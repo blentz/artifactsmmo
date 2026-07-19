@@ -185,3 +185,78 @@ a Lean formula — hence the constraint above.
 * `craft_potions_fires` currently has no HP input at all, so adding one widens its
   read-set — check the planner memo key (`project_planner_cpu_memoization`:
   memo-key = read-set).
+
+---
+
+# Session status 2026-07-19 (second half)
+
+## Done and verified
+
+* **Colour-env fix** — new `tests/conftest.py` pops `FORCE_COLOR`/`NO_COLOR` at
+  conftest IMPORT time. A session-scoped autouse fixture is TOO LATE: Rich reads
+  the env when a `Console` is constructed, which happens at module import. Verified
+  both directions: 587 pass under `FORCE_COLOR=1` (12 spurious failures before),
+  84 under `NO_COLOR=1`. `scripts/run_tests.sh:25` already unset both, so only
+  direct `uv run pytest tests/` was affected — which is exactly how it cost time.
+
+* **Guard wiring** (uncommitted) — `craft_potions_fires` takes `history` and sizes
+  from projected in-combat consumption. No new plumbing needed: `guards.py` already
+  threaded `history` "for signature parity with future learning-aware guards".
+
+## BLOCKER: `l48_band_adequate` — do NOT "fix" the fixture
+
+`test_band_search_is_bounded[l48_band_adequate]` fails on
+`search_bounds.py:26` `assert report.goals_tried` — the arbiter now tries ZERO
+goals and selects `Wait`.
+
+**The fixture deliberately has no winnable monster.** `test_no_deadlock.py:15`
+documents it ("no winnable monster in this bundle's L47-50 fight window") and
+`test_no_deadlock.py:192` asserts `_pick_winnable_monster() is None`. Adding a
+monster would destroy the scenario's purpose. The sibling test
+`test_l48_band_adequate_chosen_root_is_wait_when_no_winnable_monster` STILL PASSES.
+
+So the guard change is behaving correctly: no winnable monster ⇒ no combat ⇒ no
+reason to stock potions. What it EXPOSED is that `CRAFT_POTIONS` was previously
+the only goal tried in that scenario — potion busywork for fights the character
+cannot have, masking a scenario with nothing to do.
+
+**User hypothesis (2026-07-19), consistent with existing findings:** by L48,
+progression may depend on EVENT and RAID monsters, which the planner cannot see.
+That matches `project_roadmap4_discovery` (event monster/resource invisible to the
+planner, gates L20-50 gear) and the L48 wall in `project_l50_unconditional_descent`.
+Refs: https://docs.artifactsmmo.com/concepts/raids/ and
+https://docs.artifactsmmo.com/concepts/events/ — the user notes this information is
+knowable or deducible, so planner support is feasible rather than blocked on data.
+
+If that holds, `l48_band_adequate` is not a potion problem at all: it models a wall
+that is itself an artifact of planner blindness to event/raid content, and the
+honest fix is planner support for those mechanics — a separate epic. Weakening
+`assert report.goals_tried` would be wrong: it is a VACUOUSNESS guard (without it
+the loop below passes trivially on an empty list).
+
+## IN PROGRESS: guard/goal unification — 16 fixtures remain
+
+`CraftPotionsGoal._baseline` now delegates to `potion_stock_target_pure`, the same
+core the guard uses. 16 `test_craft_potions.py` tests still fail because their
+GameData defines NO monster, so projected consumption is 0 and the goal is inert —
+the same fixture shape already fixed in `test_tiers_guards.py` and
+`test_potion_supply_integration.py`. Each needs judging individually: does it encode
+the OLD rest-avoidance contract (update it), or catch a real regression (fix code)?
+
+**Real bug found while unifying:** the goal must NOT trust only the injected
+`self._combat_monster`. The arbiter can hand it a `SelectionContext` whose
+`combat_monster` is None while the guard — which calls `primary_combat_target`
+itself — has already fired. `_baseline` now falls back to `primary_combat_target`,
+or the goal would go inert in exactly the cycles the guard selected it for: the
+same divergence, inverted. This is why `_ctx()` fixtures with
+`combat_monster=None` were failing.
+
+## Next session, in order
+
+1. Decide the `l48_band_adequate` disposition (likely: separate events/raids epic).
+2. Finish the 16 fixtures, judging each.
+3. `mypy`, `ruff check src tests`, `check_extraction.sh`, full gate.
+4. Mutation anchor for `POTION_LEAD_FIGHTS` and `MARGINAL_FIGHT_HP_NUM/DEN` — both
+   are live decision knobs and currently unanchored.
+5. Runtime verification on Robby (baseline: ~86% cycles on wolf-fight survival,
+   potion gather/craft/equip 284x).

@@ -8,8 +8,14 @@ for the CRAFT_POTIONS guard tier (guards.py) and CraftPotionsGoal.
 from artifactsmmo_cli.ai.boost_selection import best_boost_potion
 from artifactsmmo_cli.ai.combat_targets import combat_target_monsters
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
+from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
+from artifactsmmo_cli.ai.potion_stock_target import (
+    fight_is_marginal_pure,
+    potion_stock_target_pure,
+)
 from artifactsmmo_cli.ai.thresholds import (
     POTION_HIGH_LEVEL,
     POTION_HIGH_QTY,
@@ -132,7 +138,34 @@ def _recipe_producible(recipe: dict[str, int], state: WorldState, game_data: Gam
     return all(obtainable(mat, qty) for mat, qty in recipe.items())
 
 
-def craft_potions_fires(state: WorldState, game_data: GameData) -> bool:
+def projected_heal_need_per_fight(state: WorldState, game_data: GameData,
+                                  monster: str,
+                                  history: LearningStore | None) -> int:
+    """In-combat healing needed per fight against ``monster``, in HP.
+
+    Learned consumption first: `hp_healed_per_fight` is what the character has
+    ACTUALLY drunk in won fights. With no history, marginality decides whether
+    there is any need at all -- a comfortably-winnable monster returns 0, because
+    a fight won without drinking needs no stock.
+
+    Deliberately NOT raw expected damage as the primary driver: resting refills to
+    full between fights for `max(3, ceil(missing%))` seconds, so damage the bot
+    simply rests off is not evidence that a potion was needed. Expected damage is
+    used only to SIZE a need that marginality has already established.
+    """
+    learned = history.hp_healed_per_fight(monster, game_data.hp_restore_of) \
+        if history is not None else None
+    if learned is not None:
+        return max(0, int(learned))
+    # No history: only a fight that is NOT comfortably won justifies stock.
+    damage = max(0, expected_damage_per_fight(state, game_data, monster))
+    if not fight_is_marginal_pure(damage, state.max_hp):
+        return 0
+    return damage
+
+
+def craft_potions_fires(state: WorldState, game_data: GameData,
+                        history: LearningStore | None = None) -> bool:
     """True when the CRAFT_POTIONS guard should preempt the grind.
 
     Fires when:
@@ -158,8 +191,21 @@ def craft_potions_fires(state: WorldState, game_data: GameData) -> bool:
     if target is None:
         return False
     equipped = equipped_potion_qty(state, target)
-    baseline = potion_baseline_pure(
+    level_baseline = potion_baseline_pure(
         state.level, POTION_LOW_LEVEL, POTION_LOW_QTY, POTION_HIGH_LEVEL, POTION_HIGH_QTY,
+    )
+    # Combat-justified target: projected in-combat consumption over the lead-time
+    # window, CAPPED by the level ramp. Was the bare ramp, which fired on a stock
+    # deficit with no HP or consumption term at all -- so a full-HP bot that wins
+    # without drinking still routed to gather/craft, which since Rest went dynamic
+    # is never a time saving. Same core the goal sizes from, so the two cannot
+    # diverge (they used to: the goal already had a consumption term, the guard
+    # did not).
+    combat_monster = primary_combat_target(state, game_data)
+    hp_need = projected_heal_need_per_fight(state, game_data, combat_monster, history) \
+        if combat_monster is not None else 0
+    baseline = potion_stock_target_pure(
+        hp_need, game_data.hp_restore_of(target), level_baseline,
     )
     if equipped >= baseline:
         monster = primary_combat_target(state, game_data)

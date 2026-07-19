@@ -62,15 +62,34 @@ def _gd_with_potion() -> GameData:
     return gd
 
 
+def _gd_with_potion_and_hurting_monster() -> GameData:
+    """`_gd_with_potion` plus an in-band monster that actually hurts.
+
+    Stocking is combat-justified (2026-07-19): the target is projected in-combat
+    consumption, so a fixture with NO monster projects zero need and the guard
+    correctly stays silent. This fixture supplies the combat pressure that makes
+    stocking the right call -- a monster whose expected damage leaves the
+    character at or below the marginal-fight HP fraction."""
+    gd = _gd_with_potion()
+    gd._monster_level = {_MONSTER: 3}
+    gd._monster_hp = {_MONSTER: 60}
+    gd._monster_attack = {_MONSTER: {"fire": 40}}
+    gd._monster_resistance = {_MONSTER: {}}
+    gd._monster_locations = {_MONSTER: [(1, 0)]}
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
 def _understocked_state():
     """Level 3, alchemy 1, empty utility slots, ingredient held (so the batch is
-    craft-from-held producible). baseline(3)=5 > equipped 0 -> understocked."""
+    craft-from-held producible). Understocked against the combat-projected
+    target, which the paired game data supplies a hurting monster for."""
     return make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0,
-                      inventory={_INGREDIENT: 10})
+                      inventory={_INGREDIENT: 10}, attack={"fire": 20})
 
 
 def test_understocked_producible_fires_guard_maps_goal_and_plans_craft_and_equip():
-    gd = _gd_with_potion()
+    gd = _gd_with_potion_and_hurting_monster()
     state = _understocked_state()
     ctx = _ctx()
 
@@ -184,6 +203,9 @@ def _gd_boost_winnable() -> GameData:
     gd._monster_hp = {_MONSTER: 1000}
     gd._monster_attack = {_MONSTER: {"fire": 5}}
     gd._monster_resistance = {_MONSTER: {}}
+    # Static tile: combat_target_monsters requires a known spawn, and both the
+    # boost selector and the combat-justified heal target route through it.
+    gd._monster_locations = {_MONSTER: [(1, 0)]}
     fill_monster_stat_defaults(gd)
     return gd
 
@@ -357,3 +379,52 @@ def test_anti_grind_boost_skill_gated_guard_does_not_fire():
         "_active_craft must return None when guard is silent; "
         "any non-None result would plan a craft step for an unattainable boost"
     )
+
+
+# ─── combat-justified stocking (2026-07-19) ──────────────────────────────────
+# The guard used to fire on a bare level-ramp stock deficit, with no HP and no
+# consumption term, so a full-HP bot that wins every fight without drinking
+# anything still routed to gather/craft. Since Rest went dynamic (3a4994f4) that
+# is never a time saving -- resting refills to full for max(3, ceil(missing%))
+# seconds. Potions are justified by combat (you cannot rest MID-fight), so
+# projected consumption now drives the target and the ramp only caps it.
+
+
+def test_guard_silent_when_no_projected_consumption():
+    """THE REPORTED BUG. Understocked heals, but the bot wins without drinking:
+    no history, and the monster is comfortably winnable, so projected consumption
+    is 0 and the guard must stay silent.
+
+    Non-vacuous: identical to test_guard_fires_when_understocked_and_producible
+    except for the consumption projection -- the heal is craftable, understocked,
+    and its recipe is producible, so every OTHER precondition to fire is met."""
+    gd = _gd_boost_trivial_monster()          # zero-attack monster => no healing needed
+    state = make_state(
+        level=5,
+        hp=100, max_hp=100,
+        attack={"fire": 50},
+        skills={**make_state().skills, "alchemy": 10},
+        equipment={**make_state().equipment, "utility1_slot": _POTION},
+        utility1_slot_quantity=0,             # UNDERSTOCKED
+        inventory={_INGREDIENT: 3},           # recipe producible
+    )
+    assert craft_potions_fires(state, gd, None) is False, (
+        "guard must stay silent when the bot needs no in-combat healing; "
+        "gather-crafting a potion is never cheaper than resting it off"
+    )
+
+
+def test_guard_fires_when_consumption_is_projected():
+    """The other side: a monster that actually hurts projects real consumption,
+    so the guard fires and the bot stocks ahead of the fight."""
+    gd = _gd_boost_winnable()                 # attacking monster => damage taken
+    state = make_state(
+        level=5,
+        hp=100, max_hp=100,
+        attack={"fire": 50},
+        skills={**make_state().skills, "alchemy": 10},
+        equipment={**make_state().equipment, "utility1_slot": _POTION},
+        utility1_slot_quantity=0,
+        inventory={_INGREDIENT: 3},
+    )
+    assert craft_potions_fires(state, gd, None) is True

@@ -276,7 +276,7 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
     if kind is GuardKind.GEAR_REVIEW:
         return ctx.gear_review_active
     if kind is GuardKind.CRAFT_POTIONS:
-        return craft_potions_fires(state, game_data)
+        return craft_potions_fires(state, game_data, history)
     return False
 
 
@@ -285,7 +285,9 @@ def active_guards(state: WorldState, game_data: GameData,
                   step_profile: dict[str, int] | None = None) -> list[GuardKind]:
     """Triggered guards in ladder (preemption) order.
 
-    history is accepted for signature parity with future learning-aware guards (currently unused).
+    history feeds CRAFT_POTIONS, which sizes potion stocking from LEARNED in-combat
+    consumption (`hp_healed_per_fight`) and falls back to fight marginality when
+    there is no history yet.
     `step_profile` (the resolved step goal's needed map) reaches every disposal
     predicate through the ctx — see `deposit_context`.
     """

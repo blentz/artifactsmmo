@@ -1,9 +1,14 @@
 """Tests for Task 6 (spec 2026-06-30-potion-supply): CraftPotionsGoal.
 
-Covers target-potion selection, the state-only baseline `is_satisfied`, the
-`value` deficit, and the three-tier action ladder (craft-from-held > buy-mix >
-gather-5) that tops the equipped utility-slot potion stack toward a level-scaled
-baseline.
+Covers target-potion selection, the baseline `is_satisfied`, the `value` deficit,
+and the three-tier action ladder (craft-from-held > buy-mix > gather-5) that tops
+the equipped utility-slot potion stack toward its target.
+
+Since 2026-07-19 that target is COMBAT-JUSTIFIED: it is projected in-combat
+consumption against a real winnable-but-damaging monster, capped (never floored)
+by the level ramp. Fixtures therefore have to supply combat context — a monster
+with a known spawn tile and a character with an attack — or the goal correctly
+projects zero need and plans nothing.
 """
 
 import dataclasses
@@ -28,6 +33,7 @@ _POTION = "small_health_potion"
 _INGREDIENT = "sunflower"
 _INGREDIENT2 = "herb"
 _RESOURCE = "sunflower_field"
+_HURTS = "biting_slime"   # winnable-but-damaging: makes potion stocking justified
 
 
 def _gd_potion(*, hp_restore: int = 30, craft_level: int = 1) -> GameData:
@@ -44,6 +50,16 @@ def _gd_potion(*, hp_restore: int = 30, craft_level: int = 1) -> GameData:
     gd._resource_drops = {_RESOURCE: _INGREDIENT}
     gd._resource_locations = {_RESOURCE: [(2, 0)]}
     gd._workshop_locations = {"alchemy": (3, 0)}
+    # Combat pressure. Potion stocking is combat-justified (2026-07-19): the target
+    # is projected IN-COMBAT consumption, so a catalog with no hurting monster
+    # projects zero need and the goal correctly plans nothing. This monster is
+    # given a static tile so it also survives the combat_targets spawn gate.
+    gd._monster_level = {_HURTS: 3}
+    gd._monster_hp = {_HURTS: 60}
+    gd._monster_attack = {_HURTS: {"fire": 40}}
+    gd._monster_resistance = {_HURTS: {}}
+    gd._monster_locations = {_HURTS: [(1, 0)]}
+    fill_monster_stat_defaults(gd)
     return gd
 
 
@@ -132,27 +148,33 @@ def test_target_potion_highest_restore_then_smallest_code():
 # ── is_satisfied (state-only baseline check) ─────────────────────────────────
 
 def test_satisfied_when_slot_meets_baseline():
-    # State-only: a utility slot stocked to this level's baseline (5 at level 1).
-    state = make_state(level=1, equipment={"utility1_slot": _POTION})
+    # A utility slot stocked to this level's combat-projected target (capped by
+    # the level ramp at 5 for level 1) leaves nothing to craft.
+    gd = _gd_potion()
+    state = make_state(level=1, attack={"fire": 20}, equipment={"utility1_slot": _POTION})
     state = dataclasses.replace(state, utility1_slot_quantity=5)
-    assert CraftPotionsGoal().is_satisfied(state) is True
+    assert CraftPotionsGoal(game_data=gd, combat_monster=_HURTS).is_satisfied(state) is True
 
 
 def test_unsatisfied_when_understocked():
-    assert CraftPotionsGoal().is_satisfied(make_state(level=1)) is False
+    gd = _gd_potion()
+    state = make_state(level=1, attack={"fire": 20})
+    assert CraftPotionsGoal(game_data=gd, combat_monster=_HURTS).is_satisfied(state) is False
 
 
 # ── value ────────────────────────────────────────────────────────────────────
 
 def test_value_is_baseline_deficit_when_understocked():
     gd = _gd_potion()
-    state = make_state(level=1)  # baseline(1)=5, equipped 0 -> deficit 5
+    # _HURTS projects real in-combat consumption; the ramp caps it at 5 for
+    # level 1, and nothing is equipped -> deficit 5.
+    state = make_state(level=1, attack={"fire": 20})
     assert CraftPotionsGoal().value(state, gd) == 5.0
 
 
 def test_value_zero_when_satisfied():
     gd = _gd_potion()
-    state = make_state(level=1, equipment={"utility1_slot": _POTION})
+    state = make_state(level=1, attack={"fire": 20}, equipment={"utility1_slot": _POTION})
     state = dataclasses.replace(state, utility1_slot_quantity=5)
     assert CraftPotionsGoal().value(state, gd) == 0.0
 
@@ -168,7 +190,7 @@ def test_relevant_actions_empty_when_no_target():
 def test_craft_from_held_emits_craft_and_equip():
     gd = _gd_potion()
     # held ingredient allows a batch -> craft-from-held tier.
-    state = make_state(level=1, inventory={_INGREDIENT: 10})
+    state = make_state(level=1, inventory={_INGREDIENT: 10}, attack={"fire": 20})
     actions = [_craft_action(),
                GatherAction(resource_code=_RESOURCE, locations=frozenset({(2, 0)})),
                MoveAction(x=0, y=0)]
@@ -186,7 +208,7 @@ def test_equips_held_potions_without_requiring_craft():
     inventory while RestoreHP spun on UseConsumable; once the spin is fixed the
     held potions must be equippable."""
     gd = _gd_potion()
-    state = make_state(level=1, inventory={_POTION: 10})  # baseline(1)=5, slot empty
+    state = make_state(level=1, inventory={_POTION: 10}, attack={"fire": 20})  # baseline(1)=5, slot empty
     out = CraftPotionsGoal().relevant_actions(
         [_craft_action(), MoveAction(x=0, y=0)], state, gd)
     equips = [a for a in out
@@ -201,7 +223,7 @@ def test_buy_tier_emits_npcbuy():
     gd = _gd_potion()
     gd._npc_stock = {"alchemist": {_INGREDIENT: 2}}
     gd._npc_locations = {"alchemist": (5, 0)}
-    state = make_state(level=1, inventory={}, gold=1000)
+    state = make_state(level=1, inventory={}, gold=1000, attack={"fire": 20})
     actions = [_craft_action(),
                NpcBuyAction(npc_code="alchemist", item_code=_INGREDIENT, quantity=1,
                             npc_location=(5, 0)),
@@ -214,7 +236,7 @@ def test_buy_tier_emits_npcbuy():
 def test_gather_path_bounds_to_five_potion_batch():
     gd = _gd_potion()
     # no held ingredient, no NPC sells it -> gather a POTION_GATHER_BATCH batch.
-    state = make_state(level=3, inventory={})
+    state = make_state(level=3, inventory={}, attack={"fire": 20})
     actions = [_craft_action(),
                GatherAction(resource_code=_RESOURCE, locations=frozenset({(2, 0)})),
                WithdrawItemAction(code=_INGREDIENT, quantity=1, bank_location=(4, 0)),
@@ -231,7 +253,7 @@ def test_relevant_actions_includes_craftable_intermediate():
     gd._crafting_recipes = {_POTION: {"potion_base": 1}, "potion_base": {_INGREDIENT: 1}}
     gd._item_stats["potion_base"] = ItemStats(code="potion_base", level=1, type_="resource",
                                              crafting_skill="alchemy", crafting_level=1)
-    state = make_state(level=1, inventory={_INGREDIENT: 10})
+    state = make_state(level=1, inventory={_INGREDIENT: 10}, attack={"fire": 20})
     actions = [_craft_action(),
                CraftAction(code="potion_base", quantity=1, workshop_location=(3, 0))]
     out = CraftPotionsGoal().relevant_actions(actions, state, gd)
@@ -253,7 +275,7 @@ def test_intermediate_craft_is_batched():
     gd._item_stats["potion_base"] = ItemStats(code="potion_base", level=1, type_="resource",
                                              crafting_skill="alchemy", crafting_level=1)
     # 10 sunflowers held; inventory_max=20 → inventory_free=10
-    state = make_state(level=1, inventory={_INGREDIENT: 10})
+    state = make_state(level=1, inventory={_INGREDIENT: 10}, attack={"fire": 20})
     actions = [
         _craft_action(),
         CraftAction(code="potion_base", quantity=1, workshop_location=(3, 0)),
@@ -265,7 +287,7 @@ def test_intermediate_craft_is_batched():
 
 def test_gather_path_filters_closure_and_keeps_moves():
     gd = _gd_potion()
-    state = make_state(level=3, inventory={})
+    state = make_state(level=3, inventory={}, attack={"fire": 20})
     actions = [_craft_action(),
                GatherAction(resource_code=_RESOURCE, locations=frozenset({(2, 0)})),
                GatherAction(resource_code="copper_rocks", locations=frozenset({(9, 9)})),
@@ -284,7 +306,7 @@ def test_buy_quantity_batched_to_run_count():
     gd = _gd_potion()
     gd._npc_stock = {"alchemist": {_INGREDIENT: 100}}
     gd._npc_locations = {"alchemist": (5, 0)}
-    state = make_state(level=1, inventory={}, gold=100000)  # baseline 5, nothing held
+    state = make_state(level=1, inventory={}, gold=100000, attack={"fire": 20})  # baseline 5, nothing held
     actions = [_craft_action(),
                NpcBuyAction(npc_code="alchemist", item_code=_INGREDIENT, quantity=1,
                             npc_location=(5, 0)),
@@ -312,7 +334,7 @@ def test_buy_quantity_subtracts_held():
     gd._crafting_recipes = {_POTION: {_INGREDIENT: 1, _INGREDIENT2: 1}}
     gd._npc_stock = {"alchemist": {_INGREDIENT: 100, _INGREDIENT2: 100}}
     gd._npc_locations = {"alchemist": (5, 0)}
-    state = make_state(level=1, inventory={_INGREDIENT: 2}, gold=100000)
+    state = make_state(level=1, inventory={_INGREDIENT: 2}, gold=100000, attack={"fire": 20})
     actions = [
         _craft_action(),
         NpcBuyAction(npc_code="alchemist", item_code=_INGREDIENT, quantity=1,
@@ -375,12 +397,32 @@ def _mk_store_with_fights(tmp_path, monster: str, consumables_json: str,
     return store
 
 
-def test_baseline_rises_for_hard_target_monster(tmp_path):
-    """When learned monster demand exceeds level_baseline, _baseline is raised.
+def test_baseline_follows_learned_combat_demand(tmp_path):
+    """Learned in-combat consumption DRIVES the target; the level ramp only caps it.
 
-    level=1 → level_baseline=5. 5 fight rows each use 10 potions × 30 HP = 300 healed.
-    hp_healed_per_fight returns 300.0. monster_demand = ceil(300/30) = 10 > 5.
-    _baseline returns min(max(5, 10), 100) = 10.
+    level=45 → level_baseline=100 (the cap). 5 fight rows each expend 1 potion ×
+    30 HP, so hp_healed_per_fight returns 30.0. Projected over the
+    POTION_LEAD_FIGHTS=10 fight lead-time window that is 300 HP, i.e.
+    ceil(300/30) = 10 potions — well under the cap, so the learned demand is what
+    comes out.
+    """
+    _MONSTER = "hard_boss"
+    gd = _gd_potion(hp_restore=30)
+    state = make_state(level=45)
+    store = _mk_store_with_fights(tmp_path, _MONSTER, '{"small_health_potion": 1}')
+    goal = CraftPotionsGoal(combat_monster=_MONSTER, game_data=gd, history=store)
+    result = goal._baseline(state.level, state, gd, store)
+    store.close()
+    assert result == 10
+
+
+def test_baseline_capped_by_level_ramp(tmp_path):
+    """The level ramp is a CAP on speculation, never a floor.
+
+    level=1 → level_baseline=5. 5 fight rows each expend 10 potions × 30 HP, so
+    hp_healed_per_fight returns 300.0 and the 10-fight projection wants
+    ceil(3000/30) = 100 potions. The ramp clamps that to 5 — a level-1 character
+    is not sent gather-crafting a hundred potions on the strength of a projection.
     """
     _MONSTER = "hard_boss"
     gd = _gd_potion(hp_restore=30)
@@ -389,29 +431,44 @@ def test_baseline_rises_for_hard_target_monster(tmp_path):
     goal = CraftPotionsGoal(combat_monster=_MONSTER, game_data=gd, history=store)
     result = goal._baseline(state.level, state, gd, store)
     store.close()
-    assert result == 10
+    assert result == 5
 
 
-def test_baseline_unchanged_when_no_target_monster():
-    """No combat_monster → _baseline falls back to level_baseline (no regression)."""
+def test_baseline_zero_when_no_target_monster():
+    """NEW CONTRACT (combat-justified stocking): no combat target → target 0.
+
+    The character has no attack, so nothing in the catalog is winnable and
+    `primary_combat_target` returns None. There is no fight to be consumed in, so
+    there is nothing to stock for — the level ramp does NOT apply as a floor.
+    Previously this returned the bare level_baseline (5) regardless of combat.
+    """
     gd = _gd_potion()
-    state = make_state(level=1)  # level_baseline=5
-    goal = CraftPotionsGoal()  # no combat_monster
-    assert goal._baseline(state.level, state, gd) == 5
+    state = make_state(level=1)  # no attack → no winnable monster
+    goal = CraftPotionsGoal()  # no injected combat_monster either
+    assert goal._baseline(state.level, state, gd) == 0
 
 
-def test_baseline_returns_level_baseline_when_no_target_potion():
-    """combat_monster set but game_data has no alchemy utility heal → _target_potion
-    returns None → _baseline falls back to level_baseline (line 90 branch)."""
+def test_baseline_zero_when_no_target_potion():
+    """combat_monster set but game_data has no craftable utility heal →
+    _target_potion returns None → target 0.
+
+    NEW CONTRACT: the fallback is 0, not the level ramp — a potion that cannot be
+    made is not a thing to stock toward.
+    """
     gd = _gd_no_alchemy_heal()
-    state = make_state(level=1)  # level_baseline=5
+    state = make_state(level=1)
     goal = CraftPotionsGoal(combat_monster="some_boss")
-    assert goal._baseline(state.level, state, gd) == 5
+    assert goal._baseline(state.level, state, gd) == 0
 
 
-def test_baseline_returns_level_baseline_when_potion_restore_zero():
-    """A utility item selected by effect='wisdom' has hp_restore=0; hp_restore_of
-    returns 0 → _baseline falls back to level_baseline (line 93 branch)."""
+def test_baseline_zero_when_potion_restore_zero():
+    """A utility item selected by effect='wisdom' has hp_restore=0, so no amount
+    of it covers the projected in-combat HP need → target 0.
+
+    NEW CONTRACT: the fallback is 0, not the level ramp. Non-vacuous: the monster
+    is a real, winnable, damaging one (so hp_need > 0) and the item passes the
+    skill gate — only its zero hp_restore makes it useless as stock.
+    """
     gd = GameData()
     gd._item_stats = {
         "wisdom_token": ItemStats(code="wisdom_token", level=1, type_="utility",
@@ -422,19 +479,29 @@ def test_baseline_returns_level_baseline_when_potion_restore_zero():
     gd._resource_drops = {}
     gd._resource_locations = {}
     gd._workshop_locations = {"alchemy": (3, 0)}
-    state = make_state(level=1)  # level_baseline=5; alchemy=1 passes skill gate
-    goal = CraftPotionsGoal(combat_monster="some_boss", effect="wisdom")
-    assert goal._baseline(state.level, state, gd) == 5
+    gd._monster_level = {_HURTS: 3}
+    gd._monster_hp = {_HURTS: 60}
+    gd._monster_attack = {_HURTS: {"fire": 40}}
+    gd._monster_resistance = {_HURTS: {}}
+    gd._monster_locations = {_HURTS: [(1, 0)]}
+    fill_monster_stat_defaults(gd)
+    state = make_state(level=1, attack={"fire": 20})  # alchemy=1 passes skill gate
+    goal = CraftPotionsGoal(combat_monster=_HURTS, effect="wisdom")
+    assert goal._baseline(state.level, state, gd) == 0
 
 
-def test_baseline_returns_level_baseline_when_hp_need_zero():
+def test_baseline_zero_when_hp_need_zero():
     """Monster code not in game_data.monster_levels → expected_damage_per_fight
-    returns 0 → hp_need == 0 → _baseline falls back to level_baseline (line 99 branch)."""
-    gd = _gd_potion()  # small_health_potion with hp_restore=30; no monsters in gd
-    state = make_state(level=1)  # level_baseline=5
+    returns 0 → hp_need == 0 → target 0.
+
+    NEW CONTRACT: the fallback is 0, not the level ramp — a fight that costs no
+    HP needs no potions.
+    """
+    gd = _gd_potion()  # small_health_potion with hp_restore=30
+    state = make_state(level=1)
     # "unknown_monster" absent from monster_levels → expected_damage_per_fight → 0
     goal = CraftPotionsGoal(combat_monster="unknown_monster")
-    assert goal._baseline(state.level, state, gd) == 5
+    assert goal._baseline(state.level, state, gd) == 0
 
 
 # ── heal-then-boost in _active_craft (Task 4) ────────────────────────────────
@@ -471,6 +538,10 @@ def _gd_heal_and_boost() -> GameData:
     gd._monster_hp = {_MONSTER_CODE: 1000}
     gd._monster_attack = {_MONSTER_CODE: {"fire": 5}}
     gd._monster_resistance = {_MONSTER_CODE: {}}
+    # Static tile: combat_target_monsters only sees monsters with a known spawn,
+    # and both the boost selector and the combat-justified heal target route
+    # through it — without a location the goal projects no combat at all.
+    gd._monster_locations = {_MONSTER_CODE: [(1, 0)]}
     fill_monster_stat_defaults(gd)
     return gd
 

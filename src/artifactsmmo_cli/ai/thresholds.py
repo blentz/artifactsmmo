@@ -60,3 +60,13 @@ POTION_GATHER_BATCH = 5           # gather/craft this many when gathering is req
 # mats it never drank. Consumed by potion_stock_target.potion_stock_target_pure,
 # where the level ramp above caps the result.
 POTION_LEAD_FIGHTS = 10
+
+# "Marginal fight" = one that would end with the character at or below this
+# fraction of max HP. Numerator/denominator kept separate and int-literal so the
+# decision path stays float-free (project_mechanical_extraction) -- 3/10 = 0.3,
+# the SAME fraction as actions/combat._MIN_FIGHT_HP_FRACTION ("don't start a fight
+# below this"). Deliberately not a second, independently-tuned comfort threshold:
+# a fight that leaves the bot above the floor it is allowed to fight at needed no
+# potion, and the damage rests off for free.
+MARGINAL_FIGHT_HP_NUM = 3
+MARGINAL_FIGHT_HP_DEN = 10

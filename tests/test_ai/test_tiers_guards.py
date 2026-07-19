@@ -682,13 +682,24 @@ def _potion_gd() -> GameData:
     }
     gd._crafting_recipes = {"health_potion": {"red_slimeball": 2}}
     gd._resource_drops = {"red_slime": "red_slimeball"}  # ingredient is gatherable
+    # Combat pressure. Potion stocking is combat-justified (2026-07-19): the target
+    # is projected IN-COMBAT consumption, so a catalog with no winnable monster
+    # projects zero need and the guard correctly stays silent. This monster is
+    # winnable but leaves the character at/below the marginal-fight HP fraction,
+    # which is what makes stocking the right call rather than resting it off.
+    gd._monster_level = {"red_slime": 3}
+    gd._monster_hp = {"red_slime": 60}
+    gd._monster_attack = {"red_slime": {"fire": 40}}
+    gd._monster_resistance = {"red_slime": {}}
+    gd._monster_locations = {"red_slime": [(1, 0)]}
+    fill_monster_stat_defaults(gd)
     return gd
 
 
 def _understocked_producible(level: int = 3, equipped: int = 0):
     """Level 3: baseline = POTION_LOW_QTY = 5; equipped=0 < 5; potion gatherable."""
     state = make_state(level=level, skills={"alchemy": 1},
-                       utility1_slot_quantity=equipped)
+                       utility1_slot_quantity=equipped, attack={"fire": 20})
     return state, _potion_gd(), _ctx()
 
 
@@ -737,7 +748,7 @@ def test_craft_potions_guard_fires_when_ingredients_held():
     """Understocked with all ingredients already in inventory → craft-from-held
     producibility fires (potion_supply.py:74)."""
     state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0,
-                       inventory={"red_slimeball": 2})
+                       inventory={"red_slimeball": 2}, attack={"fire": 20})
     assert _fires(GuardKind.CRAFT_POTIONS, state, _potion_gd(), None, _ctx(), None) is True
 
 
@@ -748,7 +759,7 @@ def test_craft_potions_guard_fires_when_ingredients_buyable_for_gold():
     gd._resource_drops = {}  # not gatherable — force the buyable path
     gd._npc_stock = {"alchemist": {"red_slimeball": 3}}  # gold currency by default
     state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0,
-                       inventory={})
+                       inventory={}, attack={"fire": 20})
     assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, _ctx(), None) is True
 
 

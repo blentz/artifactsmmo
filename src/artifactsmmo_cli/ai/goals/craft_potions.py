@@ -14,22 +14,20 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.boost_selection import best_boost_potion
 from artifactsmmo_cli.ai.craft_ladder import _held, craft_utility_ladder
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
-from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.max_batch_from_held import max_batch_from_held_pure
 from artifactsmmo_cli.ai.optimal_buy_mix import optimal_buy_mix_pure
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
-from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
-from artifactsmmo_cli.ai.potion_supply import primary_combat_target, target_potion_pure
+from artifactsmmo_cli.ai.potion_stock_target import potion_stock_target_pure
+from artifactsmmo_cli.ai.potion_supply import primary_combat_target, projected_heal_need_per_fight, target_potion_pure
 from artifactsmmo_cli.ai.thresholds import (
     POTION_GATHER_BATCH,
     POTION_HIGH_LEVEL,
     POTION_HIGH_QTY,
     POTION_LOW_LEVEL,
     POTION_LOW_QTY,
-    UTILITY_SLOT_MAX_STACK,
 )
 from artifactsmmo_cli.ai.unlock_boost import unlock_boost_target
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -63,37 +61,40 @@ class CraftPotionsGoal(Goal):
     def _baseline(self, level: int, state: WorldState | None = None,
                   game_data: GameData | None = None,
                   history: LearningStore | None = None) -> int:
-        """Level-scaled potion baseline, optionally raised to the active target-monster demand.
+        """Combat-projected potion target, capped by the level ramp.
 
-        When ``combat_monster`` and ``game_data`` are provided, the baseline becomes
-        ``min(max(level_baseline, monster_demand), UTILITY_SLOT_MAX_STACK)`` where
-        ``monster_demand = ceil(hp_need / potion_restore)``. ``hp_need`` is taken from
-        learned fight history when enough samples are available, otherwise from
-        ``expected_damage_per_fight``. Falls back to the plain level baseline when
-        any required context is absent.
+        Delegates to `potion_stock_target_pure` — the SAME core the CRAFT_POTIONS
+        guard sizes from, so the two can no longer disagree. They used to: the
+        guard fired on the bare level ramp while this method targeted
+        ``min(max(level_baseline, monster_demand), stack)``, so the guard could
+        fire with nothing for the goal to do.
+
+        The ramp is now a CAP on speculation rather than a FLOOR. Under the old
+        ``max(level_baseline, ...)`` a level-45 bot pursued 100 potions whether or
+        not it ever drank one, and gather-crafting those is never a time saving
+        against resting (which refills to full for ``max(3, ceil(missing%))``
+        seconds). Missing context returns 0 rather than the bare ramp for the same
+        reason: no combat target means no in-combat consumption to stock for.
         """
         level_baseline = potion_baseline_pure(level, POTION_LOW_LEVEL, POTION_LOW_QTY,
                                               POTION_HIGH_LEVEL, POTION_HIGH_QTY)
-        if self._combat_monster is None or game_data is None or state is None:
-            return level_baseline
+        if game_data is None or state is None:
+            return 0
+        # Derive the monster the way the GUARD does when none was injected. The
+        # arbiter can hand this goal a SelectionContext whose combat_monster is
+        # None while the guard -- which calls primary_combat_target itself -- has
+        # already fired. Trusting only the injected value would make the goal
+        # inert in exactly the cycles the guard just selected it for: the same
+        # guard/goal divergence, inverted.
+        monster = self._combat_monster or primary_combat_target(state, game_data)
+        if monster is None:
+            return 0
         target_potion = self._target_potion(state, game_data)
         if target_potion is None:
-            return level_baseline
-        potion_restore = game_data.hp_restore_of(target_potion)
-        if potion_restore <= 0:
-            return level_baseline
-        learned = history.hp_healed_per_fight(self._combat_monster, game_data.hp_restore_of) \
-            if history is not None else None
-        hp_need = int(learned) if learned is not None \
-            else expected_damage_per_fight(state, game_data, self._combat_monster)
-        if hp_need <= 0:
-            return level_baseline
-        # Use a large sentinel for held_heal_qty: this is a CRAFT target baseline,
-        # not limited by current holdings. potion_provision_qty_pure computes ceil(hp_need/restore).
-        monster_demand = potion_provision_qty_pure(
-            hp_need, potion_restore, UTILITY_SLOT_MAX_STACK, False, UTILITY_SLOT_MAX_STACK
-        )
-        return min(max(level_baseline, monster_demand), UTILITY_SLOT_MAX_STACK)
+            return 0
+        hp_need = projected_heal_need_per_fight(state, game_data, monster, history)
+        return potion_stock_target_pure(hp_need, game_data.hp_restore_of(target_potion),
+                                        level_baseline)
 
     def _active_craft(self, state: WorldState, game_data: GameData) -> tuple[str, int, int] | None:
         """Return (target_code, runs, equip_qty) for the craft this cycle, or None
