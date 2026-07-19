@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
 from artifactsmmo_cli.ai.actions.cost_core import (
     OVERHEAL_CONSUMABLE_COST,
+    OVERHEAL_REST_MULTIPLE,
     REST_COST_MAX,
     distance_cost_pure,
     learned_cost_pure,
@@ -187,19 +188,35 @@ def test_overheal_sentinel_dominates_rest_cost(max_hp, frac):
     overshoots the deficit, so the planner Rests instead of wasting it -- sound
     only while the sentinel strictly outranks every reachable Rest cost.
 
-    The `== 100.0` pin is what carries the Lean proof over to the Python side:
-    the theorem bounds `restCost` by the Lean `consumableCostOverheal := 100`, so
-    the transfer holds exactly while the two constants agree. The mirror is by
-    convention (both sides assert 100), not by extraction -- this assertion is
-    what makes a silent divergence fail the gate."""
+    Agreement of the two constants is asserted separately against the Lean value
+    itself, in `test_overheal_sentinel_matches_lean`."""
     hp = int(round((1.0 - frac) * max_hp))
     hp = max(0, min(hp, max_hp))
-    assert OVERHEAL_CONSUMABLE_COST == 100.0     # == Lean consumableCostOverheal
     assert rest_cost_pure(hp, max_hp) < OVERHEAL_CONSUMABLE_COST
     # The bound is tight at a full deficit: 10.0 < 100.0, with REST_COST_MAX the
     # supremum the Lean ceil-lemma (restCost_ceil_le_100) establishes.
     assert rest_cost_pure(0, max_hp) == REST_COST_MAX
     assert REST_COST_MAX < OVERHEAL_CONSUMABLE_COST
+
+
+def test_overheal_sentinel_matches_lean():
+    """The Python sentinel equals the LEAN `consumableCostOverheal`, read live from
+    the Oracle rather than hardcoded here.
+
+    This closes both drift directions, which a hand-mirrored literal could not:
+    * a Python edit to `OVERHEAL_REST_MULTIPLE` regenerates
+      `formal/Formal/Extracted/CostCore.lean`, and `extract_lean.py --check` fails
+      the gate if the checked-in file wasn't regenerated;
+    * a Lean edit to `consumableCostOverheal` or `restCostMax` changes the Oracle's
+      answer and fails THIS assertion.
+
+    Previously the mirror was by convention -- both sides asserted the literal 100 --
+    so editing the Lean constant alone was caught by nothing at all."""
+    lean_cost = run_oracle("action_cost_nonneg", [[4]])[0]["cost"]
+    assert lean_cost == OVERHEAL_CONSUMABLE_COST
+    # Both sides derive from the same extracted integer, so the product must agree
+    # factor-by-factor too, not just in total.
+    assert lean_cost == OVERHEAL_REST_MULTIPLE * REST_COST_MAX
 
 
 # ─── Per-action ≥ 0 sweep ────────────────────────────────────────────────────

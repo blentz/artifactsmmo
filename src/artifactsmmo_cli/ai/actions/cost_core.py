@@ -71,7 +71,18 @@ every character. Evaluated from the formula rather than written as a literal so
 that rescaling the cost unit inside `rest_cost_pure` carries this with it.
 """
 
-OVERHEAL_CONSUMABLE_COST = 10.0 * REST_COST_MAX
+OVERHEAL_REST_MULTIPLE = 10
+"""How many times the dearest possible Rest the overheal sentinel must cost.
+
+Single-name int-literal assignment ON PURPOSE: this is the exact shape the Lean
+extractor (`scripts/extract_lean.py`, `_extract_constants`) accepts, so this knob
+is generated into `formal/Formal/Extracted/CostCore.lean` and consumed by
+`ActionCostNonneg.consumableCostOverheal`. Both languages therefore derive the
+sentinel from ONE integer, and `extract_lean.py --check` fails the gate if they
+drift. Do not inline this into the expression below -- that breaks extraction.
+"""
+
+OVERHEAL_CONSUMABLE_COST = OVERHEAL_REST_MULTIPLE * REST_COST_MAX
 """Cost `UseConsumableAction` returns when the only consumable it can pick
 overshoots the deficit (see `consumable.py`).
 
@@ -81,8 +92,9 @@ is derived from `REST_COST_MAX` rather than hardcoded next to a comment assertin
 the relationship. The order-of-magnitude margin keeps it dominant over a plausible
 multi-step rest-and-move alternative too.
 
-Value is 100.0, matching the Lean mirror `ActionCostNonneg.consumableCostOverheal`;
-changing the multiplier requires moving that definition in lockstep.
+Value is 100.0. The Lean mirror derives the same product from the same extracted
+multiplier, and an Oracle-backed differential asserts the two agree -- so neither
+a Python edit nor a Lean edit can move one side alone.
 """
 
 

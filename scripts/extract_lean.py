@@ -351,6 +351,17 @@ MODULES: tuple[ModuleSpec, ...] = (
         constants=("PRESSURE_HIGH_NUM", "PRESSURE_HIGH_DEN"),
     ),
     ModuleSpec(
+        source="src/artifactsmmo_cli/ai/actions/cost_core.py",
+        output=f"{GENERATED_DIR}/CostCore.lean",
+        core_name="CostCore",
+        functions=(),
+        # OVERHEAL_REST_MULTIPLE is the single integer both languages derive the
+        # overheal sentinel from: Python as OVERHEAL_REST_MULTIPLE * REST_COST_MAX,
+        # Lean as ActionCostNonneg.consumableCostOverheal. Extracting it makes a
+        # Python edit regenerate the Lean side, so --check fails on drift.
+        constants=("OVERHEAL_REST_MULTIPLE",),
+    ),
+    ModuleSpec(
         source="src/artifactsmmo_cli/ai/inventory_caps.py",
         output=f"{GENERATED_DIR}/InventoryCaps.lean",
         core_name="InventoryCaps",

@@ -4387,8 +4387,8 @@ COST_CORE_SENTINEL_MUTATIONS = [
     # `test_overheal_sentinel_strictly_dominates_every_rest_cost` (strict >, which
     # fails at hp=0) and by the derivation pin.
     ("cost_core: overheal sentinel margin 10x -> 1x (ties, not dominates)",
-     "OVERHEAL_CONSUMABLE_COST = 10.0 * REST_COST_MAX",
-     "OVERHEAL_CONSUMABLE_COST = 1.0 * REST_COST_MAX"),
+     "OVERHEAL_REST_MULTIPLE = 10",
+     "OVERHEAL_REST_MULTIPLE = 1"),
 ]
 
 

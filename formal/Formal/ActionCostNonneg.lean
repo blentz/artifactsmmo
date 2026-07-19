@@ -51,6 +51,8 @@ Lean core only — no mathlib. `Rat` literals constructed via `mkRat` so the
 `decide` reduction terminates.
 -/
 
+import Formal.Extracted.CostCore
+
 namespace Formal.ActionCostNonneg
 
 /-! ## Bucket 1 — constant cost (`Nat`). -/
@@ -169,7 +171,18 @@ def transitionCost : Nat := 3
 def moveSemanticCost : Nat := 1
 def claimCost : Nat := 1
 def consumableCostFit : Nat := 2
-def consumableCostOverheal : Nat := 100
+
+/-- The dearest possible Rest, as a Nat in the same 10s cost unit `restCost` uses.
+`restCost_le_restCostMax` below proves this really is the bound. -/
+def restCostMax : Nat := 10
+
+/-- The overheal sentinel, DERIVED rather than hand-mirrored: the multiplier comes
+from `Extracted.CostCore`, generated out of the Python `OVERHEAL_REST_MULTIPLE` by
+`scripts/extract_lean.py`, and Python computes the same product as
+`OVERHEAL_REST_MULTIPLE * REST_COST_MAX`. A Python edit regenerates this side (the
+`--check` drift gate fails otherwise); a Lean edit is caught by the Oracle-backed
+differential. Value is 10 * 10 = 100. -/
+def consumableCostOverheal : Nat := Extracted.CostCore.OVERHEAL_REST_MULTIPLE.toNat * restCostMax
 def teleportCost : Nat := 20  -- PLAN #6b: flat warp cost (distance-independent); `TeleportAction.cost`
 
 theorem equip_cost_nonneg : 0 ≤ equipCost := by simp [equipCost]
@@ -204,6 +217,20 @@ theorem restCost_ceil_le_100 (hp maxHp : Nat) :
         ≤ ((maxHp - 1) + maxHp * 100) / maxHp := Nat.div_le_div_right hnum
       _ = (maxHp - 1) / maxHp + 100 := Nat.add_mul_div_left _ _ h
       _ = 100 := by rw [Nat.div_eq_of_lt (by omega)]
+
+/-- `restCostMax` really is an upper bound on `restCost` — the Lean counterpart of
+the Python `REST_COST_MAX = rest_cost_pure(0, 1)`. Justifies deriving
+`consumableCostOverheal` as a multiple of it. -/
+theorem restCost_le_restCostMax (hp maxHp : Nat) :
+    restCost hp maxHp ≤ (restCostMax : Rat) := by
+  have hq : max 3 (((maxHp - hp) * 100 + maxHp - 1) / maxHp) ≤ 100 :=
+    Nat.max_le.mpr ⟨by omega, restCost_ceil_le_100 hp maxHp⟩
+  rw [← Rat.not_lt]
+  unfold restCost restCostMax
+  rw [Rat.lt_div_iff (by decide)]
+  intro hlt
+  have : (100 : Nat) < max 3 (((maxHp - hp) * 100 + maxHp - 1) / maxHp) := by exact_mod_cast hlt
+  omega
 
 /-- Rest is always strictly cheaper than the overheal sentinel, so a plan that
 overheals is never preferred to one that rests. Unconditional — it needs no

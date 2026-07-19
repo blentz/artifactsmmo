@@ -1777,9 +1777,15 @@ Dispatches on `args[0]`:
 * `1`: distance cost  — `[1, base, d]`         → `{"cost": base + d}`
 * `2`: qty cost       — `[2, base, qty, d, perUnit]` → `{"cost": base + perUnit*qty + d}`
 * `3`: delete cost    — `[3, branch]`          → `{"cost": deleteCost branch}`
+* `4`: overheal sentinel — `[4]`               → `{"cost": consumableCostOverheal}`
 
 Reuses the proved Nat cores directly. The `Rat`-valued history-fraction
-core is exercised on the Python side against the structural formula. -/
+core is exercised on the Python side against the structural formula.
+
+Branch 4 exists so the Python differential can read the LEAN value of the
+overheal sentinel rather than hardcoding its own copy. `consumableCostOverheal`
+derives from the extracted `OVERHEAL_REST_MULTIPLE`, so a Python edit is caught
+by the extraction drift gate and a Lean edit is caught here. -/
 def runActionCostNonneg (args : Array Json) : Json :=
   let q := intArg args 0
   let cost : Nat :=
@@ -1792,6 +1798,8 @@ def runActionCostNonneg (args : Array Json) : Json :=
         (intArg args 3).toNat (intArg args 4).toNat
     else if q == 3 then
       Formal.ActionCostNonneg.deleteCost (intArg args 1).toNat
+    else if q == 4 then
+      Formal.ActionCostNonneg.consumableCostOverheal
     else
       0
   Json.mkObj [("cost", Json.num (Int.ofNat cost)),
