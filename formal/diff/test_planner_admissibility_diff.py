@@ -6,13 +6,17 @@ remaining cost in seconds), so the planner returned strictly suboptimal plans.
 The fix sets `h = 0.0` (planner.py:81,112), making the search Dijkstra /
 uniform-cost over non-negative `action.cost(...)` — so the textbook A* optimality
 result applies absolutely. Proved in `Formal.PlannerAdmissibility`:
-`RHP_first_satisfied_is_optimal` (7 ≤ 10) via the general
+`RHP_first_satisfied_is_optimal` (7 ≤ 9) via the general
 `firstSatisfied_least_cost_of_admissible` applied with the admissible `h ≡ 0`.
+
+Rest cost is DYNAMIC (rest_cost_pure = max(3, ceil(missing%))/10); the instance
+is re-anchored to HP 10/100 (missing 90%) so Rest = 9.0 stays the expensive
+single-step and the multi-step optimum (7) is preserved.
 
 This test runs the real Python planner on the SAME instance the Lean module
 models and asserts:
 * it returns the optimal `[Move, EatAtTile]` plan (cost 7), NOT the rest plan
-  (cost 10) — the now-true optimality;
+  (cost 9) — the now-true optimality;
 * the planner's ordering by `g` alone (h = 0) lets a cheap-prefix multi-step
   beat an expensive single-step — the behavioural consequence of Dijkstra.
 """
@@ -102,7 +106,11 @@ def _instance():
             code="cooked_chicken", level=1, type_="consumable", hp_restore=30
         )
     }
-    state = make_state(hp=50, max_hp=100, inventory={"cooked_chicken": 1}, x=0, y=0)
+    # HP 10/100 (missing 90%) re-anchors the demo for the DYNAMIC Rest cost
+    # (rest_cost_pure = max(3, ceil(missing%))/10 = 9.0 here), keeping Rest the
+    # expensive single-step. cooked_chicken restores 30 ≤ 90 deficit, so EatAtTile
+    # FITS (cost 2.0, not the 100.0 overheal sentinel) and full-heals in-model.
+    state = make_state(hp=10, max_hp=100, inventory={"cooked_chicken": 1}, x=0, y=0)
     goal = RestoreHPGoal()
     actions = [
         RestAction(),
@@ -114,10 +122,11 @@ def _instance():
 
 def test_planner_returns_optimal_plan_after_fix():
     """With h ≡ 0 the search is Dijkstra over non-negative `action.cost`. On the
-    RestoreHP instance the Move-prefix node (f = g = 5) pops before the Rest-node
-    (f = g = 10); the planner expands UseConsumable from there and returns the
-    optimal `[Move, EatAtTile]` plan (cost 5 + 2 = 7), strictly cheaper than the
-    `[Rest]` plan (cost 10). Mirrors Lean `RHP_first_satisfied_is_optimal`."""
+    RestoreHP instance (HP 10/100) the Move-prefix node (f = g = 5) pops before
+    the Rest-node (f = g = 9); the planner expands UseConsumable from there and
+    returns the optimal `[Move, EatAtTile]` plan (cost 5 + 2 = 7), strictly
+    cheaper than the `[Rest]` plan (cost 9). Mirrors Lean
+    `RHP_first_satisfied_is_optimal`."""
     gd, state, goal, actions = _instance()
 
     planner = GOAPPlanner()
@@ -131,7 +140,7 @@ def test_planner_returns_optimal_plan_after_fix():
     assert [repr(a) for a in bf["plan"]] == ["Move(1,0)", "EatAtTile(1,0)"]
 
     # The planner returns the brute-force optimum (the previously-buggy
-    # `[Rest]` cost-10 plan is no longer chosen).
+    # `[Rest]` cost-9 plan is no longer chosen).
     assert [repr(a) for a in plan] == ["Move(1,0)", "EatAtTile(1,0)"]
     assert returned_cost == bf["cost"] == 7.0
 
@@ -139,11 +148,12 @@ def test_planner_returns_optimal_plan_after_fix():
 def test_zero_heuristic_is_admissible_and_planner_is_dijkstra():
     """h ≡ 0 is admissible w.r.t. ANY true-remaining function, so the planner
     is uniform-cost. Behavioural witness: a cheap-prefix multi-step plan
-    (Move 5 + Eat 2 = 7) beats an expensive single-step plan (Rest 10), even
-    though the multi-step plan is longer. Under the old urgency heuristic the
-    single-step satisfied node was popped first (f = 10 + 0 = 10) before the
-    Move-prefix node (f = 5 + 50 = 55), and the planner returned [Rest]. With
-    h = 0 the Move node (f = 5) pops first and the optimal plan wins."""
+    (Move 5 + Eat 2 = 7) beats an expensive single-step plan (Rest 9), even
+    though the multi-step plan is longer. Under the old urgency heuristic (at
+    HP 10/100, urgency = (1 − 0.1)·100 = 90) the single-step satisfied node was
+    popped first (f = 9 + 0 = 9) before the Move-prefix node (f = 5 + 90 = 95),
+    and the planner returned [Rest]. With h = 0 the Move node (f = 5) pops first
+    and the optimal plan wins."""
     gd, state, goal, actions = _instance()
 
     # Brute-force confirms the multi-step prefix is genuinely the cheaper route.
@@ -151,10 +161,11 @@ def test_zero_heuristic_is_admissible_and_planner_is_dijkstra():
     assert bf["cost"] == 7.0
     assert len(bf["plan"]) == 2  # multi-step
 
-    # Rest alone is shorter (1 step) but strictly costlier (10 > 7).
+    # Rest alone is shorter (1 step) but strictly costlier (9 > 7). At HP 10/100
+    # the dynamic rest cost is max(3, ceil(90%))/10 = 9.0.
     rest_only = [RestAction()]
     rest_cost = _plan_cost(state, rest_only, gd)
-    assert rest_cost == 10.0
+    assert rest_cost == 9.0
     assert rest_cost > bf["cost"]
 
     # The planner picks the cheaper multi-step plan — Dijkstra ordering by g.

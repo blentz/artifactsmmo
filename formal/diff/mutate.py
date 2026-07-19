@@ -4347,6 +4347,20 @@ COST_CORE_MUTATIONS = [
     ("cost_core: learned_cost_pure drop max() rate_floor clamp",
      "        return learned / max(rate, rate_floor)",
      "        return learned / rate if rate != 0 else float('-inf')"),
+    # rest_cost: drop the min-3s floor (`max(3, pct_ceil)` -> `pct_ceil`). At
+    # hp==max_hp the deficit is 0 -> pct_ceil 0 -> cost 0.0, not the pinned 0.3.
+    # Killed by the `rest_cost_pure(100, 100) == 0.3` spot-check in
+    # test_rest_cost_pure_nonneg (and the >= 0.3 floor assertion).
+    ("cost_core: rest_cost_pure drop max(3,...) min-3s floor",
+     "    return max(3, pct_ceil) / 10.0",
+     "    return pct_ceil / 10.0"),
+    # rest_cost: flip the ceil to a floor (drop the double-negation ceil trick,
+    # use plain floor division). A partial-percent deficit rounds DOWN, breaking
+    # the `rest_cost_pure(90, 100) == 1.0`/`rest_cost_pure(0, 100) == 10.0`
+    # formula spot-checks for non-divisor deficits (e.g. 95/200 -> 5.2 not 5.3).
+    ("cost_core: rest_cost_pure ceil -> floor",
+     "    pct_ceil = -(-(missing * 100) // max_hp)   # ceil(missing*100/max_hp); max_hp>0",
+     "    pct_ceil = (missing * 100) // max_hp   # ceil(missing*100/max_hp); max_hp>0"),
 ]
 
 

@@ -24,6 +24,7 @@ from artifactsmmo_cli.ai.actions.cost_core import (
     distance_cost_pure,
     learned_cost_pure,
     qty_cost_pure,
+    rest_cost_pure,
 )
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
@@ -33,7 +34,6 @@ from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.movement_semantic import MoveTo
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
-from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
@@ -137,6 +137,37 @@ def test_learned_cost_pure_nonneg(static, learned, rate, has_history):
         assert out == learned
 
 
+# ─── rest_cost_pure: ≥ 0 for every deficit (Python mirror of restCost_nonneg) ──
+
+
+@settings(max_examples=300)
+@given(
+    max_hp=st.integers(min_value=1, max_value=5000),
+    frac=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
+)
+def test_rest_cost_pure_nonneg(max_hp, frac):
+    """rest_cost_pure(hp, max_hp) >= 0 for every reachable HP shape
+    (0 <= hp <= max_hp, max_hp >= 1). This is the Python-side mirror of the Lean
+    theorem `restCost_nonneg`: the `max(3, …)` floor keeps the cost >= 0.3 > 0.
+
+    Also spot-checks the formula: a full deficit (hp=0) is 10.0 (matching the
+    prior flat constant), a full-HP rest is 0.3 (the 3s minimum), and a
+    10%-missing deficit is 1.0."""
+    hp = int(round((1.0 - frac) * max_hp))
+    hp = max(0, min(hp, max_hp))
+    out = rest_cost_pure(hp, max_hp)
+    assert out >= 0.0
+    assert out >= 0.3  # max(3, …)/10 floor
+
+    # Formula spot-checks (deterministic, independent of the drawn shape).
+    assert rest_cost_pure(0, 100) == 10.0      # full deficit → 100% → 10.0
+    assert rest_cost_pure(100, 100) == 0.3     # no deficit → min-3s floor
+    assert rest_cost_pure(90, 100) == 1.0      # 10% missing → 1.0
+    # Partial-percent deficit pins the CEIL (not floor): 95/200 → missing 105 →
+    # ceil(105·100/200) = ceil(52.5) = 53 → 5.3 (a floor would give 5.2).
+    assert rest_cost_pure(95, 200) == 5.3
+
+
 # ─── Per-action ≥ 0 sweep ────────────────────────────────────────────────────
 
 
@@ -148,9 +179,12 @@ def test_learned_cost_pure_nonneg(static, learned, rate, has_history):
     dy=st.integers(min_value=-50, max_value=50),
 )
 def test_constant_actions_nonneg(x, y, dx, dy):
-    """All constant-cost actions return their pinned positive constants."""
+    """All constant-cost actions return their pinned positive constants.
+
+    Rest is NO LONGER constant (its cost scales with the missing-HP fraction —
+    see test_rest_cost_pure_nonneg); it is excluded from this sweep.
+    """
     s = _state(x=x, y=y)
-    assert RestAction().cost(s, None, None) == 10.0
     assert EquipAction(code="c", slot="weapon").cost(s, None, None) == 1.0
     assert UnequipAction(slot="weapon").cost(s, None, None) == 1.0
     # P5b: transition cost folds the walk to the portal (walk + 3.0) — no

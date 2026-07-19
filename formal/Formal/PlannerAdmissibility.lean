@@ -15,8 +15,8 @@ instance in Lean and Python.
 
 THE FIX (this revision).  The planner now uses `h ≡ 0` (planner.py:81, 112);
 together with non-negative `action.cost(...)` across every Action subclass
-(rest.py:51, movement.py:58, consumable.py:93, combat.py, gathering.py,
-crafting.py, etc. — all return ≥ 0), the search becomes Dijkstra / uniform-
+(rest.py dynamic ≥ 3/10, movement.py:58, consumable.py:93, combat.py,
+gathering.py, crafting.py, etc. — all return ≥ 0), the search becomes Dijkstra / uniform-
 cost.  `h ≡ 0` is trivially admissible (`0 ≤ trueRemaining`) and consistent,
 so the textbook A* optimality result applies absolutely: the first popped
 satisfied node is least-cost.  On the same RestoreHP instance the planner
@@ -32,8 +32,9 @@ This file proves:
   popped f equals the least plan cost,
 * `zero_h_admissible` — the trivial fact that `h ≡ 0` is admissible,
 * `RestoreHP_*` — the positive correctness contract on the formerly-buggy
-  RestoreHP instance: with the planner's now-zero h, the cheap plan
-  (cost 7) is the one the planner returns, NOT the rest plan (cost 10).
+  RestoreHP instance (re-anchored to HP 10/100 so the dynamic Rest cost = 9
+  stays the expensive route): with the planner's now-zero h, the cheap plan
+  (cost 7) is the one the planner returns, NOT the rest plan (cost 9).
 
 Lean core only — no mathlib.
 -/
@@ -239,25 +240,30 @@ theorem consistent_closedSet_preserves_optimal
 /-! ## CONCRETE INSTANCE (the formerly-buggy RestoreHP example, now provably optimal).
 
 Faithful mini-instance of RestoreHPGoal (restore_hp.py) with the REAL action cost
-model (rest.py:51: Rest = 10; movement.py:58-59: a one-tile move = max(1·5, 1) = 5;
-consumable.py: a fitting UseConsumable = 2).  HP starts at 50/100 (hp_percent 0.5).
+model.  Rest is now DYNAMIC (rest.py / cost_core.rest_cost_pure:
+`max(3, ⌈missing_HP%⌉)/10`), so the deficit is chosen deep enough that Rest stays
+the expensive single-step: HP starts at 10/100 (hp_percent 0.1, missing 90%), so
+Rest = max(3, 90)/10 = 9.  movement.py:58-59: a one-tile move = max(1·5, 1) = 5;
+consumable.py: a fitting UseConsumable = 2 (a 30-HP heal fits the 90 deficit).
 
 Two ways to reach full HP (satisfied):
-  * EXPENSIVE / SHORT :  [Rest]                    g = 10
+  * EXPENSIVE / SHORT :  [Rest]                    g = 9
   * CHEAP / LONGER    :  [Move, UseConsumable]     g = 5 + 2 = 7   ← optimal
 
 With the FIX (planner h ≡ 0):
-  Rest-node              : f = g + h = 10 + 0 = 10
-  Move-node (HP still 50): f = g + h = 5  + 0 = 5     ← popped FIRST
+  Rest-node              : f = g + h = 9 + 0 = 9
+  Move-node (HP still 10): f = g + h = 5 + 0 = 5     ← popped FIRST
 After popping the Move-node the planner expands UseConsumable, reaching the eaten
-satisfied node at g = 7, which is < 10, so [Move, UseConsumable] is popped before
-[Rest].  The optimal plan is returned. -/
+satisfied node at g = 7, which is < 9, so [Move, UseConsumable] is popped before
+[Rest].  The optimal plan is returned.  (The dynamic cost does not change the
+admissibility PROPERTY — A* is optimal for any non-negative edge cost — it only
+re-anchors this witness deficit so Rest remains the costlier route.) -/
 
 /-- The four states of the instance. -/
 inductive RHPState where
-  | start          -- HP 50/100 at the home tile
+  | start          -- HP 10/100 at the home tile
   | rested         -- HP full (reached via Rest)            — SATISFIED
-  | moved          -- HP 50/100, at the cooking tile
+  | moved          -- HP 10/100, at the cooking tile
   | eaten          -- HP full (reached via Move+Use)         — SATISFIED
 deriving Repr, DecidableEq
 
@@ -282,8 +288,9 @@ def RHPtrueRemaining : RHPState → Nat
 /-- Cost of the optimal plan: [Move, UseConsumable]. -/
 def RHPoptimalPlanCost : Nat := 7
 
-/-- Cost of the (suboptimal) single-Rest plan, kept as a witness. -/
-def RHPrestPlanCost : Nat := 10
+/-- Cost of the (suboptimal) single-Rest plan, kept as a witness. At HP 10/100
+the dynamic rest cost is `max(3, ⌈90%⌉)/10 = 9` (rest_cost_pure). -/
+def RHPrestPlanCost : Nat := 9
 
 /-- The planner now uses h ≡ 0 (planner.py:81,112 after the fix). -/
 def RHPh : RHPState → Nat := fun _ => 0
@@ -299,7 +306,7 @@ theorem RHP_h_admissible : Admissible RHPh RHPtrueRemaining := by
   intro _; exact Nat.zero_le _
 
 /-- With h ≡ 0 and non-negative edge costs, the eaten satisfied node (g = 7)
-pops STRICTLY BEFORE the rested satisfied node (g = 10): f-scores are 7 < 10. -/
+pops STRICTLY BEFORE the rested satisfied node (g = 9): f-scores are 7 < 9. -/
 theorem RHP_optimal_popped_before_rest :
     fScore RHPoptimalPlanCost (RHPh eaten) < fScore RHPrestPlanCost (RHPh rested) := by
   simp [fScore, RHPh, RHPoptimalPlanCost, RHPrestPlanCost]
@@ -307,7 +314,7 @@ theorem RHP_optimal_popped_before_rest :
 /-- THE NOW-PROVABLE OPTIMALITY: applying the general A* optimality result with
 the planner's admissible h ≡ 0 on the instance.  Whenever the eaten node is
 popped no later than the rested node (which it is — see above), its plan cost
-is no greater than the rest plan's cost.  Witnessing 7 ≤ 10. -/
+is no greater than the rest plan's cost.  Witnessing 7 ≤ 9. -/
 theorem RHP_first_satisfied_is_optimal :
     RHPoptimalPlanCost ≤ RHPrestPlanCost :=
   firstSatisfied_least_cost_of_admissible

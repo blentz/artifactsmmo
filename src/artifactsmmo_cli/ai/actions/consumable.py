@@ -92,8 +92,12 @@ class UseConsumableAction(Action):
             return 2.0                        # not applicable anyway; cheap default
         _, restore = best
         if restore <= deficit:
-            return 2.0                        # fits the deficit -> beats Rest (10.0)
-        return 100.0  # overheal: must exceed RestAction.cost (10.0) so the planner Rests.
+            return 2.0                        # fits the deficit -> beats Rest (<=10.0)
+        # Overheal: 100.0 must exceed the MAX possible dynamic Rest cost. Rest is
+        # now rest_cost_pure = max(3, ceil(missing%))/10, which peaks at 10.0 for a
+        # full (100%) deficit, so 100.0 still dominates and the planner Rests
+        # rather than wasting an overhealing consumable.
+        return 100.0
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         deficit = state.max_hp - state.hp

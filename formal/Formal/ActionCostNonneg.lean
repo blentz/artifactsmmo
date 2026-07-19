@@ -12,8 +12,11 @@ discharges this precondition for the entire concrete Action set under
 
 All formulas fall into a small set of structural buckets:
 
-* **Constant** — Rest=10, Equip=1, Unequip=1, Transition=3, MoveSemantic=1,
+* **Constant** — Equip=1, Unequip=1, Transition=3, MoveSemantic=1,
   Claim=1, Consumable∈{2,100}. Trivially ≥ 0.
+* **HP-deficit-dependent** — Rest = `max(3, ⌈missing_HP%⌉)/10` (real server
+  cooldown scaled to the 10s cost unit; full-HP rest = 10, min 3/10). No longer
+  constant; `≥ 3/10 > 0` via the `max 3` floor.
 * **Distance + positive const** — AcceptTask, CompleteTask, TaskCancel,
   TaskExchange, TaskTrade, DepositGold, DepositAll, WithdrawGold,
   WithdrawItem, NpcSell, Npc, BankExpansion, OptimizeLoadout. Formula
@@ -144,8 +147,22 @@ theorem learnedCost_nonneg
 
 /-! ## Per-action wrapper theorems. -/
 
+-- Bucket 1b: HP-deficit-dependent cost (`Rat`) — Rest. Real server cooldown
+-- `max(3, ⌈missing_HP%⌉)` seconds scaled to the 10s cost unit. `missing` is the
+-- Nat truncated sub `maxHp - hp` (0 when hp ≥ maxHp); the Nat ceil
+-- `(missing*100 + maxHp - 1)/maxHp` agrees with the Python
+-- `-(-(missing*100)//max_hp)` for all inputs (incl. missing=0 → 0). The `max 3`
+-- floor makes `restCost ≥ 3/10 > 0`, so non-negativity is trivial.
+def restCost (hp maxHp : Nat) : Rat :=
+  ((max 3 (((maxHp - hp) * 100 + maxHp - 1) / maxHp) : Nat) : Rat) / 10
+
+theorem restCost_nonneg (hp maxHp : Nat) : 0 ≤ restCost hp maxHp := by
+  unfold restCost
+  rw [Rat.div_def]
+  exact Rat.mul_nonneg (by exact_mod_cast Nat.zero_le _)
+    (Rat.le_of_lt (Rat.inv_pos.mpr (by decide)))
+
 -- Bucket 1: constants. Production values, all in `Nat`.
-def restCost : Nat := 10
 def equipCost : Nat := 1
 def unequipCost : Nat := 1
 def transitionCost : Nat := 3
@@ -155,7 +172,6 @@ def consumableCostFit : Nat := 2
 def consumableCostOverheal : Nat := 100
 def teleportCost : Nat := 20  -- PLAN #6b: flat warp cost (distance-independent); `TeleportAction.cost`
 
-theorem rest_cost_nonneg : 0 ≤ restCost := by simp [restCost]
 theorem equip_cost_nonneg : 0 ≤ equipCost := by simp [equipCost]
 theorem unequip_cost_nonneg : 0 ≤ unequipCost := by simp [unequipCost]
 theorem transition_cost_nonneg : 0 ≤ transitionCost := by simp [transitionCost]

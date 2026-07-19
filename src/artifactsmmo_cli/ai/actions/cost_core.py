@@ -9,9 +9,15 @@ concrete Action that delegates here.
 
 Three structural forms cover all 26 concrete Action subclasses:
 
-1. **Constant** cost (`Rest`, `Equip`, `Unequip`, `Transition`, `Claim`,
+1. **Constant** cost (`Equip`, `Unequip`, `Transition`, `Claim`,
    `MoveSemantic`): trivially ≥ 0 — no helper needed; the constant in the
    action's `cost` method already lives in the source.
+
+1b. **HP-deficit-dependent** cost (`Rest`): the real server cooldown scales
+   with the missing-HP fraction, so `Rest` is no longer constant. Use
+   `rest_cost_pure(hp, max_hp)` = `max(3, ceil(missing_HP%)) / 10` — a full-HP
+   rest stays 10.0 (matching the prior flat constant) while small deficits are
+   cheap (≥ 0.3), so the planner rests instead of churning consumables.
 
 2. **Distance + positive constant** (`AcceptTask`, `BankExpansion`, `Craft`,
    `Recycle`, `DepositGold`, `DepositAll`, `Withdraw*`, `Npc*`,
@@ -41,6 +47,19 @@ The non-negativity contract for `learned_cost_pure`:
 all branches of `player_helpers.delete_cost` return a positive constant
 (5.0 / 25.0 / 50.0).
 """
+
+
+def rest_cost_pure(hp: int, max_hp: int) -> float:
+    """Rest edge cost = real cooldown seconds / 10 (cost unit = 10s, so a
+    full-HP rest = 100s = 10.0, matching the prior flat constant). Server
+    cooldown = max(3, ceil(missing_HP%)) seconds (1s per 1% missing HP, min 3s;
+    https://docs.artifactsmmo.com/concepts/resting_and_using_items/). Dynamic so
+    a small deficit rests cheaply (beating a fitting consumable's 2.0) instead of
+    the old flat 10.0 that made Rest always look expensive and drove wasteful
+    potion crafting."""
+    missing = max(0, max_hp - hp)
+    pct_ceil = -(-(missing * 100) // max_hp)   # ceil(missing*100/max_hp); max_hp>0
+    return max(3, pct_ceil) / 10.0
 
 
 def distance_cost_pure(base: float, dist: int) -> float:

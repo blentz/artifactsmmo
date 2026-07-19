@@ -4,7 +4,10 @@ from artifactsmmo_cli.ai.actions.cost_core import (
     distance_cost_pure,
     learned_cost_pure,
     qty_cost_pure,
+    rest_cost_pure,
 )
+from artifactsmmo_cli.ai.actions.rest import RestAction
+from tests.test_ai.fixtures import make_state
 
 
 def test_distance_cost_pure_sums_base_and_distance():
@@ -37,3 +40,40 @@ def test_learned_cost_pure_low_confidence_scales_by_rate_floor():
     # rate < 0.95 → learned / max(rate, 0.1).
     # static=10, learned=3, rate=0.05 → 3 / 0.1 = 30.
     assert learned_cost_pure(10.0, 3.0, 0.05, has_history=True) == 30.0
+
+
+def test_rest_cost_pure_full_deficit_is_ten():
+    # hp=0 → missing 100% → max(3, 100)/10 = 10.0 (matches the prior flat constant).
+    assert rest_cost_pure(0, 100) == 10.0
+
+
+def test_rest_cost_pure_full_hp_hits_min_floor():
+    # hp==max_hp → missing 0% → max(3, 0)/10 = 0.3 (the 3s minimum cooldown).
+    assert rest_cost_pure(100, 100) == 0.3
+
+
+def test_rest_cost_pure_ten_percent_missing_is_one():
+    # hp=90/100 → missing 10% → max(3, 10)/10 = 1.0.
+    assert rest_cost_pure(90, 100) == 1.0
+
+
+def test_rest_cost_pure_small_deficit_hits_min_floor():
+    # hp=99/100 → missing 1% → max(3, 1)/10 = 0.3 (min-3s floor bites).
+    assert rest_cost_pure(99, 100) == 0.3
+
+
+def test_rest_cost_pure_ceils_partial_percent():
+    # hp=95/200 → missing 105/200 = 52.5% → ceil = 53 → max(3, 53)/10 = 5.3.
+    assert rest_cost_pure(95, 200) == 5.3
+
+
+def test_rest_cost_pure_nonneg_and_deep_deficit():
+    # hp=10/100 → missing 90% → max(3, 90)/10 = 9.0 (the re-anchored demo point).
+    assert rest_cost_pure(10, 100) == 9.0
+    assert rest_cost_pure(10, 100) >= 0.0
+
+
+def test_rest_action_cost_delegates_to_rest_cost_pure():
+    # RestAction.cost must return rest_cost_pure(state.hp, state.max_hp).
+    state = make_state(hp=10, max_hp=100)
+    assert RestAction().cost(state, None, None) == rest_cost_pure(10, 100) == 9.0
