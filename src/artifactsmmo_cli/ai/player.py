@@ -1451,6 +1451,21 @@ class GamePlayer:
             # Phase B3: fired guard/means kinds as selection saw them (see
             # StrategyArbiter.last_fires) — consumed by the trace lockstep.
             "fires": dict(self._arbiter.last_fires),
+            # Arbiter anti-starvation epic follow-up: the runtime gear-focus
+            # aging ledger, on THIS surface too — `play-trace-*.jsonl` (what
+            # gets analyzed) is written HERE via `self.tracer.write_cycle`,
+            # not via `CycleSnapshot` (that's the separate cycle_observer/TUI
+            # surface; see `_notify_observer`). Same string-key encoding
+            # (`f"{slot}|{code}"`, `GamePlayer._focus_key_str`) so both
+            # surfaces agree.
+            "gear_focus": {
+                self._focus_key_str(k): v for k, v in self._gear_focus.items()
+            },
+            "interleave_seats": dict(self._interleave_seats),
+            "aged_pick": (
+                self._last_decision.aged_pick
+                if self._last_decision is not None else False
+            ),
         }
         # E-tower observable: production's loadoutAdequate — a winnable,
         # xp-positive band target exists for the CURRENT means (the exact

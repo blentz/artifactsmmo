@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.file_tracer import FileTracer
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.tiers import ObtainItem, StrategyDecision
 from artifactsmmo_cli.ai.tracer import Tracer
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -140,3 +141,82 @@ class TestPlayerTracer:
         assert state["xp"] == 42
         assert state["max_xp"] == 100
         assert state["skill_xp"] == {"mining": 50, "woodcutting": 10}
+
+    def test_trace_record_carries_gear_focus_ledger(self):
+        """The `play-trace-*.jsonl` record — what's actually analyzed — must
+        carry the gear-focus aging ledger too, string-key-encoded the same
+        way as `CycleSnapshot.gear_focus` (`f"{slot}|{code}"`), so a level-up
+        that PRESERVES a stuck root's fall-off (see
+        tests/test_ai/test_player_focus_ledger.py) is visible on the surface
+        the trace analysis actually reads. `CycleSnapshot` (cycle_observer/
+        TUI) is a different, separate surface — this test targets the
+        `_emit_trace`-written `record` dict directly."""
+        captured: list[dict] = []
+
+        class CapturingTracer(Tracer):
+            def write_cycle(self, record: dict) -> None:
+                captured.append(record)
+
+            def close(self) -> None:
+                pass
+
+        player = GamePlayer(character="testchar", tracer=CapturingTracer())
+        player.game_data = GameData()
+        player.game_data._monster_level = {"chicken": 1}
+        fill_monster_stat_defaults(player.game_data)
+        player.state = make_state()
+        player._gear_focus = {
+            ("helmet_slot", "wolf_ears"): 40,
+            ("ring2_slot", "iron_ring"): 3,
+        }
+        player._interleave_seats = {"helmet_slot": 5}
+        root = ObtainItem(code="wolf_ears", quantity=1, slot="helmet_slot")
+        player._last_decision = StrategyDecision(
+            interrupt=None, chosen_root=root, chosen_step=root, desired_state={},
+            aged_pick=True,
+        )
+
+        player._emit_trace(
+            action_name="Fight(chicken)",
+            goal_name="FarmMonster(chicken)",
+            outcome="ok",
+            planner_stats={"nodes": 5, "depth": 2, "timed_out": False, "plan_len": 1},
+        )
+        assert len(captured) == 1
+        rec = captured[0]
+        assert rec["gear_focus"] == {
+            "helmet_slot|wolf_ears": 40, "ring2_slot|iron_ring": 3,
+        }
+        assert rec["interleave_seats"] == {"helmet_slot": 5}
+        assert rec["aged_pick"] is True
+
+    def test_trace_record_aged_pick_false_when_no_decision_yet(self):
+        """No decide() has run this session (`_last_decision is None`) — the
+        trace record's `aged_pick` defaults False rather than crashing, and
+        an empty ledger serializes as empty dicts, not missing keys."""
+        captured: list[dict] = []
+
+        class CapturingTracer(Tracer):
+            def write_cycle(self, record: dict) -> None:
+                captured.append(record)
+
+            def close(self) -> None:
+                pass
+
+        player = GamePlayer(character="testchar", tracer=CapturingTracer())
+        player.game_data = GameData()
+        player.game_data._monster_level = {"chicken": 1}
+        fill_monster_stat_defaults(player.game_data)
+        player.state = make_state()
+        assert player._last_decision is None
+
+        player._emit_trace(
+            action_name="Fight(chicken)",
+            goal_name="FarmMonster(chicken)",
+            outcome="ok",
+            planner_stats={"nodes": 5, "depth": 2, "timed_out": False, "plan_len": 1},
+        )
+        rec = captured[0]
+        assert rec["gear_focus"] == {}
+        assert rec["interleave_seats"] == {}
+        assert rec["aged_pick"] is False
