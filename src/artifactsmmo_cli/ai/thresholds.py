@@ -53,3 +53,10 @@ POTION_LOW_QTY = 5
 POTION_HIGH_LEVEL = 45
 POTION_HIGH_QTY = 100             # == UTILITY_SLOT_MAX_STACK
 POTION_GATHER_BATCH = 5           # gather/craft this many when gathering is required
+
+# How many fights ahead potion stocking speculates. Crafting has lead time, so a
+# bot that only starts brewing once it is already marginal starts too late; but
+# the window also bounds the over-stocking that made a full-HP bot gather potion
+# mats it never drank. Consumed by potion_stock_target.potion_stock_target_pure,
+# where the level ramp above caps the result.
+POTION_LEAD_FIGHTS = 10

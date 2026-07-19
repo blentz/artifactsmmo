@@ -110,19 +110,70 @@ and count `CRAFT_POTIONS` / `MAINTAIN_CONSUMABLES` selections before vs after. T
 pre-change baseline from the last trace: ~86% of cycles on wolf-fight survival,
 potion gather/craft/equip 284×.
 
-## Open questions for the user
+## Decisions (user, 2026-07-19) — all settled
 
-1. **Should potions ever be stocked speculatively**, ahead of a fight that is not
-   yet losing? A strict reading of "only when it changes a combat outcome" means
-   the bot stocks only when already marginal, which may be too late given craft
-   lead time. A small lookahead buffer may be wanted.
-2. **What about boost/resist/antipoison potions?** `POTION_TYPE_WEIGHTS`
-   (`progression_tree_core.py:36-52`) weights them at 1/4 vs `hp_restore` at 1.
-   They are never a rest substitute, so this work arguably should not touch them —
-   confirm they stay out of scope.
-3. **`ProvisionMarginalFightGoal` overlap.** If Tasks 1-2 make the potion roots
-   combat-justified, does `ProvisionMarginalFightGoal` become redundant, or does it
-   stay as the acute case while the guards handle the sustained one?
+1. **Stock speculatively, with lead time.** Do NOT gate on "already marginal";
+   that fires too late given craft lead time.
+2. **Skip boost/resist/antipoison.** Only `hp_restore` is in scope. The
+   `unlock_boost_target` stall-breaker path in `craft_potions_fires` is a
+   different purpose (flipping bare-unwinnable → winnable) and stays untouched.
+3. **Keep `ProvisionMarginalFightGoal`** as the acute case; the guards handle the
+   sustained one.
+4. **Demand driver:** learned `history.hp_healed_per_fight` (actual potion
+   consumption) first. With no history, marginality decides whether there is any
+   need at all — comfortably-winnable ⇒ demand 0; marginal ⇒ size by
+   `expected_damage_per_fight`. Explicitly NOT raw expected damage as the primary
+   driver: resting already handles damage for free, so that would keep
+   over-stocking for damage no potion was ever needed for.
+5. **Lead time:** a named constant, `POTION_LEAD_FIGHTS = 10`, capped by the level
+   ramp. Must be pinned by a test and a mutation anchor so it cannot drift.
+
+## Finding that reshapes Task 1: the guard and the goal already disagree
+
+`CraftPotionsGoal._baseline` (`craft_potions.py:75-95`) is ALREADY
+consumption-aware:
+
+```python
+monster_demand = ceil(hp_need / potion_restore)
+return min(max(level_baseline, monster_demand), UTILITY_SLOT_MAX_STACK)
+```
+
+but the guard `craft_potions_fires` uses ONLY `potion_baseline_pure` — the level
+ramp, no consumption term. So the guard decides WHETHER to stock by one rule and
+the goal decides HOW MANY by another. That divergence is a latent bug independent
+of the Rest change.
+
+It also shows the ramp is currently a **floor** (`max(level_baseline, demand)`),
+which is exactly why a level-45 bot pursues 100 potions whether or not it ever
+drinks one. Per decision 1 the ramp becomes the **cap** on speculation, with
+consumption as the driver:
+
+```
+demand = ceil(hp_need_per_fight * POTION_LEAD_FIGHTS / restore)   # 0 when no need
+target = min(demand, level_baseline)                             # ramp = CAP
+```
+
+Zero projected consumption ⇒ target 0 ⇒ guard never fires. That is what kills the
+idle-bot stocking case.
+
+### Revised Task 1
+Extract ONE shared pure core (`potion_stock_target_pure`) computing the target,
+and use it in BOTH `craft_potions_fires` and `CraftPotionsGoal._baseline`, so the
+two can no longer diverge. New cores ship extracted (`project_mechanical_extraction`).
+
+**Do NOT change `potion_baseline_pure` itself** — it is mirrored bit-for-bit by
+`formal/Formal/PotionBaseline.lean` and feeds liveness proofs. Keeping it as the
+cap keeps this out of proof-rewrite territory.
+
+## Lean coupling (checked)
+
+`craftPotionsFires` is an OPAQUE state field in Lean
+(`Liveness/ProductionLadder.lean:202` — `def craftPotionsFires (s : State) : Bool :=
+s.craftPotionsFires`), and `formal/diff/test_ladder_fires_diff.py:443-445` binds
+slot 32 to the real Python predicate. So changing the predicate's internals moves
+NO Lean formula; only scenario expectations in that diff test may need updating
+where a scenario's declared value flips. Changing `potion_baseline_pure` WOULD move
+a Lean formula — hence the constraint above.
 
 ## Risks
 
