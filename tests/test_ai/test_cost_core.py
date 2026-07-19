@@ -101,7 +101,7 @@ def test_rest_cost_max_is_the_supremum_of_rest_cost_pure():
 def test_overheal_sentinel_strictly_dominates_every_rest_cost():
     for max_hp in (1, 2, 3, 7, 99, 100, 150, 1000):
         for hp in range(max_hp + 1):
-            assert OVERHEAL_CONSUMABLE_COST > rest_cost_pure(hp, max_hp)
+            assert rest_cost_pure(hp, max_hp) < OVERHEAL_CONSUMABLE_COST
 
 
 def test_overheal_sentinel_is_derived_not_hardcoded():
