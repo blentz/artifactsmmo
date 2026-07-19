@@ -238,11 +238,15 @@ overheals is never preferred to one that rests. Unconditional — it needs no
 the `max 3` floor (cost `3/10`) rather than dividing by zero in `Rat`. -/
 theorem restCost_lt_consumableCostOverheal (hp maxHp : Nat) :
     restCost hp maxHp < (consumableCostOverheal : Rat) := by
-  have hq : max 3 (((maxHp - hp) * 100 + maxHp - 1) / maxHp) ≤ 100 :=
-    Nat.max_le.mpr ⟨by omega, restCost_ceil_le_100 hp maxHp⟩
-  unfold restCost consumableCostOverheal
-  rw [Rat.div_lt_iff (by decide)]
-  exact_mod_cast (show max 3 (((maxHp - hp) * 100 + maxHp - 1) / maxHp) < 1000 by omega)
+  -- Deliberately routed through `restCost_le_restCostMax` and a `decide` on the
+  -- Nat side, rather than hardcoding the product as a numeral. Retuning the
+  -- Python `OVERHEAL_REST_MULTIPLE` regenerates the extracted multiplier, and
+  -- this proof still goes through for any multiple ≥ 2 -- whereas a literal
+  -- would send the gate red on a legitimate retune. A multiplier of 1 makes the
+  -- sentinel merely TIE the dearest Rest, and `decide` then fails here, which is
+  -- exactly the outcome we want.
+  have hnat : restCostMax < consumableCostOverheal := by decide
+  exact Std.lt_of_le_of_lt (restCost_le_restCostMax hp maxHp) (by exact_mod_cast hnat)
 
 -- Bucket 2: distance + constant.
 def acceptTaskCost (dist : Nat) : Nat := distanceCost 1 dist
