@@ -181,21 +181,32 @@ class TestRestAction:
         new_state = action.apply(state, make_game_data())
         assert new_state.skill_xp == {"alchemy": 200}
 
-    def test_cost(self):
+    def test_cost_delegates_to_rest_cost_pure(self):
+        # The action holds no constant of its own: it is rest_cost_pure(hp, max_hp).
+        # make_state defaults are hp=100/max_hp=150 -> missing 50 -> ceil(5000/150)
+        # = 34% -> max(3, 34)/10 = 3.4. The regimes themselves (min-3s floor, ceil,
+        # full deficit) are pinned in tests/test_ai/test_cost_core.py.
         action = RestAction()
         state = make_state()
         gd = make_game_data()
-        assert action.cost(state, gd) == pytest.approx(10.0)
+        assert action.cost(state, gd) == pytest.approx(3.4)
 
-    def test_cost_higher_than_consumable(self):
-        from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
-        from artifactsmmo_cli.ai.game_data import ItemStats
+    def test_cost_exceeds_consumable_only_at_deep_deficit(self):
+        # Rest always refills to full; its cooldown is the only price, and it
+        # scales with the deficit. So a consumable is worth its own cooldown only
+        # when it removes more rest-seconds than it costs -- true at a deep
+        # deficit, false at a shallow one. The old blanket "rest is dearer than a
+        # consumable" assertion held only by accident of the fixture defaults.
         stats = {"chicken": ItemStats(code="chicken", level=1, type_="consumable", hp_restore=80)}
         rest = RestAction()
         use = UseConsumableAction(_item_stats=stats)
-        state = make_state()
         gd = make_game_data()
-        assert rest.cost(state, gd) > use.cost(state, gd)
+
+        deep = make_state(hp=10, max_hp=150)      # 94% missing -> 9.4
+        assert rest.cost(deep, gd) > use.cost(deep, gd)
+
+        shallow = make_state(hp=149, max_hp=150)  # 1% missing -> min-3s floor -> 0.3
+        assert rest.cost(shallow, gd) < use.cost(shallow, gd)
 
 
 class TestFightAction:
