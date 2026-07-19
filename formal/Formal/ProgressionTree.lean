@@ -620,7 +620,17 @@ theorem focusAgingPick_unaged_eq_argmax
       exact decide_eq_true (h c hc)
     simp only [focusAgingPick, hall, if_true]
 
-/-! ### No-starvation (bounded reachability) — DEFERRED
+/-! ### No-starvation (bounded reachability) — DISCHARGED in the liveness tier
+
+RESOLVED: this theorem is now fully PROVEN (no `sorry`) as
+`Formal.ProgressionTree.interleaveDue_reaches` in
+`Formal/Liveness/InterleaveNoStarvation.lean`. Per the liveness quarantine
+(`Formal/Liveness/README.md`) the summation / ceiling argument that the two
+obstructions below cite lives in the Mathlib-permitted tier, so this safety core
+stays Mathlib-free. The honest hypotheses the counting argument needs
+(`(weighted.map Prod.fst).Nodup` and per-key positivity — see obstruction 2) are
+carried on the liveness-tier statement. The note below is retained as a record
+of the original obstructions.
 
 Intended theorem (`interleaveDue_reaches`): every strictly-positive-weight key
 `(key, w) ∈ weighted` receives a seat within a bounded window
