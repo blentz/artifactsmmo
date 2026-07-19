@@ -4361,6 +4361,18 @@ COST_CORE_MUTATIONS = [
     ("cost_core: rest_cost_pure ceil -> floor",
      "    pct_ceil = -(-(missing * 100) // max_hp)   # ceil(missing*100/max_hp); max_hp>0",
      "    pct_ceil = (missing * 100) // max_hp   # ceil(missing*100/max_hp); max_hp>0"),
+]
+
+
+# The overheal sentinel's domination invariant. SEPARATE GROUP because these are
+# killed by unit tests (tests/test_ai/test_cost_core.py), not by the Lean-mirror
+# differential that COST_CORE_MUTATIONS runs against — left in that group they
+# both SURVIVE, since test_action_cost_nonneg_diff.py never imports the two
+# constants.
+# NB: mutating the derivation back to a literal `100.0` would be VACUOUS — same
+# value, so nothing could kill it. These target the two ways the derivation can
+# be WRONG instead.
+COST_CORE_SENTINEL_MUTATIONS = [
     # REST_COST_MAX: evaluate the Rest cost at the wrong extreme (full HP instead
     # of a full deficit) -> 0.3, which is a LOWER bound, not the supremum. Killed
     # by `test_rest_cost_max_is_the_supremum_of_rest_cost_pure` (both the == 10.0
@@ -4374,9 +4386,6 @@ COST_CORE_MUTATIONS = [
     # consumable. Killed by
     # `test_overheal_sentinel_strictly_dominates_every_rest_cost` (strict >, which
     # fails at hp=0) and by the derivation pin.
-    # NB: mutating the derivation back to a literal `100.0` would be VACUOUS —
-    # same value, so nothing could kill it. The anchors target the two ways the
-    # derivation can be WRONG (wrong extreme, insufficient margin) instead.
     ("cost_core: overheal sentinel margin 10x -> 1x (ties, not dominates)",
      "OVERHEAL_CONSUMABLE_COST = 10.0 * REST_COST_MAX",
      "OVERHEAL_CONSUMABLE_COST = 1.0 * REST_COST_MAX"),
@@ -5166,6 +5175,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_event_window_diff.py", survivors)
     run_group(COST_CORE_SRC, COST_CORE_MUTATIONS,
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
+    run_group(COST_CORE_SRC, COST_CORE_SENTINEL_MUTATIONS,
+              "tests/test_ai/test_cost_core.py", survivors)
     run_group(NPC_BUY_CORE_SRC, NPC_BUY_MUTATIONS,
               "formal/diff/test_npc_buy_inventory_diff.py", survivors)
     run_group(TASK_TRADE_CORE_SRC, TASK_TRADE_CORE_MUTATIONS,
