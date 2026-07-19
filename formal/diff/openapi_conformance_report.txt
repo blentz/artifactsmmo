@@ -1,6 +1,6 @@
 # Item 14 — OpenAPI conformance audit
 
-openapi.json schemas: 208
+openapi.json schemas: 264
 Tracked schemas: 4
 
 ## 14a — Schema property drift per tracked schema
@@ -8,7 +8,7 @@ Tracked schemas: 4
 ### BankSchema
   ✓ schema in sync (4 fields)
 ### ItemSchema
-  ✓ schema in sync (10 fields)
+  ✓ schema in sync (11 fields)
 ### MonsterSchema
   ✓ schema in sync (19 fields)
 ### CraftSchema
@@ -18,9 +18,21 @@ Tracked schemas: 4
 
 ## 14b — GameData.load schema imports
 
-Schemas imported by game_data.py: 2
+Schemas imported by game_data.py: 14
+  - BankSchema
+  - CraftSkill
+  - EffectSchema
+  - EventSchema
+  - GEOrderType
+  - GatheringSkill
+  - ItemSchema
   - MapContentType
   - MapLayer
+  - MapSchema
+  - MonsterSchema
+  - NPCItemSchema
+  - ResourceSchema
+  - TaskFullSchema
 
 ## 14c — Replay coverage
 
