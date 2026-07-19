@@ -12,6 +12,9 @@ from tests.test_ai.fixtures import make_state
 def _gd(levels):
     gd = GameData()
     gd._monster_level = dict(levels)
+    # combat_target_monsters only considers monsters the planner can actually
+    # route to, so every monster in the fixture needs a known spawn tile.
+    gd._monster_locations = {code: [(1, 0)] for code in levels}
     return gd
 
 

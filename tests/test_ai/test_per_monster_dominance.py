@@ -25,6 +25,10 @@ def test_both_weapons_kept_when_each_best_vs_a_different_monster(monkeypatch):
     gd._monster_level = {"ember": 8, "golem": 9}
     gd._monster_resistance = {"ember": {"fire": -50, "earth": 80},
                                "golem": {"fire": 80, "earth": -20}}
+    # Both need a static tile: combat_target_monsters only considers monsters
+    # whose spawn is known on the map, so a location-less monster is invisible to
+    # the per-monster pareto comparison and it degrades to the flat-value path.
+    gd._monster_locations = {"ember": [(1, 0)], "golem": [(2, 0)]}
     monkeypatch.setattr(ct, "is_winnable", lambda s, g, c, h=None: True)
     state = _wstate({"fire_staff": 1, "iron_sword": 1})
     assert _is_equippable_dominated("fire_staff", state, gd) is False

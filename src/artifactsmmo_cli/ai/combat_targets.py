@@ -25,16 +25,37 @@ def _clear_cache() -> None:
 
 
 def combat_target_monsters(state: WorldState, game_data: GameData) -> list[str]:
-    """Codes of winnable monsters at or above `level - LEVEL_BAND_BELOW`."""
+    """Codes of REACHABLE winnable monsters at or above `level - LEVEL_BAND_BELOW`.
+
+    `monster_levels` is the full catalog, which includes event-only monsters and
+    raid bosses. 14 of the 58 monsters in the committed bundle have no static map
+    tile at all -- among them the raid bosses `pixie` and `sonnengott`, which no
+    action can ever target because `factory.py` only emits a `FightAction` per
+    entry of `all_monster_locations`. Without the spawn gate this helper returned
+    them, and `potion_supply.primary_combat_target` delegates here, so potion
+    stocking could size itself against a fight that can never happen.
+
+    The gate keys on REACHABILITY, not on being event content: `monster_spawn_known`
+    is event-aware, so an event monster counts while its event runs and drops out
+    when it ends. Filtering event content wholesale would undo the event-visibility
+    work that deliberately made those monsters fightable.
+    """
     equip_sig = tuple(sorted(c for c in state.equipment.values() if c is not None))
-    key = (id(game_data), state.level, equip_sig)
+    # active_event_codes is part of the read-set: `monster_spawn_known` consults it,
+    # and the player mutates it on the SAME GameData object every cycle
+    # (player.py:1275). Keying only on id(game_data) would serve the pre-event
+    # answer for the rest of the run.
+    key = (id(game_data), state.level, equip_sig,
+           frozenset(game_data.active_event_codes))
     if _cache.get("key") == key:
         cached_val = _cache["val"]
         if isinstance(cached_val, list):
             return list(cached_val)
     floor = state.level - LEVEL_BAND_BELOW
     out = [code for code, level in game_data.monster_levels.items()
-           if level >= floor and is_winnable(state, game_data, code, None)]
+           if level >= floor
+           and game_data.monster_spawn_known(code)
+           and is_winnable(state, game_data, code, None)]
     _cache["key"] = key
     _cache["val"] = out
     return list(out)

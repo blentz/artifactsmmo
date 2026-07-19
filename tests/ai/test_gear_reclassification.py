@@ -101,6 +101,11 @@ def test_ring_per_monster_not_dominated_by_attack_ring(monkeypatch):
     }
     gd._monster_level = {"fire_slime": 1}
     gd._monster_attack = {"fire_slime": {"fire": 20}}
+    # A tile, so the monster survives combat_target_monsters' spawn gate. The gate
+    # drops catalog monsters that spawn nowhere (raid bosses, dormant event
+    # content); without a tile this fixture's monster vanishes and the per-monster
+    # comparison below has nothing to compare against.
+    gd._monster_locations = {"fire_slime": [(0, 0)]}
     monkeypatch.setattr(ct, "is_winnable", lambda s, g, c, h=None: True)
     # 2 attack_rings fills both ring slots by count — enough to scalar-dominate in old code.
     state = _make_state(inventory={"attack_ring": 2, "resist_ring": 1})
