@@ -566,12 +566,12 @@ DOMINANCE_PARETO_MUTATIONS = [
      "    return geq_all"),
     # geq comparator >= -> > : a tie on one component wrongly un-dominates.
     ("dominance_pareto: geq_all >= -> >",
-     "    geq_all = all(p >= i for p, i in zip(peer_scores, item_scores))",
-     "    geq_all = all(p > i for p, i in zip(peer_scores, item_scores))"),
+     "    geq_all = all(p >= i for p, i in zip(peer_scores, item_scores, strict=False))",
+     "    geq_all = all(p > i for p, i in zip(peer_scores, item_scores, strict=False))"),
     # strict comparator > -> >= : equal vectors wrongly dominate.
     ("dominance_pareto: gt_some > -> >=",
-     "    gt_some = any(p > i for p, i in zip(peer_scores, item_scores))",
-     "    gt_some = any(p >= i for p, i in zip(peer_scores, item_scores))"),
+     "    gt_some = any(p > i for p, i in zip(peer_scores, item_scores, strict=False))",
+     "    gt_some = any(p >= i for p, i in zip(peer_scores, item_scores, strict=False))"),
 ]
 
 
@@ -2669,8 +2669,8 @@ PROGRESSION_TREE_MUTATIONS = [
      "    return POTION_TYPE_WEIGHTS.get(family, Fraction(0))",
      "    return POTION_TYPE_WEIGHTS.get(family, Fraction(1))"),
     ("tree: argmax gain sign flipped (worst upgrade wins)",
-     "    return min(candidates, key=lambda c: (-c.gain, -c.level, c.code, c.slot))",
-     "    return min(candidates, key=lambda c: (c.gain, -c.level, c.code, c.slot))"),
+     "    return (-c.gain, -c.level, c.code, c.slot)",
+     "    return (c.gain, -c.level, c.code, c.slot)"),
     # Focus-aging pure functions (Task 7, 2026-07-18): unit-killed group.
     # falloff: flat-window floor swap.
     ("falloff: floor instead of full weight in flat window",

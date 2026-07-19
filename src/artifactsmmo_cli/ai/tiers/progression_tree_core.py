@@ -162,13 +162,20 @@ class GearCandidate:
     level: int
 
 
+def _gear_pref_key(c: GearCandidate) -> tuple[Fraction, int, str, str]:
+    """Canonical total order for gear candidates: biggest weighted gain, then
+    higher item level (newer gear generation), then code and slot ascending as
+    PURE disambiguators (insertion-order and hash-seed independent). The single
+    source of truth for both `gear_target_pick`'s argmax and `focus_aging_order`'s
+    tail sort. Mirrors Lean `Formal.ProgressionTree.better`."""
+    return (-c.gain, -c.level, c.code, c.slot)
+
+
 def gear_target_pick(candidates: list[GearCandidate]) -> GearCandidate | None:
-    """Deterministic argmax: biggest weighted gain, then higher item level
-    (newer gear generation), then code and slot as PURE disambiguators
-    (canonical total order — insertion-order and hash-seed independent)."""
+    """Deterministic argmax over the canonical `_gear_pref_key` total order."""
     if not candidates:
         return None
-    return min(candidates, key=lambda c: (-c.gain, -c.level, c.code, c.slot))
+    return min(candidates, key=_gear_pref_key)
 
 
 def _scaled_weights(candidates: list[GearCandidate],
@@ -221,6 +228,5 @@ def focus_aging_order(candidates: list[GearCandidate],
         return []
     pick = focus_aging_pick(candidates, focus, seats)
     assert pick is not None
-    rest = sorted((c for c in candidates if c is not pick),
-                  key=lambda c: (-c.gain, -c.level, c.code, c.slot))
+    rest = sorted((c for c in candidates if c is not pick), key=_gear_pref_key)
     return [pick, *rest]
