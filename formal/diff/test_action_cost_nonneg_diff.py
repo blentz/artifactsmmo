@@ -21,6 +21,8 @@ from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
 from artifactsmmo_cli.ai.actions.cost_core import (
+    OVERHEAL_CONSUMABLE_COST,
+    REST_COST_MAX,
     distance_cost_pure,
     learned_cost_pure,
     qty_cost_pure,
@@ -166,6 +168,38 @@ def test_rest_cost_pure_nonneg(max_hp, frac):
     # Partial-percent deficit pins the CEIL (not floor): 95/200 → missing 105 →
     # ceil(105·100/200) = ceil(52.5) = 53 → 5.3 (a floor would give 5.2).
     assert rest_cost_pure(95, 200) == 5.3
+
+
+# ─── the overheal sentinel dominates Rest (mirror of ──────────────────────────
+# ─── restCost_lt_consumableCostOverheal) ──────────────────────────────────────
+
+
+@settings(max_examples=300)
+@given(
+    max_hp=st.integers(min_value=1, max_value=5000),
+    frac=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
+)
+def test_overheal_sentinel_dominates_rest_cost(max_hp, frac):
+    """Python mirror of `restCost_lt_consumableCostOverheal`, which proves
+    `restCost hp maxHp < consumableCostOverheal` for ALL hp/maxHp in the kernel.
+
+    UseConsumableAction returns this sentinel when its only pickable consumable
+    overshoots the deficit, so the planner Rests instead of wasting it -- sound
+    only while the sentinel strictly outranks every reachable Rest cost.
+
+    The `== 100.0` pin is what carries the Lean proof over to the Python side:
+    the theorem bounds `restCost` by the Lean `consumableCostOverheal := 100`, so
+    the transfer holds exactly while the two constants agree. The mirror is by
+    convention (both sides assert 100), not by extraction -- this assertion is
+    what makes a silent divergence fail the gate."""
+    hp = int(round((1.0 - frac) * max_hp))
+    hp = max(0, min(hp, max_hp))
+    assert OVERHEAL_CONSUMABLE_COST == 100.0     # == Lean consumableCostOverheal
+    assert rest_cost_pure(hp, max_hp) < OVERHEAL_CONSUMABLE_COST
+    # The bound is tight at a full deficit: 10.0 < 100.0, with REST_COST_MAX the
+    # supremum the Lean ceil-lemma (restCost_ceil_le_100) establishes.
+    assert rest_cost_pure(0, max_hp) == REST_COST_MAX
+    assert REST_COST_MAX < OVERHEAL_CONSUMABLE_COST
 
 
 # ─── Per-action ≥ 0 sweep ────────────────────────────────────────────────────

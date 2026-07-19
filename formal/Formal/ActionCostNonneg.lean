@@ -182,6 +182,41 @@ theorem consumable_cost_fit_nonneg : 0 ≤ consumableCostFit := by simp [consuma
 theorem consumable_cost_overheal_nonneg : 0 ≤ consumableCostOverheal := by
   simp [consumableCostOverheal]
 
+/-! ### The overheal sentinel dominates every Rest cost.
+
+`UseConsumableAction` returns `consumableCostOverheal` when the only consumable it
+can pick overshoots the deficit, so that the planner Rests instead of wasting it.
+That is sound only while the sentinel strictly exceeds EVERY reachable Rest cost —
+a relationship that used to live in a Python comment, one file away from the
+formula it constrains (`cost_core.OVERHEAL_CONSUMABLE_COST`, derived there from
+`REST_COST_MAX`). Here it is kernel-checked instead, for all `hp` and `maxHp`. -/
+
+/-- The Nat ceil term inside `restCost` never exceeds 100. `missing = maxHp - hp`
+is a truncated sub, so `missing ≤ maxHp` and the numerator is at most
+`(maxHp - 1) + maxHp * 100`, whose quotient by `maxHp` is exactly 100. The
+`maxHp = 0` case is division by zero, which Nat sends to 0. -/
+theorem restCost_ceil_le_100 (hp maxHp : Nat) :
+    ((maxHp - hp) * 100 + maxHp - 1) / maxHp ≤ 100 := by
+  rcases Nat.eq_zero_or_pos maxHp with h | h
+  · subst h; simp
+  · have hnum : (maxHp - hp) * 100 + maxHp - 1 ≤ (maxHp - 1) + maxHp * 100 := by omega
+    calc ((maxHp - hp) * 100 + maxHp - 1) / maxHp
+        ≤ ((maxHp - 1) + maxHp * 100) / maxHp := Nat.div_le_div_right hnum
+      _ = (maxHp - 1) / maxHp + 100 := Nat.add_mul_div_left _ _ h
+      _ = 100 := by rw [Nat.div_eq_of_lt (by omega)]
+
+/-- Rest is always strictly cheaper than the overheal sentinel, so a plan that
+overheals is never preferred to one that rests. Unconditional — it needs no
+`0 < maxHp` hypothesis, because the degenerate `maxHp = 0` state bottoms out at
+the `max 3` floor (cost `3/10`) rather than dividing by zero in `Rat`. -/
+theorem restCost_lt_consumableCostOverheal (hp maxHp : Nat) :
+    restCost hp maxHp < (consumableCostOverheal : Rat) := by
+  have hq : max 3 (((maxHp - hp) * 100 + maxHp - 1) / maxHp) ≤ 100 :=
+    Nat.max_le.mpr ⟨by omega, restCost_ceil_le_100 hp maxHp⟩
+  unfold restCost consumableCostOverheal
+  rw [Rat.div_lt_iff (by decide)]
+  exact_mod_cast (show max 3 (((maxHp - hp) * 100 + maxHp - 1) / maxHp) < 1000 by omega)
+
 -- Bucket 2: distance + constant.
 def acceptTaskCost (dist : Nat) : Nat := distanceCost 1 dist
 def completeTaskCost (dist : Nat) : Nat := distanceCost 1 dist
