@@ -4361,6 +4361,25 @@ COST_CORE_MUTATIONS = [
     ("cost_core: rest_cost_pure ceil -> floor",
      "    pct_ceil = -(-(missing * 100) // max_hp)   # ceil(missing*100/max_hp); max_hp>0",
      "    pct_ceil = (missing * 100) // max_hp   # ceil(missing*100/max_hp); max_hp>0"),
+    # REST_COST_MAX: evaluate the Rest cost at the wrong extreme (full HP instead
+    # of a full deficit) -> 0.3, which is a LOWER bound, not the supremum. Killed
+    # by `test_rest_cost_max_is_the_supremum_of_rest_cost_pure` (both the == 10.0
+    # pin and the sweep, where deep-deficit costs exceed the mutated "max").
+    ("cost_core: REST_COST_MAX taken at full HP instead of full deficit",
+     "REST_COST_MAX = rest_cost_pure(0, 1)",
+     "REST_COST_MAX = rest_cost_pure(1, 1)"),
+    # Overheal sentinel: collapse the dominance margin to 1x, so the sentinel
+    # merely TIES the dearest Rest (10.0) instead of strictly exceeding it — the
+    # planner would no longer reliably prefer Rest over wasting an overhealing
+    # consumable. Killed by
+    # `test_overheal_sentinel_strictly_dominates_every_rest_cost` (strict >, which
+    # fails at hp=0) and by the derivation pin.
+    # NB: mutating the derivation back to a literal `100.0` would be VACUOUS —
+    # same value, so nothing could kill it. The anchors target the two ways the
+    # derivation can be WRONG (wrong extreme, insufficient margin) instead.
+    ("cost_core: overheal sentinel margin 10x -> 1x (ties, not dominates)",
+     "OVERHEAL_CONSUMABLE_COST = 10.0 * REST_COST_MAX",
+     "OVERHEAL_CONSUMABLE_COST = 1.0 * REST_COST_MAX"),
 ]
 
 

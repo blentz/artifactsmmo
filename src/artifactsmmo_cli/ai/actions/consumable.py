@@ -10,6 +10,7 @@ from artifactsmmo_api_client.api.my_characters.action_use_item_my_name_action_us
 from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cost_core import OVERHEAL_CONSUMABLE_COST
 from artifactsmmo_cli.ai.consumable_selection import select_consumable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -83,8 +84,8 @@ class UseConsumableAction(Action):
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
         # select_consumable is overheal-aware: it picks the best-FITTING consumable
-        # for the deficit, only overhealing when NOTHING fits. So the 100.0 Rest-
-        # forcing sentinel fires only when even the chosen (least-overheal) item still
+        # for the deficit, only overhealing when NOTHING fits. So the Rest-forcing
+        # sentinel fires only when even the chosen (least-overheal) item still
         # overshoots — i.e. no fitting consumable exists.
         deficit = state.max_hp - state.hp
         best = select_consumable(state.inventory, self._item_stats, deficit)
@@ -92,12 +93,11 @@ class UseConsumableAction(Action):
             return 2.0                        # not applicable anyway; cheap default
         _, restore = best
         if restore <= deficit:
-            return 2.0                        # fits the deficit -> beats Rest (<=10.0)
-        # Overheal: 100.0 must exceed the MAX possible dynamic Rest cost. Rest is
-        # now rest_cost_pure = max(3, ceil(missing%))/10, which peaks at 10.0 for a
-        # full (100%) deficit, so 100.0 still dominates and the planner Rests
-        # rather than wasting an overhealing consumable.
-        return 100.0
+            return 2.0                        # fits the deficit -> beats Rest (<= REST_COST_MAX)
+        # Overheal: prefer Rest over wasting the item. OVERHEAL_CONSUMABLE_COST is
+        # derived from REST_COST_MAX (cost_core.py), so it stays dominant if the
+        # Rest cost unit is ever rescaled.
+        return OVERHEAL_CONSUMABLE_COST
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         deficit = state.max_hp - state.hp

@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.actions.complete_task import (
     CompleteTaskAction,
 )
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
+from artifactsmmo_cli.ai.actions.cost_core import OVERHEAL_CONSUMABLE_COST, REST_COST_MAX
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
@@ -924,11 +925,13 @@ class TestUseConsumableAction:
         assert action.cost(state, make_game_data()) == 2.0
 
     def test_consumable_expensive_when_overheal(self):
-        # deficit 10 < potion restore 50 -> overheal -> cost above Rest (10.0)
+        # deficit 10 < potion restore 50 -> overheal -> the Rest-forcing sentinel,
+        # which must outrank the dearest possible Rest rather than a literal 10.0.
         item_stats = {"potion": ItemStats(code="potion", level=1, type_="consumable", hp_restore=50)}
         action = UseConsumableAction(_item_stats=item_stats)
         state = make_state(hp=90, max_hp=100, inventory={"potion": 3})
-        assert action.cost(state, make_game_data()) > 10.0
+        assert action.cost(state, make_game_data()) == OVERHEAL_CONSUMABLE_COST
+        assert action.cost(state, make_game_data()) > REST_COST_MAX
 
 
 class TestAcceptTaskAction:

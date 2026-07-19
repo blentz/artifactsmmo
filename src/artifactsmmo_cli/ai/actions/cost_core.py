@@ -62,6 +62,30 @@ def rest_cost_pure(hp: int, max_hp: int) -> float:
     return max(3, pct_ceil) / 10.0
 
 
+REST_COST_MAX = rest_cost_pure(0, 1)
+"""The supremum of `rest_cost_pure` over every reachable HP shape (= 10.0).
+
+`missing <= max_hp` always, so `pct_ceil <= 100` and the cost peaks at
+`max(3, 100)/10` -- independently of `max_hp`, which is why one constant covers
+every character. Evaluated from the formula rather than written as a literal so
+that rescaling the cost unit inside `rest_cost_pure` carries this with it.
+"""
+
+OVERHEAL_CONSUMABLE_COST = 10.0 * REST_COST_MAX
+"""Cost `UseConsumableAction` returns when the only consumable it can pick
+overshoots the deficit (see `consumable.py`).
+
+The point is to make the planner prefer Rest over wasting an overhealing item,
+which is only sound while this STRICTLY exceeds every possible Rest cost -- so it
+is derived from `REST_COST_MAX` rather than hardcoded next to a comment asserting
+the relationship. The order-of-magnitude margin keeps it dominant over a plausible
+multi-step rest-and-move alternative too.
+
+Value is 100.0, matching the Lean mirror `ActionCostNonneg.consumableCostOverheal`;
+changing the multiplier requires moving that definition in lockstep.
+"""
+
+
 def distance_cost_pure(base: float, dist: int) -> float:
     """Cost = base + dist. Non-negative when base >= 0 and dist >= 0.
 

@@ -1,6 +1,8 @@
 """Coverage tests for actions/cost_core.py pure helpers."""
 
 from artifactsmmo_cli.ai.actions.cost_core import (
+    OVERHEAL_CONSUMABLE_COST,
+    REST_COST_MAX,
     distance_cost_pure,
     learned_cost_pure,
     qty_cost_pure,
@@ -77,3 +79,34 @@ def test_rest_action_cost_delegates_to_rest_cost_pure():
     # RestAction.cost must return rest_cost_pure(state.hp, state.max_hp).
     state = make_state(hp=10, max_hp=100)
     assert RestAction().cost(state, None, None) == rest_cost_pure(10, 100) == 9.0
+
+
+# ─── the overheal sentinel's domination invariant ────────────────────────────
+# UseConsumableAction returns OVERHEAL_CONSUMABLE_COST when the only available
+# consumable overshoots the deficit, so that the planner Rests rather than waste
+# it. That is only correct while the sentinel strictly exceeds EVERY reachable
+# Rest cost. Previously that reasoning lived in a comment, in a different file
+# from the formula it constrained; these tests make it executable.
+
+def test_rest_cost_max_is_the_supremum_of_rest_cost_pure():
+    # missing <= max_hp, so pct_ceil <= 100 and the cost peaks at max(3,100)/10.
+    # The peak is independent of max_hp, which is why a single constant suffices.
+    assert REST_COST_MAX == 10.0
+    for max_hp in (1, 2, 3, 7, 99, 100, 150, 1000):
+        for hp in range(max_hp + 1):
+            assert rest_cost_pure(hp, max_hp) <= REST_COST_MAX
+    assert rest_cost_pure(0, 150) == REST_COST_MAX      # attained at a full deficit
+
+
+def test_overheal_sentinel_strictly_dominates_every_rest_cost():
+    for max_hp in (1, 2, 3, 7, 99, 100, 150, 1000):
+        for hp in range(max_hp + 1):
+            assert OVERHEAL_CONSUMABLE_COST > rest_cost_pure(hp, max_hp)
+
+
+def test_overheal_sentinel_is_derived_not_hardcoded():
+    # Pins the derivation itself: the sentinel is a multiple of the Rest maximum,
+    # so rescaling the Rest cost unit carries the sentinel with it. The value must
+    # stay 100.0 to keep the Lean mirror (ActionCostNonneg.consumableCostOverheal)
+    # in lockstep.
+    assert OVERHEAL_CONSUMABLE_COST == 10.0 * REST_COST_MAX == 100.0
