@@ -8,14 +8,19 @@ candidate is silently REJECTED. The raid was unselectable for exactly that reaso
 until the xp floor was added.
 """
 
+from datetime import datetime, timedelta, timezone
+
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.participate_raid import (
     RAID_PARTICIPATION_VALUE,
     ParticipateRaidGoal,
 )
+from artifactsmmo_cli.ai.raid_info import RaidInfo
+from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 _RAID = "enchanted_fairy"
@@ -76,3 +81,56 @@ def test_desired_state_is_empty_so_the_goal_test_is_is_satisfied():
     """Pairs with is_satisfied: the planner goal-tests via is_satisfied, so a
     non-empty desired_state here would add a second, divergent goal test."""
     assert _goal().desired_state(make_state(), GameData()) == {}
+
+
+# ─── the two _raid_candidates gates, exercised directly ──────────────────────
+# Both are refusals the raid design turns on, and both shipped uncovered: a raid
+# with no known tile, and one the character cannot survive. A gate that is never
+# exercised is a gate nobody has checked refuses anything.
+
+def _raid_info() -> RaidInfo:
+    now = datetime.now(timezone.utc)
+    return RaidInfo(code=_RAID, name=_RAID, monster=_BOSS, status="active",
+                    next_start_at=now + timedelta(days=1), remaining_hp=5000,
+                    total_hp=10000, window_ends_at=now + timedelta(hours=1))
+
+
+def _raid_gd(*, tiles: bool, hurts: bool) -> GameData:
+    gd = GameData()
+    gd._item_stats = {"x": ItemStats(code="x", level=1, type_="resource")}
+    gd._monster_level = {_BOSS: 40}
+    gd._monster_hp = {_BOSS: 100}
+    gd._monster_attack = {_BOSS: {"air": 400 if hurts else 1}}
+    gd._monster_resistance = {_BOSS: {}}
+    if tiles:
+        gd.world.raid_locations = {_RAID: [(-4, 10)]}
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+def _candidates(gd, state):
+    return StrategyArbiter._raid_candidates(
+        StrategyArbiter.__new__(StrategyArbiter), state, gd)
+
+
+def test_raid_with_no_known_tile_is_not_offered():
+    state = make_state(level=48, hp=1000, max_hp=1000,
+                       attack={"air": 50}, raids=[_raid_info()])
+    assert _candidates(_raid_gd(tiles=False, hurts=False), state) == []
+
+
+def test_unsurvivable_raid_is_not_offered():
+    """A boss that would drop the character below the critical floor in one
+    engagement: rest first, do not go."""
+    state = make_state(level=48, hp=1000, max_hp=1000,
+                       attack={"air": 50}, raids=[_raid_info()])
+    assert _candidates(_raid_gd(tiles=True, hurts=True), state) == []
+
+
+def test_survivable_raid_with_a_tile_is_offered():
+    """Non-vacuity: the same shape that passes both gates DOES produce a goal,
+    so the two refusals above are measuring the gates and not a broken fixture."""
+    state = make_state(level=48, hp=1000, max_hp=1000,
+                       attack={"air": 50}, raids=[_raid_info()])
+    out = _candidates(_raid_gd(tiles=True, hurts=False), state)
+    assert [repr(g) for g in out] == [f"ParticipateRaid({_RAID})"]

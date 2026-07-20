@@ -222,3 +222,19 @@ def test_classifier_flags_event_only_resources():
     gather = GatherAction(resource_code="fairy_dust_node",
                           locations=frozenset({(3, 0)}))
     assert _event_only_target(gather, gd) == "fairy_dust_node"
+
+
+def test_state_says_active_but_gamedata_overlay_disagrees_does_not_fit():
+    """The DESYNC guard. `state.active_events` and
+    `game_data.world.active_event_codes` are separate sources, synced per cycle
+    by the player. If the state believes the window is open but the overlay has
+    not been refreshed, the content resolves to NO reachable tiles -- there is
+    nothing to route to, so the plan cannot be honoured.
+
+    Reaching this needs the two sources to disagree; an empty tile list instead
+    makes the content read as non-event and skips the gate entirely."""
+    gd = _gd()
+    gd.world.active_event_codes = set()          # overlay says the event is SHUT
+    fight = FightAction(monster_code=_EVENT_ONLY, locations=frozenset({(3, 0)}))
+    # ...while the STATE still carries an un-expired window for it.
+    assert plan_fits_event_window([fight], _state(3600), gd, _NOW) is False

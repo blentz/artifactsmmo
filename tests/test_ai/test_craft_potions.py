@@ -598,3 +598,34 @@ def test_goal_prioritizes_heal_over_boost():
     assert result is not None, "_active_craft must return a heal plan when heals are understocked"
     code, _runs, _qty = result
     assert code == _POTION
+
+
+# ─── uncovered defensive branches (added 2026-07-20) ─────────────────────────
+# Found by the 100% coverage gate after the merge, not by the fast --no-cov loop
+# I had switched to. Each is a real path the goal can be constructed into.
+
+def test_baseline_zero_without_game_data_or_state():
+    """`_baseline` is called with optional context; without it there is no
+    monster and no target, so there is nothing to size a stock against."""
+    goal = CraftPotionsGoal(combat_monster=_HURTS)
+    assert goal._baseline(10, None, None, None) == 0
+    assert goal._baseline(10, make_state(level=10), None, None) == 0
+
+
+def test_is_satisfied_without_game_data_reads_satisfied():
+    """The state-only arm, and it is DEGENERATE by construction.
+
+    `Goal.is_satisfied(state)` has no GameData, so a goal built without one
+    compares utility-slot quantities against `_baseline(...)` -- which itself
+    returns 0 when game_data is None. `qty >= 0` always holds, so the goal reads
+    satisfied whatever the stock.
+
+    That is the right outcome (no catalog means no target means nothing to do)
+    but it is easy to misread as a stocking check, so it is pinned rather than
+    left implicit. The REAL gating lives in `craft_potions_fires`, which does
+    have GameData; the guard not firing is what makes this arm unreachable in
+    production."""
+    goal = CraftPotionsGoal()          # no game_data injected
+    assert goal.is_satisfied(make_state(level=3, utility1_slot_quantity=99)) is True
+    assert goal.is_satisfied(
+        make_state(level=3, utility1_slot_quantity=0, utility2_slot_quantity=0)) is True

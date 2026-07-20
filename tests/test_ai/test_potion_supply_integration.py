@@ -428,3 +428,16 @@ def test_guard_fires_when_consumption_is_projected():
         inventory={_INGREDIENT: 3},
     )
     assert craft_potions_fires(state, gd, None) is True
+
+
+def test_guard_quiet_when_the_heal_target_has_an_empty_recipe():
+    """A craftable-now heal whose recipe is EMPTY has no ingredient path, so the
+    guard must stay silent rather than fire on an unbuildable target.
+
+    Distinct from the no-recipe case: the item IS in crafting_recipes, mapped to
+    an empty dict."""
+    gd = _gd_with_potion_and_hurting_monster()
+    gd._crafting_recipes = {_POTION: {}}          # present but empty
+    state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0,
+                       inventory={_INGREDIENT: 10}, attack={"fire": 20})
+    assert craft_potions_fires(state, gd, None) is False
