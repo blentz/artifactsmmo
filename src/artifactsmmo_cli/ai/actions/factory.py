@@ -75,6 +75,21 @@ def build_actions(
         actions.append(FightAction(monster_code=monster_code, locations=frozenset(locs)))
         actions.append(OptimizeLoadoutAction(target_monster_code=monster_code, game_data=game_data))
 
+    # Raid bosses have NO monster-type map tile, so the loop above never sees
+    # them — that is the mechanical reason a raid was unplannable. Participation
+    # is the ordinary fight action at a tile whose content type is `raid`, while
+    # the raid is active (upstream concept docs), so the emission is a plain
+    # FightAction rather than a new action type. Gated on `active_raids` because
+    # the tile exists statically but the boss is only fightable inside the
+    # window; whether to ENGAGE is decided separately by ai/raid_participation.
+    for raid in (state.active_raids if state is not None else []):
+        raid_tiles = game_data.raid_location_tiles(raid.code)
+        if raid_tiles:
+            actions.append(FightAction(monster_code=raid.monster,
+                                       locations=frozenset(raid_tiles)))
+            actions.append(OptimizeLoadoutAction(target_monster_code=raid.monster,
+                                                 game_data=game_data))
+
     for resource_code, locs in game_data.all_resource_locations.items():
         actions.append(GatherAction(resource_code=resource_code, locations=frozenset(locs)))
         # P1: one targeted gather per NON-primary drop (rare multi-drops —
