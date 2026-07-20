@@ -11,6 +11,30 @@ close before the character can walk to the merchant."""
 EVENT_ARRIVAL_MARGIN_SECONDS = 10.0
 """Safety margin added to estimated travel time before committing to the trip."""
 
+PLAN_SECONDS_PER_COST_UNIT = 10.0
+"""The planner's cost unit in seconds. Established by `rest_cost_pure`: a full-HP
+rest is 100 real seconds and costs 10.0, so one cost unit is 10s. That conversion
+is what lets an event window be compared against a PLAN, not just against travel."""
+
+
+def event_window_sufficient_pure(remaining_seconds: float, distance: int,
+                                 plan_cost: float) -> bool:
+    """True when the event stays up long enough to travel there AND finish the
+    plan, with the arrival margin to spare.
+
+    Travel alone was the original question (`event_npc_tradeable`), and it is
+    only half: reaching the spawn tile is worthless if the window shuts partway
+    through the ten actions planned for it. `plan_cost` is in planner cost units;
+    a non-positive value degrades this to the pure travel question, which is the
+    pre-P2 behaviour and the right answer for a caller that has no plan yet.
+    """
+    if remaining_seconds <= 0:
+        return False
+    needed = distance * EVENT_TRAVEL_SECONDS_PER_TILE + EVENT_ARRIVAL_MARGIN_SECONDS
+    if plan_cost > 0:
+        needed += plan_cost * PLAN_SECONDS_PER_COST_UNIT
+    return remaining_seconds > needed
+
 
 def event_npc_tradeable(
     npc_code: str,
@@ -43,6 +67,9 @@ def event_npc_tradeable(
     if spawn is None:
         return False
     distance = abs(spawn[0] - x) + abs(spawn[1] - y)
-    travel_seconds = distance * EVENT_TRAVEL_SECONDS_PER_TILE
-    remaining = (expiration - now).total_seconds()
-    return remaining > travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS
+    # Delegates to the shared window predicate so NPC and non-NPC event content
+    # cannot drift apart. plan_cost=0 keeps the NPC question exactly as it was --
+    # a trade is one action at the tile, so travel is the whole cost.
+    return event_window_sufficient_pure(
+        remaining_seconds=(expiration - now).total_seconds(),
+        distance=distance, plan_cost=0.0)
