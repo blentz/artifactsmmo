@@ -12,6 +12,7 @@ from pathlib import Path
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
@@ -74,6 +75,17 @@ class ScenarioCharacter:
     codes. seed_offline mirrors the live player's per-cycle overlay by
     seeding GameData.active_event_codes from the state, so event
     monster/resource/NPC spawns surface exactly as they do live."""
+    raids: tuple[str, ...] = ()
+    """Raid codes live for the whole scenario cycle (converted to
+    `WorldState.raids` entries with status="active"). Mirrors `active_events`,
+    with one difference: `RaidInfo.is_active()` keys on the STATUS string, not on
+    a timestamp window, so a declared raid reads as active by construction rather
+    than by an expiry far in the future.
+
+    Exists so a scenario can exercise BOTH poles of a raid-gated decision -- no
+    raid means the bot provably cannot plan, an active raid means it can. Without
+    it only the negative pole is expressible, and the negative pole passes
+    trivially (epic P3, docs/PLAN_events_raids_epic.md)."""
     derive_combat_stats: bool = False
     """When True, scenario_state computes the server-total combat stats
     (attack/dmg/dmg_elements/resistance/critical_strike/initiative) by
@@ -199,6 +211,10 @@ def scenario_state(sc: ScenarioCharacter,
         utility1_slot_quantity=sc.utility_quantities.get("utility1_slot", 0),
         utility2_slot_quantity=sc.utility_quantities.get("utility2_slot", 0),
         active_events={code: FAR_FUTURE for code in sc.active_events},
+        raids=[RaidInfo(code=code, name=code, monster=code, status="active",
+                        next_start_at=FAR_FUTURE, remaining_hp=None,
+                        total_hp=None, window_ends_at=FAR_FUTURE)
+               for code in sc.raids],
         attack=combat.attack,
         dmg=combat.dmg,
         dmg_elements=combat.dmg_elements,
