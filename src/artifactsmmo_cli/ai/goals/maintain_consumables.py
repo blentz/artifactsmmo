@@ -3,7 +3,14 @@
 Selected by the MAINTAIN_CONSUMABLES discretionary means when combat is the
 active means and the bot is under-stocked on heals. Crafts the best heal its
 skills can make (reusing recipe-closure gather/withdraw/craft actions) so the
-bot tops up its cupboard instead of falling back on the slow Rest action.
+bot has heals to DRINK MID-FIGHT.
+
+Note the justification: NOT "instead of falling back on the slow Rest action".
+Rest is no longer slow in general -- since the dynamic cost landed it is
+max(3, ceil(missing%)) seconds and refills to FULL, so resting off damage
+between fights is cheap and gather-crafting a heal to avoid it never pays. What
+Rest cannot do is happen DURING a fight, which is the whole reason to carry
+heals.
 """
 
 import dataclasses

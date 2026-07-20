@@ -169,8 +169,10 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
 
     if kind is MeansKind.MAINTAIN_CONSUMABLES:
         # Only when combat is the active means (a target is selected): keep a
-        # heal stockpile so the bot cooks/brews instead of resting between
-        # fights. Gated on under-stock + craftable-better-heal (the shared
+        # heal stockpile for MID-FIGHT drinking. NOT "instead of resting between
+        # fights" -- resting between fights is cheap since Rest went dynamic
+        # (max(3, ceil(missing%))s, refills to full), so stocking to avoid it
+        # never pays. Gated on under-stock + craftable-better-heal (the shared
         # pure predicate). PLAN #6a.
         if ctx.combat_monster is None:
             return False

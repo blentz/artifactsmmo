@@ -128,7 +128,9 @@ class GOAPPlanner:
             # h = goal.heuristic(state, game_data): an admissible & CONSISTENT
             # estimate of remaining plan cost (seconds), by contract (see
             # Goal.heuristic's docstring). Every `action.cost(...)` in this
-            # codebase returns a non-negative float (see e.g. rest.py:51 = 10.0,
+            # codebase returns a non-negative float (see e.g. rest.py's
+            # rest_cost_pure ≥ 0.3 — dynamic since 3a4994f4, not the old flat
+            # 10.0 —
             # movement.py:58 = max(d*5, 1.0) ≥ 1.0, consumable.py:93 = 2.0,
             # gathering.py:86, combat.py:97, crafting.py:103 — all ≥ 0). With
             # non-negative edge costs and an admissible+consistent h, A*'s

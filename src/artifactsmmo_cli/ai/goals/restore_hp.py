@@ -42,9 +42,15 @@ class RestoreHPGoal(Goal):
         """Recovery, craft (cook-then-eat) and movement (reach the workshop)
         only. HP restoration can never require fighting, gathering or banking,
         but with the FULL action set the h=0 planner must exhaust every state
-        cheaper than Rest's cost-10 before popping [Rest] — live probe
+        cheaper than the Rest edge before popping [Rest] — live probe
         2026-07-06: 1822 actions, 79s to find the 1-step plan, so the 10s
-        cheap pass timed out every cycle and the HP guard never planned."""
+        cheap pass timed out every cycle and the HP guard never planned.
+
+        The probe ran when Rest was a flat 10.0. Rest is now dynamic
+        (max(3, ceil(missing%))/10, i.e. 0.3..10.0), which makes the frontier
+        BELOW it strictly smaller, so the narrowing is still sound and the
+        cheap-pass argument still holds a fortiori. Kept, with the stale
+        'cost-10' framing removed rather than the conclusion."""
         return [a for a in actions if a.tags & {"recovery", "craft", "movement"}]
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:

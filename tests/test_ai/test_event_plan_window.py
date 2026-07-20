@@ -181,3 +181,44 @@ def test_wiring_passes_the_same_plan_through_an_ample_window():
     out = driver._plans(_DummyGoal(), state, gd, [], None, budget_seconds=1.0)
     assert len(out) == 12
     assert driver.goals_tried[-1]["plan_len"] == 12
+
+
+# ─── _event_only_target: the load-bearing classification ─────────────────────
+# Tested directly (not just through plan_fits_event_window) because this is where
+# the "event tiles AND no static tile" judgement lives. Using is_event_monster
+# alone here would wrongly gate solar_desert_scorpion, whose shape _BOTH mirrors.
+
+def test_classifier_flags_event_only_content():
+    from artifactsmmo_cli.ai.event_plan_window import _event_only_target
+    assert _event_only_target(_fight(_EVENT_ONLY), _gd()) == _EVENT_ONLY
+
+
+def test_classifier_ignores_content_with_a_static_tile():
+    """The solar_desert_scorpion shape: in the event registry AND permanently
+    spawned, so a plan against it survives the window closing."""
+    from artifactsmmo_cli.ai.event_plan_window import _event_only_target
+    assert _event_only_target(_fight(_BOTH), _gd()) is None
+
+
+def test_classifier_ignores_plain_content():
+    from artifactsmmo_cli.ai.event_plan_window import _event_only_target
+    gd = _gd()
+    gd._monster_locations = {"chicken": [(1, 1)], _BOTH: [(1, 0)]}
+    fight = FightAction(monster_code="chicken", locations=frozenset({(1, 1)}))
+    assert _event_only_target(fight, gd) is None
+
+
+def test_classifier_ignores_non_targeting_actions():
+    """Move/Rest carry no target, so they can never be window-gated."""
+    from artifactsmmo_cli.ai.event_plan_window import _event_only_target
+    assert _event_only_target(MoveAction(x=1, y=1), _gd()) is None
+
+
+def test_classifier_flags_event_only_resources():
+    from artifactsmmo_cli.ai.event_plan_window import _event_only_target
+    gd = _gd()
+    gd._resource_drops = {"fairy_dust_node": "fairy_dust"}
+    gd.world.event_resource_locations = {"fairy_dust_node": [(3, 0)]}
+    gather = GatherAction(resource_code="fairy_dust_node",
+                          locations=frozenset({(3, 0)}))
+    assert _event_only_target(gather, gd) == "fairy_dust_node"

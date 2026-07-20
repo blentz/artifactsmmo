@@ -6,8 +6,13 @@ MaintainConsumables means predicate (`tiers/means.py`) and goal
 backing both the RECYCLE_SURPLUS means and its goal.
 
 Intent: when combat is the active means and the bot is under-stocked on heals,
-cook/brew more rather than falling back to the slow Rest action. The bot already
-EATS heals (UseConsumable); this keeps the cupboard stocked.
+cook/brew heals to DRINK MID-FIGHT. The bot already EATS heals (UseConsumable);
+this keeps the cupboard stocked.
+
+NOT "rather than falling back to the slow Rest action" -- that rationale is dead.
+Rest costs max(3, ceil(missing%)) seconds and refills to FULL, so resting damage
+off between fights is cheap; crafting a heal to avoid it is strictly worse. The
+justification is that you cannot rest DURING a fight.
 """
 
 from artifactsmmo_cli.ai.game_data import GameData
