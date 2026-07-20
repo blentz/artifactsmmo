@@ -2,6 +2,8 @@
 
 **Date:** 2026-07-19
 **Status:** DESIGNED — not scheduled, not built
+**Depends on:** the Phase 1 requirement-model unification epic (§5), approved 2026-07-19 as
+a separate prerequisite with its own spec, plan, and gate run
 **Supersedes:** the backlog note `docs/PLAN_synergy_weighting.md` added in 4c85df15 (idea
 capture only; that file lives on branch `fix/dynamic-rest-cost` and is not on `main`)
 
@@ -160,7 +162,71 @@ root still decays.
 
 This invariant gets an explicit test, not a comment.
 
-### 3.6 Curve shape reuses a proven one
+### 3.6 Assembling `B`
+
+`B` is the union of live roots' demand, computed once per `decide_tree` call and shared by
+every candidate. Members, in the order they are available:
+
+| Member | Source | Present when |
+|---|---|---|
+| Trunk | `ReachCharLevel(milestone_pure(state.level))` — contributes `char_xp` | always |
+| Sibling candidates | `_structural_candidates` + `_utility_candidates` (`progression_tree.py:254`) | always |
+| Committed root | `GamePlayer._last_decision.chosen_root` | after the first cycle |
+| Current task | `state.task_code` → `requirement_set` (items task) or `char_xp` + drops (monsters task) | `state.task_code` non-empty |
+
+Assembly is a **two-pass** computation inside `decide_tree`, before `focus_aging_order`:
+
+```
+pass 1:  demand[c] = requirement_set(c)              for each member c
+         total     = ⊎ demand[c]                     multiset union (sum quantities)
+pass 2:  B_for(c)  = total ⊖ demand[c]               multiset difference — leave-one-out
+         synergy[c] = synergy_pure(shared(demand[c], B_for(c)), size(demand[c]))
+```
+
+Two passes rather than recomputing the union per candidate: `N` requirement sets are built
+once, and leave-one-out is a subtraction rather than an `N`-way re-union. Cost is `O(N)`
+walks plus `O(N · |demand|)` arithmetic, not `O(N²)` walks.
+
+**The committed root is usually also a sibling candidate.** Multiset union means it
+contributes its demand twice, weighting the thing the bot is already committed to. This is
+deliberate and mild — it biases toward finishing what is started, in the same direction as
+sticky commitment. It is called out because it looks like a double-count bug on inspection.
+
+**Non-members, deliberately:** guards, collect-band means, and discretionary means other
+than the current task. Guards are safety and must never be weighted (§2.2); the rest are
+not *targets* whose work a gear candidate could share.
+
+### 3.7 Determinism and tie-breaking
+
+Synergy adds no new tiebreak. It changes the *weights* fed to `dhondt_step`, whose existing
+tie order — `(quotient, weight, key)` (`progression_tree_core.py:96`) — is unchanged, as is
+`_gear_pref_key` = `(-gain, -level, code, slot)` (`:165`) for the sorted tail.
+
+Two determinism obligations:
+
+1. **`requirement_set` must be order-independent.** This is exactly D4 (§5.3): the current
+   `_item_skill_gap` is `dict`-iteration-order dependent on diamond recipes. The Phase 1
+   epic's single cycle policy is what discharges this. Synergy must not be built on a walk
+   that can return different answers for the same input.
+2. **No `repr`/alphabetical tiebreak may be introduced anywhere in the synergy path.** Ties
+   in synergy are broken by the pre-existing semantic keys above, never by string order.
+
+### 3.8 Degradation when synergy is unavailable
+
+Every synergy consumer must accept an empty synergy map meaning "no signal", mirroring the
+existing `_NO_FOCUS` / `_NO_SEATS` sentinels (`progression_tree.py:41,47`, both
+`MappingProxyType({})`):
+
+```python
+_NO_SYNERGY: Mapping[tuple[str, str], Fraction] = MappingProxyType({})
+```
+
+A missing entry reads as `Fraction(1)` — the §3.4 degenerate — so the tree behaves exactly
+as it does today. This makes the phases independently landable: Phase 3 can ship with
+`_NO_SYNERGY` wired and prove the plumbing inert, before the Phase 1 epic makes real values
+available. It also gives a single-line kill switch if a live trace goes wrong.
+
+### 3.9 Curve shape reuses a proven one
 
 `synergy = S_MIN + (1 − S_MIN)·raw` is an affine map of a normalised quantity into
 `[S_MIN, 1]` — the same shape as `falloff`, which is `FLOOR + (1−FLOOR)·(1−t²)`. The Lean
@@ -168,7 +234,7 @@ obligations are structural twins of theorems already discharged in
 `formal/Formal/ProgressionTree.lean`: `falloff_le_one:332`, `falloff_ge_floor:345`,
 `falloff_floor_pos:378`.
 
-### 3.7 Worked outcomes
+### 3.10 Worked outcomes
 
 **Currency grind.** `A = buy_only{event_ticket: N}`; overlap with `B` ≈ ∅ ⇒ `synergy = 1/3`
 ⇒ 3× suppression, compounding with `falloff` to 27× once stale.
@@ -251,10 +317,18 @@ This placement also self-corrects §4.2's `apply` bug: once the goal names a mas
 
 ---
 
-## 5. Requirement-model unification (Phase 1, in detail)
+## 5. Requirement-model unification — PREREQUISITE EPIC (Phase 1)
+
+> **Status: approved as a separate epic, not a phase of this design.** Synergy depends on
+> it; it does not depend on synergy. It needs its own spec, plan, and gate run. What follows
+> is the scoping and the semantic diff that justifies it — enough to write that spec from,
+> not a substitute for it.
 
 Synergy needs one demand-weighted requirement set. Adding a seventh walk to produce it
 would make the problem worse. Phase 1 therefore unifies the existing six.
+
+Phase numbering is retained (this remains "Phase 1") so that references in the commit
+history and the dependency ordering in §6 stay valid.
 
 ### 5.1 The six walks
 
@@ -404,10 +478,26 @@ It is also independently justified: D4's order-dependence is a live determinism 
 three workarounds are ongoing maintenance cost, and the parity test of §5.7 is missing
 infrastructure regardless of whether synergy is ever built.
 
-**Recommended sequencing:** land Phase 0, then Phase 1 as a standalone epic gated on the
-parity test, then Phases 2–4. If Phase 1 proves larger than appetite allows, the fallback is
-to build `DemandSet` as a seventh walk and defer unification — this is **explicitly the
-inferior option**, recorded only so the trade-off is a decision rather than a surprise.
+**Approved sequencing (2026-07-19):** Phase 1 is reframed as a standalone prerequisite epic.
+Land Phase 0, then the Phase 1 epic gated on the parity test, then Phases 2–4.
+
+The fallback — build `DemandSet` as a seventh walk and defer unification — is **explicitly
+the inferior option**, recorded only so that taking it would be a decision rather than a
+surprise. It leaves D1–D4 in place and adds to them.
+
+### 5.9 What the Phase 1 epic's own spec must settle
+
+Out of scope here; listed so its spec has a starting agenda.
+
+1. Whether `RequirementGraph` is built per-`GameData` (once, cached) or per-call. The
+   substrate is state-free, which permits the former — but the graph spans the full recipe
+   table and memory cost is unmeasured.
+2. Migration order across the dozen call sites, and whether any consumer keeps its current
+   walk permanently rather than migrating.
+3. Whether `gather_skill` (§5.6) is populated in the same epic or left as a declared-empty
+   field. This design needs only that the *shape* exists.
+4. Whether the parity test lives in `tests/` or `audit/`. It is closer in kind to the
+   censuses than to a unit test, and the censuses have their own runner and budget.
 
 ---
 
@@ -441,23 +531,103 @@ justified by the determinism bug D4 and the missing parity oracle.
 
 ### Phase 2 — Synergy core
 
-Pure, integer/`Fraction` only, **shipped extracted** (new cores ship extracted;
-`progression_tree_core` currently carries only the mutation leg — see §7).
+New module `ai/tiers/synergy_core.py`. Pure, integer/`Fraction` only, **shipped extracted**
+(new cores ship extracted; `progression_tree_core` currently carries only the mutation leg
+— see §7).
 
-Theorems: `synergy_le_one`, `synergy_ge_floor`, `synergy_floor_pos`, and monotonicity in
-shared demand. Structural twins of §3.6.
+```python
+S_MIN: Fraction = Fraction(1, 3)
+
+def synergy_pure(shared: int, total: int) -> Fraction:
+    """shared, total are demand-weighted unit counts; total == 0 means 'needs nothing'."""
+    if total <= 0:
+        return Fraction(1)
+    return S_MIN + (Fraction(1) - S_MIN) * Fraction(shared, total)
+```
+
+Deliberately takes **two integers, not two `DemandSet`s.** Intersection and sizing happen in
+the impure assembly layer (§3.6); the proven core is a scalar function whose Lean image is
+trivial to state and whose mutation group is small. This mirrors `falloff(focus_level: int)`,
+which likewise takes a scalar rather than the focus ledger.
+
+`shared > total` must be impossible by construction (intersection cannot exceed the set it is
+drawn from). The core asserts rather than clamps — a violation means the assembly layer is
+wrong and must fail loudly, not be silently corrected.
+
+**Lean obligations** (`formal/Formal/Synergy.lean`, mirroring the discharged `falloff`
+theorems at `ProgressionTree.lean:332/345/378`):
+
+| Theorem | Statement |
+|---|---|
+| `synergy_le_one` | `shared ≤ total → synergy shared total ≤ 1` |
+| `synergy_ge_floor` | `S_MIN ≤ synergy shared total` |
+| `synergy_floor_pos` | `0 < synergy shared total` — the `minWeight_pos` feeder |
+| `synergy_monotone` | `s₁ ≤ s₂ → synergy s₁ t ≤ synergy s₂ t` |
+| `synergy_total_zero` | `synergy s 0 = 1` — the §3.4 degenerate, proven not commented |
 
 ### Phase 3 — Tree call site
 
-`_scaled_weights` (`progression_tree_core.py:181`) takes a synergy map;
-`focus_aging_pick`/`focus_aging_order` signatures widen. `falloff`, the curve, and
-`dhondt_step` are **untouched**. `formal/Formal/ProgressionTree.lean` updates in lockstep.
+The synergy map is keyed **`(slot, code)`**, identically to `_gear_focus`, so the two
+modulating factors are looked up the same way and a same-code ring1/ring2 pair stays
+distinct:
+
+```python
+def _scaled_weights(candidates, focus, synergy=_NO_SYNERGY):
+    return [(c.slot,
+             c.gain
+             * falloff(focus.get((c.slot, c.code), 0))
+             * synergy.get((c.slot, c.code), Fraction(1)))
+            for c in candidates]
+```
+
+`focus_aging_pick` and `focus_aging_order` widen by one defaulted parameter; `decide_tree`
+computes the map per §3.6 and threads it alongside `focus`/`seats`, exactly as those two are
+threaded from `player.py:419-426`.
+
+**Untouched:** `falloff`, the curve constants, `dhondt_step`, `interleave_due`,
+`_gear_pref_key`. `formal/Formal/ProgressionTree.lean` updates in lockstep with the widened
+signatures only.
+
+**The fast path must be re-examined, not just extended.** `focus_aging_pick:193` currently
+short-circuits to `gear_target_pick` when `all(focus.get(...) <= FOCUS_FLAT)` — i.e. "nothing
+is stale, so skip apportionment." With synergy live that guard is wrong: weights can differ
+even when no candidate is stale. The condition becomes "nothing stale **and** no synergy
+signal", falling back to the argmax only when both modulators are inert. Getting this wrong
+makes synergy silently inert for exactly the first `FOCUS_FLAT = 10` cycles of every root —
+the window where it matters most.
 
 Explicit test for the §3.5 invariant: the starvation bound is multiplied by at most 3.
 
 ### Phase 4 — Taskmaster choice
 
 Implements §4.3/§4.4. Depends on Phase 0 and residual R1 being resolved.
+
+**Deterministic top-quantile.** `TOP_QUANTILE = Fraction(1, 3)`. Given pool synergies as a
+list of `Fraction`:
+
+```
+k        = max(1, ceil(len(pool) * TOP_QUANTILE))        # never zero
+ranked   = sort(pool, key=(-synergy, task_code))         # semantic tiebreak, not repr
+E        = mean(ranked[:k])                              # exact Fraction mean
+```
+
+`task_code` breaks synergy ties. It is an API-assigned identifier, not a display string, so
+this is a semantic key — but it is the one place in this design where an identifier orders
+a decision, and it is recorded here so a reviewer can challenge it. `k ≥ 1` guarantees a
+non-empty slice for any non-empty pool.
+
+**Edge cases:**
+
+| Case | Behaviour |
+|---|---|
+| One master's pool empty (no tasks at this level) | That master is not a candidate; the other wins by default |
+| Both pools empty | No taskmaster preference; fall back to today's behaviour (nearest/only tile) |
+| `E_synergy` tie between masters | Break by travel cost — the physically cheaper tile. Cost stays out of the *score* (§4.4) but is a legitimate *tiebreak* |
+| Only one taskmaster discovered on the map | No choice to make; skip the computation entirely |
+
+That last row matters: it is the behaviour Phase 0 restores. Before Phase 0 it is also the
+behaviour of *every* run, since only one tile survives (§4.2) — so Phase 4 is provably inert
+until Phase 0 lands, and a test should assert exactly that.
 
 ### Phase 5 — Within-band ordering
 
@@ -466,7 +636,7 @@ fixed tuple. `select_pure` and its triple gate are never opened.
 
 **Misgiving, recorded at the user's request.** Phases 0–4 may already deliver the entire
 worked example: Phase 3 fixes gear ranking, Phase 4 fixes which task distribution is drawn
-from, and the task/grind convergence of §3.7 arrives through `B` without any reordering.
+from, and the task/grind convergence of §3.10 arrives through `B` without any reordering.
 Phase 5 then adds a knob to an already-corrected ladder, and its benefit is speculative —
 it reorders means that the worth gate has *already* admitted, so the marginal effect is
 "which admitted means goes first", not "which means is chosen". It also perturbs an
@@ -489,6 +659,27 @@ shows a genuinely aligned means losing to a less-aligned one within the same ban
 | Runtime activation | Must fire on live `plan <char>`; green tests ≠ runtime-active |
 | Planner completeness | Census gate stays green |
 | CPU | Memo hit-rate asserted; `N` ≈ 10–20 closure walks/cycle |
+
+### 7.1 Named tests
+
+Each of these must fail before its phase and pass after — a test that passes both ways is
+proving nothing.
+
+| Test | Asserts |
+|---|---|
+| `test_synergy_core_bounds` | `S_MIN ≤ synergy ≤ 1` over a swept `(shared, total)` grid |
+| `test_synergy_total_zero` | `synergy(s, 0) == 1` for all `s` |
+| `test_synergy_asserts_shared_gt_total` | Raises rather than clamping — assembly bugs surface |
+| `test_synergy_range_inside_falloff` | `S_MAX/S_MIN < FOCUS_1/FOCUS_FLOOR` — the §3.5 invariant, as arithmetic over the real constants, so retuning either constant trips it |
+| `test_leave_one_out_not_degenerate` | With `A` a live root, `synergy(A) < 1` — catches §3.3 regressing to a constant |
+| `test_committed_root_double_counts` | Pins the §3.6 deliberate double-count so a future reader cannot "fix" it silently |
+| `test_no_synergy_map_is_inert` | With `_NO_SYNERGY`, `focus_aging_order` output is byte-identical to pre-Phase-3 |
+| `test_fast_path_respects_synergy` | Candidates all below `FOCUS_FLAT` but with differing synergy do **not** take the argmax fast path — the §Phase-3 trap |
+| `test_synergy_absent_from_repr` | Two goals differing only in synergy have equal `repr_` |
+| `test_currency_root_suppressed` | The §3.10 worked case: a zero-overlap currency root lands at `S_MIN` |
+| `test_task_skill_convergence` | The §3.10 worked case: a task requiring skill X raises candidates consuming X |
+| `test_phase4_inert_with_one_taskmaster` | Phase 4 changes nothing until Phase 0 lands |
+| `test_requirement_set_order_independent` | Same input, shuffled `dict` order, identical output — discharges D4 |
 
 ---
 
