@@ -485,19 +485,23 @@ The fallback — build `DemandSet` as a seventh walk and defer unification — i
 the inferior option**, recorded only so that taking it would be a decision rather than a
 surprise. It leaves D1–D4 in place and adds to them.
 
-### 5.9 What the Phase 1 epic's own spec must settle
+### 5.9 The Phase 1 epic's own spec — SETTLED
 
-Out of scope here; listed so its spec has a starting agenda.
+Written up as `docs/superpowers/specs/2026-07-19-requirement-model-unification-epic.md`
+(2026-07-19). The four questions this section previously left open are resolved there:
 
-1. Whether `RequirementGraph` is built per-`GameData` (once, cached) or per-call. The
-   substrate is state-free, which permits the former — but the graph spans the full recipe
-   table and memory cost is unmeasured.
-2. Migration order across the dozen call sites, and whether any consumer keeps its current
-   walk permanently rather than migrating.
-3. Whether `gather_skill` (§5.6) is populated in the same epic or left as a declared-empty
-   field. This design needs only that the *shape* exists.
-4. Whether the parity test lives in `tests/` or `audit/`. It is closer in kind to the
-   censuses than to a unit test, and the censuses have their own runner and budget.
+| Question | Resolution |
+|---|---|
+| Per-`GameData` or per-call? | Per-`GameData`, lazy — by precedent, not preference: `GameData.recipe_cost` (`game_data.py:1064-1073`) is already exactly this shape. Epic §4.4 |
+| Migration order | Nine waves ordered by **proof coverage, not call-site count** — risk is inverted, since the most-consumed walks (`obtain_sources`, `objective_needs`) have the least Lean/mutation cover. Epic §7 |
+| Is `gather_skill` populated? | **Populated but unconsumed.** Scope A: represent, do not enforce. Epic §3, §4.1 |
+| Parity test in `tests/` or `audit/`? | `audit/`, wired as a fifth `census-gate.yml` check. Epic §6 |
+
+The epic also settled a question this design did not think to ask: the mechanically-extracted
+core (`_closure_visited`, `_raw_units`, `_closure_demand`, `recipe_closure_pure`) **does not
+move** — `scripts/extract_lean.py:325-344` pins those names, so `RequirementGraph` is built
+*on top of* the extracted core rather than replacing it. That removed the epic's largest
+risk (epic §4.5).
 
 ---
 
