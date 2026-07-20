@@ -1,8 +1,12 @@
-"""LevelSkill: a GOAP action that raises a crafting skill to `target_level`.
+"""LevelSkill: a GOAP action that raises a crafting OR gathering skill to
+`target_level`.
 
 The GOAP planner treats skill levels as immutable during search, so
 CraftAction's skill gate (skill_level < crafting_level -> not applicable) is
-otherwise unsatisfiable in-search — an under-skill craft cannot be planned.
+otherwise unsatisfiable in-search — an under-skill craft cannot be planned. The
+same holds for GatherAction's skill gate: since P3b (commit 7b6b4408) this
+action also opens skill-locked gathers (iron_ore <- iron_rocks, mining 10), and
+`is_applicable` is satisfied by either a craftable rung or a gatherable one.
 LevelSkill's `apply` OPTIMISTICALLY sets the skill to `target_level` (the whole
 grind assumed complete, the FightAction optimistic-apply idiom), so a downstream
 CraftAction(target) becomes applicable in the SIMULATED plan; the player expands

@@ -15,6 +15,11 @@ echo "== (b) axiom lint =="; bash "$HERE/gate/check_axioms.sh"
 echo "== (b') role manifest =="; ( cd "$HERE" && lake env lean Formal/Manifest.lean >/dev/null && echo "manifest OK" )
 echo "== (b'') proof-concept index =="; bash "$HERE/gate/check_proof_concept_index.sh"
 echo "== (b''') extraction drift =="; bash "$HERE/gate/check_extraction.sh"
+# Anchor resolution runs here, before the two slow phases, because it is the
+# cheapest possible failure: seconds against ~580 anchors, no tests executed. A
+# stale or ambiguous anchor used to surface only at the END of the hour-long
+# mutation run, long after the commit that caused it.
+echo "== (b'''') mutation anchors =="; ( cd "$ROOT" && uv run python formal/diff/mutate.py --check-anchors )
 echo "== (d) differential =="; ( cd "$HERE" && lake build oracle ); ( cd "$ROOT" && uv run pytest formal/diff/ -q --no-cov -n auto --ignore=formal/diff/test_game_data_fixture_diff.py )
 echo "== (c) mutation =="; ( cd "$ROOT" && uv run python formal/diff/mutate.py )
 echo "ALL GATE PARTS PASSED"
