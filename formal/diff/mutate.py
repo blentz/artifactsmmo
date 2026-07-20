@@ -3694,19 +3694,23 @@ EVENT_WINDOW_MUTATIONS = [
     # Flip the window check `>` to `>=`: at exactly remaining == travel+margin the
     # window is too tight (no slack to arrive), but now it spuriously trades. The
     # boundary cases in the diff fire.
+    # RETARGETED 2026-07-20: the arithmetic moved into
+    # `event_window_sufficient_pure` when event_npc_tradeable was consolidated
+    # onto it (P2). The old anchors matched the pre-refactor lines and went
+    # STALE -- silently enforcing nothing until the gate flagged them.
     ("event_window: window > -> >= (off-by-one on arrival margin)",
-     "return remaining > travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS",
-     "return remaining >= travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS"),
+     "    return remaining_seconds > needed",
+     "    return remaining_seconds >= needed"),
     # Invert the window check `>` to `<`: the bot now trades EXACTLY when the
     # window has too little time, inverting the reachability gate.
     ("event_window: window > -> < (inverted reachability)",
-     "return remaining > travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS",
-     "return remaining < travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS"),
+     "    return remaining_seconds > needed",
+     "    return remaining_seconds < needed"),
     # Drop the arrival margin: the safety buffer disappears, so trips that can't
     # actually finish before expiry now fire. Cases near the margin diverge.
     ("event_window: drop arrival margin (+ -> -)",
-     "return remaining > travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS",
-     "return remaining > travel_seconds - EVENT_ARRIVAL_MARGIN_SECONDS"),
+     "    needed = distance * EVENT_TRAVEL_SECONDS_PER_TILE + EVENT_ARRIVAL_MARGIN_SECONDS",
+     "    needed = distance * EVENT_TRAVEL_SECONDS_PER_TILE - EVENT_ARRIVAL_MARGIN_SECONDS"),
     # Flip the inactive-event guard to return True: an event with no active
     # window is now wrongly treated as tradeable. Inactive cases diverge.
     ("event_window: inactive guard False -> True",
@@ -3715,8 +3719,28 @@ EVENT_WINDOW_MUTATIONS = [
     # Drop the travel cost: distance no longer matters, so far merchants with a
     # short window now spuriously trade. Nonzero-distance cases diverge.
     ("event_window: drop travel cost (* -> * 0)",
-     "    travel_seconds = distance * EVENT_TRAVEL_SECONDS_PER_TILE",
-     "    travel_seconds = distance * 0"),
+     "    needed = distance * EVENT_TRAVEL_SECONDS_PER_TILE + EVENT_ARRIVAL_MARGIN_SECONDS",
+     "    needed = distance * 0 + EVENT_ARRIVAL_MARGIN_SECONDS"),
+]
+
+# The PLAN-LENGTH half of the window gate (P2). SEPARATE GROUP because it is
+# killed by unit tests, not by the Lean-mirror differential: that mirror models
+# `eventNpcTradeable`, whose caller passes plan_cost=0, so a mutation to the plan
+# term is INVISIBLE to it and would survive there -- the same trap the sentinel
+# anchors hit in a1b32dda.
+EVENT_PLAN_WINDOW_MUTATIONS = [
+    # Drop the plan cost entirely: the gate degrades to the pre-P2 travel-only
+    # question, so a 40-step chain through a 90-second window passes again --
+    # exactly the defect P2 exists to prevent.
+    ("event_window: drop plan cost (plan term -> 0)",
+     "        needed += plan_cost * PLAN_SECONDS_PER_COST_UNIT",
+     "        needed += plan_cost * 0"),
+    # Mis-scale the cost unit. Costs are seconds/10 (rest_cost_pure), so treating
+    # a cost unit as one second under-counts a plan tenfold and lets plans that
+    # cannot finish through.
+    ("event_window: cost unit 10s -> 1s (tenfold under-count)",
+     "PLAN_SECONDS_PER_COST_UNIT = 10.0",
+     "PLAN_SECONDS_PER_COST_UNIT = 1.0"),
 ]
 
 
@@ -5173,6 +5197,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_bank_expansion_timing_diff.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_WINDOW_MUTATIONS,
               "formal/diff/test_event_window_diff.py", survivors)
+    run_group(EVENT_WINDOW_SRC, EVENT_PLAN_WINDOW_MUTATIONS,
+              "tests/test_ai/test_event_window.py", survivors)
     run_group(COST_CORE_SRC, COST_CORE_MUTATIONS,
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
     run_group(COST_CORE_SRC, COST_CORE_SENTINEL_MUTATIONS,
