@@ -5,6 +5,7 @@ Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle.""
 
 import os
 from dataclasses import replace
+from datetime import datetime, timezone
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
@@ -26,6 +27,7 @@ from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.equipment.bank_tool_fills import bank_tool_fills
 from artifactsmmo_cli.ai.equipment.empty_slot_fills import empty_slot_rank_fills
+from artifactsmmo_cli.ai.event_plan_window import plan_fits_event_window
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_step_target import gather_step_target
@@ -888,6 +890,15 @@ class StrategyArbiter:
                                   budget_seconds=budget_seconds)
         stats = self._planner.last_stats
         self._last_timed_out = stats.timed_out
+        # P2: a plan that depends on event-ONLY content is worthless if the window
+        # shuts before it finishes. Dropped rather than returned, so the candidate
+        # is rejected and the arbiter moves on to something reachable. Only plans
+        # that actually touch event-only content are affected -- content with a
+        # permanent spawn is never gated, and a plan with no event content at all
+        # short-circuits before any cost is summed.
+        if plan and not plan_fits_event_window(plan, state, game_data,
+                                               datetime.now(timezone.utc)):
+            plan = []
         self.goals_tried.append({
             "goal": repr(goal),
             "nodes": stats.nodes_explored,
