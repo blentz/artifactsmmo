@@ -377,8 +377,27 @@ class GamePlayer:
         if stats is None:
             return
         if stats.type_ in EQUIPMENT_SLOT_TYPES:
-            self._gear_focus.clear()
-            self._interleave_seats.clear()  # lockstep with the focus ledger
+            # Drop ONLY the crafted root's own entry, not the whole ledger.
+            # Crafting X is progress for X; a different root Y that is still
+            # stuck made none, and wiping its accumulated fall-off hands it a
+            # fresh farm window it did not earn. This is the same contamination
+            # the level-up branch above was narrowed to fix -- one step removed,
+            # because here the progress is real, it just belongs to ONE root.
+            #
+            # Live case: a gear root whose equippable is NPC-buy-only, priced in
+            # a 0.5%-drop currency. That root can never be CRAFTED, so every
+            # unrelated equippable craft reset its decay before it ever reached
+            # FOCUS_FLAT and the anti-starvation never engaged.
+            if self._last_decision is None:
+                return          # nothing to prune against -- preserve, don't guess
+            crafted_keys = {k for k in self._gear_focus if k[1] == executed_action.code}
+            for key in crafted_keys:
+                self._gear_focus.pop(key, None)
+            live_slots = {k[0] for k in self._gear_focus}
+            self._interleave_seats = {
+                slot: s for slot, s in self._interleave_seats.items()
+                if slot in live_slots
+            }  # lockstep with the focus ledger
 
     def _decide_band(
         self,

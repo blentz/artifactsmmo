@@ -199,14 +199,22 @@ def test_reset_on_level_up_prunes_seats_for_a_slot_with_no_live_root():
     assert p._interleave_seats == {"ring2_slot": 1}
 
 
-def test_reset_on_equippable_craft_clears_ledger():
+def test_reset_on_equippable_craft_clears_only_the_crafted_root():
+    """CONTRACT CHANGED 2026-07-20. This used to assert a FULL clear of the
+    ledger on any equippable craft. That let a craft of X hand an unrelated
+    stuck root Y a farm window it had not earned -- the same cross-root
+    contamination the level-up branch was narrowed to fix in c31a373b.
+
+    Now the crafted item's own entry is dropped (it progressed, and is leaving
+    the candidate set) while every other root keeps its accumulated fall-off."""
     p = _player_with_items()
-    p._gear_focus = {("helmet_slot", "wolf_ears"): 40}
-    p._interleave_seats = {"helmet_slot": 5}
+    p._last_decision = _decision_with_root(_obtain_item("iron_ring", "ring2_slot"))
+    p._gear_focus = {("helmet_slot", "wolf_ears"): 40, ("ring2_slot", "iron_ring"): 7}
+    p._interleave_seats = {"helmet_slot": 5, "ring2_slot": 2}
     craft = _craft_action("iron_ring")  # iron_ring is a ring (equippable)
     p._maybe_reset_focus(prev_level=15, cur_level=15, executed_action=craft, outcome="ok")
-    assert p._gear_focus == {}
-    assert p._interleave_seats == {}  # seats reset in lockstep with focus
+    assert p._gear_focus == {("helmet_slot", "wolf_ears"): 40}
+    assert p._interleave_seats == {"helmet_slot": 5}  # seats in lockstep with focus
 
 
 def test_no_reset_on_consumable_craft():
@@ -378,3 +386,59 @@ def test_notify_observer_aged_pick_false_when_no_decision_yet():
     assert player._last_decision is None
     player._notify_observer("X", "Y", "ok", goal_rank_trace=[])
     assert calls[0].aged_pick is False
+
+
+# ─── equippable-craft reset must not contaminate OTHER roots (2026-07-20) ─────
+# The level-up branch was already narrowed from a full clear to a prune (c31a373b)
+# because the bot levels up BY GRINDING the very root the fall-off decays. The
+# equippable-craft branch kept the full clear, and it has the same flaw one step
+# removed: crafting gear X wipes the accumulated decay of an unrelated STUCK root
+# Y that made no progress at all.
+#
+# Live case (Robby, 2026-07-20): a gear root whose equippable is NPC-buy-only,
+# priced in event_ticket. Tickets drop at 0.5%/gather (changelog 8.2.0), so the
+# derived GatherMaterials(event_ticket, ...) goal runs for hundreds of cycles --
+# but the root can never be CRAFTED, so every unrelated equippable craft reset
+# its fall-off before it reached FOCUS_FLAT=10. The decay never engaged.
+
+
+def test_equippable_craft_preserves_focus_of_other_live_roots():
+    """Crafting X is progress for X, not for the stuck root Y."""
+    p = _player_with_items()
+    stuck = _obtain_item("wolf_ears", "helmet_slot")
+    p._last_decision = _decision_with_root(stuck)
+    p._gear_focus = {("helmet_slot", "wolf_ears"): 40}
+    p._interleave_seats = {"helmet_slot": 5}
+    craft = _craft_action("iron_ring")          # a DIFFERENT root's item
+    p._maybe_reset_focus(prev_level=15, cur_level=15, executed_action=craft, outcome="ok")
+    assert p._gear_focus == {("helmet_slot", "wolf_ears"): 40}, (
+        "an unrelated craft must not hand the stuck root a fresh farm window"
+    )
+    assert p._interleave_seats == {"helmet_slot": 5}, "seats move in lockstep with focus"
+
+
+def test_equippable_craft_drops_the_crafted_roots_own_focus():
+    """The crafted item's own root DID progress, so its entry goes -- it is
+    leaving the candidate set anyway."""
+    p = _player_with_items()
+    root = _obtain_item("iron_ring", "ring2_slot")
+    p._last_decision = _decision_with_root(root)
+    p._gear_focus = {("ring2_slot", "iron_ring"): 12, ("helmet_slot", "wolf_ears"): 40}
+    p._interleave_seats = {"ring2_slot": 3, "helmet_slot": 5}
+    craft = _craft_action("iron_ring")
+    p._maybe_reset_focus(prev_level=15, cur_level=15, executed_action=craft, outcome="ok")
+    assert ("ring2_slot", "iron_ring") not in p._gear_focus
+    assert p._gear_focus == {("helmet_slot", "wolf_ears"): 40}
+    assert "ring2_slot" not in p._interleave_seats
+    assert p._interleave_seats == {"helmet_slot": 5}
+
+
+def test_equippable_craft_with_no_decision_preserves_ledger():
+    """Mirrors the level-up branch: with no decision to prune against, preserve
+    rather than guess or clear."""
+    p = _player_with_items()
+    p._last_decision = None
+    p._gear_focus = {("helmet_slot", "wolf_ears"): 40}
+    craft = _craft_action("iron_ring")
+    p._maybe_reset_focus(prev_level=15, cur_level=15, executed_action=craft, outcome="ok")
+    assert p._gear_focus == {("helmet_slot", "wolf_ears"): 40}
