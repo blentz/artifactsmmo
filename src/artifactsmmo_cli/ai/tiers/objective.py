@@ -1,12 +1,15 @@
-"""Tier-1 objective: the 'perfect character sheet' target and the gap to it.
+"""Tier-1 objective: the 'perfect character sheet' target.
 
-Two tightly-coupled frozen models in one file (CharacterObjective produces
-ObjectiveGap), following the cycle_snapshot.py GoalRankEntry/GoalAttempt
-precedent."""
+`CharacterObjective` is the endgame sheet — best attainable item per slot, best
+tool per gathering skill, char/skill level ceilings. Built once from game data.
+
+The objective-DISTANCE half (`ObjectiveGap`, personality weighting,
+`weighted_remaining`) was removed 2026-07-20: it had no production consumer, and
+its kernel proofs therefore guarded dead code. Gear priority is decided by the
+progression tree's `gain` on the `pursuit_value` ruler, not by a gap scalar."""
 
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.combat import is_winnable
@@ -15,7 +18,6 @@ from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
 from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target, target_potion_pure
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
-from artifactsmmo_cli.ai.tiers.objective_completion import is_complete_pure
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
@@ -241,28 +243,6 @@ def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool
 
 
 @dataclass(frozen=True)
-class ObjectiveGap:
-    """Distance from a state to the Tier-1 objective. Positive gaps only;
-    fractions normalise unlike units into [0, 1] for personality weighting.
-
-    P4a: gear gaps are exact ints (equip_value deltas); the normalised
-    fractions are exact `Fraction` ratios of those integer gaps — no float
-    rounding anywhere in the objective gap."""
-
-    char_level_gap: int
-    skill_gaps: dict[str, int]
-    gear_gaps: dict[str, int]
-    char_level_fraction: Fraction
-    skills_fraction: Fraction
-    gear_fraction: Fraction
-
-    @property
-    def is_complete(self) -> bool:
-        return is_complete_pure(
-            (self.char_level_fraction, self.skills_fraction, self.gear_fraction))
-
-
-@dataclass(frozen=True)
 class CharacterObjective:
     """The maxed character sheet: char level 50, every skill 50, best-value
     item per equipment slot, best tool per gathering skill. Built once from
@@ -402,40 +382,9 @@ class CharacterObjective:
         fraction: that fraction is now measured in combat-dominant units too,
         which is the correct axis for "how much gear progress remains" (a
         prospecting artifact should not read as near-complete gear) — a ratio,
-        so the scale change cancels and objective-completion thresholds hold
-        (verified by test_tiers_objective_completion)."""
+        so the scale change cancels."""
         if not code:
             return 0
         stats = self._game_data.item_stats(code)
         return pursuit_value(stats) if stats is not None else 0
 
-    def gap(self, state: WorldState) -> ObjectiveGap:
-        char_level_gap = max(0, self.target_char_level - state.level)
-        skill_gaps = {
-            skill: max(0, target - state.skills.get(skill, 1))
-            for skill, target in self.target_skill_levels.items()
-            if max(0, target - state.skills.get(skill, 1)) > 0
-        }
-        gear_gaps: dict[str, int] = {}
-        gear_target_total = 0
-        for slot, target_code in self.target_gear.items():
-            target_val = self._item_value(target_code)
-            gear_target_total += target_val
-            deficit = max(0, target_val - self._item_value(state.equipment.get(slot)))
-            if deficit > 0:
-                gear_gaps[slot] = deficit
-
-        # P4a: exact rational fractions (integer gap / integer denominator).
-        char_level_fraction = Fraction(char_level_gap, self.target_char_level)
-        skills_denom = len(SKILL_NAMES) * self._game_data.max_skill_level
-        skills_fraction = Fraction(sum(skill_gaps.values()), skills_denom)
-        gear_fraction = (Fraction(sum(gear_gaps.values()), gear_target_total)
-                         if gear_target_total > 0 else Fraction(0))
-        return ObjectiveGap(
-            char_level_gap=char_level_gap,
-            skill_gaps=skill_gaps,
-            gear_gaps=gear_gaps,
-            char_level_fraction=char_level_fraction,
-            skills_fraction=skills_fraction,
-            gear_fraction=gear_fraction,
-        )

@@ -62,7 +62,6 @@ SCALAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "scala
 PLANNER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "planner.py"
 ARBITER_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "arbiter_select.py"
 TASK_DECISION_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_decision_core.py"
-OBJECTIVE_COMPLETION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective_completion.py"
 LOW_YIELD_BOUNDARY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "low_yield_boundary.py"
 OBJECTIVE_STEP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "objective_step_fight_core.py"
 DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_key.py"
@@ -1292,11 +1291,6 @@ OBJECTIVE_MUTATIONS = [
      "            attainable = [(value, code) for (value, code) in ranked\n"
      "                          if is_attainable(code, game_data)]",
      "            attainable = [(value, code) for (value, code) in ranked]"),
-    # char_level_gap sign flip: state.level - target instead of target - level
-    # (negates the deficit; max(0, ...) then masks real gaps as 0).
-    ("objective: char_level_gap sign flip (target-level -> level-target)",
-     "        char_level_gap = max(0, self.target_char_level - state.level)",
-     "        char_level_gap = max(0, state.level - self.target_char_level)"),
     # drop the monster-drop leaf branch: reverts is_attainable to the old
     # gathering-ONLY bug that silently dropped body/leg/amulet from target_gear.
     # A craft chain bottoming out in a (spawning) monster drop is wrongly
@@ -1349,11 +1343,6 @@ OBJECTIVE_MUTATIONS = [
     ("objective: drop permanent-vendor gate",
      "            if not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None]",
      "            ]"),
-    # NOTE: the historical `is_complete` weakening mutation (and -> or) MOVED to
-    # `objective_completion.py` after the pure-core extraction (the property
-    # `ObjectiveGap.is_complete` now delegates to `is_complete_pure`). The
-    # equivalent mutation lives in WEIGHTED_REMAINING_MUTATIONS
-    # ("is_complete == flipped to !="), killed by test_weighted_remaining_diff.py.
 ]
 
 
@@ -1821,43 +1810,6 @@ TASK_DECISION_MUTATIONS = [
     ("task_decision: drop req_is_none -> PURSUE short-circuit",
      "    if req_is_none:\n        return PURSUE\n",
      ""),
-]
-
-
-# objective_completion mutations -- old strings matched to current objective_completion.py text.
-WEIGHTED_REMAINING_MUTATIONS = [
-    # Drop the third weight*fraction summand: the gear-category contribution
-    # is silently zeroed, so any partial gear gap is invisible to the scalar.
-    # The exact-rational diff with positive weights catches the missing term;
-    # the bug-teeth diff also catches it (the zeroed third category mimics
-    # the latent zero-weight defect in a way the equivalence forbids).
-    ("objective_completion: drop third weight*fraction summand",
-     "    return (weights[0] * fractions[0]\n"
-     "            + weights[1] * fractions[1]\n"
-     "            + weights[2] * fractions[2])",
-     "    return (weights[0] * fractions[0]\n"
-     "            + weights[1] * fractions[1])"),
-    # is_complete `==` flipped to `!=`: an all-zero objective wrongly reports
-    # INCOMPLETE (and vice versa). The positive-equivalence diff catches it
-    # via the is_complete agreement check at a complete triple.
-    ("objective_completion: is_complete == flipped to !=",
-     "    return (fractions[0] == 0.0\n"
-     "            and fractions[1] == 0.0\n"
-     "            and fractions[2] == 0.0)",
-     "    return (fractions[0] != 0.0\n"
-     "            and fractions[1] != 0.0\n"
-     "            and fractions[2] != 0.0)"),
-    # weighted_remaining substitutes `max` for the sum: the scalar becomes the
-    # largest weight*fraction term, not the sum. Three weight*fraction terms
-    # produce different totals between sum and max whenever ≥ 2 are nonzero,
-    # which the diff exercises broadly.
-    ("objective_completion: weighted_remaining sum -> max",
-     "    return (weights[0] * fractions[0]\n"
-     "            + weights[1] * fractions[1]\n"
-     "            + weights[2] * fractions[2])",
-     "    return max(weights[0] * fractions[0],\n"
-     "               weights[1] * fractions[1],\n"
-     "               weights[2] * fractions[2])"),
 ]
 
 
@@ -2809,7 +2761,7 @@ _ALL_SRCS = [
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, KIT_SELECTION_SRC, STUCK_DETECTOR_SRC,
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
-    PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC, OBJECTIVE_COMPLETION_SRC,
+    PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC,
     LOW_YIELD_BOUNDARY_SRC, OBJECTIVE_STEP_FIGHT_CORE_SRC, DECIDE_KEY_SRC,
     CYCLES_FOR_PROGRESS_SRC,
     GATHER_APPLY_SRC,
@@ -5224,8 +5176,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_arbiter_select_diff.py", survivors)
     run_group(TASK_DECISION_CORE_SRC, TASK_DECISION_MUTATIONS,
               "formal/diff/test_task_decision_diff.py", survivors)
-    run_group(OBJECTIVE_COMPLETION_SRC, WEIGHTED_REMAINING_MUTATIONS,
-              "formal/diff/test_weighted_remaining_diff.py", survivors)
     run_group(LOW_YIELD_BOUNDARY_SRC, LOW_YIELD_MUTATIONS,
               "formal/diff/test_low_yield_cancel_diff.py", survivors)
     run_group(OBJECTIVE_STEP_FIGHT_CORE_SRC, OBJECTIVE_STEP_FIGHT_MUTATIONS,

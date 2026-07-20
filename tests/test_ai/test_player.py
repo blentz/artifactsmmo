@@ -27,7 +27,6 @@ from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
 from artifactsmmo_cli.ai.recovery import StuckExit, StuckSignal
 from artifactsmmo_cli.ai.tiers import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
@@ -173,7 +172,7 @@ class TestArbiterSelection:
         player = GamePlayer(character="hero")
         player.game_data = gd
         player._objective = CharacterObjective.from_game_data(gd)
-        player._strategy = StrategyEngine(player._objective, BalancedPersonality())
+        player._strategy = StrategyEngine(player._objective)
         # A capable fighter by default so the stat-based winnability estimator
         # can beat the low test mobs (callers can override via state_kw).
         combat_defaults = dict(max_hp=100, attack={"fire": 50}, initiative=50)
@@ -1755,7 +1754,7 @@ class TestBuildGoalsTaskCancelNeverSuppressed:
         player.game_data = gd
         player.state = make_state()
         player._objective = CharacterObjective.from_game_data(gd)
-        player._strategy = StrategyEngine(player._objective, BalancedPersonality())
+        player._strategy = StrategyEngine(player._objective)
         return player
 
     def test_task_cancel_survives_suppression(self, tmp_path):

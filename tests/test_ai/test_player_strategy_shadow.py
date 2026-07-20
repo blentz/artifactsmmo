@@ -1,7 +1,6 @@
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.tracer import Tracer
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -31,7 +30,7 @@ def test_emit_trace_includes_strategy_without_changing_selected_goal():
     player.game_data = _gd()
     player.state = make_state(level=3)
     player._objective = CharacterObjective.from_game_data(player.game_data)
-    player._strategy = StrategyEngine(player._objective, BalancedPersonality())
+    player._strategy = StrategyEngine(player._objective)
     player.tracer = _CaptureTracer()
 
     player._emit_trace(action_name="Gather(x)", goal_name="FarmItems",
@@ -61,7 +60,7 @@ def test_emit_trace_strategy_record_keeps_to_trace_shape():
     player.game_data = _gd()
     player.state = make_state(level=3)
     player._objective = CharacterObjective.from_game_data(player.game_data)
-    player._strategy = StrategyEngine(player._objective, BalancedPersonality())
+    player._strategy = StrategyEngine(player._objective)
     player.tracer = _CaptureTracer()
 
     player._emit_trace(action_name="Gather(x)", goal_name="FarmItems",

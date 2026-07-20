@@ -7,8 +7,8 @@ PLAN_acquisition_timing.md). `strategic_value` instead re-weights the
 non-combat EFFICIENCY stats (wisdom, prospecting, inventory_space, haste) by a
 per-stat efficiency rate so a bag's compounding value isn't scored like raw
 attack, while combat stats keep a single shared weight so combat-slot ordering
-is preserved. It feeds ObjectiveGap cross-slot priority + #14 acquisition timing
-ONLY — never the combat loadout pick.
+is preserved. It feeds cross-slot gear priority (via `pursuit_value`) + #14
+acquisition timing ONLY — never the combat loadout pick.
 
 The per-stat WEIGHTS are derived (openapi rates for wisdom/prospecting; a
 gather/craft-cadence proxy for inventory_space; an empirical probe for haste —
@@ -87,8 +87,8 @@ def strategic_value_pure(
     rate weight. Every summand is exact integer arithmetic, matching the Lean
     `Formal.StrategicValue.strategicValue` model directly.
 
-    For nonneg stats and nonneg weights the result is nonneg (the ObjectiveGap
-    gap bounds need this) and monotone non-decreasing in every stat — proved
+    For nonneg stats and nonneg weights the result is nonneg and monotone
+    non-decreasing in every stat — proved
     over all inputs in Formal/StrategicValue.lean and transferred onto this
     extracted def by the Bridges9 bridge.
     """

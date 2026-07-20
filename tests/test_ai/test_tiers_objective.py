@@ -98,54 +98,6 @@ def test_target_gear_prefers_attainable_over_higher_value_drop():
     assert obj.target_gear["weapon_slot"] == "iron_blade"  # attainable wins despite lower value
 
 
-def test_gap_complete_fractions_zero_for_maxed_components():
-    obj = CharacterObjective.from_game_data(_gd())
-    maxed = make_state(
-        level=50, skills={s: 50 for s in SKILL_NAMES},
-        equipment={"weapon_slot": "iron_sword", "ring1_slot": "gold_ring", "ring2_slot": "ruby_ring"},
-    )
-    g = obj.gap(maxed)
-    assert g.char_level_gap == 0
-    assert g.skill_gaps == {}
-    assert g.char_level_fraction == 0.0
-    assert g.skills_fraction == 0.0
-
-
-def test_gap_measures_level_and_skill_and_gear_deficit():
-    obj = CharacterObjective.from_game_data(_gd())
-    state = make_state(level=10, skills={"mining": 5}, equipment={"weapon_slot": "wooden_stick"})
-    g = obj.gap(state)
-    assert g.char_level_gap == 40
-    assert g.skill_gaps["mining"] == 45
-    assert g.skill_gaps["woodcutting"] == 49  # default level 1 → gap 49
-    # RE-DERIVED 2026-07-08 (Task-3 pursuit_value): gap() rides `_item_value`,
-    # now pursuit_value (combat-dominant). weapon target iron_sword
-    # (combat_raw 30 -> 30*1000 = 30000) vs equipped wooden_stick
-    # (combat_raw 4 -> 4000) -> gap 26000 (was equip_value's 2*raw+nonTool
-    # delta 61-9 = 52). The gear gap is now measured in combat-dominant units.
-    assert g.gear_gaps["weapon_slot"] == 26000
-    assert 0.0 < g.char_level_fraction <= 1.0
-    assert 0.0 < g.gear_fraction <= 1.0
-
-
-def test_empty_slot_scores_full_target_value():
-    obj = CharacterObjective.from_game_data(_gd())
-    state = make_state(level=50, skills={s: 50 for s in SKILL_NAMES}, equipment={})
-    g = obj.gap(state)
-    # RE-DERIVED 2026-07-08 (Task-3 pursuit_value): empty slot scores the full
-    # target value on the pursuit_value ruler — iron_sword combat_raw 30 ->
-    # 30*1000 = 30000 (was equip_value's 2*30+1 = 61).
-    assert g.gear_gaps["weapon_slot"] == 30000
-
-
-def test_gear_fraction_zero_and_complete_when_no_gear_targeted():
-    gd = GameData()  # no items → no target gear
-    obj = CharacterObjective.from_game_data(gd)
-    g = obj.gap(make_state(level=50, skills={s: 50 for s in SKILL_NAMES}))
-    assert g.gear_fraction == 0.0
-    assert g.is_complete is True
-
-
 def _gd_with_tools() -> GameData:
     """Fixture with combat weapons + skill tools sharing weapon_slot."""
     gd = GameData()

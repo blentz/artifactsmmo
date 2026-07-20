@@ -1,5 +1,5 @@
-"""Differential test: real Python `is_attainable`, `CharacterObjective.from_game_data`
-(gear selection), and `gap` / `is_complete` must agree with the proved Lean oracle.
+"""Differential test: real Python `is_attainable` and `CharacterObjective.from_game_data`
+(gear selection) must agree with the proved Lean oracle.
 
 * `is_attainable(code, game_data)` (objective.py:15) bottoms a craft chain out in
   gatherables, cycle-safe via a `_path` set. We feed random recipe graphs
@@ -7,22 +7,17 @@
 * `CharacterObjective.from_game_data` ranks each gear type by `(-equip_value,
   code)`, filters to attainable, zips to slots: the first slot gets the
   highest-equip_value ATTAINABLE item. We assert the per-(first-)slot best code.
-* `gap` / `is_complete` produce integer gaps and a completeness bool. We assert
-  the char gap, skill/gear gap sums and denominators, and `is_complete`.
-
 Integer item/equip-value codes; controlled fake GameData exposing only the fields
 these functions read. The same data is encoded for the Lean oracle (flat ints).
 """
 import random
-from fractions import Fraction
 
 from hypothesis import given, settings, strategies as st
 
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
-from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable
-from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
+from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
 
 
@@ -404,82 +399,3 @@ def test_best_gear_matches_lean(seed):
     assert py_code == lean["chosen_code"], f"gear code mismatch: {ctx} lean={lean}"
 
 
-# ---------------------------------------------------------------------------
-# gap / is_complete
-# ---------------------------------------------------------------------------
-
-@settings(max_examples=200, deadline=None)
-@given(seed=st.integers(min_value=0, max_value=2**31 - 1))
-def test_gap_matches_lean(seed):
-    """Drive the REAL `CharacterObjective.gap` and bind its integer gaps to Lean.
-
-    We build a real objective with ONE weapon-slot target (a drop-grounded
-    weapon) and a random equipped weapon, plus a random char level and skills.
-    The real `gap` produces char_level_gap, skill_gaps, and gear_gaps; we feed
-    the corresponding (target, have) integer pairs to the Lean oracle and assert
-    the integer numerators/denominators and is_complete agree."""
-    rng = random.Random(seed)
-    level = rng.randint(1, 55)
-    skills = {s: rng.randint(1, 55) for s in SKILL_NAMES}
-
-    # one attainable weapon target (craft from drop leaf) + a random equipped one
-    item_stats = {
-        999: _stats(999, "resource_internal", 0, 0, 0),
-        1: _stats(1, "weapon", rng.randint(1, 9), rng.randint(0, 9), rng.randint(0, 9)),
-    }
-    recipes = {1: {999: 1}}
-    drops = {100: 999}
-    target_val = pursuit_value(item_stats[1])  # gap() measures gear in pursuit_value units
-
-    # equipped weapon: maybe none, maybe a weaker/stronger item
-    have_val = 0
-    equipment: dict[str, str | None] = {"weapon_slot": None}
-    if rng.random() < 0.6:
-        eq = _stats(2, "weapon", rng.randint(0, 12), rng.randint(0, 12), rng.randint(0, 12))
-        item_stats[2] = eq
-        equipment["weapon_slot"] = "2"
-        have_val = pursuit_value(eq)  # gap() measures gear in pursuit_value units
-
-    gd = _FakeGameData(recipes, drops, item_stats)
-    obj = CharacterObjective.from_game_data(gd)
-    state = _make_state(level, skills, equipment)
-    py_gap = obj.gap(state)
-
-    py_char = py_gap.char_level_gap
-    py_skill_sum = sum(py_gap.skill_gaps.values())
-    py_skill_denom = len(SKILL_NAMES) * gd.max_skill_level
-    # P4a: gear gaps are exact ints — the sum is an int, no rounding cast.
-    py_gear_sum = sum(py_gap.gear_gaps.values())
-    # gear denom = sum of target gear item values (here just the one weapon)
-    py_gear_denom = target_val if obj.target_gear.get("weapon_slot") else 0
-    py_complete = py_gap.is_complete
-
-    skill_pairs = [(gd.max_skill_level, skills[s]) for s in SKILL_NAMES]
-    gear_pairs = [(target_val, have_val)] if obj.target_gear.get("weapon_slot") else []
-    args = [gd.max_character_level, level, len(skill_pairs)]
-    for t, h in skill_pairs:
-        args += [t, h]
-    args += [len(gear_pairs)]
-    for t, h in gear_pairs:
-        args += [t, h]
-    lean = run_oracle("objective_gap", [args])[0]
-    ctx = f"level={level} target_val={target_val} have_val={have_val}"
-    assert py_char == lean["char_gap"], f"char gap: {ctx} {lean}"
-    assert py_skill_sum == lean["skill_gap_sum"], f"skill gap: {ctx} {lean}"
-    assert py_skill_denom == lean["skill_denom"], f"skill denom: {ctx} {lean}"
-    assert py_gear_sum == lean["gear_gap_sum"], f"gear gap: {ctx} {lean}"
-    assert py_gear_denom == lean["gear_denom"], f"gear denom: {ctx} {lean}"
-    assert py_complete == lean["is_complete"], f"complete: {ctx} {lean}"
-    # P4a: the production fractions are EXACT rationals — pin them against the
-    # oracle's integer numerators/denominators with zero tolerance.
-    assert py_gap.char_level_fraction == Fraction(lean["char_gap"], gd.max_character_level)
-    assert py_gap.skills_fraction == Fraction(lean["skill_gap_sum"], lean["skill_denom"])
-    if lean["gear_denom"] > 0:
-        assert py_gap.gear_fraction == Fraction(lean["gear_gap_sum"], lean["gear_denom"])
-    else:
-        assert py_gap.gear_fraction == Fraction(0)
-    # integer fraction bound, verified integer-only: 0 <= gap <= denom
-    assert 0 <= lean["skill_gap_sum"] <= lean["skill_denom"]
-    if lean["gear_denom"] > 0:
-        assert 0 <= lean["gear_gap_sum"] <= lean["gear_denom"]
-    assert 0 <= lean["char_gap"] <= gd.max_character_level

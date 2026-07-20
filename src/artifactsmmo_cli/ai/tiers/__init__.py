@@ -1,6 +1,6 @@
 """Tiered goal architecture.
 
-P1: Tier-1 objective + gap + personality seam.
+P1: Tier-1 objective.
 P2: Tier-2 meta-goal nodes + prerequisite graph (search substrate)."""
 
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
@@ -12,13 +12,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import (
     CharacterObjective,
-    ObjectiveGap,
     is_attainable,
-)
-from artifactsmmo_cli.ai.tiers.personality import (
-    BalancedPersonality,
-    Personality,
-    weighted_remaining,
 )
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
     best_attainable_weapon,
@@ -36,12 +30,9 @@ from artifactsmmo_cli.ai.tiers.strategy import (
 )
 
 __all__ = [
-    "BalancedPersonality",
     "CharacterObjective",
     "MetaGoal",
-    "ObjectiveGap",
     "ObtainItem",
-    "Personality",
     "ReachCharLevel",
     "RootScore",
     "StrategyDecision",
@@ -56,5 +47,4 @@ __all__ = [
     "prerequisites",
     "root_category",
     "unmet_closure_size",
-    "weighted_remaining",
 ]

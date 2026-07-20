@@ -24,7 +24,6 @@ import Formal.TieredSelection
 import Formal.GearLatch
 import Formal.ArbiterSelect
 import Formal.TaskDecision
-import Formal.WeightedRemaining
 import Formal.LowYieldCancel
 import Formal.ObjectiveStepFight
 import Formal.DecideKey

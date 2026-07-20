@@ -169,11 +169,6 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.Objective.attainAux_sound             -- recursion accept ⇒ Grounded (any path/fuel)
 #check @Formal.Objective.best_gear_argmax            -- first-slot pick = argmax over attainable
 #check @Formal.Objective.bestGear_optimal            -- bestGear dominates every member by (-value,code)
-#check @Formal.Objective.gapSum_nonneg               -- gap numerator ≥ 0
-#check @Formal.Objective.gapSum_le_targetSum         -- gap ≤ denom (fraction ∈ [0,1], integer-only)
-#check @Formal.Objective.charGap_bounds              -- 0 ≤ char gap ≤ target
-#check @Formal.Objective.is_complete_iff             -- is_complete ↔ raw-target form (independent)
-#check @Formal.Objective.axisGap_zero_iff            -- per-axis gap 0 ↔ raw target met
 -- StrategyTraversal required roles:
 #check @Formal.StrategyTraversal.is_reachable_eq_grounding  -- is_reachable = grounding fixpoint (sound+complete)
 #check @Formal.StrategyTraversal.groundedByN_sound          -- saturation SOUND wrt Grounded
@@ -287,12 +282,6 @@ open Formal.PriorityBand
 #check @Formal.TaskDecision.requiredVpc_antitone_in_confidence   -- confidence-monotone: threshold antitone in confidence
 #check @Formal.TaskDecision.decision_pursue_confidence_monotone  -- confidence-monotone: PURSUE preserved by ↑confidence
 #check @Formal.TaskDecision.decision_pursue_vpc_monotone         -- vpc-monotone: PURSUE preserved by ↑skill_up_vpc
--- WeightedRemaining required roles:
-#check @Formal.WeightedRemaining.complete_imp_zero       -- complete ⇒ scalar 0 (unconditional)
-#check @Formal.WeightedRemaining.zero_iff_complete_pos   -- positive-weight equivalence: scalar 0 ↔ complete
-#check @Formal.WeightedRemaining.bug_teeth_witness       -- bug-teeth: zero-weight ⇒ equivalence fails (witness)
-#check @Formal.WeightedRemaining.mono_head               -- monotone-nondecreasing in head fraction (weight ≥ 0)
-#check @Formal.WeightedRemaining.nonneg                  -- non-negativity under all-non-negative inputs
 -- LowYieldCancel required roles:
 #check @Formal.LowYieldCancel.no_task_never_fires                              -- shell-safety: ¬hasTask ⇒ never fires
 #check @Formal.LowYieldCancel.no_samples_blocks                                -- sample-gate: farm=0 ∨ alt=0 ⇒ never fires

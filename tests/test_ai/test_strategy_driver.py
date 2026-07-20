@@ -57,7 +57,6 @@ from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -1874,7 +1873,7 @@ def test_arbiter_equips_second_ring_into_empty_slot():
     state = make_state(level=5, inventory={"copper_ring": 1},
                        equipment={"ring1_slot": "copper_ring"})
     # The arbiter targets the empty ring2 slot...
-    eng = StrategyEngine(obj, BalancedPersonality())
+    eng = StrategyEngine(obj)
     d = eng.decide(state, gd)
     assert d.chosen_root == ObtainItem("copper_ring", slot="ring2_slot")
     # ...and the equip is ACTUALLY applicable + lands the ring in ring2_slot.

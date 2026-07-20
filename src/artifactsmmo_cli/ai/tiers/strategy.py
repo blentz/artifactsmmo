@@ -18,7 +18,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
 )
 from artifactsmmo_cli.ai.tiers.objective import GOLD, CharacterObjective, _permanent_vendor_purchases
-from artifactsmmo_cli.ai.tiers.personality import Personality
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -289,7 +288,6 @@ class StrategyDecision:
 @dataclass(frozen=True)
 class StrategyEngine:
     objective: CharacterObjective
-    personality: Personality
 
     def decide(self, state: WorldState, game_data: GameData,
                step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
