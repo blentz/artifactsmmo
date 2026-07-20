@@ -265,33 +265,48 @@ Waves 5–8 each land as their own commit with their own gate run. Waves 1–4 m
 
 Found while designing; real, and deliberately excluded per §3.
 
-**F1 — Parity census MODEL/POOL divergence on under-skilled gathers.**
-`_gather_sources(item, game_data)` (`ai/obtain_sources.py:238`) **never receives `state`** —
-it cannot consult skills even in principle. Every sibling takes `state` and gates on it
-(`_craft_sources:232`, `_recycle_sources:210`, `_drop_sources:275`). GATHER is the only
-source kind with a state-free eligibility predicate.
+**F1 — WITHDRAWN 2026-07-20. Not a defect; the premise was wrong.**
 
-Consequently `audit/obtain_parity_completeness.py:487-500` asks the POOL side via
-`GatherAction.is_applicable` — which **does** enforce the gate (`ai/actions/gathering.py:84-89`)
-— against a MODEL side that does not. On any under-skilled resource the two disagree. The
-census is green only because no current fixture hits the case.
+This was recorded as "the parity census asks the POOL side via a skill-enforcing predicate
+against a MODEL side that cannot enforce it, so under-skilled gathers diverge — green only
+because no fixture hits the case." **Probed empirically; both directions hold.**
 
-Fixing it means threading `state` into a state-free function and flipping leafing behavior
-in `prerequisite_graph.py:123`, `next_craft_core`, `craft_plan_gen`, and
-`forced_craft_grind` simultaneously. `ai/goals/gathering.py:55-73` documents a real hazard a
-naive source-layer gate would have to reproduce (salmon_spot/fishing-40 displacing
-bass_spot).
+The structural observation is true: `_gather_sources(item, game_data)`
+(`ai/obtain_sources.py:238`) never receives `state` and is the only source kind with a
+state-free eligibility predicate. The conclusion drawn from it was not. The census carries a
+deliberate asymmetry that covers exactly this case (`obtain_parity_completeness.py:489-501`):
 
-**F2 — `UpgradeEquipmentGoal` never received the P3b gather-gate fix.**
-`GatherMaterialsGoal.relevant_actions` (`ai/goals/gathering.py:342-380`) grew the
-`open_drops` / `locked_by_drop` partition in `7b6b4408`. `ai/goals/progression.py:261-268`
-still builds `gated_skill_levels` from `crafting_skill`/`crafting_level` only — while its own
-comment at `:256` claims it *"Mirrors GatherMaterialsGoal.gated_skill_levels."* True at P3a;
-silently false since P3b.
+| Direction | `applicable_only` | Under-skilled gather |
+|---|---|---|
+| POOL ⊆ MODEL | `True` — only actions that can fire now | `{} ⊆ {GATHER}` ✓ |
+| MODEL ⊆ POOL | `False` — inapplicable entries still count | `{GATHER} ⊆ {GATHER}` ✓ |
 
-**F3 — Stale docstring.** `ai/actions/level_skill.py:1-11` says the action "raises a
-*crafting* skill". It has supported gathering skills since P3b (`:107-118` accepts
-`best_gather_resource_drop`). Trivial, but it is the comment a future reader would trust.
+Measured against a synthetic `deep_rocks` (mining 10) with the character at mining 1:
+`MODEL = {GATHER}`, `POOL(applicable_only) = {}`, `POOL(all) = {GATHER}`, both subset checks
+`True`.
+
+The state-free predicate is moreover *correct* for the model's purpose. `prerequisite_graph`
+leafs on a GATHER source regardless of skill, and since P3b a skill-locked gather genuinely
+IS obtainable via LevelSkill → Gather. A source-layer skill gate would wrongly mark it
+unreachable — reintroducing the livelock P3b fixed, and it would have to reproduce the
+`skill_open` narrowing hazard (`ai/gather_skill_gate.py`) besides.
+
+Left as-is deliberately. Retained here as a record so the "obvious" gate is not re-proposed.
+
+**F2 — FIXED 2026-07-20 (`879a5f59`).** `UpgradeEquipmentGoal` never received the P3b
+gather-gate fix: it built `gated_skill_levels` from `crafting_skill`/`crafting_level` alone
+while its comment claimed to mirror `GatherMaterialsGoal`. An equippable whose material's
+only source was a locked gather was therefore unplannable from that goal — the `GatherAction`
+was admitted but the `LevelSkill` that could open it was not, so it sat in the pool
+permanently unreachable.
+
+Root cause was that the logic was mirrored *by comment* rather than shared as code. Fixed at
+that level: extracted to `ai/gather_skill_gate.py` (`openable_gather_grinds`, `skill_open`,
+`level_below_and_grindable`), consumed by both goals. `GatherMaterialsGoal` behaviour is
+unchanged — the extracted function is its former body verbatim.
+
+**F3 — FIXED 2026-07-20 (`879a5f59`).** `ai/actions/level_skill.py`'s docstring said the
+action "raises a *crafting* skill"; it has opened gathering gates since P3b.
 
 ---
 
