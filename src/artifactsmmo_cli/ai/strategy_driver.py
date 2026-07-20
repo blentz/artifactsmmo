@@ -21,6 +21,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
 from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.craft_plan_gen import _closure_items, generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
+from artifactsmmo_cli.ai.currency_grind_target import currency_grind_target_pure
 from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.equipment.bank_tool_fills import bank_tool_fills
@@ -494,10 +495,15 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
         # item is in hand this branch is skipped and UpgradeEquipment fires
         # the equip — one stepwise leg per cycle, as with every other root.
         #
-        # UNAFFORDABLE item-currency: accumulate the currency INCREMENTALLY
-        # (needed = held+1, the grind-one-replan idiom) — a one-shot plan
-        # for a 230-coin price is ~120 fights deep and dies on max_depth
-        # (sandwhisper_bag probe @L50: 28K nodes, plan_len=0). Cheapest
+        # UNAFFORDABLE item-currency: accumulate the currency in BATCHES via
+        # `currency_grind_target_pure` — a one-shot plan for a 230-coin price
+        # is ~120 fights deep and dies on max_depth (sandwhisper_bag probe
+        # @L50: 28K nodes, plan_len=0), so the target must stay shallow. It
+        # was `held + 1`, which stayed shallow but re-armed on EVERY
+        # acquisition; since `needed` is part of the goal's identity that
+        # churned the repr each cycle and reset sticky-commit keying. The
+        # batch milestone is absolute, so it holds still within a batch while
+        # still never running more than one batch ahead of `held`. Cheapest
         # PERMANENT located vendor decides the price (semantic key; event/
         # unlocated vendors mirror currency_demand's exclusion). Gold-priced
         # items skip the accumulation (gold is earned by normal play, not a
@@ -510,8 +516,9 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
             price, currency = min(purchases)
             held = state.inventory.get(currency, 0) + bank.get(currency, 0)
             if held < price:
-                return GatherMaterialsGoal(target_item=currency,
-                                           needed={currency: held + 1})
+                return GatherMaterialsGoal(
+                    target_item=currency,
+                    needed={currency: currency_grind_target_pure(held, price)})
         return GatherMaterialsGoal(target_item=code, needed={code: 1})
     if upgrade.is_plannable(state, game_data):
         return upgrade

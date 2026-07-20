@@ -144,6 +144,7 @@ from artifactsmmo_cli.ai.scenario import (
     load_bundle_game_data,
     scenario_state,
 )
+from artifactsmmo_cli.ai.thresholds import CURRENCY_GRIND_BATCH
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -540,12 +541,19 @@ def test_l35_artifact_fill_pearl_route_plans() -> None:
     small_pearls_entries = [g for g in report.goals_tried if str(g.get("goal", ""))
                             .startswith("GatherMaterials(small_pearls")]
     assert small_pearls_entries, report.goals_tried
-    assert all(entry["nodes"] == 2 and entry["plan_len"] == 1
+    # BATCHED 2026-07-20: the currency target is now the next CURRENCY_GRIND_BATCH
+    # milestone rather than held+1, so this step plans a batch of gathers instead
+    # of exactly one. The point of the original assertion was that the route is
+    # TRIVIALLY plannable (against the 1-node dead search it replaced), and it
+    # still is -- one node per unit plus the goal node, nowhere near the 28K-node
+    # max_depth cliff the shallow-target rule guards against.
+    assert all(entry["nodes"] == 2 * CURRENCY_GRIND_BATCH
+               and entry["plan_len"] == CURRENCY_GRIND_BATCH
                for entry in small_pearls_entries), small_pearls_entries  # GAP-7 flip
     assert repr(report.selected_goal).startswith("GatherMaterials(small_pearls"), (
         repr(report.selected_goal), report.plan)
-    assert [repr(a) for a in report.plan] == ["Gather(bass_spot->small_pearls)"], \
-        report.plan
+    assert [repr(a) for a in report.plan] == \
+        ["Gather(bass_spot->small_pearls)"] * CURRENCY_GRIND_BATCH, report.plan
     assert report.plan[0].drop_item_override == "small_pearls"
 
 

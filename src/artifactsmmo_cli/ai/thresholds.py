@@ -70,3 +70,12 @@ POTION_LEAD_FIGHTS = 10
 # potion, and the damage rests off for free.
 MARGINAL_FIGHT_HP_NUM = 3
 MARGINAL_FIGHT_HP_DEN = 10
+
+# Batch size for accumulating an item-currency toward a vendor price. The grind
+# target is the next ABSOLUTE multiple of this above what is held, so it stays
+# put while the character works through a batch (the goal's `needed` is part of
+# its identity, and a target that moved every acquisition churned sticky-commit
+# keying) while never running more than one batch ahead -- which is what keeps
+# the planner off the 120-fight max_depth cliff that motivated the original
+# `held + 1`. Consumed by currency_grind_target.currency_grind_target_pure.
+CURRENCY_GRIND_BATCH = 5

@@ -53,6 +53,7 @@ from artifactsmmo_cli.ai.strategy_driver import (
     objective_step_goal,
 )
 from artifactsmmo_cli.ai.task_batch import task_batch_size
+from artifactsmmo_cli.ai.thresholds import CURRENCY_GRIND_BATCH
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
@@ -2205,18 +2206,44 @@ def _vendor_bag_gd() -> GameData:
 
 
 def test_equippable_goal_routes_unowned_vendor_only_item_to_currency_grind():
-    """An UNOWNED, recipe-less, NPC-buy-only equippable with the currency
-    NOT yet affordable must map to an INCREMENTAL currency accumulation
-    (needed = held+1, the grind-one-replan idiom): a one-shot plan for a
-    230-coin price is ~120 fights deep and dies on max_depth
+    """An UNOWNED, recipe-less, NPC-buy-only equippable with the currency NOT
+    yet affordable must map to a BATCHED currency accumulation: a one-shot plan
+    for a 230-coin price is ~120 fights deep and dies on max_depth
     (sandwhisper_bag probe 2026-07-06 @L50: 28K nodes, plan_len=0), while
-    UpgradeEquipment's closure lock could never emit the buy at all."""
+    UpgradeEquipment's closure lock could never emit the buy at all.
+
+    Price 3 here is below CURRENCY_GRIND_BATCH, so the whole price is asked for
+    in one step -- that plan is already shallow, so laddering would buy nothing.
+    The laddering itself is exercised by the large-price test below."""
     gd = _vendor_bag_gd()
     state = make_state(level=5, attack={"air": 50}, inventory={}, bank_items={})
     goal = objective_step_goal(ObtainItem("dune_bag", 1, slot="bag_slot"),
                                state, gd, _ctx(), root=ObtainItem("dune_bag", 1, slot="bag_slot"))
     assert isinstance(goal, GatherMaterialsGoal), repr(goal)
-    assert goal.needed == {"dune_coin": 1}, repr(goal)
+    assert goal.needed == {"dune_coin": 3}, repr(goal)
+
+
+def test_currency_grind_target_is_stable_while_units_accumulate():
+    """The re-arming fix, at the integration boundary.
+
+    `needed` is part of a GatherMaterialsGoal's identity, so the old
+    `held + 1` target changed the goal's repr on EVERY acquisition and reset
+    sticky-commit keying each cycle. With a batch milestone the goal is
+    IDENTICAL across the acquisitions within a batch.
+
+    Uses a price well above the batch so the ladder actually engages -- the
+    3-coin fixture above cannot show this."""
+    gd = _vendor_bag_gd()
+    gd._npc_stock = {"dune_trader": {"dune_bag": 100}}   # expensive: ladder applies
+    root = ObtainItem("dune_bag", 1, slot="bag_slot")
+    seen = []
+    for held in range(CURRENCY_GRIND_BATCH):
+        state = make_state(level=5, attack={"air": 50},
+                           inventory={"dune_coin": held} if held else {}, bank_items={})
+        goal = objective_step_goal(root, state, gd, _ctx(), root=root)
+        seen.append(goal.needed["dune_coin"])
+    assert len(set(seen)) == 1, f"target moved while inside one batch: {seen}"
+    assert seen[0] == CURRENCY_GRIND_BATCH
 
 
 def test_equippable_goal_routes_affordable_vendor_only_item_to_buy():
