@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -203,3 +204,59 @@ def test_relevant_actions_scopes_level_skill_to_gated_closure() -> None:
     leaf_goal = GatherMaterialsGoal(target_item="gear_ore", needed={"gear_ore": 1})
     assert not [a for a in leaf_goal.relevant_actions(actions, under, gd)
                 if isinstance(a, LevelSkill)]
+
+
+def _gd_gated_gather_equippable() -> GameData:
+    """An EQUIPPABLE whose sole material is behind a gather-skill gate.
+
+    deep_helmet (helmet, gearcrafting 1) needs deep_ore, whose only source is
+    deep_rocks at mining 10. The character is at mining 1, so the single route
+    is LevelSkill(mining->10) then Gather(deep_rocks) then Craft.
+    """
+    gd = GameData()
+    gd._item_stats = {
+        "deep_helmet": ItemStats(code="deep_helmet", level=1, type_="helmet",
+                                 subtype="", crafting_skill="gearcrafting",
+                                 crafting_level=1, hp_bonus=50),
+        "deep_ore": ItemStats(code="deep_ore", level=10, type_="resource",
+                              subtype="mining"),
+        "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource",
+                                subtype="mining"),
+    }
+    gd._crafting_recipes = {"deep_helmet": {"deep_ore": 2}}
+    gd._resource_drops = {"deep_rocks": "deep_ore", "copper_rocks": "copper_ore"}
+    gd._resource_skill = {"deep_rocks": ("mining", 10), "copper_rocks": ("mining", 1)}
+    gd._resource_locations = {"deep_rocks": [(3, 3)], "copper_rocks": [(4, 4)]}
+    gd._workshop_locations = {"gearcrafting": (2, 2)}
+    gd._bank_location = (0, 0)
+    gd._taskmaster_location = (1, 1)
+    return gd
+
+
+def test_upgrade_equipment_admits_gather_gate_level_skill() -> None:
+    """UpgradeEquipmentGoal must admit the LevelSkill that opens a gather-skill
+    gate on one of its materials.
+
+    Regression (defect F2): P3b added the gather-skill-gate admission to
+    GatherMaterialsGoal only. UpgradeEquipmentGoal built `gated_skill_levels`
+    from crafting_skill/crafting_level alone while its comment claimed to mirror
+    GatherMaterialsGoal, so an equippable gated behind a locked gather could
+    never have its grind admitted from this goal. Both now share
+    ai.gather_skill_gate.openable_gather_grinds.
+    """
+    gd = _gd_gated_gather_equippable()
+    ls_mining10 = LevelSkill(skill="mining", target_level=10)
+    state = scenario_state(
+        ScenarioCharacter(name="t", level=12, skills={"mining": 1,
+                                                      "gearcrafting": 5}), gd)
+    objective = CharacterObjective.from_game_data(gd)
+    actions = build_actions(gd, state, objective, bank_accessible=True,
+                            task_exchange_min_coins=0)
+    actions.append(ls_mining10)
+    goal = UpgradeEquipmentGoal(committed_target=("deep_helmet", "helmet"))
+
+    admitted = goal.relevant_actions(actions, state, gd)
+
+    assert ls_mining10 in admitted, (
+        "LevelSkill(mining->10) must be admitted: deep_ore's only source is "
+        "gated at mining 10 and the character is at mining 1")

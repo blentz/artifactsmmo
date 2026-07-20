@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.forced_craft_grind import forced_craft_grind
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gather_skill_gate import openable_gather_grinds
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.upgrade_selection import (
     UpgradeCandidate,
@@ -253,11 +254,11 @@ class UpgradeEquipmentGoal(Goal):
         # LevelSkill admission scope (P3a): a skill-grind action only serves THIS
         # goal when a closure craftable (the target or a craftable intermediate)
         # is gated behind that exact (skill, level) and the character is under it
-        # — the gear-unlock grind. Mirrors GatherMaterialsGoal.gated_skill_levels:
-        # an UNCONDITIONAL skill_grind admission fans EVERY emitted LevelSkill
-        # (one per craft level in the whole recipe table) into every search,
-        # timing out under load (the P2 ff4401ac regression), and would also
-        # break the slot-lock by admitting grinds unrelated to the target.
+        # — the gear-unlock grind. An UNCONDITIONAL skill_grind admission fans
+        # EVERY emitted LevelSkill (one per craft level in the whole recipe
+        # table) into every search, timing out under load (the P2 ff4401ac
+        # regression), and would also break the slot-lock by admitting grinds
+        # unrelated to the target.
         gated_skill_levels: set[tuple[str, int]] = set()
         for code in in_closure_crafts:
             stats = game_data.item_stats(code)
@@ -266,6 +267,19 @@ class UpgradeEquipmentGoal(Goal):
                     and state.skills.get(stats.crafting_skill, 1)
                     < stats.crafting_level):
                 gated_skill_levels.add((stats.crafting_skill, stats.crafting_level))
+        # GATHER-skill gate, same treatment as the craft-skill gate above. P3b
+        # added this to GatherMaterialsGoal and never reached here, while the
+        # comment above went on claiming parity — an equippable whose material
+        # is behind a locked gather (iron_ore ← iron_rocks, mining 10) was
+        # therefore unplannable from this goal. Shared, not mirrored: see
+        # ai/gather_skill_gate.py.
+        # Only the skill levels are needed here: unlike GatherMaterialsGoal, the
+        # GatherAction arm below admits every closure gather regardless of its
+        # skill gate, so the locked gather is already in the pool and just needs
+        # its LevelSkill to become reachable.
+        _openable_gathers, gather_grind_levels = openable_gather_grinds(
+            actions, state, game_data, chain, covered)
+        gated_skill_levels |= gather_grind_levels
         result: list[Action] = []
         for action in actions:
             if "recovery" in action.tags or "deposit" in action.tags:
