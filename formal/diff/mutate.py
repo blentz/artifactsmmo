@@ -11,6 +11,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
+from mutation_anchor import AnchorAmbiguous, AnchorNotFound, MatchKind, apply_anchor, find_anchor
+
 ROOT = Path(__file__).resolve().parents[2]
 # Mutate<->play interlock: while this runner holds live mutants in src/, other
 # consumers (artifactsmmo play) must not import the package. The reader side
@@ -688,12 +690,23 @@ PREDICT_WIN_LIFESTEAL_MUTATIONS = [
     ("predict_win: drop monster enchanted_mirror reflect term in dieStep",
      "            + monster_enchanted_mirror * raw_player * (200 + p_crit) // 2)",
      "            + monster_enchanted_mirror * 0 * raw_player * (200 + p_crit) // 2)"),
+    # NOTE: combat_margin duplicates both of the following computations verbatim.
+    # Until the anchor check landed, these two anchors matched BOTH sites and
+    # str.replace(..., 1) silently mutated whichever came first in the file --
+    # predict_win, by luck of ordering. The trailing `return False` is what pins
+    # them here; the combat_margin twins are mutated by COMBAT_MARGIN_MUTATIONS.
     ("predict_win: drop monster barrier term in effective HP",
-     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)",
-     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code) * 0"),
+     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)\n"
+     "    rounds_to_kill = -(-(effective_monster_hp * 10000) // kill_step)  # ceil\n"
+     "    if rounds_to_kill > MAX_TURNS:\n"
+     "        return False",
+     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code) * 0\n"
+     "    rounds_to_kill = -(-(effective_monster_hp * 10000) // kill_step)  # ceil\n"
+     "    if rounds_to_kill > MAX_TURNS:\n"
+     "        return False"),
     ("predict_win: drop reconstitution turn-cap guard",
-     "    if 0 < reconstitution <= rounds_to_kill:",
-     "    if 0 < reconstitution <= 0:"),
+     "    if 0 < reconstitution <= rounds_to_kill:\n        return False",
+     "    if 0 < reconstitution <= 0:\n        return False"),
 ]
 
 # combat_margin mutations -- old strings matched to current combat.py text.
@@ -711,6 +724,23 @@ COMBAT_MARGIN_MUTATIONS = [
     ("combat_margin: flip round-cushion arithmetic (die-kill -> kill-die)",
      "    return rounds_to_die - rounds_to_kill + (1 if player_first else 0)",
      "    return rounds_to_kill - rounds_to_die + (1 if player_first else 0)"),
+    # The combat_margin twins of the two predict_win mutations above. combat.py
+    # computes effective HP and the reconstitution guard identically in both
+    # functions; before the anchor check these lines were never mutated here,
+    # because the predict_win anchors matched this site too and lost the race to
+    # file order. Pinned by the trailing `return LOSE_MARGIN`.
+    ("combat_margin: drop monster barrier term in effective HP",
+     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)\n"
+     "    rounds_to_kill = -(-(effective_monster_hp * 10000) // kill_step)  # ceil\n"
+     "    if rounds_to_kill > MAX_TURNS:\n"
+     "        return LOSE_MARGIN",
+     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code) * 0\n"
+     "    rounds_to_kill = -(-(effective_monster_hp * 10000) // kill_step)  # ceil\n"
+     "    if rounds_to_kill > MAX_TURNS:\n"
+     "        return LOSE_MARGIN"),
+    ("combat_margin: drop reconstitution turn-cap guard",
+     "    if 0 < reconstitution <= rounds_to_kill:\n        return LOSE_MARGIN",
+     "    if 0 < reconstitution <= 0:\n        return LOSE_MARGIN"),
 ]
 
 # effective-hp guard mutation -- the effective_hp<=0 branch in combat_margin.
@@ -2089,6 +2119,8 @@ _WORKERS = min(16, (os.cpu_count() or 2) - 2)
 # Group filter: a group runs only when one of these substrings appears in its
 # src path or test path. None = run every group (the gate's full sweep).
 _ONLY: list[str] | None = None
+# --check-anchors: resolve anchors and exit, running no tests.
+_CHECK_ANCHORS = False
 _SRC_PKG = "artifactsmmo_cli"
 _SRC_ROOT = ROOT / "src"
 _PYTEST_ARGS = ["-q", "--no-cov", "-x"]
@@ -2099,6 +2131,12 @@ _Unit = tuple[Path, str, str, str, str]
 # global so the ~80 run_group call sites need no signature change.
 _UNITS: list[_Unit] = []
 _PRINT_LOCK = threading.Lock()
+# Failure buckets, kept apart from genuine survivors so the summary says which
+# kind of breakage occurred. list.append is atomic under the GIL, matching how
+# `survivors` is already shared across worker threads.
+_STALE: list[str] = []
+_AMBIGUOUS: list[str] = []
+_ERRORED: list[str] = []
 
 
 def _run_pytest(test_path: str, pythonpath: str | None) -> int:
@@ -2117,21 +2155,47 @@ def _run_pytest(test_path: str, pythonpath: str | None) -> int:
 
 def _probe(target_file: Path, desc: str, old: str, new: str, test_path: str,
            pythonpath: str | None, survivors: list[str]) -> None:
-    """Apply one mutation to target_file, run its kill-test, restore. Records a
-    survivor (or stale) exactly as the original serial run_group did."""
+    """Apply one mutation to target_file, run its kill-test, restore.
+
+    Four failure modes are kept distinct, because they need different fixes:
+    a STALE anchor (source moved, refresh the anchor), an AMBIGUOUS anchor (the
+    mutation no longer identifies a unique site — a human must disambiguate), a
+    HARNESS error (the kill-test could not run at all, so 'killed' would be a
+    lie), and a genuine SURVIVOR (the mutant is not covered). All four fail the
+    gate; only the last means the test suite is weak.
+    """
     orig = target_file.read_text()
-    if old not in orig:
+    try:
+        mutated = apply_anchor(orig, old, new)
+    except AnchorAmbiguous as exc:
+        with _PRINT_LOCK:
+            print(f"AMBIGUOUS ANCHOR: {desc}\n  {exc}")
+        _AMBIGUOUS.append(desc)
+        survivors.append(desc + " (ambiguous)")
+        return
+    except AnchorNotFound:
         with _PRINT_LOCK:
             print(f"STALE MUTATION (text not found): {desc}")
+        _STALE.append(desc)
         survivors.append(desc + " (stale)")
         return
-    target_file.write_text(orig.replace(old, new, 1))
+    target_file.write_text(mutated)
     try:
-        survived = _run_pytest(test_path, pythonpath) == 0
+        rc = _run_pytest(test_path, pythonpath)
     finally:
         target_file.write_text(orig)
+    # pytest rc: 0 = all passed (mutant SURVIVED), 1 = tests failed (killed).
+    # >=2 is usage/collection/internal error or an external kill — the suite
+    # never actually judged this mutant, so counting it as killed would inflate
+    # the gate. A missing or unimportable kill-test used to read as 586 kills.
+    if rc >= 2:
+        with _PRINT_LOCK:
+            print(f"HARNESS ERROR (pytest rc={rc}, test did not run): {desc}")
+        _ERRORED.append(f"{desc} (pytest rc={rc}: {test_path})")
+        survivors.append(desc + f" (harness rc={rc})")
+        return
     with _PRINT_LOCK:
-        if survived:
+        if rc == 0:
             print(f"SURVIVED: {desc}")
             survivors.append(desc)
         else:
@@ -3735,13 +3799,28 @@ NPC_BUY_MUTATIONS = [
     # Flip the slot-floor inequality: `free < quantity` -> `free <= quantity`.
     # Off-by-one — quantity exactly at free is now wrongly refused. The
     # boundary test (used=5, cap=10, quantity=5) fires.
+    # npc_buy_currency_is_applicable_pure opens with a byte-identical slot floor,
+    # so the trailing gold line is what pins this to the gold variant; without it
+    # the anchor matched twice and mutated whichever came first. The currency
+    # twin is mutated just below.
     ("npc_buy: flip < to <= on slot floor (off-by-one)",
      "    free = inv_max - inv_used\n"
      "    if free < quantity:\n"
-     "        return False",
+     "        return False\n"
+     "    return not gold < price * quantity",
      "    free = inv_max - inv_used\n"
      "    if free <= quantity:\n"
-     "        return False"),
+     "        return False\n"
+     "    return not gold < price * quantity"),
+    ("npc_buy_currency: flip < to <= on slot floor (off-by-one)",
+     "    free = inv_max - inv_used\n"
+     "    if free < quantity:\n"
+     "        return False\n"
+     "    return not currency_on_hand < total_spent",
+     "    free = inv_max - inv_used\n"
+     "    if free <= quantity:\n"
+     "        return False\n"
+     "    return not currency_on_hand < total_spent"),
     # Apply mints +quantity+1 instead of +quantity: even with the precondition
     # satisfied, the post-state overflows the cap by 1. The diff's
     # `test_apply_matches_lean` Lean-oracle agreement fires.
@@ -4405,18 +4484,21 @@ WITHDRAW_ITEM_MUTATIONS = [
 # withdraw_item SLOT term (separate group, separate kill-test): the diff-test
 # fixtures in test_inventory_chain_safe_diff.py all set slots_max==cap so the
 # SLOT term never binds there (only the QUANTITY term above is exercised).
-# `str.replace(old, new, 1)` hits the FIRST occurrence in the file, which is
-# the is_applicable copy (line ~51) — apply's identical text is guarded by
-# `assert has_room(...)` (different prefix), so this anchor cannot
-# accidentally land on apply's copy. Killed by
+# apply() carries a byte-identical `new_stacks = ...` pair, so this anchor used
+# to match twice and relied on `str.replace(..., 1)` landing on the is_applicable
+# copy first. The distinguishing suffix (`return has_room(` here vs
+# `assert has_room(` in apply) is now part of the anchor, so the targeting is
+# enforced rather than inherited from file order. Killed by
 # `tests/test_ai/test_actions.py::TestWithdrawItemAction::
 # test_not_applicable_new_code_blocked_when_no_free_slot` (full bag, new code,
 # quantity headroom present — only the slot term can block it).
 WITHDRAW_ITEM_SLOT_MUTATIONS = [
     ("withdraw_item: drop the slot-room term (new_stacks forced to 0)",
      "        new_stacks = 1 if (self.code not in state.inventory\n"
-     "                           and self.quantity > 0) else 0",
-     "        new_stacks = 0"),
+     "                           and self.quantity > 0) else 0\n"
+     "        return has_room(",
+     "        new_stacks = 0\n"
+     "        return has_room("),
 ]
 
 CLAIM_MUTATIONS = [
@@ -4969,7 +5051,77 @@ LIVENESS_REST_MUTATIONS = [
 ]
 
 
+def check_anchors() -> int:
+    """Resolve every anchor against its source without running any test.
+
+    Seconds instead of an hour. This exists so anchor rot is caught at the point
+    it is introduced -- by the fast formal gate and by pre-commit -- rather than
+    surfacing at the end of the nightly mutation run, long after the commit that
+    broke it. Ignores --only deliberately: a subset run must never let a stale
+    anchor in an unselected group go unnoticed.
+    """
+    _UNITS.clear()
+    global _ONLY
+    saved, _ONLY = _ONLY, None
+    try:
+        _collect_all_groups()
+    finally:
+        _ONLY = saved
+    missing: list[str] = []
+    ambiguous: list[str] = []
+    reflowed: list[str] = []
+    cache: dict[Path, str] = {}
+    # Two mutations with the same target, old and new text are the same
+    # experiment run twice: they cost gate time and inflate the mutant count
+    # without testing anything extra. The anchor pass cannot see this — both
+    # resolve to the same single site perfectly well — so check it separately.
+    seen: dict[tuple[Path, str, str], str] = {}
+    duplicates: list[str] = []
+    for src, desc, old, new, _test in _UNITS:
+        key = (src, old, new)
+        if key in seen:
+            duplicates.append(f"{desc}\n    identical to: {seen[key]}")
+        else:
+            seen[key] = desc
+    for src, desc, old, _new, test_path in _UNITS:
+        if not Path(ROOT / test_path).exists():
+            missing.append(f"{desc}\n    kill-test not on disk: {test_path}")
+            continue
+        if src not in cache:
+            cache[src] = src.read_text()
+        try:
+            match = find_anchor(cache[src], old)
+        except AnchorAmbiguous as exc:
+            ambiguous.append(f"{desc}\n    {src.relative_to(ROOT)}: {exc}")
+        except AnchorNotFound:
+            missing.append(f"{desc}\n    {src.relative_to(ROOT)}: anchor text not found")
+        else:
+            if match.kind is MatchKind.REFLOWED:
+                reflowed.append(f"{desc}  [{src.relative_to(ROOT)}]")
+    total = len(_UNITS)
+    if reflowed:
+        print(f"\n{len(reflowed)} anchor(s) matched only after re-indent "
+              f"normalisation -- still applied, but refresh the anchor text:")
+        for r in reflowed:
+            print(f"  - {r}")
+    for label, bucket in (("STALE", missing), ("AMBIGUOUS", ambiguous),
+                          ("DUPLICATE", duplicates)):
+        if bucket:
+            print(f"\n{len(bucket)} {label} mutation(s):")
+            for b in bucket:
+                print(f"  - {b}")
+    if missing or ambiguous or duplicates:
+        print(f"\nANCHOR CHECK FAILED: {len(missing)} stale, {len(ambiguous)} "
+              f"ambiguous, {len(duplicates)} duplicate, out of {total} mutations.")
+        return 1
+    print(f"anchor check OK: {total} mutations, all anchors resolve uniquely "
+          f"({len(reflowed)} via re-indent normalisation)")
+    return 0
+
+
 def main() -> int:
+    if _CHECK_ANCHORS:
+        return check_anchors()
     _assert_sources_clean()
     _acquire_mutation_lock()
     try:
@@ -4980,9 +5132,12 @@ def main() -> int:
         MUTATION_LOCKFILE.unlink(missing_ok=True)
 
 
-def _run_all_groups() -> int:
+def _collect_all_groups() -> None:
+    """Register every mutation group into _UNITS. Collection only — execution is
+    _execute's job, so the anchor check can reuse this without running pytest.
+    `survivors` is threaded through purely for run_group call-site compatibility
+    and is never read."""
     survivors: list[str] = []
-    _UNITS.clear()
     run_group(SRC, MUTATIONS, "formal/diff/test_calculate_path_diff.py", survivors)
     run_group(TASK_BATCH_SRC, TASK_BATCH_MUTATIONS, "formal/diff/test_task_batch_diff.py", survivors)
     run_group(INVENTORY_CAPS_SRC, INVENTORY_CAPS_MUTATIONS,
@@ -5357,17 +5512,46 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_progression_tree_core.py", survivors)
     run_group(EQUIPMENT_PROFILE_SRC, EQUIPMENT_PROFILE_MUTATIONS,
               "formal/diff/test_equipment_profile_diff.py", survivors)
+def _run_all_groups() -> int:
+    survivors: list[str] = []
+    _UNITS.clear()
+    _STALE.clear()
+    _AMBIGUOUS.clear()
+    _ERRORED.clear()
+    _collect_all_groups()
     _execute(_UNITS, survivors)
     if survivors:
-        print(f"GATE FAIL: survivors={survivors}")
+        # Break the failure down: a weak test suite, a moved anchor, an
+        # undetermined anchor and a broken kill-test are four different bugs and
+        # used to be reported as one undifferentiated list.
+        real = [s for s in survivors
+                if not s.endswith((" (stale)", " (ambiguous)"))
+                and " (harness rc=" not in s]
+        if real:
+            print(f"\n{len(real)} SURVIVOR(S) — mutant not killed by its test:")
+            for s in real:
+                print(f"  - {s}")
+        for label, bucket in (("STALE ANCHOR", _STALE),
+                              ("AMBIGUOUS ANCHOR", _AMBIGUOUS),
+                              ("HARNESS ERROR", _ERRORED)):
+            if bucket:
+                print(f"\n{len(bucket)} {label}(S):")
+                for b in bucket:
+                    print(f"  - {b}")
+        print(f"\nGATE FAIL: {len(real)} survivor(s), {len(_STALE)} stale, "
+              f"{len(_AMBIGUOUS)} ambiguous, {len(_ERRORED)} harness error(s).")
         return 1
     print("mutation gate OK")
     return 0
 
 
 def _parse_args(argv: list[str]) -> None:
-    global _RUNNER, _ONLY, _WORKERS
+    global _RUNNER, _ONLY, _WORKERS, _CHECK_ANCHORS
     parser = argparse.ArgumentParser(description="Mutation runner for the formal gate.")
+    parser.add_argument("--check-anchors", action="store_true",
+                        help="resolve every anchor against its source and exit; "
+                             "runs no tests (seconds, not an hour). Always checks "
+                             "all groups, ignoring --only")
     parser.add_argument("--runner", choices=("parallel", "serial"), default=_RUNNER,
                         help="parallel (private-copy worker threads, default) or "
                              "serial (in-place per-mutant subprocess, parity oracle)")
@@ -5379,6 +5563,7 @@ def _parse_args(argv: list[str]) -> None:
     ns = parser.parse_args(argv)
     _RUNNER = ns.runner
     _WORKERS = max(1, ns.workers)
+    _CHECK_ANCHORS = ns.check_anchors
     if ns.only:
         _ONLY = [tok.strip() for tok in ns.only.split(",") if tok.strip()]
 

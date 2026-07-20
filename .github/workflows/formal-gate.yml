@@ -72,6 +72,13 @@ jobs:
         run: cd formal && lake env lean Formal/Manifest.lean >/dev/null && echo "manifest OK"
       - name: Extraction drift (Python -> Lean)
         run: bash formal/gate/check_extraction.sh
+      # Mutation *execution* is deferred to the nightly job (see below), which
+      # left anchor rot undetected on every PR: a refactor that moved a pinned
+      # line was only caught ~14h later, at the end of the nightly run. This
+      # step resolves all ~580 anchors without running a single test, so the
+      # PR that breaks an anchor is the PR that fails.
+      - name: Mutation anchors resolve (no tests run)
+        run: uv run python formal/diff/mutate.py --check-anchors
       - name: Differential tests (Python<->Lean)
         timeout-minutes: 25
         # `-n auto`: the 104 diff modules are deterministic input/output checks
