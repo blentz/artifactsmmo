@@ -108,7 +108,10 @@ def test_band_search_is_bounded(name: str) -> None:
     """Every tried goal bounded — see search_bounds.assert_search_bounded
     (extracted for reuse by the slot-coverage net; the bound and its
     rationale live there now)."""
-    assert_search_bounded(_run(name), name)
+    # l48_band_adequate provably has nothing to try: its L47-50 fight window is
+    # event-and-raid-only content. Both poles are asserted in test_l48_raid_pair.
+    assert_search_bounded(_run(name), name,
+                          expect_no_work=(name == L48_BAND_ADEQUATE))
 
 
 @pytest.mark.parametrize("name", BAND_NAMES)

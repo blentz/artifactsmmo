@@ -3,10 +3,15 @@
 
 """The winnable near-level monster set used to keep situationally-best gear.
 
-Memoized single-entry on `(id(game_data), character level, equipment signature)`
-because the dominance check that consumes it runs per inventory item. `is_winnable`
+Memoized single-entry on a WEAKREF to game_data plus (character level, equipment
+signature, active event codes) because the dominance check that consumes it runs
+per inventory item. Identity is a weakref compared with `is`, never `id()`: CPython
+reuses the address of a collected object, so an id-keyed entry could be hit by a
+different GameData that happened to land there. `is_winnable`
 is called with `history=None` (cold/stat beatability) — the keep decision uses the
 optimistic prediction, not the learned-loss veto, matching how planning calls it."""
+
+from weakref import ReferenceType, ref
 
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
@@ -43,11 +48,18 @@ def combat_target_monsters(state: WorldState, game_data: GameData) -> list[str]:
     equip_sig = tuple(sorted(c for c in state.equipment.values() if c is not None))
     # active_event_codes is part of the read-set: `monster_spawn_known` consults it,
     # and the player mutates it on the SAME GameData object every cycle
-    # (player.py:1275). Keying only on id(game_data) would serve the pre-event
-    # answer for the rest of the run.
-    key = (id(game_data), state.level, equip_sig,
-           frozenset(game_data.active_event_codes))
-    if _cache.get("key") == key:
+    # (player.py:1275). Keying only on identity would serve the pre-event answer
+    # for the rest of the run.
+    key = (state.level, equip_sig, frozenset(game_data.active_event_codes))
+    # Identity is held as a WEAKREF and compared with `is`, never as id().
+    # CPython reuses the id of a collected object, so an id-keyed entry could be
+    # hit by a DIFFERENT GameData that happened to land on the same address --
+    # observed as an intermittent cross-test failure (test_tiers_guards's
+    # craft_potions guard, twice, passing in isolation every time). A weakref
+    # cannot alias: once the original dies the ref reads None and the entry misses.
+    cached_ref = _cache.get("gd_ref")
+    if (isinstance(cached_ref, ReferenceType) and cached_ref() is game_data
+            and _cache.get("key") == key):
         cached_val = _cache["val"]
         if isinstance(cached_val, list):
             return list(cached_val)
@@ -56,6 +68,7 @@ def combat_target_monsters(state: WorldState, game_data: GameData) -> list[str]:
            if level >= floor
            and game_data.monster_spawn_known(code)
            and is_winnable(state, game_data, code, None)]
+    _cache["gd_ref"] = ref(game_data)
     _cache["key"] = key
     _cache["val"] = out
     return list(out)

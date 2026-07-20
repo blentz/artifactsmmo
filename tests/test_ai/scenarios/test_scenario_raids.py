@@ -20,7 +20,7 @@ from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, scenario_
 
 def _sc_with_raid() -> ScenarioCharacter:
     base = SCENARIOS["l48_band_adequate"]
-    return ScenarioCharacter(**{**vars(base), "raids": ("enchanted_fairy",)})
+    return ScenarioCharacter(**{**vars(base), "raids": (("enchanted_fairy", "pixie"),)})
 
 
 _DELIBERATE_RAID_SCENARIOS = {"l48_raid_active"}

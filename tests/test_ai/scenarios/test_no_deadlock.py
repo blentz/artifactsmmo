@@ -215,7 +215,10 @@ def test_l48_band_adequate_chosen_root_is_wait_when_no_winnable_monster() -> Non
 
 
 def test_l48_band_adequate_search_bounded() -> None:
-    assert_search_bounded(_run(CRITERION_2_WALLED), CRITERION_2_WALLED)
+    # The walled scenario provably has nothing to try (event/raid-only L47-50
+    # window); both poles are asserted in test_l48_raid_pair.
+    assert_search_bounded(_run(CRITERION_2_WALLED), CRITERION_2_WALLED,
+                          expect_no_work=True)
 
 
 def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:

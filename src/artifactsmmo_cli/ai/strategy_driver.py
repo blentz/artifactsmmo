@@ -45,6 +45,7 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.maintain_consumables import MaintainConsumablesGoal
+from artifactsmmo_cli.ai.goals.participate_raid import ParticipateRaidGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.provision_marginal_fight import ProvisionMarginalFightGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
@@ -64,6 +65,7 @@ from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_figh
 from artifactsmmo_cli.ai.obtain_sources import Source, obtain_source_map
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
+from artifactsmmo_cli.ai.raid_participation import raid_survivable_pure
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus, recycle_urgency
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
@@ -1238,7 +1240,36 @@ class StrategyArbiter:
                 continue
             g = map_means(mk, game_data, ctx, state, self._history)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g), band=BAND_DISCRETIONARY))
+        for raid_goal in self._raid_candidates(state, game_data):
+            candidates.append(Candidate(goal=raid_goal, is_means=True,
+                                        repr_=repr(raid_goal), band=BAND_DISCRETIONARY))
         return candidates
+
+    def _raid_candidates(self, state: WorldState,
+                         game_data: GameData) -> list[ParticipateRaidGoal]:
+        """One participation goal per OPEN raid whose boss is worth engaging.
+
+        Deliberately NOT a MeansKind: a new kind ripples through the ladder,
+        DecideKey.lean and the E-tower rows. A plain discretionary candidate
+        yields to every guard and objective step, which is the right priority for
+        a timed bonus.
+
+        Gated on (window open, tile known, survivable, worth-positive). The worth
+        gate uses the raid's remaining window in FIGHTS, which is unknown offline,
+        so it is skipped when the window is not known -- the survivability gate
+        still applies, and a raid the bot cannot survive is never offered.
+        """
+        out: list[ParticipateRaidGoal] = []
+        for raid in state.active_raids:
+            if not game_data.raid_location_tiles(raid.code):
+                continue
+            damage = expected_damage_per_fight(state, game_data, raid.monster)
+            if not raid_survivable_pure(state.hp, state.max_hp, damage):
+                continue
+            out.append(ParticipateRaidGoal(raid_code=raid.code,
+                                           monster_code=raid.monster,
+                                           xp_floor=state.xp))
+        return out
 
     def _worth_gate_suppressed(
         self,

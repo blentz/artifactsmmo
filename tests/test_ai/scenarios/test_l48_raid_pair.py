@@ -94,4 +94,4 @@ def test_the_two_poles_differ_only_by_the_raid():
     differing = {k for k in vars(a)
                  if getattr(a, k) != getattr(b, k)}
     assert differing <= {"name", "raids", "description"}, differing
-    assert a.raids == () and b.raids == ("enchanted_fairy",)
+    assert a.raids == () and b.raids == (("enchanted_fairy", "pixie"),)

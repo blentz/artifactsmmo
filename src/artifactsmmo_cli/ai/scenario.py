@@ -75,12 +75,19 @@ class ScenarioCharacter:
     codes. seed_offline mirrors the live player's per-cycle overlay by
     seeding GameData.active_event_codes from the state, so event
     monster/resource/NPC spawns surface exactly as they do live."""
-    raids: tuple[str, ...] = ()
-    """Raid codes live for the whole scenario cycle (converted to
-    `WorldState.raids` entries with status="active"). Mirrors `active_events`,
-    with one difference: `RaidInfo.is_active()` keys on the STATUS string, not on
-    a timestamp window, so a declared raid reads as active by construction rather
-    than by an expiry far in the future.
+    raids: tuple[tuple[str, str], ...] = ()
+    """(raid_code, boss_monster_code) pairs live for the whole scenario cycle,
+    converted to `WorldState.raids` entries with status="active". Mirrors
+    `active_events`, with two differences worth stating:
+
+    * `RaidInfo.is_active()` keys on the STATUS string, not a timestamp window, so
+      a declared raid reads active by construction rather than via a far-future
+      expiry.
+    * The BOSS must be named explicitly. A raid's map-content code is NOT its
+      monster code (`enchanted_fairy` is the content, `pixie` is the boss), and
+      GameData carries no raid catalog to resolve one to the other -- `GET /raids`
+      supplies that mapping live but is not in the cache bundle. Until the catalog
+      lands, a scenario states the pair rather than a lookup pretending to exist.
 
     Exists so a scenario can exercise BOTH poles of a raid-gated decision -- no
     raid means the bot provably cannot plan, an active raid means it can. Without
@@ -211,10 +218,10 @@ def scenario_state(sc: ScenarioCharacter,
         utility1_slot_quantity=sc.utility_quantities.get("utility1_slot", 0),
         utility2_slot_quantity=sc.utility_quantities.get("utility2_slot", 0),
         active_events={code: FAR_FUTURE for code in sc.active_events},
-        raids=[RaidInfo(code=code, name=code, monster=code, status="active",
+        raids=[RaidInfo(code=code, name=code, monster=boss, status="active",
                         next_start_at=FAR_FUTURE, remaining_hp=None,
                         total_hp=None, window_ends_at=FAR_FUTURE)
-               for code in sc.raids],
+               for code, boss in sc.raids],
         attack=combat.attack,
         dmg=combat.dmg,
         dmg_elements=combat.dmg_elements,
@@ -414,7 +421,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         utility_quantities={"utility1_slot": 20, "utility2_slot": 20},
         bank={"adamantite_ore": 5, "mithril_ore": 10},
         inventory_max=150,
-        raids=("enchanted_fairy",),
+        raids=(("enchanted_fairy", "pixie"),),
         description="l48_band_adequate WITH an active raid. The POSITIVE pole "
                      "of the L48 wall pair: byte-identical state except that a "
                      "raid window is open. enchanted_fairy's boss (pixie, L40) "
