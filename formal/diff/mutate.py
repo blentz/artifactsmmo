@@ -4071,6 +4071,51 @@ GUARD_DISCARD_QUANTITY_MUTATIONS = [
 # `_fires` predicates and is killed by the SAME ladder_fires differential. The
 # pressure rungs are stored as exact num/den ints, so a value shift mutates the
 # numerator (e.g. PRESSURE_HIGH_NUM 17 -> 19 makes 17/20=0.85 into 19/20=0.95).
+# ─── decision knobs added 2026-07-19/20, each anchored against the UNIT test
+# that actually kills it. All five live in ai/thresholds.py, but they are split
+# into three groups by KILLER FILE — a group runs one test path, and an anchor
+# in a group whose tests never import the constant SURVIVES (the trap hit twice
+# already: a1b32dda's sentinel anchors and 7dcb0c86's plan-cost anchor).
+
+POTION_KNOB_MUTATIONS = [
+    # Collapse the lead-time window to a single fight: stocking stops being
+    # speculative, so the bot starts brewing only once already marginal — too
+    # late, given crafting has lead time. Killed by the lead-window test.
+    ("thresholds: POTION_LEAD_FIGHTS 10 -> 1 (no speculation)",
+     "POTION_LEAD_FIGHTS = 10",
+     "POTION_LEAD_FIGHTS = 1"),
+    # Move the marginal-fight fraction off the shared 3/10 fight-HP floor. At
+    # 9/10 almost every fight reads "marginal", so the combat justification
+    # degenerates back to stock-on-any-deficit.
+    ("thresholds: MARGINAL_FIGHT_HP_NUM 3 -> 9 (everything reads marginal)",
+     "MARGINAL_FIGHT_HP_NUM = 3",
+     "MARGINAL_FIGHT_HP_NUM = 9"),
+    # Denominator shift the other way: 3/100 means nothing is ever marginal, so
+    # the bot never stocks and dies mid-fight with an empty utility slot.
+    ("thresholds: MARGINAL_FIGHT_HP_DEN 10 -> 100 (nothing reads marginal)",
+     "MARGINAL_FIGHT_HP_DEN = 10",
+     "MARGINAL_FIGHT_HP_DEN = 100"),
+]
+
+CURRENCY_KNOB_MUTATIONS = [
+    # Batch of 1 is exactly the `held + 1` re-arming target the milestone ladder
+    # replaced: the goal's `needed` moves on every acquisition, churning its
+    # identity and resetting sticky-commit keying each cycle.
+    ("thresholds: CURRENCY_GRIND_BATCH 5 -> 1 (re-arms every acquisition)",
+     "CURRENCY_GRIND_BATCH = 5",
+     "CURRENCY_GRIND_BATCH = 1"),
+]
+
+RAID_KNOB_MUTATIONS = [
+    # Drop the reward threshold to 1 damage: every character reads as
+    # worth-positive, including one that contributes nothing and is only going
+    # to spend cooldowns and die.
+    ("thresholds: RAID_TICKET_DAMAGE 20000 -> 1 (worth gate always passes)",
+     "RAID_TICKET_DAMAGE = 20000",
+     "RAID_TICKET_DAMAGE = 1"),
+]
+
+
 LADDER_THRESHOLD_VALUE_MUTATIONS = [
     (
         "ladder/thresholds: HP_CRITICAL threshold 0.75 -> 0.50 (narrows critical band)",
@@ -5240,6 +5285,12 @@ def _run_all_groups() -> int:
               "tests/test_ai/scenarios/test_slot_exhaustion.py", survivors)
     run_group(THRESHOLDS_SRC, LADDER_THRESHOLD_VALUE_MUTATIONS,
               "formal/diff/test_ladder_fires_diff.py", survivors)
+    run_group(THRESHOLDS_SRC, POTION_KNOB_MUTATIONS,
+              "tests/test_ai/test_potion_stock_target.py", survivors)
+    run_group(THRESHOLDS_SRC, CURRENCY_KNOB_MUTATIONS,
+              "tests/test_ai/test_currency_grind_target.py", survivors)
+    run_group(THRESHOLDS_SRC, RAID_KNOB_MUTATIONS,
+              "tests/test_ai/test_raid_participation.py", survivors)
     run_group(MEANS_SRC, LADDER_MEANS_FIRES_MUTATIONS,
               "formal/diff/test_ladder_fires_diff.py", survivors)
     run_group(WITHDRAW_ITEM_SRC, WITHDRAW_ITEM_MUTATIONS,
