@@ -28,7 +28,6 @@ from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext, active_guards
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -161,7 +160,7 @@ def test_robby_scenario_stocked_small_does_not_force_enhanced_grind() -> None:
         utility1_slot_quantity=100,
     )
 
-    eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+    eng = StrategyEngine(CharacterObjective.from_game_data(gd))
     chosen_root = eng.decide(state, gd).chosen_root
     assert "enhanced_health_potion" not in repr(chosen_root)
 

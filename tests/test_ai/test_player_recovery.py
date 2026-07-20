@@ -26,7 +26,6 @@ def test_player_has_detector_after_init():
 def test_arbiter_skips_suppressed_goals():
     """A goal whose repr is in _suppressed_goals is skipped by the arbiter."""
     from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-    from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
     from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 
     player = GamePlayer(character="testchar")
@@ -50,7 +49,7 @@ def test_arbiter_skips_suppressed_goals():
     # Idle (no task) → AcceptTask is the discretionary candidate; suppress it.
     player.state = make_state(task_code=None, task_type=None)
     player._objective = CharacterObjective.from_game_data(gd)
-    player._strategy = StrategyEngine(player._objective, BalancedPersonality())
+    player._strategy = StrategyEngine(player._objective)
     player._suppressed_goals = {"AcceptTask": 5}
 
     decision = player._strategy.decide(player.state, gd)

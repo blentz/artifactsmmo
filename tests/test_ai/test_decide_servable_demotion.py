@@ -10,7 +10,6 @@ the deleted `servable_filter.py`) died with the flat ranking in Phase 4b.
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -19,7 +18,7 @@ from tests.test_ai.fixtures import make_state
 def _eng(gd: GameData) -> StrategyEngine:
     """Engine over from_game_data (was imported from test_tiers_strategy's
     `_eng` helper, retired with the flat ranking in Phase 4b Task 2)."""
-    return StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+    return StrategyEngine(CharacterObjective.from_game_data(gd))
 
 
 def _two_root_gd() -> GameData:

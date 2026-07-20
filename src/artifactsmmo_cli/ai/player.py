@@ -100,7 +100,6 @@ from artifactsmmo_cli.ai.strategy_driver import (
 )
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers import (
-    BalancedPersonality,
     CharacterObjective,
     ObtainItem,
     StrategyDecision,
@@ -566,7 +565,7 @@ class GamePlayer:
         )
         # Build the Tier-3 strategy engine once (shadow mode — traced only).
         self._objective = CharacterObjective.from_game_data(self.game_data)
-        self._strategy = StrategyEngine(self._objective, BalancedPersonality())
+        self._strategy = StrategyEngine(self._objective)
 
         print(f"[{self._now()}] Fetching character state...")
         self.state = self._fetch_world_state(client)
@@ -625,7 +624,7 @@ class GamePlayer:
         # monster_spawn_known) is silently inert in scenarios.
         self.game_data.active_event_codes = set(state.active_events)
         self._objective = CharacterObjective.from_game_data(game_data)
-        self._strategy = StrategyEngine(self._objective, BalancedPersonality())
+        self._strategy = StrategyEngine(self._objective)
         self.state = state
         seed_documented_blockers(self._blockers, game_data, state)
         self._actions_since_full_refresh = BANK_REFRESH_FORCE_SENTINEL

@@ -15,7 +15,6 @@ open Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal
 open Formal.BankSelection Formal.PriorityBand Formal.OwnedCount Formal.UpgradeSelection
 open Formal.Scalarizer
 open Formal.TaskDecision
-open Formal.WeightedRemaining
 open Formal.LowYieldCancel
 open Formal.DecideKey
 open Formal.CyclesForProgress
@@ -671,30 +670,6 @@ def runObjectiveBestGear (args : Array Json) : Json :=
   let val : Int := match chosen with | some it => it.value | none => 0
   Json.mkObj [("chosen_code", Json.num code), ("chosen_value", Json.num val)]
 
-/-- Run the `gap` integer numerators/denominators and `is_complete`.
-
-args layout (Ints): `[targetLevel, level, nSkills, (target, have)*nSkills,
-nGear, (target, have)*nGear]`. Emits char gap, skill gap sum + denom, gear gap
-sum + denom, and is_complete. -/
-def runObjectiveGap (args : Array Json) : Json :=
-  let targetLevel := intArg args 0
-  let level := intArg args 1
-  let charGap := Formal.Objective.axisGap targetLevel level
-  let nSkills := (intArg args 2).toNat
-  let skillPairs : List (Int × Int) :=
-    (List.range nSkills).map (fun k => (intArg args (3 + 2*k), intArg args (4 + 2*k)))
-  let p := 3 + 2*nSkills
-  let nGear := (intArg args p).toNat
-  let gearPairs : List (Int × Int) :=
-    (List.range nGear).map (fun k => (intArg args (p + 1 + 2*k), intArg args (p + 2 + 2*k)))
-  Json.mkObj [
-    ("char_gap", Json.num charGap),
-    ("skill_gap_sum", Json.num (Formal.Objective.gapSum skillPairs)),
-    ("skill_denom", Json.num (Formal.Objective.targetSum skillPairs)),
-    ("gear_gap_sum", Json.num (Formal.Objective.gapSum gearPairs)),
-    ("gear_denom", Json.num (Formal.Objective.targetSum gearPairs)),
-    ("is_complete", Json.bool (Formal.Objective.isComplete charGap skillPairs gearPairs))]
-
 /-- Build a `StrategyTraversal.Graph` from a flat node encoding and return it
 together with the node count.
 
@@ -1093,25 +1068,6 @@ def runTaskDecision (args : Array Json) : Json :=
     | Decision.PURSUE => "pursue"
     | Decision.PIVOT => "pivot"
   Json.mkObj [("decision", Json.str label)]
-
-/-- Compute one weighted_remaining + is_complete result over the proved
-`weightedRemaining` / `isComplete`.
-
-args layout (Ints; rationals as num/den pairs):
-* `[0]`        nTerms
-* per-term block (4 Ints): `[weightNum, weightDen, fractionNum, fractionDen]`
-
-Emits `wr_num`/`wr_den` (the exact scalar over `ℚ`), and `is_complete`. -/
-def runWeightedRemaining (args : Array Json) : Json :=
-  let n := (intArg args 0).toNat
-  let terms : List Formal.WeightedRemaining.Term :=
-    (List.range n).map (fun k =>
-      (ratArg args (1 + 4 * k), ratArg args (3 + 4 * k)))
-  let r := Formal.WeightedRemaining.weightedRemaining terms
-  Json.mkObj [
-    ("wr_num", Json.num r.num),
-    ("wr_den", Json.num (Int.ofNat r.den)),
-    ("is_complete", Json.bool (decide (Formal.WeightedRemaining.isComplete terms)))]
 
 /-- Compute one low_yield_cancel result using the SAME proved
 `lowYieldFiresPure`.
@@ -2820,8 +2776,6 @@ def runOne (item : Json) : Json :=
     runObjectiveAttainable args
   else if kind == "objective_best_gear" then
     runObjectiveBestGear args
-  else if kind == "objective_gap" then
-    runObjectiveGap args
   else if kind == "strategy_is_reachable" then
     runStrategyTraversal "is_reachable" args
   else if kind == "strategy_closure_size" then
@@ -2848,8 +2802,6 @@ def runOne (item : Json) : Json :=
     runArbiterSelect args
   else if kind == "task_decision" then
     runTaskDecision args
-  else if kind == "weighted_remaining" then
-    runWeightedRemaining args
   else if kind == "low_yield_cancel" then
     runLowYieldCancel args
   else if kind == "max_batch_from_held" then

@@ -4,7 +4,6 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
 from artifactsmmo_cli.ai.tiers.strategy import (
     StrategyEngine,
@@ -136,7 +135,7 @@ def test_decide_delegates_to_the_progression_tree():
     decision. The legacy ranking pipeline is deleted (Task 2)."""
     gd = _gd()
     obj = CharacterObjective.from_game_data(gd)
-    eng = StrategyEngine(objective=obj, personality=BalancedPersonality())
+    eng = StrategyEngine(objective=obj)
     state = make_state(level=5, skills={"mining": 3})
     assert eng.decide(state, gd) == decide_tree(state, gd, obj)
 
@@ -145,7 +144,7 @@ def test_decide_forwards_band_adequate_and_step_servable():
     """The two live parameters pass through to `decide_tree` unchanged."""
     gd = _gd()
     obj = CharacterObjective.from_game_data(gd)
-    eng = StrategyEngine(objective=obj, personality=BalancedPersonality())
+    eng = StrategyEngine(objective=obj)
     state = make_state(level=5, skills={"mining": 3})
     servable = lambda root, step: not isinstance(root, ObtainItem)  # noqa: E731
     assert eng.decide(state, gd, band_adequate=True, step_servable=servable) \
@@ -169,7 +168,7 @@ def test_decide_skips_blocked_unmet_root():
     gd._item_stats = {"cursed_blade": ItemStats(code="cursed_blade", level=1, type_="weapon", attack={"f": 5})}
     gd._crafting_recipes = {"cursed_blade": {"cursed_blade": 1}}
     obj = CharacterObjective.from_game_data(gd)
-    eng = StrategyEngine(obj, BalancedPersonality())
+    eng = StrategyEngine(obj)
     d = eng.decide(make_state(level=5), gd)
     # the cursed_blade gear root is excluded from ranking (blocked)
     assert all("cursed_blade" not in rs.root_repr for rs in d.ranking)
@@ -203,7 +202,7 @@ def test_root_cost_shrinks_with_a_ready_source():
 def test_rootscore_instrumental_always_false():
     gd = _gd()
     obj = CharacterObjective.from_game_data(gd)
-    d = StrategyEngine(obj, BalancedPersonality()).decide(make_state(level=5), gd)
+    d = StrategyEngine(obj).decide(make_state(level=5), gd)
     assert all(rs.instrumental is False for rs in d.ranking)
 
 
@@ -334,7 +333,7 @@ def test_decide_skips_root_unreachable_in_current_game_data():
     gd_empty = GameData()
     gd_empty._monster_level = {"chicken": 1}  # char reachable; iron_helm not producible here
     fill_monster_stat_defaults(gd_empty)
-    d = StrategyEngine(obj, BalancedPersonality()).decide(make_state(level=5), gd_empty)
+    d = StrategyEngine(obj).decide(make_state(level=5), gd_empty)
     assert all("iron_helm" not in rs.root_repr for rs in d.ranking)
 
 
@@ -343,7 +342,7 @@ def test_unattainable_gear_not_targeted_but_craftable_is():
     obj = CharacterObjective.from_game_data(gd)
     assert "weapon_slot" not in obj.target_gear           # drop_blade excluded at build
     assert obj.target_gear.get("helmet_slot") == "iron_helm"
-    d = StrategyEngine(obj, BalancedPersonality()).decide(make_state(level=5), gd)
+    d = StrategyEngine(obj).decide(make_state(level=5), gd)
     reprs = [rs.root_repr for rs in d.ranking]
     assert any("iron_helm" in r for r in reprs)            # craftable gear is a candidate
     assert all("drop_blade" not in r for r in reprs)
@@ -378,7 +377,7 @@ def _combat_obj(gd: GameData) -> CharacterObjective:
 
 def test_decide_returns_a_root_when_combat_capable():
     gd = _combat_gd()
-    eng = StrategyEngine(_combat_obj(gd), BalancedPersonality())
+    eng = StrategyEngine(_combat_obj(gd))
     state = make_state(level=4, skills={"weaponcrafting": 1, "mining": 1})
     d = eng.decide(state, gd)
     assert d.chosen_root is not None

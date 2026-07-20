@@ -797,32 +797,13 @@ example : ∀ (attain : Formal.Objective.Gear → Bool) (items : List Formal.Obj
     (∀ y ∈ items, attain y = true →
       chosen.value > y.value ∨ (chosen.value = y.value ∧ chosen.code ≤ y.code)) :=
   @Formal.Objective.best_gear_argmax
--- gap_nonneg: the gap-sum numerator is ≥ 0 (each per-axis gap is max(0, …)).
-example : ∀ (pairs : List (Int × Int)), 0 ≤ Formal.Objective.gapSum pairs :=
-  @Formal.Objective.gapSum_nonneg
--- gap_le_denom: nonneg haves AND nonneg targets ⇒ gapSum ≤ targetSum, so with
--- gapSum_nonneg the fraction gapSum/targetSum ∈ [0,1] (integer-only bound).
-example : ∀ (pairs : List (Int × Int)),
-    (∀ p ∈ pairs, 0 ≤ p.2) → (∀ p ∈ pairs, 0 ≤ p.1) →
-    Formal.Objective.gapSum pairs ≤ Formal.Objective.targetSum pairs :=
-  @Formal.Objective.gapSum_le_targetSum
--- charGap_bounds: 0 ≤ char gap ≤ target (so the char fraction ∈ [0,1]).
-example : ∀ (targetLevel level : Int), 0 ≤ level → 0 ≤ targetLevel →
-    0 ≤ Formal.Objective.axisGap targetLevel level ∧
-    Formal.Objective.axisGap targetLevel level ≤ targetLevel :=
-  @Formal.Objective.charGap_bounds
--- is_complete_iff: is_complete ↔ INDEPENDENT raw-target form (char gap 0 ∧ every
--- skill gap 0 ∧ every gear gap 0) — NOT a restatement of is_complete's own body.
-example : ∀ (charGap : Int) (skillPairs gearPairs : List (Int × Int)),
-    Formal.Objective.isComplete charGap skillPairs gearPairs = true ↔
-      (charGap = 0 ∧
-       (∀ p ∈ skillPairs, Formal.Objective.axisGap p.1 p.2 = 0) ∧
-       (∀ p ∈ gearPairs, Formal.Objective.axisGap p.1 p.2 = 0)) :=
-  @Formal.Objective.is_complete_iff
--- axisGap_zero_iff: a per-axis gap is 0 ↔ the raw target is met (have ≥ target).
-example : ∀ (target have_ : Int),
-    Formal.Objective.axisGap target have_ = 0 ↔ target ≤ have_ :=
-  @Formal.Objective.axisGap_zero_iff
+-- NOTE: the objective-GAP role contracts (gap_nonneg, gap_le_denom,
+-- charGap_bounds, is_complete_iff, axisGap_zero_iff) were removed 2026-07-20
+-- together with the Python chain they guarded. `CharacterObjective.gap` and the
+-- ObjectiveGap → weighted_remaining scalar had no production consumer, so these
+-- were proofs about code the planner never ran. Gear priority is decided by the
+-- progression tree's `gain` on the pursuit_value ruler; its contracts live under
+-- the ProgressionTree / StrategicValue roles.
 
 /-! ### StrategyTraversal role contracts.
 

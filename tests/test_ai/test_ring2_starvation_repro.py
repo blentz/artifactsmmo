@@ -24,7 +24,6 @@ from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
-from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT, FOCUS_SPAN
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -105,7 +104,7 @@ def test_stuck_drop_root_does_not_starve_the_craftable_second_ring() -> None:
     ring2's craftable iron_ring must be chosen at least once — the aging
     hands cycles to it instead of wolf_ears monopolizing forever."""
     state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
-    engine = StrategyEngine(objective, BalancedPersonality())
+    engine = StrategyEngine(objective)
     focus: dict[tuple[str, str], int] = {}
     seats: dict[str, int] = {}
     chosen_ring2 = False
@@ -140,7 +139,7 @@ def test_pre_fix_behavior_absent_aging_would_starve() -> None:
     wolf_ears on EVERY cycle and ring2's iron_ring is NEVER chosen — this is
     exactly the starvation the aging (Tasks 1-7) fixes."""
     state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
-    engine = StrategyEngine(objective, BalancedPersonality())
+    engine = StrategyEngine(objective)
     picks = {repr(engine.decide(state, gd, band_adequate=False, focus={}, seats={}).chosen_root)
              for _ in range(30)}
     assert picks == {"ObtainItem(code='wolf_ears', quantity=1, slot='helmet_slot')"}
