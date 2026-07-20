@@ -396,6 +396,37 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "gear candidate exists — the XP/capstone branch, not "
                      "the gear branch."),
 
+    "l48_raid_active": ScenarioCharacter(
+        name="l48_raid_active", level=48, max_hp=690, gold=800,
+        skills={"mining": 46, "woodcutting": 46, "weaponcrafting": 42,
+                "gearcrafting": 42, "fishing": 42, "cooking": 42,
+                "alchemy": 35, "jewelrycrafting": 35},
+        equipment={
+            "weapon_slot": "mithril_sword", "helmet_slot": "mithril_helm",
+            "body_armor_slot": "mithril_platebody", "leg_armor_slot": "mithril_platelegs",
+            "boots_slot": "mithril_boots", "ring1_slot": "mithril_ring",
+            "ring2_slot": "copper_ring", "amulet_slot": "greater_sapphire_amulet",
+            "shield_slot": "wooden_shield",
+            "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
+            "artifact3_slot": "perfect_pearl",
+            "utility1_slot": "health_splash_potion", "utility2_slot": "health_splash_potion",
+        },
+        utility_quantities={"utility1_slot": 20, "utility2_slot": 20},
+        bank={"adamantite_ore": 5, "mithril_ore": 10},
+        inventory_max=150,
+        raids=("enchanted_fairy",),
+        description="l48_band_adequate WITH an active raid. The POSITIVE pole "
+                     "of the L48 wall pair: byte-identical state except that a "
+                     "raid window is open. enchanted_fairy's boss (pixie, L40) "
+                     "sits on the OVERWORLD at (-4,10), so it needs no layer "
+                     "transition and clears the level+2 suicide cap at L48 — "
+                     "unlike god_of_the_sun (sonnengott L55, underground). "
+                     "Deliberately does NOT set derive_combat_stats: that alone "
+                     "unlocks unrelated work (the pair first planned "
+                     "Gather(gold_rocks), not the boss), which would let the "
+                     "positive pole pass for a reason that has nothing to do "
+                     "with raids."),
+
     # --- Event-gear pursuit across the L48 wall (2026-07-07 slot-coverage
     # pass): the l48_band_adequate loadout with REAL combat stats
     # (derive_combat_stats — the zero-stat harness default makes every

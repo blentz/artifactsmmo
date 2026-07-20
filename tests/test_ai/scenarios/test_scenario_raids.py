@@ -23,11 +23,16 @@ def _sc_with_raid() -> ScenarioCharacter:
     return ScenarioCharacter(**{**vars(base), "raids": ("enchanted_fairy",)})
 
 
-def test_scenario_character_defaults_to_no_raids():
-    """Every existing scenario keeps an empty raid set -- declaring a raid must
-    be opt-in, or every scenario silently gains raid content."""
-    for name, sc in SCENARIOS.items():
-        assert sc.raids == (), f"{name} unexpectedly declares raids"
+_DELIBERATE_RAID_SCENARIOS = {"l48_raid_active"}
+"""Scenarios that declare a raid ON PURPOSE. Kept as an explicit allow-list so a
+scenario cannot gain raid content by accident -- adding one here is a decision."""
+
+
+def test_scenario_raids_are_opt_in():
+    """Declaring a raid must be deliberate, or scenarios silently gain raid
+    content and every raid-gated assertion elsewhere drifts."""
+    declaring = {name for name, sc in SCENARIOS.items() if sc.raids}
+    assert declaring == _DELIBERATE_RAID_SCENARIOS, declaring
 
 
 def test_declared_raid_reaches_world_state_as_active():
