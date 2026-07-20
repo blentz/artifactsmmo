@@ -105,6 +105,7 @@ class WithdrawItemAction(Action):
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
             active_events=state.active_events,
+            raids=state.raids,
         )
 
     def __repr__(self) -> str:

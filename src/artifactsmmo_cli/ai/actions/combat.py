@@ -193,6 +193,7 @@ class FightAction(Action):
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
             active_events=state.active_events,
+            raids=state.raids,
         )
         # Detect defeat: API returns 200 OK on loss; result.data.fight.result == LOSS.
         # Raise so the player loop records outcome=error:fight_lost and learning

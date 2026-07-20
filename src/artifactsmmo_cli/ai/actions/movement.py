@@ -52,6 +52,7 @@ class MoveAction(Action):
             bank_gold=state.bank_gold,
             pending_items=state.pending_items,
             active_events=state.active_events,
+            raids=state.raids,
         )
         # Server applies a per-action cooldown to moves. Composite actions
         # (Gather, Fight, NpcBuy, TaskTrade, etc.) call MoveAction.execute then
