@@ -84,17 +84,11 @@ needs?" It is boolean, and wired only to `PURSUE_TASK`/`ACCEPT_TASK`; every othe
 returns `True` unconditionally. This design **generalises** it rather than adding a
 parallel mechanism.
 
-### 2.6 Requirement computation is smeared across three modules
+### 2.6 Requirement computation is smeared across six walks that disagree
 
-There is no single call returning a target's full requirement set:
-
-- `ai/recipe_closure.py` — materials, quantities via `closure_demand`; **no skills, no monsters**
-- `ai/obtain_sources.py` — monsters via `SourceKind.DROP`, per item
-- `ai/task_feasibility.py:44` `_item_skill_gap` — skills, by re-walking the recipe tree
-- `ai/tiers/prerequisite_graph.py:126-129` — **deliberately omits** crafting-skill gates,
-  because skill grinding is planner-native
-
-Consolidating this is the refactor that makes the measure possible.
+There is no single call returning a target's full requirement set. There are **six**
+distinct walks answering "what does obtaining X require", and no test anywhere asserts that
+any two of them agree. Section 5 diffs them and specifies the unification.
 
 ---
 
@@ -257,7 +251,167 @@ This placement also self-corrects §4.2's `apply` bug: once the goal names a mas
 
 ---
 
-## 5. Phasing
+## 5. Requirement-model unification (Phase 1, in detail)
+
+Synergy needs one demand-weighted requirement set. Adding a seventh walk to produce it
+would make the problem worse. Phase 1 therefore unifies the existing six.
+
+### 5.1 The six walks
+
+| Walk | Ply | State-aware | Namespace | Quantities | Crafting skill | Gathering skill | Monster drops |
+|---|---|---|---|---|---|---|---|
+| `recipe_closure` (`recipe_closure.py:195`) | closure | no | **resource-node** | no | no | no | **no** |
+| `closure_demand` (`:258`) | closure | no | item | **yes** | no | no | no |
+| `prerequisites` (`prerequisite_graph.py:69`) | **one ply** | **yes** | item | per-run only | no (deliberate) | no | yes |
+| `objective_needs` (`objective_needs.py:69`) | closure +1 ply | yes | item | **no** | yes (names only) | no | yes |
+| `_item_skill_gap` (`task_feasibility.py:44`) | closure | yes | item | no | **yes (levels)** | no | no |
+| `obtain_sources` (`obtain_sources.py:146`) | **single item** | yes | item | `yield_per`/`capacity` | gate only | no | yes |
+
+### 5.2 Which disagreements are legitimate
+
+Two axes are **real** and must survive unification as explicit parameters, because
+different consumers genuinely need different answers:
+
+- **Axis 1 — edges vs closure.** `prerequisites` is deliberately one-ply; `tiers/strategy.py`
+  does its own traversal on top. Collapsing this would break `act_step`.
+- **Axis 2 — state truncation.** `prerequisites` treats an item as a **leaf** when any ready
+  non-craft source exists (bank withdraw, licensed recycle, live gather, located vendor,
+  winnable drop) and never descends its recipe. `recipe_closure`/`objective_needs` descend
+  regardless of what is in the bag. Both are correct for their callers.
+
+Everything below is **not** legitimate — it is drift, and Phase 1 removes it.
+
+### 5.3 The four defects unification removes
+
+**D1 — Namespace split.** `recipe_closure` returns **resource-node** codes (`copper_rocks`)
+for raw leaves; every other walk speaks **item** codes (`copper_ore`). `craft_plan_gen.py:80-87`
+documents keeping a hand-rolled DFS rather than "forcing a mismatched reuse."
+
+**D2 — Drop-leaf blindness, with three independent workarounds.** `recipe_closure`'s two-set
+return cannot represent a monster-drop leaf. `audit/craft_completeness.py:151-153` states it:
+`feather` is *"neither a resource code nor craftable, so `recipe_closure`'s two-set return is
+blind to it."* Three separate patches exist for this one hole — `objective_needs`' extra
+`all_ingredients` ply (`:86-91`), `craft_completeness._closure_item_set`, and
+`craft_plan_gen._closure_items`.
+
+**D3 — Four near-identical crafting-skill-gate derivations**, none sharing code, all running
+over the same `recipe_closure` result: `tiers/skill_gates.py:87` `gating_skills`,
+`objective_needs.py:106-123` `skill_xp`, `goals/progression.py:253-283`
+`UpgradeEquipmentGoal.gated_skill_levels`, and `craft_plan_gen.py:189-201`. They disagree on
+output type: skill **names** (`objective_needs`), the single **worst** `(skill, req, cur)`
+(`_item_skill_gap`), `{skill: SkillGate}` (`skill_gates`), and `(skill, level)` pairs
+(`progression`).
+
+**D4 — Three cycle policies, one of them nondeterministic.** Inside `recipe_closure.py`
+alone: `_raw_units` uses a per-path copy returning **cost 1** on revisit (`:90-91`);
+`_closure_demand` uses a per-path copy returning **nothing** on revisit (`:120-121`);
+`_closure_visited` threads a **shared** map. Separately, `_item_skill_gap` uses a shared
+mutable `seen` with no path semantics, making its result **dependent on `dict` iteration
+order** whenever a diamond appears in the recipe tree. That is a latent determinism bug and
+violates the project's no-incidental-ordering rule independently of this design.
+
+### 5.4 Target shape — one substrate, several projections
+
+One state-free walk; state-awareness applied afterward as a separate pass, not baked in.
+
+```python
+@dataclass(frozen=True)
+class RequirementGraph:
+    """Item-namespace, quantity-carrying, drop-aware. One cycle policy. State-free."""
+    edges:      Mapping[str, Mapping[str, int]]   # item -> direct ingredient -> qty
+    leaves:     Mapping[str, frozenset[SourceKind]]
+    craft_skill:  Mapping[str, tuple[str, int]]   # item -> (skill, required_level)
+    gather_skill: Mapping[str, tuple[str, int]]   # resource -> (skill, required_level)
+```
+
+Projections, each replacing a current walk rather than joining it:
+
+| Projection | Replaces | Axis 1 | Axis 2 |
+|---|---|---|---|
+| `requirement_edges(g, item)` | `prerequisites` body | edges | truncation pass |
+| `requirement_closure(g, roots)` | `recipe_closure` | closure | none |
+| `demand_set(g, roots)` → `DemandSet` | `closure_demand` + `objective_needs` | closure | none |
+| `need_set(demand_set)` → `NeedSet` | `objective_needs` return | closure | none |
+| `skill_gates(g, roots, skills)` | **all four** of D3 | closure | none |
+
+`DemandSet` is the quantified form synergy consumes; `NeedSet` becomes its unquantified
+projection, so `objective_needs` and `means_serves` keep working at their call sites.
+Memoised on read-set key (planner-memo lesson: memo key = read set).
+
+### 5.5 Deliberately preserved
+
+**Crafting-skill gates stay out of `prerequisites`' node output.** `prerequisite_graph.py:126-130`
+omits them because skill grinding is planner-native via `UpgradeEquipmentGoal` +
+`LevelSkill` (epic P3, commit `7b6b4408`). `ReachSkillLevel` **no longer exists as a type** —
+it was deleted from `meta_goal.py`, `strategy.py`, `objective_needs.py`, `equipment_profile.py`,
+`plan_tree.py`, and the Lean models. Re-emitting a skill node would: return an unactionable
+step from `act_step` that `map_means` cannot dispatch (livelock); inflate `unmet_closure_size`,
+which is the Tier-1 cost proxy that `_CHAR_LEVEL_BOOTSTRAP_HORIZON` is calibrated against;
+and break the `PrerequisiteGraph.lean` / `StrategyTraversal.lean` differential gate.
+
+The `RequirementGraph` therefore **carries** `craft_skill` as data — that is what lets D3's
+four derivations collapse — while `requirement_edges` continues to emit no skill node. Data
+availability and node emission are separated; only the latter was ever retired.
+
+**Scoped `LevelSkill` admission stays scoped.** `progression.py:256-259` records that an
+unconditional `skill_grind` admission fans every emitted `LevelSkill` into every search and
+times out under load (the P2 `ff4401ac` regression). The unified `skill_gates` projection
+must preserve per-target scoping, not return a global set.
+
+### 5.6 A known hole, made explicit rather than inherited
+
+**Gathering-skill gates appear in no walk.** Not `obtain_sources._gather_sources` (`:238-260`
+gates on live tiles only, never `resource_skill_level`), not `objective_needs`, not
+`prerequisites`. Only the action factory knows about it. This was the exact livelock
+root-caused in `7b6b4408` (`iron_ore ← iron_rocks, mining 10`).
+
+`RequirementGraph.gather_skill` exists so the unified model can *represent* it. Populating it
+is cheap (the data is already in `GameData`). **Consumers opt in; no current consumer's
+behaviour changes in Phase 1.** Wiring it into planning is explicitly out of scope here — but
+a model that silently cannot express a known livelock cause is not a unification, so the
+field ships even though this design does not use it.
+
+### 5.7 Order of work — characterization before refactor
+
+No test currently asserts any two walks agree, so there is no safety net and no record of
+which disagreements are intentional. Therefore:
+
+1. **Write the parity test first**, characterizing *current* behaviour across all six walks
+   for a fixture corpus — including their disagreements, asserted as-is. This is the
+   missing oracle, and it has standalone value.
+2. Build `RequirementGraph` + projections.
+3. Migrate consumers one at a time, parity test green at each step. Any diff is either an
+   intentional fix (D1–D4) or a regression — the test forces the distinction.
+4. Delete the superseded walks.
+
+The existing censuses are the outer net and must stay green throughout:
+`audit/obtain_parity_completeness.py` (whose docstring already names itself the intended
+future oracle, carrying one declared asymmetry — the WITHDRAW carveout) and
+`audit/craft_completeness.py`.
+
+Lean surfaces that move in lockstep: `RecipeClosure.lean` + `Extracted/RecipeClosure.lean`,
+`TaskReservation.lean` (`closureDemand`), `CraftPlanDriver.lean` (`craftPlan`), with
+differential harnesses `formal/diff/test_recipe_closure_diff.py` and
+`test_recipe_cost_memo_diff.py`.
+
+### 5.8 Honest scoping
+
+**Phase 1 is now larger than the rest of this design combined**, and is properly its own
+epic that synergy depends on rather than a step inside it. It touches six modules, four
+Lean files, two censuses, and roughly a dozen call sites.
+
+It is also independently justified: D4's order-dependence is a live determinism bug, D2's
+three workarounds are ongoing maintenance cost, and the parity test of §5.7 is missing
+infrastructure regardless of whether synergy is ever built.
+
+**Recommended sequencing:** land Phase 0, then Phase 1 as a standalone epic gated on the
+parity test, then Phases 2–4. If Phase 1 proves larger than appetite allows, the fallback is
+to build `DemandSet` as a seventh walk and defer unification — this is **explicitly the
+inferior option**, recorded only so the trade-off is a decision rather than a surprise.
+
+---
+
+## 6. Phasing
 
 ### Phase 0 — Prerequisites (pure bug fixes, independently shippable)
 
@@ -273,33 +427,22 @@ unfiltered and `_build_tasks` discards these fields. **`CACHE_VERSION` must be b
 
 `factory.py:59-69` currently constructs `AcceptTaskAction`, `CompleteTaskAction`,
 `TaskExchangeAction`, `TaskCancelAction`, and `TaskTradeAction` against one literal tile.
-Each must be re-pointed per §7 residual R1.
+Each must be re-pointed per §8 residual R1.
 
-### Phase 1 — One requirement-set producer (the refactor)
+### Phase 1 — Requirement-model unification
 
-```python
-@dataclass(frozen=True)
-class DemandSet:
-    materials: Mapping[str, int]
-    skill_xp:  Mapping[str, int]
-    buy_only:  Mapping[str, int]
-    char_xp:   int
-```
+Specified in full in §5. One `RequirementGraph` substrate with five projections replacing
+six divergent walks; parity test written first as a characterization oracle; `DemandSet` is
+the quantified projection synergy consumes, `NeedSet` its unquantified form.
+`means_serves` reduces to `synergy(...) > S_MIN` — the boolean special case.
 
-`requirement_set(target, state, game_data, ctx) -> DemandSet`, consolidating
-`recipe_closure.closure_demand` (materials), `obtain_sources` `SourceKind.DROP` (monsters),
-and skill gaps from `task_feasibility._item_skill_gap` / `game_data.active_gathering_skills`.
-
-`NeedSet` (`ai/tiers/objective_needs.py:22`) becomes the unquantified projection of
-`DemandSet`, so `objective_needs` and `means_serves` keep working unchanged at their call
-sites. `means_serves` reduces to `synergy(...) > S_MIN` — the boolean special case.
-
-Memoised on read-set key (per the planner-memo lesson: memo key = read set).
+Per §5.8 this is properly its own epic that synergy depends on, and is independently
+justified by the determinism bug D4 and the missing parity oracle.
 
 ### Phase 2 — Synergy core
 
 Pure, integer/`Fraction` only, **shipped extracted** (new cores ship extracted;
-`progression_tree_core` currently carries only the mutation leg — see §6).
+`progression_tree_core` currently carries only the mutation leg — see §7).
 
 Theorems: `synergy_le_one`, `synergy_ge_floor`, `synergy_floor_pos`, and monotonicity in
 shared demand. Structural twins of §3.6.
@@ -335,7 +478,7 @@ shows a genuinely aligned means losing to a less-aligned one within the same ban
 
 ---
 
-## 6. Verification strategy
+## 7. Verification strategy
 
 | Concern | Approach |
 |---|---|
@@ -349,7 +492,7 @@ shows a genuinely aligned means losing to a less-aligned one within the same ban
 
 ---
 
-## 7. Residuals — stated, not hidden
+## 8. Residuals — stated, not hidden
 
 **R1 — Which taskmaster can complete/exchange a given task is ASSERTED, not probed.**
 The docs say exchange works at "any Task Master"; **completion is unspecified**. This is
@@ -372,7 +515,7 @@ traces the way `FOCUS_FLOOR = 1/9` was calibrated against the Robby trace.
 
 ---
 
-## 8. Explicitly out of scope
+## 9. Explicitly out of scope
 
 - Making `Candidate` carry a weight, or replacing the band ladder with weighted selection (§2.2).
 - Any change to `select_pure`.
