@@ -79,3 +79,10 @@ MARGINAL_FIGHT_HP_DEN = 10
 # the planner off the 120-fight max_depth cliff that motivated the original
 # `held + 1`. Consumed by currency_grind_target.currency_grind_target_pure.
 CURRENCY_GRIND_BATCH = 5
+
+# Damage dealt to a raid boss per event ticket awarded. Upstream changelog 8.2.0
+# (07/19/26): raids drop tickets at a GUARANTEED rate of 1 per 20,000 damage --
+# unlike the 1%-per-kill / 0.5%-per-gather rolls, this yield is deterministic and
+# therefore plannable. Consumed by raid_participation.raid_worth_pure as the bar a
+# character's expected window damage must clear before engaging at all.
+RAID_TICKET_DAMAGE = 20000
