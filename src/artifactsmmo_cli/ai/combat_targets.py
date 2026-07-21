@@ -11,6 +11,7 @@ different GameData that happened to land there. `is_winnable`
 is called with `history=None` (cold/stat beatability) — the keep decision uses the
 optimistic prediction, not the learned-loss veto, matching how planning calls it."""
 
+from dataclasses import dataclass, field
 from weakref import ReferenceType, ref
 
 from artifactsmmo_cli.ai.combat import is_winnable
@@ -21,12 +22,32 @@ LEVEL_BAND_BELOW = 5
 """A monster whose level is at least `character level - LEVEL_BAND_BELOW` counts as
 one we might fight; the upper end is the beatability frontier (`is_winnable`)."""
 
-_cache: dict[str, object] = {}
+_MemoKey = tuple[int, tuple[str, ...], frozenset[str]]
+
+
+@dataclass
+class _Memo:
+    """The single memo entry, TYPED.
+
+    Was a `dict[str, object]`, which forced an `isinstance(val, list)` narrowing
+    check whose False arm was unreachable — a permanently partial branch that
+    statement coverage could not see (the repo measures statements, not
+    branches). Typing the entry removes the impossible arm instead of testing it.
+    """
+
+    gd_ref: ReferenceType[GameData] | None = None
+    key: _MemoKey | None = None
+    val: list[str] = field(default_factory=list)
+
+
+_memo = _Memo()
 
 
 def _clear_cache() -> None:
     """Reset the single-entry memo (test hook; also harmless in production)."""
-    _cache.clear()
+    _memo.gd_ref = None
+    _memo.key = None
+    _memo.val = []
 
 
 def combat_target_monsters(state: WorldState, game_data: GameData) -> list[str]:
@@ -57,18 +78,15 @@ def combat_target_monsters(state: WorldState, game_data: GameData) -> list[str]:
     # observed as an intermittent cross-test failure (test_tiers_guards's
     # craft_potions guard, twice, passing in isolation every time). A weakref
     # cannot alias: once the original dies the ref reads None and the entry misses.
-    cached_ref = _cache.get("gd_ref")
-    if (isinstance(cached_ref, ReferenceType) and cached_ref() is game_data
-            and _cache.get("key") == key):
-        cached_val = _cache["val"]
-        if isinstance(cached_val, list):
-            return list(cached_val)
+    if (_memo.gd_ref is not None and _memo.gd_ref() is game_data
+            and _memo.key == key):
+        return list(_memo.val)
     floor = state.level - LEVEL_BAND_BELOW
     out = [code for code, level in game_data.monster_levels.items()
            if level >= floor
            and game_data.monster_spawn_known(code)
            and is_winnable(state, game_data, code, None)]
-    _cache["gd_ref"] = ref(game_data)
-    _cache["key"] = key
-    _cache["val"] = out
+    _memo.gd_ref = ref(game_data)
+    _memo.key = key
+    _memo.val = out
     return list(out)

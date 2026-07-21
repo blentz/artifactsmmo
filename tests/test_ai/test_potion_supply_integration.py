@@ -440,3 +440,21 @@ def test_guard_quiet_when_the_heal_target_has_an_empty_recipe():
     state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0,
                        inventory={_INGREDIENT: 10}, attack={"fire": 20})
     assert craft_potions_fires(state, gd, None) is False
+
+
+def test_guard_quiet_when_the_beneficial_boost_has_no_producible_recipe():
+    """Heals stocked, a BENEFICIAL boost exists and is understocked -- but its
+    recipe is empty, so there is no ingredient path and the guard must stay
+    silent rather than fire on an unbuildable boost.
+
+    The negative arm of the boost branch: firing here would commit the economy
+    to a target it can never reach. Distinct from
+    `test_guard_no_boost_when_none_beneficial`, where the boost is buildable but
+    confers no combat gain -- here the gain exists and the RECIPE is the blocker."""
+    gd = _gd_boost_winnable()
+    gd._crafting_recipes = {**gd._crafting_recipes, _BOOST: {}}   # present, empty
+    state = _state_heals_stocked()
+    assert best_boost_potion(state, gd, _MONSTER) == _BOOST, (
+        "fixture must still offer a BENEFICIAL boost, or this tests nothing"
+    )
+    assert craft_potions_fires(state, gd, None) is False
