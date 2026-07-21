@@ -38,11 +38,8 @@ import Formal.Liveness.RecipeChainClosure
 import Formal.Liveness.ItemsTaskTermination
 import Formal.Liveness.ItemsTaskRun
 import Formal.Liveness.GameDataFixture
-import Formal.Liveness.LevelFiftyReachable
-import Formal.Liveness.ReducedReachability
 import Formal.Liveness.NoWait
 import Formal.Liveness.PerceptionInvariant
-import Formal.Liveness.FightFairness
 import Formal.Liveness.BlockerQuieting
 import Formal.Liveness.BlockerMonotone
 import Formal.Liveness.BlockerSelection
@@ -50,13 +47,6 @@ import Formal.Liveness.BootstrapReach
 import Formal.Liveness.PerceptionRefresh
 import Formal.Liveness.CycleStepP
 import Formal.Liveness.LevelFiftyReachableP
-import Formal.Liveness.BlockerSettled
-import Formal.Liveness.SettledWitness
-import Formal.Liveness.SettledReach
-import Formal.Liveness.WarmupCleared
-import Formal.Liveness.Leveling
-import Formal.Liveness.FightReady
-import Formal.Liveness.FightReadyReach
 import Formal.Liveness.GearTierLeveling
 import Formal.Liveness.WinnableGrounded
 import Formal.Liveness.LifecycleBound
@@ -297,14 +287,6 @@ open Formal.Liveness.GameDataFixture
 -- Phase 25: LevelFiftyReachable — TIER 5 CAPSTONE. Iterates Phase 23c-3c's
 -- cumulative_progress_under_no_wait 49 times to prove level-50 reachability
 -- from any state with GlobalInvariants.
-open Formal.Liveness.LevelFiftyReachable
-#print axioms cycleStepN_add
-#print axioms globalInvariants_step
-#print axioms level_advances_once
-#print axioms ai_reaches_level_fifty_aux
-#print axioms ai_reaches_level_fifty
-#print axioms ai_reaches_level_fifty_from_spawn
-
 -- Obligation-5 O5.1: hnowait discharged HONESTLY (a task means always fires
 -- before .wait; NOT the .wait fall-through).
 open Formal.Liveness.NoWait in
@@ -313,9 +295,6 @@ open Formal.Liveness.NoWait in
 #print axioms productionLadder_ne_wait
 -- Obligation-5: hnowait + hex/hbe discharged; GlobalInvariants reduced to
 -- {hperc, hfightFires} + spawn config-positivity.
-open Formal.Liveness.ReducedReachability in
-#print axioms ai_reaches_level_fifty_config_positive
-
 -- Item 1a: LifecycleBound — refined taskCancelFires gated on
 -- taskFeasibleProjected. Lifecycle reaches .complete under feasibility.
 open Formal.Liveness.LifecycleBound
@@ -562,13 +541,6 @@ open Formal.Liveness.PerceptionInvariant
 -- Prop CombatObjectiveFairlyScheduled (a combat objective active+unblocked
 -- infinitely often). Selection mechanics + the reduction + end-to-end level-50
 -- reachability from spawn config-positivity + fairness, all proven.
-open Formal.Liveness.FightFairness
-#print axioms productionLadder_eq_objectiveStep_of_unblocked
-#print axioms hfightFires_of_combat_scheduled
-#print axioms ai_reaches_level_fifty_from_fair_combat
-#print axioms combat_scheduled_of_persistent_and_quiet
-#print axioms ai_reaches_level_fifty_from_persistent_combat
-
 -- O5.2 blocker one-step quieting (2026-06-16): each objectiveStepBlocker's planFor
 -- action clears its own firing condition, so it cannot fire two cycles in a row
 -- (13 of 14; reachUnlockLevel is gap-bounded instead). Building blocks for
@@ -610,56 +582,25 @@ open Formal.Liveness.BlockerMonotone
 -- ⇒ cycle is a fight ⇒ Settled preserved. So a single Settled state discharges
 -- CombatObjectiveFairlyScheduled and level-50 reachability; only "reach a Settled
 -- state" (the transient) remains.
-open Formal.Liveness.BlockerSettled
-#print axioms Settled_blockers_quiet
-#print axioms Settled_cycleStep
-#print axioms combatScheduled_of_settled
-#print axioms ai_reaches_level_fifty_of_settled
-
--- O5.2 anti-vacuity (2026-06-16): Settled is satisfiable (settledWitness), and the
--- witness discharges config-positivity + Settled, giving a CONCRETE hypothesis-free
--- (modulo LIV-001) level-50 reachability — the non-vacuous payoff of the O5.2 work.
-open Formal.Liveness.SettledWitness
-#print axioms settledWitness_isSettled
-#print axioms settledWitness_reaches_fifty
-
--- O5.2 reach frontier (2026-06-16): reach_fifty_of_eventually_settled reduces the
--- whole obligation to ∃K Settled (config-pos is cycleStepN-invariant). And
--- Settled_unreachable_without_perception PROVES the O5.4 frontier: the pure model
--- never sets objectiveStepFires true, so reaching Settled requires perception to
--- supply the combat objective — not model-producible.
-open Formal.Liveness.SettledReach
-#print axioms reach_fifty_of_eventually_settled
-#print axioms Settled_unreachable_without_perception
-
+-- (2026-07-20) The O5.2 Settled tower described here — settledWitness,
+-- reach_fifty_of_eventually_settled, Settled_unreachable_without_perception — was
+-- RETIRED along with the rest of the superseded cycleStepN cluster. Its capstones
+-- carried undischarged hypotheses with no satisfiability lemmas and nothing
+-- depended on them. Level-50 reachability is now carried by the three
+-- hypothesis-free descent capstones audited below (F / D / E towers); the O5.4
+-- perception frontier it established is recorded in docs/LEVEL_FIFTY_RESIDUALS.md.
 -- O5.2 warm-up brick 1 (2026-06-16): MechCleared bundles the 9 cycleStep-monotone
 -- clearing conditions (the Settled core sans phase + perception); proven invariant by
 -- composing the incr 7-9 monotonicity lemmas, and bridged to Settled.
-open Formal.Liveness.WarmupCleared
-#print axioms MechCleared_cycleStep
-#print axioms settled_of_mechCleared
-
 -- O5.2 warm-up brick 2 (2026-06-16): Leveling — the REACHABLE steady state
 -- (MechCleared + parked task + perception). Weaker than Settled (no phase=.none, so a
 -- feasible accepted task qualifies), self-preserving via the objectiveStep→fight cycle,
 -- and discharges CombatObjectiveFairlyScheduled + level-50 reachability.
-open Formal.Liveness.Leveling
-#print axioms Leveling_blockers_quiet
-#print axioms Leveling_cycleStep
-#print axioms combatScheduled_of_leveling
-#print axioms ai_reaches_level_fifty_of_leveling
-
 -- O5.2 gear-tier decouple (2026-06-16): FightReady is the bank-INDEPENDENT leveling
 -- invariant (non-fight blockers quiet + combat objective; NO bankAccessible /
 -- level≥bankRequiredLevel). The selected means is always a FIGHT (bankUnlock /
 -- reachUnlockLevel / objectiveStep), so reach-50 holds at every level<50 via gear-tier
 -- combat, not gated on the level-44 bank unlock.
-open Formal.Liveness.FightReady
-#print axioms productionLadder_fight_of_fightReady
-#print axioms FightReady_cycleStep
-#print axioms hfightFires_of_fightReady
-#print axioms ai_reaches_level_fifty_of_fightReady
-
 -- O5.2 gear-tier part 2 (2026-06-17): WinnableAcrossBand (the gear-tier guarantee — a
 -- winnable XP-positive monster exists at every level the char actually reaches, 1≤L<50)
 -- grounds combat-target existence via the proven picker headline, hence grounds

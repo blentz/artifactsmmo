@@ -1,4 +1,6 @@
-import Formal.Liveness.FightFairness
+-- These arrived transitively via the retired FightFairness import (removed
+-- 2026-07-20 with the superseded capstone tower); named directly now.
+import Formal.Liveness.CumulativeProgress
 import Mathlib.Tactic
 
 /-! # BlockerQuieting — one-step transience of the objectiveStep blockers (O5.2)
@@ -31,7 +33,6 @@ open Formal.Liveness.Plan
 open Formal.Liveness.PlanAction
 open Formal.Liveness.CycleStep
 open Formal.Liveness.CumulativeProgress
-open Formal.Liveness.FightFairness
 
 /-- A selected means fires (extracted from the `findSome?` characterisation of
     `productionLadder`). Local copy of the `private` helper in CycleStep /

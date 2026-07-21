@@ -136,7 +136,6 @@ import Formal.Liveness.ItemsTaskTermination
 import Formal.Liveness.ItemsTaskRun
 import Formal.Liveness.CatalogTypes
 import Formal.Liveness.GameDataFixture
-import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -166,10 +165,8 @@ import Formal.XpPositive
 import Formal.XpValue
 import Formal.SkillGrindSelection
 import Formal.MonsterDropApply
-import Formal.Liveness.ReducedReachability
 import Formal.Liveness.NoWait
 import Formal.Liveness.PerceptionInvariant
-import Formal.Liveness.FightFairness
 import Formal.Liveness.BlockerQuieting
 import Formal.Liveness.BlockerMonotone
 import Formal.Liveness.BlockerSelection
@@ -177,9 +174,6 @@ import Formal.Liveness.BootstrapReach
 import Formal.Liveness.PerceptionRefresh
 import Formal.Liveness.CycleStepP
 import Formal.Liveness.LevelFiftyReachableP
-import Formal.Liveness.BlockerSettled
-import Formal.Liveness.SettledWitness
-import Formal.Liveness.SettledReach
 import Formal.Liveness.InventoryPressure
 import Formal.Liveness.InventoryDynamics
 import Formal.Liveness.CycleStepF
@@ -200,10 +194,6 @@ import Formal.Liveness.GearedDescent
 import Formal.Liveness.CycleStepEC
 import Formal.Liveness.CycleStepDC
 import Formal.Liveness.GearBuildTermination
-import Formal.Liveness.WarmupCleared
-import Formal.Liveness.Leveling
-import Formal.Liveness.FightReady
-import Formal.Liveness.FightReadyReach
 import Formal.Liveness.GearTierLeveling
 import Formal.Liveness.WinnableGrounded
 import Formal.Liveness.WitnessAcquirable

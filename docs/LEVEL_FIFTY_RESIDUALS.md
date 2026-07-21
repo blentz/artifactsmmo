@@ -1,20 +1,37 @@
 # Level-50 reachability — the honest residual perimeter
 
-**Status (2026-07-04, second pass): TWO hypothesis-free capstones.**
+**Status (2026-07-20, third pass): THREE hypothesis-free capstones.**
 
 > `Formal.Liveness.UnconditionalDescent.ai_reaches_fifty_unconditional :`
 > `∀ s, ∃ k, (cycleStepFN k s).level ≥ 50`
 >
 > `Formal.Liveness.DeferFaithful.ai_reaches_fifty_defer_faithful :`
 > `∀ s, ∃ k, (cycleStepDN k s).level ≥ 50`
+>
+> `Formal.Liveness.GearedDescent.ai_reaches_fifty_geared :`
+> `∀ s, ∃ k, (cycleStepEN k s).level ≥ 50`   ← **current best**
 
-The second (`cycleStepD`, `docs/PLAN_residual_closure.md`) strengthens the
-first on two of the perimeter rows below: the items-task defer-case is now
-MODELLED (arming gated on the production-observed `itemsTaskDeferActive`;
-inside the window the cycle pursues the items task and descends a `taskCycles`
-slot) instead of over-approximated, and chore re-arming is WORST-CASED (every
-fight re-arms ALL 8 chore latches — reach-50 still holds, because flags are
-lex-dominated by the fight's level/xp descent).
+Each is strictly stronger than the last. The second (`cycleStepD`,
+`docs/PLAN_residual_closure.md`) strengthens the first on two of the perimeter
+rows below: the items-task defer-case is now MODELLED (arming gated on the
+production-observed `itemsTaskDeferActive`; inside the window the cycle pursues
+the items task and descends a `taskCycles` slot) instead of over-approximated,
+and chore re-arming is WORST-CASED (every fight re-arms ALL 8 chore latches —
+reach-50 still holds, because flags are lex-dominated by the fight's level/xp
+descent). The third (`cycleStepE`) adds gear-adequacy gating — see "E-tower
+LANDED" below.
+
+**Superseded tower RETIRED 2026-07-20.** The ten modules of the older
+`cycleStepN` fairness/Settled/FightReady cluster were deleted: their capstones
+(`ai_reaches_level_fifty`, `…_from_spawn`, `…_config_positive`,
+`…_from_fair_combat`, `…_from_persistent_combat`, `…_of_settled`,
+`…_of_leveling`, `…_of_fightReady`, `…_from_spawn_warmup`,
+`settledWitness_reaches_fifty`, `reach_fifty_of_eventually_settled`) all carried
+UNDISCHARGED hypotheses (`GlobalInvariants`, `hfightFires`, `CombatPersistent`,
+`BlockersQuietInfinitelyOften`, `Settled`) with NO satisfiability lemmas, and
+nothing depended on them. They were not vacuous in the 2026-06-19 sense — they
+lack the fatal `∧ level < 50` conjunct — but their NAMES read as the live
+result, which is the citation hazard this document exists to prevent.
 
 Kernel axioms: `{propext, Classical.choice, Quot.sound, xpToNextLevel}` — the
 standard set plus LIV-001 only (`xpToNextLevel_pos` is no longer even consumed).

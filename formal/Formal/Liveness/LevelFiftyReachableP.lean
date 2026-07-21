@@ -1,18 +1,23 @@
 import Formal.Liveness.LifecycleBound7
-import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.PerceptionRefresh
 import Formal.Liveness.CycleStepP
 import Mathlib.Tactic
 
 /-! # LevelFiftyReachableP — Brick 5: level-50 reachability for the refreshed cycle
 
-The capstone of the perception-refresh model extension. `LevelFiftyReachable.
-ai_reaches_level_fifty` proves level-50 reachability for the PURE cycle `cycleStep`
-from `GlobalInvariants`, whose `hfightFires` field is an ASSUMED runtime fairness
-obligation (the planner keeps fighting via a combat objective infinitely often).
-Brick 4 (`FightFairnessP`) discharged the refreshed analog `hfightFiresP` from the
-scheduling residual `BlockersQuietBelowCapInfinitelyOftenP` ALONE — the combat
-persistence is now PROVEN IN-MODEL (Brick 3), not assumed.
+HISTORICAL CONTEXT (the modules named here are gone). This was the capstone of the
+perception-refresh model extension, built on `LevelFiftyReachable.
+ai_reaches_level_fifty` — level-50 reachability for the PURE cycle `cycleStep` from
+`GlobalInvariants`, whose `hfightFires` field was an ASSUMED runtime fairness
+obligation. Brick 4 (`FightFairnessP`) discharged the refreshed analog `hfightFiresP`
+from `BlockersQuietBelowCapInfinitelyOftenP` alone.
+
+`FightFairnessP` was deleted 2026-06-19 with the vacuous tower; `LevelFiftyReachable`
+was retired 2026-07-20 with the superseded cycleStepN cluster. **This module survives
+ONLY for its iteration/monotonicity helpers** (`cycleStepPN_add`, `cycleStepP_level_ge`,
+and friends), which `CycleStepFIteration` — and thus the live F/D/E descent towers —
+still consume. Its own capstone is long gone. Current result:
+`GearedDescent.ai_reaches_fifty_geared`.
 
 This module re-derives the level-advance engine and the level-50 capstone for the
 REFRESHED cycle `cycleStepP = cycleStep ∘ perceptionRefresh`, consuming

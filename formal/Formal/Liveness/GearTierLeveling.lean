@@ -1,5 +1,4 @@
 import Formal.CombatTargetExistence
-import Formal.Liveness.FightReady
 import Mathlib.Tactic
 
 /-! # GearTierLeveling — grounding the combat objective in gear-tier winnability (O5.2 part 2)

@@ -1,5 +1,7 @@
-import Formal.Liveness.LevelFiftyReachable
 import Formal.StuckDetector
+-- These four arrived transitively via the retired LevelFiftyReachable import
+-- (removed 2026-07-20 with the superseded capstone tower); named directly now.
+import Formal.Liveness.CumulativeProgress
 import Mathlib.Tactic
 
 /-! # CategoryBBridge — Item 2c
@@ -23,7 +25,6 @@ open Formal.Liveness.MeansKind
 open Formal.Liveness.ProductionLadder
 open Formal.Liveness.CycleStep
 open Formal.Liveness.CumulativeProgress
-open Formal.Liveness.LevelFiftyReachable
 open Formal.StuckDetector
 
 /-! ## hnowait → noprog signal

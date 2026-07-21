@@ -9,10 +9,26 @@ not accurately modeled the game or the AI?" — yes. This is the proof and the d
 > `PressureBurst`/`Drainability`/`CycleStepFLeveling`; the `cycleStepP` capstone gutted
 > from `LevelFiftyReachableP`, keeping its reusable helpers; `FightFairnessP` deleted;
 > the `ResidualVacuity` demonstration module deleted now that its subjects are gone).
-> The NON-VACUOUS replacement is `Formal.Liveness.LevelingDescent.
+> The first NON-VACUOUS replacement was `Formal.Liveness.LevelingDescent.
 > cycleStepF_reaches_fifty_of_fights` (reach 50 from a per-cycle measure DESCENT via
 > `Formal.Liveness.MeasureDescent`). The kernel proofs of vacuity below are the
 > historical record of WHY the removal happened.
+>
+> **SUPERSEDED TWICE SINCE — do not cite the pointer above as current.** As of
+> 2026-07-20 there are THREE *hypothesis-free* capstones, each `∀ s, ∃ k, level ≥ 50`
+> with NO hypotheses at all (so vacuity is not merely discharged, it is
+> inapplicable — there is no hypothesis set left to be unsatisfiable):
+> `UnconditionalDescent.ai_reaches_fifty_unconditional` (cycleStepFN),
+> `DeferFaithful.ai_reaches_fifty_defer_faithful` (cycleStepDN), and
+> **`GearedDescent.ai_reaches_fifty_geared` (cycleStepEN) — the current best.**
+> `cycleStepF_reaches_fifty_of_fights` still exists but is itself superseded
+> (it assumes `FightsBelowCap`). Live status: `docs/LEVEL_FIFTY_RESIDUALS.md`.
+>
+> **2026-07-20:** the OLDER `cycleStepN` fairness/Settled/FightReady cluster — a
+> different tower from the one removed above, and not vacuous by this document's
+> argument — was also retired (10 modules), because its capstones carried
+> undischarged hypotheses with no satisfiability lemmas while nothing depended on
+> them. This file remains a HISTORICAL RECORD of the 2026-06-19 vacuity finding.
 
 ## The finding
 
