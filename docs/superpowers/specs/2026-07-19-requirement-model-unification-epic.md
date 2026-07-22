@@ -218,6 +218,18 @@ family is comparatively *safe* to touch, because the gate catches mistakes. Migr
 
 ## 6. The parity oracle — characterization first
 
+> **STATUS: Wave 0 BUILT.** `src/artifactsmmo_cli/audit/requirement_parity.py`,
+> `scripts/gen_requirement_parity.py`, `tests/test_audit/test_requirement_parity.py`,
+> matrix at `docs/behavioral_completeness/REQUIREMENT_PARITY_MATRIX.md`, wired as the
+> fifth `census-gate.yml` step. **321 targets, 0.0s** — the process pool §6 anticipated
+> was unnecessary. Measured: D1 282, D2 282, D3 244, axis-2 truncation 2.
+>
+> **`--check` is a DRIFT gate, not a `== 0` residual** — the one deviation from the four
+> existing censuses, and deliberate. This census pins defects on purpose, so a bug count
+> would be either permanently red or would launder D1–D4 into "expected", which is the
+> exact flattering-gate failure the epic exists to undo. It fails when the committed
+> matrix and a fresh run disagree; the reviewer then decides D-fix or regression.
+
 **Wave 0 delivers a test that asserts current behavior, disagreements included.** No
 production code changes in this wave.
 
@@ -246,7 +258,7 @@ Ordered by proof coverage — safest first, so the oracle is trusted before it i
 
 | Wave | Content | Risk | Notes |
 |---|---|---|---|
-| **0** | Parity oracle (§6). No production change. | — | Must land and be green before Wave 2 |
+| **0** | Parity oracle (§6). No production change. | — | ✅ **BUILT + green.** Must land and be green before Wave 2 |
 | **1** | **Delete dead walks.** `gating_skills` (`ai/tiers/skill_gates.py:87`) and `raw_material_units` (`ai/recipe_closure.py:239`) have **zero production call sites** | low | `raw_material_units` has a Lean diff + `mutate.py:1144`; remove those too, or keep the function solely as a proof artifact — decide in the plan, do not leave it ambiguous |
 | **2** | Build `RequirementGraph` + projections on top of the extracted core (§4.5). Nothing consumes it yet | low | Additive only; oracle stays green trivially |
 | **3** | Migrate `objective_needs` (one production caller, `strategy_driver.py:1304`, no Lean/mutation coupling) | low | First real consumer swap; validates the oracle |

@@ -38,6 +38,7 @@ on:
       - "scripts/gen_inventory_completeness.py"
       - "scripts/gen_recycle_source_completeness.py"
       - "scripts/gen_obtain_parity.py"
+      - "scripts/gen_requirement_parity.py"
       - ".github/workflows/census-gate.yml"
   push:
     branches: [main]
@@ -47,6 +48,7 @@ on:
       - "scripts/gen_inventory_completeness.py"
       - "scripts/gen_recycle_source_completeness.py"
       - "scripts/gen_obtain_parity.py"
+      - "scripts/gen_requirement_parity.py"
       - ".github/workflows/census-gate.yml"
   workflow_dispatch: {}
 
@@ -81,3 +83,12 @@ jobs:
 
       - name: obtain-parity census — obtain_parity_bug == 0
         run: uv run python scripts/gen_obtain_parity.py --check
+
+      # DRIFT gate, not a bug count. The requirement-walk census is
+      # characterization-first: today's answer includes the four D-defects the
+      # unification epic exists to remove, so a "== 0" residual would be
+      # permanently red or would launder them into "expected". It fails when the
+      # committed matrix and a fresh run disagree, which during the migration
+      # waves is the signal that matters.
+      - name: requirement-walk parity — answers unchanged
+        run: uv run python scripts/gen_requirement_parity.py --check
