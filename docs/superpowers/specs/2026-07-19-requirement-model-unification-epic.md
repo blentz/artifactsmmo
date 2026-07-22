@@ -171,6 +171,34 @@ Renaming or resignaturing those four functions would break `formal/gate/check_ex
 for no benefit this epic needs. This decision shrinks the epic substantially and removes its
 single largest risk.
 
+### 4.6 What Wave 2 changed about this design (as built)
+
+**Three deliberate deviations**, each documented at the top of `ai/requirement_graph.py`:
+
+1. **`gather_skill` is keyed by ITEM, not resource.** §4.1's headline says "item namespace
+   throughout" while its own field comment says `resource -> ...` — the spec contradicted
+   itself. Item-keying is what states the livelock §4.1 cites: `iron_ore → (mining, 10)`,
+   confirmed on real data. Where several resources drop one item the EASIEST gate wins.
+2. **`leaves` carries only STATE-FREE kinds** (CRAFT/GATHER/DROP/BUY). WITHDRAW and RECYCLE
+   are state-dependent, so baking them in would re-create axis 2 inside a model §4.1 declares
+   state-free. They belong to the truncation pass.
+3. **`need_set` is deferred to Wave 3.** `NeedSet.buy_only` / `.char_xp` are not functions of
+   demand alone — they need `WorldState`. It migrates with `objective_needs`, where those
+   semantics are in scope, rather than being guessed at here.
+
+**Two missing `GameData` accessors, found by a failing test.** `monster_drop_items()` and
+`purchasable_items()` did not exist; `gatherable_drop_items()` had no DROP or BUY counterpart.
+Without them a drop-ONLY or vendor-ONLY item never enters the enumeration and the graph
+reports it **unobtainable** — D2 left half-fixed in the very structure built to fix it. The
+general rule now encoded in the build: *every route that can be an item's ONLY route must
+contribute its items to the enumeration.*
+
+**One import cycle broken.** `GameData` → memo → graph → `obtain_sources` → `actions.equip`
+→ `actions.base` → `GameData`. `SourceKind` is a pure enum but lived in `obtain_sources`,
+which drags the whole action stack, so anything `GameData` imports could not name a source
+route. Extracted to `ai/source_kind.py` and re-exported (`X as X`, for mypy strict) so all
+seven existing import sites are untouched and exactly one enum exists.
+
 ---
 
 ## 5. Migration hazards
@@ -260,7 +288,7 @@ Ordered by proof coverage — safest first, so the oracle is trusted before it i
 |---|---|---|---|
 | **0** | Parity oracle (§6). No production change. | — | ✅ **BUILT + green.** Must land and be green before Wave 2 |
 | **1** | **Delete dead walks.** `gating_skills` and `raw_material_units` — **zero production call sites** | low | ✅ **DONE @e9cf0924.** `skill_gates.py` deleted WHOLE (all four symbols dead, not just the entry point) + LIV-SKILL-3, which proved a property of code the bot never ran. R1 resolved against both offered options — see §10 |
-| **2** | Build `RequirementGraph` + projections on top of the extracted core (§4.5). Nothing consumes it yet | low | Additive only; oracle stays green trivially |
+| **2** | Build `RequirementGraph` + projections on top of the extracted core (§4.5). Nothing consumes it yet | low | ✅ **DONE.** Additive; oracle green. 3 deliberate deviations + 2 missing GameData accessors found — see §4.6 |
 | **3** | Migrate `objective_needs` (one production caller, `strategy_driver.py:1304`, no Lean/mutation coupling) | low | First real consumer swap; validates the oracle |
 | **4** | Migrate the uniform easy sites: `gather_serves_closure` (5 boolean-filter sites) and `recipe_closure` non-audit callers (5 goal modules + `craft_ladder.py:50`) | low-med | All share one destructure shape; several already discard the resource set |
 | **5** | Migrate `closure_demand`'s 11 threaded-accumulator sites | **med-high** | Callers mutate a caller-owned dict; `goals/gathering.py:241` and `maintain_consumables.py:75/:80` accumulate **multiple** calls into one shared dict, so a return-value form changes merge semantics. Refresh `mutate.py:1164-1175` |
@@ -362,8 +390,10 @@ over an extracted-core primitive. The core primitives (`_raw_units`, `_closure_v
 `_closure_demand`, `recipe_closure_pure`) are where the Lean actually bites; a public wrapper
 being dead says nothing about whether the thing underneath it is.
 
-**R2 — Graph build cost is unmeasured.** The `recipe_cost` precedent suggests it is fine, but
-the graph spans the full recipe table and no measurement exists. Wave 2 should record it.
+**R2 — ✅ MEASURED in Wave 2.** Whole-table build over the committed bundle: **4.8 ms**
+(321 edges, 522 leaves, 321 craft gates, 42 item-keyed gather gates). Cached access **4 µs**
+with object identity preserved. The `recipe_cost` precedent was right — no lazy-per-root
+scheme is needed, and the memo can safely rebuild whenever its input fingerprint moves.
 
 **R3 — Some consumer may legitimately keep its own walk.** §7 assumes all migrate. If one
 has a genuine reason not to, that is an acceptable outcome — but it must be *documented at

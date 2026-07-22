@@ -55,6 +55,7 @@ from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
 from artifactsmmo_cli.ai.recipe_cost_memo import RecipeCostMemo
+from artifactsmmo_cli.ai.requirement_graph_memo import RequirementGraphMemo
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 __all__ = ["_GATHERING_SKILLS", "GameData", "ItemStats"]
@@ -139,6 +140,7 @@ class GameData:
     _task_coin_rewards: dict[str, int] = field(default_factory=dict)
     _task_gold_rewards: dict[str, int] = field(default_factory=dict)
     _recipe_cost_memo: RecipeCostMemo | None = field(default=None, init=False, repr=False)
+    _requirement_graph_memo: RequirementGraphMemo | None = field(default=None, init=False, repr=False)
     _consumable_effect_codes: dict[str, list[str]] = field(default_factory=dict, init=False, repr=False)
     _effect_registry: dict[str, str] = field(default_factory=dict, init=False, repr=False)
     _seen_effect_codes: set[str] = field(default_factory=set, init=False, repr=False)
@@ -235,6 +237,8 @@ class GameData:
         self.recipes_catalog.crafting_recipes = value
         if self._recipe_cost_memo is not None:
             self._recipe_cost_memo.clear()
+        if self._requirement_graph_memo is not None:
+            self._requirement_graph_memo.clear()
 
     @property
     def _craft_yields(self) -> dict[str, int]:
@@ -272,6 +276,34 @@ class GameData:
         for table in self.recipes_catalog.resource_drops_full.values():
             for item, _rate, _mn, _mx in table:
                 out.add(item)
+        return frozenset(out)
+
+    def monster_drop_items(self) -> frozenset[str]:
+        """Every item ANY monster can drop — the combat-side counterpart to
+        `gatherable_drop_items`.
+
+        Added in Wave 2 of the requirement-model unification epic. Without it a
+        drop-ONLY item (one no recipe lists and no resource drops) cannot be
+        enumerated at all, so the unified graph would report it unobtainable —
+        which is exactly the D2 drop-leaf blindness the graph exists to remove.
+        """
+        out: set[str] = set()
+        for table in self.monsters.drops.values():
+            for item, _rate, _mn, _mx in table:
+                out.add(item)
+        return frozenset(out)
+
+    def purchasable_items(self) -> frozenset[str]:
+        """Every item ANY NPC sells — the vendor-side counterpart to
+        `gatherable_drop_items` and `monster_drop_items`.
+
+        Added in Wave 2 of the requirement-model unification epic, for the same
+        reason as `monster_drop_items`: a vendor-ONLY item must be enumerable,
+        or the unified graph reports it unobtainable.
+        """
+        out: set[str] = set()
+        for stock in self.world.npc_stock.values():
+            out.update(stock)
         return frozenset(out)
 
     def resource_for_drop(self, item_code: str) -> tuple[str, int] | None:
@@ -1096,6 +1128,22 @@ class GameData:
         if self._recipe_cost_memo is None:
             self._recipe_cost_memo = RecipeCostMemo(self)
         return self._recipe_cost_memo
+
+    @property
+    def requirement_graph(self) -> RequirementGraphMemo:
+        """Lazily-built requirement graph over the whole recipe table.
+
+        Wave 2 of the requirement-model unification epic. Read-only, and
+        DELIBERATELY unconsumed — Waves 3-8 migrate the six disagreeing walks
+        onto it one at a time so each swap is a binary signal against the Wave 0
+        parity oracle.
+
+        Unlike `recipe_cost` this memo also self-invalidates on input growth;
+        see `requirement_graph_memo` for why the rebind-only hook is not enough.
+        """
+        if self._requirement_graph_memo is None:
+            self._requirement_graph_memo = RequirementGraphMemo(self)
+        return self._requirement_graph_memo
 
     @property
     def resource_drops(self) -> Mapping[str, str]:

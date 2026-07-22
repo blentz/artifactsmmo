@@ -84,13 +84,13 @@ consumer exists.
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from enum import Enum
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import destroyable
 from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.source_kind import SourceKind as SourceKind
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Sentinel capacity for a source kind that is never stock-limited (GATHER,
@@ -100,16 +100,6 @@ from artifactsmmo_cli.ai.world_state import WorldState
 UNBOUNDED_CAPACITY = 10**9
 
 
-class SourceKind(Enum):
-    """The six ways an item can be obtained, in ascending order of "creates
-    new work" — see the module docstring for the declared priority policy."""
-
-    WITHDRAW = "withdraw"
-    RECYCLE = "recycle"
-    CRAFT = "craft"
-    GATHER = "gather"
-    BUY = "buy"
-    DROP = "drop"
 
 
 @dataclass(frozen=True)
