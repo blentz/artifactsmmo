@@ -1,5 +1,5 @@
 /-
-Formal model of `recipe_closure` and `raw_material_units` from
+Formal model of `recipe_closure` and `_raw_units` from
 `src/artifactsmmo_cli/ai/recipe_closure.py`.
 
 ## `recipe_closure(game_data, roots) -> (needed_resources, craftable_mats)`
@@ -31,10 +31,10 @@ fixpoint: SOUNDNESS (DFS ⊆ reachable — no extra) + COMPLETENESS (reachable �
 DFS — nothing missed), for fuel ≥ |universe|. From that, `craftable_mats` and
 `needed_resources` are pinned exactly.
 
-## `raw_material_units(game_data, item, visited) -> int`
+## `_raw_units(fuel, item, recipes, yields, visited) -> int`
 
 `visited` guards against cycles: revisit → 1; raw/unknown (no recipe) → 1;
-otherwise `Σ_{(sub,qty) ∈ recipe} qty * raw_material_units(sub, visited ∪ {item})`.
+otherwise `Σ_{(sub,qty) ∈ recipe} qty * _raw_units(sub, visited ∪ {item})`.
 The recursion terminates on CYCLIC recipes because `visited` strictly grows and
 is bounded by the (finite) item universe. We model the visited-set recursion
 with a structural fuel = |universe \ visited| and prove the documented cost
@@ -107,7 +107,7 @@ a reachable material. Mirrors the `for (res, drop) in _resource_drops: if drop
 def isNeeded (r : Recipe) (roots : List Nat) (drops : List (Nat × Nat)) (res : Nat) : Prop :=
   ∃ drop, (res, drop) ∈ drops ∧ Reachable r roots drop
 
-/-! ### `raw_material_units` — visited-set recursion, cyclic-safe.
+/-! ### `_raw_units` — visited-set recursion, cyclic-safe.
 
 We model the universe of items as a finite `List Nat` `univ` containing every
 item that can ever appear (roots + all recipe keys/children). The visited guard
@@ -143,7 +143,7 @@ def rawUnitsAux (r : Recipe) (y : Nat → Nat) : Nat → List Nat → Nat → Na
       | [] => 1
       | rcp => ceilDiv (rcp.map (fun p => p.2 * rawUnitsAux r y n (item :: visited) p.1)).sum (y item)
 
-/-- `raw_material_units(item)` at the top level: empty visited set. The fuel is
+/-- `_raw_units(item)` at the top level: empty visited set. The fuel is
 the universe size `fuel`; callers pass `univ.length`. `y` is the per-item yield
 map (default 1). -/
 def rawUnits (r : Recipe) (y : Nat → Nat) (fuel : Nat) (item : Nat) : Nat :=
@@ -293,7 +293,7 @@ theorem reachable_least (r : Recipe) (roots : List Nat) (S : Nat → Prop)
   | root hm => exact hroots _ hm
   | step hi hc ih => exact hclosed _ _ ih hc
 
-/-! ### Theorems for `raw_material_units`. -/
+/-! ### Theorems for `_raw_units`. -/
 
 /-- `raw_units_eq_cost`: with fuel `n+1` and an unvisited item that HAS a recipe,
 the cost is exactly `⌈(Σ qty * rec(sub, item :: visited)) / y item⌉` — the

@@ -1,9 +1,9 @@
-"""Differential test: real Python `recipe_closure` / `raw_material_units` must
+"""Differential test: real Python `recipe_closure` / `_raw_units` must
 agree with the proved Lean oracle over random finite recipe graphs.
 
 `recipe_closure(game_data, roots)` does a DFS over `_crafting_recipes` (item ->
 {sub: qty}) and `_resource_drops` (resource -> drop_item), returning
-`(needed_resources, craftable_mats)`. `raw_material_units(game_data, item)`
+`(needed_resources, craftable_mats)`. `_raw_units` (via the `raw_units` helper)
 recursively sums `qty * units(sub)` with a visited guard making revisits / raw
 items cost 1 (cyclic-safe).
 
@@ -12,7 +12,7 @@ carrying only `crafting_recipes` and `resource_drops`. The same recipe graph is
 encoded for the Lean oracle (flat int args). We assert:
 * `needed_resources` sets match,
 * `craftable_mats` sets match,
-* `raw_material_units(query)` values match,
+* `_raw_units(query)` values match,
 over >= 200 random graphs including CYCLIC and DIAMOND shapes.
 """
 import random
@@ -20,7 +20,26 @@ import random
 from hypothesis import given, settings, strategies as st
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.recipe_closure import _closure_demand, raw_material_units, recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import (
+    _closure_demand,
+    _raw_units,
+    recipe_closure,
+)
+
+
+def raw_units(game_data, item):
+    """Raw-material units for `item`, in the LIVE production call shape.
+
+    Wave 1 deleted the `raw_material_units` wrapper this test used to call —
+    it had zero production callers, so the differential was verifying a shim
+    one indirection away from the code the bot runs. `_raw_units` IS live
+    (`task_batch.craft_batch_size_pure`), and this reproduces that call
+    exactly: fuel `len(recipes) + 1`, explicit yields, empty visited. The
+    Lean oracle side is unchanged — it always modelled `_raw_units`.
+    """
+    recipes = game_data.crafting_recipes
+    return _raw_units(len(recipes) + 1, item, recipes,
+                      game_data.craft_yields, {})
 from formal.diff.oracle_client import run_oracle
 
 
@@ -51,7 +70,7 @@ def _run(recipes, drops, roots, query, fuel):
     needed, craft = recipe_closure(gd, [str(x) for x in roots])
     py_needed = sorted(int(x) for x in needed)
     py_craft = sorted(int(x) for x in craft)
-    py_units = raw_material_units(gd, str(query))
+    py_units = raw_units(gd, str(query))
 
     args = _encode_args(recipes, drops, roots, query, fuel)
     lean = run_oracle("recipe_closure", [args])[0]
@@ -103,7 +122,7 @@ def test_python_matches_lean(seed):
            f"allow_cycle={allow_cycle}")
     assert py_needed == sorted(lean["needed_resources"]), f"needed mismatch: {ctx} lean={lean}"
     assert py_craft == sorted(lean["craftable_mats"]), f"craftable mismatch: {ctx} lean={lean}"
-    assert py_units == lean["raw_material_units"], f"units mismatch: {ctx} lean={lean}"
+    assert py_units == lean["raw_units"], f"units mismatch: {ctx} lean={lean}"
 
 
 def test_diamond_graph_binds():
@@ -118,13 +137,13 @@ def test_diamond_graph_binds():
     py_needed, py_craft, py_units, lean = _run(recipes, drops, roots, query, fuel)
     assert py_needed == sorted(lean["needed_resources"])
     assert py_craft == sorted(lean["craftable_mats"])
-    assert py_units == lean["raw_material_units"]
+    assert py_units == lean["raw_units"]
     # units(top) = 2*units(a) + 3*units(b) = 2*(5*1) + 3*(7*1) = 10 + 21 = 31
     assert py_units == 31
 
 
 def test_cyclic_graph_terminates_and_binds():
-    """Cycle: 0 -> 1, 1 -> 0. raw_material_units must terminate (revisit -> 1)
+    """Cycle: 0 -> 1, 1 -> 0. _raw_units must terminate (revisit -> 1)
     and the closure must capture both items. Pins cyclic safety against Lean."""
     recipes = {0: {1: 2}, 1: {0: 3}}
     drops = {100: 0, 101: 1}
@@ -135,14 +154,14 @@ def test_cyclic_graph_terminates_and_binds():
     assert py_craft == sorted(lean["craftable_mats"]) == [0, 1]
     assert py_needed == sorted(lean["needed_resources"]) == [100, 101]
     # units(0) = 2 * units(1, visited={0}) = 2 * (3 * units(0, visited={0,1})=1) = 2*3 = 6
-    assert py_units == lean["raw_material_units"] == 6
+    assert py_units == lean["raw_units"] == 6
 
 
 # ---------------------------------------------------------------------------
 # Yield-parameterised differential tests (Task 6 / feat/batch-craft-yield).
 # Exercises the ⌈m/Y⌉ ceil-batch semantics added to `_raw_units` /
 # `_closure_demand` in Tasks 4-5.  The oracle routes:
-#   * raw_material_units → recipe_closure kind (parseYieldFn at p3+2)
+#   * _raw_units → recipe_closure kind (parseYieldFn at p3+2)
 #   * _closure_demand    → task_reservation kind (parseYieldFn at qBase+2+nQuery)
 #     via reservedDemand(r, y, fuel, {taskCode=root, taskTotal=multiplier,
 #     taskProgress=0, taskIsItems=True}).
@@ -223,7 +242,7 @@ def _rand_yields_nonempty(
 @settings(max_examples=200, deadline=None)
 @given(seed=st.integers(min_value=0, max_value=2**31 - 1))
 def test_yield_raw_units_matches_lean(seed):
-    """raw_material_units with Y>1 yields must agree with the recipe_closure oracle.
+    """_raw_units with Y>1 yields must agree with the recipe_closure oracle.
     Exercises the parseYieldFn + rawUnits ceil-batch arithmetic path."""
     rng = random.Random(seed)
     recipes, drops, roots, query, fuel = _rand_graph(rng, allow_cycle=False)
@@ -231,11 +250,11 @@ def test_yield_raw_units_matches_lean(seed):
         return
     yields = _rand_yields_nonempty(rng, recipes)
     gd = _gd_with_yields(recipes, drops, yields)
-    py_units = raw_material_units(gd, str(query))
+    py_units = raw_units(gd, str(query))
     args = _encode_args_yield(recipes, drops, roots, query, fuel, yields)
     lean = run_oracle("recipe_closure", [args])[0]
     ctx = f"recipes={recipes} yields={yields} query={query}"
-    assert py_units == lean["raw_material_units"], f"raw_units mismatch: {ctx} lean={lean}"
+    assert py_units == lean["raw_units"], f"raw_units mismatch: {ctx} lean={lean}"
 
 
 @settings(max_examples=200, deadline=None)
@@ -290,12 +309,12 @@ def test_pin_yield2_ceil_demand():
     assert py_demand.get("0", 0) == lean["demand_vals"][0], f"oracle q=0 mismatch: {lean}"
     assert py_demand.get("1", 0) == lean["demand_vals"][1], f"oracle q=1 mismatch: {lean}"
     gd = _gd_with_yields(recipes, drops, yields)
-    py_units = raw_material_units(gd, "0")
+    py_units = raw_units(gd, "0")
     lean_rc = run_oracle("recipe_closure", [
         _encode_args_yield(recipes, drops, [0], 0, fuel, yields)
     ])[0]
     assert py_units == 1, f"raw_units of potion should be ⌈1/2⌉=1, got {py_units}"
-    assert py_units == lean_rc["raw_material_units"], f"oracle raw_units mismatch: {lean_rc}"
+    assert py_units == lean_rc["raw_units"], f"oracle raw_units mismatch: {lean_rc}"
 
 
 def test_pin_yield3_nondivisible():
@@ -321,9 +340,9 @@ def test_pin_yield3_nondivisible():
     assert py_demand.get("0", 0) == lean["demand_vals"][0], f"oracle q=0 mismatch: {lean}"
     assert py_demand.get("1", 0) == lean["demand_vals"][1], f"oracle q=1 mismatch: {lean}"
     gd = _gd_with_yields(recipes, drops, yields)
-    py_units = raw_material_units(gd, "0")
+    py_units = raw_units(gd, "0")
     lean_rc = run_oracle("recipe_closure", [
         _encode_args_yield(recipes, drops, [0], 0, fuel, yields)
     ])[0]
     assert py_units == 2, f"raw_units of bar should be ⌈4/3⌉=2, got {py_units}"
-    assert py_units == lean_rc["raw_material_units"], f"oracle raw_units mismatch: {lean_rc}"
+    assert py_units == lean_rc["raw_units"], f"oracle raw_units mismatch: {lean_rc}"

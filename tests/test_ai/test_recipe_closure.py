@@ -7,9 +7,22 @@ from artifactsmmo_cli.ai.recipe_closure import (
     _raw_units,
     closure_demand,
     gather_serves_closure,
-    raw_material_units,
     recipe_closure,
 )
+
+
+def _units(gd, item, yields=None):
+    """Raw-material units for one `item`, in the LIVE call shape.
+
+    Wave 1 deleted the `raw_material_units` wrapper (zero production callers).
+    Every real caller reaches `_raw_units` the way `task_batch.craft_batch_size_pure`
+    does — fuel `len(recipes) + 1`, yields supplied explicitly from
+    `game_data.craft_yields`, empty visited — so this helper reproduces exactly
+    that and the tests below now pin the path the bot actually runs.
+    """
+    recipes = gd.crafting_recipes
+    return _raw_units(len(recipes) + 1, item, recipes,
+                      gd.craft_yields if yields is None else yields, {})
 
 
 def _gd(recipes, drops, yields=None, drops_full=None):
@@ -174,31 +187,31 @@ def test_cyclic_recipe_terminates():
     assert resources == set()
 
 
-def test_raw_material_units_single_level():
+def test_raw_units_single_level():
     gd = _gd({"copper_bar": {"copper_ore": 10}}, {"copper_rocks": "copper_ore"})
-    assert raw_material_units(gd, "copper_bar") == 10
+    assert _units(gd, "copper_bar") == 10
 
 
-def test_raw_material_units_nested():
+def test_raw_units_nested():
     gd = _gd(
         {"steel_bar": {"iron_bar": 1, "coal": 2}, "iron_bar": {"iron_ore": 6}},
         {"iron_rocks": "iron_ore", "coal_rocks": "coal"},
     )
-    assert raw_material_units(gd, "steel_bar") == 8   # 1*6 + 2*1
+    assert _units(gd, "steel_bar") == 8   # 1*6 + 2*1
 
 
-def test_raw_material_units_raw_resource_is_one():
+def test_raw_units_raw_resource_is_one():
     gd = _gd({}, {"ash_tree": "ash_wood"})
-    assert raw_material_units(gd, "ash_wood") == 1
+    assert _units(gd, "ash_wood") == 1
 
 
-def test_raw_material_units_unknown_is_one():
-    assert raw_material_units(_gd({}, {}), "mystery") == 1
+def test_raw_units_unknown_is_one():
+    assert _units(_gd({}, {}), "mystery") == 1
 
 
-def test_raw_material_units_cyclic_terminates():
+def test_raw_units_cyclic_terminates():
     gd = _gd({"a": {"b": 1}, "b": {"a": 1}}, {})
-    assert raw_material_units(gd, "a") == 1   # cycle guard returns 1 on revisit
+    assert _units(gd, "a") == 1   # cycle guard returns 1 on revisit
 
 
 # ---------------------------------------------------------------------------
@@ -238,7 +251,7 @@ def test_cyclic_recipe_terminates_via_visited_guard_not_fuel():
     assert resources == {"rock_a", "rock_b"}
     assert craftable == {"a", "b"}
     # units(a) = 2 * units(b, {a}) = 2 * (3 * units(a, {a,b}) = 1) = 6
-    assert raw_material_units(gd, "a") == 6
+    assert _units(gd, "a") == 6
     assert _raw_units(6, "a", recipes, {}, {}) == _raw_units(3, "a", recipes, {}, {}) == 6
     assert _closure_visited(6, "a", recipes, {}) == _closure_visited(3, "a", recipes, {})
     # demand: a recorded at 1, b at 1*2; the cycle edge back to a is cut by
@@ -297,25 +310,25 @@ def test_raw_units_yield_one_unchanged():
 # ---------------------------------------------------------------------------
 
 
-def test_raw_material_units_uses_prior_map_by_default():
+def test_raw_units_uses_prior_map_by_default():
     # craft_yields has potion=2; omitting yields arg must use that prior map.
     # Need 1 potion, yield=2 → ⌈4/2⌉ = 2 ore (4 ore per batch, 1 potion wanted)
     gd = _gd({"potion": {"herb": 4}}, {}, yields={"potion": 2})
     # Without prior map default: would return 4 (Y=1). With prior map: ⌈4/2⌉=2.
-    assert raw_material_units(gd, "potion") == 2
+    assert _units(gd, "potion") == 2
 
 
-def test_raw_material_units_explicit_yields_overrides_prior():
+def test_raw_units_explicit_yields_overrides_prior():
     # game_data prior says potion=2, but caller passes yields={"potion": 4}.
     # Explicit override must win: ⌈4/4⌉ = 1 ore.
     gd = _gd({"potion": {"herb": 4}}, {}, yields={"potion": 2})
-    assert raw_material_units(gd, "potion", yields={"potion": 4}) == 1
+    assert _units(gd, "potion", yields={"potion": 4}) == 1
 
 
-def test_raw_material_units_empty_prior_is_noop():
+def test_raw_units_empty_prior_is_noop():
     # Empty craft_yields (today's all-Y=1 data) ⇒ exact same result as before.
     gd = _gd({"bar": {"ore": 2}}, {})
-    assert raw_material_units(gd, "bar") == 2
+    assert _units(gd, "bar") == 2
 
 
 def test_closure_demand_uses_prior_map_by_default():

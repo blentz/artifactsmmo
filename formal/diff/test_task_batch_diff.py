@@ -6,7 +6,7 @@ the recipe math, which is proved and differentially tested elsewhere) against
 the Lean model with the SAME mats/held inputs, we construct a REAL one-recipe
 game world realizing any chosen `(mats, held)` pair — no monkeypatching:
 
-* recipes: `{"T": {"M": mats}}` with `"M"` raw, so `raw_material_units("T") == mats`.
+* recipes: `{"T": {"M": mats}}` with `"M"` raw, so `_raw_units("T") == mats`.
 * drops: `{"R": "M"}`, so the closure's needed resource is `"R"` and
   `held_recipe` is the inventory count of its drop `"M"` — the chosen `held`.
 * `inventory == {"M": held}` and `inventory_max == free + held`, so

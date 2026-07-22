@@ -1170,7 +1170,7 @@ RECIPE_CLOSURE_MUTATIONS = [
      "        visited = _closure_visited(fuel - 1, sub_mat, recipes, visited)"),
     # alter the qty factor in _raw_units: drop the qty multiplier so quantities
     # no longer multiply down the tree (wrong units total).
-    ("raw_material_units: drop qty factor (qty * units -> units)",
+    ("_raw_units: drop qty factor (qty * units -> units)",
      "        total = total + qty * _raw_units(fuel - 1, sub, recipes, yields, deeper)",
      "        total = total + _raw_units(fuel - 1, sub, recipes, yields, deeper)"),
 ]

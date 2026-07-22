@@ -481,10 +481,10 @@ args layout (all Nat, encoded as Int ≥ 0):
 * `[1 .. 3*nRecipe]`   the triples, flat: item0 sub0 qty0 item1 sub1 qty1 ...
 * next: nDrops, then `(res, drop)` pairs flat
 * next: nRoots, then roots
-* next: queryItem (for raw_material_units), fuel
+* next: queryItem (for _raw_units), fuel
 
 Emits sorted `needed_resources` / `craftable_mats` lists and the
-`raw_material_units(queryItem)` value. -/
+`_raw_units(queryItem)` value. -/
 def runRecipeClosure (args : Array Json) : Json :=
   let g := fun i => (intArg args i).toNat
   let nRecipe := g 0
@@ -505,7 +505,7 @@ def runRecipeClosure (args : Array Json) : Json :=
   let craft := (craftableList r roots fuel).mergeSort (· ≤ ·) |>.eraseDups
   let toJson := fun (xs : List Nat) => Json.arr ((xs.map (fun n => Json.num (Int.ofNat n))).toArray)
   Json.mkObj [("needed_resources", toJson needed), ("craftable_mats", toJson craft),
-    ("raw_material_units",
+    ("raw_units",
       Json.num (Int.ofNat (rawUnits r (parseYieldFn args (p3 + 2)) fuel queryItem)))]
 
 /-- Build a `TaskFeasibility.Recipe` (Nat → List Nat, ingredient codes only)

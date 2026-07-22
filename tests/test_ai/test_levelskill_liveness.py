@@ -1,14 +1,18 @@
-"""Liveness obligations for the skill-gate mechanism (LIV-SKILL-1/2/3).
+"""Liveness obligations for the skill-grind mechanism (LIV-SKILL-1/2).
 
 These tests are the point of the feature: a craft-skill gate must never leave the
-planner without a forward action, the grind target must exist for any gating
-craft skill (monotone progression), and the gating set must strictly shrink as a
-skill is driven across its gate (no livelock)."""
+planner without a forward action, and the grind target must exist for any gating
+craft skill (monotone progression).
+
+LIV-SKILL-3 (the gating set strictly shrinks) was DELETED in Wave 1 of the
+requirement-model unification epic along with `tiers/skill_gates.py`. It asserted
+a no-livelock property of `gating_skills`, which had zero production call sites —
+so the obligation it discharged was about code the bot never ran. The live
+no-livelock path is LIV-SKILL-2 below, over `skill_grind_target`.
+"""
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.skill_gates import gating_skills
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from tests.test_ai.fixtures import make_state
 
@@ -47,23 +51,3 @@ def test_liv_skill_2_grind_target_total_over_progression():
     for lvl in range(1, 5):
         state = make_state(skills={"weaponcrafting": lvl})
         assert skill_grind_target("weaponcrafting", state, gd) is not None
-
-
-def test_liv_skill_3_gating_set_strictly_shrinks_as_skill_rises():
-    """Driving the skill across the gate removes it from gating_skills and it is
-    not re-added (no livelock)."""
-    gd = _progression_gd()
-    gd._item_stats["target_weapon"] = ItemStats(
-        code="target_weapon", level=5, type_="weapon",
-        crafting_skill="weaponcrafting", crafting_level=5)
-    gd._crafting_recipes["target_weapon"] = {"wc_t5": 1}
-    obj = CharacterObjective(
-        target_char_level=50, target_skill_levels={},
-        target_gear={"weapon_slot": "target_weapon"}, _game_data=gd, target_tools={})
-
-    gated_levels = []
-    for lvl in range(1, 6):
-        state = make_state(skills={"weaponcrafting": lvl})
-        gates = gating_skills(state, gd, obj, combat_weapon=None)
-        gated_levels.append("weaponcrafting" in gates)
-    assert gated_levels == [True, True, True, True, False]

@@ -236,25 +236,6 @@ def gather_serves_closure(resource_code: str, drop_item_override: str | None,
     return effective is not None and effective in closure_materials
 
 
-def raw_material_units(
-    game_data: _HasRecipes,
-    item: str,
-    visited: frozenset[str] | None = None,
-    yields: Mapping[str, int] | None = None,
-) -> int:
-    """Total raw-resource quantity gathered to craft one `item`, multiplying
-    ingredient quantities down the recipe tree. A raw (gathered) or unknown item
-    costs 1. Cyclic recipes terminate via the visited guard (revisit -> 1).
-
-    `yields` maps item code to output quantity per craft run; omit (or pass None)
-    for all-Y=1 behaviour (today's data, exact no-op)."""
-    visited = visited or frozenset()
-    recipes = game_data.crafting_recipes
-    return _raw_units(len(recipes) + 1, item, recipes,
-                      yields if yields is not None else game_data.craft_yields,
-                      {code: 1 for code in visited})
-
-
 def closure_demand(
     root: str,
     multiplier: int,

@@ -48,7 +48,7 @@ uv sync --dev
 | `project_loadout_stats` (`ai/equipment/projection.py`) | `LoadoutProjection.lean` | additive delta; identity; guarded sum = unconditional sum |
 | `pick_loadout` (`ai/equipment/scoring.py`) | `EquipmentScoring.lean` | per-slot score-optimal, no-downgrade, ties-keep-current, feasible, clamp≥0 |
 | `SkillXpCurve` (`ai/learning/skill_xp_curve.py`) | `SkillXpCurve.lean` | required_xp branches, confidence∈[0,1], is_confident iff full, cycles guards, total monotone, default-ratio condition (geometric float estimate abstracted) |
-| `recipe_closure`/`raw_material_units` (`ai/recipe_closure.py`) | `RecipeClosure.lean` | closure = least fixpoint (sound+complete); cyclic termination; quantity cost |
+| `recipe_closure`/`_raw_units` (`ai/recipe_closure.py`) | `RecipeClosure.lean` | closure = least fixpoint (sound+complete); cyclic termination; quantity cost |
 | `task_requirement` (`ai/task_feasibility.py`) | `TaskFeasibility.lean` | worst = max unmet over closure; none-iff-feasible; monster gate threshold |
 | `prerequisites`/`combat_capable` (`ai/tiers/prerequisite_graph.py`) | `PrerequisiteGraph.lean` | exact direct edges; combat_capable = ∃ beatable (De Morgan) |
 | `is_attainable`/`gap`/gear (`ai/tiers/objective.py`) | `Objective.lean` | is_attainable = grounding fixpoint; best-attainable gear argmax; gap bounds; is_complete iff targets met |

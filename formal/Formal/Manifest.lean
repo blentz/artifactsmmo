@@ -135,7 +135,7 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @closureItems_complete       -- reachable-within-budget ⊆ computed closure
 #check @craftableList_isCraftable   -- craftable_mats member ⇒ Reachable ∧ has recipe
 #check @neededList_isNeeded         -- needed_resources member ⇒ drop Reachable
-#check @rawUnits_eq_cost            -- raw_material_units = Σ qty * units(sub)
+#check @rawUnits_eq_cost            -- _raw_units = Σ qty * units(sub)
 #check @rawUnits_revisit            -- cyclic guard: revisit ⇒ cost 1
 #check @remaining_decreasing        -- termination measure strictly decreases
 #check @rawUnits_fuel_stable        -- adequate fuel ⇒ fuel-independent (terminates)
