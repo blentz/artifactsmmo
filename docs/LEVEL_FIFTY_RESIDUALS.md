@@ -1,6 +1,15 @@
 # Level-50 reachability — the honest residual perimeter
 
-**Status (2026-07-20, third pass): THREE hypothesis-free capstones.**
+**Status (2026-07-22, fourth pass): THREE capstones — the E tower is now
+CONDITIONAL on two NAMED residuals, and that is an improvement, not a regression.**
+
+The 2026-07-20 adversarial review found the E capstone's "hypothesis-free" claim
+FALSE: the fairness and gear assumptions had not been discharged, they had been
+moved out of the theorem statement and into `cycleStepE`'s DEFINITION, where
+`#print axioms` cannot see them. They are now named hypotheses with a joint
+satisfiability witness (`adequateArmsFight_satisfiable_with_goal`), so a reader
+can see what is assumed. The F and D towers remain hypothesis-free over their
+weaker cycles.
 
 > `Formal.Liveness.UnconditionalDescent.ai_reaches_fifty_unconditional :`
 > `∀ s, ∃ k, (cycleStepFN k s).level ≥ 50`
@@ -9,7 +18,9 @@
 > `∀ s, ∃ k, (cycleStepDN k s).level ≥ 50`
 >
 > `Formal.Liveness.GearedDescent.ai_reaches_fifty_geared :`
-> `∀ s, ∃ k, (cycleStepEN k s).level ≥ 50`   ← **current best**
+> `∀ s, (∀ k, AdequateArmsFightAt (cycleStepEN k s)) →`
+> `(∀ k, GearCycleMakesProgressAt (cycleStepEN k s)) →`
+> `∃ k, (cycleStepEN k s).level ≥ 50`   ← **current best, and the most honest**
 
 Each is strictly stronger than the last. The second (`cycleStepD`,
 `docs/PLAN_residual_closure.md`) strengthens the first on two of the perimeter
@@ -35,7 +46,17 @@ result, which is the citation hazard this document exists to prevent.
 
 Kernel axioms: `{propext, Classical.choice, Quot.sound, xpToNextLevel}` — the
 standard set plus LIV-001 only (`xpToNextLevel_pos` is no longer even consumed).
-No `hquiet`, no `hspawn`, no fairness residual, no `GlobalInvariants` bundle.
+No `hquiet`, no `hspawn`, no `GlobalInvariants` bundle. The E tower's two named
+residuals are HYPOTHESES, not axioms, and each has a satisfiability witness so
+neither can be a vacuous `False → P`:
+
+* `AdequateArmsFightAt` — the production arming observation. Pinned as
+  satisfiable and discriminating by `test_loadout_adequate_diff.py` (49/49 bands
+  win with the witness loadout, 49/49 lose without it), and shown FALSIFIABLE in
+  production by `test_objectivestep_arming_diff.py::test_provision_branch_yields_no_fight_despite_combat_target`.
+* `GearCycleMakesProgressAt` — that one `.gearReview` cycle advances the build.
+  `GEAR_CAP` bounds the STEPS (fixture-pinned, `witness_loadout_le_gear_cap`);
+  this residual covers the CYCLES those steps take.
 Audited in `LivenessAudit.lean`; per-cycle engine and slot design in
 `Formal/Liveness/FMeasure.lean`; per-means descent in `BlockerDescent.lean`;
 case-analysis closure in `UnconditionalDescent.lean`; plan + design record in
@@ -154,7 +175,36 @@ differential; per-cycle latency measured, not asserted).
 ## What this does NOT prove
 
 * Nothing about wall-clock time or xp RATE — only eventual reachability under
-  the model's cycle semantics.
+  the model's cycle semantics. The capstones are pure `∃ k` with NO bound on `k`.
 * Nothing about levels beyond 50, boss content, or achievements.
 * The `.fight` apply's `xp += 10` is the deliberate abstract projection
   (FakeServer + Lean lockstep) — see `feedback_combat_xp_projection_is_abstract`.
+
+### The modelled bot does not use eight of its own means (2026-07-22)
+
+Below level 50 the E-tower proves EIGHT of the 27 `MeansKind`s are
+**unselectable**, by `decide`, at `GearedDescent.lean:167-174`:
+
+> `acceptTask`, `taskExchange`, `maintainConsumables`, `sellIdle`,
+> `recycleSurplus`, `bankExpand`, `drainBankJunk`, `wait`
+
+They sit in `discretionaryTail`, past `.objectiveStep` in the ladder, and the
+refresh always arms something in `blockerPrefix` — so the prefix always wins.
+
+This is sound about the MODEL and false about the BOT. The real arbiter accepts
+tasks, expands the bank, and waits on cooldowns constantly. Any livelock living
+in those eight means is excluded by construction rather than ruled out, so the
+capstone says nothing about them. It is disclosed here because the exclusion is
+invisible at the theorem statement: `∀ s, ∃ k, level ≥ 50` reads as a claim about
+the whole ladder.
+
+Note the interaction with `AdequateArmsFightAt`: the residual assumes the arming
+observation is positive, which is what keeps the prefix armed and the tail
+unreachable. A production cycle where the objective tier yields nothing would
+fall through to exactly these eight — the region the proof does not cover.
+
+`formal/diff/test_objectivestep_arming_diff.py::test_provision_branch_yields_no_fight_despite_combat_target`
+pins one concrete way the arming residual is false in production: with a combat
+target, a `LearningStore`, empty utility slots and a held heal,
+`_marginal_provision_goal` (`strategy_driver.py:781-783`) pre-empts the grind and
+returns a provisioning goal — no fight, no combat xp that cycle.

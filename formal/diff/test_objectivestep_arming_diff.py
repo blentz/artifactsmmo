@@ -46,7 +46,8 @@ from __future__ import annotations
 
 import dataclasses
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
@@ -264,3 +265,65 @@ def test_no_combat_target() -> None:
     scn = _base_scn(level=5, target_level=7, combat_target_exists=False)
     assert _production_answers(scn) is False
     _assert(scn)
+
+
+# ---------------------------------------------------------------------------
+# Falsifier: production can yield a NON-fight even with a combat target set.
+# ---------------------------------------------------------------------------
+
+def test_provision_branch_yields_no_fight_despite_combat_target() -> None:
+    """`_marginal_provision_goal` pre-empts the grind — the arming is NOT
+    implied by "a combat target exists".
+
+    `strategy_driver.py:781-783` runs BEFORE `GrindCharacterXPGoal`: with a
+    combat target, a `LearningStore`, empty utility slots and a held heal,
+    production returns `ProvisionMarginalFightGoal` — a craft/equip goal, not a
+    fight. The cycle spends itself provisioning and earns no combat xp.
+
+    The sweep above cannot see this: it calls `objective_step_goal` with the
+    default `history=None`, and `_marginal_provision_goal` returns immediately on
+    `history is None` (`:592`). So this branch had never been exercised by the
+    arming differential at all.
+
+    This is a genuine falsifier of "combat target exists ⇒ the model may arm
+    `objectiveStepIsFight`". It does not break the E-tower, because increment 2
+    stopped `perceptionRefreshE` from installing that Bool and made it the named
+    residual `AdequateArmsFightAt` — this test documents one concrete way that
+    residual can be FALSE in production, so the assumption stays visible instead
+    of being rediscovered later.
+    """
+    from artifactsmmo_cli.ai.game_data import ItemStats
+    from artifactsmmo_cli.ai.learning.store import LearningStore
+
+    heal = "small_health_potion"
+    gd = _make_game_data()
+    gd._item_stats = {
+        heal: ItemStats(code=heal, level=1, type_="utility", hp_restore=60),
+    }
+    gd._monster_attack = {COMBAT_MONSTER: {"fire": 40}}
+    gd._monster_hp = {COMBAT_MONSTER: 60}
+    gd._monster_resistance = {COMBAT_MONSTER: {}}
+    gd._monster_critical_strike = {COMBAT_MONSTER: 0}
+    gd._monster_initiative = {COMBAT_MONSTER: 0}
+
+    scn = Scenario(level=10, target_level=11, combat_target_exists=True,
+                   task_type=None, task_code=None, task_progress=0, task_total=0)
+    # The character must be able to KILL the monster and TAKE damage, or
+    # `expected_damage_per_fight` returns 0 (`expected_damage.py:42-44`), the
+    # provision quantity ceils to 0, and the branch silently does not fire.
+    w = dataclasses.replace(
+        _make_world(scn), inventory={heal: 5}, attack={"fire": 20},
+    )
+    ctx = _make_ctx(scn)
+    history = LearningStore(db_path=":memory:", character="diff")
+
+    goal = objective_step_goal(ReachCharLevel(scn.target_level), w, gd, ctx,
+                               history=history)
+
+    assert goal is not None, "expected a provision goal, got no step at all"
+    assert not isinstance(goal, GrindCharacterXPGoal), (
+        f"expected the provision branch to pre-empt the grind, got {goal!r}"
+    )
+    assert type(goal).__name__ == "ProvisionMarginalFightGoal", (
+        f"unexpected goal type on the provision branch: {type(goal).__name__}"
+    )
