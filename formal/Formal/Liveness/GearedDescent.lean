@@ -1,5 +1,6 @@
 import Formal.Liveness.BlockerDescentE
 import Formal.Liveness.DeferFaithful
+import Formal.Liveness.WitnessAcquirable
 
 /-! # GearedDescent — `ai_reaches_fifty_geared` (E-tower capstone, C2c)
 
@@ -25,13 +26,22 @@ cannot see them and the gate goes green. `perceptionRefreshE` overwrote the
 opaque production observation `objectiveStepFires` with `true`, which is the
 retired `hfightFires` fairness obligation wearing a different hat.
 
-Two grants remain definitional and are NOT yet named here — G2 (`gearProgress`
-restores adequacy within `GEAR_CAP` cycles at zero cost) and G3 (`.fight` grants
-a constant `xp + 10` and cannot fail). They are specified as increments 3-4 of
-`docs/superpowers/specs/2026-07-20-l50-honest-restatement.md`. Until then this
-capstone is honest about G1 only, and the claims about G2's offline grounding
-below are PROSE — `WitnessAcquirable` is cited in this docstring but appears in
-no import and no proof term of this module.
+Two grants remain definitional — G2 (`gearProgress` restores adequacy within
+`GEAR_CAP` cycles at zero cost) and G3 (`.fight` grants a constant `xp + 10` and
+cannot fail) — specified as increments 4-7 of
+`docs/superpowers/specs/2026-07-20-l50-honest-restatement.md`.
+
+Increment 3 (2026-07-20) took the first real bite out of G2. `GEAR_CAP` was `8`
+and self-declared "provisional"; against this repository's own fixture it was
+FALSE — 20 of the 49 `acquirableWitness` rows carry loadouts larger than 8, up to
+11. It is now `11`, pinned by `witness_loadout_le_gear_cap` /
+`witness_loadout_attains_gear_cap` below, which compute `loadoutCodes.length`
+IN-KERNEL. `WitnessAcquirable` was previously cited in this docstring while
+appearing in NO import and NO proof term — it is now genuinely imported and used.
+
+What is still granted in G2 is the RATE: that one `.gearReview` cycle
+accomplishes one acquisition step. `GEAR_CAP` bounds the STEPS, not the cycles
+those steps take.
 
 Liveness namespace — Mathlib allowed. -/
 
@@ -228,5 +238,39 @@ theorem adequateArmsFight_satisfiable_with_goal (s : State) (h : s.level ≥ 50)
       ∧ ∃ k, (cycleStepEN k s).level ≥ 50 := by
   refine ⟨fun k hk => absurd hk (by have := cycleStepEN_level_ge s k; omega), 0, ?_⟩
   rw [cycleStepEN_zero]; exact h
+
+/-! ## `GEAR_CAP` grounding (increment 3 of the honest-restatement spec).
+
+`CycleStepE.gearProgress` decrements `gearGap` by one per `.gearReview` cycle and
+restores adequacy at zero, so `CycleStepE.GEAR_CAP` — the value `gearGap` is reset
+to on a band change — must bound the number of ACQUISITION STEPS for a band's
+witness loadout.
+
+The bound is computed IN-KERNEL from `loadoutCodes.length` over the witness rows.
+Nothing is trusted from the generator: had we instead emitted a
+`witnessClosureDepth` column, the certificate would only be as good as the Python
+that produced it, and `generate_lean_fixture.py:72-78` silently defaults depths on
+cycle detection behind a `print(f"WARN: ...")` — a fabricated number the kernel
+would then have pinned as truth.
+
+HISTORY: `GEAR_CAP` was `8`, self-declared provisional. That was FALSE against
+this very fixture — 20 of the 49 rows carry loadouts larger than 8, up to 11. -/
+theorem witness_loadout_le_gear_cap :
+    Formal.Liveness.GameDataFixture.acquirableWitness.all
+      (fun r => r.loadoutCodes.length ≤ GEAR_CAP) = true := by
+  decide
+
+/-- The bound is TIGHT: some band actually needs all `GEAR_CAP` steps. Without
+    this a future edit could inflate `GEAR_CAP` to silence the bound above
+    instead of confronting a genuinely larger loadout. -/
+theorem witness_loadout_attains_gear_cap :
+    Formal.Liveness.GameDataFixture.acquirableWitness.any
+      (fun r => r.loadoutCodes.length == GEAR_CAP) = true := by
+  decide
+
+/-- The witness table is non-empty, so the two bounds above are not vacuous over
+    an empty list. -/
+theorem Formal.Liveness.GameDataFixture.acquirableWitness_nonempty : Formal.Liveness.GameDataFixture.acquirableWitness ≠ [] := by decide
+
 
 end Formal.Liveness.GearedDescent

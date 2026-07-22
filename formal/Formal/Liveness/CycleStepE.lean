@@ -42,9 +42,27 @@ open Formal.Liveness.CycleStep
 open Formal.Liveness.InventoryDynamics
 open Formal.Liveness.CycleStepD
 
-/-- Gear re-arm size on a band change (provisional, lemma-agnostic — any raise
-    at the gearGap slot is dominated by the rollover's slot-1 descent). -/
-def GEAR_CAP : Nat := 8
+/-- Gear re-arm size on a band change: the number of `.gearReview` cycles the
+    model allows for rebuilding a band's witness loadout.
+
+    GROUNDED 2026-07-20 (increment 3). This was `8`, self-declared "provisional".
+    It was not merely ungrounded — it was WRONG, and wrong in the flattering
+    direction: `gearProgress` decrements `gearGap` by one per gear cycle and
+    restores adequacy at zero, so `GEAR_CAP` must bound the number of
+    acquisition steps for a band's witness loadout. The fixture's 49
+    `acquirableWitness` rows carry loadouts of up to **11** items, and **20 of
+    49 exceed 8** — so the old constant asserted that a 11-item loadout is
+    rebuilt in 8 steps.
+
+    11 is now pinned against the fixture by `WitnessAcquirable.witness_loadout_le_gear_cap`,
+    which computes `loadoutCodes.length` IN-KERNEL from the witness rows rather
+    than trusting an emitted number.
+
+    STILL RESIDUAL (`GearCycleMakesProgress`, spec increment 4): that ONE gear
+    cycle accomplishes ONE acquisition step. The real arbiter may spend a
+    `.gearReview` cycle travelling, or lose it to an API failure. This constant
+    bounds the STEPS; it does not bound the CYCLES those steps take. -/
+def GEAR_CAP : Nat := 11
 
 /-- Worst-case hp loss of one fight (B1 trace measurement: max observed 270).
     Lemma-agnostic.
