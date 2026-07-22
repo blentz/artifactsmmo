@@ -120,8 +120,10 @@ def pressureDeltaD (k : MeansKind) (r st : State) : State :=
   else
     match k with
     | .claimPending => { st with inventoryUsed := min st.inventoryMax (st.inventoryUsed + 1) }
-    | .depositFull | .discardCritical | .discardHigh | .sellPressured | .craftRelief =>
-        { st with inventoryUsed := 0 }
+    -- CORRECTED 2026-07-22: reducers make NO drain claim. The `-> 0` model was
+    -- falsified by docs/REVIEW_pressuredelta_differential.md (no production
+    -- reducer drops the bag below the 85% watermark); see the long note in
+    -- InventoryDynamics.lean. Latch behaviour is carried by `partialClear`.
     | _ => st
 
 /-- Phase-A2 partial clear: the three multi-batch chores clear their latch

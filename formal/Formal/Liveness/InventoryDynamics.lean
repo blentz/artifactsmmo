@@ -60,10 +60,13 @@ def pressureDelta (k : MeansKind) (s : State) : State :=
   | .objectiveStep => { s with inventoryUsed := min s.inventoryMax (s.inventoryUsed + DROP_BOUND) }
   | .claimPending  => { s with inventoryUsed := min s.inventoryMax (s.inventoryUsed + 1) }
   | .depositFull | .discardCritical | .discardHigh | .sellPressured | .craftRelief =>
-      { s with inventoryUsed := 0 }
+      -- CORRECTED 2026-07-22: reducers make NO drain claim. See the note below.
+      s
   | _ => s
 
-/-- The pressure-reducing means: each DRAINS the bag (modelled `inventoryUsed → 0`). -/
+/-- The pressure-reducing means. NOTE (2026-07-22): this is a CLASSIFICATION of
+    which means production intends as reducers. It no longer carries any claim
+    about how much they actually drain — see the note on `pressureDelta`. -/
 def isPressureReducer (k : MeansKind) : Bool :=
   match k with
   | .depositFull | .discardCritical | .discardHigh | .sellPressured | .craftRelief => true
@@ -102,25 +105,36 @@ theorem pressureDelta_inventoryUsed_le_add_bound (k : MeansKind) (s : State) :
     (pressureDelta k s).inventoryUsed ≤ s.inventoryUsed + DROP_BOUND := by
   cases k <;> simp only [pressureDelta, DROP_BOUND] <;> omega
 
-/-! ## Reducers clear pressure — each drain empties the bag, so (with `Brick 1`)
-the gated chores fall silent while `inventoryMax > 0`. -/
+/-! ## Reducers make NO drain claim — RETIRED 2026-07-22
 
-/-- Every pressure-reducer drains the bag to `0`. -/
-theorem pressureDelta_reducer_clears {k : MeansKind} (h : isPressureReducer k = true)
-    (s : State) : (pressureDelta k s).inventoryUsed = 0 := by
-  cases k <;> simp_all [isPressureReducer, pressureDelta]
+`pressureDelta` used to model every reducer as `inventoryUsed := 0`, and two
+lemmas here — `pressureDelta_reducer_clears` and
+`pressureGatedChores_quiet_after_reducer` — read that off. Both are DELETED,
+because the premise is false about production.
 
-/-- After a reducer, all four pressure-gated chores are quiet (the drained bag is
-    below every threshold while `inventoryMax > 0`). Bridges Brick-1's
-    `pressureGatedChores_quiet_of_low` through the cleared pressure. -/
-theorem pressureGatedChores_quiet_after_reducer {k : MeansKind}
-    (h : isPressureReducer k = true) (s : State) (hmax : s.inventoryMax > 0) :
-    discardCriticalFires (pressureDelta k s) = false
-      ∧ discardHighFires (pressureDelta k s) = false
-      ∧ depositFullFires (pressureDelta k s) = false
-      ∧ sellPressuredFires (pressureDelta k s) = false := by
-  apply InventoryPressure.pressureGatedChores_quiet_of_low
-  rw [pressureDelta_reducer_clears h s, pressureDelta_inventoryMax]
-  omega
+`docs/REVIEW_pressuredelta_differential.md` (2026-06-19) drove all five reducers
+and found NONE drops the bag below the 85% watermark: DISCARD removes only the
+excess above per-item caps (a capped bag stays >=85% and the guard then goes
+SILENT), DEPOSIT keeps a large keep-set, SELL targets `free >= 5`, CRAFT
+batch-clamps. The honest replacement built at the time
+(`EffectiveDrainTransience.lean`, lifting the drain to an explicit
+`EffectiveDrainArmed` residual) was deleted as COLLATERAL in the vacuous-tower
+removal `c7c658ab`, and the `-> 0` model it had replaced survived it.
+
+The model now makes no drain claim at all: a reducer leaves `inventoryUsed`
+alone. That is PESSIMISTIC — production usually does remove something — which is
+the safe direction for a reachability argument.
+
+Nothing is lost. No descent row consumes the `bankPressure` slot; it appears in
+`EMeasure` only as an equality premise for higher slots, so reducer rows descend
+via their latch/debt components and the pressure value is lex-dominated either
+way. The chore latches are handled by `CycleStepD.partialClear` (debt-counted
+re-arms), which is the mechanism that actually models a reducer needing several
+batches — and, unlike the `-> 0` drain, it is honest about that.
+
+What remains assumed is `DEBT_CAP`: the number of re-arm rounds a chore can take
+before its latch clears. That bound is where the real full-of-useful-items
+livelock (`project_inventory_profiles`) would show up, and it is an opaque
+worst-case constant, not a proven one. -/
 
 end Formal.Liveness.InventoryDynamics
