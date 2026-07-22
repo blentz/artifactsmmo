@@ -2126,3 +2126,146 @@ def test_monster_spawn_known_includes_layered_tiles():
     assert gd.monster_spawn_known("lich") is True
     assert gd.monster_spawn_known("ghost") is False
     assert gd.monster_locations("lich") == []
+
+
+class TestTaskmasterKeying:
+    """Phase 0: both tasks masters are discoverable, keyed by content code.
+
+    Before 2026-07-22 `_build_maps` assigned a single tile, so the LAST tasks
+    master parsed erased the other. `TASKS_MASTER` was the only branch that
+    discarded `content.code` — MONSTER/RESOURCE/NPC/RAID all key by it.
+    """
+
+    @staticmethod
+    def _gd_with_both() -> GameData:
+        gd = GameData()
+        gd._build_maps([
+            make_map_tile(1, 2, "tasks_master", "monsters"),
+            make_map_tile(4, 13, "tasks_master", "items"),
+        ])
+        return gd
+
+    def test_both_taskmasters_discovered(self):
+        """The regression. Fails before the fix: items (parsed last) wins and
+        the monsters master at (1, 2) is unreachable."""
+        gd = self._gd_with_both()
+        assert gd.taskmaster_tiles == {"monsters": (1, 2), "items": (4, 13)}
+
+    def test_selects_by_code(self):
+        gd = self._gd_with_both()
+        assert gd.taskmaster_location("monsters") == (1, 2)
+        assert gd.taskmaster_location("items") == (4, 13)
+
+    def test_default_is_monsters_not_last_parsed(self):
+        """Default resolution is SEMANTIC (monsters = the char-XP progression
+        line, matching AcceptTaskAction's projection), not map-scan order. The
+        items master is parsed later and used to win."""
+        gd = self._gd_with_both()
+        assert gd.taskmaster_location() == (1, 2)
+
+    def test_default_falls_through_to_any_discovered_master(self):
+        """A world with only an items master still resolves."""
+        gd = GameData()
+        gd._build_maps([make_map_tile(4, 13, "tasks_master", "items")])
+        assert gd.taskmaster_location() == (4, 13)
+
+    def test_unknown_code_raises(self):
+        gd = self._gd_with_both()
+        with pytest.raises(RuntimeError, match="No tasks master for 'nope'"):
+            gd.taskmaster_location("nope")
+
+    def test_raises_when_no_taskmaster(self):
+        """Preserves the original contract."""
+        with pytest.raises(RuntimeError, match="Taskmaster location not found"):
+            GameData().taskmaster_location()
+
+    def test_or_none_is_display_safe(self):
+        assert GameData().taskmaster_location_or_none is None
+        assert self._gd_with_both().taskmaster_location_or_none == (1, 2)
+
+    def test_legacy_private_view_is_none_without_a_taskmaster(self):
+        """`gd._taskmaster_location` is the private legacy view several tests
+        assign to stage a master; reading it on an empty world must not raise."""
+        gd = GameData()
+        assert gd._taskmaster_location is None
+        gd._taskmaster_location = (3, 4)
+        assert gd._taskmaster_location == (3, 4)
+        assert gd.taskmaster_tiles == {"monsters": (3, 4)}
+        gd._taskmaster_location = None
+        assert gd._taskmaster_location is None
+
+    def test_legacy_single_tile_view_round_trips(self):
+        """Callers and tests that set one tile directly still work, and get a
+        coherent keyed catalog rather than a silently-ignored attribute."""
+        gd = GameData()
+        gd.world.taskmaster_tile = (7, 7)
+        assert gd.taskmaster_tiles == {"monsters": (7, 7)}
+        assert gd.world.taskmaster_tile == (7, 7)
+        gd.world.taskmaster_tile = None
+        assert gd.taskmaster_tiles == {}
+        assert gd.world.taskmaster_tile is None
+
+
+class TestTaskPoolRetention:
+    """Phase 0: the task pool is retained, not fetched-then-discarded.
+
+    `_fetch_tasks` always paged the WHOLE pool and the bundle always persisted
+    every field; `_build_tasks` kept only the reward projections, so the bot
+    could not enumerate what a given tasks master is able to issue. No
+    CACHE_VERSION bump was needed — the data was already on disk, just unread.
+    """
+
+    @staticmethod
+    def _tasks() -> list:
+        from artifactsmmo_api_client.models.task_full_schema import TaskFullSchema
+        return [
+            TaskFullSchema.from_dict(d)
+            for d in [
+                {"code": "chicken", "level": 5, "type": "monsters",
+                 "min_quantity": 10, "max_quantity": 20,
+                 "rewards": {"items": [{"code": "tasks_coin", "quantity": 3}], "gold": 200}},
+                {"code": "cooked_gudgeon", "level": 1, "type": "items",
+                 "min_quantity": 60, "max_quantity": 240, "skill": "cooking",
+                 "rewards": {"items": [{"code": "tasks_coin", "quantity": 2}], "gold": 150}},
+                {"code": "demon", "level": 30, "type": "monsters",
+                 "min_quantity": 1, "max_quantity": 5,
+                 "rewards": {"items": [{"code": "tasks_coin", "quantity": 5}], "gold": 500}},
+            ]
+        ]
+
+    def _gd(self) -> GameData:
+        gd = GameData()
+        gd._build_tasks(self._tasks())
+        return gd
+
+    def test_filters_by_type(self):
+        gd = self._gd()
+        assert {t.code for t in gd.tasks_for("monsters", 50)} == {"chicken", "demon"}
+        assert {t.code for t in gd.tasks_for("items", 50)} == {"cooked_gudgeon"}
+
+    def test_filters_by_level(self):
+        """The level bound is what makes this usable as a per-band pool."""
+        gd = self._gd()
+        assert {t.code for t in gd.tasks_for("monsters", 10)} == {"chicken"}
+        assert gd.tasks_for("monsters", 4) == []
+
+    def test_unknown_type_is_empty_not_an_error(self):
+        """A map with only one tasks master is a legitimate world state."""
+        assert self._gd().tasks_for("nope", 50) == []
+
+    def test_empty_before_any_build(self):
+        assert GameData().tasks_for("monsters", 50) == []
+
+    def test_retains_fields_the_old_build_discarded(self):
+        """The point of the change: level/skill/quantities survive, not just
+        the reward projections."""
+        (t,) = self._gd().tasks_for("items", 50)
+        assert t.level == 1
+        assert t.skill == "cooking"
+        assert (t.min_quantity, t.max_quantity) == (60, 240)
+
+    def test_reward_projections_still_built(self):
+        """Retention is additive — the C2 coin/gold indexes are unchanged."""
+        gd = self._gd()
+        assert gd.task_coin_reward("demon") == 5
+        assert gd.task_gold_reward("chicken") == 200

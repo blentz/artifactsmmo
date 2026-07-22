@@ -26,12 +26,33 @@ class AcceptTaskAction(Action):
     tags: ClassVar[frozenset[str]] = frozenset({"task"})
 
     taskmaster_location: tuple[int, int]
+    taskmaster_code: str = "monsters"
+    """Which tasks master this walks to (`"monsters"` / `"items"`).
+
+    ADDED 2026-07-22. The map carries two masters and the one you visit decides
+    the task TYPE the server issues. Until now `_build_maps` kept only the last
+    tile parsed, which in the live map is the ITEMS master -- so the bot walked
+    to the items master while `apply` projected a MONSTERS task. The plan and
+    the destination disagreed.
+
+    Defaults to `"monsters"` to match the projection below, which is load-bearing
+    (see `apply`). Choosing the master deliberately is synergy Phase 4."""
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         return not state.task_code and state.task_total == 0
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = self.taskmaster_location
+        # KEEP THIS "monsters" LITERAL. It is not a placeholder for
+        # `self.taskmaster_code`, and projecting the visited master's real type
+        # would REGRESS a fixed bug: an items task cannot progress in-model,
+        # because TaskTradeAction gates on a SPECIFIC task code and the pending
+        # marker is `__pending__`, so CompleteTask would never become applicable
+        # and the accept->progress->complete chain would go unfindable again.
+        # The action is instead emitted against the monsters master (factory.py),
+        # so destination and projection now agree -- which is exactly what the
+        # single-tile bug broke.
+        #
         # task_type="monsters" makes the pending in-model task PROGRESSABLE:
         # FightAction.apply advances a monsters-task, and it special-cases the
         # _PENDING_TASK marker (any monster counts). Without a type the pending

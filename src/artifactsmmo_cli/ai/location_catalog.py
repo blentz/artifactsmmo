@@ -1,6 +1,7 @@
 """World/location domain catalog: bank, workshops, NPCs, GE orders, and tiles."""
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 
 @dataclass
@@ -23,7 +24,19 @@ class LocationCatalog:
     ] = field(default_factory=dict)
     bank_tile: tuple[int, int] | None = None
     bank_tile_open: bool = False  # True once bank_tile points at an unconditional bank
-    taskmaster_tile: tuple[int, int] | None = None
+    taskmaster_tiles: dict[str, tuple[int, int]] = field(default_factory=dict)
+    """Taskmaster tiles KEYED BY CONTENT CODE (`"monsters"` / `"items"`).
+
+    Was a single `taskmaster_tile` until 2026-07-22. The map carries TWO tasks
+    masters and `_build_maps` kept only the last one parsed, so one of them was
+    silently unreachable — in the bundle fixture the items master (maps index
+    791) overwrote the monsters master (index 601), leaving `(1, 2)` invisible.
+    `TASKS_MASTER` was the only `_build_maps` branch that discarded
+    `content.code`; MONSTER/RESOURCE/NPC/RAID all key by it.
+
+    Which master you visit determines which task TYPE you are issued
+    (https://docs.artifactsmmo.com/concepts/tasks/), so this is a strategic
+    lever, not bookkeeping."""
     grand_exchange_tile: tuple[int, int] | None = None
     npc_tiles: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> (x, y)
     npc_stock: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: buy_price}
@@ -132,11 +145,61 @@ class LocationCatalog:
         achievement gate). Used to drop a stale global bank-lock blocker."""
         return self.bank_tile_open
 
-    def taskmaster_location(self) -> tuple[int, int]:
-        """Location of the tasks master NPC."""
-        if self.taskmaster_tile is None:
-            raise RuntimeError("Taskmaster location not found in map data")
-        return self.taskmaster_tile
+    @property
+    def taskmaster_tile(self) -> tuple[int, int] | None:
+        """LEGACY single-tile view over `taskmaster_tiles`.
+
+        Kept because callers and tests set/read a single tile directly. Reading
+        resolves the default master; writing registers it under the default
+        code, so staging one taskmaster yields a coherent keyed catalog rather
+        than a silently-ignored attribute.
+        """
+        try:
+            return self.taskmaster_location()
+        except RuntimeError:
+            return None
+
+    @taskmaster_tile.setter
+    def taskmaster_tile(self, value: tuple[int, int] | None) -> None:
+        default = self.TASKMASTER_DEFAULT_ORDER[0]
+        if value is None:
+            self.taskmaster_tiles.pop(default, None)
+        else:
+            self.taskmaster_tiles[default] = value
+
+    #: Preference order when no taskmaster code is requested. `monsters` first
+    #: because monster tasks are the char-XP progression line and
+    #: `AcceptTaskAction.apply` projects that type. A SEMANTIC default, not an
+    #: alphabetical tiebreak — callers that care (the synergy taskmaster choice)
+    #: pass an explicit code.
+    TASKMASTER_DEFAULT_ORDER: ClassVar[tuple[str, ...]] = ("monsters", "items")
+
+    def taskmaster_location(self, code: str | None = None) -> tuple[int, int]:
+        """Location of a tasks master; `code` selects `"monsters"` / `"items"`.
+
+        With no `code` this resolves through `TASKMASTER_DEFAULT_ORDER` and then
+        any remaining discovered master, so the ~5 existing call sites keep
+        working unchanged. Note this is a deliberate behaviour change: they used
+        to get whichever tile the map scan happened to parse LAST.
+
+        NOT "the nearest master" — this method has no position to measure from.
+        Routing complete/exchange/cancel/trade to the right master depends on an
+        unverified server rule (residual R1 of the Phase 0 spec: the docs say
+        exchange works at "any Tasks Master" and are silent on completion), so
+        those callers keep a single deterministic master until that is probed.
+        """
+        if code is not None:
+            tile = self.taskmaster_tiles.get(code)
+            if tile is None:
+                raise RuntimeError(f"No tasks master for {code!r} in map data")
+            return tile
+        for preferred in self.TASKMASTER_DEFAULT_ORDER:
+            tile = self.taskmaster_tiles.get(preferred)
+            if tile is not None:
+                return tile
+        for _code, tile in sorted(self.taskmaster_tiles.items()):
+            return tile
+        raise RuntimeError("Taskmaster location not found in map data")
 
     def npc_location(self, npc_code: str) -> tuple[int, int] | None:
         """Location of a named NPC: static map scan first, then event spawn tile."""

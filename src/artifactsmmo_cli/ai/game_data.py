@@ -131,6 +131,10 @@ class GameData:
     monsters: MonsterCatalog = field(default_factory=MonsterCatalog)
     recipes_catalog: RecipeCatalog = field(default_factory=RecipeCatalog)
     world: LocationCatalog = field(default_factory=LocationCatalog)
+    _tasks: list[TaskFullSchema] = field(default_factory=list)
+    """The retained task pool. `_fetch_tasks` always paged it in full and the
+    bundle always persisted it; until 2026-07-22 `_build_tasks` kept only the
+    reward projections, so `type_`/`level`/`skill` were fetched and discarded."""
     _task_reward_item_codes: frozenset[str] = field(default_factory=frozenset)
     _task_coin_rewards: dict[str, int] = field(default_factory=dict)
     _task_gold_rewards: dict[str, int] = field(default_factory=dict)
@@ -187,11 +191,24 @@ class GameData:
 
     @property
     def _taskmaster_location(self) -> tuple[int, int] | None:
-        return self.world.taskmaster_tile
+        """Legacy single-tile view over the keyed `taskmaster_tiles`.
+
+        Resolves through `LocationCatalog.TASKMASTER_DEFAULT_ORDER`. Retained
+        because several tests assign it directly to stage a taskmaster."""
+        try:
+            return self.world.taskmaster_location()
+        except RuntimeError:
+            return None
 
     @_taskmaster_location.setter
     def _taskmaster_location(self, value: tuple[int, int] | None) -> None:
-        self.world.taskmaster_tile = value
+        """Assigning the legacy view registers the DEFAULT master, so a test or
+        caller that stages one taskmaster gets a coherent keyed catalog."""
+        default = self.world.TASKMASTER_DEFAULT_ORDER[0]
+        if value is None:
+            self.world.taskmaster_tiles.pop(default, None)
+        else:
+            self.world.taskmaster_tiles[default] = value
 
     @property
     def _grand_exchange_location(self) -> tuple[int, int] | None:
@@ -652,9 +669,17 @@ class GameData:
             return True
         return len(conditions) == 0
 
-    def taskmaster_location(self) -> tuple[int, int]:
-        """Location of the tasks master NPC."""
-        return self.world.taskmaster_location()
+    def taskmaster_location(self, code: str | None = None) -> tuple[int, int]:
+        """Location of a tasks master; `code` selects `"monsters"` / `"items"`.
+
+        No `code` resolves the default master -- see
+        `LocationCatalog.taskmaster_location`."""
+        return self.world.taskmaster_location(code)
+
+    @property
+    def taskmaster_tiles(self) -> dict[str, tuple[int, int]]:
+        """All discovered tasks masters, keyed by content code."""
+        return dict(self.world.taskmaster_tiles)
 
     def item_stats(self, code: str) -> ItemStats | None:
         """Stats for an item."""
@@ -1187,7 +1212,10 @@ class GameData:
     def taskmaster_location_or_none(self) -> tuple[int, int] | None:
         """Tasks-master tile, or None when unknown (display-safe counterpart
         to the raising `taskmaster_location()`)."""
-        return self.world.taskmaster_tile
+        try:
+            return self.world.taskmaster_location()
+        except RuntimeError:
+            return None
 
     @classmethod
     def load(
@@ -1397,7 +1425,13 @@ class GameData:
                 elif not self._bank_location_open:
                     self._bank_location = loc
             elif ct == MapContentType.TASKS_MASTER:
-                self._taskmaster_location = loc
+                # KEY BY CODE (2026-07-22). This branch used to assign a single
+                # tile, so the LAST tasks master parsed silently erased the
+                # other -- the only _build_maps branch that discarded
+                # `content.code` while MONSTER/RESOURCE/NPC/RAID all key by it.
+                # The map carries a "monsters" and an "items" master and which
+                # one you visit decides the task TYPE you are issued.
+                self.world.taskmaster_tiles[code] = loc
             elif ct == MapContentType.GRAND_EXCHANGE:
                 self._grand_exchange_location = loc
             elif ct == MapContentType.NPC:
@@ -1656,7 +1690,16 @@ class GameData:
     def _build_tasks(self, tasks: list[TaskFullSchema]) -> None:
         """Collect (a) the set of item codes any task awards [C1],
         (b) per-task `tasks_coin` reward amounts [C2], and (c) per-task gold
-        payouts (API `rewards.gold`, so projections never hardcode a figure)."""
+        payouts (API `rewards.gold`, so projections never hardcode a figure).
+
+        Also RETAINS the task pool itself (2026-07-22). `_fetch_tasks` already
+        pages the WHOLE pool unfiltered and the bundle already persists every
+        field; this method simply threw away `type_`, `level`, `skill`,
+        `min_quantity` and `max_quantity`, so the bot could not enumerate what a
+        given tasks master is able to issue. Keeping them costs one reference
+        and needs no CACHE_VERSION bump -- the data is already on disk in v4
+        bundles, it was merely unread."""
+        self._tasks = list(tasks)
         self._task_reward_item_codes = frozenset(
             item.code for task in tasks for item in task.rewards.items
         )
@@ -1680,6 +1723,23 @@ class GameData:
                 for code, qty in bad
             )
             raise GameDataCoverageError(details)
+
+    def tasks_for(self, task_type: str, max_level: int) -> list[TaskFullSchema]:
+        """Tasks a master of `task_type` can issue at or below `max_level`.
+
+        `task_type` is the tasks-master content code (`"monsters"` / `"items"`)
+        — the same key `taskmaster_tiles` uses, because the master you visit
+        decides the type you are issued.
+
+        Returns [] for an unknown type rather than raising: a map with only one
+        tasks master is a legitimate world state, not a data error.
+        """
+        return [
+            t
+            for t in self._tasks
+            if getattr(t.type_, "value", t.type_) == task_type
+            and t.level <= max_level
+        ]
 
     def _load_ge_orders(self, client: AuthenticatedClient) -> None:
         """Index, per item, the highest-price OPEN BUY order and the lowest-price

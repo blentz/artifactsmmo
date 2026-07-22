@@ -35,6 +35,7 @@ from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
+from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.player_helpers import delete_cost
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -56,14 +57,22 @@ def build_actions(
     see the recycle block below.
     """
     bank = game_data.bank_location()
+    # Resolves the DEFAULT master (monsters-first). Until 2026-07-22 this was
+    # whichever tasks-master tile the map scan parsed LAST -- the items master --
+    # while AcceptTaskAction.apply projected a monsters task, so the bot walked
+    # one way and planned the other. Complete/exchange/cancel/trade stay on this
+    # single master pending residual R1 (whether a task can be completed at a
+    # master other than its issuer is undocumented; the docs cover only exchange,
+    # at "any Tasks Master").
     taskmaster = game_data.taskmaster_location()
+    accept_master = LocationCatalog.TASKMASTER_DEFAULT_ORDER[0]
 
     actions: list[Action] = [
         RestAction(),
         UseConsumableAction(_item_stats=game_data.all_item_stats),
         UseGoldBagAction(_item_stats=game_data.all_item_stats),
         DepositAllAction(bank_location=bank, accessible=bank_accessible, game_data=game_data),
-        AcceptTaskAction(taskmaster_location=taskmaster),
+        AcceptTaskAction(taskmaster_location=taskmaster, taskmaster_code=accept_master),
         CompleteTaskAction(taskmaster_location=taskmaster),
         TaskExchangeAction(taskmaster_location=taskmaster, min_coins=task_exchange_min_coins),
         TaskCancelAction(taskmaster_location=taskmaster),
