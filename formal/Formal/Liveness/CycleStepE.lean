@@ -57,14 +57,45 @@ def GEAR_CAP : Nat := 8
     this docstring previously did not say so. -/
 def FIGHT_LOSS_BOUND : Nat := 270
 
-/-- Adequacy-gated arming: fight objective when adequate, gear latch when not;
-    identity inside the defer window and at/above the cap. -/
+/-- **RESIDUAL (G1): the arming observation, at one state.**
+
+    `objectiveStepFires` / `objectiveStepIsFight` are OPAQUE production
+    observations (`Measure.lean:161-164`): the arbiter yields a step candidate
+    IFF the objective tier produced a plannable one. This says that below the
+    cap, outside the defer window, with adequate gear, that observation is in
+    fact positive and is a Fight.
+
+    PER-STATE by design. The `∀ s` form is FALSE — states exist with adequate
+    gear and no plannable step — and a false hypothesis would make the capstone
+    VACUOUS, which is the 2026-06-19 failure this whole line of work exists to
+    avoid. Callers quantify it over the trajectory instead.
+
+    It is a RESIDUAL, not a theorem, and it cannot be discharged offline: it
+    equates an opaque model Bool with a Python computation over
+    `state.equipment`, `monster_spawn_known`, and a `LearningStore`. Known
+    production falsifiers, none modelled here: `_marginal_provision_goal`
+    returning a non-Fight goal (`strategy_driver.py:782-784`); the objective step
+    being `ObtainItem` rather than `ReachCharLevel`; the learned-loss veto
+    overriding a positive `predict_win` (`combat.py:367-377`); the 14/58 catalog
+    monsters with no map tile.
+
+    HISTORY (2026-07-20). Until this commit `perceptionRefreshE` simply OVERWROTE
+    the observation with `true`, so the capstone read as hypothesis-free while
+    silently assuming exactly this — the retired `hfightFires` fairness
+    obligation, relocated into a definition where `#print axioms` could not see
+    it. Naming it is the point. -/
+def AdequateArmsFightAt (s : State) : Prop :=
+  s.level < 50 → deferGate s = false → s.loadoutAdequate = true →
+    s.objectiveStepFires = true ∧ s.objectiveStepIsFight = true
+
+/-- Adequacy-gated arming: gear latch when inadequate; otherwise the state passes
+    through UNCHANGED — the fight objective is READ from the production
+    observation, never installed (see `AdequateArmsFightAt`). Identity inside the
+    defer window and at/above the cap. -/
 def perceptionRefreshE (s : State) : State :=
   if s.level < 50 && !(deferGate s) then
-    if s.loadoutAdequate then
-      { s with objectiveStepFires := true, objectiveStepIsFight := true }
-    else
-      { s with gearReviewFires := true }
+    if s.loadoutAdequate then s
+    else { s with gearReviewFires := true }
   else s
 
 /-- Gear progress: a gear-review cycle with an open gap closes one step and
@@ -194,6 +225,37 @@ theorem cycleStepE_level (s : State) :
   | some k =>
       rw [rearmE_level, gearProgress_level, fightLoss_level,
         partialClear_level, pressureDeltaD_level]
+
+/-- One `cycleStepE` never lowers `level`.
+
+    Bridges `cycleStepE_level` through `CumulativeProgress.cycleStep_level_ge`;
+    the refresh is level-invariant (`perceptionRefreshE_level`), and none of the
+    E overlays (`rearmE`/`gearProgress`/`fightLoss`) touch `level`. Mirrors
+    `CycleStepFIteration.cycleStepF_level_ge`. -/
+theorem cycleStepE_level_ge (s : State) : (cycleStepE s).level ≥ s.level := by
+  rw [cycleStepE_level]
+  have h := Formal.Liveness.CumulativeProgress.cycleStep_level_ge
+    (perceptionRefreshE s)
+  rw [perceptionRefreshE_level] at h
+  exact h
+
+/-- `level` is monotone non-decreasing along the geared trajectory.
+
+    ADDED 2026-07-20. The E-tower had NO level-monotonicity lemma — an absence
+    that only shows up when you try to state an E-tower hypothesis honestly,
+    because every satisfiability witness in this codebase is the degenerate
+    "already ≥ 50" state (`LevelingDescent.fights_below_cap_satisfiable_with_goal`)
+    and that witness needs exactly this. Mirrors `cycleStepFN_level_ge`. -/
+theorem cycleStepEN_level_ge (s : State) (n : Nat) :
+    (cycleStepEN n s).level ≥ s.level := by
+  induction n generalizing s with
+  | zero => rw [cycleStepEN_zero]
+  | succ k ih =>
+    rw [cycleStepEN_succ]
+    have h1 : (cycleStepE s).level ≥ s.level := cycleStepE_level_ge s
+    have h2 : (cycleStepEN k (cycleStepE s)).level ≥ (cycleStepE s).level :=
+      ih (cycleStepE s)
+    omega
 
 /-- Xp bridge. -/
 theorem cycleStepE_xp (s : State) :

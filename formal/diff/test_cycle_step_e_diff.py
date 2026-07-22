@@ -3,7 +3,7 @@ cycle faithfully.
 
 The kernel already binds mirror = model (`cycleStepEC_eq`, an rfl-chain on
 `cycleStepDC`'s clone), so the residual risk is the ORACLE BOUNDARY: the
-40-slot vector decode (slots 38/39 are new) and the E-layer semantics as seen
+41-slot vector decode (slots 38/39/40) and the E-layer semantics as seen
 through it. Each test drives the compiled oracle with hand-built states and
 pins the behavior the capstone's descent rows prove:
 
@@ -12,7 +12,10 @@ pins the behavior the capstone's descent rows prove:
 * adequate + quiet guards → the fight objective is armed and selected,
   xp advances, and the gear fields are untouched (non-rollover);
 * a rollover fight resets gearGap := GEAR_CAP and drops adequacy;
-* a fight costs FIGHT_LOSS_BOUND hp; at or below the bound it respawns full.
+* a fight costs FIGHT_LOSS_BOUND hp; at or below the bound it FLOORS AT 1
+  (production never dies -- `ai/actions/combat.py:120-122`);
+* adequate gear with a NEGATIVE arming observation does NOT select a fight
+  (the case the pre-2026-07-20 definitional grant made unrepresentable).
 """
 from __future__ import annotations
 
@@ -28,7 +31,7 @@ FIGHT_LOSS_BOUND = 270
 
 def _base_vector() -> list[int]:
     """All ladder guards quiet: full hp, empty chores, no task phase."""
-    v = [0] * 40
+    v = [0] * 41
     v[0] = 1000        # hp
     v[1] = 1000        # maxHp (full → hpCritical/restForCombat quiet)
     v[2] = 10          # level
@@ -41,6 +44,13 @@ def _base_vector() -> list[int]:
     v[24] = 1          # taskFeasibleProjected
     v[30] = 1          # bankItemsKnown
     v[33] = 150        # xpNext (xpToNextLevel at this state)
+    # ARMING OBSERVATION (slots 28/40). Supplied, not fabricated: since the
+    # 2026-07-20 honest restatement `perceptionRefreshE` READS these production
+    # observations instead of overwriting them with `true`. A vector that leaves
+    # them 0 models "no plannable fight step", and the ladder correctly falls
+    # through past objectiveStep -- which is the behaviour the old grant hid.
+    v[28] = 1          # objectiveStepFires
+    v[40] = 1          # objectiveStepIsFight
     return v
 
 
@@ -140,3 +150,27 @@ def test_defer_window_outranks_gear_arming() -> None:
     assert r["gear_gap"] in (3, 4)
     if r["gear_gap"] == 4:
         assert r["selected"] != "gearReview"
+
+
+def test_adequate_but_unarmed_does_not_fight() -> None:
+    """Adequate gear + NO plannable fight step ⇒ objectiveStep is not selected.
+
+    This case could not be expressed before 2026-07-20: `perceptionRefreshE`
+    overwrote `objectiveStepFires` with `true`, so an adequate state ALWAYS
+    armed a fight regardless of what production observed. That grant is what
+    made the capstone look hypothesis-free while silently assuming the retired
+    `hfightFires` fairness obligation.
+
+    The observation is now READ, so a negative one is representable — and the
+    ladder falls through past objectiveStep exactly as the real arbiter would
+    when the objective tier yields no plannable step. `AdequateArmsFightAt` is
+    the named residual that rules this out along a trajectory.
+    """
+    v = _base_vector()
+    v[38] = 1          # adequate
+    v[28] = 0          # objectiveStepFires = false (no plannable step)
+    v[40] = 0          # objectiveStepIsFight = false
+    (r,) = _run([v])
+    assert r["selected"] != "objectiveStep"
+    assert r["xp"] == 50               # no fight ⇒ no xp credit
+    assert r["hp"] == 1000             # no fight ⇒ no hp cost

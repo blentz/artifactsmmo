@@ -2356,6 +2356,10 @@ def runCycleStepD (args : Array Json) : Json :=
 
 * `[38]` loadoutAdequate (Bool 0/1 — production `is_winnable(current gear,
          band target)` observation)
+* `[40]` objectiveStepIsFight (Bool 0/1 — the production observation that the
+                              objective step is a FIGHT. ADDED 2026-07-20: the
+                              E refresh used to FABRICATE this; now it READS it,
+                              so it must be supplied. See `AdequateArmsFightAt`.)
 * `[39]` gearGap (Nat — recipe-closure steps toward the band's acquirable
          witness loadout)
 
@@ -2389,7 +2393,8 @@ def runCycleStepE (args : Array Json) : Json :=
     bankJunkNonempty := b 31, craftPotionsFires := b 32,
     itemsTaskDeferActive := b 34,
     overstockDebt := n 35, depositDebt := n 36, sellDebt := n 37,
-    loadoutAdequate := b 38, gearGap := n 39 }
+    loadoutAdequate := b 38, gearGap := n 39,
+    objectiveStepIsFight := b 40 }
   let post := Formal.Liveness.CycleStepEC.cycleStepEC (n 33) s
   let selected : Json :=
     match Formal.Liveness.ProductionLadder.productionLadder

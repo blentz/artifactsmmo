@@ -13,9 +13,25 @@ every band's winning loadout is provably obtainable); fights pay a worst-case
 hp loss with death→respawn; rollovers adversarially reset gear AND every chore
 latch/debt.
 
-HYPOTHESIS-FREE: no fairness, no quiescence, no spawn, no adequacy assumption
-— from ANY start state. Axioms: standard + the `xpToNextLevel` positivity
-axiom (LIV-001), as audited in `LivenessAudit.lean`.
+**CONDITIONAL on one NAMED residual: `AdequateArmsFightAt`, quantified along the
+trajectory.** Axioms: standard + `xpToNextLevel` (LIV-001), audited in
+`LivenessAudit.lean`.
+
+CORRECTED 2026-07-20 (adversarial review). This header previously read
+"HYPOTHESIS-FREE: no fairness, no quiescence, no spawn, no adequacy assumption".
+That was FALSE. The assumptions were not discharged — they were moved out of the
+theorem statement and into `cycleStepE`'s DEFINITION, where `#print axioms`
+cannot see them and the gate goes green. `perceptionRefreshE` overwrote the
+opaque production observation `objectiveStepFires` with `true`, which is the
+retired `hfightFires` fairness obligation wearing a different hat.
+
+Two grants remain definitional and are NOT yet named here — G2 (`gearProgress`
+restores adequacy within `GEAR_CAP` cycles at zero cost) and G3 (`.fight` grants
+a constant `xp + 10` and cannot fail). They are specified as increments 3-4 of
+`docs/superpowers/specs/2026-07-20-l50-honest-restatement.md`. Until then this
+capstone is honest about G1 only, and the claims about G2's offline grounding
+below are PROSE — `WitnessAcquirable` is cited in this docstring but appears in
+no import and no proof term of this module.
 
 Liveness namespace — Mathlib allowed. -/
 
@@ -44,7 +60,8 @@ private theorem refreshE_phase' (s : State) :
 /-- Below the cap the ladder always selects something: inside the defer window
     `pursueTask` fires; outside it the refresh arms the objective (adequate)
     or the gear latch (inadequate) — all three fire. -/
-theorem ladderE_some_below_fifty (s : State) (hlvl : s.level < 50) :
+theorem ladderE_some_below_fifty (s : State) (hArms : AdequateArmsFightAt s)
+    (hlvl : s.level < 50) :
     productionLadder (perceptionRefreshE s) ≠ none := by
   intro hnone
   unfold productionLadder at hnone
@@ -69,6 +86,7 @@ theorem ladderE_some_below_fifty (s : State) (hlvl : s.level < 50) :
         simp only [fires, ProductionLadder.objectiveStepFires]
         unfold perceptionRefreshE
         rw [if_pos hcondT, if_pos hadq]
+        exact (hArms hlvl hg hadq).1
       have h : (if fires .objectiveStep (perceptionRefreshE s) = true
           then some MeansKind.objectiveStep else none) = (none : Option MeansKind) :=
         hnone .objectiveStep (by decide)
@@ -85,10 +103,11 @@ theorem ladderE_some_below_fifty (s : State) (hlvl : s.level < 50) :
       cases h
 
 /-- **Total per-cycle descent for the geared cycle.** -/
-theorem cycleStepE_descends_below_fifty (s : State) (hlvl : s.level < 50) :
+theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt s)
+    (hlvl : s.level < 50) :
     eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
   cases hk : productionLadder (perceptionRefreshE s) with
-  | none => exact absurd hk (ladderE_some_below_fifty s hlvl)
+  | none => exact absurd hk (ladderE_some_below_fifty s hArms hlvl)
   | some k =>
     have hmem : k ∈ pursuePrefix := by
       by_cases hgate : deferGate s = true
@@ -107,6 +126,7 @@ theorem cycleStepE_descends_below_fifty (s : State) (hlvl : s.level < 50) :
             simp only [fires, ProductionLadder.objectiveStepFires]
             unfold perceptionRefreshE
             rw [if_pos hcondT, if_pos hadq]
+            exact (hArms hlvl hg hadq).1
           exact List.mem_append_left _ (ladder_mem_blockerPrefix hobj hk)
         · have hgear : fires .gearReview (perceptionRefreshE s) = true := by
             simp only [fires, ProductionLadder.gearReviewFires]
@@ -162,8 +182,8 @@ theorem cycleStepE_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | objectiveStep   =>
         by_cases hisF : (perceptionRefreshE s).objectiveStepIsFight = true
         · exact descendsE_fight s hlvl (Or.inr (Or.inr ⟨hk, hisF⟩))
-        · exact descendsE_placeholder s hk (Bool.eq_false_iff.mpr hisF)
-    | pursueTask      => exact descendsE_pursueTask s hlvl hk
+        · exact descendsE_placeholder s hArms hk (Bool.eq_false_iff.mpr hisF)
+    | pursueTask      => exact descendsE_pursueTask s hArms hlvl hk
     | acceptTask      => exact absurd hmem (by decide)
     | taskExchange    => exact absurd hmem (by decide)
     | maintainConsumables => exact absurd hmem (by decide)
@@ -173,14 +193,40 @@ theorem cycleStepE_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | drainBankJunk   => exact absurd hmem (by decide)
     | wait            => exact absurd hmem (by decide)
 
-/-- **The geared reach-50 capstone** — xp credited only behind adequate gear,
-    gear progress grounded by the empty acquirable frontier, fights costing
-    hp with death→respawn, rollovers adversarially re-arming everything. -/
-theorem ai_reaches_fifty_geared (s : State) :
+/-- **The geared reach-50 capstone.**
+
+    Every below-50 geared cycle strictly decreases the 20-slot lex `EMeasure`
+    (top slot `50 - level`), so some finite iterate reaches 50.
+
+    CONDITIONAL on `AdequateArmsFightAt` holding along the trajectory. That
+    hypothesis is the production arming observation, and it is NAMED here rather
+    than installed by `perceptionRefreshE` — see the history note on
+    `AdequateArmsFightAt`. It is quantified per-iterate because the `∀ s` form is
+    false and would make this vacuous.
+
+    Non-vacuity: `adequateArmsFight_satisfiable_with_goal` below. -/
+theorem ai_reaches_fifty_geared (s : State)
+    (hArms : ∀ k, AdequateArmsFightAt (cycleStepEN k s)) :
     ∃ k, (cycleStepEN k s).level ≥ 50 :=
   exists_level_ge_of_edescent (fun k => cycleStepEN k s) (fun k hk => by
     show eMeasureLt (eMeasure (cycleStepEN (k + 1) s)) (eMeasure (cycleStepEN k s))
     rw [cycleStepEN_succ_outer k s]
-    exact cycleStepE_descends_below_fifty (cycleStepEN k s) hk)
+    exact cycleStepE_descends_below_fifty (cycleStepEN k s) (hArms k) hk)
+
+/-- **Non-vacuity check.** The residual and the goal hold TOGETHER — the
+    degenerate `≥ 50` witness (residual vacuous at every iterate by level
+    monotonicity, goal at `k = 0`).
+
+    This is the check the 2026-06-19 vacuity finding taught us to write: the old
+    i.o.-fairness residuals could provably NEVER coexist with the goal, which is
+    exactly what made those capstones vacuous. Mirrors
+    `LevelingDescent.fights_below_cap_satisfiable_with_goal`, and needs
+    `cycleStepEN_level_ge` — a lemma the E-tower did not have until the honest
+    restatement forced it. -/
+theorem adequateArmsFight_satisfiable_with_goal (s : State) (h : s.level ≥ 50) :
+    (∀ k, AdequateArmsFightAt (cycleStepEN k s))
+      ∧ ∃ k, (cycleStepEN k s).level ≥ 50 := by
+  refine ⟨fun k hk => absurd hk (by have := cycleStepEN_level_ge s k; omega), 0, ?_⟩
+  rw [cycleStepEN_zero]; exact h
 
 end Formal.Liveness.GearedDescent

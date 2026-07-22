@@ -716,8 +716,7 @@ theorem descendsE_gearReview (s : State)
       -- already set in `s`; the optimize apply clears it — slot `gearReviewFlag`.
       have hlatch : s.gearReviewFires = true := by
         by_cases hc : (decide (s.level < 50) && !(deferGate s)) = true
-        · have harm : perceptionRefreshE s
-              = { s with objectiveStepFires := true, objectiveStepIsFight := true } := by
+        · have harm : perceptionRefreshE s = s := by
             unfold perceptionRefreshE
             rw [if_pos hc, if_pos hadq]
           rw [harm] at hfire
@@ -894,7 +893,7 @@ private theorem gearReview_quiet_of_objectiveStep {r : State}
 /-- A stale-armed objective Bool with `isFight = false` survives only when the
     refresh was the identity: adequate arming sets `isFight`, inadequate
     arming sets the gear latch (which would outrank the objective). -/
-theorem descendsE_placeholder (s : State)
+theorem descendsE_placeholder (s : State) (hArms : AdequateArmsFightAt s)
     (hk : productionLadder (perceptionRefreshE s) = some .objectiveStep)
     (hisF : (perceptionRefreshE s).objectiveStepIsFight = false) :
     eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
@@ -904,9 +903,17 @@ theorem descendsE_placeholder (s : State)
     by_cases hc : (decide (s.level < 50) && !(deferGate s)) = true
     · exfalso
       by_cases hadq : s.loadoutAdequate = true
-      · have : (perceptionRefreshE s).objectiveStepIsFight = true := by
+      · have hgd : deferGate s = false := by
+          by_contra hne
+          rw [Bool.not_eq_false] at hne
+          simp [hne] at hc
+        have hlt : s.level < 50 := by
+          by_contra hne
+          simp [hne] at hc
+        have : (perceptionRefreshE s).objectiveStepIsFight = true := by
           unfold perceptionRefreshE
           rw [if_pos hc, if_pos hadq]
+          exact (hArms hlt hgd hadq).2
         rw [this] at hisF; cases hisF
       · have : (perceptionRefreshE s).gearReviewFires = true := by
           unfold perceptionRefreshE
@@ -933,7 +940,7 @@ theorem descendsE_placeholder (s : State)
 /-- `pursueTask` is selectable only inside the defer window: outside it the
     refresh arms the objective (adequate) or the gear latch (inadequate), and
     BOTH outrank it. The gate certifies work remains — `taskCycles` descends. -/
-theorem descendsE_pursueTask (s : State) (hlvl : s.level < 50)
+theorem descendsE_pursueTask (s : State) (hArms : AdequateArmsFightAt s) (hlvl : s.level < 50)
     (hk : productionLadder (perceptionRefreshE s) = some .pursueTask) :
     eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
   have hprefix_none :
@@ -981,9 +988,17 @@ theorem descendsE_pursueTask (s : State) (hlvl : s.level < 50)
     by_cases hc : (decide (s.level < 50) && !(deferGate s)) = true
     · exfalso
       by_cases hadq : s.loadoutAdequate = true
-      · have : (perceptionRefreshE s).objectiveStepFires = true := by
+      · have hgd : deferGate s = false := by
+          by_contra hne
+          rw [Bool.not_eq_false] at hne
+          simp [hne] at hc
+        have hlt : s.level < 50 := by
+          by_contra hne
+          simp [hne] at hc
+        have : (perceptionRefreshE s).objectiveStepFires = true := by
           unfold perceptionRefreshE
           rw [if_pos hc, if_pos hadq]
+          exact (hArms hlt hgd hadq).1
         rw [this] at hquietO; cases hquietO
       · have : (perceptionRefreshE s).gearReviewFires = true := by
           unfold perceptionRefreshE
