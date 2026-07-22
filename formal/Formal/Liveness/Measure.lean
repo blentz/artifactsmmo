@@ -406,9 +406,22 @@ structure State where
       by `CycleStepD.partialClear`; defaulted. -/
   sellDebt : Nat := 0
   /-- OPAQUE (E-tower, `docs/PLAN_c2_composed_liveness.md` C2a): production's
-      observed verdict that the CURRENT equipment beats the band's acquirable
-      witness target (`is_winnable(current gear, band target)`). Consumed only
-      by `CycleStepE`; defaulted. -/
+      observed verdict that the character's gear beats the band's acquirable
+      witness target — `is_winnable(state, band target)`.
+
+      CORRECTED 2026-07-22. This said "the CURRENT equipment", which named a
+      predicate production does not have. `is_winnable` → `predict_win` picks the
+      best ON-HAND loadout over inventory + equipped (`combat.py:152-156`), and
+      `project_loadout_stats` is a DELTA against `state.equipment`
+      (`projection.py:45-46`) because a live `WorldState` already carries worn
+      gear in its stat fields. A state that merely WEARS its loadout therefore
+      projects a zero gear contribution — `formal/diff/test_loadout_adequate_diff.py`
+      found exactly that, losing all 49 bands, before being rewritten to the
+      faithful construction. Read this as "holding the band's witness loadout",
+      which is what that differential now pins (49/49, and 49/49 flip lose→win on
+      the gear alone).
+
+      Consumed only by `CycleStepE`; defaulted. -/
   loadoutAdequate : Bool := false
   /-- OPAQUE (E-tower): recipe-closure steps remaining toward the band's
       acquirable-witness loadout (the A2 debt pattern at gear scale). Consumed
