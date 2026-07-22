@@ -259,7 +259,7 @@ Ordered by proof coverage — safest first, so the oracle is trusted before it i
 | Wave | Content | Risk | Notes |
 |---|---|---|---|
 | **0** | Parity oracle (§6). No production change. | — | ✅ **BUILT + green.** Must land and be green before Wave 2 |
-| **1** | **Delete dead walks.** `gating_skills` (`ai/tiers/skill_gates.py:87`) and `raw_material_units` (`ai/recipe_closure.py:239`) have **zero production call sites** | low | `raw_material_units` has a Lean diff + `mutate.py:1144`; remove those too, or keep the function solely as a proof artifact — decide in the plan, do not leave it ambiguous |
+| **1** | **Delete dead walks.** `gating_skills` and `raw_material_units` — **zero production call sites** | low | ✅ **DONE @e9cf0924.** `skill_gates.py` deleted WHOLE (all four symbols dead, not just the entry point) + LIV-SKILL-3, which proved a property of code the bot never ran. R1 resolved against both offered options — see §10 |
 | **2** | Build `RequirementGraph` + projections on top of the extracted core (§4.5). Nothing consumes it yet | low | Additive only; oracle stays green trivially |
 | **3** | Migrate `objective_needs` (one production caller, `strategy_driver.py:1304`, no Lean/mutation coupling) | low | First real consumer swap; validates the oracle |
 | **4** | Migrate the uniform easy sites: `gather_serves_closure` (5 boolean-filter sites) and `recipe_closure` non-audit callers (5 goal modules + `craft_ladder.py:50`) | low-med | All share one destructure shape; several already discard the resource set |
@@ -341,9 +341,26 @@ Gate discipline note: this project merges to `main` with no PR, so the gate must
 
 ## 10. Residuals
 
-**R1 — `raw_material_units`' fate is undecided.** Zero production callers, but it has a Lean
-diff and `mutate.py:1144`. Either delete all three together, or keep it as a proof-only
-artifact. §7 Wave 1 requires the plan to choose explicitly rather than drift.
+**R1 — ✅ RESOLVED in Wave 1 (@e9cf0924), and BOTH offered options were wrong.** They shared a
+stale premise: that the walk's proof coverage stood or fell with the function. It does not.
+`raw_material_units` was a thin wrapper over `_raw_units`, and **`_raw_units` is
+production-live** (`task_batch.craft_batch_size_pure` → `strategy_driver` /
+`actions.factory` / `intermediate_batch`). So "delete all three together" would have stripped
+proof coverage OFF live code, and "keep it as a proof-only artifact" would have left the
+differential verifying a shim one indirection from production — the exact
+proofs-over-unreachable-code failure this epic exists to undo.
+
+**Resolution: delete the wrapper, repoint the coverage ONTO the live primitive.** All Lean
+retained. The mutation anchor needed no re-anchoring — its text was always inside
+`_raw_units`' body; only its *label* named the wrapper (and the cited `mutate.py:1144` was
+itself stale, actually `:1173`). Unit + differential tests now call `_raw_units` in the live
+call shape. `Oracle.lean`'s emitted JSON key was renamed to `raw_units` for the same reason a
+stale citation misleads.
+
+**Generalisable lesson for Waves 2-9:** before deleting a walk, check whether it is a *wrapper*
+over an extracted-core primitive. The core primitives (`_raw_units`, `_closure_visited`,
+`_closure_demand`, `recipe_closure_pure`) are where the Lean actually bites; a public wrapper
+being dead says nothing about whether the thing underneath it is.
 
 **R2 — Graph build cost is unmeasured.** The `recipe_cost` precedent suggests it is fine, but
 the graph spans the full recipe table and no measurement exists. Wave 2 should record it.
