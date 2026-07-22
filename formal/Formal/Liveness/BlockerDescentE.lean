@@ -231,6 +231,39 @@ private theorem pressureDeltaD_adequate (k : MeansKind) (r st : State) :
     (pressureDeltaD k r st).loadoutAdequate = st.loadoutAdequate := by
   cases k <;> simp [pressureDeltaD, apply_ite]
 
+/-! ### `gearCycleProductive` preservation (increment 4).
+
+The productivity observation is carried by the state and touched by NOTHING in
+the cycle — every layer is a `{ s with ... }` update over other fields. These
+lemmas let the descent rows transport `hprodc` (stated about `s`) through the
+composed post-apply state that `gearProgress` actually sees. -/
+
+private theorem refreshE_productive (s : State) :
+    (perceptionRefreshE s).gearCycleProductive = s.gearCycleProductive := by
+  unfold perceptionRefreshE
+  split
+  · split <;> rfl
+  · rfl
+
+private theorem fightLoss_productive (k : MeansKind) (r st : State) :
+    (fightLoss k r st).gearCycleProductive = st.gearCycleProductive := by
+  unfold fightLoss
+  split
+  · split <;> rfl
+  · rfl
+
+private theorem partialClear_productive (k : MeansKind) (st : State) :
+    (partialClear k st).gearCycleProductive = st.gearCycleProductive := by
+  cases k <;> simp [partialClear, apply_ite]
+
+private theorem pressureDeltaD_productive (k : MeansKind) (r st : State) :
+    (pressureDeltaD k r st).gearCycleProductive = st.gearCycleProductive := by
+  cases k <;> simp [pressureDeltaD, apply_ite]
+
+private theorem apply_optimizeLoadout_productive (r : State) :
+    (applyActionKind .optimizeLoadout r).gearCycleProductive
+      = r.gearCycleProductive := rfl
+
 private theorem apply_fight_gearGap (r : State) :
     (applyActionKind .fight r).gearGap = r.gearGap := rfl
 
@@ -700,7 +733,8 @@ theorem descendsE_completeTask (s : State)
 
 /-! ## The gearReview row — three cases: open gap, gap exhausted, stale latch. -/
 
-theorem descendsE_gearReview (s : State)
+theorem descendsE_gearReview (s : State) (hlvl : s.level < 50)
+    (hGear : GearCycleMakesProgressAt s)
     (hk : productionLadder (perceptionRefreshE s) = some .gearReview) :
     eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
   have hfire := fires_of_ladder hk
@@ -710,6 +744,37 @@ theorem descendsE_gearReview (s : State)
       applyActionKind .optimizeLoadout (perceptionRefreshE s) := by
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
+  by_cases hprodc : s.gearCycleProductive = true
+  case neg =>
+    -- UNPRODUCTIVE cycle. `hGear` + `hlvl` force `defer ∨ adequate`, and
+    -- `perceptionRefreshE` is the IDENTITY in both — so the gear latch was
+    -- genuinely already set in `s` (not armed by this cycle's refresh), and the
+    -- optimize apply clears it. Slot `gearReviewFlag` pays.
+    have hprodf : s.gearCycleProductive = false := Bool.eq_false_iff.mpr hprodc
+    have hid : perceptionRefreshE s = s := by
+      by_cases hgate : deferGate s = true
+      · have hc : (decide (s.level < 50) && !(deferGate s)) = false := by
+          simp [hgate]
+        unfold perceptionRefreshE; rw [if_neg (by simp [hc])]
+      · have hgf : deferGate s = false := Bool.eq_false_iff.mpr hgate
+        by_cases hadq : s.loadoutAdequate = true
+        · have hc : (decide (s.level < 50) && !(deferGate s)) = true := by
+            simp [hlvl, hgf]
+          unfold perceptionRefreshE; rw [if_pos hc, if_pos hadq]
+        · exact absurd (hGear hlvl hgf (Bool.eq_false_iff.mpr hadq))
+            (by simp [hprodf])
+    have hlatch : s.gearReviewFires = true := by rw [hid] at hfire; exact hfire
+    apply eLt_of_gearReview_dec <;>
+      simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
+        applyActionKind, hlatch, hprodf, hid,
+        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
+      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
+      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
+      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
+      refreshE_gearGap, refreshE_adequate,
+      perceptionRefreshE_level, perceptionRefreshE_xp]
+  case pos =>
   by_cases hgap : s.gearGap = 0
   · by_cases hadq : s.loadoutAdequate = true
     · -- Stale latch: the refresh only arms when INADEQUATE, so the latch was
@@ -728,7 +793,7 @@ theorem descendsE_gearReview (s : State)
           exact hfire
       apply eLt_of_gearReview_dec <;>
         simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-          applyActionKind, hgap, hadq, hlatch,
+          applyActionKind, hgap, hadq, hlatch, hprodc,
           refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
@@ -740,7 +805,8 @@ theorem descendsE_gearReview (s : State)
       have hadq' : s.loadoutAdequate = false := Bool.eq_false_iff.mpr hadq
       apply eLt_of_inadequacy_dec <;>
         simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-          applyActionKind, hgap, hadq',
+          applyActionKind, hgap, hadq', hprodc, refreshE_productive, fightLoss_productive,
+          partialClear_productive, pressureDeltaD_productive, apply_optimizeLoadout_productive,
           refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
@@ -751,7 +817,8 @@ theorem descendsE_gearReview (s : State)
   · -- Open gap: one gear step closes — slot 2.
     apply eLt_of_gearGap_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-        applyActionKind, hgap,
+        applyActionKind, hgap, hprodc, refreshE_productive, fightLoss_productive,
+        partialClear_productive, pressureDeltaD_productive, apply_optimizeLoadout_productive,
         refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,

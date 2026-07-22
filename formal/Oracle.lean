@@ -2356,6 +2356,11 @@ def runCycleStepD (args : Array Json) : Json :=
 
 * `[38]` loadoutAdequate (Bool 0/1 — production `is_winnable(current gear,
          band target)` observation)
+* `[41]` gearCycleProductive (Bool 0/1 — the production observation that THIS
+                             `.gearReview` cycle advanced the build. ADDED
+                             2026-07-20 increment 4: `gearProgress` used to
+                             decrement unconditionally. See
+                             `GearCycleMakesProgressAt`.)
 * `[40]` objectiveStepIsFight (Bool 0/1 — the production observation that the
                               objective step is a FIGHT. ADDED 2026-07-20: the
                               E refresh used to FABRICATE this; now it READS it,
@@ -2394,7 +2399,7 @@ def runCycleStepE (args : Array Json) : Json :=
     itemsTaskDeferActive := b 34,
     overstockDebt := n 35, depositDebt := n 36, sellDebt := n 37,
     loadoutAdequate := b 38, gearGap := n 39,
-    objectiveStepIsFight := b 40 }
+    objectiveStepIsFight := b 40, gearCycleProductive := b 41 }
   let post := Formal.Liveness.CycleStepEC.cycleStepEC (n 33) s
   let selected : Json :=
     match Formal.Liveness.ProductionLadder.productionLadder

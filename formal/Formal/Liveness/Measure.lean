@@ -414,6 +414,17 @@ structure State where
       acquirable-witness loadout (the A2 debt pattern at gear scale). Consumed
       only by `CycleStepE`; defaulted. -/
   gearGap : Nat := 0
+  /-- OPAQUE (E-tower, increment 4): production's observation that THIS
+      `.gearReview` cycle actually advanced the build — an item acquired, a
+      material gathered, a component crafted.
+
+      Defaulted FALSE deliberately. `gearProgress` used to decrement `gearGap`
+      unconditionally, granting that every gear cycle is productive. The real
+      arbiter can spend a `.gearReview` cycle travelling, replanning, or losing
+      the call to an API failure, and then the cycle moves nothing. That is now
+      representable; `CycleStepE.GearCycleMakesProgressAt` is the named residual
+      ruling it out along a trajectory. -/
+  gearCycleProductive : Bool := false
   deriving Repr
 
 namespace State

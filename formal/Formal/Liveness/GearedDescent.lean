@@ -11,12 +11,13 @@ inadequate states route through gear-progress cycles whose finite discharge is
 grounded offline by the EMPTY acquirable frontier
 (`WitnessAcquirable.acquirableFrontier_empty` — post-P1 multi-drop closure,
 every band's winning loadout is provably obtainable); fights pay a worst-case
-hp loss with death→respawn; rollovers adversarially reset gear AND every chore
-latch/debt.
+hp loss FLOORED AT 1 (production never dies); rollovers adversarially reset gear
+AND every chore latch/debt.
 
-**CONDITIONAL on one NAMED residual: `AdequateArmsFightAt`, quantified along the
-trajectory.** Axioms: standard + `xpToNextLevel` (LIV-001), audited in
-`LivenessAudit.lean`.
+**CONDITIONAL on two NAMED residuals, each quantified along the trajectory:
+`AdequateArmsFightAt` (G1, the arming observation) and `GearCycleMakesProgressAt`
+(G2 rate, that a gear cycle advances the build).** Axioms: standard +
+`xpToNextLevel` (LIV-001), audited in `LivenessAudit.lean`.
 
 CORRECTED 2026-07-20 (adversarial review). This header previously read
 "HYPOTHESIS-FREE: no fairness, no quiescence, no spawn, no adequacy assumption".
@@ -26,10 +27,13 @@ cannot see them and the gate goes green. `perceptionRefreshE` overwrote the
 opaque production observation `objectiveStepFires` with `true`, which is the
 retired `hfightFires` fairness obligation wearing a different hat.
 
-Two grants remain definitional — G2 (`gearProgress` restores adequacy within
-`GEAR_CAP` cycles at zero cost) and G3 (`.fight` grants a constant `xp + 10` and
-cannot fail) — specified as increments 4-7 of
-`docs/superpowers/specs/2026-07-20-l50-honest-restatement.md`.
+ONE grant remains definitional — G3 (`.fight` grants a constant `xp + 10` and
+cannot fail), specified as increments 5-7 of
+`docs/superpowers/specs/2026-07-20-l50-honest-restatement.md`. It is IRREDUCIBLE:
+`PredictWin.lean` returns a Bool verdict over stat scalars with no xp output and
+no `State`, and proving a `FightSucceeds` residual would contradict production's
+own learned-loss veto (`combat.py:367-377`), which exists precisely because
+`predict_win` is sometimes empirically wrong.
 
 Increment 3 (2026-07-20) took the first real bite out of G2. `GEAR_CAP` was `8`
 and self-declared "provisional"; against this repository's own fixture it was
@@ -39,9 +43,11 @@ FALSE — 20 of the 49 `acquirableWitness` rows carry loadouts larger than 8, up
 IN-KERNEL. `WitnessAcquirable` was previously cited in this docstring while
 appearing in NO import and NO proof term — it is now genuinely imported and used.
 
-What is still granted in G2 is the RATE: that one `.gearReview` cycle
-accomplishes one acquisition step. `GEAR_CAP` bounds the STEPS, not the cycles
-those steps take.
+Increment 4 closed the rest of G2. `gearProgress` decremented `gearGap` on EVERY
+gear cycle, granting that each one advances the build; it now advances only on an
+observed-productive cycle, and `GearCycleMakesProgressAt` names what that assumes.
+`GEAR_CAP` bounds the STEPS (increment 3); the residual covers the CYCLES those
+steps take.
 
 Liveness namespace — Mathlib allowed. -/
 
@@ -114,7 +120,7 @@ theorem ladderE_some_below_fifty (s : State) (hArms : AdequateArmsFightAt s)
 
 /-- **Total per-cycle descent for the geared cycle.** -/
 theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt s)
-    (hlvl : s.level < 50) :
+    (hGear : GearCycleMakesProgressAt s) (hlvl : s.level < 50) :
     eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
   cases hk : productionLadder (perceptionRefreshE s) with
   | none => exact absurd hk (ladderE_some_below_fifty s hArms hlvl)
@@ -182,7 +188,7 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
     | sellRelief      => exact descendsE_sellRelief s hk
     | depositFull     => exact descendsE_depositFull s hk
     | discardHigh     => exact descendsE_discardHigh s hk
-    | gearReview      => exact descendsE_gearReview s hk
+    | gearReview      => exact descendsE_gearReview s hlvl hGear hk
     | craftPotions    => exact descendsE_craftPotions s hk
     | claimPending    => exact descendsE_claimPending s hk
     | completeTask    => exact descendsE_completeTask s hk
@@ -216,12 +222,13 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
 
     Non-vacuity: `adequateArmsFight_satisfiable_with_goal` below. -/
 theorem ai_reaches_fifty_geared (s : State)
-    (hArms : ∀ k, AdequateArmsFightAt (cycleStepEN k s)) :
+    (hArms : ∀ k, AdequateArmsFightAt (cycleStepEN k s))
+    (hGear : ∀ k, GearCycleMakesProgressAt (cycleStepEN k s)) :
     ∃ k, (cycleStepEN k s).level ≥ 50 :=
   exists_level_ge_of_edescent (fun k => cycleStepEN k s) (fun k hk => by
     show eMeasureLt (eMeasure (cycleStepEN (k + 1) s)) (eMeasure (cycleStepEN k s))
     rw [cycleStepEN_succ_outer k s]
-    exact cycleStepE_descends_below_fifty (cycleStepEN k s) (hArms k) hk)
+    exact cycleStepE_descends_below_fifty (cycleStepEN k s) (hArms k) (hGear k) hk)
 
 /-- **Non-vacuity check.** The residual and the goal hold TOGETHER — the
     degenerate `≥ 50` witness (residual vacuous at every iterate by level
@@ -235,8 +242,10 @@ theorem ai_reaches_fifty_geared (s : State)
     restatement forced it. -/
 theorem adequateArmsFight_satisfiable_with_goal (s : State) (h : s.level ≥ 50) :
     (∀ k, AdequateArmsFightAt (cycleStepEN k s))
+      ∧ (∀ k, GearCycleMakesProgressAt (cycleStepEN k s))
       ∧ ∃ k, (cycleStepEN k s).level ≥ 50 := by
-  refine ⟨fun k hk => absurd hk (by have := cycleStepEN_level_ge s k; omega), 0, ?_⟩
+  refine ⟨fun k hk => absurd hk (by have := cycleStepEN_level_ge s k; omega),
+          fun k hk => absurd hk (by have := cycleStepEN_level_ge s k; omega), 0, ?_⟩
   rw [cycleStepEN_zero]; exact h
 
 /-! ## `GEAR_CAP` grounding (increment 3 of the honest-restatement spec).

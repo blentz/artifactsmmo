@@ -3,7 +3,7 @@ cycle faithfully.
 
 The kernel already binds mirror = model (`cycleStepEC_eq`, an rfl-chain on
 `cycleStepDC`'s clone), so the residual risk is the ORACLE BOUNDARY: the
-41-slot vector decode (slots 38/39/40) and the E-layer semantics as seen
+42-slot vector decode (slots 38/39/40/41) and the E-layer semantics as seen
 through it. Each test drives the compiled oracle with hand-built states and
 pins the behavior the capstone's descent rows prove:
 
@@ -36,7 +36,7 @@ FIGHT_LOSS_BOUND = 270
 
 def _base_vector() -> list[int]:
     """All ladder guards quiet: full hp, empty chores, no task phase."""
-    v = [0] * 41
+    v = [0] * 42
     v[0] = 1000        # hp
     v[1] = 1000        # maxHp (full → hpCritical/restForCombat quiet)
     v[2] = 10          # level
@@ -56,6 +56,12 @@ def _base_vector() -> list[int]:
     # through past objectiveStep -- which is the behaviour the old grant hid.
     v[28] = 1          # objectiveStepFires
     v[40] = 1          # objectiveStepIsFight
+    # GEAR PRODUCTIVITY (slot 41). Supplied, not fabricated: since increment 4
+    # `gearProgress` only advances the build when production observed that this
+    # `.gearReview` cycle actually did something. A vector leaving it 0 models a
+    # cycle spent travelling or lost to an API failure -- and then the gap does
+    # NOT close, which is the livelock the old unconditional decrement hid.
+    v[41] = 1          # gearCycleProductive
     return v
 
 
@@ -179,3 +185,22 @@ def test_adequate_but_unarmed_does_not_fight() -> None:
     assert r["selected"] != "objectiveStep"
     assert r["xp"] == 50               # no fight ⇒ no xp credit
     assert r["hp"] == 1000             # no fight ⇒ no hp cost
+
+
+def test_unproductive_gear_cycle_does_not_close_the_gap() -> None:
+    """An unproductive `.gearReview` cycle moves nothing.
+
+    Before increment 4 `gearProgress` decremented `gearGap` on EVERY gear cycle,
+    granting that each one advances the build. The real arbiter can spend the
+    cycle travelling to a workshop, replanning, or absorbing an API failure.
+    That is now representable, and `GearCycleMakesProgressAt` is the named
+    residual that rules it out along a trajectory.
+    """
+    v = _base_vector()
+    v[38] = 0          # inadequate → the refresh arms the gear latch
+    v[39] = 3          # open gap
+    v[41] = 0          # but the cycle accomplished nothing
+    (r,) = _run([v])
+    assert r["selected"] == "gearReview"
+    assert r["gear_gap"] == 3            # unchanged: no progress
+    assert r["loadout_adequate"] is False

@@ -12,8 +12,9 @@ with the combat-outcome gaps closed:
    GEAR latch instead (`gearReviewFires` — the UpgradeEquipment band): the
    model stops crediting xp for fights the real bot could not win, the
    gap-1 fix the B1/B2 trace phases measured.
-2. **Gear progress** (`gearProgress`): a `.gearReview` cycle with
-   `gearGap > 0` strictly decrements the gap; at an exhausted gap the cycle
+2. **Gear progress** (`gearProgress`): a PRODUCTIVE `.gearReview` cycle with
+   `gearGap > 0` strictly decrements the gap (an unproductive one moves
+   nothing — see `GearCycleMakesProgressAt`); at an exhausted gap the cycle
    RESTORES adequacy (paid at the measure's `inadequacyFlag` slot) —
    the A2 debt pattern at gear scale, grounded offline by the EMPTY
    acquirable frontier (`WitnessAcquirable.acquirableFrontier_empty`: every
@@ -24,9 +25,11 @@ with the combat-outcome gaps closed:
    paid at the measure's slot 1. Non-rollover fights re-arm the chore
    latches as in the D-tower.
 4. **Fight hp-loss** (`fightLoss`): every fight dispatch costs
-   `FIGHT_LOSS_BOUND` hp (B1-measured worst case 270, death included:
-   at ≤ bound the character respawns at full hp). Raises only `hpDeficit` —
+   `FIGHT_LOSS_BOUND` hp, FLOORED AT 1 — production never dies and never
+   restores (`ai/actions/combat.py:120-122`). Raises only `hpDeficit` —
    dominated by the fight's slot-1/3 descent; the rest row heals as before.
+   (Until 2026-07-20 the below-bound case respawned at FULL hp, which made a
+   death descend the measure MORE than a survived fight.)
 
 Additive only — the D-tower and every existing theorem are untouched.
 Liveness namespace — Mathlib allowed. -/
@@ -116,12 +119,35 @@ def perceptionRefreshE (s : State) : State :=
     else { s with gearReviewFires := true }
   else s
 
-/-- Gear progress: a gear-review cycle with an open gap closes one step and
-    restores adequacy exactly at zero. -/
+/-- **RESIDUAL (G2, rate): a gear cycle advances the build, at one state.**
+
+    `GEAR_CAP` bounds the acquisition STEPS for a band's witness loadout — pinned
+    against the fixture by `GearedDescent.witness_loadout_le_gear_cap`
+    (increment 3). What remained granted is the RATE: that one `.gearReview`
+    cycle accomplishes one step.
+
+    Not derivable offline. The arbiter may select `.gearReview` and spend the
+    cycle travelling to a workshop, replanning, or absorbing an API failure.
+    `GearBuildTermination.grounded_builds_target` gives ∃-a-finite-build-sequence
+    over a `Graph`, but `State` carries only an opaque `Nat` here; bridging needs
+    the gear graph carried in the state, which is a larger change than this slot
+    warrants now that increment 3 has bounded it. -/
+def GearCycleMakesProgressAt (s : State) : Prop :=
+  s.level < 50 → deferGate s = false → s.loadoutAdequate = false →
+    s.gearCycleProductive = true
+
+/-- Gear progress: a PRODUCTIVE gear-review cycle with an open gap closes one
+    step and restores adequacy exactly at zero.
+
+    CORRECTED 2026-07-20 (increment 4). This decremented unconditionally,
+    granting that every `.gearReview` cycle is productive. An unproductive cycle
+    now moves nothing — the honest model of a wasted cycle, and exactly the
+    livelock `GearCycleMakesProgressAt` must rule out. -/
 def gearProgress (k : MeansKind) (st : State) : State :=
   match k with
   | .gearReview =>
-      if st.gearGap = 0 then { st with loadoutAdequate := true }
+      if !st.gearCycleProductive then st
+      else if st.gearGap = 0 then { st with loadoutAdequate := true }
       else { st with gearGap := st.gearGap - 1,
                      loadoutAdequate := decide (st.gearGap - 1 = 0) }
   | _ => st
@@ -200,11 +226,21 @@ theorem perceptionRefreshE_xp (s : State) :
 
 theorem gearProgress_level (k : MeansKind) (st : State) :
     (gearProgress k st).level = st.level := by
-  cases k <;> simp [gearProgress, apply_ite]
+  unfold gearProgress
+  split
+  · split
+    · rfl
+    · split <;> rfl
+  · rfl
 
 theorem gearProgress_xp (k : MeansKind) (st : State) :
     (gearProgress k st).xp = st.xp := by
-  cases k <;> simp [gearProgress, apply_ite]
+  unfold gearProgress
+  split
+  · split
+    · rfl
+    · split <;> rfl
+  · rfl
 
 theorem fightLoss_level (k : MeansKind) (r st : State) :
     (fightLoss k r st).level = st.level := by
