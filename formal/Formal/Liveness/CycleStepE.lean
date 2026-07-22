@@ -46,8 +46,15 @@ open Formal.Liveness.CycleStepD
     at the gearGap slot is dominated by the rollover's slot-1 descent). -/
 def GEAR_CAP : Nat := 8
 
-/-- Worst-case hp loss of one fight (B1 trace measurement: max observed 270,
-    a full-bar death — modelled as respawn to full). Lemma-agnostic. -/
+/-- Worst-case hp loss of one fight (B1 trace measurement: max observed 270).
+    Lemma-agnostic.
+
+    FAITHFULNESS NOTE (2026-07-20). This is a trace-measured worst case, NOT the
+    production planner's projection, which is `max(1, max_hp / 5)`
+    (`ai/actions/combat.py:121`). 270 is the larger loss for any `maxHp < 1350`,
+    so the model is PESSIMISTIC here relative to the bot's own projection — the
+    safe direction for a descent argument. The two are not the same quantity and
+    this docstring previously did not say so. -/
 def FIGHT_LOSS_BOUND : Nat := 270
 
 /-- Adequacy-gated arming: fight objective when adequate, gear latch when not;
@@ -70,11 +77,24 @@ def gearProgress (k : MeansKind) (st : State) : State :=
                      loadoutAdequate := decide (st.gearGap - 1 = 0) }
   | _ => st
 
-/-- Fight hp cost with death→respawn-at-full. -/
+/-- Fight hp cost, flooring at 1 hp.
+
+    CORRECTED 2026-07-20 (adversarial review). The below-bound case previously
+    read `hp := st.maxHp` — "death → respawn at full". That was unfaithful in the
+    direction that FLATTERS the proof: `hpDeficit = maxHp - hp` is EMeasure slot
+    18, so respawning made a death decrease the measure MORE than surviving a
+    fight did. The model priced dying better than winning, and a bot that died to
+    every monster still reached 50.
+
+    Production never dies and never restores: `FightAction.apply` computes
+    `new_hp = max(1, hp - estimated_hp_cost)` (`ai/actions/combat.py:120-122`).
+    The floor is now 1, mirroring that. Descent is unaffected — a fight descends
+    slot 1 (`levelDeficit`) or slot 4 (`xpDeficit`), both of which lex-dominate
+    slot 18 — so the correction costs only the flattering case. -/
 def fightLoss (k : MeansKind) (r st : State) : State :=
   if dispatchesFight k r then
     if FIGHT_LOSS_BOUND < st.hp then { st with hp := st.hp - FIGHT_LOSS_BOUND }
-    else { st with hp := st.maxHp }
+    else { st with hp := 1 }
   else st
 
 /-- Fight re-arm: rollover fights reset the gear fields (new band) on top of

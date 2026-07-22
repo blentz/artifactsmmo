@@ -100,15 +100,28 @@ def test_rollover_fight_rearms_gear() -> None:
     assert r["loadout_adequate"] is False
 
 
-def test_fight_death_respawns_full() -> None:
+def test_fight_below_bound_floors_at_one_hp() -> None:
+    """A fight that would take the character below 0 floors at 1 hp.
+
+    CORRECTED 2026-07-20 (was `test_fight_death_respawns_full`, asserting
+    `hp == 300`). The old assertion pinned an UNFAITHFUL model: `fightLoss`
+    treated the below-bound case as death → respawn-at-full. Because
+    `hpDeficit = maxHp - hp` is EMeasure slot 18, that made dying decrease the
+    measure MORE than surviving — the model priced death better than victory,
+    and a bot that died every fight still reached 50.
+
+    Production never dies and never restores: `FightAction.apply` computes
+    `new_hp = max(1, hp - estimated_hp_cost)` (`ai/actions/combat.py:120-122`).
+    This test now pins that floor.
+    """
     v = _base_vector()
-    v[0] = FIGHT_LOSS_BOUND          # hp == bound → death branch
+    v[0] = FIGHT_LOSS_BOUND          # hp == bound → below-bound branch
     v[1] = 300                       # maxHp low enough that hp/maxHp ≥ 3/4
     v[38] = 1
     (r,) = _run([v])
-    # hp 270 of 300 = 90% → hpCritical quiet; fight then dies → respawn full.
+    # hp 270 of 300 = 90% → hpCritical quiet; the fight then floors hp at 1.
     assert r["selected"] == "objectiveStep"
-    assert r["hp"] == 300
+    assert r["hp"] == 1
 
 
 def test_defer_window_outranks_gear_arming() -> None:
