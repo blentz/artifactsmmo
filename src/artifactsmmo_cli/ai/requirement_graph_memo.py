@@ -27,11 +27,14 @@ contract for that case.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from artifactsmmo_cli.ai.requirement_graph import (
     RequirementGraph,
     _HasRequirementData,
     build_requirement_graph,
 )
+from artifactsmmo_cli.ai.requirement_projections import demand_set
 
 
 class RequirementGraphMemo:
@@ -41,6 +44,7 @@ class RequirementGraphMemo:
         self._game_data = game_data
         self._graph: RequirementGraph | None = None
         self._fingerprint: tuple[int, int, int, int] | None = None
+        self._demand_cache: dict[str, Mapping[str, int]] = {}
 
     def _current_fingerprint(self) -> tuple[int, int, int, int]:
         """Sizes of the source tables the graph is derived from."""
@@ -62,9 +66,23 @@ class RequirementGraphMemo:
         if self._graph is None or self._fingerprint != fingerprint:
             self._graph = build_requirement_graph(self._game_data)
             self._fingerprint = fingerprint
+            self._demand_cache = {}   # graph rebuilt -> per-code demands stale
         return self._graph
+
+    def demand_for(self, code: str) -> Mapping[str, int]:
+        """Memoized demand-weighted requirement multiset (item -> quantity) for
+        a single root item, `demand_set(graph, [code]).quantities`. The synergy
+        B-assembly (spec 2026-07-19 §3.6) computes ~N of these per cycle; caching
+        per code honours the feather_coat CPU precedent (residual R3). The cache
+        is invalidated with the graph (a rebuilt graph drops it), so it never
+        serves a demand from a stale graph."""
+        self.graph()   # revalidates the cache against the current fingerprint
+        if code not in self._demand_cache:
+            self._demand_cache[code] = demand_set(self.graph(), [code]).quantities
+        return self._demand_cache[code]
 
     def clear(self) -> None:
         """Drop the cache. Safe to call before any `graph()` call."""
         self._graph = None
         self._fingerprint = None
+        self._demand_cache = {}

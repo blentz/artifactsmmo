@@ -415,6 +415,13 @@ class GamePlayer:
         self._last_ctx = ctx
         servable_pred = self._step_servable(state, game_data, ctx)
         self._notify_planning(True)
+        # The committed root of the PRIOR cycle (this cycle's `_last_decision` is
+        # still last cycle's) feeds synergy B-assembly as a live member — usually
+        # also a sibling candidate, so its demand counts twice, biasing toward
+        # finishing what is started (synergy spec §3.6). None on the first cycle
+        # or whenever the committed root is not an item goal (e.g. the xp trunk).
+        prior_root = self._last_decision.chosen_root if self._last_decision else None
+        committed_root_code = prior_root.code if isinstance(prior_root, ObtainItem) else None
         decision = self._strategy.decide(
             state, game_data,
             step_servable=servable_pred,
@@ -422,6 +429,8 @@ class GamePlayer:
             ctx=ctx,
             focus=self._gear_focus,
             seats=self._interleave_seats,
+            committed_root_code=committed_root_code,
+            enable_synergy=True,
         )
         # Focus-ledger bump lives at the `_plan_or_reuse` seam (once per
         # run-loop iteration, fresh-decide OR cache-hit), NOT here — bumping

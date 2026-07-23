@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharL
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     FOCUS_FLAT,
+    _NO_SYNERGY,
     Branch,
     GearCandidate,
     branch_pick_pure,
@@ -35,6 +36,7 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     potion_type_weight,
 )
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
+from artifactsmmo_cli.ai.tiers.synergy_core import synergy_pure
 from artifactsmmo_cli.ai.weapon_winnability import marginal_weapon_winnability
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -207,6 +209,49 @@ def _servable_promotion(
     return promoted_root, promoted_step, demoted_roots, demoted_steps
 
 
+def _synergy_map(candidates: list[GearCandidate],
+                 committed_root_code: str | None,
+                 state: WorldState,
+                 game_data: GameData) -> Mapping[tuple[str, str], Fraction]:
+    """The per-candidate synergy multiplier (spec 2026-07-19 §3.6): the
+    demand-weighted fraction of a candidate's own requirement multiset that
+    OTHER live roots also demand (leave-one-out), mapped through `synergy_pure`
+    into [S_MIN, 1]. Keyed `(slot, code)` like the focus ledger.
+
+    Two-pass over the item namespace: build each member's demand once, SUM into a
+    multiset `total`, then score each candidate `shared / own` where an item is
+    shared iff some OTHER member still demands it after the candidate's own copy
+    is removed (`total[i] - own[i] > 0`) — the leave-one-out subtraction. Members
+    are the sibling candidates, the committed root, and the current items-task; a
+    monsters-task carries no item requirement and is omitted (its char_xp / skill
+    overlap is a later wave). The committed root is usually ALSO a sibling
+    candidate, so its demand enters `total` twice — deliberate: it biases toward
+    finishing what is started (§3.6), and a candidate that IS the committed root
+    overlaps itself through that second copy. O(N) demand walks (memoized on the
+    graph), not O(N^2)."""
+    if not candidates:
+        return _NO_SYNERGY
+    memo = game_data.requirement_graph
+    own: dict[tuple[str, str], Mapping[str, int]] = {
+        (c.slot, c.code): memo.demand_for(c.code) for c in candidates}
+    members: list[Mapping[str, int]] = list(own.values())
+    if committed_root_code is not None:
+        members.append(memo.demand_for(committed_root_code))
+    if state.task_code is not None and state.task_type != "monsters":
+        members.append(memo.demand_for(state.task_code))
+    total: dict[str, int] = {}
+    for demand in members:
+        for item, qty in demand.items():
+            total[item] = total.get(item, 0) + qty
+    out: dict[tuple[str, str], Fraction] = {}
+    for key, demand in own.items():
+        own_total = sum(demand.values())
+        shared = sum(qty for item, qty in demand.items()
+                     if total[item] - qty > 0)
+        out[key] = synergy_pure(shared, own_total)
+    return out
+
+
 def decide_tree(state: WorldState, game_data: GameData,
                 objective: CharacterObjective,
                 band_adequate: bool = False,
@@ -214,6 +259,8 @@ def decide_tree(state: WorldState, game_data: GameData,
                 ctx: SelectionContext = NO_PROFILE_CONTEXT,
                 focus: Mapping[tuple[str, str], int] = _NO_FOCUS,
                 seats: Mapping[str, int] = _NO_SEATS,
+                committed_root_code: str | None = None,
+                enable_synergy: bool = False,
                 ) -> "strategy.StrategyDecision":
     """The tree assembly: trunk milestone, gear/xp branch pivot, and the
     chosen root/step — composing the Task-1 pure cores exactly per the
@@ -256,8 +303,16 @@ def decide_tree(state: WorldState, game_data: GameData,
     gear_target_exists = candidates != []
     branch = branch_pick_pure(band_adequate, gear_target_exists)
 
-    ordered = focus_aging_order(candidates, focus, seats)
-    pick = focus_aging_pick(candidates, focus, seats) if candidates else None
+    # Synergy weighting (spec 2026-07-19 §3): the third selection factor after
+    # magnitude (gain) and staleness (falloff). Computed once here and shared by
+    # every candidate; `enable_synergy` is the caller's opt-in (the player wires
+    # it) so every unit caller stays byte-identical on the inert `_NO_SYNERGY`
+    # default — the §3.8 kill switch.
+    synergy = (_synergy_map(candidates, committed_root_code, state, game_data)
+               if enable_synergy else _NO_SYNERGY)
+
+    ordered = focus_aging_order(candidates, focus, seats, synergy)
+    pick = focus_aging_pick(candidates, focus, seats, synergy) if candidates else None
     if candidates:
         # Drift-risk hardening: the display order's element 0 must always
         # agree with the aging pick — focus_aging_order is built FROM
@@ -279,8 +334,14 @@ def decide_tree(state: WorldState, game_data: GameData,
     # craft, so no focus reset) can no longer make the player consume a seat on
     # a cycle that actually took the fast path. `all(...)` is over the non-empty
     # candidate list whenever the branch is GEAR (gear_target_exists holds).
-    aged_pick = branch is Branch.GEAR and not all(
-        focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)
+    # The synergy clause mirrors `focus_aging_pick`'s widened fast-path guard: a
+    # pick steered by synergy (weights differ with nothing stale) IS an aged
+    # decision, so the player bumps a seat for it — otherwise the interleave
+    # schedule and the seat ledger would disagree.
+    aged_pick = branch is Branch.GEAR and not (
+        all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)
+        and all(synergy.get((c.slot, c.code), Fraction(1)) == Fraction(1)
+                for c in candidates))
 
     fallback_roots: list[MetaGoal]
     fallback_steps: list[MetaGoal]

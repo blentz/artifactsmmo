@@ -147,6 +147,7 @@ GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxono
 BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selection.py"
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
+PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
 INVENTORY_ROOM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_room.py"
@@ -2770,6 +2771,36 @@ SYNERGY_CORE_MUTATIONS = [
     ("synergy: alignment sign flipped (overlap pushes below floor)",
      "    return S_MIN + (Fraction(1) - S_MIN) * Fraction(shared, total)",
      "    return S_MIN - (Fraction(1) - S_MIN) * Fraction(shared, total)"),
+]
+
+# _synergy_map (progression_tree.py) — the impure B-assembly (spec §3.6).
+# Unit-killed by tests/test_ai/test_synergy_assembly.py.
+SYNERGY_ASSEMBLY_MUTATIONS = [
+    # Leave-one-out dropped: a candidate overlaps ITSELF (total[i] still counts
+    # its own copy), so every candidate scores 1 — a constant, i.e. inert (§3.3).
+    ("synergy assembly: leave-one-out subtraction dropped",
+     "                     if total[item] - qty > 0)",
+     "                     if total[item] > 0)"),
+    # Union overwrites instead of summing: the committed-root second copy no
+    # longer accumulates, killing the deliberate double-count (§3.6).
+    ("synergy assembly: demand union overwrites instead of summing",
+     "            total[item] = total.get(item, 0) + qty",
+     "            total[item] = qty"),
+    # Committed root dropped as a member: no double-count, no bias toward
+    # finishing what is started.
+    ("synergy assembly: committed root not a member",
+     "    if committed_root_code is not None:",
+     "    if False:"),
+    # Task-type guard flipped: an items/crafting task stops contributing to B
+    # (task/gear convergence lost) and a monsters task feeds a non-item code in.
+    ("synergy assembly: items-task guard flipped to monsters",
+     '    if state.task_code is not None and state.task_type != "monsters":',
+     '    if state.task_code is not None and state.task_type == "monsters":'),
+    # synergy_pure args swapped: own_total >= shared, so this asserts (shared >
+    # total is impossible) — the assembly bug surfaces loudly rather than lying.
+    ("synergy assembly: synergy_pure args swapped",
+     "        out[key] = synergy_pure(shared, own_total)",
+     "        out[key] = synergy_pure(own_total, shared)"),
 ]
 
 # equipment_profile.profile_for selector (2026-07-08; utility axis retired in P3b):
@@ -5632,6 +5663,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_progression_tree_core.py", survivors)
     run_group(SYNERGY_CORE_SRC, SYNERGY_CORE_MUTATIONS,
               "tests/test_ai/test_synergy_core.py", survivors)
+    run_group(PROGRESSION_TREE_IMPURE_SRC, SYNERGY_ASSEMBLY_MUTATIONS,
+              "tests/test_ai/test_synergy_assembly.py", survivors)
     run_group(EQUIPMENT_PROFILE_SRC, EQUIPMENT_PROFILE_MUTATIONS,
               "formal/diff/test_equipment_profile_diff.py", survivors)
 def _run_all_groups() -> int:

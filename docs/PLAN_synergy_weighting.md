@@ -70,18 +70,25 @@ falloff-parity, which the spec itself treats as the baseline for `Fraction` curv
 
 **Split into two landable sub-waves (spec §3.8: "ship `_NO_SYNERGY` wired and prove the plumbing inert first, before real values available"):**
 
-### Wave 3a — plumbing, provably INERT (no behavior change)
-- `_NO_SYNERGY` sentinel + `_scaled_weights(..., synergy=_NO_SYNERGY)` third factor + thread through `focus_aging_pick`/`focus_aging_order`/`decide_tree`, all DEFAULTED so every current caller is unchanged.
-- FAST-PATH TRAP fix (`focus_aging_pick` guard → "nothing stale AND no synergy signal"). With `_NO_SYNERGY` the added clause is always "no signal", so still inert.
-- Lean `ProgressionTree.lean` lockstep with widened signatures only.
-- Tests: `test_no_synergy_map_is_inert` (byte-identical to pre-3a), `test_synergy_absent_from_repr`, `test_fast_path_respects_synergy` (synthetic synergy map, not yet from B).
-- Ships with synergy empty → zero production change, plumbing proven.
+### Wave 3a — plumbing, provably INERT ✅ SHIPPED @025f04ca
+- ✅ `_NO_SYNERGY` sentinel (in `progression_tree_core.py`) + `_scaled_weights`/`focus_aging_pick`/`focus_aging_order` gain a DEFAULTED `synergy` param (third factor, keyed `(slot,code)`). Empty default = byte-identical. `decide_tree`/`player.py` UNTOUCHED — fully inert.
+- ✅ FAST-PATH TRAP fix: guard → "nothing stale AND no synergy signal".
+- ✅ Lean lockstep: `scaledWeights`/`focusAgingPick` gain defaulted synergy assoc-list (`synergyOf`, default `[]`→1); `focusAgingPick_unaged_eq_argmax` holds.
+- ✅ 4 tests + 2 new mutants (fast-path-ignores-synergy trap, drop-synergy-factor) + 2 refreshed anchors. Gate green: lake build, anchors 597, mutation 14/14, suite 100%.
+- **Note:** `decide_tree` NOT touched in 3a (cleaner inert proof). 3b wires it.
 
-### Wave 3b — real B-assembly, ACTIVATES synergy
-- Two-pass leave-one-out B-assembly in `decide_tree` (§3.6), memoized (R3).
-- Generalize `means_serves` → `synergy(...) > S_MIN`.
-- Tests: `test_committed_root_double_counts`, `test_leave_one_out_not_degenerate`, `test_currency_root_suppressed`, `test_task_skill_convergence`.
-- **Runtime activation**: must fire on live `plan <char>`.
+### Wave 3b — real B-assembly, ACTIVATES synergy (item namespace)
+- ✅ `_synergy_map` two-pass leave-one-out B-assembly in `decide_tree` (§3.6, item namespace). Members = sibling candidates + committed root + items-task (monsters-task omitted — enriched namespace is 3c). Committed-root double-count deliberate.
+- ✅ Memoized `demand_for(code)` on the graph memo (R3), cleared on graph rebuild.
+- ✅ Threaded `committed_root_code` + `enable_synergy` opt-in through `strategy.decide` → `decide_tree`; player wires `enable_synergy=True`. Every non-opt-in caller stays inert (kill switch, §3.8).
+- ✅ `decide_tree.aged_pick` recompute widened to include the synergy signal (seat-ledger consistency).
+- ✅ Tests: `test_synergy_assembly.py` (currency_root_suppressed, committed_root_double_counts, leave_one_out_not_degenerate, items-task-member, empty→_NO_SYNERGY, **fires-on-real-graph**) + 5 mutants. 149 scenario tests + 324 decide-path tests green with synergy active.
+- **DEFERRED to 3c**: `means_serves` generalization, `task_skill_convergence`, level-up (all need enriched char_xp/skill_xp namespace — item-only would regress the task gate).
+
+### Wave 3c — enriched namespace (char_xp / skill_xp / drops)
+- Extend the requirement multiset beyond items: trunk `ReachCharLevel`→char_xp token; monsters-task→char_xp + drop overlap; craft-skill gates→skill_xp tokens.
+- Generalize `means_serves`→`synergy(...) > S_MIN`.
+- Tests: `test_task_skill_convergence`, level-up preference.
 
 ---
 
