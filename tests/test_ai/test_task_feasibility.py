@@ -81,3 +81,49 @@ def test_items_task_gated_by_recursive_ingredient():
                        skills={"weaponcrafting": 5, "mining": 1})
     assert task_requirement(state, gd) == SkillRequirement(
         skill="mining", required_level=8, current_level=1)
+
+
+def test_d4_tie_break_is_order_independent():
+    """D4 discharge: two SIBLING ingredients gating different skills at the same
+    required_level must resolve to the SAME skill regardless of recipe dict
+    order. Old code used strict `>` and returned whichever was seen first —
+    dict-order-dependent, and that skill drives the ReachSkillGoal grind target.
+    """
+    def gd(order):
+        g = GameData()
+        ingredients = {"forge_a": 1, "forge_b": 1} if order == "AB" \
+            else {"forge_b": 1, "forge_a": 1}
+        g._crafting_recipes = {"widget": ingredients,
+                               "forge_a": {"ore": 1}, "forge_b": {"ore": 1}}
+        g._item_stats = {
+            "forge_a": ItemStats(code="forge_a", level=1, type_="resource",
+                                 crafting_skill="skill_a", crafting_level=20),
+            "forge_b": ItemStats(code="forge_b", level=1, type_="resource",
+                                 crafting_skill="skill_b", crafting_level=20),
+        }
+        return g
+    state = make_state(task_code="widget", task_type="items", task_total=1, skills={})
+    ab = task_requirement(state, gd("AB"))
+    ba = task_requirement(state, gd("BA"))
+    assert ab == ba
+    assert ab is not None and ab.required_level == 20
+
+
+def test_tie_prefers_the_outermost_gate():
+    """On a tie, the OUTERMOST gate wins (semantic, not name-based): the task's
+    own skill is reported before a deeper ingredient's, matching the old
+    implicit behaviour (own gap set first, a tied deeper gap never replaced it).
+    """
+    gd = GameData()
+    gd._crafting_recipes = {"amulet": {"bead": 1}, "bead": {"ore": 1}}
+    gd._item_stats = {
+        # root 'amulet' gates zzz_craft@20; deep 'bead' gates aaa_craft@20 (tie).
+        "amulet": ItemStats(code="amulet", level=1, type_="accessory",
+                            crafting_skill="zzz_craft", crafting_level=20),
+        "bead": ItemStats(code="bead", level=1, type_="resource",
+                          crafting_skill="aaa_craft", crafting_level=20),
+    }
+    state = make_state(task_code="amulet", task_type="items", task_total=1, skills={})
+    req = task_requirement(state, gd)
+    # Depth wins over the alphabetically-earlier deep skill: the OUTERMOST gate.
+    assert req == SkillRequirement(skill="zzz_craft", required_level=20, current_level=0)

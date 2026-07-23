@@ -1208,18 +1208,21 @@ RECIPE_CLOSURE_YIELD_MUTATIONS = [
 
 # task_feasibility mutations -- old strings matched to current task_feasibility.py text.
 TASK_FEASIBILITY_MUTATIONS = [
-    # worst -> min instead of max: pick the SMALLEST gap rather than the highest
-    # required_level (flip the comparison so a smaller sub replaces worst).
+    # worst -> min instead of max: pick the SMALLEST gap rather than the worst
+    # (flip the total-order comparison so a lesser sub replaces worst). Wave 7
+    # made the tie-break deterministic via `_gap_rank` and moved the recursion to
+    # `_worst_gap`; required_level is still the primary key, so this still flips
+    # max->min on the reported level.
     ("task_feasibility: worst max -> min (> becomes <)",
-     "        if sub is not None and (worst is None or sub.required_level > worst.required_level):",
-     "        if sub is not None and (worst is None or sub.required_level < worst.required_level):"),
+     "        if sub is not None and (worst is None or _gap_rank(sub) > _gap_rank(worst)):",
+     "        if sub is not None and (worst is None or _gap_rank(sub) < _gap_rank(worst)):"),
     # drop the closure recursion: only consider the FIRST ingredient, missing the
     # rest of the craft closure (incomplete worst gap).
     ("task_feasibility: closure recurse first ingredient only",
      "    for ingredient in recipe:\n"
-     "        sub = _item_skill_gap(ingredient, state, game_data, seen)",
+     "        sub = _worst_gap(ingredient, state, game_data, seen, depth + 1)",
      "    for ingredient in list(recipe)[:1]:\n"
-     "        sub = _item_skill_gap(ingredient, state, game_data, seen)"),
+     "        sub = _worst_gap(ingredient, state, game_data, seen, depth + 1)"),
     # monster margin off-by-one: > MARGIN becomes >= MARGIN, so a monster EXACTLY
     # at char_level + 2 (the boundary) would wrongly gate.
     ("task_feasibility: monster margin off-by-one (> -> >=)",
