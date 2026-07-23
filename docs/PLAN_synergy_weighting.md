@@ -68,6 +68,25 @@ falloff-parity, which the spec itself treats as the baseline for `Fraction` curv
 
 ## Wave 3 — Tree call site
 
+**Split into two landable sub-waves (spec §3.8: "ship `_NO_SYNERGY` wired and prove the plumbing inert first, before real values available"):**
+
+### Wave 3a — plumbing, provably INERT (no behavior change)
+- `_NO_SYNERGY` sentinel + `_scaled_weights(..., synergy=_NO_SYNERGY)` third factor + thread through `focus_aging_pick`/`focus_aging_order`/`decide_tree`, all DEFAULTED so every current caller is unchanged.
+- FAST-PATH TRAP fix (`focus_aging_pick` guard → "nothing stale AND no synergy signal"). With `_NO_SYNERGY` the added clause is always "no signal", so still inert.
+- Lean `ProgressionTree.lean` lockstep with widened signatures only.
+- Tests: `test_no_synergy_map_is_inert` (byte-identical to pre-3a), `test_synergy_absent_from_repr`, `test_fast_path_respects_synergy` (synthetic synergy map, not yet from B).
+- Ships with synergy empty → zero production change, plumbing proven.
+
+### Wave 3b — real B-assembly, ACTIVATES synergy
+- Two-pass leave-one-out B-assembly in `decide_tree` (§3.6), memoized (R3).
+- Generalize `means_serves` → `synergy(...) > S_MIN`.
+- Tests: `test_committed_root_double_counts`, `test_leave_one_out_not_degenerate`, `test_currency_root_suppressed`, `test_task_skill_convergence`.
+- **Runtime activation**: must fire on live `plan <char>`.
+
+---
+
+### Wave 3 detail (reference)
+
 - `_NO_SYNERGY: Mapping[tuple[str,str], Fraction] = MappingProxyType({})` (mirror `_NO_FOCUS`/`_NO_SEATS`); missing entry reads as `Fraction(1)`.
 - `_scaled_weights(candidates, focus, synergy=_NO_SYNERGY)` — multiply the third factor in, keyed `(slot, code)` (same as `_gear_focus`).
 - B-assembly **two-pass** in `decide_tree` (§3.6): build N demand sets once → multiset union → leave-one-out by multiset subtraction. Members: trunk `ReachCharLevel` (char_xp) + sibling candidates + committed root + current task. Committed root double-counts **deliberately** (pin with `test_committed_root_double_counts`).

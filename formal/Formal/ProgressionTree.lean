@@ -582,25 +582,36 @@ there is one gear candidate per slot). -/
 def focusLevelOf (focus : List (String × Nat)) (c : GearCand) : Nat :=
   lookupFocus focus c.slot
 
-/-- Per-candidate scaled selection weight `gain * falloff(focus level)`, keyed
-by slot. Mirrors Python `_scaled_weights`. -/
-def scaledWeights (cs : List GearCand) (focus : List (String × Nat)) :
-    List (String × Rat) :=
-  cs.map (fun c => (c.slot, c.gain * falloff (focusLevelOf focus c)))
+/-- The synergy multiplier attributed to a candidate, defaulting to `1` (no
+alignment signal — Python `synergy.get(key, Fraction(1))`, the §3.4 degenerate).
+Keyed by the candidate's unique slot, like `focusLevelOf`. -/
+def synergyOf (synergy : List (String × Rat)) (c : GearCand) : Rat :=
+  match synergy.find? (fun p => p.1 = c.slot) with
+  | some p => p.2
+  | none => 1
+
+/-- Per-candidate scaled selection weight `gain * falloff(focus level) * synergy`
+— magnitude * staleness * purity — keyed by slot. Mirrors Python
+`_scaled_weights`. `synergy` defaults to the empty assoc-list (`synergyOf = 1`),
+so the pre-synergy weight is recovered exactly. -/
+def scaledWeights (cs : List GearCand) (focus : List (String × Nat))
+    (synergy : List (String × Rat) := []) : List (String × Rat) :=
+  cs.map (fun c => (c.slot, c.gain * falloff (focusLevelOf focus c) * synergyOf synergy c))
 
 /-- The gear root to pursue this cycle, with anti-starvation aging. While every
 candidate is still in its flat farm window the result is bit-identical to the
 proven `gearTargetPick` argmax; once any candidate has aged, the pick is drawn
 by the deterministic weighted interleave. Mirrors Python `focus_aging_pick`. -/
 def focusAgingPick (cs : List GearCand) (focus : List (String × Nat))
-    (cycle : Nat) : Option GearCand :=
+    (cycle : Nat) (synergy : List (String × Rat) := []) : Option GearCand :=
   match cs with
   | [] => none
   | _ =>
-    if cs.all (fun c => focusLevelOf focus c ≤ focusFlat) then
+    if cs.all (fun c => focusLevelOf focus c ≤ focusFlat)
+        && cs.all (fun c => synergyOf synergy c == 1) then
       gearTargetPick cs
     else
-      match interleaveDue (scaledWeights cs focus) cycle with
+      match interleaveDue (scaledWeights cs focus synergy) cycle with
       | none => none
       | some slot => cs.find? (fun c => c.slot = slot)
 
@@ -618,7 +629,13 @@ theorem focusAgingPick_unaged_eq_argmax
       rw [List.all_eq_true]
       intro c hc
       exact decide_eq_true (h c hc)
-    simp only [focusAgingPick, hall, if_true]
+    -- with the default empty synergy, every candidate's multiplier is 1 (no
+    -- signal), so the synergy clause of the guard is vacuously satisfied.
+    have hsyn : (x :: t).all (fun c => synergyOf [] c == 1) = true := by
+      rw [List.all_eq_true]
+      intro c _
+      simp [synergyOf]
+    simp only [focusAgingPick, hall, hsyn, Bool.and_self, if_true]
 
 /-! ### No-starvation (bounded reachability) — DISCHARGED in the liveness tier
 

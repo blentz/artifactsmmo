@@ -2718,14 +2718,26 @@ PROGRESSION_TREE_MUTATIONS = [
      "    return min(\n        weighted,"),
     # focus_aging_pick: never take the bit-identical argmax fast-path.
     ("aging pick: never take the argmax fast-path",
-     "    if all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates):\n        return gear_target_pick(candidates)",
+     "    if (all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)\n            and all(synergy.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)):\n        return gear_target_pick(candidates)",
      "    if False:\n        return gear_target_pick(candidates)"),
+    # focus_aging_pick: the FAST-PATH TRAP (spec Phase 3). Drop the synergy clause
+    # from the guard, so the argmax fast-path is taken whenever nothing is stale
+    # even if a synergy signal should have steered the pick — synergy goes silently
+    # inert for the first FOCUS_FLAT cycles of every root.
+    ("aging pick: fast-path ignores synergy signal (the Phase-3 trap)",
+     "    if (all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)\n            and all(synergy.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)):\n        return gear_target_pick(candidates)",
+     "    if all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates):\n        return gear_target_pick(candidates)"),
     # _scaled_weights: key the returned weight by code instead of slot, so two
     # same-code candidates in different slots (e.g. a ring in ring1/ring2)
     # collapse into one interleave entry.
     ("scaled weights: key by code instead of slot (collapses dual-slot candidates)",
-     "    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0)))\n            for c in candidates]",
-     "    return [(c.code, c.gain * falloff(focus.get((c.slot, c.code), 0)))\n            for c in candidates]"),
+     "    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0))\n             * synergy.get((c.slot, c.code), Fraction(1)))\n            for c in candidates]",
+     "    return [(c.code, c.gain * falloff(focus.get((c.slot, c.code), 0))\n             * synergy.get((c.slot, c.code), Fraction(1)))\n            for c in candidates]"),
+    # _scaled_weights: drop the synergy factor, so alignment stops modulating the
+    # weight and a zero-overlap currency root is no longer suppressed.
+    ("scaled weights: drop the synergy factor",
+     "    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0))\n             * synergy.get((c.slot, c.code), Fraction(1)))\n            for c in candidates]",
+     "    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0)))\n            for c in candidates]"),
 ]
 
 # synergy_core.synergy_pure — the purity factor of weight = gain*falloff*synergy

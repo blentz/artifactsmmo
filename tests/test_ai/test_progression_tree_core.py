@@ -3,6 +3,7 @@
 Mirrored by Formal/ProgressionTree.lean; the PROGRESSION_TREE_MUTATIONS
 group binds these tests to the source."""
 
+from dataclasses import fields
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
@@ -12,6 +13,7 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     POTION_TYPE_WEIGHTS,
     Branch,
     GearCandidate,
+    _NO_SYNERGY,
     _scaled_weights,
     branch_pick_pure,
     dhondt_step,
@@ -23,6 +25,7 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     milestone_pure,
     potion_type_weight,
 )
+from artifactsmmo_cli.ai.tiers.synergy_core import S_MIN
 
 
 class TestMilestone:
@@ -264,3 +267,64 @@ def test_aging_order_is_permutation_of_input():
 def test_aging_pick_empty_candidates_is_none():
     assert focus_aging_pick([], {}, {}) is None
     assert focus_aging_order([], {}, {}) == []
+
+
+# --- Wave 3a: synergy plumbing (spec 2026-07-19 §3, Phase 3) ---
+# weight = gain * falloff(focus) * synergy. Wave 3a wires the third factor with
+# the empty _NO_SYNERGY default so the whole tree is byte-identical until Wave 3b
+# supplies real values. These tests pin (a) that inertness and (b) the FAST-PATH
+# TRAP fix: the argmax short-circuit must respect a synergy signal even when
+# nothing is stale.
+
+
+def test_no_synergy_map_is_inert():
+    """With _NO_SYNERGY (the default), the weight is exactly the pre-synergy
+    `gain * falloff(focus)` — the third factor collapses to Fraction(1). Any
+    drift here means the plumbing is not inert."""
+    cands = [_gc("helmet_slot", "wolf_ears", 18100),
+             _gc("ring2_slot", "iron_ring", 2000)]
+    focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT + FOCUS_SPAN}  # decayed
+    expected = [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0)))
+                for c in cands]
+    assert _scaled_weights(cands, focus, _NO_SYNERGY) == expected
+    assert _scaled_weights(cands, focus) == expected                  # default
+    # order/pick unchanged too
+    seats: dict[str, int] = {}
+    assert (focus_aging_order(cands, focus, seats, _NO_SYNERGY)
+            == focus_aging_order(cands, focus, seats))
+
+
+def test_synergy_scales_the_weight():
+    """A synergy multiplier < 1 suppresses a candidate's weight proportionally
+    (purity factor). `synergy_pure`'s floor S_MIN gives a 3x suppression."""
+    cands = [_gc("helmet_slot", "big", 9)]
+    synergy = {("helmet_slot", "big"): S_MIN}
+    assert _scaled_weights(cands, {}, synergy) == [("helmet_slot", 9 * S_MIN)]
+
+
+def test_fast_path_respects_synergy():
+    """THE PHASE-3 TRAP. Every candidate is inside the flat window (nothing
+    stale), so the old guard would take the argmax fast-path and ignore synergy
+    entirely — silently inert for the first FOCUS_FLAT cycles. The fix falls
+    back to argmax only when there is ALSO no synergy signal, so a suppressed
+    high-gain candidate loses to an aligned lower-gain one."""
+    a = _gc("helmet_slot", "big", 10)      # higher gain, but zero-overlap
+    b = _gc("ring1_slot", "small", 5)      # lower gain, fully aligned
+    cands = [a, b]
+    synergy = {("helmet_slot", "big"): S_MIN}   # big suppressed to 10/3 < 5
+    # No synergy: the fast-path argmax picks the higher gain (big).
+    assert focus_aging_pick(cands, {}, {}) is a
+    # With synergy: the guard sees a signal, drops to dhondt over scaled
+    # weights, and the aligned candidate wins despite lower raw gain.
+    assert focus_aging_pick(cands, {}, {}, synergy) is b
+    assert focus_aging_order(cands, {}, {}, synergy)[0] is b
+
+
+def test_synergy_absent_from_gear_candidate_identity():
+    """Synergy is a modulating weight, never candidate identity — it must not
+    enter GearCandidate's fields or its repr (the currency-grind lesson: a
+    moving value inside identity resets sticky keying). Structurally excluded."""
+    names = {f.name for f in fields(GearCandidate)}
+    assert "synergy" not in names
+    # two candidates equal but for a synergy context have identical repr
+    assert repr(_gc("s", "c", 5)) == repr(_gc("s", "c", 5))
