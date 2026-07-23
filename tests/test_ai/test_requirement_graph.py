@@ -110,6 +110,20 @@ def test_all_four_state_free_kinds_are_detected():
     assert g.sources("buyable") == frozenset({SourceKind.BUY})
 
 
+def test_buy_leaf_is_currency_aware():
+    """Wave 8: a currency-buyable item (paid in a non-gold currency) is a BUY
+    leaf. The old `npcs_selling_item` check collapsed to gold and reported such
+    items UNOBTAINABLE — a capability hole the `obtain_sources` parity invariant
+    surfaced (jasper_crystal / cloth on the real bundle)."""
+    gd = _gd(recipes={"charm": {"token_gem": 1}})
+    gd.world.npc_stock = {"jeweler": {"token_gem": 5}}
+    gd.world.npc_buy_currency = {"jeweler": {"token_gem": "tasks_coin"}}  # non-gold
+    g = build_requirement_graph(gd)
+    assert gd.npcs_selling_item("token_gem") == []          # gold view is blind
+    assert g.sources("token_gem") == frozenset({SourceKind.BUY})
+    assert g.is_obtainable("token_gem")
+
+
 def test_leaves_exclude_state_dependent_kinds():
     """Deviation 2: WITHDRAW and RECYCLE depend on what is banked or licensed
     RIGHT NOW. Baking them into a state-free graph would re-create axis 2 inside

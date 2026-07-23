@@ -18,6 +18,21 @@ item, right now?" for every consumer. Adding a SEVENTH source is one edit to
 this module, and every consumer gains it structurally — the "which of the two
 producers knows this route?" bug class becomes unrepresentable.
 
+REQUIREMENT-MODEL UNIFICATION EPIC — Wave 8, R3 deviation: this walk is
+DELIBERATELY NOT migrated onto `RequirementGraph`. It is STATE-AWARE (it returns
+the sources ready RIGHT NOW — bank stock, licensed surplus, met skill gates,
+known workshops, live locations, permanent vendors — in priority order, with
+codes and prices), and it is pinned against the live planner action pool by two
+censuses (`obtain_parity_completeness`, `recycle_source_completeness`) at the
+`StrategyArbiter.select` seam. The graph's `leaves` is its STATE-FREE
+counterpart (capability, no readiness gating); collapsing the two would lose the
+readiness those censuses require. Their relationship IS asserted, so this is a
+documented agreement and not an unchecked survivor: the state-free kinds this
+walk can name are a subset of `graph.leaves`
+(`tests/test_audit/test_obtain_graph_agreement.py`) — proving the graph is never
+blind to a route this walk finds. That invariant is what surfaced the graph's
+gold-only BUY blindness to currency-buyable items, fixed in the same wave.
+
 PRIORITY ORDER (the whole point of this file). `obtain_sources` returns
 sources in this declared order — a descent takes the FIRST applicable one:
 

@@ -92,7 +92,7 @@ class _HasRequirementData(Protocol):
 
     def monsters_dropping(self, item: str) -> list[tuple[str, int, int, int]]: ...
 
-    def npcs_selling_item(self, item_code: str) -> list[tuple[str, int]]: ...
+    def npc_purchases(self, item_code: str) -> list[tuple[str, int, str]]: ...
 
 
 @dataclass(frozen=True)
@@ -169,7 +169,14 @@ def _leaf_kinds(game_data: _HasRequirementData, item: str,
         kinds.add(SourceKind.GATHER)
     if game_data.monsters_dropping(item):
         kinds.add(SourceKind.DROP)
-    if game_data.npcs_selling_item(item):
+    # CURRENCY-AWARE (Wave 8): `npc_purchases` covers every currency, not just
+    # gold. `npcs_selling_item` collapses to gold, so it reported jasper_crystal
+    # / cloth / hard_leather (task-coin / wool buys) as UNOBTAINABLE — a
+    # capability hole the `obtain_sources` parity invariant surfaced (its
+    # `_buy_sources` reads `npc_purchases`). The graph is the state-free
+    # capability, so it takes the broadest vendor set; event/reachability gating
+    # is `obtain_sources`' state-aware job.
+    if game_data.npc_purchases(item):
         kinds.add(SourceKind.BUY)
     return frozenset(kinds)
 
