@@ -670,13 +670,21 @@ class GamePlayer:
         combat_monster = self._winnable_farm_target()
         ctx = self._selection_context(combat_monster)
         self._last_ctx = ctx
+        # Synergy is wired here too — NOT just in `_decide_band` — so the `plan`
+        # diagnostic reflects the synergy-active production decision rather than a
+        # synergy-blind one (the two-plan-producers trap: a second decide site that
+        # silently omits the flag). Mirrors `_decide_band` exactly.
+        prior_root = self._last_decision.chosen_root if self._last_decision else None
+        committed_root_code = prior_root.code if isinstance(prior_root, ObtainItem) else None
         decision = self._strategy.decide(
             state, game_data,
             step_servable=self._step_servable(state, game_data, ctx),
             band_adequate=self._tree_band_adequate(),
             ctx=ctx,
             focus=self._gear_focus,
-            seats=self._interleave_seats)
+            seats=self._interleave_seats,
+            committed_root_code=committed_root_code,
+            enable_synergy=True)
         self._bump_focus(decision)
         self._last_decision = decision
         step = decision.chosen_step

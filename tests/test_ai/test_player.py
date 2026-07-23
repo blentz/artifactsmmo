@@ -186,6 +186,25 @@ class TestArbiterSelection:
         assert not hasattr(player, "_select_goal")
         assert not hasattr(player, "_build_goals")
 
+    def test_plan_from_state_activates_synergy(self):
+        """Regression (runtime activation): `plan_from_state` — the `plan` CLI and
+        the offline scenario harness — must pass `enable_synergy=True`, exactly
+        like the live `_decide_band`. It was silently synergy-blind (a second
+        decide producer that dropped the flag), so the whole scenario suite and
+        the `plan` diagnostic ran synergy INERT. This pins the flag on."""
+        player = GamePlayer(character="hero")
+        player.seed_offline(make_state(level=5), make_game_data_mock())
+
+        class _Stop(Exception):
+            pass
+
+        # StrategyEngine is frozen; patch the method on the class and short-circuit
+        # before the fragile post-decide path — we only need the call kwargs.
+        with patch.object(StrategyEngine, "decide", side_effect=_Stop) as spy:
+            with pytest.raises(_Stop):
+                player.plan_from_state()
+        assert spy.call_args.kwargs.get("enable_synergy") is True
+
     def test_crafting_target_set_when_chosen_step_is_obtain_item(self):
         """Cycle must write state.crafting_target from the strategy's chosen_step."""
         player = self._with_strategy(make_game_data_mock(), level=3)
