@@ -147,6 +147,7 @@ GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxono
 BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selection.py"
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
+SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
 INVENTORY_ROOM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_room.py"
 INVENTORY_KEEP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_keep.py"
@@ -2725,6 +2726,38 @@ PROGRESSION_TREE_MUTATIONS = [
     ("scaled weights: key by code instead of slot (collapses dual-slot candidates)",
      "    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0)))\n            for c in candidates]",
      "    return [(c.code, c.gain * falloff(focus.get((c.slot, c.code), 0)))\n            for c in candidates]"),
+]
+
+# synergy_core.synergy_pure — the purity factor of weight = gain*falloff*synergy
+# (spec 2026-07-19 §3, Phase 2). Unit-killed by tests/test_ai/test_synergy_core.py;
+# the same core is proven in Formal/Synergy.lean (synergy_le_one/ge_floor/floor_pos/
+# monotone/total_zero). Each mutant breaks a named bound.
+SYNERGY_CORE_MUTATIONS = [
+    # Floor sinks to falloff's floor: synergy's 3:1 range no longer stays strictly
+    # inside falloff's 9:1, so aging stops dominating alignment (§3.5 invariant).
+    ("synergy: floor sunk to 1/9 (range no longer inside falloff)",
+     "S_MIN = Fraction(1, 3)",
+     "S_MIN = Fraction(1, 9)"),
+    # Degenerate guard weakened: total == 0 (needs nothing) now falls through to the
+    # assert/divide instead of returning the maximal-alignment 1 (§3.4).
+    ("synergy: total-zero guard weakened to strict <",
+     "    if total <= 0:",
+     "    if total < 0:"),
+    # Contract dropped: shared > total (an impossible over-count) is silently
+    # corrected instead of failing loudly — an assembly-layer bug would hide.
+    ("synergy: assembly-layer contract assert dropped",
+     '    assert shared <= total, f"shared {shared} exceeds total {total}"',
+     "    pass"),
+    # Alignment term dropped: every candidate collapses to the floor, so full overlap
+    # no longer scores 1 — synergy stops rewarding alignment at all.
+    ("synergy: alignment term dropped (always floor)",
+     "    return S_MIN + (Fraction(1) - S_MIN) * Fraction(shared, total)",
+     "    return S_MIN"),
+    # Sign flipped: alignment SUBTRACTS from the floor, driving high-overlap targets
+    # below S_MIN and out of the bounded-positive range the no-starvation proof needs.
+    ("synergy: alignment sign flipped (overlap pushes below floor)",
+     "    return S_MIN + (Fraction(1) - S_MIN) * Fraction(shared, total)",
+     "    return S_MIN - (Fraction(1) - S_MIN) * Fraction(shared, total)"),
 ]
 
 # equipment_profile.profile_for selector (2026-07-08; utility axis retired in P3b):
@@ -5585,6 +5618,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_potion_supply.py", survivors)
     run_group(PROGRESSION_TREE_SRC, PROGRESSION_TREE_MUTATIONS,
               "tests/test_ai/test_progression_tree_core.py", survivors)
+    run_group(SYNERGY_CORE_SRC, SYNERGY_CORE_MUTATIONS,
+              "tests/test_ai/test_synergy_core.py", survivors)
     run_group(EQUIPMENT_PROFILE_SRC, EQUIPMENT_PROFILE_MUTATIONS,
               "formal/diff/test_equipment_profile_diff.py", survivors)
 def _run_all_groups() -> int:

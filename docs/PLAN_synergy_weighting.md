@@ -1,61 +1,102 @@
-# BACKLOG: synergy weighting between short- and long-term targets
+# PLAN — Synergy Weighting Epic (execution tracker)
 
-Status: **IDEA, not designed.** Captured 2026-07-20 (user). Not scheduled — do not
-start without picking it up deliberately.
+**Design spec:** `docs/superpowers/specs/2026-07-19-synergy-weighting-design.md` (717 lines, approved, on main).
+**This doc:** the executable, cross-session wave breakdown. The spec is the *why*; this is the *what-next*.
 
-## The thought
+`weight = gain × falloff(focus) × synergy` — magnitude × staleness × **purity**.
+Synergy = demand-weighted fraction of a candidate's own work (`A`) that overlaps the other live roots (`B`), leave-one-out, floored at `S_MIN = 1/3` and bounded strictly inside `falloff`'s 9:1 so aging always dominates alignment.
 
-A 20,000-gather currency target is not inherently bad. It is bad *in isolation*. It
-becomes worth pursuing when it ALIGNS with other targets the bot needs anyway —
-gathering, crafting, and skill/character XP it would be earning regardless.
+---
 
-So target selection should weight a short-term target by how well it advances
-long-term goals, rather than judging each target only on its own cost.
+## Status ledger
 
-## Relationship to the existing jitter/fall-off
+| Phase | What | State |
+|---|---|---|
+| **0** | Pure bug fixes (taskmaster keying / task-pool retention / accept_task plumbing) | ✅ **DONE** `0836ed4d` (0.1+0.2) + field laid 2026-07-22 (0.3 projection deferred to Phase 4 **by design** — factory emits only the monsters master today) |
+| **1** | Requirement-model unification (its own epic) | ✅ **DONE** — closed last session (`2bfd47f9..5d7b19b9`). `RequirementGraph` + projections live; `demand_set → DemandSet` is the quantified form synergy consumes |
+| **2** | Synergy core (`synergy_core.py` + `Synergy.lean`) — pure, full triple gate | ⬜ **NEXT** |
+| **3** | Tree call site (`_scaled_weights`, `_NO_SYNERGY`, B-assembly, fast-path trap) | ⬜ |
+| **4** | Taskmaster choice (argmax expected synergy, reroll-aware top-quantile) | ⬜ — blocked on R1 live probe |
+| **5** | Within-band `DISCRETIONARY_ORDER` sort | ⏸ **DEFERRED** — build only on live-trace evidence (spec §Phase-5 misgiving) |
 
-This generalises what the focus-aging fall-off and d'Hondt interleave already do.
-That mechanism exists to stop a single root monopolising, and it deliberately keeps
-a positive floor so a decayed root is never fully abandoned.
+---
 
-The same shape applies here: **favour high-synergy targets, but still select a
-lower-synergy target occasionally.** The occasional off-target pick is not noise —
-it is what avoids deadlock and what makes high-complexity goals reachable at all,
-because those goals depend on prerequisites that look poorly aligned in the short
-term.
+## Wave 2 — Synergy core  ⟵ START HERE
 
-## Worked example (user's)
+Pure, integer/`Fraction` only, **ships extracted** (all three legs: extraction + differential + mutation), structural twin of `falloff`. Zero integration risk — nothing consumes it yet.
 
-* L50 is the ultimate goal, so `ReachCharLevel(current + 1)` should be *slightly*
-  favoured overall.
-* But reaching it requires work that is NOT aligned in the near term — e.g. taking
-  tasks to earn task tickets to buy a satchel.
-* Task goals are RANDOM skill grinds. They quasi-align with long-term needs (skill
-  levels are wanted eventually) but may align poorly with what is needed now.
-* Concrete synergy to exploit: align `FinishCurrentTask` with targets that trigger
-  SkillXP grinding **for the skill the current task requires**. Then the task and
-  the skill grind stop competing and become one line of progress.
+```python
+# src/artifactsmmo_cli/ai/tiers/synergy_core.py
+S_MIN: Fraction = Fraction(1, 3)
 
-## Why this is not a scoring rewrite
+def synergy_pure(shared: int, total: int) -> Fraction:
+    if total <= 0:
+        return Fraction(1)          # §3.4 degenerate: needs nothing == maximally aligned
+    assert shared <= total, ...     # ASSERT not clamp — shared>total means assembly layer is wrong
+    return S_MIN + (Fraction(1) - S_MIN) * Fraction(shared, total)
+```
 
-Note the constraint discovered 2026-07-19: `goal.value()` is NOT consumed by
-arbiter selection (`arbiter_select.py` picks by fixed ladder position), and
-`planner.py` deliberately runs `h = 0` because a non-zero heuristic was
-inadmissible. So "weight the targets" cannot mean "add a score to the arbiter" —
-that would be re-introducing exactly what was removed.
+**Steps (TDD — each test must fail before, pass after):**
+1. `test_synergy_core_bounds` — `S_MIN ≤ synergy ≤ 1` over swept `(shared, total)` grid.
+2. `test_synergy_total_zero` — `synergy(s, 0) == 1` ∀ s.
+3. `test_synergy_asserts_shared_gt_total` — raises, does not clamp.
+4. `test_synergy_range_inside_falloff` — `S_MAX/S_MIN < FOCUS_1/FOCUS_FLOOR` as arithmetic over the *real* constants (retuning either trips it). **The §3.5 load-bearing invariant.**
+5. ✅ Write `synergy_pure` + `S_MIN` (`src/artifactsmmo_cli/ai/tiers/synergy_core.py`).
+6. ✅ `formal/Formal/Synergy.lean` — 5 theorems, twins of `falloff_le_one/ge_floor/floor_pos`:
+   `synergy_le_one`, `synergy_ge_floor`, `synergy_floor_pos`, `synergy_monotone`, `synergy_total_zero`
+   (+ self-contained Rat helpers; imports nothing, matching ProgressionTree convention). `lake build` green.
+7. ✅ Mutation group `SYNERGY_CORE_MUTATIONS` in `formal/diff/mutate.py` (5 mutants, each killed by a named
+   test), `run_group(... test_synergy_core.py ...)`, anchors unique (595 total). All 5 killed.
 
-Any design here must say WHERE the weighting lives: the tree's candidate ranking
-(where the fall-off already lives, and where `gain` is already a real number), not
-the arbiter band walk and not the planner heuristic.
+**DEVIATION FROM SPEC — extraction/differential leg dropped (recorded, not silent).**
+Spec §Phase-2/§7 asks the core to "ship extracted" (full triple gate). But the SAME §Phase-2 also
+mandates it "ASSERTS rather than clamps" (pinned by `test_synergy_asserts_shared_gt_total`), and the
+AST extractor (`scripts/extract_lean.py:105,1658`) **structurally rejects `assert`** — a total Lean
+function cannot carry a partial contract. The two requirements are mutually exclusive for this function.
+Removing the assert is forbidden (spec-mandated contract; catches real assembly-layer over-counts) and
+a second impl is forbidden (CLAUDE.md). Resolution: match **`falloff`'s exact precedent** — falloff is
+also a `Fraction`-returning curve and ships hand-model + mutation, no extraction/differential. The hand
+model PROVES the five bounds; the mutation gate BINDS Python to them. The differential leg's only added
+guarantee (Python==Lean byte-equal) is redundant for a proven 1-line affine map. Verification is at
+falloff-parity, which the spec itself treats as the baseline for `Fraction` curves.
 
-## Open questions
+8. Gate: `lake build` (all), `--check-anchors`, synergy mutation leg, full suite 100% cov — **serialized**.
 
-1. What is the synergy MEASURE? Shared prerequisites? Overlap in the recipe/drop
-   closure? Skill-XP contribution to a skill some other live target needs?
-2. Does it belong in `gear_target_pick`'s `_gear_pref_key` (currently
-   `(-gain, -level, code, slot)`), as a term in `gain`, or as a separate weight fed
-   to the existing d'Hondt scaling?
-3. How does it interact with the fall-off? A high-synergy root that is STUCK should
-   still decay — synergy must not defeat anti-starvation.
-4. Does the "slightly favour level-up" part belong here at all, or is it the
-   trunk/branch precedence the progression tree already encodes?
+**Verify:** `synergy_le_one` is the `≤1` bound that keeps synergy inside falloff; `synergy_floor_pos` is the `minWeight_pos` feeder that preserves `interleaveDue_reaches` (no-starvation). Both state and prove cleanly — curve shape correct.
+
+---
+
+## Wave 3 — Tree call site
+
+- `_NO_SYNERGY: Mapping[tuple[str,str], Fraction] = MappingProxyType({})` (mirror `_NO_FOCUS`/`_NO_SEATS`); missing entry reads as `Fraction(1)`.
+- `_scaled_weights(candidates, focus, synergy=_NO_SYNERGY)` — multiply the third factor in, keyed `(slot, code)` (same as `_gear_focus`).
+- B-assembly **two-pass** in `decide_tree` (§3.6): build N demand sets once → multiset union → leave-one-out by multiset subtraction. Members: trunk `ReachCharLevel` (char_xp) + sibling candidates + committed root + current task. Committed root double-counts **deliberately** (pin with `test_committed_root_double_counts`).
+- **⚠️ FAST-PATH TRAP** (`focus_aging_pick:193`): short-circuit guard must become "nothing stale **AND** no synergy signal", else synergy is silently inert for FOCUS_FLAT=10 cycles of every root. `test_fast_path_respects_synergy`.
+- `means_serves` → generalize to `synergy(...) > S_MIN` (the boolean special case) — do NOT parallel it.
+- Structural: `test_no_synergy_map_is_inert` (byte-identical to pre-Wave-3), `test_synergy_absent_from_repr` (synergy cannot enter `repr_` — the currency-grind identity-churn lesson), `test_leave_one_out_not_degenerate`.
+- Lean `ProgressionTree.lean` updates in lockstep with widened signatures only; `falloff`/`dhondt_step`/`interleave_due`/`_gear_pref_key` UNTOUCHED.
+- Memo the B-assembly per §R3 (feather_coat CPU precedent).
+- Worked-case tests: `test_currency_root_suppressed`, `test_task_skill_convergence`.
+- **Runtime activation**: must fire on live `plan <char>` (green tests ≠ runtime-active).
+
+## Wave 4 — Taskmaster choice
+
+- **BLOCKED on R1**: probe live which master can COMPLETE/exchange a task (docs say exchange=any, completion unspecified). Same asserted-not-probed trap as duplicate-artifacts. Probe FIRST.
+- argmax `E_synergy(M)` over `tasks_for(M.code, char_level)`, reroll-aware top-quantile: `k = max(1, ceil(n·1/3))`, tiebreak `task_code` (semantic; flagged as the one identifier ordering a decision).
+- Wire at `AcceptTaskGoal()` construction (`strategy_driver.py:382`); goal carries chosen master → `accept_task.apply` projects `task_type` from `taskmaster_code` (completes 0.3). Factory re-points all 5 task actions per master.
+- Synergy NEVER enters `AcceptTaskAction.cost` (admissibility trap).
+- `test_phase4_inert_with_one_taskmaster` (provably inert until Phase 0 — which is landed).
+
+## Wave 5 — Within-band ordering  ⏸ DEFERRED
+`DISCRETIONARY_ORDER` sorted by synergy. Recorded misgiving: reorders means the worth gate ALREADY admitted. Build only if a live trace shows an aligned means losing to a less-aligned one in the same band.
+
+---
+
+## Standing invariants (do not violate)
+- Synergy is **cardinal computation, ordinal consumption** — dies at `decide_tree`; `Candidate` gets no weight field; `select_pure` never opened.
+- Synergy NEVER in any action cost / planner heuristic (`f=g+h` admissibility).
+- No `repr`/alphabetical tiebreak anywhere in the synergy path (feedback_no_alphabetical_tiebreak).
+- Gate runs serialized — never concurrent with anything importing src (feedback_serialize_gate_runs).
+- Mutation anchors refreshed in the same commit as the source edit.
+- Merge to main directly, fast-forward `git push origin HEAD:main`, gate green BEFORE push (no PR to catch it).
+- 0 errors / 0 warnings / 0 skipped / 100% coverage.
