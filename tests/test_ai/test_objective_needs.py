@@ -6,6 +6,22 @@ from artifactsmmo_cli.ai.tiers.objective_needs import _producible_by_self, objec
 from tests.test_ai.fixtures import make_state
 
 
+def test_needs_closure_is_sourced_from_the_shared_graph():
+    """Wave 3 migration: the closure now comes from `RequirementGraph`, not a
+    private `recipe_closure` call. Prove the coupling is real — a deep material
+    that only the graph closure reaches (iron_ore, two plies down) must appear
+    as a need. If objective_needs had kept a shallow private walk this would be
+    absent."""
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 1, "mining": 1})
+    needs = objective_needs(ObtainItem("iron_sword"), state, gd)
+    # iron_sword -> iron_bar -> iron_ore: the transitive leaf is a material need,
+    # in ITEM namespace (iron_ore, never the resource node iron_rocks).
+    assert "iron_ore" in needs.materials
+    assert "iron_rocks" not in needs.materials
+    assert "iron_rocks" not in needs.buy_only
+
+
 def _gd() -> GameData:
     gd = GameData()
     gd._item_stats = {

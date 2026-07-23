@@ -4,12 +4,31 @@ would actually move the objective forward. Drives the arbiter's worth gate
 
 See docs/superpowers/specs/2026-06-09-objective-committed-need-gated-arbitration-design.md
 (Component 2).
+
+Wave 3 of the requirement-model unification epic
+(`docs/superpowers/specs/2026-07-19-requirement-model-unification-epic.md` §4.3):
+this IS the `need_set` projection now — the closure walk comes from the shared
+`RequirementGraph` (`requirement_closure`) instead of a private `recipe_closure`
+call with two D-workarounds bolted on. The walk it replaced did three things the
+one graph call now does directly:
+
+  * translated RESOURCE-node codes to item codes (D1) via `resource_drop_item`;
+  * added an `all_ingredients` ply to see buy-only leaves the two-set return was
+    blind to (D2);
+  * classified drop-only leaves through a separate resources loop.
+
+The graph closure is already item-namespace and drop-aware, so all three fold
+into one `requirement_closure`. Producibility classification (`_producible_by_self`)
+and the skill/char semantics stay here unchanged — those read `WorldState` and are
+NOT functions of the demand set (which is why §4.1's `NeedSet`-as-DemandSet-projection
+framing was deferred to this wave). Output is behaviour-identical to the old walk;
+the Wave 0 parity oracle staying green is the proof.
 """
 
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.recipe_closure import recipe_closure
+from artifactsmmo_cli.ai.requirement_projections import requirement_closure
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -66,6 +85,15 @@ def _producible_by_self(code: str, game_data: GameData) -> bool:
         if not game_data.is_event_npc(_npc) and game_data.npc_location(_npc) is not None)
 
 
+def _add_skill_gate(code: str, state: WorldState, game_data: GameData,
+                    skill_xp: set[str]) -> None:
+    """Record `code`'s unmet crafting-skill gate, if any, into `skill_xp`."""
+    stats = game_data.item_stats(code)
+    if (stats is not None and stats.crafting_skill
+            and stats.crafting_level > state.skills.get(stats.crafting_skill, 0)):
+        skill_xp.add(stats.crafting_skill)
+
+
 def objective_needs(root: MetaGoal, state: WorldState, game_data: GameData) -> NeedSet:
     """Unmet needs of `root`. Empty NeedSet when the objective is already met."""
     if isinstance(root, ReachCharLevel):
@@ -74,53 +102,26 @@ def objective_needs(root: MetaGoal, state: WorldState, game_data: GameData) -> N
     if isinstance(root, ObtainItem):
         if _owned(root.code, state) >= root.quantity:
             return NeedSet(frozenset(), frozenset(), frozenset(), char_xp=False)
-        resources, craftables = recipe_closure(game_data, [root.code])
-        nodes = set(craftables) | {root.code}
+        graph = game_data.requirement_graph.graph()
         materials: set[str] = set()
         skill_xp: set[str] = set()
         buy_only: set[str] = set()
-        for res in resources:
-            drop = game_data.resource_drop_item(res)
-            if drop is not None and _owned(drop, state) < 1:
-                materials.add(drop)
-        # collect all recipe ingredients across every craftable node (including root)
-        all_ingredients: set[str] = set()
-        for node in nodes:
-            recipe = game_data.crafting_recipe(node)
-            if recipe:
-                all_ingredients.update(recipe.keys())
-        # process craftable sub-items (not root) for skill gates and material needs
-        for node in nodes:
-            if node == root.code:
+        # ONE item-namespace, drop-aware closure replaces the old resource loop
+        # + all_ingredients ply + resource->item translation (D1/D2 folded in).
+        for item in requirement_closure(graph, [root.code]):
+            if item == root.code:
                 continue
-            if _owned(node, state) >= 1:
+            if _owned(item, state) >= 1:
                 continue
-            # `nodes` are recipe_closure craftables (all producible); buy-only
-            # leaves are handled by the all_ingredients loop below, so this else
-            # is unreachable here.
-            if _producible_by_self(node, game_data):
-                materials.add(node)
-            else:  # pragma: no cover
-                buy_only.add(node)
-            stats = game_data.item_stats(node)
-            if (stats is not None and stats.crafting_skill
-                    and stats.crafting_level > state.skills.get(stats.crafting_skill, 0)):
-                skill_xp.add(stats.crafting_skill)
-        # Classify recipe-ingredient LEAVES not already handled by the closure
-        # nodes loop: gatherable/craftable → a material need; otherwise → buy-only.
-        for ingredient in all_ingredients:
-            if ingredient in nodes:
-                continue  # already handled above
-            if _owned(ingredient, state) >= 1:
-                continue
-            if _producible_by_self(ingredient, game_data):
-                materials.add(ingredient)
+            if _producible_by_self(item, game_data):
+                materials.add(item)
             else:
-                buy_only.add(ingredient)
-        root_stats = game_data.item_stats(root.code)
-        if (root_stats is not None and root_stats.crafting_skill
-                and root_stats.crafting_level > state.skills.get(root_stats.crafting_skill, 0)):
-            skill_xp.add(root_stats.crafting_skill)
+                buy_only.add(item)
+            # Skill gate only for CRAFTABLE closure items — the old code checked
+            # skills solely in its craftables loop, never for ingredient leaves.
+            if game_data.crafting_recipe(item) is not None:
+                _add_skill_gate(item, state, game_data, skill_xp)
+        _add_skill_gate(root.code, state, game_data, skill_xp)
         return NeedSet(frozenset(materials), frozenset(skill_xp),
                        frozenset(buy_only), char_xp=False)
     return NeedSet(frozenset(), frozenset(), frozenset(), char_xp=False)
