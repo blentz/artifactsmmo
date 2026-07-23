@@ -85,10 +85,13 @@ falloff-parity, which the spec itself treats as the baseline for `Fraction` curv
 - ✅ Tests: `test_synergy_assembly.py` (currency_root_suppressed, committed_root_double_counts, leave_one_out_not_degenerate, items-task-member, empty→_NO_SYNERGY, **fires-on-real-graph**) + 5 mutants. 149 scenario tests + 324 decide-path tests green with synergy active.
 - **DEFERRED to 3c**: `means_serves` generalization, `task_skill_convergence`, level-up (all need enriched char_xp/skill_xp namespace — item-only would regress the task gate).
 
-### Wave 3c — enriched namespace (char_xp / skill_xp / drops)
-- Extend the requirement multiset beyond items: trunk `ReachCharLevel`→char_xp token; monsters-task→char_xp + drop overlap; craft-skill gates→skill_xp tokens.
-- Generalize `means_serves`→`synergy(...) > S_MIN`.
-- Tests: `test_task_skill_convergence`, level-up preference.
+### Wave 3c — enriched namespace (char_xp / skill_xp / drops) ✅ BUILT
+**User forks (2026-07-23):** closure-count weighting; generalize means_serves now.
+- ✅ `requirement_multiset_for(code)` on the graph memo: item quantities + `skill:<name>` tokens (weight = #closure items gated by that craft/gather skill) + `char_xp` token (weight = #DROP leaves). Closure-count weighted, self-scaling, no tuned constant. Memoized, cleared on rebuild.
+- ✅ `_synergy_map` uses the enriched multiset; char-level trunk is ALWAYS a member (`_TRUNK_DEMAND={char_xp:1}`); monsters-task enters as a char_xp member (produces char progression, not items); items/gather task by full enriched requirement.
+- ✅ `means_serves` generalized to `synergy_pure(overlap, 4) > S_MIN` over task-output-vs-need — **provably equivalent** to the old OR-of-clauses (`> S_MIN ⟺ overlap > 0`), so non-regressing; `means_worth` tests pass unchanged.
+- ✅ Tests: `task_skill_convergence`, `level_up_preference`, monsters-task char_xp, enrichment-fires-on-real-graph, differential recompute. 149 scenario + 302 decide-path + 9 means_worth green.
+- ✅ Mutants: monsters-branch-flip, trunk-not-member, char-count-zero, craft-weight, means threshold, char-clause. No Lean/core change (values flow through 3a's widened `_scaled_weights`).
 
 ---
 

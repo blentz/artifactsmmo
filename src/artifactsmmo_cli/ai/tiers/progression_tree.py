@@ -19,6 +19,7 @@ from fractions import Fraction
 from types import MappingProxyType
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.requirement_graph_memo import CHAR_XP
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
@@ -209,36 +210,52 @@ def _servable_promotion(
     return promoted_root, promoted_step, demoted_roots, demoted_steps
 
 
+#: The char-level trunk's requirement, as a demand multiset member: it always
+#: demands character progression. A gear candidate whose closure routes through
+#: monster drops carries a `char_xp` token too, so it overlaps the trunk and is
+#: nudged up — the "L50 slightly favoured" preference, mechanical not tuned.
+_TRUNK_DEMAND: Mapping[str, int] = MappingProxyType({CHAR_XP: 1})
+
+
 def _synergy_map(candidates: list[GearCandidate],
                  committed_root_code: str | None,
                  state: WorldState,
                  game_data: GameData) -> Mapping[tuple[str, str], Fraction]:
-    """The per-candidate synergy multiplier (spec 2026-07-19 §3.6): the
-    demand-weighted fraction of a candidate's own requirement multiset that
-    OTHER live roots also demand (leave-one-out), mapped through `synergy_pure`
-    into [S_MIN, 1]. Keyed `(slot, code)` like the focus ledger.
+    """The per-candidate synergy multiplier (spec 2026-07-19 §3.6/§3.10): the
+    demand-weighted fraction of a candidate's own ENRICHED requirement multiset
+    that OTHER live roots also demand (leave-one-out), mapped through
+    `synergy_pure` into [S_MIN, 1]. Keyed `(slot, code)` like the focus ledger.
 
-    Two-pass over the item namespace: build each member's demand once, SUM into a
-    multiset `total`, then score each candidate `shared / own` where an item is
-    shared iff some OTHER member still demands it after the candidate's own copy
-    is removed (`total[i] - own[i] > 0`) — the leave-one-out subtraction. Members
-    are the sibling candidates, the committed root, and the current items-task; a
-    monsters-task carries no item requirement and is omitted (its char_xp / skill
-    overlap is a later wave). The committed root is usually ALSO a sibling
-    candidate, so its demand enters `total` twice — deliberate: it biases toward
-    finishing what is started (§3.6), and a candidate that IS the committed root
-    overlaps itself through that second copy. O(N) demand walks (memoized on the
-    graph), not O(N^2)."""
+    The multiset spans items (quantities) AND synthetic tokens — `skill:<name>`
+    (closure items gated by that craft/gather skill) and `char_xp` (DROP leaves)
+    — so alignment counts skill and character-level overlap, not just shared
+    materials (`RequirementGraphMemo.requirement_multiset_for`).
+
+    Two-pass: build each member's multiset once, SUM into `total`, then score
+    each candidate `shared / own` where a token is shared iff some OTHER member
+    still demands it after the candidate's own copy is removed
+    (`total[i] - own[i] > 0`) — the leave-one-out subtraction. Members are the
+    sibling candidates, the char-level trunk (always — `char_xp`), the committed
+    root, and the current task: an items/gather task by its full enriched
+    requirement, a monsters-task by `char_xp` (it produces char progression, not
+    items). The committed root is usually ALSO a sibling candidate, so its demand
+    enters `total` twice — deliberate: it biases toward finishing what is started
+    (§3.6), and a candidate that IS the committed root overlaps itself through
+    that second copy. O(N) walks (memoized on the graph), not O(N^2)."""
     if not candidates:
         return _NO_SYNERGY
     memo = game_data.requirement_graph
     own: dict[tuple[str, str], Mapping[str, int]] = {
-        (c.slot, c.code): memo.demand_for(c.code) for c in candidates}
+        (c.slot, c.code): memo.requirement_multiset_for(c.code) for c in candidates}
     members: list[Mapping[str, int]] = list(own.values())
+    members.append(_TRUNK_DEMAND)
     if committed_root_code is not None:
-        members.append(memo.demand_for(committed_root_code))
-    if state.task_code is not None and state.task_type != "monsters":
-        members.append(memo.demand_for(state.task_code))
+        members.append(memo.requirement_multiset_for(committed_root_code))
+    if state.task_code is not None:
+        if state.task_type == "monsters":
+            members.append(_TRUNK_DEMAND)   # combat task -> char progression
+        else:
+            members.append(memo.requirement_multiset_for(state.task_code))
     total: dict[str, int] = {}
     for demand in members:
         for item, qty in demand.items():

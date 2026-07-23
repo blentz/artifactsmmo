@@ -149,6 +149,8 @@ POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
 PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
+REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
+MEANS_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means_worth.py"
 EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
 INVENTORY_ROOM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_room.py"
 INVENTORY_KEEP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_keep.py"
@@ -2791,16 +2793,50 @@ SYNERGY_ASSEMBLY_MUTATIONS = [
     ("synergy assembly: committed root not a member",
      "    if committed_root_code is not None:",
      "    if False:"),
-    # Task-type guard flipped: an items/crafting task stops contributing to B
-    # (task/gear convergence lost) and a monsters task feeds a non-item code in.
-    ("synergy assembly: items-task guard flipped to monsters",
-     '    if state.task_code is not None and state.task_type != "monsters":',
-     '    if state.task_code is not None and state.task_type == "monsters":'),
+    # Trunk dropped as a member: a drop-routed candidate no longer overlaps the
+    # char-level trunk, losing the level-up preference (§3.10).
+    ("synergy assembly: char-level trunk not a member",
+     "    members.append(_TRUNK_DEMAND)\n    if committed_root_code is not None:",
+     "    if committed_root_code is not None:"),
+    # Task-type branch flipped: an items/gather task takes the char_xp arm (loses
+    # its skill/material contribution) and a monsters task feeds a non-item code.
+    ("synergy assembly: monsters-task branch flipped",
+     '        if state.task_type == "monsters":',
+     '        if state.task_type != "monsters":'),
     # synergy_pure args swapped: own_total >= shared, so this asserts (shared >
     # total is impossible) — the assembly bug surfaces loudly rather than lying.
     ("synergy assembly: synergy_pure args swapped",
      "        out[key] = synergy_pure(shared, own_total)",
      "        out[key] = synergy_pure(own_total, shared)"),
+]
+
+# RequirementGraphMemo.requirement_multiset_for — the enriched (item + skill +
+# char_xp) requirement multiset (spec §3.10). Unit-killed by the differential and
+# firing tests in tests/test_ai/test_synergy_assembly.py.
+MEMO_ENRICH_MUTATIONS = [
+    # char_xp weight zeroed: no closure ever contributes a char-progression token,
+    # so level-up alignment goes dark.
+    ("memo enrich: char_xp drop-leaf count zeroed",
+     "            drop_leaves = sum(1 for item in closure",
+     "            drop_leaves = sum(0 for item in closure"),
+    # craft-skill token weight wrong: the closure-count weighting no longer holds.
+    ("memo enrich: craft-skill token weight not +1",
+     "                    key = SKILL_PREFIX + craft[0]\n                    out[key] = out.get(key, 0) + 1",
+     "                    key = SKILL_PREFIX + craft[0]\n                    out[key] = out.get(key, 0) + 2"),
+]
+
+# means_worth.means_serves — the boolean special case of the means<->objective
+# synergy (spec §2.5). Unit-killed by tests/test_ai/test_means_worth.py.
+MEANS_SERVES_MUTATIONS = [
+    # Threshold loosened: overlap 0 gives synergy == S_MIN, so `>=` serves EVERY
+    # task, dissolving the worth gate.
+    ("means_serves: threshold >= floods every task through the gate",
+     "    return synergy_pure(overlap, _TASK_OUTPUT_KINDS) > S_MIN",
+     "    return synergy_pure(overlap, _TASK_OUTPUT_KINDS) >= S_MIN"),
+    # char-XP clause dropped: a monsters-task no longer serves a char-level need.
+    ("means_serves: monsters-task char-xp clause dropped",
+     "    if needs.char_xp and state.task_type == \"monsters\":\n        serving += 1",
+     "    if False:\n        serving += 1"),
 ]
 
 # equipment_profile.profile_for selector (2026-07-08; utility axis retired in P3b):
@@ -5665,6 +5701,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_synergy_core.py", survivors)
     run_group(PROGRESSION_TREE_IMPURE_SRC, SYNERGY_ASSEMBLY_MUTATIONS,
               "tests/test_ai/test_synergy_assembly.py", survivors)
+    run_group(REQUIREMENT_GRAPH_MEMO_SRC, MEMO_ENRICH_MUTATIONS,
+              "tests/test_ai/test_synergy_assembly.py", survivors)
+    run_group(MEANS_WORTH_SRC, MEANS_SERVES_MUTATIONS,
+              "tests/test_ai/test_means_worth.py", survivors)
     run_group(EQUIPMENT_PROFILE_SRC, EQUIPMENT_PROFILE_MUTATIONS,
               "formal/diff/test_equipment_profile_diff.py", survivors)
 def _run_all_groups() -> int:

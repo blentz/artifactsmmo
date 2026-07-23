@@ -34,7 +34,17 @@ from artifactsmmo_cli.ai.requirement_graph import (
     _HasRequirementData,
     build_requirement_graph,
 )
-from artifactsmmo_cli.ai.requirement_projections import demand_set
+from artifactsmmo_cli.ai.requirement_projections import demand_set, requirement_closure
+from artifactsmmo_cli.ai.source_kind import SourceKind
+
+#: The synthetic char-progression token in an enriched requirement multiset:
+#: its demand-weight is the number of DROP leaves in a root's closure (work that
+#: routes through monster kills). Namespaced so it never collides with an item
+#: code. Synergy spec 2026-07-19 §3.10 (closure-count weighting, 2026-07-23).
+CHAR_XP = "char_xp"
+
+#: Prefix for a synthetic craft/gather-skill token; the suffix is the skill name.
+SKILL_PREFIX = "skill:"
 
 
 class RequirementGraphMemo:
@@ -45,6 +55,7 @@ class RequirementGraphMemo:
         self._graph: RequirementGraph | None = None
         self._fingerprint: tuple[int, int, int, int] | None = None
         self._demand_cache: dict[str, Mapping[str, int]] = {}
+        self._multiset_cache: dict[str, Mapping[str, int]] = {}
 
     def _current_fingerprint(self) -> tuple[int, int, int, int]:
         """Sizes of the source tables the graph is derived from."""
@@ -66,7 +77,8 @@ class RequirementGraphMemo:
         if self._graph is None or self._fingerprint != fingerprint:
             self._graph = build_requirement_graph(self._game_data)
             self._fingerprint = fingerprint
-            self._demand_cache = {}   # graph rebuilt -> per-code demands stale
+            self._demand_cache = {}     # graph rebuilt -> per-code demands stale
+            self._multiset_cache = {}
         return self._graph
 
     def demand_for(self, code: str) -> Mapping[str, int]:
@@ -81,8 +93,45 @@ class RequirementGraphMemo:
             self._demand_cache[code] = demand_set(self.graph(), [code]).quantities
         return self._demand_cache[code]
 
+    def requirement_multiset_for(self, code: str) -> Mapping[str, int]:
+        """The ENRICHED requirement multiset for synergy overlap (spec §3.10,
+        closure-count weighting): item quantities (as `demand_for`) PLUS synthetic
+        tokens, so that skill and character-level alignment count alongside shared
+        materials. Each token's weight is how much of the root's work it stands
+        for — self-scaling, no tuned constant:
+
+        * ``skill:<name>`` — the number of closure items gated by that craft or
+          gather skill. Lets a task needing skill X raise gear whose closure
+          consumes X (task/grind convergence).
+        * ``char_xp`` — the number of DROP leaves in the closure (work that routes
+          through monster kills). Lets a drop-routed candidate align with the
+          char-level trunk (level-up preference).
+
+        Tokens are namespaced (``skill:`` / ``char_xp``) so they never collide
+        with item codes. Memoized with the graph."""
+        if code not in self._multiset_cache:
+            graph = self.graph()
+            out: dict[str, int] = dict(self.demand_for(code))
+            closure = requirement_closure(graph, [code])
+            for item in closure:
+                craft = graph.craft_skill.get(item)
+                if craft is not None:
+                    key = SKILL_PREFIX + craft[0]
+                    out[key] = out.get(key, 0) + 1
+                gather = graph.gather_skill.get(item)
+                if gather is not None:
+                    key = SKILL_PREFIX + gather[0]
+                    out[key] = out.get(key, 0) + 1
+            drop_leaves = sum(1 for item in closure
+                              if SourceKind.DROP in graph.leaves.get(item, frozenset()))
+            if drop_leaves:
+                out[CHAR_XP] = drop_leaves
+            self._multiset_cache[code] = out
+        return self._multiset_cache[code]
+
     def clear(self) -> None:
         """Drop the cache. Safe to call before any `graph()` call."""
         self._graph = None
         self._fingerprint = None
         self._demand_cache = {}
+        self._multiset_cache = {}

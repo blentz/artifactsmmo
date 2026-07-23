@@ -15,6 +15,9 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.requirement_graph_memo import CHAR_XP, SKILL_PREFIX
+from artifactsmmo_cli.ai.requirement_projections import requirement_closure
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.progression_tree import _synergy_map
 from artifactsmmo_cli.ai.tiers.progression_tree_core import _NO_SYNERGY, GearCandidate
 from artifactsmmo_cli.ai.tiers.synergy_core import S_MIN
@@ -32,14 +35,15 @@ def bundle_game_data() -> GameData:
 
 
 class _FakeMemo:
-    """Stand-in for `RequirementGraphMemo.demand_for` — returns the controlled
-    per-code demand multiset so the leave-one-out arithmetic is exercised on
-    exact inputs. This doubles the collaborator, not `_synergy_map` itself."""
+    """Stand-in for `RequirementGraphMemo.requirement_multiset_for` — returns the
+    controlled per-code requirement multiset (items and/or synthetic skill/char
+    tokens) so the leave-one-out arithmetic is exercised on exact inputs. This
+    doubles the collaborator, not `_synergy_map` itself."""
 
     def __init__(self, demands: dict[str, Mapping[str, int]]) -> None:
         self._demands = demands
 
-    def demand_for(self, code: str) -> Mapping[str, int]:
+    def requirement_multiset_for(self, code: str) -> Mapping[str, int]:
         return self._demands.get(code, {})
 
 
@@ -112,6 +116,106 @@ def test_items_task_is_a_member_but_monsters_task_is_not():
     monsters = make_state(task_code="task_item", task_type="monsters")
     assert _synergy_map(cand, None, crafting, gd)[("weapon_slot", "gear")] == Fraction(1)
     assert _synergy_map(cand, None, monsters, gd)[("weapon_slot", "gear")] == S_MIN
+
+
+def test_task_skill_convergence():
+    """The §3.10 worked case, closure-count weighted. A non-monsters task
+    contributes its skill tokens to B, so a gear candidate whose closure consumes
+    the SAME skill scores high while an unrelated candidate stays at the floor —
+    task and grind become one line of progress. Without the task the aligned
+    candidate falls back to the floor, so it is the task that lifts it."""
+    demands = {
+        "gear_mining": {SKILL_PREFIX + "mining": 3},
+        "gear_alchemy": {SKILL_PREFIX + "alchemy": 2},
+        "task_item": {SKILL_PREFIX + "mining": 1},
+    }
+    gd = _FakeGameData(demands)
+    cands = [_gc("weapon_slot", "gear_mining"), _gc("shield_slot", "gear_alchemy")]
+    crafting = make_state(task_code="task_item", task_type="crafting")
+    syn = _synergy_map(cands, None, crafting, gd)
+    assert syn[("weapon_slot", "gear_mining")] == Fraction(1)     # task feeds mining
+    assert syn[("shield_slot", "gear_alchemy")] == S_MIN          # unrelated skill
+    # the task is what lifts it: with no task, mining candidate falls to the floor
+    without = _synergy_map(cands, None, make_state(), gd)
+    assert without[("weapon_slot", "gear_mining")] == S_MIN
+
+
+def test_level_up_preference():
+    """The §3.10 level-up case. The char-level trunk is always a member, so a
+    candidate whose closure routes through monster DROPS (a char_xp token)
+    overlaps it and is nudged above a pure-craft candidate — the 'L50 slightly
+    favoured' preference, mechanical not a tuned constant."""
+    demands = {
+        "drop_routed": {CHAR_XP: 4},          # 4 drop leaves in its closure
+        "pure_craft": {"copper_bar": 2},      # no drops
+    }
+    gd = _FakeGameData(demands)
+    cands = [_gc("weapon_slot", "drop_routed"), _gc("shield_slot", "pure_craft")]
+    syn = _synergy_map(cands, None, make_state(), gd)
+    assert syn[("weapon_slot", "drop_routed")] == Fraction(1)     # overlaps the trunk
+    assert syn[("shield_slot", "pure_craft")] == S_MIN
+    assert syn[("weapon_slot", "drop_routed")] > syn[("shield_slot", "pure_craft")]
+
+
+def test_monsters_task_contributes_char_xp_not_items():
+    """A monsters-task produces character progression, not craftable items, so it
+    enters B as a char_xp member (lifting drop-routed candidates), never by its
+    monster code's (nonexistent) item requirement."""
+    gd = _FakeGameData({"drop_routed": {CHAR_XP: 2}})
+    cand = [_gc("weapon_slot", "drop_routed")]
+    monsters = make_state(task_code="some_monster", task_type="monsters")
+    assert _synergy_map(cand, None, monsters, gd)[("weapon_slot", "drop_routed")] == Fraction(1)
+
+
+def test_enriched_multiset_fires_on_real_graph(bundle_game_data: GameData):
+    """Runtime activation of the enrichment (spec §7): on the real bundle graph
+    the multiset must actually carry skill tokens (some craftable is skill-gated)
+    and at least one closure a char_xp token (some route hits a monster drop) —
+    proof the skill/char enrichment is not silently empty."""
+    memo = bundle_game_data.requirement_graph
+    graph = memo.graph()
+    saw_skill = False
+    saw_char = False
+    for code in graph.edges:
+        ms = memo.requirement_multiset_for(code)
+        if any(k.startswith(SKILL_PREFIX) for k in ms):
+            saw_skill = True
+        if CHAR_XP in ms:
+            saw_char = True
+        if saw_skill and saw_char:
+            break
+    assert saw_skill, "no craftable in the bundle carries a skill token — enrichment inert"
+    assert saw_char, "no closure in the bundle routes through a drop — char_xp inert"
+
+
+def test_requirement_multiset_matches_independent_recompute(bundle_game_data: GameData):
+    """Differential pin: the enriched multiset equals `demand_for` PLUS a
+    from-scratch recompute of the closure-count skill tokens and the DROP-leaf
+    char_xp token. Any drift in the enrichment arithmetic (a skill source
+    skipped, a weight not incremented, the char count zeroed) fails here."""
+    memo = bundle_game_data.requirement_graph
+    graph = memo.graph()
+    target = next((code for code in graph.edges
+                   if any(k.startswith(SKILL_PREFIX)
+                          for k in memo.requirement_multiset_for(code))
+                   or CHAR_XP in memo.requirement_multiset_for(code)), None)
+    assert target is not None, "no enriched multiset in the bundle to differentiate against"
+
+    expected: dict[str, int] = dict(memo.demand_for(target))
+    closure = requirement_closure(graph, [target])
+    for item in closure:
+        craft = graph.craft_skill.get(item)
+        if craft is not None:
+            expected[SKILL_PREFIX + craft[0]] = expected.get(SKILL_PREFIX + craft[0], 0) + 1
+        gather = graph.gather_skill.get(item)
+        if gather is not None:
+            expected[SKILL_PREFIX + gather[0]] = expected.get(SKILL_PREFIX + gather[0], 0) + 1
+    drop_leaves = sum(1 for item in closure
+                      if SourceKind.DROP in graph.leaves.get(item, frozenset()))
+    if drop_leaves:
+        expected[CHAR_XP] = drop_leaves
+
+    assert dict(memo.requirement_multiset_for(target)) == expected
 
 
 def test_synergy_fires_on_real_graph(bundle_game_data: GameData):
