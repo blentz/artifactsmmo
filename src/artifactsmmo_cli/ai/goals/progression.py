@@ -34,8 +34,8 @@ from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.recipe_closure import (
     closure_demand,
     gather_serves_closure,
-    recipe_closure,
 )
+from artifactsmmo_cli.ai.requirement_projections import requirement_craftables
 from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -229,7 +229,8 @@ class UpgradeEquipmentGoal(Goal):
         # Recipe closure of the target: the resources to gather and the craftable
         # intermediates (copper_bar, copper_dagger). Restrict the action set to
         # this so the planner cannot wander into unrelated crafts/fights/gathers.
-        _needed_resources, craftable_mats = recipe_closure(game_data, (target_item,))
+        craftable_mats = requirement_craftables(
+            game_data.requirement_graph.graph(), (target_item,))
         in_closure_crafts = set(craftable_mats) | {target_item}
         # Withdraw-eligible item codes: the craftable intermediates + the
         # target; every leaf material arrives via the closure-demand union

@@ -36,7 +36,10 @@ from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.recipe_closure import (
     closure_demand,
     gather_serves_closure,
-    recipe_closure,
+)
+from artifactsmmo_cli.ai.requirement_projections import (
+    requirement_craftables,
+    requirement_gather_skills,
 )
 from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
 from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
@@ -189,7 +192,8 @@ class GatherMaterialsGoal(Goal):
         """Restrict planning to gather/smelt/deposit/withdraw — excludes
         combat and unrelated gathers. Withdraw is included so a material
         already banked is pulled rather than re-gathered."""
-        needed_resources, craftable_mats = recipe_closure(game_data, self._needed)
+        graph = game_data.requirement_graph.graph()
+        craftable_mats = requirement_craftables(graph, self._needed)
         # Withdraw-eligible item codes: the craftable intermediates + the
         # needed items themselves; every LEAF material arrives via the
         # closure-demand union below (chain covers all closure materials, so
@@ -283,11 +287,10 @@ class GatherMaterialsGoal(Goal):
         # Without it the penalty had no action that could remove it and the
         # re-arm was inert — trace 2026-07-05 16:22: copper_pickaxe ferried to
         # the bag, then every cycle still mined with copper_dagger.
-        needed_skills: set[str] = set()
-        for res in needed_resources:
-            skill_req = game_data.resource_skill_level(res)
-            if skill_req is not None:
-                needed_skills.add(skill_req[0])
+        # The closure's gatherable-material skills, item-namespace (D1). Was a
+        # loop over `recipe_closure`'s resource-node set; the graph reads the
+        # item-keyed gather_skill directly. Byte-equal over the whole bundle.
+        needed_skills: set[str] = set(requirement_gather_skills(graph, self._needed))
 
         # LevelSkill admission scope: a skill-grind action only serves THIS goal
         # when a closure craftable is gated behind that exact (skill, level) and

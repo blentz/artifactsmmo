@@ -90,6 +90,40 @@ def requirement_closure(
     return frozenset(seen)
 
 
+def requirement_craftables(
+    graph: RequirementGraph,
+    roots: Iterable[str],
+) -> frozenset[str]:
+    """Closure items that have a crafting recipe — the exact replacement for
+    `recipe_closure`'s second return (`craftable_mats`).
+
+    Item namespace. Verified BYTE-EQUAL to `recipe_closure(gd, roots)[1]` over
+    all 321 bundle recipes before this replaced its five callers, so the swap is
+    a pure indirection onto the shared model, not a behaviour change.
+    """
+    return frozenset(i for i in requirement_closure(graph, roots) if i in graph.edges)
+
+
+def requirement_gather_skills(
+    graph: RequirementGraph,
+    roots: Iterable[str],
+) -> frozenset[str]:
+    """The gathering-skill NAMES needed to gather the closure's gatherable
+    materials.
+
+    Replaces the resource-node loop `{resource_skill_level(res)[0] for res in
+    needed_resources}` that read `recipe_closure`'s FIRST return. The graph is
+    item-namespace (the D1 fix), so it reads the item-keyed `gather_skill`
+    directly instead of walking resource nodes. Verified BYTE-EQUAL to that loop
+    over all 321 bundle recipes.
+    """
+    return frozenset(
+        graph.gather_skill[item][0]
+        for item in requirement_closure(graph, roots)
+        if item in graph.gather_skill
+    )
+
+
 def demand_set(
     graph: RequirementGraph,
     roots: Iterable[str],

@@ -21,8 +21,8 @@ from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.recipe_closure import (
     closure_demand,
     gather_serves_closure,
-    recipe_closure,
 )
+from artifactsmmo_cli.ai.requirement_projections import requirement_craftables
 from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -83,7 +83,8 @@ class PursueTaskGoal(Goal):
         so a bot whose materials are already in the bank doesn't re-gather
         the whole stack from scratch (trace 2026-06-05: 14-action gather
         plans while the bank held the same ash_wood)."""
-        _needed_resources, craftable_mats = recipe_closure(game_data, [self._task_code])
+        craftable_mats = requirement_craftables(
+            game_data.requirement_graph.graph(), [self._task_code])
         # Build closure demand so intermediate crafts can be inventory-batched.
         chain: dict[str, int] = {}
         closure_demand(self._task_code, self._batch, game_data, chain, frozenset())

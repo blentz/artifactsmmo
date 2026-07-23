@@ -33,8 +33,8 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recipe_closure import (
     closure_demand,
     gather_serves_closure,
-    recipe_closure,
 )
+from artifactsmmo_cli.ai.requirement_projections import requirement_craftables
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MAINTAIN_CONSUMABLES_VALUE = 25.0
@@ -72,7 +72,8 @@ class MaintainConsumablesGoal(Goal):
         code = best_craftable_heal(state, game_data)
         if code is None:
             return []
-        _needed_resources, craftable_mats = recipe_closure(game_data, [code])
+        craftable_mats = requirement_craftables(
+            game_data.requirement_graph.graph(), [code])
         # Withdraw-eligible codes: craftable intermediates + the heal itself;
         # every leaf material arrives via the closure-demand union below
         # (GAP-7: the per-resource primary-drop loop was redundant and, with

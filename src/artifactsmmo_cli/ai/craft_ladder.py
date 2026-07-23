@@ -19,8 +19,8 @@ from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.recipe_closure import (
     closure_demand,
     gather_serves_closure,
-    recipe_closure,
 )
+from artifactsmmo_cli.ai.requirement_projections import requirement_craftables
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _TARGET_SLOT = "utility1_slot"
@@ -47,7 +47,8 @@ def craft_utility_ladder(
     parameterised for reuse by CraftUnlockBoostGoal and other utility-slot
     craft goals.
     """
-    _needed_resources, craftable_mats = recipe_closure(game_data, [target_code])
+    craftable_mats = requirement_craftables(
+        game_data.requirement_graph.graph(), [target_code])
     # Withdraw-eligible codes: craftable intermediates + target; every leaf
     # material arrives via the closure-demand union below (the historical
     # per-resource primary-drop loop was redundant, and with GAP-7's widened

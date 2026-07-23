@@ -16,7 +16,9 @@ from artifactsmmo_cli.ai.requirement_graph_memo import RequirementGraphMemo
 from artifactsmmo_cli.ai.requirement_projections import (
     demand_set,
     requirement_closure,
+    requirement_craftables,
     requirement_edges,
+    requirement_gather_skills,
     skill_gates,
 )
 from artifactsmmo_cli.ai.source_kind import SourceKind
@@ -199,6 +201,34 @@ def test_closure_terminates_on_a_cycle():
     gd = _gd(recipes={"a": {"b": 1}, "b": {"a": 1}})
     g = build_requirement_graph(gd)
     assert requirement_closure(g, ["a"]) == {"a", "b"}
+
+
+# --- Wave 4 projections: the recipe_closure two-set replacement --------------
+
+def test_requirement_craftables_is_the_recipe_closure_second_return():
+    """`recipe_closure`'s `craftable_mats` = closure items with a recipe. The
+    projection that replaced its five callers must give exactly that set."""
+    g = build_requirement_graph(_dagger_gd())
+    # closure = {copper_dagger, copper_bar, copper_ore}; only the first two craft.
+    assert requirement_craftables(g, ["copper_dagger"]) == {"copper_dagger", "copper_bar"}
+
+
+def test_requirement_craftables_excludes_raw_leaves():
+    g = build_requirement_graph(_dagger_gd())
+    assert "copper_ore" not in requirement_craftables(g, ["copper_dagger"])
+
+
+def test_requirement_gather_skills_reads_item_keyed_gates():
+    """Replaces the old resource-node loop. copper_ore is gatherable at mining 1,
+    so mining is a needed gather skill for the dagger closure."""
+    g = build_requirement_graph(_dagger_gd())
+    assert requirement_gather_skills(g, ["copper_dagger"]) == {"mining"}
+
+
+def test_requirement_gather_skills_empty_when_nothing_gatherable():
+    gd = _gd(recipes={"a": {"b": 1}})  # b has no gather source
+    g = build_requirement_graph(gd)
+    assert requirement_gather_skills(g, ["a"]) == frozenset()
 
 
 # --- quantities --------------------------------------------------------------
