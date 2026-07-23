@@ -16,11 +16,11 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
-from artifactsmmo_cli.ai.recipe_closure import (
-    closure_demand,
-    gather_serves_closure,
+from artifactsmmo_cli.ai.recipe_closure import gather_serves_closure
+from artifactsmmo_cli.ai.requirement_projections import (
+    demand_set,
+    requirement_craftables,
 )
-from artifactsmmo_cli.ai.requirement_projections import requirement_craftables
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _TARGET_SLOT = "utility1_slot"
@@ -55,12 +55,11 @@ def craft_utility_ladder(
     # needed_resources it would admit junk withdraws — the primary drop of a
     # secondarily-needed resource is not a closure material).
     withdrawable: set[str] = set(craftable_mats) | {target_code}
-    chain: dict[str, int] = {}
-    closure_demand(target_code, 1, game_data, chain, frozenset())
+    chain = dict(demand_set(game_data.requirement_graph.graph(), [target_code]).quantities)
     withdrawable |= set(chain)
 
-    buy_chain: dict[str, int] = {}
-    closure_demand(target_code, runs, game_data, buy_chain, frozenset())
+    buy_chain = dict(demand_set(
+        game_data.requirement_graph.graph(), [target_code], {target_code: runs}).quantities)
 
     result: list[Action] = []
     have_craft = False

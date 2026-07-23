@@ -67,6 +67,9 @@ class _HasRequirementData(Protocol):
     def crafting_recipes(self) -> Mapping[str, dict[str, int]]: ...
 
     @property
+    def craft_yields(self) -> Mapping[str, int]: ...
+
+    @property
     def resource_drops(self) -> Mapping[str, str]: ...
 
     @property
@@ -99,8 +102,10 @@ class RequirementGraph:
     One cycle policy: the per-path revisit guard of the extracted core.
     """
 
-    #: item -> direct ingredient -> qty (ONE ply; axis 1 lives in the projection)
-    edges: Mapping[str, Mapping[str, int]]
+    #: item -> direct ingredient -> qty (ONE ply; axis 1 lives in the projection).
+    #: Inner is `dict` not `Mapping` so it feeds the extracted `_closure_demand`
+    #: (whose signature is pinned) without a defensive per-call copy.
+    edges: Mapping[str, dict[str, int]]
     #: item -> the state-free ways it can be obtained (see deviation 2)
     leaves: Mapping[str, frozenset[SourceKind]]
     #: item -> (craft skill, required level)
@@ -109,6 +114,11 @@ class RequirementGraph:
     #: Populated but UNCONSUMED this epic (scope A, §3): a model that cannot
     #: express a known livelock cause is not a unification.
     gather_skill: Mapping[str, tuple[str, int]]
+    #: item -> craft output quantity per run (the ⌈demand/Y⌉ batch divisor).
+    #: The bundle carries 31 items with Y>1, so a demand walk that ignores this
+    #: over-orders their materials at any multiplier >1 — `demand_set` reads it
+    #: by default so the projection matches the live `closure_demand` exactly.
+    yields: Mapping[str, int]
 
     def sources(self, item: str) -> frozenset[SourceKind]:
         """The state-free obtain routes for `item`; empty when unobtainable."""
@@ -199,6 +209,7 @@ def build_requirement_graph(game_data: _HasRequirementData) -> RequirementGraph:
         leaves={code: _leaf_kinds(game_data, code, gatherable) for code in known},
         craft_skill=craft_skill,
         gather_skill=_gather_skill_by_item(game_data),
+        yields=dict(game_data.craft_yields),
     )
 
 

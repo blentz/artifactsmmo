@@ -40,14 +40,15 @@ class RequirementGraphMemo:
     def __init__(self, game_data: _HasRequirementData) -> None:
         self._game_data = game_data
         self._graph: RequirementGraph | None = None
-        self._fingerprint: tuple[int, int, int] | None = None
+        self._fingerprint: tuple[int, int, int, int] | None = None
 
-    def _current_fingerprint(self) -> tuple[int, int, int]:
-        """Sizes of the three source tables the graph is derived from."""
+    def _current_fingerprint(self) -> tuple[int, int, int, int]:
+        """Sizes of the source tables the graph is derived from."""
         return (
             len(self._game_data.crafting_recipes),
             len(self._game_data.all_item_stats),
             len(self._game_data.resource_drops_full),
+            len(self._game_data.craft_yields),
         )
 
     def graph(self) -> RequirementGraph:

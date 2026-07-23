@@ -140,14 +140,23 @@ def demand_set(
     `quantities` gives per-root multipliers (default 1 each). Quantities across
     roots combine at their MAX, matching `_closure_demand`'s cumulative
     semantics — see `DemandSet.merge`.
+
+    `yields` defaults to the graph's own yields (`game_data.craft_yields`), NOT
+    an empty map. That default is load-bearing: the bundle has 31 items with
+    Y>1, and ignoring them over-orders their materials at any multiplier >1. It
+    is exactly what the live `closure_demand` reads by default, so the projection
+    matches it byte-for-byte.
     """
     root_list = list(roots)
     wanted = quantities or {}
-    edges = {item: dict(ing) for item, ing in graph.edges.items()}
+    effective_yields = graph.yields if yields is None else yields
+    # graph.edges is read-only here (`_closure_demand` only reads recipes), so
+    # no defensive copy — this is a hot planner path.
+    edges = graph.edges
     out: dict[str, int] = {}
     for root in root_list:
         _closure_demand(_fuel(graph), root, wanted.get(root, 1),
-                        edges, yields or {}, {}, out)
+                        edges, effective_yields, {}, out)
     return DemandSet(quantities=out, roots=frozenset(root_list))
 
 

@@ -68,8 +68,8 @@ from artifactsmmo_cli.ai.obtain_sources import Source, obtain_source_map
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.raid_participation import raid_survivable_pure
-from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus, recycle_urgency
+from artifactsmmo_cli.ai.requirement_projections import demand_set
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
@@ -213,8 +213,8 @@ def _step_protection_profile(step_goal: Goal | None, state: WorldState,
         missing = qty - state.inventory.get(code, 0) - bank.get(code, 0)
         if missing <= 0:
             continue
-        chain: dict[str, int] = {}
-        closure_demand(code, missing, game_data, chain, frozenset())
+        chain = dict(demand_set(
+            game_data.requirement_graph.graph(), [code], {code: missing}).quantities)
         for mat, mat_qty in chain.items():
             if mat_qty > profile.get(mat, 0):
                 profile[mat] = mat_qty

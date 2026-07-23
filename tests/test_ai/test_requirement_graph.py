@@ -25,9 +25,11 @@ from artifactsmmo_cli.ai.source_kind import SourceKind
 
 
 def _gd(recipes=None, drops=None, drops_full=None, resource_skill=None,
-        item_stats=None, monster_drops=None, npc_stock=None):
+        item_stats=None, monster_drops=None, npc_stock=None, yields=None):
     gd = GameData()
     gd._crafting_recipes = recipes or {}
+    if yields is not None:
+        gd._craft_yields = yields
     gd._resource_drops = drops or {}
     if drops_full is not None:
         gd._resource_drops_full = drops_full
@@ -274,6 +276,29 @@ def test_demand_set_is_yield_aware_with_no_partial_batches():
 def test_demand_set_unknown_quantity_is_zero():
     g = build_requirement_graph(_dagger_gd())
     assert demand_set(g, ["copper_dagger"]).quantity("nothing_here") == 0
+
+
+def test_graph_carries_craft_yields():
+    """Wave 5: the graph now carries yields so `demand_set` is yield-correct by
+    default. Without this field the projection ignored the bundle's 31 Y>1 items
+    and over-ordered their materials at any multiplier >1."""
+    gd = _gd(recipes={"potion": {"herb": 4}}, yields={"potion": 2})
+    g = build_requirement_graph(gd)
+    assert g.yields["potion"] == 2
+
+
+def test_demand_set_default_is_yield_aware():
+    """The load-bearing Wave 5 fix. `demand_set(g, roots, {root: mult})` with NO
+    explicit yields must still apply the graph's yields — this is what makes it
+    match the live `closure_demand`, whose default reads `craft_yields`. A prior
+    version defaulted to an empty map and silently ignored Y>1 at mult>1."""
+    gd = _gd(recipes={"potion": {"herb": 4}}, yields={"potion": 2})
+    g = build_requirement_graph(gd)
+    # want 3 potions, Y=2 -> ceil(3/2)=2 batches -> 2*4 = 8 herb, NOT 3*4=12.
+    assert demand_set(g, ["potion"], {"potion": 3}).quantity("herb") == 8
+    # an explicit yields arg still overrides the graph default.
+    assert demand_set(g, ["potion"], {"potion": 3},
+                      yields={"potion": 1}).quantity("herb") == 12
 
 
 def test_demand_merge_takes_max_not_sum():

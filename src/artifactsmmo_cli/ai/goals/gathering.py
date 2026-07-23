@@ -33,11 +33,9 @@ from artifactsmmo_cli.ai.monster_drop_selection import (
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
-from artifactsmmo_cli.ai.recipe_closure import (
-    closure_demand,
-    gather_serves_closure,
-)
+from artifactsmmo_cli.ai.recipe_closure import gather_serves_closure
 from artifactsmmo_cli.ai.requirement_projections import (
+    demand_set,
     requirement_craftables,
     requirement_gather_skills,
 )
@@ -208,9 +206,8 @@ class GatherMaterialsGoal(Goal):
         # and Withdraw(feather) never entered a plan. Every material in the
         # full recipe closure (closure_demand includes such leaf inputs) must
         # be withdrawable.
-        chain: dict[str, int] = {}
-        for code, qty in self._needed.items():
-            closure_demand(code, qty, game_data, chain, frozenset())
+        chain = dict(demand_set(
+            game_data.requirement_graph.graph(), list(self._needed), self._needed).quantities)
         # Currency-earning for must-buy items (#13): a non-craftable NPC-only item
         # paid in a NON-GOLD currency (e.g. greater_lifesteal_rune ←
         # sandwhisper_coin) is only buyable once the currency is on hand. Add the

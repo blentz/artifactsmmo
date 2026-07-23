@@ -30,11 +30,11 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.recipe_closure import (
-    closure_demand,
-    gather_serves_closure,
+from artifactsmmo_cli.ai.recipe_closure import gather_serves_closure
+from artifactsmmo_cli.ai.requirement_projections import (
+    demand_set,
+    requirement_craftables,
 )
-from artifactsmmo_cli.ai.requirement_projections import requirement_craftables
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MAINTAIN_CONSUMABLES_VALUE = 25.0
@@ -79,13 +79,12 @@ class MaintainConsumablesGoal(Goal):
         # (GAP-7: the per-resource primary-drop loop was redundant and, with
         # the widened needed_resources, would admit junk withdraws).
         withdrawable: set[str] = set(craftable_mats) | {code}
-        chain: dict[str, int] = {}
-        closure_demand(code, 1, game_data, chain, frozenset())
+        chain = dict(demand_set(game_data.requirement_graph.graph(), [code]).quantities)
         withdrawable |= set(chain)
 
         deficit = max(1, HEAL_STOCK_FLOOR - heal_stock(state, game_data))
-        batch_chain: dict[str, int] = {}
-        closure_demand(code, deficit, game_data, batch_chain, frozenset())
+        batch_chain = dict(demand_set(
+            game_data.requirement_graph.graph(), [code], {code: deficit}).quantities)
         result: list[Action] = []
         have_craft = False
         for a in actions:

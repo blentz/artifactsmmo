@@ -67,7 +67,7 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.next_craft_core import NextAction
 from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
-from artifactsmmo_cli.ai.recipe_closure import closure_demand
+from artifactsmmo_cli.ai.requirement_projections import demand_set
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -224,8 +224,8 @@ def generate_next_craft_action(
         plan = craft_plan_full(recipes, owned, bank, item, qty, sources)
         if not plan:
             continue  # this item already satisfied; try the next needed item
-        chain: dict[str, int] = {}
-        closure_demand(item, qty, game_data, chain, frozenset())
+        chain = dict(demand_set(
+            game_data.requirement_graph.graph(), [item], {item: qty}).quantities)
         mapped: list[Action] = []
         for na in plan:
             action = _map_next_action(na, relevant, game_data, sources)

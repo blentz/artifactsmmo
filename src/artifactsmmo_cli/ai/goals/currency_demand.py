@@ -122,7 +122,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.currency_afford_core import currency_afford_plannable_pure
 from artifactsmmo_cli.ai.goals.funding_core import funding_cycles_pure
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor_multi
-from artifactsmmo_cli.ai.recipe_closure import closure_demand
+from artifactsmmo_cli.ai.requirement_projections import demand_set
 from artifactsmmo_cli.ai.tiers.objective import GOLD
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
@@ -269,9 +269,8 @@ def analyze_currency_leaves(
     # unknown-bank rule — None means unknown, which credits nothing (never a
     # default; the WithdrawGold edge is likewise inapplicable on a None bank).
     gold_on_hand = state.gold + (state.bank_gold or 0)
-    chain: dict[str, int] = {}
-    for code, qty in needed.items():
-        closure_demand(code, qty, game_data, chain, frozenset())
+    chain = dict(demand_set(
+        game_data.requirement_graph.graph(), list(needed), needed).quantities)
 
     leaves = _classify_leaves(chain, state, game_data)
     # JOINT gold check (Task 4): the admitted set's total spend, feeding

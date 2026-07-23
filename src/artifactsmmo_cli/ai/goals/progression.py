@@ -31,11 +31,11 @@ from artifactsmmo_cli.ai.monster_drop_selection import (
     select_monster_for_drop,
 )
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
-from artifactsmmo_cli.ai.recipe_closure import (
-    closure_demand,
-    gather_serves_closure,
+from artifactsmmo_cli.ai.recipe_closure import gather_serves_closure
+from artifactsmmo_cli.ai.requirement_projections import (
+    demand_set,
+    requirement_craftables,
 )
-from artifactsmmo_cli.ai.requirement_projections import requirement_craftables
 from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -244,8 +244,7 @@ class UpgradeEquipmentGoal(Goal):
         # Withdraw(feather) never entered a plan. Every material in the full
         # recipe closure must be withdrawable (same defect fixed in
         # GatherMaterialsGoal for run-17 c94).
-        chain: dict[str, int] = {}
-        closure_demand(target_item, 1, game_data, chain, frozenset())
+        chain = dict(demand_set(game_data.requirement_graph.graph(), [target_item]).quantities)
         withdrawable |= set(chain)
         # Materials the bank+inventory fully cover — withdraw them, don't gather.
         owned: dict[str, int] = dict(state.inventory)

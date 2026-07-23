@@ -18,11 +18,11 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
-from artifactsmmo_cli.ai.recipe_closure import (
-    closure_demand,
-    gather_serves_closure,
+from artifactsmmo_cli.ai.recipe_closure import gather_serves_closure
+from artifactsmmo_cli.ai.requirement_projections import (
+    demand_set,
+    requirement_craftables,
 )
-from artifactsmmo_cli.ai.requirement_projections import requirement_craftables
 from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -86,8 +86,8 @@ class PursueTaskGoal(Goal):
         craftable_mats = requirement_craftables(
             game_data.requirement_graph.graph(), [self._task_code])
         # Build closure demand so intermediate crafts can be inventory-batched.
-        chain: dict[str, int] = {}
-        closure_demand(self._task_code, self._batch, game_data, chain, frozenset())
+        chain = dict(demand_set(
+            game_data.requirement_graph.graph(), [self._task_code], {self._task_code: self._batch}).quantities)
         # The withdraw-eligible item codes are (a) every closure material
         # (chain — leaf raw materials like ash_wood included) plus (b)
         # intermediate craftables already in the bank, e.g. ash_plank
