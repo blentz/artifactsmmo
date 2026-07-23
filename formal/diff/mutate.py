@@ -1234,8 +1234,8 @@ PREREQUISITE_GRAPH_MUTATIONS = [
     # edges — the recipe branch collapses to a leaf (wrong edge set, material
     # edges missing). The only prerequisite the ObtainItem branch now emits.
     ("prerequisite_graph: drop ingredient ObtainItem edges",
-     "            return [ObtainItem(mat, qty) for mat, qty in recipe.items()]",
-     "            return []"),
+     "        return [ObtainItem(mat, qty) for mat, qty in edges.items()]",
+     "        return []"),
     # combat_capable any -> all: requires EVERY monster beatable rather than SOME
     # (the anti-gaming aggregation flip the De Morgan contract catches).
     ("prerequisite_graph: combat_capable any -> all",
@@ -1262,16 +1262,17 @@ RECOVERABLE_LEAF_MUTATIONS = [
      "        return False",
      "    if source.kind is SourceKind.CRAFT:\n"
      "        return True"),
-    # Drop the leaf branch entirely: always descend into the recipe regardless
-    # of any ready source, reverting to the pre-epic behavior (the live
-    # 2026-07-13 ash_plank/fishing_net bug this whole epic fixes). Killed by
+    # Force the ready-source leaf predicate to False: `_leafs` never truncates on
+    # a ready non-craft route, so the descent ALWAYS falls into the recipe —
+    # reverting to the pre-epic behavior (the live 2026-07-13 ash_plank/fishing_net
+    # bug this whole epic fixes). Wave 6 moved the branch into `_leafs`; the
+    # semantics ("always descend") are unchanged. Killed by
     # test_a_material_with_a_ready_source_is_a_leaf (a RECYCLE source must
     # short-circuit to []).
     ("prerequisite_graph: drop ready-source leaf branch (always descend)",
-     "            if any(_source_leafs(s, game_data, exclude_recycle_leaf)\n"
-     "                   for s in sources):\n"
-     "                return []  # a ready leaf source exists → LEAF\n",
-     ""),
+     "            return any(_source_leafs(s, game_data, exclude_recycle_leaf)\n"
+     "                       for s in sources)",
+     "            return False"),
     # Grind value-aware recycle leafing: flip the JUNK-vs-current-tier floor
     # comparison. Killed by test_exclude_recycle_leaf_descends_past_a_recycle_
     # only_material (current-tier copper_dagger must NOT leaf -> descend) AND

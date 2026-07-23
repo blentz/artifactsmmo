@@ -7,6 +7,7 @@ chains terminate; cycles (if any) are left for P3's visited-set traversal."""
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind, obtain_sources
+from artifactsmmo_cli.ai.requirement_projections import requirement_edges
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
@@ -90,45 +91,42 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
     the ready source with gather/craft to make up any shortfall, finding the true
     optimum rather than an all-or-nothing cliff."""
     if isinstance(node, ObtainItem):
-        if node.is_satisfied(state, game_data):
-            return []
-        # For equippables: if the item is already OWNED (in inventory or
-        # bank) but not yet equipped, no recipe descent is needed — the
-        # only remaining step is the equip itself. Without this guard,
-        # the prereq tree falls into the recipe (which consumed its
-        # inputs during the original craft) and the bot would re-gather
-        # mats to build a second copy. The arbiter's UpgradeEquipmentGoal
-        # plans the EquipAction for the existing copy via the empty
-        # prereq path.
-        equipped_codes = [c for c in state.equipment.values() if c is not None]
-        if owned_count_pure(
-            state.inventory, state.bank_items, equipped_codes, node.code,
-        ) >= node.quantity:
-            return []
-        recipe = game_data.crafting_recipe(node.code)
-        if recipe is not None:
+        # Axis-2 (spec §4.2): state-truncation is a PREDICATE fed to the graph's
+        # one-ply `requirement_edges`, not logic baked into the walk. `_leafs`
+        # returns True when `node` is directly actionable — so the descent does
+        # NOT fall into its recipe — for exactly the reasons the old branch did:
+        #   * already satisfied, or already OWNED (equippable held-not-equipped:
+        #     the only remaining step is the equip, so re-descending the recipe
+        #     would re-gather mats to build a second copy — UpgradeEquipmentGoal
+        #     plans the EquipAction via this empty prereq path);
+        #   * a READY non-craft source exists (withdraw / licensed recycle / live
+        #     gather / located vendor / winnable drop) per the shared
+        #     `obtain_sources` model.
+        # `exclude_recycle_leaf` (set by a SKILL GRIND) makes recycle leafing
+        # VALUE-AWARE: a grind gathers materials fresh rather than churning
+        # CURRENT-TIER gear (pursuit_value >= RECYCLE_LEAF_VALUE_FLOOR) but still
+        # recovers surplus JUNK cheaply — see `_source_leafs`. The rung itself is
+        # forbidden separately by GatherMaterialsGoal.exclude_recycle (null cycle).
+        # `requirement_edges` only ever queries `node.code` (one ply), so `_leafs`
+        # is called with that item alone; the skill-gate is NOT emitted as a prereq
+        # (under-skill gear grinds planner-natively via LevelSkill, epic P3).
+        def _leafs(item: str) -> bool:
+            if node.is_satisfied(state, game_data):
+                return True
+            equipped_codes = [c for c in state.equipment.values() if c is not None]
+            if owned_count_pure(
+                state.inventory, state.bank_items, equipped_codes, node.code,
+            ) >= node.quantity:
+                return True
+            if game_data.crafting_recipe(node.code) is None:
+                return True  # buyable / drop / gatherable / unknown → leaf
             sources = obtain_sources(node.code, state, game_data, ctx)
-            # `exclude_recycle_leaf` (set by a SKILL GRIND): VALUE-AWARE recycle
-            # leafing. A grind gathers its materials fresh rather than churning
-            # CURRENT-TIER gear to source them, but still recovers surplus JUNK
-            # cheaply (a fast grind — recycling a worthless obsolete item beats
-            # 50 raw gathers). So a RECYCLE source leafs a material for the grind
-            # ONLY when the recycled item is JUNK (`pursuit_value <
-            # RECYCLE_LEAF_VALUE_FLOOR`); a current-tier item does NOT leaf, and
-            # the grind descends past the recyclable-only material to its
-            # GATHERABLE raw (a flat, always-plannable gather). The rung itself is
-            # forbidden separately by GatherMaterialsGoal.exclude_recycle (the
-            # null cycle). Withdraw/gather/buy/drop always leaf. For every other
-            # caller the flag is off and recycle leafs as before.
-            if any(_source_leafs(s, game_data, exclude_recycle_leaf)
-                   for s in sources):
-                return []  # a ready leaf source exists → LEAF
-            # An ObtainItem's prereqs are just its material ObtainItems. The
-            # crafting-skill gate is no longer emitted as a prerequisite node:
-            # under-skill gear is grinded planner-natively by UpgradeEquipmentGoal
-            # via the LevelSkill action (epic P3), not by a tree-level skill root.
-            return [ObtainItem(mat, qty) for mat, qty in recipe.items()]
-        return []  # buyable / monster-drop / gatherable / unknown → leaf
+            return any(_source_leafs(s, game_data, exclude_recycle_leaf)
+                       for s in sources)
+
+        graph = game_data.requirement_graph.graph()
+        edges = requirement_edges(graph, node.code, _leafs)
+        return [ObtainItem(mat, qty) for mat, qty in edges.items()]
     if isinstance(node, ReachCharLevel):
         if combat_capable(state, game_data):
             return []
