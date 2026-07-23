@@ -689,12 +689,20 @@ proving nothing.
 
 ## 8. Residuals — stated, not hidden
 
-**R1 — Which taskmaster can complete/exchange a given task is ASSERTED, not probed.**
-The docs say exchange works at "any Task Master"; **completion is unspecified**. This is
-the same trap as the duplicate-artifacts server rule (asserted, never probed). Phase 0 must
-probe this live and record the result before Phase 4 depends on it. If completion is
-master-specific, `CompleteTaskAction` must route to the issuing master and the travel cost
-of a mis-chosen master becomes part of §4.3's economics.
+**R1 — RESOLVED 2026-07-23 (live OpenAPI probe, no stateful action).** The authoritative
+API schema (`https://api.artifactsmmo.com/openapi.json`) shows `POST /my/{name}/action/task/complete`
+carries **no master-code parameter** and its only location error is `598 "Tasks Master not
+found on this map"` — the *same* code exchange and accept return. There is no "wrong master
+type" or "return to issuing master" error. **Completion works at ANY tasks_master tile**, not
+the issuing one; exchange likewise (confirming the docs). Accept (`/action/task/new`) also has
+no type parameter, so the task TYPE is purely positional — determined by which master tile the
+character stands on (the lever). Live `/maps` confirms exactly two tasks_master tiles, at
+(1,2) and (4,13), matching the fixture.
+
+**Consequence for Phase 4:** a mis-chosen accept master CANNOT strand the character (they
+complete anywhere), so there is **no completion travel-cost penalty** in §4.3's economics —
+the master choice optimises the task-type *distribution* only. `CompleteTaskAction` /
+`TaskExchangeAction` route to the NEAREST tasks_master, not the issuer.
 
 **R2 — Weight churn.** `B` moves as live roots change, so synergy moves cycle-to-cycle and
 d'Hondt apportionment could thrash. Believed benign: `falloff` already moves every cycle

@@ -108,9 +108,9 @@ falloff-parity, which the spec itself treats as the baseline for `Fraction` curv
 - Worked-case tests: `test_currency_root_suppressed`, `test_task_skill_convergence`.
 - **Runtime activation**: must fire on live `plan <char>` (green tests ≠ runtime-active).
 
-## Wave 4 — Taskmaster choice
+## Wave 4 — Taskmaster choice  ⟵ UNBLOCKED (R1 resolved)
 
-- **BLOCKED on R1**: probe live which master can COMPLETE/exchange a task (docs say exchange=any, completion unspecified). Same asserted-not-probed trap as duplicate-artifacts. Probe FIRST.
+- **R1 RESOLVED 2026-07-23** (live OpenAPI probe): completion + exchange work at ANY tasks_master (only error 598 = "no tasks master on this map"), NOT the issuing one; accept has no type param → task TYPE is positional (which master tile). Live `/maps`: 2 tiles (1,2)+(4,13), matches fixture. **Consequence: no completion travel-cost penalty** — master choice optimizes task-type distribution ONLY; complete/exchange route to nearest tile.
 - argmax `E_synergy(M)` over `tasks_for(M.code, char_level)`, reroll-aware top-quantile: `k = max(1, ceil(n·1/3))`, tiebreak `task_code` (semantic; flagged as the one identifier ordering a decision).
 - Wire at `AcceptTaskGoal()` construction (`strategy_driver.py:382`); goal carries chosen master → `accept_task.apply` projects `task_type` from `taskmaster_code` (completes 0.3). Factory re-points all 5 task actions per master.
 - Synergy NEVER enters `AcceptTaskAction.cost` (admissibility trap).
