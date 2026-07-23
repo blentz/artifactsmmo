@@ -123,6 +123,12 @@ _RUNE_ABILITY_CARVEOUTS: frozenset[str] = frozenset({
 #                     ever goes live) doesn't trip the equippable guard.
 _ITEM_EFFECT_CARVEOUTS: frozenset[str] = frozenset({"gems", "christmas_magic"})
 
+#: Minimum monster-catalog size before `currency_accrues_passively` will judge a
+#: currency 'broadly dropped'. A real catalog is ~58; a test/edge catalog of one
+#: or two monsters cannot establish that a currency is earned by normal play (a
+#: single dropper would trivially be a 'majority'), so the floor keeps it honest.
+_MIN_MONSTERS_FOR_BREADTH = 10
+
 
 @dataclass
 class GameData:
@@ -908,6 +914,22 @@ class GameData:
         selection (pick the monster minimizing expected kills for a needed
         drop)."""
         return self.monsters.monsters_dropping(item)
+
+    def currency_accrues_passively(self, currency: str) -> bool:
+        """True if `currency` is earned as a broad byproduct of normal combat — it
+        drops from at least half of all monsters, in a catalog large enough
+        (>= `_MIN_MONSTERS_FOR_BREADTH`) to judge breadth at all. Such a currency
+        accumulates while the character simply levels, so it needs no DEDICATED
+        farm: the same reason gold is excluded from currency grinds
+        (`_equippable_goal` / `gathering` injection both note "gold is earned by
+        normal play"). The character buys the priced item once ordinary play has
+        accrued enough, instead of a directed grind out-prioritising leveling.
+        event_ticket, which drops from 56/58 monsters, is the motivating case
+        (2026-07-23); the catalog floor keeps a tiny test/edge catalog — where a
+        single dropper is trivially a 'majority' — from misfiring."""
+        total = len(self.monsters.levels)
+        return (total >= _MIN_MONSTERS_FOR_BREADTH
+                and len(self.monsters_dropping(currency)) * 2 >= total)
 
     def monster_min_gold(self, code: str) -> int:
         """OpenAPI conformance (Item 14): minimum gold reward per fight win.

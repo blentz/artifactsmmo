@@ -162,6 +162,39 @@ def test_relevant_actions_farms_nongold_currency_for_must_buy(_=None) -> None:
     assert any(isinstance(a, NpcBuyAction) for a in relevant), "rune NpcBuy must be offered"
 
 
+def test_relevant_actions_no_farm_for_passively_earned_currency() -> None:
+    """A currency earned as a broad combat byproduct (dropped by most monsters,
+    like event_ticket) is NOT dedicate-farmed — it accrues while levelling, so the
+    injection skips it (like a gold vendor). The buy is still offered; only the
+    currency-farm Fight is withheld, so the arbiter falls back to leveling until
+    ordinary play affords the item (live event_ticket / lich_race_medal fix)."""
+    gd = GameData()
+    gd._item_stats = {"medal": ItemStats(code="medal", level=5, type_="artifact")}
+    gd._npc_stock = {"vendor": {"medal": 100}}
+    gd._npc_buy_currency = {"vendor": {"medal": "ticket"}}
+    gd._npc_locations = {"vendor": (0, 0)}
+    gd._monster_level = {f"m{i}": 5 for i in range(12)}
+    gd._monster_hp = {f"m{i}": 20 for i in range(12)}
+    fill_monster_stat_defaults(gd)
+    gd._monster_drops = {f"m{i}": [("ticket", 50, 1, 1)] for i in range(9)}  # 9/12 passive
+    gd._monster_locations = {f"m{i}": (10, 10) for i in range(9)}
+    actions = [
+        FightAction(monster_code="m0", locations=[(10, 10)]),
+        NpcBuyAction(npc_code="vendor", item_code="medal",
+                     npc_location=(0, 0), quantity=1),
+    ]
+    goal = GatherMaterialsGoal(target_item="medal", needed={"medal": 1})
+    # The droppers are WINNABLE (so a Fight WOULD be emitted if the currency were
+    # injected) — that is what makes this pin the skip: with the gate the Fight is
+    # absent, without it a winnable drop-farm Fight appears.
+    state = make_state(level=40, attack={"air": 50}, gold=0, x=0, y=0,
+                       inventory={"ticket": 7})
+    relevant = goal.relevant_actions(actions, state, gd)
+    assert not any(isinstance(a, FightAction) for a in relevant), \
+        "a passively-earned currency must NOT be dedicate-farmed"
+    assert any(isinstance(a, NpcBuyAction) for a in relevant), "the buy is still offered"
+
+
 def test_relevant_actions_no_currency_farm_when_gold_vendor_exists() -> None:
     """If a permanent GOLD vendor also sells the item, no currency-farming is
     injected (gold needs no farming): the coin-dropper Fight is NOT surfaced."""

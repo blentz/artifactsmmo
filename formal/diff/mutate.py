@@ -2885,6 +2885,41 @@ TASKMASTER_CHOICE_MUTATIONS = [
      "        if pool:\n            continue"),
 ]
 
+# currency_accrues_passively (game_data.py) — a currency earned as a broad combat
+# byproduct needs no dedicated grind (§synergy live diagnosis 2026-07-23).
+# Unit-killed by tests/test_ai/test_game_data.py.
+PASSIVE_CURRENCY_HELPER_MUTATIONS = [
+    # Threshold drops the *2: only an ALL-monster drop counts as passive, so
+    # event_ticket (56/58) would fail and get a dedicated grind again.
+    ("currency passive: threshold needs every monster (drops the *2)",
+     "                and len(self.monsters_dropping(currency)) * 2 >= total)",
+     "                and len(self.monsters_dropping(currency)) >= total)"),
+    # Catalog floor removed: a tiny catalog where one dropper is a trivial
+    # 'majority' would falsely read as passive (the sea_marauder-coin regression).
+    ("currency passive: catalog-size floor removed",
+     "        return (total >= _MIN_MONSTERS_FOR_BREADTH",
+     "        return (total >= 0"),
+]
+
+# _equippable_goal passive-currency gate (strategy_driver.py). Unit-killed by
+# tests/test_ai/test_strategy_driver.py.
+PASSIVE_CURRENCY_GATE_MUTATIONS = [
+    # Skip removed: a passively-accruing currency is dedicated-farmed again,
+    # out-ranking leveling (the exact bug this fixes).
+    ("equippable: passive-currency skip removed",
+     '                     if currency != "gold"\n'
+     '                     and not game_data.currency_accrues_passively(currency)]',
+     '                     if currency != "gold"]'),
+]
+
+# gathering currency-injection passive-currency gate (goals/gathering.py). The
+# twin of the _equippable_goal gate. Unit-killed by test_craft_vs_buy_wiring.py.
+GATHERING_PASSIVE_MUTATIONS = [
+    ("gathering: passive-currency injection skip removed",
+     "            if game_data.currency_accrues_passively(currency):\n                continue",
+     "            if False:\n                continue"),
+]
+
 # equipment_profile.profile_for selector (2026-07-08; utility axis retired in P3b):
 # profile_for is now a CONSTANT COMBAT for every root and adequacy (skill-level
 # roots — the only former utility-axis pursuit — grind planner-natively via the
@@ -5753,6 +5788,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_means_worth.py", survivors)
     run_group(TASKMASTER_CHOICE_SRC, TASKMASTER_CHOICE_MUTATIONS,
               "tests/test_ai/test_taskmaster_choice.py", survivors)
+    run_group(GAME_DATA_PARSE_SRC, PASSIVE_CURRENCY_HELPER_MUTATIONS,
+              "tests/test_ai/test_game_data.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, PASSIVE_CURRENCY_GATE_MUTATIONS,
+              "tests/test_ai/test_strategy_driver.py", survivors)
+    run_group(GATHERING_GOAL_SRC, GATHERING_PASSIVE_MUTATIONS,
+              "tests/test_ai/test_craft_vs_buy_wiring.py", survivors)
     run_group(EQUIPMENT_PROFILE_SRC, EQUIPMENT_PROFILE_MUTATIONS,
               "formal/diff/test_equipment_profile_diff.py", survivors)
 def _run_all_groups() -> int:

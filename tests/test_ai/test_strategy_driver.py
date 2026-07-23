@@ -451,6 +451,42 @@ def test_objective_step_gathers_satchel_when_currency_funded():
     assert goal is not None
 
 
+def _passive_currency_gd():
+    """A buy-only artifact priced in a currency that drops from MOST monsters —
+    it accrues while levelling (like gold, like event_ticket)."""
+    gd = GameData()
+    gd._item_stats = {"medal": ItemStats(code="medal", level=5, type_="artifact")}
+    gd._npc_stock = {"vendor": {"medal": 100}}
+    gd._npc_buy_currency = {"vendor": {"medal": "ticket"}}
+    gd._npc_locations = {"vendor": (0, 0)}
+    gd.monsters.levels = {f"m{i}": 1 for i in range(12)}
+    gd._monster_drops = {f"m{i}": [("ticket", 50, 1, 1)] for i in range(9)}  # 9/12 passive
+    return gd
+
+
+def test_equippable_passive_currency_skips_dedicated_grind():
+    """A buy-only item priced in a passively-accruing currency does NOT mint a
+    dedicated currency grind — the currency is earned while levelling, so the goal
+    falls through to the plain buy (unplannable until affordable, so the arbiter
+    levels). This is the live event_ticket / lich_race_medal fix."""
+    gd = _passive_currency_gd()
+    state = make_state(inventory={"ticket": 7}, bank_items={})
+    goal = _equippable_goal("medal", "artifact1_slot", state, gd)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal._target_item == "medal"      # the buy, NOT a "ticket" grind
+
+
+def test_equippable_non_passive_currency_still_grinds():
+    """Control: a currency that does NOT accrue passively (one dropper of four)
+    still drives the currency grind — the fix is targeted, not a blanket disable."""
+    gd = _passive_currency_gd()
+    gd._monster_drops = {"m0": [("ticket", 50, 1, 1)]}   # 1/12 < half -> not passive
+    state = make_state(inventory={"ticket": 7}, bank_items={})
+    goal = _equippable_goal("medal", "artifact1_slot", state, gd)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal._target_item == "ticket"     # currency grind fires
+
+
 def test_map_guard_gear_review_upgrades_when_materials_in_hand():
     gd = GameData()
     gd._item_stats = {"copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",

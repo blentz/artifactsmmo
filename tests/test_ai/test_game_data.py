@@ -2269,3 +2269,28 @@ class TestTaskPoolRetention:
         gd = self._gd()
         assert gd.task_coin_reward("demon") == 5
         assert gd.task_gold_reward("chicken") == 200
+
+
+def test_currency_accrues_passively_majority_of_a_real_catalog():
+    """A currency dropping from >= half of a real-sized catalog accrues while the
+    character simply levels, so it needs no dedicated farm (the gold rule
+    generalised). Fewer droppers -> not passive -> the grind still fires."""
+    gd = GameData()
+    gd.monsters.levels = {f"m{i}": 1 for i in range(12)}                  # 12 monsters
+    gd._monster_drops = {f"m{i}": [("tk", 50, 1, 1)] for i in range(6)}   # 6/12 == half
+    assert gd.currency_accrues_passively("tk") is True
+    gd._monster_drops = {f"m{i}": [("tk", 50, 1, 1)] for i in range(5)}   # 5/12 < half
+    assert gd.currency_accrues_passively("tk") is False
+    assert gd.currency_accrues_passively("absent") is False              # 0 droppers
+
+
+def test_currency_not_passive_in_a_tiny_catalog():
+    """The catalog floor: with too few monsters, a single dropper is trivially a
+    'majority' — that is not 'earned by normal play', so it is NOT passive (a
+    dedicated grind still fires). Also covers the empty catalog (no 0-division)."""
+    gd = GameData()
+    gd.monsters.levels = {"only": 1}
+    gd._monster_drops = {"only": [("tk", 50, 1, 1)]}                      # 1/1 but tiny
+    assert gd.currency_accrues_passively("tk") is False
+    gd.monsters.levels = {}
+    assert gd.currency_accrues_passively("tk") is False

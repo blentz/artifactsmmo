@@ -223,6 +223,12 @@ class GatherMaterialsGoal(Goal):
             if not perm or any(cur == "gold" for _price, cur in perm):
                 continue
             unit_price, currency = min(perm, key=lambda pc: pc[0])
+            # Skip a currency that accrues passively from normal combat (like gold,
+            # e.g. event_ticket): no Fight-injection to farm it — it is earned while
+            # levelling, and the buy fires once ordinary play affords it. Mirrors the
+            # `_equippable_goal` gate (§synergy live diagnosis 2026-07-23).
+            if game_data.currency_accrues_passively(currency):
+                continue
             chain[currency] = chain.get(currency, 0) + unit_price * qty
         withdrawable |= set(chain)
 

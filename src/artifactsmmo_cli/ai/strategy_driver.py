@@ -523,9 +523,17 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
         # items skip the accumulation (gold is earned by normal play, not a
         # gatherable item) and fall through to the buy attempt.
         bank = state.bank_items or {}
+        # A currency that accrues passively from normal combat (like gold, and like
+        # event_ticket, which drops from 56/58 monsters) is NOT farmed on a
+        # dedicated grind — it is earned while levelling. Excluding it here drops
+        # through to the plain buy attempt, which is unplannable until affordable,
+        # so the arbiter falls back to levelling (which accrues the currency). The
+        # item is then bought once ordinary play has paid for it. (§synergy live
+        # diagnosis 2026-07-23: over-boosted event_ticket grind out-ranked xp.)
         purchases = [(price, currency)
                      for price, currency in _permanent_vendor_purchases(code, game_data)
-                     if currency != "gold"]
+                     if currency != "gold"
+                     and not game_data.currency_accrues_passively(currency)]
         if purchases:
             price, currency = min(purchases)
             held = state.inventory.get(currency, 0) + bank.get(currency, 0)
