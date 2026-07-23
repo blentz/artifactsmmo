@@ -20,6 +20,8 @@ own work — and this module maps them to a bounded `Fraction`. Taking two ints
 (not two DemandSets) keeps the proven core scalar and its mutation group small,
 mirroring `falloff(focus_level: int)`."""
 
+import math
+from collections.abc import Sequence
 from fractions import Fraction
 
 S_MIN = Fraction(1, 3)
@@ -48,3 +50,32 @@ def synergy_pure(shared: int, total: int) -> Fraction:
         return Fraction(1)
     assert shared <= total, f"shared {shared} exceeds total {total}"
     return S_MIN + (Fraction(1) - S_MIN) * Fraction(shared, total)
+
+
+TOP_QUANTILE = Fraction(1, 3)
+"""Fraction of a task pool that counts toward a taskmaster's expected synergy
+(spec 2026-07-19 §4.3). A bad task draw is a cheap cancel (1 coin), so a master
+is worth its GOOD draws, not its average — the aggregate reads the top third.
+Unvalidated tuning surface (residual R4): calibrate against a live trace, the
+way FOCUS_FLOOR was."""
+
+
+def expected_pool_synergy(synergies: Sequence[Fraction],
+                          top_quantile: Fraction = TOP_QUANTILE) -> Fraction:
+    """Reroll-aware expected synergy of a taskmaster's task pool: the mean of the
+    top `ceil(n * top_quantile)` per-task synergies (spec §4.3). Because a bad
+    draw is cheap to cancel and reroll, a master's value tracks how good its GOOD
+    draws are, not its plain average — plain mean washes the lever out; max
+    over-commits on a draw that may never roll.
+
+    `k = max(1, ceil(n * q))` never selects an empty slice, so a one-task pool is
+    its own value. Exact `Fraction`; no float in the decision path. Only the
+    MEAN of the top-k is returned — its value is invariant to how ties among the
+    selected synergies are ordered, so no task identifier orders the decision
+    (unlike the spec's sketch, which broke ties on `task_code`). ASSERTS on an
+    empty pool: the caller must drop a master with no tasks first."""
+    n = len(synergies)
+    assert n > 0, "expected_pool_synergy on an empty pool — caller must exclude it"
+    k = max(1, math.ceil(n * top_quantile))
+    top = sorted(synergies, reverse=True)[:k]
+    return sum(top, Fraction(0)) / k

@@ -89,6 +89,7 @@ from artifactsmmo_cli.ai.tiers.means import (
     means_fires,
 )
 from artifactsmmo_cli.ai.tiers.means_worth import means_serves
+from artifactsmmo_cli.ai.tiers.taskmaster_choice import choose_taskmaster
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -384,7 +385,16 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
                               initial_progress=state.task_progress,
                               batch=task_batch_size(state, game_data))
     if kind is MeansKind.ACCEPT_TASK:
-        return AcceptTaskGoal()
+        # Synergy Wave 4: steer the task DISTRIBUTION toward the master whose pool
+        # best serves the pursued gear (spec §4). `ctx.target_gear` is the live
+        # gear demand B available at this site; the choice returns None (no second
+        # master, or neither pool has a level-appropriate task), meaning fall back
+        # to today's default master.
+        chosen = choose_taskmaster(state, game_data, ctx.target_gear)
+        if chosen is None:
+            return AcceptTaskGoal()
+        code, tile = chosen
+        return AcceptTaskGoal(taskmaster_location=tile, taskmaster_code=code)
     if kind is MeansKind.TASK_EXCHANGE:
         # ONE-batch semantics: capture the construction-time coin total so the
         # goal is satisfied after a single exchange (initial - min_coins), not

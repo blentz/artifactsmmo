@@ -151,6 +151,7 @@ PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers"
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 MEANS_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means_worth.py"
+TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "taskmaster_choice.py"
 EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
 INVENTORY_ROOM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_room.py"
 INVENTORY_KEEP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_keep.py"
@@ -2773,6 +2774,19 @@ SYNERGY_CORE_MUTATIONS = [
     ("synergy: alignment sign flipped (overlap pushes below floor)",
      "    return S_MIN + (Fraction(1) - S_MIN) * Fraction(shared, total)",
      "    return S_MIN - (Fraction(1) - S_MIN) * Fraction(shared, total)"),
+    # expected_pool_synergy (Wave 4): reroll-aware top-quantile mean.
+    # Worst third instead of best: the master is valued by its useless draws.
+    ("pool synergy: takes the worst third instead of the best",
+     "    top = sorted(synergies, reverse=True)[:k]",
+     "    top = sorted(synergies)[:k]"),
+    # floor instead of ceil: a 4-task pool takes 1 not 2, changing the mean.
+    ("pool synergy: slice rounds down instead of up",
+     "    k = max(1, math.ceil(n * top_quantile))",
+     "    k = max(1, math.floor(n * top_quantile))"),
+    # sum without the mean: magnitude leaks back in (a big pool scores higher).
+    ("pool synergy: sum not mean (no divide by k)",
+     "    return sum(top, Fraction(0)) / k",
+     "    return sum(top, Fraction(0))"),
 ]
 
 # _synergy_map (progression_tree.py) — the impure B-assembly (spec §3.6).
@@ -2837,6 +2851,33 @@ MEANS_SERVES_MUTATIONS = [
     ("means_serves: monsters-task char-xp clause dropped",
      "    if needs.char_xp and state.task_type == \"monsters\":\n        serving += 1",
      "    if False:\n        serving += 1"),
+]
+
+# taskmaster_choice.choose_taskmaster — the master lever (spec §4). Unit-killed by
+# tests/test_ai/test_taskmaster_choice.py.
+TASKMASTER_CHOICE_MUTATIONS = [
+    # "no choice" guard weakened: a single discovered master is now "chosen"
+    # instead of falling back, so Phase 4 is no longer inert with one master.
+    ("taskmaster: single-master guard weakened",
+     "    if len(tiles) < 2:",
+     "    if len(tiles) < 1:"),
+    # Overlap ignored: every task scores the floor, so the lever goes dead and the
+    # choice collapses to nearest-tile regardless of gear.
+    ("taskmaster: task/gear overlap dropped (always floor)",
+     "    shared = sum(qty for token, qty in own.items() if gear_demand.get(token, 0) > 0)",
+     "    shared = sum(0 for token, qty in own.items() if gear_demand.get(token, 0) > 0)"),
+    # argmax flipped to argmin: the WORST-aligned master is chosen.
+    ("taskmaster: argmax flipped to argmin",
+     "    best = max(scored, key=lambda c: (scored[c][0], -_distance(scored[c][1], state)))",
+     "    best = min(scored, key=lambda c: (scored[c][0], -_distance(scored[c][1], state)))"),
+    # Tie-break inverted: ties go to the FARTHER tile.
+    ("taskmaster: tie-break to the farther tile",
+     "    best = max(scored, key=lambda c: (scored[c][0], -_distance(scored[c][1], state)))",
+     "    best = max(scored, key=lambda c: (scored[c][0], _distance(scored[c][1], state)))"),
+    # Empty-pool skip inverted: non-empty pools are skipped, so no master scores.
+    ("taskmaster: empty-pool skip inverted",
+     "        if not pool:\n            continue",
+     "        if pool:\n            continue"),
 ]
 
 # equipment_profile.profile_for selector (2026-07-08; utility axis retired in P3b):
@@ -5705,6 +5746,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_synergy_assembly.py", survivors)
     run_group(MEANS_WORTH_SRC, MEANS_SERVES_MUTATIONS,
               "tests/test_ai/test_means_worth.py", survivors)
+    run_group(TASKMASTER_CHOICE_SRC, TASKMASTER_CHOICE_MUTATIONS,
+              "tests/test_ai/test_taskmaster_choice.py", survivors)
     run_group(EQUIPMENT_PROFILE_SRC, EQUIPMENT_PROFILE_MUTATIONS,
               "formal/diff/test_equipment_profile_diff.py", survivors)
 def _run_all_groups() -> int:

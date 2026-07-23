@@ -108,13 +108,14 @@ falloff-parity, which the spec itself treats as the baseline for `Fraction` curv
 - Worked-case tests: `test_currency_root_suppressed`, `test_task_skill_convergence`.
 - **Runtime activation**: must fire on live `plan <char>` (green tests ≠ runtime-active).
 
-## Wave 4 — Taskmaster choice  ⟵ UNBLOCKED (R1 resolved)
+## Wave 4 — Taskmaster choice  ✅ BUILT
 
-- **R1 RESOLVED 2026-07-23** (live OpenAPI probe): completion + exchange work at ANY tasks_master (only error 598 = "no tasks master on this map"), NOT the issuing one; accept has no type param → task TYPE is positional (which master tile). Live `/maps`: 2 tiles (1,2)+(4,13), matches fixture. **Consequence: no completion travel-cost penalty** — master choice optimizes task-type distribution ONLY; complete/exchange route to nearest tile.
-- argmax `E_synergy(M)` over `tasks_for(M.code, char_level)`, reroll-aware top-quantile: `k = max(1, ceil(n·1/3))`, tiebreak `task_code` (semantic; flagged as the one identifier ordering a decision).
-- Wire at `AcceptTaskGoal()` construction (`strategy_driver.py:382`); goal carries chosen master → `accept_task.apply` projects `task_type` from `taskmaster_code` (completes 0.3). Factory re-points all 5 task actions per master.
-- Synergy NEVER enters `AcceptTaskAction.cost` (admissibility trap).
-- `test_phase4_inert_with_one_taskmaster` (provably inert until Phase 0 — which is landed).
+- **R1 RESOLVED 2026-07-23** (live OpenAPI probe): completion + exchange work at ANY tasks_master; task TYPE is positional. No completion travel penalty — master choice optimizes task-type distribution ONLY.
+- ✅ Pure core `expected_pool_synergy(synergies, q=1/3)` in `synergy_core.py` — reroll-aware mean of top `max(1,ceil(n·q))`. **No task_code tiebreak needed**: only the MEAN of the top-k is used and it's invariant to tie order, so no identifier orders the decision (improves on the spec sketch). Mutation + unit (no Lean — order statistic, not required by §7).
+- ✅ `taskmaster_choice.choose_taskmaster(state, game_data, target_gear)` → `(code, tile) | None`. B = live **gear** demand (`ctx.target_gear`), NOT the trunk (trunk char_xp would make every combat task score 1 → always monsters). argmax `E_synergy` per master over `tasks_for(code, level)`; tie → nearer tile (travel is tie-break only, never score).
+- ✅ Wired at `map_means` ACCEPT_TASK (`strategy_driver.py`); `AcceptTaskGoal` gains optional `(taskmaster_location, code)` and builds its own chosen action; bare goal filters the pool (backward-compatible). Master choice NOT in `__repr__` (no identity churn). Factory unchanged (no pool-count change / census risk). `apply` projection left as-is (deliberate, keeps task progressable).
+- ✅ Synergy NEVER in `AcceptTaskAction.cost` (admissibility).
+- ✅ Tests: lever both ways (drops→monsters, materials/skills→items), tie→nearer, one-master→None (inert), both-pools-empty→None, fires-on-real-bundle. 5 taskmaster mutants + 3 pool mutants. 149 scenario + 276 integration green.
 
 ## Wave 5 — Within-band ordering  ⏸ DEFERRED
 `DISCRETIONARY_ORDER` sorted by synergy. Recorded misgiving: reorders means the worth gate ALREADY admitted. Build only if a live trace shows an aligned means losing to a less-aligned one in the same band.

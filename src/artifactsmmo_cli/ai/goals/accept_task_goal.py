@@ -9,7 +9,18 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 class AcceptTaskGoal(Goal):
-    """Accept a new task when the character has none."""
+    """Accept a new task when the character has none.
+
+    When a taskmaster has been CHOSEN (synergy Wave 4, `taskmaster_choice`), the
+    goal carries that master's `(location, code)` and walks there; otherwise it
+    falls back to whichever `AcceptTaskAction` the factory prebuilt (today's
+    single default master). The master choice never enters `__repr__`, so it
+    cannot churn arbiter identity (the currency-grind sticky-keying lesson)."""
+
+    def __init__(self, taskmaster_location: tuple[int, int] | None = None,
+                 taskmaster_code: str = "monsters") -> None:
+        self._taskmaster_location = taskmaster_location
+        self._taskmaster_code = taskmaster_code
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:
@@ -19,7 +30,14 @@ class AcceptTaskGoal(Goal):
         timeout when the arbiter reached this goal (l35_boots_drop_farm,
         2026-07-15) — the same bug DepositInventoryGoal already fixed with a
         relevant_actions filter. Restricting the pool keeps the search a single
-        node."""
+        node.
+
+        A chosen master builds its own single action (the factory prebuilds only
+        the default master); an unparameterised goal filters the prebuilt pool,
+        reproducing today's behaviour exactly."""
+        if self._taskmaster_location is not None:
+            return [AcceptTaskAction(taskmaster_location=self._taskmaster_location,
+                                     taskmaster_code=self._taskmaster_code)]
         return [a for a in actions if isinstance(a, AcceptTaskAction)]
 
     def value(self, state: WorldState, game_data: GameData,

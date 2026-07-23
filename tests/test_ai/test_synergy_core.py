@@ -14,7 +14,12 @@ from fractions import Fraction
 import pytest
 
 from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLOOR, falloff
-from artifactsmmo_cli.ai.tiers.synergy_core import S_MIN, synergy_pure
+from artifactsmmo_cli.ai.tiers.synergy_core import (
+    S_MIN,
+    TOP_QUANTILE,
+    expected_pool_synergy,
+    synergy_pure,
+)
 
 
 def test_synergy_core_bounds():
@@ -52,3 +57,58 @@ def test_synergy_range_inside_falloff():
     s_max = synergy_pure(1, 1)                     # ceiling of the synergy curve
     focus_1 = falloff(0)                           # flat-top of the falloff curve
     assert s_max / S_MIN < focus_1 / FOCUS_FLOOR
+
+
+# --- Wave 4: reroll-aware pool synergy for taskmaster choice (spec §4.3) ---
+
+
+def test_pool_synergy_single_is_that_value():
+    assert expected_pool_synergy([Fraction(2, 5)]) == Fraction(2, 5)
+
+
+def test_pool_synergy_is_mean_of_top_third():
+    """k = ceil(n * 1/3); the mean is over the k HIGHEST synergies. Nine tasks →
+    top three."""
+    pool = [Fraction(i, 10) for i in range(1, 10)]   # 0.1 .. 0.9, n=9
+    # top 3 = 0.9, 0.8, 0.7 -> mean 0.8
+    assert expected_pool_synergy(pool) == Fraction(8, 10)
+
+
+def test_pool_synergy_k_is_at_least_one():
+    """A two-task pool still takes ceil(2/3)=1 — the single best draw, never
+    zero (an empty slice would divide by zero)."""
+    assert expected_pool_synergy([Fraction(1, 3), Fraction(1)]) == Fraction(1)
+
+
+def test_pool_synergy_ceil_rounds_the_slice_up():
+    """k rounds UP: four tasks take ceil(4/3)=2 (the top two), not floor=1. Pins
+    ceil against a floor mutant."""
+    pool = [Fraction(1, 10), Fraction(2, 10), Fraction(3, 10), Fraction(4, 10)]
+    # top 2 = 0.4, 0.3 -> mean 0.35 (floor would give just 0.4)
+    assert expected_pool_synergy(pool) == Fraction(35, 100)
+
+
+def test_pool_synergy_is_reroll_aware():
+    """The whole point: a master with one strong draw and many useless ones is
+    valued by its GOOD draws (a bad draw is a cheap cancel), so its expected
+    synergy beats the washed-out plain mean."""
+    pool = [Fraction(1)] + [S_MIN] * 8               # one great, eight floor
+    plain_mean = sum(pool, Fraction(0)) / len(pool)
+    assert expected_pool_synergy(pool) > plain_mean
+
+
+def test_pool_synergy_is_exact_fraction():
+    result = expected_pool_synergy([Fraction(1, 3), Fraction(1, 7), Fraction(1)])
+    assert isinstance(result, Fraction)              # no float in the decision path
+
+
+def test_pool_synergy_empty_asserts():
+    """An empty pool has no expected synergy — the impure caller must exclude a
+    master with no tasks BEFORE calling, so this asserts rather than inventing a
+    value."""
+    with pytest.raises(AssertionError):
+        expected_pool_synergy([])
+
+
+def test_top_quantile_is_one_third():
+    assert TOP_QUANTILE == Fraction(1, 3)
