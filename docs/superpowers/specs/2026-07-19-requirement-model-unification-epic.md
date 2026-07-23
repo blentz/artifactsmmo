@@ -1,7 +1,21 @@
 # Requirement-Model Unification (EPIC)
 
 **Date:** 2026-07-19
-**Status:** DESIGNED — not scheduled, not built
+**Status:** ✅ **COMPLETE** (Waves 0-9 merged, 2026-07-22). See each wave row in §7 for its commit.
+
+> **Completion summary.** Production now has ONE requirement model: `RequirementGraph` +
+> projections, built once and memoized (§4.6, 4.8 ms). Every production requirement-walk
+> consumer delegates to it — `objective_needs` (W3), the 5 `recipe_closure` callers (W4), the
+> 10 `closure_demand` callers (W5), `prerequisites` (W6). `_item_skill_gap` (W7) was fixed in
+> place (D4 discharged) and is provably equivalent to the graph's `skill_gates` via its Lean
+> oracle; `obtain_sources` (W8) is the one documented R3 survivor (state-aware, census-pinned)
+> with an asserted `⊆ graph.leaves` invariant. The migration was IN PLACE, kept green at every
+> step by the Wave 0 parity oracle, so no duplicate walk ever existed to delete (W9).
+> `recipe_closure` / `closure_demand` are retained as the Lean-proven reference the oracle and
+> censuses check the graph against. **Three latent bugs were found and fixed along the way** by
+> the act of relating the walks: the graph's drop/vendor-only enumeration blindness (W2), the
+> `demand_set` empty-yields default that ignored 31 Y>1 items (W5), and the graph's gold-only
+> BUY leaf that hid currency-buyable items (W8).
 **Scope decision:** **A — represent only** (approved 2026-07-19). See §3.
 **Blocks:** `2026-07-19-synergy-weighting-design.md` Phase 1 (§5 of that spec)
 
@@ -295,7 +309,7 @@ Ordered by proof coverage — safest first, so the oracle is trusted before it i
 | **6** | Migrate `prerequisites` | **high** | ✅ **DONE.** Body now = `requirement_edges(g, code, _leafs)` — axis-2 truncation is the explicit `_leafs` PREDICATE (§4.2), axis-1 one-ply is the projection. Signature + all 4 call sites UNCHANGED, so the frozen fakes (§5.2) and the `mutate.py:1388` caller anchor hold. `ReachCharLevel` handling stays (graph has no char-level concept). **Oracle green = byte-identical** `prereq_reprs`/`prereq_leafed` across 321 targets. **2 mutation anchors REFRESHED in-commit** (they pinned the rewritten body lines): the leaf branch moved into `_leafs` (`→ return False`) and the edge return (`recipe.items()` → `edges.items()`); both re-verified killed |
 | **7** | Discharge D4 in `_item_skill_gap` | **high** | ✅ **DONE.** **D4 was mischaracterized in Wave 0**: the worst LEVEL is order-independent (max is commutative); the bug was the tied-SKILL identity, which drives a decision (`ReachSkillGoal` grind target + `task_decision` XP-curve), so an alphabetical tiebreak was forbidden. Fixed with a total order (required_level, gap, **-depth** = outermost gate, skill-name backstop). **NOT migrated onto `skill_gates`** (deviation, R3): the Lean oracle already models `worstLevel` as a max-over-set, so the observable answer is already unified-equivalent — routing it through the graph would need a full `RequirementGraph` inside the Lean differential's `_FakeGameData` for zero observable benefit + real Lean-diff risk. **Oracle stayed GREEN** — depth-preference matches old behaviour on the bundle (real ties are root-vs-deep), so D4 was LATENT (never manifested differently on real data). 2 mutation anchors refreshed (recursion moved to `_worst_gap`), both re-verified killed |
 | **8** | `obtain_sources` — R3 documented survivor | **high** | ✅ **DONE.** **NOT migrated (R3).** All 3 consumers (`prerequisite_graph._leafs`, `forced_craft_grind`, `obtain_source_map`) genuinely need STATE-awareness (bank stock, licensed recycle, met skill gates); the graph is deliberately state-free, and two censuses pin this walk against the live planner pool at the `select` seam. Collapsing it would lose that. **But related, not unrelated:** a new census-style test asserts the walk's state-free kinds ⊆ `graph.leaves` (`test_obtain_graph_agreement.py`, with falsifiability witness). **That invariant surfaced a real Wave-2 bug**: the graph's BUY leaf used `npcs_selling_item` (gold-only), reporting currency-buyable items (jasper_crystal, cloth) UNOBTAINABLE — fixed to `npc_purchases`. `graph.leaves` was unconsumed in production, so the fix is low-risk |
-| **9** | Delete superseded walks and their now-duplicate tests | low | Oracle proves nothing was lost |
+| **9** | Close-out: retire what is dead, retain what proves | low | ✅ **DONE — the premise was wrong.** Waves 3-8 migrated IN PLACE (bodies rewritten to delegate to the graph), so NO duplicate walk was ever created to delete, and no migration left dead code (helper scan: 0 orphans). Wave 1 already removed the genuinely-dead walks (`gating_skills`, `raw_material_units`). `recipe_closure` (0 production callers) and `closure_demand` (1 infra caller, `recipe_cost_memo`) are DELIBERATELY RETAINED: they are the Lean-proven, oracle-anchoring REFERENCE layer — deleting them would orphan 7 Lean modules (closure = least-fixpoint soundness+completeness, the ⌈m/Y⌉ quantity math) that the graph's `requirement_closure`/`demand_set` do NOT independently prove. `gather_serves_closure` has 6 live production callers. **Epic complete.** |
 
 Waves 5–8 each land as their own commit with their own gate run. Waves 1–4 may batch.
 
