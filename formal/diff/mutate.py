@@ -2837,6 +2837,11 @@ MEMO_ENRICH_MUTATIONS = [
     ("memo enrich: craft-skill token weight not +1",
      "                    key = SKILL_PREFIX + craft[0]\n                    out[key] = out.get(key, 0) + 1",
      "                    key = SKILL_PREFIX + craft[0]\n                    out[key] = out.get(key, 0) + 2"),
+    # buy-only currency cost dropped: a buy-only item's real work (its currency
+    # price) goes invisible again, so an expensive currency grind is unweighable.
+    ("memo enrich: buy-only currency cost dropped",
+     "                if SourceKind.BUY in graph.leaves.get(item, frozenset()):",
+     "                if False:"),
 ]
 
 # means_worth.means_serves — the boolean special case of the means<->objective

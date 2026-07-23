@@ -107,8 +107,17 @@ class RequirementGraphMemo:
           through monster kills). Lets a drop-routed candidate align with the
           char-level trunk (level-up preference).
 
-        Tokens are namespaced (``skill:`` / ``char_xp``) so they never collide
-        with item codes. Memoized with the graph."""
+        * a CURRENCY item — for a buy-only closure item (e.g. an artifact bought
+          from an NPC), the price in its currency, weighted by how many are
+          demanded. Without this the real cost of a buy-only root is INVISIBLE to
+          synergy: its recipe closure is just itself (`prerequisites` leafs it), so
+          an expensive currency grind (e.g. 100 event_ticket per lich_race_medal)
+          would score as a one-token root and never be recognised as work that
+          serves nothing else. The currency is a real item code, so it overlaps
+          other roots' demand naturally.
+
+        Synthetic tokens are namespaced (``skill:`` / ``char_xp``) so they never
+        collide with item codes. Memoized with the graph."""
         if code not in self._multiset_cache:
             graph = self.graph()
             out: dict[str, int] = dict(self.demand_for(code))
@@ -122,6 +131,13 @@ class RequirementGraphMemo:
                 if gather is not None:
                     key = SKILL_PREFIX + gather[0]
                     out[key] = out.get(key, 0) + 1
+                if SourceKind.BUY in graph.leaves.get(item, frozenset()):
+                    purchases = self._game_data.npc_purchases(item)
+                    if purchases:
+                        # cheapest buy route's currency cost (price * quantity
+                        # demanded) — the real work behind a buy-only item.
+                        _npc, price, currency = min(purchases, key=lambda p: p[1])
+                        out[currency] = out.get(currency, 0) + price * out.get(item, 1)
             drop_leaves = sum(1 for item in closure
                               if SourceKind.DROP in graph.leaves.get(item, frozenset()))
             if drop_leaves:

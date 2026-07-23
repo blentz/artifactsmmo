@@ -210,12 +210,35 @@ def test_requirement_multiset_matches_independent_recompute(bundle_game_data: Ga
         gather = graph.gather_skill.get(item)
         if gather is not None:
             expected[SKILL_PREFIX + gather[0]] = expected.get(SKILL_PREFIX + gather[0], 0) + 1
+        if SourceKind.BUY in graph.leaves.get(item, frozenset()):
+            purchases = bundle_game_data.npc_purchases(item)
+            if purchases:
+                _npc, price, currency = min(purchases, key=lambda p: p[1])
+                expected[currency] = expected.get(currency, 0) + price * expected.get(item, 1)
     drop_leaves = sum(1 for item in closure
                       if SourceKind.DROP in graph.leaves.get(item, frozenset()))
     if drop_leaves:
         expected[CHAR_XP] = drop_leaves
 
     assert dict(memo.requirement_multiset_for(target)) == expected
+
+
+def test_buy_only_item_carries_its_currency_cost(bundle_game_data: GameData):
+    """The blindness fix: a buy-only item's real work is its currency PRICE, not
+    its (empty) recipe closure. `requirement_multiset_for` must expose that
+    currency so synergy can weigh it — otherwise an expensive currency grind
+    (e.g. lich_race_medal → 100 event_ticket) is invisible and scores as a
+    one-token root that serves nothing else can be recognised against."""
+    memo = bundle_game_data.requirement_graph
+    graph = memo.graph()
+    target = next((code for code in graph.leaves
+                   if SourceKind.BUY in graph.leaves[code]
+                   and bundle_game_data.npc_purchases(code)), None)
+    assert target is not None, "no buy-only currency item in the bundle to check"
+    ms = memo.requirement_multiset_for(target)
+    _npc, price, currency = min(bundle_game_data.npc_purchases(target), key=lambda p: p[1])
+    assert ms.get(currency, 0) >= price, (
+        f"{target} multiset {dict(ms)} is missing its {currency} cost (>= {price})")
 
 
 def test_synergy_fires_on_real_graph(bundle_game_data: GameData):

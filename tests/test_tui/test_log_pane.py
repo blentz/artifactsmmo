@@ -147,6 +147,17 @@ class TestBuildLogLines:
         assert "copper_boots" in why and "1.00" in why
         assert "cooked_gudgeon" in why and "0.40" in why
 
+    def test_why_line_names_the_chosen_root(self):
+        """The chosen root's NAME, not just its category+score — otherwise a
+        currency grind (GatherMaterials(event_ticket)) shows in the log with no
+        link to the target it funds (lich_race_medal)."""
+        why = build_log_lines(_ranked_snap(
+            chosen_root="ObtainItem(code='lich_race_medal', quantity=1)",
+            strategy_ranking=[RootScoreView(
+                root_repr="ObtainItem(code='lich_race_medal', quantity=1)",
+                category="gear", score=50.0, step_repr="")]))[1]
+        assert "lich_race_medal" in why
+
     def test_why_line_omits_alt_segment_when_only_chosen(self):
         snap = _ranked_snap(strategy_ranking=[
             RootScoreView(root_repr="ReachCharLevel(level=6)", category="grind", score=1.80,

@@ -77,11 +77,17 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
     chain below a LevelSkill step instead of stopping at it."""
     if decision.chosen_root is None:
         return ()
-    roots: list[PlanTreeNode] = [
-        _expand(decision.chosen_root, decision, state, game_data, serve_step,
-                frozenset(), 0, ctx, grind_children)
-    ]
+    chosen_node = _expand(decision.chosen_root, decision, state, game_data,
+                          serve_step, frozenset(), 0, ctx, grind_children)
     chosen_repr = repr(decision.chosen_root)
+    # Show the chosen root's OWN score/category — alternatives already show theirs,
+    # so without this the winner is the only node with no value, and a user cannot
+    # see WHY it beat the rest (or how dominant it is).
+    chosen_score = next((r for r in decision.ranking if r.root_repr == chosen_repr), None)
+    if chosen_score is not None:
+        chosen_node = chosen_node.model_copy(
+            update={"detail": f"{chosen_score.category} · {float(chosen_score.score):.2f}"})
+    roots: list[PlanTreeNode] = [chosen_node]
     for i, r in enumerate(decision.ranking):
         if r.root_repr == chosen_repr:
             continue

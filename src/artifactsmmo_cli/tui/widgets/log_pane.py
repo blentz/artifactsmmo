@@ -29,7 +29,11 @@ def build_log_lines(snap: CycleSnapshot) -> list[str]:
     chosen = (next((r for r in snap.strategy_ranking if r.root_repr == snap.chosen_root), None)
               if snap.chosen_root is not None and snap.strategy_ranking else None)
     if chosen is not None:
-        why = f"   why: {chosen.category} {chosen.score:.2f}"
+        # Name the chosen root, not just its category+score — otherwise a currency
+        # grind (e.g. GatherMaterials(event_ticket)) shows in the log with no link
+        # to the target it funds (e.g. lich_race_medal), which reads as a pointless
+        # grind. The name is already on the snapshot; it was just not rendered.
+        why = f"   why: {short_root(chosen.root_repr)}  {chosen.category} {chosen.score:.2f}"
         alts = [r for r in snap.strategy_ranking if r.root_repr != snap.chosen_root][:2]
         if alts:
             alt_text = " | ".join(f"{short_root(r.root_repr)} {r.score:.2f}" for r in alts)

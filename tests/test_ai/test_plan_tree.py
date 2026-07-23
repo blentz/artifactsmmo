@@ -54,6 +54,28 @@ def test_chosen_expands_materials():
     assert kinds["topaz ×2"].status == "unmet"
 
 
+def test_chosen_node_shows_its_score():
+    """The chosen root's own score/category is rendered on its node — otherwise
+    the winner is the only node with no value and a user cannot see how it ranked
+    (or how dominant it is over a currency grind it funds)."""
+    gd = _gd()
+    state = make_state(skills={"jewelrycrafting": 1}, equipment={"amulet_slot": None})
+    chosen = ObtainItem("life_amulet")
+    tree = build_plan_tree(_decision(chosen, chosen, [_rs(chosen, 2)]), state, gd, None)
+    assert "2.00" in tree[0].detail and "gear" in tree[0].detail
+
+
+def test_chosen_node_no_detail_when_absent_from_ranking():
+    """Defensive: a chosen root with no matching RootScoreView leaves the detail
+    empty rather than crashing."""
+    gd = _gd()
+    state = make_state(skills={"jewelrycrafting": 1}, equipment={"amulet_slot": None})
+    chosen = ObtainItem("life_amulet")
+    other = ObtainItem("copper_boots")
+    tree = build_plan_tree(_decision(chosen, chosen, [_rs(other, 2)]), state, gd, None)
+    assert tree[0].detail == ""
+
+
 def test_current_step_gets_synthetic_serve_child():
     gd = _gd()
     state = make_state(skills={"jewelrycrafting": 1})
