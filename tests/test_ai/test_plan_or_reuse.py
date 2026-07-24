@@ -135,6 +135,7 @@ def test_advance_with_history_persists_cursor(tmp_path):
         patch.object(player, "_fetch_world_state", return_value=initial_state),
         patch.object(player, "_wait_for_cooldown", side_effect=fake_wait),
         patch.object(player, "_maybe_periodic_refresh"),
+        patch.object(player, "_reconcile_open_orders"),
         patch.object(player, "_build_actions", return_value=[rest]),
         pytest.raises(KeyboardInterrupt),
     ):

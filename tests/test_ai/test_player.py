@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
 from artifactsmmo_cli.ai.recovery import StuckExit, StuckSignal
 from artifactsmmo_cli.ai.tiers import ObtainItem, ReachCharLevel
@@ -519,6 +520,126 @@ class TestFetchWorldState:
         with patch("artifactsmmo_cli.ai.player.get_character", return_value=None):
             with pytest.raises(RuntimeError):
                 player._fetch_world_state(client)
+
+
+def _make_ge_order_row(id, code, quantity, price, side: OrderSide):
+    """MagicMock stand-in for a GEOrderSchema row (id/code/quantity/price/type_)."""
+    row = MagicMock()
+    row.id = id
+    row.code = code
+    row.quantity = quantity
+    row.price = price
+    row.type_ = MagicMock(value=side.value)
+    return row
+
+
+class TestFetchOpenOrders:
+    """Task 8 Part B: the character's own GE orders, read fresh from the API
+    each cycle (the endpoint _reconcile_open_orders folds into self.state)."""
+
+    def test_maps_api_rows_to_open_orders_at_age_zero(self):
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+        page = MagicMock()
+        page.data = [_make_ge_order_row("o1", "iron_ore", 3, 19, OrderSide.SELL)]
+        with patch("artifactsmmo_cli.ai.player.get_my_ge_orders", return_value=page):
+            result = player._fetch_open_orders(client)
+        assert result == (OpenOrder(id="o1", code="iron_ore", qty=3, price=19, side=OrderSide.SELL, age=0),)
+
+    def test_paginates_when_full_page_returned(self):
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+        row = _make_ge_order_row("o1", "iron_ore", 1, 19, OrderSide.SELL)
+        page1 = MagicMock()
+        page1.data = [row] * 100
+        page2 = MagicMock()
+        page2.data = [_make_ge_order_row("o2", "copper_ore", 2, 5, OrderSide.BUY)]
+        with patch("artifactsmmo_cli.ai.player.get_my_ge_orders", side_effect=[page1, page2]):
+            result = player._fetch_open_orders(client)
+        assert result is not None
+        assert len(result) == 101
+
+    def test_returns_none_after_persistent_network_failure(self):
+        """A poll that never succeeds must return None (not an empty tuple), so
+        the caller cannot mistake "we couldn't ask" for "every order filled"."""
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+        with patch("artifactsmmo_cli.ai.player.get_my_ge_orders",
+                   side_effect=httpx.ReadTimeout("timed out")):
+            with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                result = player._fetch_open_orders(client)
+        assert result is None
+
+
+class TestReconcileOpenOrders:
+    """Task 8 Part B: fold API-truth GE orders into self.state each cycle —
+    fill settlement (gold for SELL, pending_items for BUY) plus aging."""
+
+    def test_noop_when_state_is_none(self):
+        player = GamePlayer(character="hero")
+        player.state = None
+        client = MagicMock()
+        with patch("artifactsmmo_cli.ai.player.get_my_ge_orders") as mock_fetch:
+            player._reconcile_open_orders(client)
+        mock_fetch.assert_not_called()
+        assert player.state is None
+
+    def test_keeps_prior_open_orders_on_fetch_failure(self):
+        prior = (OpenOrder(id="o1", code="iron_ore", qty=5, price=19, side=OrderSide.SELL, age=1),)
+        player = GamePlayer(character="hero")
+        player.state = make_state(open_orders=prior, gold=50)
+        client = MagicMock()
+        with patch("artifactsmmo_cli.ai.player.get_my_ge_orders",
+                   side_effect=httpx.ReadTimeout("timed out")):
+            with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                player._reconcile_open_orders(client)
+        assert player.state.open_orders == prior
+        assert player.state.gold == 50
+
+    def test_filled_sell_credits_gold_and_clears_the_order(self):
+        prior = (OpenOrder(id="o1", code="iron_ore", qty=3, price=19, side=OrderSide.SELL, age=0),)
+        player = GamePlayer(character="hero")
+        player.state = make_state(open_orders=prior, gold=50)
+        client = MagicMock()
+        empty_page = MagicMock()
+        empty_page.data = []
+        with patch("artifactsmmo_cli.ai.player.get_my_ge_orders", return_value=empty_page):
+            player._reconcile_open_orders(client)
+        assert player.state.open_orders == ()
+        assert player.state.gold == 50 + 3 * 19
+
+    def test_filled_buy_appends_pending_item(self):
+        prior = (OpenOrder(id="o2", code="copper_ore", qty=2, price=5, side=OrderSide.BUY, age=0),)
+        player = GamePlayer(character="hero")
+        player.state = make_state(open_orders=prior, gold=50, pending_items=(("p1", "small_health_potion"),))
+        client = MagicMock()
+        empty_page = MagicMock()
+        empty_page.data = []
+        with patch("artifactsmmo_cli.ai.player.get_my_ge_orders", return_value=empty_page):
+            player._reconcile_open_orders(client)
+        assert player.state.open_orders == ()
+        assert player.state.gold == 50  # a BUY fill delivers the item, not gold
+        assert player.state.pending_items == (("p1", "small_health_potion"), ("o2", "copper_ore"))
+
+    def test_still_open_order_ages_and_overwrites_non_ge_reset(self):
+        """Regression guard for the systemic bug this task fixes: a non-GE
+        Action.execute() rebuild defaults open_orders to () (it doesn't
+        thread the field through), so self.state.open_orders may already be
+        wiped when this runs. Reconciliation must re-derive the true view
+        from the API rather than trusting the (possibly wiped) prior state."""
+        player = GamePlayer(character="hero")
+        # Simulate the wipe: self.state currently shows no open orders even
+        # though one is still genuinely open per the API.
+        player.state = make_state(open_orders=(), gold=50)
+        client = MagicMock()
+        page = MagicMock()
+        page.data = [_make_ge_order_row("o1", "iron_ore", 5, 19, OrderSide.SELL)]
+        with patch("artifactsmmo_cli.ai.player.get_my_ge_orders", return_value=page):
+            player._reconcile_open_orders(client)
+        assert player.state.open_orders == (
+            OpenOrder(id="o1", code="iron_ore", qty=5, price=19, side=OrderSide.SELL, age=0),
+        )
+        assert player.state.gold == 50
 
 
 class TestFullRefreshNetworkResilience:

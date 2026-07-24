@@ -119,7 +119,8 @@ class TestPlayerRun:
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                            with patch.object(player, "_maybe_periodic_refresh"):
+                            with patch.object(player, "_maybe_periodic_refresh"), \
+                                    patch.object(player, "_reconcile_open_orders"):
                                 with patch.object(player, "_build_actions", return_value=[]):
                                     with patch("artifactsmmo_cli.ai.player.time.sleep"):
                                         with pytest.raises(KeyboardInterrupt):
@@ -156,7 +157,8 @@ class TestPlayerRun:
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_full_refresh", side_effect=fake_full_refresh):
-                            with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                            with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait), \
+                                    patch.object(player, "_reconcile_open_orders"):
                                 with patch.object(player, "_build_actions", return_value=[]):
                                     with patch("artifactsmmo_cli.ai.player.time.sleep"):
                                         with pytest.raises(KeyboardInterrupt):
@@ -181,7 +183,8 @@ class TestPlayerRun:
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
-                        with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                        with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait), \
+                                patch.object(player, "_reconcile_open_orders"):
                             with patch.object(player, "_maybe_periodic_refresh",
                                                side_effect=lambda c: order.append("refresh")):
                                 with patch.object(player, "_build_actions",
@@ -210,7 +213,8 @@ class TestPlayerRun:
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=state_with_low_hp):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                            with patch.object(player, "_maybe_periodic_refresh"):
+                            with patch.object(player, "_maybe_periodic_refresh"), \
+                                    patch.object(player, "_reconcile_open_orders"):
                                 with patch.object(player, "_build_actions", return_value=[]):
                                     with patch("artifactsmmo_cli.ai.player.time.sleep"):
                                         with pytest.raises(KeyboardInterrupt):
@@ -245,7 +249,8 @@ class TestPlayerRun:
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                            with patch.object(player, "_maybe_periodic_refresh"):
+                            with patch.object(player, "_maybe_periodic_refresh"), \
+                                    patch.object(player, "_reconcile_open_orders"):
                                 with patch.object(player, "_build_actions", return_value=[]):
                                     with patch("artifactsmmo_cli.ai.player.time.sleep") as mock_sleep:
                                         with pytest.raises(KeyboardInterrupt):
@@ -275,7 +280,8 @@ class TestPlayerRun:
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                            with patch.object(player, "_maybe_periodic_refresh"):
+                            with patch.object(player, "_maybe_periodic_refresh"), \
+                                    patch.object(player, "_reconcile_open_orders"):
                                 with patch.object(player, "_build_actions", return_value=[]):
                                     with patch("artifactsmmo_cli.ai.player.time.sleep"):
                                         with pytest.raises(KeyboardInterrupt):
@@ -436,7 +442,8 @@ def test_run_calls_handle_stuck_in_no_plan_path():
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=initial_state):
                     with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                        with patch.object(player, "_maybe_periodic_refresh"):
+                        with patch.object(player, "_maybe_periodic_refresh"), \
+                                patch.object(player, "_reconcile_open_orders"):
                             # Empty action list → no plan possible → no-plan path
                             with patch.object(player, "_build_actions", return_value=[]):
                                 with patch("artifactsmmo_cli.ai.player.time.sleep"):
@@ -485,7 +492,8 @@ def test_run_calls_handle_stuck_after_successful_action():
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=initial_state):
                     with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                        with patch.object(player, "_maybe_periodic_refresh"):
+                        with patch.object(player, "_maybe_periodic_refresh"), \
+                                patch.object(player, "_reconcile_open_orders"):
                             # Return RestAction so a plan can be found; patch _execute to avoid HTTP call
                             with patch.object(player, "_build_actions", return_value=[RestAction()]):
                                 with patch.object(player, "_execute", return_value=(initial_state, "ok")):
@@ -529,7 +537,8 @@ def test_run_survives_http_485_and_keeps_cycling():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                            with patch.object(player, "_maybe_periodic_refresh"):
+                            with patch.object(player, "_maybe_periodic_refresh"), \
+                                    patch.object(player, "_reconcile_open_orders"):
                                 with patch.object(player, "_build_actions", return_value=[RestAction()]):
                                     with patch.object(
                                         player._arbiter, "select",
@@ -582,7 +591,8 @@ def test_run_loads_remembered_bank_blocker(capsys):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
-                        with patch.object(player, "_maybe_periodic_refresh"):
+                        with patch.object(player, "_maybe_periodic_refresh"), \
+                                patch.object(player, "_reconcile_open_orders"):
                             with patch.object(player, "_build_actions", side_effect=boom):
                                 with pytest.raises(KeyboardInterrupt):
                                     player.run()
@@ -614,7 +624,8 @@ def test_run_logs_seeded_documented_blockers(capsys):
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=initial_state):
                     with patch("artifactsmmo_cli.ai.player.seed_documented_blockers", return_value=3):
-                        with patch.object(player, "_maybe_periodic_refresh"):
+                        with patch.object(player, "_maybe_periodic_refresh"), \
+                                patch.object(player, "_reconcile_open_orders"):
                             with patch.object(player, "_build_actions", side_effect=boom):
                                 with pytest.raises(KeyboardInterrupt):
                                     player.run()
@@ -674,7 +685,8 @@ def test_run_derives_crafting_target_from_fallback_obtain_item():
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
                         with patch.object(player, "_wait_for_cooldown"):
-                            with patch.object(player, "_maybe_periodic_refresh"):
+                            with patch.object(player, "_maybe_periodic_refresh"), \
+                                    patch.object(player, "_reconcile_open_orders"):
                                 with patch.object(player, "_build_actions", return_value=[]):
                                     with patch.object(player, "_winnable_farm_target", return_value=None):
                                         with patch("artifactsmmo_cli.ai.player.time.sleep"):
@@ -704,7 +716,8 @@ def _run_one_action_with(player, action, new_state, outcome, client):
             raise KeyboardInterrupt
 
     with patch.object(player, "_build_actions", return_value=[action]):
-        with patch.object(player, "_maybe_periodic_refresh"):
+        with patch.object(player, "_maybe_periodic_refresh"), \
+                patch.object(player, "_reconcile_open_orders"):
             with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
                 with patch.object(player, "_winnable_farm_target", return_value=None):
                     with patch.object(player, "_execute", return_value=(new_state, outcome)):

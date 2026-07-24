@@ -258,7 +258,8 @@ class TestPlayerRunVerboseAndExecute:
                                                   with patch.object(player, "_fetch_world_state",
                                                                     return_value=initial_state):
                                                       with patch.object(player, "_wait_for_cooldown",
-                                                                        side_effect=fake_wait):
+                                                                        side_effect=fake_wait), \
+                                                              patch.object(player, "_reconcile_open_orders"):
                                                           with patch.object(player, "_maybe_periodic_refresh"):
                                                               with patch.object(player, "_build_actions",
                                                                          return_value=[RestAction()]):
@@ -308,7 +309,8 @@ class TestPlayerRunVerboseAndExecute:
                                                   with patch.object(player, "_fetch_world_state",
                                                                     return_value=initial_state):
                                                       with patch.object(player, "_wait_for_cooldown",
-                                                                        side_effect=fake_wait):
+                                                                        side_effect=fake_wait), \
+                                                              patch.object(player, "_reconcile_open_orders"):
                                                           with patch.object(player, "_maybe_periodic_refresh"):
                                                               with patch.object(player, "_build_actions",
                                                                          return_value=[RestAction()]):

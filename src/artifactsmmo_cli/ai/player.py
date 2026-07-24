@@ -15,6 +15,9 @@ from artifactsmmo_api_client.api.characters.get_character_characters_name_get im
 from artifactsmmo_api_client.api.events.get_all_active_events_events_active_get import sync as get_all_active_events
 from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
 from artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get import sync as get_bank_items
+from artifactsmmo_api_client.api.my_account.get_ge_orders_my_grandexchange_orders_get import (
+    sync as get_my_ge_orders,
+)
 from artifactsmmo_api_client.api.my_account.get_pending_items_my_pending_items_get import sync as get_pending_items
 from artifactsmmo_api_client.api.raids.get_all_raids_raids_get import sync as get_all_raids
 from artifactsmmo_api_client.models.achievement_type import AchievementType
@@ -73,6 +76,7 @@ from artifactsmmo_cli.ai.loadout_profiles import (
     gather_key,
 )
 from artifactsmmo_cli.ai.null_tracer import NullTracer
+from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.plan_tree import build_plan_tree
@@ -81,6 +85,7 @@ from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost  # no
 from artifactsmmo_cli.ai.player_helpers import format_plan as _format_plan
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.raid_info import RaidInfo
+from artifactsmmo_cli.ai.reconcile_open_orders import reconcile_open_orders
 from artifactsmmo_cli.ai.recovery import (
     REPEATED_ACTION_FAILURE_THRESHOLD,
     REPEATED_ACTION_WINDOW,
@@ -746,6 +751,12 @@ class GamePlayer:
                 # goal/map_means later computes K from (else K can diverge on the
                 # ~1-in-20 refresh cycle).
                 self._maybe_periodic_refresh(client)
+                # Reconcile open_orders against API truth AFTER the periodic
+                # refresh (which does not thread open_orders) and every cycle
+                # (non-GE Action.execute() rebuilds default open_orders to ()
+                # — see world_state.py's `open_orders` docstring) so planning
+                # always sees the authoritative fill/aging state.
+                self._reconcile_open_orders(client)
                 actions = self._build_actions()
                 self._wait_for_cooldown()
 
@@ -1390,6 +1401,83 @@ class GamePlayer:
         """Force a full refresh every BANK_REFRESH_INTERVAL successful actions."""
         if self._actions_since_full_refresh >= BANK_REFRESH_INTERVAL:
             self._full_refresh(client)
+
+    def _fetch_open_orders(self, client: AuthenticatedClient) -> tuple[OpenOrder, ...] | None:
+        """Page through this character's own currently-open GE orders.
+
+        Retries transient transport errors with the same backoff schedule as
+        `_fetch_active_events`/`_fetch_raids`. Returns None (never an empty
+        tuple) on total failure so the caller cannot mistake a failed poll for
+        every order having filled."""
+        orders: list[OpenOrder] = []
+        page = 1
+        while True:
+            result = None
+            fetched = False
+            backoff = 5.0
+            for attempt in range(1, 4):  # 3 attempts: immediate, +5s, +10s
+                try:
+                    result = get_my_ge_orders(client=client, page=page, size=100)
+                    fetched = True
+                    break
+                except httpx.HTTPError as e:
+                    if attempt < 3:
+                        print(f"[{self._now()}] get_ge_orders network error: {e!r}; "
+                              f"retry {attempt}/3 in {backoff:.0f}s")
+                        time.sleep(backoff)
+                        backoff *= 2
+            if not fetched:
+                return None
+            if result is None or not result.data:
+                break
+            for row in result.data:
+                orders.append(OpenOrder(
+                    id=row.id, code=row.code, qty=row.quantity, price=row.price,
+                    side=OrderSide(row.type_.value), age=0,
+                ))
+            if len(result.data) < 100:
+                break
+            page += 1
+        return tuple(orders)
+
+    def _reconcile_open_orders(self, client: AuthenticatedClient) -> None:
+        """Fold the API's live view of this character's own GE orders into
+        `self.state` every cycle: this is the ONLY channel that keeps
+        `open_orders` (and fill settlement — gold/pending_items) correct
+        outside a GE Action or a full character refresh, since ordinary
+        (non-GE) Action.execute() rebuilds default `open_orders` to `()`
+        and a periodic/error refresh does not thread it either.
+
+        A disappeared or reduced-quantity order versus the last-known
+        `open_orders` is a FILL: a SELL credits gold (the character schema
+        is not re-fetched here, so nothing else would apply that credit
+        until the next full refresh); a BUY routes the item into
+        `pending_items` (so `ClaimPendingGoal` can collect it) since the
+        pending-items list itself is only re-synced on a full refresh, not
+        every cycle.
+
+        Tolerates transient transport failures: on a failed poll, keeps the
+        prior `open_orders` view untouched and tries again next cycle rather
+        than treating "we could not ask" as "every order filled"."""
+        if self.state is None:
+            return
+        api_open = self._fetch_open_orders(client)
+        if api_open is None:
+            return  # transient failure; retry next cycle
+        result = reconcile_open_orders(self.state.open_orders, api_open)
+        gold = self.state.gold
+        pending = list(self.state.pending_items) if self.state.pending_items else []
+        for filled in result.filled:
+            if filled.side is OrderSide.SELL:
+                gold += filled.price * filled.qty
+            else:
+                pending.append((filled.id, filled.code))
+        self.state = replace(
+            self.state,
+            open_orders=result.open_orders,
+            gold=gold,
+            pending_items=tuple(pending) if pending else None,
+        )
 
     def _wait_for_cooldown(self) -> None:
         """Sleep until the character's cooldown expires."""
