@@ -19,7 +19,27 @@ from enum import Enum
 
 class BuyVenue(Enum):
     NPC = "npc"
-    GE = "ge"
+    GE = "ge"            # fill a standing sell order (immediate)
+    GE_POST = "ge_post"  # post our own buy order (deferred)
+
+
+def choose_buy_venue3(npc_price: int, ge_fill_cost: int | None, post_price: int | None) -> BuyVenue:
+    """Three-way buy venue (dual of choose_venue3). FILL an existing sell order when
+    it costs at most our post price. Else POST our own buy order when its price beats
+    the NPC cost. Else NPC. `post_price is None` is the fail-closed anchor guard."""
+    if ge_fill_cost is not None and post_price is not None and ge_fill_cost <= post_price:
+        return BuyVenue.GE
+    if ge_fill_cost is not None and post_price is None and ge_fill_cost < npc_price:
+        return BuyVenue.GE
+    if post_price is not None and post_price < npc_price:
+        return BuyVenue.GE_POST
+    # Provably unreachable totality-mirror of Lean's innermost `if f < npcPrice`
+    # in the some/some arm: reaching here needs post_price present with
+    # post_price >= npc_price and ge_fill_cost > post_price, yet ge_fill_cost <
+    # npc_price -- i.e. ge_fill_cost < npc_price <= post_price < ge_fill_cost.
+    if ge_fill_cost is not None and ge_fill_cost < npc_price:  # pragma: no cover
+        return BuyVenue.GE
+    return BuyVenue.NPC
 
 
 def choose_buy_venue(npc_price: int, ge_price: int | None) -> BuyVenue:

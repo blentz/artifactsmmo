@@ -20,7 +20,29 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 class Venue(Enum):
     NPC = "npc"
-    GE = "ge"
+    GE = "ge"           # fill a standing buy order (immediate)
+    GE_POST = "ge_post"  # post our own sell order (deferred)
+
+
+def choose_venue3(npc_pay: int, ge_fill_proceeds: int | None, post_price: int | None) -> Venue:
+    """Three-way sell venue. FILL an existing buy order when it pays at least our
+    post price (immediate beats deferred at equal terms). Else POST our own sell
+    order when its price beats the NPC floor. Else NPC. `post_price is None` is the
+    fail-closed anchor guard (no book to anchor on)."""
+    if ge_fill_proceeds is not None and post_price is not None and ge_fill_proceeds >= post_price:
+        return Venue.GE
+    if ge_fill_proceeds is not None and post_price is None and ge_fill_proceeds > npc_pay:
+        return Venue.GE
+    if post_price is not None and post_price > npc_pay:
+        return Venue.GE_POST
+    # Provably unreachable totality-mirror of Lean's innermost `if f > npcPay`
+    # in the some/some arm: reaching here needs post_price present with
+    # post_price <= npc_pay and ge_fill_proceeds < post_price, yet
+    # ge_fill_proceeds > npc_pay -- i.e. npc_pay < ge_fill_proceeds < post_price
+    # <= npc_pay.
+    if ge_fill_proceeds is not None and ge_fill_proceeds > npc_pay:  # pragma: no cover
+        return Venue.GE
+    return Venue.NPC
 
 
 def choose_venue(npc_pay: int, ge_proceeds: int | None) -> Venue:

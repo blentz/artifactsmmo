@@ -1502,6 +1502,7 @@ def runLiquidationVenue (args : Array Json) : Json :=
   let code : Int := match venue with
     | Formal.LiquidationVenue.Venue.ge => 1
     | Formal.LiquidationVenue.Venue.npc => 0
+    | Formal.LiquidationVenue.Venue.gePost => 2  -- unreachable: chooseVenue is 2-way
   let realized := Formal.LiquidationVenue.realizedProceeds npcPay geProceeds venue
   Json.mkObj [("venue", Json.num code), ("realized", Json.num realized)]
 
@@ -1537,6 +1538,7 @@ def runBuySourceVenue (args : Array Json) : Json :=
   let code : Int := match venue with
     | Formal.BuySourceVenue.BuyVenue.ge => 1
     | Formal.BuySourceVenue.BuyVenue.npc => 0
+    | Formal.BuySourceVenue.BuyVenue.gePost => 2  -- unreachable: chooseBuyVenue is 2-way
   let realized := Formal.BuySourceVenue.realizedCost npcPrice gePrice venue
   Json.mkObj [("venue", Json.num code), ("realized", Json.num realized)]
 

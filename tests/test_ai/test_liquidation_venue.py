@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.liquidation_venue import (
     Venue,
     choose_venue,
+    choose_venue3,
     liquidation_venue,
     realized_proceeds,
 )
@@ -60,6 +61,30 @@ def test_realized_proceeds_at_choice_is_maximal():
 def test_venue_enum_values():
     assert Venue.NPC.value == "npc"
     assert Venue.GE.value == "ge"
+
+
+class TestChooseVenue3:
+    def test_fill_preferred_when_order_pays_at_least_post(self):
+        # standing buy order pays 20, post would be 18 -> fill now.
+        assert choose_venue3(npc_pay=5, ge_fill_proceeds=20, post_price=18) is Venue.GE
+
+    def test_post_when_post_beats_npc_and_no_good_fill(self):
+        # no fillable order, post 18 > npc 5 -> post.
+        assert choose_venue3(npc_pay=5, ge_fill_proceeds=None, post_price=18) is Venue.GE_POST
+
+    def test_npc_when_no_post_anchor(self):
+        assert choose_venue3(npc_pay=5, ge_fill_proceeds=None, post_price=None) is Venue.NPC
+
+    def test_npc_when_post_not_better_than_npc(self):
+        assert choose_venue3(npc_pay=20, ge_fill_proceeds=None, post_price=18) is Venue.NPC
+
+    def test_fill_when_no_anchor_but_order_beats_npc(self):
+        # No post anchor, but a standing buy order pays 20 > npc 5 -> fill it.
+        assert choose_venue3(npc_pay=5, ge_fill_proceeds=20, post_price=None) is Venue.GE
+
+    def test_npc_when_no_anchor_and_order_not_above_npc(self):
+        # No anchor and the order only ties the NPC floor -> NPC (no strict gain).
+        assert choose_venue3(npc_pay=20, ge_fill_proceeds=20, post_price=None) is Venue.NPC
 
 
 # ---- liquidation_venue adapter (impure glue over GameData) ----

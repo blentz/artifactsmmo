@@ -8,6 +8,7 @@ coupling for every venue/order combination.
 from artifactsmmo_cli.ai.buy_source_venue import (
     BuyVenue,
     choose_buy_venue,
+    choose_buy_venue3,
     realized_cost,
 )
 
@@ -58,3 +59,25 @@ def test_realized_cost_at_choice_is_minimal():
 def test_venue_enum_values():
     assert BuyVenue.NPC.value == "npc"
     assert BuyVenue.GE.value == "ge"
+
+
+class TestChooseBuyVenue3:
+    def test_fill_preferred_when_order_costs_at_most_post(self):
+        assert choose_buy_venue3(npc_price=20, ge_fill_cost=8, post_price=10) is BuyVenue.GE
+
+    def test_post_when_post_beats_npc_and_no_good_fill(self):
+        assert choose_buy_venue3(npc_price=20, ge_fill_cost=None, post_price=10) is BuyVenue.GE_POST
+
+    def test_npc_when_no_post_anchor(self):
+        assert choose_buy_venue3(npc_price=20, ge_fill_cost=None, post_price=None) is BuyVenue.NPC
+
+    def test_npc_when_post_not_cheaper_than_npc(self):
+        assert choose_buy_venue3(npc_price=8, ge_fill_cost=None, post_price=10) is BuyVenue.NPC
+
+    def test_fill_when_no_anchor_but_order_beats_npc(self):
+        # No post anchor, but a standing sell order costs 8 < npc 20 -> fill it.
+        assert choose_buy_venue3(npc_price=20, ge_fill_cost=8, post_price=None) is BuyVenue.GE
+
+    def test_npc_when_no_anchor_and_order_not_below_npc(self):
+        # No anchor and the order only ties the NPC price -> NPC (no strict saving).
+        assert choose_buy_venue3(npc_price=20, ge_fill_cost=20, post_price=None) is BuyVenue.NPC

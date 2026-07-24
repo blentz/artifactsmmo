@@ -36,8 +36,9 @@ NON-VACUITY: all three branches are reachable and exhibited below
 
 namespace Formal.BuySourceVenue
 
-/-- Buy source venue for one needed unit. Mirrors the Python `BuyVenue` enum. -/
-inductive BuyVenue where | npc | ge deriving Repr, DecidableEq
+/-- Buy source venue for one needed unit. Mirrors the Python `BuyVenue` enum.
+`gePost` (post our own buy order, deferred) is the Task-4 third outcome. -/
+inductive BuyVenue where | npc | ge | gePost deriving Repr, DecidableEq
 
 /-- GE iff a fillable standing sell order exists AND costs strictly less than the NPC
 buy price; otherwise NPC. Mirrors the Python `choose_buy_venue`. -/
@@ -52,6 +53,65 @@ def realizedCost (npcPrice : Int) (gePrice : Option Int) (venue : BuyVenue) : In
   match venue, gePrice with
   | BuyVenue.ge, some g => g
   | _, _ => npcPrice
+
+/-! ### THREE-WAY VENUE (Task 4: FILL / POST / NPC) — dual of chooseVenue3. -/
+
+/-- Three-way buy venue (Task 4, dual of `chooseVenue3`). FILL an existing sell order
+when it costs at most our post price; else POST our own buy order when its price beats
+the NPC cost; else NPC. `postPrice = none` (no anchor) forbids POST. Mirrors the Python
+`choose_buy_venue3`. -/
+def chooseBuyVenue3 (npcPrice : Int) (geFill : Option Int) (postPrice : Option Int) : BuyVenue :=
+  match geFill, postPrice with
+  | some f, some p => if f ≤ p then BuyVenue.ge else if p < npcPrice then BuyVenue.gePost
+                      else if f < npcPrice then BuyVenue.ge else BuyVenue.npc
+  | some f, none   => if f < npcPrice then BuyVenue.ge else BuyVenue.npc
+  | none,   some p => if p < npcPrice then BuyVenue.gePost else BuyVenue.npc
+  | none,   none   => BuyVenue.npc
+
+/-- TOTALITY (3-way): the decision is always NPC, GE, or GE_POST — no fourth outcome,
+no stuck state — for ANY `npcPrice` and ANY (present-or-absent) fill/post prices. -/
+theorem venue3_total (npcPrice : Int) (geFill postPrice : Option Int) :
+    chooseBuyVenue3 npcPrice geFill postPrice = BuyVenue.npc
+    ∨ chooseBuyVenue3 npcPrice geFill postPrice = BuyVenue.ge
+    ∨ chooseBuyVenue3 npcPrice geFill postPrice = BuyVenue.gePost := by
+  unfold chooseBuyVenue3
+  cases geFill with
+  | none =>
+    cases postPrice with
+    | none => exact Or.inl rfl
+    | some p =>
+      by_cases h : p < npcPrice
+      · exact Or.inr (Or.inr (by simp [h]))
+      · exact Or.inl (by simp [h])
+  | some f =>
+    cases postPrice with
+    | none =>
+      by_cases h : f < npcPrice
+      · exact Or.inr (Or.inl (by simp [h]))
+      · exact Or.inl (by simp [h])
+    | some p =>
+      by_cases h1 : f ≤ p
+      · exact Or.inr (Or.inl (by simp [h1]))
+      · by_cases h2 : p < npcPrice
+        · exact Or.inr (Or.inr (by simp [h1, h2]))
+        · by_cases h3 : f < npcPrice
+          · exact Or.inr (Or.inl (by simp [h1, h2, h3]))
+          · exact Or.inl (by simp [h1, h2, h3])
+
+/-- SAFETY (fail-closed anchor): GE_POST is NEVER chosen without a post anchor.
+`chooseBuyVenue3 = gePost → postPrice.isSome`. With no order book to anchor on we can
+never decide to post our own order. Dual of `LiquidationVenue.post_requires_anchor`. -/
+theorem post_requires_anchor (npcPrice : Int) (geFill postPrice : Option Int)
+    (h : chooseBuyVenue3 npcPrice geFill postPrice = BuyVenue.gePost) : postPrice.isSome := by
+  unfold chooseBuyVenue3 at h
+  cases postPrice with
+  | some p => simp
+  | none =>
+    cases geFill with
+    | none => exact absurd h (by simp)
+    | some f =>
+      simp only at h
+      split at h <;> exact absurd h (by simp)
 
 /-! ### TOTALITY. -/
 
