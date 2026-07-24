@@ -446,6 +446,8 @@ class GatherMaterialsGoal(Goal):
         # `chain` is the closure demand (built above for `withdrawable`); non-drop
         # items (feather_coat, ash_plank) have no droppers and are skipped.
         for item in chain:
+            if item in bid_items:
+                continue  # a GE bid is already in flight for this item (bid_vs_craft exclusion)
             droppers = game_data.monsters_dropping(item)
             if not droppers:
                 continue
@@ -511,6 +513,8 @@ class GatherMaterialsGoal(Goal):
         for item, qty in chain.items():
             if item in self._needed:
                 continue  # top-level items handled by the existing loop below
+            if item in bid_items:
+                continue  # a GE bid is already in flight for this item (bid_vs_craft exclusion)
             if (game_data.crafting_recipe(item) is None
                     and item not in game_data.resource_drops.values()
                     and not game_data.monsters_dropping(item)):
@@ -527,6 +531,8 @@ class GatherMaterialsGoal(Goal):
         # then picks buy-vs-make. Items with no seller / unaffordable / pricier are
         # left craft-only.
         for item, qty in self._needed.items():
+            if item in bid_items:
+                continue  # a GE bid is already in flight for this item (bid_vs_craft exclusion)
             craftable = game_data.crafting_recipe(item) is not None
             if not craftable:
                 # NON-craftable NPC-sold item (rune / bag / artifact — no recipe,
