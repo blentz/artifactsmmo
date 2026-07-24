@@ -60,7 +60,7 @@ def blockerPrefix : List MeansKind :=
 /-- The discretionary tail — everything after `.objectiveStep`. -/
 def discretionaryTail : List MeansKind :=
   [.pursueTask, .acceptTask, .taskExchange, .maintainConsumables,
-   .sellIdle, .recycleSurplus, .bankExpand, .drainBankJunk, .wait]
+   .sellIdle, .recycleSurplus, .bankExpand, .geBid, .drainBankJunk, .wait]
 
 /-- `allInLadderOrder` splits at `.objectiveStep`. -/
 theorem ladder_split : allInLadderOrder = blockerPrefix ++ discretionaryTail := rfl
@@ -154,6 +154,7 @@ theorem cycleStepF_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | recycleSurplus  => exact absurd hmem (by decide)
     | bankExpand      => exact absurd hmem (by decide)
     | drainBankJunk   => exact absurd hmem (by decide)
+    | geBid           => exact absurd hmem (by decide)
     | wait            => exact absurd hmem (by decide)
 
 /-- **The unconditional reach-50 capstone.** For EVERY state, the faithful

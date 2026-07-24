@@ -107,6 +107,7 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.SELL_IDLE:          "npcSell",
     LadderMeans.RECYCLE_SURPLUS:    "recycle",
     LadderMeans.DRAIN_BANK_JUNK:    "withdrawItem",
+    LadderMeans.GE_BID:             "gePostBuyOrder",
     LadderMeans.BANK_EXPAND:        "buyBankExpansion",
     LadderMeans.WAIT:               "wait",
 }

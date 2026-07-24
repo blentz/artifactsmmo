@@ -4425,6 +4425,11 @@ LADDER_MEANS_FIRES_MUTATIONS = [
         "                and bool(bank_drain_excess(state, game_data, ctx)))",
         "                and True)",
     ),
+    (
+        "ladder/means: GE_BID drop ge_bid_candidates guard (fires with no biddable item)",
+        "        return bool(ge_bid_candidates(state, game_data, ctx, BID_FILL_HORIZON_SECONDS))",
+        "        return True",
+    ),
 ]
 
 

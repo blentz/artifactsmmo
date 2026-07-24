@@ -697,6 +697,9 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | drainBankJunk =>
       show (applyActionKind .withdrawItem s).level ≥ s.level
       simp [applyActionKind]
+    | geBid =>
+      show (applyActionKind .gePostBuyOrder s).level ≥ s.level
+      simp [applyActionKind]
     | bankExpand =>
       show (applyActionKind .buyBankExpansion s).level ≥ s.level
       simp [applyActionKind]
@@ -1105,6 +1108,7 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   | completeTask    => exfalso; revert hmem; unfold progressMeans; decide
   | recycleSurplus  => exfalso; revert hmem; unfold progressMeans; decide
   | drainBankJunk   => exfalso; revert hmem; unfold progressMeans; decide
+  | geBid           => exfalso; revert hmem; unfold progressMeans; decide
   | recycleRelief   => exfalso; revert hmem; unfold progressMeans; decide
   | sellRelief      => exfalso; revert hmem; unfold progressMeans; decide
   | maintainConsumables => exfalso; revert hmem; unfold progressMeans; decide

@@ -2325,6 +2325,7 @@ noncomputable def fixtureFreshState : State where
   gold := 0
   bankAccessible := true
   bankJunkNonempty := false
+  geBidCandidateNonempty := false
   bankUnlockMonsterPresent := false
   initialXp := 0
   unlockMonsterLevel := 0

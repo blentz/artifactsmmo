@@ -15,6 +15,8 @@ from artifactsmmo_cli.ai.bank_expansion_timing import (
 )
 from artifactsmmo_cli.ai.consumable_supply import maintain_consumables_fires
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
+from artifactsmmo_cli.ai.ge_order_config import BID_FILL_HORIZON_SECONDS
 from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
@@ -54,6 +56,7 @@ class MeansKind(Enum):
     # DISCRETIONARY_ORDER priority slot below (PLAN #6a).
     MAINTAIN_CONSUMABLES = "maintain_consumables"
     DRAIN_BANK_JUNK = "drain_bank_junk"  # 2026-06-24: drain over-cap bank junk.
+    GE_BID = "ge_bid"  # 2026-07-24: post a discretionary GE buy order for a slow-to-craft item.
 
 
 COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
@@ -71,6 +74,10 @@ DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
     MeansKind.BANK_EXPAND,
+    # Opportunistic cheap acquisition: post a GE buy order for a slow-to-craft
+    # objective material. Below the housekeeping investments (recycle/expand),
+    # above pure junk-drain — acquiring a needed material beats draining junk.
+    MeansKind.GE_BID,
     # Lowest-value housekeeping (15), just above WAIT: drain over-cap bank junk
     # only when nothing better — incl. a bank-expansion investment — is pending.
     MeansKind.DRAIN_BANK_JUNK,
@@ -166,6 +173,17 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # demand are never withdrawn into the discard ladder's mouth.
         return (_used_fraction(state) < SELL_PRESSURE_FRACTION
                 and bool(bank_drain_excess(state, game_data, ctx)))
+
+    if kind is MeansKind.GE_BID:
+        # Post a GE buy order for a slow-to-craft objective material. Fires iff
+        # the shared candidate helper (the SAME predicate the goal bids on, so
+        # the means never fires on a candidate the goal then refuses — no
+        # zero-length plan) yields at least one biddable item: a needed,
+        # not-held, slow-to-self-craft step material with a live buy-anchor, an
+        # NPC alternative to ceiling-bound the price, no open order, and a
+        # three-way venue verdict of GE_POST. Fire-and-lose: posting creates an
+        # open order that suppresses the item next cycle.
+        return bool(ge_bid_candidates(state, game_data, ctx, BID_FILL_HORIZON_SECONDS))
 
     if kind is MeansKind.MAINTAIN_CONSUMABLES:
         # Only when combat is the active means (a target is selected): keep a

@@ -64,6 +64,7 @@ def inertLadderState : State where
   sellableInventoryNonempty := false
   recyclableSurplusNonempty := false
   bankJunkNonempty := false
+  geBidCandidateNonempty := false
   taskCoinsTotal := 0
   taskExchangeMinCoins := 0
   lowYieldCancelFires := false
@@ -132,6 +133,7 @@ def meansKindName : MeansKind → String
   | .sellIdle            => "sellIdle"
   | .recycleSurplus      => "recycleSurplus"
   | .drainBankJunk       => "drainBankJunk"
+  | .geBid               => "geBid"
   | .bankExpand          => "bankExpand"
   | .wait                => "wait"
 

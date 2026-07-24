@@ -207,6 +207,7 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
     | recycleSurplus  => exact absurd hmem (by decide)
     | bankExpand      => exact absurd hmem (by decide)
     | drainBankJunk   => exact absurd hmem (by decide)
+    | geBid           => exact absurd hmem (by decide)
     | wait            => exact absurd hmem (by decide)
 
 /-- **The geared reach-50 capstone.**

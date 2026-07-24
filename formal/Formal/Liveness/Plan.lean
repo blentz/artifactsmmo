@@ -471,7 +471,13 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- action semantics, like .recycle clears recyclable-surplus). Sufficient to
   -- flip `drainBankJunkFires` off post-withdraw — fire-and-lose.
   | .withdrawItem, s => { s with bankJunkNonempty := false }
-  -- All other 4 kinds: no-op (see module docstring; future phases will
+  -- GePostBuyOrderAction (ge_post_buy.py) used by GE_BID: posts a buy order for
+  -- the material, creating an open order that SUPPRESSES the item on the next
+  -- evaluation (ge_bid_candidates skips open-order codes). Clears the geBid
+  -- candidate signal — single-action semantics, like .withdrawItem clears bank
+  -- junk. Fire-and-lose.
+  | .gePostBuyOrder, s => { s with geBidCandidateNonempty := false }
+  -- All other kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s
 

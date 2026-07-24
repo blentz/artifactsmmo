@@ -1177,7 +1177,8 @@ def runDecideKey (args : Array Json) : Json :=
       | 10 => .bankExpand
       | 11 => .wait
       | 12 => .maintainConsumables
-      | _ => .drainBankJunk
+      | 13 => .drainBankJunk
+      | _ => .geBid  -- index 14
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfMeans k))]
 
 /-- progression_reserve: args layout (all Nat ≥ 0):
@@ -2256,9 +2257,12 @@ ARG LAYOUT (flat ints; index → field):
                                         the BANK_EXPAND reserve gate. NOTE:
                                         cycle_step_d/e reuse only the 0..32
                                         prefix; their own [33] is xpNext.)
+* `[34]` geBidCandidateNonempty       (Bool 0/1 — ge_bid_candidates nonempty;
+                                        appended so the cycle_step_d/e [33..]
+                                        trace layout is undisturbed.)
 
 Emits a JSON object: one Bool field per MeansKind keyed by `meansKindName`
-(27 fields), plus `"selected"`: the name of `productionLadder s` or `null`. -/
+(28 fields), plus `"selected"`: the name of `productionLadder s` or `null`. -/
 def runLadder (args : Array Json) : Json :=
   let n := fun i => (intArg args i).toNat
   let b := fun i => intArg args i != 0
@@ -2284,7 +2288,7 @@ def runLadder (args : Array Json) : Json :=
     craftReliefFires := b 27, objectiveStepFires := b 28,
     maintainConsumablesFires := b 29, bankItemsKnown := b 30,
     bankJunkNonempty := b 31, craftPotionsFires := b 32,
-    goldReserve := n 33 }
+    goldReserve := n 33, geBidCandidateNonempty := b 34 }
   let firesFields : List (String × Json) :=
     allInLadderOrder.map (fun k => (meansKindName k, Json.bool (fires k s)))
   let selected : Json := match productionLadder s with

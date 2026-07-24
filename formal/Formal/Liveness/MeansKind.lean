@@ -92,6 +92,11 @@ inductive MeansKind where
                         --                     over-cap bank junk so DiscardOverstock
                         --                     can shed it (fire-and-lose, like recycle)
   | bankExpand          -- BANK_EXPAND,        means.py:103
+  | geBid               -- GE_BID,             means.py (2026-07-24): post a GE buy
+                        --                     order for a slow-to-craft objective
+                        --                     material so it fills async (fire-and-
+                        --                     lose, like recycle/drainBankJunk: the
+                        --                     posted order suppresses it next cycle)
   -- Last-resort fallback (Phase 20e-v2 step 1, means.py:32, means.py:115)
   | wait                -- WAIT,               always fires
   deriving DecidableEq, Repr
@@ -106,10 +111,10 @@ def allInLadderOrder : List MeansKind :=
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
    .objectiveStep,
    .pursueTask, .acceptTask, .taskExchange, .maintainConsumables,
-   .sellIdle, .recycleSurplus, .bankExpand, .drainBankJunk,
+   .sellIdle, .recycleSurplus, .bankExpand, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 27 constructors. -/
-example : allInLadderOrder.length = 27 := by decide
+/-- Sanity: 28 constructors. -/
+example : allInLadderOrder.length = 28 := by decide
 
 end Formal.Liveness.MeansKind

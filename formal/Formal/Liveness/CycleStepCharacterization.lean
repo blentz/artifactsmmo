@@ -213,6 +213,10 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (applyActionKind .withdrawItem s).level = s.level
             ∧ (applyActionKind .withdrawItem s).xp = s.xp
       exact ⟨rfl, rfl⟩
+    | geBid =>
+      show (applyActionKind .gePostBuyOrder s).level = s.level
+            ∧ (applyActionKind .gePostBuyOrder s).xp = s.xp
+      exact ⟨rfl, rfl⟩
     | bankExpand =>
       show (applyActionKind .buyBankExpansion s).level = s.level
             ∧ (applyActionKind .buyBankExpansion s).xp = s.xp

@@ -74,6 +74,8 @@ inductive MeansKind where
                          -- index dispatch (0..11) stable.
   | drainBankJunk  -- 2026-06-24: withdraw over-cap bank junk. Appended LAST
                    -- (oracle index 13) to keep earlier index dispatch stable.
+  | geBid  -- 2026-07-24: post a discretionary GE buy order for a slow-to-craft
+           -- item. Appended LAST (oracle index 14) to keep earlier dispatch stable.
 deriving Repr, DecidableEq
 
 /-- TOTAL `match`: every `GuardKind` variant maps to a non-empty repr string.
@@ -110,6 +112,7 @@ def goalReprOfMeans : MeansKind → String
   | .wait            => "Wait"
   | .maintainConsumables => "MaintainConsumables"
   | .drainBankJunk   => "DrainBankJunk"
+  | .geBid           => "PostBuyBid"
 
 /-! ### Exhaustiveness intent theorems (totality witnesses). -/
 

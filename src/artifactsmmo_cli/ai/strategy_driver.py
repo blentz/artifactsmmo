@@ -41,6 +41,7 @@ from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
+from artifactsmmo_cli.ai.goals.post_buy_bid import PostBuyBidGoal
 from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -367,6 +368,8 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
     if kind is MeansKind.DRAIN_BANK_JUNK:
         return DrainBankJunkGoal(game_data=game_data, ctx=ctx,
                                  bank_accessible=ctx.bank_accessible)
+    if kind is MeansKind.GE_BID:
+        return PostBuyBidGoal(game_data=game_data, ctx=ctx)
     if kind is MeansKind.LOW_YIELD_CANCEL:
         return LowYieldCancelGoal()
     if kind is MeansKind.TASK_CANCEL:

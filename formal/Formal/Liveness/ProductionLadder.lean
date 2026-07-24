@@ -296,6 +296,12 @@ def drainBankJunkFires (s : State) : Bool :=
                < SELL_PRESSURE_NUM * s.inventoryMax))
   && s.bankJunkNonempty
 
+/-- GE_BID. Mirrors `means.py::_fires(GE_BID, …)`: `bool(ge_bid_candidates(...))`.
+    NO pressure gate — the Python guard fires purely on the candidate set being
+    nonempty (the opaque `geBidCandidateNonempty` signal). -/
+def geBidFires (s : State) : Bool :=
+  s.geBidCandidateNonempty
+
 /-- MAINTAIN_CONSUMABLES (PLAN #6a). Mirrors `means.py::_fires(MAINTAIN_CONSUMABLES, …)`:
     combat-active ∧ heal-stock < floor ∧ a better heal is craftable. Opaque
     State-carried Bool (see `Measure.State.maintainConsumablesFires`). -/
@@ -371,6 +377,7 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .sellIdle         => sellIdleFires s
   | .recycleSurplus   => recycleSurplusFires s
   | .drainBankJunk    => drainBankJunkFires s
+  | .geBid            => geBidFires s
   | .bankExpand       => bankExpandFires s
   | .wait             => waitFires s
 

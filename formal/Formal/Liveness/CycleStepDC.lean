@@ -372,7 +372,11 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
   -- action semantics, like .recycle clears recyclable-surplus). Sufficient to
   -- flip `drainBankJunkFires` off post-withdraw — fire-and-lose.
   | .withdrawItem, s => { s with bankJunkNonempty := false }
-  -- All other 4 kinds: no-op (see module docstring; future phases will
+  -- GePostBuyOrderAction (ge_post_buy.py) used by GE_BID: posting a buy order
+  -- suppresses the item next cycle. Clears the geBid candidate signal — mirrors
+  -- `applyActionKind .gePostBuyOrder`. Fire-and-lose.
+  | .gePostBuyOrder, s => { s with geBidCandidateNonempty := false }
+  -- All other kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s
 
@@ -417,6 +421,7 @@ def planForC : MeansKind → State → Plan
   | .sellIdle         , _ => [.npcSell]
   | .recycleSurplus   , _ => [.recycle]
   | .drainBankJunk    , _ => [.withdrawItem]
+  | .geBid            , _ => [.gePostBuyOrder]
   | .bankExpand       , _ => [.buyBankExpansion]
   | .wait             , _ => [.wait]
 

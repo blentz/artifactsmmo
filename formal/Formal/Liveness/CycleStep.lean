@@ -144,6 +144,7 @@ noncomputable def planFor : MeansKind → State → Plan
   | .sellIdle         , _ => [.npcSell]
   | .recycleSurplus   , _ => [.recycle]
   | .drainBankJunk    , _ => [.withdrawItem]
+  | .geBid            , _ => [.gePostBuyOrder]
   | .bankExpand       , _ => [.buyBankExpansion]
   | .wait             , _ => [.wait]
 
@@ -626,6 +627,20 @@ theorem cycleStep_progress_or_waits
                   = false := rfl
     have hpre' : s.bankJunkNonempty = false := by
       have : (applyActionKind .withdrawItem s).bankJunkNonempty = false := hpost
+      rw [heq] at this; exact this
+    rw [hpre] at hpre'; cases hpre'
+  | geBid =>
+    left
+    have hcs : cycleStep s = applyActionKind .gePostBuyOrder s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    simp only [fires, geBidFires] at hfires
+    have hpre : s.geBidCandidateNonempty = true := hfires
+    intro heq
+    have hpost : ({s with geBidCandidateNonempty := false} : State).geBidCandidateNonempty
+                  = false := rfl
+    have hpre' : s.geBidCandidateNonempty = false := by
+      have : (applyActionKind .gePostBuyOrder s).geBidCandidateNonempty = false := hpost
       rw [heq] at this; exact this
     rw [hpre] at hpre'; cases hpre'
   | bankExpand =>

@@ -143,6 +143,12 @@ structure State where
       false by `applyActionKind .withdrawItem` — fire-and-lose, like
       `recyclableSurplusNonempty`. -/
   bankJunkNonempty : Bool
+  /-- `ge_bid_candidates(state, game_data, ctx, …)` nonempty (ge_bid.py): at least
+      one needed, not-held, slow-to-self-craft objective-step material has a live GE
+      buy-anchor, an NPC alternative, no open order, and a `GE_POST` venue verdict
+      (2026-07-24). Flipped false by `applyActionKind .gePostBuyOrder` — the posted
+      order suppresses the item next cycle. Fire-and-lose, like `bankJunkNonempty`. -/
+  geBidCandidateNonempty : Bool
   /-- `_tasks_coin_total(state)` (means.py:61-62): inventory + bank. -/
   taskCoinsTotal : Nat
   /-- ctx — `SelectionContext.task_exchange_min_coins` (guards.py:30). -/

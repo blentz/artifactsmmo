@@ -161,11 +161,14 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
-from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
+from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
+from artifactsmmo_cli.ai.ge_order_config import BID_FILL_HORIZON_SECONDS
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext, _has_sellable
@@ -222,6 +225,7 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.SELL_IDLE: "sellIdle",
     LadderMeans.RECYCLE_SURPLUS: "recycleSurplus",
     LadderMeans.DRAIN_BANK_JUNK: "drainBankJunk",
+    LadderMeans.GE_BID: "geBid",
     LadderMeans.BANK_EXPAND: "bankExpand",
     LadderMeans.WAIT: "wait",
 }
@@ -447,6 +451,11 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         # via ctx.gold_reserve (should_expand_bank's safety gate, 2026-07-06)
         # — one value, two sides, exact lockstep.
         scn.gold_reserve,
+        # 34 geBidCandidateNonempty: the Scenario models no Grand Exchange and no
+        # objective step_profile, so `ge_bid_candidates` is empty on the synthetic
+        # (w, gd) — GE_BID never fires on the poor path. Always 0; the rich path
+        # drives it from the REAL helper (see `_rich_oracle_args`).
+        0,
     ]
 
 
@@ -829,6 +838,10 @@ def _rich_oracle_args(
         # production verdict (like gearReview/craftRelief/maintainConsumables).
         1 if prod[LadderMeans.CRAFT_POTIONS] else 0,  # 32 craftPotionsFires
         ctx.gold_reserve,                             # 33 goldReserve (ctx-threaded)
+        # 34: derive from production's REAL ge_bid_candidates helper (like 31),
+        # NOT the slot verdict — the helper IS the opaque geBidCandidateNonempty
+        # signal, and geBidFires has no extra gate so the two coincide.
+        1 if ge_bid_candidates(w, gd, ctx, BID_FILL_HORIZON_SECONDS) else 0,  # 34 geBidCandidateNonempty
     ]
 
 
@@ -1180,6 +1193,90 @@ def test_drain_bank_junk_fill_boundary() -> None:
     _assert_full_agreement(_base_scn(bank_accessible=True, bank_known=True,
                                      bank_capacity=50, bank_items_count=1,
                                      inventory_max=20, junk_qty=16))
+
+
+# ---------------------------------------------------------------------------
+# Slot 4 — geBid (arg[34]).  Production GE_BID fires iff `ge_bid_candidates(...)`
+# is non-empty (tiers/means.py + ge_bid.py): an objective-step material that is
+# needed, not held, slow-to-self-craft, has a live GE buy-anchor + an NPC
+# alternative, no open order, and a `GE_POST` venue verdict. NO pressure gate
+# (geBidFires reads the candidate signal directly). Like drainBankJunk it sits
+# below the lifecycle slots and can only fire-and-lose; the contest drives it
+# TRUE under phase=none where BOTH ladders select acceptTask. arg[34] is derived
+# from the REAL ge_bid_candidates helper (not the slot verdict).
+# ---------------------------------------------------------------------------
+
+
+def _gebid_gd() -> GameData:
+    # steel <- iron x2; iron is a very-rare monster drop (~1000s >> the 600s bid
+    # horizon), sold by an NPC at 100, with a standing GE buy order at 40 to
+    # overbid. Grand Exchange present so a post can land. bank_capacity large ⇒
+    # RECYCLE_RELIEF / SELL_RELIEF quiet so acceptTask cleanly wins the contest.
+    gd = GameData()
+    gd._crafting_recipes = {"steel": {"iron": 2}}
+    gd._monster_drops = {"mob": [("iron", 50, 1, 1)]}
+    gd._npc_stock = {"shop": {"steel": 100}}
+    gd._npc_locations = {"shop": (1, 0)}
+    gd._ge_buy_orders = {"steel": ("b1", 40, 5)}
+    gd._grand_exchange_location = (7, 7)
+    gd._bank_capacity = 50
+    return gd
+
+
+def _gebid_ctx(step_profile: dict[str, int]) -> SelectionContext:
+    return SelectionContext(
+        bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
+        initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
+        step_profile=step_profile)
+
+
+def _gebid_world(*, open_steel_order: bool = False) -> WorldState:
+    # No task (phase NONE), empty bag (fill 0 < 0.85), 1000 gold to afford a post.
+    orders = ((OpenOrder("x", "steel", 1, 41, OrderSide.BUY, 0),)
+              if open_steel_order else ())
+    return WorldState(
+        character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
+        gold=1000, skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        inventory_slots_max=20,
+        equipment={}, cooldown_expires=None,
+        bank_items={}, bank_gold=None, pending_items=None,
+        open_orders=orders,
+        task_code=None, task_type=None, task_progress=0, task_total=0)
+
+
+def test_ge_bid_drives_true() -> None:
+    """TRUE fixture: steel is a needed (step_profile), slow-to-craft, unheld
+    material with a live buy-anchor + NPC alt + GE_POST venue -> production GE_BID
+    fires. It loses selection to ACCEPT_TASK (phase NONE) on BOTH ladders, binding
+    arg[34] per-slot."""
+    w = _gebid_world()
+    gd = _gebid_gd()
+    prod, prod_sel, lean, lean_sel = drive_and_contest(
+        w, gd, _gebid_ctx({"steel": 1}), driven=frozenset({LadderMeans.GE_BID}))
+    assert prod[LadderMeans.GE_BID] is True
+    assert lean[LadderMeans.GE_BID] is True
+    assert prod_sel is LadderMeans.ACCEPT_TASK
+    assert lean_sel is LadderMeans.ACCEPT_TASK
+
+
+def test_ge_bid_near_miss_suppressed_by_open_order() -> None:
+    """Near-miss: an open BUY order for steel already stands -> ge_bid_candidates
+    suppresses it -> GE_BID does NOT fire."""
+    w = _gebid_world(open_steel_order=True)
+    gd = _gebid_gd()
+    prod, _, lean, _ = drive_and_contest(w, gd, _gebid_ctx({"steel": 1}))
+    assert prod[LadderMeans.GE_BID] is False
+    assert lean[LadderMeans.GE_BID] is False
+
+
+def test_ge_bid_near_miss_no_step_demand() -> None:
+    """Near-miss: nothing in the objective step_profile -> no candidate -> GE_BID
+    does NOT fire."""
+    w = _gebid_world()
+    gd = _gebid_gd()
+    prod, _, lean, _ = drive_and_contest(w, gd, _gebid_ctx({}))
+    assert prod[LadderMeans.GE_BID] is False
+    assert lean[LadderMeans.GE_BID] is False
 
 
 # ===========================================================================
