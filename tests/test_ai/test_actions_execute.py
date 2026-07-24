@@ -100,6 +100,26 @@ class TestMoveActionExecute:
             with pytest.raises(RuntimeError):
                 action.execute(state, client)
 
+    def test_execute_preserves_open_orders(self):
+        """Regression: MoveAction.execute rebuilds WorldState via
+        from_character_schema without threading open_orders through, so the
+        field defaulted to () and every fold through a move (post-sell,
+        post-buy, cancel, fill) wiped all tracked open orders. The returned
+        state must still carry the open order that was present beforehand.
+        """
+        from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
+
+        order = OpenOrder(id="o1", code="iron_ore", qty=2, price=11, side=OrderSide.SELL, age=0)
+        action = MoveAction(x=3, y=5)
+        state = make_state(x=0, y=0, open_orders=(order,))
+        client = MagicMock()
+        char = make_char_schema(x=3, y=5)
+
+        with patch("artifactsmmo_cli.ai.actions.movement.action_move", return_value=make_api_result(char)):
+            new_state = action.execute(state, client)
+
+        assert new_state.open_orders == (order,)
+
 
 class TestRestActionExecute:
     def test_calls_api_and_returns_new_state(self):

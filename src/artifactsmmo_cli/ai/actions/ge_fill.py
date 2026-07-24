@@ -87,6 +87,7 @@ class GeFillBuyOrderAction(Action):
             pending_items=state.pending_items,
             active_events=state.active_events,
             raids=state.raids,
+            open_orders=state.open_orders,
         )
 
     def __repr__(self) -> str:

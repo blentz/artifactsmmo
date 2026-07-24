@@ -91,3 +91,27 @@ class TestExecute:
                 mock_move.return_value = make_api_result(make_char_schema(x=5, y=1))
                 a.execute(state, client)
         mock_move.assert_called_once()
+
+    def test_execute_move_fold_preserves_other_open_orders(self):
+        """Regression: when the character is NOT already at ge_location,
+        GeCancelOrderAction.execute folds a MoveAction first. MoveAction.execute
+        rebuilds WorldState via from_character_schema without threading
+        open_orders through, so it used to default to () and wipe every
+        tracked open order — not just the one being cancelled. With two open
+        orders (o1 cancelled, o2 kept) and the character starting away from
+        ge_location (forcing the move fold to run), the returned state must
+        still carry o2 and must not carry o1.
+        """
+        cancelled = OpenOrder(id="o1", code="iron_ore", qty=1, price=19, side=OrderSide.SELL, age=1)
+        kept = OpenOrder(id="o2", code="copper_ore", qty=2, price=7, side=OrderSide.BUY, age=0)
+        a = GeCancelOrderAction(order_id="o1", ge_location=(5, 1))
+        state = make_state(x=0, y=0, open_orders=(cancelled, kept))
+        client = MagicMock()
+        with patch("artifactsmmo_cli.ai.actions.ge_cancel_order.action_ge_cancel_order",
+                   return_value=make_api_result(make_char_schema(x=5, y=1))):
+            with patch("artifactsmmo_cli.ai.actions.movement.action_move") as mock_move:
+                mock_move.return_value = make_api_result(make_char_schema(x=5, y=1))
+                new_state = a.execute(state, client)
+        assert kept in new_state.open_orders
+        assert cancelled not in new_state.open_orders
+        assert len(new_state.open_orders) == 1
