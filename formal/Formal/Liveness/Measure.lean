@@ -149,6 +149,13 @@ structure State where
       (2026-07-24). Flipped false by `applyActionKind .gePostBuyOrder` — the posted
       order suppresses the item next cycle. Fire-and-lose, like `bankJunkNonempty`. -/
   geBidCandidateNonempty : Bool
+  /-- `cancel_selection.cancel_targets(state, game_data, need_gold, needed_items)`
+      nonempty (cancel_selection.py): at least one posted GE order is a cancel target
+      — a needed-item SELL, a gold-short BUY, or any order aged past `TTL_CYCLES`
+      (2026-07-24). Flipped false by `applyActionKind .geCancelOrder` — cancelling
+      removes the order from the target set next cycle. Fire-and-lose, like
+      `geBidCandidateNonempty` / `recyclableSurplusNonempty`. -/
+  geCancelTargetsNonempty : Bool
   /-- `_tasks_coin_total(state)` (means.py:61-62): inventory + bank. -/
   taskCoinsTotal : Nat
   /-- ctx — `SelectionContext.task_exchange_min_coins` (guards.py:30). -/

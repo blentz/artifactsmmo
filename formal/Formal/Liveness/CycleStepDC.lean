@@ -376,6 +376,10 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
   -- suppresses the item next cycle. Clears the geBid candidate signal — mirrors
   -- `applyActionKind .gePostBuyOrder`. Fire-and-lose.
   | .gePostBuyOrder, s => { s with geBidCandidateNonempty := false }
+  -- GeCancelOrderAction (ge_cancel_order.py) emitted by GE_CANCEL: cancelling an
+  -- order removes it from the cancel-target set next cycle. Clears the geCancel
+  -- target signal — mirrors `applyActionKind .geCancelOrder`. Fire-and-lose.
+  | .geCancelOrder, s => { s with geCancelTargetsNonempty := false }
   -- All other kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s
@@ -422,6 +426,7 @@ def planForC : MeansKind → State → Plan
   | .recycleSurplus   , _ => [.recycle]
   | .drainBankJunk    , _ => [.withdrawItem]
   | .geBid            , _ => [.gePostBuyOrder]
+  | .geCancel         , _ => [.geCancelOrder]
   | .bankExpand       , _ => [.buyBankExpansion]
   | .wait             , _ => [.wait]
 

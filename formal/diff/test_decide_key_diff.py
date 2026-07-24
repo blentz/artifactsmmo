@@ -36,6 +36,7 @@ _GUARD_INDEX = {
     GuardKind.RECYCLE_RELIEF: 9,
     GuardKind.SELL_RELIEF: 10,
     GuardKind.CRAFT_POTIONS: 11,
+    GuardKind.GE_CANCEL: 12,
 }
 
 _MEANS_INDEX = {

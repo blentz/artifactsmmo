@@ -445,9 +445,10 @@ def test_ladder_has_27_entries() -> None:
     + RECYCLE_RELIEF (bank-full cascade, after CRAFT_RELIEF)
     + SELL_RELIEF (bank-full cascade, after RECYCLE_RELIEF)
     + DRAIN_BANK_JUNK (lowest-value housekeeping, after BANK_EXPAND)
-    + CRAFT_POTIONS (last guard in GUARD_ORDER, after GEAR_REVIEW).
-    Lean side mirrors via MeansKind.allInLadderOrder.length = 27."""
-    assert len(ALL_IN_LADDER_ORDER) == 27
+    + CRAFT_POTIONS (last guard in GUARD_ORDER, after GEAR_REVIEW)
+    + GE_CANCEL (on-need + TTL order cancellation, below the FIGHT gates).
+    Lean side mirrors via MeansKind.allInLadderOrder."""
+    assert len(ALL_IN_LADDER_ORDER) == 28
 
 
 def test_no_task_state_acceptTask_fires() -> None:

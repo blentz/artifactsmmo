@@ -182,6 +182,7 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
     | restForCombat   => exact descendsE_restForCombat s hk
     | bankUnlock      => exact descendsE_fight s hlvl (Or.inl hk)
     | reachUnlockLevel => exact descendsE_fight s hlvl (Or.inr (Or.inl hk))
+    | geCancel        => exact descendsE_geCancel s hk
     | discardCritical => exact descendsE_discardCritical s hk
     | craftRelief     => exact descendsE_craftRelief s hk
     | recycleRelief   => exact descendsE_recycleRelief s hk

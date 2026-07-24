@@ -78,6 +78,11 @@ structure FMeasure where
   pendingFlag            : Nat
   bankPressure           : Nat
   hpDeficit              : Nat
+  -- geCancel is a fire-and-lose guard: `.geCancelOrder` clears ONLY
+  -- `geCancelTargetsNonempty`, changing no other slot, so this flag can sit at the
+  -- bottom of the cascade — a geCancel step decreases it with every higher slot
+  -- equal, and no OTHER chore ever needs it (they all descend at a higher slot).
+  geCancelFlag           : Nat
   deriving DecidableEq, Repr
 
 /-- Extract the FMeasure from a `State`. Slot 3 is "a task is present"
@@ -99,7 +104,8 @@ noncomputable def fMeasure (s : State) : FMeasure :=
     gearReviewFlag         := b2n s.gearReviewFires
     pendingFlag            := b2n s.pendingItemsNonempty
     bankPressure           := s.inventoryUsed
-    hpDeficit              := s.maxHp - s.hp }
+    hpDeficit              := s.maxHp - s.hp
+    geCancelFlag           := b2n s.geCancelTargetsNonempty }
 
 /-! ## Strict lex order — hand-rolled 13-way disjunction (the
 `CumulativeProgress.extMeasureLt` pattern). -/
@@ -186,15 +192,28 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.pendingFlag = m₂.pendingFlag
      ∧ m₁.bankPressure = m₂.bankPressure
      ∧ m₁.hpDeficit < m₂.hpDeficit)
+  ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.phasePresent = m₂.phasePresent
+     ∧ m₁.overstockFlag = m₂.overstockFlag
+     ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
+     ∧ m₁.sellableFlag = m₂.sellableFlag
+     ∧ m₁.recyclableFlag = m₂.recyclableFlag
+     ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
+     ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
+     ∧ m₁.gearReviewFlag = m₂.gearReviewFlag
+     ∧ m₁.pendingFlag = m₂.pendingFlag
+     ∧ m₁.bankPressure = m₂.bankPressure
+     ∧ m₁.hpDeficit = m₂.hpDeficit
+     ∧ m₁.geCancelFlag < m₂.geCancelFlag)
 
 /-! ### Well-foundedness via embedding into Mathlib lex. -/
 
-/-- Right-associated 13-tuple of `Nat`. -/
+/-- Right-associated 14-tuple of `Nat`. -/
 abbrev LexThirteen :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
-    Nat ×ₗ Nat ×ₗ Nat
+    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
-/-- Embed an `FMeasure` into the right-associated lex 13-tuple. -/
+/-- Embed an `FMeasure` into the right-associated lex 14-tuple. -/
 def toLex13 (m : FMeasure) : LexThirteen :=
   toLex (m.levelDeficit,
     toLex (m.xpDeficit,
@@ -207,14 +226,15 @@ def toLex13 (m : FMeasure) : LexThirteen :=
                   toLex (m.craftPotionsFlag,
                     toLex (m.gearReviewFlag,
                       toLex (m.pendingFlag,
-                        toLex (m.bankPressure, m.hpDeficit))))))))))))
+                        toLex (m.bankPressure,
+                          toLex (m.hpDeficit, m.geCancelFlag)))))))))))))
 
 /-- `fMeasureLt` implies the embedded `<` on `LexThirteen`. -/
 theorem toLex13_lt_of_fMeasureLt
     {m₁ m₂ : FMeasure} (h : fMeasureLt m₁ m₂) :
     toLex13 m₁ < toLex13 m₂ := by
   simp only [toLex13, Prod.Lex.lt_iff, ofLex_toLex]
-  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h
+  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h
   · exact Or.inl h
   · obtain ⟨h1, h⟩ := h
     exact Or.inr ⟨h1, Or.inl h⟩
@@ -251,7 +271,12 @@ theorem toLex13_lt_of_fMeasureLt
   · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h⟩ := h
     exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
             Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
-              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
+            Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
+              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
+                Or.inr ⟨h13, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Well-foundedness of `fMeasureLt`, by `InvImage` reduction to Mathlib's
     standard well-founded order on `LexThirteen`. -/
@@ -397,8 +422,30 @@ theorem fLt_of_hpDeficit_dec {m₁ m₂ : FMeasure}
     (h12 : m₁.bankPressure = m₂.bankPressure)
     (h : m₁.hpDeficit < m₂.hpDeficit) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inr (Or.inr ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11,
-      h12, h⟩)))))))))))
+    (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11,
+      h12, h⟩))))))))))))
+
+/-- Slot 14 (`geCancelFlag`) decrease with slots 1-13 equal — the fire-and-lose
+    GE_CANCEL guard. `.geCancelOrder` clears only `geCancelTargetsNonempty`, so every
+    higher slot is unchanged and this bottom slot strictly drops. -/
+theorem fLt_of_geCancel_dec {m₁ m₂ : FMeasure}
+    (h1 : m₁.levelDeficit = m₂.levelDeficit)
+    (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (h3 : m₁.phasePresent = m₂.phasePresent)
+    (h4 : m₁.overstockFlag = m₂.overstockFlag)
+    (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
+    (h6 : m₁.sellableFlag = m₂.sellableFlag)
+    (h7 : m₁.recyclableFlag = m₂.recyclableFlag)
+    (h8 : m₁.craftReliefFlag = m₂.craftReliefFlag)
+    (h9 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
+    (h10 : m₁.gearReviewFlag = m₂.gearReviewFlag)
+    (h11 : m₁.pendingFlag = m₂.pendingFlag)
+    (h12 : m₁.bankPressure = m₂.bankPressure)
+    (h13 : m₁.hpDeficit = m₂.hpDeficit)
+    (h : m₁.geCancelFlag < m₂.geCancelFlag) : fMeasureLt m₁ m₂ :=
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+    (Or.inr (Or.inr (Or.inr (Or.inr ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11,
+      h12, h13, h⟩))))))))))))
 
 /-! ## The engine — reach 50 from per-cycle FMeasure descent (the
 `MeasureDescent.exists_level_ge_of_descent` shape over the richer tuple). -/

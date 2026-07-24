@@ -4224,6 +4224,12 @@ MEANS_MAINTAIN_MUTATIONS = [
 # task_decision, low_yield_cancel_fires, …) already anchored elsewhere.
 LADDER_GUARD_FIRES_MUTATIONS = [
     (
+        "ladder/guards: GE_CANCEL drop cancel_targets guard (fires with no cancel target)",
+        "        return bool(cancel_targets(\n"
+        "            state, game_data, 0, frozenset(step_profile or ())))",
+        "        return True",
+    ),
+    (
         "ladder/guards: HP_CRITICAL comparator < -> <= (boundary 25/100 leaks)",
         "        return state.hp_percent < CRITICAL_HP_FRACTION",
         "        return state.hp_percent <= CRITICAL_HP_FRACTION",

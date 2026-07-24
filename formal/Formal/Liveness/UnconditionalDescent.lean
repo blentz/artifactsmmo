@@ -53,6 +53,7 @@ open Formal.Liveness.BlockerDescent
     precedes the discretionary tail in `allInLadderOrder`). -/
 def blockerPrefix : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
+   .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
    .discardHigh, .gearReview, .craftPotions, .claimPending, .completeTask,
    .sellPressured, .lowYieldCancel, .taskCancel, .objectiveStep]
@@ -130,6 +131,7 @@ theorem cycleStepF_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | restForCombat   => exact descends_restForCombat s hk
     | bankUnlock      => exact descends_fight s hlvl (Or.inl hk)
     | reachUnlockLevel => exact descends_fight s hlvl (Or.inr (Or.inl hk))
+    | geCancel        => exact descends_geCancel s hk
     | discardCritical => exact descends_discardCritical s hk
     | craftRelief     => exact descends_craftRelief s hk
     | recycleRelief   => exact descends_recycleRelief s hk

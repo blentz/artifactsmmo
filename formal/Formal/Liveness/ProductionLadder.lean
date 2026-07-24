@@ -336,6 +336,12 @@ def bankExpandFires (s : State) : Bool :=
     harness asserts agreement with `craft_relief_candidates`. -/
 def craftReliefFires (s : State) : Bool := s.craftReliefFires
 
+/-- GE_CANCEL. Mirrors `tiers/guards.py::_fires(GE_CANCEL, …)`: fires iff
+    `cancel_selection.cancel_targets(...)` is nonempty. NO pressure gate — the
+    guard's Python `_fires` is exactly `bool(cancel_targets(...))`, mirroring the
+    fire-and-lose shape of `geBidFires`. -/
+def geCancelFires (s : State) : Bool := s.geCancelTargetsNonempty
+
 /-- RECYCLE_RELIEF. Mirrors `tiers/guards.py::_fires(RECYCLE_RELIEF, …)`:
     bank full (not bankHasRoom) AND recyclable surplus nonempty. -/
 def recycleReliefFires (s : State) : Bool :=
@@ -356,6 +362,7 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .restForCombat    => restForCombatFires s
   | .bankUnlock       => bankUnlockFires s
   | .reachUnlockLevel => reachUnlockLevelFires s
+  | .geCancel         => geCancelFires s
   | .discardCritical  => discardCriticalFires s
   | .craftRelief      => craftReliefFires s
   | .recycleRelief    => recycleReliefFires s

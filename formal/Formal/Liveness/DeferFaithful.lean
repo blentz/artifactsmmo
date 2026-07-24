@@ -135,6 +135,7 @@ theorem cycleStepD_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | restForCombat   => exact descendsD_restForCombat s hk
     | bankUnlock      => exact descendsD_fight s hlvl (Or.inl hk)
     | reachUnlockLevel => exact descendsD_fight s hlvl (Or.inr (Or.inl hk))
+    | geCancel        => exact descendsD_geCancel s hk
     | discardCritical => exact descendsD_discardCritical s hk
     | craftRelief     => exact descendsD_craftRelief s hk
     | recycleRelief   => exact descendsD_recycleRelief s hk

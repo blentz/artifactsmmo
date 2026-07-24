@@ -86,6 +86,7 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.REST_FOR_COMBAT:    "rest",
     LadderMeans.BANK_UNLOCK:        "fight",
     LadderMeans.REACH_UNLOCK_LEVEL: "fight",
+    LadderMeans.GE_CANCEL:          "geCancelOrder",
     LadderMeans.DISCARD_CRITICAL:   "deleteItem",
     LadderMeans.CRAFT_RELIEF:       "craft",
     LadderMeans.RECYCLE_RELIEF:     "recycle",

@@ -2,7 +2,7 @@
   Formal.Liveness.MeansKind
 
   Production-granularity `MeansKind` enum mirroring the StrategyArbiter's
-  ladder. There are 27 means in total, ordered:
+  ladder. There are 28 means in total, ordered:
 
     GUARD_ORDER (10, from `tiers/guards.py:68`)  -- REST_FOR_COMBAT after
                                                    HP_CRITICAL; CRAFT_RELIEF
@@ -38,7 +38,7 @@ namespace Formal.Liveness.MeansKind
     Order matches production's preordered candidate list:
       GUARD_ORDER ++ COLLECT_REWARD_ORDER ++ [OBJECTIVE_STEP] ++ DISCRETIONARY_ORDER.
 
-    Total 27 constructors. -/
+    Total 28 constructors. -/
 inductive MeansKind where
   -- Guards (GUARD_ORDER, guards.py:68)
   | hpCritical          -- HP_CRITICAL,        guards.py:69
@@ -49,6 +49,13 @@ inductive MeansKind where
                         --                     hpCritical, distinct tier)
   | bankUnlock          -- BANK_UNLOCK,        guards.py:71
   | reachUnlockLevel    -- REACH_UNLOCK_LEVEL, guards.py:72
+  | geCancel            -- GE_CANCEL,          guards.py (2026-07-24): on-need +
+                        --                     TTL cancellation of posted GE orders.
+                        --                     Sits BELOW the two FIGHT gates and
+                        --                     ABOVE the bag/bank-management cluster.
+                        --                     Fire-and-lose, like recycleRelief: a
+                        --                     cancel removes the order from the
+                        --                     cancel-target set next cycle.
   | discardCritical     -- DISCARD_CRITICAL,   guards.py:73
   | craftRelief         -- CRAFT_RELIEF,       guards.py:74 (circuit breaker
                         --                     between DISCARD_CRITICAL and
@@ -106,6 +113,7 @@ inductive MeansKind where
     so the ladder is unconditionally total (see `NoDeadlockV2.lean`). -/
 def allInLadderOrder : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
+   .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh, .gearReview,
    .craftPotions,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
@@ -114,7 +122,7 @@ def allInLadderOrder : List MeansKind :=
    .sellIdle, .recycleSurplus, .bankExpand, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 28 constructors. -/
-example : allInLadderOrder.length = 28 := by decide
+/-- Sanity: 29 constructors. -/
+example : allInLadderOrder.length = 29 := by decide
 
 end Formal.Liveness.MeansKind

@@ -50,6 +50,7 @@ _GUARD_REPR: dict[GuardKind, str] = {
     # material availability — the static prefix covers exhaustiveness.
     GuardKind.GEAR_REVIEW: "UpgradeEquipment",
     GuardKind.CRAFT_POTIONS: "CraftPotions",
+    GuardKind.GE_CANCEL: "CancelOrders",
 }
 
 _MEANS_REPR: dict[MeansKind, str] = {

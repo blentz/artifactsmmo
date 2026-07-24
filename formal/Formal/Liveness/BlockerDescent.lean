@@ -205,6 +205,23 @@ theorem descends_recycleRelief (s : State)
   apply fLt_of_recyclable_dec <;>
     simp [fMeasure, pressureDelta, applyActionKind, hfire.2]
 
+/-- `geCancel` (→ `.geCancelOrder`) strictly descends at `geCancelFlag`. The
+    fire-and-lose GE_CANCEL guard: `.geCancelOrder` clears only
+    `geCancelTargetsNonempty`, so every higher slot is unchanged and the bottom
+    slot strictly drops. -/
+theorem descends_geCancel (s : State)
+    (hk : productionLadder (perceptionRefresh s) = some .geCancel) :
+    fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, geCancelFires] at hfire
+  rw [cycleStepF_some s hk, ← fMeasure_perceptionRefresh s]
+  have hcs : cycleStep (perceptionRefresh s) =
+      applyActionKind .geCancelOrder (perceptionRefresh s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  apply fLt_of_geCancel_dec <;>
+    simp [fMeasure, pressureDelta, applyActionKind, hfire]
+
 /-- `craftRelief` (→ `.craft`) strictly descends at `craftReliefFlag`. -/
 theorem descends_craftRelief (s : State)
     (hk : productionLadder (perceptionRefresh s) = some .craftRelief) :

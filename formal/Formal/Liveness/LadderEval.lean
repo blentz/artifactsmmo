@@ -65,6 +65,7 @@ def inertLadderState : State where
   recyclableSurplusNonempty := false
   bankJunkNonempty := false
   geBidCandidateNonempty := false
+  geCancelTargetsNonempty := false
   taskCoinsTotal := 0
   taskExchangeMinCoins := 0
   lowYieldCancelFires := false
@@ -112,6 +113,7 @@ def meansKindName : MeansKind → String
   | .restForCombat       => "restForCombat"
   | .bankUnlock          => "bankUnlock"
   | .reachUnlockLevel    => "reachUnlockLevel"
+  | .geCancel            => "geCancel"
   | .discardCritical     => "discardCritical"
   | .craftRelief         => "craftRelief"
   | .recycleRelief       => "recycleRelief"

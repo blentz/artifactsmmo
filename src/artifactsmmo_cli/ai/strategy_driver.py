@@ -33,6 +33,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_step_target import gather_step_target
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.goals.cancel_orders import CancelOrdersGoal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
@@ -344,6 +345,12 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
     if kind is GuardKind.CRAFT_POTIONS:
         return CraftPotionsGoal(combat_monster=ctx.combat_monster, game_data=game_data,
                                 history=history)
+    if kind is GuardKind.GE_CANCEL:
+        # needed_items = the active step's material demand (step_profile codes), the
+        # same per-cycle demand the firing predicate used; need_gold=0 (no per-step
+        # required-spend is exposed), so the goal cancels on item-need + TTL.
+        return CancelOrdersGoal(game_data=game_data, need_gold=0,
+                                needed_items=frozenset(step_profile or ()))
     raise ValueError(f"Unknown GuardKind: {kind!r}")
 
 

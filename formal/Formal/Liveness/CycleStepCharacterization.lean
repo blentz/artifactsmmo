@@ -128,6 +128,12 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (applyActionKind .craft s).level = s.level
             ∧ (applyActionKind .craft s).xp = s.xp
       exact ⟨rfl, rfl⟩
+    | geCancel =>
+      -- planFor .geCancel = [.geCancelOrder]; applyActionKind .geCancelOrder
+      -- preserves level and xp (clears geCancelTargetsNonempty only).
+      show (applyActionKind .geCancelOrder s).level = s.level
+            ∧ (applyActionKind .geCancelOrder s).xp = s.xp
+      exact ⟨rfl, rfl⟩
     | recycleRelief =>
       -- planFor .recycleRelief = [.recycle]; applyActionKind .recycle preserves
       -- level and xp (clears recyclableSurplusNonempty only).

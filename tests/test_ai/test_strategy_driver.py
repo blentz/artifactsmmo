@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.arbiter_select import Candidate, _precedes, select_pure
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
+from artifactsmmo_cli.ai.goals.cancel_orders import CancelOrdersGoal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
@@ -95,6 +96,11 @@ def test_map_guard_hp_critical():
 def test_map_guard_discard_critical():
     g = map_guard(GuardKind.DISCARD_CRITICAL, GameData(), _ctx())
     assert isinstance(g, DiscardOverstockGoal)
+
+
+def test_map_guard_ge_cancel():
+    g = map_guard(GuardKind.GE_CANCEL, GameData(), _ctx(), step_profile={"iron": 1})
+    assert isinstance(g, CancelOrdersGoal)
 
 
 def test_map_guard_discard_high():

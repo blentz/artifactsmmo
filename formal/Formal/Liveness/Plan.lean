@@ -477,6 +477,12 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- candidate signal — single-action semantics, like .withdrawItem clears bank
   -- junk. Fire-and-lose.
   | .gePostBuyOrder, s => { s with geBidCandidateNonempty := false }
+  -- GeCancelOrderAction (ge_cancel_order.py) emitted by the GE_CANCEL guard:
+  -- cancelling an order REMOVES it from the open-order set, so it leaves the
+  -- cancel-target set on the next evaluation (cancel_selection.cancel_targets no
+  -- longer reports it). Clears the geCancel target signal — single-action
+  -- semantics, like .gePostBuyOrder clears the geBid candidate. Fire-and-lose.
+  | .geCancelOrder, s => { s with geCancelTargetsNonempty := false }
   -- All other kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s

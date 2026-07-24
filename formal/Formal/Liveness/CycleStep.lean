@@ -116,6 +116,7 @@ noncomputable def planFor : MeansKind → State → Plan
   | .restForCombat    , _ => [.rest]
   | .bankUnlock       , _ => [.fight]
   | .reachUnlockLevel , _ => [.fight]
+  | .geCancel         , _ => [.geCancelOrder]
   | .discardCritical  , _ => [.deleteItem]
   | .craftRelief      , _ => [.craft]
   | .recycleRelief    , _ => [.recycle]
@@ -294,6 +295,24 @@ theorem cycleStep_progress_or_waits
         simp only [applyActionKind]; simp [hwillf]
       have hxp_eq : (applyActionKind .fight s).xp = s.xp := by rw [heq]
       omega
+  | geCancel =>
+    -- GE_CANCEL plans `.geCancelOrder`, which clears `geCancelTargetsNonempty`.
+    -- geCancelFires requires geCancelTargetsNonempty = true, so the post-state
+    -- (false) differs from the pre-state (true) → cycleStep s ≠ s. Mirrors the
+    -- geBid / recycleRelief fire-and-lose descent exactly.
+    left
+    have hcs : cycleStep s = applyActionKind .geCancelOrder s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    simp only [fires, geCancelFires] at hfires
+    have hpre : s.geCancelTargetsNonempty = true := hfires
+    intro heq
+    have hpost : ({s with geCancelTargetsNonempty := false} : State).geCancelTargetsNonempty
+                  = false := rfl
+    have hpre' : s.geCancelTargetsNonempty = false := by
+      have : (applyActionKind .geCancelOrder s).geCancelTargetsNonempty = false := hpost
+      rw [heq] at this; exact this
+    rw [hpre] at hpre'; cases hpre'
   | discardCritical =>
     left
     have hcs : cycleStep s = applyActionKind .deleteItem s := by

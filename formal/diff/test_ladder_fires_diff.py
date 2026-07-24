@@ -162,6 +162,7 @@ from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
+from artifactsmmo_cli.ai.cancel_selection import cancel_targets
 from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
@@ -204,6 +205,7 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.REST_FOR_COMBAT: "restForCombat",
     LadderMeans.BANK_UNLOCK: "bankUnlock",
     LadderMeans.REACH_UNLOCK_LEVEL: "reachUnlockLevel",
+    LadderMeans.GE_CANCEL: "geCancel",
     LadderMeans.DISCARD_CRITICAL: "discardCritical",
     LadderMeans.CRAFT_RELIEF: "craftRelief",
     LadderMeans.RECYCLE_RELIEF: "recycleRelief",
@@ -455,6 +457,10 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         # objective step_profile, so `ge_bid_candidates` is empty on the synthetic
         # (w, gd) — GE_BID never fires on the poor path. Always 0; the rich path
         # drives it from the REAL helper (see `_rich_oracle_args`).
+        0,
+        # 35 geCancelTargetsNonempty: the Scenario models no posted GE orders, so
+        # `cancel_targets` is empty — GE_CANCEL never fires on the poor path. Always
+        # 0; the rich path drives it from the REAL helper (see `_rich_oracle_args`).
         0,
     ]
 
@@ -842,6 +848,11 @@ def _rich_oracle_args(
         # NOT the slot verdict — the helper IS the opaque geBidCandidateNonempty
         # signal, and geBidFires has no extra gate so the two coincide.
         1 if ge_bid_candidates(w, gd, ctx, BID_FILL_HORIZON_SECONDS) else 0,  # 34 geBidCandidateNonempty
+        # 35: derive from production's REAL cancel_targets helper — the GE_CANCEL
+        # guard's `_fires` is `bool(cancel_targets(state, gd, 0, needed_items))` with
+        # needed_items = step_profile codes; the ladder call threads no step_profile,
+        # so needed_items is empty here (matching production) and this is TTL-driven.
+        1 if cancel_targets(w, gd, 0, frozenset()) else 0,  # 35 geCancelTargetsNonempty
     ]
 
 

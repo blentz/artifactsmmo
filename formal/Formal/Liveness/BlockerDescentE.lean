@@ -99,6 +99,12 @@ private theorem refreshE_recyclable (s : State) :
   split
   · split <;> rfl
   · rfl
+private theorem refreshE_geCancel (s : State) :
+    (perceptionRefreshE s).geCancelTargetsNonempty = s.geCancelTargetsNonempty := by
+  unfold perceptionRefreshE
+  split
+  · split <;> rfl
+  · rfl
 private theorem refreshE_craftRelief (s : State) :
     (perceptionRefreshE s).craftReliefFires = s.craftReliefFires := by
   unfold perceptionRefreshE
@@ -378,6 +384,30 @@ theorem descendsE_recycleRelief (s : State)
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
       refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
       refreshE_gearGap, refreshE_adequate,
+      perceptionRefreshE_level, perceptionRefreshE_xp]
+
+
+/-- `geCancel` (→ `.geCancelOrder`) strictly descends at `geCancelFlag` (the
+    fire-and-lose GE_CANCEL guard, above `objectiveStepFlag`). -/
+theorem descendsE_geCancel (s : State)
+    (hk : productionLadder (perceptionRefreshE s) = some .geCancel) :
+    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, geCancelFires, refreshE_geCancel] at hfire
+  rw [cycleStepE_some s hk]
+  have hcs : cycleStep (perceptionRefreshE s) =
+      applyActionKind .geCancelOrder (perceptionRefreshE s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  apply eLt_of_geCancel_dec <;>
+    simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
+      applyActionKind, hfire,
+      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
+      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
+      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
+      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
+      refreshE_gearGap, refreshE_adequate, refreshE_geCancel,
       perceptionRefreshE_level, perceptionRefreshE_xp]
 
 
@@ -766,7 +796,7 @@ theorem descendsE_gearReview (s : State) (hlvl : s.level < 50)
     have hlatch : s.gearReviewFires = true := by rw [hid] at hfire; exact hfire
     apply eLt_of_gearReview_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-        applyActionKind, hlatch, hprodf, hid,
+        applyActionKind, hlatch, hprodf, hid, refreshE_geCancel,
         refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
@@ -793,7 +823,7 @@ theorem descendsE_gearReview (s : State) (hlvl : s.level < 50)
           exact hfire
       apply eLt_of_gearReview_dec <;>
         simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-          applyActionKind, hgap, hadq, hlatch, hprodc,
+          applyActionKind, hgap, hadq, hlatch, hprodc, refreshE_geCancel,
           refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
@@ -889,6 +919,7 @@ theorem descendsE_fight (s : State) (hlvl : s.level < 50)
 /-- The blocker prefix up to (excluding) `.objectiveStep`. -/
 private def gearScanPrefix : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
+   .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
    .discardHigh, .gearReview, .craftPotions, .claimPending, .completeTask,
    .sellPressured, .lowYieldCancel, .taskCancel]
@@ -1002,7 +1033,7 @@ theorem descendsE_placeholder (s : State) (hArms : AdequateArmsFightAt s)
   rw [hcs]
   apply eLt_of_objectiveStepFlag_dec <;>
     simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-      applyActionKind, his0, hfire]
+      applyActionKind, his0, hfire, refreshE_geCancel]
 
 /-- `pursueTask` is selectable only inside the defer window: outside it the
     refresh arms the objective (adequate) or the gear latch (inadequate), and

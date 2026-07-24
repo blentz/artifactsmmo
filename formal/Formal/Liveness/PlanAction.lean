@@ -112,6 +112,8 @@ inductive ActionKind where
   | withdrawItem
   | gePostBuyOrder  -- 2026-07-24: GePostBuyOrderAction (ge_post_buy.py), posted by
                     -- the GE_BID means. Real production Action subclass.
+  | geCancelOrder   -- 2026-07-24: GeCancelOrderAction (ge_cancel_order.py), emitted
+                    -- by the GE_CANCEL guard. Real production Action subclass.
   -- Phase 21d-1: synthetic placeholder, NOT a production `Action` subclass.
   -- See module docstring "Phase 21d-1: synthetic `.objectiveStep`
   -- placeholder" for the honest disclosure. Excluded from
@@ -127,7 +129,7 @@ def allActionKinds : List ActionKind :=
    .gather, .mapTransition, .move, .moveTo, .npcBuy, .npcSell,
    .optimizeLoadout, .recycle, .rest, .taskCancel, .taskExchange,
    .taskTrade, .unequip, .useConsumable, .wait, .withdrawGold,
-   .withdrawItem, .gePostBuyOrder, .objectiveStep]
+   .withdrawItem, .gePostBuyOrder, .geCancelOrder, .objectiveStep]
 
 /-- Enumeration of the production `Action` subclasses ONLY (27, matching
     `src/artifactsmmo_cli/ai/actions/` at commit b60e979). Excludes the
@@ -138,13 +140,13 @@ def productionActionKinds : List ActionKind :=
    .gather, .mapTransition, .move, .moveTo, .npcBuy, .npcSell,
    .optimizeLoadout, .recycle, .rest, .taskCancel, .taskExchange,
    .taskTrade, .unequip, .useConsumable, .wait, .withdrawGold,
-   .withdrawItem, .gePostBuyOrder]
+   .withdrawItem, .gePostBuyOrder, .geCancelOrder]
 
-/-- Sanity: 29 constructors total (28 production + 1 synthetic). -/
-example : allActionKinds.length = 29 := by decide
+/-- Sanity: 30 constructors total (29 production + 1 synthetic). -/
+example : allActionKinds.length = 30 := by decide
 
-/-- Sanity: 28 production `Action` subclasses (b60e979's 27 + GePostBuyOrderAction,
-    2026-07-24). -/
-example : productionActionKinds.length = 28 := by decide
+/-- Sanity: 29 production `Action` subclasses (b60e979's 27 + GePostBuyOrderAction
+    + GeCancelOrderAction, 2026-07-24). -/
+example : productionActionKinds.length = 29 := by decide
 
 end Formal.Liveness.PlanAction

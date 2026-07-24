@@ -9,6 +9,7 @@ from enum import Enum
 
 from artifactsmmo_cli.ai.bank_room import bank_has_room
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
+from artifactsmmo_cli.ai.cancel_selection import cancel_targets
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.craft_relief import (
     CRAFT_RELIEF_FRACTION,
@@ -83,6 +84,7 @@ class GuardKind(Enum):
     DISCARD_HIGH = "discard_high"
     GEAR_REVIEW = "gear_review"  # post-level-up / post-loss gear prioritization
     CRAFT_POTIONS = "craft_potions"  # preemptively stock the utility-slot potion baseline
+    GE_CANCEL = "ge_cancel"  # on-need + TTL cancellation of posted GE orders (appended LAST)
 
 
 GUARD_ORDER: tuple[GuardKind, ...] = (
@@ -90,6 +92,13 @@ GUARD_ORDER: tuple[GuardKind, ...] = (
     GuardKind.REST_FOR_COMBAT,  # preempts the next Fight when current hp is insufficient
     GuardKind.BANK_UNLOCK,
     GuardKind.REACH_UNLOCK_LEVEL,
+    # GE_CANCEL sits below the two FIGHT prerequisite gates (BANK_UNLOCK /
+    # REACH_UNLOCK_LEVEL) and above the whole bag/bank-management cluster: freeing
+    # locked capital (on-need) and clearing stale orders (TTL) precedes discard and
+    # bank-relief. It is BELOW the fight gates deliberately — preempting the
+    # bootstrap fight would break the reach-50 `cycleStep_fights_in_window` liveness
+    # lemma (which only assumes hp/rest quiet), so this is the highest sound slot.
+    GuardKind.GE_CANCEL,
     GuardKind.DISCARD_CRITICAL,
     GuardKind.CRAFT_RELIEF,  # craft-before-deposit/discard when applicable
     GuardKind.RECYCLE_RELIEF,  # bank-full: recover materials before sell/discard
@@ -277,6 +286,15 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
         return ctx.gear_review_active
     if kind is GuardKind.CRAFT_POTIONS:
         return craft_potions_fires(state, game_data, history)
+    if kind is GuardKind.GE_CANCEL:
+        # On-need + TTL cancellation. `needed_items` is the active step's material
+        # demand (`step_profile` codes — the same per-cycle demand GE_BID reads); a
+        # SELL order for one of those, or ANY order past TTL_CYCLES, is a target.
+        # `need_gold=0`: the arbiter exposes no per-step required-spend, so the gold
+        # on-need trigger is dormant here and the guard fires on item-need + TTL only
+        # (a required-spend source is a future wiring extension — see cancel_targets).
+        return bool(cancel_targets(
+            state, game_data, 0, frozenset(step_profile or ())))
     return False
 
 

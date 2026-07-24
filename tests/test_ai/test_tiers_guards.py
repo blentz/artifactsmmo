@@ -3,6 +3,8 @@
 from unittest.mock import patch
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
+from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.thresholds import DEPOSIT_FULL_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import (
     GUARD_ORDER,
@@ -774,3 +776,36 @@ def test_craft_potions_guard_quiet_when_recipe_is_empty():
     gd._crafting_recipes = {"health_potion": {}}  # selected as target, but no ingredients
     state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0)
     assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, _ctx(), None) is False
+
+
+def _ge_gd() -> GameData:
+    gd = GameData()
+    gd._grand_exchange_location = (1, 2)
+    return gd
+
+
+def test_ge_cancel_guard_fires_on_needed_item_sell():
+    """A SELL order for a material the active step needs → GE_CANCEL fires."""
+    state = make_state(open_orders=(OpenOrder("s1", "iron", 3, 19, OrderSide.SELL, 0),))
+    assert _fires(GuardKind.GE_CANCEL, state, _ge_gd(), None, _ctx(),
+                  {"iron": 1}) is True
+
+
+def test_ge_cancel_guard_fires_on_stale_order():
+    """Any order past TTL_CYCLES → GE_CANCEL fires even with no step demand."""
+    state = make_state(
+        open_orders=(OpenOrder("s2", "iron", 3, 19, OrderSide.SELL, TTL_CYCLES + 1),))
+    assert _fires(GuardKind.GE_CANCEL, state, _ge_gd(), None, _ctx(), None) is True
+
+
+def test_ge_cancel_guard_quiet_when_fresh_and_unneeded():
+    state = make_state(
+        gold=999, open_orders=(OpenOrder("s3", "iron", 3, 19, OrderSide.SELL, 0),))
+    assert _fires(GuardKind.GE_CANCEL, state, _ge_gd(), None, _ctx(), {"copper": 1}) is False
+
+
+def test_ge_cancel_guard_in_ladder_below_fight_gates():
+    """GE_CANCEL sits after the two FIGHT prerequisite gates, before DISCARD_CRITICAL."""
+    i = GUARD_ORDER.index(GuardKind.GE_CANCEL)
+    assert GUARD_ORDER[i - 1] is GuardKind.REACH_UNLOCK_LEVEL
+    assert GUARD_ORDER[i + 1] is GuardKind.DISCARD_CRITICAL

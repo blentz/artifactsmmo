@@ -39,37 +39,41 @@ theorem productionLadder_eq_hpCritical (s : State)
 theorem productionLadder_eq_discardCritical (s : State)
     (h0 : fires .hpCritical s = false) (h1 : fires .restForCombat s = false)
     (h2 : fires .bankUnlock s = false) (h3 : fires .reachUnlockLevel s = false)
+    (hgc : fires .geCancel s = false)
     (hfire : fires .discardCritical s = true) :
     productionLadder s = some .discardCritical := by
   simp [productionLadder, allInLadderOrder,
-    h0, h1, h2, h3, hfire]
+    h0, h1, h2, h3, hgc, hfire]
 
 /-- `craftRelief` (slot 5) — higher: slots 0-4. -/
 theorem productionLadder_eq_craftRelief (s : State)
     (h0 : fires .hpCritical s = false) (h1 : fires .restForCombat s = false)
     (h2 : fires .bankUnlock s = false) (h3 : fires .reachUnlockLevel s = false)
+    (hgc : fires .geCancel s = false)
     (h4 : fires .discardCritical s = false)
     (hfire : fires .craftRelief s = true) :
     productionLadder s = some .craftRelief := by
   simp [productionLadder, allInLadderOrder,
-    h0, h1, h2, h3, h4, hfire]
+    h0, h1, h2, h3, hgc, h4, hfire]
 
 /-- `depositFull` (slot 8) — higher: slots 0-7 (incl. recycleRelief, sellRelief). -/
 theorem productionLadder_eq_depositFull (s : State)
     (h0 : fires .hpCritical s = false) (h1 : fires .restForCombat s = false)
     (h2 : fires .bankUnlock s = false) (h3 : fires .reachUnlockLevel s = false)
+    (hgc : fires .geCancel s = false)
     (h4 : fires .discardCritical s = false) (h5 : fires .craftRelief s = false)
     (h5b : fires .recycleRelief s = false)
     (h5c : fires .sellRelief s = false)
     (hfire : fires .depositFull s = true) :
     productionLadder s = some .depositFull := by
   simp [productionLadder, allInLadderOrder,
-    h0, h1, h2, h3, h4, h5, h5b, h5c, hfire]
+    h0, h1, h2, h3, hgc, h4, h5, h5b, h5c, hfire]
 
 /-- `discardHigh` (slot 9) — higher: slots 0-8. -/
 theorem productionLadder_eq_discardHigh (s : State)
     (h0 : fires .hpCritical s = false) (h1 : fires .restForCombat s = false)
     (h2 : fires .bankUnlock s = false) (h3 : fires .reachUnlockLevel s = false)
+    (hgc : fires .geCancel s = false)
     (h4 : fires .discardCritical s = false) (h5 : fires .craftRelief s = false)
     (h5b : fires .recycleRelief s = false)
     (h5c : fires .sellRelief s = false)
@@ -77,12 +81,13 @@ theorem productionLadder_eq_discardHigh (s : State)
     (hfire : fires .discardHigh s = true) :
     productionLadder s = some .discardHigh := by
   simp [productionLadder, allInLadderOrder,
-    h0, h1, h2, h3, h4, h5, h5b, h5c, h6, hfire]
+    h0, h1, h2, h3, hgc, h4, h5, h5b, h5c, h6, hfire]
 
 /-- `gearReview` (slot 10) — higher: slots 0-9. -/
 theorem productionLadder_eq_gearReview (s : State)
     (h0 : fires .hpCritical s = false) (h1 : fires .restForCombat s = false)
     (h2 : fires .bankUnlock s = false) (h3 : fires .reachUnlockLevel s = false)
+    (hgc : fires .geCancel s = false)
     (h4 : fires .discardCritical s = false) (h5 : fires .craftRelief s = false)
     (h5b : fires .recycleRelief s = false)
     (h5c : fires .sellRelief s = false)
@@ -90,12 +95,13 @@ theorem productionLadder_eq_gearReview (s : State)
     (hfire : fires .gearReview s = true) :
     productionLadder s = some .gearReview := by
   simp [productionLadder, allInLadderOrder,
-    h0, h1, h2, h3, h4, h5, h5b, h5c, h6, h7, hfire]
+    h0, h1, h2, h3, hgc, h4, h5, h5b, h5c, h6, h7, hfire]
 
 /-- `claimPending` (slot 11) — higher: slots 0-10. -/
 theorem productionLadder_eq_claimPending (s : State)
     (h0 : fires .hpCritical s = false) (h1 : fires .restForCombat s = false)
     (h2 : fires .bankUnlock s = false) (h3 : fires .reachUnlockLevel s = false)
+    (hgc : fires .geCancel s = false)
     (h4 : fires .discardCritical s = false) (h5 : fires .craftRelief s = false)
     (h5b : fires .recycleRelief s = false)
     (h5c : fires .sellRelief s = false)
@@ -104,12 +110,13 @@ theorem productionLadder_eq_claimPending (s : State)
     (hfire : fires .claimPending s = true) :
     productionLadder s = some .claimPending := by
   simp [productionLadder, allInLadderOrder,
-    h0, h1, h2, h3, h4, h5, h5b, h5c, h6, h7, h8, h8b, hfire]
+    h0, h1, h2, h3, hgc, h4, h5, h5b, h5c, h6, h7, h8, h8b, hfire]
 
 /-- `sellPressured` (slot 13) — higher: slots 0-12 (incl. completeTask). -/
 theorem productionLadder_eq_sellPressured (s : State)
     (h0 : fires .hpCritical s = false) (h1 : fires .restForCombat s = false)
     (h2 : fires .bankUnlock s = false) (h3 : fires .reachUnlockLevel s = false)
+    (hgc : fires .geCancel s = false)
     (h4 : fires .discardCritical s = false) (h5 : fires .craftRelief s = false)
     (h5b : fires .recycleRelief s = false)
     (h5c : fires .sellRelief s = false)
@@ -120,7 +127,7 @@ theorem productionLadder_eq_sellPressured (s : State)
     (hfire : fires .sellPressured s = true) :
     productionLadder s = some .sellPressured := by
   simp [productionLadder, allInLadderOrder,
-    h0, h1, h2, h3, h4, h5, h5b, h5c, h6, h7, h8, h8b, h9, h10, hfire]
+    h0, h1, h2, h3, hgc, h4, h5, h5b, h5c, h6, h7, h8, h8b, h9, h10, hfire]
 
 /-- `bankUnlock` (slot 2, a FIGHT means) is selected when it fires and the two
     higher slots (hpCritical, restForCombat) are quiet. Used by the B-0 bootstrap

@@ -37,12 +37,13 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 class LadderMeans(Enum):
-    """Unified 24-entry enum mirroring `Formal.Liveness.MeansKind.MeansKind`."""
+    """Unified 28-entry enum mirroring `Formal.Liveness.MeansKind.MeansKind`."""
 
     HP_CRITICAL = "hp_critical"
     REST_FOR_COMBAT = "rest_for_combat"
     BANK_UNLOCK = "bank_unlock"
     REACH_UNLOCK_LEVEL = "reach_unlock_level"
+    GE_CANCEL = "ge_cancel"
     DISCARD_CRITICAL = "discard_critical"
     CRAFT_RELIEF = "craft_relief"
     RECYCLE_RELIEF = "recycle_relief"
@@ -74,6 +75,7 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.REST_FOR_COMBAT,
     LadderMeans.BANK_UNLOCK,
     LadderMeans.REACH_UNLOCK_LEVEL,
+    LadderMeans.GE_CANCEL,
     LadderMeans.DISCARD_CRITICAL,
     LadderMeans.CRAFT_RELIEF,
     LadderMeans.RECYCLE_RELIEF,
@@ -106,6 +108,7 @@ _GUARD_MAP: dict[LadderMeans, GuardKind] = {
     LadderMeans.REST_FOR_COMBAT: GuardKind.REST_FOR_COMBAT,
     LadderMeans.BANK_UNLOCK: GuardKind.BANK_UNLOCK,
     LadderMeans.REACH_UNLOCK_LEVEL: GuardKind.REACH_UNLOCK_LEVEL,
+    LadderMeans.GE_CANCEL: GuardKind.GE_CANCEL,
     LadderMeans.DISCARD_CRITICAL: GuardKind.DISCARD_CRITICAL,
     LadderMeans.CRAFT_RELIEF: GuardKind.CRAFT_RELIEF,
     LadderMeans.RECYCLE_RELIEF: GuardKind.RECYCLE_RELIEF,
@@ -141,6 +144,7 @@ assert tuple(g for g in GUARD_ORDER) == (
     GuardKind.REST_FOR_COMBAT,
     GuardKind.BANK_UNLOCK,
     GuardKind.REACH_UNLOCK_LEVEL,
+    GuardKind.GE_CANCEL,
     GuardKind.DISCARD_CRITICAL,
     GuardKind.CRAFT_RELIEF,
     GuardKind.RECYCLE_RELIEF,
