@@ -1,6 +1,7 @@
 """Tests for inventory_caps + DiscardOverstockGoal."""
 
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
+from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value import gear_value
@@ -576,6 +577,33 @@ class TestDiscardOverstockGoal:
         assert len(relevant) == 1
         assert isinstance(relevant[0], DeleteItemAction)
         assert relevant[0].code == "festival_token"
+
+    def test_offers_post_sell_when_post_beats_npc_and_no_fill(self):
+        """Surplus + NO fillable GE buy order + a standing SELL order anchor
+        above the NPC floor -> choose_venue3 picks GE_POST, so a
+        GePostSellOrderAction is offered, batched to the standing sell
+        order's own quantity (capped at the excess)."""
+        gd = GameData()
+        gd._item_stats = {
+            "iron_ore": ItemStats(code="iron_ore", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {}
+        gd._npc_sell_prices = {"npc1": {"iron_ore": 5}}
+        gd._npc_locations = {"npc1": (3, 3)}
+        gd._ge_buy_orders = {}                                  # nothing to fill
+        gd._ge_sell_orders = {"iron_ore": ("s1", 20, 8)}        # anchor: best sell 20, qty 8
+        gd._grand_exchange_location = (5, 5)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
+        # 40/44 ~= 0.909 >= HIGH_PRESSURE_FRACTION (0.85) -> overstock; iron_ore
+        # has no recipe/task use so its cap is 0 -> full 40 is excess.
+        state = make_state(level=1, inventory={"iron_ore": 40}, inventory_max=44)
+        relevant = goal.relevant_actions([], state, gd)
+        posts = [a for a in relevant if isinstance(a, GePostSellOrderAction)]
+        assert posts, f"expected a GePostSellOrderAction, got {relevant}"
+        assert posts[0].price == 19          # undercut best_sell 20 by one tick
+        assert posts[0].quantity == 8         # batch = best standing sell order's qty
+        assert posts[0].item_code == "iron_ore"
+        assert posts[0].ge_location == (5, 5)
 
 
 class TestEquippableDominance:

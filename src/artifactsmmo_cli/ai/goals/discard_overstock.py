@@ -3,13 +3,15 @@ licenses, for items the space-pressure gate reports as overstock."""
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.ge_fill import GeFillBuyOrderAction
+from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.disposal_route import overstock_disposal
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.ge_post_pricing import sell_post_price
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.liquidation_venue import Venue, liquidation_venue
+from artifactsmmo_cli.ai.liquidation_venue import Venue, choose_venue3, liquidation_venue
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.thresholds import (
     PRESSURE_CRITICAL_FRACTION,
@@ -114,9 +116,10 @@ class DiscardOverstockGoal(Goal):
             buyers = game_data.npcs_buying_item(code)
             npc_loc: tuple[int, int] | None = None
             npc_code: str | None = None
+            npc_pay = 0
             if buyers:
                 # npcs_buying_item sorted highest-first
-                npc_code, _price = buyers[0]
+                npc_code, npc_pay = buyers[0]
                 npc_loc = game_data.npc_location(npc_code)
             # Immediate-fill GE liquidation: when a standing GE buy order pays
             # strictly more than the best NPC sell-back AND can absorb the whole
@@ -135,6 +138,21 @@ class DiscardOverstockGoal(Goal):
                     quantity=excess_qty, ge_location=ge_loc,
                 ))
                 ge_action_available = True
+
+            # Post our own SELL order when no standing buy order is worth filling but
+            # the book gives an anchor and the post price beats the NPC floor.
+            # choose_venue3 -> GE_POST (proved fail-closed in GePostPricing.lean).
+            sell_anchor = game_data.ge_best_sell_order(code)
+            best_sell = sell_anchor[1] if sell_anchor is not None else None
+            fill_proceeds = order[1] if (order is not None and order[2] >= excess_qty) else None
+            post_price = sell_post_price(best_sell, npc_sellback=npc_pay, margin=1)
+            if ge_loc is not None and post_price is not None and \
+                    choose_venue3(npc_pay, fill_proceeds, post_price) is Venue.GE_POST:
+                # Batch to the standing sell order's size, capped at the excess.
+                batch = min(excess_qty, sell_anchor[2]) if sell_anchor is not None else excess_qty
+                result.append(GePostSellOrderAction(
+                    item_code=code, quantity=batch, price=post_price, ge_location=ge_loc,
+                ))
 
             sell_action: NpcSellAction | None = None
             if npc_code is not None and npc_loc is not None:
