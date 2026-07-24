@@ -1,4 +1,4 @@
-from artifactsmmo_cli.ai.ge_post_pricing import sell_post_price, buy_post_price
+from artifactsmmo_cli.ai.ge_post_pricing import buy_post_price, sell_post_price
 
 
 class TestSellPostPrice:
