@@ -4,7 +4,7 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.open_order import OrderSide
+from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
@@ -68,13 +68,25 @@ class TestExecute:
     def test_execute_moves_then_posts_sell_order(self):
         a = GePostSellOrderAction(item_code="iron_ore", quantity=2, price=19, ge_location=(5, 1))
         char = make_char_schema()
-        state = make_state(x=0, y=0, inventory={"iron_ore": 3})
+        existing_order = OpenOrder(
+            id="order-1", code="copper_ore", qty=1, price=10, side=OrderSide.SELL, age=0,
+        )
+        state = make_state(
+            x=0, y=0, inventory={"iron_ore": 3}, open_orders=(existing_order,),
+        )
         client = MagicMock()
         with patch("artifactsmmo_cli.ai.actions.ge_post_sell.MoveAction") as MockMove:
-            MockMove.return_value.execute.return_value = make_state(x=5, y=1, inventory={"iron_ore": 3})
+            MockMove.return_value.execute.return_value = make_state(
+                x=5, y=1, inventory={"iron_ore": 3}, open_orders=(existing_order,),
+            )
             with patch("artifactsmmo_cli.ai.actions.ge_post_sell.action_ge_create_sell_order",
                        return_value=make_api_result(char)) as mock_post:
-                a.execute(state, client)
+                result_state = a.execute(state, client)
         mock_post.assert_called_once()
         body = mock_post.call_args.kwargs["body"]
         assert (body.code, body.quantity, body.price) == ("iron_ore", 2, 19)
+        # execute rebuilds WorldState via from_character_schema(open_orders=state.open_orders) —
+        # from_character_schema does not derive open_orders from the char schema itself, so
+        # this asserts the passthrough kwarg genuinely carried it through.
+        assert existing_order in result_state.open_orders
+        assert result_state.open_orders == state.open_orders

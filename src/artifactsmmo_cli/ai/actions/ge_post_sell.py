@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
-from artifactsmmo_api_client.api.my_characters.action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post import (
+from artifactsmmo_api_client.api.my_characters.action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post import (  # noqa: E501
     sync as action_ge_create_sell_order,
 )
 from artifactsmmo_api_client.models.ge_order_creation_schema import GEOrderCreationSchema
