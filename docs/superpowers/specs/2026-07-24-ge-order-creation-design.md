@@ -72,10 +72,10 @@ Escrow accounting in `apply()` (pure, optimistic — no API):
 - **post SELL:** `inventory[code] -= qty`; append `OpenOrder(SELL)`. Item is locked
   (out of the bag, not in the bank).
 - **post BUY:** `gold -= qty * price`; append `OpenOrder(BUY)`. Gold is locked.
-- **fill** (detected next cycle from the API, §2):
-  - SELL fill → `gold += qty * price`; remove order.
-  - BUY fill → item lands in existing `pending_items` (reuses `ClaimPendingGoal`);
-    remove order.
+- **fill** (a future event, only observed via §2 reconciliation): during *planning*,
+  `apply()` does not simulate fills — a fill is an uncertain future event the planner cannot
+  schedule. It only models post + cancel. The gold/item a fill yields is observed at
+  execution time (§2), not minted in the plan.
 - **cancel:** SELL → item returns; BUY → gold returns. *(Exact return destination —
   inventory vs `pending_items` — is a live-probe residual, §7.)*
 
@@ -83,13 +83,25 @@ Escrow accounting in `apply()` (pure, optimistic — no API):
 the source of truth. This mirrors how the fill actions already rebuild state from the API in
 `execute()`.
 
+> **⚠️ Correction (implementation, Task 8):** an earlier draft of this spec had reconciliation
+> **credit gold on a filled SELL** and **append the item to `pending_items` on a filled BUY**.
+> That is a **double-count bug**: `WorldState.from_character_schema` reads `gold` (and inventory,
+> and `pending_items` via `_sync_pending`) **fresh from the character API every cycle**, and the
+> server credits gold / delivers items on fill automatically — so those values already reflect any
+> fill. Reconciliation therefore does **NOT** settle gold or pending. Its sole job is to keep
+> `open_orders` (with correct `age`) tracked from the API. See §2.
+
 ### §2 — Reconciliation (API is truth, `apply()` is prediction)
 
 At cycle start, read the character's own open orders from the account endpoint
-(`my_account`). Diff against the last-known `open_orders`:
+(`my_account`). Diff against the last-known `open_orders` (held on a **player-persistent
+attribute**, NOT on `WorldState` — non-GE action rebuilds reset `WorldState.open_orders` to
+`()`, so `age` must be tracked off a store the action rebuilds don't wipe, else the TTL cancel
+in §6 never fires):
 
-- order absent, or its qty dropped → a **fill** occurred → settle
-  (credit gold for a sell, route item to `pending_items` for a buy).
+- order absent, or its qty dropped → a **fill** occurred. Gold/item settlement is **already
+  reflected** in this cycle's fresh API reads (see the §1 correction) — reconciliation does NOT
+  re-credit; it only removes the order from tracking. `filled` is informational (logging).
 - order still present at full qty → still open; increment `age`.
 
 `GameData` already snapshots the *global* order book
