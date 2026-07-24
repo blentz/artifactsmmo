@@ -240,6 +240,13 @@ class GamePlayer:
         # is updated once per cycle BEFORE selection and read into the
         # SelectionContext to fire the GEAR_REVIEW guard.
         self._gear_latch = GearLatch()
+        # Authoritative aged open-order list, persisted independently of
+        # self.state. Non-GE Action.execute() rebuilds reset
+        # self.state.open_orders to (), so reconcile must fold against THIS
+        # attribute for ages to accumulate across cycles (the TTL cancel reads
+        # that age). Settlement (gold, item delivery) is NOT tracked here — it
+        # is API-authoritative via the fresh character/pending reads each cycle.
+        self._open_orders: tuple[OpenOrder, ...] = ()
         self._prev_level: int | None = None
         self._last_outcome: str | None = None
         self._plan_cache: PlanCache | None = None
@@ -1441,20 +1448,23 @@ class GamePlayer:
         return tuple(orders)
 
     def _reconcile_open_orders(self, client: AuthenticatedClient) -> None:
-        """Fold the API's live view of this character's own GE orders into
-        `self.state` every cycle: this is the ONLY channel that keeps
-        `open_orders` (and fill settlement — gold/pending_items) correct
-        outside a GE Action or a full character refresh, since ordinary
-        (non-GE) Action.execute() rebuilds default `open_orders` to `()`
-        and a periodic/error refresh does not thread it either.
+        """Keep this character's own GE `open_orders` (with correct per-cycle
+        ages) tracked from the API every cycle, so the cancel/TTL/suppression
+        logic reads accurate state.
 
-        A disappeared or reduced-quantity order versus the last-known
-        `open_orders` is a FILL: a SELL credits gold (the character schema
-        is not re-fetched here, so nothing else would apply that credit
-        until the next full refresh); a BUY routes the item into
-        `pending_items` (so `ClaimPendingGoal` can collect it) since the
-        pending-items list itself is only re-synced on a full refresh, not
-        every cycle.
+        Reconcile does NOT settle fills. Settlement is API-authoritative and
+        already reflected in the fresh reads each cycle:
+        `WorldState.from_character_schema` sets `gold = char.gold`, and
+        `_sync_pending` re-syncs `pending_items`. Crediting gold or appending
+        to `pending_items` here would DOUBLE-COUNT (transiently, until the next
+        authoritative read overwrites it). So this method touches neither.
+
+        Ages must accumulate across cycles, but ordinary (non-GE)
+        `Action.execute()` rebuilds reset `self.state.open_orders` to `()`.
+        Folding against `self.state` would therefore lose every order's age on
+        most cycles. Instead we fold against `self._open_orders` — a persistent
+        per-player attribute that survives action rebuilds — so a still-open
+        order ages by one each cycle (the TTL cancel reads that age).
 
         Tolerates transient transport failures: on a failed poll, keeps the
         prior `open_orders` view untouched and tries again next cycle rather
@@ -1464,20 +1474,9 @@ class GamePlayer:
         api_open = self._fetch_open_orders(client)
         if api_open is None:
             return  # transient failure; retry next cycle
-        result = reconcile_open_orders(self.state.open_orders, api_open)
-        gold = self.state.gold
-        pending = list(self.state.pending_items) if self.state.pending_items else []
-        for filled in result.filled:
-            if filled.side is OrderSide.SELL:
-                gold += filled.price * filled.qty
-            else:
-                pending.append((filled.id, filled.code))
-        self.state = replace(
-            self.state,
-            open_orders=result.open_orders,
-            gold=gold,
-            pending_items=tuple(pending) if pending else None,
-        )
+        result = reconcile_open_orders(self._open_orders, api_open)
+        self._open_orders = result.open_orders
+        self.state = replace(self.state, open_orders=result.open_orders)
 
     def _wait_for_cooldown(self) -> None:
         """Sleep until the character's cooldown expires."""

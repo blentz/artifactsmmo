@@ -2,9 +2,12 @@
 
 apply() predicts posts/cancels optimistically; the API's list of the character's
 currently-open orders is the source of truth. An order present last cycle but gone
-(or reduced in quantity) this cycle is a FILL: the caller credits gold for a SELL
-and routes the item into pending_items for a BUY. Still-open orders age by one cycle
-(the TTL cancel reads that age)."""
+(or reduced in quantity) this cycle is a FILL, reported in `filled`. Still-open
+orders age by one cycle (the TTL cancel reads that age).
+
+`filled` is informational only (e.g. a debug line). Settlement — gold for a SELL,
+item delivery for a BUY — is NOT driven from here: it is API-authoritative and
+already reflected in the caller's fresh character/pending reads each cycle."""
 
 from typing import NamedTuple
 

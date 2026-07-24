@@ -572,8 +572,11 @@ class TestFetchOpenOrders:
 
 
 class TestReconcileOpenOrders:
-    """Task 8 Part B: fold API-truth GE orders into self.state each cycle —
-    fill settlement (gold for SELL, pending_items for BUY) plus aging."""
+    """Task 8 Part B: track API-truth GE `open_orders` (with correct per-cycle
+    ages) in self.state each cycle. Reconcile does NOT settle fills — gold and
+    pending_items are API-authoritative via the fresh reads each cycle, so
+    crediting them here would double-count. Ages accumulate against the
+    persistent self._open_orders, which survives non-GE action rebuilds."""
 
     def test_noop_when_state_is_none(self):
         player = GamePlayer(character="hero")
@@ -596,9 +599,34 @@ class TestReconcileOpenOrders:
         assert player.state.open_orders == prior
         assert player.state.gold == 50
 
-    def test_filled_sell_credits_gold_and_clears_the_order(self):
+    def test_fill_does_not_settle_gold_or_pending(self):
+        """A fill (order gone from the API) must NOT credit gold or append to
+        pending_items — settlement is API-authoritative via the fresh
+        character/pending reads each cycle, and mutating it here would
+        double-count. Reconcile only removes the order from the tracked list."""
         prior = (OpenOrder(id="o1", code="iron_ore", qty=3, price=19, side=OrderSide.SELL, age=0),)
         player = GamePlayer(character="hero")
+        player._open_orders = prior
+        player.state = make_state(
+            open_orders=prior, gold=50, pending_items=(("p1", "small_health_potion"),),
+        )
+        client = MagicMock()
+        empty_page = MagicMock()
+        empty_page.data = []
+        with patch("artifactsmmo_cli.ai.player.get_my_ge_orders", return_value=empty_page):
+            player._reconcile_open_orders(client)
+        assert player.state.open_orders == ()
+        assert player._open_orders == ()               # dropped from tracked list
+        assert player.state.gold == 50                  # unchanged: gold is API-authoritative
+        assert player.state.pending_items == (("p1", "small_health_potion"),)  # unchanged
+
+    def test_buy_fill_does_not_credit_gold(self):
+        """A BUY fill likewise settles nothing here — the item arrives via the
+        server-side pending list (re-synced by _sync_pending), not via a manual
+        append, and gold is untouched."""
+        prior = (OpenOrder(id="o2", code="copper_ore", qty=2, price=5, side=OrderSide.BUY, age=0),)
+        player = GamePlayer(character="hero")
+        player._open_orders = prior
         player.state = make_state(open_orders=prior, gold=50)
         client = MagicMock()
         empty_page = MagicMock()
@@ -606,40 +634,34 @@ class TestReconcileOpenOrders:
         with patch("artifactsmmo_cli.ai.player.get_my_ge_orders", return_value=empty_page):
             player._reconcile_open_orders(client)
         assert player.state.open_orders == ()
-        assert player.state.gold == 50 + 3 * 19
+        assert player._open_orders == ()
+        assert player.state.gold == 50
+        assert player.state.pending_items is None
 
-    def test_filled_buy_appends_pending_item(self):
-        prior = (OpenOrder(id="o2", code="copper_ore", qty=2, price=5, side=OrderSide.BUY, age=0),)
+    def test_age_accumulates_across_non_ge_state_rebuild(self):
+        """Regression guard for the TTL prerequisite (Task 13). A non-GE
+        Action.execute() rebuild resets self.state.open_orders to (), so
+        folding against self.state would lose the age every cycle. Reconcile
+        folds against the persistent self._open_orders instead, so a
+        still-open order ages by one each cycle even while self.state is
+        repeatedly wiped."""
+        order = OpenOrder(id="o1", code="iron_ore", qty=5, price=19, side=OrderSide.SELL, age=0)
         player = GamePlayer(character="hero")
-        player.state = make_state(open_orders=prior, gold=50, pending_items=(("p1", "small_health_potion"),))
-        client = MagicMock()
-        empty_page = MagicMock()
-        empty_page.data = []
-        with patch("artifactsmmo_cli.ai.player.get_my_ge_orders", return_value=empty_page):
-            player._reconcile_open_orders(client)
-        assert player.state.open_orders == ()
-        assert player.state.gold == 50  # a BUY fill delivers the item, not gold
-        assert player.state.pending_items == (("p1", "small_health_potion"), ("o2", "copper_ore"))
-
-    def test_still_open_order_ages_and_overwrites_non_ge_reset(self):
-        """Regression guard for the systemic bug this task fixes: a non-GE
-        Action.execute() rebuild defaults open_orders to () (it doesn't
-        thread the field through), so self.state.open_orders may already be
-        wiped when this runs. Reconciliation must re-derive the true view
-        from the API rather than trusting the (possibly wiped) prior state."""
-        player = GamePlayer(character="hero")
-        # Simulate the wipe: self.state currently shows no open orders even
-        # though one is still genuinely open per the API.
-        player.state = make_state(open_orders=(), gold=50)
+        player._open_orders = (order,)
+        player.state = make_state(open_orders=(), gold=50)  # simulate the non-GE wipe
         client = MagicMock()
         page = MagicMock()
         page.data = [_make_ge_order_row("o1", "iron_ore", 5, 19, OrderSide.SELL)]
         with patch("artifactsmmo_cli.ai.player.get_my_ge_orders", return_value=page):
             player._reconcile_open_orders(client)
-        assert player.state.open_orders == (
-            OpenOrder(id="o1", code="iron_ore", qty=5, price=19, side=OrderSide.SELL, age=0),
-        )
-        assert player.state.gold == 50
+        assert player._open_orders[0].age == 1
+        assert player.state.open_orders[0].age == 1
+        # Next cycle: self.state wiped to () again, age still climbs to 2.
+        player.state = make_state(open_orders=(), gold=50)
+        with patch("artifactsmmo_cli.ai.player.get_my_ge_orders", return_value=page):
+            player._reconcile_open_orders(client)
+        assert player._open_orders[0].age == 2
+        assert player.state.open_orders[0].age == 2
 
 
 class TestFullRefreshNetworkResilience:
