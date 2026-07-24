@@ -42,7 +42,6 @@ from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
-from artifactsmmo_cli.ai.goals.post_buy_bid import PostBuyBidGoal
 from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -50,6 +49,7 @@ from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.maintain_consumables import MaintainConsumablesGoal
 from artifactsmmo_cli.ai.goals.participate_raid import ParticipateRaidGoal
+from artifactsmmo_cli.ai.goals.post_buy_bid import PostBuyBidGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.provision_marginal_fight import ProvisionMarginalFightGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
@@ -91,7 +91,6 @@ from artifactsmmo_cli.ai.tiers.means import (
     means_fires,
 )
 from artifactsmmo_cli.ai.tiers.means_worth import means_serves
-from artifactsmmo_cli.ai.tiers.taskmaster_choice import choose_taskmaster
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -100,6 +99,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, _permanent_vendor_purchases
 from artifactsmmo_cli.ai.tiers.objective_needs import objective_needs
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
+from artifactsmmo_cli.ai.tiers.taskmaster_choice import choose_taskmaster
 from artifactsmmo_cli.ai.world_state import WorldState
 
 RECYCLE_HOIST_URGENCY = 2

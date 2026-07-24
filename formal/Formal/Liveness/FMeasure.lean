@@ -209,12 +209,12 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
 /-! ### Well-foundedness via embedding into Mathlib lex. -/
 
 /-- Right-associated 14-tuple of `Nat`. -/
-abbrev LexThirteen :=
+abbrev LexFourteen :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
 /-- Embed an `FMeasure` into the right-associated lex 14-tuple. -/
-def toLex13 (m : FMeasure) : LexThirteen :=
+def toLex13 (m : FMeasure) : LexFourteen :=
   toLex (m.levelDeficit,
     toLex (m.xpDeficit,
       toLex (m.phasePresent,
@@ -229,7 +229,7 @@ def toLex13 (m : FMeasure) : LexThirteen :=
                         toLex (m.bankPressure,
                           toLex (m.hpDeficit, m.geCancelFlag)))))))))))))
 
-/-- `fMeasureLt` implies the embedded `<` on `LexThirteen`. -/
+/-- `fMeasureLt` implies the embedded `<` on `LexFourteen`. -/
 theorem toLex13_lt_of_fMeasureLt
     {m₁ m₂ : FMeasure} (h : fMeasureLt m₁ m₂) :
     toLex13 m₁ < toLex13 m₂ := by
@@ -279,10 +279,10 @@ theorem toLex13_lt_of_fMeasureLt
                 Or.inr ⟨h13, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Well-foundedness of `fMeasureLt`, by `InvImage` reduction to Mathlib's
-    standard well-founded order on `LexThirteen`. -/
+    standard well-founded order on `LexFourteen`. -/
 theorem fMeasureLt_wellFounded : WellFounded fMeasureLt := by
-  have hwf : WellFounded (fun a b : LexThirteen => a < b) :=
-    (inferInstance : WellFoundedRelation LexThirteen).wf
+  have hwf : WellFounded (fun a b : LexFourteen => a < b) :=
+    (inferInstance : WellFoundedRelation LexFourteen).wf
   exact Subrelation.wf
     (h₁ := fun {a b} h => toLex13_lt_of_fMeasureLt h)
     (InvImage.wf toLex13 hwf)

@@ -11,7 +11,7 @@ structure Ledger where
   escrowItems : Int    -- items locked by open SELL orders
   deriving Repr, DecidableEq
 
-def postSell (l : Ledger) (qty price : Int) : Ledger :=
+def postSell (l : Ledger) (qty _price : Int) : Ledger :=
   { l with items := l.items - qty, escrowItems := l.escrowItems + qty }
 
 def postBuy (l : Ledger) (qty price : Int) : Ledger :=

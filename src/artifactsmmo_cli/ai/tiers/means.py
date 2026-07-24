@@ -235,8 +235,10 @@ def means_fires(kind: MeansKind, state: WorldState, game_data: GameData,
     `PURSUE_TASK`, which decides whether the objective step is task-suppressed and
     therefore whether the step has a protection profile to bind onto the ctx. The
     remaining kinds are evaluated (via `active_means`) AFTER that binding, because
-    three of them — SELL_IDLE, RECYCLE_SURPLUS, DRAIN_BANK_JUNK — read the keep
-    authority, which reads `ctx.step_profile`. Evaluating them on the unbound ctx
+    four of them depend on `ctx.step_profile`: SELL_IDLE, RECYCLE_SURPLUS,
+    DRAIN_BANK_JUNK read the keep authority (which reads `ctx.step_profile`), and
+    GE_BID reads `ctx.step_profile` directly for its per-cycle GOAL_MATERIALS demand.
+    Evaluating them on the unbound ctx
     made the predicate and the goal it maps to disagree (the predicate saw an EMPTY
     step profile, the goal saw the full one), so a means could fire on surplus its
     goal then refused to shed: a zero-length plan candidate.
@@ -259,7 +261,7 @@ def active_means(
 
     CALL ORDER (load-bearing): the caller must bind `ctx.step_profile` BEFORE
     calling this — SELL_IDLE / RECYCLE_SURPLUS / DRAIN_BANK_JUNK read the keep
-    authority, which reads that field. See `means_fires`.
+    authority, which reads that field, and GE_BID reads it directly. See `means_fires`.
     """
     collect = [k for k in COLLECT_REWARD_ORDER if _fires(k, state, game_data, history, ctx)]
     discretionary = [k for k in DISCRETIONARY_ORDER if _fires(k, state, game_data, history, ctx)]

@@ -99,12 +99,12 @@ noncomputable def dMeasure (s : State) : DMeasure :=
     objectiveStepFlag      := b2n s.objectiveStepFires }
 
 /-- Right-associated 19-tuple of `Nat`. -/
-abbrev LexEighteenD :=
+abbrev LexNineteenD :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
 /-- Embed a `DMeasure` into the right-associated lex 19-tuple. -/
-def toLexD (m : DMeasure) : LexEighteenD :=
+def toLexD (m : DMeasure) : LexNineteenD :=
   toLex (m.levelDeficit,
       toLex (m.xpDeficit,
       toLex (m.phasePresent,
@@ -130,8 +130,8 @@ def dMeasureLt (m₁ m₂ : DMeasure) : Prop :=
 
 /-- Well-foundedness of `dMeasureLt` by `InvImage`. -/
 theorem dMeasureLt_wellFounded : WellFounded dMeasureLt := by
-  have hwf : WellFounded (fun a b : LexEighteenD => a < b) :=
-    (inferInstance : WellFoundedRelation LexEighteenD).wf
+  have hwf : WellFounded (fun a b : LexNineteenD => a < b) :=
+    (inferInstance : WellFoundedRelation LexNineteenD).wf
   exact InvImage.wf toLexD hwf
 
 /-! ## Slot-decrease helpers. -/

@@ -1544,6 +1544,71 @@ def runBuySourceVenue (args : Array Json) : Json :=
   let realized := Formal.BuySourceVenue.realizedCost npcPrice gePrice venue
   Json.mkObj [("venue", Json.num code), ("realized", Json.num realized)]
 
+/-- Compute one ge_post_pricing SELL result using the SAME proved
+`Formal.GePostPricing.sellPostPrice`.
+
+args layout (4 Ints): `[anchorPresent(0/1), anchorValue, npcSellback, margin]`. When
+`anchorPresent = 0` the best-standing-sell anchor is `none` (the fail-closed guard);
+otherwise it is `some anchorValue`. Emits the posted price as an `Option Int` encoded
+present-flag + value (`present = false` mirrors the no-post `none`), so the differential
+pins BOTH the fail-closed case and the NPC-floor clamp. -/
+def runSellPostPrice (args : Array Json) : Json :=
+  let bestSell : Option Int :=
+    if intArg args 0 != 0 then some (intArg args 1) else none
+  match Formal.GePostPricing.sellPostPrice bestSell (intArg args 2) (intArg args 3) with
+  | some p => Json.mkObj [("present", Json.bool true), ("value", Json.num p)]
+  | none => Json.mkObj [("present", Json.bool false), ("value", Json.num 0)]
+
+/-- Compute one ge_post_pricing BUY result using the SAME proved
+`Formal.GePostPricing.buyPostPrice` (the DUAL of the sell post-price).
+
+args layout (4 Ints): `[anchorPresent(0/1), anchorValue, altCost, margin]`. When
+`anchorPresent = 0` the best-standing-buy anchor is `none` (fail-closed); otherwise it
+is `some anchorValue`. Emits the posted price as an `Option Int` encoded present-flag +
+value, so the differential pins BOTH the fail-closed case and the alt-cost ceiling clamp. -/
+def runBuyPostPrice (args : Array Json) : Json :=
+  let bestBuy : Option Int :=
+    if intArg args 0 != 0 then some (intArg args 1) else none
+  match Formal.GePostPricing.buyPostPrice bestBuy (intArg args 2) (intArg args 3) with
+  | some p => Json.mkObj [("present", Json.bool true), ("value", Json.num p)]
+  | none => Json.mkObj [("present", Json.bool false), ("value", Json.num 0)]
+
+/-- Compute one choose_venue3 result using the SAME proved
+`Formal.LiquidationVenue.chooseVenue3` (the three-way FILL / POST / NPC sell venue).
+
+args layout (5 Ints): `[npcPay, fillPresent(0/1), fillValue, postPresent(0/1), postValue]`.
+Each `Option Int` field is `none` when its present-flag is 0. Emits the chosen venue
+(`0` = NPC, `1` = GE, `2` = GE_POST), matching the Python `Venue` encoding. -/
+def runChooseVenue3 (args : Array Json) : Json :=
+  let geFill : Option Int :=
+    if intArg args 1 != 0 then some (intArg args 2) else none
+  let postPrice : Option Int :=
+    if intArg args 3 != 0 then some (intArg args 4) else none
+  let venue := Formal.LiquidationVenue.chooseVenue3 (intArg args 0) geFill postPrice
+  let code : Int := match venue with
+    | Formal.LiquidationVenue.Venue.npc => 0
+    | Formal.LiquidationVenue.Venue.ge => 1
+    | Formal.LiquidationVenue.Venue.gePost => 2
+  Json.mkObj [("venue", Json.num code)]
+
+/-- Compute one choose_buy_venue3 result using the SAME proved
+`Formal.BuySourceVenue.chooseBuyVenue3` (the dual three-way buy venue).
+
+args layout (5 Ints): `[npcPrice, fillPresent(0/1), fillValue, postPresent(0/1), postValue]`.
+Each `Option Int` field is `none` when its present-flag is 0. Emits the chosen venue
+(`0` = NPC, `1` = GE, `2` = GE_POST), matching the Python `BuyVenue` encoding. -/
+def runChooseBuyVenue3 (args : Array Json) : Json :=
+  let geFill : Option Int :=
+    if intArg args 1 != 0 then some (intArg args 2) else none
+  let postPrice : Option Int :=
+    if intArg args 3 != 0 then some (intArg args 4) else none
+  let venue := Formal.BuySourceVenue.chooseBuyVenue3 (intArg args 0) geFill postPrice
+  let code : Int := match venue with
+    | Formal.BuySourceVenue.BuyVenue.npc => 0
+    | Formal.BuySourceVenue.BuyVenue.ge => 1
+    | Formal.BuySourceVenue.BuyVenue.gePost => 2
+  Json.mkObj [("venue", Json.num code)]
+
 /-- Compute one nearest_tile result using the SAME proved
 `Formal.NearestTile.nearestTile`.
 
@@ -2862,6 +2927,14 @@ def runOne (item : Json) : Json :=
     runDisposalRoute args
   else if kind == "buy_source_venue" then
     runBuySourceVenue args
+  else if kind == "sell_post_price" then
+    runSellPostPrice args
+  else if kind == "buy_post_price" then
+    runBuyPostPrice args
+  else if kind == "choose_venue3" then
+    runChooseVenue3 args
+  else if kind == "choose_buy_venue3" then
+    runChooseBuyVenue3 args
   else if kind == "nearest_tile" then
     runNearestTile args
   else if kind == "consumable_selection" then
