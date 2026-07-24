@@ -343,8 +343,11 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         return _gather_goal_for_unreachable_equippable(
             item, state, game_data, committed.max_depth, ctx)
     if kind is GuardKind.CRAFT_POTIONS:
+        # `state=` seeds the goal's frozen craft target. Without it the goal
+        # re-resolves its target per planner node and can demand one its own
+        # (seed-frozen) action set never provides — see CraftPotionsGoal.__init__.
         return CraftPotionsGoal(combat_monster=ctx.combat_monster, game_data=game_data,
-                                history=history)
+                                history=history, state=state)
     if kind is GuardKind.GE_CANCEL:
         # needed_items = the active step's material demand (step_profile codes), the
         # same per-cycle demand the firing predicate used; need_gold=0 (no per-step

@@ -41,11 +41,33 @@ class CraftPotionsGoal(Goal):
     def __init__(self, effect: str = "hp_restore",
                  combat_monster: str | None = None,
                  game_data: GameData | None = None,
-                 history: LearningStore | None = None) -> None:
+                 history: LearningStore | None = None,
+                 state: WorldState | None = None) -> None:
         self._effect = effect
         self._combat_monster = combat_monster
         self._game_data = game_data
         self._history = history
+        # ── the plan's FROZEN target ────────────────────────────────────────
+        # `GOAPPlanner.plan` evaluates `relevant_actions` ONCE, against the seed
+        # state, so the admitted action set covers exactly ONE craft target at
+        # ONE batch size. `is_satisfied` must therefore be a predicate over what
+        # THAT set can reach. It used to delegate straight to `_active_craft`,
+        # which re-resolves per node and re-targets the moment the seed target's
+        # deficit closes (heal stocked -> boost potion). The goal test could then
+        # demand a target the frozen action set never provides, leaving NO
+        # reachable satisfying state: A* exhausted the space and returned no plan
+        # on every cycle it was selected (live: 285/285, ~57 nodes, no timeout).
+        #
+        # Resolving the target here, from the state the goal will be planned
+        # from, makes the action set and the goal test agree by construction.
+        # Re-targeting still happens — on the NEXT cycle, whose goal instance
+        # seeds from the post-batch state. That is the "craft a batch and
+        # replan" loop this goal's ladder was always documented to drive.
+        self._seed_target = (self._active_craft(state, game_data)
+                             if state is not None and game_data is not None else None)
+        self._seed_equipped = (
+            equipped_potion_qty(state, self._seed_target[0])
+            if state is not None and self._seed_target is not None else 0)
 
     def _target_potion(self, state: WorldState, game_data: GameData) -> str | None:
         """Highest-`effect`, alchemy-craftable-now, utility-slot-equippable potion.
@@ -157,10 +179,23 @@ class CraftPotionsGoal(Goal):
         return float(max(0, deficit))
 
     def is_satisfied(self, state: WorldState) -> bool:
-        # When game_data is set (constructed with game_data=...), delegate to
-        # _active_craft so the unlock-boost path is reflected: owning the boost
-        # makes unlock_boost_target return None and the heal check applies.
-        # Falls back to the state-only slot-quantity check when game_data is absent.
+        # Seeded (production): satisfaction is "this plan's BATCH has landed" —
+        # the frozen target equipped up by the quantity `relevant_actions` sized
+        # its EquipAction for. This is the only form the admitted action set can
+        # actually reach, and it is what keeps the goal plannable. Testing the
+        # FULL remaining deficit instead made the goal unsatisfiable twice over:
+        # once because the batch is capped at POTION_GATHER_BATCH runs while the
+        # deficit can be a whole 40-potion stack, and once because closing the
+        # heal deficit re-targeted a boost potion the action set never covered.
+        if self._seed_target is not None:
+            _code, _runs, equip_qty = self._seed_target
+            return equipped_potion_qty(state, _code) >= self._seed_equipped + equip_qty
+        # Unseeded: no batch is defined, so the honest question is the arbiter's
+        # pre-plan one — is there anything to do at all? When game_data is set,
+        # delegate to _active_craft so the unlock-boost path is reflected: owning
+        # the boost makes unlock_boost_target return None and the heal check
+        # applies. Falls back to the state-only slot-quantity check when
+        # game_data is absent.
         if self._game_data is not None:
             return self._active_craft(state, self._game_data) is None
         baseline = self._baseline(state.level, state, self._game_data, self._history)
@@ -209,6 +244,11 @@ class CraftPotionsGoal(Goal):
         """Recipe-closure actions for the active craft target (unlock boost or
         heal potion), sized by the supply ladder, plus the EquipAction that tops
         up utility1_slot.  Returns ``[]`` when _active_craft determines the goal
-        is already satisfied."""
-        plan = self._active_craft(state, game_data)
+        is already satisfied.
+
+        Uses the target frozen at construction when the goal was seeded, so the
+        admitted set is the very one `is_satisfied` tests for. Unseeded, it
+        resolves from `state` as before."""
+        plan = self._seed_target if self._seed_target is not None \
+            else self._active_craft(state, game_data)
         return [] if plan is None else craft_utility_ladder(*plan, actions, state, game_data)
