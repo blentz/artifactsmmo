@@ -31,6 +31,7 @@ from artifactsmmo_cli.ai.monster_drop_selection import (
     select_monster_for_drop,
 )
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
+from artifactsmmo_cli.ai.open_order import OrderSide
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.recipe_closure import gather_serves_closure
@@ -325,6 +326,17 @@ class GatherMaterialsGoal(Goal):
             actions, state, game_data, chain, covered)
         gated_skill_levels |= gather_grind_levels
 
+        # Bid/self-craft mutual exclusion (bid_vs_craft.py's documented "open_orders
+        # suppression at the call site"): an item with a standing GE BUY bid is
+        # already being acquired asynchronously — gathering/crafting it in parallel
+        # is wasted work. Only BUY orders suppress; a SELL order (surplus
+        # disposal) is a different lifecycle and must not block acquisition of the
+        # same code (we would not be re-acquiring something we are selling, but
+        # narrowing to BUY keeps the two concerns independent regardless).
+        bid_items: set[str] = {
+            o.code for o in state.open_orders if o.side is OrderSide.BUY
+        }
+
         result: list[Action] = []
         for action in actions:
             if (
@@ -336,6 +348,14 @@ class GatherMaterialsGoal(Goal):
                 # gather, else the primary) fully bank/inventory-covered —
                 # withdraw, don't gather.
                 continue
+            if (
+                isinstance(action, GatherAction)
+                and (action.drop_item_override
+                     or game_data.resource_drop_item(action.resource_code)) in bid_items
+            ):
+                continue  # a GE bid is already in flight for this item (bid_vs_craft exclusion)
+            if isinstance(action, CraftAction) and action.code in bid_items:
+                continue  # a GE bid is already in flight for this item (bid_vs_craft exclusion)
             # GAP-7 admission precision: a gather enters the plan iff its
             # EFFECTIVE drop is a closure material (gather_serves_closure),
             # not merely because its resource is in needed_resources — the
