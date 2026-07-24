@@ -71,6 +71,7 @@ def make_state(**overrides) -> WorldState:
         bank_gold=None,
         bank_capacity=None,
         pending_items=None,
+        open_orders=(),
     )
     defaults.update(overrides)
     if "task_lifecycle_phase" not in defaults:

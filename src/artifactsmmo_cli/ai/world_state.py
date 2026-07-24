@@ -12,6 +12,7 @@ from artifactsmmo_api_client.types import Unset
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.missing_api_data import MissingApiData
+from artifactsmmo_cli.ai.open_order import OpenOrder
 from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.task_lifecycle import (
     TaskLifecyclePhase,
@@ -142,6 +143,11 @@ class WorldState:
     P5b movement (docs/PLAN_multilayer_nav.md). Defaults overworld so older
     constructions keep working; access-REGION identity is derived at use time
     via GameData.region_of (restricted tiles partition further than layers)."""
+    open_orders: tuple[OpenOrder, ...] = ()
+    """Posted GE orders the character currently has open. Empty tuple = none.
+    Escrow: a posted SELL removes the item from `inventory`; a posted BUY removes
+    `gold`. Settlement (fill) is reconciled from the API each cycle. Ordered
+    deterministically by (side, code, price, id) at construction sites."""
     """Quantity of the consumable in utility slot 2 (from CharacterSchema)."""
 
     def __post_init__(self) -> None:
@@ -217,6 +223,7 @@ class WorldState:
         pending_items: "tuple[tuple[str, str], ...] | None" = None,
         active_events: dict[str, datetime] | None = None,
         raids: list[RaidInfo] | None = None,
+        open_orders: tuple[OpenOrder, ...] = (),
     ) -> "WorldState":
         """Build WorldState from a CharacterSchema API response."""
         inventory: dict[str, int] = {}
@@ -286,6 +293,7 @@ class WorldState:
             bank_gold=bank_gold,
             bank_capacity=bank_capacity,
             pending_items=pending_items,
+            open_orders=open_orders,
             active_events=active_events or {},
             raids=raids or [],
             attack=attack,
