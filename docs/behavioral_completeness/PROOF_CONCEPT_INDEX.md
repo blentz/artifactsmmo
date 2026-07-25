@@ -31,11 +31,13 @@ concept tag, or a concept with no module, is a traceability gap.
 | DoomedMemo | core, planner | monotonicity, safety, reachability |
 | EquipValueAugmented | items, characters | dominance, monotonicity |
 | EquipmentProfile | equipment-profile | safety, validity, totality |
+| EscrowConservation | grandexchange | conservation, liveness |
 | EventWindow | events | totality, safety, dominance, monotonicity, reachability |
 | FallbackChain | core, planner | totality, dominance |
 | GameDataAccessors | core | safety |
 | GatherApply | resources, items | safety |
 | GatherSelection | resources | dominance, monotonicity, totality, reachability |
+| GePostPricing | grandexchange, undercut | fail-closed, dominance, boundedness |
 | GearLatch | items, characters | safety, monotonicity |
 | GearPolicy | items, characters | dominance, safety |
 | GearTaxonomy | core, gear | validity, monotonicity, safety |

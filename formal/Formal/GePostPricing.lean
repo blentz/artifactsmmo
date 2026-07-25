@@ -1,4 +1,4 @@
--- @concept: grandexchange @property: fail_closed, dominance, undercut
+-- @concept: grandexchange, undercut @property: fail-closed, dominance, boundedness
 /-
 Formal model of the pure POSTED-order price-setting extracted from
 `src/artifactsmmo_cli/ai/ge_post_pricing.py` (`sell_post_price`, `buy_post_price`).
@@ -26,7 +26,6 @@ The Python core mirrors this exactly:
   `None if best_buy  is None else min(best_buy  + 1, alt_cost   - margin)`
 We model it over `Int` with `Option Int`, matching `LiquidationVenue.lean`.
 -/
-import Mathlib.Data.Int.Order.Basic
 
 namespace Formal.GePostPricing
 
@@ -63,7 +62,7 @@ theorem sell_price_ge_floor (b npcSellback margin : Int) :
   intro p h
   simp only [sellPostPrice, Option.some.injEq] at h
   subst h
-  exact le_max_right _ _
+  omega
 
 /-- DOMINANCE (buy): a posted buy price is never above the alt-cost minus margin, so
 posting weakly dominates buying from the alternative. -/
@@ -72,7 +71,7 @@ theorem buy_price_le_ceiling (b altCost margin : Int) :
   intro p h
   simp only [buyPostPrice, Option.some.injEq] at h
   subst h
-  exact min_le_right _ _
+  omega
 
 /-! ### UNDERCUT / OVERBID (one-tick queue placement, or exactly the bound). -/
 
@@ -83,9 +82,7 @@ theorem sell_price_le_best_minus_one (b npcSellback margin : Int) :
   intro p h
   simp only [sellPostPrice, Option.some.injEq] at h
   subst h
-  rcases le_total (b - 1) (npcSellback + margin) with hle | hle
-  · rw [max_eq_right hle]; omega
-  · rw [max_eq_left hle]; omega
+  omega
 
 /-- OVERBID (buy): the posted price is at least one tick above the best buy (or the cap). -/
 theorem buy_price_ge_best_plus_one (b altCost margin : Int) :
@@ -94,9 +91,7 @@ theorem buy_price_ge_best_plus_one (b altCost margin : Int) :
   intro p h
   simp only [buyPostPrice, Option.some.injEq] at h
   subst h
-  rcases le_total (b + 1) (altCost - margin) with hle | hle
-  · rw [min_eq_left hle]; omega
-  · rw [min_eq_right hle]; omega
+  omega
 
 /-! ### Concrete witnesses (non-vacuity of both branches of the bound). -/
 

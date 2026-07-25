@@ -17,6 +17,20 @@ _ALLOWED_PROPERTIES = frozenset({
     # happen). Formal/Synergy.lean is the case — synergy_ge_floor /
     # synergy_le_one / synergy_floor_pos pin synergyPure into [sMin, 1].
     "boundedness",
+    # conservation: a modelled quantity is neither minted nor destroyed by a
+    # transition — what goes in comes back out. Formal/EscrowConservation.lean is
+    # the case: sell_post_cancel_restores / buy_post_cancel_restores return
+    # exactly what post locked, and the *_escrow_freed pair shows a fill moves
+    # value between ledger columns rather than creating it. Distinct from
+    # deduction-accounting (a deduction is BOOKED correctly) and from safety
+    # (a state is never REACHED): conservation is an equality across a step.
+    "conservation",
+    # fail-closed: absent an input the model REFUSES to act, rather than acting on
+    # a default. Formal/GePostPricing.lean is the case — with no live anchor the
+    # posted price is `none` (sell_none_of_no_anchor / buy_none_of_no_anchor), so
+    # an empty order book can never produce a speculative post. Distinct from
+    # safety (a bad state is unreachable): this is about the ABSENCE of input.
+    "fail-closed",
 })
 _TAG_RE = re.compile(r"@concept:\s*([^@]+?)\s*@property:\s*(.+)")
 

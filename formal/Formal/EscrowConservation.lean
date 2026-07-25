@@ -1,6 +1,5 @@
 -- formal/Formal/EscrowConservation.lean
 -- @concept: grandexchange @property: conservation, liveness
-import Mathlib.Data.Int.Order.Basic
 
 namespace Formal.EscrowConservation
 
