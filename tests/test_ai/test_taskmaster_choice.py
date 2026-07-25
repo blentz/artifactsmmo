@@ -13,9 +13,7 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.tiers.synergy_core import S_MIN
 from artifactsmmo_cli.ai.tiers.taskmaster_choice import choose_taskmaster
-
 from tests.test_ai.fixtures import make_state
 
 _BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")

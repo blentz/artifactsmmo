@@ -7,13 +7,13 @@ from dataclasses import fields
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
+    _NO_SYNERGY,
     FOCUS_FLAT,
     FOCUS_FLOOR,
     FOCUS_SPAN,
     POTION_TYPE_WEIGHTS,
     Branch,
     GearCandidate,
-    _NO_SYNERGY,
     _scaled_weights,
     branch_pick_pure,
     dhondt_step,

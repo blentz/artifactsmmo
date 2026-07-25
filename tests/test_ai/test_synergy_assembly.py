@@ -21,7 +21,6 @@ from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.progression_tree import _synergy_map
 from artifactsmmo_cli.ai.tiers.progression_tree_core import _NO_SYNERGY, GearCandidate
 from artifactsmmo_cli.ai.tiers.synergy_core import S_MIN
-
 from tests.test_ai.fixtures import make_state
 
 _BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")

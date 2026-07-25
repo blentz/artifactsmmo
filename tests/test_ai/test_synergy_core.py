@@ -111,4 +111,4 @@ def test_pool_synergy_empty_asserts():
 
 
 def test_top_quantile_is_one_third():
-    assert TOP_QUANTILE == Fraction(1, 3)
+    assert Fraction(1, 3) == TOP_QUANTILE

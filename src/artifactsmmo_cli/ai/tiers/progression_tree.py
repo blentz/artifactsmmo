@@ -26,8 +26,8 @@ from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
-    FOCUS_FLAT,
     _NO_SYNERGY,
+    FOCUS_FLAT,
     Branch,
     GearCandidate,
     branch_pick_pure,
