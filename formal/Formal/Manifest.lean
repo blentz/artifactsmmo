@@ -1203,3 +1203,25 @@ open Formal.PriorityBand
 #check @Formal.InventoryKeep.destroyable_never_eats_keep     -- SAFETY: what must stay owned is never destroyed
 #check @Formal.InventoryKeep.destroyable_counts_bank_copies  -- bank copies satisfy keep_owned (no double-pinning)
 #check @Formal.InventoryKeep.copper_axe_hoard_refuted        -- non-vacuity: the 18-axe incident, on the real numbers
+-- EscrowConservation (the GE order ledger: capital locked by an open order is
+-- neither minted nor destroyed by post / cancel / fill — the accounting behind
+-- ge_post_sell.py, ge_post_buy.py and ge_cancel_order.py). The Ledger is an
+-- in-Lean model, not an extracted core: settlement itself is API-authoritative
+-- (crediting gold locally would double-count), so what is proven here is the
+-- BOOKKEEPING shape those actions must preserve:
+#check @Formal.EscrowConservation.sell_post_cancel_restores  -- post-then-cancel a SELL restores the ledger exactly
+#check @Formal.EscrowConservation.buy_post_cancel_restores   -- post-then-cancel a BUY restores the gold ledger exactly
+#check @Formal.EscrowConservation.sell_post_fill_gold        -- a filled SELL yields exactly qty*price gold
+#check @Formal.EscrowConservation.buy_post_fill_escrow       -- a filled BUY frees exactly the escrowed gold
+#check @Formal.EscrowConservation.sell_escrow_freed          -- LIVENESS: cancel frees the escrowed items (no capital locked forever)
+#check @Formal.EscrowConservation.buy_escrow_freed           -- LIVENESS: cancel frees the escrowed gold
+-- GePostPricing (the pure posted-order price core;
+-- src/artifactsmmo_cli/ai/ge_post_pricing.py::sell_post_price / buy_post_price).
+-- This is the SPECULATIVE half left out of liquidation_venue / buy_source_venue,
+-- so its two guards are what make it safe to run at all:
+#check @Formal.GePostPricing.sell_none_of_no_anchor          -- FAIL CLOSED: empty book ⇒ no speculative sell post
+#check @Formal.GePostPricing.buy_none_of_no_anchor           -- FAIL CLOSED: empty book ⇒ no speculative buy post
+#check @Formal.GePostPricing.sell_price_ge_floor             -- DOMINANCE: never below NPC sell-back + margin
+#check @Formal.GePostPricing.buy_price_le_ceiling            -- DOMINANCE: never above alt-cost − margin
+#check @Formal.GePostPricing.sell_price_le_best_minus_one    -- BOUND: one tick under the best sell, or exactly the floor
+#check @Formal.GePostPricing.buy_price_ge_best_plus_one      -- BOUND: one tick over the best buy, or exactly the cap

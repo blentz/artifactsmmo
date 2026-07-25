@@ -921,3 +921,15 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms InventoryRoom.hasRoom_no_slot_witness
 #print axioms InventoryRoom.hasRoom_no_qty_witness
 #print axioms InventoryRoom.hasRoom_grow_full_slots_witness
+#print axioms Formal.EscrowConservation.sell_post_cancel_restores
+#print axioms Formal.EscrowConservation.buy_post_cancel_restores
+#print axioms Formal.EscrowConservation.sell_post_fill_gold
+#print axioms Formal.EscrowConservation.buy_post_fill_escrow
+#print axioms Formal.EscrowConservation.sell_escrow_freed
+#print axioms Formal.EscrowConservation.buy_escrow_freed
+#print axioms Formal.GePostPricing.sell_none_of_no_anchor
+#print axioms Formal.GePostPricing.buy_none_of_no_anchor
+#print axioms Formal.GePostPricing.sell_price_ge_floor
+#print axioms Formal.GePostPricing.buy_price_le_ceiling
+#print axioms Formal.GePostPricing.sell_price_le_best_minus_one
+#print axioms Formal.GePostPricing.buy_price_ge_best_plus_one
