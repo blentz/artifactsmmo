@@ -70,6 +70,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | ObjectiveStepFight | liveness | safety, liveness, validity |
 | OptimalBuyMix | potion-supply-economics | validity, safety |
 | OwnedCount | items | safety, monotonicity |
+| Phase10GoalLattices | core, planner | boundedness, dominance, reachability |
 | Phase7Invariants | items, core | safety |
 | Phase8Invariants | items, crafting, bank | safety, reachability |
 | PlanModel | planner, plan, action | monotonicity, safety |
@@ -98,6 +99,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | TaskTradeReadyPriority | tasks | safety, totality |
 | TieredSelection | core, planner | totality, dominance |
 | UpgradeSelection | items, characters | dominance |
+| WinnableCascade | combat, monsters | dominance, totality |
 | WithdrawSetExpansion | crafting, items | totality, safety |
 | XpPositive | combat, planner | safety |
 | XpValue | combat, planner | safety |

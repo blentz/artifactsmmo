@@ -1295,3 +1295,131 @@ open Formal.PriorityBand
 #check @Formal.PlanModel.canonicalPlan_valid                 -- CONSTRUCTIVE witness: the canonical plan obtains AND equips
 #check @Formal.PlanModel.length_eq_counts                    -- a plan's length is its gather + craft + equip counts
 #check @Formal.PlanModel.gear_obtainable_of_perActionLength_le -- OBTAINABILITY under the per-action length budget
+-- The 112 declarations below were listed ONLY in Audit.lean: their axioms
+-- were scanned but they had no traceability row. Audit.lean is generated
+-- from this file, so they are recorded here to keep them scanned.
+-- ArbiterSelect (4):
+#check @Formal.ArbiterSelect.findCommitted_some_props
+#check @Formal.ArbiterSelect.guard_precedes_means_in_guardsFirst
+#check @Formal.ArbiterSelect.select_pure_any_plannable_guard_wins
+#check @Formal.ArbiterSelect.walk_returns_guard_when_plannable_guard_exists
+-- CheapestPath (7):
+#check @Formal.CheapestPath.all_zero_blocks_witness
+#check @Formal.CheapestPath.beatable_level_zero_refused_witness
+#check @Formal.CheapestPath.beatable_plus_one_witness
+#check @Formal.CheapestPath.beatable_plus_two_refused_witness
+#check @Formal.CheapestPath.empty_blocks_witness
+#check @Formal.CheapestPath.target_below_witness
+#check @Formal.CheapestPath.target_met_witness
+-- InventoryChainSafe (2):
+#check @Formal.InventoryChainSafe.deposit_watermark_boundary_witness
+#check @Formal.InventoryChainSafe.gather_overflows_full_witness
+-- InventoryProfile (3):
+#check @Formal.InventoryProfile.profile_protection_witness
+#check @Formal.InventoryProfile.protectedFloor_ge_useful
+#check @Formal.InventoryProfile.space_driven_witness
+-- Liveness.ItemsTaskRun (3):
+#check @Formal.Liveness.ItemsTaskRun.applyRun_cons
+#check @Formal.Liveness.ItemsTaskRun.replicate_trade_accounts
+#check @Formal.Liveness.ItemsTaskRun.replicate_trade_progress_of_room
+-- LoadoutProfiles (4):
+#check @Formal.LoadoutProfiles.bankSpaceCost_witness
+#check @Formal.LoadoutProfiles.gearDemand_max_not_sum_witness
+#check @Formal.LoadoutProfiles.gearDemand_ring_witness
+#check @Formal.LoadoutProfiles.gearDemand_shared_witness
+-- Phase10GoalLattices (41):
+#check @Formal.Phase10GoalLattices.deposit_below_ramp_zero
+#check @Formal.Phase10GoalLattices.deposit_bounded
+#check @Formal.Phase10GoalLattices.deposit_full_value
+#check @Formal.Phase10GoalLattices.deposit_just_below_ramp_value
+#check @Formal.Phase10GoalLattices.deposit_midramp_value
+#check @Formal.Phase10GoalLattices.deposit_ramp_start_value
+#check @Formal.Phase10GoalLattices.deposit_satisfied_zero
+#check @Formal.Phase10GoalLattices.deposit_zero_cap_zero
+#check @Formal.Phase10GoalLattices.overstock_below_high
+#check @Formal.Phase10GoalLattices.overstock_bounded
+#check @Formal.Phase10GoalLattices.overstock_critical_at_threshold
+#check @Formal.Phase10GoalLattices.overstock_high_at_threshold
+#check @Formal.Phase10GoalLattices.overstock_satisfied_zero
+#check @Formal.Phase10GoalLattices.overstock_tier_order
+#check @Formal.Phase10GoalLattices.pursueTask_batch_done_zero
+#check @Formal.Phase10GoalLattices.pursueTask_bounded
+#check @Formal.Phase10GoalLattices.pursueTask_done_zero
+#check @Formal.Phase10GoalLattices.pursueTask_fires
+#check @Formal.Phase10GoalLattices.pursueTask_no_task_zero
+#check @Formal.Phase10GoalLattices.pursueTask_total_zero_zero
+#check @Formal.Phase10GoalLattices.reachUnlock_active_fires
+#check @Formal.Phase10GoalLattices.reachUnlock_at_boundary_fires
+#check @Formal.Phase10GoalLattices.reachUnlock_bounded
+#check @Formal.Phase10GoalLattices.reachUnlock_gap_huge_zero
+#check @Formal.Phase10GoalLattices.reachUnlock_just_over_gap_zero
+#check @Formal.Phase10GoalLattices.reachUnlock_satisfied_zero
+#check @Formal.Phase10GoalLattices.reachUnlock_target_zero
+#check @Formal.Phase10GoalLattices.taskExchange_at_min_fires
+#check @Formal.Phase10GoalLattices.taskExchange_bank_only_fires
+#check @Formal.Phase10GoalLattices.taskExchange_below_min_zero
+#check @Formal.Phase10GoalLattices.taskExchange_bounded
+#check @Formal.Phase10GoalLattices.taskExchange_one_batch_satisfies
+#check @Formal.Phase10GoalLattices.taskExchange_partial_spend_fires
+#check @Formal.Phase10GoalLattices.taskExchange_split_fires
+#check @Formal.Phase10GoalLattices.unlockBank_bounded
+#check @Formal.Phase10GoalLattices.unlockBank_high_pressure_sellable_defers
+#check @Formal.Phase10GoalLattices.unlockBank_low_pressure_fires
+#check @Formal.Phase10GoalLattices.unlockBank_no_sellable_fires_under_pressure
+#check @Formal.Phase10GoalLattices.unlockBank_not_locked_zero
+#check @Formal.Phase10GoalLattices.unlockBank_unreachable_zero
+#check @Formal.Phase10GoalLattices.unlockBank_xp_advanced_zero
+-- Phase8Invariants (24):
+#check @Formal.Phase8Invariants.accept_applicable_after_cancel
+#check @Formal.Phase8Invariants.accept_applicable_after_complete
+#check @Formal.Phase8Invariants.accept_not_reapplicable
+#check @Formal.Phase8Invariants.accept_pending_refused
+#check @Formal.Phase8Invariants.accept_preserves_consistent
+#check @Formal.Phase8Invariants.accept_real_task_refused
+#check @Formal.Phase8Invariants.bank_expansion_apply_increments_capacity_witness
+#check @Formal.Phase8Invariants.buyBankExpansionPreFix_preserves_bankItems
+#check @Formal.Phase8Invariants.buyBankExpansionPreFix_preserves_capacity
+#check @Formal.Phase8Invariants.buyBankExpansion_preserves_bankItems
+#check @Formal.Phase8Invariants.cancel_preserves_consistent
+#check @Formal.Phase8Invariants.claim_value_pos_iff_pending
+#check @Formal.Phase8Invariants.claim_value_pos_with_full_bag_witness
+#check @Formal.Phase8Invariants.complete_preserves_consistent
+#check @Formal.Phase8Invariants.recycle_apply_inventory_safe
+#check @Formal.Phase8Invariants.recycle_apply_inventory_safe_zero_net
+#check @Formal.Phase8Invariants.recycle_boundary_witness
+#check @Formal.Phase8Invariants.recycle_chain_safe
+#check @Formal.Phase8Invariants.recycle_is_applicable_imp_free_ge_net
+#check @Formal.Phase8Invariants.recycle_is_applicable_imp_skill_ge
+#check @Formal.Phase8Invariants.recycle_no_crafting_skill_refused
+#check @Formal.Phase8Invariants.recycle_no_workshop_refused
+#check @Formal.Phase8Invariants.recycle_regression_full_bag_net2_refused
+#check @Formal.Phase8Invariants.recycle_regression_skill_low_refused
+-- PrerequisiteGraph (4):
+#check @Formal.PrerequisiteGraph.combat_capable_witness
+#check @Formal.PrerequisiteGraph.recoverableYield_qty_one
+#check @Formal.PrerequisiteGraph.yield_batch_exceeds_unit_at_qty_three
+#check @Formal.PrerequisiteGraph.yield_unit_exceeds_batch_at_qty_one
+-- Scalarizer (1):
+#check @Formal.Scalarizer.scalarYield_eq_components
+-- ShoppingList (9):
+#check @Formal.ShoppingList.deficit_le_qty
+#check @Formal.ShoppingList.expand_eq_work
+#check @Formal.ShoppingList.fullyCovered_covered_singleton
+#check @Formal.ShoppingList.getD_setD
+#check @Formal.ShoppingList.netSumRaw_setD
+#check @Formal.ShoppingList.shoppingList_raw_mono_qty
+#check @Formal.ShoppingList.shoppingList_raw_no_holdings
+#check @Formal.ShoppingList.work_mono
+#check @Formal.ShoppingList.work_zero
+-- StrategyTraversal (4):
+#check @Formal.StrategyTraversal.actStepShared_actionable_returns
+#check @Formal.StrategyTraversal.actStepShared_none_preserves_unvisited
+#check @Formal.StrategyTraversal.actStepShared_sound
+#check @Formal.StrategyTraversal.actionable_step_shared_sound
+-- WinnableCascade (6):
+#check @Formal.WinnableCascade.path_result_was_winnable
+#check @Formal.WinnableCascade.path_wins_when_winnable
+#check @Formal.WinnableCascade.pick_wins_when_no_path
+#check @Formal.WinnableCascade.pick_wins_when_path_not_winnable
+#check @Formal.WinnableCascade.task_wins
+#check @Formal.WinnableCascade.totality

@@ -1,3 +1,4 @@
+-- @concept: combat, monsters @property: dominance, totality
 /-
 Formal model of the pure core extracted from
 `src/artifactsmmo_cli/ai/player.py` (`Player._winnable_farm_target`),

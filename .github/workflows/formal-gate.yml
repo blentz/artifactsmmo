@@ -70,6 +70,11 @@ jobs:
         run: bash formal/gate/check_axioms.sh
       - name: Role manifest
         run: cd formal && lake env lean Formal/Manifest.lean >/dev/null && echo "manifest OK"
+      # Audit.lean is DERIVED from Manifest.lean. They were two hand-maintained
+      # lists and had drifted in both directions, so a theorem could carry a
+      # traceability row while nothing scanned its axioms.
+      - name: Audit list derived from manifest (no drift)
+        run: bash formal/gate/check_audit_generated.sh
       - name: Extraction drift (Python -> Lean)
         run: bash formal/gate/check_extraction.sh
       # Mutation *execution* is deferred to the nightly job (see below), which

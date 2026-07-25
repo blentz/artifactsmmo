@@ -1,3 +1,4 @@
+-- @concept: core, planner @property: boundedness, dominance, reachability
 /-
 Phase 10 — Goal value-lattice contracts for previously untouched Goal
 subclasses (recon Area A).

@@ -90,6 +90,48 @@ def render_index_markdown(rows: list[IndexRow]) -> str:
     return "\n".join(lines) + "\n"
 
 
+#: Line-ANCHORED: a `#check @…` written inside a comment (a retired row, an
+#: example in prose) must not become an audited declaration — it would name
+#: something that may not exist and the audit file would stop compiling.
+_CHECK_RE = re.compile(r"^#check @([A-Za-z0-9_.']+)", re.M)
+_OPEN_RE = re.compile(r"^open .+$", re.M)
+
+#: Header of the generated audit file. `import Formal` pulls in every module, so
+#: fully-qualified names resolve without any `open`.
+_AUDIT_HEADER = (
+    "-- GENERATED from Formal/Manifest.lean — DO NOT EDIT\n"
+    "-- Regenerate: `uv run python scripts/gen_audit.py` (drift gate: --check).\n"
+    "--\n"
+    "-- Every declaration with a Manifest traceability row gets its axioms\n"
+    "-- scanned here. The two lists were hand-maintained and had drifted apart in\n"
+    "-- BOTH directions (216 traced-but-unscanned, 112 scanned-but-untraced);\n"
+    "-- deriving this file from Manifest.lean makes that divergence impossible.\n"
+    "import Formal\n"
+)
+
+
+def manifest_audit_names(manifest_text: str) -> list[str]:
+    """The fully-qualified names of every `#check @…` in Manifest.lean, in file
+    order, deduplicated. This is the authoritative audited surface."""
+    seen: dict[str, None] = {}
+    for name in _CHECK_RE.findall(manifest_text):
+        seen.setdefault(name, None)
+    return list(seen)
+
+
+def manifest_open_lines(manifest_text: str) -> list[str]:
+    """Manifest's `open` lines. It abbreviates 60 of its `#check`s to bare names,
+    so the generated audit file must reproduce the SAME namespace context or those
+    names will not resolve."""
+    return _OPEN_RE.findall(manifest_text)
+
+
+def render_audit_lean(names: list[str], opens: list[str]) -> str:
+    """Render `Formal/Audit.lean` — one `#print axioms` per audited declaration."""
+    body = "".join(f"{line}\n" for line in opens)
+    return _AUDIT_HEADER + body + "".join(f"#print axioms {n}\n" for n in names)
+
+
 def cross_check(tagged: set[str], manifest_modules: set[str]) -> list[str]:
     """The tag/manifest correspondence, checked in BOTH directions. Returns a list
     of human-readable errors (empty = clean).
