@@ -68,6 +68,37 @@ class CraftPotionsGoal(Goal):
         self._seed_equipped = (
             equipped_potion_qty(state, self._seed_target[0])
             if state is not None and self._seed_target is not None else 0)
+        self._seed_depth = (
+            self._batch_depth(self._seed_target, game_data)
+            if game_data is not None and self._seed_target is not None else 0)
+
+    @staticmethod
+    def _batch_depth(plan: tuple[str, int, int], game_data: GameData) -> int:
+        """Planning steps the sized batch actually costs: one Gather per unit of
+        every ingredient the runs consume, plus the craft and the equip.
+
+        A gather yields ONE unit per action, so `runs * sum(recipe)` is the
+        worst-case (nothing held) leg length. Without this the goal inherited
+        Goal.max_depth = 15 while its own ladder routinely sized a longer batch —
+        POTION_GATHER_BATCH=5 runs of a 3-unit recipe is 5*3 + 2 = 17 — so A*
+        exhausted at depth 15 and returned no plan. Live at level 20 that read as
+        `CraftPotionsGoal: nodes=54 depth=15 plan_len=0`; the batch became
+        reachable the moment the budget covered it.
+        """
+        code, runs, _equip_qty = plan
+        recipe = game_data.crafting_recipes.get(code, {})
+        return runs * sum(recipe.values()) + 2
+
+    @property
+    def max_depth(self) -> int:
+        """The sized batch's own length, never below the inherited default.
+
+        Derived at construction from the FROZEN target, mirroring
+        ReachCurrencyGoal's funding-cycle bound: a goal that sizes its own batch
+        has to provision the depth that batch needs, or it is unplannable by
+        construction. Unseeded (no state/game_data) there is no batch to measure,
+        so the default stands."""
+        return max(super().max_depth, self._seed_depth)
 
     def _target_potion(self, state: WorldState, game_data: GameData) -> str | None:
         """Highest-`effect`, alchemy-craftable-now, utility-slot-equippable potion.

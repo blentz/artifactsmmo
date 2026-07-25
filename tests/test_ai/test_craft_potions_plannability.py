@@ -42,7 +42,7 @@ def clear_unlock_boost_cache():
     _unlock_boost_module._cache.clear()
 
 
-def _gd(*, with_boost: bool, monster_level: int = 3) -> GameData:
+def _gd(*, with_boost: bool, monster_level: int = 3, ingredient_qty: int = 1) -> GameData:
     """Catalog with a gatherable-ingredient alchemy heal, a winnable-but-hurting
     monster (so potion stocking is combat-justified), and — when `with_boost` —
     a craftable damage boost for the SAME element the monster is weak to.
@@ -64,7 +64,7 @@ def _gd(*, with_boost: bool, monster_level: int = 3) -> GameData:
         _INGREDIENT: ItemStats(code=_INGREDIENT, level=1, type_="resource"),
         "wpn": ItemStats(code="wpn", level=1, type_="weapon", attack={"fire": 150}),
     }
-    recipes = {_HEAL: {_INGREDIENT: 1}}
+    recipes = {_HEAL: {_INGREDIENT: ingredient_qty}}
     if with_boost:
         stats[_BOOST] = ItemStats(code=_BOOST, level=10, type_="utility",
                                   crafting_skill="alchemy", crafting_level=10,
@@ -174,3 +174,33 @@ def test_goal_is_plannable_when_the_deficit_exceeds_one_gather_batch():
 
     assert not planner.last_stats.timed_out, "must be a real exhaustion, not a budget artifact"
     assert plan, "a deficit larger than one gather batch must still yield a batch plan"
+
+
+def test_goal_provisions_depth_for_the_batch_its_own_ladder_sized():
+    """The batch must FIT the goal's max_depth.
+
+    `_ladder_runs` sizes a gather batch of up to POTION_GATHER_BATCH runs, and a
+    run costs one Gather per ingredient unit. With a 3-unit recipe that is
+    5*3 = 15 gathers + 1 craft + 1 equip = 17 actions — past the inherited
+    Goal.max_depth of 15, so A* exhausts at depth 15 and returns nothing.
+
+    Live at level 20 this is exactly what `plan Robby` showed:
+    `CraftPotionsGoal: nodes=54 depth=15 plan_len=0`; raising only max_depth to
+    20 turned the same state into `plan_len=17` in 60 nodes. A goal must
+    provision depth for the batch it sized, or the batch is unreachable by
+    construction — the same action-set/goal-test disagreement as the boost
+    clause above, in the depth dimension.
+    """
+    gd = _gd(with_boost=False, monster_level=18, ingredient_qty=3)
+    state = _state(inventory={})          # nothing held: forces the gather rung
+    goal = CraftPotionsGoal(game_data=gd, state=state)
+    assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
+
+    planner = GOAPPlanner()
+    plan = planner.plan(state, goal, _actions(gd), gd)
+
+    assert not planner.last_stats.timed_out, "must be a real exhaustion, not a budget artifact"
+    assert plan, (
+        f"a {goal.max_depth}-deep budget must cover the sized batch; "
+        f"got no plan after {planner.last_stats.nodes_explored} nodes"
+    )
