@@ -863,6 +863,12 @@ class StrategyArbiter:
         single-step [WaitAction()] plan so the last-resort fallback always
         provides a firing candidate to select_pure.
         """
+        # Recorded on every attempt because this is the ONLY place the goal
+        # OBJECT is still in scope — `goals_tried` carries reprs, so a consumer
+        # downstream cannot recover it. The trace's `goal_rank` used to emit a
+        # hardcoded 0.0 here, and both TUI consumers filter on `priority > 0`,
+        # so that panel rendered empty on every cycle ever traced.
+        priority = goal.priority(state, game_data, self._history)
         if isinstance(goal, WaitGoal):
             wait_plan: list[Action] = [WaitAction()]
             self._last_timed_out = False
@@ -872,6 +878,7 @@ class StrategyArbiter:
                 "depth": 1,
                 "timed_out": False,
                 "plan_len": 1,
+                "priority": priority,
             })
             return wait_plan
         # Provably-sound pre-plan reachability gate: a goal whose minimum plan is
@@ -890,6 +897,7 @@ class StrategyArbiter:
                 "depth": 0,
                 "timed_out": False,
                 "plan_len": 0,
+                "priority": priority,
             })
             return []
         # Fast-path: for a deterministic gather-craft closure (all leaves are
@@ -915,6 +923,7 @@ class StrategyArbiter:
                 "depth": 0,
                 "timed_out": False,
                 "plan_len": len(gen),
+                "priority": priority,
             })
             return gen
         plan = self._planner.plan(state, goal, actions, game_data, self._history,
@@ -937,6 +946,7 @@ class StrategyArbiter:
             "timed_out": stats.timed_out,
             "node_capped": stats.node_capped,
             "plan_len": len(plan),
+            "priority": priority,
         })
         return plan
 

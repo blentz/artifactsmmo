@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.event_plan_window import plan_fits_event_window
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goals.base import Goal
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -115,19 +116,31 @@ def test_naive_now_is_rejected_loudly():
 # non-vacuity check caught it. This version stubs the PLANNER (a collaborator,
 # not the unit under test) so an event-only plan definitely reaches the seam.
 
-class _DummyGoal:
+class _DummyGoal(Goal):
     """A minimal real-shaped Goal: not WaitGoal (which the seam short-circuits)
-    and never satisfied, so the stubbed planner's plan is what reaches the gate."""
+    and never satisfied, so the stubbed planner's plan is what reaches the gate.
 
-    def is_plannable(self, state, game_data, history=None):
-        return True
+    Subclasses the real `Goal` rather than duck-typing it, so it inherits the
+    whole contract the arbiter relies on (`priority`, `heuristic`, and crucially
+    `max_depth` as a PROPERTY — an override declaring it as a method hands the
+    planner a bound method where it expects an int)."""
+
+    def value(self, state, game_data, history=None):
+        return 1.0
 
     def is_satisfied(self, state):
         return False
 
+    def desired_state(self, state, game_data):
+        return {}
+
+    def is_plannable(self, state, game_data, history=None):
+        return True
+
     def relevant_actions(self, actions, state, game_data):
         return list(actions)
 
+    @property
     def max_depth(self):
         return 20
 

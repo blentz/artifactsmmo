@@ -788,8 +788,15 @@ class GamePlayer:
                 selected_goal, plan, goals_tried, replanned = self._plan_or_reuse(
                     state, game_data, actions, combat_monster)
                 state = self.state  # _plan_or_reuse may have replaced crafting_target
+                # `priority` is recorded per attempt by the arbiter, which is the
+                # only place the goal OBJECT still exists (`goals_tried` carries
+                # reprs). It used to be hardcoded 0.0 here; since both TUI
+                # consumers render `if gr.priority > 0`, that panel was empty on
+                # every cycle ever traced. `.get` keeps synthetic entries (e.g.
+                # the worth-gate bypass marker) safe.
                 goal_rank_trace: list[dict[str, object]] = [
-                    {"goal": gt["goal"], "priority": 0.0} for gt in goals_tried
+                    {"goal": gt["goal"], "priority": float(gt.get("priority", 0.0) or 0.0)}
+                    for gt in goals_tried
                 ]
 
                 if self.verbose:

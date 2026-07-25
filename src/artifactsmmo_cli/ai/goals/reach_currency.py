@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
+from artifactsmmo_cli.ai.combat_targets import combat_target_monsters
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.funding_core import funding_cycles_pure
@@ -28,7 +29,6 @@ de-folded into its own planning node, or in-model `task_total` raised above 1, o
 a Craft-based task needing intermediate craft nodes — the real per-cycle node
 count exceeds 3 and `max_depth` UNDER-provisions, silently reintroducing the
 planner timeout this goal exists to prevent. Re-derive this constant if so."""
-PRIORITY_WHEN_NEEDED = 1.0  # placeholder ranking; demand routing is C4
 PRIORITY_WHEN_NEEDED = 1.0  # placeholder ranking; demand routing is C4
 
 
@@ -70,8 +70,27 @@ class ReachCurrencyGoal(Goal):
         weapon can't stall the loop with no way to fix it (Task 6b
         regression, mirrored here). Deduped by monster_code — this goal is
         search-flood sensitive, so one swap per distinct monster, not one
-        per fight."""
-        fight_actions = [a for a in actions if isinstance(a, FightAction)]
+        per fight.
+
+        Fights are further restricted to the monsters `combat_target_monsters`
+        actually selects. The in-model accepted task is the `__pending__`
+        placeholder (AcceptTaskAction.apply), monsters-typed with task_total=1,
+        so EVERY admitted fight progresses it identically — the catalog's other
+        fights are interchangeable alternatives differing only in cost, and with
+        h=0 the search just enumerates which monster to kill on each funding
+        cycle. Live at level 20 (44 catalog fights) that timed out on the 10s
+        cheap pass at ~10.5K nodes with no plan, blocking the satchel chain
+        (jasper_crystal is tasks_trader/tasks_coin only); narrowed to the one
+        real target the SAME 12-action funding plan is found in 55 nodes.
+        Same argument, same fix as the ~320 crafts dropped above.
+
+        The narrowing is skipped when the selector names NOTHING, since
+        filtering to the empty set would make the goal spuriously unplannable
+        rather than merely cheaper."""
+        targets = set(combat_target_monsters(state, game_data))
+        fight_actions = [a for a in actions
+                         if isinstance(a, FightAction)
+                         and (not targets or a.monster_code in targets)]
         seen_monsters: set[str] = set()
         swap_actions: list[Action] = []
         for fight in fight_actions:
