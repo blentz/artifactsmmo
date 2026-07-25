@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/recipe_closure.py (sha256: d6fb4c4324c0fa78690247faed6ccf165445ee0d3625f58db075c8c29af02344) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/recipe_closure.py (sha256: afb299601771472e872e4085831e417db0e4abe321d326edad49cf5150e2f447) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.RecipeClosure
