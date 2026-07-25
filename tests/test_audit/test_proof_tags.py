@@ -33,3 +33,22 @@ def test_cross_check_flags_manifest_module_without_tags():
 
 def test_cross_check_clean_when_all_tagged():
     assert cross_check(tagged={"Alpha", "Gamma"}, manifest_modules={"Alpha", "Gamma"}) == []
+
+
+def test_cross_check_flags_tagged_module_absent_from_manifest():
+    """The reverse direction. A module can compile, carry correct tags and reach
+    the generated index while NO theorem of it is listed in Manifest.lean — so
+    nothing asserts its axiom hygiene. That is exactly how EscrowConservation and
+    GePostPricing shipped twelve unaudited theorems (429bfc77)."""
+    errors = cross_check(tagged={"Alpha", "Beta"}, manifest_modules={"Alpha"})
+    assert any("Beta" in e for e in errors)
+
+
+def test_cross_check_reports_both_directions_at_once():
+    """Both gaps surface in ONE run. parse_tags dying on the first bad tag is how
+    four unknown tags hid behind each other across four sessions; a checker that
+    reported one direction and stopped would repeat that failure shape."""
+    errors = cross_check(tagged={"Alpha", "Beta"}, manifest_modules={"Alpha", "Gamma"})
+    assert any("Gamma" in e for e in errors), "manifest-without-tags not reported"
+    assert any("Beta" in e for e in errors), "tagged-without-manifest not reported"
+    assert len(errors) == 2

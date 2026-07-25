@@ -1225,3 +1225,73 @@ open Formal.PriorityBand
 #check @Formal.GePostPricing.buy_price_le_ceiling            -- DOMINANCE: never above alt-cost − margin
 #check @Formal.GePostPricing.sell_price_le_best_minus_one    -- BOUND: one tick under the best sell, or exactly the floor
 #check @Formal.GePostPricing.buy_price_ge_best_plus_one      -- BOUND: one tick over the best buy, or exactly the cap
+-- The nine modules below were tagged, compiled and indexed but had NO row here,
+-- so nothing asserted their axiom hygiene. Added when cross_check gained its
+-- reverse direction. Manifest is a CURATED list of headline roles, so large
+-- modules contribute their concluding results, not every internal lemma.
+-- EquipmentProfile (the constant COMBAT-axis selector):
+#check @Formal.EquipmentProfile.planGate_forces_combat       -- combat-inadequate ⇒ COMBAT, for every root category
+#check @Formal.EquipmentProfile.never_utility                -- the selector never chooses the retired UTILITY axis
+#check @Formal.EquipmentProfile.isUtilityObjective_false     -- is_utility_objective is a constant false
+-- InventoryRoom (slot-vs-quantity admission; the 497-livelock core):
+#check @InventoryRoom.hasRoom_false_of_no_slot        -- no free slot ⇒ blocked, whatever the quantity room
+#check @InventoryRoom.hasRoom_false_of_no_qty         -- no quantity room ⇒ blocked, whatever the slots
+#check @InventoryRoom.hasRoom_grow_ignores_slots      -- growing a held stack ignores the slot cap
+#check @InventoryRoom.hasRoom_both_room_witness       -- non-vacuity: a new stack with slot + qty room is admitted
+#check @InventoryRoom.hasRoom_no_slot_witness         -- non-vacuity: blocked purely by the slot cap
+#check @InventoryRoom.hasRoom_no_qty_witness          -- non-vacuity: blocked purely by the quantity cap
+#check @InventoryRoom.hasRoom_grow_full_slots_witness -- non-vacuity: grow past a full slot budget still fits
+-- OptimalBuyMix (the affordable-batch search behind the Python `break`):
+#check @Formal.OptimalBuyMix.cost_zero                       -- zero runs cost zero
+#check @Formal.OptimalBuyMix.cost_mono                       -- cost is monotone in batch (affordable batches are down-closed)
+#check @Formal.OptimalBuyMix.result_feasible                 -- the returned batch is within budget
+#check @Formal.OptimalBuyMix.succ_infeasible                 -- one past the result is unaffordable ⇒ the result is MAXIMAL
+-- PotionProvisionQty (how many potions a fight is provisioned with):
+#check @Formal.PotionProvisionQty.provision_le_max           -- never more than a full stack
+#check @Formal.PotionProvisionQty.provision_le_held          -- never more than actually held
+#check @Formal.PotionProvisionQty.provision_nonneg           -- never negative
+-- ProgressionTree (trunk milestones, branch choice, focus-aging falloff and the
+-- d'Hondt interleave — the selector that replaced the flat ranking):
+#check @Formal.ProgressionTree.milestone_gt_level            -- the milestone strictly exceeds the level below the cap
+#check @Formal.ProgressionTree.milestone_le_cap              -- the milestone never exceeds the cap
+#check @Formal.ProgressionTree.milestone_band_aligned        -- milestones are band boundaries (divisible by 10)
+#check @Formal.ProgressionTree.milestone_advances            -- crossing a milestone strictly advances it (trunk descent)
+#check @Formal.ProgressionTree.branchPick_table              -- exhaustive truth table (all four input rows)
+#check @Formal.ProgressionTree.branchPick_gear_iff           -- gear is picked IFF gear work exists ∧ band not yet adequate
+#check @Formal.ProgressionTree.potionWeight_health_maximal   -- health dominates every potion family (tuning decision, pinned)
+#check @Formal.ProgressionTree.potionWeight_unknown_floor    -- unknown families never outrank anything
+#check @Formal.ProgressionTree.gearTargetPick_none_iff       -- totality: empty picks nothing, non-empty always picks
+#check @Formal.ProgressionTree.gearTargetPick_mem            -- SAFETY: the argmax never invents a candidate
+#check @Formal.ProgressionTree.falloff_flat                  -- FLAT window: below focusFlat the multiplier is exactly 1
+#check @Formal.ProgressionTree.falloff_le_one                -- the multiplier never exceeds 1
+#check @Formal.ProgressionTree.falloff_ge_floor              -- a stuck root is never fully abandoned (floor)
+#check @Formal.ProgressionTree.falloff_floor_after           -- at/past focusFlat + focusSpan the multiplier IS the floor
+#check @Formal.ProgressionTree.falloff_antitone              -- ANTITONE: aging never increases the multiplier
+#check @Formal.ProgressionTree.selectMax_quot_max            -- HIGHEST-AVERAGES: the per-seat winner maximises the d'Hondt quotient
+#check @Formal.ProgressionTree.dhondtStepKey_quot_max        -- dhondt_step returns a quotient-dominant key (one seat of apportionment)
+#check @Formal.ProgressionTree.focusAgingPick_unaged_eq_argmax -- unaged candidates reduce to the proven argmax (no jitter)
+-- Synergy (the pool-overlap multiplier pinned into [sMin, 1]):
+#check @Formal.Synergy.synergyRatio_nonneg                   -- the overlap ratio is nonneg
+#check @Formal.Synergy.synergyRatio_le_one                   -- with shared ≤ total the ratio is ≤ 1
+#check @Formal.Synergy.synergy_total_zero                    -- a candidate needing nothing is maximally aligned
+#check @Formal.Synergy.synergy_ge_floor                      -- never below sMin (the anti-starvation floor)
+#check @Formal.Synergy.synergy_le_one                        -- never above 1
+#check @Formal.Synergy.synergy_floor_pos                     -- the floor is strictly positive (feeds interleaveDue_reaches)
+#check @Formal.Synergy.synergy_monotone                      -- MONOTONE: higher overlap scores no lower
+-- XpPositive (the server level_penalty band that decides whether a kill pays xp):
+#check @Formal.XpPositive.gate_iff                           -- characterisation: the gate IS the integer band, exactly
+#check @Formal.XpPositive.gate_false_iff                     -- the level_penalty = 0 band is exactly the complement
+#check @Formal.XpPositive.gate_of_window                     -- picker-window targets are structurally xp-positive
+#check @Formal.XpPositive.gate_antitone                      -- levelling up never turns a zero-xp target positive
+-- XpValue (the exact combat-xp VALUE core, documented server formula):
+#check @Formal.XpValue.roundHalfEven_ge_floor                -- half-even never rounds below the floor
+#check @Formal.XpValue.roundHalfEven_le_succ_floor           -- half-even never exceeds floor + 1
+#check @Formal.XpValue.xpPerKill_pos_iff_gate                -- VALUE ↔ GATE: xp is positive exactly when XpPositive holds
+#check @Formal.XpValue.xpPerKill_wisdom_mono                 -- more wisdom never lowers the value
+-- PlanModel (plannability soundness: the planner's admission bound is not a lie).
+-- 125 theorems, of which these are the concluding results:
+#check @Formal.PlanModel.minGathers_le_gathers_of_star       -- the Ψ-closure half of minGathers_le_gathers
+#check @Formal.PlanModel.minGathers_le_gathers_of_corner3    -- the full plannability-soundness gather bound
+#check @Formal.PlanModel.canonicalPlan_valid                 -- CONSTRUCTIVE witness: the canonical plan obtains AND equips
+#check @Formal.PlanModel.length_eq_counts                    -- a plan's length is its gather + craft + equip counts
+#check @Formal.PlanModel.gear_obtainable_of_perActionLength_le -- OBTAINABILITY under the per-action length budget

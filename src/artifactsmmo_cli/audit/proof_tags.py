@@ -91,9 +91,28 @@ def render_index_markdown(rows: list[IndexRow]) -> str:
 
 
 def cross_check(tagged: set[str], manifest_modules: set[str]) -> list[str]:
-    """Every module whose theorems are in Manifest.lean must carry tags. Returns a
-    list of human-readable errors (empty = clean)."""
+    """The tag/manifest correspondence, checked in BOTH directions. Returns a list
+    of human-readable errors (empty = clean).
+
+    Forward: a module whose theorems are in Manifest.lean must carry tags, or the
+    generated index has a hole.
+
+    Reverse: a tagged module must have at least one theorem in Manifest.lean.
+    Without it a module can compile, carry correct tags and appear in the index
+    while no theorem of it is listed anywhere — which is how EscrowConservation
+    and GePostPricing shipped twelve theorems no audit file mentioned (429bfc77).
+    Manifest.lean is a curated list of headline roles, not an exhaustive dump, so
+    this requires PRESENCE, not that every theorem be listed.
+
+    Scope limit, stated because it is easy to over-read: Manifest.lean is the
+    TRACEABILITY list. It is NOT the axiom surface — the safety gate iterates
+    `Formal/Audit.lean`, a separate and currently smaller list, so passing this
+    check does not imply a module's axioms are scanned. 29 tagged modules are in
+    Manifest but absent from Audit.lean."""
     return [
         f"module in Manifest but untagged (no @concept/@property): {m}"
         for m in sorted(manifest_modules - tagged)
+    ] + [
+        f"module tagged but absent from Manifest (no theorem audited): {m}"
+        for m in sorted(tagged - manifest_modules)
     ]

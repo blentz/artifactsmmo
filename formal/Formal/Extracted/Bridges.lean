@@ -1,3 +1,4 @@
+-- @concept: core @property: validity
 import Formal.Extracted.CombatPicker
 import Formal.Extracted.NearestTile
 import Formal.Extracted.NpcBuyCore

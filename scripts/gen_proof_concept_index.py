@@ -16,7 +16,11 @@ FORMAL = Path("formal/Formal")
 INDEX = Path("docs/behavioral_completeness/PROOF_CONCEPT_INDEX.md")
 # Greedy module group so nested modules (e.g. Formal.Liveness.Foo.thm ->
 # "Liveness.Foo") are captured whole; the trailing segment is the theorem name.
-_MANIFEST_RE = re.compile(r"#check @Formal\.([A-Za-z0-9_.]+)\.[A-Za-z0-9_']+")
+# The `Formal.` prefix is OPTIONAL because a module's namespace need not sit
+# under `Formal` — `Formal/InventoryRoom.lean` declares a bare `InventoryRoom`.
+# Requiring the prefix made such a module unmatchable, so it counted as absent
+# from the Manifest no matter how many of its theorems were listed.
+_MANIFEST_RE = re.compile(r"#check @(?:Formal\.)?([A-Za-z0-9_.]+)\.[A-Za-z0-9_']+")
 
 
 def _module_name(path: Path) -> str:
