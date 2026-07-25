@@ -12,6 +12,11 @@ _ALLOWED_PROPERTIES = frozenset({
     # C1–C3 additions: validity (function mirrors a spec), sufficiency (condition
     # guarantees an outcome), termination (process/descent terminates).
     "validity", "sufficiency", "termination",
+    # boundedness: the modelled quantity is confined to a stated interval.
+    # Distinct from monotonicity (how it MOVES) and from safety (what must never
+    # happen). Formal/Synergy.lean is the case — synergy_ge_floor /
+    # synergy_le_one / synergy_floor_pos pin synergyPure into [sMin, 1].
+    "boundedness",
 })
 _TAG_RE = re.compile(r"@concept:\s*([^@]+?)\s*@property:\s*(.+)")
 
