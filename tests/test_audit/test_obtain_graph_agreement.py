@@ -88,6 +88,23 @@ def test_obtain_sources_state_free_kinds_are_a_subset_of_graph_leaves(
         f"(the graph under-reports a real obtain route): {violations[:10]}")
 
 
+def _anchorable_vendor(item: str, game_data: GameData) -> bool:
+    """Does SOME permanent, placed NPC sell `item`? This mirrors the reachability
+    precondition `_buy_sources` applies (`obtain_sources.py:272-275`) as a pure
+    DATA predicate — it never consults the walk, so a witness chosen with it
+    still tests walk behaviour rather than restating it.
+
+    The graph's `leaves` deliberately does NOT apply this gate: it is the
+    state-free CAPABILITY view, and a vendor's map placement is world state. So
+    the bundle legitimately contains currency-buy items the walk names nothing
+    for — all three are sold only by `sorceress`, an NPC with no tile."""
+    return any(
+        not game_data.is_event_npc(npc_code)
+        and game_data.npc_location(npc_code) is not None
+        for npc_code, _price, _currency in game_data.npc_purchases(item)
+    )
+
+
 def test_the_invariant_can_fail(bundle_game_data: GameData) -> None:
     """Falsifiability witness: a graph whose BUY leaf reverts to the gold-only
     view must FAIL the subset check, proving it measures real divergence and not
@@ -95,12 +112,16 @@ def test_the_invariant_can_fail(bundle_game_data: GameData) -> None:
     graph = bundle_game_data.requirement_graph.graph()
     state = _open_state(bundle_game_data)
     # A currency-buyable item: obtain_sources names BUY, and the graph now agrees.
-    currency_buys = [
+    # `graph.leaves` iterates in hash order, so the witness is taken from a
+    # SORTED list: an unsorted `[0]` picked a different item per process and hit
+    # an unanchorable one (`sorceress`) in ~9% of runs.
+    currency_buys = sorted(
         item for item in graph.leaves
         if SourceKind.BUY in graph.leaves[item]
         and not bundle_game_data.npcs_selling_item(item)  # gold view is blind
         and bundle_game_data.npc_purchases(item)          # but a currency vendor sells it
-    ]
+        and _anchorable_vendor(item, bundle_game_data)    # and the walk can reach it
+    )
     assert currency_buys, "no currency-only buy in the bundle — witness is vacuous"
     item = currency_buys[0]
     walk_kinds = {s.kind for s in obtain_sources(
