@@ -8,7 +8,10 @@ in the learning store.  The computation reuses ``_expected_hit`` from
 import math
 
 from artifactsmmo_cli.ai.combat import _expected_hit
+from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
+from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -25,10 +28,18 @@ def expected_damage_per_fight(
     the same ``_expected_hit`` primitive — so the estimate cannot drift
     from the combat verdict's damage model.
 
-    Uses the player's current equipped stats directly from ``state``; no
-    loadout projection is performed.  Guard: ``game_data.monster_levels``
-    returns 0 for unknown codes, so the membership check avoids calling
-    the raising stat accessors.
+    Judged against the loadout ``pick_loadout`` would actually equip, exactly as
+    ``predict_win`` / ``combat_margin`` do — NOT the currently-worn gear. Using
+    the worn stats made this seed disagree with the combat verdict it claims not
+    to drift from: the bot asked "can I win?" wearing the best owned weapon and
+    "how much will I bleed?" wearing whatever happened to be in the slot. Since
+    ``projected_heal_need_per_fight`` sizes potion demand from this number, a
+    stale weapon made a comfortably-won fight read MARGINAL and the CRAFT_POTIONS
+    guard fired — brewing a 30-potion stack to survive a fight that equipping the
+    bow already in the bag wins outright.
+
+    Guard: ``game_data.monster_levels`` returns 0 for unknown codes, so the
+    membership check avoids calling the raising stat accessors.
     """
     if monster_code not in game_data.monster_levels:
         return 0
@@ -36,9 +47,11 @@ def expected_damage_per_fight(
     m_resist = game_data.monster_resistance(monster_code)
     m_hp = game_data.monster_hp(monster_code)
     m_crit = game_data.monster_critical_strike(monster_code)
-    monster_per_turn = _expected_hit(m_attack, 0, {}, state.resistance, m_crit)
+    loadout = pick_loadout_cached(Combat(m_attack, m_resist), state, game_data)
+    p = project_loadout_stats(state, loadout, game_data)
+    monster_per_turn = _expected_hit(m_attack, 0, {}, p.resistance, m_crit)
     player_kill_step = _expected_hit(
-        state.attack, state.dmg, state.dmg_elements, m_resist, state.critical_strike
+        p.attack, p.dmg, p.dmg_elements, m_resist, p.critical_strike
     )
     if player_kill_step <= 0:
         return 0
