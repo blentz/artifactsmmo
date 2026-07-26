@@ -50,9 +50,11 @@ def achievability_pure(effort: int, min_effort: int) -> Fraction:
     every other candidate to the floor: with raw ratios, min_effort = 0 sends
     every other ratio to 0 regardless of whether they need 2 units or 2000.
 
-    `effort < min_effort` cannot happen by construction (min_effort is the
-    minimum over a set containing effort); the core ASSERTS rather than clamps,
-    so an assembly-layer bug fails loudly instead of being silently corrected."""
+    `effort <= 0` means the candidate needs nothing new, which is immediately
+    achievable — returns 1, not a division by zero. `effort < min_effort`
+    (when effort > 0) is impossible by construction (min_effort is the minimum
+    over a set containing effort); the core ASSERTS rather than clamps, so an
+    assembly-layer bug fails loudly instead of being silently corrected."""
     if effort <= 0:
         return Fraction(1)
     assert effort >= min_effort >= 0, f"effort {effort} below min {min_effort}"
