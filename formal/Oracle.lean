@@ -3018,17 +3018,33 @@ def runOne (item : Json) : Json :=
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 
-/-- Answer one framed request: `{"id": N, "reqs": [...]}` -> `{"id": N, "results": [...]}`.
+/-- Answer one request, echoing the per-request `rid` alongside its value.
 
-The `id` echo is a SAFETY mechanism, not bookkeeping. In `--serve` mode requests
-and responses are matched positionally over a pipe, so a single desynchronised
-line would leave every later differential test comparing Python against the
-answer to some OTHER question — and still passing. The client asserts the echoed
-id, turning any desync into a loud failure instead of a vacuously green gate. -/
+`runOne` reads only `kind` and `args`, so the extra `rid` key passes through it
+untouched. Tagging every RESULT (not just the batch) is what lets the client
+match answers to questions by KEY rather than by position — see `runFramed`. -/
+def runTagged (j : Json) : Json :=
+  let rid := (j.getObjValAs? Nat "rid").toOption.getD 0
+  Json.mkObj [("rid", Json.num rid), ("value", runOne j)]
+
+/-- Answer one framed request:
+`{"id": N, "reqs": [{"rid": k, ...}]}` -> `{"id": N, "results": [{"rid": k, "value": ...}]}`.
+
+The two echoes are a SAFETY mechanism, not bookkeeping. Over a reused pipe a
+desynchronised line would leave every later differential test comparing Python
+against the answer to some OTHER question — and still passing, because a wrong
+answer is still a well-formed one. So nothing is matched by position:
+
+* `id` pins the RESPONSE to the request that asked for it;
+* `rid` pins each individual RESULT to its own request inside the batch.
+
+The client reassembles by key and rejects any missing, duplicated or unknown
+`rid`, so a scrambled or truncated batch is a loud failure rather than a
+silently green gate. -/
 def runFramed (j : Json) : Json :=
   let id := (j.getObjValAs? Nat "id").toOption.getD 0
   let reqs := ((j.getObjVal? "reqs").toOption.bind (·.getArr?.toOption)).getD #[]
-  Json.mkObj [("id", Json.num id), ("results", Json.arr (reqs.map runOne))]
+  Json.mkObj [("id", Json.num id), ("results", Json.arr (reqs.map runTagged))]
 
 /-- Request loop for `--serve`: one framed JSON object per input line, one
 response line each, flushed immediately. Spawning this binary costs ~107ms and

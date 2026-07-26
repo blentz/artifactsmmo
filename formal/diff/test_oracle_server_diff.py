@@ -12,8 +12,9 @@ import json
 
 import pytest
 
+import formal.diff.test_calculate_path_diff as calculate_path_diff
 from formal.diff.oracle_client import _spawn_once, run_oracle
-from formal.diff.oracle_server import OracleServer
+from formal.diff.oracle_server import OracleServer, align_results
 
 # A few kinds with distinguishable answers, so parity is a real comparison.
 _CASES = [
@@ -80,6 +81,52 @@ def test_close_is_idempotent():
     server.request("calculate_path", [[0, 0, 1, 0]])
     server.close()
     server.close()
+
+
+def test_results_are_matched_by_rid_not_position():
+    """Scrambling the order must NOT scramble the answers. This is the property
+    that makes the transport position-independent: the oracle is free to return
+    a batch in any order, and the client still hands each answer back with the
+    request that asked for it."""
+    tagged = [{"rid": 2, "value": "c"}, {"rid": 0, "value": "a"}, {"rid": 1, "value": "b"}]
+    assert align_results(3, tagged, "test") == ["a", "b", "c"]
+
+
+@pytest.mark.parametrize("tagged,expected_count,match", [
+    ([{"rid": 0, "value": "a"}], 2, "returned 1 results for 2 requests"),
+    ([{"rid": 0, "value": "a"}, {"rid": 0, "value": "b"}], 2, "duplicate rid 0"),
+    ([{"rid": 0, "value": "a"}, {"rid": 5, "value": "b"}], 2, "rid mismatch"),
+    ([{"rid": 0, "value": "a"}, {"value": "b"}], 2, "missing rid/value"),
+])
+def test_every_batch_corruption_raises(tagged, expected_count, match):
+    """Truncated, duplicated, out-of-range and malformed batches each raise.
+    Before rid-tagging, all four produced well-formed but WRONG answers that a
+    differential test would have compared and passed."""
+    with pytest.raises(RuntimeError, match=match):
+        align_results(expected_count, tagged, "test")
+
+
+def test_the_differential_gate_can_fail(monkeypatch):
+    """Falsifiability witness for the whole differential mechanism.
+
+    Every other test in this suite asserts Python and Lean AGREE. None of them
+    demonstrates that disagreement would be noticed — so a transport bug that
+    quietly fed each test its own Python answer would leave 762 tests green and
+    verifying nothing.
+
+    Here the oracle is made to lie by exactly one unit, and a real differential
+    test must fail. If this test ever passes without raising, the differential
+    gate has stopped comparing anything.
+    """
+    truthful = calculate_path_diff.run_oracle
+
+    def lying(kind, inputs):
+        return [{**r, "total_distance": r["total_distance"] + 1}
+                for r in truthful(kind, inputs)]
+
+    monkeypatch.setattr(calculate_path_diff, "run_oracle", lying)
+    with pytest.raises(AssertionError):
+        calculate_path_diff.test_python_matches_lean()
 
 
 def test_structured_payload_round_trips():

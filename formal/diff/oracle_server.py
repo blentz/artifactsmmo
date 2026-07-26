@@ -43,6 +43,37 @@ def oracle_missing_error() -> RuntimeError:
     return RuntimeError(f"oracle not built: {ORACLE} (run `cd formal && lake build oracle`)")
 
 
+def align_results(expected: int, tagged: list[dict], context: str) -> list[dict]:
+    """Reassemble a batch's results BY `rid`, never by position.
+
+    Position is the dangerous part of a pipe protocol: a scrambled, truncated or
+    duplicated batch still yields well-formed answers, so a differential test
+    would compare Python against the wrong question and PASS. Matching by key
+    turns every one of those into an exception.
+
+    Pure, so each failure mode is tested directly rather than by trying to
+    provoke a real oracle into misbehaving.
+    """
+    if len(tagged) != expected:
+        raise RuntimeError(
+            f"oracle returned {len(tagged)} results for {expected} requests ({context})")
+    by_rid: dict[int, dict] = {}
+    for item in tagged:
+        if "rid" not in item or "value" not in item:
+            raise RuntimeError(f"oracle result missing rid/value: {item!r} ({context})")
+        rid = item["rid"]
+        if rid in by_rid:
+            raise RuntimeError(f"oracle returned duplicate rid {rid} ({context})")
+        by_rid[rid] = item["value"]
+    missing = set(range(expected)) - by_rid.keys()
+    unknown = by_rid.keys() - set(range(expected))
+    if missing or unknown:
+        raise RuntimeError(
+            f"oracle rid mismatch ({context}): missing {sorted(missing)}, "
+            f"unexpected {sorted(unknown)}")
+    return [by_rid[i] for i in range(expected)]
+
+
 class OracleServer:
     """Owns one `oracle --serve` subprocess and the framed exchange with it."""
 
@@ -80,7 +111,8 @@ class OracleServer:
             req_id = self._next_id
             payload = json.dumps({
                 "id": req_id,
-                "reqs": [{"kind": kind, "args": list(a)} for a in args_batches],
+                "reqs": [{"rid": i, "kind": kind, "args": list(a)}
+                         for i, a in enumerate(args_batches)],
             })
             try:
                 proc.stdin.write(payload + "\n")
@@ -110,14 +142,15 @@ class OracleServer:
             if "error" in reply:
                 raise RuntimeError(f"oracle error on request {req_id} ({kind}): {reply['error']}")
             if reply.get("id") != req_id:
-                # Positional desync: every later comparison would be against the
-                # wrong question. Fail hard rather than silently pass.
+                # Response/request desync: every later comparison would be
+                # against the wrong question. Fail hard rather than silently pass.
                 self._kill()
                 raise RuntimeError(
                     f"oracle response desync: sent id {req_id} ({kind}), got id "
                     f"{reply.get('id')!r}. The oracle process has been killed."
                 )
-            return reply["results"]
+            return align_results(
+                len(args_batches), reply["results"], f"id {req_id}, kind {kind}")
 
     def _drain_stderr(self) -> str:
         proc = self._proc
