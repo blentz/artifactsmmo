@@ -3,9 +3,16 @@
 Mirrored by Formal/ProgressionTree.lean; the PROGRESSION_TREE_MUTATIONS
 group binds these tests to the source."""
 
-from dataclasses import fields
+import json
+from collections.abc import Mapping
+from dataclasses import fields, replace
 from fractions import Fraction
+from functools import lru_cache
+from pathlib import Path
+from types import MappingProxyType
 
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.tiers.progression_tree import _effort_for
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     _NO_SYNERGY,
     FOCUS_FLAT,
@@ -26,6 +33,43 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     potion_type_weight,
 )
 from artifactsmmo_cli.ai.tiers.synergy_core import S_MIN
+from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import make_state
+
+_BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
+
+#: The `make_state` skill baseline (mirrored, not imported — that dict is a
+#: fixture-internal default), so `_bundle_and_state`'s `skills=` override can
+#: MERGE onto it instead of replacing the whole dict. Merging matters:
+#: `test_skill_tokens_count_as_the_level_deficit` compares two calls that vary
+#: only `jewelrycrafting`, and every other skill term (e.g. `mining`, also
+#: demanded by life_ring) must stay identical across both calls for the
+#: comparison to isolate the one deficit that changed.
+_DEFAULT_SKILLS: Mapping[str, int] = MappingProxyType({
+    "mining": 3, "woodcutting": 2, "fishing": 1, "weaponcrafting": 1,
+    "gearcrafting": 1, "jewelrycrafting": 1, "cooking": 1, "alchemy": 1,
+})
+
+
+@lru_cache(maxsize=1)
+def _bundle_game_data() -> GameData:
+    """The committed live-API bundle as GameData (same source used by the
+    synergy-assembly and taskmaster-choice tests) — real recipes/items, so
+    the effort numbers reflect the actual requirement graph rather than a
+    synthetic double. Cached: several tests load it, and it is read-only."""
+    return GameData.from_cache_bundle(json.loads(_BUNDLE.read_text()))
+
+
+def _bundle_and_state(gold: int = 50,
+                       skills: Mapping[str, int] | None = None,
+                       ) -> tuple[GameData, WorldState]:
+    """The real bundle GameData paired with a minimal WorldState, for
+    `_effort_for` tests. `skills` overrides merge onto `_DEFAULT_SKILLS`
+    (see its docstring for why merge, not replace)."""
+    merged_skills = dict(_DEFAULT_SKILLS)
+    if skills:
+        merged_skills.update(skills)
+    return _bundle_game_data(), make_state(gold=gold, skills=merged_skills)
 
 
 class TestMilestone:
@@ -328,3 +372,41 @@ def test_synergy_absent_from_gear_candidate_identity():
     assert "synergy" not in names
     # two candidates equal but for a synergy context have identical repr
     assert repr(_gc("s", "c", 5)) == repr(_gc("s", "c", 5))
+
+
+# --- Task 3 (achievability factor): effort as unmet demand ---
+
+
+def test_effort_ignores_what_is_already_held():
+    """life_ring demands 2000 gold; a character holding 12382 has zero gold
+    effort. Total demand ranks by price tag; UNMET demand ranks by difficulty."""
+    gd, state = _bundle_and_state(gold=12382)
+    effort = _effort_for("life_ring", state, gd)
+    assert effort < 2000, "gold the character already holds must not count"
+
+
+def test_skill_tokens_count_as_the_level_deficit():
+    """A recipe needing jewelrycrafting 15 against skill 10 contributes 5 —
+    this is what separates a skill-gapped item from a currency-gated one."""
+    gd, state = _bundle_and_state(skills={"jewelrycrafting": 10})
+    with_gap = _effort_for("life_ring", state, gd)
+    gd2, state2 = _bundle_and_state(skills={"jewelrycrafting": 15})
+    assert _effort_for("life_ring", state2, gd2) < with_gap
+
+
+def test_char_xp_tokens_do_not_count_as_effort():
+    """char_xp marks drop-routed work for SYNERGY alignment; it is not a unit
+    of demand and must not inflate effort."""
+    gd, state = _bundle_and_state()
+    assert _effort_for("mushmush_jacket", state, gd) < 100
+
+
+def test_effort_credits_bank_items_against_demand():
+    """Held quantities are inventory PLUS bank: life_ring demands 8 iron_bar,
+    and a character with 8 banked (none in inventory) must not read that
+    material as still-needed — bank and inventory are the same 'already have
+    it' fact, just parked in different places."""
+    gd, state = _bundle_and_state()
+    without_bank = _effort_for("life_ring", state, gd)
+    banked = replace(state, bank_items={"iron_bar": 8})
+    assert _effort_for("life_ring", banked, gd) < without_bank

@@ -19,7 +19,7 @@ from fractions import Fraction
 from types import MappingProxyType
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.requirement_graph_memo import CHAR_XP
+from artifactsmmo_cli.ai.requirement_graph_memo import CHAR_XP, SKILL_PREFIX
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
@@ -215,6 +215,42 @@ def _servable_promotion(
 #: monster drops carries a `char_xp` token too, so it overlaps the trunk and is
 #: nudged up — the "L50 slightly favoured" preference, mechanical not tuned.
 _TRUNK_DEMAND: Mapping[str, int] = MappingProxyType({CHAR_XP: 1})
+
+
+def _effort_for(code: str, state: WorldState, game_data: GameData) -> int:
+    """UNMET demand for one unit of `code`: how much work is actually LEFT.
+
+    Total demand ranks by price tag, not difficulty — life_ring demands 2000
+    gold, which is no work at all to a character holding 12382. Subtracting
+    holdings is what makes this an effort measure rather than a cost sheet.
+
+    Token handling:
+      * `skill:<name>` — the recipe's craft LEVEL DEFICIT, not the token count.
+        A 5-level gap is real work; being already at level is none. This is the
+        distinction the whole factor turns on: a skill-gapped candidate must
+        read cheaper than a currency-gated one, not equally blocked.
+      * `char_xp` — SKIPPED. It marks drop-routed work for synergy alignment;
+        it is not a unit of demand and would inflate every drop-routed
+        candidate.
+      * everything else — an item quantity, credited against inventory + bank.
+    """
+    stats = game_data.item_stats(code)
+    held = dict(state.inventory or {})
+    for item, qty in (state.bank_items or {}).items():
+        held[item] = held.get(item, 0) + qty
+    held["gold"] = state.gold + (state.bank_gold or 0)
+
+    effort = 0
+    for token, qty in game_data.requirement_graph.requirement_multiset_for(code).items():
+        if token == CHAR_XP:
+            continue
+        if token.startswith(SKILL_PREFIX):
+            skill = token[len(SKILL_PREFIX):]
+            need = (stats.crafting_level or 0) if stats is not None else 0
+            effort += max(0, need - state.skills.get(skill, 0))
+            continue
+        effort += max(0, qty - held.get(token, 0))
+    return effort
 
 
 def _synergy_map(candidates: list[GearCandidate],
