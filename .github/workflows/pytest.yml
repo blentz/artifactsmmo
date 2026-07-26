@@ -34,6 +34,10 @@ jobs:
       # The suite is fully stubbed (no live API calls), but CLI init requires
       # a token string to exist; locally the gitignored TOKEN file provides it.
       ARTIFACTSMMO_TOKEN: "ci-dummy-token"
+      # sys.monitoring coverage core (Python 3.12+): ~4.5x cheaper than the C
+      # trace function on the census lane. Safe because pyproject.toml sets
+      # branch = false, the one mode sysmon does not support.
+      COVERAGE_CORE: sysmon
     steps:
       - uses: actions/checkout@v6
       - name: Install uv

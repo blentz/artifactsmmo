@@ -24,6 +24,15 @@ cd "$(dirname "$0")/.."
 # tests. Clearing both is the only combination that keeps every suite green.
 unset FORCE_COLOR NO_COLOR
 
+# Coverage measurement core. Python 3.12+ implements coverage via sys.monitoring
+# instead of a C trace function, which is ~4.5x cheaper on lane 2: the census
+# fixture fans 152 planner searches over a ProcessPoolExecutor and tracing all of
+# them dominated the lane (5:34 -> 1:14; whole suite ~6:00 -> 1:38.8). sysmon does
+# not support BRANCH coverage, which is why this is safe here: pyproject.toml sets
+# `branch = false`. Overridable so a bisect can pin the old core:
+# `COVERAGE_CORE=ctrace bash scripts/run_tests.sh`.
+export COVERAGE_CORE="${COVERAGE_CORE:-sysmon}"
+
 SCENARIOS=tests/test_ai/scenarios
 CENSUS=tests/test_audit/test_inventory_census.py
 
