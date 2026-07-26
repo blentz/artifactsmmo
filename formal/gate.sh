@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; ROOT="$(cd "$HERE/.." && pwd)"
+# RUNTIME BUDGET: this script must stay under 15 minutes from a warm Lean build.
+# Measured 2026-07-25 (docs/superpowers/specs/2026-07-25-local-gate-runtime-design.md):
+#   kernel build + 8 cheap checks  ~2 min
+#   differential (-n auto)          2:27   <- NEVER drop -n auto; single-process is 20-38 min
+#   python suite (run_tests.sh)     1:39   <- needs COVERAGE_CORE=sysmon; ctrace core is ~6 min
+#   TOTAL                          ~6 min
+# Full mutation execution is nightly (mutation-gate.yml) and must not return here.
 . "$HOME/.elan/env" 2>/dev/null || true
 # Pull Mathlib's hosted prebuilt cache before compiling. Saves ~30 min
 # of cold Lean+Mathlib compile per CI run. `|| true` because the command
