@@ -467,3 +467,45 @@ def test_achievability_breaks_the_flat_window_short_circuit():
     ach = {("artifact3_slot", "trophy"): Fraction(1, 2)}
     pick = focus_aging_pick([far, near], {}, {}, _NO_SYNERGY, ach)
     assert pick.code == "life_ring", "flat-window fast path ignored achievability"
+
+
+def test_tie_break_flips_under_achievability_dhondt_vs_argmax():
+    """Task 4 review finding (Important 4): achievability escaping the
+    fast path swaps which TIE-BREAK RULE governs a genuine tie between two
+    same-code, same-gain candidates in different slots — exactly the live
+    DUPLICATE_SLOT_TYPE shape (e.g. `copper_ring` filling ring1_slot AND
+    ring2_slot).
+
+    `gear_target_pick`'s canonical order (`_gear_pref_key` = `(-gain,
+    -level, code, slot)`, via `min`) breaks a tie by ASCENDING slot: ring1
+    wins. `dhondt_step`'s `(quotient, weight, key)` via `max` breaks the
+    SAME tie by DESCENDING key: ring2 wins (both candidates are keyed by
+    `c.slot` in `_scaled_weights`, so `key` here IS the slot string).
+
+    Before this task, EVERY synergy-off caller — `decide_tree`'s own
+    default, unit tests, the offline `plan` path — always took the argmax
+    fast path, so this reversal could never surface (synergy already
+    bypassed the fast path in production, but only for `enable_synergy=
+    True` callers). A non-1 achievability value now bypasses the fast path
+    unconditionally (achievability has no opt-in flag), so a synergy-off
+    caller can hit this reversal too. Pinned here so it is documented
+    behaviour, not an incidental surprise: the two candidates carry the
+    SAME achievability (as same-code duplicates naturally would, sharing an
+    identical requirement multiset and therefore identical `_effort_for`),
+    so this isolates the tie-break RULE swap from any magnitude change."""
+    a = GearCandidate(slot="ring1_slot", code="copper_ring", gain=Fraction(100), level=1)
+    b = GearCandidate(slot="ring2_slot", code="copper_ring", gain=Fraction(100), level=1)
+    cands = [a, b]
+    # No achievability signal: fast path taken, ascending-slot tiebreak (ring1).
+    assert gear_target_pick(cands) is a
+    assert focus_aging_pick(cands, {}, {}) is a
+    # Achievability escapes the fast path. Both candidates carry the SAME
+    # non-1 value (a real duplicate-slot item's multiset is identical for
+    # both slots), so this is purely a tie-break-rule swap, not a magnitude
+    # change.
+    ach = {("ring1_slot", "copper_ring"): Fraction(3, 4),
+           ("ring2_slot", "copper_ring"): Fraction(3, 4)}
+    winner = focus_aging_pick(cands, {}, {}, _NO_SYNERGY, ach)
+    assert winner is b, (
+        "dhondt_step's tie-break favors the HIGHER slot key, reversing "
+        "gear_target_pick's LOWER-slot tiebreak")

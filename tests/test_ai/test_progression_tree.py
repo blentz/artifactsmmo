@@ -526,3 +526,26 @@ class TestFocusAging:
         focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT + 50}  # a real candidate
         d = decide_tree(state, gd, objective, band_adequate=False, focus=focus, seats={})
         assert d.aged_pick is True
+
+    def test_aged_pick_true_via_achievability_alone(self):
+        """Task 4 review finding (Important 3): `test_aged_pick_false_when_
+        all_candidates_unaged` only proves `aged_pick` False when BOTH the
+        `_two_gear_candidate_fixture` items are fully held (`_effort_for`
+        returns 0 for each -> achievability collapses to `Fraction(1)` for
+        both, same as if achievability didn't exist) -- it never exercises
+        `aged_pick` flipping True from achievability with focus and synergy
+        BOTH inert. No new scaffolding needed: the already-pinned `l1_fresh`
+        scenario (`test_l1_fresh_pins_weapon_gear_branch`) has 7 structural
+        candidates over materials the level-1 character does NOT yet hold
+        (copper_dagger etc. need gathered ore), so their `_effort_for` is
+        strictly positive and unequal to `small_health_potion`'s (a stocked
+        utility candidate, effort 0) -- verified directly:
+        `_achievability_map` on this scenario returns `Fraction(707, 1336)`
+        for every structural candidate and exactly `Fraction(1)` only for
+        the fully-stocked utility one, so `all(... == Fraction(1))` is FALSE
+        purely from achievability. `_decide` wires no focus/seats (both
+        default to the empty/inert case) and `decide_tree`'s own
+        `enable_synergy` defaults to False, so synergy is `_NO_SYNERGY`
+        (inert) too -- achievability is the ONLY non-inert factor in play."""
+        d, _ = _decide("l1_fresh")
+        assert d.aged_pick is True
