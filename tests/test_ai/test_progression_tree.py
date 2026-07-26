@@ -186,7 +186,15 @@ class TestPerScenarioPins:
         assert d.chosen_root == ObtainItem(code="iron_boots", quantity=1,
                                            slot="boots_slot")
         assert d.chosen_step == ObtainItem(code="feather", quantity=3)
-        assert len(d.ranking) == 8
+        # 7, not 8: satchel left the ranking (region soundness). Its recipe needs
+        # jasper_crystal, sold ONLY by tasks_trader, who stands on
+        # (5,11,overworld) — a tile gated `conditional` on the tasks_farmer
+        # achievement, which the bundle now pins as 0/100 and uncompleted. The
+        # scenario is NAMED "taskgated"; until the world model honoured access
+        # conditions, the gate was named but never actually shut.
+        assert len(d.ranking) == 7
+        assert not any("satchel" in r.root_repr for r in d.ranking), \
+            "satchel needs jasper_crystal from an unreachable trader"
 
 
 # --- band_adequate parameter (Phase-3 Task-1) -------------------------------

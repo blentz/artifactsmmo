@@ -38,8 +38,18 @@ def _gd() -> GameData:
 def test_classify_gap_real_bundle_new_classes_regression_pin() -> None:
     """Regression pin over the committed bundle. Two honest gap classes are
     stable (classify_gap is pure/deterministic):
-      - iron_axe at-skill: needs jasper_crystal, sold only by tasks_trader for
-        tasks_coin (task-earned) -> PURCHASE_RECURSION.
+      - iron_axe at-skill: needs jasper_crystal, whose ONLY seller is
+        tasks_trader -> MATERIAL_UNREACHABLE.
+
+        RE-DERIVED (region soundness): this pinned PURCHASE_RECURSION while the
+        world model let the planner walk anywhere on a layer. tasks_trader sits
+        on (5,11,overworld), a tile whose access is `conditional` on
+        `achievement_unlocked: tasks_farmer` — and the bundle now pins the
+        account's real achievement page: tasks_farmer is 0/100, completed_at
+        None. The trader cannot be reached at all, so the gap is not "buy it
+        with task coins" (which presumes standing in front of the trader); the
+        material is unreachable outright. PURCHASE_RECURSION was the old model
+        shopping through a gate the account has not earned.
       - cooked_chicken at char 12 / cooking 1: raw_chicken's only dropper is the
         grey L1 chicken and a near next-tier food exists -> GREY_FARM_SUPPRESSED.
     And the LevelSkill acceptance (epic P4): an under-skill grindable cell no
@@ -47,7 +57,13 @@ def test_classify_gap_real_bundle_new_classes_regression_pin() -> None:
     and `craft_cell_verdict` PASSes it (was SKILL_PREREQUISITE, now retired)."""
     gd = _gd()
     assert classify_gap("iron_axe", CraftCell(8, "weaponcrafting", 10),
-                        gd) is GapClass.PURCHASE_RECURSION
+                        gd) is GapClass.MATERIAL_UNREACHABLE
+    # Non-vacuity: the classification above must follow from the CLOSED gate,
+    # not from jasper_crystal being unknown. The seller exists in the catalog;
+    # it is only the route to it that is missing.
+    assert gd.npc_purchases("jasper_crystal") == [("tasks_trader", 8, "tasks_coin")]
+    assert gd.npc_location("tasks_trader") is None
+    assert not gd.achievement_completed("tasks_farmer")
     assert classify_gap("cooked_chicken", CraftCell(12, "cooking", 1),
                         gd) is GapClass.GREY_FARM_SUPPRESSED
     # iron_bar under-skill (mining 5 < craft 10): plans [LevelSkill(mining->10)]
