@@ -14,6 +14,7 @@ from types import MappingProxyType
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.tiers.progression_tree import _effort_for
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
+    _NO_ACHIEVABILITY,
     _NO_SYNERGY,
     FOCUS_FLAT,
     FOCUS_FLOOR,
@@ -434,3 +435,35 @@ def test_skill_deficit_uses_the_gates_own_level_not_the_candidates():
         "past mining's REAL gate (10) effort must not keep falling toward "
         "life_ring's own craft level (15) — that would be the candidate's "
         "own level misattributed onto mining's token")
+
+
+# --- Task 4 (achievability factor): wiring into the weight ---
+
+
+def test_achievability_scales_the_weight():
+    """A distant candidate with the bigger gain loses to a close smaller one."""
+    far = GearCandidate(slot="artifact3_slot", code="trophy", gain=Fraction(25050), level=20)
+    near = GearCandidate(slot="ring1_slot", code="life_ring", gain=Fraction(21020), level=15)
+    ach = {("artifact3_slot", "trophy"): Fraction(509, 1000),
+           ("ring1_slot", "life_ring"): Fraction(788, 1000)}
+    weights = dict(_scaled_weights([far, near], {}, _NO_SYNERGY, ach))
+    assert weights["ring1_slot"] > weights["artifact3_slot"]
+
+
+def test_empty_achievability_reproduces_the_old_weights():
+    """The inert default must be bit-identical to pre-achievability behaviour."""
+    c = GearCandidate(slot="ring1_slot", code="life_ring", gain=Fraction(21020), level=15)
+    assert (_scaled_weights([c], {}, _NO_SYNERGY, _NO_ACHIEVABILITY)
+            == _scaled_weights([c], {}, _NO_SYNERGY))
+
+
+def test_achievability_breaks_the_flat_window_short_circuit():
+    """THE TRAP: while every root is fresh, focus_aging_pick returns the plain
+    argmax. Without extending that condition, achievability is inert for the
+    first FOCUS_FLAT cycles — exactly the window a fresh gear decision lives in.
+    Same bug synergy's docstring records."""
+    far = GearCandidate(slot="artifact3_slot", code="trophy", gain=Fraction(25050), level=20)
+    near = GearCandidate(slot="ring1_slot", code="life_ring", gain=Fraction(21020), level=15)
+    ach = {("artifact3_slot", "trophy"): Fraction(1, 2)}
+    pick = focus_aging_pick([far, near], {}, {}, _NO_SYNERGY, ach)
+    assert pick.code == "life_ring", "flat-window fast path ignored achievability"

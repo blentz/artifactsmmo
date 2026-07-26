@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.requirement_graph_memo import CHAR_XP, SKILL_PREFIX
 from artifactsmmo_cli.ai.requirement_projections import requirement_closure
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import strategy
+from artifactsmmo_cli.ai.tiers.achievability_core import achievability_pure
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -335,6 +336,18 @@ def _synergy_map(candidates: list[GearCandidate],
     return out
 
 
+def _achievability_map(candidates: list[GearCandidate], state: WorldState,
+                       game_data: GameData) -> Mapping[tuple[str, str], Fraction]:
+    """Per-candidate effort multiplier, keyed `(slot, code)` like `focus` and
+    `synergy`. Scored RELATIVE to the cheapest candidate in this decision, so
+    the factor has no absolute effort scale."""
+    if not candidates:
+        return {}
+    efforts = {(c.slot, c.code): _effort_for(c.code, state, game_data) for c in candidates}
+    floor = min(efforts.values())
+    return {key: achievability_pure(effort, floor) for key, effort in efforts.items()}
+
+
 def decide_tree(state: WorldState, game_data: GameData,
                 objective: CharacterObjective,
                 band_adequate: bool = False,
@@ -394,8 +407,16 @@ def decide_tree(state: WorldState, game_data: GameData,
     synergy = (_synergy_map(candidates, committed_root_code, state, game_data)
                if enable_synergy else _NO_SYNERGY)
 
-    ordered = focus_aging_order(candidates, focus, seats, synergy)
-    pick = focus_aging_pick(candidates, focus, seats, synergy) if candidates else None
+    # Achievability weighting (effort-to-reach, the fourth selection factor):
+    # scored once here, relative to the cheapest candidate in THIS decision
+    # (see `_achievability_map`'s docstring). Unlike synergy there is no
+    # opt-in flag — the empty-candidates case already collapses to `{}`
+    # (inert), and a non-empty candidate list always has a well-defined
+    # cheapest member, so there is no unready-data case to gate on.
+    achievability = _achievability_map(candidates, state, game_data)
+
+    ordered = focus_aging_order(candidates, focus, seats, synergy, achievability)
+    pick = focus_aging_pick(candidates, focus, seats, synergy, achievability) if candidates else None
     if candidates:
         # Drift-risk hardening: the display order's element 0 must always
         # agree with the aging pick — focus_aging_order is built FROM
@@ -417,13 +438,19 @@ def decide_tree(state: WorldState, game_data: GameData,
     # craft, so no focus reset) can no longer make the player consume a seat on
     # a cycle that actually took the fast path. `all(...)` is over the non-empty
     # candidate list whenever the branch is GEAR (gear_target_exists holds).
-    # The synergy clause mirrors `focus_aging_pick`'s widened fast-path guard: a
-    # pick steered by synergy (weights differ with nothing stale) IS an aged
-    # decision, so the player bumps a seat for it — otherwise the interleave
-    # schedule and the seat ledger would disagree.
+    # The synergy AND achievability clauses both mirror `focus_aging_pick`'s
+    # widened fast-path guard: a pick steered by synergy OR achievability
+    # (weights differ with nothing stale) IS an aged decision, so the player
+    # bumps a seat for it — otherwise the interleave schedule and the seat
+    # ledger would disagree. Omitting the achievability clause here would be
+    # the identical trap `focus_aging_pick`'s own fix addresses: a pick
+    # steered purely by achievability, with focus and synergy both inert,
+    # would read as NOT aged and silently starve the seat ledger.
     aged_pick = branch is Branch.GEAR and not (
         all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)
         and all(synergy.get((c.slot, c.code), Fraction(1)) == Fraction(1)
+                for c in candidates)
+        and all(achievability.get((c.slot, c.code), Fraction(1)) == Fraction(1)
                 for c in candidates))
 
     fallback_roots: list[MetaGoal]
