@@ -951,50 +951,21 @@ class GameData:
         drop)."""
         return self.monsters.monsters_dropping(item)
 
-    def currency_accrues_passively(self, currency: str, _seen: frozenset[str] | None = None) -> bool:
-        """True if `currency` is earned as a byproduct of normal play, so it needs
-        no DEDICATED farm — the character buys the priced item once ordinary play
-        has paid for it, instead of a directed grind out-prioritising levelling.
-        Same reason gold is excluded from currency grinds (`_equippable_goal` /
-        `gathering` injection both note "gold is earned by normal play").
-
-        Two ways to qualify:
-
-        DIRECTLY — it drops from at least half of all monsters, in a catalog
-        large enough (>= `_MIN_MONSTERS_FOR_BREADTH`) to judge breadth at all.
-        event_ticket, dropping from 56/58 monsters, is the motivating case
-        (2026-07-23). The catalog floor keeps a tiny test/edge catalog — where a
-        single dropper is trivially a 'majority' — from misfiring.
-
-        TRANSITIVELY — it is sold by a permanent, reachable vendor for a currency
-        that itself accrues passively. Passivity is a property of the CHAIN, not
-        of the last link: buying with something you earn by playing is still
-        earning it by playing.
-
-        The transitive arm exists because checking only the direct link let a
-        deep chain slip the gate entirely (live 2026-07-26): lich_race_trophy
-        costs 10 lich_race_medal, and lich_race_medal costs 100 event_ticket
-        each. event_ticket is passive, but lich_race_medal has ZERO droppers, so
-        the one-level check saw "not passive" and armed a dedicated grind for an
-        item that really costs 1000 tickets of ordinary combat. Meanwhile
-        craft-from-gatherables gear (life_ring, adventurer_pants) waited behind
-        it. Recursing fixes the ordering without touching the value ranking.
-
-        Vendors are filtered exactly as `_permanent_vendor_purchases` does —
-        permanent (non-event) and located — because an unreachable vendor cannot
-        make anything accrue. `_seen` breaks currency cycles (A buys B buys A);
-        it is an implementation detail, not part of the contract."""
+    def currency_accrues_passively(self, currency: str) -> bool:
+        """True if `currency` is earned as a broad byproduct of normal combat — it
+        drops from at least half of all monsters, in a catalog large enough
+        (>= `_MIN_MONSTERS_FOR_BREADTH`) to judge breadth at all. Such a currency
+        accumulates while the character simply levels, so it needs no DEDICATED
+        farm: the same reason gold is excluded from currency grinds
+        (`_equippable_goal` / `gathering` injection both note "gold is earned by
+        normal play"). The character buys the priced item once ordinary play has
+        accrued enough, instead of a directed grind out-prioritising leveling.
+        event_ticket, which drops from 56/58 monsters, is the motivating case
+        (2026-07-23); the catalog floor keeps a tiny test/edge catalog — where a
+        single dropper is trivially a 'majority' — from misfiring."""
         total = len(self.monsters.levels)
-        if total >= _MIN_MONSTERS_FOR_BREADTH and len(self.monsters_dropping(currency)) * 2 >= total:
-            return True
-        seen = (_seen or frozenset()) | {currency}
-        return any(
-            priced_in not in seen
-            and not self.is_event_npc(npc)
-            and self.npc_location(npc) is not None
-            and self.currency_accrues_passively(priced_in, seen)
-            for npc, _price, priced_in in self.npc_purchases(currency)
-        )
+        return (total >= _MIN_MONSTERS_FOR_BREADTH
+                and len(self.monsters_dropping(currency)) * 2 >= total)
 
     def monster_min_gold(self, code: str) -> int:
         """OpenAPI conformance (Item 14): minimum gold reward per fight win.
