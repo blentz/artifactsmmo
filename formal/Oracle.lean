@@ -3018,11 +3018,55 @@ def runOne (item : Json) : Json :=
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 
-def main : IO Unit := do
-  let input ← (← IO.getStdin).readToEnd
-  match Json.parse input with
-  | .error e => IO.eprintln s!"parse error: {e}"; IO.Process.exit 1
+/-- Answer one framed request: `{"id": N, "reqs": [...]}` -> `{"id": N, "results": [...]}`.
+
+The `id` echo is a SAFETY mechanism, not bookkeeping. In `--serve` mode requests
+and responses are matched positionally over a pipe, so a single desynchronised
+line would leave every later differential test comparing Python against the
+answer to some OTHER question — and still passing. The client asserts the echoed
+id, turning any desync into a loud failure instead of a vacuously green gate. -/
+def runFramed (j : Json) : Json :=
+  let id := (j.getObjValAs? Nat "id").toOption.getD 0
+  let reqs := ((j.getObjVal? "reqs").toOption.bind (·.getArr?.toOption)).getD #[]
+  Json.mkObj [("id", Json.num id), ("results", Json.arr (reqs.map runOne))]
+
+/-- Request loop for `--serve`: one framed JSON object per input line, one
+response line each, flushed immediately. Spawning this binary costs ~107ms and
+is independent of batch size, so the differential suite — which calls the oracle
+once per Hypothesis example — paid that startup ~48,000 times. Serving keeps one
+process alive per pytest worker instead.
+
+A blank line or EOF ends the loop. A malformed line answers with an `error`
+object rather than dying, so the client gets a diagnosable failure instead of a
+hang on a closed pipe. -/
+partial def serve : IO Unit := do
+  let stdin ← IO.getStdin
+  let stdout ← IO.getStdout
+  let line ← stdin.getLine
+  -- `getLine` yields "" at EOF and "\n" for a blank line; both end the loop.
+  -- (`all` over the characters rather than `trim`, which is deprecated and now
+  -- returns a `String.Slice`.)
+  if line.all Char.isWhitespace then
+    return ()
+  match Json.parse line with
+  | .error e =>
+    stdout.putStrLn (Json.mkObj [("error", Json.str s!"parse error: {e}")]).compress
+    stdout.flush
   | .ok j =>
-    let arr := (j.getArr?).toOption.getD #[]
-    let results := arr.map runOne
-    IO.println (Json.arr results).compress
+    stdout.putStrLn (runFramed j).compress
+    stdout.flush
+  serve
+
+def main (args : List String) : IO Unit := do
+  if args.contains "--serve" then
+    serve
+  else
+    -- One-shot mode, unchanged: read a bare JSON array to EOF, answer once, exit.
+    -- Retained as the parity path the client falls back to (ARTIFACTSMMO_ORACLE_MODE=spawn).
+    let input ← (← IO.getStdin).readToEnd
+    match Json.parse input with
+    | .error e => IO.eprintln s!"parse error: {e}"; IO.Process.exit 1
+    | .ok j =>
+      let arr := (j.getArr?).toOption.getD #[]
+      let results := arr.map runOne
+      IO.println (Json.arr results).compress

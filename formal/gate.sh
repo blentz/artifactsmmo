@@ -5,7 +5,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; ROOT="$(cd "$HERE/.." && p
 # Measured integrated run 2026-07-25 (docs/superpowers/specs/2026-07-25-local-gate-runtime-design.md):
 #   kernel build + 8 Lean/audit cheap checks (cache/build/orphans/sorry/
 #     axioms/manifest/proof-concept index/extraction/audit-drift/anchors) ~29s
-#   differential (-n auto)                                               1:59   <- NEVER drop -n auto; single-process is 20-38 min
+#   differential (-n auto)                                               0:07   <- was 1:59 before the persistent oracle (see below);
+#                                                                               NEVER drop -n auto; single-process is 20-38 min
 #   python suite (run_tests.sh)                                          1:36   <- needs COVERAGE_CORE=sysmon; ctrace core is ~6 min
 #   PRIOR END-TO-END TOTAL (the three phases above, actually run together
 #     2026-07-25): 4:03.6
@@ -16,6 +17,12 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; ROOT="$(cd "$HERE/.." && p
 #   census --check x5 (inventory/recycle/craft/obtain-parity/req-parity) 2:39   <- 0:56 + 0:01 + 1:39 + 0:01 + 0:01 standalone
 #   PROJECTED NEW TOTAL: ~6:43 (4:03.6 prior + ~2:40 added) -- still ~8 min
 #   of headroom under the 15-minute ceiling.
+# The differential phase dropped 1:59 -> 0:07 when the Lean oracle gained a
+# `--serve` request loop (formal/diff/oracle_server.py): spawning that binary
+# costs ~107ms regardless of batch size, and the suite calls it once per
+# Hypothesis example, so it was paying startup ~48,000 times. One process per
+# xdist worker now. `ARTIFACTSMMO_ORACLE_MODE=spawn` restores the old
+# spawn-per-call transport as a parity oracle — both give 762 passed.
 # Full mutation execution is nightly (mutation-gate.yml) and must not return here.
 # SCOPE (accuracy matters here -- this claims to be "the whole local gate"):
 # this script now runs everything CI runs across formal-gate.yml, lint-gate.yml,
