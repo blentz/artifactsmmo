@@ -2892,13 +2892,30 @@ PASSIVE_CURRENCY_HELPER_MUTATIONS = [
     # Threshold drops the *2: only an ALL-monster drop counts as passive, so
     # event_ticket (56/58) would fail and get a dedicated grind again.
     ("currency passive: threshold needs every monster (drops the *2)",
-     "                and len(self.monsters_dropping(currency)) * 2 >= total)",
-     "                and len(self.monsters_dropping(currency)) >= total)"),
+     "and len(self.monsters_dropping(currency)) * 2 >= total:",
+     "and len(self.monsters_dropping(currency)) >= total:"),
     # Catalog floor removed: a tiny catalog where one dropper is a trivial
     # 'majority' would falsely read as passive (the sea_marauder-coin regression).
     ("currency passive: catalog-size floor removed",
-     "        return (total >= _MIN_MONSTERS_FOR_BREADTH",
-     "        return (total >= 0"),
+     "        if total >= _MIN_MONSTERS_FOR_BREADTH and",
+     "        if total >= 0 and"),
+    # TRANSITIVE arm removed: passivity stops looking past the direct price
+    # currency. This is the 2026-07-26 live defect exactly — lich_race_medal has
+    # zero droppers but is bought with event_ticket, so a one-level check armed a
+    # dedicated grind for something costing 1000 tickets of ordinary combat.
+    ("currency passive: transitive vendor arm removed",
+     "            and self.currency_accrues_passively(priced_in, seen)",
+     "            and False"),
+    # Cycle guard removed: `A buys B buys A` would recurse until the interpreter
+    # stack gives out, turning a catalog quirk into a crash mid-plan.
+    ("currency passive: currency-cycle guard removed",
+     "            priced_in not in seen",
+     "            priced_in is not None"),
+    # Vendor reachability dropped: an EVENT or unlocated vendor would confer
+    # passivity, so a currency behind a closed window would read as accruing.
+    ("currency passive: vendor reachability dropped",
+     "            and not self.is_event_npc(npc)\n            and self.npc_location(npc) is not None",
+     "            and True"),
 ]
 
 # _equippable_goal passive-currency gate (strategy_driver.py). Unit-killed by
