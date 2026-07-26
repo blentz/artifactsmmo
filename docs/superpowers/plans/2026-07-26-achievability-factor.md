@@ -256,12 +256,24 @@ def achievability_pure(effort: int, min_effort: int) -> Fraction:
     every other candidate to the floor: with raw ratios, min_effort = 0 sends
     every other ratio to 0 regardless of whether they need 2 units or 2000.
 
-    `effort < min_effort` cannot happen by construction (min_effort is the
-    minimum over a set containing effort); the core ASSERTS rather than clamps,
-    so an assembly-layer bug fails loudly instead of being silently corrected."""
+    `effort <= 0` means nothing is left to do, which is maximally achievable —
+    returns 1 rather than asserting, mirroring `synergy_pure`'s `total <= 0`
+    guard. Above that boundary, `effort < min_effort` cannot happen by
+    construction (min_effort is the minimum over a set containing effort), so
+    the core ASSERTS rather than clamps and an assembly-layer bug fails loudly
+    instead of being silently corrected."""
+    if effort <= 0:
+        return Fraction(1)
     assert effort >= min_effort >= 0, f"effort {effort} below min {min_effort}"
     return A_MIN + (Fraction(1) - A_MIN) * Fraction(min_effort + 1, effort + 1)
 ```
+
+CORRECTION (2026-07-26, found in review): an earlier draft of this step omitted
+the `effort <= 0` guard, which made the code above unable to pass the tests in
+Step 1 — `test_never_above_one` calls `achievability_pure(effort=0,
+min_effort=99)` and `test_antitone_in_effort`'s range starts at 0, both of which
+violate the bare `assert effort >= min_effort`. `synergy_core.py` carries the
+identical guard for `total <= 0`; this file mirrors it.
 
 - [ ] **Step 4: Run to verify it passes**
 
