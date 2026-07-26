@@ -206,6 +206,30 @@ def _run(name: str) -> PlanReport:
     return player.plan_from_state()
 
 
+def _bundle_with_tasks_farmer_completed() -> GameData:
+    """The committed bundle with ONE bit flipped: the tasks_farmer achievement
+    completed. Everything else is byte-identical, so any behaviour difference is
+    attributable to that achievement and nothing else.
+
+    tasks_trader stands on a tile conditional on it, and is the sole seller of
+    jasper_crystal, so this is the difference between the satchel chain being
+    shut and open."""
+    raw = json.loads(BUNDLE.read_text())
+    for ach in raw["achievements"]:
+        if ach["code"] == "tasks_farmer":
+            ach["completed_at"] = "2026-01-01T00:00:00+00:00"
+            for objective in ach["objectives"]:
+                objective["progress"] = objective["total"]
+    return GameData.from_cache_bundle(raw)
+
+
+def _run_with(name: str, gd: GameData) -> PlanReport:
+    """`_run`, against a caller-supplied catalog."""
+    player = GamePlayer(character=name, history=None)
+    player.seed_offline(_state(name, gd), gd)
+    return player.plan_from_state()
+
+
 @pytest.mark.parametrize("name", NEW_SCENARIOS)
 def test_slot_scenario_registered(name: str) -> None:
     """Registry-first (TDD): the slot-coverage scenarios must exist under
@@ -225,10 +249,26 @@ def test_slot_scenario_full_stack_liveness(name: str) -> None:
         [g.get("goal") for g in report.goals_tried])
 
 
+#: Scenarios that PROVABLY have nothing to try, so the bound is asserted with the
+#: guard FLIPPED (goals_tried must be EMPTY) rather than vacuously satisfied.
+#:
+#: l35_boots_drop_farm (region soundness, 2026-07-26): its only two work sources
+#: are both legitimately closed. Its near_term_gear target is wooden_club, which
+#: the winnability guard correctly suppresses — at L35 fully geared its marginal
+#: winnability is 0, so farming it is a combat no-op (see
+#: test_l35_boots_drop_farm_fights_grey_dropper, which documents ReachCharLevel as
+#: the right arbiter outcome). The AcceptTask work it used to try existed only to
+#: fund jasper_crystal for satchel, and that chain is shut behind tasks_farmer
+#: (0/100). Verified by flipping ONLY that achievement on the same bundle:
+#: goals_tried goes [] -> ['AcceptTask', 'worth_gate_bypassed'].
+_NO_WORK_SCENARIOS = {"l35_boots_drop_farm"}
+
+
 @pytest.mark.parametrize("name", NEW_SCENARIOS)
 def test_slot_scenario_search_is_bounded(name: str) -> None:
     """Every tried goal bounded — the shared band-liveness bound."""
-    assert_search_bounded(_run(name), name)
+    assert_search_bounded(_run(name), name,
+                          expect_no_work=name in _NO_WORK_SCENARIOS)
 
 
 # --- Deliverable 1: event-gear pursuit across the L48 wall -----------------
@@ -378,11 +418,38 @@ def test_bag_slot_banked_stock_credited() -> None:
     assert (state.bank_items or {}).get("feather", 0) >= 2  # fully banked
     assert is_attainable_now("cowhide", state, gd)  # GAP-1 fix, directly
     assert is_attainable_now("feather", state, gd)  # GAP-1 fix, directly
-    assert is_attainable_now("satchel", state, gd)  # propagates upward
+    # satchel does NOT propagate upward — and the docstring's parenthetical above
+    # is why: it assumed jasper_crystal was "independently task-earnable, the C4
+    # funding loop always available". It is bought with tasks_coin from
+    # tasks_trader, who stands on a tile conditional on the tasks_farmer
+    # achievement (0/100 on the real account, now pinned in the bundle). The
+    # trader is unroutable, so the third material is unobtainable.
+    #
+    # The two asserts below are what keep this a GAP-1 test rather than a
+    # jasper_crystal test: the banked-stock credit still answers YES for both
+    # materials it is about, and the ONLY thing missing upward is the third.
+    assert not is_attainable_now("satchel", state, gd)
+    assert not is_attainable_now("jasper_crystal", state, gd)
+    assert gd.npc_location("tasks_trader") is None
 
 
-def test_l10_bag_pursuit_satchel_live_but_vest_outranks() -> None:
-    """Re-derived (2026-07-07 hp-derivation fix wave): the original pin
+def test_l10_bag_pursuit_satchel_gated_but_vest_still_wins() -> None:
+    """RE-DERIVED AGAIN (region soundness, 2026-07-26) — renamed, because the old
+    name asserted "satchel_live", which is now false.
+
+    satchel needs jasper_crystal, bought with tasks_coin from tasks_trader, who
+    stands on a tile conditional on the tasks_farmer achievement — 0/100 on the
+    real account, now pinned in the bundle. The trader is unroutable, so the
+    satchel chain is SHUT and bag_slot is no longer a near_term_gear candidate at
+    all, not even a fallback root.
+
+    What this test still covers is unchanged and is the part that matters: at
+    this loadout adventurer_vest wins body_armor_slot and the cowhide is spent on
+    it. That was the outcome before, when satchel merely lost the ranking; it is
+    the outcome now, when satchel is not in the ranking. The vest assertions
+    below are therefore untouched — only the satchel expectations are inverted.
+
+    Prior derivation (2026-07-07 hp-derivation fix wave): the original pin
     ('satchel invisible at L10') was CONTAMINATED — it relied on the
     harness's hand-declared max_hp (240) undershooting the server's real
     115 + 5*level + gear formula (375 at this loadout), which made cow read
@@ -403,22 +470,25 @@ def test_l10_bag_pursuit_satchel_live_but_vest_outranks() -> None:
     objective = CharacterObjective.from_game_data(gd)
     assert (state.bank_items or {}).get("cowhide", 0) >= 5  # mats really banked
     assert is_winnable(state, gd, "cow")
-    assert is_attainable_now("satchel", state, gd)
+    # The satchel chain is shut at its THIRD material, not at cow/cowhide: the
+    # monster-drop leaf this scenario is built on is still winnable above.
+    assert not is_attainable_now("satchel", state, gd)
+    assert gd.npc_location("tasks_trader") is None
     assert objective.near_term_gear(state) == {
-        "body_armor_slot": "adventurer_vest", "bag_slot": "satchel"}
+        "body_armor_slot": "adventurer_vest"}
 
     report = _run("l10_bag_pursuit")
     assert report.decision.chosen_root == ObtainItem(
         code="adventurer_vest", quantity=1, slot="body_armor_slot")
-    assert ObtainItem(code="satchel", quantity=1, slot="bag_slot") \
-        in report.decision.fallback_roots
+    assert not any(r.code == "satchel" for r in report.decision.fallback_roots
+                   if isinstance(r, ObtainItem)), report.decision.fallback_roots
     assert repr(report.selected_goal).startswith("GatherMaterials(cowhide"), (
         repr(report.selected_goal))
     assert report.plan and repr(report.plan[0]).startswith("Fight(cow"), report.plan
 
 
-def test_l12_bag_pursuit_satchel_chain_live() -> None:
-    """The isolation witness that the satchel chain itself works: +2 levels
+def test_l12_bag_pursuit_satchel_chain_gated() -> None:
+    """RE-DERIVED (region soundness): the isolation witness that the satchel chain itself works: +2 levels
     flips cow winnable (matching the original minimal-delta framing), and
     every OTHER slot is pushed to its own near_term_gear fixed point (vest,
     helmet, ring1 — re-derived 2026-07-07 hp-derivation fix wave, see
@@ -432,10 +502,34 @@ def test_l12_bag_pursuit_satchel_chain_live() -> None:
     gd = _bundle()
     state = _state("l12_bag_pursuit", gd)
     objective = CharacterObjective.from_game_data(gd)
+    # Gate SHUT on the real account: the isolation leaves nothing behind, because
+    # the sole candidate this scenario isolates is itself unreachable.
+    assert objective.near_term_gear(state) == {}
+    assert not is_attainable_now("satchel", state, gd)
+    assert gd.npc_location("tasks_trader") is None
+
+
+def test_l12_bag_pursuit_satchel_chain_opens_when_the_achievement_lands() -> None:
+    """The other half, and the one that keeps the C4 funding chain covered.
+
+    Same bundle, ONE bit flipped — tasks_farmer completed — and every assertion
+    the shut-gate twin above used to make comes back verbatim: bag_slot ->
+    satchel as the sole candidate, jasper_crystal as the step, and the full
+    ReachCurrency(tasks_coin) -> AcceptTask funding route.
+
+    This is what makes the suppression a GATE and not a regression. Without it,
+    "satchel is unreachable" would be indistinguishable from the planner having
+    lost the ability to pursue a bag at all, and the C4 pipeline would sit
+    uncovered until someone completed 100 tasks."""
+    gd = _bundle_with_tasks_farmer_completed()
+    state = _state("l12_bag_pursuit", gd)
+    objective = CharacterObjective.from_game_data(gd)
+    assert gd.achievement_completed("tasks_farmer")
+    assert gd.npc_location("tasks_trader") == (5, 11)
     assert objective.near_term_gear(state) == {"bag_slot": "satchel"}
     assert is_attainable_now("satchel", state, gd)
 
-    report = _run("l12_bag_pursuit")
+    report = _run_with("l12_bag_pursuit", gd)
     assert report.decision.chosen_root == ObtainItem(
         code="satchel", quantity=1, slot="bag_slot")
     assert report.decision.chosen_step == ObtainItem(

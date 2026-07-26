@@ -2096,6 +2096,64 @@ def test_raid_tiles_are_indexed_even_when_restricted():
     assert (-4, 10, "overworld") not in gd.world.walkable_tiles
 
 
+def test_active_raid_codes_round_trips_through_the_catalog():
+    """The per-cycle overlay is readable, not just writable — `Player` sets it
+    each cycle and the location accessors read it back."""
+    gd = GameData()
+    assert gd.active_raid_codes == set()
+    gd.active_raid_codes = {"enchanted_fairy"}
+    assert gd.active_raid_codes == {"enchanted_fairy"}
+    assert gd.world.active_raid_codes == {"enchanted_fairy"}
+
+
+def test_reachable_regions_delegates_to_the_catalog():
+    """A single-component world is one region: the spawn component."""
+    from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
+    from artifactsmmo_api_client.models.map_content_type import MapContentType
+    gd = GameData()
+    gd._build_maps([
+        _map_tile(1, 0, 0, "overworld",
+                  content=MapContentSchema(type_=MapContentType.MONSTER, code="chicken")),
+        _map_tile(2, 0, 1, "overworld"),
+    ])
+    assert gd.reachable_regions() == frozenset({"overworld"})
+
+
+def test_fetch_achievements_pages_until_a_short_or_empty_page():
+    """Both loop exits: a FULL page continues, a SHORT page stops, and an
+    absent/error page stops. Without the full-page case the pager would look
+    correct while never advancing past page 1."""
+    from unittest.mock import patch
+
+    from artifactsmmo_api_client.models.account_achievement_schema import (
+        AccountAchievementSchema,
+    )
+
+    def _ach(code):
+        return AccountAchievementSchema.from_dict(
+            {"name": code, "code": code, "description": "", "points": 1,
+             "objectives": [], "rewards": {"gold": 0, "items": []},
+             "completed_at": None})
+
+    details = MagicMock()
+    details.data.username = "acct"
+    full = MagicMock(data=[_ach(f"a{i}") for i in range(100)])   # full -> continue
+    short = MagicMock(data=[_ach("tail")])                       # short -> stop
+    with (
+        patch("artifactsmmo_cli.ai.game_data.get_account_details", return_value=details),
+        patch("artifactsmmo_cli.ai.game_data.get_account_achievements",
+              side_effect=[full, short]),
+    ):
+        assert len(GameData()._fetch_achievements(MagicMock())) == 101
+
+    empty = MagicMock(data=[])                                   # absent -> stop
+    with (
+        patch("artifactsmmo_cli.ai.game_data.get_account_details", return_value=details),
+        patch("artifactsmmo_cli.ai.game_data.get_account_achievements", return_value=empty),
+    ):
+        assert GameData()._fetch_achievements(MagicMock()) == []
+
+
 def test_restricted_area_content_surfaces_only_while_a_raid_is_open():
     """The raid area's ORDINARY content (dryad, enchanted_mushroom) is recorded
     but withheld until a raid opens the area, mirroring how event content is

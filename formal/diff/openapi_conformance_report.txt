@@ -18,7 +18,8 @@ Tracked schemas: 4
 
 ## 14b — GameData.load schema imports
 
-Schemas imported by game_data.py: 14
+Schemas imported by game_data.py: 15
+  - AccountAchievementSchema
   - BankSchema
   - CraftSkill
   - EffectSchema
