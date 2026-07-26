@@ -541,6 +541,22 @@ lives in, and the same bug synergy's docstring records."
 
 - [ ] **Step 1: Write the Lean module**
 
+**NO MATHLIB.** `Formal/Achievability.lean` lives outside `Formal/Liveness/`, and
+`formal/gate/check_axioms.sh` fails any such module that imports Mathlib
+(`GATE FAIL: safety modules import Mathlib`). `Synergy.lean` — the template —
+imports nothing and proves its bounds with only `unfold`, `simp`,
+`exact_mod_cast`, `decide`, `grind`, `calc`, and the `Rat.*` lemmas from core
+(`Rat.mul_nonneg`, `Rat.mul_le_mul_of_nonneg_left`, `Rat.mul_one`,
+`Rat.le_refl`, `Rat.div_def`, `Rat.mul_inv_cancel`), plus its own local helpers
+`ratDivMono` / `ratDivNonneg`. Read `formal/Formal/Synergy.lean` in full and
+follow its proof idioms.
+
+The skeleton below uses Mathlib tactics (`positivity`, `linarith`, `nlinarith`,
+`div_le_one`, `div_le_div_of_nonneg_left`) and **will not compile here**. Treat
+it as a statement of the OBLIGATIONS, not as usable proof text — port each proof
+to Synergy.lean's idioms. The theorem STATEMENTS and names are what matter and
+should be kept.
+
 Mirror `Formal/Synergy.lean` exactly — same structure, same theorem set:
 
 ```lean
