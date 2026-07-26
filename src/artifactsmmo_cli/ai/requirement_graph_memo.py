@@ -93,6 +93,21 @@ class RequirementGraphMemo:
             self._demand_cache[code] = demand_set(self.graph(), [code]).quantities
         return self._demand_cache[code]
 
+    def _currency_cost(self, item: str, qty: int,
+                       seen: frozenset[str] = frozenset()) -> tuple[str, int] | None:
+        """(currency, units) for a buy-only item, following the chain to the
+        currency you actually EARN. lich_race_trophy costs 10 lich_race_medal,
+        each 100 event_ticket, so the real cost is 1000 tickets — stopping at
+        the medal hides three orders of magnitude of work. `seen` breaks
+        currency cycles; the depth is bounded by the chain, which is finite
+        because each hop must name a different currency."""
+        purchases = self._game_data.npc_purchases(item)
+        if not purchases or item in seen:
+            return None
+        _npc, price, currency = min(purchases, key=lambda p: p[1])
+        deeper = self._currency_cost(currency, price * qty, seen | {item})
+        return deeper if deeper is not None else (currency, price * qty)
+
     def requirement_multiset_for(self, code: str) -> Mapping[str, int]:
         """The ENRICHED requirement multiset for synergy overlap (spec §3.10,
         closure-count weighting): item quantities (as `demand_for`) PLUS synthetic
@@ -109,12 +124,15 @@ class RequirementGraphMemo:
 
         * a CURRENCY item — for a buy-only closure item (e.g. an artifact bought
           from an NPC), the price in its currency, weighted by how many are
-          demanded. Without this the real cost of a buy-only root is INVISIBLE to
-          synergy: its recipe closure is just itself (`prerequisites` leafs it), so
-          an expensive currency grind (e.g. 100 event_ticket per lich_race_medal)
-          would score as a one-token root and never be recognised as work that
-          serves nothing else. The currency is a real item code, so it overlaps
-          other roots' demand naturally.
+          demanded, expanded TRANSITIVELY via `_currency_cost` until it reaches
+          the currency you actually earn. Without this the real cost of a
+          buy-only root is INVISIBLE to synergy: its recipe closure is just
+          itself (`prerequisites` leafs it), and stopping at the first currency
+          hop is just as blind — `lich_race_trophy` costs 10 `lich_race_medal`,
+          which reads as 11 tokens unless the medal's own 100-`event_ticket`
+          price is folded in too, for the real cost of 1000 tickets. The
+          currency is a real item code, so it overlaps other roots' demand
+          naturally.
 
         Synthetic tokens are namespaced (``skill:`` / ``char_xp``) so they never
         collide with item codes. Memoized with the graph."""
@@ -132,12 +150,10 @@ class RequirementGraphMemo:
                     key = SKILL_PREFIX + gather[0]
                     out[key] = out.get(key, 0) + 1
                 if SourceKind.BUY in graph.leaves.get(item, frozenset()):
-                    purchases = self._game_data.npc_purchases(item)
-                    if purchases:
-                        # cheapest buy route's currency cost (price * quantity
-                        # demanded) — the real work behind a buy-only item.
-                        _npc, price, currency = min(purchases, key=lambda p: p[1])
-                        out[currency] = out.get(currency, 0) + price * out.get(item, 1)
+                    priced = self._currency_cost(item, out.get(item, 1))
+                    if priced is not None:
+                        currency, units = priced
+                        out[currency] = out.get(currency, 0) + units
             drop_leaves = sum(1 for item in closure
                               if SourceKind.DROP in graph.leaves.get(item, frozenset()))
             if drop_leaves:
