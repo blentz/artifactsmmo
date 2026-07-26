@@ -15,6 +15,7 @@ echo "== (b) axiom lint =="; bash "$HERE/gate/check_axioms.sh"
 echo "== (b') role manifest =="; ( cd "$HERE" && lake env lean Formal/Manifest.lean >/dev/null && echo "manifest OK" )
 echo "== (b'') proof-concept index =="; bash "$HERE/gate/check_proof_concept_index.sh"
 echo "== (b''') extraction drift =="; bash "$HERE/gate/check_extraction.sh"
+echo "== (b'''a) audit list derived from manifest =="; bash "$HERE/gate/check_audit_generated.sh"
 # Anchor resolution runs here, before the two slow phases, because it is the
 # cheapest possible failure: seconds against ~580 anchors, no tests executed. A
 # stale or ambiguous anchor used to surface only at the END of the hour-long
@@ -27,4 +28,9 @@ echo "== (d) differential =="; ( cd "$HERE" && lake build oracle ); ( cd "$ROOT"
 # worth paying per-commit — it is seconds, runs no tests, and catches the stale
 # or ambiguous anchor on the commit that caused it rather than 14h later.
 # To run the sweep by hand: `uv run python formal/diff/mutate.py`.
+# The Python suite runs LAST: it is the second-slowest phase, and every check
+# above fails in seconds. run_tests.sh owns its own two-lane split and the 100%
+# coverage gate; it is invoked rather than inlined so local and CI run the same
+# script (.github/workflows/pytest.yml calls exactly this).
+echo "== (e) python suite =="; ( cd "$ROOT" && bash scripts/run_tests.sh )
 echo "ALL GATE PARTS PASSED"
