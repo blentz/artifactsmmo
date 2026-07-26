@@ -44,6 +44,16 @@ def _gd_with_cycle() -> GameData:
     return gd
 
 
+def _gd_with_self_price() -> GameData:
+    """x is sold by a vendor priced in ITSELF — a degenerate listing with no
+    external currency at all (the 1-hop degenerate case of a cycle)."""
+    gd = GameData()
+    gd.world.npc_stock["vendor_x"] = {"x": 5}
+    gd.world.npc_buy_currency["vendor_x"] = {"x": "x"}
+    gd.world.npc_tiles["vendor_x"] = (0, 0)
+    return gd
+
+
 def test_buy_only_currency_expands_transitively():
     """lich_race_trophy costs 10 lich_race_medal; each medal costs 100
     event_ticket. The multiset must show the 1000 tickets, not stop at 10
@@ -54,7 +64,25 @@ def test_buy_only_currency_expands_transitively():
     assert "medal" not in ms, "the intermediate currency must be expanded, not listed"
 
 
-def test_currency_cycle_terminates():
-    """A priced in B priced in A must not recurse forever."""
+def test_currency_cycle_terminates_at_the_last_resolvable_hop():
+    """A priced in B priced in A must not recurse forever, AND must not
+    attribute A's cost to A ITSELF (the item the deepest frame re-encounters
+    when the loop closes). The last RESOLVABLE hop is "a costs 1 b" — the
+    walk must stop there, not drill into b's own (cyclic) currency and
+    report 'a' as its own price. Asserting full CONTENT here, not merely
+    `is not None`, is the point: a version that self-inflated `a` (reporting
+    `{"a": 2, ...}` instead of `{"a": 1, "b": 1}`) would still be non-None
+    and would have passed a weaker check."""
     gd = _gd_with_cycle()          # a <- 1 b, b <- 1 a
-    assert gd.requirement_graph.requirement_multiset_for("a") is not None
+    ms = gd.requirement_graph.requirement_multiset_for("a")
+    assert ms == {"a": 1, "b": 1}
+
+
+def test_self_priced_item_does_not_self_inflate():
+    """An item priced in itself has no external currency to expand into.
+    `_currency_cost` must refuse that hop (return None) rather than
+    reporting the item's own code as its currency — which would silently
+    double its own multiset entry via `out[currency] += units`."""
+    gd = _gd_with_self_price()     # x <- 1 x (degenerate: no real currency)
+    ms = gd.requirement_graph.requirement_multiset_for("x")
+    assert ms == {"x": 1}

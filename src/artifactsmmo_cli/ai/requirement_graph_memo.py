@@ -98,13 +98,26 @@ class RequirementGraphMemo:
         """(currency, units) for a buy-only item, following the chain to the
         currency you actually EARN. lich_race_trophy costs 10 lich_race_medal,
         each 100 event_ticket, so the real cost is 1000 tickets — stopping at
-        the medal hides three orders of magnitude of work. `seen` breaks
-        currency cycles; the depth is bounded by the chain, which is finite
-        because each hop must name a different currency."""
+        the medal hides three orders of magnitude of work.
+
+        `seen` is every item already priced on this path. Before recursing,
+        a next-hop currency that IS the item just priced (a self-priced
+        vendor listing) or IS already in `seen` (a genuine cycle: A priced in
+        B priced in A) is refused — that currency is not one you can actually
+        earn, only a re-visit. Refusing it BEFORE recursing, rather than
+        discovering the revisit one level deeper, matters: the deeper call
+        would otherwise return ITS OWN currency as a fallback, and that
+        fallback is exactly the re-encountered item — bubbling up unchanged
+        and inflating that item's own multiset entry with a "cost" that is
+        really just itself. Refusing here means the CALLER (one frame up)
+        reports the last RESOLVABLE hop instead: for a<-1b<-1a this resolves
+        to "a costs 1 b", not "a costs 1 a"."""
         purchases = self._game_data.npc_purchases(item)
-        if not purchases or item in seen:
+        if not purchases:
             return None
         _npc, price, currency = min(purchases, key=lambda p: p[1])
+        if currency == item or currency in seen:
+            return None
         deeper = self._currency_cost(currency, price * qty, seen | {item})
         return deeper if deeper is not None else (currency, price * qty)
 

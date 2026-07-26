@@ -187,11 +187,36 @@ def test_enriched_multiset_fires_on_real_graph(bundle_game_data: GameData):
     assert saw_char, "no closure in the bundle routes through a drop — char_xp inert"
 
 
+def _expected_currency_cost(gd: GameData, item: str, qty: int,
+                            seen: frozenset[str] = frozenset()) -> tuple[str, int] | None:
+    """Independent recompute of `RequirementGraphMemo._currency_cost`'s
+    CONTRACT (walk the NPC-purchase currency chain to the currency actually
+    earned, refusing a hop that re-prices the item in itself or closes a
+    cycle) — written as its OWN recursion here, not a call into the memo's
+    private method, so a regression in that method's recursion would make
+    this recompute DISAGREE with it rather than silently agreeing with
+    whatever the code under test happens to do. Task 1 achievability-factor
+    fix round 1 (review finding 2): the previous version of this recompute
+    inlined the OLD one-hop pricing, so it only ever matched production
+    because the committed bundle happens to contain no chained currency —
+    never because it validated the recursion."""
+    purchases = gd.npc_purchases(item)
+    if not purchases:
+        return None
+    _npc, price, currency = min(purchases, key=lambda p: p[1])
+    if currency == item or currency in seen:
+        return None
+    deeper = _expected_currency_cost(gd, currency, price * qty, seen | {item})
+    return deeper if deeper is not None else (currency, price * qty)
+
+
 def test_requirement_multiset_matches_independent_recompute(bundle_game_data: GameData):
     """Differential pin: the enriched multiset equals `demand_for` PLUS a
-    from-scratch recompute of the closure-count skill tokens and the DROP-leaf
-    char_xp token. Any drift in the enrichment arithmetic (a skill source
-    skipped, a weight not incremented, the char count zeroed) fails here."""
+    from-scratch recompute of the closure-count skill tokens, the DROP-leaf
+    char_xp token, and the TRANSITIVELY-expanded buy-currency cost (Task 1,
+    achievability-factor). Any drift in the enrichment arithmetic (a skill
+    source skipped, a weight not incremented, the char count zeroed, or the
+    currency chain stopping one hop short) fails here."""
     memo = bundle_game_data.requirement_graph
     graph = memo.graph()
     target = next((code for code in graph.edges
@@ -210,10 +235,10 @@ def test_requirement_multiset_matches_independent_recompute(bundle_game_data: Ga
         if gather is not None:
             expected[SKILL_PREFIX + gather[0]] = expected.get(SKILL_PREFIX + gather[0], 0) + 1
         if SourceKind.BUY in graph.leaves.get(item, frozenset()):
-            purchases = bundle_game_data.npc_purchases(item)
-            if purchases:
-                _npc, price, currency = min(purchases, key=lambda p: p[1])
-                expected[currency] = expected.get(currency, 0) + price * expected.get(item, 1)
+            priced = _expected_currency_cost(bundle_game_data, item, expected.get(item, 1))
+            if priced is not None:
+                currency, units = priced
+                expected[currency] = expected.get(currency, 0) + units
     drop_leaves = sum(1 for item in closure
                       if SourceKind.DROP in graph.leaves.get(item, frozenset()))
     if drop_leaves:
@@ -223,10 +248,12 @@ def test_requirement_multiset_matches_independent_recompute(bundle_game_data: Ga
 
 
 def test_buy_only_item_carries_its_currency_cost(bundle_game_data: GameData):
-    """The blindness fix: a buy-only item's real work is its currency PRICE, not
-    its (empty) recipe closure. `requirement_multiset_for` must expose that
-    currency so synergy can weigh it — otherwise an expensive currency grind
-    (e.g. lich_race_medal → 100 event_ticket) is invisible and scores as a
+    """The blindness fix: a buy-only item's real work is its currency PRICE,
+    expanded TRANSITIVELY to the currency actually earned (Task 1,
+    achievability-factor) — not its (empty) recipe closure, and not just the
+    FIRST currency hop. `requirement_multiset_for` must expose that currency
+    so synergy can weigh it — otherwise an expensive currency grind (e.g.
+    lich_race_medal → 100 event_ticket) is invisible and scores as a
     one-token root that serves nothing else can be recognised against."""
     memo = bundle_game_data.requirement_graph
     graph = memo.graph()
@@ -235,9 +262,12 @@ def test_buy_only_item_carries_its_currency_cost(bundle_game_data: GameData):
                    and bundle_game_data.npc_purchases(code)), None)
     assert target is not None, "no buy-only currency item in the bundle to check"
     ms = memo.requirement_multiset_for(target)
-    _npc, price, currency = min(bundle_game_data.npc_purchases(target), key=lambda p: p[1])
-    assert ms.get(currency, 0) >= price, (
-        f"{target} multiset {dict(ms)} is missing its {currency} cost (>= {price})")
+    demanded = memo.demand_for(target).get(target, 1)
+    priced = _expected_currency_cost(bundle_game_data, target, demanded)
+    assert priced is not None, f"{target} has NPC purchases but resolved to no currency"
+    currency, units = priced
+    assert ms.get(currency, 0) >= units, (
+        f"{target} multiset {dict(ms)} is missing its {currency} cost (>= {units})")
 
 
 def test_synergy_fires_on_real_graph(bundle_game_data: GameData):
