@@ -71,6 +71,16 @@ echo "== (c''') census (--check x5) =="
   && uv run python scripts/gen_craft_completeness.py --check \
   && uv run python scripts/gen_obtain_parity.py --check \
   && uv run python scripts/gen_requirement_parity.py --check )
+# The craft census's `--check` deliberately rewrites MATRIX/BACKLOG (see
+# gen_craft_completeness.py:17-19) and its cell verdicts are wall-clock
+# nondeterministic (~16% of cells hit the 10s budget), so a passing local run
+# would otherwise leave the tree dirty with churn — one `git commit -a` away
+# from being committed. Restore them, so the local gate VERIFIES without
+# mutating; census-gate.yml remains the authoritative regeneration.
+# This line is deliberately AFTER the &&-chain: under `set -euo pipefail` a real
+# PLANNER_BUG failure aborts before it, leaving the regenerated docs on disk for
+# diagnosis exactly as that script's docstring intends.
+( cd "$ROOT" && git checkout -- docs/craft_completeness/MATRIX.md docs/craft_completeness/BACKLOG.md )
 echo "== (d) differential =="; ( cd "$HERE" && lake build oracle ); ( cd "$ROOT" && uv run pytest formal/diff/ -q --no-cov -n auto --ignore=formal/diff/test_game_data_fixture_diff.py )
 # Full mutation EXECUTION is deliberately not here. It runs nightly in
 # mutation-gate.yml, where CI moved it: ~36 min, peaks ~22GB, and it was the
