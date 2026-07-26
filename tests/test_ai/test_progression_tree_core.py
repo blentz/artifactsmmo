@@ -410,3 +410,27 @@ def test_effort_credits_bank_items_against_demand():
     without_bank = _effort_for("life_ring", state, gd)
     banked = replace(state, bank_items={"iron_bar": 8})
     assert _effort_for("life_ring", banked, gd) < without_bank
+
+
+def test_skill_deficit_uses_the_gates_own_level_not_the_candidates():
+    """Fix round 1 (critical review finding): life_ring's closure spans TWO
+    skills at DIFFERENT gates — jewelrycrafting 15 (life_ring's own recipe)
+    and mining 10 (from iron_ore/iron_bar in its closure). The original
+    implementation reused life_ring's OWN craft level (15) as `need` for
+    EVERY `skill:<name>` token, so a character already AT the real mining
+    gate (10) was still charged a phantom 5-level deficit, and effort kept
+    falling all the way out to mining 15 — the candidate's own level, wrongly
+    misattributed onto mining's token. The fix must plateau exactly at
+    mining's REAL gate (10): raising mining below it still costs, raising it
+    past it must not lower effort any further."""
+    gd, below = _bundle_and_state(skills={"mining": 9, "jewelrycrafting": 15})
+    gd2, at_gate = _bundle_and_state(skills={"mining": 10, "jewelrycrafting": 15})
+    gd3, past_gate = _bundle_and_state(skills={"mining": 20, "jewelrycrafting": 15})
+    effort_below = _effort_for("life_ring", below, gd)
+    effort_at_gate = _effort_for("life_ring", at_gate, gd2)
+    effort_past_gate = _effort_for("life_ring", past_gate, gd3)
+    assert effort_at_gate < effort_below, "below the real mining gate must still cost"
+    assert effort_past_gate == effort_at_gate, (
+        "past mining's REAL gate (10) effort must not keep falling toward "
+        "life_ring's own craft level (15) — that would be the candidate's "
+        "own level misattributed onto mining's token")

@@ -20,6 +20,7 @@ from types import MappingProxyType
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.requirement_graph_memo import CHAR_XP, SKILL_PREFIX
+from artifactsmmo_cli.ai.requirement_projections import requirement_closure
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
@@ -217,6 +218,33 @@ def _servable_promotion(
 _TRUNK_DEMAND: Mapping[str, int] = MappingProxyType({CHAR_XP: 1})
 
 
+def _skill_gate_levels(code: str, game_data: GameData) -> Mapping[str, int]:
+    """The real per-skill gate `code`'s closure demands: for each craft/gather
+    skill touched by ANY closure item, the MAX required level among those
+    items — you must reach the highest gate to use the skill at all, so max
+    is the honest requirement (not sum, not min).
+
+    Fix round 1 (critical finding): `_effort_for` used to reuse `code`'s OWN
+    `item_stats(code).crafting_level` as `need` for every `skill:<name>`
+    token in its multiset, whatever skill that token actually came from —
+    correct only for the one token matching `code`'s own craft skill, wrong
+    for everything gathered (e.g. life_ring's `skill:mining` token is really
+    gated at mining 10, from `iron_ore`/`iron_bar`, not jewelrycrafting 15).
+    `requirement_multiset_for` deliberately discards the per-item level when
+    it collapses a skill to a token (`requirement_graph_memo.py` keeps only
+    the skill NAME), so the level cannot be recovered from its output — this
+    reads it straight from the graph's `craft_skill`/`gather_skill` maps,
+    which still carry it."""
+    graph = game_data.requirement_graph.graph()
+    levels: dict[str, int] = {}
+    for item in requirement_closure(graph, [code]):
+        for gate in (graph.craft_skill.get(item), graph.gather_skill.get(item)):
+            if gate is not None:
+                skill, level = gate
+                levels[skill] = max(levels.get(skill, 0), level)
+    return levels
+
+
 def _effort_for(code: str, state: WorldState, game_data: GameData) -> int:
     """UNMET demand for one unit of `code`: how much work is actually LEFT.
 
@@ -225,20 +253,22 @@ def _effort_for(code: str, state: WorldState, game_data: GameData) -> int:
     holdings is what makes this an effort measure rather than a cost sheet.
 
     Token handling:
-      * `skill:<name>` — the recipe's craft LEVEL DEFICIT, not the token count.
-        A 5-level gap is real work; being already at level is none. This is the
-        distinction the whole factor turns on: a skill-gapped candidate must
-        read cheaper than a currency-gated one, not equally blocked.
+      * `skill:<name>` — the LEVEL DEFICIT against that skill's own real gate
+        in `code`'s closure (`_skill_gate_levels`), not the token count and
+        NOT `code`'s own craft level. A 5-level gap is real work; being
+        already at level is none. This is the distinction the whole factor
+        turns on: a skill-gapped candidate must read cheaper than a
+        currency-gated one, not equally blocked.
       * `char_xp` — SKIPPED. It marks drop-routed work for synergy alignment;
         it is not a unit of demand and would inflate every drop-routed
         candidate.
       * everything else — an item quantity, credited against inventory + bank.
     """
-    stats = game_data.item_stats(code)
     held = dict(state.inventory or {})
     for item, qty in (state.bank_items or {}).items():
         held[item] = held.get(item, 0) + qty
     held["gold"] = state.gold + (state.bank_gold or 0)
+    gate_levels = _skill_gate_levels(code, game_data)
 
     effort = 0
     for token, qty in game_data.requirement_graph.requirement_multiset_for(code).items():
@@ -246,7 +276,7 @@ def _effort_for(code: str, state: WorldState, game_data: GameData) -> int:
             continue
         if token.startswith(SKILL_PREFIX):
             skill = token[len(SKILL_PREFIX):]
-            need = (stats.crafting_level or 0) if stats is not None else 0
+            need = gate_levels.get(skill, 0)
             effort += max(0, need - state.skills.get(skill, 0))
             continue
         effort += max(0, qty - held.get(token, 0))
