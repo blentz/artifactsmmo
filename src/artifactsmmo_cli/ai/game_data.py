@@ -596,6 +596,20 @@ class GameData:
         self.world.active_event_codes = set(codes)
 
     @property
+    def active_raid_codes(self) -> set[str]:
+        """Raid codes live right now. Per-cycle overlay set from
+        `WorldState.active_raids()` before planning, mirroring
+        `active_event_codes`. An open raid surfaces the content standing on
+        RESTRICTED tiles (the raid areas) into the location accessors; empty ⇒
+        those tiles stay invisible and the planner cannot route into a closed
+        area (HTTP 596)."""
+        return self.world.active_raid_codes
+
+    @active_raid_codes.setter
+    def active_raid_codes(self, codes: set[str]) -> None:
+        self.world.active_raid_codes = set(codes)
+
+    @property
     def _bank_capacity(self) -> int:
         return self.world.bank_capacity
 
@@ -1230,10 +1244,11 @@ class GameData:
         monsters merged in (so the factory emits a FightAction for them only while
         their event is live). No active events ⇒ identical to the static map."""
         active = self.world.active_event_monsters()
-        if not active:
+        raid_open = self.world.raid_open_monsters()
+        if not active and not raid_open:
             return self.monsters.locations
         merged = dict(self.monsters.locations)
-        for code, tiles in active.items():
+        for code, tiles in list(active.items()) + list(raid_open.items()):
             merged[code] = list(dict.fromkeys(merged.get(code, []) + tiles))
         return merged
 
@@ -1242,10 +1257,11 @@ class GameData:
         """resource_code -> tiles for every known resource, with active event
         resources merged in. No active events ⇒ identical to the static map."""
         active = self.world.active_event_resources()
-        if not active:
+        raid_open = self.world.raid_open_resources()
+        if not active and not raid_open:
             return self.recipes_catalog.locations
         merged = dict(self.recipes_catalog.locations)
-        for code, tiles in active.items():
+        for code, tiles in list(active.items()) + list(raid_open.items()):
             merged[code] = list(dict.fromkeys(merged.get(code, []) + tiles))
         return merged
 
@@ -1581,8 +1597,30 @@ class GameData:
             # model routes to it through transition edges. Banks are exempt
             # — their dedicated open-vs-gated latch below already handles
             # conditional access.
-            if not walkable and ct != MapContentType.BANK:
+            if not walkable and ct not in (MapContentType.BANK, MapContentType.RAID):
+                # A RESTRICTED tile is a raid area: closed most of the time, but
+                # openable. Record its content so an open raid window can surface
+                # it (see LocationCatalog.raid_open_*), rather than discarding it
+                # and making the area permanently invisible. An unmet CONDITIONAL
+                # tile is different in kind — it is gated on an achievement the
+                # account has not earned, and no raid opens that — so it stays
+                # dropped here. That distinction is what keeps tasks_trader
+                # (conditional on tasks_farmer, 0/100) correctly unreachable.
+                if access_type == "restricted":
+                    if ct == MapContentType.MONSTER:
+                        self.world.restricted_monster_locations.setdefault(code, []).append(loc)
+                    elif ct == MapContentType.RESOURCE:
+                        self.world.restricted_resource_locations.setdefault(code, []).append(loc)
                 continue
+            # RAID content is exempt from the walkability skip for the same
+            # reason BANK is: the tile is STATIC and its own gate lives
+            # downstream. enchanted_fairy's tile (-4,10,overworld) is itself
+            # `restricted` — the raid area is shut until the raid opens it — and
+            # dropping it here left `raid_locations` empty, so factory.py could
+            # never emit the boss fight and ParticipateRaid was unplannable even
+            # with the window open. factory.py already gates that emission on
+            # `state.active_raids`, so indexing the tile cannot route the planner
+            # into a closed area.
 
             if ct == MapContentType.MONSTER:
                 self._monster_locations.setdefault(code, []).append(loc)

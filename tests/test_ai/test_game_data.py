@@ -2063,10 +2063,19 @@ def test_raid_map_content_ingested():
     assert gd.raid_location_tiles("nope") == []
 
 
-def test_raid_build_indexes_walkable_tiles_only():
-    """A raid tile on open ground is legacy-indexed; the (real) restricted
-    enchanted_fairy tile is not — it belongs to the layered/region model
-    like every other restricted content."""
+def test_raid_tiles_are_indexed_even_when_restricted():
+    """RAID content is exempt from the walkability skip, like BANK.
+
+    RE-DERIVED: this originally asserted the restricted enchanted_fairy tile was
+    NOT indexed, treating it like any other restricted content. That made raids
+    unreachable in principle — enchanted_fairy's real tile (-4,10,overworld) IS
+    restricted, because the raid area is shut until the raid opens it, so
+    dropping it left `raid_locations` empty and `factory.py` could never emit the
+    boss fight. A restricted raid tile is not "content behind a wall"; it is the
+    wall's own door.
+
+    Indexing it cannot route the planner into a closed area: factory.py emits the
+    boss fight only for `state.active_raids`, so the window is still the gate."""
     from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
     from artifactsmmo_api_client.models.map_content_type import MapContentType
     gd = GameData()
@@ -2078,8 +2087,64 @@ def test_raid_build_indexes_walkable_tiles_only():
                                            code="enchanted_fairy")),
     ])
     assert gd.raid_location_tiles("open_raid") == [(3, 3)]
-    assert gd.raid_location_tiles("enchanted_fairy") == []
+    assert gd.raid_location_tiles("enchanted_fairy") == [(-4, 10)]
+    # Still carried by the layered/region model too — indexing it does not take
+    # it out of the structure the movement layer routes through.
     assert gd.layered_locations("enchanted_fairy") == [(-4, 10, "overworld")]
+    # The tile itself remains NOT walkable: the raid opens the area, the index
+    # does not. This is what stops the exemption becoming a free pass.
+    assert (-4, 10, "overworld") not in gd.world.walkable_tiles
+
+
+def test_restricted_area_content_surfaces_only_while_a_raid_is_open():
+    """The raid area's ORDINARY content (dryad, enchanted_mushroom) is recorded
+    but withheld until a raid opens the area, mirroring how event content is
+    withheld until its event is live.
+
+    Both directions are asserted, because only the pair is meaningful: withheld
+    with no raid (or routing draws HTTP 596 on a closed area), surfaced with one
+    (or an open raid still cannot reach the content it opened)."""
+    from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
+    from artifactsmmo_api_client.models.map_content_type import MapContentType
+    gd = GameData()
+    gd._build_maps([
+        _map_tile(1, -5, 8, "overworld", access_type="restricted",
+                  content=MapContentSchema(type_=MapContentType.MONSTER, code="dryad")),
+        _map_tile(2, -4, 8, "overworld", access_type="restricted",
+                  content=MapContentSchema(type_=MapContentType.RESOURCE,
+                                           code="enchanted_mushroom")),
+    ])
+    # Recorded, but not surfaced: no raid is open.
+    assert gd.world.restricted_monster_locations == {"dryad": [(-5, 8)]}
+    assert gd.all_monster_locations.get("dryad") is None
+    assert gd.all_resource_locations.get("enchanted_mushroom") is None
+
+    gd.active_raid_codes = {"enchanted_fairy"}
+    assert gd.all_monster_locations.get("dryad") == [(-5, 8)]
+    assert gd.all_resource_locations.get("enchanted_mushroom") == [(-4, 8)]
+
+    # Closing the window withdraws it again — the overlay is per-cycle, not a latch.
+    gd.active_raid_codes = set()
+    assert gd.all_monster_locations.get("dryad") is None
+
+
+def test_an_unmet_conditional_tile_is_not_opened_by_a_raid():
+    """A raid opens RESTRICTED areas, not ACHIEVEMENT gates. tasks_trader stands
+    on a tile conditional on `tasks_farmer` (0/100 on the real account); no raid
+    grants that achievement, so its content stays withheld with a raid open.
+    Without this the raid exemption would quietly reopen the very gate the
+    region work exists to close."""
+    from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
+    from artifactsmmo_api_client.models.map_content_type import MapContentType
+    gd = GameData()
+    gd._build_maps([
+        _map_tile(1, 5, 11, "overworld", access_type="conditional",
+                  access_conditions=[("tasks_farmer", "achievement_unlocked", 1)],
+                  content=MapContentSchema(type_=MapContentType.NPC, code="tasks_trader")),
+    ])
+    gd.active_raid_codes = {"enchanted_fairy"}
+    assert gd.npc_location("tasks_trader") is None
+    assert gd.world.restricted_monster_locations == {}
 
 
 def _map_tile(map_id, x, y, layer, access_type="standard", content=None,

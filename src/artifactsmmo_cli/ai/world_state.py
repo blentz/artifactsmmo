@@ -210,7 +210,10 @@ class WorldState:
 
     @property
     def active_raids(self) -> list[RaidInfo]:
-        """Raids currently running (visibility only — no planner consumer)."""
+        """Raids currently running. No longer visibility-only: `Player` mirrors
+        this into `GameData.active_raid_codes` each cycle, and an open raid
+        surfaces the content standing on RESTRICTED tiles (the raid areas) into
+        the location accessors."""
         return [r for r in self.raids if r.is_active()]
 
     @classmethod

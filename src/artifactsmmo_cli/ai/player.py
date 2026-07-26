@@ -644,6 +644,10 @@ class GamePlayer:
         # or event-gated attainability (near_term_gear via
         # monster_spawn_known) is silently inert in scenarios.
         self.game_data.active_event_codes = set(state.active_events)
+        # Same overlay for raids: an open raid opens the RESTRICTED areas, so
+        # their content must surface offline exactly as it does live, or
+        # raid scenarios plan against a world with the raid area still shut.
+        self.game_data.active_raid_codes = {r.code for r in state.active_raids}
         self._objective = CharacterObjective.from_game_data(game_data)
         self._strategy = StrategyEngine(self._objective)
         self.state = state
@@ -1335,6 +1339,7 @@ class GamePlayer:
         # and action-building, both of which read game_data this cycle.
         if self.game_data is not None:
             self.game_data.active_event_codes = set(active_events)
+            self.game_data.active_raid_codes = {r.code for r in state.active_raids}
         return state
 
     def _sync_bank(self, client: AuthenticatedClient, state: WorldState) -> WorldState:

@@ -83,6 +83,22 @@ class LocationCatalog:
     event_resource_locations: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     event_code_of_content: dict[str, str] = field(default_factory=dict)  # monster/resource code -> event code
     active_event_codes: set[str] = field(default_factory=set)  # per-cycle: events live right now
+    # Content standing on RESTRICTED tiles (the raid areas — the bundle's five
+    # restricted tiles carry dryad x2 and enchanted_mushroom). Recorded for every
+    # such tile but surfaced to the planner only while a raid is open, exactly as
+    # event content is surfaced only while its event is live. Routing to a closed
+    # restricted tile draws HTTP 596, which is why these are NOT in the legacy
+    # indexes by default.
+    #
+    # DELIBERATE APPROXIMATION: any active raid opens ALL restricted tiles. The
+    # API exposes no restricted-area -> raid mapping (raid map content is a
+    # separate `raid` content type, and the committed bundle carries none), so a
+    # per-raid gate cannot be derived from data. Coarse in the OPEN direction:
+    # with a raid live the planner may route to a restricted area that raid does
+    # not actually open. Narrow this the moment the API gives an area key.
+    restricted_monster_locations: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    restricted_resource_locations: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    active_raid_codes: set[str] = field(default_factory=set)  # per-cycle: raids live right now
     bank_capacity: int = 0
     next_expansion_cost: int = 0
     slots_per_expansion: int = 0  # learned after the first expansion (response delta)
@@ -302,6 +318,20 @@ class LocationCatalog:
         """{resource_code -> event tiles} for every event resource live right now."""
         return {code: tiles for code, tiles in self.event_resource_locations.items()
                 if self._content_event_active(code)}
+
+    def raid_open_monsters(self) -> dict[str, list[tuple[int, int]]]:
+        """{monster_code -> restricted tiles} once a raid opens the restricted
+        areas. Empty with no raid live, so restricted content stays out of the
+        legacy indexes and the planner cannot route into a closed area."""
+        if not self.active_raid_codes:
+            return {}
+        return dict(self.restricted_monster_locations)
+
+    def raid_open_resources(self) -> dict[str, list[tuple[int, int]]]:
+        """{resource_code -> restricted tiles} once a raid opens the areas."""
+        if not self.active_raid_codes:
+            return {}
+        return dict(self.restricted_resource_locations)
 
     def npc_event_code(self, npc_code: str) -> str | None:
         """Event code whose active window spawns this NPC, or None if not an event NPC."""
