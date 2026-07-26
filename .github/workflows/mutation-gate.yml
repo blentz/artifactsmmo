@@ -9,6 +9,19 @@ on:
       - "formal/diff/**"
       - "openapi.json"
       - ".github/workflows/mutation-gate.yml"
+  # This repo merges by fast-forward push straight to main -- it never opens
+  # PRs -- so the pull_request trigger above never fires and there was zero
+  # per-change mutation enforcement; only the nightly cron caught a survivor,
+  # up to ~24h after the commit that introduced it. Same paths filter as
+  # pull_request above, so a push to main gets the identical per-change gate
+  # a PR-based workflow would have gotten.
+  push:
+    branches: [main]
+    paths:
+      - "src/artifactsmmo_cli/ai/**"
+      - "formal/diff/**"
+      - "openapi.json"
+      - ".github/workflows/mutation-gate.yml"
 jobs:
   mutate:
     runs-on: ubuntu-latest
