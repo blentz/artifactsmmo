@@ -1,7 +1,33 @@
 # PLAN: re-justify potion stocking on combat survivability
 
-Status: **NOT STARTED** — design agreed 2026-07-19, no code written.
-Branch base: `fix/dynamic-rest-cost` @ `be902db2`.
+Status: **COMPLETE on main** — verified against the tree 2026-07-26. The header
+below said "NOT STARTED — no code written" long after the work had landed, which
+is worse than no status at all: it invites someone to redo finished work, or to
+answer "is this done?" from the doc and get it wrong.
+
+What is on `main`, checked file by file:
+
+| Plan item | Where |
+|---|---|
+| Task 1 — one shared pure core | `ai/potion_stock_target.py::potion_stock_target_pure` |
+| Task 1 — the GUARD uses it | `ai/potion_supply.py:207` (`craft_potions_fires`) |
+| Task 1 — the GOAL uses the SAME core | `ai/goals/craft_potions.py:149` |
+| Task 3 — three dead rest-avoidance rationales | rewritten in `goals/maintain_consumables.py`, `consumable_supply.py`, `tiers/means.py` — each now states the rationale is dead |
+| Decision 5 — `POTION_LEAD_FIGHTS` | present, and mutation-anchored in `formal/diff/mutate.py` |
+| `MARGINAL_FIGHT_HP_NUM/DEN` | present, and mutation-anchored |
+| `l48_band_adequate` blocker | resolved honestly via the events/raids epic (raid support in `ai/`), NOT by weakening the `assert report.goals_tried` vacuousness guard |
+
+The guard/goal divergence this plan called "a latent bug independent of the Rest
+change" is closed: both sides compute the target from one core, so they cannot
+disagree.
+
+STILL UNVERIFIED — Task 7, runtime activation. Nobody has confirmed on a live
+run that `CRAFT_POTIONS`/`MAINTAIN_CONSUMABLES` selection counts actually moved
+against the ~86%-of-cycles-on-wolf-fight baseline. Green tests are not runtime
+activation in this codebase.
+
+Original branch base: `fix/dynamic-rest-cost` @ `be902db2` (that branch is now
+merged and deleted; its final commit was `1fc266fd`).
 
 ## Why
 
