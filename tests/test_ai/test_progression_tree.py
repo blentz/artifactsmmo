@@ -13,8 +13,20 @@ from artifactsmmo_cli.ai.player import GamePlayer  # noqa: F401  (scenario seam 
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree, has_structural_upgrade
-from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT, FOCUS_SPAN
+from artifactsmmo_cli.ai.tiers.progression_tree import (
+    _achievability_map,
+    _structural_candidates,
+    _utility_candidates,
+    decide_tree,
+    has_structural_upgrade,
+)
+from artifactsmmo_cli.ai.tiers.progression_tree_core import (
+    FOCUS_FLAT,
+    FOCUS_SPAN,
+    GearCandidate,
+    focus_aging_order,
+)
+from artifactsmmo_cli.ai.world_state import WorldState
 
 BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures"
           / "gamedata_bundle.json")
@@ -549,3 +561,134 @@ class TestFocusAging:
         (inert) too -- achievability is the ONLY non-inert factor in play."""
         d, _ = _decide("l1_fresh")
         assert d.aged_pick is True
+
+
+# --- Achievability acceptance witness (Task 6) -------------------------------
+#
+# THE acceptance test for the whole achievability-factor epic: the factor must
+# actually reorder live candidates, and the reordering must be REVERSIBLE by
+# holdings, or it is just a blanket penalty on long chains dressed up as an
+# effort measure. `lich_race_trophy` (achievability_core.py's own docstring
+# example -- "Live at L21 ... 1000 event_tickets away") is not itself in the
+# committed `gamedata_bundle.json` fixture (only `lich_crown`/`lich_tomb_key`
+# are), so this builds the identical SHAPE on top of the real bundle: one
+# synthetic BUY-only artifact, priced by a permanent NPC vendor in
+# `event_ticket` -- a real bundle item, gatherable here (so it is attainable-
+# now on its own, not only once held) exactly the way
+# tests/test_ai/test_requirement_graph_memo.py builds its currency chains on a
+# synthetic `GameData()`. Every OTHER candidate-surface fact (life_ring's own
+# recipe, its skill gates, pursuit_value, `_effort_for`'s currency/skill
+# handling) is the real bundle's, unmodified.
+
+def _bundle_with_currency_gated_artifact() -> GameData:
+    """`_bundle()` plus one synthetic artifact, `lich_race_trophy`: no recipe
+    (BUY leaf only), sold by a permanent vendor for 1000 `event_ticket`. hp_bonus
+    40 -> pursuit_value 40000 (`combat_raw * 1000`), a 1.6x gain gap over
+    life_ring's real 25020 -- comfortably under achievability_core.A_MIN's
+    documented 2x boundary (a maximally distant candidate can only lose to a
+    maximally close one below that gap), which is the exact property this test
+    exercises. `event_ticket` is made gatherable (a resource drop) so it is
+    attainable-now by itself; the poor/rich split below turns entirely on how
+    much of it is HELD, not on whether it can be acquired in principle."""
+    gd = _bundle()
+    gd.items.stats["lich_race_trophy"] = ItemStats(
+        code="lich_race_trophy", level=15, type_="artifact", hp_bonus=40)
+    gd.world.npc_stock["trophy_vendor"] = {"lich_race_trophy": 1000}
+    gd.world.npc_buy_currency["trophy_vendor"] = {"lich_race_trophy": "event_ticket"}
+    gd.world.npc_tiles["trophy_vendor"] = (5, 5)
+    gd.recipes_catalog.resource_drops_full["event_shrine"] = [("event_ticket", 1, 1, 1)]
+    return gd
+
+
+_ACHIEVABILITY_WITNESS_BANK = {
+    "iron_bar": 8, "iron_ore": 80, "cloth": 2, "mushroom": 5,
+    "wool": 6, "life_ring": 1,
+}
+"""Covers life_ring's ENTIRE real requirement multiset (empirically confirmed
+against the committed bundle: `requirement_multiset_for("life_ring")` ==
+these item tokens plus `gold`/`skill:jewelrycrafting`/`skill:mining`/`char_xp`,
+handled separately below) so `_effort_for("life_ring", ...)` is exactly 0 --
+the achievability FLOOR every other candidate in the decision is scored
+against (`achievability_pure`'s `min_effort`)."""
+
+
+def _state_with(gd: GameData, inventory: dict[str, int]) -> WorldState:
+    """A near_term_gear fixed point for every slot EXCEPT rings/artifacts
+    (iterated empirically the same way every fixed-point entry in
+    scenario.SCENARIOS is -- see e.g. l30_rune_fill/l48_band_adequate), so
+    `life_ring` (ring1_slot/ring2_slot) and `lich_race_trophy`
+    (artifact1/2/3_slot) are the ONLY structural gear candidates. `gold=2000`
+    and `skills` clear life_ring's own currency/skill-gate tokens (see
+    `_ACHIEVABILITY_WITNESS_BANK`). `inventory` is the SOLE difference between
+    the poor and rich witnesses -- holding `event_ticket` is the only thing
+    that changes."""
+    sc = ScenarioCharacter(
+        name="achievability_witness", level=25, max_hp=500, gold=2000,
+        skills={"jewelrycrafting": 15, "mining": 10},
+        equipment={
+            "helmet_slot": "iron_helm", "weapon_slot": "copper_dagger",
+            "shield_slot": "iron_shield", "boots_slot": "copper_boots",
+            "body_armor_slot": "copper_armor",
+            "utility1_slot": "small_health_potion",
+        },
+        utility_quantities={"utility1_slot": 5},
+        bank=dict(_ACHIEVABILITY_WITNESS_BANK),
+        inventory=inventory, inventory_max=2000,
+    )
+    return scenario_state(sc)
+
+
+def _ordered_candidates(state: WorldState, gd: GameData) -> list[GearCandidate]:
+    """The tree's OWN achievability-weighted display order: exactly
+    `decide_tree`'s own `_structural_candidates + _utility_candidates` ->
+    `_achievability_map` -> `focus_aging_order` pipeline
+    (progression_tree.py:397-418), read directly -- NOT `decision.ranking`,
+    which is display-only (progression_tree.py:149-155: "no separate
+    weighting exists in this display path -- the trunk row does the same")."""
+    objective = CharacterObjective.from_game_data(gd)
+    candidates = (_structural_candidates(state, gd, objective)
+                  + _utility_candidates(state, gd, objective))
+    achievability = _achievability_map(candidates, state, gd)
+    return focus_aging_order(candidates, {}, {}, {}, achievability)
+
+
+class TestAchievabilityReversalWitness:
+    def test_achievability_reorders_the_live_bundle_and_is_reversible(self) -> None:
+        """THE acceptance test. With ordinary holdings the craftable life_ring
+        outranks the currency-gated lich_race_trophy; give the character 1000
+        event_tickets and the trophy returns to the top. If the second half
+        failed, the factor would be a blanket penalty on long chains rather
+        than an effort measure that responds to what is actually held."""
+        gd = _bundle_with_currency_gated_artifact()
+        poor = _state_with(gd, inventory={})
+        rich = _state_with(gd, inventory={"event_ticket": 1000})
+
+        poor_order = [c.code for c in _ordered_candidates(poor, gd)]
+        rich_order = [c.code for c in _ordered_candidates(rich, gd)]
+
+        assert poor_order.index("life_ring") < poor_order.index("lich_race_trophy")
+        assert rich_order.index("lich_race_trophy") < rich_order.index("life_ring")
+
+    def test_reversal_is_falsifiable_by_the_inert_achievability_default(self) -> None:
+        """OVERRIDE (supersedes the brief's `git stash` step, per a standing
+        project rule against stashing mid-task): `focus_aging_order`'s
+        achievability parameter defaults to the empty `_NO_ACHIEVABILITY` map,
+        bit-identical to pre-factor behaviour (progression_tree_core.py's own
+        docstring). If the poor-holdings order above held regardless of
+        achievability, it would equal this inert-default order too -- it does
+        not, so the factor (not the candidates' raw gains alone) drives the
+        poor-case ranking. A permanent test, not a one-off manual diff."""
+        gd = _bundle_with_currency_gated_artifact()
+        poor = _state_with(gd, inventory={})
+        objective = CharacterObjective.from_game_data(gd)
+        candidates = (_structural_candidates(poor, gd, objective)
+                      + _utility_candidates(poor, gd, objective))
+
+        real_achievability = _achievability_map(candidates, poor, gd)
+        weighted_order = [c.code for c in
+                          focus_aging_order(candidates, {}, {}, {}, real_achievability)]
+        inert_order = [c.code for c in focus_aging_order(candidates, {}, {})]
+
+        assert weighted_order.index("life_ring") < weighted_order.index("lich_race_trophy")
+        assert inert_order.index("lich_race_trophy") < inert_order.index("life_ring")
+        assert weighted_order != inert_order

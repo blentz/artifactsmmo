@@ -150,6 +150,7 @@ PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "pro
 PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
+ACHIEVABILITY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "achievability_core.py"
 MEANS_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means_worth.py"
 TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "taskmaster_choice.py"
 EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
@@ -2914,6 +2915,25 @@ PASSIVE_CURRENCY_HELPER_MUTATIONS = [
     ("currency passive: catalog-size floor removed",
      "        return (total >= _MIN_MONSTERS_FOR_BREADTH",
      "        return (total >= 0"),
+]
+
+# achievability_core.py — the effort-to-reach multiplier. A_MIN is a live
+# decision knob (cf. POTION_LEAD_FIGHTS), so it is anchored, not just tested.
+# Unit-killed by tests/test_ai/test_achievability_core.py.
+ACHIEVABILITY_CORE_MUTATIONS = [
+    # Floor removed: a distant candidate decays to zero weight and d'Hondt never
+    # awards it a seat — the anti-starvation property minWeight_pos rests on.
+    ("achievability: floor removed",
+     "A_MIN = Fraction(1, 2)",
+     "A_MIN = Fraction(0, 1)"),
+    # Floor raised to 1: the factor becomes constant and cannot reorder anything.
+    ("achievability: factor flattened to a no-op",
+     "A_MIN = Fraction(1, 2)",
+     "A_MIN = Fraction(1, 1)"),
+    # Ratio inverted: MORE effort would score HIGHER, inverting the whole point.
+    ("achievability: effort ratio inverted",
+     "Fraction(min_effort + 1, effort + 1)",
+     "Fraction(effort + 1, min_effort + 1)"),
 ]
 
 # _equippable_goal passive-currency gate (strategy_driver.py). Unit-killed by
@@ -5816,6 +5836,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_taskmaster_choice.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, PASSIVE_CURRENCY_HELPER_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)
+    run_group(ACHIEVABILITY_CORE_SRC, ACHIEVABILITY_CORE_MUTATIONS,
+              "tests/test_ai/test_achievability_core.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, PASSIVE_CURRENCY_GATE_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHERING_PASSIVE_MUTATIONS,
