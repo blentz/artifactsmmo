@@ -1,6 +1,5 @@
 """Progression goal: equipment upgrades."""
 
-import dataclasses
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
@@ -11,7 +10,7 @@ from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.forced_craft_grind import forced_craft_grind
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gather_skill_gate import openable_gather_grinds
@@ -26,11 +25,6 @@ from artifactsmmo_cli.ai.goals.upgrade_selection import (
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.min_plan_length import min_plan_length
-from artifactsmmo_cli.ai.monster_drop_selection import (
-    MonsterDropCandidate,
-    select_monster_for_drop,
-)
-from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.recipe_closure import gather_serves_closure
 from artifactsmmo_cli.ai.requirement_projections import (
     demand_set,
@@ -386,36 +380,10 @@ class UpgradeEquipmentGoal(Goal):
         live route while no goal grinds gearcrafting). The demand gate holds
         structurally: the drop IS the goal's target, so a grey fight emitted
         here can never serve an xp-grind plan."""
-        droppers = game_data.monsters_dropping(target_item)
-        if not droppers:
-            return None
-        fights_by_code: dict[str, FightAction] = {
-            a.monster_code: a for a in actions if isinstance(a, FightAction)
-        }
-        drop_candidates: list[MonsterDropCandidate] = []
-        winner_fights: dict[str, FightAction] = {}
-        for monster_code, rate, mn, mx in droppers:
-            fight = fights_by_code.get(monster_code)
-            if fight is None:
-                continue
-            if not is_winnable(state, game_data, monster_code):
-                continue
-            if fight.locations:
-                loc = nearest_or_error(state.x, state.y, fight.locations, "gather")
-                dist = abs(loc[0] - state.x) + abs(loc[1] - state.y)
-            else:
-                dist = 0
-            drop_candidates.append(MonsterDropCandidate(
-                monster_code=monster_code, rate=rate,
-                min_quantity=mn, max_quantity=mx, distance=dist))
-            winner_fights[monster_code] = fight
-        chosen = select_monster_for_drop(target_item, drop_candidates)
-        if chosen is None:
-            return None
-        fight = winner_fights[chosen]
-        if game_data.xp_per_kill(chosen, state.level) > 0:
-            return fight
-        return dataclasses.replace(fight, drop_farm=True)
+        # allow_grey=True: the target-semantics deviation argued in the
+        # docstring above. Material edges pass the grey POLICY instead.
+        return select_drop_fight(target_item, actions, state, game_data,
+                                 allow_grey=True)
 
     def find_upgrade_target(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Find the best upgrade (inventory or craftable) ignoring material availability.

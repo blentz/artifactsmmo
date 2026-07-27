@@ -4,7 +4,6 @@ import dataclasses
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
@@ -15,8 +14,8 @@ from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
-from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
+from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.forced_craft_grind import forced_craft_grind
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_source
@@ -26,10 +25,6 @@ from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.monster_drop_selection import (
-    MonsterDropCandidate,
-    select_monster_for_drop,
-)
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.open_order import OrderSide
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
@@ -434,9 +429,8 @@ class GatherMaterialsGoal(Goal):
         # kills replace gathers; monsters replace resource nodes. An item with no
         # winnable dropper contributes no FightAction (it also reads as
         # not-producible in tiers/strategy._producible, so no unreachable plan).
-        fights_by_code: dict[str, FightAction] = {
-            a.monster_code: a for a in actions if isinstance(a, FightAction)
-        }
+        # The narrowing itself now lives in ai/drop_fight_selection.py, shared
+        # with UpgradeEquipmentGoal rather than copied into it.
         # Emit a fight for EVERY monster-drop in the full recipe closure, not just
         # top-level needed items. feather_coat (needed={feather_coat:1}) is crafted,
         # not dropped; its feather input is a chicken drop deep in the closure. The
@@ -448,60 +442,32 @@ class GatherMaterialsGoal(Goal):
         for item in chain:
             if item in bid_items:
                 continue  # a GE bid is already in flight for this item (bid_vs_craft exclusion)
-            droppers = game_data.monsters_dropping(item)
-            if not droppers:
-                continue
-            drop_candidates: list[MonsterDropCandidate] = []
-            winner_fights: dict[str, FightAction] = {}
-            for monster_code, rate, mn, mx in droppers:
-                fight = fights_by_code.get(monster_code)
-                if fight is None:
-                    continue
-                if not is_winnable(state, game_data, monster_code):
-                    continue
-                if fight.locations:
-                    loc = nearest_or_error(state.x, state.y, fight.locations, "gather")
-                    dist = abs(loc[0] - state.x) + abs(loc[1] - state.y)
-                else:
-                    dist = 0
-                drop_candidates.append(MonsterDropCandidate(
-                    monster_code=monster_code, rate=rate,
-                    min_quantity=mn, max_quantity=mx, distance=dist))
-                winner_fights[monster_code] = fight
-            if not drop_candidates:
-                continue
-            chosen = select_monster_for_drop(item, drop_candidates)
-            if chosen is not None and chosen in winner_fights:
-                fight = winner_fights[chosen]
-                emitted = False
-                if game_data.xp_per_kill(chosen, state.level) > 0:
-                    result.append(fight)
-                    emitted = True
-                elif grey_farm_allowed(item, state, game_data):
-                    # GREY dropper (zero xp at this level): the plain fight is
-                    # inapplicable (xpPositive gate), so a recipe demand could
-                    # never hunt its drops — live Robby L12 could not gather
-                    # feathers from L1 chickens. Emit the drop-farm variant,
-                    # but only under the policy: the drop serves a recipe AND
-                    # the next-tier recipe is too far a grind away; when a
-                    # same-family recipe is within reach, grinding the skill
-                    # beats farming greys, and no fight is emitted.
-                    result.append(dataclasses.replace(fight, drop_farm=True))
-                    emitted = True
-                if emitted:
-                    # Companion combat swap so A* can satisfy FightAction's
-                    # hard optimal-loadout gate: the drop Fight is
-                    # inapplicable while a suboptimal weapon is equipped, and
-                    # without a swap action in the goal's own menu the goal
-                    # is unplannable for the drop demand (any bag occupancy —
-                    # Task 6b). Self-guarding: OptimizeLoadout.is_applicable
-                    # is False when the loadout is already optimal (empty
-                    # _swap_plan), so A* sequences it only when a swap is
-                    # actually needed. At a full bag it is slot-gated; the
-                    # relief guard preempts across cycles (see
-                    # slot-exhaustion fix).
-                    result.append(OptimizeLoadoutAction(
-                        target_monster_code=chosen, game_data=game_data))
+            # One selection, shared with UpgradeEquipmentGoal's target and
+            # material edges (ai/drop_fight_selection.py). The grey POLICY stays
+            # here: `grey_farm_allowed` governs recipe-material farming — the
+            # drop must serve a recipe AND the next-tier recipe must be too far
+            # a grind away, since when a same-family recipe is within reach,
+            # grinding the skill beats farming greys. Live Robby L12 could not
+            # gather feathers from L1 chickens without the drop_farm variant the
+            # selection returns (the plain fight fails the xpPositive gate).
+            fight = select_drop_fight(
+                item, actions, state, game_data,
+                allow_grey=grey_farm_allowed(item, state, game_data))
+            if fight is not None:
+                result.append(fight)
+                # Companion combat swap so A* can satisfy FightAction's
+                # hard optimal-loadout gate: the drop Fight is
+                # inapplicable while a suboptimal weapon is equipped, and
+                # without a swap action in the goal's own menu the goal
+                # is unplannable for the drop demand (any bag occupancy —
+                # Task 6b). Self-guarding: OptimizeLoadout.is_applicable
+                # is False when the loadout is already optimal (empty
+                # _swap_plan), so A* sequences it only when a swap is
+                # actually needed. At a full bag it is slot-gated; the
+                # relief guard preempts across cycles (see
+                # slot-exhaustion fix).
+                result.append(OptimizeLoadoutAction(
+                    target_monster_code=fight.monster_code, game_data=game_data))
 
         # C4 Task 1: emit NpcBuy for deep recipe-closure leaves that are
         # currency-bought. A top-level needed item is handled below; a TRANSITIVE
