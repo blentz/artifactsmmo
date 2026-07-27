@@ -461,12 +461,26 @@ def decide_tree(state: WorldState, game_data: GameData,
         chosen_root: MetaGoal = _candidate_root(pick)
         chosen_step: MetaGoal = strategy.actionable_step(
             chosen_root, state, game_data, ctx) or chosen_root
-        # Semantics item 6: the other branch (xp trunk) first, then the
-        # remaining gear candidates in pick order, each its own root/step.
+        # Semantics item 6, CORRECTED 2026-07-27: the remaining gear candidates
+        # in pick order FIRST, then the other branch (xp trunk) last.
+        #
+        # The trunk sat at index 0 until a live trace measured the cost. When
+        # the chosen gear step is unservable, `_servable_promotion` walks this
+        # list and takes the FIRST servable pair — so a single unservable gear
+        # step abandoned the whole gear branch for XP grinding while servable
+        # gear candidates sat behind the trunk, unreached. Robby, 2026-07-27:
+        # 9 of 15 cycles ran ReachCharLevel with 7 structural candidates live
+        # and band_adequate False, i.e. with the tree's own branch verdict
+        # saying GEAR.
+        #
+        # The trunk stays in the list, just last: when EVERY gear pair is
+        # unservable the promotion still reaches it, so a fully-blocked gear
+        # branch yields to XP exactly as before rather than deadlocking.
+        # Yielding the branch is the last resort, not the first.
         extra_roots, extra_steps = _candidate_fallbacks(
             state, game_data, ordered, skip=pick, ctx=ctx)
-        fallback_roots = [trunk, *extra_roots]
-        fallback_steps = [trunk, *extra_steps]
+        fallback_roots = [*extra_roots, trunk]
+        fallback_steps = [*extra_steps, trunk]
     else:
         # XP branch: the trunk IS the chosen decision. Any gear candidates
         # (possible now that band_adequate is caller-supplied: adequate band

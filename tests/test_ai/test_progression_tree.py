@@ -161,7 +161,9 @@ class TestPerScenarioPins:
         assert d.chosen_root == ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
         assert d.chosen_step == ObtainItem(code="copper_bar", quantity=6)
         assert len(d.ranking) == 4  # trunk + dagger + potion + shield
-        assert d.fallback_roots[0] == ReachCharLevel(level=20)
+        # Trunk LAST (2026-07-27): gear fallbacks are walked before the branch
+        # is abandoned for XP — see TestServabilityDemotion's docstring.
+        assert d.fallback_roots[-1] == ReachCharLevel(level=20)
         assert ObtainItem(code="small_health_potion", quantity=1,
                           slot="utility1_slot") in d.fallback_roots
         assert ObtainItem(code="wooden_shield", quantity=1, slot="shield_slot") in d.fallback_roots
@@ -262,14 +264,20 @@ class TestAdequacyParameter:
 class TestServabilityDemotion:
     """l10_weapon_upgrade pins (see TestPerScenarioPins): chosen =
     ObtainItem(copper_dagger, weapon_slot) / step ObtainItem(copper_bar, 6);
-    fallback_roots = [ReachCharLevel(20), wooden_shield, small_health_potion].
+    fallback_roots = [wooden_shield, small_health_potion, ReachCharLevel(20)].
 
     GEAR-FIRST re-derivation 2026-07-08 (Task-3 pursuit_value; user ruling):
     the SHIELD (a structural candidate, now scored by combat-dominant
     pursuit_value ×1000) outranks the POTION (a utility-potion candidate, kept
     on equip_value × potion_weight ×~2) in the merged argmax, so the two swap
     order — combat/gear pursuit outranks potion-stocking, potions still pursued
-    once no structural upgrade remains. Was [TRUNK, POTION, SHIELD]."""
+    once no structural upgrade remains. Was [TRUNK, POTION, SHIELD].
+
+    TRUNK-LAST correction 2026-07-27 (live trace): the trunk used to sit at
+    index 0, so ONE unservable gear step promoted the XP trunk over servable
+    gear candidates sitting behind it — Robby ran 9 of 15 cycles on
+    ReachCharLevel with 7 live structural candidates and the branch verdict
+    saying GEAR. Was [TRUNK, SHIELD, POTION]."""
 
     DAGGER = ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
     TRUNK = ReachCharLevel(level=20)
@@ -285,38 +293,51 @@ class TestServabilityDemotion:
     def test_servable_chosen_is_untouched(self):
         d = self._decide_with(lambda root, step: True)
         assert d.chosen_root == self.DAGGER
-        assert d.fallback_roots == [self.TRUNK, self.SHIELD, self.POTION]
+        assert d.fallback_roots == [self.SHIELD, self.POTION, self.TRUNK]
 
-    def test_unservable_chosen_promotes_first_servable_fallback(self):
+    def test_unservable_chosen_promotes_the_next_gear_candidate_not_the_trunk(self):
+        """THE 2026-07-27 REGRESSION. One unservable gear step must not
+        abandon the gear branch: the promotion takes the next servable GEAR
+        candidate, and the trunk stays behind it."""
         d = self._decide_with(lambda root, step: root != self.DAGGER)
-        assert d.chosen_root == self.TRUNK
-        assert d.chosen_step == self.TRUNK
+        assert d.chosen_root == self.SHIELD
+        assert d.chosen_root != self.TRUNK
         # The demoted pair survives in the fallbacks, ahead of the rest —
         # original priority order minus the promotion.
-        assert d.fallback_roots == [self.DAGGER, self.SHIELD, self.POTION]
+        assert d.fallback_roots == [self.DAGGER, self.POTION, self.TRUNK]
         assert d.fallback_steps[0] == ObtainItem(code="copper_bar", quantity=6)
 
     def test_walk_skips_unservable_fallbacks_in_order(self):
-        servable = lambda root, step: root not in (self.DAGGER, self.TRUNK)  # noqa: E731
+        servable = lambda root, step: root not in (self.DAGGER, self.SHIELD)  # noqa: E731
         d = self._decide_with(servable)
-        # GEAR-FIRST (2026-07-08): SHIELD now precedes POTION, so the first
-        # servable fallback promoted is the SHIELD, not the potion.
-        assert d.chosen_root == self.SHIELD
+        # DAGGER unservable, SHIELD (the next gear candidate) unservable too,
+        # so the walk skips it and reaches the POTION — still gear, still ahead
+        # of the trunk.
+        assert d.chosen_root == self.POTION
         # Demoted pairs (chosen first, then the skipped fallbacks) keep their
         # relative order after the promoted pair leaves the list.
-        assert d.fallback_roots == [self.DAGGER, self.TRUNK, self.POTION]
+        assert d.fallback_roots == [self.DAGGER, self.SHIELD, self.TRUNK]
+
+    def test_every_gear_pair_unservable_still_reaches_the_trunk(self):
+        """The trunk stays in the list, just last: a FULLY blocked gear branch
+        must still yield to XP rather than deadlock on an unservable pick.
+        Yielding the branch is the last resort, not the first."""
+        gear = (self.DAGGER, self.SHIELD, self.POTION)
+        d = self._decide_with(lambda root, step: root not in gear)
+        assert d.chosen_root == self.TRUNK
+        assert d.chosen_step == self.TRUNK
 
     def test_all_unservable_keeps_original_choice(self):
         d = self._decide_with(lambda root, step: False)
         assert d.chosen_root == self.DAGGER
-        assert d.fallback_roots == [self.TRUNK, self.SHIELD, self.POTION]
+        assert d.fallback_roots == [self.SHIELD, self.POTION, self.TRUNK]
 
     def test_default_none_predicate_is_untouched(self):
         gd = _bundle()
         state = scenario_state(SCENARIOS["l10_weapon_upgrade"])
         d = decide_tree(state, gd, CharacterObjective.from_game_data(gd))
         assert d.chosen_root == self.DAGGER
-        assert d.fallback_roots == [self.TRUNK, self.SHIELD, self.POTION]
+        assert d.fallback_roots == [self.SHIELD, self.POTION, self.TRUNK]
 
     def test_predicate_sees_root_step_pairs(self):
         seen: list[tuple[object, object]] = []
@@ -328,7 +349,7 @@ class TestServabilityDemotion:
         self._decide_with(spy)
         # Walk order: chosen pair first, then fallbacks in order.
         assert seen[0] == (self.DAGGER, ObtainItem(code="copper_bar", quantity=6))
-        assert [r for r, _ in seen[1:]] == [self.TRUNK, self.SHIELD, self.POTION]
+        assert [r for r, _ in seen[1:]] == [self.SHIELD, self.POTION, self.TRUNK]
 
 
 # --- Synthetic-GameData unit tests (coverage of branches the 6 scenarios

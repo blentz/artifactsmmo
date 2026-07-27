@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     POTION_TYPE_WEIGHTS,
     Branch,
     GearCandidate,
+    _gear_pref_key,
     _scaled_weights,
     branch_pick_pure,
     dhondt_step,
@@ -312,6 +313,43 @@ def test_aging_order_is_permutation_of_input():
 def test_aging_pick_empty_candidates_is_none():
     assert focus_aging_pick([], {}, {}) is None
     assert focus_aging_order([], {}, {}) == []
+
+
+def test_aging_order_tail_uses_scaled_weights_not_raw_gain():
+    """THE 2026-07-27 REGRESSION (live). The tail is the fallback list the
+    arbiter walks when the head cannot be served, so sorting it by RAW gain
+    preserved exactly the ordering the head's own factors rejected: behind an
+    achievability-demoted head sat lich_race_trophy (25050) ahead of
+    adventurer_pants (15019), one position down.
+
+    Live gains and achievability values, Robby L21.
+    """
+    trophy = _gc("artifact2_slot", "lich_race_trophy", 25050)
+    ring = _gc("ring2_slot", "life_ring", 21020)
+    pants = _gc("leg_armor_slot", "adventurer_pants", 15019)
+    cands = [trophy, ring, pants]
+    achievability = {
+        ("artifact2_slot", "lich_race_trophy"): Fraction(553, 1000),
+        ("ring2_slot", "life_ring"): Fraction(786, 1000),
+        ("leg_armor_slot", "adventurer_pants"): Fraction(1),
+    }
+    order = focus_aging_order(cands, {}, {}, _NO_SYNERGY, achievability)
+
+    assert [c.code for c in order] == ["life_ring", "adventurer_pants", "lich_race_trophy"]
+    # Raw gain would have ordered the tail trophy-first; the head is the same
+    # either way, so ONLY the tail distinguishes the two.
+    assert sorted((c for c in cands if c is not order[0]),
+                  key=_gear_pref_key)[0] is trophy
+
+
+def test_aging_order_tail_is_unchanged_when_every_factor_is_inert():
+    """The scaled key must reduce to `_gear_pref_key` exactly with no signals,
+    so the weighted tail is not a behaviour change for unweighted callers."""
+    cands = [_gc("ring2_slot", "iron_ring", 2000), _gc("helmet_slot", "wolf_ears", 18100),
+             _gc("boots_slot", "iron_boots", 9000)]
+    order = focus_aging_order(cands, {}, {})
+    assert order == [order[0], *sorted((c for c in cands if c is not order[0]),
+                                       key=_gear_pref_key)]
 
 
 # --- Wave 3a: synergy plumbing (spec 2026-07-19 §3, Phase 3) ---

@@ -2685,6 +2685,15 @@ PROGRESSION_TREE_MUTATIONS = [
     ("tree: branch pick ignores adequacy (gear whenever a target exists)",
      "    if not band_adequate and gear_target_exists:",
      "    if gear_target_exists:"),
+    # Aging-order TAIL back to raw gain — the shape that shipped and was
+    # measured wrong live 2026-07-27. The tail IS the fallback list the arbiter
+    # walks when the head is unservable, so sorting it by raw gain reinstates
+    # exactly the ordering the head's own factors rejected (lich_race_trophy
+    # 25050 ahead of adventurer_pants 15019, one position down). The head is
+    # unaffected, so only a tail assertion can catch this.
+    ("tree: aging-order tail sorts by RAW gain, ignoring every factor",
+     "                  key=lambda c: _scaled_pref_key(c, weights[c.slot]))",
+     "                  key=_gear_pref_key)"),
     ("tree: milestone off-by-a-band (current band, not next)",
      "    return min(TRUNK_CAP, (level // BAND + 1) * BAND)",
      "    return min(TRUNK_CAP, (level // BAND) * BAND)"),
@@ -2807,6 +2816,26 @@ SYNERGY_CORE_MUTATIONS = [
 
 # _synergy_map (progression_tree.py) — the impure B-assembly (spec §3.6).
 # Unit-killed by tests/test_ai/test_synergy_assembly.py.
+# decide_tree's GEAR-branch fallback ORDER (progression_tree.py). Its own group:
+# the mutant is unit-killed by tests/test_ai/test_progression_tree.py, not by
+# the synergy-assembly suite the other impure-tree group runs.
+FALLBACK_ORDER_MUTATIONS = [
+    # Trunk back to fallback index 0 — the shape that shipped, measured live
+    # 2026-07-27: `_servable_promotion` takes the FIRST servable pair, so one
+    # unservable gear step abandoned the whole gear branch for XP grinding
+    # while servable gear candidates sat behind the trunk (Robby: 9 of 15
+    # cycles on ReachCharLevel with 7 structural candidates live).
+    ("tree: xp trunk back to fallback index 0 (abandons gear on one bad step)",
+     "        fallback_roots = [*extra_roots, trunk]\n        fallback_steps = [*extra_steps, trunk]",
+     "        fallback_roots = [trunk, *extra_roots]\n        fallback_steps = [trunk, *extra_steps]"),
+    # Trunk dropped from the fallbacks entirely: gear-first becomes gear-ONLY,
+    # so a fully-blocked gear branch can no longer yield to XP and the arbiter
+    # is left holding an unservable pick. Trunk-last must not become trunk-gone.
+    ("tree: xp trunk dropped from the gear-branch fallbacks entirely",
+     "        fallback_roots = [*extra_roots, trunk]\n        fallback_steps = [*extra_steps, trunk]",
+     "        fallback_roots = [*extra_roots]\n        fallback_steps = [*extra_steps]"),
+]
+
 SYNERGY_ASSEMBLY_MUTATIONS = [
     # Leave-one-out dropped: a candidate overlaps ITSELF (total[i] still counts
     # its own copy), so every candidate scores 1 — a constant, i.e. inert (§3.3).
@@ -5836,6 +5865,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_synergy_core.py", survivors)
     run_group(PROGRESSION_TREE_IMPURE_SRC, SYNERGY_ASSEMBLY_MUTATIONS,
               "tests/test_ai/test_synergy_assembly.py", survivors)
+    run_group(PROGRESSION_TREE_IMPURE_SRC, FALLBACK_ORDER_MUTATIONS,
+              "tests/test_ai/test_progression_tree.py", survivors)
     run_group(REQUIREMENT_GRAPH_MEMO_SRC, MEMO_ENRICH_MUTATIONS,
               "tests/test_ai/test_synergy_assembly.py", survivors)
     run_group(MEANS_WORTH_SRC, MEANS_SERVES_MUTATIONS,

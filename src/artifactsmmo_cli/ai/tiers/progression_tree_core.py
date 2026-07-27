@@ -164,12 +164,33 @@ class GearCandidate:
 
 
 def _gear_pref_key(c: GearCandidate) -> tuple[Fraction, int, str, str]:
-    """Canonical total order for gear candidates: biggest weighted gain, then
-    higher item level (newer gear generation), then code and slot ascending as
-    PURE disambiguators (insertion-order and hash-seed independent). The single
-    source of truth for both `gear_target_pick`'s argmax and `focus_aging_order`'s
-    tail sort. Mirrors Lean `Formal.ProgressionTree.better`."""
+    """Canonical total order for gear candidates: biggest RAW gain, then higher
+    item level (newer gear generation), then code and slot ascending as PURE
+    disambiguators (insertion-order and hash-seed independent). The single
+    source of truth for `gear_target_pick`'s argmax — the UNWEIGHTED baseline
+    the aging fast path collapses to. Mirrors Lean
+    `Formal.ProgressionTree.better`; `focusAgingPick_unaged_eq_argmax` rests on
+    this staying raw, so the selection factors must never be folded in here.
+    `focus_aging_order`'s tail uses `_scaled_pref_key` instead."""
     return (-c.gain, -c.level, c.code, c.slot)
+
+
+def _scaled_pref_key(c: GearCandidate, weight: Fraction) -> tuple[Fraction, int, str, str]:
+    """`_gear_pref_key` with the SCALED weight in place of raw gain — the order
+    used for `focus_aging_order`'s tail, i.e. the fallback list the arbiter walks
+    when the head is unservable.
+
+    Live 2026-07-27: the tail sorted by RAW GAIN, so behind an achievability-
+    demoted head sat `lich_race_trophy (25050), lich_race_trophy, life_ring
+    (21020), adventurer_pants…` — the exact ordering the achievability factor
+    exists to prevent, preserved one position down. A fallback list that
+    disagrees with the head's own ranking hands the arbiter the demoted
+    candidate the moment the head cannot be served.
+
+    Reduces to `_gear_pref_key` exactly when every factor is inert (weight ==
+    gain), so the fast-path/argmax equivalence and every unweighted caller are
+    byte-identical."""
+    return (-weight, -c.level, c.code, c.slot)
 
 
 def gear_target_pick(candidates: list[GearCandidate]) -> GearCandidate | None:
@@ -271,13 +292,19 @@ def focus_aging_order(candidates: list[GearCandidate],
                       achievability: Mapping[tuple[str, str], Fraction] = _NO_ACHIEVABILITY
                       ) -> list[GearCandidate]:
     """Display/fallback order whose head is exactly `focus_aging_pick` and
-    whose tail is the remaining candidates in the canonical argmax order
-    (`gear_target_pick`'s total order). Keeps `decide_tree`'s
-    `ordered[0] == pick` invariant intact under aging, synergy, and
-    achievability scaling."""
+    whose tail is the remaining candidates by SCALED weight — the same
+    gain * falloff * synergy * achievability the head is picked on. Keeps
+    `decide_tree`'s `ordered[0] == pick` invariant intact under aging, synergy,
+    and achievability scaling.
+
+    The tail sorted by raw gain until 2026-07-27; see `_scaled_pref_key` for the
+    live failure. With every factor inert the scaled key reduces to
+    `_gear_pref_key`, so the unweighted order is unchanged."""
     if not candidates:
         return []
     pick = focus_aging_pick(candidates, focus, seats, synergy, achievability)
     assert pick is not None
-    rest = sorted((c for c in candidates if c is not pick), key=_gear_pref_key)
+    weights = dict(_scaled_weights(candidates, focus, synergy, achievability))
+    rest = sorted((c for c in candidates if c is not pick),
+                  key=lambda c: _scaled_pref_key(c, weights[c.slot]))
     return [pick, *rest]
