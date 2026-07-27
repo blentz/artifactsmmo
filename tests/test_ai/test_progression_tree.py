@@ -327,6 +327,28 @@ class TestServabilityDemotion:
         assert d.chosen_root == self.TRUNK
         assert d.chosen_step == self.TRUNK
 
+    def test_promotion_records_the_root_the_tree_actually_picked(self):
+        """The trace could not tell "the tree chose this" from "promotion landed
+        here": the servability verdict is computed on the FINAL root, so a
+        promoted root always logs as servable. Live 2026-07-27, 9 of 15 cycles
+        logged `ReachCharLevel, servable: true` and read as the tree choosing XP
+        when every one was a displaced gear pick."""
+        d = self._decide_with(lambda root, step: root != self.DAGGER)
+        assert d.chosen_root == self.SHIELD
+        assert d.promoted_from == self.DAGGER
+
+    def test_no_promotion_records_nothing(self):
+        d = self._decide_with(lambda root, step: True)
+        assert d.chosen_root == self.DAGGER
+        assert d.promoted_from is None
+
+    def test_all_unservable_records_no_promotion(self):
+        """Nothing was displaced — the original choice is kept — so the field
+        must stay None rather than pointing at the root that IS chosen."""
+        d = self._decide_with(lambda root, step: False)
+        assert d.chosen_root == self.DAGGER
+        assert d.promoted_from is None
+
     def test_all_unservable_keeps_original_choice(self):
         d = self._decide_with(lambda root, step: False)
         assert d.chosen_root == self.DAGGER

@@ -2828,6 +2828,13 @@ FALLBACK_ORDER_MUTATIONS = [
     ("tree: xp trunk back to fallback index 0 (abandons gear on one bad step)",
      "        fallback_roots = [*extra_roots, trunk]\n        fallback_steps = [*extra_steps, trunk]",
      "        fallback_roots = [trunk, *extra_roots]\n        fallback_steps = [trunk, *extra_steps]"),
+    # Promotion silently rewrites history: `promoted_from` always None, so a
+    # displaced pick again reads as the tree's own decision. This is the
+    # diagnostic that made the trunk-at-index-0 defect invisible for as long as
+    # it existed — it is anchored so it cannot quietly go back to lying.
+    ("tree: promotion no longer records the displaced pick",
+     "    promoted_from = tree_pick_root if chosen_root is not tree_pick_root else None",
+     "    promoted_from = None"),
     # Trunk dropped from the fallbacks entirely: gear-first becomes gear-ONLY,
     # so a fully-blocked gear branch can no longer yield to XP and the arbiter
     # is left holding an unservable pick. Trunk-last must not become trunk-gone.

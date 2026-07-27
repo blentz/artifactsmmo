@@ -450,10 +450,23 @@ class GamePlayer:
         # multi-cycle cached plan (Fix 2, arbiter anti-starvation epic).
         self._last_decision = decision
         cr, cs = decision.chosen_root, decision.chosen_step
+        promoted_from = getattr(decision, "promoted_from", None)
         self._last_servability_diag = {
+            # NOTE this verdict is computed on the FINAL root, i.e. AFTER any
+            # servability promotion — so on a promoted cycle it is necessarily
+            # True and says nothing about the root the tree actually wanted.
+            # Read it together with `promoted_from`.
             "chosen_root_servable": bool(
                 cr is not None and cs is not None and servable_pred(cr, cs)),
             "chosen_root": repr(cr) if cr is not None else None,
+            # The tree's own pick when promotion displaced it, else None. Without
+            # this, a promoted cycle is indistinguishable from a cycle the tree
+            # decided outright (live 2026-07-27: 9 of 15 cycles read as "the tree
+            # chose XP" when every one of them was a gear pick that lost its
+            # step). `promoted` is redundant with `promoted_from is not None` but
+            # makes the common trace query a field lookup, not a null test.
+            "promoted": promoted_from is not None,
+            "promoted_from": repr(promoted_from) if promoted_from is not None else None,
         }
         step = decision.chosen_step
         crafting_target = step.code if isinstance(step, ObtainItem) else None

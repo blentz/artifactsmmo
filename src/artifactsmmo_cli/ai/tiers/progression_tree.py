@@ -493,9 +493,16 @@ def decide_tree(state: WorldState, game_data: GameData,
         fallback_roots, fallback_steps = _candidate_fallbacks(
             state, game_data, ordered, ctx=ctx)
 
+    # The tree's OWN pick, before servability can displace it. Kept so the
+    # trace can tell "the tree chose this" apart from "the tree chose something
+    # else and promotion landed here" — indistinguishable in the 2026-07-27
+    # trace, which logged `chosen_root_servable: true` for a promoted trunk and
+    # made 9 cycles of fallback-walking read as a branch decision.
+    tree_pick_root = chosen_root
     if step_servable is not None:
         chosen_root, chosen_step, fallback_roots, fallback_steps = _servable_promotion(
             chosen_root, chosen_step, fallback_roots, fallback_steps, step_servable)
+    promoted_from = tree_pick_root if chosen_root is not tree_pick_root else None
 
     trunk_row = strategy.RootScore(
         root_repr=repr(trunk), category="char_level", contribution=Fraction(1),
@@ -514,4 +521,5 @@ def decide_tree(state: WorldState, game_data: GameData,
         fallback_steps=fallback_steps,
         fallback_roots=fallback_roots,
         aged_pick=aged_pick,
+        promoted_from=promoted_from,
     )

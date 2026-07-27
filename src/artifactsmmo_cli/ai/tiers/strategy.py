@@ -272,6 +272,15 @@ class StrategyDecision:
     # longer pollute the schedule. Defaulted False: fast-path / non-gear / XP
     # decisions consume no seat, and every non-tree constructor is unaffected.
     aged_pick: bool = False
+    # The root the TREE picked, when servability promotion then displaced it;
+    # None when the tree's own pick survived. Diagnostic only — no decision
+    # reads it — but the distinction is not recoverable afterwards: the
+    # servability diagnostic is computed on the FINAL decision, so a promoted
+    # root logs as servable and the promotion is invisible. Live 2026-07-27:
+    # 9 of 15 cycles logged `chosen_root: ReachCharLevel, servable: true` and
+    # read as the tree choosing XP, when the tree had chosen GEAR every time
+    # and promotion walked to the trunk sitting at fallback index 0.
+    promoted_from: MetaGoal | None = None
 
     def to_trace(self) -> dict[str, object]:
         return {

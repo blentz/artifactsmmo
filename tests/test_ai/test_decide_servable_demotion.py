@@ -65,6 +65,19 @@ class TestDecideServableFilter:
         assert repr(filtered.chosen_root) != top_repr, (
             "top root with unservable step must be demoted")
 
+    def test_demotion_is_visible_through_the_engine(self):
+        """`promoted_from` survives the StrategyEngine.decide seam — the trace
+        reads the decision from here, and without this field a demoted cycle is
+        indistinguishable from one the tree decided outright."""
+        gd = _two_root_gd()
+        eng = _eng(gd)
+        state = make_state(level=5)
+        top_repr = repr(eng.decide(state, gd).chosen_root)
+        filtered = eng.decide(state, gd,
+                              step_servable=lambda root, _s: repr(root) != top_repr)
+        assert repr(filtered.promoted_from) == top_repr
+        assert repr(filtered.chosen_root) != top_repr
+
     def test_all_unservable_keeps_natural_top(self):
         gd = _two_root_gd()
         eng = _eng(gd)
