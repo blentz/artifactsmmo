@@ -8,6 +8,7 @@ concept tag, or a concept with no module, is a traceability gap.
 |---|---|---|
 | AcceptTaskGate | tasks, items | safety, totality |
 | AccumulationSell | inventory, selling | safety, monotonicity |
+| Achievability | gear, planner | boundedness, monotonicity |
 | ActionApplicability | combat, characters | safety, monotonicity |
 | ActionCostNonneg | core, planner | safety |
 | ActionSetCompleteness | core | totality |

@@ -1278,6 +1278,13 @@ open Formal.PriorityBand
 #check @Formal.Synergy.synergy_le_one                        -- never above 1
 #check @Formal.Synergy.synergy_floor_pos                     -- the floor is strictly positive (feeds interleaveDue_reaches)
 #check @Formal.Synergy.synergy_monotone                      -- MONOTONE: higher overlap scores no lower
+-- Achievability (the effort-to-reach multiplier pinned into [aMin, 1]):
+#check @Formal.Achievability.ratio_nonneg                    -- the effort ratio is nonneg
+#check @Formal.Achievability.ratio_le_one                    -- with minEffort ≤ effort the ratio is ≤ 1
+#check @Formal.Achievability.achievability_ge_floor          -- never below aMin (the anti-starvation floor)
+#check @Formal.Achievability.achievability_le_one            -- never above 1
+#check @Formal.Achievability.achievability_floor_pos         -- the floor is strictly positive (feeds interleaveDue_reaches)
+#check @Formal.Achievability.achievability_antitone          -- ANTITONE: more effort scores no higher
 -- XpPositive (the server level_penalty band that decides whether a kill pays xp):
 #check @Formal.XpPositive.gate_iff                           -- characterisation: the gate IS the integer band, exactly
 #check @Formal.XpPositive.gate_false_iff                     -- the level_penalty = 0 band is exactly the complement

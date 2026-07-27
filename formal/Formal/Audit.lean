@@ -983,6 +983,12 @@ open Formal.PriorityBand
 #print axioms Formal.Synergy.synergy_le_one
 #print axioms Formal.Synergy.synergy_floor_pos
 #print axioms Formal.Synergy.synergy_monotone
+#print axioms Formal.Achievability.ratio_nonneg
+#print axioms Formal.Achievability.ratio_le_one
+#print axioms Formal.Achievability.achievability_ge_floor
+#print axioms Formal.Achievability.achievability_le_one
+#print axioms Formal.Achievability.achievability_floor_pos
+#print axioms Formal.Achievability.achievability_antitone
 #print axioms Formal.XpPositive.gate_iff
 #print axioms Formal.XpPositive.gate_false_iff
 #print axioms Formal.XpPositive.gate_of_window

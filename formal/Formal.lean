@@ -213,6 +213,7 @@ import Formal.PotionBaseline
 import Formal.MaxBatchFromHeld
 import Formal.OptimalBuyMix
 import Formal.ProgressionTree
+import Formal.Achievability
 import Formal.Synergy
 import Formal.EquipmentProfile
 import Formal.InventoryRoom
