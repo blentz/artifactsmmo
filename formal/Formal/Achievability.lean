@@ -55,11 +55,23 @@ strictly-positive weight, so d'Hondt still awards it a seat eventually
 synergy's `3` (`sMin = 1/3`), which is itself inside falloff's `9`. -/
 def aMin : Rat := mkRat 1 2
 
-/-- Relative-effort ratio `(minEffort+1)/(effort+1)` as an exact `Rat`. The `+1`
-on both sides keeps a zero-effort candidate from dividing by zero and keeps one
-fully-held candidate from slamming every other to the floor. -/
+/-- How much unmet work counts as a MEANINGFUL difference, in demand units.
+Added to BOTH sides of the effort ratio. Mirrors `EFFORT_SCALE` in
+`achievability_core.py`, whose docstring records the live failure that fixed the
+value: at a scale of 1 a zero-effort candidate drags the reference to 0 and
+collapses every other candidate onto the floor together, so the factor stops
+reordering anything. Positivity (`effortScale_pos`) is what every denominator
+lemma below actually needs — the specific value is a calibration knob, so no
+theorem here depends on it being 100. -/
+def effortScale : Rat := 100
+
+theorem effortScale_pos : (0 : Rat) < effortScale := by decide
+
+/-- Relative-effort ratio `(minEffort + effortScale)/(effort + effortScale)` as
+an exact `Rat`. Adding the scale to both sides also keeps a zero-effort
+candidate from dividing by zero. -/
 def achievabilityRatio (effort minEffort : Nat) : Rat :=
-  ((minEffort : Rat) + 1) / ((effort : Rat) + 1)
+  ((minEffort : Rat) + effortScale) / ((effort : Rat) + effortScale)
 
 /-- Effort multiplier: the affine map `aMin + (1 - aMin) * ratio`. Mirrors
 Python `achievability_pure` (whose `effort <= 0` branch and `effort >=
@@ -70,19 +82,20 @@ and this single formula recovers the Python branch's return value exactly). -/
 def achievabilityPure (effort minEffort : Nat) : Rat :=
   aMin + (1 - aMin) * achievabilityRatio effort minEffort
 
-/-- `(effort : Rat) + 1` is always strictly positive — true for every `Nat`,
-including `effort = 0`. -/
-theorem denom_pos (effort : Nat) : (0 : Rat) < (effort : Rat) + 1 := by
+/-- `(effort : Rat) + effortScale` is always strictly positive — true for every
+`Nat`, including `effort = 0`, since the scale itself is positive. -/
+theorem denom_pos (effort : Nat) : (0 : Rat) < (effort : Rat) + effortScale := by
   have h0 : (0 : Rat) ≤ (effort : Rat) := Rat.natCast_nonneg (a := effort)
-  have h1 : (0 : Rat) < 1 := by decide
+  have h1 := effortScale_pos
   grind
 
 theorem ratio_nonneg (effort minEffort : Nat) :
     0 ≤ achievabilityRatio effort minEffort := by
   unfold achievabilityRatio
   have hd := denom_pos effort
-  have hn : (0 : Rat) ≤ (minEffort : Rat) + 1 := by
+  have hn : (0 : Rat) ≤ (minEffort : Rat) + effortScale := by
     have h0 : (0 : Rat) ≤ (minEffort : Rat) := Rat.natCast_nonneg (a := minEffort)
+    have h1 := effortScale_pos
     grind
   exact ratDivNonneg hn hd
 
@@ -90,15 +103,16 @@ theorem ratio_le_one {effort minEffort : Nat} (h : minEffort ≤ effort) :
     achievabilityRatio effort minEffort ≤ 1 := by
   unfold achievabilityRatio
   have hd := denom_pos effort
-  have hne : ((effort : Rat) + 1) ≠ 0 := by
+  have hne : ((effort : Rat) + effortScale) ≠ 0 := by
     intro hz; rw [hz] at hd; exact absurd hd (by decide)
-  have hn : (minEffort : Rat) + 1 ≤ (effort : Rat) + 1 := by
+  have hn : (minEffort : Rat) + effortScale ≤ (effort : Rat) + effortScale := by
     have hcast : (minEffort : Rat) ≤ (effort : Rat) := by exact_mod_cast h
-    exact (Rat.add_le_add_right (a := (minEffort : Rat)) (b := (effort : Rat)) (c := 1)).mpr hcast
-  have hself : ((effort : Rat) + 1) / ((effort : Rat) + 1) = 1 := by
+    exact (Rat.add_le_add_right (a := (minEffort : Rat)) (b := (effort : Rat))
+      (c := effortScale)).mpr hcast
+  have hself : ((effort : Rat) + effortScale) / ((effort : Rat) + effortScale) = 1 := by
     rw [Rat.div_def, Rat.mul_inv_cancel _ hne]
-  calc ((minEffort : Rat) + 1) / ((effort : Rat) + 1)
-      ≤ ((effort : Rat) + 1) / ((effort : Rat) + 1) := ratDivMono hn hd
+  calc ((minEffort : Rat) + effortScale) / ((effort : Rat) + effortScale)
+      ≤ ((effort : Rat) + effortScale) / ((effort : Rat) + effortScale) := ratDivMono hn hd
     _ = 1 := hself
 
 /-- `1 - aMin = 1/2 ≥ 0` (the ratio coefficient is nonneg). -/
@@ -131,17 +145,19 @@ theorem achievability_antitone {e1 e2 minEffort : Nat} (h : e1 ≤ e2) :
   unfold achievabilityPure achievabilityRatio
   have hd1 := denom_pos e1
   have hd2 := denom_pos e2
-  have hdcast : (e1 : Rat) + 1 ≤ (e2 : Rat) + 1 := by
+  have hdcast : (e1 : Rat) + effortScale ≤ (e2 : Rat) + effortScale := by
     have hcast : (e1 : Rat) ≤ (e2 : Rat) := by exact_mod_cast h
-    exact (Rat.add_le_add_right (a := (e1 : Rat)) (b := (e2 : Rat)) (c := 1)).mpr hcast
-  have hnum_nonneg : (0 : Rat) ≤ (minEffort : Rat) + 1 := by
+    exact (Rat.add_le_add_right (a := (e1 : Rat)) (b := (e2 : Rat))
+      (c := effortScale)).mpr hcast
+  have hnum_nonneg : (0 : Rat) ≤ (minEffort : Rat) + effortScale := by
     have h0 : (0 : Rat) ≤ (minEffort : Rat) := Rat.natCast_nonneg (a := minEffort)
+    have h1 := effortScale_pos
     grind
-  have hmono : ((minEffort : Rat) + 1) / ((e2 : Rat) + 1)
-             ≤ ((minEffort : Rat) + 1) / ((e1 : Rat) + 1) :=
+  have hmono : ((minEffort : Rat) + effortScale) / ((e2 : Rat) + effortScale)
+             ≤ ((minEffort : Rat) + effortScale) / ((e1 : Rat) + effortScale) :=
     ratDivAntitone hnum_nonneg hd1 hd2 hdcast
-  have hmul : (1 - aMin) * (((minEffort : Rat) + 1) / ((e2 : Rat) + 1))
-            ≤ (1 - aMin) * (((minEffort : Rat) + 1) / ((e1 : Rat) + 1)) :=
+  have hmul : (1 - aMin) * (((minEffort : Rat) + effortScale) / ((e2 : Rat) + effortScale))
+            ≤ (1 - aMin) * (((minEffort : Rat) + effortScale) / ((e1 : Rat) + effortScale)) :=
     Rat.mul_le_mul_of_nonneg_left hmono oneSubAMin_nonneg
   grind
 

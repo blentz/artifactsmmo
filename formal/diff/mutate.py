@@ -2932,8 +2932,16 @@ ACHIEVABILITY_CORE_MUTATIONS = [
      "A_MIN = Fraction(1, 1)"),
     # Ratio inverted: MORE effort would score HIGHER, inverting the whole point.
     ("achievability: effort ratio inverted",
-     "Fraction(min_effort + 1, effort + 1)",
-     "Fraction(effort + 1, min_effort + 1)"),
+     "        min_effort + EFFORT_SCALE, effort + EFFORT_SCALE)",
+     "        effort + EFFORT_SCALE, min_effort + EFFORT_SCALE)"),
+    # Scale collapsed back to 1 — the value that SHIPPED and self-disabled
+    # (2026-07-27). A zero-effort candidate (a stocked utility potion, present in
+    # most real decisions) drags min_effort to 0 and pulls every other candidate
+    # onto the floor together, so the factor stops reordering anything and raw
+    # gain retakes the decision. The second live knob beside A_MIN.
+    ("achievability: effort scale collapsed to 1 (the self-disabling value)",
+     "EFFORT_SCALE = 100",
+     "EFFORT_SCALE = 1"),
 ]
 
 # _equippable_goal passive-currency gate (strategy_driver.py). Unit-killed by

@@ -55,8 +55,9 @@ The codebase already ranks its factors by range, deliberately:
 | `synergy` (alignment) | 3:1 (`S_MIN = 1/3`) | "strictly inside falloff's 9:1 so aging structurally dominates alignment" |
 | **achievability** | **2:1 (`A_MIN = 1/2`)** | strictly inside synergy's 3:1 — effort informs, never dictates |
 
-`A_MIN = Fraction(1, 2)`. This is the ONLY tuning surface, mirroring
-`S_MIN`'s docstring discipline.
+`A_MIN = Fraction(1, 2)`, mirroring `S_MIN`'s docstring discipline. It was
+intended as the ONLY tuning surface; live measurement added a second,
+`EFFORT_SCALE` — see the correction under "The weight function is self-scaling".
 
 It satisfies the requirement it exists for: flipping `lich_race_trophy` (25050)
 below `life_ring` (21020) needs an achievability ratio under 21020/25050 = 0.84,
@@ -91,12 +92,35 @@ effort(c) = SUM over tokens of max(0, demand(token) - held(token))
 
 ### The weight function is self-scaling
 
-No absolute effort constant. Achievability is relative to the cheapest candidate
-in the same decision:
+> **CORRECTED 2026-07-27 — this section was wrong, and the shipped factor was
+> self-disabling because of it.** The claim below ("no absolute effort
+> constant") does not survive contact with a real candidate pool. Effort is
+> unbounded BELOW: a `small_health_potion` in the utility slot costs ~0 unmet
+> units and is present in most decisions, which pins `min_effort` at 0 and
+> collapses every candidate onto the floor TOGETHER. Robby's trace showed
+> exactly this — cycle 0 picked `adventurer_pants`, cycle 2 gained the potion
+> candidate and reverted to `lich_race_trophy`.
+>
+> ```
+> pool without potion (min_effort=32): spread 1.94:1 -> life_ring 21020 wins
+> pool with    potion (min_effort=0):  spread 1.03:1 -> trophy    12538 wins
+> ```
+>
+> A 1.03:1 spread cannot overturn the 1.19:1 gain gap the factor exists to
+> overturn. **Anchoring on the most DISTANT candidate instead was tried and
+> rejected**: mirror-image flaw — it manufactures a full 2:1 spread out of
+> trivial differences (a 1-unit candidate floored merely for being the pool
+> maximum), which broke the reversibility witness. The fix is an explicit scale
+> constant, `EFFORT_SCALE = 100`, added to both sides. The quantity being
+> denied was real; naming it is the honest move. `A_MIN` and `EFFORT_SCALE` are
+> both live knobs, both mutation-anchored, both recalibrated from traces.
+
+Achievability is relative to the cheapest candidate in the same decision, on a
+fixed scale:
 
 ```
-r(c)            = (min_effort + 1) / (effort(c) + 1)      -> (0, 1]
-achievability(c) = A_MIN + (1 - A_MIN) * r(c)             -> [A_MIN, 1]
+r(c)            = (min_effort + EFFORT_SCALE) / (effort(c) + EFFORT_SCALE)  -> (0, 1]
+achievability(c) = A_MIN + (1 - A_MIN) * r(c)                              -> [A_MIN, 1]
 ```
 
 The `+1` smoothing avoids a divide-by-zero when something is fully held, and
