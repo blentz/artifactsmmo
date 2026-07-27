@@ -571,31 +571,42 @@ class TestFocusAging:
 # effort measure. `lich_race_trophy` (achievability_core.py's own docstring
 # example -- "Live at L21 ... 1000 event_tickets away") is not itself in the
 # committed `gamedata_bundle.json` fixture (only `lich_crown`/`lich_tomb_key`
-# are), so this builds the identical SHAPE on top of the real bundle: one
-# synthetic BUY-only artifact, priced by a permanent NPC vendor in
-# `event_ticket` -- a real bundle item, gatherable here (so it is attainable-
-# now on its own, not only once held) exactly the way
-# tests/test_ai/test_requirement_graph_memo.py builds its currency chains on a
-# synthetic `GameData()`. Every OTHER candidate-surface fact (life_ring's own
-# recipe, its skill gates, pursuit_value, `_effort_for`'s currency/skill
-# handling) is the real bundle's, unmodified.
+# are), so this builds the same TWO-HOP currency shape
+# (`requirement_graph_memo.py`'s own docstring: trophy <- 10 medal <- 100
+# event_ticket each = 1000) on top of the real bundle: one synthetic BUY-only
+# artifact plus one synthetic intermediate currency, priced by two permanent
+# NPC vendors, bottoming out in `event_ticket` -- a real bundle item, gatherable
+# here (so it is attainable-now on its own, not only once held). This uses the
+# SAME post-load `npc_stock`/`npc_buy_currency`/`npc_tiles` mutation TECHNIQUE
+# tests/test_ai/test_requirement_graph_memo.py's `_gd_with_chain` uses (that
+# fixture is a synthetic `GameData()` modelling the chain in isolation; this one
+# is the real bundle, modelling the ranking-path consumer of it) -- a single-hop
+# price would exercise `_currency_cost`'s base case only, never its recursive
+# transitive-expansion arm, which is exactly what Task 1 added.
 
 def _bundle_with_currency_gated_artifact() -> GameData:
     """`_bundle()` plus one synthetic artifact, `lich_race_trophy`: no recipe
-    (BUY leaf only), sold by a permanent vendor for 1000 `event_ticket`. hp_bonus
-    40 -> pursuit_value 40000 (`combat_raw * 1000`), a 1.6x gain gap over
-    life_ring's real 25020 -- comfortably under achievability_core.A_MIN's
-    documented 2x boundary (a maximally distant candidate can only lose to a
-    maximally close one below that gap), which is the exact property this test
-    exercises. `event_ticket` is made gatherable (a resource drop) so it is
-    attainable-now by itself; the poor/rich split below turns entirely on how
-    much of it is HELD, not on whether it can be acquired in principle."""
+    (BUY leaf only), sold by a permanent vendor for 10 `lich_race_medal`, itself
+    sold by a second permanent vendor for 100 `event_ticket` each -- a genuine
+    two-hop chain (`_currency_cost`'s recursive arm, not just its base case),
+    totalling 1000 tickets exactly as `requirement_graph_memo.py`'s own
+    docstring describes. hp_bonus 40 -> pursuit_value 40000 (`combat_raw *
+    1000`), a 1.6x gain gap over life_ring's real 25020 -- comfortably under
+    achievability_core.A_MIN's documented 2x boundary (a maximally distant
+    candidate can only lose to a maximally close one below that gap), which is
+    the exact property this test exercises. `event_ticket` is made gatherable
+    (a resource drop) so it is attainable-now by itself; the poor/rich split
+    below turns entirely on how much of it is HELD, not on whether it can be
+    acquired in principle."""
     gd = _bundle()
     gd.items.stats["lich_race_trophy"] = ItemStats(
         code="lich_race_trophy", level=15, type_="artifact", hp_bonus=40)
-    gd.world.npc_stock["trophy_vendor"] = {"lich_race_trophy": 1000}
-    gd.world.npc_buy_currency["trophy_vendor"] = {"lich_race_trophy": "event_ticket"}
+    gd.world.npc_stock["trophy_vendor"] = {"lich_race_trophy": 10}
+    gd.world.npc_buy_currency["trophy_vendor"] = {"lich_race_trophy": "lich_race_medal"}
     gd.world.npc_tiles["trophy_vendor"] = (5, 5)
+    gd.world.npc_stock["medal_vendor"] = {"lich_race_medal": 100}
+    gd.world.npc_buy_currency["medal_vendor"] = {"lich_race_medal": "event_ticket"}
+    gd.world.npc_tiles["medal_vendor"] = (6, 6)
     gd.recipes_catalog.resource_drops_full["event_shrine"] = [("event_ticket", 1, 1, 1)]
     return gd
 
