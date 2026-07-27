@@ -113,6 +113,11 @@ transitive expansion of §1 applied:
 | `adventurer_boots` | 10041 | 18 | 1.000 | 10041 | 4th |
 | `mushmush_jacket` | 6990 | 30 | 0.806 | 5637 | 5th |
 
+**Note (2026-07-26 post-Task 3 correction):** The per-candidate figures above predate the per-skill gate lookup fix in Task 3, which corrected the code to apply the candidate's craft level only to its own recipes, not to every token in the closure. The ordering claim—that a craftable candidate outranks the currency-gated trophy—remains valid. However, at HEAD, the actual live result is:
+- `chosen_root: ObtainItem(code='adventurer_pants', quantity=1, slot='leg_armor_slot')`
+- `chosen_step: ObtainItem(code='ash_plank', quantity=7)`
+- `lich_race_trophy` remains the raw-gain argmax at 25050 but is no longer picked.
+
 The desired reordering, from the real catalog and real holdings. Note
 `lich_race_trophy` lands 2nd, not last — down-weighted, not banished, which is
 the stated intent.

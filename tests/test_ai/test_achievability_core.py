@@ -1,6 +1,7 @@
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.tiers.achievability_core import A_MIN, achievability_pure
+from artifactsmmo_cli.ai.tiers.synergy_core import S_MIN
 
 
 def test_the_cheapest_candidate_is_unpenalised():
@@ -41,5 +42,4 @@ def test_the_floor_is_strictly_positive():
 
 def test_the_range_sits_inside_synergy():
     """Hierarchy: falloff 9:1 > synergy 3:1 > achievability 2:1."""
-    from artifactsmmo_cli.ai.tiers.synergy_core import S_MIN
     assert Fraction(1) / A_MIN < Fraction(1) / S_MIN
