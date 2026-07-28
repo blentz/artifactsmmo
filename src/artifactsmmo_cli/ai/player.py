@@ -58,6 +58,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
     RootScoreView,
 )
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
+from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_latch import GearLatch
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
@@ -1028,6 +1029,7 @@ class GamePlayer:
                     goal_name=repr(selected_goal),
                     outcome=outcome,
                     planner_stats=cycle_stats,
+                    fight=self._fight_of(action),
                 )
                 self._notify_observer(
                     repr(selected_goal) if selected_goal else "<none>",
@@ -1585,8 +1587,21 @@ class GamePlayer:
             succeeded=succeeded,
         )
 
+    @staticmethod
+    def _fight_of(action: object | None) -> FightRecord | None:
+        """The transcript captured by a fight cycle; None on every other cycle.
+
+        ONE gate shared by both consumer surfaces (`_emit_trace` and
+        `_notify_observer`) so the trace and the TUI can never disagree about
+        whether a cycle fought. Mirrors the `isinstance(action, LevelSkill)`
+        grind gate.
+        """
+        return action.last_fight if isinstance(action, FightAction) else None
+
     def _emit_trace(self, action_name: str, goal_name: str, outcome: str,
-                    planner_stats: dict[str, object], recovery: dict[str, object] | None = None) -> None:
+                    planner_stats: dict[str, object],
+                    recovery: dict[str, object] | None = None,
+                    fight: FightRecord | None = None) -> None:
         """Emit one per-cycle record to the tracer."""
         if self.state is None:
             return
@@ -1644,6 +1659,17 @@ class GamePlayer:
         # the cycle_step_e trace lockstep. Emitted only when game data is
         # loaded (absent = unobserved, never guessed); gearGap has no cheap
         # per-cycle analog and stays a measured divergence class.
+        if fight is not None:
+            # Structured outcome only — the per-turn transcript is EXCLUDED.
+            # It is 96.8% of the record (measured over 31 real fights: 5190 B
+            # with `logs`, 168 B without) and it is server-rendered prose that
+            # nothing here is permitted to parse, so it buys no analysis. What
+            # remains is exactly what `predict_win` can be scored against:
+            # `turns` against its predicted fight length, `hp_before - hp_after`
+            # against its predicted damage taken. `started_at` is the server-side
+            # key back into GET /my/logs if the transcript is ever wanted — the
+            # TUI fight modal reads the same key (see tui/screens/fight_screen).
+            record["fight"] = fight.model_dump(exclude={"logs"})
         if self.game_data is not None:
             record["gear"] = {"adequate": self._pick_winnable_monster() is not None}
         if self._strategy is not None and self.game_data is not None:
@@ -1900,8 +1926,8 @@ class GamePlayer:
         grind_children = self._last_grind_expansion if isinstance(action, LevelSkill) else ()
         # Same shape as the grind gate above: only a fight cycle has a captured
         # transcript, and gating on the action type keeps a prior fight's record
-        # from leaking onto an unrelated cycle.
-        fight_record = action.last_fight if isinstance(action, FightAction) else None
+        # from leaking onto an unrelated cycle. Shared with the trace surface.
+        fight_record = self._fight_of(action)
         snap = CycleSnapshot(
             cycle_index=self._cycle_counter,
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
