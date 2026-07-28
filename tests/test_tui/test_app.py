@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from artifactsmmo_api_client.models.log_type import LogType
+from textual.widgets import RichLog
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.fight_record import FightRecord
@@ -546,3 +547,31 @@ class TestFightBackfill:
             app.screen.load_older_sync()
 
             assert [r.opponent for r in app.screen.records] == ["chicken"]
+
+    @pytest.mark.asyncio
+    async def test_m_dispatches_the_backfill_worker(self):
+        """'m' must run the fetch on a worker thread, not the event loop."""
+        app, _ = self._app_with_api([self._fight_entry()])
+        async with app.run_test() as pilot:
+            await pilot.press("f")
+            await pilot.press("m")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+
+            assert [r.opponent for r in app.screen.records] == ["chicken"]
+            assert "loaded 1" in app.screen.status_text
+
+    @pytest.mark.asyncio
+    async def test_arrow_keys_re_render_the_detail_pane(self):
+        app, _ = self._app_with_api([])
+        app._store_snapshot(_snap(fight=_FIGHT))
+        app._store_snapshot(_snap(fight=_FIGHT.model_copy(
+            update={"started_at": "2026-07-27T22:00:00.000000",
+                    "opponent": "chicken"})))
+        async with app.run_test() as pilot:
+            await pilot.press("f")
+            await pilot.press("down")
+            await pilot.pause()
+
+            detail = app.screen.query_one("#fight-detail", RichLog)
+            assert "chicken" in str(detail.lines[0])

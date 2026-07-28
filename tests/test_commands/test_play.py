@@ -17,6 +17,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckExit, StuckSignal
+from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.commands.play import default_learn_db_path, play
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 
@@ -401,10 +402,13 @@ class TestRunWithTui:
                 mock_game_data.load.assert_called_once_with(
                     mock_client, ttl_minutes=30, force_refresh=False)
                 assert mock_player.game_data is loaded_data
-                # App created with the character and preloaded data.
-                mock_watch_app_cls.assert_called_once_with(
-                    character="hero", game_data=loaded_data
-                )
+                # App created with the character, preloaded data, and an API
+                # wrapper (the fight modal's /my/logs history backfill).
+                assert mock_watch_app_cls.call_count == 1
+                kwargs = mock_watch_app_cls.call_args.kwargs
+                assert kwargs["character"] == "hero"
+                assert kwargs["game_data"] is loaded_data
+                assert isinstance(kwargs["api"], APIWrapper)
                 # Bridge wraps the app's update callback + planning signal, and feeds
                 # both the cycle observer and the planning observer.
                 mock_bridge_cls.assert_called_once_with(

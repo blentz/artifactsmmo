@@ -75,12 +75,24 @@ class FightScreen(Screen[None]):
     def on_mount(self) -> None:
         self._refresh_list()
         self._render_detail(0)
+        # Focus the list, not the transcript pane, so up/down browse fights the
+        # moment the modal opens instead of scrolling the detail RichLog.
+        self.query_one("#fight-list", ListView).focus()
 
     def _refresh_list(self) -> None:
         listing = self.query_one("#fight-list", ListView)
+        # ListView.clear() drops the highlight, so hold the caller's row and put
+        # it back — otherwise a fight merging in mid-browse would yank the
+        # selection to the top. A fresh list seeds row 0 so it matches the detail
+        # pane; without it the highlight reads as absent and the first arrow
+        # press is spent selecting rather than moving.
+        previous = listing.index
         listing.clear()
         for rec in self.records:
             listing.append(ListItem(Label(fight_row_label(rec))))
+        if self.records:
+            listing.index = (
+                previous if previous is not None and previous < len(self.records) else 0)
 
     def _render_detail(self, index: int) -> None:
         detail = self.query_one("#fight-detail", RichLog)
@@ -92,19 +104,26 @@ class FightScreen(Screen[None]):
         if event.list_view.index is not None:
             self._render_detail(event.list_view.index)
 
+    def sync_ui(self) -> None:
+        """Push current state into the widgets. EVENT-LOOP THREAD ONLY.
+
+        Textual resolves widgets through the `active_app` ContextVar, which is
+        unset on a worker thread — touching a widget there raises LookupError.
+        Everything that mutates the UI funnels through here so the thread body
+        can marshal one call back onto the loop.
+        """
+        if not self.is_mounted:
+            return
+        self.query_one("#fight-status", Static).update(self.status_text)
+        self._refresh_list()
+
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         """A fight landed while the modal was open."""
         if snap.fight is None:
             return
         self.merge([snap.fight])
         self.session_started_at = self.records[0].started_at
-        if self.is_mounted:
-            self._refresh_list()
-
-    def _set_status(self, text: str) -> None:
-        self.status_text = text
-        if self.is_mounted:
-            self.query_one("#fight-status", Static).update(text)
+        self.sync_ui()
 
     def action_load_older(self) -> None:
         """Fetch the next page of server history off the event loop.
@@ -112,10 +131,16 @@ class FightScreen(Screen[None]):
         The generated client call is synchronous; running it inline would freeze
         the UI for the duration of the request.
         """
-        self.run_worker(self.load_older_sync, thread=True)
+        self.run_worker(self._load_older_worker, thread=True)
+
+    def _load_older_worker(self) -> None:
+        """Worker-thread body: fetch, then hand the UI touch back to the loop."""
+        self.load_older_sync()
+        self.app.call_from_thread(self.sync_ui)
 
     def load_older_sync(self) -> None:
-        """Fetch, convert, merge, and report. Safe to call directly in tests.
+        """Fetch, convert, merge, and record status. Touches NO widgets, so it is
+        safe both on a worker thread and when called directly in tests.
 
         The `except RuntimeError` is the SINGLE error-handling level for the
         backfill: the failure is surfaced in the status bar and the page counter
@@ -129,14 +154,12 @@ class FightScreen(Screen[None]):
         try:
             fetched = self._fetch_older(page)
         except RuntimeError as exc:
-            self._set_status(f"backfill failed: {exc}")
+            self.status_text = f"backfill failed: {exc}"
             return
         self._next_page = page + 1
         if not fetched:
-            self._set_status(f"no older fights on page {page}")
+            self.status_text = f"no older fights on page {page}"
             return
         before = len(self.records)
         self.merge(fetched)
-        self._set_status(f"loaded {len(self.records) - before} older fights")
-        if self.is_mounted:
-            self._refresh_list()
+        self.status_text = f"loaded {len(self.records) - before} older fights"

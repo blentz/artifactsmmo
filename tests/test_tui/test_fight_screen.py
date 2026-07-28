@@ -1,7 +1,18 @@
 """FightScreen list/detail behaviour — pure logic, no running app."""
 
+from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.tui.screens.fight_screen import FightScreen
+
+
+def _snap(**overrides) -> CycleSnapshot:
+    base = dict(
+        cycle_index=1, timestamp="2026-07-27T23:00:00Z", character="Robby",
+        x=0, y=0, level=1, xp=0, max_xp=100, hp=100, max_hp=100, gold=0,
+        selected_goal="g", action="Fight(mushmush)", outcome="ok",
+    )
+    base.update(overrides)
+    return CycleSnapshot(**base)
 
 
 def make_record(started_at="2026-07-27T23:30:30.455000", **overrides) -> FightRecord:
@@ -170,3 +181,21 @@ class TestBackfill:
         screen.load_older_sync()
 
         assert "1" in screen.status_text
+
+
+class TestLiveUpdate:
+    def test_a_non_fight_snapshot_is_ignored(self):
+        screen = FightScreen([make_record()], character="Robby")
+
+        screen.update_snapshot(_snap())
+
+        assert len(screen.records) == 1
+
+    def test_a_fight_snapshot_is_merged(self):
+        screen = FightScreen([], character="Robby")
+        rec = make_record("2026-07-27T23:00:00.000000")
+
+        screen.update_snapshot(_snap(fight=rec))
+
+        assert screen.records == [rec]
+        assert screen.session_started_at == rec.started_at
