@@ -5,6 +5,7 @@ from typing import Any
 from textual.widgets import RichLog
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
+from artifactsmmo_cli.tui.fight_format import fight_summary_line
 from artifactsmmo_cli.tui.plan_format import grind_chain_lines, short_root
 
 _OUTCOME_COLOR = {"ok": "green", "no_plan": "yellow"}
@@ -14,8 +15,9 @@ def build_log_lines(snap: CycleSnapshot) -> list[str]:
     """Rich-markup lines for one cycle: the compact decision line, an optional
     dim 'why' line (chosen root score + top-2 alternatives) when a strategy
     ranking is present, and — on a LevelSkill cycle — the captured grind chain
-    (the concrete gather/craft legs the step expands into). Discretionary cycles
-    (no chosen_root / empty ranking) get the single line plus any grind chain."""
+    (the concrete gather/craft legs the step expands into), and — on a fight
+    cycle — a structured one-line fight summary. Discretionary cycles (no
+    chosen_root / empty ranking) get the single line plus any grind chain."""
     outcome_color = _OUTCOME_COLOR.get(snap.outcome, "red")
     ts = snap.timestamp[11:19] if len(snap.timestamp) >= 19 else snap.timestamp
     line1 = (
@@ -40,6 +42,8 @@ def build_log_lines(snap: CycleSnapshot) -> list[str]:
             why = f"{why}  alt: {alt_text}"
         lines.append(f"[dim]{why}[/dim]")
     lines.extend(grind_chain_lines(snap.grind_expansion))
+    if snap.fight is not None:
+        lines.append(fight_summary_line(snap.fight))
     return lines
 
 

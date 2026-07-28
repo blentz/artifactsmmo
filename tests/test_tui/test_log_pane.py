@@ -3,7 +3,21 @@
 from unittest.mock import patch
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode, RootScoreView
+from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.tui.widgets.log_pane import LogPane, build_log_lines
+
+_FIGHT = FightRecord(
+    started_at="2026-07-27T23:30:30.455000",
+    result="win",
+    turns=27,
+    opponent="mushmush",
+    logs=("Fight start: hero HP: 485/485 vs Mushmush HP: 350/350",),
+    hp_before=485,
+    hp_after=275,
+    xp=45,
+    gold=12,
+    drops=(),
+)
 
 
 def _snap(**overrides) -> CycleSnapshot:
@@ -190,3 +204,28 @@ class TestGrindExpansionLines:
 
     def test_no_grind_expansion_leaves_single_line(self):
         assert len(build_log_lines(_snap())) == 1
+
+
+class TestFightSummary:
+    def test_fight_cycle_appends_a_summary_line(self):
+        lines = build_log_lines(_snap(action="Fight(mushmush)", fight=_FIGHT))
+
+        assert any("fight:" in line and "27t" in line for line in lines)
+
+    def test_non_fight_cycle_appends_nothing(self):
+        assert not any("fight:" in line for line in build_log_lines(_snap()))
+
+    def test_summary_sits_below_the_decision_line(self):
+        lines = build_log_lines(_snap(action="Fight(mushmush)", fight=_FIGHT))
+
+        assert "Fight(mushmush)" in lines[0]
+        assert "fight:" in lines[-1]
+
+    def test_a_lost_fight_still_reports(self):
+        """The cycle outcome is error:fight_lost, but the record is present."""
+        lost = _FIGHT.model_copy(update={"result": "loss", "hp_after": 0})
+
+        lines = build_log_lines(
+            _snap(action="Fight(mushmush)", outcome="error:fight_lost", fight=lost))
+
+        assert any("loss" in line for line in lines)
