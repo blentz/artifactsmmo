@@ -310,21 +310,17 @@ class TestFightAction:
         """
         from unittest.mock import MagicMock, patch
 
-        from artifactsmmo_api_client.models.fight_result import FightResult
-
-        from tests.test_ai.test_actions_execute import make_char_schema
+        from tests.test_ai.test_actions_execute import (
+            make_char_schema,
+            make_fight_api_result,
+        )
 
         action = FightAction(monster_code="yellow_slime", locations=frozenset([(1, 0)]))
         state = make_state(x=1, y=0, hp=100, max_hp=100, level=1)
 
         char = make_char_schema(x=1, y=0)
-        fight_data = MagicMock()
-        fight_data.characters = [char]
-        fight_data.fight = MagicMock()
-        fight_data.fight.result = FightResult.LOSS
-        fight_data.fight.turns = 3
-        api_result = MagicMock()
-        api_result.data = fight_data
+        api_result = make_fight_api_result(
+            char, result="loss", turns=3, opponent="yellow_slime", final_hp=0)
 
         with patch("artifactsmmo_cli.ai.actions.combat.action_fight", return_value=api_result):
             with pytest.raises(RuntimeError, match="fight_lost"):

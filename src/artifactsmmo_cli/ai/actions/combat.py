@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.actions.gather_apply_core import (
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_match import equipped_matches_loadout
@@ -56,6 +57,13 @@ class FightAction(Action):
     # learned-cost history keys and action identity don't fork. Mirrored in
     # Formal/ActionApplicability.lean (dropFarm arm).
     drop_farm: bool = field(default=False, compare=False, repr=False)
+    # The transcript of the fight this instance most recently executed, for the
+    # TUI. Excluded from compare so a fought action stays equal to its freshly
+    # planned twin (otherwise the planner reads its cached plan as invalidated
+    # after every fight and re-searches), and from repr so the trace and
+    # CycleSnapshot.action string are unchanged. Read by GamePlayer via an
+    # isinstance gate, mirroring _last_grind_expansion / LevelSkill.
+    last_fight: FightRecord | None = field(default=None, compare=False, repr=False)
 
     _MIN_FREE_SLOTS = 1  # combat can drop loot; need at least 1 free capacity
 
@@ -185,8 +193,14 @@ class FightAction(Action):
         dest = nearest_or_error(state.x, state.y, self.locations, "combat")
         if (state.x, state.y) != dest:
             state = MoveAction(x=dest[0], y=dest[1]).execute(state, client)
+        self.last_fight = None
         result = action_fight(client=client, name=state.character, body=FightRequestSchema())
         result = Action._raise_for_error(result, f"Fight {self.monster_code}")
+        # Capture BEFORE the loss raise below: GamePlayer catches that RuntimeError,
+        # records outcome=error:fight_lost, and still reaches _notify_observer with
+        # this same action object — so losses reach the TUI with no extra machinery.
+        self.last_fight = FightRecord.from_fight_response(
+            result.data, character=state.character, hp_before=state.hp)
         new_state = WorldState.from_character_schema(
             result.data.characters[0],
             bank_items=state.bank_items,

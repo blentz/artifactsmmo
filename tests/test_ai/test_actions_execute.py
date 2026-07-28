@@ -1,8 +1,10 @@
 """Integration tests for Action.execute() — API client mocked."""
 
+import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from artifactsmmo_api_client.models.fight_result import FightResult
 
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
@@ -71,11 +73,33 @@ def make_get_character_result(char):
     return result
 
 
-def make_fight_api_result(char):
-    result = MagicMock()
-    result.data = MagicMock()
-    result.data.characters = [char]
-    return result
+def make_fight_api_result(char, *, result="win", turns=3, opponent="chicken",
+                          xp=12, gold=3, final_hp=90,
+                          started_at="2026-07-27T23:30:30.455000"):
+    """Wrap a mock CharacterSchema as a fight API response.
+
+    ``data.fight`` must carry REAL scalars, not bare MagicMocks: FightAction.execute
+    builds a FightRecord from them and pydantic rejects a MagicMock int.
+    """
+    api_result = MagicMock()
+    api_result.data = MagicMock()
+    api_result.data.characters = [char]
+    api_result.data.cooldown.started_at = datetime.datetime.fromisoformat(started_at)
+    fight = api_result.data.fight
+    # FightResult is a real `str, Enum`, so one assignment serves both consumers:
+    # `== FightResult.LOSS` for execute's loss branch, and `.value` for FightRecord.
+    fight.result = FightResult.WIN if result == "win" else FightResult.LOSS
+    fight.turns = turns
+    fight.opponent = opponent
+    fight.logs = [f"Fight start: {char.name} HP: 100/100 vs Chicken HP: 60/60"]
+    row = MagicMock()
+    row.character_name = char.name
+    row.xp = xp
+    row.gold = gold
+    row.final_hp = final_hp
+    row.drops = []
+    fight.characters = [row]
+    return api_result
 
 
 class TestMoveActionExecute:
@@ -177,6 +201,67 @@ class TestFightActionExecute:
         with patch("artifactsmmo_cli.ai.actions.combat.action_fight", return_value=None):
             with pytest.raises(RuntimeError):
                 action.execute(state, client)
+
+    def test_execute_captures_the_fight_record(self):
+        action = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]))
+        state = make_state(x=0, y=0, hp=100, max_hp=100)
+        char = make_char_schema(x=0, y=0)
+
+        with patch("artifactsmmo_cli.ai.actions.combat.action_fight",
+                   return_value=make_fight_api_result(char, turns=7, final_hp=90)):
+            action.execute(state, client=MagicMock())
+
+        assert action.last_fight is not None
+        assert action.last_fight.turns == 7
+        assert action.last_fight.result == "win"
+        assert action.last_fight.hp_before == 100
+        assert action.last_fight.hp_after == 90
+        assert action.last_fight.logs
+
+    def test_execute_captures_the_record_before_raising_on_loss(self):
+        """Losses are the most informative transcripts — they must survive the raise."""
+        action = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]))
+        state = make_state(x=0, y=0, hp=100, max_hp=100)
+        char = make_char_schema(x=0, y=0)
+
+        with patch("artifactsmmo_cli.ai.actions.combat.action_fight",
+                   return_value=make_fight_api_result(char, result="loss", final_hp=0)):
+            with pytest.raises(RuntimeError, match="fight_lost"):
+                action.execute(state, client=MagicMock())
+
+        assert action.last_fight is not None
+        assert action.last_fight.result == "loss"
+        assert action.last_fight.hp_after == 0
+
+    def test_execute_clears_a_stale_record_first(self):
+        action = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]))
+        state = make_state(x=0, y=0, hp=100, max_hp=100)
+        char = make_char_schema(x=0, y=0)
+
+        with patch("artifactsmmo_cli.ai.actions.combat.action_fight",
+                   return_value=make_fight_api_result(char, turns=7)):
+            action.execute(state, client=MagicMock())
+        with patch("artifactsmmo_cli.ai.actions.combat.action_fight", return_value=None):
+            with pytest.raises(RuntimeError):
+                action.execute(state, client=MagicMock())
+
+        assert action.last_fight is None
+
+    def test_last_fight_does_not_affect_equality_or_repr(self):
+        """compare=False keeps a fought action equal to its freshly-planned twin;
+        without it the planner would see its cached plan invalidated after every
+        fight and re-search. repr=False keeps the trace/snapshot action string."""
+        fought = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]))
+        fresh = FightAction(monster_code="chicken", locations=frozenset([(0, 0)]))
+        state = make_state(x=0, y=0, hp=100, max_hp=100)
+        char = make_char_schema(x=0, y=0)
+
+        with patch("artifactsmmo_cli.ai.actions.combat.action_fight",
+                   return_value=make_fight_api_result(char)):
+            fought.execute(state, client=MagicMock())
+
+        assert fought == fresh
+        assert repr(fought) == repr(fresh)
 
 
 class TestGatherActionExecute:
