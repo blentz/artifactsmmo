@@ -1874,6 +1874,10 @@ class GamePlayer:
         # action type keeps a prior grind's legs from leaking onto an unrelated
         # cycle (the field is only cleared inside _execute_level_skill).
         grind_children = self._last_grind_expansion if isinstance(action, LevelSkill) else ()
+        # Same shape as the grind gate above: only a fight cycle has a captured
+        # transcript, and gating on the action type keeps a prior fight's record
+        # from leaking onto an unrelated cycle.
+        fight_record = action.last_fight if isinstance(action, FightAction) else None
         snap = CycleSnapshot(
             cycle_index=self._cycle_counter,
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
@@ -1935,6 +1939,7 @@ class GamePlayer:
                 if self._last_decision is not None and self.game_data is not None else ()
             ),
             grind_expansion=grind_children,
+            fight=fight_record,
             gear_focus={
                 self._focus_key_str(k): v for k, v in self._gear_focus.items()
             },

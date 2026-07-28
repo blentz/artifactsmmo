@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from artifactsmmo_cli.ai.fight_record import FightRecord
+
 
 class RootScoreView(BaseModel):
     """Compact view of a ranked strategy root for the TUI plan screen."""
@@ -122,3 +124,8 @@ class CycleSnapshot(BaseModel):
     # The d'Hondt seat accumulator (`GamePlayer._interleave_seats`), keyed by
     # equipment slot.
     interleave_seats: dict[str, int] = Field(default_factory=dict)
+
+    # The transcript of the fight executed this cycle, when the action was a
+    # FightAction that reached the server. None on every other cycle. Drives the
+    # log pane's summary line and the fight modal.
+    fight: FightRecord | None = None
