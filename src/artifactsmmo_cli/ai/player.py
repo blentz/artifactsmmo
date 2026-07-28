@@ -306,8 +306,33 @@ class GamePlayer:
         wall-clock cycles, matching the FOCUS_FLAT/FOCUS_SPAN "iterations"
         the aging pick/order (Task 4) is calibrated against. The offline
         `plan_from_state` seam (no plan-cache concept — one decide() per CLI
-        invocation) calls this directly after its own `decide()`."""
-        key = self._gear_root_key(decision.chosen_root)
+        invocation) calls this directly after its own `decide()`.
+
+        A root DISPLACED by servability promotion is charged too. Aging exists
+        to rotate attention, and the displaced root consumed the decision — it
+        won the head pick — while producing no work. Charging only the promoted
+        root creates a feedback loop where the unservable winner never ages and
+        therefore wins FOREVER: live 2026-07-27, `lich_race_trophy` took the
+        head pick in 16 of 18 cycles and never once appeared in the ledger,
+        while `life_ring` (the promoted root actually being pursued) absorbed
+        all 19 focus units and decayed. The interleave was neutralized —
+        promotion alone kept the bot on target.
+
+        Both are charged, not one or the other: the promoted root is the work
+        genuinely done this cycle (it must still age, or it never rotates), and
+        the displaced pick must age out of a head position it cannot use."""
+        self._charge_focus(self._gear_root_key(decision.chosen_root),
+                           decision.aged_pick)
+        displaced = getattr(decision, "promoted_from", None)
+        if displaced is not None:
+            # `_gear_root_key` returns None for the xp trunk, so a decision
+            # promoted PAST the trunk charges nothing extra — only gear roots
+            # occupy the ledger.
+            self._charge_focus(self._gear_root_key(displaced), decision.aged_pick)
+
+    def _charge_focus(self, key: "tuple[str, str] | None", aged_pick: bool) -> None:
+        """One cycle of focus (and, when the pick was interleaved, one d'Hondt
+        seat) against `key`. No-op for a non-gear root."""
         if key is None:
             return
         self._gear_focus[key] = self._gear_focus.get(key, 0) + 1
@@ -318,11 +343,10 @@ class GamePlayer:
         # a stale `(slot,code)` entry past FOCUS_FLAT for a root that has LEFT
         # the candidate set (its slot filled by equipping owned gear — no reset)
         # would falsely bump a seat on a fast-path cycle where no interleave
-        # ran, polluting the d'Hondt schedule. Keyed by the committed root's
+        # ran, polluting the d'Hondt schedule. Keyed by the charged root's
         # SLOT — the same slot `dhondt_step` returns.
-        if decision.aged_pick:
-            slot = key[0]
-            self._interleave_seats[slot] = self._interleave_seats.get(slot, 0) + 1
+        if aged_pick:
+            self._interleave_seats[key[0]] = self._interleave_seats.get(key[0], 0) + 1
 
     def _bump_committed_focus(self) -> None:
         """Bump the ledger for whichever gear root is EFFECTIVELY committed

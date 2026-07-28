@@ -151,6 +151,7 @@ PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers"
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 ACHIEVABILITY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "achievability_core.py"
+PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
 MEANS_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means_worth.py"
 TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "taskmaster_choice.py"
 EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
@@ -2951,6 +2952,26 @@ PASSIVE_CURRENCY_HELPER_MUTATIONS = [
     ("currency passive: catalog-size floor removed",
      "        return (total >= _MIN_MONSTERS_FOR_BREADTH",
      "        return (total >= 0"),
+]
+
+# GamePlayer's gear-focus aging ledger. Unit-killed by
+# tests/test_ai/test_player_focus_ledger.py.
+FOCUS_CHARGE_MUTATIONS = [
+    # Stop charging the DISPLACED pick — the shape that shipped, measured live
+    # 2026-07-27: an unservable root that wins the head pick never ages, so it
+    # wins EVERY cycle (lich_race_trophy took 16 of 18 head picks and never
+    # entered the ledger) while the promoted root it displaced absorbs all the
+    # focus and decays. The anti-starvation interleave goes inert; only
+    # servability promotion keeps the bot on target.
+    ("focus ledger: displaced pick no longer ages (unservable root wins forever)",
+     '        displaced = getattr(decision, "promoted_from", None)',
+     "        displaced = None"),
+    # Stop charging the COMMITTED root: the root actually being pursued never
+    # ages, so nothing ever rotates away from it — the starvation the ledger
+    # exists to prevent. Both charges are load-bearing, in opposite directions.
+    ("focus ledger: committed root no longer ages",
+     "        self._charge_focus(self._gear_root_key(decision.chosen_root),\n                           decision.aged_pick)",
+     "        self._charge_focus(None, decision.aged_pick)"),
 ]
 
 # achievability_core.py — the effort-to-reach multiplier. A_MIN is a live
@@ -5874,6 +5895,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_synergy_assembly.py", survivors)
     run_group(PROGRESSION_TREE_IMPURE_SRC, FALLBACK_ORDER_MUTATIONS,
               "tests/test_ai/test_progression_tree.py", survivors)
+    run_group(PLAYER_SRC, FOCUS_CHARGE_MUTATIONS,
+              "tests/test_ai/test_player_focus_ledger.py", survivors)
     run_group(REQUIREMENT_GRAPH_MEMO_SRC, MEMO_ENRICH_MUTATIONS,
               "tests/test_ai/test_synergy_assembly.py", survivors)
     run_group(MEANS_WORTH_SRC, MEANS_SERVES_MUTATIONS,

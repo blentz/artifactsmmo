@@ -28,10 +28,11 @@ def _reach_char_level(level: int) -> ReachCharLevel:
     return ReachCharLevel(level=level)
 
 
-def _decision_with_root(root, aged_pick: bool = False) -> StrategyDecision:
+def _decision_with_root(root, aged_pick: bool = False,
+                        promoted_from=None) -> StrategyDecision:
     return StrategyDecision(
         interrupt=None, chosen_root=root, chosen_step=root, desired_state={},
-        aged_pick=aged_pick,
+        aged_pick=aged_pick, promoted_from=promoted_from,
     )
 
 
@@ -62,6 +63,54 @@ def test_gear_root_key_extracts_slot_code():
 
 def test_gear_root_key_none_for_non_gear_root():
     assert GamePlayer._gear_root_key(_reach_char_level(20)) is None
+
+
+def test_a_displaced_pick_is_charged_too():
+    """THE 2026-07-27 FEEDBACK LOOP. A root displaced by servability promotion
+    won the head pick, so it must age — charging only the promoted root let the
+    unservable winner sit at focus 0 forever and take the head EVERY cycle.
+    Live: lich_race_trophy took 16 of 18 head picks and never entered the
+    ledger, while life_ring absorbed all 19 focus units and decayed."""
+    p = _bare_player()
+    p._gear_focus = {}
+    trophy = _obtain_item("lich_race_trophy", "artifact3_slot")
+    ring = _obtain_item("life_ring", "ring1_slot")
+    for _ in range(3):
+        p._bump_focus(_decision_with_root(ring, promoted_from=trophy))
+    # Both age: the promoted root is the work actually done, the displaced pick
+    # must age out of a head position it cannot use.
+    assert p._gear_focus[("ring1_slot", "life_ring")] == 3
+    assert p._gear_focus[("artifact3_slot", "lich_race_trophy")] == 3
+
+
+def test_no_promotion_charges_only_the_chosen_root():
+    p = _bare_player()
+    p._gear_focus = {}
+    p._bump_focus(_decision_with_root(_obtain_item("life_ring", "ring1_slot")))
+    assert p._gear_focus == {("ring1_slot", "life_ring"): 1}
+
+
+def test_a_displaced_trunk_charges_nothing_extra():
+    """`_gear_root_key` is None for the xp trunk, so a decision promoted PAST
+    the trunk must not invent a ledger entry for it."""
+    p = _bare_player()
+    p._gear_focus = {}
+    p._bump_focus(_decision_with_root(_obtain_item("life_ring", "ring1_slot"),
+                                      promoted_from=_reach_char_level(30)))
+    assert p._gear_focus == {("ring1_slot", "life_ring"): 1}
+
+
+def test_a_displaced_pick_consumes_a_seat_when_interleaved():
+    """Seats track turns TAKEN. The displaced root took a turn and wasted it,
+    so the d'Hondt schedule must move past it — otherwise the seat ledger and
+    the focus ledger disagree about the same cycle."""
+    p = _bare_player()
+    p._gear_focus = {}
+    p._interleave_seats = {}
+    p._bump_focus(_decision_with_root(
+        _obtain_item("life_ring", "ring1_slot"), aged_pick=True,
+        promoted_from=_obtain_item("lich_race_trophy", "artifact3_slot")))
+    assert p._interleave_seats == {"ring1_slot": 1, "artifact3_slot": 1}
 
 
 def test_bump_increments_chosen_gear_root():
