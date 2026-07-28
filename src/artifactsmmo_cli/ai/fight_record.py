@@ -43,10 +43,15 @@ class FightRecord(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    # Server-side fight time, normalised through isoparse().isoformat(). This is
-    # the record's IDENTITY: the live fight response and the corresponding
-    # /my/logs entry carry the same value, so merging the two sources dedupes
-    # exactly, with no clock-skew guessing and no content hashing.
+    # Server-side fight time as the source reported it.
+    #
+    # NOT a cross-source identity. The two endpoints stamp the SAME fight from
+    # different moments: measured on 12 fights present in both, the fight
+    # response gave offset-aware microseconds ('2026-07-28T14:21:57.869538+00:00')
+    # while /my/logs gave naive milliseconds ('2026-07-28T14:21:57.803000') —
+    # ~66 ms apart. Equal only within one source, so it dedupes repeats of the
+    # same page and nothing else. Use `instant` for ordering or for any
+    # comparison that crosses sources.
     started_at: str
     result: str                      # "win" | "loss"
     turns: int
@@ -62,6 +67,20 @@ class FightRecord(BaseModel):
     xp: int
     gold: int
     drops: tuple[FightDrop, ...]
+
+    @property
+    def instant(self) -> datetime.datetime:
+        """`started_at` as a UTC-naive datetime — the only sound way to order
+        records or compare them across sources.
+
+        One source emits offset-aware stamps and the other naive ones, so the
+        raw strings neither compare nor sort correctly against each other: at an
+        equal prefix, a naive string sorts above its own offset-aware form.
+        """
+        parsed = datetime.datetime.fromisoformat(self.started_at)
+        if parsed.tzinfo is None:
+            return parsed
+        return parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
 
     @classmethod
     def from_fight_response(

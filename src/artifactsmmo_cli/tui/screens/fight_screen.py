@@ -2,10 +2,17 @@
 
 Two panes: the fight list on the left, the selected fight's verbatim transcript
 on the right. Session fights arrive on CycleSnapshot and need no network; older
-fights are pulled from GET /my/logs/{name} on demand and merged in, deduped on
-the server-side `started_at` the two sources share.
+fights are pulled from GET /my/logs/{name} on demand.
+
+The two sources CANNOT be matched against each other: they stamp the same fight
+from different moments (measured ~66 ms apart, one offset-aware and one naive),
+so no key dedupes a session capture against its server-log twin. Overlap is
+therefore prevented structurally — backfill is clamped to strictly before
+`session_floor`, the oldest fight this session watched — rather than matched
+heuristically after the fact.
 """
 
+import datetime
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -44,22 +51,35 @@ class FightScreen(Screen[None]):
         self._next_page = 1
         self.status_text = ""
         self.records: list[FightRecord] = []
+        # OLDEST fight this session watched — the point below which every row
+        # came from the server log. Backfill is clamped to strictly before it,
+        # which is why the two sources can never present the same fight twice.
+        self.session_floor: datetime.datetime | None = None
         self.merge(records)
-        # The newest record present at construction: the boundary between what
-        # this session watched and what was pulled from the server log.
-        self.session_started_at: str | None = (
-            self.records[0].started_at if self.records else None)
+        self._lower_floor(records)
+
+    def _lower_floor(self, records: Iterable[FightRecord]) -> None:
+        """Extend the session boundary down to cover `records`."""
+        for rec in records:
+            if self.session_floor is None or rec.instant < self.session_floor:
+                self.session_floor = rec.instant
 
     def merge(self, records: Iterable[FightRecord]) -> None:
-        """Add records, dropping any whose `started_at` is already present, and
-        re-sort newest first. Existing records win: a session capture carries
-        `hp_before`, which the backfilled form of the same fight cannot."""
+        """Add records, dropping same-source repeats, and re-sort newest first.
+
+        Dedup is on the raw `started_at`, which is only meaningful WITHIN one
+        source (re-fetching a page). It cannot match a session capture against
+        its /my/logs twin — those differ by tens of milliseconds — so overlap is
+        prevented by `session_floor` in `load_older_sync` instead of matched
+        here. Ordering goes through `instant`: the sources mix offset-aware and
+        naive stamps, which sort wrongly as raw strings.
+        """
         seen = {r.started_at for r in self.records}
         for rec in records:
             if rec.started_at not in seen:
                 self.records.append(rec)
                 seen.add(rec.started_at)
-        self.records.sort(key=lambda r: r.started_at, reverse=True)
+        self.records.sort(key=lambda r: r.instant, reverse=True)
 
     def detail_lines(self, index: int) -> list[str]:
         if not self.records:
@@ -122,7 +142,7 @@ class FightScreen(Screen[None]):
         if snap.fight is None:
             return
         self.merge([snap.fight])
-        self.session_started_at = self.records[0].started_at
+        self._lower_floor([snap.fight])
         self.sync_ui()
 
     def action_load_older(self) -> None:
@@ -160,6 +180,16 @@ class FightScreen(Screen[None]):
         if not fetched:
             self.status_text = f"no older fights on page {page}"
             return
+        # Clamp to strictly before the session boundary. A fight this session
+        # already captured also sits in the server log under a DIFFERENT stamp
+        # (~66 ms off, and offset-aware where the log is naive), so letting it
+        # through would show that fight twice — no key can match the two.
+        older = [r for r in fetched
+                 if self.session_floor is None or r.instant < self.session_floor]
+        skipped = len(fetched) - len(older)
         before = len(self.records)
-        self.merge(fetched)
-        self.status_text = f"loaded {len(self.records) - before} older fights"
+        self.merge(older)
+        added = len(self.records) - before
+        # Never silently truncate: say what the clamp dropped.
+        note = f", {skipped} skipped (already seen this session)" if skipped else ""
+        self.status_text = f"loaded {added} older fights{note}"

@@ -160,3 +160,42 @@ class TestIdentity:
 
         with pytest.raises(ValidationError):
             rec.turns = 5
+
+
+class TestInstant:
+    """`started_at` is NOT comparable as a string across sources.
+
+    Measured on 12 real fights present in both: the fight response emits
+    offset-aware microseconds ('...T14:21:57.869538+00:00') while /my/logs
+    emits naive milliseconds ('...T14:21:57.803000') — the same fight, stamped
+    ~66 ms apart by two different endpoints. Ordering and cross-source
+    comparison must go through a normalised instant, never the raw string.
+    """
+
+    def test_aware_and_naive_forms_of_one_moment_compare_equal(self):
+        aware = FightRecord.from_fight_response(
+            make_response([make_row("Robby")]), character="Robby", hp_before=485)
+        content = make_content([content_row("Robby")])
+        content["cooldown"]["started_at"] = STARTED_AT + "+00:00"
+        naive = FightRecord.from_log_entry(content, character="Robby")
+
+        assert aware.started_at != naive.started_at      # raw strings differ
+        assert aware.instant == naive.instant            # instants do not
+
+    def test_instant_is_naive_utc(self):
+        rec = FightRecord.from_log_entry(
+            make_content([content_row("Robby")]), character="Robby")
+
+        assert rec.instant.tzinfo is None
+
+    def test_instant_orders_across_the_tz_boundary(self):
+        """A naive string sorts ABOVE an aware one at equal prefixes, so raw
+        string ordering interleaves the two sources wrongly."""
+        # STARTED_AT is 2026-07-27T23:30:30.455000; this predates it, but as a
+        # RAW STRING an aware form of STARTED_AT would sort below it.
+        older = make_content([content_row("Robby")])
+        older["cooldown"]["started_at"] = "2026-07-27T22:00:00.000000"
+        newer = FightRecord.from_fight_response(
+            make_response([make_row("Robby")]), character="Robby", hp_before=485)
+
+        assert FightRecord.from_log_entry(older, character="Robby").instant < newer.instant

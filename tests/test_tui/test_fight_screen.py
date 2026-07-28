@@ -73,16 +73,25 @@ class TestMerge:
 
 
 class TestSessionBoundary:
-    def test_session_records_are_tracked_separately_from_backfilled(self):
+    def test_the_boundary_is_the_oldest_session_record(self):
+        oldest = make_record("2026-07-27T22:00:00.000000")
+        screen = FightScreen([make_record("2026-07-27T23:00:00.000000"), oldest],
+                             character="Robby")
+
+        assert screen.session_floor == oldest.instant
+
+    def test_merging_backfill_does_not_lower_the_boundary(self):
+        """Only fights this session WATCHED move the floor; server history
+        below it must not be mistaken for session-captured."""
         session = make_record("2026-07-27T23:00:00.000000")
         screen = FightScreen([session], character="Robby")
 
         screen.merge([make_record("2026-07-27T22:00:00.000000")])
 
-        assert screen.session_started_at == session.started_at
+        assert screen.session_floor == session.instant
 
     def test_no_session_boundary_when_opened_with_nothing(self):
-        assert FightScreen([], character="Robby").session_started_at is None
+        assert FightScreen([], character="Robby").session_floor is None
 
 
 class TestDetail:
@@ -198,4 +207,70 @@ class TestLiveUpdate:
         screen.update_snapshot(_snap(fight=rec))
 
         assert screen.records == [rec]
-        assert screen.session_started_at == rec.started_at
+        assert screen.session_floor == rec.instant
+
+
+class TestSessionFloor:
+    """No exact cross-source key exists (the two endpoints stamp the same fight
+    ~66 ms apart), so overlap is prevented STRUCTURALLY instead of matched
+    heuristically: backfill only reaches fights older than the oldest fight this
+    session watched."""
+
+    def test_backfill_drops_anything_at_or_newer_than_the_session_floor(self):
+        session = [make_record("2026-07-28T14:00:00.000000"),
+                   make_record("2026-07-28T15:00:00.000000")]
+        # the server's stamp for the SAME 14:00 fight, ~66ms off and tz-aware
+        twin = make_record("2026-07-28T14:00:00.066000+00:00")
+        newer = make_record("2026-07-28T16:00:00.000000+00:00")
+        older = make_record("2026-07-28T13:00:00.000000")
+        screen = FightScreen(session, character="Robby",
+                             fetch_older=lambda page: [twin, newer, older])
+
+        screen.load_older_sync()
+
+        assert len(screen.records) == 3          # 2 session + only the older one
+        assert screen.records[-1].started_at == older.started_at
+
+    def test_the_floor_is_the_oldest_session_fight_not_the_newest(self):
+        screen = FightScreen([make_record("2026-07-28T15:00:00.000000"),
+                              make_record("2026-07-28T14:00:00.000000")],
+                             character="Robby")
+
+        assert screen.session_floor == make_record("2026-07-28T14:00:00.000000").instant
+
+    def test_no_session_fights_means_backfill_is_unrestricted(self):
+        screen = FightScreen([], character="Robby",
+                             fetch_older=lambda page: [make_record()])
+
+        screen.load_older_sync()
+
+        assert len(screen.records) == 1
+
+    def test_a_fight_arriving_live_establishes_the_floor(self):
+        screen = FightScreen([], character="Robby",
+                             fetch_older=lambda page: [make_record("2026-07-28T16:00:00.000000")])
+        screen.update_snapshot(_snap(fight=make_record("2026-07-28T15:00:00.000000")))
+
+        screen.load_older_sync()
+
+        assert len(screen.records) == 1          # the 16:00 backfill is newer, dropped
+
+    def test_skipped_backfill_is_reported_never_silent(self):
+        screen = FightScreen([make_record("2026-07-28T14:00:00.000000")],
+                             character="Robby",
+                             fetch_older=lambda page: [
+                                 make_record("2026-07-28T15:00:00.000000"),
+                                 make_record("2026-07-28T13:00:00.000000")])
+
+        screen.load_older_sync()
+
+        assert "1" in screen.status_text and "skipped" in screen.status_text.lower()
+
+    def test_rows_are_ordered_by_instant_across_the_tz_boundary(self):
+        screen = FightScreen([make_record("2026-07-28T15:00:00.000000+00:00")],
+                             character="Robby",
+                             fetch_older=lambda page: [make_record("2026-07-28T14:00:00.000000")])
+
+        screen.load_older_sync()
+
+        assert [r.instant.hour for r in screen.records] == [15, 14]
