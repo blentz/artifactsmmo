@@ -1,6 +1,9 @@
 """WatchApp tests — static properties and live-loop tests via run_test()."""
 
+from unittest.mock import MagicMock
+
 import pytest
+from artifactsmmo_api_client.models.log_type import LogType
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.fight_record import FightRecord
@@ -479,3 +482,67 @@ class TestFightModal:
             app.update_snapshot(_snap(fight=_FIGHT))
             await pilot.pause()
             assert app.screen.records == [_FIGHT]
+
+
+class TestFightBackfill:
+    @staticmethod
+    def _fight_entry(opponent="chicken", started_at="2026-07-27T22:00:00.000000"):
+        entry = MagicMock()
+        entry.type_ = LogType.FIGHT
+        entry.content = {
+            "cooldown": {"started_at": started_at},
+            "fight": {
+                "result": "win", "turns": 5, "opponent": opponent,
+                "logs": ["Fight start: hero HP: 100/100 vs Chicken HP: 60/60"],
+                "characters": [{"character_name": "hero", "xp": 5, "gold": 1,
+                                "final_hp": 95, "drops": []}],
+            },
+        }
+        return entry
+
+    def _app_with_api(self, entries):
+        page = MagicMock()
+        page.data = entries
+        api = MagicMock()
+        api.get_character_logs.return_value = page
+        return WatchApp(character="hero", game_data=GameData(), api=api), api
+
+    def test_fetcher_keeps_only_fight_entries_and_converts_them(self):
+        other = MagicMock()
+        other.type_ = LogType.MOVEMENT
+        app, _ = self._app_with_api([self._fight_entry(), other])
+
+        records = app._fetch_older_fights(1)
+
+        assert len(records) == 1
+        assert records[0].opponent == "chicken"
+
+    def test_backfilled_records_have_no_pre_fight_hp(self):
+        """The server log carries only final_hp; never invent a starting value."""
+        app, _ = self._app_with_api([self._fight_entry()])
+
+        assert app._fetch_older_fights(1)[0].hp_before is None
+
+    def test_fetcher_requests_the_asked_for_page(self):
+        app, api = self._app_with_api([])
+
+        app._fetch_older_fights(3)
+
+        api.get_character_logs.assert_called_once_with("hero", page=3, size=100)
+
+    def test_fetcher_without_an_api_returns_nothing(self):
+        app = _make_app()
+
+        assert app._fetch_older_fights(1) == []
+
+    @pytest.mark.asyncio
+    async def test_opened_modal_can_actually_backfill(self):
+        """End to end: 'f' opens the modal, 'm' pulls a fight off the API."""
+        app, _ = self._app_with_api([self._fight_entry()])
+        async with app.run_test() as pilot:
+            await pilot.press("f")
+            assert app.screen.records == []
+
+            app.screen.load_older_sync()
+
+            assert [r.opponent for r in app.screen.records] == ["chicken"]

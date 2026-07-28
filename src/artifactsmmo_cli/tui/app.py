@@ -3,6 +3,7 @@
 from collections import deque
 from collections.abc import Callable
 
+from artifactsmmo_api_client.models.log_type import LogType
 from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.screen import Screen
@@ -11,6 +12,7 @@ from textual.widgets import Footer, Header
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.tui.screens.character_screen import CharacterScreen
 from artifactsmmo_cli.tui.screens.encyclopedia_screen import EncyclopediaScreen
 from artifactsmmo_cli.tui.screens.fight_screen import FightScreen
@@ -87,10 +89,15 @@ class WatchApp(App[None]):
         ("f", "toggle_fight", "Fights"),
     ]
 
-    def __init__(self, character: str, game_data: GameData) -> None:
+    def __init__(self, character: str, game_data: GameData,
+                 api: APIWrapper | None = None) -> None:
         super().__init__()
         self._character = character
         self._game_data = game_data
+        # Optional: only the fight modal's history backfill needs the API. When
+        # absent (tests, or a host that did not supply one) the modal still shows
+        # everything this session watched; only 'm' goes quiet.
+        self._api = api
         self.title = f"artifactsmmo watch: {character}"
         self._last_snapshot: CycleSnapshot | None = None
         self._recent_snapshots: deque[CycleSnapshot] = deque(maxlen=self.LOG_BUFFER)
@@ -177,8 +184,20 @@ class WatchApp(App[None]):
             lambda: EncyclopediaScreen(self._game_data),
         )
 
+    def _fetch_older_fights(self, page: int) -> list[FightRecord]:
+        """One page of server history, fights only. Runs on a worker thread."""
+        if self._api is None:
+            return []
+        result = self._api.get_character_logs(self._character, page=page, size=100)
+        return [
+            FightRecord.from_log_entry(entry.content, character=self._character)
+            for entry in result.data
+            if entry.type_ == LogType.FIGHT
+        ]
+
     def action_toggle_fight(self) -> None:
         self._open_modal(
             FightScreen,
-            lambda: FightScreen(self._fights, character=self._character),
+            lambda: FightScreen(self._fights, character=self._character,
+                                fetch_older=self._fetch_older_fights),
         )

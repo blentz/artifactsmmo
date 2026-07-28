@@ -56,6 +56,9 @@ from artifactsmmo_api_client.api.my_characters.action_unequip_item_my_name_actio
 from artifactsmmo_api_client.api.my_characters.action_use_item_my_name_action_use_post import (
     sync as action_use_item_sync,
 )
+from artifactsmmo_api_client.api.my_characters.get_character_logs_my_logs_name_get import (
+    sync as get_character_logs_sync,
+)
 from artifactsmmo_api_client.api.my_characters.get_my_characters_my_characters_get import (
     sync as get_my_characters_sync,
 )
@@ -95,6 +98,11 @@ class APIWrapper:
 
     def get_character(self, name: str) -> Any:
         return get_character_sync(client=self._client, name=name)
+
+    def get_character_logs(self, name: str, page: int = 1, size: int = 100) -> Any:
+        """History of the character's last actions. Fight entries carry the whole
+        fight payload — including the per-turn transcript — under `content`."""
+        return get_character_logs_sync(client=self._client, name=name, page=page, size=size)
 
     # Character actions
     def action_move(self, name: str, body: Any) -> Any:

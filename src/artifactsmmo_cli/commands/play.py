@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import StuckExit
 from artifactsmmo_cli.ai.tracer import Tracer
+from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
@@ -138,7 +139,8 @@ def _run_with_tui(
     client = ClientManager().client
     player.game_data = GameData.load(
         client, ttl_minutes=game_data_ttl_minutes, force_refresh=refresh_game_data)
-    app = WatchApp(character=character, game_data=player.game_data)
+    app = WatchApp(character=character, game_data=player.game_data,
+                   api=APIWrapper(client))
     bridge = ThreadSafeBridge(app, app.update_snapshot, planning_handler=app.set_planning)
     player.set_cycle_observer(bridge.notify)
     player.set_planning_observer(bridge.notify_planning)

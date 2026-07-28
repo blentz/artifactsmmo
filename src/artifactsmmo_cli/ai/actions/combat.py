@@ -18,8 +18,8 @@ from artifactsmmo_cli.ai.actions.gather_apply_core import (
 )
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
-from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.fight_record import FightRecord
+from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_match import equipped_matches_loadout

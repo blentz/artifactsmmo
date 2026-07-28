@@ -96,3 +96,77 @@ class TestDetail:
                              character="Robby")
 
         assert "chicken" in screen.detail_lines(1)[0]
+
+
+class TestBackfill:
+    def test_load_older_merges_fetched_records(self):
+        fetched = [make_record("2026-07-27T22:00:00.000000")]
+        screen = FightScreen([make_record("2026-07-27T23:00:00.000000")],
+                             character="Robby", fetch_older=lambda page: fetched)
+
+        screen.load_older_sync()
+
+        assert len(screen.records) == 2
+
+    def test_load_older_advances_the_page(self):
+        pages = []
+
+        def fetch(page):
+            pages.append(page)
+            return [make_record(f"2026-07-27T2{page}:00:00.000000")]
+
+        screen = FightScreen([], character="Robby", fetch_older=fetch)
+
+        screen.load_older_sync()
+        screen.load_older_sync()
+
+        assert pages == [1, 2]
+
+    def test_load_older_without_a_fetcher_is_inert(self):
+        screen = FightScreen([make_record()], character="Robby")
+
+        screen.load_older_sync()
+
+        assert len(screen.records) == 1
+
+    def test_status_reports_an_empty_page(self):
+        screen = FightScreen([], character="Robby", fetch_older=lambda page: [])
+
+        screen.load_older_sync()
+
+        assert "no older" in screen.status_text.lower()
+
+    def test_status_distinguishes_a_failed_request_from_an_empty_one(self):
+        """An empty result and a failed request must not look the same."""
+        def boom(page):
+            raise RuntimeError("HTTP 500")
+
+        screen = FightScreen([], character="Robby", fetch_older=boom)
+
+        screen.load_older_sync()
+
+        assert "HTTP 500" in screen.status_text
+        assert "no older" not in screen.status_text.lower()
+
+    def test_a_failed_request_does_not_advance_the_page(self):
+        """Pressing 'm' again must retry the same page, not skip it."""
+        attempts = []
+
+        def flaky(page):
+            attempts.append(page)
+            raise RuntimeError("HTTP 500")
+
+        screen = FightScreen([], character="Robby", fetch_older=flaky)
+
+        screen.load_older_sync()
+        screen.load_older_sync()
+
+        assert attempts == [1, 1]
+
+    def test_status_reports_how_many_were_added(self):
+        screen = FightScreen([], character="Robby",
+                             fetch_older=lambda page: [make_record()])
+
+        screen.load_older_sync()
+
+        assert "1" in screen.status_text

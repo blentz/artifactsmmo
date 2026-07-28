@@ -101,7 +101,42 @@ class FightScreen(Screen[None]):
         if self.is_mounted:
             self._refresh_list()
 
+    def _set_status(self, text: str) -> None:
+        self.status_text = text
+        if self.is_mounted:
+            self.query_one("#fight-status", Static).update(text)
+
     def action_load_older(self) -> None:
-        """Wired in the backfill task; inert until a fetcher is supplied."""
+        """Fetch the next page of server history off the event loop.
+
+        The generated client call is synchronous; running it inline would freeze
+        the UI for the duration of the request.
+        """
+        self.run_worker(self.load_older_sync, thread=True)
+
+    def load_older_sync(self) -> None:
+        """Fetch, convert, merge, and report. Safe to call directly in tests.
+
+        The `except RuntimeError` is the SINGLE error-handling level for the
+        backfill: the failure is surfaced in the status bar and the page counter
+        is deliberately NOT advanced, so pressing 'm' again retries the same
+        page. There is no fallback path — an empty page and a failed request
+        report differently rather than both showing an empty list.
+        """
         if self._fetch_older is None:
             return
+        page = self._next_page
+        try:
+            fetched = self._fetch_older(page)
+        except RuntimeError as exc:
+            self._set_status(f"backfill failed: {exc}")
+            return
+        self._next_page = page + 1
+        if not fetched:
+            self._set_status(f"no older fights on page {page}")
+            return
+        before = len(self.records)
+        self.merge(fetched)
+        self._set_status(f"loaded {len(self.records) - before} older fights")
+        if self.is_mounted:
+            self._refresh_list()
