@@ -3,9 +3,11 @@
 import pytest
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
+from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.app import WatchApp
 from artifactsmmo_cli.tui.screens.character_screen import CharacterScreen
+from artifactsmmo_cli.tui.screens.fight_screen import FightScreen
 from artifactsmmo_cli.tui.screens.log_screen import LogScreen
 from artifactsmmo_cli.tui.screens.plan_screen import PlanScreen
 from artifactsmmo_cli.tui.sprites import NPC_SPRITES
@@ -17,6 +19,20 @@ from artifactsmmo_cli.tui.widgets.status_pane import StatusPane
 
 def _make_app(character: str = "hero") -> WatchApp:
     return WatchApp(character=character, game_data=GameData())
+
+
+_FIGHT = FightRecord(
+    started_at="2026-07-27T23:30:30.455000",
+    result="win",
+    turns=27,
+    opponent="mushmush",
+    logs=("Fight start: hero HP: 485/485 vs Mushmush HP: 350/350",),
+    hp_before=485,
+    hp_after=275,
+    xp=45,
+    gold=12,
+    drops=(),
+)
 
 
 def _snap(**overrides) -> CycleSnapshot:
@@ -421,3 +437,45 @@ class TestThreeByThreeLayout:
             # the cell fully contains the map and extends past it (owns the gap)
             assert cell.region.x <= m.region.x and cell.region.right >= m.region.right
             assert cell.region.right > m.region.right or cell.region.bottom > m.region.bottom
+
+
+class TestFightModal:
+    def test_f_is_bound_to_the_fight_toggle(self):
+        assert any(b[0] == "f" and b[1] == "toggle_fight" for b in WatchApp.BINDINGS)
+
+    def test_fight_screen_is_a_registered_modal(self):
+        assert FightScreen in WatchApp._MODAL_SCREENS
+
+    def test_fight_records_are_kept_in_a_dedicated_deque(self):
+        """Not a filter over _recent_snapshots: that deque is capped at 500
+        CYCLES, so unrelated cycles would silently evict old fights."""
+        app = _make_app()
+
+        app._store_snapshot(_snap(fight=_FIGHT))
+        app._store_snapshot(_snap())
+
+        assert list(app._fights) == [_FIGHT]
+
+    def test_fight_deque_is_bounded(self):
+        assert WatchApp.FIGHT_BUFFER > 0
+        app = _make_app()
+
+        assert app._fights.maxlen == WatchApp.FIGHT_BUFFER
+
+    @pytest.mark.asyncio
+    async def test_f_opens_and_closes_the_fight_modal(self):
+        app = _make_app()
+        async with app.run_test() as pilot:
+            await pilot.press("f")
+            assert isinstance(app.screen, FightScreen)
+            await pilot.press("f")
+            assert not isinstance(app.screen, FightScreen)
+
+    @pytest.mark.asyncio
+    async def test_a_fight_reaches_an_open_modal(self):
+        app = _make_app()
+        async with app.run_test() as pilot:
+            await pilot.press("f")
+            app.update_snapshot(_snap(fight=_FIGHT))
+            await pilot.pause()
+            assert app.screen.records == [_FIGHT]

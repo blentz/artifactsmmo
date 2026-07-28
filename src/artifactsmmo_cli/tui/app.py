@@ -9,9 +9,11 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
+from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.screens.character_screen import CharacterScreen
 from artifactsmmo_cli.tui.screens.encyclopedia_screen import EncyclopediaScreen
+from artifactsmmo_cli.tui.screens.fight_screen import FightScreen
 from artifactsmmo_cli.tui.screens.log_screen import LogScreen
 from artifactsmmo_cli.tui.screens.plan_screen import PlanScreen
 from artifactsmmo_cli.tui.sprite_coverage_audit import SpriteCoverageAudit
@@ -33,7 +35,7 @@ class WatchApp(App[None]):
     }
     /* The bare `Screen` grid above also matches pushed modals; reset them to a
        full-screen vertical layout. App CSS outranks a screen's DEFAULT_CSS. */
-    #character-modal, #log-modal, #plan-modal, #encyclopedia-modal {
+    #character-modal, #log-modal, #plan-modal, #encyclopedia-modal, #fight-modal {
         layout: vertical;
     }
     /* Textual has no explicit cell-placement (`column`/`row`) props: cells are
@@ -74,6 +76,7 @@ class WatchApp(App[None]):
     """
 
     LOG_BUFFER = 500
+    FIGHT_BUFFER = 200
 
     BINDINGS = [
         ("q", "quit", "Quit"),
@@ -81,6 +84,7 @@ class WatchApp(App[None]):
         ("l", "toggle_log", "Log"),
         ("p", "toggle_plan", "Plan"),
         ("e", "toggle_encyclopedia", "Encyclopedia"),
+        ("f", "toggle_fight", "Fights"),
     ]
 
     def __init__(self, character: str, game_data: GameData) -> None:
@@ -90,6 +94,10 @@ class WatchApp(App[None]):
         self.title = f"artifactsmmo watch: {character}"
         self._last_snapshot: CycleSnapshot | None = None
         self._recent_snapshots: deque[CycleSnapshot] = deque(maxlen=self.LOG_BUFFER)
+        # Fights get their OWN buffer rather than being filtered out of
+        # _recent_snapshots: that deque is capped at LOG_BUFFER *cycles*, so a
+        # busy stretch of non-fight cycles would silently evict old fights.
+        self._fights: deque[FightRecord] = deque(maxlen=self.FIGHT_BUFFER)
         SpriteCoverageAudit().run(game_data)
 
     def compose(self) -> ComposeResult:
@@ -104,6 +112,8 @@ class WatchApp(App[None]):
     def _store_snapshot(self, snap: CycleSnapshot) -> None:
         self._last_snapshot = snap
         self._recent_snapshots.append(snap)
+        if snap.fight is not None:
+            self._fights.append(snap.fight)
 
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         """Called from the bot's worker thread via ThreadSafeBridge.
@@ -114,14 +124,15 @@ class WatchApp(App[None]):
         self.query_one("#inv", InventoryPane).update_snapshot(snap)
         self.query_one("#log", LogPane).update_snapshot(snap)
         top = self.screen
-        if isinstance(top, (CharacterScreen, LogScreen, PlanScreen)):
+        if isinstance(top, (CharacterScreen, LogScreen, PlanScreen, FightScreen)):
             top.update_snapshot(snap)
 
-    # The four modal screens. Each mounts with a FIXED widget id
-    # (character-modal / log-modal / plan-modal / encyclopedia-modal), so two of the
-    # same kind in the screen stack collide with DuplicateIds. Toggles enforce ONE
-    # modal at a time.
-    _MODAL_SCREENS = (CharacterScreen, LogScreen, PlanScreen, EncyclopediaScreen)
+    # The five modal screens. Each mounts with a FIXED widget id
+    # (character-modal / log-modal / plan-modal / encyclopedia-modal / fight-modal),
+    # so two of the same kind in the screen stack collide with DuplicateIds. Toggles
+    # enforce ONE modal at a time.
+    _MODAL_SCREENS = (
+        CharacterScreen, LogScreen, PlanScreen, EncyclopediaScreen, FightScreen)
 
     def _open_modal(self, screen_type: type[Screen[None]],
                     factory: Callable[[], Screen[None] | None]) -> None:
@@ -164,4 +175,10 @@ class WatchApp(App[None]):
         self._open_modal(
             EncyclopediaScreen,
             lambda: EncyclopediaScreen(self._game_data),
+        )
+
+    def action_toggle_fight(self) -> None:
+        self._open_modal(
+            FightScreen,
+            lambda: FightScreen(self._fights, character=self._character),
         )
