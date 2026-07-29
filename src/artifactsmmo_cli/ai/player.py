@@ -274,6 +274,11 @@ class GamePlayer:
         # cycle's LevelSkill step (empty on non-grind cycles). Surfaced to the
         # TUI plan tree + log so the whole action chain below LevelSkill shows.
         self._last_grind_expansion: tuple[PlanTreeNode, ...] = ()
+        # The leg a skill grind actually executed this cycle. The cycle's
+        # observers see the outer LevelSkill, so this is how a Fight leg's
+        # captured transcript reaches them (see `_fight_of`). Cleared alongside
+        # `_last_grind_expansion` on every non-recursive grind.
+        self._last_grind_leg: Action | None = None
         # Why the last executed action failed. `outcome` alone collapses
         # distinct dead-ends onto one label — `error:other` covers all three
         # LevelSkill grind guards — so the message rides the trace too.
@@ -1098,6 +1103,7 @@ class GamePlayer:
         # for this errored grind cycle rather than a stale one.
         if not _grinding:
             self._last_grind_expansion = ()
+            self._last_grind_leg = None
         if action.skill in _grinding:
             raise RuntimeError(
                 f"cyclic skill-grind dependency for {action.skill}: "
@@ -1122,6 +1128,10 @@ class GamePlayer:
                 action.skill, sub_plan, self._last_grind_expansion)
             return result
         self._last_grind_expansion = grind_leg_nodes(action.skill, sub_plan)
+        # Stash the leg BEFORE executing it: a Fight leg sets its own
+        # `last_fight` before raising on a loss, so recording the leg first is
+        # what lets a grind-embedded defeat reach the trace too.
+        self._last_grind_leg = first
         return self._execute(first, client)
 
     def _execute(self, action: Action, client: AuthenticatedClient) -> tuple[WorldState, str]:
@@ -1606,16 +1616,26 @@ class GamePlayer:
             succeeded=succeeded,
         )
 
-    @staticmethod
-    def _fight_of(action: object | None) -> FightRecord | None:
-        """The transcript captured by a fight cycle; None on every other cycle.
+    def _fight_of(self, action: object | None) -> FightRecord | None:
+        """The transcript captured by this cycle's fight; None if it didn't fight.
 
         ONE gate shared by both consumer surfaces (`_emit_trace` and
         `_notify_observer`) so the trace and the TUI can never disagree about
-        whether a cycle fought. Mirrors the `isinstance(action, LevelSkill)`
-        grind gate.
+        whether a cycle fought.
+
+        Two arms, because a fight reaches the server by two routes. A top-level
+        `FightAction` carries its own record. A SKILL GRIND executes its leg
+        through `_execute` (so the leg captures a record just the same) but hands
+        the observers the outer `LevelSkill` — which is how 59 live fights across
+        a 1263-cycle run recorded nothing at all (Robby 2026-07-29): every one
+        was a grind leg, and only the outer action was ever consulted.
         """
-        return action.last_fight if isinstance(action, FightAction) else None
+        if isinstance(action, FightAction):
+            return action.last_fight
+        if isinstance(action, LevelSkill):
+            leg = self._last_grind_leg
+            return leg.last_fight if isinstance(leg, FightAction) else None
+        return None
 
     def _emit_trace(self, action_name: str, goal_name: str, outcome: str,
                     planner_stats: dict[str, object],
