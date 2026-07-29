@@ -131,6 +131,16 @@ _BANK_TILE = None  # resolved from game_data at runtime
 EQUIPMENT_SLOT_TYPES: frozenset[str] = frozenset(ITEM_TYPE_TO_SLOTS) - {"utility"}
 
 
+def _error_text(exc: BaseException) -> str:
+    """Human-readable reason for a failed cycle.
+
+    Falls back to `repr` because several transport exceptions carry an empty
+    `str` — an empty string in the trace would read as "no reason recorded",
+    which is exactly the ambiguity this field exists to remove.
+    """
+    return str(exc) or repr(exc)
+
+
 class GamePlayer:
     """Autonomous GOAP AI player for a single character."""
 
@@ -264,6 +274,11 @@ class GamePlayer:
         # cycle's LevelSkill step (empty on non-grind cycles). Surfaced to the
         # TUI plan tree + log so the whole action chain below LevelSkill shows.
         self._last_grind_expansion: tuple[PlanTreeNode, ...] = ()
+        # Why the last executed action failed. `outcome` alone collapses
+        # distinct dead-ends onto one label — `error:other` covers all three
+        # LevelSkill grind guards — so the message rides the trace too.
+        # Cleared at the start of every `_execute`, like the grind expansion.
+        self._last_error: str | None = None
 
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
@@ -1130,6 +1145,7 @@ class GamePlayer:
                 feasible = action.effective_quantity(self.state, self.game_data)
                 if feasible >= 1 and feasible != action.quantity:
                     action = replace(action, quantity=feasible)
+        self._last_error = None
         try:
             # LevelSkill is player-expanded (never LevelSkill.execute, which
             # raises). Dispatched INSIDE the try so its grind dead-end guards
@@ -1148,6 +1164,7 @@ class GamePlayer:
                 new_state = self._sync_pending(client, new_state)
             return new_state, "ok"
         except ApiActionError as e:
+            self._last_error = _error_text(e)
             if e.code == ERROR_CODE_COOLDOWN:
                 print(f"[{self._now()}] Server cooldown (HTTP 499) — refreshing state")
                 outcome = "error:cooldown"
@@ -1207,6 +1224,7 @@ class GamePlayer:
             return refreshed, outcome
         except RuntimeError as e:
             msg = str(e)
+            self._last_error = _error_text(e)
             if msg.startswith("fight_lost"):
                 print(f"[{self._now()}] Fight lost: {msg} — refreshing state")
                 outcome = "error:fight_lost"
@@ -1218,6 +1236,7 @@ class GamePlayer:
             # Transport-level failure (DNS, timeout, connection reset). Treat
             # as transient; refetch state (which also retries) and let the
             # next cycle replan with current truth.
+            self._last_error = _error_text(e)
             print(f"[{self._now()}] Network error during {action!r}: {e!r} — refreshing state")
             return self._fetch_world_state(client), "error:network"
 
@@ -1659,6 +1678,11 @@ class GamePlayer:
         # the cycle_step_e trace lockstep. Emitted only when game data is
         # loaded (absent = unobserved, never guessed); gearGap has no cheap
         # per-cycle analog and stays a measured divergence class.
+        if outcome.startswith("error") and self._last_error is not None:
+            # Gated on the OUTCOME, not on the field alone: `_execute` never
+            # runs on a no-plan cycle, so the field is not cleared there and a
+            # prior failure would otherwise mislabel an unrelated cycle.
+            record["error"] = self._last_error
         if fight is not None:
             # Structured outcome only — the per-turn transcript is EXCLUDED.
             # It is 96.8% of the record (measured over 31 real fights: 5190 B
