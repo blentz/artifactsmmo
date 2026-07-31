@@ -35,17 +35,25 @@ async def test_every_child_runs_and_reports():
 
 @pytest.mark.asyncio
 async def test_children_run_concurrently_not_serially():
-    """Three children that each sleep 0.3s must finish in well under 0.9s.
+    """Three children that each sleep 1.0s must finish in well under 2.0s.
 
-    Margin widened from the brief's literal <0.9s to <1.5s: this is a real
-    wall-clock assertion about asyncio.gather actually parallelizing the
-    children (a serial run would take ~0.9s+ for 3x0.3s), but the tight
-    bound can flake on a loaded CI machine. Widening the margin keeps the
-    assertion meaningful without deleting it.
+    The brief's literal numbers (0.3s sleep, <0.9s threshold) left almost no
+    gap between the concurrent case (~0.9s) and the serial-bug floor
+    (~0.9s+), so the assertion could pass against a `SupervisorPool.run()`
+    that awaited each supervisor in a plain `for` loop instead of
+    `asyncio.gather` -- exactly the defect this test exists to catch.
+
+    Raising the per-child sleep to 1.0s widens the *gap* instead of the
+    threshold: concurrent execution finishes in ~1.0-1.3s (one sleep plus
+    process startup), while a serial implementation takes ~3.0-3.3s (three
+    sleeps plus three startups). Asserting <2.0s leaves ~0.7s of slack
+    above the concurrent case and a full 1.0s below the serial floor, so
+    the test stays robust on a loaded machine while still failing against
+    a serial `run()`.
     """
     body = (
         "import sys, time\n"
-        "time.sleep(0.3)\n"
+        "time.sleep(1.0)\n"
         "sys.stdout.write('{\"kind\":\"exit\",\"character\":\"x\",\"reason\":\"normal\"}\\n')\n"
         "sys.stdout.flush()\n"
     )
@@ -59,7 +67,7 @@ async def test_children_run_concurrently_not_serially():
     ]
     start = asyncio.get_running_loop().time()
     await asyncio.wait_for(SupervisorPool(supervisors).run(), timeout=10.0)
-    assert asyncio.get_running_loop().time() - start < 1.5
+    assert asyncio.get_running_loop().time() - start < 2.0
 
 
 @pytest.mark.asyncio
