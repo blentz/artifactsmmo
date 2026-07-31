@@ -53,3 +53,22 @@ def test_split_rejects_a_nonpositive_child_count():
 def test_json_round_trip():
     budgets = split_budget(parse_rate_limits(_PAYLOAD), children=5)
     assert BucketBudgets.from_json(budgets.to_json()) == budgets
+
+
+def test_as_windows_includes_all_declared_windows():
+    budget = WindowBudget(second=10, minute=200, hour=2000, day=3600)
+    windows = budget.as_windows()
+    assert windows == {1.0: 10, 60.0: 200, 3600.0: 2000, 86400.0: 3600}
+
+
+def test_as_windows_omits_none_windows():
+    budget = WindowBudget(second=10, minute=None, hour=2000, day=None)
+    windows = budget.as_windows()
+    assert windows == {1.0: 10, 3600.0: 2000}
+    assert 60.0 not in windows
+    assert 86400.0 not in windows
+
+
+def test_parse_rejects_missing_data_envelope():
+    with pytest.raises(ValueError, match="rate limit payload has no 'data' envelope"):
+        parse_rate_limits({})
