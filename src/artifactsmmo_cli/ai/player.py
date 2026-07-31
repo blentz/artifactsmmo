@@ -1583,7 +1583,12 @@ class GamePlayer:
         )
 
     def _sync_pending(self, client: AuthenticatedClient, state: WorldState) -> WorldState:
-        """Re-fetch pending items after claiming one."""
+        """Re-fetch pending items after claiming one.
+
+        `/my/pending_items` is an account-scoped read (tagged "My account" in
+        the OpenAPI spec, same as `/my/bank` and `/my/bank/items`), so it
+        draws from the account bucket, not the data bucket."""
+        self._acquire_account()
         result = get_pending_items(client=client)
         pending: tuple[tuple[str, str], ...] | None = None
         if result is not None and result.data:
@@ -1728,7 +1733,13 @@ class GamePlayer:
             print(f"[{self._now()}] Cleared stale bank lock — an open bank is available")
 
     def _resolve_bank_unlock_monster(self, client: AuthenticatedClient, achievement_code: str) -> str | None:
-        """Fetch the first combat_kill objective target for an achievement."""
+        """Fetch the first combat_kill objective target for an achievement.
+
+        `/achievements/{code}` is tagged "Achievements" in the OpenAPI spec
+        (not "My account"), so it is a data-scoped public read like
+        `get_character`/`get_all_active_events`/`get_all_raids`, drawing from
+        the data bucket."""
+        self._acquire_data()
         result = get_achievement(client=client, code=achievement_code)
         if result is None or not hasattr(result, "data") or result.data is None:
             return None

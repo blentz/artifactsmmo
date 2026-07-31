@@ -214,6 +214,42 @@ class TestAccountScopedReadsUseTheAccountGovernor:
         assert account_governor.acquire.call_count == 1
         assert data_governor.acquire.call_count == 0
 
+    def test_sync_pending_acquires_from_the_account_governor_not_data(self):
+        """`/my/pending_items` is tagged "My account" in the OpenAPI spec,
+        the same tag as `/my/bank` and `/my/bank/items` -- so it must draw
+        from `_account_governor`, never `_data_governor`. Previously
+        `_sync_pending` charged no governor at all, undercounting the
+        tightest bucket by roughly half at the periodic-refresh site where
+        it runs immediately after `_sync_bank`."""
+        player = GamePlayer(character="hero")
+        data_governor = MagicMock()
+        account_governor = MagicMock()
+        player.set_rate_governors(data=data_governor, action=MagicMock(), account=account_governor)
+        state = make_state()
+        client = MagicMock()
+        with patch("artifactsmmo_cli.ai.player.get_pending_items", return_value=_empty_page()):
+            player._sync_pending(client, state)
+        assert account_governor.acquire.call_count == 1
+        assert data_governor.acquire.call_count == 0
+
+
+class TestAchievementLookupUsesTheDataGovernor:
+    """`/achievements/{code}` is tagged "Achievements" in the OpenAPI spec
+    (not "My account"), so `_resolve_bank_unlock_monster` is a data-scoped
+    public read like `get_character`/`get_all_active_events`, and must draw
+    from `_data_governor`, never `_account_governor`."""
+
+    def test_resolve_bank_unlock_monster_acquires_from_the_data_governor_not_account(self):
+        player = GamePlayer(character="hero")
+        data_governor = MagicMock()
+        account_governor = MagicMock()
+        player.set_rate_governors(data=data_governor, action=MagicMock(), account=account_governor)
+        client = MagicMock()
+        with patch("artifactsmmo_cli.ai.player.get_achievement", return_value=None):
+            player._resolve_bank_unlock_monster(client, "some_achievement")
+        assert data_governor.acquire.call_count == 1
+        assert account_governor.acquire.call_count == 0
+
 
 class TestGovernorConsultedBeforeActionDispatch:
     def test_execute_acquires_from_the_action_governor_once_and_not_the_data_governor(self):
