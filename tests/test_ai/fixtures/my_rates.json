@@ -1,0 +1,7 @@
+{
+  "data": {
+    "account": {"second": {"limit": 10}, "hour": {"limit": 300}},
+    "data": {"second": {"limit": 10}, "minute": {"limit": 200}, "hour": {"limit": 2000}},
+    "action": {"second": {"limit": 10}, "minute": {"limit": 100}, "hour": {"limit": 5000}}
+  }
+}
