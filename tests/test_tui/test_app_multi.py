@@ -32,9 +32,14 @@ def test_the_first_roster_character_is_focused_initially():
     assert _app().focused_character == "alice"
 
 
-def test_keys_one_to_five_are_bound():
-    keys = {binding[0] for binding in WatchApp.BINDINGS}
-    assert {"1", "2", "3", "4", "5"} <= keys
+def test_one_focus_key_is_bound_per_character_in_the_roster():
+    """Was a check on the static BINDINGS table, which bound all five slots
+    regardless of the roster. The keys are per instance now so they can carry
+    the character's name (see test_app_character_keybinds), which also means a
+    three-character run offers exactly three of them."""
+    keys = set(_app()._bindings.key_to_bindings)
+    assert {"1", "2", "3"} <= keys
+    assert "4" not in keys
 
 
 def test_focusing_an_occupied_slot_switches_character():

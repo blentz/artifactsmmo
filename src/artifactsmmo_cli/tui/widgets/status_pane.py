@@ -88,12 +88,26 @@ class StatusPane(Static):
         self.refresh()
 
     def roster_text(self) -> Text:
-        """One line naming every character. Empty for a single-character run,
-        which must look exactly as it did before multi-character support."""
+        """One line for every character IN TROUBLE — dead, or alive only after a
+        restart.
+
+        Healthy characters are deliberately not named. The key legend at the
+        bottom of the screen labels each focus key with its character, so
+        listing the same names on every cycle was pure duplication of what the
+        operator can already read. What is duplicated nowhere is a child in
+        trouble: a dead one's exit reason and last stderr line are reachable
+        here and nowhere else, and the restart count is reported nowhere else
+        either, so those entries keep their line.
+
+        Empty for a single-character run, which must look exactly as it did
+        before multi-character support.
+        """
         line = Text(no_wrap=True, overflow="crop")
         if len(self._roster) < 2:
             return line
         for entry in self._roster:
+            if entry.alive and not entry.restarts:
+                continue
             marker = "●" if entry.alive else "✗"
             label = f"[{entry.slot}]{marker}{entry.character} L{entry.level} ({entry.x},{entry.y})"
             if entry.restarts:

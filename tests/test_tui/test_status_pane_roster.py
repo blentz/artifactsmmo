@@ -1,4 +1,12 @@
-"""StatusPane renders the multi-character roster line."""
+"""StatusPane renders the multi-character roster line.
+
+The line used to name every character on every cycle. That duplicated the key
+legend, which now carries the names (see test_app_character_keybinds), so a
+healthy roster renders NOTHING here. What is not duplicated anywhere is a
+child in trouble — a dead one's exit reason and last stderr line are reachable
+nowhere else, and a restart count is reported nowhere else — so those entries,
+and only those, still get a line.
+"""
 
 from rich.console import Console
 
@@ -16,12 +24,52 @@ def _entries():
     )
 
 
-def test_roster_line_names_every_character_with_slot_and_level():
+def test_a_healthy_character_is_not_listed():
+    """alice is alive and has never restarted: the key legend already names
+    her, so repeating it here is the redundancy this line was carrying."""
+    pane = StatusPane()
+    pane.update_roster(_entries())
+
+    assert "alice" not in pane.roster_text().plain
+
+
+def test_a_character_in_trouble_is_named_with_its_slot_and_level():
+    """bob is dead: he is named here because nothing else reports it."""
     pane = StatusPane()
     pane.update_roster(_entries())
     text = pane.roster_text().plain
-    assert "1" in text and "alice" in text and "19" in text
-    assert "2" in text and "bob" in text
+
+    assert "2" in text and "bob" in text and "7" in text
+
+
+def test_an_alive_character_that_has_restarted_is_still_shown():
+    """A child that died and came back looks healthy right now, but the restart
+    count is reported nowhere else, so it keeps its line."""
+    entries = (
+        RosterEntry(slot=1, character="alice", color=TUNIC, level=19,
+                    x=0, y=2, alive=True, restarts=3, focused=True),
+        RosterEntry(slot=2, character="bob", color=BLOOD, level=7,
+                    x=5, y=-1, alive=True, restarts=0, focused=False),
+    )
+    pane = StatusPane()
+    pane.update_roster(entries)
+    text = pane.roster_text().plain
+
+    assert "alice" in text and "↻3" in text
+    assert "bob" not in text
+
+
+def test_a_roster_with_nothing_wrong_renders_nothing():
+    entries = (
+        RosterEntry(slot=1, character="alice", color=TUNIC, level=19,
+                    x=0, y=2, alive=True, restarts=0, focused=True),
+        RosterEntry(slot=2, character="bob", color=BLOOD, level=7,
+                    x=5, y=-1, alive=True, restarts=0, focused=False),
+    )
+    pane = StatusPane()
+    pane.update_roster(entries)
+
+    assert pane.roster_text().plain == ""
 
 
 def test_a_dead_character_is_visibly_marked():
@@ -63,12 +111,12 @@ def _rendered(pane: StatusPane) -> str:
 
 
 def test_render_prepends_the_roster_line_to_the_status_body():
-    """render() (not just roster_text()) must actually surface the roster
-    strip above the usual status table for a multi-character roster."""
+    """render() (not just roster_text()) must actually surface the strip above
+    the usual status table when a character is in trouble."""
     pane = StatusPane()
     pane.update_roster(_entries())
     out = _rendered(pane)
-    assert "alice" in out and "bob" in out
+    assert "bob" in out
     assert "Waiting..." in out  # the usual no-snapshot body is still present
 
 

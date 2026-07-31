@@ -90,11 +90,8 @@ class WatchApp(App[None]):
         ("p", "toggle_plan", "Plan"),
         ("e", "toggle_encyclopedia", "Encyclopedia"),
         ("f", "toggle_fight", "Fights"),
-        ("1", "focus_character(1)", "Char 1"),
-        ("2", "focus_character(2)", "Char 2"),
-        ("3", "focus_character(3)", "Char 3"),
-        ("4", "focus_character(4)", "Char 4"),
-        ("5", "focus_character(5)", "Char 5"),
+        # The focus keys are NOT here: they are bound per instance in
+        # `_bind_character_keys`, which knows the roster and can name it.
     ]
 
     def __init__(self, characters: list[str], game_data: GameData,
@@ -111,7 +108,26 @@ class WatchApp(App[None]):
         self._store = MultiSnapshotStore(self._roster.names)
         self._child_states: dict[str, ChildState] = {}
         self._pool: SupervisorPool | None = None
+        self._bind_character_keys()
         SpriteCoverageAudit().run(game_data)
+
+    def _bind_character_keys(self) -> None:
+        """Give every character in the roster a focus key LABELLED with its name.
+
+        Bound per instance instead of declared in `BINDINGS`, because a class
+        table cannot know the roster: it could only say "Char 3", a number the
+        operator just pressed and a name they could not see, and it advertised
+        all five slots however many characters were actually playing. Naming
+        the keys here is also what lets the status pane stop listing the roster.
+
+        A single-character run binds nothing at all — there is nothing to switch
+        to — so it keeps exactly the key legend it had before multi-character
+        support.
+        """
+        if len(self._roster.names) < 2:
+            return
+        for slot, name in enumerate(self._roster.names, start=1):
+            self._bindings.bind(str(slot), f"focus_character({slot})", description=name)
 
     def attach_pool(self, pool: SupervisorPool) -> None:
         """Run `play --all`'s child supervisors on Textual's own asyncio loop.
