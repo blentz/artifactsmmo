@@ -286,8 +286,9 @@ Lean gate should stay green without new proof obligations.
 ## Open items for implementation
 
 - Five children running with `--learn` share one SQLite file. Rows are already
-  keyed by character, but the store needs WAL mode and a `busy_timeout` to
-  survive concurrent writers. Verify and fix in `ai/learning/store.py`.
+  keyed by character and WAL is already enabled (`ai/learning/store.py:99`), but
+  there is no `busy_timeout`, so a concurrent writer fails immediately with
+  "database is locked" instead of waiting. Add one.
 - Confirm how a 429 currently surfaces through the generated client — as an
   `ApiActionError`, an `httpx` error, or a non-standard status — before writing
   the backoff path, so the handling attaches at the right layer.
