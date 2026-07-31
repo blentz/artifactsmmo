@@ -2,7 +2,9 @@
 
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeVar, cast
+
+T = TypeVar("T")
 
 
 class GlobalReadsCache:
@@ -27,11 +29,11 @@ class GlobalReadsCache:
         self._clock = clock
         self._entries: dict[str, tuple[float, Any]] = {}
 
-    def get_or_fetch(self, key: str, fetch: Callable[[], Any]) -> Any:
+    def get_or_fetch(self, key: str, fetch: Callable[[], T]) -> T:
         now = self._clock()
         entry = self._entries.get(key)
         if entry is not None and now - entry[0] < self._ttl:
-            return entry[1]
+            return cast(T, entry[1])
         value = fetch()
         self._entries[key] = (now, value)
         return value
