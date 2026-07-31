@@ -232,3 +232,33 @@ class TestEmitEventsWiring:
         lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
         last_event = json.loads(lines[-1])
         assert last_event["reason"] == "keyboard_interrupt"
+
+    def test_broken_pipe_on_emit_exit_does_not_mask_the_original_crash(self, runner):
+        """A supervisor that has already killed this child leaves the emitter
+        writing into a closed pipe. emit_exit() then raises BrokenPipeError
+        from inside the `finally` block — which, unguarded, REPLACES whatever
+        exception was propagating. The real crash (here a RuntimeError) must
+        be what escapes play(), not the broken-pipe error."""
+        with (
+            patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls,
+            patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
+            patch("artifactsmmo_cli.commands.play.JsonlEventEmitter") as mock_emitter_cls,
+        ):
+            mock_player = Mock()
+            mock_player.run.side_effect = RuntimeError("real crash, must survive")
+            mock_player_cls.return_value = mock_player
+            mock_store = Mock()
+            mock_store_cls.return_value = mock_store
+            mock_emitter = Mock()
+            mock_emitter.emit_exit.side_effect = BrokenPipeError("pipe closed by supervisor")
+            mock_emitter_cls.return_value = mock_emitter
+
+            result = runner.invoke(app, ["hero", "--emit-events"])
+
+        assert result.exit_code != 0
+        assert isinstance(result.exception, RuntimeError), (
+            f"expected the original RuntimeError to survive, got {result.exception!r}"
+        )
+        assert "real crash, must survive" in str(result.exception)
+        # The store still recorded the honest reason despite the broken pipe.
+        mock_store.end_session.assert_called_once_with(exit_reason="crash")

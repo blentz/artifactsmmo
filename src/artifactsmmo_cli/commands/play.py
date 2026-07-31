@@ -173,7 +173,13 @@ def play(
         raise
     finally:
         if emitter is not None:
-            emitter.emit_exit(emit_reason)
+            # A supervisor that has already killed this child leaves us with a
+            # closed pipe. Nobody is listening for the exit event, so a failed
+            # write is expected and not actionable — but letting it out of a
+            # `finally` would REPLACE the exception we are propagating and
+            # destroy the real exit diagnosis.
+            with contextlib.suppress(OSError):
+                emitter.emit_exit(emit_reason)
         store.end_session(exit_reason=exit_reason)
         store.close()
 
