@@ -1,5 +1,6 @@
 """Scrolling log of per-cycle decisions. Wraps Textual's RichLog."""
 
+from collections.abc import Iterable
 from typing import Any
 
 from textual.widgets import RichLog
@@ -56,3 +57,15 @@ class LogPane(RichLog):
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         for line in build_log_lines(snap):
             self.write(line)
+
+    def replace_history(self, snaps: Iterable[CycleSnapshot]) -> None:
+        """Re-bind the log to a different character's history.
+
+        This pane is append-only, so a focus switch that merely appended the
+        new character's latest cycle left the operator reading a MIXTURE of two
+        characters' logs with nothing marking where one ended and the other
+        began. Switching replaces the contents outright.
+        """
+        self.clear()
+        for snap in snaps:
+            self.update_snapshot(snap)

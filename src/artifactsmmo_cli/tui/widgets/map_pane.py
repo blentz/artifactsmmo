@@ -162,6 +162,24 @@ class MapPane(Static):
             self._anim_frames = []
         self.refresh()
 
+    def rebind(self, snap: CycleSnapshot | None) -> None:
+        """Centre the map on a different character.
+
+        Deliberately NOT `update_snapshot`: that derives a glide path from the
+        previous snapshot's position, which across a focus switch belongs to a
+        DIFFERENT character — the map would animate a fake walk from one
+        character's tile to another's. A rebind is an instant cut, and a `None`
+        snapshot (the character has produced no cycle yet) blanks the viewport
+        rather than leaving the previous character centred.
+        """
+        self.snapshot = snap
+        self._anim_frames = []
+        self._anim_start = time.monotonic()
+        self._anim_now = self._anim_start
+        self._planning_active = False
+        self._line_cache.clear()
+        self.refresh()
+
     def set_others(self, others: dict[tuple[int, int], Sprite]) -> None:
         """Place the non-focused characters. Cheap to call on every foreign
         cycle: it does NOT touch the focused character's animation state."""

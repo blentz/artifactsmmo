@@ -197,11 +197,38 @@ class WatchApp(App[None]):
         if name is None or name == self.focused_character:
             return
         self.focused_character = name
-        snap = self._store.last(name)
-        if snap is not None:
-            self._repaint_focused(snap)
+        self._rebind_panes(name)
         self._repaint_others()
         self._repaint_roster()
+
+    def _rebind_panes(self, name: str) -> None:
+        """Point every pane at `name`.
+
+        A focus switch is a RE-BIND, not a snapshot push. The old code called
+        `_repaint_focused` only when the target already had a snapshot, so
+        switching to a character that had not yet completed a cycle repainted
+        NOTHING — every pane kept the previous character's data, and because
+        that character was no longer focused its later snapshots were skipped
+        too, freezing the panes permanently. That is what "switching characters
+        does nothing" looked like in practice.
+
+        The panes also hold per-character state that must not leak across a
+        switch: the log is append-only (it would interleave two characters'
+        histories), and the status pane carries a cooldown expiry and task-ETA
+        samples belonging to whoever was focused before.
+        """
+        if not self.is_running:
+            return
+        snap = self._store.last(name)
+        self.query_one("#status", StatusPane).rebind(snap)
+        self.query_one("#inv", InventoryPane).rebind(snap)
+        self.query_one("#map", MapPane).rebind(snap)
+        self.query_one("#log", LogPane).replace_history(self._store.recent(name))
+        top = self.screen
+        if snap is not None and isinstance(
+            top, (CharacterScreen, LogScreen, PlanScreen, FightScreen)
+        ):
+            top.update_snapshot(snap)
 
     def update_child_state(self, state: ChildState) -> None:
         self._child_states[state.character] = state

@@ -65,6 +65,24 @@ class StatusPane(Static):
         )
         self.snapshot = snap
 
+    def rebind(self, snap: CycleSnapshot | None) -> None:
+        """Point this pane at a different character.
+
+        The ETA samples and the cooldown expiry are per-character transient
+        state. Without clearing them a focus switch left the previous
+        character's cooldown counting down and its task-ETA history feeding a
+        projection for someone else. `None` means the new character has
+        produced no cycle yet, so the pane goes blank rather than keep showing
+        the previous character's numbers.
+        """
+        self._eta_task = None
+        self._eta_samples = []
+        self._cooldown_expiry = None
+        if snap is None:
+            self.snapshot = None
+            return
+        self.update_snapshot(snap)
+
     def update_roster(self, entries: tuple[RosterEntry, ...]) -> None:
         self._roster = entries
         self.refresh()

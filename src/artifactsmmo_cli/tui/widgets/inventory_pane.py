@@ -16,6 +16,12 @@ class InventoryPane(Static):
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         self.snapshot = snap
 
+    def rebind(self, snap: CycleSnapshot | None) -> None:
+        """Point this pane at a different character. `None` means that
+        character has produced no cycle yet — the pane must go blank rather
+        than keep showing the previously focused character's inventory."""
+        self.snapshot = snap
+
     def render(self) -> RenderableType:
         snap = self.snapshot
         if snap is None:
