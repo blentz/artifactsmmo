@@ -26,6 +26,8 @@ from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 from artifactsmmo_cli.tui.app import WatchApp
 from artifactsmmo_cli.tui.observer import ThreadSafeBridge
 from artifactsmmo_cli.utils.mutation_lock import check_mutation_lock, default_lock_path
+from artifactsmmo_cli.utils.rate_budget import BucketBudgets
+from artifactsmmo_cli.utils.rate_governor import RateGovernor
 
 
 def default_learn_db_path() -> str:
@@ -132,6 +134,11 @@ def play(
         game_data_ttl_minutes=config.game_data_ttl_minutes,
         refresh_game_data=refresh_game_data,
     )
+    if rate_budget is not None:
+        budgets = BucketBudgets.from_json(rate_budget)
+        player.set_rate_governors(
+            data=RateGovernor(budgets.data), action=RateGovernor(budgets.action)
+        )
 
     emitter: JsonlEventEmitter | None = None
     if emit_events:

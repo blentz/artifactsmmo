@@ -119,6 +119,7 @@ from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.client_manager import ClientManager
+from artifactsmmo_cli.utils.rate_governor import RateGovernor
 
 _BANK_RETRY_SECONDS = 60.0  # retry bank access this long after an HTTP 496 block
 _ACHIEVEMENT_CODE_RE = re.compile(r"\((\w+) achievement_unlocked")
@@ -290,6 +291,10 @@ class GamePlayer:
         # LevelSkill grind guards — so the message rides the trace too.
         # Cleared at the start of every `_execute`, like the grind expansion.
         self._last_error: str | None = None
+        # Set only by `play --all` children, which share one per-IP budget.
+        # A lone `play <character>` is unthrottled, exactly as before.
+        self._data_governor: RateGovernor | None = None
+        self._action_governor: RateGovernor | None = None
 
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
@@ -297,6 +302,23 @@ class GamePlayer:
 
     def set_planning_observer(self, observer: "Callable[[bool], None] | None") -> None:
         self._planning_observer = observer
+
+    def set_rate_governors(self, data: RateGovernor, action: RateGovernor) -> None:
+        """Wire this child's share of the shared per-IP rate budget. Called only
+        by `play --all` children; a lone `play <character>` never calls this,
+        so `_acquire_data`/`_acquire_action` stay no-ops for it."""
+        self._data_governor = data
+        self._action_governor = action
+
+    def _acquire_data(self) -> None:
+        """Block until the data-bucket budget has room. A no-op when unset."""
+        if self._data_governor is not None:
+            self._data_governor.acquire()
+
+    def _acquire_action(self) -> None:
+        """Block until the action-bucket budget has room. A no-op when unset."""
+        if self._action_governor is not None:
+            self._action_governor.acquire()
 
     def _notify_planning(self, active: bool) -> None:
         if self._planning_observer is not None:
@@ -1171,6 +1193,7 @@ class GamePlayer:
             # propagating out of run() and crashing the session.
             if isinstance(action, LevelSkill):
                 return self._execute_level_skill(action, client)
+            self._acquire_action()
             new_state = action.execute(self.state, client)
             # Re-sync bank state after visiting bank
             if isinstance(action, (DepositAllAction, DepositItemAction, WithdrawItemAction)):
@@ -1273,6 +1296,7 @@ class GamePlayer:
             backoff = 5.0
             for attempt in range(1, 4):  # 3 attempts: immediate, +5s, +10s
                 try:
+                    self._acquire_data()
                     result = get_all_active_events(client=client, page=page, size=100)
                     break
                 except httpx.HTTPError as e:
@@ -1301,6 +1325,7 @@ class GamePlayer:
             backoff = 5.0
             for attempt in range(1, 4):
                 try:
+                    self._acquire_data()
                     result = get_all_raids(client=client, page=page, size=100)
                     break
                 except httpx.HTTPError as e:
@@ -1357,6 +1382,7 @@ class GamePlayer:
         backoff = 5.0
         for attempt in range(1, 4):  # 3 attempts: immediate, +5s, +10s
             try:
+                self._acquire_data()
                 last_result = get_character(client=client, name=self.character)
             except httpx.HTTPError as e:
                 last_result = None
@@ -1437,6 +1463,7 @@ class GamePlayer:
         bank_items: dict[str, int] = {}
         page = 1
         while True:
+            self._acquire_data()
             result = get_bank_items(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
@@ -1448,6 +1475,7 @@ class GamePlayer:
 
         bank_gold: int | None = None
         bank_capacity: int | None = state.bank_capacity
+        self._acquire_data()
         details = get_bank_details(client=client)
         if details is not None and hasattr(details, "data") and details.data is not None:
             bank_gold = details.data.gold
@@ -1526,6 +1554,7 @@ class GamePlayer:
             backoff = 5.0
             for attempt in range(1, 4):  # 3 attempts: immediate, +5s, +10s
                 try:
+                    self._acquire_data()
                     result = get_my_ge_orders(client=client, page=page, size=100)
                     fetched = True
                     break
