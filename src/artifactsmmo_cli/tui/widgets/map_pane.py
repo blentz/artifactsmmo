@@ -114,6 +114,10 @@ class MapPane(Static):
         # so all lines composite consistently.
         self._line_cache: dict[int, tuple[object, Strip]] = {}
         self._anim_now = 0.0
+        # Non-focused characters: world tile -> their recoloured sprite. They
+        # render statically; swing and glide frames are keyed to ONE action
+        # timeline, so only the focused character animates.
+        self._others: dict[tuple[int, int], Sprite] = {}
 
     @staticmethod
     def _build_tile_index(gd: GameData) -> dict[tuple[int, int], TileContent]:
@@ -156,6 +160,13 @@ class MapPane(Static):
             self._anim_frames = glide_path((prior.x, prior.y), (snap.x, snap.y), MAX_ANIM_STEPS)
         else:
             self._anim_frames = []
+        self.refresh()
+
+    def set_others(self, others: dict[tuple[int, int], Sprite]) -> None:
+        """Place the non-focused characters. Cheap to call on every foreign
+        cycle: it does NOT touch the focused character's animation state."""
+        self._others = others
+        self._line_cache.clear()  # a stale Strip would strand a moved character
         self.refresh()
 
     def on_mount(self) -> None:
@@ -333,6 +344,9 @@ class MapPane(Static):
                                  player_sprite: Sprite) -> tuple[Sprite, str]:
         if is_player:
             return player_sprite, WALKABLE_COLOR
+        other = self._others.get((wx, wy))
+        if other is not None:
+            return other, WALKABLE_COLOR
         content = self._tile_index.get((wx, wy))
         if content is None:
             terrain = WALKABLE_COLOR if (wx, wy) in self._known_tiles else UNMAPPED_COLOR
@@ -446,7 +460,14 @@ class MapPane(Static):
         row_off = trow - half_h
         ov = tuple(sorted((k, id(v)) for k, v in overlay.items() if k[1] == row_off))
         psprite = id(player_sprite) if row_off == 0 else 0
-        return (center, trow, sub, psprite, ov)
+        others = tuple(
+            sorted(
+                (xy, id(sprite))
+                for xy, sprite in self._others.items()
+                if xy[1] - center[1] == row_off
+            )
+        )
+        return (center, trow, sub, psprite, ov, others)
 
     def _text_strip(self, text: Text, width: int) -> Strip:
         opts = _RENDER_CONSOLE.options.update_width(width)
