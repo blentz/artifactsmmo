@@ -1,6 +1,7 @@
 """WatchApp: Textual app with four panes for live character observation."""
 
 from collections.abc import Callable
+from functools import partial
 
 from artifactsmmo_api_client.models.log_type import LogType
 from textual.app import App, ComposeResult
@@ -224,11 +225,45 @@ class WatchApp(App[None]):
         self.query_one("#inv", InventoryPane).rebind(snap)
         self.query_one("#map", MapPane).rebind(snap)
         self.query_one("#log", LogPane).replace_history(self._store.recent(name))
+        self._rebind_modal()
+
+    def _rebind_modal(self) -> None:
+        """Point the open modal at the newly focused character.
+
+        Every defect the pane re-bind fixed also existed one level up, because
+        a switch pushed the new character's snapshot into the OLD character's
+        modal: `LogScreen` is append-only like `LogPane` and interleaved two
+        traces; `FightScreen` accumulated both characters' fights into one list
+        still labelled with the old name, and its 'm' backfill then pulled the
+        focused character's server history into it; `CharacterScreen` and
+        `PlanScreen` were skipped outright when the new character had no cycle
+        yet, so they kept showing the previous one.
+
+        Re-bound IN PLACE rather than popped and re-pushed: each modal mounts
+        with a fixed widget id, Textual removes a screen asynchronously, and a
+        same-type push therefore collides with the outgoing screen's id
+        (DuplicateIds). Dismissal is the one case that pops — a character with
+        no cycle yet has nothing for the character/plan modals to show, and
+        showing the previous character instead is the bug being fixed.
+
+        `EncyclopediaScreen` is game data, not character data: it is untouched
+        here, so a switch leaves the operator's place in the index intact.
+        """
         top = self.screen
-        if snap is not None and isinstance(
-            top, (CharacterScreen, LogScreen, PlanScreen, FightScreen)
-        ):
-            top.update_snapshot(snap)
+        name = self.focused_character
+        snap = self._store.last(name)
+        if isinstance(top, (CharacterScreen, PlanScreen)):
+            # Both rebuild their whole body from one snapshot, so pushing the
+            # new character's snapshot IS a re-bind for them.
+            if snap is None:
+                self.pop_screen()
+            else:
+                top.update_snapshot(snap)
+        elif isinstance(top, LogScreen):
+            top.replace_history(self._store.recent(name))
+        elif isinstance(top, FightScreen):
+            top.rebind(self._store.fights(name), character=name,
+                       fetch_older=partial(self._fetch_older_fights, name))
 
     def update_child_state(self, state: ChildState) -> None:
         self._child_states[state.character] = state
@@ -283,24 +318,46 @@ class WatchApp(App[None]):
         if new is not None:
             self.push_screen(new)
 
-    def action_toggle_character(self) -> None:
+    # One factory per character-scoped modal, so its toggle key and any later
+    # re-bind agree on how that modal is built for the focused character.
+    def _character_modal(self) -> CharacterScreen | None:
         last = self._store.last(self.focused_character)
-        self._open_modal(
-            CharacterScreen,
-            lambda: CharacterScreen(last) if last is not None else None)
+        return CharacterScreen(last) if last is not None else None
+
+    def _log_modal(self) -> LogScreen:
+        return LogScreen(self._store.recent(self.focused_character))
+
+    def _plan_modal(self) -> PlanScreen | None:
+        last = self._store.last(self.focused_character)
+        return PlanScreen(last, self._game_data) if last is not None else None
+
+    def _fight_modal(self) -> FightScreen:
+        character = self.focused_character
+        # Bind the character INTO the backfill rather than reading
+        # `focused_character` when 'm' fires: a switch during an in-flight fetch
+        # would otherwise land one character's server history in another's list.
+        return FightScreen(
+            self._store.fights(character), character=character,
+            fetch_older=partial(self._fetch_older_fights, character))
+
+    def action_toggle_character(self) -> None:
+        self._open_modal(CharacterScreen, self._character_modal)
 
     def action_toggle_log(self) -> None:
-        self._open_modal(LogScreen, lambda: LogScreen(self._store.recent(self.focused_character)))
+        self._open_modal(LogScreen, self._log_modal)
 
     def set_planning(self, active: bool) -> None:
-        """Bot-thread signal (via ThreadSafeBridge): planner is deciding."""
+        """Bot-thread signal (via ThreadSafeBridge): planner is deciding.
+
+        Guarded like `update_snapshot`: a child's planning event can arrive
+        before mount or after teardown, and querying the DOM then raises
+        ScreenStackError instead of the NoMatches the repaints tolerate."""
+        if not self.is_running:
+            return
         self.query_one("#map", MapPane).set_planning(active)
 
     def action_toggle_plan(self) -> None:
-        last = self._store.last(self.focused_character)
-        self._open_modal(
-            PlanScreen,
-            lambda: PlanScreen(last, self._game_data) if last is not None else None)
+        self._open_modal(PlanScreen, self._plan_modal)
 
     def action_toggle_encyclopedia(self) -> None:
         self._open_modal(
@@ -308,20 +365,18 @@ class WatchApp(App[None]):
             lambda: EncyclopediaScreen(self._game_data),
         )
 
-    def _fetch_older_fights(self, page: int) -> list[FightRecord]:
-        """One page of server history, fights only. Runs on a worker thread."""
+    def _fetch_older_fights(self, character: str, page: int) -> list[FightRecord]:
+        """One page of `character`'s server history, fights only. Runs on a
+        worker thread; the character is bound by the modal that owns the fetch,
+        never re-read from focus mid-flight."""
         if self._api is None:
             return []
-        result = self._api.get_character_logs(self.focused_character, page=page, size=100)
+        result = self._api.get_character_logs(character, page=page, size=100)
         return [
-            FightRecord.from_log_entry(entry.content, character=self.focused_character)
+            FightRecord.from_log_entry(entry.content, character=character)
             for entry in result.data
             if entry.type_ == LogType.FIGHT
         ]
 
     def action_toggle_fight(self) -> None:
-        self._open_modal(
-            FightScreen,
-            lambda: FightScreen(self._store.fights(self.focused_character), character=self.focused_character,
-                                fetch_older=self._fetch_older_fights),
-        )
+        self._open_modal(FightScreen, self._fight_modal)

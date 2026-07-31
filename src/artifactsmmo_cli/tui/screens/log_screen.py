@@ -85,3 +85,18 @@ class LogScreen(Screen[None]):
 
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         self.query_one("#debug-log", RichLog).write(build_debug_log_line(snap))
+
+    def replace_history(self, history: Iterable[CycleSnapshot]) -> None:
+        """Re-bind this modal to a different character's history.
+
+        The widget is append-only, so a focus switch that merely wrote the new
+        character's cycle left the operator reading a MIXTURE of two characters'
+        traces with nothing marking where one ended. Switching replaces the
+        contents outright, and `_history` with it so a re-mount replays the
+        character now being watched.
+        """
+        self._history = list(history)
+        log = self.query_one("#debug-log", RichLog)
+        log.clear()
+        for snap in self._history:
+            log.write(build_debug_log_line(snap))

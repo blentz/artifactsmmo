@@ -514,7 +514,7 @@ class TestFightBackfill:
         other.type_ = LogType.MOVEMENT
         app, _ = self._app_with_api([self._fight_entry(), other])
 
-        records = app._fetch_older_fights(1)
+        records = app._fetch_older_fights("hero", 1)
 
         assert len(records) == 1
         assert records[0].opponent == "chicken"
@@ -523,19 +523,19 @@ class TestFightBackfill:
         """The server log carries only final_hp; never invent a starting value."""
         app, _ = self._app_with_api([self._fight_entry()])
 
-        assert app._fetch_older_fights(1)[0].hp_before is None
+        assert app._fetch_older_fights("hero", 1)[0].hp_before is None
 
     def test_fetcher_requests_the_asked_for_page(self):
         app, api = self._app_with_api([])
 
-        app._fetch_older_fights(3)
+        app._fetch_older_fights("hero", 3)
 
         api.get_character_logs.assert_called_once_with("hero", page=3, size=100)
 
     def test_fetcher_without_an_api_returns_nothing(self):
         app = _make_app()
 
-        assert app._fetch_older_fights(1) == []
+        assert app._fetch_older_fights("hero", 1) == []
 
     @pytest.mark.asyncio
     async def test_opened_modal_can_actually_backfill(self):

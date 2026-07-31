@@ -81,6 +81,33 @@ class FightScreen(Screen[None]):
                 seen.add(rec.started_at)
         self.records.sort(key=lambda r: r.instant, reverse=True)
 
+    def rebind(self, records: Iterable[FightRecord], character: str,
+               fetch_older: Callable[[int], list[FightRecord]] | None = None) -> None:
+        """Point this modal at a different character.
+
+        Everything per-character is replaced, not merged: the record list (the
+        old `merge` path accumulated both characters' fights into one list), the
+        name this modal reports, the session floor that clamps backfill against
+        THIS character's captures, and the page counter — page 1 of the new
+        character's server history has not been read yet.
+        """
+        self._character = character
+        self._fetch_older = fetch_older
+        self._next_page = 1
+        self.status_text = ""
+        self.records = []
+        self.session_floor = None
+        self.merge(records)
+        self._lower_floor(records)
+        self.sync_ui()
+        if self.is_mounted:
+            # `_refresh_list` deliberately HOLDS the browsed row so a fight
+            # merging in mid-browse does not yank the selection; across a
+            # re-bind that row belonged to another character's list, so the
+            # browse position starts over at the newest fight.
+            self.query_one("#fight-list", ListView).index = 0 if self.records else None
+            self._render_detail(0)
+
     def detail_lines(self, index: int) -> list[str]:
         if not self.records:
             return ["No fights recorded yet."]
