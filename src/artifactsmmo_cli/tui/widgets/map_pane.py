@@ -1,6 +1,7 @@
 """Tile-map pane: each tile is an 8x8 half-block sprite, centered on the player."""
 
 import time
+from collections.abc import Sequence
 from typing import Any
 
 from rich.console import Console
@@ -18,6 +19,8 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
 from artifactsmmo_cli.tui.half_block import HalfBlockCompositor
 from artifactsmmo_cli.tui.path_interpolate import glide_path
+from artifactsmmo_cli.tui.roster_entry import RosterEntry
+from artifactsmmo_cli.tui.roster_line import build_roster_line
 from artifactsmmo_cli.tui.sprite_registry import SpriteRegistry
 from artifactsmmo_cli.tui.sprites import (
     BLANK_SPRITE,
@@ -118,6 +121,22 @@ class MapPane(Static):
         # render statically; swing and glide frames are keyed to ONE action
         # timeline, so only the focused character animates.
         self._others: dict[tuple[int, int], Sprite] = {}
+        # Characters in trouble, rendered after the coordinates on the HUD line.
+        # This used to sit in the status pane, one narrow grid cell wide, where
+        # a dead child's reason was cropped away mid-diagnostic.
+        self._roster_line = Text()
+
+    def set_roster(self, entries: Sequence[RosterEntry]) -> None:
+        """Report any character in trouble alongside the coordinates.
+
+        The derived line is held rather than the entries: it is what the HUD
+        renders and what that line's cache signature is taken from, so a child
+        dying while the map sits still (no coordinate change, no animation)
+        still invalidates the cached Strip and appears.
+        """
+        self._roster_line = build_roster_line(entries)
+        self._line_cache.pop(0, None)
+        self.refresh()
 
     @staticmethod
     def _build_tile_index(gd: GameData) -> dict[tuple[int, int], TileContent]:
@@ -287,7 +306,7 @@ class MapPane(Static):
     def render(self) -> Text:
         snap = self.snapshot
         if snap is None:
-            return Text("Waiting for first cycle...")
+            return self._waiting_text()
         width = self.size.width or FALLBACK_W
         height = self.size.height or FALLBACK_H
         now = time.monotonic()
@@ -307,6 +326,26 @@ class MapPane(Static):
         if content is None:
             return coords
         return f"{coords} · {content[1]}"
+
+    def hud_text(self, cx: int, cy: int) -> Text:
+        """The HUD line: where the viewport is centred, then anything wrong with
+        the roster. This line spans both wide grid columns, which is why the
+        trouble report lives here and not in the one-cell status pane."""
+        text = Text(no_wrap=True, overflow="crop")
+        text.append(self._hud_line(cx, cy), style="dim")
+        if self._roster_line.plain:
+            text.append("   ")
+            text.append_text(self._roster_line)
+        return text
+
+    def _waiting_text(self) -> Text:
+        """Pre-first-cycle HUD. Carries the roster too: a child can die before
+        ever completing a cycle, which is precisely when the reason matters."""
+        text = Text("Waiting for first cycle...", no_wrap=True, overflow="crop")
+        if self._roster_line.plain:
+            text.append("   ")
+            text.append_text(self._roster_line)
+        return text
 
     def _player_sprite(self, now: float) -> Sprite:
         snap = self.snapshot
@@ -394,10 +433,9 @@ class MapPane(Static):
         half_w = tiles_w // 2
         half_h = tiles_h // 2
         cx, cy = center
-        line = Text(no_wrap=True, overflow="crop")
         if y == 0:
-            line.append(self._hud_line(cx, cy), style="dim")
-            return line
+            return self.hud_text(cx, cy)
+        line = Text(no_wrap=True, overflow="crop")
         trow = (y - 1) // TILE_H
         sub = (y - 1) % TILE_H
         for tcol in range(tiles_w):
@@ -438,7 +476,7 @@ class MapPane(Static):
         height = self.size.height or FALLBACK_H
         snap = self.snapshot
         if snap is None:
-            text = Text("Waiting for first cycle...") if y == 0 else Text("")
+            text = self._waiting_text() if y == 0 else Text("")
             strip = self._text_strip(text, width)
             return strip.apply_style(_HUD_STYLE) if y == 0 else strip
         if y >= self._line_count(height):
@@ -470,7 +508,9 @@ class MapPane(Static):
         tool/cloud overlay landing on this line's tile-row. Stable for static map
         lines → cache hit; changes only on the swing/glide rows."""
         if y == 0:
-            return ("hud", center)
+            # The roster belongs in the signature: a child dying changes no
+            # coordinate, so without it the cached Strip would hide the death.
+            return ("hud", center, self._roster_line.plain)
         tiles_h = (height - 1) // TILE_H
         half_h = tiles_h // 2
         trow = (y - 1) // TILE_H

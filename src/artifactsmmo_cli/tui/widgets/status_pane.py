@@ -13,7 +13,6 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
-from artifactsmmo_cli.tui.roster_entry import RosterEntry
 
 ETA_WINDOW = 20
 """Number of recent (time, progress) samples used to estimate task ETA."""
@@ -55,7 +54,6 @@ class StatusPane(Static):
         self._eta_task: str | None = None
         self._eta_samples: list[tuple[float, int]] = []
         self._cooldown_expiry: float | None = None
-        self._roster: tuple[RosterEntry, ...] = ()
 
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         self._track_eta(snap)
@@ -82,49 +80,6 @@ class StatusPane(Static):
             self.snapshot = None
             return
         self.update_snapshot(snap)
-
-    def update_roster(self, entries: tuple[RosterEntry, ...]) -> None:
-        self._roster = entries
-        self.refresh()
-
-    def roster_text(self) -> Text:
-        """One line for every character IN TROUBLE — dead, or alive only after a
-        restart.
-
-        Healthy characters are deliberately not named. The key legend at the
-        bottom of the screen labels each focus key with its character, so
-        listing the same names on every cycle was pure duplication of what the
-        operator can already read. What is duplicated nowhere is a child in
-        trouble: a dead one's exit reason and last stderr line are reachable
-        here and nowhere else, and the restart count is reported nowhere else
-        either, so those entries keep their line.
-
-        Empty for a single-character run, which must look exactly as it did
-        before multi-character support.
-        """
-        line = Text(no_wrap=True, overflow="crop")
-        if len(self._roster) < 2:
-            return line
-        for entry in self._roster:
-            if entry.alive and not entry.restarts:
-                continue
-            marker = "●" if entry.alive else "✗"
-            label = f"[{entry.slot}]{marker}{entry.character} L{entry.level} ({entry.x},{entry.y})"
-            if entry.restarts:
-                label += f" ↻{entry.restarts}"
-            if not entry.alive:
-                # The only place a dead child's cause of death is reachable:
-                # captured stderr and the recorded exit reason were otherwise
-                # gathered and discarded with no consumer.
-                detail = entry.last_reason or ""
-                if entry.last_stderr_line:
-                    line_detail = entry.last_stderr_line[:60]
-                    detail = f"{detail}: {line_detail}" if detail else line_detail
-                if detail:
-                    label += f" [{detail}]"
-            style = f"bold {entry.color}" if entry.focused else entry.color
-            line.append(label + "  ", style=style)
-        return line
 
     def on_mount(self) -> None:
         """Tick once a second so the cooldown counts down between AI cycles."""
@@ -155,11 +110,7 @@ class StatusPane(Static):
 
     def render(self) -> RenderableType:
         snap = self.snapshot
-        body: Table | Text = Text("Waiting...") if snap is None else self._render_status(snap)
-        roster = self.roster_text()
-        if not roster.plain:
-            return body
-        return Group(roster, body)
+        return Text("Waiting...") if snap is None else self._render_status(snap)
 
     def _render_status(self, s: CycleSnapshot) -> Table:
         # HP bar — red when critical

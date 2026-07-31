@@ -305,9 +305,12 @@ class WatchApp(App[None]):
         return tuple(entries)
 
     def _repaint_roster(self) -> None:
+        """Draw any character in trouble on the map's HUD line. It used to go to
+        the status pane, which is one narrow grid cell wide and cropped a dead
+        child's reason mid-sentence; the HUD line spans both wide columns."""
         if not self.is_running:
             return
-        self.query_one("#status", StatusPane).update_roster(self.roster_entries())
+        self.query_one("#map", MapPane).set_roster(self.roster_entries())
 
     # The five modal screens. Each mounts with a FIXED widget id
     # (character-modal / log-modal / plan-modal / encyclopedia-modal / fight-modal),
