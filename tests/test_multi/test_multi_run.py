@@ -104,6 +104,12 @@ def test_an_empty_roster_fails_loudly():
 def test_the_budget_is_split_by_the_actual_child_count():
     pool = _run().build_pool(characters=["a", "b"], rates=_RATES)
     assert pool.characters() == ("a", "b")
+    two_way = split_budget(parse_rate_limits(_RATES), children=2).to_json()
+    five_way = split_budget(parse_rate_limits(_RATES), children=5).to_json()
+    assert two_way != five_way  # otherwise the checks below prove nothing
+    for supervisor in (pool._by_name["a"], pool._by_name["b"]):
+        assert two_way in supervisor._argv
+        assert five_way not in supervisor._argv
 
 
 # --- _on_event -------------------------------------------------------------
