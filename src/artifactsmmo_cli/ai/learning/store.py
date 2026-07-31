@@ -9,8 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypeVar
 
-from sqlalchemy import func, text
+from sqlalchemy import event, func, text
+from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.pool import ConnectionPoolEntry
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, col, create_engine, select
 
@@ -89,6 +91,24 @@ class LearningStore:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
         self._engine = create_engine(f"sqlite:///{db_path}")
+
+        # Five `play --all` children share one DB file. WAL (below) lets readers
+        # and one writer proceed together, but a second WRITER still collides;
+        # without a busy timeout SQLite fails that commit immediately with
+        # "database is locked" instead of waiting out the other child. `busy_timeout`
+        # is per-connection, and this engine is pooled (QueuePool), so a PRAGMA run
+        # on one checked-out connection does NOT apply to the next physical
+        # connection the pool opens under concurrent load — verified empirically: a
+        # second, concurrently-opened pooled connection reports the pysqlite
+        # driver's own default (5000ms) instead of an inline PRAGMA's value. A
+        # `connect` listener fires for every new physical connection, so it's the
+        # only form that reliably applies.
+        @event.listens_for(self._engine, "connect")
+        def _set_busy_timeout(
+            dbapi_connection: DBAPIConnection, _record: ConnectionPoolEntry
+        ) -> None:
+            dbapi_connection.execute("PRAGMA busy_timeout=5000")
+
         # Dispose the engine's pooled SQLite connection when this store is
         # garbage-collected, so callers that forget close() don't leak a
         # connection (raises ResourceWarning). Bound to the engine, not self.
