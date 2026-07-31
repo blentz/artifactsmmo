@@ -1,6 +1,6 @@
 """Tests for GamePlayer._fetch_active_events and active_events in _fetch_world_state."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -138,7 +138,7 @@ class TestFetchWorldStateActiveEvents:
         char = make_char_schema()
         client = MagicMock()
 
-        expiry = datetime(2026, 5, 20, 12, 0, 0, tzinfo=timezone.utc)
+        expiry = datetime.now(timezone.utc) + timedelta(hours=1)
 
         ev = MagicMock()
         ev.code = "gemstone_merchant"

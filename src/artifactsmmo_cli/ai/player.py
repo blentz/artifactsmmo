@@ -63,6 +63,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_latch import GearLatch
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
+from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.grind_expansion import grind_leg_nodes
@@ -162,6 +163,11 @@ class GamePlayer:
         self._refresh_game_data = refresh_game_data
         self.planner = GOAPPlanner()
         self._arbiter = StrategyArbiter(self.planner, history)
+        # active_events and raids are account-GLOBAL: identical for every
+        # character, yet re-read every cycle. With five `play --all` children
+        # that duplication alone breaches the 2000/hour per-IP data ceiling at
+        # peak (measured: 158 cycles/hour/character x 5 x 3 reads = 2370).
+        self._global_reads = GlobalReadsCache()
         # Phase 4b (THE FLIP): the progression-tree decision — the ONLY
         # decision; `StrategyEngine.decide` delegates to `decide_tree`, so
         # what's stashed here is what drove arbiter/select this cycle.
@@ -1336,6 +1342,15 @@ class GamePlayer:
                       f"{raid.remaining_hp}/{raid.total_hp} hp, "
                       f"ends {raid.window_ends_at}")
 
+    @staticmethod
+    def _unexpired(
+        events: dict[str, datetime], now: datetime
+    ) -> dict[str, datetime]:
+        """Drop events whose expiry has passed. A cached events view is up to
+        one TTL stale, so without this the planner could target an event that
+        already ended."""
+        return {code: expiry for code, expiry in events.items() if expiry > now}
+
     def _fetch_world_state(self, client: AuthenticatedClient) -> WorldState:
         """Query character state from the API. Retries on transient errors."""
         last_result = None
@@ -1386,8 +1401,15 @@ class GamePlayer:
         bank_gold = self.state.bank_gold if self.state else None
         bank_capacity = self.state.bank_capacity if self.state else None
         pending_items = self.state.pending_items if self.state else None
-        active_events = self._fetch_active_events(client)
-        raids = self._fetch_raids(client)
+        active_events = self._unexpired(
+            self._global_reads.get_or_fetch(
+                "active_events", lambda: self._fetch_active_events(client)
+            ),
+            datetime.now(timezone.utc),
+        )
+        raids = self._global_reads.get_or_fetch(
+            "raids", lambda: self._fetch_raids(client)
+        )
         self._log_active_raids(raids)
         state = WorldState.from_character_schema(
             last_result.data,
