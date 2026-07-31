@@ -1,6 +1,7 @@
 # PLAN: Multi-Character Support
 
-**Status:** DESIGN APPROVED — not yet implemented
+**Status:** IMPLEMENTED — `c913b4c4..HEAD` (19 of 20 tasks landed; Task 1 was
+withdrawn, see `docs/PLAN_multi_character_implementation.md`)
 **Date:** 2026-07-30
 
 Run up to 5 characters at once, each an independent instance of the current AI

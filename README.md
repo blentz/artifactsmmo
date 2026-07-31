@@ -29,6 +29,22 @@ uv run artifactsmmo play <name> --learn --tui
 
 Full command reference and session-stats tooling: [docs/usage.md](docs/usage.md).
 
+### Playing multiple characters
+
+`artifactsmmo play --all --tui` supervises every character on the account, one
+subprocess each, in a single TUI. Keys `1`–`5` choose which character the map
+centres on and which character the status, inventory, and log panes follow. All
+characters appear on the map at once, same sprite, one colour each.
+
+`artifactsmmo play --all` runs the same supervisor headless, streaming each
+child's log prefixed with its character name.
+
+Characters play independently — they share a bank but do not coordinate, and a
+lost race for a banked item is an ordinary replan. The account's `/my/rates`
+budget is read once and divided across the children.
+
+`artifactsmmo play <character>` is unchanged: one character, in-process.
+
 ## What the AI player does
 
 It runs a sense → plan → act loop with a single goal: reach max character
@@ -63,7 +79,9 @@ watcher: [docs/tui.md](docs/tui.md).
 Active development. Single-character autonomous play works end-to-end:
 gather → craft → fight → task → bank, with per-monster equipment
 optimization, overstock control, blocker memory, and live TUI observation.
-Multi-character coordination is not in scope yet.
+`play --all` supervises up to five characters concurrently, each in its own
+subprocess, visible together in one TUI. Characters play independently — they
+share a bank but do not coordinate; collaborative behaviour is future work.
 
 ## License
 
