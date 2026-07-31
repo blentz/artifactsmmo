@@ -53,7 +53,27 @@ Copied from `AGENTS.md` and `docs/PLAN_multi_character.md`. Every task's require
 
 ---
 
-### Task 1: SQLite `busy_timeout` for concurrent children
+### Task 1: SQLite `busy_timeout` for concurrent children — ~~DO~~ **CANCELLED, no work needed**
+
+> **This task was based on a false premise and has been withdrawn.** It was
+> implemented (`05f8c6f1`) and reverted (`275b9b2f`) on 2026-07-30.
+>
+> The premise was "there is no `busy_timeout`, so a concurrent writer fails
+> immediately". That is wrong: pysqlite's `sqlite3.connect(timeout=5.0)` default
+> already sets `busy_timeout=5000` on **every** connection, verified against a
+> SQLAlchemy engine with no PRAGMA at all. An explicit `PRAGMA busy_timeout=5000`
+> changes nothing, and the accompanying test passed on unmodified code — a
+> vacuous guard.
+>
+> Two findings from the attempt are worth keeping:
+> - `busy_timeout` genuinely is per-connection and this engine is pooled, so IF a
+>   non-default value were ever wanted, it must go in a SQLAlchemy `connect` event
+>   listener, not an inline PRAGMA.
+> - `LearningStore.start_session()` / `end_session()` do **not** write a session
+>   row; the row is created lazily by `record_cycle()` → `_ensure_session_row()`.
+>   Any future test that means to exercise a real write must call one of those.
+>
+> Skip to Task 2. The original text is left below for the record.
 
 Five children with `--learn` share one SQLite file. WAL is already on (`store.py:99`), but with no `busy_timeout` a concurrent writer fails instantly with "database is locked" instead of waiting out the other writer's commit.
 
