@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 from typing import Any
 
-from rich.console import Group
+from rich.console import Group, RenderableType
 from rich.progress_bar import ProgressBar
 from rich.table import Table
 from rich.text import Text
@@ -13,6 +13,7 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
+from artifactsmmo_cli.tui.roster_entry import RosterEntry
 
 ETA_WINDOW = 20
 """Number of recent (time, progress) samples used to estimate task ETA."""
@@ -54,6 +55,7 @@ class StatusPane(Static):
         self._eta_task: str | None = None
         self._eta_samples: list[tuple[float, int]] = []
         self._cooldown_expiry: float | None = None
+        self._roster: tuple[RosterEntry, ...] = ()
 
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         self._track_eta(snap)
@@ -62,6 +64,25 @@ class StatusPane(Static):
             if snap.cooldown_remaining > 0 else None
         )
         self.snapshot = snap
+
+    def update_roster(self, entries: tuple[RosterEntry, ...]) -> None:
+        self._roster = entries
+        self.refresh()
+
+    def roster_text(self) -> Text:
+        """One line naming every character. Empty for a single-character run,
+        which must look exactly as it did before multi-character support."""
+        line = Text(no_wrap=True, overflow="crop")
+        if len(self._roster) < 2:
+            return line
+        for entry in self._roster:
+            marker = "●" if entry.alive else "✗"
+            label = f"[{entry.slot}]{marker}{entry.character} L{entry.level} ({entry.x},{entry.y})"
+            if entry.restarts:
+                label += f" ↻{entry.restarts}"
+            style = f"bold {entry.color}" if entry.focused else entry.color
+            line.append(label + "  ", style=style)
+        return line
 
     def on_mount(self) -> None:
         """Tick once a second so the cooldown counts down between AI cycles."""
@@ -90,11 +111,13 @@ class StatusPane(Static):
         if len(self._eta_samples) > ETA_WINDOW:
             self._eta_samples = self._eta_samples[-ETA_WINDOW:]
 
-    def render(self) -> Table | Text:
+    def render(self) -> RenderableType:
         snap = self.snapshot
-        if snap is None:
-            return Text("Waiting...")
-        return self._render_status(snap)
+        body: Table | Text = Text("Waiting...") if snap is None else self._render_status(snap)
+        roster = self.roster_text()
+        if not roster.plain:
+            return body
+        return Group(roster, body)
 
     def _render_status(self, s: CycleSnapshot) -> Table:
         # HP bar — red when critical

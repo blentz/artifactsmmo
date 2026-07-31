@@ -406,7 +406,7 @@ class TestRunWithTui:
                 # wrapper (the fight modal's /my/logs history backfill).
                 assert mock_watch_app_cls.call_count == 1
                 kwargs = mock_watch_app_cls.call_args.kwargs
-                assert kwargs["character"] == "hero"
+                assert kwargs["characters"] == ["hero"]
                 assert kwargs["game_data"] is loaded_data
                 assert isinstance(kwargs["api"], APIWrapper)
                 # Bridge wraps the app's update callback + planning signal, and feeds

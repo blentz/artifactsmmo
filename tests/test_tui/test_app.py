@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.app import WatchApp
+from artifactsmmo_cli.tui.multi_snapshot_store import FIGHT_BUFFER, LOG_BUFFER
 from artifactsmmo_cli.tui.screens.character_screen import CharacterScreen
 from artifactsmmo_cli.tui.screens.fight_screen import FightScreen
 from artifactsmmo_cli.tui.screens.log_screen import LogScreen
@@ -22,7 +23,7 @@ from artifactsmmo_cli.tui.widgets.status_pane import StatusPane
 
 
 def _make_app(character: str = "hero") -> WatchApp:
-    return WatchApp(character=character, game_data=GameData())
+    return WatchApp(characters=[character], game_data=GameData())
 
 
 _FIGHT = FightRecord(
@@ -83,18 +84,18 @@ class TestWatchAppStaticProperties:
 
     def test_stores_character(self):
         app = _make_app("warrior")
-        assert app._character == "warrior"
+        assert app.focused_character == "warrior"
 
     def test_stores_game_data(self):
         gd = GameData()
-        app = WatchApp(character="hero", game_data=gd)
+        app = WatchApp(characters=["hero"], game_data=gd)
         assert app._game_data is gd
 
     def test_watchapp_init_audits_uncurated(self, capsys):
         gd = GameData()
         gd._monster_locations = {"made_up_beast": [(0, 0)]}
         gd.world.npc_tiles = {next(iter(NPC_SPRITES)): (0, 0)}
-        WatchApp("robby", gd)
+        WatchApp(["robby"], gd)
         out = capsys.readouterr().out
         assert "made_up_beast" in out and "uncurated monsters" in out
 
@@ -176,17 +177,17 @@ class TestWatchAppQuitBinding:
 class TestWatchAppBuffers:
     def test_update_stores_last_and_recent(self):
         app = _make_app()
-        # exercise the pure storage method without a running app loop
-        app._store_snapshot(_snap(cycle_index=1))
-        app._store_snapshot(_snap(cycle_index=2))
-        assert app._last_snapshot.cycle_index == 2
-        assert len(app._recent_snapshots) == 2
+        # exercise the pure storage delegate without a running app loop
+        app._store.record(_snap(cycle_index=1))
+        app._store.record(_snap(cycle_index=2))
+        assert app._store.last(app.focused_character).cycle_index == 2
+        assert len(app._store.recent(app.focused_character)) == 2
 
     def test_recent_snapshots_capped(self):
         app = _make_app()
-        for i in range(app.LOG_BUFFER + 50):
-            app._store_snapshot(_snap(cycle_index=i))
-        assert len(app._recent_snapshots) == app.LOG_BUFFER
+        for i in range(LOG_BUFFER + 50):
+            app._store.record(_snap(cycle_index=i))
+        assert len(app._store.recent(app.focused_character)) == LOG_BUFFER
 
 
 class TestWatchAppModals:
@@ -265,7 +266,7 @@ class TestWatchAppModals:
         app = _make_app()
         async with app.run_test():
             app.update_snapshot(_snap())
-            await app.push_screen(CharacterScreen(app._last_snapshot))
+            await app.push_screen(CharacterScreen(app._store.last(app.focused_character)))
             assert isinstance(app.screen, CharacterScreen)
             app.action_toggle_character()
             assert not isinstance(app.screen, CharacterScreen)
@@ -276,7 +277,7 @@ class TestWatchAppModals:
         app = _make_app()
         async with app.run_test():
             app.update_snapshot(_snap())
-            await app.push_screen(LogScreen(app._recent_snapshots))
+            await app.push_screen(LogScreen(app._store.recent(app.focused_character)))
             assert isinstance(app.screen, LogScreen)
             app.action_toggle_log()
             assert not isinstance(app.screen, LogScreen)
@@ -317,7 +318,7 @@ class TestWatchAppModals:
         """Pressing 'c' with no snapshot does not push a CharacterScreen (elif guard)."""
         app = _make_app()
         async with app.run_test() as pilot:
-            # Do NOT call update_snapshot — _last_snapshot is None
+            # Do NOT call update_snapshot — no snapshot stored for the focused character
             await pilot.press("c")
             assert not isinstance(app.screen, CharacterScreen)
 
@@ -348,7 +349,7 @@ class TestWatchAppModals:
         app = _make_app()
         async with app.run_test():
             app.update_snapshot(_snap())
-            await app.push_screen(PlanScreen(app._last_snapshot, app._game_data))
+            await app.push_screen(PlanScreen(app._store.last(app.focused_character), app._game_data))
             assert isinstance(app.screen, PlanScreen)
             app.action_toggle_plan()
             assert not isinstance(app.screen, PlanScreen)
@@ -358,7 +359,7 @@ class TestWatchAppModals:
         """Pressing 'p' with no snapshot does not push a PlanScreen (elif guard)."""
         app = _make_app()
         async with app.run_test() as pilot:
-            # Do NOT call update_snapshot — _last_snapshot is None
+            # Do NOT call update_snapshot — no snapshot stored for the focused character
             await pilot.press("p")
             assert not isinstance(app.screen, PlanScreen)
 
@@ -388,7 +389,7 @@ class TestWatchAppSetPlanning:
 
 class TestThreeByThreeLayout:
     async def test_map_spans_wide_right_block_and_log_is_full_width(self):
-        app = WatchApp("hero", GameData())
+        app = WatchApp(["hero"], GameData())
         async with app.run_test(size=(120, 45)) as pilot:
             map_pane = app.query_one("#map", MapPane)
             inv_pane = app.query_one("#inv")
@@ -429,7 +430,7 @@ class TestThreeByThreeLayout:
         and OWNS the sub-tile leftover (right/bottom of the map box). Unowned
         screen space is not repainted on modal close, which stranded remnants
         there; an owning widget is repainted like any other pane."""
-        app = WatchApp("hero", GameData())
+        app = WatchApp(["hero"], GameData())
         async with app.run_test(size=(170, 44)) as pilot:
             app.update_snapshot(_snap())
             await pilot.pause()
@@ -451,20 +452,20 @@ class TestFightModal:
         assert FightScreen in WatchApp._MODAL_SCREENS
 
     def test_fight_records_are_kept_in_a_dedicated_deque(self):
-        """Not a filter over _recent_snapshots: that deque is capped at 500
-        CYCLES, so unrelated cycles would silently evict old fights."""
+        """Not a filter over the recent-cycles deque: that deque is capped at
+        500 CYCLES, so unrelated cycles would silently evict old fights."""
         app = _make_app()
 
-        app._store_snapshot(_snap(fight=_FIGHT))
-        app._store_snapshot(_snap())
+        app._store.record(_snap(fight=_FIGHT))
+        app._store.record(_snap())
 
-        assert list(app._fights) == [_FIGHT]
+        assert list(app._store.fights(app.focused_character)) == [_FIGHT]
 
     def test_fight_deque_is_bounded(self):
-        assert WatchApp.FIGHT_BUFFER > 0
+        assert FIGHT_BUFFER > 0
         app = _make_app()
 
-        assert app._fights.maxlen == WatchApp.FIGHT_BUFFER
+        assert app._store.fights(app.focused_character).maxlen == FIGHT_BUFFER
 
     @pytest.mark.asyncio
     async def test_f_opens_and_closes_the_fight_modal(self):
@@ -506,7 +507,7 @@ class TestFightBackfill:
         page.data = entries
         api = MagicMock()
         api.get_character_logs.return_value = page
-        return WatchApp(character="hero", game_data=GameData(), api=api), api
+        return WatchApp(characters=["hero"], game_data=GameData(), api=api), api
 
     def test_fetcher_keeps_only_fight_entries_and_converts_them(self):
         other = MagicMock()
@@ -564,8 +565,8 @@ class TestFightBackfill:
     @pytest.mark.asyncio
     async def test_arrow_keys_re_render_the_detail_pane(self):
         app, _ = self._app_with_api([])
-        app._store_snapshot(_snap(fight=_FIGHT))
-        app._store_snapshot(_snap(fight=_FIGHT.model_copy(
+        app._store.record(_snap(fight=_FIGHT))
+        app._store.record(_snap(fight=_FIGHT.model_copy(
             update={"started_at": "2026-07-27T22:00:00.000000",
                     "opponent": "chicken"})))
         async with app.run_test() as pilot:

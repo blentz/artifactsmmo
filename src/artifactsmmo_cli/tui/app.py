@@ -1,6 +1,5 @@
 """WatchApp: Textual app with four panes for live character observation."""
 
-from collections import deque
 from collections.abc import Callable
 
 from artifactsmmo_api_client.models.log_type import LogType
@@ -13,6 +12,10 @@ from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.api_wrapper import APIWrapper
+from artifactsmmo_cli.multi.child_state import ChildState
+from artifactsmmo_cli.tui.character_roster import CharacterRoster
+from artifactsmmo_cli.tui.multi_snapshot_store import MultiSnapshotStore
+from artifactsmmo_cli.tui.roster_entry import RosterEntry
 from artifactsmmo_cli.tui.screens.character_screen import CharacterScreen
 from artifactsmmo_cli.tui.screens.encyclopedia_screen import EncyclopediaScreen
 from artifactsmmo_cli.tui.screens.fight_screen import FightScreen
@@ -77,9 +80,6 @@ class WatchApp(App[None]):
     }
     """
 
-    LOG_BUFFER = 500
-    FIGHT_BUFFER = 200
-
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("c", "toggle_character", "Character"),
@@ -87,24 +87,26 @@ class WatchApp(App[None]):
         ("p", "toggle_plan", "Plan"),
         ("e", "toggle_encyclopedia", "Encyclopedia"),
         ("f", "toggle_fight", "Fights"),
+        ("1", "focus_character(1)", "Char 1"),
+        ("2", "focus_character(2)", "Char 2"),
+        ("3", "focus_character(3)", "Char 3"),
+        ("4", "focus_character(4)", "Char 4"),
+        ("5", "focus_character(5)", "Char 5"),
     ]
 
-    def __init__(self, character: str, game_data: GameData,
+    def __init__(self, characters: list[str], game_data: GameData,
                  api: APIWrapper | None = None) -> None:
         super().__init__()
-        self._character = character
+        self._roster = CharacterRoster(characters)
         self._game_data = game_data
         # Optional: only the fight modal's history backfill needs the API. When
         # absent (tests, or a host that did not supply one) the modal still shows
         # everything this session watched; only 'm' goes quiet.
         self._api = api
-        self.title = f"artifactsmmo watch: {character}"
-        self._last_snapshot: CycleSnapshot | None = None
-        self._recent_snapshots: deque[CycleSnapshot] = deque(maxlen=self.LOG_BUFFER)
-        # Fights get their OWN buffer rather than being filtered out of
-        # _recent_snapshots: that deque is capped at LOG_BUFFER *cycles*, so a
-        # busy stretch of non-fight cycles would silently evict old fights.
-        self._fights: deque[FightRecord] = deque(maxlen=self.FIGHT_BUFFER)
+        self.focused_character = self._roster.names[0]
+        self.title = f"artifactsmmo watch: {', '.join(self._roster.names)}"
+        self._store = MultiSnapshotStore(self._roster.names)
+        self._child_states: dict[str, ChildState] = {}
         SpriteCoverageAudit().run(game_data)
 
     def compose(self) -> ComposeResult:
@@ -116,16 +118,16 @@ class WatchApp(App[None]):
         yield LogPane(id="log")
         yield Footer()
 
-    def _store_snapshot(self, snap: CycleSnapshot) -> None:
-        self._last_snapshot = snap
-        self._recent_snapshots.append(snap)
-        if snap.fight is not None:
-            self._fights.append(snap.fight)
-
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         """Called from the bot's worker thread via ThreadSafeBridge.
         Textual queues this onto the main thread."""
-        self._store_snapshot(snap)
+        self._store.record(snap)
+        if snap.character == self.focused_character:
+            self._repaint_focused(snap)
+        self._repaint_others()
+        self._repaint_roster()
+
+    def _repaint_focused(self, snap: CycleSnapshot) -> None:
         self.query_one("#status", StatusPane).update_snapshot(snap)
         self.query_one("#map", MapPane).update_snapshot(snap)
         self.query_one("#inv", InventoryPane).update_snapshot(snap)
@@ -133,6 +135,53 @@ class WatchApp(App[None]):
         top = self.screen
         if isinstance(top, (CharacterScreen, LogScreen, PlanScreen, FightScreen)):
             top.update_snapshot(snap)
+
+    def _repaint_others(self) -> None:
+        """Place every character EXCEPT the focused one; the focused character
+        is already drawn as the centred, animated sprite."""
+        if not self.is_running:
+            return
+        others = {
+            (snap.x, snap.y): self._roster.sprite(name)
+            for name, snap in self._store.latest_all().items()
+            if name != self.focused_character
+        }
+        self.query_one("#map", MapPane).set_others(others)
+
+    def action_focus_character(self, slot: int) -> None:
+        name = self._roster.at(slot)
+        if name is None or name == self.focused_character:
+            return
+        self.focused_character = name
+        snap = self._store.last(name)
+        if snap is not None:
+            self._repaint_focused(snap)
+        self._repaint_others()
+        self._repaint_roster()
+
+    def update_child_state(self, state: ChildState) -> None:
+        self._child_states[state.character] = state
+        self._repaint_roster()
+
+    def roster_entries(self) -> tuple[RosterEntry, ...]:
+        entries = []
+        for slot, name in enumerate(self._roster.names, start=1):
+            snap = self._store.last(name)
+            child = self._child_states.get(name)
+            entries.append(RosterEntry(
+                slot=slot, character=name, color=self._roster.color(name),
+                level=snap.level if snap else 0,
+                x=snap.x if snap else 0, y=snap.y if snap else 0,
+                alive=child.alive if child else True,
+                restarts=child.restarts if child else 0,
+                focused=name == self.focused_character,
+            ))
+        return tuple(entries)
+
+    def _repaint_roster(self) -> None:
+        if not self.is_running:
+            return
+        self.query_one("#status", StatusPane).update_roster(self.roster_entries())
 
     # The five modal screens. Each mounts with a FIXED widget id
     # (character-modal / log-modal / plan-modal / encyclopedia-modal / fight-modal),
@@ -160,23 +209,23 @@ class WatchApp(App[None]):
             self.push_screen(new)
 
     def action_toggle_character(self) -> None:
+        last = self._store.last(self.focused_character)
         self._open_modal(
             CharacterScreen,
-            lambda: CharacterScreen(self._last_snapshot)
-            if self._last_snapshot is not None else None)
+            lambda: CharacterScreen(last) if last is not None else None)
 
     def action_toggle_log(self) -> None:
-        self._open_modal(LogScreen, lambda: LogScreen(self._recent_snapshots))
+        self._open_modal(LogScreen, lambda: LogScreen(self._store.recent(self.focused_character)))
 
     def set_planning(self, active: bool) -> None:
         """Bot-thread signal (via ThreadSafeBridge): planner is deciding."""
         self.query_one("#map", MapPane).set_planning(active)
 
     def action_toggle_plan(self) -> None:
+        last = self._store.last(self.focused_character)
         self._open_modal(
             PlanScreen,
-            lambda: PlanScreen(self._last_snapshot, self._game_data)
-            if self._last_snapshot is not None else None)
+            lambda: PlanScreen(last, self._game_data) if last is not None else None)
 
     def action_toggle_encyclopedia(self) -> None:
         self._open_modal(
@@ -188,9 +237,9 @@ class WatchApp(App[None]):
         """One page of server history, fights only. Runs on a worker thread."""
         if self._api is None:
             return []
-        result = self._api.get_character_logs(self._character, page=page, size=100)
+        result = self._api.get_character_logs(self.focused_character, page=page, size=100)
         return [
-            FightRecord.from_log_entry(entry.content, character=self._character)
+            FightRecord.from_log_entry(entry.content, character=self.focused_character)
             for entry in result.data
             if entry.type_ == LogType.FIGHT
         ]
@@ -198,6 +247,6 @@ class WatchApp(App[None]):
     def action_toggle_fight(self) -> None:
         self._open_modal(
             FightScreen,
-            lambda: FightScreen(self._fights, character=self._character,
+            lambda: FightScreen(self._store.fights(self.focused_character), character=self.focused_character,
                                 fetch_older=self._fetch_older_fights),
         )

@@ -205,7 +205,7 @@ def _run_with_tui(
     client = ClientManager().client
     player.game_data = GameData.load(
         client, ttl_minutes=game_data_ttl_minutes, force_refresh=refresh_game_data)
-    app = WatchApp(character=character, game_data=player.game_data,
+    app = WatchApp(characters=[character], game_data=player.game_data,
                    api=APIWrapper(client))
     bridge = ThreadSafeBridge(app, app.update_snapshot, planning_handler=app.set_planning)
     player.set_cycle_observer(bridge.notify)

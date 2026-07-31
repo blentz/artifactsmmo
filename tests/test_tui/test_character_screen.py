@@ -58,7 +58,7 @@ def test_detail_no_task():
 class TestThreeColumnModal:
     @pytest.mark.asyncio
     async def test_modal_has_three_columns(self):
-        app = WatchApp("hero", GameData())
+        app = WatchApp(["hero"], GameData())
         async with app.run_test(size=(120, 50)) as pilot:
             app.update_snapshot(
                 _snap(inventory={"iron_ore": 5}, inventory_max=20, bank_items={"gold_ore": 3})
@@ -73,7 +73,7 @@ class TestThreeColumnModal:
 
     @pytest.mark.asyncio
     async def test_columns_show_expected_content(self):
-        app = WatchApp("hero", GameData())
+        app = WatchApp(["hero"], GameData())
         async with app.run_test(size=(150, 50)) as pilot:
             app.update_snapshot(
                 _snap(inventory={"iron_ore": 5}, inventory_max=20, bank_items={"gold_ore": 3})
@@ -86,7 +86,7 @@ class TestThreeColumnModal:
 
     @pytest.mark.asyncio
     async def test_bank_waiting_when_none(self):
-        app = WatchApp("hero", GameData())
+        app = WatchApp(["hero"], GameData())
         async with app.run_test(size=(150, 50)) as pilot:
             app.update_snapshot(_snap(bank_items=None))
             await pilot.press("c")
@@ -95,7 +95,7 @@ class TestThreeColumnModal:
 
     @pytest.mark.asyncio
     async def test_update_snapshot_refreshes_all_columns(self):
-        app = WatchApp("hero", GameData())
+        app = WatchApp(["hero"], GameData())
         async with app.run_test(size=(150, 50)) as pilot:
             app.update_snapshot(_snap(bank_items={"gold_ore": 1}))
             await pilot.press("c")
