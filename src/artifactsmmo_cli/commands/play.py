@@ -1,11 +1,13 @@
 """Play command: run the GOAP AI player."""
 
 import contextlib
+import sys
 import threading
 import traceback
 from datetime import datetime
 from pathlib import Path
 
+import httpx
 import typer
 
 from artifactsmmo_cli.ai.file_tracer import FileTracer
@@ -18,6 +20,7 @@ from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
+from artifactsmmo_cli.multi.event_emitter import JsonlEventEmitter
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 from artifactsmmo_cli.tui.app import WatchApp
 from artifactsmmo_cli.tui.observer import ThreadSafeBridge
@@ -29,8 +32,26 @@ def default_learn_db_path() -> str:
     return str(Path.home() / ".cache" / "artifactsmmo" / "learning.db")
 
 
+def emit_reason_for(exc: BaseException) -> str:
+    """The exit reason reported to the supervisor. An httpx transport failure is
+    transient and worth restarting; every other crash is a bug that a restart
+    loop would only hide. The learning store still records plain "crash"."""
+    if isinstance(exc, httpx.HTTPError):
+        return "crash:network"
+    return "crash"
+
+
 def play(
-    character: str = typer.Argument(..., help="Character name to play"),
+    character: str | None = typer.Argument(None, help="Character name to play"),
+    all_characters: bool = typer.Option(
+        False, "--all",
+        help="Supervise every account character, one subprocess each"),
+    emit_events: bool = typer.Option(
+        False, "--emit-events",
+        help="Emit JSONL cycle events on stdout; human output moves to stderr"),
+    rate_budget: str | None = typer.Option(
+        None, "--rate-budget",
+        help="This child's share of the account rate budget, as JSON"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show full plan each cycle"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Plan only, do not execute actions"),
     trace: bool = typer.Option(False, "--trace", help="Emit per-cycle JSONL to --trace-file"),
@@ -47,6 +68,24 @@ def play(
         help="Ignore the cached static game data and re-fetch from the API"),
 ) -> None:
     """Run the autonomous GOAP AI player for one character."""
+    if all_characters and character is not None:
+        print("--all supervises every character; do not also name one")
+        raise typer.Exit(code=2)
+    if all_characters and trace_file is not None:
+        print("--all writes one trace per character; --trace-file names only one")
+        raise typer.Exit(code=2)
+    if not all_characters and character is None:
+        print("name a character to play, or pass --all")
+        raise typer.Exit(code=2)
+    if all_characters:
+        print("--all requires the multi-character supervisor (not yet implemented)")
+        raise typer.Exit(code=2)
+    # The three checks above raise for every case where `character` could
+    # still be None; mypy's flow analysis does not connect the two
+    # independent conditions, so state the resulting invariant explicitly
+    # rather than reaching for a `# type: ignore`.
+    assert character is not None
+
     # Mutate<->play interlock: formal/diff/mutate.py live-writes mutants into
     # src/ and holds a repo-root lockfile for the whole run. Starting the bot
     # mid-run imports poisoned code (2026-06-09: a mutated predicate crashed
@@ -90,30 +129,51 @@ def play(
         game_data_ttl_minutes=config.game_data_ttl_minutes,
         refresh_game_data=refresh_game_data,
     )
+
+    emitter: JsonlEventEmitter | None = None
+    if emit_events:
+        # Capture the REAL stdout before the redirect below rebinds sys.stdout,
+        # so the protocol keeps writing to the pipe the parent reads.
+        emitter = JsonlEventEmitter(character=character, stream=sys.stdout)
+        player.set_cycle_observer(emitter.snapshot)
+        player.set_planning_observer(emitter.planning)
+
     exit_reason = "crash"
+    emit_reason = "crash"
     try:
-        if tui:
-            _run_with_tui(player, character, config.game_data_ttl_minutes, refresh_game_data)
-        else:
-            player.run()
+        with contextlib.redirect_stdout(sys.stderr) if emit_events else contextlib.nullcontext():
+            if tui:
+                _run_with_tui(player, character, config.game_data_ttl_minutes, refresh_game_data)
+            else:
+                player.run()
         exit_reason = "normal"
+        emit_reason = "normal"
     except ServerUnavailableError:
         # Server returned a maintenance page. run() (the console entrypoint)
         # renders it and exits 3; here we only record the honest exit reason.
-        exit_reason = "server_unavailable"
+        exit_reason = emit_reason = "server_unavailable"
         raise
     except StuckExit as exc:
         # Honest terminal path: stuck recovery exhausted its escalation
         # ladder. This is a deliberate, clean stop — NOT a crash — so the
         # session records exit_reason="stuck_exit" (trace 2026-06-10: the
         # old SystemExit(2) here was recorded as "crash").
-        exit_reason = "stuck_exit"
+        exit_reason = emit_reason = "stuck_exit"
         print(f"Bot for {character!r} stopped: {exc} — manual intervention needed")
         raise typer.Exit(code=2) from exc
     except KeyboardInterrupt:
-        exit_reason = "keyboard_interrupt"
+        exit_reason = emit_reason = "keyboard_interrupt"
+        raise
+    except httpx.HTTPError as exc:
+        # A transport failure is transient and worth the supervisor
+        # restarting; the learning store still records plain "crash" so its
+        # existing vocabulary does not change.
+        exit_reason = "crash"
+        emit_reason = emit_reason_for(exc)
         raise
     finally:
+        if emitter is not None:
+            emitter.emit_exit(emit_reason)
         store.end_session(exit_reason=exit_reason)
         store.close()
 
