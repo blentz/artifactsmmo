@@ -137,7 +137,8 @@ def play(
     if rate_budget is not None:
         budgets = BucketBudgets.from_json(rate_budget)
         player.set_rate_governors(
-            data=RateGovernor(budgets.data), action=RateGovernor(budgets.action)
+            data=RateGovernor(budgets.data), action=RateGovernor(budgets.action),
+            account=RateGovernor(budgets.account),
         )
 
     emitter: JsonlEventEmitter | None = None

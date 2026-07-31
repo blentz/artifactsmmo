@@ -32,16 +32,19 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
-def _rate_budget_json(children: int = 2) -> tuple[str, WindowBudget, WindowBudget]:
+def _rate_budget_json(
+    children: int = 2,
+) -> tuple[str, WindowBudget, WindowBudget, WindowBudget]:
     """A real --rate-budget JSON string built the same way MultiRun builds it
     for a child: parse a /my/rates-shaped payload, then split it. Returns the
-    JSON plus the pre-split data/action WindowBudgets so the test can assert
-    against real, independently-computed expectations rather than a literal.
+    JSON plus the pre-split account/data/action WindowBudgets so the test can
+    assert against real, independently-computed expectations rather than a
+    literal.
     """
     payload = {
         "data": {
             "account": {"second": {"limit": 6}, "minute": {"limit": None},
-                        "hour": {"limit": None}, "day": {"limit": None}},
+                        "hour": {"limit": 300}, "day": {"limit": None}},
             "data": {"second": {"limit": 20}, "minute": {"limit": 600},
                       "hour": {"limit": None}, "day": {"limit": None}},
             "action": {"second": {"limit": 10}, "minute": {"limit": 200},
@@ -50,16 +53,18 @@ def _rate_budget_json(children: int = 2) -> tuple[str, WindowBudget, WindowBudge
     }
     budgets = parse_rate_limits(payload)
     split = split_budget(budgets, children=children)
-    # Sanity: the two buckets this test cares about must actually differ,
-    # otherwise a crossed-wire bug (same budget handed to both governors)
+    # Sanity: the three buckets this test cares about must all differ,
+    # otherwise a crossed-wire bug (the same budget handed to two governors)
     # would be indistinguishable from correct wiring.
+    assert split.account.as_windows() != split.data.as_windows()
     assert split.data.as_windows() != split.action.as_windows()
-    return split.to_json(), split.data, split.action
+    assert split.account.as_windows() != split.action.as_windows()
+    return split.to_json(), split.account, split.data, split.action
 
 
 class TestRateBudgetWiring:
     def test_rate_budget_governors_get_the_right_half_of_the_split(self, runner: CliRunner) -> None:
-        rate_budget_json, expected_data, expected_action = _rate_budget_json(children=2)
+        rate_budget_json, expected_account, expected_data, expected_action = _rate_budget_json(children=2)
         with (
             patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls,
             patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
@@ -73,14 +78,18 @@ class TestRateBudgetWiring:
         assert result.exit_code == 0, result.output
         mock_player.set_rate_governors.assert_called_once()
         kwargs = mock_player.set_rate_governors.call_args.kwargs
+        account_governor = kwargs["account"]
         data_governor = kwargs["data"]
         action_governor = kwargs["action"]
         # RateGovernor stores the parsed windows as `_windows`; comparing
         # against independently-computed expected WindowBudgets is what
-        # catches a swap (data<->action) or a duplicate (same budget handed
-        # to both) — either would leave one side's `_windows` wrong.
+        # catches a swap (e.g. account<->data) or a duplicate (same budget
+        # handed to two governors) — either would leave one side's
+        # `_windows` wrong.
+        assert account_governor._windows == expected_account.as_windows()
         assert data_governor._windows == expected_data.as_windows()
         assert action_governor._windows == expected_action.as_windows()
+        assert account_governor._windows != data_governor._windows
         assert data_governor._windows != action_governor._windows
 
     def test_no_rate_budget_leaves_governors_unset(self, runner: CliRunner) -> None:

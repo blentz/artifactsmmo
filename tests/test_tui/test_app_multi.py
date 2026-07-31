@@ -1,8 +1,10 @@
 """WatchApp with a multi-character roster and 1-5 focus keys."""
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
+from textual.worker import WorkerState
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
@@ -95,6 +97,28 @@ def test_child_state_reaches_the_roster():
     assert entry.restarts == 2
 
 
+def test_child_state_last_reason_and_stderr_reach_the_roster_entry():
+    """Finding 3: the child's last stderr line and last_reason were captured
+    and packed into ChildState but had no consumer -- RosterEntry must
+    actually carry them through so a dead character's cause of death is
+    reachable, not just gathered and discarded."""
+    app = _app()
+    app.update_child_state(
+        ChildState(character="bob", alive=False, restarts=1,
+                   last_reason="crash", stderr_tail=("bot log line", "Traceback: boom"))
+    )
+    entry = next(e for e in app.roster_entries() if e.character == "bob")
+    assert entry.last_reason == "crash"
+    assert entry.last_stderr_line == "Traceback: boom"  # the LAST line, not the first
+
+
+def test_a_character_with_no_child_state_has_no_reason_or_stderr():
+    app = _app()
+    entry = next(e for e in app.roster_entries() if e.character == "alice")
+    assert entry.last_reason is None
+    assert entry.last_stderr_line is None
+
+
 def test_roster_entries_report_the_focused_character():
     """A verifiable-failure check on top of the brief's suite: an
     implementation that never sets `focused=True` on any entry (or always sets
@@ -185,3 +209,95 @@ async def test_on_mount_starts_the_pool_worker_and_polling_updates_the_roster():
         entry = next(e for e in app.roster_entries() if e.character == "alice")
         assert entry.alive is False
         assert entry.restarts == 3
+
+
+# --- shutdown hazard: update_snapshot / _repaint_focused before mount or
+# after teardown must be a no-op, like their siblings already are -----------
+
+
+def test_update_snapshot_before_mount_does_not_crash():
+    """Reproduces the hazard directly: before the fix, calling
+    update_snapshot on an unmounted app (is_running is False) reached
+    _repaint_focused's unguarded query_one and raised ScreenStackError --
+    the exact failure mode a late child event hits during app teardown."""
+    app = _app(names=("alice",))
+    app.update_snapshot(_snap("alice"))  # must not raise
+
+
+def test_repaint_focused_before_mount_does_not_crash():
+    app = _app(names=("alice",))
+    app._repaint_focused(_snap("alice"))  # must not raise
+
+
+# --- Finding 6: pool completion must not leave the TUI idling silently -----
+
+
+def test_pool_success_ends_the_app():
+    app = _app()
+    calls = []
+    app.exit = lambda *a, **k: calls.append((a, k))
+    event = SimpleNamespace(
+        worker=SimpleNamespace(name="supervisors", error=None), state=WorkerState.SUCCESS)
+    app.on_worker_state_changed(event)
+    assert calls, "app.exit must be called once every child has finished"
+
+
+def test_pool_error_ends_the_app_with_a_nonzero_return_code():
+    app = _app()
+    calls = []
+    app.exit = lambda *a, **k: calls.append((a, k))
+    event = SimpleNamespace(
+        worker=SimpleNamespace(name="supervisors", error=RuntimeError("boom")),
+        state=WorkerState.ERROR)
+    app.on_worker_state_changed(event)
+    assert calls
+    _, kwargs = calls[0]
+    assert kwargs.get("return_code") == 1
+    assert "boom" in str(kwargs.get("message"))
+
+
+def test_an_unrelated_worker_finishing_is_ignored():
+    """Only the "supervisors" worker's completion should end the app -- e.g.
+    the fight-history backfill worker (fight_screen.py) finishing must not
+    be mistaken for the whole pool completing."""
+    app = _app()
+    calls = []
+    app.exit = lambda *a, **k: calls.append((a, k))
+    event = SimpleNamespace(
+        worker=SimpleNamespace(name="something-else", error=None), state=WorkerState.SUCCESS)
+    app.on_worker_state_changed(event)
+    assert calls == []
+
+
+def test_the_supervisors_worker_being_cancelled_is_not_treated_as_completion():
+    """CANCELLED is the operator's own 'q' tearing the worker down (already
+    handled by the quit action); on_worker_state_changed must not also call
+    exit() on top of that."""
+    app = _app()
+    calls = []
+    app.exit = lambda *a, **k: calls.append((a, k))
+    event = SimpleNamespace(
+        worker=SimpleNamespace(name="supervisors", error=None), state=WorkerState.CANCELLED)
+    app.on_worker_state_changed(event)
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_the_pool_finishing_for_real_ends_the_running_app():
+    """End-to-end through the real Textual worker lifecycle, not a synthetic
+    event: a pool whose run() returns must actually drive the app to exit."""
+    class _FinishingPool:
+        def characters(self) -> tuple[str, ...]:
+            return ()
+
+        def state(self, character: str) -> ChildState:
+            raise AssertionError("no characters to poll")
+
+        async def run(self) -> None:
+            return
+
+    app = _app(names=("alice",))
+    app.attach_pool(_FinishingPool())
+    async with app.run_test():
+        await asyncio.sleep(0.2)  # let the worker run to completion and fire exit()
+        assert app.is_running is False

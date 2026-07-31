@@ -7,6 +7,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.screen import Screen
 from textual.widgets import Footer, Header
+from textual.worker import Worker, WorkerState
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.fight_record import FightRecord
@@ -125,6 +126,19 @@ class WatchApp(App[None]):
             self.run_worker(self._pool.run(), name="supervisors")
             self.set_interval(1.0, self._poll_child_states)
 
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        """React when the supervisor pool's worker finishes, instead of
+        idling on a dead roster with no exit or indication anything
+        happened. CANCELLED is not handled here: that is the operator's own
+        'q' tearing the worker down, already handled by the quit action, and
+        re-exiting on top of it would be redundant at best."""
+        if event.worker.name != "supervisors":
+            return
+        if event.state == WorkerState.SUCCESS:
+            self.exit(message="All characters have stopped.")
+        elif event.state == WorkerState.ERROR:
+            self.exit(return_code=1, message=f"Supervisor pool failed: {event.worker.error!r}")
+
     def _poll_child_states(self) -> None:
         if self._pool is None:
             return
@@ -143,6 +157,12 @@ class WatchApp(App[None]):
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         """Called from the bot's worker thread via ThreadSafeBridge.
         Textual queues this onto the main thread."""
+        if not self.is_running:
+            # A snapshot can arrive before mount or after teardown (a child's
+            # event still in flight when the app exits): querying the DOM
+            # then raises ScreenStackError rather than the NoMatches that
+            # `_repaint_others`/`_repaint_roster` already guard against.
+            return
         self._store.record(snap)
         if snap.character == self.focused_character:
             self._repaint_focused(snap)
@@ -150,6 +170,8 @@ class WatchApp(App[None]):
         self._repaint_roster()
 
     def _repaint_focused(self, snap: CycleSnapshot) -> None:
+        if not self.is_running:
+            return
         self.query_one("#status", StatusPane).update_snapshot(snap)
         self.query_one("#map", MapPane).update_snapshot(snap)
         self.query_one("#inv", InventoryPane).update_snapshot(snap)
@@ -197,6 +219,10 @@ class WatchApp(App[None]):
                 alive=child.alive if child else True,
                 restarts=child.restarts if child else 0,
                 focused=name == self.focused_character,
+                last_reason=child.last_reason if child else None,
+                last_stderr_line=(
+                    child.stderr_tail[-1] if child and child.stderr_tail else None
+                ),
             ))
         return tuple(entries)
 

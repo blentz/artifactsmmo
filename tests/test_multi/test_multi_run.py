@@ -139,6 +139,68 @@ def test_on_event_ignores_non_snapshot_events():
     mock_app.update_snapshot.assert_not_called()
 
 
+def test_on_event_forwards_planning_for_the_focused_character():
+    """The design doc says PlanningEvent drives set_planning; before the fix
+    MultiRun._on_event handled only SnapshotEvent and silently dropped every
+    PlanningEvent, so the map's planning overlay never lit in --all mode."""
+    mrun = _run()
+    mock_app = Mock()
+    mock_app.focused_character = "a"
+    mrun._app = mock_app
+    mrun._on_event(PlanningEvent(character="a", active=True))
+    mock_app.set_planning.assert_called_once_with(True)
+
+
+def test_on_event_ignores_planning_for_a_non_focused_character():
+    """set_planning drives ONE overlay; a background child's planning state
+    must not fight the overlay for whichever character is actually focused."""
+    mrun = _run()
+    mock_app = Mock()
+    mock_app.focused_character = "a"
+    mrun._app = mock_app
+    mrun._on_event(PlanningEvent(character="b", active=True))
+    mock_app.set_planning.assert_not_called()
+
+
+def test_on_event_planning_is_a_noop_with_no_app_attached():
+    mrun = _run()
+    assert mrun._app is None
+    mrun._on_event(PlanningEvent(character="a", active=True))  # no raise
+
+
+# --- _on_stderr: headless streams it, TUI stays quiet -----------------------
+
+
+def test_on_stderr_prints_to_stderr_with_the_character_name_in_headless_mode(capsys):
+    mrun = _run(tui=False)
+    mrun._on_stderr("alice", "bot log line")
+    captured = capsys.readouterr()
+    assert captured.err == "[alice] bot log line\n"
+
+
+def test_on_stderr_is_silent_in_tui_mode(capsys):
+    """Printing to the real stderr while Textual owns the alternate screen
+    would corrupt the TUI -- the same reason the bot's own stdout is
+    redirected under --emit-events."""
+    mrun = _run(tui=True)
+    mrun._on_stderr("alice", "bot log line")
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
+def test_build_pool_wires_on_stderr_to_the_character(capsys):
+    """End-to-end through build_pool: the supervisor's on_stderr callback
+    must actually be MultiRun._on_stderr bound to ITS character, not a
+    shared closure that reports every child under the same name (the classic
+    late-binding-in-a-loop bug)."""
+    mrun = _run(tui=False)
+    pool = mrun.build_pool(characters=["alice", "bob"], rates=_RATES)
+    pool._by_name["alice"]._on_stderr("alice said this")
+    pool._by_name["bob"]._on_stderr("bob said this")
+    captured = capsys.readouterr()
+    assert captured.err == "[alice] alice said this\n[bob] bob said this\n"
+
+
 # --- run(): headless vs TUI, and loud failure on bad API data --------------
 #
 # run() itself needs a real API token and network to exercise for real; every

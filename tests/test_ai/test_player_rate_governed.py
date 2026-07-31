@@ -7,6 +7,15 @@ completely unthrottled, and (2) each real outbound-read call site
 (`_fetch_world_state`'s `get_character`, `_fetch_active_events`,
 `_fetch_raids`, `_sync_bank`, `_fetch_open_orders`) and the action-dispatch
 site in `_execute` actually CONSULT the governor when one is wired in.
+
+Whole-branch review finding: `_sync_bank` (bank items + bank details) and
+`_fetch_open_orders` (GE orders) hit `/my/*` endpoints that are NOT
+`/my/{name}/action/*`, so per docs.artifactsmmo.com they are ACCOUNT-scoped
+reads (300/hour total -- the tightest bucket of the three) rather than
+data-scoped (2000/hour). They were wrongly charged against the data governor
+and the account bucket -- the one this whole epic exists to protect -- went
+completely unenforced. The `..._not_data` tests below pin the fix: they
+assert the account governor was consulted AND the data governor was NOT.
 """
 
 from unittest.mock import MagicMock, patch
@@ -44,6 +53,7 @@ def test_governors_default_to_none_so_single_character_play_is_unthrottled():
     player = GamePlayer(character="hero")
     assert player._data_governor is None
     assert player._action_governor is None
+    assert player._account_governor is None
 
 
 def test_a_data_read_acquires_from_the_data_governor():
@@ -53,7 +63,7 @@ def test_a_data_read_acquires_from_the_data_governor():
         WindowBudget(second=1, minute=None, hour=None, day=None),
         clock=fake.clock, sleep=fake.sleep,
     )
-    player.set_rate_governors(data=governor, action=governor)
+    player.set_rate_governors(data=governor, action=governor, account=governor)
     player._acquire_data()
     player._acquire_data()
     assert fake.slept == [1.0]
@@ -62,6 +72,7 @@ def test_a_data_read_acquires_from_the_data_governor():
 def test_acquiring_without_a_governor_is_a_no_op():
     GamePlayer(character="hero")._acquire_data()
     GamePlayer(character="hero")._acquire_action()
+    GamePlayer(character="hero")._acquire_account()
 
 
 class TestGovernorConsultedOnRealDataReadPaths:
@@ -73,7 +84,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
     def test_fetch_world_state_acquires_for_character_events_and_raids(self):
         player = GamePlayer(character="hero")
         governor = MagicMock()
-        player.set_rate_governors(data=governor, action=MagicMock())
+        player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
         char = make_char_schema()
         with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
@@ -93,7 +104,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
         events/raids fetch functions are not even invoked."""
         player = GamePlayer(character="hero")
         governor = MagicMock()
-        player.set_rate_governors(data=governor, action=MagicMock())
+        player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
         char = make_char_schema()
         with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
@@ -111,7 +122,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
     def test_fetch_active_events_acquires_once_per_page(self):
         player = GamePlayer(character="hero")
         governor = MagicMock()
-        player.set_rate_governors(data=governor, action=MagicMock())
+        player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
 
         def make_ev(code):
@@ -134,7 +145,7 @@ class TestGovernorConsultedOnRealDataReadPaths:
         consult the governor — acquire() is not just a once-per-page gate."""
         player = GamePlayer(character="hero")
         governor = MagicMock()
-        player.set_rate_governors(data=governor, action=MagicMock())
+        player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
         ev = MagicMock()
         ev.code = "gemstone_merchant"
@@ -150,16 +161,24 @@ class TestGovernorConsultedOnRealDataReadPaths:
     def test_fetch_raids_acquires_once_per_page(self):
         player = GamePlayer(character="hero")
         governor = MagicMock()
-        player.set_rate_governors(data=governor, action=MagicMock())
+        player.set_rate_governors(data=governor, action=MagicMock(), account=MagicMock())
         client = MagicMock()
         with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=_empty_page()):
             player._fetch_raids(client)
         assert governor.acquire.call_count == 1
 
-    def test_sync_bank_acquires_once_per_items_page_plus_once_for_details(self):
+
+class TestAccountScopedReadsUseTheAccountGovernor:
+    """`/my/bank`, `/my/bank/items`, and `/my/grandexchange/orders` are
+    account-scoped (`/my/*`, not `/my/{name}/action/*`); the account bucket
+    is 300/hour total -- the tightest of the three -- so these must draw
+    from `_account_governor`, never `_data_governor`."""
+
+    def test_sync_bank_acquires_from_the_account_governor_not_data(self):
         player = GamePlayer(character="hero")
-        governor = MagicMock()
-        player.set_rate_governors(data=governor, action=MagicMock())
+        data_governor = MagicMock()
+        account_governor = MagicMock()
+        player.set_rate_governors(data=data_governor, action=MagicMock(), account=account_governor)
         state = make_state()
         client = MagicMock()
 
@@ -181,16 +200,19 @@ class TestGovernorConsultedOnRealDataReadPaths:
             with patch("artifactsmmo_cli.ai.player.get_bank_details", return_value=details):
                 player._sync_bank(client, state)
         # 2 bank_items pages + 1 bank_details call
-        assert governor.acquire.call_count == 3
+        assert account_governor.acquire.call_count == 3
+        assert data_governor.acquire.call_count == 0
 
-    def test_fetch_open_orders_acquires_once_per_page(self):
+    def test_fetch_open_orders_acquires_from_the_account_governor_not_data(self):
         player = GamePlayer(character="hero")
-        governor = MagicMock()
-        player.set_rate_governors(data=governor, action=MagicMock())
+        data_governor = MagicMock()
+        account_governor = MagicMock()
+        player.set_rate_governors(data=data_governor, action=MagicMock(), account=account_governor)
         client = MagicMock()
         with patch("artifactsmmo_cli.ai.player.get_my_ge_orders", return_value=_empty_page()):
             player._fetch_open_orders(client)
-        assert governor.acquire.call_count == 1
+        assert account_governor.acquire.call_count == 1
+        assert data_governor.acquire.call_count == 0
 
 
 class TestGovernorConsultedBeforeActionDispatch:
@@ -199,7 +221,7 @@ class TestGovernorConsultedBeforeActionDispatch:
         player.state = make_state(x=0, y=0)
         data_governor = MagicMock()
         action_governor = MagicMock()
-        player.set_rate_governors(data=data_governor, action=action_governor)
+        player.set_rate_governors(data=data_governor, action=action_governor, account=MagicMock())
         client = MagicMock()
         action = MoveAction(x=3, y=5)
         char = make_char_schema(x=3, y=5)

@@ -332,6 +332,7 @@ class GamePlayer:
         # A lone `play <character>` is unthrottled, exactly as before.
         self._data_governor: RateGovernor | None = None
         self._action_governor: RateGovernor | None = None
+        self._account_governor: RateGovernor | None = None
 
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
@@ -340,12 +341,17 @@ class GamePlayer:
     def set_planning_observer(self, observer: "Callable[[bool], None] | None") -> None:
         self._planning_observer = observer
 
-    def set_rate_governors(self, data: RateGovernor, action: RateGovernor) -> None:
-        """Wire this child's share of the shared per-IP rate budget. Called only
-        by `play --all` children; a lone `play <character>` never calls this,
-        so `_acquire_data`/`_acquire_action` stay no-ops for it."""
+    def set_rate_governors(
+        self, data: RateGovernor, action: RateGovernor, account: RateGovernor
+    ) -> None:
+        """Wire this child's share of the shared per-IP rate budget, across all
+        three buckets the bot actually calls. Called only by `play --all`
+        children; a lone `play <character>` never calls this, so
+        `_acquire_data`/`_acquire_action`/`_acquire_account` stay no-ops for
+        it."""
         self._data_governor = data
         self._action_governor = action
+        self._account_governor = account
 
     def _acquire_data(self) -> None:
         """Block until the data-bucket budget has room. A no-op when unset."""
@@ -356,6 +362,19 @@ class GamePlayer:
         """Block until the action-bucket budget has room. A no-op when unset."""
         if self._action_governor is not None:
             self._action_governor.acquire()
+
+    def _acquire_account(self) -> None:
+        """Block until the account-bucket budget has room. A no-op when unset.
+
+        The account bucket (300/hour total, per docs.artifactsmmo.com) is the
+        TIGHTEST of the three -- 60/hour/child at 5 children, versus data's
+        2000/hour -- and covers `/my/*` reads that are not `/my/{name}/action/*`
+        (bank items, bank details, GE orders, ...). Those were previously
+        charged against the data bucket, which both starved data's real
+        budget and left the account bucket, the one this whole epic exists to
+        protect, unenforced."""
+        if self._account_governor is not None:
+            self._account_governor.acquire()
 
     def _notify_planning(self, active: bool) -> None:
         if self._planning_observer is not None:
@@ -1524,11 +1543,15 @@ class GamePlayer:
         return state
 
     def _sync_bank(self, client: AuthenticatedClient, state: WorldState) -> WorldState:
-        """Re-fetch bank contents after a bank interaction."""
+        """Re-fetch bank contents after a bank interaction.
+
+        `/my/bank/items` and `/my/bank` are account-scoped reads (they are
+        `/my/*` but not `/my/{name}/action/*`), so they draw from the account
+        bucket, not the data bucket."""
         bank_items: dict[str, int] = {}
         page = 1
         while True:
-            self._acquire_data()
+            self._acquire_account()
             result = get_bank_items(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
@@ -1540,7 +1563,7 @@ class GamePlayer:
 
         bank_gold: int | None = None
         bank_capacity: int | None = state.bank_capacity
-        self._acquire_data()
+        self._acquire_account()
         details = get_bank_details(client=client)
         if details is not None and hasattr(details, "data") and details.data is not None:
             bank_gold = details.data.gold
@@ -1610,7 +1633,10 @@ class GamePlayer:
         Retries transient transport errors with the same backoff schedule as
         `_fetch_active_events`/`_fetch_raids`. Returns None (never an empty
         tuple) on total failure so the caller cannot mistake a failed poll for
-        every order having filled."""
+        every order having filled.
+
+        `/my/grandexchange/orders` is an account-scoped read (`/my/*`, not
+        `/my/{name}/action/*`), so it draws from the account bucket."""
         orders: list[OpenOrder] = []
         page = 1
         while True:
@@ -1619,7 +1645,7 @@ class GamePlayer:
             backoff = 5.0
             for attempt in range(1, 4):  # 3 attempts: immediate, +5s, +10s
                 try:
-                    self._acquire_data()
+                    self._acquire_account()
                     result = get_my_ge_orders(client=client, page=page, size=100)
                     fetched = True
                     break

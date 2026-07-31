@@ -2,6 +2,7 @@
 
 import asyncio
 import sys
+from functools import partial
 from typing import Any
 
 from artifactsmmo_cli.ai.game_data import GameData
@@ -9,7 +10,7 @@ from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
 from artifactsmmo_cli.multi.character_supervisor import CharacterSupervisor
-from artifactsmmo_cli.multi.child_event import ChildEvent, SnapshotEvent
+from artifactsmmo_cli.multi.child_event import ChildEvent, PlanningEvent, SnapshotEvent
 from artifactsmmo_cli.multi.supervisor_pool import SupervisorPool
 from artifactsmmo_cli.tui.app import WatchApp
 from artifactsmmo_cli.utils.rate_budget import (
@@ -67,13 +68,35 @@ class MultiRun:
                 character=name,
                 argv=self.child_argv(name, budget),
                 on_event=self._on_event,
+                # `partial` binds `name` by VALUE right now, unlike a lambda
+                # closing over the loop variable `name` (which would report
+                # every child under whichever name the loop variable held
+                # last by the time a callback actually fired).
+                on_stderr=partial(self._on_stderr, name),
             )
             for name in characters
         ])
 
     def _on_event(self, event: ChildEvent) -> None:
-        if self._app is not None and isinstance(event, SnapshotEvent):
+        if self._app is None:
+            return
+        if isinstance(event, SnapshotEvent):
             self._app.update_snapshot(event.payload)
+        elif isinstance(event, PlanningEvent) and event.character == self._app.focused_character:
+            # `set_planning` drives ONE overlay, not a per-character one, so
+            # only the focused child's planning state should reach it -- a
+            # background child's planning flicker must not fight the overlay
+            # for whichever character the operator is actually watching.
+            self._app.set_planning(event.active)
+
+    def _on_stderr(self, character: str, line: str) -> None:
+        """Headless mode has no TUI to show a dead child's log in, so per the
+        design doc it streams each child's stderr live, prefixed with the
+        character name. In TUI mode this would corrupt the alternate screen,
+        so it stays quiet there -- the roster/status pane surfaces the same
+        information instead."""
+        if not self._tui:
+            print(f"[{character}] {line}", file=sys.stderr)
 
     def run(self) -> None:
         config = Config.from_token_file()

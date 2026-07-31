@@ -81,3 +81,47 @@ def test_render_omits_the_roster_line_for_a_single_character():
     bare = StatusPane()
     without_roster = _rendered(bare)
     assert with_roster == without_roster
+
+
+# --- Finding 3: a dead character's last stderr line / exit reason must be
+# reachable where it is shown, not merely captured and discarded ------------
+
+
+def test_a_dead_characters_last_reason_is_shown():
+    entries = (
+        RosterEntry(slot=1, character="alice", color=TUNIC, level=19,
+                    x=0, y=2, alive=True, restarts=0, focused=True),
+        RosterEntry(slot=2, character="bob", color=BLOOD, level=7,
+                    x=5, y=-1, alive=False, restarts=2, focused=False,
+                    last_reason="crash", last_stderr_line="Traceback: boom"),
+    )
+    pane = StatusPane()
+    pane.update_roster(entries)
+    text = pane.roster_text().plain
+    assert "crash" in text
+    assert "Traceback: boom" in text
+
+
+def test_an_alive_characters_reason_and_stderr_are_not_shown():
+    """last_reason/last_stderr_line are set only once a child has actually
+    died; showing them for a live character would be misleading noise."""
+    entries = (
+        RosterEntry(slot=1, character="alice", color=TUNIC, level=19,
+                    x=0, y=2, alive=True, restarts=0, focused=True,
+                    last_reason="crash", last_stderr_line="stale from a prior life"),
+    )
+    pane = StatusPane()
+    pane.update_roster(entries * 2)  # keep it multi-character so the line renders
+    text = pane.roster_text().plain
+    assert "crash" not in text
+    assert "stale from a prior life" not in text
+
+
+def test_a_dead_character_with_no_reason_or_stderr_renders_as_before():
+    """Backward-compatible default: a dead entry that never got a reason or
+    stderr line (e.g. never actually observed) must not sprout an empty
+    bracket."""
+    pane = StatusPane()
+    pane.update_roster(_entries())
+    text = pane.roster_text().plain
+    assert "[]" not in text

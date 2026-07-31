@@ -1,6 +1,7 @@
 """CharacterSupervisor: one child process, driven by real subprocesses."""
 
 import asyncio
+import os
 import sys
 
 import pytest
@@ -131,3 +132,143 @@ async def test_an_unparseable_complete_line_surfaces_as_an_error():
     )
     await _run_with_timeout(supervisor)
     assert any("protocol" in line for line in supervisor.stderr_tail)
+
+
+# --- Finding 1: the child must always be reaped, not merely un-watched -----
+
+
+@pytest.mark.asyncio
+async def test_cancelling_the_supervisor_kills_and_reaps_the_child():
+    """Simulates Textual cancelling the "supervisors" worker when the
+    operator presses 'q'. Before the fix, `_run_once` awaited the readers
+    with no try/finally: cancelling the gather propagated straight out,
+    `process.wait()` never ran, and the child (a live game-bot subprocess)
+    was left running with nobody watching it.
+
+    This proves the process is actually gone -- not merely that
+    supervisor.run() raised CancelledError without error -- by checking the
+    real OS pid after cancellation.
+    """
+    body = "import time\ntime.sleep(30)\n"
+    supervisor = CharacterSupervisor(
+        character="hero", argv=_child_argv(body), on_event=lambda _e: None
+    )
+    task = asyncio.create_task(supervisor.run())
+    async with asyncio.timeout(10.0):
+        while supervisor.pid is None:
+            await asyncio.sleep(0.01)
+    pid = supervisor.pid
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        async with asyncio.timeout(10.0):
+            await task
+
+    # await task only returns once every await inside _run_once's finally
+    # block (terminate + wait()) has actually completed, so the process must
+    # already be reaped here -- no extra sleep needed.
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
+@pytest.mark.asyncio
+async def test_a_child_that_ignores_sigterm_is_force_killed():
+    """Graceful termination alone is not enough: a child that traps SIGTERM
+    (or is simply too busy to act on it) must still be gone by the time
+    _terminate returns. `terminate_timeout` is set tiny here purely so the
+    test does not have to wait out the real 5s production ceiling.
+
+    The child signals readiness over stderr (via `on_stderr`) once its
+    SIG_IGN handler is actually installed, so cancellation cannot race the
+    child's own startup -- without that rendezvous, terminate() could land
+    before the handler exists and kill the child via the DEFAULT SIGTERM
+    action, never exercising the force-kill path at all.
+    """
+    body = (
+        "import signal, sys, time\n"
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "sys.stderr.write('ready\\n')\n"
+        "sys.stderr.flush()\n"
+        "time.sleep(30)\n"
+    )
+    ready = asyncio.Event()
+
+    def _on_stderr(line: str) -> None:
+        if line == "ready":
+            ready.set()
+
+    supervisor = CharacterSupervisor(
+        character="hero", argv=_child_argv(body), on_event=lambda _e: None,
+        on_stderr=_on_stderr, terminate_timeout=0.2,
+    )
+    task = asyncio.create_task(supervisor.run())
+    async with asyncio.timeout(10.0):
+        await ready.wait()
+    pid = supervisor.pid
+    assert pid is not None
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        async with asyncio.timeout(10.0):
+            await task
+
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
+@pytest.mark.asyncio
+async def test_a_clean_exit_still_reaps_the_process():
+    """The non-cancelled path must also leave nothing behind: `alive` and
+    `pid` both clear once the child has actually exited."""
+    supervisor = CharacterSupervisor(
+        character="hero", argv=_child_argv(_EMIT_AND_EXIT), on_event=lambda _e: None
+    )
+    await _run_with_timeout(supervisor)
+    assert supervisor.alive is False
+    assert supervisor.pid is None
+
+
+# --- Finding 2: an over-limit line must not silently kill the character ----
+
+
+_OVERLONG_LINE_THEN_EXIT = (
+    "import sys\n"
+    "sys.stdout.write('{\"kind\":\"exit\",\"character\":\"hero\",\"reason\":\"'"
+    " + 'x' * 5000 + '\"}\\n')\n"
+    "sys.stdout.write('{\"kind\":\"exit\",\"character\":\"hero\",\"reason\":\"normal\"}\\n')\n"
+    "sys.stdout.flush()\n"
+)
+
+
+@pytest.mark.asyncio
+async def test_an_overlong_line_is_reported_and_the_supervisor_survives():
+    """asyncio's own default StreamReader limit (65536 bytes) is too tight for
+    a real late-game SnapshotEvent (measured 51,725 bytes); readline() raises
+    ValueError past whatever limit is configured, which the old code did not
+    catch, so the character silently froze (alive stayed True, no restart, no
+    error surfaced). A small `stream_limit` here reproduces the same failure
+    mode with a short line instead of an actual 64KiB+ one.
+    """
+    supervisor = CharacterSupervisor(
+        character="hero", argv=_child_argv(_OVERLONG_LINE_THEN_EXIT),
+        on_event=lambda _e: None, stream_limit=1024,
+    )
+    await _run_with_timeout(supervisor)
+    assert supervisor.last_reason == "normal"
+    assert any("protocol error" in line for line in supervisor.stderr_tail)
+    assert any("stream limit" in line for line in supervisor.stderr_tail)
+
+
+# --- Finding 3: stderr lines are forwarded live, not just buffered ---------
+
+
+@pytest.mark.asyncio
+async def test_stderr_lines_are_forwarded_to_on_stderr_as_they_arrive():
+    seen: list[str] = []
+    supervisor = CharacterSupervisor(
+        character="hero", argv=_child_argv(_NOISY_STDERR), on_event=lambda _e: None,
+        on_stderr=seen.append,
+    )
+    await _run_with_timeout(supervisor)
+    assert "bot log line" in seen
+    assert "Traceback: boom" in seen

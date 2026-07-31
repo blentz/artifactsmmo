@@ -80,6 +80,16 @@ class StatusPane(Static):
             label = f"[{entry.slot}]{marker}{entry.character} L{entry.level} ({entry.x},{entry.y})"
             if entry.restarts:
                 label += f" ↻{entry.restarts}"
+            if not entry.alive:
+                # The only place a dead child's cause of death is reachable:
+                # captured stderr and the recorded exit reason were otherwise
+                # gathered and discarded with no consumer.
+                detail = entry.last_reason or ""
+                if entry.last_stderr_line:
+                    line_detail = entry.last_stderr_line[:60]
+                    detail = f"{detail}: {line_detail}" if detail else line_detail
+                if detail:
+                    label += f" [{detail}]"
             style = f"bold {entry.color}" if entry.focused else entry.color
             line.append(label + "  ", style=style)
         return line
