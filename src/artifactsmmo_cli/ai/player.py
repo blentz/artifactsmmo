@@ -47,6 +47,7 @@ from artifactsmmo_cli.ai.constants import (
     ERROR_BACKOFF_MAX_SECONDS,
     ERROR_CODE_ALREADY_EQUIPPED,
     ERROR_CODE_COOLDOWN,
+    ERROR_CODE_RATE_LIMITED,
     STUCK_DETECTOR_WINDOW,
 )
 from artifactsmmo_cli.ai.consumable_supply import consumable_craft_quantity
@@ -119,7 +120,9 @@ from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.client_manager import ClientManager
+from artifactsmmo_cli.rate_limited_error import RateLimitedError
 from artifactsmmo_cli.utils.rate_governor import RateGovernor
+from artifactsmmo_cli.utils.retry_after import retry_after_seconds
 
 _BANK_RETRY_SECONDS = 60.0  # retry bank access this long after an HTTP 496 block
 _ACHIEVEMENT_CODE_RE = re.compile(r"\((\w+) achievement_unlocked")
@@ -145,6 +148,35 @@ def _error_text(exc: BaseException) -> str:
 
 class GamePlayer:
     """Autonomous GOAP AI player for a single character."""
+
+    RATE_LIMITED_OUTCOME = "error:rate_limited"
+    """`_execute`'s outcome string for an HTTP 429. Kept distinguishable from
+    `error:other` so `_record_learning_cycle` doesn't fold a throttle into
+    ordinary failed-cycle stats, and treated like `error:cooldown` at the two
+    `run()` checkpoints that ask "was this a real failure?" (the no-cooldown
+    exponential backoff and the stuck-detector's `outcome_for_stuck`) so a
+    429 reads as a transient server-timing rejection, not a goal failure —
+    the bot retries the same plan instead of replanning around a game-state
+    problem that never existed."""
+
+    @staticmethod
+    def is_rate_limited(code: int) -> bool:
+        """True if `code` is the HTTP 429 (Too Many Requests) status.
+
+        A named predicate rather than an inline `code == 429` comparison, for
+        any call site holding a raw status code. Task 18 investigation: no
+        code path in this codebase currently constructs one — the generated
+        OpenAPI client's `_parse_response` does not recognize 429 for any
+        endpoint (undocumented in the spec), so with
+        `raise_on_unexpected_status=False` `sync()` silently discards both
+        the status code and the response headers to `None`, and
+        `ApiActionError` is never constructed with code 429. Detection
+        instead happens in the raw httpx response hook
+        (`rate_limit_detector.detect_rate_limited_response`, wired in
+        `client_manager.py`), which raises `RateLimitedError` directly;
+        `_execute` dispatches on that exception type, not on this predicate.
+        """
+        return code == ERROR_CODE_RATE_LIMITED
 
     def __init__(
         self,
@@ -193,6 +225,11 @@ class GamePlayer:
         # backoff that keeps a persistent error (e.g. a stuck Withdraw→478) from
         # spinning the loop at full CPU. Reset on any ok/cooldown cycle.
         self._error_backoff_n: int = 0
+        # Consecutive HTTP 429s, driving retry_after_seconds' capped backoff
+        # (Retry-After if the server sent one, else exponential). Reset on
+        # any SUCCESSFUL action so an isolated 429 or two early in a session
+        # doesn't ratchet the wait upward for the rest of it.
+        self._rate_limit_attempts: int = 0
         self._recovery_level: dict[StuckSignal, int] = {}
         # Escalation decay bookkeeping (see _record_cycle/_handle_stuck): per
         # signal, the current and the maximum run of CONSECUTIVE
@@ -989,7 +1026,11 @@ class GamePlayer:
                 # resets on the next ok/cooldown cycle — fast to recover from a
                 # one-off error, quickly idle on a true livelock. The sleep also
                 # gives the just-resynced bank / stuck detector room to react.
-                if outcome in ("ok", "error:cooldown"):
+                # RATE_LIMITED_OUTCOME is exempted too: `_execute` already
+                # slept via retry_after_seconds for this exact failure, so
+                # sleeping again here would be a second level of backoff for
+                # the same 429.
+                if outcome in ("ok", "error:cooldown", self.RATE_LIMITED_OUTCOME):
                     self._error_backoff_n = 0
                 elif cooldown_remaining == 0.0:
                     delay = min(
@@ -1049,9 +1090,13 @@ class GamePlayer:
                 # bot abandoned combat after one server-timing miss
                 # (trace 2026-06-06 cycles 0+1: cooldown → suppression →
                 # PursueTask for the rest of the session). The action's
-                # intent was correct; only the timing was off.
+                # intent was correct; only the timing was off. A 429
+                # (RATE_LIMITED_OUTCOME) is the same shape of non-failure —
+                # a per-IP throttle rejected the request before it reached
+                # game logic, not a sign the plan or goal was wrong.
                 outcome_for_stuck = (
                     outcome == "ok" or outcome == "error:cooldown"
+                    or outcome == self.RATE_LIMITED_OUTCOME
                 )
                 self._record_cycle(self._make_cycle_record(
                     goal_name=repr(selected_goal),
@@ -1201,7 +1246,27 @@ class GamePlayer:
             # Re-sync pending items after claiming one
             if isinstance(action, ClaimPendingItemAction):
                 new_state = self._sync_pending(client, new_state)
+            # Any successful action clears the throttle history — an isolated
+            # 429 (or two) earlier in the session must not keep inflating the
+            # wait for the rest of it.
+            self._rate_limit_attempts = 0
             return new_state, "ok"
+        except RateLimitedError as e:
+            # Per-IP throttle (HTTP 429), not a bad plan: the request was
+            # rejected before it reached game logic, so state is unchanged —
+            # skip the refetch the other branches below do (it would spend
+            # another budget token while already being throttled). Must be
+            # caught ahead of `except httpx.HTTPError` below, since
+            # RateLimitedError IS one (see rate_limited_error.py) — that's
+            # deliberate, so every OTHER call site's existing
+            # `except httpx.HTTPError` retry loop already treats a 429 as
+            # transient with no changes there.
+            self._last_error = _error_text(e)
+            delay = retry_after_seconds(e.headers, self._rate_limit_attempts)
+            self._rate_limit_attempts += 1
+            print(f"[{self._now()}] Rate limited (HTTP 429) — waiting {delay:.0f}s")
+            time.sleep(delay)
+            return self.state, self.RATE_LIMITED_OUTCOME
         except ApiActionError as e:
             self._last_error = _error_text(e)
             if e.code == ERROR_CODE_COOLDOWN:

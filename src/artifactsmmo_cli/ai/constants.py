@@ -33,3 +33,13 @@ ERROR_CODE_COOLDOWN = 499
 # planned equip should never 485 — but any future 485 must remain an
 # ordinary failed-cycle outcome (2026-06-10 Robby utility2 livelock).
 ERROR_CODE_ALREADY_EQUIPPED = 485
+
+# Standard HTTP 429 ("Too Many Requests"): the per-IP throttle `play --all`
+# children divide between themselves as a soft budget (see utils/rate_governor.py)
+# tripped anyway. Undocumented in the OpenAPI spec this project's client is
+# generated from, so it never becomes an ErrorResponseSchema/ApiActionError —
+# detected instead via a raw httpx response hook
+# (rate_limit_detector.detect_rate_limited_response, wired in client_manager.py)
+# that raises RateLimitedError before the generated client's `_parse_response`
+# can discard the status code. See GamePlayer.is_rate_limited/RATE_LIMITED_OUTCOME.
+ERROR_CODE_RATE_LIMITED = 429

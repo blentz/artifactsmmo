@@ -12,6 +12,7 @@ from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
 from artifactsmmo_cli.maintenance_detector import detect_maintenance_response
+from artifactsmmo_cli.rate_limit_detector import detect_rate_limited_response
 
 
 def test_client_manager_singleton():
@@ -35,7 +36,9 @@ def test_client_manager_initialization():
             token="test-token",
             timeout=httpx.Timeout(30),
             raise_on_unexpected_status=False,
-            httpx_args={"event_hooks": {"response": [detect_maintenance_response]}},
+            httpx_args={"event_hooks": {
+                "response": [detect_maintenance_response, detect_rate_limited_response]
+            }},
         )
 
         assert manager.is_initialized()
@@ -128,6 +131,23 @@ def test_client_has_maintenance_response_hook():
         # Close the real httpx client so its connection pool does not leak an
         # unclosed SSL socket into a later test (pytest's unraisableexception
         # plugin promotes that ResourceWarning to an error).
+        http_client.close()
+
+
+def test_client_has_rate_limited_response_hook():
+    """Task 18: the 429 detector must be installed on the API client too."""
+    ClientManager._instance = None
+    ClientManager._client = None
+    ClientManager._api = None
+    ClientManager._config = None
+    manager = ClientManager()
+
+    config = Config(token="test-token")
+    manager.initialize(config)
+    http_client = manager.client.get_httpx_client()
+    try:
+        assert detect_rate_limited_response in http_client.event_hooks["response"]
+    finally:
         http_client.close()
 
 
