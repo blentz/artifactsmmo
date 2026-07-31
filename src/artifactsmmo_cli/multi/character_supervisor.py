@@ -104,9 +104,27 @@ class CharacterSupervisor:
             # its pipes: up to 5 bot subprocesses still hitting the live
             # game account, each taking one more real action before dying
             # accidentally on SIGPIPE.
-            await self._terminate(process)
-            self.alive = False
-            self.pid = None
+            #
+            # That same cancellation can arrive a SECOND time while this
+            # ladder is itself mid-`wait()` -- Textual's shutdown path calls
+            # `workers.cancel_all()` on 'q' without awaiting the workers, so
+            # `asyncio.run`'s teardown delivers another cancel here. Left
+            # unshielded, that second cancel would abort the ladder right
+            # there: `process.kill()` and the final `process.wait()` never
+            # run, which quietly removes the SIGKILL escalation that makes
+            # the SIGTERM above trustworthy. `asyncio.shield` lets the
+            # ladder run to completion regardless -- in the background, if
+            # this coroutine is re-cancelled while awaiting it -- while
+            # still letting the CancelledError propagate to the caller;
+            # shutdown must never be silently swallowed.
+            try:
+                await asyncio.shield(self._terminate(process))
+            finally:
+                # A NESTED finally: these must clear even if the shield()
+                # await above is itself interrupted by that second cancel,
+                # not only on the ladder's normal completion.
+                self.alive = False
+                self.pid = None
         # A child killed hard never emits an exit event. Treat the silence as
         # a crash rather than inventing a friendlier reason.
         return reason_box[0] if reason_box else "crash"

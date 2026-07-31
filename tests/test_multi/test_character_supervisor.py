@@ -217,6 +217,67 @@ async def test_a_child_that_ignores_sigterm_is_force_killed():
 
 
 @pytest.mark.asyncio
+async def test_a_second_cancel_mid_ladder_does_not_abort_the_kill():
+    """`asyncio.shield` regression pin: Textual's 'q' shutdown path calls
+    `workers.cancel_all()` without awaiting the workers, so a SECOND
+    cancellation can land while `_terminate`'s ladder is still awaiting
+    `process.wait()`. Before the shield fix, that second cancel aborted the
+    ladder mid-flight -- `process.kill()` and the final `process.wait()`
+    never ran -- so a SIGTERM-ignoring child (and `sup.alive`) survived the
+    shutdown entirely. This is the same SIGTERM-ignoring child as the
+    single-cancel test above, but cancelled TWICE.
+    """
+    body = (
+        "import signal, sys, time\n"
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "sys.stderr.write('ready\\n')\n"
+        "sys.stderr.flush()\n"
+        "time.sleep(30)\n"
+    )
+    ready = asyncio.Event()
+
+    def _on_stderr(line: str) -> None:
+        if line == "ready":
+            ready.set()
+
+    supervisor = CharacterSupervisor(
+        character="hero", argv=_child_argv(body), on_event=lambda _e: None,
+        on_stderr=_on_stderr, terminate_timeout=1.0,
+    )
+    task = asyncio.create_task(supervisor.run())
+    async with asyncio.timeout(10.0):
+        await ready.wait()
+    pid = supervisor.pid
+    assert pid is not None
+
+    task.cancel()
+    # Give the first cancel time to unwind out of the gather and into
+    # `_terminate`'s `wait_for(process.wait(), ...)` -- comfortably inside
+    # the 1.0s terminate_timeout above -- before delivering the second
+    # cancel there.
+    await asyncio.sleep(0.1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        async with asyncio.timeout(10.0):
+            await task
+
+    # The nested `finally` clears `alive` the instant the second cancel is
+    # delivered -- it does not wait for the shielded ladder to finish.
+    assert supervisor.alive is False
+
+    # The shielded ladder itself keeps running in the background even
+    # though `task` already raised CancelledError above, so give it time to
+    # escalate to SIGKILL and reap the child before checking it is gone.
+    async with asyncio.timeout(10.0):
+        while True:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            await asyncio.sleep(0.01)
+
+
+@pytest.mark.asyncio
 async def test_a_clean_exit_still_reaps_the_process():
     """The non-cancelled path must also leave nothing behind: `alive` and
     `pid` both clear once the child has actually exited."""
