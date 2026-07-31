@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.multi.child_state import ChildState
+from artifactsmmo_cli.multi.supervisor_pool import SupervisorPool
 from artifactsmmo_cli.tui.character_roster import CharacterRoster
 from artifactsmmo_cli.tui.multi_snapshot_store import MultiSnapshotStore
 from artifactsmmo_cli.tui.roster_entry import RosterEntry
@@ -107,7 +108,28 @@ class WatchApp(App[None]):
         self.title = f"artifactsmmo watch: {', '.join(self._roster.names)}"
         self._store = MultiSnapshotStore(self._roster.names)
         self._child_states: dict[str, ChildState] = {}
+        self._pool: SupervisorPool | None = None
         SpriteCoverageAudit().run(game_data)
+
+    def attach_pool(self, pool: SupervisorPool) -> None:
+        """Run `play --all`'s child supervisors on Textual's own asyncio loop.
+
+        Must be called before `run()`: `on_mount` only starts the worker if a
+        pool is already attached, so attaching after mount would silently
+        never run it.
+        """
+        self._pool = pool
+
+    def on_mount(self) -> None:
+        if self._pool is not None:
+            self.run_worker(self._pool.run(), name="supervisors")
+            self.set_interval(1.0, self._poll_child_states)
+
+    def _poll_child_states(self) -> None:
+        if self._pool is None:
+            return
+        for character in self._pool.characters():
+            self.update_child_state(self._pool.state(character))
 
     def compose(self) -> ComposeResult:
         yield Header()

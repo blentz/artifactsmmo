@@ -92,3 +92,50 @@ async def test_state_rejects_an_unknown_character():
 def test_characters_preserves_roster_order():
     pool = SupervisorPool([_supervisor(n, []) for n in ["carol", "alice", "bob"]])
     assert pool.characters() == ("carol", "alice", "bob")
+
+
+@pytest.mark.asyncio
+async def test_a_spawn_failure_does_not_orphan_the_other_children():
+    """A bad argv (create_subprocess_exec raising OSError, e.g. ENOENT) must
+    not abandon the other children mid-flight: every supervisor must still be
+    tracked to its own natural completion, and the failure must surface.
+
+    Against a bare ``asyncio.gather(...)`` (no ``return_exceptions``), the
+    ghost's OSError surfaces near-instantly -- well before "alice"'s real
+    subprocess has had time to spawn, run, and exit -- so it would propagate
+    out of ``pool.run()`` immediately, leaving alice's supervisor task
+    scheduled but unawaited: an orphaned Task with a live subprocess nothing
+    is tracking. The fixed ``run()`` awaits every supervisor to completion
+    before raising, so alice's state is deterministically settled by the
+    time the exception is caught -- this assertion cannot pass by accident.
+    """
+    seen: list = []
+    alice = _supervisor("alice", seen)
+    ghost = CharacterSupervisor(
+        character="ghost",
+        argv=["/nonexistent/path/for-sure-does-not-exist-xyz"],
+        on_event=lambda _e: None,
+    )
+    pool = SupervisorPool([alice, ghost])
+    with pytest.raises(OSError):
+        await asyncio.wait_for(pool.run(), timeout=10.0)
+    assert pool.state("alice").last_reason == "normal"
+    assert {event.character for event in seen} == {"alice"}
+
+
+@pytest.mark.asyncio
+async def test_multiple_spawn_failures_are_reported_together():
+    """More than one simultaneous failure is not allowed to shadow the
+    others: every failure is collected, not just the first."""
+    ghosts = [
+        CharacterSupervisor(
+            character=f"ghost{i}",
+            argv=["/nonexistent/path/for-sure-does-not-exist-xyz"],
+            on_event=lambda _e: None,
+        )
+        for i in range(2)
+    ]
+    pool = SupervisorPool(ghosts)
+    with pytest.raises(ExceptionGroup) as excinfo:
+        await asyncio.wait_for(pool.run(), timeout=10.0)
+    assert len(excinfo.value.exceptions) == 2

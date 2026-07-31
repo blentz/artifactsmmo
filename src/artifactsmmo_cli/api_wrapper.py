@@ -20,6 +20,9 @@ from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import 
 from artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get import (
     sync as get_bank_items_sync,
 )
+from artifactsmmo_api_client.api.my_account.get_rate_limits_my_rates_get import (
+    sync as get_rate_limits_sync,
+)
 from artifactsmmo_api_client.api.my_characters import (
     action_buy_bank_expansion_my_name_action_bank_buy_expansion_post as buy_expansion_api,
 )
@@ -174,6 +177,10 @@ class APIWrapper:
 
     def get_bank_details(self) -> Any:
         return get_bank_details_sync(client=self._client)
+
+    # Rate limits (play --all divides this across its children)
+    def get_rate_limits(self) -> Any:
+        return get_rate_limits_sync(client=self._client)
 
     def action_deposit_bank_gold(self, name: str, body: Any) -> Any:
         return deposit_gold_api.sync(client=self._client, name=name, body=body)

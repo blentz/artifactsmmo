@@ -1,5 +1,7 @@
 """WatchApp with a multi-character roster and 1-5 focus keys."""
 
+import asyncio
+
 import pytest
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
@@ -111,3 +113,75 @@ def test_action_focus_on_the_already_focused_slot_is_a_no_op_not_a_crash():
     app = _app()
     app.action_focus_character(1)
     assert app.focused_character == "alice"
+
+
+# --- attach_pool / on_mount / _poll_child_states: `play --all` wiring ------
+
+
+class _FakePool:
+    """Duck-types SupervisorPool without spawning real subprocesses: on_mount
+    hands `run()` to `run_worker`, so it must be an awaitable coroutine
+    function, and `_poll_child_states` reads `characters()`/`state()`."""
+
+    def __init__(self, characters: tuple[str, ...], states: dict[str, ChildState]) -> None:
+        self._characters = characters
+        self._states = states
+        self.run_called = False
+
+    def characters(self) -> tuple[str, ...]:
+        return self._characters
+
+    def state(self, character: str) -> ChildState:
+        return self._states[character]
+
+    async def run(self) -> None:
+        self.run_called = True
+
+
+def test_attach_pool_stores_it_without_starting_it():
+    """attach_pool is called BEFORE run(); on_mount is what actually starts
+    the worker, so merely attaching must not run anything."""
+    app = _app()
+    pool = _FakePool((), {})
+    app.attach_pool(pool)
+    assert app._pool is pool
+    assert pool.run_called is False
+
+
+def test_on_mount_without_an_attached_pool_is_a_noop():
+    """The single-character `play --tui` path never calls attach_pool; on_mount
+    must not explode trying to run a pool that doesn't exist."""
+    app = _app()
+    app.on_mount()
+    assert app._pool is None
+
+
+def test_poll_child_states_without_an_attached_pool_is_a_noop():
+    app = _app()
+    app._poll_child_states()  # no pool, no characters -> nothing to update
+    assert app._child_states == {}
+
+
+@pytest.mark.asyncio
+async def test_on_mount_starts_the_pool_worker_and_polling_updates_the_roster():
+    """End-to-end through the real Textual mount lifecycle (run_test() calls
+    on_mount for us): the attached pool's run() coroutine actually executes
+    as a worker, and _poll_child_states pulls each character's live state
+    into the roster (proving the state -> roster wiring, not just that the
+    method runs without crashing)."""
+    states = {
+        "alice": ChildState(character="alice", alive=False, restarts=3,
+                            last_reason="crash", stderr_tail=("boom",)),
+    }
+    pool = _FakePool(("alice",), states)
+    app = _app(names=("alice",))
+    app.attach_pool(pool)
+    async with app.run_test():
+        await asyncio.sleep(0.05)  # let the scheduled worker task actually run
+        assert pool.run_called is True
+
+        app._poll_child_states()
+
+        entry = next(e for e in app.roster_entries() if e.character == "alice")
+        assert entry.alive is False
+        assert entry.restarts == 3

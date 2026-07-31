@@ -10,9 +10,8 @@ empirically, see task-8-report.md):
    objects as the value of any parameter that isn't explicitly passed. The
    three validation tests below only work because their checks short-circuit
    before touching an unpassed parameter; this is preserved deliberately.
-3. The ``--all`` branch does not construct ``MultiRun`` (Task 16); it prints
-   a "not yet implemented" message and exits 2. That behaviour is pinned by
-   ``test_all_flag_without_supervisor_exits_not_implemented`` below.
+3. The ``--all`` branch constructs ``MultiRun`` and calls its ``run()`` (Task
+   16); see ``TestAllFlagWiring`` below.
 """
 
 import json
@@ -95,25 +94,55 @@ def test_neither_all_nor_character_is_an_error():
     assert excinfo.value.exit_code == 2
 
 
-# --- The --all branch itself: pinned, not accidental -----------------------
+# --- The --all branch itself: wired to MultiRun -----------------------------
 
 
-class TestAllFlagStub:
-    """``--all`` is otherwise valid (no character named, no --trace-file) but
-    the multi-character supervisor (Task 16) does not exist yet. This must
-    exit 2 with an explicit message rather than silently falling through to
-    ``GamePlayer(character=None)``."""
+class TestAllFlagWiring:
+    """``--all`` is otherwise valid (no character named, no --trace-file) and
+    must construct ``MultiRun`` with the run's flags and call ``run()`` on
+    it, entirely bypassing the single-character ``GamePlayer``/mutation-lock/
+    ``LearningStore`` path below."""
 
-    def test_all_flag_without_supervisor_exits_not_implemented(self, runner):
+    def test_all_flag_constructs_multirun_with_the_run_flags_and_calls_run(self, runner):
         with (
+            patch("artifactsmmo_cli.commands.play.MultiRun") as mock_multi_run_cls,
             patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls,
-            patch("artifactsmmo_cli.commands.play.LearningStore"),
+            patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
         ):
+            mock_multi_run = Mock()
+            mock_multi_run_cls.return_value = mock_multi_run
+
+            result = runner.invoke(app, [
+                "--all", "--verbose", "--dry-run", "--trace", "--learn",
+                "--learn-db", "/tmp/l.db", "--tui", "--refresh-game-data",
+            ])
+
+        assert result.exit_code == 0
+        mock_multi_run_cls.assert_called_once_with(
+            verbose=True, dry_run=True, trace=True, learn=True,
+            learn_db="/tmp/l.db", tui=True, refresh_game_data=True,
+        )
+        mock_multi_run.run.assert_called_once_with()
+        # The single-character path (mutation lock, GamePlayer, LearningStore)
+        # never runs: --all is a completely separate lifecycle.
+        mock_player_cls.assert_not_called()
+        mock_store_cls.assert_not_called()
+
+    def test_all_flag_propagates_a_multirun_failure(self, runner):
+        """A MultiRun.run() failure (e.g. an empty roster, or a supervisor
+        that never recovers) must be visible, not swallowed."""
+        with (
+            patch("artifactsmmo_cli.commands.play.MultiRun") as mock_multi_run_cls,
+        ):
+            mock_multi_run = Mock()
+            mock_multi_run.run.side_effect = RuntimeError("account has no characters")
+            mock_multi_run_cls.return_value = mock_multi_run
+
             result = runner.invoke(app, ["--all"])
 
-        assert result.exit_code == 2
-        assert "not yet implemented" in result.output
-        mock_player_cls.assert_not_called()
+        assert result.exit_code != 0
+        assert isinstance(result.exception, RuntimeError)
+        assert "account has no characters" in str(result.exception)
 
 
 # --- --emit-events wiring through the real play() body ---------------------

@@ -531,6 +531,19 @@ def test_api_wrapper_get_bank_details():
     assert result is sentinel
 
 
+def test_api_wrapper_get_rate_limits():
+    """`play --all` divides /my/rates across its children."""
+    wrapper = _make_wrapper()
+    sentinel = object()
+    with patch(
+        "artifactsmmo_cli.api_wrapper.get_rate_limits_sync",
+        return_value=sentinel,
+    ) as mock_sync:
+        result = wrapper.get_rate_limits()
+    mock_sync.assert_called_once_with(client=wrapper._client)
+    assert result is sentinel
+
+
 def test_api_wrapper_action_deposit_bank_gold():
     wrapper = _make_wrapper()
     body = MagicMock()

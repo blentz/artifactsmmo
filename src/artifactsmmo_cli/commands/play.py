@@ -21,6 +21,7 @@ from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
 from artifactsmmo_cli.multi.event_emitter import JsonlEventEmitter
+from artifactsmmo_cli.multi.multi_run import MultiRun
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 from artifactsmmo_cli.tui.app import WatchApp
 from artifactsmmo_cli.tui.observer import ThreadSafeBridge
@@ -78,8 +79,10 @@ def play(
         print("name a character to play, or pass --all")
         raise typer.Exit(code=2)
     if all_characters:
-        print("--all requires the multi-character supervisor (not yet implemented)")
-        raise typer.Exit(code=2)
+        MultiRun(verbose=verbose, dry_run=dry_run, trace=trace, learn=learn,
+                 learn_db=learn_db, tui=tui,
+                 refresh_game_data=refresh_game_data).run()
+        return
     # The three checks above raise for every case where `character` could
     # still be None; mypy's flow analysis does not connect the two
     # independent conditions, so state the resulting invariant explicitly

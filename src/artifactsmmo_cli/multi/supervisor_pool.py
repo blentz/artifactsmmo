@@ -32,4 +32,32 @@ class SupervisorPool:
         )
 
     async def run(self) -> None:
-        await asyncio.gather(*(s.run() for s in self._supervisors))
+        """Run every supervisor concurrently, tracking each one until it
+        actually finishes.
+
+        The default ``asyncio.gather(...)`` (``return_exceptions=False``)
+        propagates the moment ANY supervisor's ``run()`` raises -- e.g.
+        ``create_subprocess_exec`` failing with an OSError for a bad argv.
+        The other supervisors are then neither cancelled nor awaited: they
+        become orphaned asyncio Tasks with live game-bot subprocesses that
+        nothing is tracking, still hitting the API, for as long as the
+        parent process happens to keep running.
+
+        ``return_exceptions=True`` keeps every supervisor tracked to its own
+        natural completion -- none is ever silently abandoned -- and any
+        failures are collected and re-raised once the whole pool is done,
+        instead of on the very first one.
+        """
+        results = await asyncio.gather(
+            *(s.run() for s in self._supervisors), return_exceptions=True
+        )
+        errors = [result for result in results if isinstance(result, BaseException)]
+        if not errors:
+            return
+        if len(errors) == 1:
+            raise errors[0]
+        # BaseExceptionGroup accepts any BaseException (e.g. a CancelledError
+        # slipping through alongside a real crash); Python auto-downgrades it
+        # to a plain ExceptionGroup when every member is an Exception, which
+        # is the common case here.
+        raise BaseExceptionGroup("supervisor pool: multiple children failed", errors)
