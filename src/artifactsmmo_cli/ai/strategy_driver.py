@@ -59,6 +59,7 @@ from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
+from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin_total
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
@@ -428,6 +429,10 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         )
     if kind is MeansKind.MAINTAIN_CONSUMABLES:
         return MaintainConsumablesGoal(game_data=game_data)
+    if kind is MeansKind.SUPPLY_BANK:
+        assert ctx.supply_target is not None  # _fires guarantees a target
+        item_code, quantity, demand = ctx.supply_target
+        return SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand)
     if kind is MeansKind.WAIT:
         return WaitGoal()
     raise ValueError(f"Unknown MeansKind: {kind!r}")

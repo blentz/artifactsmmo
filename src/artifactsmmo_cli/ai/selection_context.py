@@ -64,6 +64,11 @@ class SelectionContext:
     # construct SelectionContext positionally-by-keyword and a required field
     # would break every one of them.
     step_profile: dict[str, int] = field(default_factory=dict)
+    # (item_code, quantity, demand) this character should produce for a
+    # sibling this cycle, or None when nothing is servable. Populated by the
+    # player's per-cycle coordination block; None on every single-character
+    # run (Task 11 wires the producer — this means is inert until then).
+    supply_target: tuple[str, int, int] | None = None
 
 
 NO_PROFILE_CONTEXT = SelectionContext(
