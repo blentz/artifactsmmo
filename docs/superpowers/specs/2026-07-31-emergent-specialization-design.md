@@ -213,9 +213,11 @@ the common case. Section 7.2 covers both mismatch directions.
 
 ### 5.4 Integration points
 
-**Ranking factor.** `weighted_candidates` in `tiers/progression_tree_core.py`
+**Ranking factor.** `_scaled_weights` in `tiers/progression_tree_core.py`
 currently computes `gain * falloff(focus) * synergy * achievability`, keyed by
-`(slot, code)`. `role_alignment` becomes the fifth factor on the same key, with
+`(slot, code)`, and its two consumers `focus_aging_pick` and
+`focus_aging_order` forward the same factor arguments. `role_alignment` becomes
+the fifth factor on the same key across all three, with
 a `_NO_ROLE` empty-map sentinel that reads as `Fraction(1)` — byte-identical to
 the four-factor weight, matching how `_NO_SYNERGY` and `_NO_ACHIEVABILITY`
 already land.
@@ -350,15 +352,25 @@ compile-time enforced rather than silently driftable:
 - `goalReprOfMeans` in `formal/Formal/DecideKey.lean` — total match, the
   compiler rejects the build until it is updated
 - `formal/Formal/Liveness/ProductionLadder.lean`, whose header describes it as
-  a "walk over the 17-element MeansKind list" mirroring `means.py:65-113`. It
-  becomes 18, and the ladder proof fails until the new rung is discharged.
+  a walk over `allInLadderOrder`, which is
+  `GUARD_ORDER ++ COLLECT_REWARD_ORDER ++ [.objectiveStep] ++
+  DISCRETIONARY_ORDER`. It gains one entry, and the ladder proof fails until
+  the new rung is discharged.
+
+Sizes, verified 2026-08-01 rather than taken from comments: the Python
+`MeansKind` enum has **15** variants and becomes 16. The Lean
+`Formal.Liveness.MeansKind` inductive is *not* a mirror of it — it is the
+combined guard + collect + objective + discretionary ladder — so the
+"17-element MeansKind list" figure in the `ProductionLadder.lean` header
+describes neither and is itself stale. That header is corrected as part of the
+same change.
 
 This cost is paid deliberately. A previous epic reused a guard slot to avoid it;
 here, supplying a sibling is a genuinely distinct decision the strategy commits
 to, and folding it into an existing variant would make it invisible in the
 traces this project debugs from.
 
-Separately, `role_alignment` entering `weighted_candidates` touches a
+Separately, `role_alignment` entering `_scaled_weights` touches a
 mechanically-extracted module, so `_NO_ROLE` must be proven byte-identical to
 the current four-factor weight — the same obligation `_NO_ACHIEVABILITY`
 already discharges.
@@ -386,7 +398,7 @@ The third proves collusion actually happened. Without it the epic is inert
 regardless of suite colour.
 
 **Census.** No new census, but obtain-parity must stay clean since
-`weighted_candidates` changes.
+`_scaled_weights` changes.
 
 **Gate.** `bash formal/gate.sh` green before push (~7 minutes), redirected to a
 file rather than piped so `${PIPESTATUS[0]}` is not masked by `tail`.
