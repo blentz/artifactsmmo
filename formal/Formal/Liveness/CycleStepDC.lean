@@ -422,6 +422,7 @@ def planForC : MeansKind → State → Plan
   | .acceptTask       , _ => [.acceptTask]
   | .taskExchange     , _ => [.taskExchange]
   | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
+  | .supplyBank       , _ => [.gather]  -- 2026-08-01: produce for a sibling
   | .sellIdle         , _ => [.npcSell]
   | .recycleSurplus   , _ => [.recycle]
   | .drainBankJunk    , _ => [.withdrawItem]

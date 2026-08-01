@@ -151,6 +151,13 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (applyActionKind .craft s).level = s.level
             ∧ (applyActionKind .craft s).xp = s.xp
       exact ⟨rfl, rfl⟩
+    | supplyBank =>
+      -- 2026-08-01: planFor .supplyBank = [.gather]; applyActionKind .gather
+      -- preserves character level and xp (it bumps trackedSkillLevel,
+      -- inventoryItems and skillXpDelta only).
+      show (applyActionKind .gather s).level = s.level
+            ∧ (applyActionKind .gather s).xp = s.xp
+      exact ⟨rfl, rfl⟩
     | depositFull =>
       show (applyActionKind .depositAll s).level = s.level
             ∧ (applyActionKind .depositAll s).xp = s.xp

@@ -105,6 +105,10 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.ACCEPT_TASK:        "acceptTask",
     LadderMeans.TASK_EXCHANGE:      "taskExchange",
     LadderMeans.MAINTAIN_CONSUMABLES: "craft",  # PLAN #6a: cook/brew a heal
+    # 2026-08-01: SupplyBankGoal plans produce-then-deposit; the witness is the
+    # HEAD produce step (the demand board routes each item to the role that
+    # produces it). Mirrors Lean `planFor .supplyBank = [.gather]`.
+    LadderMeans.SUPPLY_BANK:        "gather",
     LadderMeans.SELL_IDLE:          "npcSell",
     LadderMeans.RECYCLE_SURPLUS:    "recycle",
     LadderMeans.DRAIN_BANK_JUNK:    "withdrawItem",

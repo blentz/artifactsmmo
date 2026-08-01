@@ -1136,7 +1136,7 @@ def runBootstrapCharHorizon (_args : Array Json) : Json :=
 args layout (Ints):
 * `[0]`         query: 1 = goalReprOfGuard, 2 = goalReprOfMeans
 * For query 1: `[1]` = GuardKind index 0..12.
-* For query 2: `[1]` = MeansKind index 0..13.
+* For query 2: `[1]` = MeansKind index 0..15.
 
 (Query 0, the retired flat ranking's `decideCmp` comparator, was deleted with
 the flat scalar ranking in progression-tree Phase 4b; the 1/2 indices are kept
@@ -1179,7 +1179,8 @@ def runDecideKey (args : Array Json) : Json :=
       | 11 => .wait
       | 12 => .maintainConsumables
       | 13 => .drainBankJunk
-      | _ => .geBid  -- index 14
+      | 14 => .geBid
+      | _ => .supplyBank  -- index 15
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfMeans k))]
 
 /-- progression_reserve: args layout (all Nat ≥ 0):
@@ -2328,9 +2329,13 @@ ARG LAYOUT (flat ints; index → field):
                                         trace layout is undisturbed.)
 * `[35]` geCancelTargetsNonempty      (Bool 0/1 — cancel_selection.cancel_targets
                                         nonempty; appended, layout undisturbed.)
+* `[36]` supplyTargetPresent          (Bool 0/1 — `ctx.supply_target is not None`,
+                                        the SUPPLY_BANK means; appended, layout
+                                        undisturbed.)
 
 Emits a JSON object: one Bool field per MeansKind keyed by `meansKindName`
-(29 fields), plus `"selected"`: the name of `productionLadder s` or `null`. -/
+(one per `allInLadderOrder` rung), plus `"selected"`: the name of
+`productionLadder s` or `null`. -/
 def runLadder (args : Array Json) : Json :=
   let n := fun i => (intArg args i).toNat
   let b := fun i => intArg args i != 0
@@ -2357,7 +2362,7 @@ def runLadder (args : Array Json) : Json :=
     maintainConsumablesFires := b 29, bankItemsKnown := b 30,
     bankJunkNonempty := b 31, craftPotionsFires := b 32,
     goldReserve := n 33, geBidCandidateNonempty := b 34,
-    geCancelTargetsNonempty := b 35 }
+    geCancelTargetsNonempty := b 35, supplyTargetPresent := b 36 }
   let firesFields : List (String × Json) :=
     allInLadderOrder.map (fun k => (meansKindName k, Json.bool (fires k s)))
   let selected : Json := match productionLadder s with

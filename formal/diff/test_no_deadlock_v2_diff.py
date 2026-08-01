@@ -435,10 +435,12 @@ def test_productionLadder_falsifiable_without_objective_step(
 # Sanity / mirror tests
 # ---------------------------------------------------------------------------
 
-def test_ladder_has_29_entries() -> None:
-    """Mirror sanity: Python ladder matches the Lean 29-element list.
+def test_ladder_entry_count_matches_lean() -> None:
+    """Mirror sanity: the Python ladder has the same length as the Lean
+    `MeansKind.allInLadderOrder` (whose length is pinned by the `example` at the
+    bottom of `formal/Formal/Liveness/MeansKind.lean` — update BOTH together).
 
-    29 = original 17 + WAIT (Phase 20e-v2) + CRAFT_RELIEF (circuit
+    30 = original 17 + WAIT (Phase 20e-v2) + CRAFT_RELIEF (circuit
     breaker between DISCARD_CRITICAL and DEPOSIT_FULL) + REST_FOR_COMBAT
     (after HP_CRITICAL) + GEAR_REVIEW (lowest-priority guard, after
     DISCARD_HIGH) + MAINTAIN_CONSUMABLES (PLAN #6a, after TASK_EXCHANGE)
@@ -447,9 +449,11 @@ def test_ladder_has_29_entries() -> None:
     + DRAIN_BANK_JUNK (lowest-value housekeeping, after BANK_EXPAND)
     + CRAFT_POTIONS (last guard in GUARD_ORDER, after GEAR_REVIEW)
     + GE_CANCEL (on-need + TTL order cancellation, below the FIGHT gates)
-    + GE_BID (discretionary reactive buy-post, above DRAIN_BANK_JUNK).
+    + GE_BID (discretionary reactive buy-post, above DRAIN_BANK_JUNK)
+    + SUPPLY_BANK (2026-08-01, produce for a sibling; between
+    MAINTAIN_CONSUMABLES and SELL_IDLE).
     Lean side mirrors via MeansKind.allInLadderOrder."""
-    assert len(ALL_IN_LADDER_ORDER) == 29
+    assert len(ALL_IN_LADDER_ORDER) == 30
 
 
 def test_no_task_state_acceptTask_fires() -> None:

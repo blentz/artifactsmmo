@@ -34,7 +34,7 @@ BOTH sides from one set of fields:
 
   * the concrete numeric/structural fields (hp, maxHp, level, xp, fill, task
     lifecycle, bank state, coins) feed production's `WorldState` /
-    `SelectionContext` / `GameData` AND the 31-int oracle arg array; and
+    `SelectionContext` / `GameData` AND the oracle arg array; and
   * the opaque Bools we CAN pass through identically — `objective_step_fires`
     (→ `production_ladder(..., objective_step_fires)` and oracle arg[28]) and
     `gear_review_active` (→ `ctx.gear_review_active` and oracle arg[26]) — are
@@ -224,6 +224,7 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.ACCEPT_TASK: "acceptTask",
     LadderMeans.TASK_EXCHANGE: "taskExchange",
     LadderMeans.MAINTAIN_CONSUMABLES: "maintainConsumables",
+    LadderMeans.SUPPLY_BANK: "supplyBank",
     LadderMeans.SELL_IDLE: "sellIdle",
     LadderMeans.RECYCLE_SURPLUS: "recycleSurplus",
     LadderMeans.DRAIN_BANK_JUNK: "drainBankJunk",
@@ -392,14 +393,15 @@ def _production_answers(
 
 
 # ---------------------------------------------------------------------------
-# Lean-side: build the 31-int oracle arg array from the SAME scenario.
+# Lean-side: build the oracle arg array from the SAME scenario.
 # ---------------------------------------------------------------------------
 
 _PHASE_INT = {"none": 0, "accepted": 1, "inProgress": 2, "complete": 3}
 
 
 def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
-    """Build the 32-int oracle arg array reading the STRUCTURAL facts off the
+    """Build the oracle arg array (the `runLadder` docstring layout,
+    Oracle.lean) reading the STRUCTURAL facts off the
     same constructed `WorldState` production reads (coin total, bank item
     count), so neither side can drift on how those are derived. The opaque
     Bools (overstock/deposit/sellable/passthroughs) are computed by helpers
@@ -462,6 +464,13 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         # `cancel_targets` is empty — GE_CANCEL never fires on the poor path. Always
         # 0; the rich path drives it from the REAL helper (see `_rich_oracle_args`).
         0,
+        # 36 supplyTargetPresent: `_make_ctx` leaves `supply_target` at its None
+        # default (the Scenario models no coordination board), which is exactly
+        # what production's `_fires(SUPPLY_BANK, …)` reads — so SUPPLY_BANK is
+        # False on BOTH sides of the poor path. Read off the SAME ctx production
+        # reads rather than hard-coded, so a Scenario that ever grows a supply
+        # target drives both sides together.
+        1 if _make_ctx(scn).supply_target is not None else 0,
     ]
 
 
@@ -779,7 +788,7 @@ def _rich_oracle_args(
     actions_attempted: int = 0,
     task_feasible_projected: bool = True,
 ) -> list[int]:
-    """Build the 31-int oracle arg array (the `runLadder` docstring layout,
+    """Build the oracle arg array (the `runLadder` docstring layout,
     Oracle.lean) for a RICH hand-built fixture.
 
     Every opaque per-slot arg is derived from the SAME production verdict
@@ -853,6 +862,10 @@ def _rich_oracle_args(
         # needed_items = step_profile codes; the ladder call threads no step_profile,
         # so needed_items is empty here (matching production) and this is TTL-driven.
         1 if cancel_targets(w, gd, 0, frozenset()) else 0,  # 35 geCancelTargetsNonempty
+        # 36 supplyTargetPresent: production's `_fires(SUPPLY_BANK, …)` IS
+        # `ctx.supply_target is not None`, so thread the ctx field itself —
+        # one value, two sides, exact lockstep (like gearReview at 26).
+        1 if ctx.supply_target is not None else 0,  # 36 supplyTargetPresent
     ]
 
 

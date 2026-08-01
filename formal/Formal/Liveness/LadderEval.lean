@@ -77,6 +77,7 @@ def inertLadderState : State where
   restForCombatReady := false
   gearReviewFires := false
   maintainConsumablesFires := false
+  supplyTargetPresent := false
   bankItemsKnown := false
   bankItemsCount := 0
   bankCapacity := 0
@@ -105,6 +106,23 @@ def inertLadderState : State where
   npcStock := []
   eventSpawns := []
 
+/-- Non-vacuity witness for the SUPPLY_BANK rung (2026-08-01): its firing
+    predicate is satisfiable — the inert state with a supply target present
+    fires it. (Whether the rung can be SELECTED is a separate, weaker question
+    in this model: `acceptTask`/`pursueTask`/`completeTask` are phase-based
+    OVER-approximations that fire in every `taskLifecyclePhase`, so every
+    discretionary rung below them — `sellIdle`, `geBid`, `wait`, and now
+    `supplyBank` — is selection-unreachable here. That is a pre-existing
+    property of the phase abstraction disclosed in `ProductionLadder.lean`,
+    not a property of production.) -/
+example :
+    Formal.Liveness.ProductionLadder.supplyBankFires
+      { inertLadderState with supplyTargetPresent := true } = true := rfl
+
+/-- …and it is genuinely gated: the inert state does NOT fire it. -/
+example :
+    Formal.Liveness.ProductionLadder.supplyBankFires inertLadderState = false := rfl
+
 /-- Stable name for each `MeansKind`, matching its Lean constructor (camelCase).
     The Oracle emits one Bool field per kind under this name, plus a
     `"selected"` field carrying this name for `productionLadder`'s result. -/
@@ -132,6 +150,7 @@ def meansKindName : MeansKind → String
   | .acceptTask          => "acceptTask"
   | .taskExchange        => "taskExchange"
   | .maintainConsumables => "maintainConsumables"
+  | .supplyBank          => "supplyBank"
   | .sellIdle            => "sellIdle"
   | .recycleSurplus      => "recycleSurplus"
   | .drainBankJunk       => "drainBankJunk"
