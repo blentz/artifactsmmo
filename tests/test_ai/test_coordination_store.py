@@ -1,6 +1,7 @@
 """Tests for the coordination tables: RoleLease and MaterialDemand, and the
 CoordinationStore that operates on RoleLease."""
 
+import multiprocessing
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -374,3 +375,52 @@ def test_live_leases_rejects_non_utc_offset_now(tmp_path: Path) -> None:
             hal.live_leases(_NON_UTC_NOW)
     finally:
         hal.close()
+
+
+# --- multi-process claim race: the one behaviour mocks cannot verify ------
+
+
+def _claim_worker(db_path: str, character: str, role: str, barrier: object, out: object) -> None:
+    """Module-level so it is picklable by multiprocessing's spawn start method.
+
+    Waits on `barrier` AFTER the store is constructed (engine + schema +
+    PRAGMAs) and BEFORE the claim, so all five children attempt `claim` at
+    the same moment regardless of how long store construction took in each
+    process. Without this, the children could serialize through construction
+    and never actually contend for the row.
+    """
+    store = CoordinationStore(db_path=db_path, character=character)
+    try:
+        barrier.wait()
+        out.put((character, store.claim(role, _T0)))
+    finally:
+        store.close()
+
+
+def test_exactly_one_process_wins_a_contested_role(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    seed = CoordinationStore(db_path=db, character="seed")
+    seed.close()  # create the schema before the children race on it
+
+    ctx = multiprocessing.get_context("spawn")
+    queue = ctx.Queue()
+    names = ["HAL", "C3P0", "R2D2", "Robby", "KITT"]
+    barrier = ctx.Barrier(len(names))
+    procs = [
+        ctx.Process(target=_claim_worker, args=(db, n, "miner", barrier, queue)) for n in names
+    ]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join(timeout=30)
+        assert p.exitcode == 0
+
+    results = dict(queue.get() for _ in names)
+    winners = [n for n, won in results.items() if won]
+    assert len(winners) == 1
+
+    check = CoordinationStore(db_path=db, character="observer")
+    try:
+        assert check.live_leases(_T0) == {"miner": winners[0]}
+    finally:
+        check.close()
