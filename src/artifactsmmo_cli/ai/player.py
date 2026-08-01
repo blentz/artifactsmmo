@@ -2428,7 +2428,16 @@ class GamePlayer:
 
     def _own_unmet_demand(self, state: "WorldState", game_data: GameData) -> dict[str, int]:
         """This character's unmet closure demand for its chosen root, minus
-        what it already holds in inventory.
+        what it already holds in inventory AND the account-wide bank.
+
+        The ArtifactsMMO bank is shared by every character on the account —
+        `ai/obtain_sources` already prefers a bank withdraw over producing —
+        so material a sibling (or this character, in an earlier session)
+        already banked already satisfies this demand. Without netting the
+        bank too, this would publish demand for material the fleet already
+        holds, and a sibling's `_pick_supply_target` would then target
+        `banked + full_demand` on top of that same stock: systematic
+        over-production of exactly what's already there.
 
         Reuses `closure_demand` — the SAME core `task_reservation`'s
         `task_reserved_demand` calls for the task-material reservation
@@ -2439,9 +2448,10 @@ class GamePlayer:
             return {}
         demand: dict[str, int] = {}
         closure_demand(root, 1, game_data, demand, frozenset())
-        return {code: qty - state.inventory.get(code, 0)
+        bank = state.bank_items or {}
+        return {code: qty - state.inventory.get(code, 0) - bank.get(code, 0)
                 for code, qty in demand.items()
-                if qty - state.inventory.get(code, 0) > 0}
+                if qty - state.inventory.get(code, 0) - bank.get(code, 0) > 0}
 
     def _pick_supply_target(
         self, item_demand: dict[str, int], skill_of_item: dict[str, str | None],
@@ -2449,14 +2459,25 @@ class GamePlayer:
     ) -> "tuple[str, int, int] | None":
         """The highest-demand item this character's HELD role can produce, as
         (item_code, target banked quantity, unmet demand) — or None when no
-        role is held, or nothing the role's owned skills produce is in demand.
+        role is held, nothing the role's owned skills produce is in demand,
+        or the bank has never been visited this session (see below).
 
         Target banked quantity is current bank holding + demand: enough that
         producing exactly the still-unmet amount satisfies `SupplyBankGoal`,
         which targets an absolute banked count (not an increment) and is
         rebuilt fresh every cycle (`memo_exempt`), so recomputing the target
         from the live bank each cycle is the correct, not merely convenient,
-        choice."""
+        choice.
+
+        `state.bank_items is None` means "never visited this session" (see
+        its field docstring in `world_state.py`), NOT "empty" — the same
+        distinction `bank_room.bank_has_room` draws for the same field.
+        Conflating the two here would fabricate a `banked=0` floor from data
+        we don't actually have, understating the eventual target once the
+        real contents are known. Rather than guess, this returns None until
+        the bank has actually been visited at least once — self-correcting
+        within a cycle or two of session start, same as every other
+        bank-dependent decision in this file."""
         if self._role is None:
             return None
         role = next((r for r in ROLE_CATALOG if r.name == self._role), None)
@@ -2472,7 +2493,9 @@ class GamePlayer:
                 best_code, best_demand = code, qty
         if best_code is None:
             return None
-        banked = state.bank_items.get(best_code, 0) if state.bank_items else 0
+        if state.bank_items is None:
+            return None
+        banked = state.bank_items.get(best_code, 0)
         return (best_code, banked + best_demand, best_demand)
 
     def _update_coordination(self, state: "WorldState", game_data: GameData) -> None:
@@ -2513,6 +2536,18 @@ class GamePlayer:
         elif decision.claim is not None:
             if self._coordination.claim(decision.claim, now):
                 self._role = decision.claim
+                self._role_held_cycles = 0
+            else:
+                # Lost the claim race — most commonly `decision.claim ==
+                # self._role` (our TTL lapsed during a stall and a sibling
+                # took the role over `live_leases`; `decide_role` returns
+                # `claim=current` to re-claim it). Leaving `self._role` set
+                # here would make this character renew a lease it does not
+                # hold (a harmless no-op) but ALSO keep computing
+                # `_supply_target` for a role a sibling actually owns, every
+                # cycle, forever — two characters permanently specializing
+                # identically, defeating the whole feature.
+                self._role = None
                 self._role_held_cycles = 0
         elif decision.keep is not None:
             self._role_held_cycles += 1
