@@ -57,6 +57,7 @@ class MeansKind(Enum):
     MAINTAIN_CONSUMABLES = "maintain_consumables"
     DRAIN_BANK_JUNK = "drain_bank_junk"  # 2026-06-24: drain over-cap bank junk.
     GE_BID = "ge_bid"  # 2026-07-24: post a discretionary GE buy order for a slow-to-craft item.
+    SUPPLY_BANK = "supply_bank"  # 2026-08-01: produce a material a SIBLING needs.
 
 
 COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
@@ -71,6 +72,12 @@ DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.ACCEPT_TASK,
     MeansKind.TASK_EXCHANGE,
     MeansKind.MAINTAIN_CONSUMABLES,  # prep heals for combat before idle housekeeping
+    # Supplying a sibling a material it actually declared beats every idle
+    # housekeeping means (sell/recycle/expand/drain), because it converts this
+    # character's cycle into progress for a DIFFERENT character. It sits below
+    # combat prep and the task means, which serve this character's own
+    # committed objective.
+    MeansKind.SUPPLY_BANK,
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
     MeansKind.BANK_EXPAND,
@@ -184,6 +191,12 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # three-way venue verdict of GE_POST. Fire-and-lose: posting creates an
         # open order that suppresses the item next cycle.
         return bool(ge_bid_candidates(state, game_data, ctx, BID_FILL_HORIZON_SECONDS))
+
+    if kind is MeansKind.SUPPLY_BANK:
+        # ctx.supply_target is None whenever there is no live sibling demand
+        # this character's role can serve — which is every cycle of a
+        # single-character run, so this means is inert without `--all`.
+        return ctx.supply_target is not None
 
     if kind is MeansKind.MAINTAIN_CONSUMABLES:
         # Only when combat is the active means (a target is selected): keep a

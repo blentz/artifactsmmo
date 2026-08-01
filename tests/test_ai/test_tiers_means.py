@@ -159,6 +159,21 @@ def test_band_order_matches_declared_order():
     assert discretionary == [m for m in DISCRETIONARY_ORDER if m in discretionary]
 
 
+def test_supply_bank_silent_when_no_supply_target():
+    # ctx.supply_target is None on every single-character run (Task 11 not
+    # wired yet) — the means must stay inert, not raise on the None case.
+    state = make_state()
+    _, discretionary = active_means(state, GameData(), None, _ctx(supply_target=None))
+    assert MeansKind.SUPPLY_BANK not in discretionary
+
+
+def test_supply_bank_fires_when_supply_target_set():
+    state = make_state()
+    _, discretionary = active_means(
+        state, GameData(), None, _ctx(supply_target=("iron_ore", 10, 4)))
+    assert MeansKind.SUPPLY_BANK in discretionary
+
+
 def test_task_exchange_fires_when_enough_coins():
     state = make_state(inventory={"tasks_coin": 5}, task_code="t", task_total=1, task_progress=0)
     _, discretionary = active_means(state, GameData(), None, _ctx(task_exchange_min_coins=3))

@@ -28,6 +28,18 @@ def _ctx(**kw) -> SelectionContext:
     return SelectionContext(**base)
 
 
+def test_selection_context_supply_target_defaults_to_none():
+    # Every existing construction site omits `supply_target` — the default
+    # must keep them all working (SelectionContext is built ~26 times
+    # positionally-by-keyword across formal/diff helpers and tests).
+    assert _ctx().supply_target is None
+
+
+def test_selection_context_supply_target_accepts_a_tuple():
+    ctx = _ctx(supply_target=("iron_ore", 10, 4))
+    assert ctx.supply_target == ("iron_ore", 10, 4)
+
+
 def _combat_gd(monster_hp: int, monster_attack: dict[str, int]) -> GameData:
     gd = GameData()
     gd._monster_hp = {"mob": monster_hp}
