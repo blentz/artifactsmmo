@@ -2,6 +2,8 @@
 skill_grind GatherMaterials goal the player executes one leg of per cycle —
 mirroring strategy_driver.py:866-871."""
 
+from unittest.mock import patch
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.level_skill_expand import next_grind_goal
@@ -172,6 +174,84 @@ def test_next_grind_goal_descends_when_rung_held_but_materials_absent() -> None:
     # materials; ash_plank's recycle source does NOT leaf it for a grind.
     assert goal.needed == {"ash_wood": 10}
     assert goal.exclude_recycle == frozenset({"fire_staff"})
+
+
+def test_next_grind_goal_descends_when_rung_is_BANKED() -> None:
+    """THE C3P0 LIVELOCK (live trace 2026-08-01, 109 error:other cycles over
+    9.5h with ZERO character progress, run ended by StuckExit).
+
+    Sibling of test_next_grind_goal_descends_when_rung_held_but_materials_absent
+    — same shape, but the held rungs sit in the BANK rather than the bag, and
+    that alone defeated the descent. A banked copy gives the rung a ready
+    WITHDRAW source, and `prerequisites` leafs any item with a ready non-craft
+    source, so `actionable_step` stopped AT the rung and `next_grind_goal` fell
+    through to GatherMaterials(rung, held+1). The `held + 1` device defeats the
+    `owned_count_pure >= quantity` short-circuit but NOT the source
+    short-circuit, so the deficit never forced the recipe open.
+
+    That goal is a full from-scratch craft chain (live: 60 copper_ore gathers),
+    and its node count GROWS with the banked count because every banked copy
+    adds another applicable Withdraw. Measured on the real catalog: held=1 =>
+    24k nodes, held=3 => 47k, held>=5 => the 10s CHEAP_BUDGET_SECONDS is
+    exhausted and the sub-plan comes back EMPTY, so `_execute_level_skill`
+    raises "grind produced no leg" EVERY cycle, forever — the grind's own
+    success is what breaks it.
+
+    A grind must CRAFT a new rung; withdrawing one it already banked earns zero
+    skill XP. So the descent runs against the rung's own holdings removed."""
+    gd = _deep_gd()
+    state = scenario_state(
+        ScenarioCharacter(name="t", level=13, skills={"weaponcrafting": 6},
+                          bank={"red_slimeball": 20, "fire_staff": 5}), gd)
+    goal = next_grind_goal("weaponcrafting", state, gd)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.skill_grind is True
+    # NOT {"fire_staff": 6} — the banked copies must not become the target.
+    assert goal.needed == {"ash_wood": 10}
+    assert goal.exclude_recycle == frozenset({"fire_staff"})
+
+
+def test_next_grind_goal_descends_when_rung_is_EQUIPPED() -> None:
+    """Same short-circuit, reached through the equipment slots: `_leafs` counts
+    EQUIPPED copies via `owned_count_pure`, so an equipped rung with quantity=1
+    leafs itself and the descent stops. The probe asks for one more than the
+    equipped count, keeping the deficit real."""
+    gd = _deep_gd()
+    state = scenario_state(
+        ScenarioCharacter(name="t", level=13, skills={"weaponcrafting": 6},
+                          bank={"red_slimeball": 20},
+                          equipment={"weapon_slot": "fire_staff"}), gd)
+    goal = next_grind_goal("weaponcrafting", state, gd)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.needed == {"ash_wood": 10}
+
+
+def test_next_grind_goal_none_when_descent_is_BLOCKED() -> None:
+    """`actionable_step` returns None when the descent is cyclically blocked or
+    every branch dead-ends. From an ObtainItem root every node it can return IS
+    an ObtainItem, so None is the only non-item outcome — and the old code
+    treated it like the materials-in-hand case, falling through to
+    GatherMaterials(rung, held+1). That hands the planner a goal nothing can
+    serve, which it can only discover by spending the whole 10s budget and
+    coming back empty, every cycle. Report "cannot grind from here" instead.
+
+    `actionable_step` is patched rather than provoked through game data on
+    purpose: `skill_grind_target` already filters rungs through `is_obtainable`
+    (every recipe input recursively reachable), so a catalog that reaches this
+    branch through the front door could not be built — an unobtainable material
+    makes the rung itself unavailable and `next_grind_goal` returns None one
+    guard earlier, which would make this test VACUOUS. Patching the collaborator
+    pins the contract on the branch it actually guards."""
+    gd = _deep_gd()
+    state = scenario_state(
+        ScenarioCharacter(name="t", level=13, skills={"weaponcrafting": 6},
+                          bank={"red_slimeball": 20}), gd)
+    # Sanity: without the patch this state grinds normally, so the assertion
+    # below is caused by the blocked descent and nothing else.
+    assert next_grind_goal("weaponcrafting", state, gd) is not None
+    with patch("artifactsmmo_cli.ai.level_skill_expand.actionable_step",
+               return_value=None):
+        assert next_grind_goal("weaponcrafting", state, gd) is None
 
 
 def test_next_grind_goal_none_when_no_rung() -> None:

@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.planner import PlanStats
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -99,6 +100,48 @@ def test_level_skill_step_raises_when_grind_produces_no_leg() -> None:
             patch.object(player.planner, "plan", return_value=[]):
         with pytest.raises(RuntimeError, match="no leg"):
             player._execute_level_skill(LevelSkill("gearcrafting", 5), client)
+
+
+def test_no_leg_raise_names_a_TIMEOUT_as_a_blow_up_not_a_dead_end() -> None:
+    """A budget timeout and a genuine dead end both surface as an empty
+    sub-plan, and the raise used to word BOTH as "grind produced no leg" — which
+    reads as unreachability. Live C3P0 2026-08-01: all 109 failing cycles were
+    timeouts (`planner.timed_out` True on every one, `node_capped` on none), yet
+    the message sent the diagnosis hunting for a dead end. The timeout arm must
+    say so, and carry the goal + search stats the trace otherwise never records
+    (`_last_grind_expansion` is cleared before this raise, so a failed grind
+    cycle shows no chain at all)."""
+    player = _under_skill_player()
+    client = MagicMock()
+    stats = PlanStats(nodes_explored=63944, max_depth_reached=84, timed_out=True)
+    with patch.object(player, "_build_actions", return_value=[]), \
+            patch.object(player.planner, "plan", return_value=[]), \
+            patch.object(player.planner, "last_stats", stats):
+        with pytest.raises(RuntimeError) as excinfo:
+            player._execute_level_skill(LevelSkill("gearcrafting", 5), client)
+
+    message = str(excinfo.value)
+    assert "EXHAUSTED" in message
+    assert "not a dead end" in message
+    # The goal and the search size are what an offline bisect had to recover.
+    assert "63944" in message and "84" in message
+    assert "GatherMaterials" in message
+
+
+def test_no_leg_raise_still_names_a_genuine_DEAD_END() -> None:
+    """The other arm: search space exhausted without a timeout is a real dead
+    end, and keeps the original wording so existing trace tooling still matches."""
+    player = _under_skill_player()
+    client = MagicMock()
+    stats = PlanStats(nodes_explored=12, max_depth_reached=3, timed_out=False)
+    with patch.object(player, "_build_actions", return_value=[]), \
+            patch.object(player.planner, "plan", return_value=[]), \
+            patch.object(player.planner, "last_stats", stats):
+        with pytest.raises(RuntimeError, match="grind produced no leg") as excinfo:
+            player._execute_level_skill(LevelSkill("gearcrafting", 5), client)
+
+    assert "genuine dead end" in str(excinfo.value)
+    assert "EXHAUSTED" not in str(excinfo.value)
 
 
 def test_level_skill_step_degrades_not_crash_when_no_leg() -> None:

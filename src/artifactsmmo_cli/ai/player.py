@@ -1173,11 +1173,28 @@ class GamePlayer:
         degrades to an `error:other` cycle that changes no state, the next replan
         re-picked the same LevelSkill — a zero-progress LIVELOCK (live Robby
         2026-07-12: GatherMaterials(fire_staff) hit the 1M-node cap, every cycle,
-        forever). The blow-up itself is fixed at the source — `next_grind_goal`
-        now descends to the rung's actionable_step, a FLAT gather that plans in
-        ~70 nodes — so an empty sub-plan here is once again a genuine dead end
-        and still raises; a repeat is caught by the repeated-action-failure
+        forever). The blow-up is fixed at the source — `next_grind_goal` descends
+        to the rung's actionable_step, a FLAT gather that plans in ~30 nodes —
+        so the two arms below name which fault actually occurred.
+
+        That claim was once written here as settled, and it was not. The descent
+        only holds while the deficit it descends on is REAL, and the rung's own
+        holdings kept leafing it: live C3P0 2026-08-01 banked its own grind
+        rungs, `actionable_step` stopped at the rung, and the goal reverted to
+        the full from-scratch chain — 109 timeout cycles across 9.5h with zero
+        character progress, ending in a StuckExit. `next_grind_goal` now runs
+        the descent against a state with the rung's carried/banked/worn copies
+        removed (`level_skill_expand._grind_probe_state`), which is what makes
+        the deficit unconditionally real. Both arms below stay, and each says
+        which fault it is: a repeat is caught by the repeated-action-failure
         StuckDetector rather than being silently swallowed here.
+
+        The StuckDetector is a WEAK backstop for this shape and must not be
+        relied on as the fix. It keys on `repr(action)`, so two gear roots
+        grinding two different skills split the failure count: on the C3P0 run
+        the max same-action failures in any 20-cycle window was exactly 10, the
+        threshold, while COMBINED LevelSkill failures in that window were 20.
+        Suppressing one root just handed the arbiter its symmetric twin.
 
         Recursion is bounded by a cycle guard. A grind rung can need a cross-skill
         under-level intermediate (real: lizard_skin_armor gearcrafting-25 needs
@@ -1210,8 +1227,25 @@ class GamePlayer:
         sub_plan = self.planner.plan(self.state, goal, actions, self.game_data,
                                      budget_seconds=CHEAP_BUDGET_SECONDS)
         if not sub_plan:
+            # Two very different faults land here, and conflating them cost a
+            # 9.5h live livelock its diagnosis (C3P0 2026-08-01): the message
+            # said "no leg", which reads as a DEAD END, while all 109 failures
+            # were in fact budget TIMEOUTS on a plannable goal. Name the fault
+            # and carry the goal + search stats, so a repeat is readable from
+            # the trace alone instead of needing an offline bisect.
+            stats = self.planner.last_stats
+            detail = (f"goal={goal!r} nodes={stats.nodes_explored} "
+                      f"depth={stats.max_depth_reached}")
+            if stats.timed_out:
+                raise RuntimeError(
+                    f"LevelSkill({action.skill}) grind sub-plan EXHAUSTED the "
+                    f"{CHEAP_BUDGET_SECONDS}s planning budget — {detail}. The "
+                    "goal is plannable but too expensive to search from here; "
+                    "this is a search blow-up, not a dead end.")
             raise RuntimeError(
-                f"LevelSkill({action.skill}) grind produced no leg")
+                f"LevelSkill({action.skill}) grind produced no leg — {detail}. "
+                "The goal is a genuine dead end: the search space was "
+                "exhausted without reaching it.")
         first = sub_plan[0]
         if isinstance(first, LevelSkill):
             result = self._execute_level_skill(first, client,

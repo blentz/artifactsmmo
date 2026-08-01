@@ -7,6 +7,8 @@ tree-level skill-grind dispatch did. This picks the rung and builds the
 skill_grind GatherMaterials goal; the caller plans it and executes its first leg.
 """
 
+import dataclasses
+
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -15,6 +17,40 @@ from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
+
+
+def _grind_probe_state(state: WorldState, rung: str) -> WorldState:
+    """`state` with every carried, banked and WORN copy of `rung` removed.
+
+    The descent state for a skill grind, NOT a state anything executes against.
+    A grind earns its XP from the CRAFT, so copies the character already owns
+    are not a way to serve it — but `prerequisites` leafs an item that is
+    already owned, already worn, or has a ready withdraw source, and each of
+    those stops the descent dead at the rung. Discounting the rung's own
+    holdings is what keeps the deficit real and the descent inside the recipe
+    (see `next_grind_goal`).
+
+    The equipment slots matter as much as the bag: `ObtainItem.is_satisfied`
+    reports an EQUIPPABLE satisfied whenever its code is worn, IGNORING
+    quantity (`tiers/meta_goal.py` — "owning isn't the end-state, the objective
+    is to WEAR them"). A gear grind wears what it makes, so the very first rung
+    the character equips would otherwise leaf the rung on the `is_satisfied`
+    arm and no quantity could ever defeat it.
+
+    Only the rung's own entries are dropped; every other material and every
+    other equipped item stays, so a material that IS legitimately in hand still
+    leafs normally and the combat stats behind `_producible`'s winnability gate
+    lose only the one item the grind is about to make another of.
+    """
+    inventory = {code: qty for code, qty in state.inventory.items()
+                 if code != rung}
+    bank_items = (None if state.bank_items is None
+                  else {code: qty for code, qty in state.bank_items.items()
+                        if code != rung})
+    equipment = {slot: (None if code == rung else code)
+                 for slot, code in state.equipment.items()}
+    return dataclasses.replace(state, inventory=inventory,
+                               bank_items=bank_items, equipment=equipment)
 
 
 def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
@@ -58,23 +94,47 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
     if rung is not None:
         bank = state.bank_items or {}
         held = state.inventory.get(rung, 0) + bank.get(rung, 0)
-        # Descend on the grind quantity (held + 1), NOT the default 1: when the
-        # character already HOLDS copies of the rung, ObtainItem(rung, 1) is
-        # trivially satisfied by them, so actionable_step short-circuits at the
-        # rung and the grind goal becomes GatherMaterials(rung, held+1) — "craft
-        # ANOTHER rung" — whose recipe materials are NOT in hand, exploding the
-        # sub-plan search to a timeout / empty plan and livelocking on
-        # error:other (live Robby 2026-07-15: fire_staff x3 held, no ash_plank,
-        # 38 cycles at ~10s CPU each). held + 1 makes the deficit unmet, so the
-        # descent enters the recipe and stops at the deepest actionable material.
+        # Descend for ONE rung against a state with the rung's own copies
+        # removed (`_grind_probe_state`). A grind must CRAFT a new rung —
+        # withdrawing, re-wearing or otherwise reusing a copy it already owns
+        # earns zero skill XP — so the copies it has already made are
+        # irrelevant to what it should do next, and letting them influence the
+        # descent is what broke it three ways. `prerequisites` leafs the rung
+        # (ending the descent AT it) on any of:
+        #
+        #   * `owned_count_pure(...) >= node.quantity`. The old
+        #     `quantity = held + 1` device defeated exactly this arm (live
+        #     Robby 2026-07-15: fire_staff x3 in the BAG, no ash_plank, 38
+        #     cycles at ~10s CPU each) and nothing else.
+        #   * a ready non-craft SOURCE. A copy in the BANK is a ready WITHDRAW
+        #     source, and `held + 1` does nothing about that arm, so
+        #     `actionable_step` still stopped at the rung and the fallthrough
+        #     below emitted GatherMaterials(rung, held+1) — a full from-scratch
+        #     craft chain whose node count GROWS with the banked count, because
+        #     every banked copy adds another applicable Withdraw. Live C3P0
+        #     2026-08-01 on the real catalog: held=1 => 24k nodes, held=3 =>
+        #     47k, held>=5 => the 10s CHEAP_BUDGET_SECONDS is exhausted and the
+        #     sub-plan comes back EMPTY, so `_execute_level_skill` raised
+        #     "grind produced no leg" every cycle for 9.5h with ZERO character
+        #     progress until the run StuckExit-ed. The grind's own success is
+        #     what broke it.
+        #   * `is_satisfied`, which reports an EQUIPPABLE satisfied whenever its
+        #     code is WORN, ignoring quantity. A gear grind wears what it makes,
+        #     so no quantity can defeat this arm at all.
+        #
+        # Removing the holdings makes the deficit unconditionally real, so the
+        # descent enters the recipe and stops at the deepest actionable
+        # material — a flat, cheap gather — no matter how many copies are
+        # already banked, carried or worn.
         # exclude_recycle_leaf=True: a skill grind GATHERS its materials fresh —
         # the descent skips a recyclable-only intermediate (ash_plank via
         # recycling gear) and lands on the gatherable raw (ash_wood), a flat,
         # always-plannable gather. This keeps the grind plannable AND cannot
         # churn gear to grind (recycling the rung to source its own material is
         # a null cycle; recycling OTHER current-tier gear is low priority).
-        step = actionable_step(ObtainItem(rung, quantity=held + 1),
-                               state, game_data, ctx, exclude_recycle_leaf=True)
+        step = actionable_step(ObtainItem(rung, quantity=1),
+                               _grind_probe_state(state, rung),
+                               game_data, ctx, exclude_recycle_leaf=True)
         if isinstance(step, ObtainItem) and step.code != rung:
             # exclude_recycle={rung}: never recycle the rung to source its own
             # crafting material — that is the null cycle (rung -> material ->
@@ -83,6 +143,17 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
                                        needed={step.code: step.quantity},
                                        skill_grind=True,
                                        exclude_recycle=frozenset({rung}))
+        if not isinstance(step, ObtainItem):
+            # The descent is BLOCKED (cyclic, or every branch dead-ends) — it
+            # found no material to gather. Falling through to the rung goal
+            # would hand the planner the very from-scratch chain documented
+            # above, so report "cannot grind from here" and let the caller pick
+            # another goal instead of burning a budget it cannot spend.
+            return None
+        # Descent landed ON the rung with its own copies discounted: the
+        # recipe materials really are in hand, so the plan is the single craft
+        # that earns the XP. `held + 1` (REAL held) keeps that perpetual —
+        # craft ANOTHER — and stays cheap because the materials are present.
     else:
         rung = best_gather_resource_drop(
             skill, state.skills.get(skill, 1), game_data)
