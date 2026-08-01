@@ -2,7 +2,12 @@
   Formal.Liveness.ProductionLadder
 
   Production-granularity model of the StrategyArbiter's `select_pure` ladder
-  walk over the 17-element MeansKind list. Mirrors `_fires` predicates from:
+  walk over `Formal.Liveness.MeansKind.allInLadderOrder` — GUARD_ORDER ++
+  COLLECT_REWARD_ORDER ++ [OBJECTIVE_STEP] ++ DISCRETIONARY_ORDER, i.e. every
+  `MeansKind` constructor exactly once, in production's candidate preorder.
+  (A literal element count used to be restated here; it drifted, so the walk is
+  now described by the list it actually iterates.) Mirrors `_fires` predicates
+  from:
 
     - `src/artifactsmmo_cli/ai/tiers/guards.py:65-88` (`_fires`)
     - `src/artifactsmmo_cli/ai/tiers/means.py:65-113` (`_fires`)
@@ -14,9 +19,11 @@
 
   ## Honest disclosure
 
-  Three `_fires` predicates depend on goal-internal logic the Lean model
-  does not reproduce literally:
+  Four `_fires` predicates depend on goal-internal or out-of-model logic the
+  Lean model does not reproduce literally:
     - `objectiveStep`  (the StrategyArbiter's objective candidate)
+    - `supplyBank`     (`ctx.supply_target`, computed from the cross-character
+                       coordination DB — outside this single-character model)
     - `selectBankDepositsNonempty` used by `depositFull` (guards.py:85)
     - `sellableInventoryNonempty` used by `sellPressured`/`sellIdle`
       (means.py:54-58)
@@ -307,6 +314,14 @@ def geBidFires (s : State) : Bool :=
     State-carried Bool (see `Measure.State.maintainConsumablesFires`). -/
 def maintainConsumablesFires (s : State) : Bool := s.maintainConsumablesFires
 
+/-- SUPPLY_BANK (2026-08-01). Mirrors `means.py::_fires(SUPPLY_BANK, …)` =
+    `ctx.supply_target is not None`: fires exactly when a supply target is
+    present, i.e. some unexpired sibling demand is servable by this
+    character's role. Modelled as an opaque `State` field because the target
+    is computed from the coordination DB, which this model does not reproduce
+    — the same honest-disclosure treatment `objectiveStep` gets. -/
+def supplyBankFires (s : State) : Bool := s.supplyTargetPresent
+
 /-- WAIT. Mirrors `means.py:115-119`: the last-resort fallback fires
     unconditionally. Position-last in `allInLadderOrder` ensures every
     other means is tried first. -/
@@ -381,6 +396,7 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .acceptTask       => acceptTaskFires s
   | .taskExchange     => taskExchangeFires s
   | .maintainConsumables => maintainConsumablesFires s
+  | .supplyBank       => supplyBankFires s
   | .sellIdle         => sellIdleFires s
   | .recycleSurplus   => recycleSurplusFires s
   | .drainBankJunk    => drainBankJunkFires s

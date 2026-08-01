@@ -2,16 +2,22 @@
   Formal.Liveness.MeansKind
 
   Production-granularity `MeansKind` enum mirroring the StrategyArbiter's
-  ladder. There are 28 means in total, ordered:
+  ladder. The ladder is the concatenation
 
-    GUARD_ORDER (10, from `tiers/guards.py:68`)  -- REST_FOR_COMBAT after
-                                                   HP_CRITICAL; CRAFT_RELIEF
-                                                   between DISCARD_CRITICAL and
-                                                   DEPOSIT_FULL; GEAR_REVIEW
-                                                   last (lowest-priority guard)
-    ++ COLLECT_REWARD_ORDER (5, from `tiers/means.py:35`)
-    ++ [OBJECTIVE_STEP] (1)
-    ++ DISCRETIONARY_ORDER (7, from `tiers/means.py:42`)  -- incl MAINTAIN_CONSUMABLES + WAIT
+    GUARD_ORDER (from `tiers/guards.py`)          -- REST_FOR_COMBAT after
+                                                     HP_CRITICAL; CRAFT_RELIEF
+                                                     between DISCARD_CRITICAL and
+                                                     DEPOSIT_FULL; GEAR_REVIEW
+                                                     then CRAFT_POTIONS last
+                                                     (lowest-priority guards)
+    ++ COLLECT_REWARD_ORDER (from `tiers/means.py`)
+    ++ [OBJECTIVE_STEP]
+    ++ DISCRETIONARY_ORDER (from `tiers/means.py`) -- incl MAINTAIN_CONSUMABLES,
+                                                     SUPPLY_BANK and WAIT
+
+  `allInLadderOrder` below is the authoritative enumeration; its length is
+  checked by the `example` at the bottom of this file rather than restated
+  as a prose count here (a prose count has already drifted once).
 
   Phase 20e-v2 step 2: a `wait` last-resort means is appended to
   DISCRETIONARY_ORDER, mirroring `MeansKind.WAIT` in
@@ -30,15 +36,15 @@
 namespace Formal.Liveness.MeansKind
 
 /-- Production MeansKind enum. Mirrors:
-    - `src/artifactsmmo_cli/ai/tiers/guards.py::GuardKind` (9 constructors)
-    - `src/artifactsmmo_cli/ai/tiers/means.py::MeansKind` (11 constructors,
-      split into COLLECT_REWARD_ORDER (5), DISCRETIONARY_ORDER (6))
+    - `src/artifactsmmo_cli/ai/tiers/guards.py::GuardKind`
+    - `src/artifactsmmo_cli/ai/tiers/means.py::MeansKind`, split into
+      COLLECT_REWARD_ORDER and DISCRETIONARY_ORDER
     - OBJECTIVE_STEP — separate single tier (the objective StepGoal).
 
-    Order matches production's preordered candidate list:
+    Constructor order matches production's preordered candidate list:
       GUARD_ORDER ++ COLLECT_REWARD_ORDER ++ [OBJECTIVE_STEP] ++ DISCRETIONARY_ORDER.
-
-    Total 28 constructors. -/
+    (This inductive is NOT index-dispatched by the oracle — that is
+    `Formal.DecideKey.MeansKind` — so constructors sit in LADDER order here.) -/
 inductive MeansKind where
   -- Guards (GUARD_ORDER, guards.py:68)
   | hpCritical          -- HP_CRITICAL,        guards.py:69
@@ -93,6 +99,16 @@ inductive MeansKind where
   | taskExchange        -- TASK_EXCHANGE,      means.py:97
   | maintainConsumables -- MAINTAIN_CONSUMABLES, means.py (PLAN #6a): cook/brew
                         --                     heals when combat-active + under-stocked
+  | supplyBank          -- SUPPLY_BANK,        means.py (2026-08-01): produce a
+                        --                     material a SIBLING declared on the
+                        --                     demand board and BANK it. Fires iff
+                        --                     a supply target is present. Sits
+                        --                     between MAINTAIN_CONSUMABLES and
+                        --                     SELL_IDLE: serving a declared
+                        --                     sibling demand beats idle
+                        --                     housekeeping, but never this
+                        --                     character's own committed task
+                        --                     means or combat prep.
   | sellIdle            -- SELL_IDLE,          means.py:100
   | recycleSurplus      -- RECYCLE_SURPLUS,    means.py (2026-06-14)
   | drainBankJunk       -- DRAIN_BANK_JUNK,    means.py (2026-06-24): withdraw
@@ -119,10 +135,11 @@ def allInLadderOrder : List MeansKind :=
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
    .objectiveStep,
    .pursueTask, .acceptTask, .taskExchange, .maintainConsumables,
+   .supplyBank,
    .sellIdle, .recycleSurplus, .bankExpand, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 29 constructors. -/
-example : allInLadderOrder.length = 29 := by decide
+/-- Sanity: 30 rungs (one per constructor). -/
+example : allInLadderOrder.length = 30 := by decide
 
 end Formal.Liveness.MeansKind

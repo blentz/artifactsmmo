@@ -77,6 +77,12 @@ inductive MeansKind where
                    -- (oracle index 13) to keep earlier index dispatch stable.
   | geBid  -- 2026-07-24: post a discretionary GE buy order for a slow-to-craft
            -- item. Appended LAST (oracle index 14) to keep earlier dispatch stable.
+  | supplyBank  -- 2026-08-01: produce a material a SIBLING declared on the demand
+                -- board and bank it. Appended LAST (oracle index 15) to keep
+                -- earlier dispatch stable; its DISCRETIONARY_ORDER priority slot
+                -- (between MAINTAIN_CONSUMABLES and SELL_IDLE) is independent of
+                -- this constructor position and lives in
+                -- `Formal.Liveness.MeansKind.allInLadderOrder`.
 deriving Repr, DecidableEq
 
 /-- TOTAL `match`: every `GuardKind` variant maps to a non-empty repr string.
@@ -115,6 +121,7 @@ def goalReprOfMeans : MeansKind → String
   | .maintainConsumables => "MaintainConsumables"
   | .drainBankJunk   => "DrainBankJunk"
   | .geBid           => "PostBuyBid"
+  | .supplyBank      => "SupplyBank"
 
 /-! ### Exhaustiveness intent theorems (totality witnesses). -/
 
@@ -140,5 +147,6 @@ example : goalReprOfGuard .depositFull = "DepositInventory" := rfl
 /-- Every means variant likewise. -/
 example : goalReprOfMeans .pursueTask = "PursueTask" := rfl
 example : goalReprOfMeans .sellIdle = "SellInventory" := rfl
+example : goalReprOfMeans .supplyBank = "SupplyBank" := rfl
 
 end Formal.DecideKey

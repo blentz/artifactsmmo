@@ -1,6 +1,6 @@
 """Python mirror of `Formal.Liveness.ProductionLadder.productionLadder`.
 
-Walks the 23-element `allInLadderOrder` (GUARD_ORDER ++ COLLECT_REWARD_ORDER
+Walks `allInLadderOrder` (GUARD_ORDER ++ COLLECT_REWARD_ORDER
 ++ [OBJECTIVE_STEP] ++ DISCRETIONARY_ORDER) and returns the FIRST means
 whose production `_fires` predicate returns True; None if none fire.
 
@@ -37,7 +37,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 class LadderMeans(Enum):
-    """Unified 28-entry enum mirroring `Formal.Liveness.MeansKind.MeansKind`."""
+    """Unified enum mirroring `Formal.Liveness.MeansKind.MeansKind` — one entry
+    per Lean constructor, declared in ladder order (`ALL_IN_LADDER_ORDER`)."""
 
     HP_CRITICAL = "hp_critical"
     REST_FOR_COMBAT = "rest_for_combat"
@@ -62,6 +63,7 @@ class LadderMeans(Enum):
     ACCEPT_TASK = "accept_task"
     TASK_EXCHANGE = "task_exchange"
     MAINTAIN_CONSUMABLES = "maintain_consumables"
+    SUPPLY_BANK = "supply_bank"
     SELL_IDLE = "sell_idle"
     RECYCLE_SURPLUS = "recycle_surplus"
     DRAIN_BANK_JUNK = "drain_bank_junk"
@@ -94,6 +96,7 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.ACCEPT_TASK,
     LadderMeans.TASK_EXCHANGE,
     LadderMeans.MAINTAIN_CONSUMABLES,
+    LadderMeans.SUPPLY_BANK,
     LadderMeans.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS,
     LadderMeans.BANK_EXPAND,
@@ -129,6 +132,7 @@ _MEANS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.ACCEPT_TASK: MeansKind.ACCEPT_TASK,
     LadderMeans.TASK_EXCHANGE: MeansKind.TASK_EXCHANGE,
     LadderMeans.MAINTAIN_CONSUMABLES: MeansKind.MAINTAIN_CONSUMABLES,
+    LadderMeans.SUPPLY_BANK: MeansKind.SUPPLY_BANK,
     LadderMeans.SELL_IDLE: MeansKind.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS: MeansKind.RECYCLE_SURPLUS,
     LadderMeans.DRAIN_BANK_JUNK: MeansKind.DRAIN_BANK_JUNK,
@@ -168,6 +172,7 @@ assert DISCRETIONARY_ORDER == (
     MeansKind.ACCEPT_TASK,
     MeansKind.TASK_EXCHANGE,
     MeansKind.MAINTAIN_CONSUMABLES,
+    MeansKind.SUPPLY_BANK,
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
     MeansKind.BANK_EXPAND,

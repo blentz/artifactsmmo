@@ -55,6 +55,11 @@ _MEANS_INDEX = {
     MeansKind.MAINTAIN_CONSUMABLES: 12,  # PLAN #6a: cook/brew heals (combat-active).
     MeansKind.DRAIN_BANK_JUNK: 13,  # 2026-06-24: drain over-cap bank junk.
     MeansKind.GE_BID: 14,  # 2026-07-24: post a discretionary GE buy order.
+    # 2026-08-01: produce a material a sibling declared. 15 is the position of
+    # `supplyBank` in the LEAN `Formal.DecideKey.MeansKind` inductive (appended
+    # last, like every variant since `wait`), which is what the oracle's index
+    # dispatch reads — NOT the Python enum's declaration ordinal.
+    MeansKind.SUPPLY_BANK: 15,
 }
 
 

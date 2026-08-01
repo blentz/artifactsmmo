@@ -631,6 +631,9 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | maintainConsumables =>
       show (applyActionKind .craft s).level ≥ s.level
       simp [applyActionKind]
+    | supplyBank =>
+      show (applyActionKind .gather s).level ≥ s.level
+      simp [applyActionKind]
     | depositFull =>
       show (applyActionKind .depositAll s).level ≥ s.level
       simp [applyActionKind]
@@ -1116,6 +1119,12 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   | recycleRelief   => exfalso; revert hmem; unfold progressMeans; decide
   | sellRelief      => exfalso; revert hmem; unfold progressMeans; decide
   | maintainConsumables => exfalso; revert hmem; unfold progressMeans; decide
+  -- SUPPLY_BANK (2026-08-01) is OUT of `progressMeans` scope, like
+  -- maintainConsumables/recycleSurplus: its `.gather` step advances
+  -- `trackedSkillLevel`, which is not an `ExtMeasure` slot, so no
+  -- measure-decrease commitment is made for it here. Its per-cycle progress
+  -- is carried by `CycleStep.cycleStep_progress_or_waits`.
+  | supplyBank      => exfalso; revert hmem; unfold progressMeans; decide
   | lowYieldCancel  => exfalso; revert hmem; unfold progressMeans; decide
   | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide
   | pursueTask      => exfalso; revert hmem; unfold progressMeans; decide

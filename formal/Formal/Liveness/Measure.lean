@@ -231,6 +231,17 @@ structure State where
       State-carried Bool (default false); the production-ladder diff asserts
       agreement with the real predicate. -/
   maintainConsumablesFires : Bool := false
+  /-- OPAQUE: production's SUPPLY_BANK means firing predicate (2026-08-01).
+      Mirrors `tiers/means.py::_fires(SUPPLY_BANK, …)` = `ctx.supply_target is
+      not None`: some unexpired sibling demand on the coordination board is
+      servable by THIS character's role, so it should produce that material and
+      bank it. State-carried Bool (default false — a single-character run never
+      has a supply target, so every pre-existing witness keeps its semantics
+      unchanged); the Lean model does not reproduce the coordination DB the
+      target is computed from, the same honest-disclosure treatment
+      `objectiveStepFires` gets. The ladder differential asserts agreement with
+      the real predicate. -/
+  supplyTargetPresent : Bool := false
   /-- `state.bank_items is not None` (means.py:104). -/
   bankItemsKnown : Bool
   /-- `len(state.bank_items)` when known, else `0` (means.py:108). -/

@@ -142,6 +142,15 @@ noncomputable def planFor : MeansKind → State → Plan
   | .acceptTask       , _ => [.acceptTask]
   | .taskExchange     , _ => [.taskExchange]
   | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
+  -- SUPPLY_BANK (2026-08-01): `SupplyBankGoal.desired_state` targets a BANKED
+  -- quantity, so production plans a produce-then-deposit chain. The witness is
+  -- its HEAD — the production step — because the demand board routes each item
+  -- to the role that PRODUCES it (`ai/role_selection.py`, by producing skill).
+  -- Honest disclosure: unlike the fire-and-lose means, one `.gather` does NOT
+  -- clear `supplyTargetPresent` — production's target persists until the BANKED
+  -- quantity is met, which takes several cycles this single-action model does
+  -- not reproduce. So the model does not claim supplyBank self-quiets.
+  | .supplyBank       , _ => [.gather]
   | .sellIdle         , _ => [.npcSell]
   | .recycleSurplus   , _ => [.recycle]
   | .drainBankJunk    , _ => [.withdrawItem]
@@ -389,6 +398,23 @@ theorem cycleStep_progress_or_waits
                   = s.craftableSlots + 1 := by
       simp [applyActionKind]
     have hpre' : s.craftableSlots = s.craftableSlots + 1 := by
+      rw [heq] at hpost; exact hpost
+    exact Nat.succ_ne_self _ hpre'.symm
+  | supplyBank =>
+    -- SUPPLY_BANK (2026-08-01) plans `.gather` (produce the material a sibling
+    -- asked for). Unlike the fire-and-lose means this does NOT quiet its own
+    -- firing flag — production's supply target persists until the BANKED
+    -- quantity is met — so progress is witnessed by the gather itself:
+    -- `trackedSkillLevel` advances by +1, so the state changes.
+    left
+    have hcs : cycleStep s = applyActionKind .gather s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    intro heq
+    have hpost : (applyActionKind .gather s).trackedSkillLevel
+                  = s.trackedSkillLevel + 1 := by
+      simp [applyActionKind]
+    have hpre' : s.trackedSkillLevel = s.trackedSkillLevel + 1 := by
       rw [heq] at hpost; exact hpost
     exact Nat.succ_ne_self _ hpre'.symm
   | depositFull =>
