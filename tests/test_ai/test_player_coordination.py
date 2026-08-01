@@ -18,10 +18,13 @@ from datetime import datetime, timezone
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG
 from artifactsmmo_cli.ai.role_selection import ROLE_MIN_HOLD_CYCLES, decide_role, demand_by_role
+from artifactsmmo_cli.ai.strategy_driver import map_means
+from artifactsmmo_cli.ai.tiers.means import MeansKind, _fires
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_strategy_driver import _make_planner_gd
 
@@ -123,6 +126,31 @@ def test_own_unmet_demand_excludes_fully_held_items():
     assert p._own_unmet_demand(state, gd) == {}
 
 
+def test_own_unmet_demand_nets_the_account_wide_bank_too():
+    """The bank is ACCOUNT-WIDE (shared across every character), so material
+    already banked — by this character in an earlier session, or by a
+    sibling — already satisfies the demand and must not be re-published.
+    Without this, a sibling's `_pick_supply_target` targets
+    `banked + full_demand` on top of stock that already exists: systematic
+    over-production of exactly what the fleet already holds."""
+    p = GamePlayer(character="hero")
+    gd = _make_planner_gd()
+    gd._crafting_recipes = {"copper_dagger": {"copper_bar": 2}}
+    p._last_decide_crafting_target = "copper_dagger"
+    # Needs copper_bar x2; 1 in inventory, 1 already banked -> fully covered.
+    state = make_state(inventory={"copper_bar": 1}, bank_items={"copper_bar": 1})
+    assert p._own_unmet_demand(state, gd) == {"copper_dagger": 1}
+
+
+def test_own_unmet_demand_bank_netting_only_partially_covers():
+    p = GamePlayer(character="hero")
+    gd = _make_planner_gd()
+    gd._crafting_recipes = {"copper_dagger": {"copper_bar": 5}}
+    p._last_decide_crafting_target = "copper_dagger"
+    state = make_state(inventory={}, bank_items={"copper_bar": 2})
+    assert p._own_unmet_demand(state, gd) == {"copper_dagger": 1, "copper_bar": 3}
+
+
 # ---------------------------------------------------------------------------
 # GamePlayer._pick_supply_target
 # ---------------------------------------------------------------------------
@@ -158,12 +186,31 @@ def test_pick_supply_target_picks_the_highest_demand_match():
     assert p._pick_supply_target(item_demand, skill_of_item, state) == ("iron_ore", 10, 9)
 
 
-def test_pick_supply_target_treats_a_missing_bank_as_empty():
+def test_pick_supply_target_none_when_the_bank_has_never_been_visited():
+    """`bank_items is None` means "never visited this session" (see its field
+    docstring in `world_state.py`), NOT "empty" — the same distinction
+    `bank_room.bank_has_room` draws for the same field. Fabricating
+    `banked=0` here would understate the eventual target once the real
+    contents are known, so this must return None rather than guess."""
     p = GamePlayer(character="hero")
     p._role = "miner"
     item_demand = {"copper_ore": 3}
     skill_of_item = {"copper_ore": "mining"}
     state = make_state(bank_items=None)
+    assert p._pick_supply_target(item_demand, skill_of_item, state) is None
+
+
+def test_pick_supply_target_treats_a_visited_empty_bank_as_zero():
+    """Once the bank HAS been visited (even if genuinely empty, `{}`), the
+    absence of the item is real information — banked=0 is correct, not a
+    guess — so a target IS computed. This is the case
+    `test_pick_supply_target_none_when_the_bank_has_never_been_visited`
+    must be distinguished from."""
+    p = GamePlayer(character="hero")
+    p._role = "miner"
+    item_demand = {"copper_ore": 3}
+    skill_of_item = {"copper_ore": "mining"}
+    state = make_state(bank_items={})
     assert p._pick_supply_target(item_demand, skill_of_item, state) == ("copper_ore", 3, 3)
 
 
@@ -250,6 +297,39 @@ def test_update_coordination_does_not_set_role_when_the_claim_loses_the_race(tmp
         assert p._role_held_cycles == 0
     finally:
         store.close()
+
+
+def test_update_coordination_clears_a_stale_role_when_a_reclaim_loses_the_race(tmp_path, monkeypatch):
+    """The critical defect: `decide_role` returns `claim=current` when THIS
+    character's own lease lapsed (a stall) and a sibling took the role over
+    via `live_leases` — the re-claim path, distinct from a cold-start claim.
+    If that re-claim then loses the race, `self._role` must be cleared, not
+    left stale: leaving it set makes the character renew a lease it does not
+    hold (a no-op) and keep computing `_supply_target` for a role a sibling
+    actually owns — every cycle, forever, since the same failing re-claim
+    repeats identically next cycle. Two characters would end up specialized
+    identically, defeating the whole feature."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state()
+    p.game_data = _make_planner_gd()
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="rival")
+    p.set_coordination_store(store)
+    now = datetime.now(tz=timezone.utc)
+    try:
+        # hero's lease on "miner" lapsed and rival took it over. hero's
+        # in-memory `_role` is stale (still says "miner").
+        sibling.claim("miner", now)
+        p._role = "miner"
+        p._role_held_cycles = 5
+        monkeypatch.setattr(store, "claim", lambda role, now: False)
+        p._update_coordination(p.state, p.game_data)
+        assert p._role is None
+        assert p._role_held_cycles == 0
+    finally:
+        store.close()
+        sibling.close()
 
 
 def test_update_coordination_renews_the_lease_only_while_a_role_is_held(tmp_path, monkeypatch):
@@ -415,3 +495,50 @@ def test_notify_observer_role_and_supply_target_none_by_default():
     snap = calls[0]
     assert snap.role is None
     assert snap.supply_target is None
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: a coordinated SelectionContext must reach a real SupplyBankGoal
+# through the arbiter's actual dispatch (`active_means`/`map_means` — the
+# same two functions `StrategyArbiter.select` calls internally). Tasks 9/10
+# already unit-test `_fires`/`map_means` against a HAND-BUILT ctx; this test
+# is the missing link proving the player's REAL `_update_coordination` output
+# is what those two functions see — the feature is not inert.
+# ---------------------------------------------------------------------------
+
+def test_a_coordinated_supply_target_reaches_a_real_supply_bank_goal(tmp_path):
+    db = str(tmp_path / "coord.db")
+    gd = _make_planner_gd()
+    gd._item_stats = {}
+    gd._crafting_recipes = {}
+    gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
+    p = GamePlayer(character="hero")
+    p.state = make_state(bank_items={"copper_ore": 2})
+    p.game_data = gd
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="rival")
+    p.set_coordination_store(store)
+    now = datetime.now(tz=timezone.utc)
+    try:
+        sibling.publish_demand({"copper_ore": 5}, now)
+        store.claim("miner", now)
+        p._role = "miner"
+        p._role_held_cycles = 3  # below ROLE_MIN_HOLD_CYCLES: stays "miner"
+
+        p._update_coordination(p.state, p.game_data)
+        ctx = p._selection_context(combat_monster=None)
+        assert ctx.supply_target == ("copper_ore", 7, 5)
+
+        # The last two links: _fires (the means predicate) and map_means (the
+        # goal factory) — exactly what StrategyArbiter.select calls.
+        assert _fires(MeansKind.SUPPLY_BANK, p.state, gd, None, ctx) is True
+        goal = map_means(MeansKind.SUPPLY_BANK, gd, ctx, p.state)
+        assert isinstance(goal, SupplyBankGoal)
+        assert goal._item_code == "copper_ore"
+        assert goal._quantity == 7
+        assert goal._demand == 5
+        assert repr(goal) == "SupplyBank(copper_orex7)"
+    finally:
+        store.close()
+        sibling.close()
