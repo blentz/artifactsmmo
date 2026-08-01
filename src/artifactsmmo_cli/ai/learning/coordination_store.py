@@ -19,6 +19,7 @@ behaviour. Handled here and NOT re-handled upstream.
 """
 
 import weakref
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 
 from sqlalchemy import text
@@ -26,7 +27,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, create_engine, select
 
-from artifactsmmo_cli.ai.learning.models import RoleLease
+from artifactsmmo_cli.ai.learning.models import MaterialDemand, RoleLease
 
 LEASE_TTL_SECONDS = 600
 """Seconds a lease survives without renewal. Renewed every cycle, so this only
@@ -34,6 +35,12 @@ has to exceed the longest LEGITIMATE gap between cycles — not the action
 cooldown, but a capped Retry-After backoff or a long planner search. Ten
 minutes clears both, and costs at most ten minutes of an unworked role against
 sessions that run for hours."""
+
+DEMAND_TTL_SECONDS = 600
+"""Seconds a published demand row survives without republication. Same clock as
+LEASE_TTL_SECONDS on purpose: a crashed character's demand stops being served
+at the same moment its role frees up, so there is exactly ONE liveness rule in
+the coordination system."""
 
 
 def _require_utc(now: datetime) -> None:
@@ -183,6 +190,58 @@ class CoordinationStore:
         except SQLAlchemyError as e:
             print(f"[coordination] live_leases failed: {e}")
             return {}
+
+    def _demand_expiry(self, now: datetime) -> str:
+        return (now + timedelta(seconds=DEMAND_TTL_SECONDS)).isoformat()
+
+    def publish_demand(self, demand: Mapping[str, int], now: datetime) -> None:
+        """Replace this character's demand rows wholesale.
+
+        Replace rather than merge: demand is a snapshot of what is unmet RIGHT
+        NOW, so an item that dropped off the closure must stop being served
+        immediately. Merging would leave satisfied demand on the board until
+        its TTL, and siblings would keep producing into a bank nobody drains."""
+        _require_utc(now)
+        expiry = self._demand_expiry(now)
+        try:
+            with SqlSession(self._engine) as s:
+                stale = s.exec(
+                    select(MaterialDemand).where(
+                        MaterialDemand.character == self._character
+                    )
+                ).all()
+                for row in stale:
+                    s.delete(row)
+                for item_code, quantity in demand.items():
+                    if quantity > 0:
+                        s.add(MaterialDemand(character=self._character,
+                                             item_code=item_code,
+                                             quantity=quantity,
+                                             expires_at=expiry))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[coordination] publish_demand failed: {e}")
+
+    def sibling_demand(self, now: datetime) -> dict[str, int]:
+        """Unexpired demand summed by item across every OTHER character. The
+        second of the two deliberately unfiltered reads."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        totals: dict[str, int] = {}
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(
+                    select(MaterialDemand).where(
+                        MaterialDemand.expires_at > stamp,
+                        MaterialDemand.character != self._character,
+                    )
+                ).all()
+        except SQLAlchemyError as e:
+            print(f"[coordination] sibling_demand failed: {e}")
+            return {}
+        for row in rows:
+            totals[row.item_code] = totals.get(row.item_code, 0) + row.quantity
+        return totals
 
     def close(self) -> None:
         self._engine.dispose()
