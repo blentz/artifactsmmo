@@ -497,6 +497,45 @@ def test_empty_demand_clears_the_board(tmp_path: Path) -> None:
         obs.close()
 
 
+def test_publish_demand_skips_zero_quantity(tmp_path: Path) -> None:
+    """A zero-quantity entry must not persist a row: it would advertise a
+    need that does not exist, and a sibling would produce something nobody
+    wants."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    obs = CoordinationStore(db_path=db, character="observer")
+    try:
+        hal.publish_demand({"copper_bar": 0}, _T0)
+        assert obs.sibling_demand(_T0) == {}
+    finally:
+        hal.close()
+        obs.close()
+
+
+def test_publish_demand_skips_negative_quantity(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    obs = CoordinationStore(db_path=db, character="observer")
+    try:
+        hal.publish_demand({"copper_bar": -3}, _T0)
+        assert obs.sibling_demand(_T0) == {}
+    finally:
+        hal.close()
+        obs.close()
+
+
+def test_publish_demand_mixed_mapping_publishes_only_positive_entries(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    obs = CoordinationStore(db_path=db, character="observer")
+    try:
+        hal.publish_demand({"copper_bar": 6, "ash_plank": 0}, _T0)
+        assert obs.sibling_demand(_T0) == {"copper_bar": 6}
+    finally:
+        hal.close()
+        obs.close()
+
+
 def test_publish_demand_rejects_naive_now(tmp_path: Path) -> None:
     db = str(tmp_path / "coord.db")
     hal = CoordinationStore(db_path=db, character="HAL")
