@@ -70,6 +70,39 @@ def test_role_is_frozen() -> None:
 
 def test_valid_gather_skill_passes_without_raising() -> None:
     # Exercises the `role.gather is not None` True branch combined with the
-    # `in valid_gather` True sub-branch (no raise) — distinct from the
+    # `in GATHERING_SKILLS` True sub-branch (no raise) — distinct from the
     # gatherless (None) path and the unknown-skill (raise) path.
     validate_catalog((Role(name="fisher", gather="fishing", craft="cooking"),))
+
+
+def test_craft_only_skill_declared_as_gather_is_rejected() -> None:
+    # "cooking" is a real CraftSkill but NOT a GatheringSkill. Validating
+    # against the raw GATHERING_SKILLS vocabulary (rather than the
+    # ranking-prior partition, which folds cooking into
+    # CONSUMABLE_CRAFT_SKILLS and would wrongly accept it here) must reject
+    # this. Regression test for the reviewer-found mirror defect.
+    bad = (Role(name="ghost", gather="cooking", craft="weaponcrafting"),)
+    with pytest.raises(ValueError, match="cooking"):
+        validate_catalog(bad)
+
+
+def test_gather_only_skill_declared_as_craft_is_rejected() -> None:
+    # "fishing" is a real GatheringSkill but NOT a CraftSkill. Validating
+    # against the raw CRAFT_SKILLS vocabulary (rather than the partition,
+    # which folds fishing into GATHER_SKILLS and would wrongly accept it
+    # here) must reject this. Regression test for the originally-shipped
+    # defect this brief's Step 3 code contained.
+    bad = (Role(name="ghost", gather="mining", craft="fishing"),)
+    with pytest.raises(ValueError, match="fishing"):
+        validate_catalog(bad)
+
+
+def test_mining_is_accepted_in_both_gather_and_craft_slots() -> None:
+    # `mining` is a member of BOTH raw enums (extraction AND a craft step) —
+    # that overlap is a real schema property, not an error, and must keep
+    # validating in either slot.
+    validate_catalog((Role(name="miner", gather="mining", craft="mining"),))
+
+
+def test_woodcutting_is_accepted_in_both_gather_and_craft_slots() -> None:
+    validate_catalog((Role(name="logger", gather="woodcutting", craft="woodcutting"),))

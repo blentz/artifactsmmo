@@ -8,33 +8,34 @@ skill the server lacks: `validate_catalog` checks every declared skill against
 the api-client-derived sets in `tiers/skill_classes.py` and raises rather than
 silently no-opping, per "use only API data or fail with an error".
 
-`skill_classes` derives GATHER_SKILLS / COMBAT_CRAFT_SKILLS /
-CONSUMABLE_CRAFT_SKILLS from the `CraftSkill` / `GatheringSkill` enums by set
-algebra over a single policy seed, specifically so they cannot drift from the
-schema. This module's only hand-authored content is the PAIRING of those
-skills into roles.
+`skill_classes` exports the RAW schema vocabularies `GATHERING_SKILLS` /
+`CRAFT_SKILLS` (every value of the `GatheringSkill` / `CraftSkill` enums,
+undivided by policy) alongside a separate ranking-prior PARTITION
+(`GATHER_SKILLS` / `COMBAT_CRAFT_SKILLS` / `CONSUMABLE_CRAFT_SKILLS`).
+`validate_catalog` below checks each role's `gather` against
+`GATHERING_SKILLS` and `craft` against `CRAFT_SKILLS` — the raw vocabularies,
+not the partition — because the partition reassigns `alchemy`/`cooking` out
+of gathering to value them as consumable-craft, so it cannot answer "is this
+a real skill the server puts in this slot" for either slot on its own (it
+would wrongly accept a role declaring `craft="fishing"`, since the partition
+folds `fishing` into `GATHER_SKILLS`). This module's only hand-authored
+content is the PAIRING of skills into roles.
 
 Verified against the api-client enums 2026-08-01:
   GatheringSkill = {alchemy, fishing, mining, woodcutting}
   CraftSkill     = {alchemy, cooking, gearcrafting, jewelrycrafting, mining,
                     weaponcrafting, woodcutting}
-so GATHER_SKILLS = {fishing, mining, woodcutting} (alchemy both gathers and
-brews and is valued as consumable-craft), COMBAT_CRAFT_SKILLS =
-{gearcrafting, jewelrycrafting, weaponcrafting}, CONSUMABLE_CRAFT_SKILLS =
-{alchemy, cooking}.
 
 `mining` and `woodcutting` appear in BOTH enums — they cover extraction and the
 first processing step alike — so `miner` owning `mining` covers ore through
-bar, and `logger` owning `woodcutting` covers log through plank.
+bar, and `logger` owning `woodcutting` covers log through plank. `alchemy` also
+appears in both, which is what lets `alchemist` declare `gather="alchemy",
+craft="alchemy"`.
 """
 
 from dataclasses import dataclass
 
-from artifactsmmo_cli.ai.tiers.skill_classes import (
-    COMBAT_CRAFT_SKILLS,
-    CONSUMABLE_CRAFT_SKILLS,
-    GATHER_SKILLS,
-)
+from artifactsmmo_cli.ai.tiers.skill_classes import CRAFT_SKILLS, GATHERING_SKILLS
 
 
 @dataclass(frozen=True)
@@ -68,17 +69,21 @@ def role_skills(role: Role) -> frozenset[str]:
 
 
 def validate_catalog(catalog: tuple[Role, ...]) -> None:
-    """Raise ValueError if any role names a skill outside the API-derived sets."""
-    valid_gather = GATHER_SKILLS | CONSUMABLE_CRAFT_SKILLS
-    valid_craft = COMBAT_CRAFT_SKILLS | CONSUMABLE_CRAFT_SKILLS | GATHER_SKILLS
+    """Raise ValueError if any role names a skill outside the API-derived sets.
+
+    Validated against the RAW schema vocabularies (`GATHERING_SKILLS` /
+    `CRAFT_SKILLS`), not the ranking-prior partition — the partition
+    reassigns `alchemy`/`cooking` out of gathering, so it cannot express true
+    per-slot membership (e.g. it would wrongly accept `craft="fishing"`).
+    """
     for role in catalog:
-        if role.gather is not None and role.gather not in valid_gather:
+        if role.gather is not None and role.gather not in GATHERING_SKILLS:
             raise ValueError(
                 f"Role {role.name!r} declares gather skill {role.gather!r}, "
-                f"which is not an API gathering skill: {sorted(valid_gather)}"
+                f"which is not an API gathering skill: {sorted(GATHERING_SKILLS)}"
             )
-        if role.craft not in valid_craft:
+        if role.craft not in CRAFT_SKILLS:
             raise ValueError(
                 f"Role {role.name!r} declares craft skill {role.craft!r}, "
-                f"which is not an API craft skill: {sorted(valid_craft)}"
+                f"which is not an API craft skill: {sorted(CRAFT_SKILLS)}"
             )
