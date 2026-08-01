@@ -129,3 +129,12 @@ class CycleSnapshot(BaseModel):
     # FightAction that reached the server. None on every other cycle. Drives the
     # log pane's summary line and the fight modal.
     fight: FightRecord | None = None
+
+    # Cross-character coordination (emergent-specialization spec, Task 11).
+    role: str | None = None
+    """The specialization role this character held this cycle, or None when it
+    holds none (every cycle of a single-character run)."""
+
+    supply_target: str | None = None
+    """`repr` of the sibling demand being served this cycle, or None. This is
+    the trace field that proves collusion actually fired."""

@@ -68,6 +68,7 @@ from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.grind_expansion import grind_leg_nodes
+from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
@@ -88,6 +89,7 @@ from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost  # no
 from artifactsmmo_cli.ai.player_helpers import format_plan as _format_plan
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.raid_info import RaidInfo
+from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.reconcile_open_orders import reconcile_open_orders
 from artifactsmmo_cli.ai.recovery import (
     REPEATED_ACTION_FAILURE_THRESHOLD,
@@ -98,6 +100,8 @@ from artifactsmmo_cli.ai.recovery import (
     StuckExit,
     StuckSignal,
 )
+from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG, role_skills
+from artifactsmmo_cli.ai.role_selection import decide_role, demand_by_role
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.should_replan import should_replan
 from artifactsmmo_cli.ai.strategy_driver import (
@@ -333,6 +337,29 @@ class GamePlayer:
         self._data_governor: RateGovernor | None = None
         self._action_governor: RateGovernor | None = None
         self._account_governor: RateGovernor | None = None
+        # Cross-character role coordination (emergent-specialization spec,
+        # Task 11). None disables it entirely — every single-character run,
+        # and every `--all` child play.py declines to attach one for (see
+        # `set_coordination_store`). All local SQLite against the shared
+        # learning DB, so attaching it costs nothing from the per-IP rate
+        # budget that actually binds this bot.
+        self._coordination: CoordinationStore | None = None
+        self._role: str | None = None
+        self._role_held_cycles: int = 0
+        # Roles this character has voluntarily RELEASED (for any reason —
+        # idle or losing a demand-margin contest) — `decide_role`'s docstring
+        # is explicit that the caller adds on every release it returns, never
+        # needing to remove one: membership only matters while the role's own
+        # demand stays non-positive, so a role that goes back into real demand
+        # competes for the claim again automatically. Without this a character
+        # with nowhere better to go re-claims the very role it just released
+        # next cycle — release-on-idle alone is CHURN, not a stable release.
+        self._role_idle_released: frozenset[str] = frozenset()
+        # This cycle's (item_code, quantity, demand) to bank for a sibling, or
+        # None — threaded into `_selection_context`'s `supply_target` field.
+        # None whenever no coordination store is attached, no role is held, or
+        # nothing the held role produces is in sibling demand.
+        self._supply_target: tuple[str, int, int] | None = None
 
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
@@ -352,6 +379,11 @@ class GamePlayer:
         self._data_governor = data
         self._action_governor = action
         self._account_governor = account
+
+    def set_coordination_store(self, store: "CoordinationStore | None") -> None:
+        """Attach the cross-character coordination store. None (the default)
+        disables coordination entirely, which is the single-character path."""
+        self._coordination = store
 
     def _acquire_data(self) -> None:
         """Block until the data-bucket budget has room. A no-op when unset."""
@@ -927,6 +959,11 @@ class GamePlayer:
                 prev = self._prev_level if self._prev_level is not None else state.level
                 self._gear_latch.update(prev, state, self._last_outcome, game_data)
                 self._prev_level = state.level
+                # Coordination: renew our lease, publish what we still need,
+                # and re-decide our role. All local SQLite against the shared
+                # learning DB — zero API calls, so this costs nothing from the
+                # per-IP rate budget that actually binds this bot.
+                self._update_coordination(state, game_data)
                 self._arbiter.set_cycle(self._cycle_counter)
 
                 assert self._strategy is not None
@@ -2195,6 +2232,8 @@ class GamePlayer:
                 if self._last_decision is not None else False
             ),
             interleave_seats=dict(self._interleave_seats),
+            role=self._role,
+            supply_target=repr(self._supply_target) if self._supply_target is not None else None,
         )
         self._cycle_observer(snap)
 
@@ -2387,6 +2426,99 @@ class GamePlayer:
             keep.setdefault(code, 1)
         return keep
 
+    def _own_unmet_demand(self, state: "WorldState", game_data: GameData) -> dict[str, int]:
+        """This character's unmet closure demand for its chosen root, minus
+        what it already holds in inventory.
+
+        Reuses `closure_demand` — the SAME core `task_reservation`'s
+        `task_reserved_demand` calls for the task-material reservation
+        closure — rather than computing demand a second way (one-obtain-model
+        discipline)."""
+        root = self._last_decide_crafting_target
+        if root is None:
+            return {}
+        demand: dict[str, int] = {}
+        closure_demand(root, 1, game_data, demand, frozenset())
+        return {code: qty - state.inventory.get(code, 0)
+                for code, qty in demand.items()
+                if qty - state.inventory.get(code, 0) > 0}
+
+    def _pick_supply_target(
+        self, item_demand: dict[str, int], skill_of_item: dict[str, str | None],
+        state: "WorldState",
+    ) -> "tuple[str, int, int] | None":
+        """The highest-demand item this character's HELD role can produce, as
+        (item_code, target banked quantity, unmet demand) — or None when no
+        role is held, or nothing the role's owned skills produce is in demand.
+
+        Target banked quantity is current bank holding + demand: enough that
+        producing exactly the still-unmet amount satisfies `SupplyBankGoal`,
+        which targets an absolute banked count (not an increment) and is
+        rebuilt fresh every cycle (`memo_exempt`), so recomputing the target
+        from the live bank each cycle is the correct, not merely convenient,
+        choice."""
+        if self._role is None:
+            return None
+        role = next((r for r in ROLE_CATALOG if r.name == self._role), None)
+        if role is None:
+            return None
+        owned_skills = role_skills(role)
+        best_code: str | None = None
+        best_demand = 0
+        for code, qty in item_demand.items():
+            if skill_of_item.get(code) not in owned_skills:
+                continue
+            if qty > best_demand:
+                best_code, best_demand = code, qty
+        if best_code is None:
+            return None
+        banked = state.bank_items.get(best_code, 0) if state.bank_items else 0
+        return (best_code, banked + best_demand, best_demand)
+
+    def _update_coordination(self, state: "WorldState", game_data: GameData) -> None:
+        """Renew, publish, and re-decide this character's role for one cycle,
+        and recompute this cycle's supply target.
+
+        No-op when no coordination store is attached, which is every
+        single-character run (and every `--all` child play.py declines to
+        attach one for — see `set_coordination_store`'s caller). All local
+        SQLite against the shared learning DB — zero API calls, so this costs
+        nothing from the per-IP rate budget that actually binds this bot."""
+        if self._coordination is None:
+            self._supply_target = None
+            return
+        now = datetime.now(tz=timezone.utc)
+        if self._role is not None:
+            self._coordination.renew(self._role, now)
+        self._coordination.publish_demand(self._own_unmet_demand(state, game_data), now)
+
+        item_demand = self._coordination.sibling_demand(now)
+        skill_of_item = {code: game_data.producing_skill(code) for code in item_demand}
+        by_role = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG)
+        decision = decide_role(current=self._role, held_cycles=self._role_held_cycles,
+                               live_leases=self._coordination.live_leases(now),
+                               demand_by_role=by_role,
+                               character=self._coordination.character,
+                               catalog=ROLE_CATALOG,
+                               idle_released=self._role_idle_released)
+        if decision.release is not None:
+            self._coordination.release(decision.release)
+            # `decide_role`'s docstring: the caller adds a role on EVERY
+            # release it returns (idle or a lost demand-margin contest), never
+            # needing to remove one — membership only matters while the
+            # role's own demand stays non-positive.
+            self._role_idle_released = self._role_idle_released | {decision.release}
+            self._role = None
+            self._role_held_cycles = 0
+        elif decision.claim is not None:
+            if self._coordination.claim(decision.claim, now):
+                self._role = decision.claim
+                self._role_held_cycles = 0
+        elif decision.keep is not None:
+            self._role_held_cycles += 1
+
+        self._supply_target = self._pick_supply_target(item_demand, skill_of_item, state)
+
     def _selection_context(self, combat_monster: str | None = None) -> SelectionContext:
         assert self.state is not None
         assert self.game_data is not None
@@ -2422,6 +2554,12 @@ class GamePlayer:
             near_term_targets=near_term_targets,
             gear_review_active=self._gear_latch.active,
             gear_keep=gear_keep,
+            # Cross-character coordination (Task 11): None whenever no
+            # coordination store is attached (every single-character run),
+            # no role is held, or nothing the held role produces is in live
+            # sibling demand. Set by `_update_coordination`, called once per
+            # cycle in `run()` before selection.
+            supply_target=self._supply_target,
         )
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:
