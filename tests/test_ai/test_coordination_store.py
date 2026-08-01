@@ -1,12 +1,20 @@
-"""Tests for the coordination tables: RoleLease and MaterialDemand."""
+"""Tests for the coordination tables: RoleLease and MaterialDemand, and the
+CoordinationStore that operates on RoleLease."""
 
+import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, create_engine, select
 
+from artifactsmmo_cli.ai.learning.coordination_store import (
+    LEASE_TTL_SECONDS,
+    CoordinationStore,
+)
 from artifactsmmo_cli.ai.learning.models import MaterialDemand, RoleLease
 
 
@@ -97,3 +105,188 @@ def test_material_demand_allows_same_item_for_multiple_characters(engine) -> Non
     with SqlSession(engine) as s:
         rows = s.exec(select(MaterialDemand)).all()
         assert {(row.character, row.quantity) for row in rows} == {("HAL", 6), ("C3P0", 3)}
+
+
+_T0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
+
+
+def test_claim_succeeds_then_blocks_other_character(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        assert hal.claim("miner", _T0) is True
+        assert c3po.claim("miner", _T0) is False
+        assert hal.live_leases(_T0) == {"miner": "HAL"}
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_expired_lease_is_not_live_and_can_be_reclaimed(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    later = _T0 + timedelta(seconds=LEASE_TTL_SECONDS + 1)
+    try:
+        assert hal.claim("miner", _T0) is True
+        assert hal.live_leases(later) == {}
+        assert c3po.claim("miner", later) is True
+        assert c3po.live_leases(later) == {"miner": "C3P0"}
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_renew_extends_expiry(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    mid = _T0 + timedelta(seconds=LEASE_TTL_SECONDS - 1)
+    later = _T0 + timedelta(seconds=LEASE_TTL_SECONDS + 1)
+    try:
+        assert hal.claim("miner", _T0) is True
+        hal.renew("miner", mid)
+        assert hal.live_leases(later) == {"miner": "HAL"}
+    finally:
+        hal.close()
+
+
+def test_release_frees_the_role(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        assert hal.claim("miner", _T0) is True
+        hal.release("miner")
+        assert hal.live_leases(_T0) == {}
+    finally:
+        hal.close()
+
+
+def test_reclaiming_own_live_lease_is_idempotent(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        assert hal.claim("miner", _T0) is True
+        assert hal.claim("miner", _T0) is True
+    finally:
+        hal.close()
+
+
+def test_character_property_returns_constructor_value(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        assert hal.character == "HAL"
+    finally:
+        hal.close()
+
+
+def test_renew_is_noop_when_character_holds_no_lease(tmp_path: Path) -> None:
+    """`renew` on a role this character never claimed touches nothing and
+    raises nothing."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        hal.renew("miner", _T0)
+        assert hal.live_leases(_T0) == {}
+    finally:
+        hal.close()
+
+
+def test_release_is_noop_when_character_holds_no_lease(tmp_path: Path) -> None:
+    """`release` on a role this character never claimed touches nothing and
+    raises nothing."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        assert c3po.claim("miner", _T0) is True
+        hal.release("miner")
+        assert hal.live_leases(_T0) == {"miner": "C3P0"}
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def _break_engine(store: CoordinationStore) -> None:
+    """Swap in a real engine whose SQLite URL points at a directory, so every
+    SqlSession query against it raises OperationalError (a SQLAlchemyError).
+
+    Mirrors `test_learning_store.py::_break_engine`: a genuine DB-layer fault
+    (not a mock of the unit under test) that exercises the documented
+    best-effort degradation contract.
+    """
+    bad_dir = tempfile.mkdtemp()
+    store._engine = create_engine(f"sqlite:///{bad_dir}")
+
+
+class TestDegradationOnDbError:
+    """Every CoordinationStore method must swallow SQLAlchemyError and return
+    its documented default, matching LearningStore's best-effort contract."""
+
+    def test_claim_swallows_error_and_returns_false(self, tmp_path: Path, capsys) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        _break_engine(hal)
+        assert hal.claim("miner", _T0) is False
+        assert "[coordination] claim failed" in capsys.readouterr().out
+
+    def test_renew_swallows_error(self, tmp_path: Path, capsys) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        assert hal.claim("miner", _T0) is True
+        _break_engine(hal)
+        hal.renew("miner", _T0)
+        assert "[coordination] renew failed" in capsys.readouterr().out
+
+    def test_release_swallows_error(self, tmp_path: Path, capsys) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        assert hal.claim("miner", _T0) is True
+        _break_engine(hal)
+        hal.release("miner")
+        assert "[coordination] release failed" in capsys.readouterr().out
+
+    def test_live_leases_swallows_error_and_returns_empty(self, tmp_path: Path, capsys) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        assert hal.claim("miner", _T0) is True
+        _break_engine(hal)
+        assert hal.live_leases(_T0) == {}
+        assert "[coordination] live_leases failed" in capsys.readouterr().out
+
+
+def test_claim_new_role_race_returns_false_on_integrity_error(tmp_path: Path) -> None:
+    """Two characters both try to claim a role that neither holds yet. This
+    reproduces the genuine race the docstring describes: HAL's `claim` reads
+    "no row for this role" and decides to insert, but before it flushes,
+    C3P0 concretely wins the row first (via a second, real engine/session on
+    the same file) — so HAL's own insert collides with the real UNIQUE
+    constraint and takes the `except IntegrityError` branch. This uses a real
+    second connection to create genuine DB state, not a mock of the unit
+    under test's return value."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    rival_engine = create_engine(f"sqlite:///{db}")
+
+    def _rival_claims_first(session, flush_context, instances) -> None:
+        with SqlSession(rival_engine) as rival_session:
+            rival_session.add(RoleLease(
+                role="miner", character="C3P0",
+                claimed_at=_T0.isoformat(),
+                expires_at=(_T0 + timedelta(seconds=LEASE_TTL_SECONDS)).isoformat(),
+            ))
+            rival_session.commit()
+
+    # once=True: fires exactly once then self-removes. A plain event.remove()
+    # called from inside the handler would mutate SQLAlchemy's listener deque
+    # while it is being iterated ("deque mutated during iteration").
+    event.listen(SqlSession, "before_flush", _rival_claims_first, once=True)
+    try:
+        assert hal.claim("miner", _T0) is False
+        assert hal.live_leases(_T0) == {"miner": "C3P0"}
+    finally:
+        if event.contains(SqlSession, "before_flush", _rival_claims_first):
+            event.remove(SqlSession, "before_flush", _rival_claims_first)
+        rival_engine.dispose()
+        hal.close()
