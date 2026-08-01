@@ -157,6 +157,40 @@ class LearnedSetting(SQLModel, table=True):
     value: int
 
 
+class RoleLease(SQLModel, table=True):
+    """Exclusive claim on a specialization role, held by one character at a
+    time. `role` is UNIQUE, so a concurrent double-claim raises IntegrityError
+    in exactly one place (CoordinationStore.claim) and the loser re-reads —
+    which doubles as the cold-start allocator (no tiebreak rule needed).
+
+    `expires_at` is the single liveness rule in the coordination system: a row
+    is real if unexpired. A crashed child stops renewing and its lease
+    evaporates without supervisor involvement."""
+
+    __tablename__ = "role_leases"
+
+    id: int | None = Field(default=None, primary_key=True)
+    role: str = Field(index=True, unique=True)
+    character: str = Field(index=True)
+    claimed_at: str
+    expires_at: str
+
+
+class MaterialDemand(SQLModel, table=True):
+    """One character's declared unmet need for one item. Upsert key is
+    (character, item_code). Carries the same `expires_at` liveness rule as
+    RoleLease so a dead character's demand stops being served on the same
+    clock that frees its role."""
+
+    __tablename__ = "material_demand"
+
+    id: int | None = Field(default=None, primary_key=True)
+    character: str = Field(index=True)
+    item_code: str = Field(index=True)
+    quantity: int
+    expires_at: str
+
+
 class PlanBodyLogBase(SQLModel):
     """One computed plan body, logged at re-plan time. Counted by the Phase-2
     macro detector."""
