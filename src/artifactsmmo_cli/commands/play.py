@@ -12,6 +12,7 @@ import typer
 
 from artifactsmmo_cli.ai.file_tracer import FileTracer
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -120,10 +121,15 @@ def play(
     # The ephemeral SQLite store has zero observations, so history-gated
     # predicates still behave conservatively, but tier dispatch can run.
     store: LearningStore
+    # None unless --learn points at a real, PERSISTED file — the same
+    # variable coordination attachment below gates on, since a coordination
+    # store built against ":memory:" would be private to this process and
+    # could never see a sibling anyway.
+    persisted_db_path: str | None = None
     if learn:
-        db_path = learn_db or default_learn_db_path()
-        store = LearningStore(db_path=db_path, character=character)
-        print(f"Learning enabled - DB at {db_path}")
+        persisted_db_path = learn_db or default_learn_db_path()
+        store = LearningStore(db_path=persisted_db_path, character=character)
+        print(f"Learning enabled - DB at {persisted_db_path}")
     else:
         store = LearningStore(db_path=":memory:", character=character)
     store.start_session()
@@ -140,6 +146,26 @@ def play(
             data=RateGovernor(budgets.data), action=RateGovernor(budgets.action),
             account=RateGovernor(budgets.account),
         )
+
+    # Cross-character role coordination (emergent-specialization spec, Task
+    # 11). Gated on TWO conditions, not just `--emit-events`:
+    #   1. `emit_events` — the flag `MultiRun._child_argv` ALWAYS passes to
+    #      every supervised `play --all` child, and a lone `play <character>`
+    #      never passes. This is the multi-vs-single-character signal, and
+    #      the reason a lone run stays bit-identical.
+    #   2. `persisted_db_path is not None` — coordination is cross-PROCESS by
+    #      construction (siblings are separate subprocesses), so it needs a
+    #      real file on disk. `--all` without `--learn` leaves `store` on
+    #      `:memory:`, which SQLite keeps private to this connection; a
+    #      CoordinationStore opened against that same string would get its
+    #      OWN separate anonymous in-memory database, never shared with any
+    #      sibling. Attaching one there would add per-cycle SQLite churn for
+    #      a coordination board no other child can ever see — strictly worse
+    #      than not attaching it, so it is skipped rather than papered over.
+    coordination: CoordinationStore | None = None
+    if emit_events and persisted_db_path is not None:
+        coordination = CoordinationStore(db_path=persisted_db_path, character=character)
+        player.set_coordination_store(coordination)
 
     emitter: JsonlEventEmitter | None = None
     if emit_events:
@@ -193,6 +219,8 @@ def play(
                 emitter.emit_exit(emit_reason)
         store.end_session(exit_reason=exit_reason)
         store.close()
+        if coordination is not None:
+            coordination.close()
 
 
 def _run_with_tui(

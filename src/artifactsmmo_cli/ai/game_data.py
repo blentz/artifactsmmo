@@ -1203,6 +1203,24 @@ class GameData:
             self._requirement_graph_memo = RequirementGraphMemo(self)
         return self._requirement_graph_memo
 
+    def producing_skill(self, item_code: str) -> str | None:
+        """The skill that PRODUCES `item_code`: its craft skill if craftable,
+        else the gathering skill of a resource that drops it, else None.
+
+        Composes the two item-keyed maps the requirement-model unification
+        epic already built onto `RequirementGraph` (`craft_skill` /
+        `gather_skill`) rather than re-deriving them from `item_stats` /
+        `resource_drops` a second time. `gather_skill` was populated but left
+        deliberately UNCONSUMED by that epic pending a first reader (see
+        `RequirementGraph`'s docstring) — cross-character role coordination
+        (emergent-specialization spec, Task 11) is that reader."""
+        graph = self.requirement_graph.graph()
+        craft = graph.craft_skill.get(item_code)
+        if craft is not None:
+            return craft[0]
+        gather = graph.gather_skill.get(item_code)
+        return gather[0] if gather is not None else None
+
     @property
     def resource_drops(self) -> Mapping[str, str]:
         """resource_code -> primary drop item."""
