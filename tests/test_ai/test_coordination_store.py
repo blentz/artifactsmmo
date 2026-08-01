@@ -13,6 +13,7 @@ from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, create_engine, select
 
 from artifactsmmo_cli.ai.learning.coordination_store import (
+    DEMAND_TTL_SECONDS,
     LEASE_TTL_SECONDS,
     CoordinationStore,
     _require_utc,
@@ -257,6 +258,20 @@ class TestDegradationOnDbError:
         assert hal.live_leases(_T0) == {}
         assert "[coordination] live_leases failed" in capsys.readouterr().out
 
+    def test_publish_demand_swallows_error(self, tmp_path: Path, capsys) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        _break_engine(hal)
+        hal.publish_demand({"copper_bar": 6}, _T0)
+        assert "[coordination] publish_demand failed" in capsys.readouterr().out
+
+    def test_sibling_demand_swallows_error_and_returns_empty(self, tmp_path: Path, capsys) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        _break_engine(hal)
+        assert hal.sibling_demand(_T0) == {}
+        assert "[coordination] sibling_demand failed" in capsys.readouterr().out
+
 
 def test_claim_new_role_race_returns_false_on_integrity_error(tmp_path: Path) -> None:
     """Two characters both try to claim a role that neither holds yet. This
@@ -424,3 +439,99 @@ def test_exactly_one_process_wins_a_contested_role(tmp_path: Path) -> None:
         assert check.live_leases(_T0) == {"miner": winners[0]}
     finally:
         check.close()
+
+
+# --- demand board -----------------------------------------------------------
+
+
+def test_sibling_demand_sums_across_characters_and_excludes_self(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.publish_demand({"copper_bar": 6, "ash_plank": 2}, _T0)
+        c3po.publish_demand({"copper_bar": 4}, _T0)
+        assert hal.sibling_demand(_T0) == {"copper_bar": 4}
+        assert c3po.sibling_demand(_T0) == {"copper_bar": 6, "ash_plank": 2}
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_publish_demand_replaces_prior_rows(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    obs = CoordinationStore(db_path=db, character="observer")
+    try:
+        hal.publish_demand({"copper_bar": 6, "ash_plank": 2}, _T0)
+        hal.publish_demand({"copper_bar": 1}, _T0)
+        assert obs.sibling_demand(_T0) == {"copper_bar": 1}
+    finally:
+        hal.close()
+        obs.close()
+
+
+def test_expired_demand_is_not_served(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    obs = CoordinationStore(db_path=db, character="observer")
+    later = _T0 + timedelta(seconds=DEMAND_TTL_SECONDS + 1)
+    try:
+        hal.publish_demand({"copper_bar": 6}, _T0)
+        assert obs.sibling_demand(later) == {}
+    finally:
+        hal.close()
+        obs.close()
+
+
+def test_empty_demand_clears_the_board(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    obs = CoordinationStore(db_path=db, character="observer")
+    try:
+        hal.publish_demand({"copper_bar": 6}, _T0)
+        hal.publish_demand({}, _T0)
+        assert obs.sibling_demand(_T0) == {}
+    finally:
+        hal.close()
+        obs.close()
+
+
+def test_publish_demand_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.publish_demand({"copper_bar": 6}, _NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_publish_demand_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="offset"):
+            hal.publish_demand({"copper_bar": 6}, _NON_UTC_NOW)
+    finally:
+        hal.close()
+
+
+def test_sibling_demand_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.sibling_demand(_NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_sibling_demand_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="offset"):
+            hal.sibling_demand(_NON_UTC_NOW)
+    finally:
+        hal.close()
