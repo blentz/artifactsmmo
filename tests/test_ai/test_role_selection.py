@@ -5,6 +5,7 @@ from artifactsmmo_cli.ai.role_selection import (
     ROLE_MIN_HOLD_CYCLES,
     ROLE_SWITCH_MARGIN,
     decide_role,
+    demand_by_role,
 )
 
 _ME = "HAL"
@@ -281,3 +282,57 @@ def test_idle_released_default_is_empty_and_changes_nothing() -> None:
     # identical to passing an explicit empty set -- no hidden default state.
     args = (None, 0, {}, {"miner": 10, "logger": 3})
     assert _decide(*args) == _decide(*args, idle_released=frozenset())
+
+
+# --- demand_by_role: bridges item-keyed sibling demand onto role-keyed demand ---
+
+
+def test_demand_routes_to_the_role_owning_the_producing_skill() -> None:
+    item_demand = {"copper_bar": 6, "ash_plank": 4}
+    skill_of_item = {"copper_bar": "mining", "ash_plank": "woodcutting"}
+    got = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG)
+    assert got["miner"] == 6
+    assert got["logger"] == 4
+
+
+def test_demand_for_an_unowned_skill_is_dropped() -> None:
+    got = demand_by_role({"mystery": 5}, {"mystery": None}, ROLE_CATALOG)
+    assert sum(got.values()) == 0
+
+
+def test_demand_sums_when_two_items_share_a_role() -> None:
+    item_demand = {"copper_bar": 6, "iron_bar": 3}
+    skill_of_item = {"copper_bar": "mining", "iron_bar": "mining"}
+    assert demand_by_role(item_demand, skill_of_item, ROLE_CATALOG)["miner"] == 9
+
+
+def test_every_role_appears_even_with_no_demand() -> None:
+    got = demand_by_role({}, {}, ROLE_CATALOG)
+    assert set(got) == {r.name for r in ROLE_CATALOG}
+    assert set(got.values()) == {0}
+
+
+def test_demand_for_an_item_missing_from_skill_of_item_is_dropped() -> None:
+    # skill_of_item.get(item_code) returns None both when the value IS None
+    # and when the key is absent entirely -- both must be dropped, not raise.
+    got = demand_by_role({"unmapped_item": 3}, {}, ROLE_CATALOG)
+    assert sum(got.values()) == 0
+
+
+def test_demand_routes_to_the_alchemist_whose_gather_and_craft_collapse() -> None:
+    # alchemist's gather and craft are both "alchemy" -- role_skills collapses
+    # to a single-element set. The owner map must still route "alchemy" demand
+    # to "alchemist" without double-counting or raising on the collapse.
+    item_demand = {"life_potion": 5}
+    skill_of_item = {"life_potion": "alchemy"}
+    got = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG)
+    assert got["alchemist"] == 5
+
+
+def test_demand_for_a_skill_no_role_owns_is_dropped_even_when_present() -> None:
+    # A skill string that IS in skill_of_item's values but that no catalog
+    # role owns (owner.get(skill) is None) must be dropped, not KeyError.
+    item_demand = {"raw_fish": 5}
+    skill_of_item = {"raw_fish": "fishing_prep_unowned"}
+    got = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG)
+    assert sum(got.values()) == 0

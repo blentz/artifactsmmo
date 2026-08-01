@@ -33,7 +33,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from fractions import Fraction
 
-from artifactsmmo_cli.ai.role_catalog import Role
+from artifactsmmo_cli.ai.role_catalog import Role, role_skills
 
 ROLE_MIN_HOLD_CYCLES = 100
 """Cycles a role must be held before it may be voluntarily released."""
@@ -122,3 +122,31 @@ def decide_role(current: str | None, held_cycles: int,
     if rival_best >= own_demand * ROLE_SWITCH_MARGIN:
         return RoleDecision(release=current)
     return RoleDecision(keep=current)
+
+
+def demand_by_role(item_demand: Mapping[str, int],
+                   skill_of_item: Mapping[str, str | None],
+                   catalog: tuple[Role, ...]) -> dict[str, int]:
+    """Aggregate item-keyed demand into role-keyed demand.
+
+    `skill_of_item` maps an item code to the skill that PRODUCES it (its craft
+    skill, or its gathering skill for a raw resource), or None when the API
+    exposes no producing skill -- in which case no role owns it and the demand
+    is dropped rather than assigned to an arbitrary role.
+
+    Passed in rather than derived from GameData so this module stays pure and
+    testable without a game-data fixture."""
+    totals = {role.name: 0 for role in catalog}
+    owner: dict[str, str] = {}
+    for role in catalog:
+        for owned_skill in role_skills(role):
+            owner[owned_skill] = role.name
+    for item_code, quantity in item_demand.items():
+        skill = skill_of_item.get(item_code)
+        if skill is None:
+            continue
+        role_name = owner.get(skill)
+        if role_name is None:
+            continue
+        totals[role_name] += quantity
+    return totals
