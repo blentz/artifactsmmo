@@ -14,6 +14,18 @@ Three parameters, each defending a different failure:
     renewing a lease nobody needs. Because it renews, the TTL never fires and
     the role stays locked for the whole session.
 
+A fourth failure surfaced in review of the first three: release-on-idle, taken
+alone, can cause infinite claim/release CHURN rather than a stable release.
+When demand is all-zero and only one role is unleased, an idle character
+releases it (nothing needs it), immediately re-claims it next cycle (it is
+still the only free role), holds ROLE_MIN_HOLD_CYCLES, releases again, and
+repeats forever — the role never actually frees up for anyone, and the
+character never rests. `decide_role`'s `idle_released` parameter closes this:
+the CALLER remembers which roles it has voluntarily released while idle, and
+a role in that set is not claimable again until its own demand turns
+positive. See `decide_role`'s docstring for why this must be a parameter, not
+module state.
+
 Pure: no I/O, no clock, no classes beyond the frozen result record.
 """
 
@@ -41,12 +53,17 @@ class RoleDecision:
 
 
 def _best_free_role(live_leases: Mapping[str, str], demand_by_role: Mapping[str, int],
-                    character: str, catalog: tuple[Role, ...]) -> tuple[str | None, int]:
+                    character: str, catalog: tuple[Role, ...],
+                    idle_released: frozenset[str]) -> tuple[str | None, int]:
     """Highest-demand role not leased by SOMEONE ELSE, with its demand.
 
     Ties are resolved by catalog order — a declared, semantic order, never a
     repr or alphabetical sort. Ties are also harmless: the UNIQUE constraint on
-    RoleLease.role serializes concurrent claimants regardless."""
+    RoleLease.role serializes concurrent claimants regardless.
+
+    A role in `idle_released` is also skipped, but ONLY while its demand is
+    still non-positive — see `decide_role` for why. The moment real demand
+    shows up for it, it competes for the claim like any other role again."""
     best: str | None = None
     best_demand = -1
     for role in catalog:
@@ -54,6 +71,8 @@ def _best_free_role(live_leases: Mapping[str, str], demand_by_role: Mapping[str,
         if holder is not None and holder != character:
             continue
         demand = demand_by_role.get(role.name, 0)
+        if role.name in idle_released and demand <= 0:
+            continue
         if demand > best_demand:
             best, best_demand = role.name, demand
     return best, max(best_demand, 0)
@@ -61,10 +80,22 @@ def _best_free_role(live_leases: Mapping[str, str], demand_by_role: Mapping[str,
 
 def decide_role(current: str | None, held_cycles: int,
                 live_leases: Mapping[str, str], demand_by_role: Mapping[str, int],
-                character: str, catalog: tuple[Role, ...]) -> RoleDecision:
-    """Decide whether to keep, claim, or release a role this cycle."""
+                character: str, catalog: tuple[Role, ...],
+                idle_released: frozenset[str] = frozenset()) -> RoleDecision:
+    """Decide whether to keep, claim, or release a role this cycle.
+
+    `idle_released`: roles THIS caller has previously released while idle
+    (demand was non-positive at release time). Without it, a character with
+    nowhere better to go re-claims the very role it just released on the next
+    cycle -- release-on-idle alone produces claim/release CHURN, not a stable
+    release, whenever it is the only unleased role. The caller owns this set
+    (decide_role stays pure: no I/O, no clock, no module-level state); it adds
+    a role on every `release` this function returns and never needs to remove
+    one for correctness, because a role's presence in the set only matters
+    while its demand is non-positive -- once demand turns positive,
+    `_best_free_role` stops skipping it automatically."""
     if current is None:
-        best, _ = _best_free_role(live_leases, demand_by_role, character, catalog)
+        best, _ = _best_free_role(live_leases, demand_by_role, character, catalog, idle_released)
         return RoleDecision(claim=best) if best is not None else RoleDecision()
 
     if live_leases.get(current) != character:

@@ -10,10 +10,11 @@ from artifactsmmo_cli.ai.role_selection import (
 _ME = "HAL"
 
 
-def _decide(current, held_cycles, leases, demand):
+def _decide(current, held_cycles, leases, demand, idle_released=frozenset()):
     return decide_role(current=current, held_cycles=held_cycles,
                        live_leases=leases, demand_by_role=demand,
-                       character=_ME, catalog=ROLE_CATALOG)
+                       character=_ME, catalog=ROLE_CATALOG,
+                       idle_released=idle_released)
 
 
 def test_claims_highest_demand_role_when_holding_none() -> None:
@@ -147,37 +148,51 @@ def test_current_role_is_skipped_inside_its_own_rival_scan() -> None:
 # The entire point of the hysteresis constants is that a fixed demand
 # snapshot and a fixed set of sibling leases must never cause a character to
 # ping-pong between two roles. This drives decide_role in a loop the way a
-# real caller would -- updating `current`/`held_cycles` from the returned
-# RoleDecision and folding claims/releases back into the leases the function
-# sees next cycle -- and asserts the (current) trajectory goes flat and stays
-# flat, rather than oscillating for the length of the run.
+# real caller would -- updating `current`/`held_cycles`/`idle_released` from
+# the returned RoleDecision and folding claims/releases back into the leases
+# the function sees next cycle -- and asserts the (current) trajectory goes
+# flat and stays flat, rather than oscillating for the length of the run.
+#
+# `idle_released` is threaded exactly as `decide_role`'s docstring promises a
+# caller may: a role name is added on EVERY release (idle or margin-driven)
+# and never removed -- membership only matters while that role's demand is
+# non-positive, so this is safe even for a margin-driven release of a role
+# that still has positive demand at the moment it is released.
 
 
-def _run_cycles(sibling_leases, demand, cycles):
+def _run_cycles(sibling_leases, demand, cycles, start_current=None, start_held=0):
     leases = dict(sibling_leases)
-    current = None
-    held_cycles = 0
+    if start_current is not None:
+        leases[start_current] = _ME
+    current = start_current
+    held_cycles = start_held
+    idle_released = frozenset()
     trajectory = []
+    state_changes = 0
     for _ in range(cycles):
-        d = _decide(current, held_cycles, leases, demand)
+        d = _decide(current, held_cycles, leases, demand, idle_released)
         if d.claim is not None:
             current = d.claim
             leases[current] = _ME
             held_cycles = 0
+            state_changes += 1
         elif d.release is not None:
             del leases[d.release]
+            idle_released = idle_released | {d.release}
             current = None
             held_cycles = 0
-        else:
-            assert d.keep is not None
+            state_changes += 1
+        elif d.keep is not None:
             held_cycles += 1
+        # else: a genuine no-op (RoleDecision() with every field None) --
+        # nothing free and nothing held, so current/held_cycles don't move.
         trajectory.append(current)
-    return trajectory
+    return trajectory, state_changes
 
 
 def test_decide_role_never_oscillates_under_a_fixed_demand_snapshot() -> None:
     demand = {"miner": 15, "logger": 14, "fisher": 5}
-    trajectory = _run_cycles({}, demand, cycles=400)
+    trajectory, _ = _run_cycles({}, demand, cycles=400)
 
     # Reaches a fixed point and never leaves it: once stabilized, the tail of
     # the trajectory is a single repeated role, not an alternating sequence.
@@ -196,10 +211,73 @@ def test_decide_role_stabilizes_even_with_a_near_margin_rival() -> None:
     # once logger is held; this is the shape most likely to thrash under a
     # buggy (non-hysteretic) implementation.
     demand = {"miner": 20, "logger": 14, "fisher": 1}
-    trajectory = _run_cycles({}, demand, cycles=400)
+    trajectory, _ = _run_cycles({}, demand, cycles=400)
 
     tail = trajectory[150:]
     assert len(set(tail)) == 1
 
     stabilized_at = trajectory.index(tail[0])
     assert trajectory[stabilized_at:] == [tail[0]] * (len(trajectory) - stabilized_at)
+
+
+def test_decide_role_switches_once_then_never_reverts() -> None:
+    # Coordinator review Finding 1: both prior scenarios started at
+    # current=None, so _best_free_role grabbed the global argmax on cycle 0
+    # and the trajectory was flat from the start -- that proves
+    # "grab-the-max-and-stay", not "switch-then-never-revert", which is the
+    # actual risk the hysteresis exists to prevent. Start HELD on a role that
+    # is NOT the argmax (logger, demand 14) while miner (100) -- the true
+    # argmax -- sits unleased. logger must be held through ROLE_MIN_HOLD_CYCLES
+    # (the dwell defends exactly this), switch to miner exactly once when the
+    # margin clears, and then never switch again for the rest of the run.
+    demand = {"miner": 100, "logger": 14, "fisher": 1}
+    trajectory, state_changes = _run_cycles({}, demand, cycles=400,
+                                            start_current="logger", start_held=0)
+
+    # Held through the dwell: no state change for the first
+    # ROLE_MIN_HOLD_CYCLES cycles.
+    assert trajectory[:ROLE_MIN_HOLD_CYCLES] == ["logger"] * ROLE_MIN_HOLD_CYCLES
+
+    # Exactly one release (dwell ends, margin cleared) and one claim (grabs
+    # the true argmax on the very next cycle) -- matching what the reviewer
+    # observed (2 state changes over 300 cycles) -- then nothing else moves.
+    assert state_changes == 2
+
+    # Never reverts to logger once the dwell ends, and settles on the true
+    # argmax (miner) for the remainder of the run.
+    assert "logger" not in trajectory[ROLE_MIN_HOLD_CYCLES:]
+    assert set(trajectory[-100:]) == {"miner"}
+
+
+def test_decide_role_stabilizes_the_idle_churn_scenario() -> None:
+    # Coordinator review Finding 2 (reviewer-constructed repro): demand
+    # all-zero, sibling leases cover every role except one. Without
+    # idle_released, decide_role loops claim -> hold -> release -> claim on
+    # that same role forever (observed: 7 non-keep events over 350 cycles).
+    # With idle_released threaded as the caller would, the character claims
+    # the free role once, holds it out ROLE_MIN_HOLD_CYCLES, releases it
+    # once, and then reaches a genuine no-op state (nothing free, nothing
+    # held) for the rest of the run -- exactly 2 state changes, not an
+    # unbounded, periodic churn.
+    leases = {r.name: "C3P0" for r in ROLE_CATALOG if r.name != "logger"}
+    trajectory, state_changes = _run_cycles(leases, {}, cycles=350)
+
+    assert state_changes == 2
+    # Once released, "logger" never reappears as `current` -- no re-claim.
+    last_held_at = max(i for i, c in enumerate(trajectory) if c == "logger")
+    assert all(c is None for c in trajectory[last_held_at + 1:])
+
+
+def test_idle_released_role_is_claimable_again_once_demand_turns_positive() -> None:
+    # A role that was released while idle is not claimable while it stays at
+    # zero demand, but the caller never has to clear `idle_released` for
+    # correctness: real demand alone re-opens it.
+    d = _decide(None, 0, {}, {"logger": 5}, idle_released=frozenset({"logger"}))
+    assert d.claim == "logger"
+
+
+def test_idle_released_default_is_empty_and_changes_nothing() -> None:
+    # decide_role's default `idle_released=frozenset()` must be behaviorally
+    # identical to passing an explicit empty set -- no hidden default state.
+    args = (None, 0, {}, {"miner": 10, "logger": 3})
+    assert _decide(*args) == _decide(*args, idle_released=frozenset())
