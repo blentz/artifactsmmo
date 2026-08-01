@@ -36,6 +36,48 @@ minutes clears both, and costs at most ten minutes of an unworked role against
 sessions that run for hours."""
 
 
+def _require_utc(now: datetime) -> None:
+    """Guard the ONE invariant the whole TTL/liveness design rests on.
+
+    Every liveness decision here (`claim`'s expiry check, `live_leases`'
+    filter, `_expiry`'s stored value) compares `expires_at` and `stamp` as
+    ISO 8601 STRINGS, lexicographically (`expires_at > stamp`), never as
+    parsed datetimes. That comparison only agrees with true temporal order
+    when every `now` that ever produced one of those strings is a UTC,
+    timezone-aware datetime:
+
+    - A naive datetime's `.isoformat()` carries no offset at all
+      ("2026-08-01T00:00:00"), so it can't be compared against an aware
+      string in any consistent way.
+    - A non-UTC-but-aware datetime's `.isoformat()` sorts by its LOCAL
+      wall-clock digits, not by the instant it names — e.g. an instant at
+      "+05:00" prints an earlier-looking clock time than the same instant
+      converted to UTC, so its string can sort as "older" than a genuinely
+      earlier UTC timestamp. Mixing offsets would silently corrupt every
+      lease's expiry comparison.
+
+    Both failure modes are silent (no exception without this guard) and
+    would corrupt every liveness decision in `CoordinationStore` — leases
+    expiring early or never. This project's rule is to fail loudly on bad
+    input rather than coerce it (e.g. assuming a naive datetime means UTC),
+    so both cases raise `ValueError` naming the actual problem instead of
+    being normalised.
+    """
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError(
+            f"CoordinationStore requires a timezone-aware UTC datetime; got a naive "
+            f"datetime {now!r}. A naive datetime's isoformat() carries no offset, so "
+            f"expires_at > stamp string comparisons cannot be trusted."
+        )
+    if now.utcoffset() != timedelta(0):
+        raise ValueError(
+            f"CoordinationStore requires a UTC datetime (offset +00:00); got {now!r} "
+            f"with offset {now.utcoffset()}. A non-UTC offset's isoformat() sorts by "
+            f"local wall-clock digits, not by the instant it names, which silently "
+            f"corrupts the expires_at > stamp lexicographic comparison."
+        )
+
+
 class CoordinationStore:
     """Lease + demand board over the shared learning DB. Cross-character reads
     live here and nowhere else."""
@@ -70,6 +112,7 @@ class CoordinationStore:
         cycle. This is also the cold-start allocator — five children that all
         pick the same top-demand role serialize into distinct roles over
         successive rounds, so no tiebreak rule is needed."""
+        _require_utc(now)
         stamp = now.isoformat()
         try:
             with SqlSession(self._engine) as s:
@@ -94,6 +137,7 @@ class CoordinationStore:
 
     def renew(self, role: str, now: datetime) -> None:
         """Extend this character's lease on `role`. No-op if it holds none."""
+        _require_utc(now)
         try:
             with SqlSession(self._engine) as s:
                 row = s.exec(
@@ -130,6 +174,7 @@ class CoordinationStore:
     def live_leases(self, now: datetime) -> dict[str, str]:
         """`{role: character}` over UNEXPIRED leases only, across ALL
         characters. One of the two deliberately unfiltered reads."""
+        _require_utc(now)
         stamp = now.isoformat()
         try:
             with SqlSession(self._engine) as s:

@@ -14,6 +14,7 @@ from sqlmodel import SQLModel, create_engine, select
 from artifactsmmo_cli.ai.learning.coordination_store import (
     LEASE_TTL_SECONDS,
     CoordinationStore,
+    _require_utc,
 )
 from artifactsmmo_cli.ai.learning.models import MaterialDemand, RoleLease
 
@@ -289,4 +290,87 @@ def test_claim_new_role_race_returns_false_on_integrity_error(tmp_path: Path) ->
         if event.contains(SqlSession, "before_flush", _rival_claims_first):
             event.remove(SqlSession, "before_flush", _rival_claims_first)
         rival_engine.dispose()
+        hal.close()
+
+
+# --- _require_utc: the TTL/liveness comparison's one precondition ---------
+
+_NAIVE_NOW = datetime(2026, 8, 1)
+_NON_UTC_NOW = datetime(2026, 8, 1, tzinfo=timezone(timedelta(hours=5)))
+
+
+def test_require_utc_rejects_naive_datetime() -> None:
+    with pytest.raises(ValueError, match="naive"):
+        _require_utc(_NAIVE_NOW)
+
+
+def test_require_utc_rejects_non_utc_offset() -> None:
+    with pytest.raises(ValueError, match="offset"):
+        _require_utc(_NON_UTC_NOW)
+
+
+def test_require_utc_accepts_utc_aware_datetime() -> None:
+    """No exception, no return value — a pure guard."""
+    assert _require_utc(_T0) is None
+
+
+def test_claim_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.claim("miner", _NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_claim_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="offset"):
+            hal.claim("miner", _NON_UTC_NOW)
+    finally:
+        hal.close()
+
+
+def test_renew_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        assert hal.claim("miner", _T0) is True
+        with pytest.raises(ValueError, match="naive"):
+            hal.renew("miner", _NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_renew_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        assert hal.claim("miner", _T0) is True
+        with pytest.raises(ValueError, match="offset"):
+            hal.renew("miner", _NON_UTC_NOW)
+    finally:
+        hal.close()
+
+
+def test_live_leases_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.live_leases(_NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_live_leases_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="offset"):
+            hal.live_leases(_NON_UTC_NOW)
+    finally:
         hal.close()
