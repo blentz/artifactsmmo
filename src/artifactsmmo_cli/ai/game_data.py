@@ -7,6 +7,7 @@ the catalogs own the state and domain queries, the facade owns the API-load
 logic and delegates everything else.
 """
 
+import time
 from collections.abc import Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
@@ -62,8 +63,19 @@ from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
 from artifactsmmo_cli.ai.recipe_cost_memo import RecipeCostMemo
 from artifactsmmo_cli.ai.requirement_graph_memo import RequirementGraphMemo
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
+from artifactsmmo_cli.rate_limited_error import RateLimitedError
+from artifactsmmo_cli.utils.retry_after import retry_after_seconds
 
 __all__ = ["_GATHERING_SKILLS", "GameData", "ItemStats"]
+
+GAME_DATA_LOAD_ATTEMPTS = 6
+"""How many times `GameData.load` may attempt the whole load before giving up.
+
+Bounded on purpose: a permanently throttled server must eventually fail loudly
+(the last RateLimitedError propagates) rather than spin forever. Six attempts
+means five waits, which is ~31s of capped exponential backoff when the server
+sends no Retry-After (1+2+4+8+16) and however long the server asks for when it
+does."""
 
 # Workshop map-content codes name their skill; the vocabulary is the API
 # schema's craft + gathering skills (CraftSkill/GatheringSkill enums), NOT a
@@ -1351,8 +1363,52 @@ class GameData:
         force_refresh: bool = False,
         cache: "GameDataCache | None" = None,
     ) -> "GameData":
-        """Build GameData. Reuse the disk cache for the STATIC loaders when fresh
-        (< ttl_minutes); else fetch from the API and rewrite it. GE orders are
+        """Build GameData, waiting out an HTTP 429 and retrying the whole load.
+
+        The load itself is `_load_once`; this wrapper adds the ONLY rate-limit
+        handling on the startup path. It is needed because the 429 design
+        (`rate_limited_error.py`) leans on `RateLimitedError` subclassing
+        `httpx.HTTPError` so that every EXISTING transient-retry loop absorbs a
+        429 for free — and the game-data load has no such loop: `_fetch_maps`,
+        `_fetch_items`, ... and `_load_ge_orders` call the generated client
+        with no error handling at all. `GamePlayer._execute`'s
+        `except RateLimitedError` covers the per-cycle action-dispatch path
+        only, and `_initialize` calls this BEFORE the run loop exists, so a 429
+        here killed the process outright. The two handlers are disjoint: no
+        call reachable from `_execute` reaches `GameData.load` (its only
+        callers are `GamePlayer._initialize`, `play._run_with_tui` and
+        `MultiRun.run`, all pre-loop startup).
+
+        Retrying the WHOLE load rather than the one throttled page is what makes
+        five `play --all` children self-resolve: each retry re-reads the disk
+        cache first, so a child that backs off usually finds the bundle a
+        sibling just wrote and needs no static fetch at all. It also keeps the
+        load all-or-nothing, matching `GameDataCache`'s own contract — partial
+        game data would poison every downstream decision, so an exhausted retry
+        budget re-raises instead of returning a half-built catalog."""
+        attempt = 0
+        while True:
+            try:
+                return cls._load_once(client, ttl_minutes, force_refresh, cache)
+            except RateLimitedError as e:
+                attempt += 1
+                if attempt >= GAME_DATA_LOAD_ATTEMPTS:
+                    raise
+                delay = retry_after_seconds(e.headers, attempt - 1)
+                print(f"[game_data] rate limited (HTTP 429) — waiting {delay:.0f}s, "
+                      f"retry {attempt}/{GAME_DATA_LOAD_ATTEMPTS - 1}")
+                time.sleep(delay)
+
+    @classmethod
+    def _load_once(
+        cls,
+        client: AuthenticatedClient,
+        ttl_minutes: int,
+        force_refresh: bool,
+        cache: "GameDataCache | None",
+    ) -> "GameData":
+        """One full load attempt. Reuse the disk cache for the STATIC loaders when
+        fresh (< ttl_minutes); else fetch from the API and rewrite it. GE orders are
         ALWAYS fetched live (the market order book changes constantly).
 
         _fetch_* return schema OBJECTS; the cache stores their .to_dict()s; a warm

@@ -13,10 +13,12 @@ from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.static_data_page_event_schema import StaticDataPageEventSchema
 from artifactsmmo_api_client.types import UNSET
 
-from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.game_data import GAME_DATA_LOAD_ATTEMPTS, GameData, ItemStats
 from artifactsmmo_cli.ai.game_data_cache import GameDataCache
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.rate_limited_error import RateLimitedError
+from artifactsmmo_cli.utils.retry_after import retry_after_seconds
 
 
 def make_map_tile(x, y, content_type=None, content_code=None, access_conditions=None):
@@ -1956,6 +1958,120 @@ def test_cold_load_survives_cache_write_oserror(monkeypatch, tmp_path, capsys):
     assert cache.reads == 1
     assert ge["n"] == 1  # GE still fetched live; build pipeline ran to completion
     assert "cache write failed" in capsys.readouterr().out
+
+
+class TestLoadWaitsOutARateLimit:
+    """The STARTUP 429. Five `play --all` children boot within about a second of
+    each other and each pulls the full paginated catalog, so breaching the
+    account's shared per-IP budget at startup is routine. `GamePlayer._execute`'s
+    `except RateLimitedError` covers the per-cycle action-dispatch path only, and
+    `_initialize` runs before the run loop exists — so before this handler a
+    startup 429 killed the child outright (live `play --all` traceback:
+    play.py:182 → player.py:939 run → player.py:769 _initialize →
+    game_data.py load → rate_limit_detector.py:25).
+
+    Every test patches `game_data.time.sleep`: the waits are asserted, never
+    served."""
+
+    def test_a_429_then_success_retries_and_returns_real_data(self, monkeypatch, tmp_path):
+        """The whole load is retried and the second attempt completes normally."""
+        ge = _stub_fetch_build(monkeypatch)
+        calls = {"n": 0}
+
+        def flaky_maps(self, client):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RateLimitedError({"Retry-After": "7"})
+            return []
+
+        monkeypatch.setattr(GameData, "_fetch_maps", flaky_maps)
+        cache = _RecordingCache(tmp_path, seeded=None)
+        with patch("artifactsmmo_cli.ai.game_data.time.sleep") as sleep_mock:
+            gd = GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)
+        assert isinstance(gd, GameData)
+        assert calls["n"] == 2
+        # Retry-After honored verbatim when the server sends one.
+        sleep_mock.assert_called_once_with(7.0)
+        # GE orders (the tail of the load) ran exactly once: the throttled
+        # attempt never got that far, so no page is fetched twice.
+        assert ge["n"] == 1
+        assert cache.writes == 1
+
+    def test_a_missing_retry_after_falls_back_to_capped_backoff(self, monkeypatch, tmp_path):
+        """No Retry-After header → `retry_after_seconds`' capped exponential
+        fallback, ramping across consecutive throttled attempts exactly as
+        `_execute`'s handler does."""
+        _stub_fetch_build(monkeypatch)
+        calls = {"n": 0}
+
+        def flaky_maps(self, client):
+            calls["n"] += 1
+            if calls["n"] <= 3:
+                raise RateLimitedError({})
+            return []
+
+        monkeypatch.setattr(GameData, "_fetch_maps", flaky_maps)
+        with patch("artifactsmmo_cli.ai.game_data.time.sleep") as sleep_mock:
+            gd = GameData.load(client=MagicMock(), ttl_minutes=30,
+                               cache=_RecordingCache(tmp_path))
+        assert isinstance(gd, GameData)
+        assert [c.args[0] for c in sleep_mock.call_args_list] == [1.0, 2.0, 4.0]
+
+    def test_a_permanent_rate_limit_fails_loudly_after_a_bounded_number_of_tries(
+        self, monkeypatch, tmp_path
+    ):
+        """Retries are BOUNDED. A server that never stops throttling must raise —
+        never hang, and never return a half-built catalog (partial game data
+        would poison every downstream decision)."""
+        _stub_fetch_build(monkeypatch)
+
+        def always_throttled(self, client):
+            raise RateLimitedError({})
+
+        monkeypatch.setattr(GameData, "_fetch_maps", always_throttled)
+        cache = _RecordingCache(tmp_path, seeded=None)
+        with patch("artifactsmmo_cli.ai.game_data.time.sleep") as sleep_mock:
+            with pytest.raises(RateLimitedError):
+                GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)
+        assert cache.reads == GAME_DATA_LOAD_ATTEMPTS
+        assert sleep_mock.call_count == GAME_DATA_LOAD_ATTEMPTS - 1  # no wait after the last try
+        assert cache.writes == 0  # nothing partial persisted
+
+    def test_the_retry_budget_is_pinned(self):
+        """The bound test above asserts against GAME_DATA_LOAD_ATTEMPTS itself, so
+        it cannot see the constant move. Pin the value AND what it buys: five
+        waits of header-less capped backoff, ~31s of patience before a child
+        gives up. Changing either number must be a deliberate policy edit."""
+        assert GAME_DATA_LOAD_ATTEMPTS == 6
+        waits = [retry_after_seconds({}, n) for n in range(GAME_DATA_LOAD_ATTEMPTS - 1)]
+        assert waits == [1.0, 2.0, 4.0, 8.0, 16.0]
+        assert sum(waits) == 31.0
+
+    def test_a_retry_re_reads_the_cache_so_a_siblings_write_ends_the_burst(
+        self, monkeypatch, tmp_path
+    ):
+        """Why the retry wraps the WHOLE load and not the one throttled page:
+        each attempt re-reads the disk cache first, so a child that backs off
+        typically finds the bundle a sibling just wrote and needs no static
+        fetch at all. That is what makes the five-child startup burst
+        self-resolving instead of five children re-fetching in lockstep."""
+        ge = _stub_fetch_build(monkeypatch)
+        sibling_bundle = {k: [] for k in _STATIC} | {"bank": None}
+        cache = _RecordingCache(tmp_path, seeded=None)  # cold: nobody has written yet
+        calls = {"n": 0}
+
+        def throttled_while_a_sibling_finishes(self, client):
+            calls["n"] += 1
+            cache._seeded = sibling_bundle  # sibling's write lands during our backoff
+            raise RateLimitedError({})
+
+        monkeypatch.setattr(GameData, "_fetch_maps", throttled_while_a_sibling_finishes)
+        with patch("artifactsmmo_cli.ai.game_data.time.sleep"):
+            gd = GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)
+        assert isinstance(gd, GameData)
+        assert calls["n"] == 1  # the retry hydrated from cache; zero static refetch
+        assert cache.reads == 2 and cache.writes == 0
+        assert ge["n"] == 1  # GE orders are live-only, so they still cost one call
 
 
 def test_build_bank_none_is_noop():

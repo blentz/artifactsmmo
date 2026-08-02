@@ -19,6 +19,14 @@ class RateLimitedError(httpx.HTTPError):
     of the generic `httpx.HTTPError` handling, for the action-dispatch path
     only, to honor that header (or fall back to capped backoff) and report a
     distinguishable cycle outcome instead of a bare network-error label.
+
+    The "every existing retry loop absorbs it for free" premise holds only
+    where such a loop EXISTS. `GameData.load` has none — its `_fetch_*`
+    helpers call the generated client bare — so the startup game-data load
+    carries the codebase's only OTHER `except RateLimitedError`, in
+    `GameData.load` itself. The two are disjoint: `load`'s callers are all
+    pre-loop startup (`GamePlayer._initialize`, `play._run_with_tui`,
+    `MultiRun.run`), and nothing reachable from `_execute` calls it.
     """
 
     def __init__(self, headers: Mapping[str, str]) -> None:
