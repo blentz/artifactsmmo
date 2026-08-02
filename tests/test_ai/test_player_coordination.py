@@ -22,7 +22,12 @@ from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG
-from artifactsmmo_cli.ai.role_selection import ROLE_MIN_HOLD_CYCLES, decide_role, demand_by_role
+from artifactsmmo_cli.ai.role_selection import (
+    ROLE_IDLE_DWELL_CYCLES,
+    ROLE_MIN_HOLD_CYCLES,
+    decide_role,
+    demand_by_role,
+)
 from artifactsmmo_cli.ai.strategy_driver import map_means
 from artifactsmmo_cli.ai.tiers.means import MeansKind, _fires
 from tests.test_ai.fixtures import make_state
@@ -367,6 +372,9 @@ def test_update_coordination_releases_an_idle_role_after_min_hold(tmp_path):
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES  # eligible; own demand is 0
+        # One short of the dwell window: `_update_coordination` extends the run
+        # to exactly ROLE_IDLE_DWELL_CYCLES before it decides.
+        p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES - 1
         p._update_coordination(p.state, p.game_data)
         assert "miner" in p._role_idle_released
         assert p._role_held_cycles == 0
@@ -396,6 +404,7 @@ def test_update_coordination_idle_release_does_not_immediately_reclaim(tmp_path)
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
+        p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES - 1
 
         p._update_coordination(p.state, p.game_data)
         assert p._role is None  # released: own demand is zero
@@ -408,6 +417,76 @@ def test_update_coordination_idle_release_does_not_immediately_reclaim(tmp_path)
     finally:
         store.close()
         sibling.close()
+
+
+def _mining_demand_gd() -> GameData:
+    """A catalog where `copper_ore` routes to the miner role, so a sibling's
+    published demand actually lands on the role hero holds."""
+    gd = _make_planner_gd()
+    gd._item_stats = {}
+    gd._crafting_recipes = {}
+    gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
+    return gd
+
+
+def test_update_coordination_extends_the_zero_demand_run(tmp_path):
+    """The counter `decide_role`'s dwell rule consumes is the caller's, and it
+    has to grow one per consecutive quiet cycle."""
+    p = GamePlayer(character="hero")
+    p.state = make_state()
+    p.game_data = _mining_demand_gd()
+    store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
+    p.set_coordination_store(store)
+    now = datetime.now(tz=timezone.utc)
+    try:
+        store.claim("miner", now)
+        p._role = "miner"
+        p._update_coordination(p.state, p.game_data)
+        p._update_coordination(p.state, p.game_data)
+        assert p._role_zero_demand_cycles == 2
+    finally:
+        store.close()
+
+
+def test_update_coordination_breaks_the_zero_demand_run_on_real_demand(tmp_path):
+    """One cycle of genuine demand resets the run to zero — the whole point of
+    requiring CONSECUTIVE observations."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state(bank_items={})
+    p.game_data = _mining_demand_gd()
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="rival")
+    p.set_coordination_store(store)
+    now = datetime.now(tz=timezone.utc)
+    try:
+        store.claim("miner", now)
+        p._role = "miner"
+        p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES - 2
+        sibling.publish_demand({"copper_ore": 5}, now)
+        p._update_coordination(p.state, p.game_data)
+        assert p._role_zero_demand_cycles == 0
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_update_coordination_clears_the_zero_demand_run_while_holding_no_role(tmp_path):
+    """The run is about a HELD role, so a character holding none carries no
+    run into the role it claims this cycle."""
+    p = GamePlayer(character="hero")
+    p.state = make_state()
+    p.game_data = _mining_demand_gd()
+    store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
+    p.set_coordination_store(store)
+    try:
+        p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES
+        p._update_coordination(p.state, p.game_data)  # holds none -> claims
+        assert p._role is not None
+        assert p._role_zero_demand_cycles == 0
+    finally:
+        store.close()
 
 
 def test_update_coordination_computes_the_supply_target_from_sibling_demand(tmp_path):

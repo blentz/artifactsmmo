@@ -2,6 +2,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG
 from artifactsmmo_cli.ai.role_selection import (
+    ROLE_IDLE_DWELL_CYCLES,
     ROLE_MIN_HOLD_CYCLES,
     ROLE_SWITCH_MARGIN,
     decide_role,
@@ -11,11 +12,18 @@ from artifactsmmo_cli.ai.role_selection import (
 _ME = "HAL"
 
 
-def _decide(current, held_cycles, leases, demand, idle_released=frozenset()):
+def _decide(current, held_cycles, leases, demand, idle_released=frozenset(),
+            zero_demand_cycles=ROLE_IDLE_DWELL_CYCLES):
+    """Default the zero-demand RUN to a full dwell window.
+
+    Every pre-existing case here is about the OTHER hysteresis parameters, and
+    reads most clearly when the idle run is not what is being varied. Tests
+    that exercise the run itself pass it explicitly."""
     return decide_role(current=current, held_cycles=held_cycles,
                        live_leases=leases, demand_by_role=demand,
                        character=_ME, catalog=ROLE_CATALOG,
-                       idle_released=idle_released)
+                       idle_released=idle_released,
+                       zero_demand_cycles=zero_demand_cycles)
 
 
 def test_claims_highest_demand_role_when_holding_none() -> None:
@@ -86,6 +94,67 @@ def test_releases_on_idle_even_when_every_rival_role_is_leased_away() -> None:
     leases = {r.name: (_ME if r.name == "logger" else "C3P0") for r in ROLE_CATALOG}
     d = _decide("logger", ROLE_MIN_HOLD_CYCLES, leases, {})
     assert d.release == "logger"
+
+
+def test_idle_release_needs_a_full_run_of_zero_observations() -> None:
+    # One cycle short of the dwell window: the role is idle RIGHT NOW, but the
+    # run is not long enough to call it finished. A requester that happens to
+    # sit on a level root publishes nothing at all, and those silences run for
+    # dozens of consecutive cycles live -- releasing on the strength of a
+    # single sample drops a role a sibling still needs.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME}, {},
+                zero_demand_cycles=ROLE_IDLE_DWELL_CYCLES - 1)
+    assert d.keep == "logger"
+    assert d.release is None
+
+
+def test_idle_release_fires_exactly_at_the_dwell_boundary() -> None:
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME}, {},
+                zero_demand_cycles=ROLE_IDLE_DWELL_CYCLES)
+    assert d.release == "logger"
+
+
+def test_idle_dwell_never_exceeds_the_min_hold() -> None:
+    # Load-bearing inequality, not a coincidence. `GamePlayer` does NOT reset
+    # the zero-demand run when it claims a role, because the run is only
+    # consulted after `held_cycles >= ROLE_MIN_HOLD_CYCLES` and that counter
+    # DOES restart on every claim. While this holds, a run carried across a
+    # re-claim can never be the binding constraint; if the dwell were made the
+    # longer of the two, a stale run could release a freshly claimed role early
+    # and the caller would need an explicit reset.
+    assert ROLE_IDLE_DWELL_CYCLES <= ROLE_MIN_HOLD_CYCLES
+
+
+def test_no_zero_demand_run_never_releases_on_idle() -> None:
+    # The parameter's default: a caller that does not track the run gets the
+    # conservative behaviour (hold), never a release from a single sample.
+    d = decide_role(current="logger", held_cycles=ROLE_MIN_HOLD_CYCLES,
+                    live_leases={"logger": _ME}, demand_by_role={},
+                    character=_ME, catalog=ROLE_CATALOG)
+    assert d.keep == "logger"
+
+
+def test_a_single_demand_flap_does_not_release_a_needed_role() -> None:
+    # The traced defect, end to end. A sibling's demand is real but its
+    # publication BLINKS: one cycle in every few it is on a non-ObtainItem root
+    # and publishes nothing. Under the shipped single-sample rule the role was
+    # released on the first blink after the dwell; under the run rule the role
+    # survives the whole run, because every non-blink cycle breaks the run.
+    leases = {"logger": _ME}
+    current, zero_run = "logger", 0
+    releases = 0
+    for held, cycle in enumerate(range(400)):
+        demand = {} if cycle % 7 == 0 else {"logger": 12}
+        if demand.get(current, 0) <= 0:
+            zero_run += 1
+        else:
+            zero_run = 0
+        d = _decide(current, held, leases, demand, zero_demand_cycles=zero_run)
+        if d.release is not None:
+            releases += 1
+            break
+
+    assert releases == 0, "a blinking-but-real demand must never release the role"
 
 
 def test_idle_role_is_kept_before_min_hold() -> None:
@@ -168,14 +237,25 @@ def _run_cycles(sibling_leases, demand, cycles, start_current=None, start_held=0
     current = start_current
     held_cycles = start_held
     idle_released = frozenset()
+    # Mirrors `GamePlayer._update_coordination` exactly: the caller owns the
+    # zero-demand run, extends or breaks it BEFORE deciding, and resets it on a
+    # successful claim. Simulating it any other way would prove something about
+    # a caller that does not exist.
+    zero_demand_cycles = 0
     trajectory = []
     state_changes = 0
     for _ in range(cycles):
-        d = _decide(current, held_cycles, leases, demand, idle_released)
+        if current is not None and demand.get(current, 0) <= 0:
+            zero_demand_cycles += 1
+        else:
+            zero_demand_cycles = 0
+        d = _decide(current, held_cycles, leases, demand, idle_released,
+                    zero_demand_cycles=zero_demand_cycles)
         if d.claim is not None:
             current = d.claim
             leases[current] = _ME
             held_cycles = 0
+            zero_demand_cycles = 0
             state_changes += 1
         elif d.release is not None:
             del leases[d.release]

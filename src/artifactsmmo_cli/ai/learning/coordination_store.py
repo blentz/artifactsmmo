@@ -21,6 +21,7 @@ behaviour. Handled here and NOT re-handled upstream.
 import weakref
 from collections.abc import Mapping
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -90,6 +91,16 @@ class CoordinationStore:
     live here and nowhere else."""
 
     def __init__(self, db_path: str, character: str) -> None:
+        # Same first line as LearningStore.__init__, and for the same reason:
+        # sqlite3 will not create the DB inside a directory that does not exist
+        # ("unable to open database file"). This store is the FIRST thing a
+        # `play --all` supervisor builds at the default cache path, so on a
+        # machine that has never run with `--learn` there is no
+        # ~/.cache/artifactsmmo to open into. It surfaced as an order-dependent
+        # failure of the home-guard test, which only passed when the
+        # LearningStore case happened to run first in the same process and
+        # create the directory as a side effect.
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._engine = create_engine(f"sqlite:///{db_path}")
         # Dispose the engine's pooled SQLite connection when this store is
         # garbage-collected, so callers that forget close() don't leak a

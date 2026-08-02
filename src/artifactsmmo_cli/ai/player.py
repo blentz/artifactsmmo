@@ -355,6 +355,19 @@ class GamePlayer:
         # with nowhere better to go re-claims the very role it just released
         # next cycle — release-on-idle alone is CHURN, not a stable release.
         self._role_idle_released: frozenset[str] = frozenset()
+        # Consecutive cycles the held role's own demand has read zero — the
+        # counter `decide_role`'s release-on-idle rule consumes. Owned here for
+        # the same reason `_role_idle_released` is: `decide_role` is pure.
+        # Reset by any positive observation, and by holding no role at all (the
+        # increment is guarded on `_role is not None`), which is how both
+        # release branches clear it. A CLAIM needs no explicit reset: the run is
+        # only consulted once `held_cycles >= ROLE_MIN_HOLD_CYCLES`, that
+        # counter restarts at zero on every claim, and
+        # `ROLE_IDLE_DWELL_CYCLES <= ROLE_MIN_HOLD_CYCLES` — so a run carried
+        # across a re-claim can never be the binding constraint. That
+        # inequality is pinned by a test; adding a reset "for safety" would be a
+        # second, unobservable guard on the same condition.
+        self._role_zero_demand_cycles: int = 0
         # This cycle's (item_code, quantity, demand) to bank for a sibling, or
         # None — threaded into `_selection_context`'s `supply_target` field.
         # None whenever no coordination store is attached, no role is held, or
@@ -2518,12 +2531,23 @@ class GamePlayer:
         item_demand = self._coordination.sibling_demand(now)
         skill_of_item = {code: game_data.producing_skill(code) for code in item_demand}
         by_role = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG)
+        # Extend or break the zero-demand RUN before deciding, so the count
+        # passed in includes this cycle's observation. `decide_role` releases on
+        # idle only once the run reaches ROLE_IDLE_DWELL_CYCLES: a sibling that
+        # is momentarily on a level root publishes no demand at all, and on the
+        # traced roster those silences run up to 140 consecutive cycles, so the
+        # single-sample release this replaces dropped roles that were needed.
+        if self._role is not None and by_role.get(self._role, 0) <= 0:
+            self._role_zero_demand_cycles += 1
+        else:
+            self._role_zero_demand_cycles = 0
         decision = decide_role(current=self._role, held_cycles=self._role_held_cycles,
                                live_leases=self._coordination.live_leases(now),
                                demand_by_role=by_role,
                                character=self._coordination.character,
                                catalog=ROLE_CATALOG,
-                               idle_released=self._role_idle_released)
+                               idle_released=self._role_idle_released,
+                               zero_demand_cycles=self._role_zero_demand_cycles)
         if decision.release is not None:
             self._coordination.release(decision.release)
             # `decide_role`'s docstring: the caller adds a role on EVERY

@@ -29,6 +29,23 @@ def _engine(tmp_path: Path):
     engine.dispose()
 
 
+def test_store_creates_its_parent_directory(tmp_path: Path) -> None:
+    """sqlite3 cannot create a DB inside a directory that does not exist. A
+    `play --all` supervisor builds this store at the default cache path before
+    anything else touches it, so on a machine that has never run with `--learn`
+    the directory is genuinely absent — and the store must make it, exactly as
+    LearningStore does."""
+    db_path = tmp_path / "never" / "created" / "coord.db"
+    assert not db_path.parent.exists()
+
+    store = CoordinationStore(db_path=str(db_path), character="hero")
+    try:
+        assert store.claim("miner", datetime.now(tz=timezone.utc)) is True
+    finally:
+        store.close()
+    assert db_path.exists()
+
+
 def test_role_is_unique(engine) -> None:
     with SqlSession(engine) as s:
         s.add(RoleLease(role="miner", character="HAL",

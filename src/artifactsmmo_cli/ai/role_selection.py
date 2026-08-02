@@ -12,7 +12,11 @@ Three parameters, each defending a different failure:
     either always or never met.
   * release-on-idle — the hole where a character that finishes its role keeps
     renewing a lease nobody needs. Because it renews, the TTL never fires and
-    the role stays locked for the whole session.
+    the role stays locked for the whole session. Gated on a RUN of zero-demand
+    observations (`ROLE_IDLE_DWELL_CYCLES`), never one sample: demand is
+    published from the requester's chosen root, and a root that is not an
+    `ObtainItem` publishes none, so a single-sample gate mistakes a momentary
+    silence for a finished role.
 
 A fourth failure surfaced in review of the first three: release-on-idle, taken
 alone, can cause infinite claim/release CHURN rather than a stable release.
@@ -40,6 +44,33 @@ ROLE_MIN_HOLD_CYCLES = 100
 
 ROLE_SWITCH_MARGIN = Fraction(2)
 """A rival role must carry this multiple of the current role's unmet demand."""
+
+ROLE_IDLE_DWELL_CYCLES = 100
+"""Consecutive cycles a held role's own demand must read ZERO before the role
+is released as idle.
+
+Release-on-idle shipped as a SINGLE-SAMPLE read, which is not what it defends
+against. A character publishes demand from `closure_demand` of its CHOSEN
+ROOT, and a root that is not an `ObtainItem` (a level root, a task root)
+publishes nothing at all — `publish_demand` replaces the row wholesale, so
+that character's demand row goes to zero for as long as it stays on such a
+root. Measured over the 39 live `play-trace-*.jsonl` sessions: 4.8% of 8765
+cycles carried a non-`ObtainItem` step, but they arrive in RUNS, and the runs
+are long and CORRELATED across the roster (two characters in the same session
+both ran ~60 consecutive such cycles; the longest single run was 140). A
+one-sample gate fires on every one of those runs, releasing a role a sibling
+genuinely needs.
+
+100 is the same window as `ROLE_MIN_HOLD_CYCLES`, and that is the spec's own
+wording ("stays zero for a full dwell window"): a role must be held for a
+dwell window before it may be released, and its demand must have read zero for
+a dwell window as well. It sits above every observed run but the 140-cycle
+one, and clearing that outlier too would push the release threshold past a
+whole session (519-587 cycles) and make the mechanism dead. The residual is
+benign by construction: a role released during a genuinely long idle stretch
+is re-claimable the instant its demand turns positive again, because
+`_best_free_role` only skips an `idle_released` role WHILE its demand is
+non-positive."""
 
 
 @dataclass(frozen=True)
@@ -81,8 +112,22 @@ def _best_free_role(live_leases: Mapping[str, str], demand_by_role: Mapping[str,
 def decide_role(current: str | None, held_cycles: int,
                 live_leases: Mapping[str, str], demand_by_role: Mapping[str, int],
                 character: str, catalog: tuple[Role, ...],
-                idle_released: frozenset[str] = frozenset()) -> RoleDecision:
+                idle_released: frozenset[str] = frozenset(),
+                zero_demand_cycles: int = 0) -> RoleDecision:
     """Decide whether to keep, claim, or release a role this cycle.
+
+    `zero_demand_cycles`: how many CONSECUTIVE cycles — including this one —
+    the caller has observed `demand_by_role[current]` at or below zero.
+    Release-on-idle needs a run, not a sample: a requester that happens to be
+    on a level root this cycle publishes no demand at all, and on the real
+    traced roster that is 4.8% of cycles arriving in runs up to 140 long, so a
+    single-sample release drops a role that is genuinely needed (see
+    `ROLE_IDLE_DWELL_CYCLES`). Like `idle_released`, the COUNTER is the
+    caller's to own — this function stays pure (no I/O, no clock, no
+    module-level state) — and the caller restarts it on any positive
+    observation and while it holds no role at all. The default of 0 means "no
+    run recorded yet", so a caller that does not track it never releases on
+    idle.
 
     `idle_released`: roles THIS caller has previously released while idle
     (demand was non-positive at release time). Without it, a character with
@@ -108,7 +153,11 @@ def decide_role(current: str | None, held_cycles: int,
 
     own_demand = demand_by_role.get(current, 0)
     if own_demand <= 0:
-        return RoleDecision(release=current)
+        if zero_demand_cycles >= ROLE_IDLE_DWELL_CYCLES:
+            return RoleDecision(release=current)
+        # Idle, but not for long enough to be sure. Hold the role: a
+        # requester on a level root is momentarily silent, not finished.
+        return RoleDecision(keep=current)
 
     rival_best = -1
     for role in catalog:
