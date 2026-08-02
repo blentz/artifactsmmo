@@ -2619,6 +2619,13 @@ class GamePlayer:
             # sibling demand. Set by `_update_coordination`, called once per
             # cycle in `run()` before selection.
             supply_target=self._supply_target,
+            # The held role, same source and same lifecycle as
+            # `supply_target`: set by `_update_coordination`, None on every
+            # single-character run. `progression_tree._role_map` reads it to
+            # damp gear chains this role's skills do not produce (Task 14) —
+            # None keeps the gear ranking byte-identical to the four-factor
+            # product.
+            role=self._role,
         )
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:
