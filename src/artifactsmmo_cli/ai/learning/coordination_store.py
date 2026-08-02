@@ -29,6 +29,7 @@ from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import MaterialDemand, RoleLease
+from artifactsmmo_cli.ai.learning.schema_init import exclusive_schema_lock
 
 LEASE_TTL_SECONDS = 600
 """Seconds a lease survives without renewal. Renewed every cycle, so this only
@@ -107,7 +108,13 @@ class CoordinationStore:
         # connection (raises ResourceWarning). Bound to the engine, not self —
         # mirrors LearningStore.__init__.
         self._finalizer = weakref.finalize(self, self._engine.dispose)
-        SQLModel.metadata.create_all(self._engine)
+        # Under the exclusive writer lock, NOT bare: every child of one
+        # `play --all` supervisor opens this same file within about a second,
+        # and an unlocked `create_all` lets them all probe an empty file and
+        # all decide to CREATE. That killed a child in production with
+        # "table role_leases already exists". See `schema_init`.
+        with exclusive_schema_lock(self._engine) as conn:
+            SQLModel.metadata.create_all(conn)
         with self._engine.connect() as conn:
             conn.execute(text("PRAGMA journal_mode=WAL"))
             conn.execute(text("PRAGMA synchronous=NORMAL"))
