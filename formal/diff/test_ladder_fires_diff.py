@@ -173,6 +173,7 @@ from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext, _has_sellable
+from artifactsmmo_cli.ai.tiers.means import SUPPLY_DEMAND_MIN
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.diff.oracle_client import run_oracle
 from formal.sim.production_ladder import (
@@ -464,14 +465,30 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         # `cancel_targets` is empty — GE_CANCEL never fires on the poor path. Always
         # 0; the rich path drives it from the REAL helper (see `_rich_oracle_args`).
         0,
-        # 36 supplyTargetPresent: `_make_ctx` leaves `supply_target` at its None
+        # 36 supplyDemand: `_make_ctx` leaves `supply_target` at its None
         # default (the Scenario models no coordination board), which is exactly
         # what production's `_fires(SUPPLY_BANK, …)` reads — so SUPPLY_BANK is
         # False on BOTH sides of the poor path. Read off the SAME ctx production
         # reads rather than hard-coded, so a Scenario that ever grows a supply
-        # target drives both sides together.
-        1 if _make_ctx(scn).supply_target is not None else 0,
+        # target drives both sides together. The Lean slot is the UNMET DEMAND
+        # (the tuple's third component), not a presence flag, because the
+        # 2026-08-01 promotion gates the rung on `demand >= SUPPLY_DEMAND_MIN`;
+        # `None` maps to 0, which is quiet on both sides since the threshold is
+        # positive.
+        _supply_demand(_make_ctx(scn)),
     ]
+
+
+def _supply_demand(ctx: SelectionContext) -> int:
+    """The Lean `State.supplyDemand` slot read off production's own ctx: the
+    UNMET demand component of `ctx.supply_target`, or 0 when there is no target.
+
+    One value, two sides — the SAME field `tiers/means.py::_fires(SUPPLY_BANK,
+    …)` compares against `SUPPLY_DEMAND_MIN`, so the threshold cannot drift
+    between the oracle and production."""
+    if ctx.supply_target is None:
+        return 0
+    return ctx.supply_target[2]
 
 
 def _bank_junk_nonempty(scn: Scenario) -> bool:
@@ -862,10 +879,11 @@ def _rich_oracle_args(
         # needed_items = step_profile codes; the ladder call threads no step_profile,
         # so needed_items is empty here (matching production) and this is TTL-driven.
         1 if cancel_targets(w, gd, 0, frozenset()) else 0,  # 35 geCancelTargetsNonempty
-        # 36 supplyTargetPresent: production's `_fires(SUPPLY_BANK, …)` IS
-        # `ctx.supply_target is not None`, so thread the ctx field itself —
-        # one value, two sides, exact lockstep (like gearReview at 26).
-        1 if ctx.supply_target is not None else 0,  # 36 supplyTargetPresent
+        # 36 supplyDemand: production's `_fires(SUPPLY_BANK, …)` reads
+        # `ctx.supply_target`'s UNMET-demand component and compares it against
+        # `SUPPLY_DEMAND_MIN`, so thread that number itself — one value, two
+        # sides, exact lockstep (like gearReview at 26).
+        _supply_demand(ctx),  # 36 supplyDemand
     ]
 
 
@@ -1908,3 +1926,54 @@ def test_low_yield_cancel_near_miss_no_alternative() -> None:
         history=store, actions_attempted=0, task_feasible_projected=True)
     assert prod[LadderMeans.LOW_YIELD_CANCEL] is False
     assert lean[LadderMeans.LOW_YIELD_CANCEL] is False
+
+
+# ---------------------------------------------------------------------------
+# SUPPLY_BANK demand threshold — Python/Lean lockstep (2026-08-01 promotion).
+# ---------------------------------------------------------------------------
+
+
+def _supply_ctx(demand: int) -> SelectionContext:
+    """A ctx carrying a live sibling supply target with the given UNMET demand.
+    `quantity` (the absolute banked target) is deliberately set far above the
+    threshold so the test can only pass by reading the DEMAND component."""
+    return SelectionContext(
+        bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
+        initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
+        target_gear=frozenset(), target_tools=frozenset(),
+        gear_review_active=False,
+        supply_target=("copper_ore", 999, demand))
+
+
+def test_supply_bank_threshold_at_boundary_agrees_and_wins_over_objective() -> None:
+    """At exactly `SUPPLY_DEMAND_MIN` the rung fires on BOTH sides, and — the
+    teeth of the 2026-08-01 promotion — it WINS selection against an armed
+    objective step, on both ladders. A Lean ladder that still ranked supplyBank
+    below `objectiveStep` would disagree on `selected` here."""
+    w = _monsters_task_world(task_code="chicken", progress=0, total=1)
+    gd = _feasible_items_gd()
+    prod, prod_sel, lean, lean_sel = drive_and_contest(
+        w, gd, _supply_ctx(SUPPLY_DEMAND_MIN),
+        objective_step=True,
+        driven=frozenset({LadderMeans.SUPPLY_BANK}))
+    assert prod[LadderMeans.SUPPLY_BANK] is True
+    assert lean[LadderMeans.SUPPLY_BANK] is True
+    assert prod_sel is LadderMeans.SUPPLY_BANK
+    assert lean_sel is LadderMeans.SUPPLY_BANK
+
+
+def test_supply_bank_threshold_one_below_agrees_and_yields_to_objective() -> None:
+    """One unit below the threshold the rung is quiet on BOTH sides and the
+    objective step wins. This is the pair that pins the CONSTANT itself in
+    lockstep: raise or lower `SUPPLY_DEMAND_MIN` on either side alone and one of
+    these two tests disagrees."""
+    w = _monsters_task_world(task_code="chicken", progress=0, total=1)
+    gd = _feasible_items_gd()
+    prod, prod_sel, lean, lean_sel = drive_and_contest(
+        w, gd, _supply_ctx(SUPPLY_DEMAND_MIN - 1),
+        objective_step=True,
+        driven=frozenset({LadderMeans.SUPPLY_BANK}))
+    assert prod[LadderMeans.SUPPLY_BANK] is False
+    assert lean[LadderMeans.SUPPLY_BANK] is False
+    assert prod_sel is LadderMeans.OBJECTIVE_STEP
+    assert lean_sel is LadderMeans.OBJECTIVE_STEP

@@ -204,7 +204,7 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
     | acceptTask      => exact absurd hmem (by decide)
     | taskExchange    => exact absurd hmem (by decide)
     | maintainConsumables => exact absurd hmem (by decide)
-    | supplyBank      => exact absurd hmem (by decide)
+    | supplyBank      => exact descendsE_supplyBank s hk
     | sellIdle        => exact absurd hmem (by decide)
     | recycleSurplus  => exact absurd hmem (by decide)
     | bankExpand      => exact absurd hmem (by decide)

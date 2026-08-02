@@ -37,7 +37,7 @@ def pursuePrefix : List MeansKind := blockerPrefix ++ [.pursueTask]
 /-- `allInLadderOrder` splits at `pursueTask`. -/
 theorem ladder_splitD :
     allInLadderOrder = pursuePrefix ++
-      [.acceptTask, .taskExchange, .maintainConsumables, .supplyBank,
+      [.acceptTask, .taskExchange, .maintainConsumables,
        .sellIdle, .recycleSurplus, .bankExpand, .geBid, .drainBankJunk, .wait] := rfl
 
 private theorem refreshD_phase' (s : State) :
@@ -157,7 +157,7 @@ theorem cycleStepD_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | acceptTask      => exact absurd hmem (by decide)
     | taskExchange    => exact absurd hmem (by decide)
     | maintainConsumables => exact absurd hmem (by decide)
-    | supplyBank      => exact absurd hmem (by decide)
+    | supplyBank      => exact descendsD_supplyBank s hk
     | sellIdle        => exact absurd hmem (by decide)
     | recycleSurplus  => exact absurd hmem (by decide)
     | bankExpand      => exact absurd hmem (by decide)

@@ -105,6 +105,12 @@ private theorem refreshE_geCancel (s : State) :
   split
   · split <;> rfl
   · rfl
+private theorem refreshE_supplyDemand (s : State) :
+    (perceptionRefreshE s).supplyDemand = s.supplyDemand := by
+  unfold perceptionRefreshE
+  split
+  · split <;> rfl
+  · rfl
 private theorem refreshE_craftRelief (s : State) :
     (perceptionRefreshE s).craftReliefFires = s.craftReliefFires := by
   unfold perceptionRefreshE
@@ -407,9 +413,38 @@ theorem descendsE_geCancel (s : State)
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
       refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
-      refreshE_gearGap, refreshE_adequate, refreshE_geCancel,
+      refreshE_gearGap, refreshE_adequate, refreshE_geCancel, refreshE_supplyDemand,
       perceptionRefreshE_level, perceptionRefreshE_xp]
 
+
+/-- `supplyBank` (→ `.gather`) strictly descends at `supplyDemandSlot`
+    (2026-08-01) — the promoted rung, above `gearReviewFlag`/`objectiveStepFlag`
+    (the two slots the refresh can raise). Strictness comes from the firing gate
+    `supplyDemand ≥ SUPPLY_DEMAND_MIN` plus `SUPPLY_DEMAND_MIN_pos`. -/
+theorem descendsE_supplyBank (s : State)
+    (hk : productionLadder (perceptionRefreshE s) = some .supplyBank) :
+    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, supplyBankFires, decide_eq_true_eq, refreshE_supplyDemand] at hfire
+  have hpos : s.supplyDemand > 0 := by
+    have := SUPPLY_DEMAND_MIN_pos
+    omega
+  rw [cycleStepE_some s hk]
+  have hcs : cycleStep (perceptionRefreshE s) =
+      applyActionKind .gather (perceptionRefreshE s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  apply eLt_of_supplyDemand_dec <;>
+    simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
+      applyActionKind,
+      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
+      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
+      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
+      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
+      refreshE_gearGap, refreshE_adequate, refreshE_geCancel, refreshE_supplyDemand,
+      perceptionRefreshE_level, perceptionRefreshE_xp] <;>
+    omega
 
 /-- `craftRelief` (→ `.craft`) strictly descends. -/
 theorem descendsE_craftRelief (s : State)
@@ -823,7 +858,7 @@ theorem descendsE_gearReview (s : State) (hlvl : s.level < 50)
           exact hfire
       apply eLt_of_gearReview_dec <;>
         simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-          applyActionKind, hgap, hadq, hlatch, hprodc, refreshE_geCancel,
+          applyActionKind, hgap, hadq, hlatch, hprodc, refreshE_geCancel, refreshE_supplyDemand,
           refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
@@ -922,7 +957,7 @@ private def gearScanPrefix : List MeansKind :=
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
    .discardHigh, .gearReview, .craftPotions, .claimPending, .completeTask,
-   .sellPressured, .lowYieldCancel, .taskCancel]
+   .sellPressured, .lowYieldCancel, .taskCancel, .supplyBank]
 
 private theorem blockerPrefix_split :
     Formal.Liveness.UnconditionalDescent.blockerPrefix

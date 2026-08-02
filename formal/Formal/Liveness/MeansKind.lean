@@ -10,10 +10,13 @@
                                                      DEPOSIT_FULL; GEAR_REVIEW
                                                      then CRAFT_POTIONS last
                                                      (lowest-priority guards)
-    ++ COLLECT_REWARD_ORDER (from `tiers/means.py`)
+    ++ COLLECT_REWARD_ORDER (from `tiers/means.py`) -- SUPPLY_BANK LAST in this
+                                                     group (2026-08-01 ruling:
+                                                     promoted above the objective
+                                                     step, gated on demand)
     ++ [OBJECTIVE_STEP]
-    ++ DISCRETIONARY_ORDER (from `tiers/means.py`) -- incl MAINTAIN_CONSUMABLES,
-                                                     SUPPLY_BANK and WAIT
+    ++ DISCRETIONARY_ORDER (from `tiers/means.py`) -- incl MAINTAIN_CONSUMABLES
+                                                     and WAIT
 
   `allInLadderOrder` below is the authoritative enumeration; its length is
   checked by the `example` at the bottom of this file rather than restated
@@ -91,6 +94,23 @@ inductive MeansKind where
   | sellPressured       -- SELL_PRESSURED,     means.py:76
   | lowYieldCancel      -- LOW_YIELD_CANCEL,   means.py:79
   | taskCancel          -- TASK_CANCEL,        means.py:82
+  | supplyBank          -- SUPPLY_BANK,        means.py (2026-08-01 human ruling):
+                        --                     produce a material a SIBLING declared
+                        --                     on the demand board and BANK it.
+                        --                     PROMOTED out of DISCRETIONARY_ORDER
+                        --                     into COLLECT_REWARD_ORDER, so it now
+                        --                     outranks `objectiveStep` — below the
+                        --                     step it was unreachable, because a
+                        --                     character essentially always has one.
+                        --                     LAST within the collect group: the
+                        --                     other five rungs are one-or-few-action
+                        --                     bookings of an already-earned outcome
+                        --                     and self-quiet, whereas this one is an
+                        --                     open-ended production run. Gated on
+                        --                     `supplyDemand >= SUPPLY_DEMAND_MIN`
+                        --                     (ProductionLadder) — the gate is what
+                        --                     stops a fleet of siblings serving each
+                        --                     other instead of levelling.
   -- Objective step (StrategyArbiter inserts a single objective StepGoal here)
   | objectiveStep       -- OBJECTIVE_STEP
   -- Discretionary (DISCRETIONARY_ORDER, means.py:42)
@@ -99,16 +119,6 @@ inductive MeansKind where
   | taskExchange        -- TASK_EXCHANGE,      means.py:97
   | maintainConsumables -- MAINTAIN_CONSUMABLES, means.py (PLAN #6a): cook/brew
                         --                     heals when combat-active + under-stocked
-  | supplyBank          -- SUPPLY_BANK,        means.py (2026-08-01): produce a
-                        --                     material a SIBLING declared on the
-                        --                     demand board and BANK it. Fires iff
-                        --                     a supply target is present. Sits
-                        --                     between MAINTAIN_CONSUMABLES and
-                        --                     SELL_IDLE: serving a declared
-                        --                     sibling demand beats idle
-                        --                     housekeeping, but never this
-                        --                     character's own committed task
-                        --                     means or combat prep.
   | sellIdle            -- SELL_IDLE,          means.py:100
   | recycleSurplus      -- RECYCLE_SURPLUS,    means.py (2026-06-14)
   | drainBankJunk       -- DRAIN_BANK_JUNK,    means.py (2026-06-24): withdraw
@@ -133,9 +143,9 @@ def allInLadderOrder : List MeansKind :=
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh, .gearReview,
    .craftPotions,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
+   .supplyBank,
    .objectiveStep,
    .pursueTask, .acceptTask, .taskExchange, .maintainConsumables,
-   .supplyBank,
    .sellIdle, .recycleSurplus, .bankExpand, .geBid, .drainBankJunk,
    .wait]
 

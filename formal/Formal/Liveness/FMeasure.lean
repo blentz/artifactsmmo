@@ -5,12 +5,12 @@ import Mathlib.Data.Prod.Lex
 
 /-! # FMeasure — the cycleStepF-tailored lex measure (unconditional-descent engine)
 
-Phase U (see `docs/PLAN_l50_unconditional_descent.md`): the 13-slot lexicographic
+Phase U (see `docs/PLAN_l50_unconditional_descent.md`): the 15-slot lexicographic
 measure under which EVERY below-50 `cycleStepF` cycle strictly descends — whatever
 means the ladder selects. This is the measure that discharges the capstone's
 `hquiet` (blockers-quiet) residual: instead of assuming every below-50 cycle
 FIGHTS (`LevelingDescent.FightsBelowCap`), Brick 3/4 prove a per-means descent
-covering all 18 means selectable below the cap.
+covering every means selectable below the cap.
 
 Slot design (most significant first) — each slot exists for a named blocker row,
 and every means that RAISES a slot strictly descends an earlier one:
@@ -30,6 +30,8 @@ and every means that RAISES a slot strictly descends an earlier one:
 | 11 | `pendingFlag`  | claimPending | nothing in-model |
 | 12 | `bankPressure` (= raw `inventoryUsed`) | reducers (`→ 0`) | fight `+DROP_BOUND` (slots 1/2), claim `+1` (slot 11) |
 | 13 | `hpDeficit`    | hpCritical / restForCombat (`hp := maxHp`, fires imply `hp < maxHp`) | nothing in-model |
+| 14 | `geCancelFlag` | geCancel (fire-and-lose; clears only its own flag) | nothing in-model |
+| 15 | `supplyDemandSlot` (2026-08-01) | supplyBank (`.gather` discharges one unit; fires require `supplyDemand ≥ SUPPLY_DEMAND_MIN > 0`) | nothing in-model |
 
 Deliberately NOT in the tuple: `objectiveStepFires`/`objectiveStepIsFight` (the ONLY
 fields `perceptionRefresh` mutates — so the refresh is FMeasure-invariant by
@@ -62,7 +64,7 @@ open Formal.Liveness.CumulativeProgress (b2n)
 open Formal.Liveness.CycleStepF
 open Formal.Liveness.CycleStepFIteration
 
-/-- The 13-slot lex measure for the faithful cycle. See module docstring for the
+/-- The 15-slot lex measure for the faithful cycle. See module docstring for the
     slot-by-slot design table. -/
 structure FMeasure where
   levelDeficit           : Nat
@@ -83,6 +85,17 @@ structure FMeasure where
   -- bottom of the cascade — a geCancel step decreases it with every higher slot
   -- equal, and no OTHER chore ever needs it (they all descend at a higher slot).
   geCancelFlag           : Nat
+  -- Slot 15 (2026-08-01). SUPPLY_BANK was promoted ABOVE `.objectiveStep`, so a
+  -- supply cycle is now selectable below the cap and must itself descend. Its
+  -- `.gather` apply touches NO higher slot (it bumps `trackedSkillLevel`,
+  -- `inventoryItems`, `skillXpDelta` — none of which are in this tuple) and
+  -- discharges one unit of the outstanding request, so like `geCancelFlag` this
+  -- flag sits at the bottom of the cascade. The strictness comes from
+  -- `SUPPLY_DEMAND_MIN > 0`: the rung fires only at demand ≥ 10, so the
+  -- saturating `- 1` is a genuine decrease. That is where the human ruling's
+  -- threshold does real proof work — without it, a demand of 0 could fire the
+  -- rung and the supply excursion would not terminate.
+  supplyDemandSlot       : Nat
   deriving DecidableEq, Repr
 
 /-- Extract the FMeasure from a `State`. Slot 3 is "a task is present"
@@ -105,9 +118,10 @@ noncomputable def fMeasure (s : State) : FMeasure :=
     pendingFlag            := b2n s.pendingItemsNonempty
     bankPressure           := s.inventoryUsed
     hpDeficit              := s.maxHp - s.hp
-    geCancelFlag           := b2n s.geCancelTargetsNonempty }
+    geCancelFlag           := b2n s.geCancelTargetsNonempty
+    supplyDemandSlot       := s.supplyDemand }
 
-/-! ## Strict lex order — hand-rolled 13-way disjunction (the
+/-! ## Strict lex order — hand-rolled 15-way disjunction (the
 `CumulativeProgress.extMeasureLt` pattern). -/
 
 /-- Equality of the first `n` slots, spelled out per prefix — the shared
@@ -205,16 +219,30 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.bankPressure = m₂.bankPressure
      ∧ m₁.hpDeficit = m₂.hpDeficit
      ∧ m₁.geCancelFlag < m₂.geCancelFlag)
+  ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.phasePresent = m₂.phasePresent
+     ∧ m₁.overstockFlag = m₂.overstockFlag
+     ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
+     ∧ m₁.sellableFlag = m₂.sellableFlag
+     ∧ m₁.recyclableFlag = m₂.recyclableFlag
+     ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
+     ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
+     ∧ m₁.gearReviewFlag = m₂.gearReviewFlag
+     ∧ m₁.pendingFlag = m₂.pendingFlag
+     ∧ m₁.bankPressure = m₂.bankPressure
+     ∧ m₁.hpDeficit = m₂.hpDeficit
+     ∧ m₁.geCancelFlag = m₂.geCancelFlag
+     ∧ m₁.supplyDemandSlot < m₂.supplyDemandSlot)
 
 /-! ### Well-foundedness via embedding into Mathlib lex. -/
 
-/-- Right-associated 14-tuple of `Nat`. -/
-abbrev LexFourteen :=
+/-- Right-associated 15-tuple of `Nat`. -/
+abbrev LexFifteen :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
-    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
+    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
-/-- Embed an `FMeasure` into the right-associated lex 14-tuple. -/
-def toLex13 (m : FMeasure) : LexFourteen :=
+/-- Embed an `FMeasure` into the right-associated lex 15-tuple. -/
+def toLex13 (m : FMeasure) : LexFifteen :=
   toLex (m.levelDeficit,
     toLex (m.xpDeficit,
       toLex (m.phasePresent,
@@ -227,14 +255,15 @@ def toLex13 (m : FMeasure) : LexFourteen :=
                     toLex (m.gearReviewFlag,
                       toLex (m.pendingFlag,
                         toLex (m.bankPressure,
-                          toLex (m.hpDeficit, m.geCancelFlag)))))))))))))
+                          toLex (m.hpDeficit,
+                            toLex (m.geCancelFlag, m.supplyDemandSlot))))))))))))))
 
-/-- `fMeasureLt` implies the embedded `<` on `LexFourteen`. -/
+/-- `fMeasureLt` implies the embedded `<` on `LexFifteen`. -/
 theorem toLex13_lt_of_fMeasureLt
     {m₁ m₂ : FMeasure} (h : fMeasureLt m₁ m₂) :
     toLex13 m₁ < toLex13 m₂ := by
   simp only [toLex13, Prod.Lex.lt_iff, ofLex_toLex]
-  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h
+  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h | h
   · exact Or.inl h
   · obtain ⟨h1, h⟩ := h
     exact Or.inr ⟨h1, Or.inl h⟩
@@ -276,13 +305,18 @@ theorem toLex13_lt_of_fMeasureLt
     exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
             Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
               Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
-                Or.inr ⟨h13, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+                Or.inr ⟨h13, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
+            Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
+              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
+                Or.inr ⟨h13, Or.inr ⟨h14, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Well-foundedness of `fMeasureLt`, by `InvImage` reduction to Mathlib's
-    standard well-founded order on `LexFourteen`. -/
+    standard well-founded order on `LexFifteen`. -/
 theorem fMeasureLt_wellFounded : WellFounded fMeasureLt := by
-  have hwf : WellFounded (fun a b : LexFourteen => a < b) :=
-    (inferInstance : WellFoundedRelation LexFourteen).wf
+  have hwf : WellFounded (fun a b : LexFifteen => a < b) :=
+    (inferInstance : WellFoundedRelation LexFifteen).wf
   exact Subrelation.wf
     (h₁ := fun {a b} h => toLex13_lt_of_fMeasureLt h)
     (InvImage.wf toLex13 hwf)
@@ -444,8 +478,32 @@ theorem fLt_of_geCancel_dec {m₁ m₂ : FMeasure}
     (h13 : m₁.hpDeficit = m₂.hpDeficit)
     (h : m₁.geCancelFlag < m₂.geCancelFlag) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inr (Or.inr (Or.inr ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11,
-      h12, h13, h⟩))))))))))))
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10,
+      h11, h12, h13, h⟩)))))))))))))
+
+/-- Slot 15 (`supplyDemandSlot`) decrease with slots 1-14 equal (2026-08-01).
+    The SUPPLY_BANK rung's `.gather` apply touches no other slot, so — exactly
+    like `geCancel` one rung above it — the whole cascade above is equal and the
+    bottom slot carries the descent. -/
+theorem fLt_of_supplyDemand_dec {m₁ m₂ : FMeasure}
+    (h1 : m₁.levelDeficit = m₂.levelDeficit)
+    (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (h3 : m₁.phasePresent = m₂.phasePresent)
+    (h4 : m₁.overstockFlag = m₂.overstockFlag)
+    (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
+    (h6 : m₁.sellableFlag = m₂.sellableFlag)
+    (h7 : m₁.recyclableFlag = m₂.recyclableFlag)
+    (h8 : m₁.craftReliefFlag = m₂.craftReliefFlag)
+    (h9 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
+    (h10 : m₁.gearReviewFlag = m₂.gearReviewFlag)
+    (h11 : m₁.pendingFlag = m₂.pendingFlag)
+    (h12 : m₁.bankPressure = m₂.bankPressure)
+    (h13 : m₁.hpDeficit = m₂.hpDeficit)
+    (h14 : m₁.geCancelFlag = m₂.geCancelFlag)
+    (h : m₁.supplyDemandSlot < m₂.supplyDemandSlot) : fMeasureLt m₁ m₂ :=
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10,
+      h11, h12, h13, h14, h⟩)))))))))))))
 
 /-! ## The engine — reach 50 from per-cycle FMeasure descent (the
 `MeasureDescent.exists_level_ge_of_descent` shape over the richer tuple). -/

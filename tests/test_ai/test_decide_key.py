@@ -13,7 +13,11 @@ from artifactsmmo_cli.ai.tiers.decide_key import (
     goal_repr_of_means,
 )
 from artifactsmmo_cli.ai.tiers.guards import GuardKind
-from artifactsmmo_cli.ai.tiers.means import DISCRETIONARY_ORDER, MeansKind
+from artifactsmmo_cli.ai.tiers.means import (
+    COLLECT_REWARD_ORDER,
+    DISCRETIONARY_ORDER,
+    MeansKind,
+)
 
 
 class TestDispatcherExhaustiveness:
@@ -36,8 +40,17 @@ def test_supply_bank_has_a_dispatch_repr() -> None:
     assert _MEANS_REPR[MeansKind.SUPPLY_BANK] == "SupplyBank"
 
 
-def test_supply_bank_sits_between_consumables_and_idle_selling() -> None:
-    order = list(DISCRETIONARY_ORDER)
-    assert (order.index(MeansKind.MAINTAIN_CONSUMABLES)
-            < order.index(MeansKind.SUPPLY_BANK)
-            < order.index(MeansKind.SELL_IDLE))
+def test_supply_bank_is_last_in_the_collect_reward_band() -> None:
+    """2026-08-01 human ruling: SUPPLY_BANK was promoted out of
+    DISCRETIONARY_ORDER (where the objective step outranked it on every cycle a
+    step existed, i.e. essentially always) into COLLECT_REWARD_ORDER, which sits
+    ABOVE the objective step. It goes LAST in that band: the other rungs are
+    one-or-few-action bookings of an already-earned outcome, and a supply run is
+    an open-ended production chain that must not park them."""
+    assert MeansKind.SUPPLY_BANK not in DISCRETIONARY_ORDER
+    assert COLLECT_REWARD_ORDER[-1] is MeansKind.SUPPLY_BANK
+    for cheap in (MeansKind.CLAIM_PENDING, MeansKind.COMPLETE_TASK,
+                  MeansKind.SELL_PRESSURED, MeansKind.LOW_YIELD_CANCEL,
+                  MeansKind.TASK_CANCEL):
+        assert (COLLECT_REWARD_ORDER.index(cheap)
+                < COLLECT_REWARD_ORDER.index(MeansKind.SUPPLY_BANK))

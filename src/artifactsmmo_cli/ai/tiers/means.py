@@ -37,6 +37,56 @@ from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 # the shared should_expand_bank core — no local constant.)
 SELL_PRESSURE_FRACTION = PRESSURE_HIGH_FRACTION
 
+# Minimum UNMET sibling demand (units of one material) that justifies pausing
+# this character's own objective step to produce for a sibling. Read by
+# `_fires(SUPPLY_BANK, …)` off `ctx.supply_target`'s third component — the
+# still-unmet quantity `_pick_supply_target` computed, already net of what the
+# requester holds and of what the shared bank already stocks.
+#
+# WHY A THRESHOLD AT ALL. 2026-08-01: SUPPLY_BANK moved OUT of
+# DISCRETIONARY_ORDER (below the objective step, where it never won a single
+# cycle of the traced four-character run) and INTO COLLECT_REWARD_ORDER, above
+# the step. Unconditional promotion was considered and DECLINED: with five
+# characters each publishing their root's closure demand every cycle, a
+# fires-on-any-demand rung would have them serving each other most cycles and
+# levelling slowly. This constant is the whole of what prevents that — it is
+# load-bearing, not decoration.
+#
+# WHY 10, DERIVED NOT INVENTED. Two sources agree:
+#   (a) Live traces. Across the 44 `play-trace-*.jsonl` runs on hand, every
+#       non-null `supply_target` carried demand exactly 10 (copper_ore x10 twice,
+#       ash_wood x10 once). A `>=` test at 10 therefore keeps firing on every
+#       real request observed so far — the promotion is not made inert by its
+#       own gate.
+#   (b) The recipe graph. Running `recipe_closure.closure_demand(root, 1, …)`
+#       over all 321 craftable roots in `formal/sim/game_data_snapshot.json` and
+#       taking, per root, the LARGEST base-material quantity (the quantity
+#       `_pick_supply_target` maximises over) gives this distribution:
+#         1:25  2:6  3:1  4:3  5:9  6:8  7:1  |  10:12  12:2  15:11  20:2
+#         24:15  28:5  30:6  32:2  35:3  36:12  40:8  42:11  48:13  49:9
+#         50:25  54:4  56:1  60:15  66:1  70:15  80:50  100:29  110:1  120:14
+#         192:2
+#       There is an EMPTY BAND at 8 and 9: no root's peak base demand lands
+#       there. So every threshold in 8..10 partitions the roots identically —
+#       53 roots (16.5%) below, 268 (83.5%) at or above. The cut is a real gap
+#       in the data, not a knife edge, and 10 is the value in that gap that also
+#       matches (a) exactly.
+#
+# WHAT THIS BUYS: a character pauses its own chain only for a request of
+# genuinely bulk size — the 24/50/80/120-unit asks that dominate the recipe
+# graph and cost the requester hours of self-gathering. 83.5% of roots' peak
+# requests still preempt the objective step.
+#
+# WHAT IT GIVES UP: sub-threshold demand no longer reaches SUPPLY_BANK AT ALL,
+# because the rung left DISCRETIONARY_ORDER — there is no low-priority fallback
+# slot any more. A sibling wanting <10 units, or wanting the last few units of a
+# request already mostly filled, is told (by silence) to gather them itself:
+# 1-9 units of one material is a handful of gather actions, cheaper to self-serve
+# than to route through the bank. The measured cost of that loss is small — in
+# the traced runs SUPPLY_BANK was selected zero times from the discretionary
+# band, because the objective step outranked it on every cycle a step existed.
+SUPPLY_DEMAND_MIN = 10
+
 
 class MeansKind(Enum):
     CLAIM_PENDING = "claim_pending"
@@ -66,18 +116,31 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     MeansKind.SELL_PRESSURED,
     MeansKind.LOW_YIELD_CANCEL,
     MeansKind.TASK_CANCEL,
+    # 2026-08-01, human ruling: SUPPLY_BANK is promoted out of
+    # DISCRETIONARY_ORDER to here, ABOVE the objective step, so a character can
+    # pause its own chain to serve a sibling's declared, SUBSTANTIAL request
+    # (`SUPPLY_DEMAND_MIN` is what makes "substantial" mean something — see its
+    # comment block). Below the step it was unreachable: a character essentially
+    # always has an objective step, and the traced four-character run selected
+    # SUPPLY_BANK zero times in 48 cycles despite the rung being armed.
+    #
+    # POSITION: LAST in this group, deliberately. The other five rungs are
+    # one-or-few-action bookings of an already-earned outcome (claim the pending
+    # items, hand in a finished task, shed under space pressure, cut a losing
+    # task) and each self-quiets after firing, so letting them go first costs
+    # SUPPLY_BANK at most a cycle. SUPPLY_BANK is the opposite shape — an
+    # open-ended gather-then-bank production run — and putting it first would
+    # park a completed task's reward, or a >=85%-full bag, behind a chain of
+    # dozens of actions. Ordering it last keeps the promotion (it still outranks
+    # the objective step, which is the entire point) without letting production
+    # preempt reward collection or pressure relief.
+    MeansKind.SUPPLY_BANK,
 )
 DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.PURSUE_TASK,
     MeansKind.ACCEPT_TASK,
     MeansKind.TASK_EXCHANGE,
     MeansKind.MAINTAIN_CONSUMABLES,  # prep heals for combat before idle housekeeping
-    # Supplying a sibling a material it actually declared beats every idle
-    # housekeeping means (sell/recycle/expand/drain), because it converts this
-    # character's cycle into progress for a DIFFERENT character. It sits below
-    # combat prep and the task means, which serve this character's own
-    # committed objective.
-    MeansKind.SUPPLY_BANK,
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
     MeansKind.BANK_EXPAND,
@@ -196,7 +259,18 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # ctx.supply_target is None whenever there is no live sibling demand
         # this character's role can serve — which is every cycle of a
         # single-character run, so this means is inert without `--all`.
-        return ctx.supply_target is not None
+        #
+        # DEMAND GATE (2026-08-01): this rung now sits ABOVE the objective step,
+        # so firing it costs the character its own progress for the length of a
+        # production run. It fires only for a request of at least
+        # SUPPLY_DEMAND_MIN still-unmet units — see that constant for the
+        # derivation and for what the gate buys and gives up. The third tuple
+        # component is the UNMET demand (`_pick_supply_target`), not the goal's
+        # absolute banked target (the second), which already includes stock the
+        # bank holds and so would clear any threshold on inventory the fleet
+        # already owns.
+        target = ctx.supply_target
+        return target is not None and target[2] >= SUPPLY_DEMAND_MIN
 
     if kind is MeansKind.MAINTAIN_CONSUMABLES:
         # Only when combat is the active means (a target is selected): keep a
