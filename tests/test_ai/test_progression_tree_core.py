@@ -12,9 +12,11 @@ from pathlib import Path
 from types import MappingProxyType
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.role_alignment import MISALIGNED
 from artifactsmmo_cli.ai.tiers.progression_tree import _effort_for
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     _NO_ACHIEVABILITY,
+    _NO_ROLE,
     _NO_SYNERGY,
     FOCUS_FLAT,
     FOCUS_FLOOR,
@@ -547,3 +549,36 @@ def test_tie_break_flips_under_achievability_dhondt_vs_argmax():
     assert winner is b, (
         "dhondt_step's tie-break favors the HIGHER slot key, reversing "
         "gear_target_pick's LOWER-slot tiebreak")
+
+
+# --- Task 13 (role_alignment factor): wiring into the weight, inert by default ---
+
+
+def test_role_scales_the_weight():
+    """A misaligned candidate with the bigger gain loses to an aligned smaller
+    one — same shape as the achievability weight-scaling test above."""
+    off_role = GearCandidate(slot="artifact3_slot", code="trophy", gain=Fraction(25050), level=20)
+    on_role = GearCandidate(slot="ring1_slot", code="life_ring", gain=Fraction(21020), level=15)
+    role = {("artifact3_slot", "trophy"): MISALIGNED}
+    weights = dict(_scaled_weights([off_role, on_role], {}, role=role))
+    assert weights["ring1_slot"] > weights["artifact3_slot"]
+
+
+def test_empty_role_reproduces_the_old_weights():
+    """The inert default must be bit-identical to pre-role behaviour."""
+    c = GearCandidate(slot="ring1_slot", code="life_ring", gain=Fraction(21020), level=15)
+    assert (_scaled_weights([c], {}, _NO_SYNERGY, _NO_ACHIEVABILITY, _NO_ROLE)
+            == _scaled_weights([c], {}, _NO_SYNERGY, _NO_ACHIEVABILITY))
+
+
+def test_role_breaks_the_flat_window_short_circuit():
+    """THE TRAP: while every root is fresh, focus_aging_pick returns the plain
+    argmax. Without extending that condition, role is inert for the first
+    FOCUS_FLAT cycles — exactly the window a fresh gear decision lives in.
+    Same bug synergy's and achievability's docstrings record."""
+    off_role = GearCandidate(slot="artifact3_slot", code="trophy", gain=Fraction(25050), level=20)
+    on_role = GearCandidate(slot="ring1_slot", code="life_ring", gain=Fraction(21020), level=15)
+    role = {("artifact3_slot", "trophy"): MISALIGNED}
+    pick = focus_aging_pick([off_role, on_role], {}, {}, role=role)
+    assert pick is not None
+    assert pick.code == "life_ring", "flat-window fast path ignored role"
