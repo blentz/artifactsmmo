@@ -3039,6 +3039,57 @@ ROLE_ALIGNMENT_MUTATIONS = [
      "    return MISALIGNED if candidate_skill in owned_skills else ALIGNED"),
 ]
 
+# _role_map (progression_tree.py) — the impure assembly that ACTIVATES the
+# fifth factor (Task 14, 2026-08-02), plus its two live wiring points inside
+# decide_tree. Its own group: unit-killed by tests/test_ai/test_role_alignment.py,
+# not by the synergy-assembly or fallback-order suites the other two
+# impure-tree groups run.
+ROLE_MAP_MUTATIONS = [
+    # No-role guard dropped: a role-less character (every single-character run)
+    # falls through to the catalog lookup, which cannot match None, and the
+    # whole decision raises. The identity path must stay a path, not an error.
+    ("role map: no-role guard dropped (a role-less character now raises)",
+     "    if role_name is None:\n        return {}",
+     "    if False:\n        return {}"),
+    # Unknown role silently degrades to "no role" instead of raising: a
+    # catalog/lease mismatch would switch the entire fifth factor off with no
+    # signal at all — the invisible-inertness failure this epic keeps hitting.
+    ("role map: unknown role degrades to no-role instead of raising",
+     "        raise ValueError(\n"
+     "            f\"role {role_name!r} is not in ROLE_CATALOG: \"\n"
+     "            f\"{sorted(r.name for r in ROLE_CATALOG)}\")",
+     "        return {}"),
+    # Owned skills emptied: role_alignment_pure's no-role identity then makes
+    # EVERY candidate read ALIGNED, so the map is a constant 1 — threaded but
+    # dead, which is precisely the state Task 14 exists to leave behind.
+    ("role map: owned skills emptied (every candidate reads aligned)",
+     "    owned_skills = role_skills(role)",
+     "    owned_skills = frozenset()"),
+    # Keyed by code instead of (slot, code): every lookup in _scaled_weights and
+    # in both fast-path guards misses, so the factor goes inert again — and two
+    # same-code candidates in different slots would collapse onto one entry.
+    ("role map: keyed by code, not (slot, code)",
+     "    return {(c.slot, c.code): role_alignment_pure(",
+     "    return {(c.code, c.code): role_alignment_pure("),
+    # The map is built but never handed to the pick/order: the factor computes
+    # and is discarded — the Task-13 inert state, restored.
+    ("tree: role map not threaded into the aging pick and order",
+     "    ordered = focus_aging_order(candidates, focus, seats, synergy, achievability, role)\n"
+     "    pick = (focus_aging_pick(candidates, focus, seats, synergy, achievability, role)\n"
+     "            if candidates else None)",
+     "    ordered = focus_aging_order(candidates, focus, seats, synergy, achievability)\n"
+     "    pick = (focus_aging_pick(candidates, focus, seats, synergy, achievability)\n"
+     "            if candidates else None)"),
+    # THE Task-13 review precondition: decide_tree's aged_pick mirror loses its
+    # role clause while focus_aging_pick keeps its own. A pick steered purely by
+    # role then takes the d'Hondt interleave but reads as NOT aged, so the
+    # player skips its seat bump and the schedule drifts from the ledger.
+    ("tree: aged_pick guard ignores the role signal (seat ledger drifts)",
+     "        and all(role.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n"
+     "                for c in candidates))",
+     "        )"),
+]
+
 # _equippable_goal passive-currency gate (strategy_driver.py). Unit-killed by
 # tests/test_ai/test_strategy_driver.py.
 PASSIVE_CURRENCY_GATE_MUTATIONS = [
@@ -5946,6 +5997,8 @@ def _collect_all_groups() -> None:
     run_group(ACHIEVABILITY_CORE_SRC, ACHIEVABILITY_CORE_MUTATIONS,
               "tests/test_ai/test_achievability_core.py", survivors)
     run_group(ROLE_ALIGNMENT_SRC, ROLE_ALIGNMENT_MUTATIONS,
+              "tests/test_ai/test_role_alignment.py", survivors)
+    run_group(PROGRESSION_TREE_IMPURE_SRC, ROLE_MAP_MUTATIONS,
               "tests/test_ai/test_role_alignment.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, PASSIVE_CURRENCY_GATE_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)

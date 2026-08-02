@@ -69,6 +69,16 @@ class SelectionContext:
     # player's per-cycle coordination block; None on every single-character
     # run (Task 11 wires the producer — this means is inert until then).
     supply_target: tuple[str, int, int] | None = None
+    # The specialization role this character holds THIS cycle (a
+    # `role_catalog.Role.name`), or None when it holds none — every
+    # single-character run, and any cycle whose lease is not held. Populated by
+    # the player's per-cycle coordination block from `GamePlayer._role`, the
+    # same seam as `supply_target`: the role is a per-cycle player runtime
+    # fact, which is exactly what this context carries, so the tree reads it
+    # here rather than through a second `decide`/`decide_tree` parameter.
+    # `progression_tree._role_map` turns it into the per-candidate role-fit
+    # multiplier; None yields `{}`, the inert four-factor product.
+    role: str | None = None
 
 
 NO_PROFILE_CONTEXT = SelectionContext(
