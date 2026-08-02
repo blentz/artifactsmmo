@@ -1894,6 +1894,18 @@ class GamePlayer:
                 self._last_decision.aged_pick
                 if self._last_decision is not None else False
             ),
+            # Emergent-specialization spec: the coordination fields
+            # `CycleSnapshot` (the TUI surface) already carries — see
+            # `role=self._role` / `supply_target=...` a few hundred lines
+            # below in `_notify_observer`. Present but null when no role is
+            # held (rather than omitted) so a downstream reader can tell
+            # "observed, no role" from "field didn't exist yet". Same
+            # `repr(...)` encoding as the TUI surface so the two never
+            # disagree about shape.
+            "role": self._role,
+            "supply_target": (
+                repr(self._supply_target) if self._supply_target is not None else None
+            ),
         }
         # E-tower observable: production's loadoutAdequate — a winnable,
         # xp-positive band target exists for the CURRENT means (the exact
