@@ -1,11 +1,13 @@
 """MultiRun: roster discovery, budget split, child argv, headless vs TUI."""
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
+from artifactsmmo_cli.learning_db_path import default_learn_db_path
 from artifactsmmo_cli.multi.child_event import PlanningEvent, SnapshotEvent
 from artifactsmmo_cli.multi.multi_run import MultiRun
 from artifactsmmo_cli.utils.rate_budget import parse_rate_limits, split_budget
@@ -91,6 +93,110 @@ def test_child_argv_omits_learn_db_flag_when_learn_db_is_none():
     argv = _run(learn=True, learn_db=None).child_argv("a", budget)
     assert "--learn" in argv
     assert "--learn-db" not in argv
+
+
+# --- coordination DB path: the fix for "play --all is inert by default" ---
+#
+# `MultiRun` always supplies a shared on-disk coordination path to every
+# child via `--coordination-db`, independent of `--learn`. When `--learn` is
+# on, that path IS the learning DB path (children already share that file).
+# When `--learn` is off, `MultiRun` generates a supervisor-scoped temp path
+# (never `:memory:`, which is private per-connection and could never
+# coordinate a sibling — same reasoning `commands/play.py` applies to the
+# single-character gate).
+
+
+def test_child_argv_always_carries_coordination_db():
+    """Even with `--learn` off, every child gets SOME coordination path —
+    this is the fix for "play --all is inert by default"."""
+    budget = split_budget(parse_rate_limits(_RATES), children=1)
+    argv = _run(learn=False).child_argv("a", budget)
+    assert "--coordination-db" in argv
+
+
+def test_child_argv_coordination_db_is_the_same_path_for_every_child():
+    """Two children opening two different temp files would be the same
+    silent no-op this fix exists to close — `child_argv` must hand out the
+    SAME memoized path across multiple calls on one MultiRun."""
+    budget = split_budget(parse_rate_limits(_RATES), children=2)
+    mrun = _run(learn=False)
+    argv_a = mrun.child_argv("alice", budget)
+    argv_b = mrun.child_argv("bob", budget)
+    path_a = argv_a[argv_a.index("--coordination-db") + 1]
+    path_b = argv_b[argv_b.index("--coordination-db") + 1]
+    assert path_a == path_b
+
+
+def test_coordination_db_path_reuses_the_learn_db_path_when_learn_is_on():
+    mrun = _run(learn=True, learn_db="/tmp/shared-learning.db")
+    assert mrun._coordination_db_path() == "/tmp/shared-learning.db"
+
+
+def test_coordination_db_path_reuses_the_default_learn_db_path_when_unset():
+    """`--learn` with no explicit `--learn-db` still resolves to a real,
+    persisted, shared file (`default_learn_db_path()`) — not a temp file."""
+    mrun = _run(learn=True, learn_db=None)
+    assert mrun._coordination_db_path() == default_learn_db_path()
+
+
+def test_coordination_db_path_generates_a_temp_path_when_learn_is_off():
+    mrun = _run(learn=False)
+    path = mrun._coordination_db_path()
+    assert path != default_learn_db_path()
+    assert "artifactsmmo-coordination-" in path
+
+
+def test_coordination_db_path_is_memoized():
+    """Computed ONCE per MultiRun, not once per call — otherwise every
+    `child_argv` call (one per character) would generate a DIFFERENT temp
+    path, defeating the whole point of a shared board."""
+    mrun = _run(learn=False)
+    assert mrun._coordination_db_path() == mrun._coordination_db_path()
+
+
+def test_coordination_db_path_computation_is_pure_no_file_created():
+    """Computing the path must not touch the filesystem — only a REAL child
+    subprocess's own `CoordinationStore.__init__` should ever create the
+    file. This is what keeps `child_argv`/`build_pool` safe to call directly
+    from a test without leaking a temp file into the OS temp directory."""
+    mrun = _run(learn=False)
+    path = mrun._coordination_db_path()
+    assert not Path(path).exists()
+
+
+def test_cleanup_coordination_db_removes_the_temp_file_and_wal_sidecars(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "artifactsmmo_cli.multi.multi_run.tempfile.gettempdir", lambda: str(tmp_path))
+    mrun = _run(learn=False)
+    path = Path(mrun._coordination_db_path())
+    # Simulate a real child's CoordinationStore actually having created the
+    # SQLite file plus its WAL-mode sidecars.
+    path.write_text("")
+    Path(f"{path}-wal").write_text("")
+    Path(f"{path}-shm").write_text("")
+    mrun._cleanup_coordination_db()
+    assert not path.exists()
+    assert not Path(f"{path}-wal").exists()
+    assert not Path(f"{path}-shm").exists()
+
+
+def test_cleanup_coordination_db_never_deletes_the_persisted_learn_db(tmp_path):
+    """The reused `--learn` DB is a persistent, cross-session file — cleanup
+    must never remove it, only a temp file THIS MultiRun generated itself."""
+    learn_db = tmp_path / "learning.db"
+    learn_db.write_text("real learned data")
+    mrun = _run(learn=True, learn_db=str(learn_db))
+    mrun._coordination_db_path()  # memoize; reuses learn_db, owns nothing
+    mrun._cleanup_coordination_db()
+    assert learn_db.exists()
+    assert learn_db.read_text() == "real learned data"
+
+
+def test_cleanup_coordination_db_is_a_noop_when_never_computed():
+    """`build_pool`/`child_argv` were never called (e.g. `run()` failed
+    before reaching them) — cleanup must not raise."""
+    mrun = _run(learn=False)
+    mrun._cleanup_coordination_db()  # no raise
 
 
 # --- build_pool ----------------------------------------------------------
@@ -304,3 +410,119 @@ def test_run_fails_loudly_when_the_rate_limits_call_returns_nothing():
 
         with pytest.raises(RuntimeError, match="rate"):
             _run().run()
+
+
+# --- run(): coordination temp-file cleanup ----------------------------------
+
+
+def test_run_cleans_up_the_temp_coordination_db_on_normal_headless_exit(tmp_path, monkeypatch):
+    """The temp file is removed on normal supervisor exit."""
+    monkeypatch.setattr(
+        "artifactsmmo_cli.multi.multi_run.tempfile.gettempdir", lambda: str(tmp_path))
+    fake_pool = _FakePool()
+    with (
+        patch("artifactsmmo_cli.multi.multi_run.Config"),
+        patch("artifactsmmo_cli.multi.multi_run.ClientManager"),
+        patch("artifactsmmo_cli.multi.multi_run.APIWrapper") as mock_api_cls,
+    ):
+        mock_api = Mock()
+        mock_api.get_my_characters.return_value = _characters_response("a")
+        mock_api.get_rate_limits.return_value = _rates_response()
+        mock_api_cls.return_value = mock_api
+
+        mrun = _run(tui=False, learn=False)
+
+        def _build(characters, rates):
+            # Simulate a real child's own CoordinationStore.__init__ having
+            # created the file at the path child_argv handed it.
+            Path(mrun._coordination_db_path()).write_text("")
+            return fake_pool
+
+        with patch.object(mrun, "build_pool", side_effect=_build):
+            mrun.run()
+
+        coord_path = Path(mrun._coordination_db)
+    assert fake_pool.ran is True
+    assert not coord_path.exists()
+
+
+def test_run_cleans_up_the_temp_coordination_db_even_when_the_pool_run_raises(tmp_path, monkeypatch):
+    """Abnormal exit: a supervisor pool failure must not skip cleanup."""
+    monkeypatch.setattr(
+        "artifactsmmo_cli.multi.multi_run.tempfile.gettempdir", lambda: str(tmp_path))
+
+    class _RaisingPool:
+        async def run(self) -> None:
+            raise RuntimeError("a supervisor crashed")
+
+    with (
+        patch("artifactsmmo_cli.multi.multi_run.Config"),
+        patch("artifactsmmo_cli.multi.multi_run.ClientManager"),
+        patch("artifactsmmo_cli.multi.multi_run.APIWrapper") as mock_api_cls,
+    ):
+        mock_api = Mock()
+        mock_api.get_my_characters.return_value = _characters_response("a")
+        mock_api.get_rate_limits.return_value = _rates_response()
+        mock_api_cls.return_value = mock_api
+
+        mrun = _run(tui=False, learn=False)
+
+        def _build(characters, rates):
+            Path(mrun._coordination_db_path()).write_text("")
+            return _RaisingPool()
+
+        with patch.object(mrun, "build_pool", side_effect=_build):
+            with pytest.raises(RuntimeError, match="supervisor crashed"):
+                mrun.run()
+
+        coord_path = Path(mrun._coordination_db)
+    assert not coord_path.exists()
+
+
+def test_run_cleans_up_even_when_the_roster_call_fails_after_a_path_was_prepared(tmp_path, monkeypatch):
+    """Abnormal exit before `build_pool` is ever reached: the `finally` wraps
+    the WHOLE method body, not just the happy path past the API guards."""
+    monkeypatch.setattr(
+        "artifactsmmo_cli.multi.multi_run.tempfile.gettempdir", lambda: str(tmp_path))
+    with (
+        patch("artifactsmmo_cli.multi.multi_run.Config"),
+        patch("artifactsmmo_cli.multi.multi_run.ClientManager"),
+        patch("artifactsmmo_cli.multi.multi_run.APIWrapper") as mock_api_cls,
+    ):
+        mock_api = Mock()
+        mock_api.get_my_characters.return_value = None
+        mock_api_cls.return_value = mock_api
+
+        mrun = _run(learn=False)
+        coord_path = Path(mrun._coordination_db_path())
+        coord_path.write_text("")
+
+        with pytest.raises(RuntimeError, match="characters"):
+            mrun.run()
+
+    assert not coord_path.exists()
+
+
+def test_run_does_not_delete_the_persisted_learn_db_on_exit(tmp_path):
+    """When `--learn` is on, coordination reuses the learning DB path — that
+    file must survive `run()`'s cleanup, since it holds real learned data
+    the NEXT session reads."""
+    fake_pool = _FakePool()
+    learn_db = tmp_path / "learning.db"
+    learn_db.write_text("real learned data")
+    with (
+        patch("artifactsmmo_cli.multi.multi_run.Config"),
+        patch("artifactsmmo_cli.multi.multi_run.ClientManager"),
+        patch("artifactsmmo_cli.multi.multi_run.APIWrapper") as mock_api_cls,
+    ):
+        mock_api = Mock()
+        mock_api.get_my_characters.return_value = _characters_response("a")
+        mock_api.get_rate_limits.return_value = _rates_response()
+        mock_api_cls.return_value = mock_api
+
+        mrun = _run(tui=False, learn=True, learn_db=str(learn_db))
+        with patch.object(mrun, "build_pool", return_value=fake_pool):
+            mrun.run()
+
+    assert learn_db.exists()
+    assert learn_db.read_text() == "real learned data"

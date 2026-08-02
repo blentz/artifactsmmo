@@ -5,7 +5,6 @@ import sys
 import threading
 import traceback
 from datetime import datetime
-from pathlib import Path
 
 import httpx
 import typer
@@ -21,6 +20,7 @@ from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
+from artifactsmmo_cli.learning_db_path import default_learn_db_path
 from artifactsmmo_cli.multi.event_emitter import JsonlEventEmitter
 from artifactsmmo_cli.multi.multi_run import MultiRun
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
@@ -30,10 +30,12 @@ from artifactsmmo_cli.utils.mutation_lock import check_mutation_lock, default_lo
 from artifactsmmo_cli.utils.rate_budget import BucketBudgets
 from artifactsmmo_cli.utils.rate_governor import RateGovernor
 
-
-def default_learn_db_path() -> str:
-    """Return ~/.cache/artifactsmmo/learning.db (parent dirs created on first use)."""
-    return str(Path.home() / ".cache" / "artifactsmmo" / "learning.db")
+# `default_learn_db_path` now lives in `learning_db_path.py` so
+# `multi/multi_run.py` can reuse the SAME default without importing
+# `commands/play.py` (which already imports `MultiRun` — a cycle). The
+# `import` above binds it into this module's namespace, so existing callers
+# reading it as `play_module.default_learn_db_path()` (e.g. tests predicting
+# the exact path `play` constructs a store against) are unaffected.
 
 
 def emit_reason_for(exc: BaseException) -> str:
@@ -56,6 +58,10 @@ def play(
     rate_budget: str | None = typer.Option(
         None, "--rate-budget",
         help="This child's share of the account rate budget, as JSON"),
+    coordination_db: str | None = typer.Option(
+        None, "--coordination-db",
+        help="Cross-character coordination DB path (set by `play --all`'s "
+             "supervisor for every child; not meant to be passed by hand)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show full plan each cycle"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Plan only, do not execute actions"),
     trace: bool = typer.Option(False, "--trace", help="Emit per-cycle JSONL to --trace-file"),
@@ -121,11 +127,6 @@ def play(
     # The ephemeral SQLite store has zero observations, so history-gated
     # predicates still behave conservatively, but tier dispatch can run.
     store: LearningStore
-    # None unless --learn points at a real, PERSISTED file — the same
-    # variable coordination attachment below gates on, since a coordination
-    # store built against ":memory:" would be private to this process and
-    # could never see a sibling anyway.
-    persisted_db_path: str | None = None
     if learn:
         persisted_db_path = learn_db or default_learn_db_path()
         store = LearningStore(db_path=persisted_db_path, character=character)
@@ -148,23 +149,19 @@ def play(
         )
 
     # Cross-character role coordination (emergent-specialization spec, Task
-    # 11). Gated on TWO conditions, not just `--emit-events`:
-    #   1. `emit_events` — the flag `MultiRun._child_argv` ALWAYS passes to
-    #      every supervised `play --all` child, and a lone `play <character>`
-    #      never passes. This is the multi-vs-single-character signal, and
-    #      the reason a lone run stays bit-identical.
-    #   2. `persisted_db_path is not None` — coordination is cross-PROCESS by
-    #      construction (siblings are separate subprocesses), so it needs a
-    #      real file on disk. `--all` without `--learn` leaves `store` on
-    #      `:memory:`, which SQLite keeps private to this connection; a
-    #      CoordinationStore opened against that same string would get its
-    #      OWN separate anonymous in-memory database, never shared with any
-    #      sibling. Attaching one there would add per-cycle SQLite churn for
-    #      a coordination board no other child can ever see — strictly worse
-    #      than not attaching it, so it is skipped rather than papered over.
+    # 11). Gated purely on `--coordination-db` being set. `--learn` no
+    # longer gates coordination at all — it means only "persist learned
+    # stats" now (human ruling, round 3 of review). The ONLY caller that
+    # ever passes `--coordination-db` is `MultiRun._child_argv`, which
+    # ALWAYS supplies a real, shared, on-disk path to every child of one
+    # supervisor: the learning DB path when `--learn` is on (children
+    # already share that file), else a supervisor-scoped temp file
+    # `MultiRun` creates and cleans up itself (`:memory:` would be private
+    # per-connection and could never coordinate with a sibling). A lone
+    # `play <character>` never passes this flag, so it stays bit-identical.
     coordination: CoordinationStore | None = None
-    if emit_events and persisted_db_path is not None:
-        coordination = CoordinationStore(db_path=persisted_db_path, character=character)
+    if coordination_db is not None:
+        coordination = CoordinationStore(db_path=coordination_db, character=character)
         player.set_coordination_store(coordination)
 
     emitter: JsonlEventEmitter | None = None
