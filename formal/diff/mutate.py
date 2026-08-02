@@ -151,6 +151,7 @@ PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers"
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 ACHIEVABILITY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "achievability_core.py"
+ROLE_ALIGNMENT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "role_alignment.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
 MEANS_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means_worth.py"
 TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "taskmaster_choice.py"
@@ -3014,6 +3015,28 @@ ACHIEVABILITY_CORE_MUTATIONS = [
     ("achievability: effort scale collapsed to 1 (the self-disabling value)",
      "EFFORT_SCALE = 100",
      "EFFORT_SCALE = 1"),
+]
+
+# role_alignment.role_alignment_pure — the role-fit factor of weight =
+# gain*falloff*synergy*achievability*role (Task 13, 2026-08-01). Unit-killed
+# by tests/test_ai/test_role_alignment.py.
+ROLE_ALIGNMENT_MUTATIONS = [
+    # No-role identity dropped: an empty owned_skills set (no catalog role —
+    # the single-character path) would start damping instead of staying inert.
+    ("role: no-role identity dropped (empty owned_skills no longer inert)",
+     "    if not owned_skills:\n        return ALIGNED",
+     "    if not owned_skills:\n        return MISALIGNED"),
+    # No-invented-data rule dropped: an unknown producing skill (None) becomes
+    # a penalty instead of no signal — exactly what "use only API data or fail
+    # with an error" forbids (we don't know the chain is wrong).
+    ("role: unknown producing skill penalized instead of unpenalised",
+     "    if candidate_skill is None:\n        return ALIGNED",
+     "    if candidate_skill is None:\n        return MISALIGNED"),
+    # Damp direction inverted: an off-role candidate would outrank an on-role
+    # one instead of losing to it — the factor's entire point reversed.
+    ("role: damp direction inverted (misaligned candidates now favoured)",
+     "    return ALIGNED if candidate_skill in owned_skills else MISALIGNED",
+     "    return MISALIGNED if candidate_skill in owned_skills else ALIGNED"),
 ]
 
 # _equippable_goal passive-currency gate (strategy_driver.py). Unit-killed by
@@ -5922,6 +5945,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_game_data.py", survivors)
     run_group(ACHIEVABILITY_CORE_SRC, ACHIEVABILITY_CORE_MUTATIONS,
               "tests/test_ai/test_achievability_core.py", survivors)
+    run_group(ROLE_ALIGNMENT_SRC, ROLE_ALIGNMENT_MUTATIONS,
+              "tests/test_ai/test_role_alignment.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, PASSIVE_CURRENCY_GATE_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHERING_PASSIVE_MUTATIONS,
