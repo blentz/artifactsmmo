@@ -115,20 +115,33 @@ class MultiRun:
     def build_pool(self, characters: list[str], rates: dict[str, Any]) -> SupervisorPool:
         if not characters:
             raise ValueError("account has no characters to play")
-        budget = split_budget(parse_rate_limits(rates), children=len(characters))
-        return SupervisorPool([
-            CharacterSupervisor(
-                character=name,
-                argv=self.child_argv(name, budget),
-                on_event=self._on_event,
-                # `partial` binds `name` by VALUE right now, unlike a lambda
-                # closing over the loop variable `name` (which would report
-                # every child under whichever name the loop variable held
-                # last by the time a callback actually fired).
-                on_stderr=partial(self._on_stderr, name),
-            )
-            for name in characters
-        ])
+        limits = parse_rate_limits(rates)
+        budget = split_budget(limits, children=len(characters))
+        return SupervisorPool(
+            [
+                CharacterSupervisor(
+                    character=name,
+                    argv=self.child_argv(name, budget),
+                    on_event=self._on_event,
+                    # `partial` binds `name` by VALUE right now, unlike a lambda
+                    # closing over the loop variable `name` (which would report
+                    # every child under whichever name the loop variable held
+                    # last by the time a callback actually fired).
+                    on_stderr=partial(self._on_stderr, name),
+                )
+                for name in characters
+            ],
+            # The children are spaced by the ACCOUNT bucket's own sustainable
+            # pace, read from /my/rates -- never a guessed constant. That bucket
+            # is the tightest the API declares and the one every child's
+            # unmetered startup game-data load hammers (`_load_ge_orders` is
+            # live-only, so even a warm-cache child pages it), which is what a
+            # simultaneous launch turns into boot-time 429s. The UNDIVIDED
+            # limits are the right input: the stagger paces children against
+            # each other in the one bucket they all share, whereas the divided
+            # `budget` above is what each child then polices itself with.
+            stagger_seconds=limits.account.sustainable_interval(),
+        )
 
     def _on_event(self, event: ChildEvent) -> None:
         if self._app is None:

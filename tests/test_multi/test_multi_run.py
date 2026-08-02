@@ -218,6 +218,22 @@ def test_the_budget_is_split_by_the_actual_child_count():
         assert five_way not in supervisor._argv
 
 
+def test_children_are_staggered_by_the_account_buckets_own_pace():
+    """The stagger comes from /my/rates' ACCOUNT bucket (10/s + 300/hour ->
+    one request per 12s), never a guessed constant, because that is the
+    tightest bucket and the one every child's unmetered startup game-data load
+    pages. The 12.0 also proves the UNDIVIDED limits are used: this pool has
+    two children, so the divided account budget would be 150/hour -> 24.0s.
+    """
+    limits = parse_rate_limits(_RATES)
+    pool = _run().build_pool(characters=["a", "b"], rates=_RATES)
+    assert pool._stagger_seconds == pytest.approx(12.0)
+    assert pool._stagger_seconds == limits.account.sustainable_interval()
+    # ...and it is genuinely the account bucket, not either of its siblings.
+    assert pool._stagger_seconds != limits.data.sustainable_interval()
+    assert pool._stagger_seconds != limits.action.sustainable_interval()
+
+
 # --- _on_event -------------------------------------------------------------
 
 

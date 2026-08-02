@@ -71,6 +71,64 @@ async def test_children_run_concurrently_not_serially():
 
 
 @pytest.mark.asyncio
+async def test_a_child_waits_its_stagger_before_spawning():
+    """The boot-burst fix: child i must not spawn until i * stagger has passed.
+
+    `sleep` is injected, so nothing here waits 12 real seconds. The fake gates
+    every NON-zero delay on an Event that this test controls, which pins the
+    pool at "alice has spawned, bob and carol have not" -- an ordering that a
+    stagger applied AFTER `supervisor.run()` (or not at all) cannot produce,
+    because all three children would then reach the API together, which is the
+    whole defect.
+    """
+    seen: list = []
+    delays: list[float] = []
+    gate = asyncio.Event()
+
+    async def fake_sleep(delay: float) -> None:
+        delays.append(delay)
+        if delay:
+            await gate.wait()
+
+    pool = SupervisorPool(
+        [_supervisor(n, seen) for n in ("alice", "bob", "carol")],
+        stagger_seconds=12.0,
+        sleep=fake_sleep,
+    )
+    task = asyncio.ensure_future(pool.run())
+    try:
+        # Every child's delay is computed and awaited before any subprocess
+        # can finish, so the schedule is settled by the first poll. The poll
+        # is BOUNDED so that a regression which gates child 0 too (nothing
+        # ever spawns) fails this test instead of hanging the suite.
+        async with asyncio.timeout(10.0):
+            while not seen:
+                await asyncio.sleep(0.01)
+        assert delays == [0.0, 12.0, 24.0]
+        assert {event.character for event in seen} == {"alice"}
+    finally:
+        gate.set()
+        await asyncio.wait_for(task, timeout=10.0)
+    assert {event.character for event in seen} == {"alice", "bob", "carol"}
+
+
+@pytest.mark.asyncio
+async def test_the_only_child_of_a_pool_is_never_delayed():
+    """`play` on a single character must keep booting instantly: there is no
+    sibling to collide with, so index 0 waits 0.0s even at a 12s stagger."""
+    delays: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    pool = SupervisorPool(
+        [_supervisor("alice", [])], stagger_seconds=12.0, sleep=fake_sleep
+    )
+    await asyncio.wait_for(pool.run(), timeout=10.0)
+    assert delays == [0.0]
+
+
+@pytest.mark.asyncio
 async def test_state_reports_each_child():
     seen: list = []
     pool = SupervisorPool([_supervisor("alice", seen)])

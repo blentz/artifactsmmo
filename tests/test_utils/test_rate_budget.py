@@ -69,6 +69,27 @@ def test_as_windows_omits_none_windows():
     assert 86400.0 not in windows
 
 
+def test_sustainable_interval_takes_the_slowest_window_not_the_fastest():
+    """The live account bucket: 10/second is generous, 300/hour is not. The
+    binding pace is one request per 12s, so a `min` (0.1s) would be wrong."""
+    account = parse_rate_limits(_PAYLOAD).account
+    assert account.sustainable_interval() == pytest.approx(12.0)
+
+
+def test_sustainable_interval_can_be_bound_by_the_shortest_window():
+    """"Slowest window" is not "longest span": with a per-second limit of 1 and
+    a very generous hourly one, the per-second window is what binds (1.0s vs
+    0.1s), so the choice really is a max over span/limit."""
+    budget = WindowBudget(second=1, minute=None, hour=36000, day=None)
+    assert budget.sustainable_interval() == pytest.approx(1.0)
+
+
+def test_sustainable_interval_of_an_unlimited_bucket_is_zero():
+    """No declared window means no pacing is required -- not infinite pacing."""
+    budget = WindowBudget(second=None, minute=None, hour=None, day=None)
+    assert budget.sustainable_interval() == 0.0
+
+
 def test_parse_rejects_missing_data_envelope():
     with pytest.raises(ValueError, match="rate limit payload has no 'data' envelope"):
         parse_rate_limits({})

@@ -45,6 +45,24 @@ class WindowBudget:
             if (limit := getattr(self, name)) is not None
         }
 
+    def sustainable_interval(self) -> float:
+        """Seconds per request this bucket can sustain indefinitely: the
+        LONGEST spacing any declared window demands, i.e. `max(span / limit)`.
+
+        A window of `limit` requests per `span` seconds pays out one request
+        slot every `span / limit` seconds on average, so the window with the
+        largest such quotient is the binding one -- honouring it honours every
+        other window too. For the live account bucket (10/second, 300/hour)
+        that is `3600 / 300 = 12.0`s: the per-second window allows a much
+        faster instantaneous rate, but only the hourly pace is sustainable.
+
+        Returns 0.0 when the API declares no window at all, which correctly
+        means "no pacing required" rather than "pace infinitely slowly".
+        """
+        return max(
+            (span / limit for span, limit in self.as_windows().items()), default=0.0
+        )
+
 
 @dataclass(frozen=True)
 class BucketBudgets:

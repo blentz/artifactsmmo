@@ -1,7 +1,7 @@
 """SupervisorPool: owns every character's supervisor and runs them together."""
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 
 from artifactsmmo_cli.multi.character_supervisor import CharacterSupervisor
 from artifactsmmo_cli.multi.child_state import ChildState
@@ -12,11 +12,30 @@ class SupervisorPool:
 
     Roster order is preserved: it comes from the account and is the tiebreak
     for sprite draw order, so it must never be re-sorted.
+
+    Children are STAGGERED into life rather than launched together. Every bot
+    process opens with an unmetered game-data load -- `GameData.load` predates
+    the RateGovernor and calls no `_acquire_*` -- whose `_load_ge_orders` leg
+    is live-only (the order book changes constantly, so a warm disk cache does
+    not spare it) and pages the ACCOUNT bucket, the tightest one the API
+    declares. Launched simultaneously, N children present N such bursts to
+    that shared bucket inside the same second and the losers take an HTTP 429;
+    `GameData.load`'s bounded retry then makes them collide again, one backoff
+    later, until a child exhausts its budget and dies at boot. Spacing the
+    launches by `stagger_seconds` means only one child is ever mid-boot, so
+    the bursts queue instead of collide.
     """
 
-    def __init__(self, supervisors: Sequence[CharacterSupervisor]) -> None:
+    def __init__(
+        self,
+        supervisors: Sequence[CharacterSupervisor],
+        stagger_seconds: float = 0.0,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
         self._supervisors = tuple(supervisors)
         self._by_name = {s.character: s for s in self._supervisors}
+        self._stagger_seconds = stagger_seconds
+        self._sleep = sleep
 
     def characters(self) -> tuple[str, ...]:
         return tuple(s.character for s in self._supervisors)
@@ -49,7 +68,11 @@ class SupervisorPool:
         instead of on the very first one.
         """
         results = await asyncio.gather(
-            *(s.run() for s in self._supervisors), return_exceptions=True
+            *(
+                self._run_after_stagger(index, supervisor)
+                for index, supervisor in enumerate(self._supervisors)
+            ),
+            return_exceptions=True,
         )
         errors = [result for result in results if isinstance(result, BaseException)]
         if not errors:
@@ -61,3 +84,21 @@ class SupervisorPool:
         # to a plain ExceptionGroup when every member is an Exception, which
         # is the common case here.
         raise BaseExceptionGroup("supervisor pool: multiple children failed", errors)
+
+    async def _run_after_stagger(
+        self, index: int, supervisor: CharacterSupervisor
+    ) -> None:
+        """Hold this child back `index * stagger_seconds` before spawning it.
+
+        The delay is UNCONDITIONAL -- `sleep(0.0)` for the first child, and for
+        every child of a single-character pool or a pool built with no stagger
+        -- so there is no branch here to get the boundary wrong on: the roster's
+        first character is never delayed, and a `--rate-budget`-less or
+        one-child pool behaves exactly as it did before.
+
+        It also applies once per child LIFETIME, not per restart: `run()` owns
+        the restart loop internally, and a lone child restarting has nothing to
+        collide with. Restart pacing stays `RestartPolicy`'s job.
+        """
+        await self._sleep(index * self._stagger_seconds)
+        await supervisor.run()
