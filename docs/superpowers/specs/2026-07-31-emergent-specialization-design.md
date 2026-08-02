@@ -295,6 +295,34 @@ a hole: a character that finishes its role keeps renewing a lease nobody needs,
 and because it renews, the TTL never fires — the role stays locked for the
 session.
 
+Two corrections to that sentence, both discovered in review and both shipped.
+
+*It is a run, not a sample.* "Stays zero for a full dwell window" was written as
+a window and implemented as one reading, taken on the single cycle where
+`held_cycles` crosses the min-hold. That is not the same predicate. Demand is
+published from a character's chosen root, `publish_demand` replaces the row
+wholesale, and a root that is not an `ObtainItem` (a level root, a task root)
+publishes nothing at all — so a requester that is momentarily on such a root
+zeroes its own demand row. Across the 39 traced sessions this is 4.8% of 8765
+cycles, but the quiet cycles arrive in RUNS, up to 140 long, and correlated
+across the roster. A one-sample gate therefore releases roles that are
+genuinely needed. `decide_role` now takes `zero_demand_cycles` — how many
+CONSECUTIVE cycles the caller has observed zero — and releases only once that
+reaches `ROLE_IDLE_DWELL_CYCLES` (100, the same window as min-hold). The
+counter is the caller's; `decide_role` stays pure.
+
+*Releasing is not enough on its own.* A release with nothing better to move to
+is not a stable outcome but a cycle: the released role is still the only free
+one, so the character re-claims it next cycle, holds another min-hold window,
+and releases again — forever, without the role ever actually becoming
+available to anyone. `decide_role` therefore also takes `idle_released`, the
+set of roles this character has voluntarily released. A role in that set is
+skipped by the claim search *while its demand is non-positive*, so a real
+request re-opens it automatically and the caller never has to clear the set.
+Like the counter, the set is owned by the caller (`GamePlayer`), which adds to
+it on every `release` the function returns — keeping `decide_role` a pure
+function of its arguments, with no clock and no module state.
+
 ### 7.1 Claim race and cold start
 
 `RoleLease.role` is UNIQUE. Five children boot within a second, all see an empty
