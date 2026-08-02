@@ -58,12 +58,12 @@ class LadderMeans(Enum):
     SELL_PRESSURED = "sell_pressured"
     LOW_YIELD_CANCEL = "low_yield_cancel"
     TASK_CANCEL = "task_cancel"
+    SUPPLY_BANK = "supply_bank"
     OBJECTIVE_STEP = "objective_step"
     PURSUE_TASK = "pursue_task"
     ACCEPT_TASK = "accept_task"
     TASK_EXCHANGE = "task_exchange"
     MAINTAIN_CONSUMABLES = "maintain_consumables"
-    SUPPLY_BANK = "supply_bank"
     SELL_IDLE = "sell_idle"
     RECYCLE_SURPLUS = "recycle_surplus"
     DRAIN_BANK_JUNK = "drain_bank_junk"
@@ -91,12 +91,12 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.SELL_PRESSURED,
     LadderMeans.LOW_YIELD_CANCEL,
     LadderMeans.TASK_CANCEL,
+    LadderMeans.SUPPLY_BANK,
     LadderMeans.OBJECTIVE_STEP,
     LadderMeans.PURSUE_TASK,
     LadderMeans.ACCEPT_TASK,
     LadderMeans.TASK_EXCHANGE,
     LadderMeans.MAINTAIN_CONSUMABLES,
-    LadderMeans.SUPPLY_BANK,
     LadderMeans.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS,
     LadderMeans.BANK_EXPAND,
@@ -165,6 +165,7 @@ assert COLLECT_REWARD_ORDER == (
     MeansKind.SELL_PRESSURED,
     MeansKind.LOW_YIELD_CANCEL,
     MeansKind.TASK_CANCEL,
+    MeansKind.SUPPLY_BANK,
 ), "COLLECT_REWARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 assert DISCRETIONARY_ORDER == (
@@ -172,7 +173,6 @@ assert DISCRETIONARY_ORDER == (
     MeansKind.ACCEPT_TASK,
     MeansKind.TASK_EXCHANGE,
     MeansKind.MAINTAIN_CONSUMABLES,
-    MeansKind.SUPPLY_BANK,
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
     MeansKind.BANK_EXPAND,

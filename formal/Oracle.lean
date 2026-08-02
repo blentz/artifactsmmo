@@ -2329,9 +2329,13 @@ ARG LAYOUT (flat ints; index → field):
                                         trace layout is undisturbed.)
 * `[35]` geCancelTargetsNonempty      (Bool 0/1 — cancel_selection.cancel_targets
                                         nonempty; appended, layout undisturbed.)
-* `[36]` supplyTargetPresent          (Bool 0/1 — `ctx.supply_target is not None`,
-                                        the SUPPLY_BANK means; appended, layout
-                                        undisturbed.)
+* `[36]` supplyDemand                 (Nat — `ctx.supply_target[2]`, the UNMET
+                                        sibling demand the SUPPLY_BANK means is
+                                        gated on (`>= SUPPLY_DEMAND_MIN`); 0 when
+                                        `ctx.supply_target is None`. Appended,
+                                        layout undisturbed. Was a Bool
+                                        presence flag before the 2026-08-01
+                                        promotion added the threshold.)
 
 Emits a JSON object: one Bool field per MeansKind keyed by `meansKindName`
 (one per `allInLadderOrder` rung), plus `"selected"`: the name of
@@ -2362,7 +2366,7 @@ def runLadder (args : Array Json) : Json :=
     maintainConsumablesFires := b 29, bankItemsKnown := b 30,
     bankJunkNonempty := b 31, craftPotionsFires := b 32,
     goldReserve := n 33, geBidCandidateNonempty := b 34,
-    geCancelTargetsNonempty := b 35, supplyTargetPresent := b 36 }
+    geCancelTargetsNonempty := b 35, supplyDemand := n 36 }
   let firesFields : List (String × Json) :=
     allInLadderOrder.map (fun k => (meansKindName k, Json.bool (fires k s)))
   let selected : Json := match productionLadder s with

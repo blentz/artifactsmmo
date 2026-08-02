@@ -77,7 +77,7 @@ def inertLadderState : State where
   restForCombatReady := false
   gearReviewFires := false
   maintainConsumablesFires := false
-  supplyTargetPresent := false
+  supplyDemand := 0
   bankItemsKnown := false
   bankItemsCount := 0
   bankCapacity := 0
@@ -107,21 +107,63 @@ def inertLadderState : State where
   eventSpawns := []
 
 /-- Non-vacuity witness for the SUPPLY_BANK rung (2026-08-01): its firing
-    predicate is satisfiable — the inert state with a supply target present
-    fires it. (Whether the rung can be SELECTED is a separate, weaker question
-    in this model: `acceptTask`/`pursueTask`/`completeTask` are phase-based
-    OVER-approximations that fire in every `taskLifecyclePhase`, so every
-    discretionary rung below them — `sellIdle`, `geBid`, `wait`, and now
-    `supplyBank` — is selection-unreachable here. That is a pre-existing
-    property of the phase abstraction disclosed in `ProductionLadder.lean`,
-    not a property of production.) -/
+    predicate is satisfiable — the inert state carrying an at-threshold sibling
+    demand fires it. -/
 example :
     Formal.Liveness.ProductionLadder.supplyBankFires
-      { inertLadderState with supplyTargetPresent := true } = true := rfl
+      { inertLadderState with
+        supplyDemand := Formal.Liveness.ProductionLadder.SUPPLY_DEMAND_MIN }
+      = true := rfl
 
-/-- …and it is genuinely gated: the inert state does NOT fire it. -/
+/-- …and it is genuinely gated: the inert state (no target at all) does NOT
+    fire it. -/
 example :
     Formal.Liveness.ProductionLadder.supplyBankFires inertLadderState = false := rfl
+
+/-- …and the gate is a THRESHOLD, not a mere presence test: a supply target
+    carrying demand one unit BELOW `SUPPLY_DEMAND_MIN` leaves the rung quiet.
+    This is the Lean read-back of the human ruling's load-bearing clause —
+    without it the promotion above `objectiveStep` would let siblings serve each
+    other's every trivial request instead of levelling. -/
+example :
+    Formal.Liveness.ProductionLadder.supplyBankFires
+      { inertLadderState with
+        supplyDemand := Formal.Liveness.ProductionLadder.SUPPLY_DEMAND_MIN - 1 }
+      = false := rfl
+
+/-- …and a demand well ABOVE the threshold fires it (the bulk requests — 24, 50,
+    80, 120 units — that dominate the recipe graph). -/
+example :
+    Formal.Liveness.ProductionLadder.supplyBankFires
+      { inertLadderState with supplyDemand := 80 } = true := rfl
+
+/-- The promotion is REAL in the model, not just in a list literal: with every
+    guard and collect-reward rung quiet, an at-threshold supply demand is
+    SELECTED even though the objective step is armed. Before 2026-08-01
+    `supplyBank` sat below `objectiveStep` and this state selected
+    `objectiveStep`. -/
+example :
+    Formal.Liveness.ProductionLadder.productionLadder
+      { inertLadderState with
+        supplyDemand := Formal.Liveness.ProductionLadder.SUPPLY_DEMAND_MIN,
+        objectiveStepFires := true }
+      = some MeansKind.supplyBank := rfl
+
+/-- …and the gate decides WHICH of the two wins: one unit below the threshold,
+    the same state selects the objective step. -/
+example :
+    Formal.Liveness.ProductionLadder.productionLadder
+      { inertLadderState with
+        supplyDemand := Formal.Liveness.ProductionLadder.SUPPLY_DEMAND_MIN - 1,
+        objectiveStepFires := true }
+      = some MeansKind.objectiveStep := rfl
+
+/-- …and guards still outrank supply, at any demand: an hp-critical state with a
+    huge sibling demand rests rather than produces. -/
+example :
+    Formal.Liveness.ProductionLadder.productionLadder
+      { inertLadderState with supplyDemand := 120, hp := 1, maxHp := 100 }
+      = some MeansKind.hpCritical := rfl
 
 /-- Stable name for each `MeansKind`, matching its Lean constructor (camelCase).
     The Oracle emits one Bool field per kind under this name, plus a

@@ -274,9 +274,13 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
         match s.gatherSkill with
         | some sk => (sk, 1) :: s.skillXpDelta
         | none => s.skillXpDelta
+      -- 2026-08-01: discharge one unit of any outstanding sibling supply demand
+      -- (the SUPPLY_BANK rung's plan is `.gather`). Mirrors `applyActionKind
+      -- .gather`; `applyActionKindC_eq` holds it in lockstep by `rfl`.
       { s with trackedSkillLevel := s.trackedSkillLevel + 1,
                inventoryItems := newInv,
-               skillXpDelta := newSkillXp }
+               skillXpDelta := newSkillXp,
+               supplyDemand := s.supplyDemand - 1 }
   -- Phase 23d-8: .craft advances the abstract craftableSlots counter
   -- by 1. Mirrors production CraftAction.apply (crafting.py:39+) which
   -- composes inventory updates (consume ingredients + produce output)

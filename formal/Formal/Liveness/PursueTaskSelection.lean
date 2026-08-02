@@ -62,6 +62,12 @@ def pursueSelectionConditions (s : State) : Prop :=
   ∧ sellPressuredFires s = false
   ∧ lowYieldCancelFires s = false
   ∧ taskCancelFires s = false
+  -- 2026-08-01: SUPPLY_BANK was promoted into COLLECT_REWARD_ORDER, so it now
+  -- sits between `taskCancel` and `objectiveStep` — a new rung in the SAME
+  -- higher-priority prefix this definition enumerates, not a relaxation of the
+  -- claim. `pursueTask` is selected only when every rung above it is quiet, and
+  -- there is now one more of them.
+  ∧ supplyBankFires s = false
   ∧ objectiveStepFires s = false
 
 /-- Item 3b: under `pursueSelectionConditions` plus `pursueTaskFires`,
@@ -80,10 +86,11 @@ theorem productionLadder_eq_pursueTask
   show MeansKind.allInLadderOrder.findSome?
         (fun k => if fires k s then some k else none)
       = some .pursueTask
-  obtain ⟨h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, h11, hcp, h12, h13, h14, h15, h16, h17⟩ := hConds
+  obtain ⟨h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, h11, hcp, h12, h13, h14, h15, h16,
+          hsb, h17⟩ := hConds
   simp only [MeansKind.allInLadderOrder, List.findSome?,
              fires, h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, h11, hcp, h12, h13,
-             h14, h15, h16, h17, hPursue, if_true]
+             h14, h15, h16, hsb, h17, hPursue, if_true]
   rfl
 
 /-- Item 3 corollary: under the conditions, `cycleStep` applies

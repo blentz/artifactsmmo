@@ -23,7 +23,11 @@
   Lean model does not reproduce literally:
     - `objectiveStep`  (the StrategyArbiter's objective candidate)
     - `supplyBank`     (`ctx.supply_target`, computed from the cross-character
-                       coordination DB — outside this single-character model)
+                       coordination DB — outside this single-character model.
+                       Carried as the opaque Nat `supplyDemand` rather than a
+                       Bool, because since 2026-08-01 the rung is gated on that
+                       demand clearing `SUPPLY_DEMAND_MIN`, not merely on a
+                       target existing)
     - `selectBankDepositsNonempty` used by `depositFull` (guards.py:85)
     - `sellableInventoryNonempty` used by `sellPressured`/`sellIdle`
       (means.py:54-58)
@@ -314,13 +318,35 @@ def geBidFires (s : State) : Bool :=
     State-carried Bool (see `Measure.State.maintainConsumablesFires`). -/
 def maintainConsumablesFires (s : State) : Bool := s.maintainConsumablesFires
 
+/-- SUPPLY_BANK demand gate (2026-08-01 human ruling). Mirrors
+    `means.py::SUPPLY_DEMAND_MIN`. The rung was promoted out of
+    DISCRETIONARY_ORDER into COLLECT_REWARD_ORDER, i.e. ABOVE `objectiveStep`;
+    this threshold is what keeps that promotion from letting a fleet of siblings
+    serve each other's every request instead of levelling. Derived from data,
+    not chosen: every non-null `supply_target` in the 44 recorded
+    `play-trace-*.jsonl` runs carried demand exactly 10, and over all 321
+    craftable roots in `formal/sim/game_data_snapshot.json` no root's LARGEST
+    base-material closure demand lands on 8 or 9 — an empty band, so any
+    threshold in 8..10 partitions the roots identically (53 below, 268 at or
+    above). See the constant's comment block in `tiers/means.py` for the full
+    distribution and for what the gate buys and gives up. -/
+def SUPPLY_DEMAND_MIN : Nat := 10
+
+/-- The threshold is POSITIVE. Load-bearing, not cosmetic: it is what makes
+    modelling "supply target present ∧ demand ≥ threshold" by the single Nat
+    `supplyDemand` faithful — `supplyDemand = 0` (no target) is quiet exactly
+    because the threshold exceeds 0. See `State.supplyDemand`. -/
+theorem SUPPLY_DEMAND_MIN_pos : SUPPLY_DEMAND_MIN > 0 := by decide
+
 /-- SUPPLY_BANK (2026-08-01). Mirrors `means.py::_fires(SUPPLY_BANK, …)` =
-    `ctx.supply_target is not None`: fires exactly when a supply target is
-    present, i.e. some unexpired sibling demand is servable by this
-    character's role. Modelled as an opaque `State` field because the target
-    is computed from the coordination DB, which this model does not reproduce
-    — the same honest-disclosure treatment `objectiveStep` gets. -/
-def supplyBankFires (s : State) : Bool := s.supplyTargetPresent
+    `ctx.supply_target is not None and ctx.supply_target[2] >=
+    SUPPLY_DEMAND_MIN`: fires exactly when some unexpired sibling demand is
+    servable by this character's role AND that demand is substantial enough to
+    justify pausing this character's own objective step for a production run.
+    The demand itself is an opaque `State` field because it is computed from the
+    coordination DB, which this model does not reproduce — the same
+    honest-disclosure treatment `objectiveStep` gets. -/
+def supplyBankFires (s : State) : Bool := decide (s.supplyDemand ≥ SUPPLY_DEMAND_MIN)
 
 /-- WAIT. Mirrors `means.py:115-119`: the last-resort fallback fires
     unconditionally. Position-last in `allInLadderOrder` ensures every

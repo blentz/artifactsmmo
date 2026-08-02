@@ -56,12 +56,11 @@ def blockerPrefix : List MeansKind :=
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
    .discardHigh, .gearReview, .craftPotions, .claimPending, .completeTask,
-   .sellPressured, .lowYieldCancel, .taskCancel, .objectiveStep]
+   .sellPressured, .lowYieldCancel, .taskCancel, .supplyBank, .objectiveStep]
 
 /-- The discretionary tail — everything after `.objectiveStep`. -/
 def discretionaryTail : List MeansKind :=
   [.pursueTask, .acceptTask, .taskExchange, .maintainConsumables,
-   .supplyBank,
    .sellIdle, .recycleSurplus, .bankExpand, .geBid, .drainBankJunk, .wait]
 
 /-- `allInLadderOrder` splits at `.objectiveStep`. -/
@@ -146,6 +145,7 @@ theorem cycleStepF_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | sellPressured   => exact descends_sellPressured s hk
     | lowYieldCancel  => exact descends_lowYieldCancel s hk
     | taskCancel      => exact descends_taskCancel s hk
+    | supplyBank      => exact descends_supplyBank s hk
     | objectiveStep   =>
         exact descends_fight s hlvl (Or.inr (Or.inr
           ⟨hk, perceptionRefresh_objectiveStepIsFight s hlvl⟩))
@@ -153,7 +153,6 @@ theorem cycleStepF_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | acceptTask      => exact absurd hmem (by decide)
     | taskExchange    => exact absurd hmem (by decide)
     | maintainConsumables => exact absurd hmem (by decide)
-    | supplyBank      => exact absurd hmem (by decide)
     | sellIdle        => exact absurd hmem (by decide)
     | recycleSurplus  => exact absurd hmem (by decide)
     | bankExpand      => exact absurd hmem (by decide)

@@ -222,6 +222,38 @@ theorem descends_geCancel (s : State)
   apply fLt_of_geCancel_dec <;>
     simp [fMeasure, pressureDelta, applyActionKind, hfire]
 
+/-- `supplyBank` (→ `.gather`) strictly descends at `supplyDemandSlot`
+    (2026-08-01). The rung was promoted above `.objectiveStep`, so it is now
+    selectable below the cap and owes its own descent. `.gather` bumps only
+    `trackedSkillLevel` / `inventoryItems` / `skillXpDelta` — none of them tuple
+    slots — and discharges ONE unit of the outstanding sibling request, so every
+    higher slot is unchanged and the bottom slot strictly drops.
+
+    The strictness is exactly where the human ruling's demand threshold earns
+    its keep: `supplyBankFires` requires `supplyDemand ≥ SUPPLY_DEMAND_MIN`, and
+    `SUPPLY_DEMAND_MIN_pos` turns that into `supplyDemand > 0`, which is what
+    makes the saturating `Nat` decrement a real decrease. Without the gate a
+    zero-demand target could select this rung forever and the cycle would not
+    descend at all. -/
+theorem descends_supplyBank (s : State)
+    (hk : productionLadder (perceptionRefresh s) = some .supplyBank) :
+    fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, supplyBankFires, decide_eq_true_eq] at hfire
+  have hpos : (perceptionRefresh s).supplyDemand > 0 := by
+    have := SUPPLY_DEMAND_MIN_pos
+    omega
+  rw [cycleStepF_some s hk, ← fMeasure_perceptionRefresh s]
+  have hcs : cycleStep (perceptionRefresh s) =
+      applyActionKind .gather (perceptionRefresh s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  apply fLt_of_supplyDemand_dec <;>
+    simp only [fMeasure, pressureDelta, applyActionKind] <;>
+    first
+      | rfl
+      | omega
+
 /-- `craftRelief` (→ `.craft`) strictly descends at `craftReliefFlag`. -/
 theorem descends_craftRelief (s : State)
     (hk : productionLadder (perceptionRefresh s) = some .craftRelief) :

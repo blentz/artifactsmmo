@@ -450,8 +450,9 @@ def test_ladder_entry_count_matches_lean() -> None:
     + CRAFT_POTIONS (last guard in GUARD_ORDER, after GEAR_REVIEW)
     + GE_CANCEL (on-need + TTL order cancellation, below the FIGHT gates)
     + GE_BID (discretionary reactive buy-post, above DRAIN_BANK_JUNK)
-    + SUPPLY_BANK (2026-08-01, produce for a sibling; between
-    MAINTAIN_CONSUMABLES and SELL_IDLE).
+    + SUPPLY_BANK (2026-08-01 human ruling, produce for a sibling; PROMOTED out
+    of DISCRETIONARY_ORDER into COLLECT_REWARD_ORDER, so it sits LAST in the
+    collect group — after TASK_CANCEL, above OBJECTIVE_STEP).
     Lean side mirrors via MeansKind.allInLadderOrder."""
     assert len(ALL_IN_LADDER_ORDER) == 30
 

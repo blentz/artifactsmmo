@@ -146,10 +146,14 @@ noncomputable def planFor : MeansKind → State → Plan
   -- quantity, so production plans a produce-then-deposit chain. The witness is
   -- its HEAD — the production step — because the demand board routes each item
   -- to the role that PRODUCES it (`ai/role_selection.py`, by producing skill).
-  -- Honest disclosure: unlike the fire-and-lose means, one `.gather` does NOT
-  -- clear `supplyTargetPresent` — production's target persists until the BANKED
-  -- quantity is met, which takes several cycles this single-action model does
-  -- not reproduce. So the model does not claim supplyBank self-quiets.
+  -- Honest disclosure: one `.gather` does NOT clear the demand — production's
+  -- target persists until the BANKED quantity is met, which takes several
+  -- cycles. The model reproduces that shape rather than a fire-and-lose clear:
+  -- `applyActionKind .gather` discharges ONE unit of `supplyDemand` per cycle
+  -- (Plan.lean), so the rung self-quiets only after the request is worked off —
+  -- which is what makes the supply run a finite, measure-descending excursion
+  -- rather than a starvation hole above the objective step (FMeasure slot 15,
+  -- `BlockerDescent.descends_supplyBank`).
   | .supplyBank       , _ => [.gather]
   | .sellIdle         , _ => [.npcSell]
   | .recycleSurplus   , _ => [.recycle]

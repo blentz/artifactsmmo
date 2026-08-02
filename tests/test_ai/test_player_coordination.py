@@ -29,7 +29,7 @@ from artifactsmmo_cli.ai.role_selection import (
     demand_by_role,
 )
 from artifactsmmo_cli.ai.strategy_driver import map_means
-from artifactsmmo_cli.ai.tiers.means import MeansKind, _fires
+from artifactsmmo_cli.ai.tiers.means import SUPPLY_DEMAND_MIN, MeansKind, _fires
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_strategy_driver import _make_planner_gd
 
@@ -600,14 +600,15 @@ def test_a_coordinated_supply_target_reaches_a_real_supply_bank_goal(tmp_path):
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_demand({"copper_ore": 5}, now)
+        sibling.publish_demand({"copper_ore": SUPPLY_DEMAND_MIN + 2}, now)
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = 3  # below ROLE_MIN_HOLD_CYCLES: stays "miner"
 
         p._update_coordination(p.state, p.game_data)
         ctx = p._selection_context(combat_monster=None)
-        assert ctx.supply_target == ("copper_ore", 7, 5)
+        assert ctx.supply_target == ("copper_ore", SUPPLY_DEMAND_MIN + 4,
+                                     SUPPLY_DEMAND_MIN + 2)
 
         # The last two links: _fires (the means predicate) and map_means (the
         # goal factory) — exactly what StrategyArbiter.select calls.
@@ -615,9 +616,43 @@ def test_a_coordinated_supply_target_reaches_a_real_supply_bank_goal(tmp_path):
         goal = map_means(MeansKind.SUPPLY_BANK, gd, ctx, p.state)
         assert isinstance(goal, SupplyBankGoal)
         assert goal._item_code == "copper_ore"
-        assert goal._quantity == 7
-        assert goal._demand == 5
-        assert repr(goal) == "SupplyBank(copper_orex7)"
+        assert goal._quantity == SUPPLY_DEMAND_MIN + 4
+        assert goal._demand == SUPPLY_DEMAND_MIN + 2
+        assert repr(goal) == f"SupplyBank(copper_orex{SUPPLY_DEMAND_MIN + 4})"
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_a_sub_threshold_coordinated_demand_is_targeted_but_never_fires(tmp_path):
+    """End-to-end read-back of the 2026-08-01 gate: coordination still computes
+    a supply target for a small sibling request (the board is unchanged), but
+    `_fires` declines it, so the character keeps working its own objective
+    instead of pausing for a handful of units the sibling can gather itself."""
+    db = str(tmp_path / "coord.db")
+    gd = _make_planner_gd()
+    gd._item_stats = {}
+    gd._crafting_recipes = {}
+    gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
+    p = GamePlayer(character="hero")
+    p.state = make_state(bank_items={"copper_ore": 2})
+    p.game_data = gd
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="rival")
+    p.set_coordination_store(store)
+    now = datetime.now(tz=timezone.utc)
+    try:
+        sibling.publish_demand({"copper_ore": SUPPLY_DEMAND_MIN - 1}, now)
+        store.claim("miner", now)
+        p._role = "miner"
+        p._role_held_cycles = 3
+
+        p._update_coordination(p.state, p.game_data)
+        ctx = p._selection_context(combat_monster=None)
+        assert ctx.supply_target == ("copper_ore", SUPPLY_DEMAND_MIN + 1,
+                                     SUPPLY_DEMAND_MIN - 1)
+        assert _fires(MeansKind.SUPPLY_BANK, p.state, gd, None, ctx) is False
     finally:
         store.close()
         sibling.close()

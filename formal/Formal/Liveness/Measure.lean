@@ -231,17 +231,27 @@ structure State where
       State-carried Bool (default false); the production-ladder diff asserts
       agreement with the real predicate. -/
   maintainConsumablesFires : Bool := false
-  /-- OPAQUE: production's SUPPLY_BANK means firing predicate (2026-08-01).
-      Mirrors `tiers/means.py::_fires(SUPPLY_BANK, …)` = `ctx.supply_target is
-      not None`: some unexpired sibling demand on the coordination board is
-      servable by THIS character's role, so it should produce that material and
-      bank it. State-carried Bool (default false — a single-character run never
-      has a supply target, so every pre-existing witness keeps its semantics
-      unchanged); the Lean model does not reproduce the coordination DB the
-      target is computed from, the same honest-disclosure treatment
-      `objectiveStepFires` gets. The ladder differential asserts agreement with
-      the real predicate. -/
-  supplyTargetPresent : Bool := false
+  /-- OPAQUE: the UNMET sibling demand this character's SUPPLY_BANK rung would
+      serve (2026-08-01). Mirrors the THIRD component of `ctx.supply_target` in
+      `tiers/means.py::_fires(SUPPLY_BANK, …)` — the still-unmet quantity
+      `player._pick_supply_target` computed, already net of the requester's
+      inventory and of the shared bank.
+
+      Nat, not Bool: since the 2026-08-01 promotion the means is gated on
+      `demand >= SUPPLY_DEMAND_MIN` and no longer merely on a target existing,
+      so a Bool cannot express it. `0` encodes BOTH "no supply target" and "a
+      target with zero unmet demand"; that conflation is sound and not a
+      simplification, because `SUPPLY_DEMAND_MIN > 0` (proved:
+      `ProductionLadder.SUPPLY_DEMAND_MIN_pos`) makes the rung quiet in either
+      case, and production never produces a target with demand 0 anyway
+      (`_pick_supply_target` requires `qty > best_demand` starting from 0).
+
+      Default 0 — a single-character run never has a supply target, so every
+      pre-existing witness keeps its semantics unchanged. The Lean model does
+      not reproduce the coordination DB the target is computed from: the same
+      honest-disclosure treatment `objectiveStepFires` gets. The ladder
+      differential asserts agreement with the real value. -/
+  supplyDemand : Nat := 0
   /-- `state.bank_items is not None` (means.py:104). -/
   bankItemsKnown : Bool
   /-- `len(state.bank_items)` when known, else `0` (means.py:108). -/

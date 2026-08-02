@@ -373,9 +373,24 @@ noncomputable def applyActionKind : ActionKind → State → State
         match s.gatherSkill with
         | some sk => (sk, 1) :: s.skillXpDelta
         | none => s.skillXpDelta
+      -- 2026-08-01: a gather step also DISCHARGES one unit of any outstanding
+      -- sibling supply demand. `.gather` is the plan `planFor` gives the
+      -- SUPPLY_BANK rung (and no other rung), and production's SupplyBankGoal
+      -- is exactly "produce this material and bank it" — each unit produced is
+      -- one unit the fleet no longer has to. Same conservative single-action
+      -- abstraction the other chore applies use (`.deleteItem` clears the whole
+      -- overstock latch, `.depositAll` the whole deposit latch); this one is
+      -- STRICTER, discharging a single unit per cycle rather than the whole
+      -- request. Nat subtraction saturates at 0, so a gather with no
+      -- outstanding demand is a no-op on this field.
+      -- HONEST DISCLOSURE: production's demand board is REFILLED as siblings
+      -- advance their own roots; this model, like every other opaque flag it
+      -- carries, does not re-arm the field, so it says a FIXED outstanding
+      -- request is finite — not that the board ever empties for good.
       { s with trackedSkillLevel := s.trackedSkillLevel + 1,
                inventoryItems := newInv,
-               skillXpDelta := newSkillXp }
+               skillXpDelta := newSkillXp,
+               supplyDemand := s.supplyDemand - 1 }
   -- Phase 23d-8: .craft advances the abstract craftableSlots counter
   -- by 1. Mirrors production CraftAction.apply (crafting.py:39+) which
   -- composes inventory updates (consume ingredients + produce output)

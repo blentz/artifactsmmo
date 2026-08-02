@@ -80,6 +80,9 @@ private theorem refreshD_recyclable (s : State) :
 private theorem refreshD_geCancel (s : State) :
     (perceptionRefreshD s).geCancelTargetsNonempty = s.geCancelTargetsNonempty := by
   unfold perceptionRefreshD; split <;> rfl
+private theorem refreshD_supplyDemand (s : State) :
+    (perceptionRefreshD s).supplyDemand = s.supplyDemand := by
+  unfold perceptionRefreshD; split <;> rfl
 private theorem refreshD_craftRelief (s : State) :
     (perceptionRefreshD s).craftReliefFires = s.craftReliefFires := by
   unfold perceptionRefreshD; split <;> rfl
@@ -271,8 +274,39 @@ theorem descendsD_geCancel (s : State)
       refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
       refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
-      refreshD_geCancel,
+      refreshD_geCancel, refreshD_supplyDemand,
       perceptionRefreshD_level, perceptionRefreshD_xp]
+
+/-- `supplyBank` (→ `.gather`) strictly descends at `supplyDemandSlot`
+    (2026-08-01). The promoted rung is selectable below the cap here too; its
+    `.gather` apply discharges one unit of the outstanding sibling request and
+    touches no higher slot. Strictness comes from the firing gate
+    `supplyDemand ≥ SUPPLY_DEMAND_MIN` together with `SUPPLY_DEMAND_MIN_pos`. -/
+theorem descendsD_supplyBank (s : State)
+    (hk : productionLadder (perceptionRefreshD s) = some .supplyBank) :
+    dMeasureLt (dMeasure (cycleStepD s)) (dMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, supplyBankFires, decide_eq_true_eq, refreshD_supplyDemand] at hfire
+  have hpos : s.supplyDemand > 0 := by
+    have := SUPPLY_DEMAND_MIN_pos
+    omega
+  rw [cycleStepD_some s hk]
+  have hcs : cycleStep (perceptionRefreshD s) =
+      applyActionKind .gather (perceptionRefreshD s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  apply dLt_of_supplyDemand_dec <;>
+    simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
+      applyActionKind, refreshD_supplyDemand,
+      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
+      refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
+      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
+      refreshD_hp, refreshD_maxHp,
+      refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
+      refreshD_geCancel, refreshD_supplyDemand,
+      perceptionRefreshD_level, perceptionRefreshD_xp] <;>
+    omega
 
 /-- `depositFull` (→ `.depositAll`) strictly descends. -/
 theorem descendsD_depositFull (s : State)

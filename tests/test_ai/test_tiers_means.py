@@ -6,15 +6,22 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 import artifactsmmo_cli.ai.learning.projections as projections_mod
+from artifactsmmo_cli.ai.arbiter_select import (
+    BAND_COLLECT,
+    BAND_DISCRETIONARY,
+    BAND_GUARD,
+    BAND_STEP,
+)
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.projections import Yield
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import (
     COLLECT_REWARD_ORDER,
     DISCRETIONARY_ORDER,
+    SUPPLY_DEMAND_MIN,
     MeansKind,
     active_means,
 )
@@ -160,18 +167,83 @@ def test_band_order_matches_declared_order():
 
 
 def test_supply_bank_silent_when_no_supply_target():
-    # ctx.supply_target is None on every single-character run (Task 11 not
-    # wired yet) — the means must stay inert, not raise on the None case.
+    # ctx.supply_target is None on every single-character run — the means must
+    # stay inert, not raise on the None case. A character with no supply target
+    # is completely unaffected by the 2026-08-01 promotion: neither band lists
+    # SUPPLY_BANK as firing.
     state = make_state()
-    _, discretionary = active_means(state, GameData(), None, _ctx(supply_target=None))
+    collect, discretionary = active_means(
+        state, GameData(), None, _ctx(supply_target=None))
+    assert MeansKind.SUPPLY_BANK not in collect
     assert MeansKind.SUPPLY_BANK not in discretionary
 
 
-def test_supply_bank_fires_when_supply_target_set():
+def test_supply_bank_fires_in_the_collect_band_at_the_threshold():
+    """At exactly SUPPLY_DEMAND_MIN the rung fires — and it fires in the
+    COLLECT band, which sits above the objective step."""
     state = make_state()
-    _, discretionary = active_means(
-        state, GameData(), None, _ctx(supply_target=("iron_ore", 10, 4)))
-    assert MeansKind.SUPPLY_BANK in discretionary
+    collect, discretionary = active_means(
+        state, GameData(), None,
+        _ctx(supply_target=("iron_ore", 10, SUPPLY_DEMAND_MIN)))
+    assert MeansKind.SUPPLY_BANK in collect
+    assert MeansKind.SUPPLY_BANK not in discretionary
+
+
+def test_supply_bank_silent_one_unit_below_the_threshold():
+    """The gate is a THRESHOLD, not a presence test. One unit short and the
+    character keeps working its own chain — this is the clause that stops five
+    siblings serving each other's every trivial request instead of levelling."""
+    state = make_state()
+    collect, discretionary = active_means(
+        state, GameData(), None,
+        _ctx(supply_target=("iron_ore", 10, SUPPLY_DEMAND_MIN - 1)))
+    assert MeansKind.SUPPLY_BANK not in collect
+    assert MeansKind.SUPPLY_BANK not in discretionary
+
+
+def test_supply_bank_fires_well_above_the_threshold():
+    """The bulk requests that dominate the recipe graph (24/50/80/120 units)
+    clear the gate comfortably."""
+    state = make_state()
+    collect, _ = active_means(
+        state, GameData(), None, _ctx(supply_target=("iron_ore", 80, 80)))
+    assert MeansKind.SUPPLY_BANK in collect
+
+
+def test_supply_bank_outranks_the_objective_step_and_loses_to_guards():
+    """The whole point of the 2026-08-01 promotion, checked on the structures
+    `StrategyArbiter._build_candidates` actually walks: guards first
+    (BAND_GUARD), then COLLECT_REWARD_ORDER (BAND_COLLECT), then the objective
+    step (BAND_STEP), then DISCRETIONARY_ORDER (BAND_DISCRETIONARY), with
+    `select_pure` taking the first plannable candidate in that order.
+
+    SUPPLY_BANK now lives in the collect band, so it precedes the objective
+    step; every guard still precedes it."""
+    assert MeansKind.SUPPLY_BANK in COLLECT_REWARD_ORDER
+    assert BAND_GUARD < BAND_COLLECT < BAND_STEP < BAND_DISCRETIONARY
+
+    # The literal preordered candidate walk, means-side.
+    ladder = ([("guard", g) for g in GUARD_ORDER]
+              + [("collect", m) for m in COLLECT_REWARD_ORDER]
+              + [("step", None)]
+              + [("discretionary", m) for m in DISCRETIONARY_ORDER])
+    supply_at = ladder.index(("collect", MeansKind.SUPPLY_BANK))
+    step_at = ladder.index(("step", None))
+    assert supply_at < step_at
+    assert all(i < supply_at for i, (band, _) in enumerate(ladder)
+               if band == "guard")
+
+
+def test_supply_bank_reads_unmet_demand_not_the_banked_target():
+    """The gate reads the tuple's THIRD component (still-unmet demand), not the
+    second (the absolute banked target, which already counts stock the fleet
+    owns). A nearly-filled request must not fire on the strength of what is
+    already in the bank."""
+    state = make_state()
+    collect, _ = active_means(
+        state, GameData(), None,
+        _ctx(supply_target=("iron_ore", 200, SUPPLY_DEMAND_MIN - 1)))
+    assert MeansKind.SUPPLY_BANK not in collect
 
 
 def test_task_exchange_fires_when_enough_coins():
