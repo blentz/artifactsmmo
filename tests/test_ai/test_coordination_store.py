@@ -429,10 +429,70 @@ def _claim_worker(db_path: str, character: str, role: str, barrier: object, out:
         store.close()
 
 
+def _construct_worker(db_path: str, character: str, barrier: object, out: object) -> None:
+    """Module-level so it is picklable by multiprocessing's spawn start method.
+
+    Waits on `barrier` BEFORE the store is constructed, so every child runs
+    `SQLModel.metadata.create_all` against the SAME empty file at the same
+    moment. Nothing is caught here: a store that cannot survive a concurrent
+    sibling must surface as a non-zero exit code, exactly as it did in
+    production (the child process died).
+    """
+    barrier.wait()
+    store = CoordinationStore(db_path=db_path, character=character)
+    try:
+        out.put(character)
+    finally:
+        store.close()
+
+
+def test_concurrent_first_open_of_an_unseeded_db_creates_the_schema_once(tmp_path: Path) -> None:
+    """The PRODUCTION shape: five siblings open a coordination DB that does not
+    exist yet, within about a second of each other, and nothing has created the
+    schema for them.
+
+    A live `play --all` run killed a child with
+    `OperationalError: table role_leases already exists`: SQLAlchemy's
+    `checkfirst` probe and the `CREATE TABLE` it decides to issue are not
+    atomic across processes, so a loser of that race raised. The sibling
+    `test_exactly_one_process_wins_a_contested_role` cannot catch this — it
+    seeds the schema first and only races on `claim`. The fix is
+    `MultiRun._seed_coordination_schema`, which makes the supervisor create the
+    schema once before any child exists; this test pins the store-level
+    contract that the concurrent-open itself must not kill a child.
+    """
+    db = str(tmp_path / "coord.db")
+    assert not Path(db).exists()
+
+    ctx = multiprocessing.get_context("spawn")
+    queue = ctx.Queue()
+    names = ["HAL", "C3P0", "R2D2", "Robby", "KITT"]
+    barrier = ctx.Barrier(len(names))
+    procs = [ctx.Process(target=_construct_worker, args=(db, n, barrier, queue)) for n in names]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join(timeout=30)
+        assert p.exitcode == 0, f"a child died opening the unseeded coordination DB: {p.exitcode}"
+
+    assert sorted(queue.get() for _ in names) == sorted(names)
+
+    check = CoordinationStore(db_path=db, character="observer")
+    try:
+        assert check.claim("miner", _T0) is True
+    finally:
+        check.close()
+
+
 def test_exactly_one_process_wins_a_contested_role(tmp_path: Path) -> None:
     db = str(tmp_path / "coord.db")
+    # Seeded on purpose: this test isolates the CLAIM race, so the schema must
+    # already exist when the children start. The unseeded case — five siblings
+    # racing on `create_all` itself, which is what production does — is covered
+    # by `test_concurrent_first_open_of_an_unseeded_db_creates_the_schema_once`
+    # above, and by MultiRun's supervisor-seeding tests.
     seed = CoordinationStore(db_path=db, character="seed")
-    seed.close()  # create the schema before the children race on it
+    seed.close()
 
     ctx = multiprocessing.get_context("spawn")
     queue = ctx.Queue()

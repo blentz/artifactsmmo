@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.learning.models import (
     SkillXpObservation,
     TaskRewardObservation,
 )
+from artifactsmmo_cli.ai.learning.schema_init import exclusive_schema_lock
 from artifactsmmo_cli.ai.learning.store_warmup_core import (
     WARMUP_MIN_SAMPLES,
     warmup_gated_median,
@@ -93,11 +94,18 @@ class LearningStore:
         # garbage-collected, so callers that forget close() don't leak a
         # connection (raises ResourceWarning). Bound to the engine, not self.
         self._finalizer = weakref.finalize(self, self._engine.dispose)
-        SQLModel.metadata.create_all(self._engine)
-
-        with self._engine.connect() as conn:
-            conn.execute(text("PRAGMA journal_mode=WAL"))
-            conn.execute(text("PRAGMA synchronous=NORMAL"))
+        # Schema creation AND the column migrations below run under SQLite's
+        # exclusive writer lock, because each is a probe-then-create pair that
+        # is not atomic across PROCESSES. `play --all --learn` hands every
+        # child the SAME learning DB path, and they open it within about a
+        # second of each other — the exposure that killed a child on the
+        # coordination DB ("table role_leases already exists"). Before
+        # `play --all` existed, exactly one process ever opened this file, so
+        # an unlocked `create_all` was safe for as long as it shipped; the
+        # multi-character supervisor is what made it reachable. See
+        # `schema_init`.
+        with exclusive_schema_lock(self._engine) as conn:
+            SQLModel.metadata.create_all(conn)
             # Phase G-A migration: add delta_skill_xp_json to pre-existing
             # cycles tables. SQLModel.create_all only adds tables, not columns.
             # No Alembic in scope; one-shot ALTER is the simplest contract.
@@ -115,6 +123,12 @@ class LearningStore:
                 conn.exec_driver_sql(
                     "ALTER TABLE cycles ADD COLUMN consumables_expended_json TEXT NOT NULL DEFAULT '{}'"
                 )
+
+        # PRAGMAs go on their OWN connection, after the lock is released:
+        # SQLite refuses a journal_mode change inside a transaction.
+        with self._engine.connect() as conn:
+            conn.execute(text("PRAGMA journal_mode=WAL"))
+            conn.execute(text("PRAGMA synchronous=NORMAL"))
             conn.commit()
 
         self._character = character

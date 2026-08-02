@@ -1,6 +1,8 @@
 """Tests for LearningStore."""
 
+import multiprocessing
 import os
+import sqlite3
 import tempfile
 
 import pytest
@@ -1101,3 +1103,78 @@ def test_hp_healed_per_fight_means_over_wins(tmp_path):
         consumables_expended_json='{"small_health_potion": 5}'))
     assert store.hp_healed_per_fight("red_slime", _restore_of) == 36.0
     store.close()
+
+
+# --- concurrent first open: the `play --all --learn` shape -------------------
+
+
+def _open_worker(db_path: str, character: str, barrier: object, out: object) -> None:
+    """Module-level so it is picklable by multiprocessing's spawn start method.
+
+    Waits on `barrier` BEFORE constructing the store, so every child runs
+    `LearningStore.__init__`'s schema work against the same file at the same
+    moment. Nothing is caught: a store that cannot survive a concurrent
+    sibling must surface as a non-zero exit code, exactly as it did in
+    production on the coordination DB.
+    """
+    barrier.wait()
+    store = LearningStore(db_path=db_path, character=character)
+    try:
+        out.put(character)
+    finally:
+        store.close()
+
+
+def _race_open(db_path: str) -> None:
+    """Open `db_path` from five processes at once; every one must survive."""
+    ctx = multiprocessing.get_context("spawn")
+    queue = ctx.Queue()
+    names = ["HAL", "C3P0", "R2D2", "Robby", "KITT"]
+    barrier = ctx.Barrier(len(names))
+    procs = [ctx.Process(target=_open_worker, args=(db_path, n, barrier, queue)) for n in names]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join(timeout=30)
+        assert p.exitcode == 0, f"a child died opening the learning DB: {p.exitcode}"
+    assert sorted(queue.get() for _ in names) == sorted(names)
+
+
+def test_concurrent_first_open_of_a_new_learning_db_creates_the_schema_once(tmp_path):
+    """`play --all --learn` hands every child the SAME learning DB path, so the
+    coordination DB's `create_all` race applies here verbatim. It was invisible
+    for as long as this store shipped only because, before the multi-character
+    supervisor existed, exactly ONE process ever opened this file."""
+    db_path = str(tmp_path / "fresh.db")
+    assert not os.path.exists(db_path)
+    _race_open(db_path)
+    conn = sqlite3.connect(db_path)
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    conn.close()
+    assert "cycles" in tables
+
+
+def test_concurrent_open_of_a_legacy_db_migrates_the_column_once(tmp_path):
+    """The second half of the same defect: the column migrations are also a
+    probe-then-write pair (`PRAGMA table_info` then `ALTER TABLE`), so five
+    children on a pre-migration DB would all decide to ALTER and the losers
+    would die on "duplicate column name".
+
+    The fixture is a COMPLETE modern schema with only the two migrated columns
+    dropped, so `create_all` finds every table present and issues nothing —
+    which leaves the migration as the only thing the children can race on."""
+    db_path = str(tmp_path / "legacy.db")
+    LearningStore(db_path=db_path, character="setup").close()
+    conn = sqlite3.connect(db_path)
+    conn.execute("ALTER TABLE cycles DROP COLUMN delta_skill_xp_json")
+    conn.execute("ALTER TABLE cycles DROP COLUMN consumables_expended_json")
+    conn.commit()
+    conn.close()
+
+    _race_open(db_path)
+
+    conn = sqlite3.connect(db_path)
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(cycles)")]
+    conn.close()
+    assert cols.count("delta_skill_xp_json") == 1
+    assert cols.count("consumables_expended_json") == 1
