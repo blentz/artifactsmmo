@@ -599,17 +599,30 @@ def achievabilityOf (achievability : List (String × Rat)) (c : GearCand) : Rat 
   | some p => p.2
   | none => 1
 
+/-- The role-alignment multiplier attributed to a candidate, defaulting to `1`
+(no role signal — Python `role.get(key, Fraction(1))`, the same degenerate as
+`synergyOf` / `achievabilityOf`). Keyed by the candidate's unique slot, like
+the other three per-candidate lookups. Mirrors Python `role_alignment.py`
+(Task 13): the fifth ranking factor damping off-role gear chains, inert by
+default. -/
+def roleOf (role : List (String × Rat)) (c : GearCand) : Rat :=
+  match role.find? (fun p => p.1 = c.slot) with
+  | some p => p.2
+  | none => 1
+
 /-- Per-candidate scaled selection weight `gain * falloff(focus level) *
-synergy * achievability` — magnitude * staleness * purity * effort-to-reach —
-keyed by slot. Mirrors Python `_scaled_weights`. `synergy` and `achievability`
-both default to the empty assoc-list (`synergyOf = achievabilityOf = 1`), so
-the pre-synergy/pre-achievability weight is recovered exactly. -/
+synergy * achievability * role` — magnitude * staleness * purity * effort-to-
+reach * role fit — keyed by slot. Mirrors Python `_scaled_weights`. `synergy`,
+`achievability`, and `role` all default to the empty assoc-list
+(`synergyOf = achievabilityOf = roleOf = 1`), so the pre-synergy/pre-
+achievability/pre-role weight is recovered exactly. -/
 def scaledWeights (cs : List GearCand) (focus : List (String × Nat))
-    (synergy : List (String × Rat) := []) (achievability : List (String × Rat) := []) :
+    (synergy : List (String × Rat) := []) (achievability : List (String × Rat) := [])
+    (role : List (String × Rat) := []) :
     List (String × Rat) :=
   cs.map (fun c =>
     (c.slot, c.gain * falloff (focusLevelOf focus c) * synergyOf synergy c
-      * achievabilityOf achievability c))
+      * achievabilityOf achievability c * roleOf role c))
 
 /-- The gear root to pursue this cycle, with anti-starvation aging. While every
 candidate is still in its flat farm window the result is bit-identical to the
@@ -617,16 +630,18 @@ proven `gearTargetPick` argmax; once any candidate has aged, the pick is drawn
 by the deterministic weighted interleave. Mirrors Python `focus_aging_pick`. -/
 def focusAgingPick (cs : List GearCand) (focus : List (String × Nat))
     (cycle : Nat) (synergy : List (String × Rat) := [])
-    (achievability : List (String × Rat) := []) : Option GearCand :=
+    (achievability : List (String × Rat) := []) (role : List (String × Rat) := []) :
+    Option GearCand :=
   match cs with
   | [] => none
   | _ =>
     if cs.all (fun c => focusLevelOf focus c ≤ focusFlat)
         && cs.all (fun c => synergyOf synergy c == 1)
-        && cs.all (fun c => achievabilityOf achievability c == 1) then
+        && cs.all (fun c => achievabilityOf achievability c == 1)
+        && cs.all (fun c => roleOf role c == 1) then
       gearTargetPick cs
     else
-      match interleaveDue (scaledWeights cs focus synergy achievability) cycle with
+      match interleaveDue (scaledWeights cs focus synergy achievability role) cycle with
       | none => none
       | some slot => cs.find? (fun c => c.slot = slot)
 
@@ -656,7 +671,13 @@ theorem focusAgingPick_unaged_eq_argmax
       rw [List.all_eq_true]
       intro c _
       simp [achievabilityOf]
-    simp only [focusAgingPick, hall, hsyn, hach, Bool.and_self, if_true]
+    -- same degenerate for the default empty role: no role signal, so the
+    -- fourth guard clause is vacuously satisfied too.
+    have hrole : (x :: t).all (fun c => roleOf [] c == 1) = true := by
+      rw [List.all_eq_true]
+      intro c _
+      simp [roleOf]
+    simp only [focusAgingPick, hall, hsyn, hach, hrole, Bool.and_self, if_true]
 
 /-! ### No-starvation (bounded reachability) — DISCHARGED in the liveness tier
 
