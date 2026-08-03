@@ -69,16 +69,27 @@ class SelectionContext:
     # player's per-cycle coordination block; None on every single-character
     # run (Task 11 wires the producer — this means is inert until then).
     supply_target: tuple[str, int, int] | None = None
-    # The specialization role this character holds THIS cycle (a
-    # `role_catalog.Role.name`), or None when it holds none — every
-    # single-character run, and any cycle whose lease is not held. Populated by
-    # the player's per-cycle coordination block from `GamePlayer._role`, the
-    # same seam as `supply_target`: the role is a per-cycle player runtime
-    # fact, which is exactly what this context carries, so the tree reads it
-    # here rather than through a second `decide`/`decide_tree` parameter.
-    # `progression_tree._role_map` turns it into the per-candidate role-fit
-    # multiplier; None yields `{}`, the inert four-factor product.
-    role: str | None = None
+    # The OWNED SKILLS of the specialization role this character holds THIS
+    # cycle (`role_catalog.role_skills(role)`), or the empty frozenset when it
+    # holds none — every single-character run, and any cycle whose lease is
+    # not held. Populated by the player's per-cycle coordination block from
+    # `GamePlayer._role` (resolved against `role_catalog.ROLES_BY_NAME`
+    # there, not here — this module imports nothing from the package, see the
+    # module docstring), the same seam as `supply_target`: the role is a
+    # per-cycle player runtime fact, which is exactly what this context
+    # carries, so the tree reads it here rather than through a second
+    # `decide`/`decide_tree` parameter.
+    #
+    # Carrying owned SKILLS rather than the role NAME is deliberate: it lets
+    # `progression_tree._role_map` turn this straight into the per-candidate
+    # role-fit multiplier without resolving a name against `ROLE_CATALOG`
+    # itself, which would re-import `role_catalog` into `ai.tiers` and revive
+    # the circular import `role_catalog -> tiers.skill_classes ->
+    # tiers.__init__ -> tiers.strategy -> tiers.progression_tree ->
+    # role_catalog` (2026-08-01 fix). `role_skills(role)` is never empty for a
+    # real `Role`, so the empty frozenset is an unambiguous "no role" sentinel
+    # — `_role_map` returns `{}` for it, the inert four-factor product.
+    role_skills: frozenset[str] = field(default_factory=frozenset)
 
 
 NO_PROFILE_CONTEXT = SelectionContext(

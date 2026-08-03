@@ -16,6 +16,8 @@ one execution reaching the line. See the paired tests below (`..._none`/
 
 from datetime import datetime, timezone
 
+import pytest
+
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
@@ -158,6 +160,34 @@ def test_own_unmet_demand_bank_netting_only_partially_covers():
 
 
 # ---------------------------------------------------------------------------
+# GamePlayer._role_owned_skills
+# ---------------------------------------------------------------------------
+
+def test_role_owned_skills_empty_without_a_held_role():
+    p = GamePlayer(character="hero")
+    assert p._role is None
+    assert p._role_owned_skills() == frozenset()
+
+
+def test_role_owned_skills_resolves_the_held_role():
+    p = GamePlayer(character="hero")
+    p._role = "miner"  # owns {mining, weaponcrafting}
+    assert p._role_owned_skills() == frozenset({"mining", "weaponcrafting"})
+
+
+def test_role_owned_skills_raises_for_an_unknown_role():
+    """Unlike `_pick_supply_target` (a genuine data-availability case, so it
+    degrades to `None`), `self._role` reaching here outside `ROLE_CATALOG` is
+    a catalog/lease-store consistency failure — `decide_role` only ever
+    claims a catalog name — so this raises rather than silently going
+    role-less and losing the whole fifth ranking factor invisibly."""
+    p = GamePlayer(character="hero")
+    p._role = "not_a_real_role"
+    with pytest.raises(ValueError, match="not in ROLE_CATALOG"):
+        p._role_owned_skills()
+
+
+# ---------------------------------------------------------------------------
 # GamePlayer._pick_supply_target
 # ---------------------------------------------------------------------------
 
@@ -240,6 +270,7 @@ def test_update_coordination_is_a_noop_without_a_store():
     assert p._role_held_cycles == 0
     ctx = p._selection_context(combat_monster=None)
     assert ctx.supply_target is None
+    assert ctx.role_skills == frozenset()
 
 
 def test_set_coordination_store_attaches_it():
@@ -514,6 +545,7 @@ def test_update_coordination_computes_the_supply_target_from_sibling_demand(tmp_
         assert p._supply_target == ("copper_ore", 7, 5)  # banked(2) + demand(5)
         ctx = p._selection_context(combat_monster=None)
         assert ctx.supply_target == ("copper_ore", 7, 5)
+        assert ctx.role_skills == frozenset({"mining", "weaponcrafting"})
     finally:
         store.close()
         sibling.close()

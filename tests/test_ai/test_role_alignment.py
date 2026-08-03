@@ -11,6 +11,7 @@ import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.role_alignment import ALIGNED, MISALIGNED, role_alignment_pure
+from artifactsmmo_cli.ai.role_catalog import ROLES_BY_NAME, role_skills
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
@@ -164,17 +165,18 @@ def skill_candidates() -> list[GearCandidate]:
 
 def test_role_map_is_empty_without_a_role(skill_candidates: list[GearCandidate]) -> None:
     """The no-role identity, at the assembly layer: a character holding no
-    role produces a GENUINELY empty map, not a map of `Fraction(1)`s. Empty is
-    what makes `_NO_ROLE`'s semantics exact — every `.get` falls through to the
-    no-signal default and both fast-path guards stay inert."""
-    assert _role_map(skill_candidates, None, _skill_gd()) == {}
+    role (the empty-owned-skills sentinel) produces a GENUINELY empty map, not
+    a map of `Fraction(1)`s. Empty is what makes `_NO_ROLE`'s semantics exact
+    — every `.get` falls through to the no-signal default and both fast-path
+    guards stay inert."""
+    assert _role_map(skill_candidates, frozenset(), _skill_gd()) == {}
 
 
 def test_role_map_damps_off_role_candidates(skill_candidates: list[GearCandidate]) -> None:
     """`miner` owns mining + weaponcrafting: the mining-produced bar is
     ALIGNED, the gearcrafting shield is MISALIGNED, and the item with no known
     producing skill is ALIGNED (no signal is never a penalty)."""
-    mapped = _role_map(skill_candidates, "miner", _skill_gd())
+    mapped = _role_map(skill_candidates, frozenset({"mining", "weaponcrafting"}), _skill_gd())
     assert set(mapped.values()) <= {ALIGNED, MISALIGNED}
     assert all(isinstance(k, tuple) and len(k) == 2 for k in mapped)
     assert mapped == {
@@ -192,18 +194,8 @@ def test_role_map_keys_two_same_code_candidates_separately() -> None:
         GearCandidate(slot="ring1_slot", code="copper_bar", gain=Fraction(10), level=1),
         GearCandidate(slot="ring2_slot", code="copper_bar", gain=Fraction(10), level=1),
     ]
-    assert set(_role_map(cands, "miner", _skill_gd())) == {
+    assert set(_role_map(cands, frozenset({"mining", "weaponcrafting"}), _skill_gd())) == {
         ("ring1_slot", "copper_bar"), ("ring2_slot", "copper_bar")}
-
-
-def test_role_map_rejects_a_role_outside_the_catalog(
-        skill_candidates: list[GearCandidate]) -> None:
-    """A role name the catalog does not know is a consistency failure, not a
-    missing-data case. Degrading it to `{}` would silently switch the whole
-    fifth factor off — the invisible-inertness failure this epic keeps
-    guarding against — so it raises."""
-    with pytest.raises(ValueError, match="not in ROLE_CATALOG"):
-        _role_map(skill_candidates, "blacksmith", _skill_gd())
 
 
 def _tree_candidates(state, gd, objective) -> list[GearCandidate]:
@@ -214,6 +206,13 @@ def _tree_candidates(state, gd, objective) -> list[GearCandidate]:
 def _gear_order(decision) -> list[str]:
     """The gear rows of a decision's ranking, in order (row 0 is the trunk)."""
     return [row.root_repr for row in decision.ranking[1:]]
+
+
+def _owned_skills(role_name: str | None) -> frozenset[str]:
+    """Test-side stand-in for what `GamePlayer._role_owned_skills` resolves in
+    production: a role NAME (as tests historically wired `ctx.role`) down to
+    the owned-skills frozenset `ctx.role_skills` now carries."""
+    return frozenset() if role_name is None else role_skills(ROLES_BY_NAME[role_name])
 
 
 def test_decide_tree_without_a_role_matches_the_four_factor_ranking() -> None:
@@ -244,9 +243,9 @@ def test_decide_tree_without_a_role_matches_the_four_factor_ranking() -> None:
         expected_reprs = [repr(ObtainItem(code=c.code, quantity=1, slot=c.slot))
                           for c in expected]
         decision = decide_tree(state, gd, objective,
-                               ctx=replace(NO_PROFILE_CONTEXT, role=None))
+                               ctx=replace(NO_PROFILE_CONTEXT, role_skills=frozenset()))
         assert _gear_order(decision) == expected_reprs, name
-        assert _role_map(candidates, None, gd) == {}, name
+        assert _role_map(candidates, frozenset(), gd) == {}, name
     assert checked >= 5, "the sweep must actually exercise scenarios with gear"
 
 
@@ -262,7 +261,8 @@ def test_decide_tree_role_flips_the_gear_pick() -> None:
 
     roleless = decide_tree(state, gd, objective, ctx=NO_PROFILE_CONTEXT)
     jeweler = decide_tree(state, gd, objective,
-                          ctx=replace(NO_PROFILE_CONTEXT, role="jeweler"))
+                          ctx=replace(NO_PROFILE_CONTEXT,
+                                      role_skills=_owned_skills("jeweler")))
 
     assert roleless.chosen_root == ObtainItem(
         code="iron_boots", quantity=1, slot="boots_slot")
@@ -292,7 +292,8 @@ def test_decide_tree_role_signal_alone_makes_the_pick_aged() -> None:
 
     def aged(role: str | None) -> bool:
         return decide_tree(state, gd, objective,
-                           ctx=replace(NO_PROFILE_CONTEXT, role=role)).aged_pick
+                           ctx=replace(NO_PROFILE_CONTEXT,
+                                       role_skills=_owned_skills(role))).aged_pick
 
     assert aged(None) is False
     assert aged("logger") is False    # gearcrafting: ALIGNED, still inert

@@ -3044,27 +3044,25 @@ ROLE_ALIGNMENT_MUTATIONS = [
 # decide_tree. Its own group: unit-killed by tests/test_ai/test_role_alignment.py,
 # not by the synergy-assembly or fallback-order suites the other two
 # impure-tree groups run.
+#
+# `_role_map` took a role NAME and resolved it against `ROLE_CATALOG` itself
+# until the 2026-08-01 circular-import fix moved that resolution to
+# `GamePlayer._role_owned_skills` (see `ROLE_OWNED_SKILLS_MUTATIONS` below,
+# on `PLAYER_SRC`) — `_role_map` now takes the resolved `owned_skills`
+# directly, so the "unknown role raises" and "owned skills emptied by the
+# name lookup" mutations moved there with it.
 ROLE_MAP_MUTATIONS = [
-    # No-role guard dropped: a role-less character (every single-character run)
-    # falls through to the catalog lookup, which cannot match None, and the
-    # whole decision raises. The identity path must stay a path, not an error.
-    ("role map: no-role guard dropped (a role-less character now raises)",
-     "    if role_name is None:\n        return {}",
+    # No-role guard dropped: a role-less character (every single-character
+    # run, `owned_skills == frozenset()`) falls through to
+    # `role_alignment_pure`, whose OWN no-owned-skills identity reads every
+    # candidate as ALIGNED — so the map becomes a constant-1 dict instead of
+    # the genuinely empty `{}` the no-role identity requires. The two are
+    # observationally different (`.get(key, Fraction(1))` cannot tell them
+    # apart downstream, but `== {}` can, which is exactly what
+    # `test_role_map_is_empty_without_a_role` checks).
+    ("role map: no-role guard dropped (empty owned_skills no longer short-circuits)",
+     "    if not owned_skills:\n        return {}",
      "    if False:\n        return {}"),
-    # Unknown role silently degrades to "no role" instead of raising: a
-    # catalog/lease mismatch would switch the entire fifth factor off with no
-    # signal at all — the invisible-inertness failure this epic keeps hitting.
-    ("role map: unknown role degrades to no-role instead of raising",
-     "        raise ValueError(\n"
-     "            f\"role {role_name!r} is not in ROLE_CATALOG: \"\n"
-     "            f\"{sorted(r.name for r in ROLE_CATALOG)}\")",
-     "        return {}"),
-    # Owned skills emptied: role_alignment_pure's no-role identity then makes
-    # EVERY candidate read ALIGNED, so the map is a constant 1 — threaded but
-    # dead, which is precisely the state Task 14 exists to leave behind.
-    ("role map: owned skills emptied (every candidate reads aligned)",
-     "    owned_skills = role_skills(role)",
-     "    owned_skills = frozenset()"),
     # Keyed by code instead of (slot, code): every lookup in _scaled_weights and
     # in both fast-path guards misses, so the factor goes inert again — and two
     # same-code candidates in different slots would collapse onto one entry.
@@ -3088,6 +3086,38 @@ ROLE_MAP_MUTATIONS = [
      "        and all(role.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n"
      "                for c in candidates))",
      "        )"),
+]
+
+# GamePlayer._role_owned_skills (player.py) — resolves the held role NAME
+# against ROLE_CATALOG into its owned skills for `SelectionContext.
+# role_skills`. Carved out of `progression_tree._role_map` by the 2026-08-01
+# circular-import fix (role_catalog -> tiers.skill_classes -> tiers.__init__
+# -> tiers.strategy -> tiers.progression_tree -> role_catalog): the name
+# resolution now happens on the player.py side of that boundary instead.
+# Unit-killed by tests/test_ai/test_player_coordination.py.
+ROLE_OWNED_SKILLS_MUTATIONS = [
+    # Unknown role silently degrades to "no role" instead of raising: a
+    # catalog/lease mismatch would switch the entire fifth factor off with no
+    # signal at all — the invisible-inertness failure this epic keeps
+    # guarding against.
+    ("role owned skills: unknown role degrades to no-role instead of raising",
+     "        role = ROLES_BY_NAME.get(self._role)\n"
+     "        if role is None:\n"
+     "            raise ValueError(\n"
+     "                f\"role {self._role!r} is not in ROLE_CATALOG: \"\n"
+     "                f\"{sorted(ROLES_BY_NAME)}\")\n"
+     "        return role_skills(role)",
+     "        role = ROLES_BY_NAME.get(self._role)\n"
+     "        if role is None:\n"
+     "            return frozenset()\n"
+     "        return role_skills(role)"),
+    # Owned skills emptied even for a resolved role: role_alignment_pure's
+    # no-owned-skills identity then makes EVERY candidate read ALIGNED, so the
+    # fifth factor is threaded but dead for every role-holder — the Task 14
+    # inert state, restored.
+    ("role owned skills: resolved role's skills emptied",
+     "        return role_skills(role)",
+     "        return frozenset()"),
 ]
 
 # _equippable_goal passive-currency gate (strategy_driver.py). Unit-killed by
@@ -6000,6 +6030,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_role_alignment.py", survivors)
     run_group(PROGRESSION_TREE_IMPURE_SRC, ROLE_MAP_MUTATIONS,
               "tests/test_ai/test_role_alignment.py", survivors)
+    run_group(PLAYER_SRC, ROLE_OWNED_SKILLS_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, PASSIVE_CURRENCY_GATE_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHERING_PASSIVE_MUTATIONS,

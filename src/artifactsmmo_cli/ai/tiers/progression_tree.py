@@ -22,7 +22,6 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.requirement_graph_memo import CHAR_XP, SKILL_PREFIX
 from artifactsmmo_cli.ai.requirement_projections import requirement_closure
 from artifactsmmo_cli.ai.role_alignment import role_alignment_pure
-from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG, role_skills
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.achievability_core import achievability_pure
@@ -350,18 +349,31 @@ def _achievability_map(candidates: list[GearCandidate], state: WorldState,
     return {key: achievability_pure(effort, floor) for key, effort in efforts.items()}
 
 
-def _role_map(candidates: list[GearCandidate], role_name: str | None,
+def _role_map(candidates: list[GearCandidate], owned_skills: frozenset[str],
               game_data: GameData) -> Mapping[tuple[str, str], Fraction]:
     """Per-candidate role-fit multiplier, keyed `(slot, code)` like `focus`,
     `synergy` and `achievability` — the FIFTH selection factor
     (emergent-specialization spec; `role_alignment.py` holds the pure core).
+
+    Takes the role's OWNED SKILLS directly rather than a role name — the
+    caller (`decide_tree`, off `ctx.role_skills`) already has them, resolved
+    once by `GamePlayer._selection_context` against `role_catalog.
+    ROLES_BY_NAME`. Resolving a name here instead would re-import
+    `role_catalog` into this module, reviving the circular import
+    `role_catalog -> tiers.skill_classes -> tiers.__init__ -> tiers.strategy
+    -> tiers.progression_tree -> role_catalog` (2026-08-01 fix) — and it would
+    duplicate the exact lookup `GamePlayer` already performs to populate
+    `ctx.role_skills`.
 
     `{}` whenever this character holds no role, which is every
     single-character run: an empty map makes every `role.get(...)` lookup read
     `Fraction(1)`, so `_scaled_weights` and both aging-guard fast paths are
     byte-identical to the four-factor product. That is the `_NO_ROLE` sentinel
     semantics reproduced exactly, and it is what keeps the no-role path
-    unchanged rather than merely close.
+    unchanged rather than merely close. `owned_skills` is the unambiguous
+    "no role" signal here: `role_catalog.role_skills(role)` is never empty for
+    a real `Role` (every role owns at least its `craft` skill), so an empty
+    frozenset can only mean the caller resolved no role at all.
 
     The candidate's own producing skill comes from `GameData.producing_skill`
     (craft skill if craftable, else the gathering skill of a resource that
@@ -369,22 +381,9 @@ def _role_map(candidates: list[GearCandidate], role_name: str | None,
     sibling demand with, so a candidate is judged on-role here by exactly the
     rule that decides which role would be asked to supply it. An item with no
     known producing skill reads as ALIGNED, never MISALIGNED: no signal must
-    never become a penalty (see `role_alignment_pure`).
-
-    A role name outside `ROLE_CATALOG` RAISES rather than degrading to `{}`.
-    Silently treating it as "no role" would turn a catalog/lease mismatch into
-    an invisible loss of the whole factor — the failure mode this epic's
-    `validate_catalog` already refuses for the same reason. Role names only
-    ever originate from the catalog (`decide_role`'s claim), so this is an
-    assertion about internal consistency, not a data-availability fallback."""
-    if role_name is None:
+    never become a penalty (see `role_alignment_pure`)."""
+    if not owned_skills:
         return {}
-    role = next((r for r in ROLE_CATALOG if r.name == role_name), None)
-    if role is None:
-        raise ValueError(
-            f"role {role_name!r} is not in ROLE_CATALOG: "
-            f"{sorted(r.name for r in ROLE_CATALOG)}")
-    owned_skills = role_skills(role)
     return {(c.slot, c.code): role_alignment_pure(
         owned_skills, game_data.producing_skill(c.code)) for c in candidates}
 
@@ -459,13 +458,14 @@ def decide_tree(state: WorldState, game_data: GameData,
     # Role alignment (the fifth selection factor): damp a candidate whose
     # producing skill this character's role does not own, so a role-holder
     # prefers the chain its own skills already serve and leaves the rest to the
-    # sibling that claimed them. The role comes off the per-cycle
-    # `SelectionContext` (`GamePlayer._selection_context` binds `self._role`) —
-    # the same channel `supply_target` uses, so no second coordination seam
-    # exists. `ctx.role is None` — every single-character run, and any
-    # character that holds no lease this cycle — yields `{}`, i.e. the inert
-    # four-factor product exactly.
-    role = _role_map(candidates, ctx.role, game_data)
+    # sibling that claimed them. The owned skills come off the per-cycle
+    # `SelectionContext` (`GamePlayer._selection_context` resolves `self._role`
+    # against `role_catalog.ROLES_BY_NAME` and binds the result) — the same
+    # channel `supply_target` uses, so no second coordination seam exists.
+    # `ctx.role_skills` empty — every single-character run, and any character
+    # that holds no lease this cycle — yields `{}`, i.e. the inert four-factor
+    # product exactly.
+    role = _role_map(candidates, ctx.role_skills, game_data)
 
     ordered = focus_aging_order(candidates, focus, seats, synergy, achievability, role)
     pick = (focus_aging_pick(candidates, focus, seats, synergy, achievability, role)

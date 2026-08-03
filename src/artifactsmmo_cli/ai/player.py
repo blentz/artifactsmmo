@@ -2765,14 +2765,47 @@ class GamePlayer:
             # sibling demand. Set by `_update_coordination`, called once per
             # cycle in `run()` before selection.
             supply_target=self._supply_target,
-            # The held role, same source and same lifecycle as
-            # `supply_target`: set by `_update_coordination`, None on every
-            # single-character run. `progression_tree._role_map` reads it to
-            # damp gear chains this role's skills do not produce (Task 14) —
-            # None keeps the gear ranking byte-identical to the four-factor
-            # product.
-            role=self._role,
+            # The held role's owned skills, same source and same lifecycle as
+            # `supply_target`: `self._role` is set by `_update_coordination`,
+            # None on every single-character run. Resolved to owned skills
+            # HERE (not inside `progression_tree`) so that module never needs
+            # to import `role_catalog` — see `_role_owned_skills`'s
+            # docstring. `progression_tree._role_map` reads the result to damp
+            # gear chains this role's skills do not produce (Task 14) — the
+            # empty frozenset keeps the gear ranking byte-identical to the
+            # four-factor product.
+            role_skills=self._role_owned_skills(),
         )
+
+    def _role_owned_skills(self) -> frozenset[str]:
+        """This character's held role's owned skills (`role_catalog.
+        role_skills`), or the empty frozenset when it holds none.
+
+        Resolves `self._role` against `ROLES_BY_NAME` here, in `player.py`
+        (which already imports `role_catalog` for `decide_role` /
+        `demand_by_role`), rather than inside `ai.tiers.progression_tree` —
+        that module importing `role_catalog` is exactly the circular import
+        `role_catalog -> tiers.skill_classes -> tiers.__init__ ->
+        tiers.strategy -> tiers.progression_tree -> role_catalog` fixed
+        2026-08-01. `SelectionContext.role_skills` carries the resolved
+        result across that boundary instead.
+
+        `self._role` only ever comes from `decide_role`'s claim, which only
+        ever names a `ROLE_CATALOG` entry, so a name this lookup cannot find
+        is a catalog/lease-store consistency failure, not a data-availability
+        gap — it RAISES rather than degrading to "no role", the same
+        assertion `progression_tree._role_map` made directly before this
+        refactor. (Contrast `_pick_supply_target`, which treats an unresolved
+        role as a genuine "nothing to supply" case and returns `None` — a
+        deliberately different, narrower call site.)"""
+        if self._role is None:
+            return frozenset()
+        role = ROLES_BY_NAME.get(self._role)
+        if role is None:
+            raise ValueError(
+                f"role {self._role!r} is not in ROLE_CATALOG: "
+                f"{sorted(ROLES_BY_NAME)}")
+        return role_skills(role)
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:
         assert self.state is not None
