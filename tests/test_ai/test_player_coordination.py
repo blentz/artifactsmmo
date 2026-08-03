@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG
 from artifactsmmo_cli.ai.role_selection import (
     ROLE_IDLE_DWELL_CYCLES,
     ROLE_MIN_HOLD_CYCLES,
+    ROLE_UNSERVABLE_CYCLES,
     decide_role,
     demand_by_role,
 )
@@ -545,6 +546,206 @@ def test_update_coordination_supply_target_none_without_a_matching_role(tmp_path
     finally:
         store.close()
         sibling.close()
+
+
+# ---------------------------------------------------------------------------
+# GamePlayer._note_supply_servability — the caller-owned evidence behind
+# `decide_role`'s release-on-unservable rule. The signal is the ARBITER's own
+# verdict, read out of `goals_tried`, which is a search it already performed:
+# neither `_pick_supply_target() is None` nor `SupplyBankGoal.is_plannable()`
+# can see the Lor failure (measured against the committed gamedata bundle —
+# is_plannable is True for every alchemy target at alchemy level 1, while the
+# real search for SupplyBank(health_potionx10) returns no plan).
+# ---------------------------------------------------------------------------
+
+def _tried(target, plan_len: int) -> list[dict[str, object]]:
+    """The arbiter record for the supply goal built from `target`."""
+    goal = SupplyBankGoal(item_code=target[0], quantity=target[1], demand=target[2])
+    return [{"goal": "GrindCharacterXP", "plan_len": 3},
+            {"goal": repr(goal), "plan_len": plan_len}]
+
+
+def test_note_supply_servability_extends_the_run_when_the_goal_finds_no_plan():
+    p = GamePlayer(character="hero")
+    p._supply_target = ("copper_ore", 7, 5)
+    p._note_supply_servability(_tried(p._supply_target, 0))
+    p._note_supply_servability(_tried(p._supply_target, 0))
+    assert p._role_unservable_cycles == 2
+
+
+def test_note_supply_servability_breaks_the_run_on_a_real_plan():
+    p = GamePlayer(character="hero")
+    p._supply_target = ("copper_ore", 7, 5)
+    p._role_unservable_cycles = ROLE_UNSERVABLE_CYCLES - 1
+    p._note_supply_servability(_tried(p._supply_target, 4))
+    assert p._role_unservable_cycles == 0
+
+
+def test_note_supply_servability_leaves_the_run_alone_when_the_goal_was_not_tried():
+    """Absence of evidence. A guard preempted selection, or the cached plan was
+    reused (`goals_tried` is empty on a cache hit), or the demand is below
+    `SUPPLY_DEMAND_MIN` so the means never fired — none of those is a statement
+    about whether this character CAN serve the role, so neither extending nor
+    clearing the run would be honest."""
+    p = GamePlayer(character="hero")
+    p._supply_target = ("copper_ore", 7, 5)
+    p._role_unservable_cycles = 4
+    p._note_supply_servability([])
+    p._note_supply_servability([{"goal": "GrindCharacterXP", "plan_len": 0}])
+    assert p._role_unservable_cycles == 4
+
+
+def test_note_supply_servability_clears_the_run_without_a_supply_target():
+    """Same scoping the zero-demand counter uses: the run is about a role we
+    are actively supplying, so no target (no role held, or nothing the role
+    produces is in demand) means no run."""
+    p = GamePlayer(character="hero")
+    p._role_unservable_cycles = 9
+    assert p._supply_target is None
+    p._note_supply_servability(_tried(("copper_ore", 7, 5), 0))
+    assert p._role_unservable_cycles == 0
+
+
+# ---------------------------------------------------------------------------
+# GamePlayer._update_coordination — the unservable release, end to end
+# ---------------------------------------------------------------------------
+
+def _held_miner(tmp_path, skills=None):
+    """hero holding `miner` with a sibling asking for copper_ore, plus the two
+    stores to close."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state(bank_items={}, **({"skills": skills} if skills else {}))
+    p.game_data = _mining_demand_gd()
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="rival")
+    p.set_coordination_store(store)
+    now = datetime.now(tz=timezone.utc)
+    sibling.publish_demand({"copper_ore": 5}, now)
+    store.claim("miner", now)
+    p._role = "miner"
+    p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
+    return p, store, sibling
+
+
+def test_update_coordination_releases_a_role_it_cannot_serve(tmp_path):
+    """GAP A, the Lor scenario through the real seam: demand is POSITIVE (so
+    release-on-idle cannot fire) and has gone unserved for a full run."""
+    p, store, sibling = _held_miner(tmp_path)
+    try:
+        p._role_unservable_cycles = ROLE_UNSERVABLE_CYCLES
+        p._update_coordination(p.state, p.game_data)
+        assert p._role != "miner"
+        # Blocked at the skill level the verdict was reached at: miner owns
+        # {mining, weaponcrafting} and the fixture character has mining 3.
+        assert p._role_unservable_released == {"miner": 3}
+        assert store.live_leases(datetime.now(tz=timezone.utc)).get("miner") is None
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_update_coordination_keeps_a_role_it_is_still_serving(tmp_path):
+    """The other side of the same conditional: an unfinished run holds."""
+    p, store, sibling = _held_miner(tmp_path)
+    try:
+        p._role_unservable_cycles = ROLE_UNSERVABLE_CYCLES - 1
+        p._update_coordination(p.state, p.game_data)
+        assert p._role == "miner"
+        assert p._role_unservable_released == {}
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_update_coordination_does_not_block_an_idle_release(tmp_path):
+    """Only an UNSERVABLE release blocks the re-claim. A role released because
+    nothing needed it any more is a different verdict — it must stay
+    re-claimable the instant demand returns, which is what `_role_idle_released`
+    (conditional on non-positive demand) already provides."""
+    p = GamePlayer(character="hero")
+    p.state = make_state()
+    p.game_data = _mining_demand_gd()
+    store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
+    p.set_coordination_store(store)
+    try:
+        store.claim("miner", datetime.now(tz=timezone.utc))
+        p._role = "miner"
+        p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
+        p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES - 1
+        p._update_coordination(p.state, p.game_data)
+        assert "miner" in p._role_idle_released
+        assert p._role_unservable_released == {}
+    finally:
+        store.close()
+
+
+def test_update_coordination_does_not_reclaim_an_unservable_role(tmp_path):
+    """The churn hole unique to this release: the demand that triggered it is
+    POSITIVE, so `_role_idle_released` (which only holds a role back while its
+    demand is non-positive) would hand it straight back next cycle."""
+    p, store, sibling = _held_miner(tmp_path)
+    try:
+        p._role_unservable_cycles = ROLE_UNSERVABLE_CYCLES
+        p._update_coordination(p.state, p.game_data)
+        assert "miner" in p._role_unservable_released
+        for _ in range(3):
+            p._update_coordination(p.state, p.game_data)
+            assert p._role != "miner"
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_update_coordination_reopens_an_unservable_role_once_the_skill_rises(tmp_path):
+    """...and it becomes claimable again the moment the verdict could have
+    changed. Skill progress is the only thing that can change "I cannot serve
+    this", and the role is free on the shared board the whole time, so a
+    better-suited sibling never waits on this."""
+    p, store, sibling = _held_miner(tmp_path)
+    try:
+        p._role_unservable_cycles = ROLE_UNSERVABLE_CYCLES
+        p._update_coordination(p.state, p.game_data)
+        assert "miner" in p._role_unservable_released
+
+        # Same level: still blocked.
+        p._update_coordination(p.state, p.game_data)
+        assert "miner" in p._role_unservable_released
+
+        # Mining 3 -> 4: the block lifts.
+        skills = dict(p.state.skills)
+        skills["mining"] = skills["mining"] + 1
+        p.state = make_state(bank_items={}, skills=skills)
+        p._role = None
+        p._role_held_cycles = 0
+        p._update_coordination(p.state, p.game_data)
+        assert "miner" not in p._role_unservable_released
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_update_coordination_claims_the_role_its_skills_fit(tmp_path):
+    """GAP B through the real seam: `state.skills` reaches `decide_role`, so a
+    trained jewelrycrafter claims `jeweler` where the demand-only ranking gave
+    everyone the first catalog entry. Proves the parameter is not inert."""
+    p = GamePlayer(character="hero")
+    p.game_data = _mining_demand_gd()
+    store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
+    p.set_coordination_store(store)
+    try:
+        flat = {s: 1 for s in make_state().skills}
+        p.state = make_state(skills=flat)
+        p._update_coordination(p.state, p.game_data)
+        assert p._role == ROLE_CATALOG[0].name  # no fit signal -> catalog order
+
+        p._role, p._role_held_cycles = None, 0
+        store.release(ROLE_CATALOG[0].name)
+        p.state = make_state(skills={**flat, "jewelrycrafting": 20})
+        p._update_coordination(p.state, p.game_data)
+        assert p._role == "jeweler"
+    finally:
+        store.close()
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,9 @@ import pytest
 
 from artifactsmmo_cli.ai.role_catalog import (
     ROLE_CATALOG,
+    ROLES_BY_NAME,
     Role,
+    role_skill_level,
     role_skills,
     validate_catalog,
 )
@@ -106,3 +108,34 @@ def test_mining_is_accepted_in_both_gather_and_craft_slots() -> None:
 
 def test_woodcutting_is_accepted_in_both_gather_and_craft_slots() -> None:
     validate_catalog((Role(name="logger", gather="woodcutting", craft="woodcutting"),))
+
+
+# --- ROLES_BY_NAME / role_skill_level (level-aware claiming, 2026-08-02) ---
+
+
+def test_roles_by_name_indexes_the_whole_catalog() -> None:
+    assert set(ROLES_BY_NAME) == {r.name for r in ROLE_CATALOG}
+    assert all(ROLES_BY_NAME[r.name] is r for r in ROLE_CATALOG)
+
+
+def test_role_skill_level_takes_the_best_of_the_owned_skills() -> None:
+    # miner owns {mining, weaponcrafting}: the deeper of the two is what makes
+    # the character suited to the role, so max, not min or mean.
+    role = Role(name="miner", gather="mining", craft="weaponcrafting")
+    assert role_skill_level(role, {"mining": 21, "weaponcrafting": 3}) == 21
+    assert role_skill_level(role, {"mining": 3, "weaponcrafting": 21}) == 21
+
+
+def test_role_skill_level_reads_a_missing_skill_as_zero() -> None:
+    # Absence is "no reading", NOT the API's level-1 floor: an unknown skill
+    # must not look identical to a genuinely untrained one.
+    role = Role(name="miner", gather="mining", craft="weaponcrafting")
+    assert role_skill_level(role, {"mining": 4}) == 4
+    assert role_skill_level(role, {}) == 0
+
+
+def test_role_skill_level_handles_the_collapsed_alchemist_role() -> None:
+    # gather == craft collapses `role_skills` to ONE entry; the max must still
+    # be well-formed over a single-element set.
+    role = Role(name="alchemist", gather="alchemy", craft="alchemy")
+    assert role_skill_level(role, {"alchemy": 7}) == 7

@@ -33,6 +33,7 @@ appears in both, which is what lets `alchemist` declare `gather="alchemy",
 craft="alchemy"`.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.tiers.skill_classes import CRAFT_SKILLS, GATHERING_SKILLS
@@ -60,12 +61,33 @@ ROLE_CATALOG: tuple[Role, ...] = (
 )
 """Five roles covering all eight API skills, each owned exactly once."""
 
+ROLES_BY_NAME: dict[str, Role] = {role.name: role for role in ROLE_CATALOG}
+"""Name lookup over `ROLE_CATALOG`. Names are unique by construction (each of
+the eight API skills is owned exactly once), so this loses nothing."""
+
 
 def role_skills(role: Role) -> frozenset[str]:
     """Every skill this role owns. `gather == craft` (alchemist) collapses."""
     if role.gather is None:
         return frozenset({role.craft})
     return frozenset({role.gather, role.craft})
+
+
+def role_skill_level(role: Role, skill_levels: Mapping[str, int]) -> int:
+    """The character's BEST level among the skills this role owns.
+
+    Max rather than min or mean: a role is served by producing what a sibling
+    asked for, and any one of the role's owned skills can be the producer (the
+    `miner` role serves a copper_ore request from `mining` alone). A character
+    deep in one of a role's skills is genuinely suited to it even if the other
+    is untouched.
+
+    A skill absent from `skill_levels` reads as 0, NOT as the API's level-1
+    floor: absence means the caller had no reading for it, and treating "no
+    data" as "the starting level" would make an unknown skill look equal to a
+    genuinely untrained one. `role_skills` is never empty, so the max is always
+    over at least one entry."""
+    return max(skill_levels.get(skill, 0) for skill in role_skills(role))
 
 
 def validate_catalog(catalog: tuple[Role, ...]) -> None:

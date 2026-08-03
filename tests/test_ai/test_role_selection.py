@@ -2,9 +2,11 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG
 from artifactsmmo_cli.ai.role_selection import (
+    NO_SKILL_LEVELS,
     ROLE_IDLE_DWELL_CYCLES,
     ROLE_MIN_HOLD_CYCLES,
     ROLE_SWITCH_MARGIN,
+    ROLE_UNSERVABLE_CYCLES,
     decide_role,
     demand_by_role,
 )
@@ -13,17 +15,21 @@ _ME = "HAL"
 
 
 def _decide(current, held_cycles, leases, demand, idle_released=frozenset(),
-            zero_demand_cycles=ROLE_IDLE_DWELL_CYCLES):
+            zero_demand_cycles=ROLE_IDLE_DWELL_CYCLES, **kwargs):
     """Default the zero-demand RUN to a full dwell window.
 
     Every pre-existing case here is about the OTHER hysteresis parameters, and
     reads most clearly when the idle run is not what is being varied. Tests
-    that exercise the run itself pass it explicitly."""
+    that exercise the run itself pass it explicitly.
+
+    `kwargs` forwards the later parameters (`unservable_released`,
+    `unservable_cycles`, `skill_levels`) so the cases about THOSE stay explicit
+    while every case predating them keeps their conservative defaults."""
     return decide_role(current=current, held_cycles=held_cycles,
                        live_leases=leases, demand_by_role=demand,
                        character=_ME, catalog=ROLE_CATALOG,
                        idle_released=idle_released,
-                       zero_demand_cycles=zero_demand_cycles)
+                       zero_demand_cycles=zero_demand_cycles, **kwargs)
 
 
 def test_claims_highest_demand_role_when_holding_none() -> None:
@@ -362,6 +368,182 @@ def test_idle_released_default_is_empty_and_changes_nothing() -> None:
     # identical to passing an explicit empty set -- no hidden default state.
     args = (None, 0, {}, {"miner": 10, "logger": 3})
     assert _decide(*args) == _decide(*args, idle_released=frozenset())
+
+
+# --- Release on UNSERVABLE demand (Gap A, live run 2026-08-01) ---
+# Release-on-idle triggers on demand reading ZERO. The hole it leaves: a role
+# whose demand is POSITIVE but which the holder cannot serve. Because the lease
+# is exclusive, every request for those skills routes to the holder by design,
+# so the demand is never served and no sibling may take over. Live: a level-1
+# character held `alchemist` while a level-21 sibling held `miner`.
+
+_LOR_LEASES = {"alchemist": _ME}
+_LOR_DEMAND = {"alchemist": 40}
+
+
+def test_releases_a_role_whose_positive_demand_it_cannot_serve() -> None:
+    # THE LOR SCENARIO. Demand is positive (so the idle rule cannot fire) and
+    # has gone unserved for a full run: give the role up so a sibling can take
+    # it. The `unservable` flag rides along because the caller has to know WHY
+    # -- see the reclaim test below.
+    d = _decide("alchemist", ROLE_MIN_HOLD_CYCLES, _LOR_LEASES, _LOR_DEMAND,
+                unservable_cycles=ROLE_UNSERVABLE_CYCLES)
+    assert d.release == "alchemist"
+    assert d.unservable is True
+
+
+def test_a_servable_role_with_positive_demand_is_not_released() -> None:
+    # The whole point of the counter: a role being SERVED (the run never
+    # accumulates) must be held, no matter how long it has been held for.
+    d = _decide("alchemist", ROLE_MIN_HOLD_CYCLES * 10, _LOR_LEASES, _LOR_DEMAND,
+                unservable_cycles=0)
+    assert d.keep == "alchemist"
+    assert d.release is None
+
+
+def test_unservable_release_needs_a_full_run_of_failed_attempts() -> None:
+    # One cycle short. A single failed search is a cheap-budget timeout or a
+    # momentarily missing ingredient, not an inability.
+    d = _decide("alchemist", ROLE_MIN_HOLD_CYCLES, _LOR_LEASES, _LOR_DEMAND,
+                unservable_cycles=ROLE_UNSERVABLE_CYCLES - 1)
+    assert d.keep == "alchemist"
+    assert d.release is None
+
+
+def test_no_unservable_run_never_releases_on_unservability() -> None:
+    # The parameter's default: a caller that does not track the run gets the
+    # conservative behaviour (hold), exactly as with `zero_demand_cycles`.
+    d = decide_role(current="alchemist", held_cycles=ROLE_MIN_HOLD_CYCLES,
+                    live_leases=_LOR_LEASES, demand_by_role=_LOR_DEMAND,
+                    character=_ME, catalog=ROLE_CATALOG)
+    assert d.keep == "alchemist"
+
+
+def test_unservable_release_waits_for_the_min_hold_like_every_other_release() -> None:
+    # The dwell that defends against thrash is checked FIRST, so a role claimed
+    # this cycle is never dropped on a run carried in from a previous holding.
+    d = _decide("alchemist", ROLE_MIN_HOLD_CYCLES - 1, _LOR_LEASES, _LOR_DEMAND,
+                unservable_cycles=ROLE_UNSERVABLE_CYCLES * 10)
+    assert d.keep == "alchemist"
+
+
+def test_unservable_dwell_never_exceeds_the_min_hold() -> None:
+    # Same load-bearing inequality `ROLE_IDLE_DWELL_CYCLES` carries, for the
+    # same reason: the run is only consulted once `held_cycles >=
+    # ROLE_MIN_HOLD_CYCLES`, and THAT counter restarts on every claim, so a run
+    # carried across a re-claim can never be the binding constraint.
+    assert ROLE_UNSERVABLE_CYCLES <= ROLE_MIN_HOLD_CYCLES
+
+
+def test_an_idle_release_is_not_flagged_unservable() -> None:
+    # Zero demand is a different verdict: the role is FINISHED, not impossible.
+    # It must stay re-claimable the moment demand returns, so the caller must
+    # not be told to block it.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME}, {})
+    assert d.release == "logger"
+    assert d.unservable is False
+
+
+def test_a_margin_release_is_not_flagged_unservable() -> None:
+    # Losing a demand-margin contest says nothing about capability — the role
+    # was being served fine, a rival simply carries more demand.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME},
+                {"logger": 1, "miner": 100}, unservable_cycles=0)
+    assert d.release == "logger"
+    assert d.unservable is False
+
+
+def test_an_unservable_released_role_is_not_reclaimed_despite_positive_demand() -> None:
+    # The churn hole specific to THIS release: positive demand is exactly what
+    # triggered it, so the `idle_released` rule (which only skips a role while
+    # its demand is non-positive) would hand the role straight back next cycle.
+    d = _decide(None, 0, {}, _LOR_DEMAND,
+                unservable_released=frozenset({"alchemist"}))
+    assert d.claim is not None
+    assert d.claim != "alchemist"
+
+
+def test_an_unservable_released_role_is_claimable_again_once_the_block_lifts() -> None:
+    # The caller drops the role from the set when the verdict could have
+    # changed (GamePlayer: when the character's level in one of the role's own
+    # skills has risen). With the block lifted, the role competes normally and
+    # wins on its demand.
+    d = _decide(None, 0, {}, _LOR_DEMAND, unservable_released=frozenset())
+    assert d.claim == "alchemist"
+
+
+def test_every_role_blocked_or_leased_claims_nothing() -> None:
+    # The unconditional skip must be able to empty the candidate set entirely
+    # (the `best is None` path) rather than fall through to a blocked role.
+    d = _decide(None, 0, {}, {r.name: 5 for r in ROLE_CATALOG},
+                unservable_released=frozenset(r.name for r in ROLE_CATALOG))
+    assert (d.claim, d.keep, d.release) == (None, None, None)
+
+
+# --- Level-aware claiming (Gap B, live run 2026-08-01) ---
+# Allocation used to be decided purely by demand, so which character got which
+# role came down to who won the startup race: a level-21 character holding
+# `jeweler` while a level-1 character held `miner` was perfectly reachable.
+
+_JEWELER = {"jewelrycrafting": 20}
+_MINER = {"mining": 21}
+
+
+def test_skill_fit_breaks_a_comparable_demand_toward_the_suited_role() -> None:
+    # Equal demand on miner and jeweler. Demand alone resolves this by catalog
+    # order (miner is first), which is how a trained jeweler ended up mining.
+    demand = {"miner": 10, "jeweler": 10}
+    assert _decide(None, 0, {}, demand).claim == "miner"
+    assert _decide(None, 0, {}, demand, skill_levels=_JEWELER).claim == "jeweler"
+    assert _decide(None, 0, {}, demand, skill_levels=_MINER).claim == "miner"
+
+
+def test_skill_fit_never_vetoes_a_role_the_fleet_actually_needs() -> None:
+    # A perfectly-suited character must not sit idle when the only demand is
+    # elsewhere: affinity maxes at 1, so it can at most DOUBLE effective demand.
+    d = _decide(None, 0, {}, {"miner": 100}, skill_levels=_JEWELER)
+    assert d.claim == "miner"
+
+
+def test_skill_fit_decides_when_the_board_is_completely_quiet() -> None:
+    # Cold start with nothing published. Without the `+ 1` offset every role
+    # would score zero and the tie would fall to catalog order, so a trained
+    # jeweler would claim `miner` on cycle 0 of every session.
+    assert _decide(None, 0, {}, {}, skill_levels=_JEWELER).claim == "jeweler"
+
+
+def test_a_character_with_no_levels_in_the_free_role_still_claims_it() -> None:
+    # PREFER, never forbid: hard-excluding an ill-suited role would leave a
+    # fresh character permanently unspecialized. Every role but `jeweler` is
+    # leased away and hero has zero jewelrycrafting — it still claims it.
+    leases = {r.name: "C3P0" for r in ROLE_CATALOG if r.name != "jeweler"}
+    d = _decide(None, 0, leases, {}, skill_levels=_MINER)
+    assert d.claim == "jeweler"
+
+
+def test_skills_no_role_owns_leave_the_claim_demand_ranked() -> None:
+    # `best` level over the catalog's own skills is 0 here, so affinity is
+    # uniform and the ranking is demand's alone — the same answer as passing
+    # no skills at all.
+    d = _decide(None, 0, {}, {"miner": 3, "logger": 9}, skill_levels={"unowned": 40})
+    assert d.claim == "logger"
+
+
+def test_skill_levels_default_is_empty_and_changes_nothing() -> None:
+    # No hidden default state: omitting `skill_levels` must be identical to
+    # passing the exported empty default.
+    args = (None, 0, {}, {"miner": 10, "logger": 3})
+    assert _decide(*args) == _decide(*args, skill_levels=NO_SKILL_LEVELS)
+    assert dict(NO_SKILL_LEVELS) == {}
+
+
+def test_skill_fit_does_not_reopen_the_margin_rule() -> None:
+    # The hold/release side stays demand-driven: a well-suited rival role does
+    # NOT pull a character off a role that is still carrying demand, because
+    # skill fit says what this character could produce, not what the fleet needs.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME},
+                {"logger": 10, "jeweler": 15}, skill_levels=_JEWELER)
+    assert d.keep == "logger"
 
 
 # --- demand_by_role: bridges item-keyed sibling demand onto role-keyed demand ---

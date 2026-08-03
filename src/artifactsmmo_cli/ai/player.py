@@ -67,6 +67,7 @@ from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
 from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.grind_expansion import grind_leg_nodes
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -100,7 +101,12 @@ from artifactsmmo_cli.ai.recovery import (
     StuckExit,
     StuckSignal,
 )
-from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG, role_skills
+from artifactsmmo_cli.ai.role_catalog import (
+    ROLE_CATALOG,
+    ROLES_BY_NAME,
+    role_skill_level,
+    role_skills,
+)
 from artifactsmmo_cli.ai.role_selection import decide_role, demand_by_role
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.should_replan import should_replan
@@ -368,6 +374,18 @@ class GamePlayer:
         # inequality is pinned by a test; adding a reset "for safety" would be a
         # second, unobservable guard on the same condition.
         self._role_zero_demand_cycles: int = 0
+        # Consecutive cycles this character's supply goal was ATTEMPTED by the
+        # arbiter and came back with no plan — the counter `decide_role`'s
+        # release-on-unservable rule consumes, owned here for the same reason
+        # the two above are. Advanced/reset by `_note_supply_servability`.
+        self._role_unservable_cycles: int = 0
+        # Roles released as UNSERVABLE, each mapped to `role_skill_level` at the
+        # moment of release. `decide_role` skips these unconditionally (unlike
+        # `_role_idle_released`, positive demand must NOT re-open a role we just
+        # proved we cannot serve), so the caller owns the un-blocking: an entry
+        # is dropped once this character's level in one of that role's own
+        # skills has RISEN, which is the one thing that can change the verdict.
+        self._role_unservable_released: dict[str, int] = {}
         # This cycle's (item_code, quantity, demand) to bank for a sibling, or
         # None — threaded into `_selection_context`'s `supply_target` field.
         # None whenever no coordination store is attached, no role is held, or
@@ -983,6 +1001,10 @@ class GamePlayer:
                 combat_monster = self._winnable_farm_target()
                 selected_goal, plan, goals_tried, replanned = self._plan_or_reuse(
                     state, game_data, actions, combat_monster)
+                # Whether the arbiter could actually plan this cycle's supply
+                # goal is the evidence `decide_role`'s release-on-unservable
+                # rule runs on, and this is the only point it exists.
+                self._note_supply_servability(goals_tried)
                 state = self.state  # _plan_or_reuse may have replaced crafting_target
                 # `priority` is recorded per attempt by the arbiter, which is the
                 # only place the goal OBJECT still exists (`goals_tried` carries
@@ -2539,7 +2561,7 @@ class GamePlayer:
         bank-dependent decision in this file."""
         if self._role is None:
             return None
-        role = next((r for r in ROLE_CATALOG if r.name == self._role), None)
+        role = ROLES_BY_NAME.get(self._role)
         if role is None:
             return None
         owned_skills = role_skills(role)
@@ -2556,6 +2578,67 @@ class GamePlayer:
             return None
         banked = state.bank_items.get(best_code, 0)
         return (best_code, banked + best_demand, best_demand)
+
+    def _note_supply_servability(self, goals_tried: "list[Any]") -> None:
+        """Extend or break the run of cycles this character's held role has
+        been unable to serve — the counter `decide_role`'s release-on-unservable
+        rule consumes.
+
+        THE SIGNAL IS THE ARBITER'S OWN VERDICT: the SupplyBank goal built from
+        this cycle's `_supply_target` was tried and came back with a zero-length
+        plan. Two cheaper-looking candidates were measured against the committed
+        `gamedata_bundle.json` and rejected:
+
+          * `_pick_supply_target() is None` while role demand is positive. It
+            cannot happen: `demand_by_role` and `_pick_supply_target` route on
+            the SAME producing-skill map, so positive role demand always names
+            an item the role owns. The only None left is "bank never visited",
+            which is a first-cycles transient, not an inability.
+          * `SupplyBankGoal.is_plannable() == False`. Measured False for none of
+            it: at alchemy level 1 it returns True for every alchemy craftable
+            in the bundle (small_health_potion through health_potion) and for
+            every alchemy gather drop up to torch_cactus_flower — because
+            `GatherMaterialsGoal.is_plannable` deliberately stopped pruning
+            under-skill craft goals when LevelSkill became plannable, and the
+            depth bound it adds is far looser than the real search. It is a
+            SOUND signal (False really does mean unservable) but an almost
+            silent one, so releasing on it would have been inert.
+
+        The real failure is downstream of both: the same probe planned
+        `SupplyBank(health_potionx10)` for a level-1 alchemist and got no plan
+        after 21k nodes and a full budget timeout. Only the attempt outcome sees
+        that — and it costs NOTHING to read, because `goals_tried` is already
+        the record of a search the arbiter performed anyway. SUPPLY_BANK sits in
+        `COLLECT_REWARD_ORDER` above the objective step, so it is attempted
+        before the step goal on every cycle it fires; and being `memo_exempt` it
+        is never skipped by the doomed memo, so a record here is always a real
+        search.
+
+        A cycle where the goal was NOT attempted (a guard preempted selection,
+        the cached plan was reused, the demand is below `SUPPLY_DEMAND_MIN`)
+        leaves the run untouched: it is absence of evidence, and neither
+        extending nor clearing the run would be honest. The run IS cleared when
+        there is no supply target at all, which is the same "this run is about a
+        role we are actively supplying" scoping the zero-demand counter uses.
+        """
+        target = self._supply_target
+        if target is None:
+            self._role_unservable_cycles = 0
+            return
+        item_code, quantity, demand = target
+        wanted = repr(SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand))
+        attempt = next((gt for gt in goals_tried if gt.get("goal") == wanted), None)
+        if attempt is None:
+            return
+        # Every record carrying a goal REPR comes from `StrategyArbiter._plans`,
+        # which always writes `plan_len` (the one synthetic record the arbiter
+        # appends is keyed "worth_gate_bypassed" and cannot match). Indexed, not
+        # `.get`-with-default, so a future record shape fails loudly instead of
+        # silently counting as unservable.
+        if attempt["plan_len"] > 0:
+            self._role_unservable_cycles = 0
+        else:
+            self._role_unservable_cycles += 1
 
     def _update_coordination(self, state: "WorldState", game_data: GameData) -> None:
         """Renew, publish, and re-decide this character's role for one cycle,
@@ -2587,13 +2670,24 @@ class GamePlayer:
             self._role_zero_demand_cycles += 1
         else:
             self._role_zero_demand_cycles = 0
+        # Un-block any role whose "I cannot serve this" verdict this character
+        # has since outgrown: the only thing that can change the verdict is its
+        # own skill progress, and the role is free on the shared board the whole
+        # time, so a better-suited sibling never waits on this.
+        self._role_unservable_released = {
+            name: level for name, level in self._role_unservable_released.items()
+            if role_skill_level(ROLES_BY_NAME[name], state.skills) <= level
+        }
         decision = decide_role(current=self._role, held_cycles=self._role_held_cycles,
                                live_leases=self._coordination.live_leases(now),
                                demand_by_role=by_role,
                                character=self._coordination.character,
                                catalog=ROLE_CATALOG,
                                idle_released=self._role_idle_released,
-                               zero_demand_cycles=self._role_zero_demand_cycles)
+                               zero_demand_cycles=self._role_zero_demand_cycles,
+                               unservable_released=frozenset(self._role_unservable_released),
+                               unservable_cycles=self._role_unservable_cycles,
+                               skill_levels=state.skills)
         if decision.release is not None:
             self._coordination.release(decision.release)
             # `decide_role`'s docstring: the caller adds a role on EVERY
@@ -2601,6 +2695,12 @@ class GamePlayer:
             # needing to remove one — membership only matters while the
             # role's own demand stays non-positive.
             self._role_idle_released = self._role_idle_released | {decision.release}
+            if decision.unservable:
+                # Positive demand is what triggered THIS release, so the
+                # idle set above cannot hold it back — record the skill level
+                # the verdict was reached at, and block until it rises.
+                self._role_unservable_released[decision.release] = role_skill_level(
+                    ROLES_BY_NAME[decision.release], state.skills)
             self._role = None
             self._role_held_cycles = 0
         elif decision.claim is not None:
