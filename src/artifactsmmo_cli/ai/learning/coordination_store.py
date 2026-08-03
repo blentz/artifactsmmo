@@ -23,7 +23,7 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import text
+from sqlalchemy import Connection, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, create_engine, select
@@ -43,6 +43,49 @@ DEMAND_TTL_SECONDS = 600
 LEASE_TTL_SECONDS on purpose: a crashed character's demand stops being served
 at the same moment its role frees up, so there is exactly ONE liveness rule in
 the coordination system."""
+
+
+def _migrate_role_lease_unique_index(conn: Connection) -> None:
+    """One-shot fix-up for `role_leases` on a pre-existing learning DB (2026-08-03).
+
+    `RoleLease`'s uniqueness moved from `UNIQUE(role)` to `UNIQUE(role,
+    character)` when roles stopped being an exclusive resource — see
+    `RoleLease`'s docstring in `models.py` for why. `SQLModel.metadata
+    .create_all` only creates tables that do not exist; it never alters an
+    existing table's indexes. So every `learning.db` that predates this
+    change still carries the old `CREATE UNIQUE INDEX ix_role_leases_role ON
+    role_leases (role)`. With that index in place the second character to
+    claim any role hits a UNIQUE-constraint violation on insert, and the
+    whole non-exclusive-roles feature is silently dead on any existing
+    install — the same class of "old cache, dead feature" bug the
+    `delta_skill_xp_json` / `consumables_expended_json` migrations in
+    `LearningStore.__init__` fixed for the cycles table.
+
+    Detects the stale index via `PRAGMA index_list` / `PRAGMA index_info`
+    rather than assuming it is there: a database created fresh under the
+    current model already has the compound uniqueness (as a table-level
+    `UniqueConstraint`, which SQLite implements as an autoindex) and no
+    index whose columns are exactly `["role"]`, so the search below finds
+    nothing and this is a no-op on it. Migrating in place — drop the stale
+    single-column unique index, recreate a plain (non-unique) index on
+    `role` alone to match the model's `Field(index=True)`, then add a
+    UNIQUE index on `(role, character)` — preserves every existing lease
+    row. Rows are TTL-bounded and would survive losing them, but nothing
+    here requires that: an index rebuild touches no row data.
+    """
+    unique_role_only: str | None = None
+    for row in conn.exec_driver_sql("PRAGMA index_list(role_leases)"):
+        name, is_unique = row[1], row[2]
+        if not is_unique:
+            continue
+        cols = [info[2] for info in conn.exec_driver_sql(f"PRAGMA index_info({name})")]
+        if cols == ["role"]:
+            unique_role_only = name
+    if unique_role_only is None:
+        return
+    conn.exec_driver_sql(f"DROP INDEX {unique_role_only}")
+    conn.exec_driver_sql("CREATE INDEX ix_role_leases_role ON role_leases (role)")
+    conn.exec_driver_sql("CREATE UNIQUE INDEX uq_role_lease_holder ON role_leases (role, character)")
 
 
 def _require_utc(now: datetime) -> None:
@@ -115,6 +158,7 @@ class CoordinationStore:
         # "table role_leases already exists". See `schema_init`.
         with exclusive_schema_lock(self._engine) as conn:
             SQLModel.metadata.create_all(conn)
+            _migrate_role_lease_unique_index(conn)
         with self._engine.connect() as conn:
             conn.execute(text("PRAGMA journal_mode=WAL"))
             conn.execute(text("PRAGMA synchronous=NORMAL"))

@@ -29,6 +29,126 @@ def _engine(tmp_path: Path):
     engine.dispose()
 
 
+def _create_legacy_role_leases_schema(db_path: Path) -> None:
+    """Build a `role_leases` table matching the pre-2026-08-03 schema: UNIQUE
+    on `role` alone, verified live on the real `learning.db`:
+
+        CREATE TABLE role_leases (id INTEGER NOT NULL, role VARCHAR NOT NULL,
+                                  character VARCHAR NOT NULL, claimed_at VARCHAR NOT NULL,
+                                  expires_at VARCHAR NOT NULL, PRIMARY KEY (id))
+        CREATE UNIQUE INDEX ix_role_leases_role ON role_leases (role)
+        CREATE INDEX ix_role_leases_character ON role_leases (character)
+
+    Built directly against a `tmp_path` file (never by copying a real DB) and
+    seeded with one lease row, so migration tests can also assert the row
+    survives."""
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.connect() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE role_leases (id INTEGER NOT NULL, role VARCHAR NOT NULL, "
+            "character VARCHAR NOT NULL, claimed_at VARCHAR NOT NULL, "
+            "expires_at VARCHAR NOT NULL, PRIMARY KEY (id))"
+        )
+        conn.exec_driver_sql("CREATE UNIQUE INDEX ix_role_leases_role ON role_leases (role)")
+        conn.exec_driver_sql("CREATE INDEX ix_role_leases_character ON role_leases (character)")
+        conn.exec_driver_sql(
+            "INSERT INTO role_leases (role, character, claimed_at, expires_at) "
+            "VALUES ('miner', 'HAL', '2026-08-01T00:00:00+00:00', '2026-08-01T00:10:00+00:00')"
+        )
+        conn.commit()
+    engine.dispose()
+
+
+def _role_lease_index_defs(db_path: Path) -> dict[str, tuple[bool, list[str]]]:
+    """{index_name: (is_unique, [columns])} for role_leases, read via PRAGMA.
+    Used to assert the migration's end state without depending on whichever
+    name SQLite happens to give the compound-unique index."""
+    engine = create_engine(f"sqlite:///{db_path}")
+    result: dict[str, tuple[bool, list[str]]] = {}
+    with engine.connect() as conn:
+        for row in conn.exec_driver_sql("PRAGMA index_list(role_leases)"):
+            name, is_unique = row[1], bool(row[2])
+            cols = [info[2] for info in conn.exec_driver_sql(f"PRAGMA index_info({name})")]
+            result[name] = (is_unique, cols)
+    engine.dispose()
+    return result
+
+
+def test_legacy_unique_role_only_index_is_migrated(tmp_path: Path) -> None:
+    """A database carrying the stale UNIQUE(role) index — verified live on the
+    real learning.db, where it silently killed non-exclusive roles — is fixed
+    up on open: the stale index is gone, a UNIQUE(role, character) index
+    exists instead, the pre-existing lease row survives untouched, and a
+    second character can now hold the same role."""
+    db_path = tmp_path / "legacy.db"
+    _create_legacy_role_leases_schema(db_path)
+    assert _role_lease_index_defs(db_path)["ix_role_leases_role"] == (True, ["role"])
+
+    store = CoordinationStore(db_path=str(db_path), character="C3P0")
+    try:
+        assert store.claim("miner", datetime.now(tz=timezone.utc)) is True
+    finally:
+        store.close()
+
+    defs_after = _role_lease_index_defs(db_path)
+    assert not any(is_unique and cols == ["role"] for is_unique, cols in defs_after.values()), (
+        "stale UNIQUE(role)-only index must be gone"
+    )
+    assert any(
+        is_unique and set(cols) == {"role", "character"} for is_unique, cols in defs_after.values()
+    ), "a UNIQUE(role, character) index must exist after migration"
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    with SqlSession(engine) as s:
+        rows = s.exec(select(RoleLease)).all()
+    engine.dispose()
+    assert {row.character for row in rows if row.role == "miner"} == {"HAL", "C3P0"}
+    hal_row = next(row for row in rows if row.character == "HAL")
+    assert (hal_row.claimed_at, hal_row.expires_at) == (
+        "2026-08-01T00:00:00+00:00", "2026-08-01T00:10:00+00:00",
+    ), "the pre-existing HAL row must survive the migration untouched"
+
+
+def test_role_lease_migration_is_idempotent(tmp_path: Path) -> None:
+    """Opening an already-migrated table a second time must not touch it
+    again: same index set before and after, and no rows added or lost."""
+    db_path = tmp_path / "legacy.db"
+    _create_legacy_role_leases_schema(db_path)
+
+    CoordinationStore(db_path=str(db_path), character="HAL").close()
+    defs_first = _role_lease_index_defs(db_path)
+
+    CoordinationStore(db_path=str(db_path), character="C3P0").close()
+    defs_second = _role_lease_index_defs(db_path)
+
+    assert defs_first == defs_second
+    engine = create_engine(f"sqlite:///{db_path}")
+    with SqlSession(engine) as s:
+        rows = s.exec(select(RoleLease)).all()
+    engine.dispose()
+    assert len(rows) == 1  # the original HAL row; the second open claimed nothing
+
+
+def test_fresh_database_role_leases_untouched_by_migration(tmp_path: Path) -> None:
+    """A database created straight from the current model already has the
+    compound UNIQUE (a table-level constraint, which SQLite implements as an
+    autoindex) and no single-column UNIQUE(role) at all, so the migration
+    detects nothing to fix and is a pure no-op."""
+    db_path = tmp_path / "fresh.db"
+    store = CoordinationStore(db_path=str(db_path), character="HAL")
+    store.close()
+
+    defs = _role_lease_index_defs(db_path)
+    assert not any(is_unique and cols == ["role"] for is_unique, cols in defs.values())
+    assert any(is_unique and set(cols) == {"role", "character"} for is_unique, cols in defs.values())
+
+    store2 = CoordinationStore(db_path=str(db_path), character="C3P0")
+    try:
+        assert store2.claim("miner", datetime.now(tz=timezone.utc)) is True
+    finally:
+        store2.close()
+
+
 def test_store_creates_its_parent_directory(tmp_path: Path) -> None:
     """sqlite3 cannot create a DB inside a directory that does not exist. A
     `play --all` supervisor builds this store at the default cache path before
