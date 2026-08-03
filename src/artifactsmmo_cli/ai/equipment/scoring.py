@@ -66,30 +66,83 @@ def gather_score_pure(skill_effects: dict[str, int], skill: str) -> int:
 
 def armor_score_pure(elements: list[str], resistance: dict[str, int],
                      monster_attack: dict[str, int],
+                     monster_resistance: dict[str, int],
+                     player_attack: dict[str, int],
+                     dmg: int, dmg_elements: dict[str, int],
+                     critical_strike: int,
                      hp_bonus: int, wisdom: int, prospecting: int,
                      inventory_space: int, haste: int, lifesteal: int,
                      combat_buff: int) -> int:
-    """PURE CORE (mechanically extracted, P4b): ``Σ mon_atk * armor_res% +
-    hp_bonus + wisdom + prospecting + inventory_space + haste + lifesteal +
-    combat_buff``.
+    """PURE CORE (mechanically extracted, P4b): ``200*defense + offense +
+    200*flatUtility``.
 
-    The leading term is the monster-relative defense (damage reduced per hit).
-    The trailing flat terms are monster-INDEPENDENT utility the piece grants
-    regardless of target — hp (survivability), wisdom (+xp), prospecting
-    (+drops). They make a flat-utility item with no resistance (an ARTIFACT like
-    novice_guide: res 0, hp 25, wisdom 25, prospecting 25 → score 75) pickable
-    instead of scoring 0 and being skipped by pick_loadout's empty-slot >0 gate
-    (and then discarded as worthless). For real armor the defense term dominates;
-    the utility terms tiebreak.
+    UNIT — the two monster-relative terms are BOTH in **1/20000 of one HP of
+    damage swing per combat turn**; nothing else in this function is, and the
+    docstring says so rather than pretending otherwise.
+
+    * ``defense = Σ_e mon_atk[e] * armor_res[e]``. The real damage a hit loses to
+      this piece is ``Σ_e mon_atk[e] * res[e]/100`` HP per turn, so ``defense``
+      is ``100x`` damage-reduced-per-turn and ``200*defense`` is ``20000x``.
+    * ``offense = Σ_e p_atk[e] * max(0, 100 - mon_res[e]) *
+      (2*(dmg + dmg_elements[e]) + critical_strike)``. The piece's global/elemental
+      damage % and crit % act on the PLAYER'S OWN output, which is why this
+      function needs ``player_attack`` — a damage percentage is meaningless
+      without the attack it multiplies. Per element the player deals
+      ``p_atk[e] * max(0, 100 - mon_res[e])/100`` HP per turn (the SAME clamped
+      form ``weapon_score_raw_pure`` uses); ``dmg`` adds ``(dmg+dmg_elements[e])/100``
+      of it and crit adds ``crit/200`` of it (the expected 1.5x-on-crit multiplier
+      ``1 + crit/100 * 0.5``, exactly as ``combat._expected_hit`` and
+      ``weapon_score_raw_pure``'s ``(200 + crit)`` factor model it). Summing those
+      two fractions over a common denominator of 20000 gives the integer above,
+      with NO division anywhere — so this is exact, not a rounded surrogate.
+
+    The factor 200 on ``defense`` is what puts it on the offense term's
+    denominator (100 for the percent, 2 for crit's half-multiplier); it is the
+    house convention already used by ``weapon_score_raw_pure`` (``200 + crit``)
+    and ``combat._kill_step_net`` (``50 * raw * (200 + crit)``).
+
+    WHY OFFENSE AT ALL: without it the score reduced to ``hp + wisdom`` for two
+    resistance-free body armors, so a level-21 character swapped mushmush_jacket
+    (hp 60, dmg 10, crit 3, wisdom 10 → 70) for adventurer_vest (hp 60, dmg 6,
+    wisdom 20 → 80) — a clear combat downgrade bought with 10 wisdom, because
+    4 points of global damage and 3 points of crit were invisible to the formula.
+    ``dmg_elements`` is included because it is how the game expresses ELEMENT
+    SPECIALIZATION on armor (copper_armor +5 fire/+5 earth, feather_coat +5
+    air/+5 water), and it is monster-relative through the same
+    ``max(0, 100 - mon_res[e])`` clamp: a +fire piece is worth more against a
+    fire-weak monster, which is exactly the signal the flat formula destroyed.
+
+    ``initiative`` is deliberately NOT included. It is not a per-turn rate but a
+    THRESHOLD: ``predict_win`` uses ``p.initiative >= monster_initiative`` to
+    decide only whether a tie in rounds goes to the player. Converting a
+    threshold to damage-per-turn would need an invented exchange rate, so it
+    stays out rather than entering the sum on a made-up scale.
+
+    NOT IN THE UNIT — ``flat_utility`` (hp_bonus + wisdom + prospecting +
+    inventory_space + haste + lifesteal + combat_buff) is monster-INDEPENDENT
+    per-item utility carried over unconverted (each is scaled by the same 200 as
+    ``defense``, so its weight RELATIVE to defense is exactly what it was before
+    this term existed). wisdom is an XP rate, prospecting a drop rate, hp a pool
+    not a rate — none is damage-per-turn and none is claimed to be. Its
+    load-bearing formal role is the empty-slot gate: it makes a resistance-free
+    ARTIFACT (novice_guide: res 0, hp 25, wisdom 25, prospecting 25 → 200*75 =
+    15000) score > 0 so ``pick_loadout`` fills the slot instead of discarding it
+    as worthless.
 
     Bridged to the hand ``Formal.EquipmentScoring.AScore`` over the same
     injective element encoding.
     """
-    score = 0
+    defense = 0
     for elem in elements:
-        score = score + monster_attack.get(elem, 0) * resistance.get(elem, 0)
-    return (score + hp_bonus + wisdom + prospecting + inventory_space + haste
-            + lifesteal + combat_buff)
+        defense = defense + monster_attack.get(elem, 0) * resistance.get(elem, 0)
+    offense = 0
+    for elem in elements:
+        offense = offense + (player_attack.get(elem, 0)
+                             * max(0, 100 - monster_resistance.get(elem, 0))
+                             * (2 * (dmg + dmg_elements.get(elem, 0)) + critical_strike))
+    flat_utility = (hp_bonus + wisdom + prospecting + inventory_space + haste
+                    + lifesteal + combat_buff)
+    return 200 * defense + offense + 200 * flat_utility
 
 
 def weapon_score_raw(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
@@ -145,14 +198,34 @@ def gather_score(item: ItemStats, skill: str) -> int:
     return gather_score_pure(item.skill_effects, skill)
 
 
-def armor_score(armor: ItemStats, monster_attack: dict[str, int]) -> int:
-    """Estimated damage REDUCED per hit by an armor piece. Higher = better defense.
+def armor_score(armor: ItemStats, monster_attack: dict[str, int],
+                monster_resistance: dict[str, int],
+                player_attack: dict[str, int]) -> int:
+    """Combat value of a NON-WEAPON piece against one monster, for one fighter.
 
-    Returns the EXACT integer surrogate ``Σ mon_atk * armor_res% + hp_bonus +
-    wisdom + prospecting`` — monster-relative defense plus flat monster-
-    independent utility. BIT-EQUIVALENT to the Lean ``AScore`` model.
+    UNIT: **1/20000 of one HP of damage swing per combat turn**, for the two
+    monster-relative terms (see ``armor_score_pure`` for the full derivation and
+    for the terms that are deliberately NOT in that unit).
+
+    Both halves of the swing are counted and they are commensurate by
+    construction — the piece's DEFENSE (damage it stops the monster dealing,
+    weighted by the monster's attack) and its OFFENSE (damage its ``dmg`` /
+    ``dmg_elements`` / ``critical_strike`` add to what WE deal, weighted by the
+    player's own attack through the monster's resistance). Judging armor on
+    defense alone made a strictly worse jacket lose to a vest carrying 10 more
+    wisdom.
+
+    ``player_attack`` is the fighter's CURRENT per-element attack
+    (``state.attack``), carried on the ``Combat`` purpose. It is a constant
+    across the candidates for a slot, so it scales the offense term uniformly
+    and cannot distort the within-slot argmax; it cannot be the POST-pick attack
+    without making ``pick_loadout`` depend on its own output.
+
+    BIT-EQUIVALENT to the Lean ``EquipmentScoring.AScore`` model.
     """
     return armor_score_pure(list(ELEMENTS), armor.resistance, monster_attack,
+                            monster_resistance, player_attack,
+                            armor.dmg, armor.dmg_elements, armor.critical_strike,
                             armor.hp_bonus, armor.wisdom, armor.prospecting,
                             armor.inventory_space, armor.haste, armor.lifesteal,
                             armor.combat_buff)

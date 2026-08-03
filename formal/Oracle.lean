@@ -266,15 +266,18 @@ def runLoadoutProjection (args : Array Json) : Json :=
   let slots := toSlots rest
   Json.mkObj [("projected", Json.num (projectedField current slots))]
 
-/-- Build a model `Item` from a flat 13-int block:
-`[code, level, fits(0/1), atk0..atk3, res0..res3, crit, flatUtil]`. Element keys
-are 0..3. `isUtilityFill` is left at its `false` default (set by callers that
-carry it out-of-block, e.g. `runLoadoutPicker`). -/
+/-- Build a model `Item` from a flat 18-int block:
+`[code, level, fits(0/1), atk0..atk3, res0..res3, crit, flatUtil, dmg,
+dmgElem0..dmgElem3]`. Element keys are 0..3. `isUtilityFill` is left at its
+`false` default (set by callers that carry it out-of-block, e.g.
+`runLoadoutPicker`). The last 5 ints are the OFFENSE inputs `AScore` prices a
+non-weapon piece with (global damage %, then per-element damage %). -/
 def itemFromBlock (b : Nat → Int) : Item :=
   { code := b 0, level := b 1, fits := b 2 != 0,
     attack := [(0, b 3), (1, b 4), (2, b 5), (3, b 6)],
     resistance := [(0, b 7), (1, b 8), (2, b 9), (3, b 10)],
-    crit := b 11, flatUtil := b 12 }
+    crit := b 11, flatUtil := b 12, dmg := b 13,
+    dmgElem := [(0, b 14), (1, b 15), (2, b 16), (3, b 17)] }
 
 /-- Build an `ElemStats` (monster atk OR res) from 4 ints at offset `o`. -/
 def elemFromArgs (args : Array Json) (o : Nat) : ElemStats :=
@@ -285,26 +288,31 @@ def elemFromArgs (args : Array Json) (o : Nat) : ElemStats :=
 args layout:
 * 0:        playerLevel
 * 1:        scoreKind (0 = weapon, 1 = armor)
-* 2..5:     monster element stats (resistance for weapon, attack for armor)
-* 6:        currentPresent (0/1)
-* 7..19:    current item block (13 ints; ignored when currentPresent = 0)
-* 20..:     candidate item blocks, 13 ints each (13th int = flatUtil)
+* 2..5:     monster ATTACK (the armor defense weight; unused by the weapon score)
+* 6..9:     monster RESISTANCE (the weapon score AND the armor offense clamp)
+* 10..13:   the WEARER's per-element attack (armor offense; unused by the weapon score)
+* 14:       currentPresent (0/1)
+* 15..32:   current item block (18 ints; ignored when currentPresent = 0)
+* 33..:     candidate item blocks, 18 ints each
 
 Emits the picked item's CODE (or -1 = none / leave-as-is), its SCORE, the MAX
 feasible score, and the current item's score (for the no-downgrade assertion). -/
 def runEquipmentScoring (args : Array Json) : Json :=
   let playerLevel := intArg args 0
   let isWeapon := intArg args 1 == 0
-  let monStats := elemFromArgs args 2
+  let monAtk := elemFromArgs args 2
+  let monRes := elemFromArgs args 6
+  let playerAtk := elemFromArgs args 10
   let score : Item → Int :=
-    if isWeapon then (fun it => WScore it monStats) else (fun it => AScore it monStats)
-  let curPresent := intArg args 6 != 0
+    if isWeapon then (fun it => WScore it monRes)
+    else (fun it => AScore it monAtk monRes playerAtk)
+  let curPresent := intArg args 14 != 0
   let current : Option Item :=
-    if curPresent then some (itemFromBlock (fun i => intArg args (7 + i))) else none
-  -- candidate blocks start at 20, 13 ints each
-  let nCand := (args.size - 20) / 13
+    if curPresent then some (itemFromBlock (fun i => intArg args (15 + i))) else none
+  -- candidate blocks start at 33, 18 ints each
+  let nCand := (args.size - 33) / 18
   let items : List Item :=
-    (List.range nCand).map (fun k => itemFromBlock (fun i => intArg args (20 + k * 13 + i)))
+    (List.range nCand).map (fun k => itemFromBlock (fun i => intArg args (33 + k * 18 + i)))
   let picked := pickSlot score playerLevel current items
   let pickedCode : Int := match picked with | some it => it.code | none => -1
   let pickedScore : Int := match picked with | some it => score it | none => 0
@@ -328,15 +336,17 @@ args layout:
 * 0:        purposeKind (0 = combat, 1 = gather, 2 = rank)
 * 1:        playerLevel
 * 2:        isWeapon (0/1)  — combat weapon-vs-armor dispatch; ignored otherwise
-* 3..6:     monster element stats (resistance for weapon, attack for armor)
-* 7:        currentPresent (0/1)
-* 8..:      current EXTENDED block, then candidate EXTENDED blocks
+* 3..6:     monster ATTACK (the armor defense weight)
+* 7..10:    monster RESISTANCE (the weapon score AND the armor offense clamp)
+* 11..14:   the WEARER's per-element attack (armor offense)
+* 15:       currentPresent (0/1)
+* 16..:     current EXTENDED block, then candidate EXTENDED blocks
 
-Each EXTENDED block is `stride` ints: the 13-int item block + skillEffect
-(block+13) + isUtilityFill (block+14). For the Rank purpose (purposeKind == 2)
-the block additionally carries the 6 `rankValue` inputs at block+15..block+20 —
+Each EXTENDED block is `stride` ints: the 18-int item block + skillEffect
+(block+18) + isUtilityFill (block+19). For the Rank purpose (purposeKind == 2)
+the block additionally carries the 6 `rankValue` inputs at block+20..block+25 —
 `[combat_raw, wisdom, prospecting, inventory_space, haste, is_tool]` — so
-`stride` is 21; for Combat/Gather it stays 15 (byte-unchanged layout).
+`stride` is 26; for Combat/Gather it is 20.
 
 The skill effect is carried per item (the 14th int) and reassembled into the
 abstract `skillEffect : Item → Int` keyed by item code — binding the abstract
@@ -355,36 +365,38 @@ def runLoadoutPicker (args : Array Json) : Json :=
   let purposeKind := intArg args 0
   let playerLevel := intArg args 1
   let isWeapon := intArg args 2 != 0
-  let monStats := elemFromArgs args 3
-  let curPresent := intArg args 7 != 0
+  let monAtk := elemFromArgs args 3
+  let monRes := elemFromArgs args 7
+  let playerAtk := elemFromArgs args 11
+  let curPresent := intArg args 15 != 0
   -- Rank (purposeKind == 2) extends each block with the 6 `rankValue` inputs at
-  -- block+15..block+20, so the stride is 21; Combat/Gather keep the 15-int layout.
-  let stride := if purposeKind == 2 then 21 else 15
-  -- Build an Item from a block at `base`: the 13-int item block, then the
-  -- skillEffect (base+13, read separately into the pair), then isUtilityFill
-  -- (base+14). `itemFromBlock` sets the default `isUtilityFill := false`; the
+  -- block+20..block+25, so the stride is 26; Combat/Gather use the 20-int layout.
+  let stride := if purposeKind == 2 then 26 else 20
+  -- Build an Item from a block at `base`: the 18-int item block, then the
+  -- skillEffect (base+18, read separately into the pair), then isUtilityFill
+  -- (base+19). `itemFromBlock` sets the default `isUtilityFill := false`; the
   -- record update binds it from the block so `runEquipmentScoring` stays default.
   let mkItem := fun (base : Nat) =>
     { itemFromBlock (fun i => intArg args (base + i)) with
-        isUtilityFill := intArg args (base + 14) != 0 }
+        isUtilityFill := intArg args (base + 19) != 0 }
   -- Per-item Rank ruler value from the 6 rank inputs at base+15..base+20, reusing
   -- the SAME `Formal.GearValue.rankValue` def `runRankValue` consumes: combat_raw
   -- is carried in `attack` (other combat fields 0) so `combatRaw s = combat_raw`.
   let rankAt := fun (base : Nat) =>
     let s : Formal.EquipValueAugmented.RawStats :=
-      ⟨intArg args (base + 15), 0, 0, 0, 0, 0,
-       intArg args (base + 16), intArg args (base + 17), intArg args (base + 18),
-       intArg args (base + 19), 0, 0⟩
-    Formal.GearValue.rankValue s (intArg args (base + 20) != 0)
-  let curBase := 8
+      ⟨intArg args (base + 20), 0, 0, 0, 0, 0,
+       intArg args (base + 21), intArg args (base + 22), intArg args (base + 23),
+       intArg args (base + 24), 0, 0⟩
+    Formal.GearValue.rankValue s (intArg args (base + 25) != 0)
+  let curBase := 16
   let curPair : Option (Item × Int) :=
-    if curPresent then some (mkItem curBase, intArg args (curBase + 13))
+    if curPresent then some (mkItem curBase, intArg args (curBase + 18))
     else none
   let candStart := curBase + stride
   let nCand := (args.size - candStart) / stride
   let candPairs : List (Item × Int) :=
     (List.range nCand).map (fun k =>
-      (mkItem (candStart + k * stride), intArg args (candStart + k * stride + 13)))
+      (mkItem (candStart + k * stride), intArg args (candStart + k * stride + 18)))
   let allPairs : List (Item × Int) :=
     (match curPair with | some p => [p] | none => []) ++ candPairs
   let skillEffect : Item → Int := fun it =>
@@ -400,7 +412,7 @@ def runLoadoutPicker (args : Array Json) : Json :=
         ((rankPairs.find? (fun pr => pr.1.code == it.code)).map (fun pr => pr.2)).getD 0
       Formal.GearValue.Purpose.rank rankOf
     else if purposeKind == 1 then Formal.GearValue.Purpose.gather skillEffect
-    else Formal.GearValue.Purpose.combat monStats monStats isWeapon
+    else Formal.GearValue.Purpose.combat monAtk monRes playerAtk isWeapon
   let benefit := Formal.GearValue.purposeBenefit p
   let current : Option Item := curPair.map (fun p => p.1)
   let items : List Item := candPairs.map (fun p => p.1)

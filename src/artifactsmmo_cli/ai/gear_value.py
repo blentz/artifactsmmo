@@ -33,7 +33,9 @@ def gear_value(stats: ItemStats, purpose: object) -> int:
         # other (armor) slot maximizes armor_score against the monster's attack.
         if stats.type_ == "weapon":
             return weapon_score(stats, dict(purpose.monster_resistance))
-        return armor_score(stats, dict(purpose.monster_attack))
+        return armor_score(stats, dict(purpose.monster_attack),
+                           dict(purpose.monster_resistance),
+                           dict(purpose.player_attack))
     if isinstance(purpose, Gather):
         return gather_score(stats, purpose.skill)
     raise ValueError(f"unsupported purpose: {purpose!r}")

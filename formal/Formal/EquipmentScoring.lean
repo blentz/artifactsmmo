@@ -1,3 +1,4 @@
+-- @concept: items, gear @property: validity, dominance
 /-
 Formal model of `pick_loadout` (per-slot pick) from
 `src/artifactsmmo_cli/ai/equipment/scoring.py`.
@@ -16,8 +17,10 @@ SCORES. **Byte-equivalent integer model.** The Python `weapon_score` and
 the Lean oracle uses:
   * `WScore = Σ_elem atk * max(0, 100 - res)`   (Python `weapon_score` returns
     this integer DIRECTLY; the inner `max(0, 100 - res)` is the integer clamp.)
-  * `AScore = Σ_elem mon_atk * armor_res`        (Python `armor_score` returns
-    this integer directly; NO clamp — armor scoring has none.)
+  * `AScore = 200 * Σ_elem mon_atk * armor_res + Σ_elem oTerm + 200 * flatUtil`
+    (Python `armor_score` returns this integer directly; the defense sum has NO
+    clamp — armor scoring has none — while the offense sum reuses the weapon
+    clamp `max(0, 100 - monRes)` because it prices the WEARER's output.)
 Production Python uses pure integer arithmetic — there is no floating-point step
 anywhere in the score computation, so the Python value is BIT-EQUAL to the Lean
 `WScore`/`AScore` for every input. The previous float surrogate caveat is closed:
@@ -56,6 +59,8 @@ structure Item where
   fits : Bool
   flatUtil : Int := 0   -- monster-independent utility = hp_bonus + wisdom + prospecting
   isUtilityFill : Bool := false  -- artifact-type utility-fill: Gather scores it by flatUtil
+  dmg : Int := 0        -- global damage % the piece adds to the WEARER's output
+  dmgElem : ElemStats := []  -- per-element damage % (armor's element-specialization signal)
 deriving Repr, DecidableEq
 
 /-- The 4 game elements as integer keys (fire, earth, water, air). -/
@@ -76,18 +81,58 @@ def WScore (item : Item) (monsterRes : ElemStats) : Int :=
   (elements.map (fun e => wTerm (elemGet item.attack e) (elemGet monsterRes e))).sum
     * (200 + item.crit)
 
-/-- Per-element armor surrogate term: `monAtk * armorRes` (NO clamp — the float
-`armor_score` has none). -/
+/-- Per-element armor DEFENSE term: `monAtk * armorRes` (NO clamp — the Python
+`armor_score` has none). `100x` the HP-per-turn the piece stops. -/
 def aTerm (monAtk armorRes : Int) : Int := monAtk * armorRes
 
-/-- `AScore = Σ_elem monsterAtk(elem) * armorRes(elem) + flatUtil` — monster-
-relative defense plus the monster-INDEPENDENT flat utility (hp_bonus + wisdom +
-prospecting) the piece grants regardless of target. The flat term makes a
-utility-only artifact (no resistance) score > 0 so pick_loadout fills its slot
-(novice_guide: defense 0 + flatUtil 75). -/
-def AScore (item : Item) (monsterAtk : ElemStats) : Int :=
-  (elements.map (fun e => aTerm (elemGet monsterAtk e) (elemGet item.resistance e))).sum
-    + item.flatUtil
+/-- Per-element armor OFFENSE term: the wearer's own per-element output
+`wTerm playerAtk monRes` (the SAME clamped form the weapon score uses) scaled by
+the boost the piece adds to it, `2 * dmgPct + crit`.
+
+The `2 *` and the crit are one common denominator: the piece's damage percentage
+adds `dmgPct/100` of the wearer's output and its crit adds `crit/200` (the
+expected `1 + crit/100 * 0.5` multiplier of `combat._expected_hit`, the same one
+`WScore`'s `(200 + crit)` factor encodes). Over the denominator 20000 those are
+`2 * dmgPct` and `crit` exactly — no division, no rounding. -/
+def oTerm (playerAtk monRes dmgPct crit : Int) : Int :=
+  wTerm playerAtk monRes * (2 * dmgPct + crit)
+
+/-- `AScore = 200 * Σ_elem defense + Σ_elem offense + 200 * flatUtil`.
+
+UNIT: the two monster-relative sums are BOTH `20000x` HP of damage swing per
+combat turn — the piece's DEFENSE (damage it stops, weighted by the monster's
+attack) and its OFFENSE (damage its `dmg`/`dmgElem`/`crit` percentages add to the
+WEARER's output, weighted by the wearer's attack through the monster's
+resistance). `200 *` on the defense sum is what puts `Σ monAtk * armorRes`
+(`100x` damage) on the offense sum's `20000x` denominator.
+
+The offense sum is why `AScore` takes `monsterRes` and `playerAtk`: a damage
+PERCENTAGE has no value independent of the attack it multiplies. Without it the
+score of two resistance-free body armors collapsed to `hp + wisdom`, and the live
+bot swapped mushmush_jacket (hp 60, dmg 10, crit 3, wisdom 10) for
+adventurer_vest (hp 60, dmg 6, wisdom 20) — buying 10 wisdom with 4 damage and
+3 crit that the formula could not see.
+
+`flatUtil` is monster-INDEPENDENT utility (hp_bonus + wisdom + prospecting + …)
+and is NOT in that unit — it is carried unconverted on the same `200 *` scale as
+the defense sum, so its weight relative to defense is exactly what it was before
+the offense sum existed. Its load-bearing role is the empty-slot gate: it makes a
+utility-only artifact (no resistance, no damage %) score > 0 so pick_loadout
+fills its slot (novice_guide: defense 0 + offense 0 + `200 * 75`). -/
+def AScore (item : Item) (monsterAtk monsterRes playerAtk : ElemStats) : Int :=
+  200 * (elements.map (fun e => aTerm (elemGet monsterAtk e) (elemGet item.resistance e))).sum
+    + (elements.map (fun e => oTerm (elemGet playerAtk e) (elemGet monsterRes e)
+          (item.dmg + elemGet item.dmgElem e) item.crit)).sum
+    + 200 * item.flatUtil
+
+/-- `AScore` against NO monster and NO wearer attack is exactly `200 * flatUtil`:
+both monster-relative sums vanish (`aTerm 0 _ = 0`, and `oTerm 0 _ _ _ = 0`
+because `wTerm 0 _ = 0`). This is the Gather utility-fill benefit the live
+`loadout_picker._benefit` computes as `armor_score(stats, {}, {}, {})` — pinned
+here so the two cannot drift. -/
+theorem AScore_no_monster (item : Item) :
+    AScore item [] [] [] = 200 * item.flatUtil := by
+  simp [AScore, aTerm, oTerm, wTerm, elemGet, elements]
 
 /-! ### Feasibility and the per-slot pick. -/
 

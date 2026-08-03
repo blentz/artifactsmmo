@@ -811,8 +811,42 @@ SCORING_MUTATIONS = [
     # the formula moved into the extracted pure core `armor_score_pure` (same
     # mutation intent; the `armor_score` wrapper delegates).
     ("equipment_scoring: armor_score float-rescale (breaks byte-equivalence)",
-     "        score = score + monster_attack.get(elem, 0) * resistance.get(elem, 0)",
-     "        score = score + monster_attack.get(elem, 0) * resistance.get(elem, 0) / 100.0"),
+     "        defense = defense + monster_attack.get(elem, 0) * resistance.get(elem, 0)",
+     "        defense = defense + monster_attack.get(elem, 0)"
+     " * resistance.get(elem, 0) / 100.0"),
+    # THE OFFENSE TERM (2026-08-01). Drop it entirely: armor is scored on defense
+    # + flat utility only, which is exactly the bug that made a level-21 character
+    # trade mushmush_jacket (dmg 10, crit 3) for adventurer_vest (dmg 6) to buy 10
+    # wisdom — a piece's damage %, per-element damage % and crit % were invisible.
+    # Killed by the AScore byte-equality in test_equipment_scoring_diff.py and the
+    # armor arm of test_loadout_picker_diff.py.
+    ("equipment_scoring: drop armor offense term (damage %/crit invisible)",
+     "    return 200 * defense + offense + 200 * flat_utility",
+     "    return 200 * defense + 200 * flat_utility"),
+    # Drop the 200x that puts the defense sum on the offense sum's denominator.
+    # Defense then reads 200x too cheap against offense, so a pure-damage piece
+    # beats a genuinely defensive one against a hard-hitting monster. Killed by
+    # the same byte-equality diffs (and by the rosenblood case in
+    # tests/ai/test_armor_score_offense.py).
+    ("equipment_scoring: drop the 200x defense scaling (mixes two units)",
+     "    return 200 * defense + offense + 200 * flat_utility",
+     "    return defense + offense + 200 * flat_utility"),
+    # Drop the per-element damage % read. `dmg_elements` is how the game expresses
+    # ELEMENT SPECIALIZATION on armor (copper_armor +5 fire/earth vs feather_coat
+    # +5 air/water), so without it two element-opposite pieces score identically
+    # and the pick collapses to the code tiebreak. Killed by the dmg_elements
+    # Hypothesis cases in both scoring diffs.
+    ("equipment_scoring: drop armor per-element damage % (dmg_elements)",
+     "                             * (2 * (dmg + dmg_elements.get(elem, 0))"
+     " + critical_strike))",
+     "                             * (2 * dmg + critical_strike))"),
+    # Drop the offense clamp. `max(0, 100 - mon_res)` is the SAME clamp the weapon
+    # score earns: a monster resistance above 100 would otherwise flip the sign and
+    # make a +damage piece score NEGATIVE against it. Killed by the res>100
+    # Hypothesis range in test_equipment_scoring_diff.py.
+    ("equipment_scoring: drop armor offense resistance clamp",
+     "                             * max(0, 100 - monster_resistance.get(elem, 0))",
+     "                             * (100 - monster_resistance.get(elem, 0))"),
 ]
 
 
@@ -930,7 +964,7 @@ LOADOUT_PICKER_GATHER_MUTATIONS = [
 # test_gather_fills_empty_artifact_slot (novice_guide flat utility 75 > 0).
 LOADOUT_PICKER_ARTIFACT_MUTATIONS = [
     ("loadout_picker: revert artifact utility-fill arm (armor_score -> -gear_value)",
-     "            return armor_score(stats, _NO_MONSTER)",
+     "            return armor_score(stats, _NO_MONSTER, _NO_MONSTER, _NO_MONSTER)",
      "            return -gear_value(stats, purpose)"),
 ]
 
@@ -945,9 +979,13 @@ GEAR_VALUE_DISPATCH_MUTATIONS = [
     ("gear_value: swap weapon_score and armor_score dispatch",
      "        if stats.type_ == \"weapon\":\n"
      "            return weapon_score(stats, dict(purpose.monster_resistance))\n"
-     "        return armor_score(stats, dict(purpose.monster_attack))",
+     "        return armor_score(stats, dict(purpose.monster_attack),\n"
+     "                           dict(purpose.monster_resistance),\n"
+     "                           dict(purpose.player_attack))",
      "        if stats.type_ == \"weapon\":\n"
-     "            return armor_score(stats, dict(purpose.monster_attack))\n"
+     "            return armor_score(stats, dict(purpose.monster_attack),\n"
+     "                               dict(purpose.monster_resistance),\n"
+     "                               dict(purpose.player_attack))\n"
      "        return weapon_score(stats, dict(purpose.monster_resistance))"),
 ]
 
@@ -2598,15 +2636,14 @@ KIT_SELECTION_MUTATIONS = [
 # prospecting must count so artifacts are scored, equipped, and not discarded.
 ARMOR_UTILITY_MUTATIONS = [
     ("armor_score: drop whole flat utility (hp_bonus+wisdom+prospecting+inventory_space+haste+lifesteal+combat_buff) score 0",
-     "    return (score + hp_bonus + wisdom + prospecting + inventory_space + haste\n"
-     "            + lifesteal + combat_buff)",
-     "    return score"),
+     "    return 200 * defense + offense + 200 * flat_utility",
+     "    return 200 * defense + offense"),
     ("armor_score: drop lifesteal — lifesteal gear undervalued",
-     "            + lifesteal + combat_buff)",
-     "            + combat_buff)"),
+     "                    + lifesteal + combat_buff)",
+     "                    + combat_buff)"),
     ("armor_score: drop combat_buff — buff potions undervalued",
-     "            + lifesteal + combat_buff)",
-     "            + lifesteal)"),
+     "                    + lifesteal + combat_buff)",
+     "                    + lifesteal)"),
 ]
 # Unified gear-value core (gear_value_core.py): the shared `combat_raw` atom and
 # the `rank_value` Rank ruler that `equip_value` AND the inventory_caps dominance

@@ -44,11 +44,18 @@ from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_DEN, PRESSURE_HIGH_NUM
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 
-def _score_vector(stats: ItemStats, monsters: list[str], game_data: GameData) -> list[int]:
-    """Per-monster combat score for a weapon (offense) or armor (defense) piece."""
+def _score_vector(stats: ItemStats, monsters: list[str], game_data: GameData,
+                  player_attack: dict[str, int]) -> list[int]:
+    """Per-monster combat score for a weapon (offense) or armor (both) piece.
+
+    `player_attack` is the holder's current per-element attack: `armor_score`
+    prices a piece's damage-% and crit-% stats against the output they scale, so
+    the dominance verdict sees the same value the loadout picker does."""
     if stats.type_ == "weapon":
         return [weapon_score(stats, game_data.monster_resistance(m)) for m in monsters]
-    return [armor_score(stats, game_data.monster_attack(m)) for m in monsters]
+    return [armor_score(stats, game_data.monster_attack(m),
+                        game_data.monster_resistance(m), player_attack)
+            for m in monsters]
 
 BATCH_BUFFER = 5
 """How many craft batches worth of material to keep on hand. With BATCH=5 and
@@ -333,7 +340,8 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
         return False
     monsters = combat_target_monsters(state, game_data)
     per_monster = bool(monsters) and stats.type_ in game_data.combat_gear_types
-    item_vec = _score_vector(stats, monsters, game_data) if per_monster else []
+    player_attack = dict(state.attack)
+    item_vec = _score_vector(stats, monsters, game_data, player_attack) if per_monster else []
     my_value = gear_value(stats, Rank)
     my_effects = stats.skill_effects or {}
     candidates: set[str] = set(state.inventory)
@@ -352,7 +360,8 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
         # Peer must fit every slot this item fits (so it can substitute everywhere).
         fits = all(s in peer_slots for s in slots)
         if per_monster and fits:
-            higher = pareto_dominates(_score_vector(peer, monsters, game_data), item_vec)
+            higher = pareto_dominates(
+                _score_vector(peer, monsters, game_data, player_attack), item_vec)
         else:
             higher = gear_value(peer, Rank) > my_value
         # Peer must cover this item's skill_effects (else dropping a tool

@@ -13,10 +13,20 @@ class Rank:
 
 @dataclass(frozen=True)
 class Combat:
-    """Per-monster combat purpose."""
+    """Per-monster combat purpose: WHO is fighting WHAT.
+
+    `player_attack` is the fighter's current per-element attack
+    (`state.attack`). It is part of the purpose, not of the item, because a
+    piece's `dmg`/`dmg_elements`/`critical_strike` percentages scale the
+    PLAYER'S output — `armor_score` cannot price them without it. Two
+    characters fighting the same monster with different weapons genuinely
+    should rank the same +damage% armor differently, and `pick_loadout_cached`
+    keys on the purpose, so it is also what keeps that memo sound.
+    """
 
     monster_attack: Mapping[str, int]
     monster_resistance: Mapping[str, int]
+    player_attack: Mapping[str, int]
 
 
 @dataclass(frozen=True)

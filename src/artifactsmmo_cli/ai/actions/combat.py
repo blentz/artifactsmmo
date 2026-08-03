@@ -119,7 +119,8 @@ class FightAction(Action):
         # omits it (as it already omits the equip slot-room gate).
         optimal = pick_loadout_cached(
             Combat(game_data.monster_attack(self.monster_code),
-                   game_data.monster_resistance(self.monster_code)),
+                   game_data.monster_resistance(self.monster_code),
+                   dict(state.attack)),
             state, game_data,
         )
         return equipped_matches_loadout(state.equipment, optimal)
@@ -182,7 +183,8 @@ class FightAction(Action):
         # used in OptimizeLoadoutAction._swap_plan.
         optimal = pick_loadout_cached(
             Combat(game_data.monster_attack(self.monster_code),
-                   game_data.monster_resistance(self.monster_code)),
+                   game_data.monster_resistance(self.monster_code),
+                   dict(state.attack)),
             state, game_data,
         )
         if not equipped_matches_loadout(state.equipment, optimal):

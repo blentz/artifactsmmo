@@ -101,6 +101,9 @@ def test_ring_per_monster_not_dominated_by_attack_ring(monkeypatch):
     }
     gd._monster_level = {"fire_slime": 1}
     gd._monster_attack = {"fire_slime": {"fire": 20}}
+    # armor_score is now priced on BOTH halves of the swing, so the per-monster
+    # score reads the monster's resistance too (it clamps the offense term).
+    gd._monster_resistance = {"fire_slime": {"fire": 0}}
     # A tile, so the monster survives combat_target_monsters' spawn gate. The gate
     # drops catalog monsters that spawn nowhere (raid bosses, dormant event
     # content); without a tile this fixture's monster vanishes and the per-monster

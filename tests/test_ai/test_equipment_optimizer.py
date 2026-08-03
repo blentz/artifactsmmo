@@ -134,7 +134,8 @@ class TestWeaponScore:
             inventory={"copper_dagger": 2},
         )
         result = pick_loadout(
-            Combat(gd.monster_attack("green_slime"), gd.monster_resistance("green_slime")),
+            Combat(gd.monster_attack("green_slime"), gd.monster_resistance("green_slime"),
+                   dict(state.attack)),
             state, gd,
         )
         assert result["weapon_slot"] == "copper_dagger", result
@@ -196,10 +197,11 @@ class TestArmorScore:
     def test_armor_resisting_monster_primary_wins(self):
         gd = _gd_with_combat_items()
         slime_atk = gd.monster_attack("yellow_slime")
+        slime_res = gd.monster_resistance("yellow_slime")
         # leather_armor res_earth=10 vs slime atk_earth=8 → 0.8
         # water_robe res_water=20 vs slime atk_water=0 → 0
-        assert armor_score(gd._item_stats["leather_armor"], slime_atk) > \
-               armor_score(gd._item_stats["water_robe"], slime_atk)
+        assert armor_score(gd._item_stats["leather_armor"], slime_atk, slime_res, {}) > \
+               armor_score(gd._item_stats["water_robe"], slime_atk, slime_res, {})
 
 
 class TestPickLoadout:
@@ -212,7 +214,8 @@ class TestPickLoadout:
             equipment={"weapon_slot": "wooden_stick"},
         )
         loadout = pick_loadout(
-            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")),
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime"),
+                   dict(state.attack)),
             state, gd,
         )
         # fishing_net beats wooden_stick vs yellow_slime
@@ -226,7 +229,8 @@ class TestPickLoadout:
             equipment={"weapon_slot": "wooden_stick"},
         )
         loadout = pick_loadout(
-            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")),
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime"),
+                   dict(state.attack)),
             state, gd,
         )
         assert loadout["weapon_slot"] == "wooden_stick"

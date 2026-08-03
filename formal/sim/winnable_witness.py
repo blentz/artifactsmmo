@@ -201,7 +201,8 @@ def build_witness_row(
 
     loadout = pick_loadout(
         Combat(game_data.monster_attack(monster_code),
-               game_data.monster_resistance(monster_code)), state, game_data)
+               game_data.monster_resistance(monster_code),
+               dict(state.attack)), state, game_data)
     p = project_loadout_stats(state, loadout, game_data)
     m_resist = game_data.monster_resistance(monster_code)
     m_attack = game_data.monster_attack(monster_code)

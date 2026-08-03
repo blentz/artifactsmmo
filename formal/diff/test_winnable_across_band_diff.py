@@ -464,7 +464,8 @@ def test_synthetic_harness_reports_monster_winnable() -> None:
     # base attack {} + iron_sword fire 40 ⇒ projected fire attack 40.
     loadout = pick_loadout(
         Combat(game_data.monster_attack("chicken"),
-               game_data.monster_resistance("chicken")), state, game_data)
+               game_data.monster_resistance("chicken"),
+               dict(state.attack)), state, game_data)
     projected = project_loadout_stats(state, loadout, game_data)
     assert projected.attack.get("fire") == 40, projected.attack
     assert projected.max_hp == 145  # base.max_hp(145) + iron_sword.hp_bonus(0)

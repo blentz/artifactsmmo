@@ -19,11 +19,13 @@ def test_armor_score_pure_includes_combat_buff():
     and the proven Lean AScore. Regression (drift gate 2026-06-19): it was
     accepted as a parameter but dropped from the return sum, so combat-buff gear
     (antidotes, boost items) scored as if the buff were worthless."""
-    kw = dict(hp_bonus=0, wisdom=0, prospecting=0, inventory_space=0,
-              haste=0, lifesteal=0)
+    kw = dict(monster_resistance={}, player_attack={}, dmg=0, dmg_elements={},
+              critical_strike=0, hp_bonus=0, wisdom=0, prospecting=0,
+              inventory_space=0, haste=0, lifesteal=0)
     base = armor_score_pure(["fire"], {"fire": 0}, {"fire": 0}, combat_buff=0, **kw)
     buffed = armor_score_pure(["fire"], {"fire": 0}, {"fire": 0}, combat_buff=7, **kw)
-    assert buffed - base == 7
+    # The flat-utility sum is carried on the score's common 200x denominator.
+    assert buffed - base == 200 * 7
 
 
 def _gd() -> GameData:
@@ -56,7 +58,8 @@ class TestArmorSlotLoadout:
             equipment={"body_armor_slot": None},
         )
         loadout = pick_loadout(
-            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime"),
+                   dict(state.attack)), state, gd
         )
         # vs earth-attacking slime, leather (res earth 10) reduces damage;
         # water_robe (res water) does nothing -> leather chosen.
@@ -72,7 +75,8 @@ class TestArmorSlotLoadout:
             equipment={"body_armor_slot": "leather_armor"},
         )
         loadout = pick_loadout(
-            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime"),
+                   dict(state.attack)), state, gd
         )
         assert loadout["body_armor_slot"] == "iron_armor"
 
@@ -85,7 +89,8 @@ class TestArmorSlotLoadout:
             equipment={"body_armor_slot": "iron_armor"},
         )
         loadout = pick_loadout(
-            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime"),
+                   dict(state.attack)), state, gd
         )
         assert loadout["body_armor_slot"] == "iron_armor"
 
@@ -126,7 +131,8 @@ class TestMultiSlotContention:
             equipment={"ring1_slot": "alpha_ring", "ring2_slot": None},
         )
         loadout = pick_loadout(
-            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime"),
+                   dict(state.attack)), state, gd
         )
         assert loadout["ring1_slot"] == "alpha_ring"
         # ring2 (empty current) then takes beta_ring — it sits nowhere else
@@ -147,7 +153,8 @@ class TestMultiSlotContention:
             equipment={"ring1_slot": None, "ring2_slot": "alpha_ring"},
         )
         loadout = pick_loadout(
-            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime"),
+                   dict(state.attack)), state, gd
         )
         assert loadout["ring1_slot"] is None
         assert loadout["ring2_slot"] == "alpha_ring"
@@ -165,7 +172,8 @@ class TestMultiSlotContention:
             equipment={"ring1_slot": None, "ring2_slot": "alpha_ring"},
         )
         loadout = pick_loadout(
-            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime"),
+                   dict(state.attack)), state, gd
         )
         # ring1's feasible pool excludes the worn alpha_ring; weak_ring scores
         # 8 * 5 = 40 > 0 against the earth attacker, so it fills the slot.
@@ -196,7 +204,8 @@ class TestMultiSlotContention:
             equipment={"ring1_slot": "copper_ring", "ring2_slot": None},
         )
         loadout = pick_loadout(
-            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime"),
+                   dict(state.attack)), state, gd
         )
         assert loadout["ring1_slot"] == "copper_ring"
         assert loadout["ring2_slot"] == "copper_ring"
@@ -223,7 +232,8 @@ class TestMultiSlotContention:
             equipment={"ring1_slot": None, "ring2_slot": None},
         )
         loadout = pick_loadout(
-            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime"),
+                   dict(state.attack)), state, gd
         )
         assert loadout["ring1_slot"] is None
         assert loadout["ring2_slot"] is None
@@ -251,7 +261,8 @@ class TestMultiSlotContention:
             equipment={"ring1_slot": "high_ring", "ring2_slot": None},
         )
         loadout = pick_loadout(
-            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime"),
+                   dict(state.attack)), state, gd
         )
         # No candidate fits, but the player still owns the ring -> it stays.
         assert loadout["ring1_slot"] == "high_ring"
@@ -279,7 +290,8 @@ class TestMultiSlotContention:
             equipment={"ring1_slot": "high_ring", "ring2_slot": None},
         )
         loadout = pick_loadout(
-            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime"),
+                   dict(state.attack)), state, gd
         )
         # weak_ring is the only feasible candidate but scores worse than the
         # equipped (level-gated) high_ring, so high_ring is retained.

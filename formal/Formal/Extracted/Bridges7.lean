@@ -96,21 +96,26 @@ theorem weapon_score_raw_bridge (enc : Int → String)
              Int.zero_add, Int.add_zero, Int.add_assoc]
 
 /-- BRIDGE (universal over injective element embeddings): the extracted
-`armor_score_pure` equals the hand `Formal.EquipmentScoring.AScore` (no
-clamp — armor scoring has none), for every profile. -/
+`armor_score_pure` equals the hand `Formal.EquipmentScoring.AScore`, for every
+profile — DEFENSE sum (no clamp; armor scoring has none), OFFENSE sum (the
+wearer's own output through the weapon clamp, scaled by the piece's damage/crit
+percentages) and the `200 *` scaling that puts them on one denominator. -/
 theorem armor_score_bridge (enc : Int → String)
     (hinj : ∀ a b : Int, enc a = enc b → a = b)
     (item : Formal.EquipmentScoring.Item)
-    (monsterAtk : Formal.EquipmentScoring.ElemStats)
+    (monsterAtk monsterRes playerAtk : Formal.EquipmentScoring.ElemStats)
     (hpBonus wisdom prospecting inventorySpace haste lifesteal combatBuff : Int)
     (hflat : item.flatUtil = hpBonus + wisdom + prospecting + inventorySpace + haste + lifesteal + combatBuff) :
     Extracted.EquipmentScoring.armor_score_pure
         (Formal.EquipmentScoring.elements.map enc)
         (encElem enc item.resistance) (encElem enc monsterAtk)
+        (encElem enc monsterRes) (encElem enc playerAtk)
+        item.dmg (encElem enc item.dmgElem) item.crit
         hpBonus wisdom prospecting inventorySpace haste lifesteal combatBuff
-      = Formal.EquipmentScoring.AScore item monsterAtk := by
+      = Formal.EquipmentScoring.AScore item monsterAtk monsterRes playerAtk := by
   simp only [Extracted.EquipmentScoring.armor_score_pure,
              Formal.EquipmentScoring.AScore, Formal.EquipmentScoring.aTerm,
+             Formal.EquipmentScoring.oTerm, Formal.EquipmentScoring.wTerm,
              Formal.EquipmentScoring.elements,
              List.map_cons, List.map_nil, List.foldl_cons, List.foldl_nil,
              List.sum_cons, List.sum_nil,

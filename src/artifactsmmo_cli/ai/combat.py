@@ -150,7 +150,8 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     state.hp, not max_hp; project_loadout_stats may raise max_hp via
     equipment but doesn't refill current hp."""
     loadout = pick_loadout_cached(
-        Combat(game_data.monster_attack(monster_code), game_data.monster_resistance(monster_code)),
+        Combat(game_data.monster_attack(monster_code),
+               game_data.monster_resistance(monster_code), dict(state.attack)),
         state, game_data,
     )
     p = project_loadout_stats(state, loadout, game_data)
@@ -286,7 +287,8 @@ def combat_margin(state: WorldState, game_data: GameData, monster_code: str) -> 
     Mirrors Lean ``Formal.PredictWin.combatMargin`` (PredictWin.lean).
     """
     loadout = pick_loadout_cached(
-        Combat(game_data.monster_attack(monster_code), game_data.monster_resistance(monster_code)),
+        Combat(game_data.monster_attack(monster_code),
+               game_data.monster_resistance(monster_code), dict(state.attack)),
         state, game_data,
     )
     p = project_loadout_stats(state, loadout, game_data)

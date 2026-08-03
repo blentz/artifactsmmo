@@ -149,7 +149,7 @@ class TestPickLoadoutCached:
         gather = pick_loadout_cached(Gather("woodcutting"), state, gd)
         combat = pick_loadout_cached(
             Combat(gd.monster_attack("yellow_slime"),
-                   gd.monster_resistance("yellow_slime")),
+                   gd.monster_resistance("yellow_slime"), dict(state.attack)),
             state, gd)
         assert gather["weapon_slot"] == "iron_axe"
         assert combat["weapon_slot"] == "wooden_stick"

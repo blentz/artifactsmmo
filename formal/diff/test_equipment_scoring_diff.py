@@ -45,6 +45,12 @@ _ELEM_IDX = {e: i for i, e in enumerate(ELEMENTS)}
 # A weapon slot (scored with weapon_score) vs every other (armor_score).
 _WEAPON_SLOT = "weapon_slot"
 
+# Default fighter attack for the targeted scenarios. NON-ZERO on purpose: the
+# armor score's offense term is `Σ p_atk * clamp(mon_res) * (2*dmg + crit)`, so a
+# zero player attack would make that whole term dead and the differential
+# vacuous on it. The property test generates its own.
+_PLAYER_ATK: dict[str, int] = {"fire": 12, "earth": 7}
+
 
 class _FakeGameData:
     def __init__(self, table: dict[str, ItemStats],
@@ -64,7 +70,8 @@ class _FakeGameData:
 
 
 def _make_state(level: int, inventory: dict[str, int],
-                equipment: dict[str, str | None]) -> WorldState:
+                equipment: dict[str, str | None],
+                player_attack: dict[str, int] | None = None) -> WorldState:
     return WorldState(
         character="c", level=level, xp=0, max_xp=100, hp=10, max_hp=50,
         gold=0, skills={}, x=0, y=0, inventory=dict(inventory), inventory_max=1000,
@@ -72,7 +79,8 @@ def _make_state(level: int, inventory: dict[str, int],
         equipment=dict(equipment), cooldown_expires=None, task_code=None,
         task_type=None, task_progress=0, task_total=0,
         bank_items=None, bank_gold=None, pending_items=None,
-        attack={}, dmg=0, dmg_elements={}, resistance={},
+        attack=dict(_PLAYER_ATK if player_attack is None else player_attack),
+        dmg=0, dmg_elements={}, resistance={},
         critical_strike=0, initiative=0,
     )
 
@@ -81,29 +89,36 @@ def _elem_block(stats: ItemStats | None, which: str) -> list[int]:
     """4 element ints for a block (attack or resistance), 0-filled, 0 if None."""
     if stats is None:
         return [0, 0, 0, 0]
-    d = stats.attack if which == "attack" else stats.resistance
+    d = {"attack": stats.attack, "resistance": stats.resistance,
+         "dmg_elements": stats.dmg_elements}[which]
     return [d.get(e, 0) for e in ELEMENTS]
 
 
 def _item_block(code_id: int, stats: ItemStats | None, slot: str) -> list[int]:
-    """13-int Lean Item block: [code, level, fits, atk0..3, res0..3, crit, flatUtil].
-    flatUtil = hp_bonus + wisdom + prospecting (the monster-independent utility the
-    armor/artifact score adds; novice_guide: 25+25+25 = 75)."""
+    """18-int Lean Item block: [code, level, fits, atk0..3, res0..3, crit, flatUtil,
+    dmg, dmgElem0..3].
+
+    flatUtil = hp_bonus + wisdom + prospecting + … (the monster-independent utility
+    the armor/artifact score adds; novice_guide: 25+25+25 = 75). The trailing 5 are
+    the OFFENSE inputs AScore prices a non-weapon piece with: the global damage %
+    and the per-element damage %."""
     if stats is None:
-        return [code_id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        return [code_id, *([0] * 17)]
     fits = 1 if slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []) else 0
     return [code_id, stats.level, fits, *_elem_block(stats, "attack"),
             *_elem_block(stats, "resistance"), stats.critical_strike,
             stats.hp_bonus + stats.wisdom + stats.prospecting + stats.inventory_space
-            + stats.haste + stats.lifesteal + stats.combat_buff]
+            + stats.haste + stats.lifesteal + stats.combat_buff,
+            stats.dmg, *_elem_block(stats, "dmg_elements")]
 
 
-def _py_score(stats: ItemStats, slot: str, monster_atk: dict, monster_res: dict) -> int:
+def _py_score(stats: ItemStats, slot: str, monster_atk: dict, monster_res: dict,
+              player_attack: dict) -> int:
     # Compare against RAW WScore (no nonToolBonus). The augmented combat
     # score (composite weapon_score) is verified in a separate diff against
     # the PurposeRouting.combatScore oracle.
     return (weapon_score_raw(stats, monster_res) if slot == _WEAPON_SLOT
-            else armor_score(stats, monster_atk))
+            else armor_score(stats, monster_atk, monster_res, player_attack))
 
 
 def _owned_codes(state: WorldState) -> set[str]:
@@ -112,10 +127,13 @@ def _owned_codes(state: WorldState) -> set[str]:
     return pool
 
 
-def _check(table, monster_atk, monster_res, level, inventory, equipment, slots):
+def _check(table, monster_atk, monster_res, level, inventory, equipment, slots,
+           player_attack=None):
+    player_attack = _PLAYER_ATK if player_attack is None else player_attack
     game_data = _FakeGameData(table, monster_atk, monster_res)
-    state = _make_state(level, inventory, equipment)
-    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
+    state = _make_state(level, inventory, equipment, player_attack)
+    result = pick_loadout(Combat(monster_atk, monster_res, player_attack),
+                          state, game_data)
 
     # Intern codes to small ints so the Lean `changed`/identity guards line up.
     code_ids: dict[str, int] = {}
@@ -132,9 +150,11 @@ def _check(table, monster_atk, monster_res, level, inventory, equipment, slots):
     meta: list[tuple] = []
     for slot in slots:
         is_weapon = slot == _WEAPON_SLOT
-        mon = monster_res if is_weapon else monster_atk
+        # Layout: level, kind, monster attack, monster resistance, wearer attack.
         args = [level, 0 if is_weapon else 1,
-                *[mon.get(e, 0) for e in ELEMENTS]]
+                *[monster_atk.get(e, 0) for e in ELEMENTS],
+                *[monster_res.get(e, 0) for e in ELEMENTS],
+                *[player_attack.get(e, 0) for e in ELEMENTS]]
         cur_code = equipment.get(slot)
         cur_stats = table.get(cur_code) if cur_code else None
         cur_present = 1 if cur_stats is not None else 0
@@ -154,8 +174,9 @@ def _check(table, monster_atk, monster_res, level, inventory, equipment, slots):
         chosen_code = result.get(slot)
         chosen_stats = table.get(chosen_code) if chosen_code else None
         # Python score is now the EXACT integer surrogate — same int as Lean.
-        py_chosen_score = (_py_score(chosen_stats, slot, monster_atk, monster_res)
-                           if chosen_stats is not None else None)
+        py_chosen_score = (
+            _py_score(chosen_stats, slot, monster_atk, monster_res, player_attack)
+            if chosen_stats is not None else None)
 
         feasible_exists = any(
             (st_.level <= level) and (slot in ITEM_TYPE_TO_SLOTS.get(st_.type_, []))
@@ -203,23 +224,29 @@ _TYPES = ["weapon", "body_armor"]
                        min_size=len(_ITEM_CODES), max_size=len(_ITEM_CODES)),
     item_crits=st.lists(st.integers(min_value=0, max_value=100),
                         min_size=len(_ITEM_CODES), max_size=len(_ITEM_CODES)),
+    item_dmgs=st.lists(_VAL, min_size=len(_ITEM_CODES), max_size=len(_ITEM_CODES)),
+    item_dmg_elems=st.lists(st.lists(_VAL, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+                            min_size=len(_ITEM_CODES), max_size=len(_ITEM_CODES)),
+    player_atk=st.lists(_VAL, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
     inv_pick=st.lists(st.booleans(), min_size=len(_ITEM_CODES), max_size=len(_ITEM_CODES)),
     equip_w=st.sampled_from([*_ITEM_CODES, None]),
     equip_b=st.sampled_from([*_ITEM_CODES, None]),
 )
 def test_python_matches_lean(mon_atk, mon_res, level, item_types, item_levels,
-                             item_atks, item_ress, item_crits, inv_pick,
+                             item_atks, item_ress, item_crits, item_dmgs,
+                             item_dmg_elems, player_atk, inv_pick,
                              equip_w, equip_b):
     table = {
         code: ItemStats(
             code=code, level=lvl, type_=ty,
             attack={e: a for e, a in zip(ELEMENTS, atk, strict=True)},
             resistance={e: r for e, r in zip(ELEMENTS, res, strict=True)},
-            critical_strike=crit,
+            critical_strike=crit, dmg=dmg,
+            dmg_elements={e: d for e, d in zip(ELEMENTS, dmg_el, strict=True)},
         )
-        for code, ty, lvl, atk, res, crit in zip(
+        for code, ty, lvl, atk, res, crit, dmg, dmg_el in zip(
             _ITEM_CODES, item_types, item_levels, item_atks, item_ress,
-            item_crits, strict=True)
+            item_crits, item_dmgs, item_dmg_elems, strict=True)
     }
     monster_atk = {e: v for e, v in zip(ELEMENTS, mon_atk, strict=True)}
     monster_res = {e: v for e, v in zip(ELEMENTS, mon_res, strict=True)}
@@ -238,7 +265,8 @@ def test_python_matches_lean(mon_atk, mon_res, level, item_types, item_levels,
         equip_b = None
     equipment = {"weapon_slot": equip_w, "body_armor_slot": equip_b}
     _check(table, monster_atk, monster_res, level, inventory, equipment,
-           ["weapon_slot", "body_armor_slot"])
+           ["weapon_slot", "body_armor_slot"],
+           {e: v for e, v in zip(ELEMENTS, player_atk, strict=True)})
 
 
 # ---- Targeted scenario cases ----
@@ -260,7 +288,7 @@ def test_below_level_not_chosen():
     equipment = {"weapon_slot": None, "body_armor_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res, _PLAYER_ATK), state, game_data)
     assert result["weapon_slot"] == "w_lo"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["weapon_slot"])
 
@@ -281,7 +309,7 @@ def test_utility_artifact_fills_empty_slot():
     equipment = {"artifact1_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(10, inventory, equipment)
-    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res, _PLAYER_ATK), state, game_data)
     assert result.get("artifact1_slot") == "novice_guide"
     _check(table, monster_atk, monster_res, 10, inventory, equipment, ["artifact1_slot"])
 
@@ -300,7 +328,7 @@ def test_bag_fills_empty_slot_via_inventory_space():
     equipment = {"bag_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(10, inventory, equipment)
-    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res, _PLAYER_ATK), state, game_data)
     assert result.get("bag_slot") == "backpack"
     _check(table, monster_atk, monster_res, 10, inventory, equipment, ["bag_slot"])
 
@@ -319,7 +347,7 @@ def test_haste_armor_scores_its_efficiency_value():
     equipment = {"leg_armor_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res, _PLAYER_ATK), state, game_data)
     assert result.get("leg_armor_slot") == "haste_legs"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["leg_armor_slot"])
 
@@ -338,7 +366,7 @@ def test_lifesteal_armor_scores_its_sustain_value():
     equipment = {"ring1_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res, _PLAYER_ATK), state, game_data)
     assert result.get("ring1_slot") == "vamp_ring"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["ring1_slot"])
 
@@ -358,7 +386,7 @@ def test_combat_buff_potion_scores_its_utility_value():
     equipment = {"ring1_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res, _PLAYER_ATK), state, game_data)
     assert result.get("ring1_slot") == "boost_pot"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["ring1_slot"])
 
@@ -375,7 +403,7 @@ def test_upgrade_swaps():
     equipment = {"weapon_slot": "w_old", "body_armor_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res, _PLAYER_ATK), state, game_data)
     assert result["weapon_slot"] == "w_new"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["weapon_slot"])
 
@@ -392,7 +420,7 @@ def test_downgrade_rejected():
     equipment = {"weapon_slot": "w_good", "body_armor_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res, _PLAYER_ATK), state, game_data)
     assert result["weapon_slot"] == "w_good"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["weapon_slot"])
 
@@ -408,7 +436,7 @@ def test_empty_slot_fill():
     equipment = {"weapon_slot": None, "body_armor_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res, _PLAYER_ATK), state, game_data)
     assert result["body_armor_slot"] == "b_armor"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["body_armor_slot"])
 

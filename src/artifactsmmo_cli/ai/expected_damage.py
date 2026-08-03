@@ -47,7 +47,8 @@ def expected_damage_per_fight(
     m_resist = game_data.monster_resistance(monster_code)
     m_hp = game_data.monster_hp(monster_code)
     m_crit = game_data.monster_critical_strike(monster_code)
-    loadout = pick_loadout_cached(Combat(m_attack, m_resist), state, game_data)
+    loadout = pick_loadout_cached(
+        Combat(m_attack, m_resist, dict(state.attack)), state, game_data)
     p = project_loadout_stats(state, loadout, game_data)
     monster_per_turn = _expected_hit(m_attack, 0, {}, p.resistance, m_crit)
     player_kill_step = _expected_hit(

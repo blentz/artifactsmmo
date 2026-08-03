@@ -65,6 +65,7 @@ class OptimizeLoadoutAction(Action):
             purpose = Combat(
                 game_data.monster_attack(self.target_monster_code),
                 game_data.monster_resistance(self.target_monster_code),
+                dict(state.attack),
             )
         elif self.target_skill:
             purpose = Gather(self.target_skill)

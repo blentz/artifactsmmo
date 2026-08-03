@@ -110,7 +110,7 @@ def test_combat_purpose_weapon_slot_picks_same_as_legacy() -> None:
         inventory={"fishing_net": 1},
         equipment={"weapon_slot": "wooden_stick"},
     )
-    purpose = Combat(m_atk, m_res)
+    purpose = Combat(m_atk, m_res, dict(state.attack))
     result = pick_loadout(purpose, state, gd)
     assert result["weapon_slot"] == "fishing_net"
 
@@ -119,9 +119,12 @@ def test_combat_purpose_armor_slot_picks_same_as_legacy() -> None:
     """Regression lock: armor slot picks leather_armor (earth resist 10) over water_robe
     (water resist 20) vs an earth-attacking yellow_slime.
 
-    Old armor_score values (hardcoded):
-      leather_armor: earth_atk=8 * earth_res=10 = 80
-      water_robe: water_atk=0 * water_res=20 = 0
+    Defense-term values (hardcoded), now on the 200x common denominator that
+    puts defense and offense in one unit (1/20000 damage-per-turn):
+      leather_armor: 200 * earth_atk=8 * earth_res=10 = 16000
+      water_robe: 200 * water_atk=0 * water_res=20 = 0
+    Neither piece carries dmg/dmg_elements/crit and the fixture fighter has no
+    attack, so the offense term is 0 for both and the pick is unchanged.
     Legacy pick = leather_armor.  Generalized picker must agree.
     """
     gd = _gd_combat()
@@ -129,15 +132,15 @@ def test_combat_purpose_armor_slot_picks_same_as_legacy() -> None:
     m_res = gd.monster_resistance("yellow_slime")
 
     stats = gd._item_stats
-    assert armor_score(stats["leather_armor"], m_atk) == 80
-    assert armor_score(stats["water_robe"], m_atk) == 0
+    assert armor_score(stats["leather_armor"], m_atk, m_res, {}) == 16000
+    assert armor_score(stats["water_robe"], m_atk, m_res, {}) == 0
 
     state = _make_state(
         level=1,
         inventory={"leather_armor": 1, "water_robe": 1},
         equipment={"body_armor_slot": None},
     )
-    purpose = Combat(m_atk, m_res)
+    purpose = Combat(m_atk, m_res, dict(state.attack))
     result = pick_loadout(purpose, state, gd)
     assert result["body_armor_slot"] == "leather_armor"
 
@@ -152,7 +155,7 @@ def test_combat_purpose_no_improvement_keeps_current() -> None:
         inventory={},
         equipment={"weapon_slot": "wooden_stick"},
     )
-    result = pick_loadout(Combat(m_atk, m_res), state, gd)
+    result = pick_loadout(Combat(m_atk, m_res, dict(state.attack)), state, gd)
     assert result["weapon_slot"] == "wooden_stick"
 
 
@@ -253,10 +256,11 @@ def _gd_gather_artifact() -> GameData:
 def test_gather_fills_empty_artifact_slot() -> None:
     """MUTATION KILLER: a gather re-arm fills an empty artifact slot with an owned
     utility artifact. novice_guide flat utility = hp_bonus 25 + wisdom 25 +
-    prospecting 25 = 75 > 0, so the empty-slot gate passes. The mutant that
-    reverts the artifact branch to -gather_score (0) leaves the slot empty."""
+    prospecting 25 = 75 > 0 (scaled by the score's common 200x denominator),
+    so the empty-slot gate passes. The mutant that reverts the artifact branch to
+    -gather_score (0) leaves the slot empty."""
     gd = _gd_gather_artifact()
-    assert armor_score(gd._item_stats["novice_guide"], {}) == 75
+    assert armor_score(gd._item_stats["novice_guide"], {}, {}, {}) == 200 * 75
     state = _make_state(level=1, inventory={"novice_guide": 1},
                         equipment={"artifact1_slot": None})
     result = pick_loadout(Gather("woodcutting"), state, gd)
@@ -293,7 +297,7 @@ def test_combat_fills_empty_artifact_slot_unchanged() -> None:
     gd = _gd_gather_artifact()
     state = _make_state(level=1, inventory={"novice_guide": 1},
                         equipment={"artifact1_slot": None})
-    result = pick_loadout(Combat({"earth": 0}, {"earth": 0}), state, gd)
+    result = pick_loadout(Combat({"earth": 0}, {"earth": 0}, dict(state.attack)), state, gd)
     assert result["artifact1_slot"] == "novice_guide"
 
 
@@ -313,7 +317,7 @@ def test_equal_benefit_tie_is_canonical_across_candidate_orders() -> None:
     gd._monster_attack = {"yellow_slime": {"earth": 8, "fire": 0, "water": 0, "air": 0}}
     gd._monster_resistance = {"yellow_slime": {"earth": 0, "fire": 0, "water": 0, "air": 0}}
     combat = Combat(gd._monster_attack["yellow_slime"],
-                    gd._monster_resistance["yellow_slime"])
+                    gd._monster_resistance["yellow_slime"], {})
     picks = []
     for order in (("twin_a", "twin_b"), ("twin_b", "twin_a")):
         state = _make_state(inventory={code: 1 for code in order})

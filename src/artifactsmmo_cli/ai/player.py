@@ -2894,6 +2894,7 @@ class GamePlayer:
             purpose = Combat(
                 self.game_data.monster_attack(action.monster_code),
                 self.game_data.monster_resistance(action.monster_code),
+                dict(state.attack),
             )
             task_key = combat_key(action.monster_code)
         elif isinstance(action, GatherAction):

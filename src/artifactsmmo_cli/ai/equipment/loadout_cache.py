@@ -68,9 +68,13 @@ def _equippable(code: str, game_data: GameData) -> bool:
 def _purpose_key(purpose: object) -> tuple[object, ...]:
     """Hashable canonical key for the closed purpose set (gear_value_core)."""
     if isinstance(purpose, Combat):
+        # player_attack is part of the key: armor_score prices a piece's damage-%
+        # and crit-% against the fighter's own attack, so two states sharing
+        # (level, equipment, inventory) but not attack CAN pick different armor.
         return ("combat",
                 tuple(sorted(purpose.monster_attack.items())),
-                tuple(sorted(purpose.monster_resistance.items())))
+                tuple(sorted(purpose.monster_resistance.items())),
+                tuple(sorted(purpose.player_attack.items())))
     if isinstance(purpose, Gather):
         return ("gather", purpose.skill)
     if isinstance(purpose, Rank):

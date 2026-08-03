@@ -25,8 +25,10 @@ The differential mirrors this set at ``formal/diff/test_loadout_picker_diff.py``
 two in sync — a divergence trips the bit-exact Gather-artifact binding test."""
 
 _NO_MONSTER: dict[str, int] = {}
-"""Empty monster attack: armor_score's defense term Σ mon_atk·res collapses to 0,
-leaving exactly the flat utility sum (bit-identical to the Lean model flatUtil)."""
+"""Empty monster attack / resistance / player attack: armor_score's defense term
+Σ mon_atk·res collapses to 0 and its offense term Σ p_atk·… collapses to 0 (no
+attack to scale the piece's damage %), leaving exactly 200 × the flat utility sum
+(bit-identical to the Lean model's 200 * flatUtil)."""
 
 
 def _candidates_for_slot(
@@ -98,11 +100,15 @@ def _benefit(stats: ItemStats, purpose: object) -> int:
             # Artifacts grant purpose-independent utility (wisdom/prospecting/hp)
             # and carry no skill_effects, so gear_value(Gather) = 0 and the
             # empty-slot gate discards them. Score by the flat-utility term:
-            # armor_score against an empty monster attack zeroes the defense term,
-            # leaving hp_bonus+wisdom+prospecting+inventory_space+haste+lifesteal+
-            # combat_buff — bit-identical to the Lean model's per-item flatUtil,
-            # and consistent with the Combat path (armor_score includes it too).
-            return armor_score(stats, _NO_MONSTER)
+            # armor_score against an empty monster (and an empty player attack)
+            # zeroes BOTH the defense and the offense term, leaving 200 *
+            # (hp_bonus+wisdom+prospecting+inventory_space+haste+lifesteal+
+            # combat_buff) — bit-identical to the Lean model's per-item
+            # 200 * flatUtil, and consistent with the Combat path (armor_score
+            # includes the same flat sum on the same 200 scale). A Gather
+            # purpose has no monster and no fight, so the combat half of the
+            # unit is genuinely 0 here rather than merely unpriced.
+            return armor_score(stats, _NO_MONSTER, _NO_MONSTER, _NO_MONSTER)
         return -gear_value(stats, purpose)
     return gear_value(stats, purpose)
 

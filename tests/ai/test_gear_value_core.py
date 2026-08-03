@@ -68,8 +68,10 @@ def test_combat_purpose_matches_weapon_and_armor_score() -> None:
                       hp_bonus=15)
     m_res = {"fire": 25}
     m_atk = {"fire": 40}
-    assert gear_value(weapon, Combat(m_atk, m_res)) == weapon_score(weapon, m_res)
-    assert gear_value(armor, Combat(m_atk, m_res)) == armor_score(armor, m_atk)
+    p_atk = {"fire": 30}
+    assert gear_value(weapon, Combat(m_atk, m_res, p_atk)) == weapon_score(weapon, m_res)
+    assert (gear_value(armor, Combat(m_atk, m_res, p_atk))
+            == armor_score(armor, m_atk, m_res, p_atk))
 
 
 def test_gather_purpose_matches_gather_score() -> None:

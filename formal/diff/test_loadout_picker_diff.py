@@ -25,11 +25,11 @@ loop for the two LIVE-WIRED purposes:
 
 RANK COVERAGE — BINDING NOW CLOSED (was DEFERRED; closed for the ``EquipOwnedGoal``
 live caller). The Lean ``Purpose.rank`` carries an ABSTRACT ``rankOf : Item → Int``
-because the 13-int oracle ``Item`` block aggregates the utility stats into one
+because the 18-int oracle ``Item`` block aggregates the utility stats into one
 ``flatUtil`` int, losing the breakdown ``rankValue`` needs. Rather than invent an
 ``Item → RawStats`` projection, the oracle ``runLoadoutPicker`` now carries the 6
 ``rankValue`` inputs ``[combat_raw, wisdom, prospecting, inventory_space, haste,
-is_tool]`` per item OUT-OF-BLOCK (block+15..block+20, stride 21 for
+is_tool]`` per item OUT-OF-BLOCK (block+20..block+25, stride 26 for
 ``purposeKind == 2``), reassembled into the abstract ``rankOf`` via the SAME
 ``Formal.GearValue.rankValue`` def the value-level ``rank_value`` differential
 (``test_gear_value_diff.py::test_rank_value_matches_oracle``) already pins. The
@@ -72,7 +72,8 @@ class _FakeGameData:
 
 
 def _make_state(level: int, inventory: dict[str, int],
-                equipment: dict[str, str | None]) -> WorldState:
+                equipment: dict[str, str | None],
+                player_attack: dict[str, int] | None = None) -> WorldState:
     return WorldState(
         character="c", level=level, xp=0, max_xp=100, hp=10, max_hp=50,
         gold=0, skills={}, x=0, y=0, inventory=dict(inventory), inventory_max=1000,
@@ -80,7 +81,7 @@ def _make_state(level: int, inventory: dict[str, int],
         equipment=dict(equipment), cooldown_expires=None, task_code=None,
         task_type=None, task_progress=0, task_total=0,
         bank_items=None, bank_gold=None, pending_items=None,
-        attack={}, dmg=0, dmg_elements={}, resistance={},
+        attack=dict(player_attack or {}), dmg=0, dmg_elements={}, resistance={},
         critical_strike=0, initiative=0,
     )
 
@@ -88,29 +89,33 @@ def _make_state(level: int, inventory: dict[str, int],
 def _elem_block(stats: ItemStats | None, which: str) -> list[int]:
     if stats is None:
         return [0, 0, 0, 0]
-    d = stats.attack if which == "attack" else stats.resistance
+    d = {"attack": stats.attack, "resistance": stats.resistance,
+         "dmg_elements": stats.dmg_elements}[which]
     return [d.get(e, 0) for e in ELEMENTS]
 
 
 def _item_block(code_id: int, stats: ItemStats | None, slot: str,
                 skill: str | None) -> list[int]:
-    """15-int extended Lean block: 13-int item block + skillEffect + isUtilityFill.
+    """20-int extended Lean block: 18-int item block + skillEffect + isUtilityFill.
 
     flatUtil aggregates the monster-independent utility stats (== the Python
-    armor/utility flat term); skillEffect is the signed per-skill gather effect
-    (``gather_score``) the abstract Gather benefit reads, 0 when no skill;
+    armor/utility flat term); ``dmg`` + ``dmgElem0..3`` are the OFFENSE inputs the
+    armor score prices a piece with; skillEffect is the signed per-skill gather
+    effect (``gather_score``) the abstract Gather benefit reads, 0 when no skill;
     isUtilityFill flags the artifact-type utility-fill items whose Gather benefit
-    is the flat utility (``armor_score(stats, {})``) rather than ``-gather_score``.
+    is the flat utility (``armor_score(stats, {}, {}, {})``) rather than
+    ``-gather_score``.
     """
     if stats is None:
-        return [code_id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        return [code_id, *([0] * 19)]
     fits = 1 if slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []) else 0
     flat = (stats.hp_bonus + stats.wisdom + stats.prospecting + stats.inventory_space
             + stats.haste + stats.lifesteal + stats.combat_buff)
     eff = gather_score(stats, skill) if skill is not None else 0
     is_utility_fill = 1 if stats and stats.type_ in _UTILITY_FILL_TYPES else 0
     return [code_id, stats.level, fits, *_elem_block(stats, "attack"),
-            *_elem_block(stats, "resistance"), stats.critical_strike, flat, eff,
+            *_elem_block(stats, "resistance"), stats.critical_strike, flat,
+            stats.dmg, *_elem_block(stats, "dmg_elements"), eff,
             is_utility_fill]
 
 
@@ -120,15 +125,25 @@ def _owned_codes(state: WorldState) -> set[str]:
     return pool
 
 
-def _oracle_pick(purpose_kind: int, level: int, mon: dict[str, int],
+def _oracle_pick(purpose_kind: int, level: int, mon_res: dict[str, int],
                  cur_code: str | None, table: dict[str, ItemStats],
                  owned: list[str], skill: str | None,
-                 cid, slot: str = _WEAPON_SLOT, is_weapon: int = 1) -> dict:
-    """One oracle request for `slot` under `purpose_kind`."""
+                 cid, slot: str = _WEAPON_SLOT, is_weapon: int = 1,
+                 mon_atk: dict[str, int] | None = None,
+                 player_atk: dict[str, int] | None = None) -> dict:
+    """One oracle request for `slot` under `purpose_kind`.
+
+    Monster ATTACK (armor defense), monster RESISTANCE (weapon score + armor
+    offense clamp) and the wearer's ATTACK (armor offense) are three separate
+    element blocks, matching Oracle.lean's `runLoadoutPicker` layout."""
+    mon_atk = mon_atk or {}
+    player_atk = player_atk or {}
     cur_stats = table.get(cur_code) if cur_code else None
     cur_present = 1 if cur_stats is not None else 0
     args = [purpose_kind, level, is_weapon,
-            *[mon.get(e, 0) for e in ELEMENTS], cur_present]
+            *[mon_atk.get(e, 0) for e in ELEMENTS],
+            *[mon_res.get(e, 0) for e in ELEMENTS],
+            *[player_atk.get(e, 0) for e in ELEMENTS], cur_present]
     args += _item_block(cid(cur_code), cur_stats, slot, skill)
     for code in sorted(owned):
         args += _item_block(cid(code), table.get(code), slot, skill)
@@ -207,7 +222,7 @@ def test_gather_pick_matches_lean(item_levels, item_effs, has_eff, level,
 # ---------------------------------------------------------------------------
 # GATHER + ARTIFACT: the utility-fill branch. Artifacts carry NO skill_effects,
 # so ``-gather_score`` is 0; the live ``_benefit`` routes them through the flat
-# utility ``armor_score(stats, {})`` instead, and the oracle mirrors it via the
+# utility ``armor_score(stats, {}, {}, {})`` instead, and the oracle mirrors it via the
 # per-item ``isUtilityFill`` flag → ``purposeBenefit(.gather) = flatUtil``. This
 # binds the live flat-utility score to the oracle benefit BIT-EXACT and kills the
 # mutant that reverts the artifact arm to ``-gather_score`` (0 → slot stays empty).
@@ -270,7 +285,7 @@ def test_gather_artifact_pick_matches_lean(item_levels, item_hp, item_wis, item_
     if chosen_stats is not None:
         py_benefit = _benefit(chosen_stats, purpose)
         # The utility-fill benefit is exactly the flat utility term.
-        assert py_benefit == armor_score(chosen_stats, {}), (py_benefit, chosen)
+        assert py_benefit == armor_score(chosen_stats, {}, {}, {}), (py_benefit, chosen)
         if feasible_exists:
             assert py_benefit == max(res["max_benefit"], res["cur_benefit"]), (py_benefit, res)
         assert py_benefit >= res["cur_benefit"], (py_benefit, res)
@@ -321,7 +336,7 @@ def test_combat_pick_matches_lean(mon_res, item_levels, item_atks, item_crits,
     gd = _FakeGameData(table)
     state = _make_state(level, inventory, equipment)
     # Combat purpose: monster_attack irrelevant to the weapon branch (uses res).
-    purpose = Combat({}, monster_res)
+    purpose = Combat({}, monster_res, {})
     result = pick_loadout(purpose, state, gd)
 
     code_ids: dict[str, int] = {}
@@ -346,6 +361,93 @@ def test_combat_pick_matches_lean(mon_res, item_levels, item_atks, item_crits,
         if feasible_exists:
             assert py_raw == max(res["max_benefit"], res["cur_benefit"]), (py_raw, res)
         assert py_raw >= res["cur_benefit"], (py_raw, res)
+    else:
+        assert res["cur_benefit"] == 0, res
+
+
+# ---------------------------------------------------------------------------
+# COMBAT / ARMOR: the piece is priced on BOTH halves of the swing. Binds the
+# live `gear_value(Combat)` armor branch (= `armor_score`) to the oracle's
+# `purposeBenefit(.combat … isWeapon=false)` = `AScore`, BIT-EXACT, over random
+# monsters AND random wearer attacks. A mutant that drops the offense sum, the
+# `dmg_elements` read, the crit read or the `200 *` defense scaling diverges.
+# ---------------------------------------------------------------------------
+
+_ARMOR_CODES = ["b_a", "b_b", "b_c", "b_d"]
+_ARMOR_SLOT = "body_armor_slot"
+
+
+@settings(max_examples=250, deadline=None)
+@given(
+    mon_atk=st.lists(_VAL, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+    mon_res=st.lists(_RES, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+    player_atk=st.lists(_VAL, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+    item_levels=st.lists(st.integers(min_value=1, max_value=10),
+                         min_size=len(_ARMOR_CODES), max_size=len(_ARMOR_CODES)),
+    item_ress=st.lists(st.lists(_VAL, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+                       min_size=len(_ARMOR_CODES), max_size=len(_ARMOR_CODES)),
+    item_dmgs=st.lists(_VAL, min_size=len(_ARMOR_CODES), max_size=len(_ARMOR_CODES)),
+    item_dmg_elems=st.lists(st.lists(_VAL, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+                            min_size=len(_ARMOR_CODES), max_size=len(_ARMOR_CODES)),
+    item_crits=st.lists(st.integers(min_value=0, max_value=100),
+                        min_size=len(_ARMOR_CODES), max_size=len(_ARMOR_CODES)),
+    item_hps=st.lists(_VAL, min_size=len(_ARMOR_CODES), max_size=len(_ARMOR_CODES)),
+    level=st.integers(min_value=1, max_value=10),
+    inv_pick=st.lists(st.booleans(), min_size=len(_ARMOR_CODES), max_size=len(_ARMOR_CODES)),
+    equip_b=st.sampled_from([*_ARMOR_CODES, None]),
+)
+def test_combat_armor_pick_matches_lean(mon_atk, mon_res, player_atk, item_levels,
+                                        item_ress, item_dmgs, item_dmg_elems,
+                                        item_crits, item_hps, level, inv_pick,
+                                        equip_b):
+    """Live `pick_loadout(Combat)` armor-slot benefit == oracle `AScore`, bit-exact."""
+    monster_atk = {e: v for e, v in zip(ELEMENTS, mon_atk, strict=True)}
+    monster_res = {e: v for e, v in zip(ELEMENTS, mon_res, strict=True)}
+    wearer_atk = {e: v for e, v in zip(ELEMENTS, player_atk, strict=True)}
+    table = {
+        code: ItemStats(
+            code=code, level=lvl, type_="body_armor",
+            resistance={e: r for e, r in zip(ELEMENTS, res, strict=True)},
+            dmg=dmg,
+            dmg_elements={e: d for e, d in zip(ELEMENTS, dmg_el, strict=True)},
+            critical_strike=crit, hp_bonus=hp,
+        )
+        for code, lvl, res, dmg, dmg_el, crit, hp in zip(
+            _ARMOR_CODES, item_levels, item_ress, item_dmgs, item_dmg_elems,
+            item_crits, item_hps, strict=True)
+    }
+    inventory = {c: 1 for c, keep in zip(_ARMOR_CODES, inv_pick, strict=True) if keep}
+    equipment = {_ARMOR_SLOT: equip_b}
+    gd = _FakeGameData(table)
+    state = _make_state(level, inventory, equipment, wearer_atk)
+    purpose = Combat(monster_atk, monster_res, wearer_atk)
+    result = pick_loadout(purpose, state, gd)
+
+    code_ids: dict[str, int] = {}
+
+    def cid(code: str | None) -> int:
+        if code is None:
+            return -1
+        return code_ids.setdefault(code, len(code_ids) + 1)
+
+    owned = sorted(_owned_codes(state))
+    cid(equip_b)
+    res = _oracle_pick(0, level, monster_res, equip_b, table, owned, None, cid,
+                       slot=_ARMOR_SLOT, is_weapon=0, mon_atk=monster_atk,
+                       player_atk=wearer_atk)
+
+    chosen = result.get(_ARMOR_SLOT)
+    chosen_stats = table.get(chosen) if chosen else None
+    feasible_exists = any(
+        st_.level <= level and _ARMOR_SLOT in ITEM_TYPE_TO_SLOTS.get(st_.type_, [])
+        for st_ in (table.get(c) for c in owned) if st_ is not None
+    )
+    if chosen_stats is not None:
+        py = armor_score(chosen_stats, monster_atk, monster_res, wearer_atk)
+        assert py == _benefit(chosen_stats, purpose), (py, chosen)
+        if feasible_exists:
+            assert py == max(res["max_benefit"], res["cur_benefit"]), (py, res)
+        assert py >= res["cur_benefit"], (py, res)
     else:
         assert res["cur_benefit"] == 0, res
 
@@ -423,7 +525,7 @@ _RANK_CODES = ["r_a", "r_b", "r_c", "r_d", "r_e", "r_f", "r_g", "r_h"]
 
 
 def _rank_item_block(code_id: int, stats: ItemStats | None, slot: str) -> list[int]:
-    """21-int Rank block: the 15-int extended block + the 6 ``rankValue`` inputs
+    """26-int Rank block: the 20-int extended block + the 6 ``rankValue`` inputs
     ``[combat_raw, wisdom, prospecting, inventory_space, haste, is_tool]`` — the
     SAME inputs ``runRankValue`` (Oracle.lean) consumes, computed exactly as the
     live ``gear_value(_, Rank)`` reads them (``combat_raw_of`` + ItemStats fields
@@ -443,7 +545,7 @@ def _oracle_rank_pick(level: int, cur_code: str | None,
     the monster element block is all zeros)."""
     cur_stats = table.get(cur_code) if cur_code else None
     cur_present = 1 if cur_stats is not None else 0
-    args = [2, level, is_weapon, *[0 for _ in ELEMENTS], cur_present]
+    args = [2, level, is_weapon, *[0 for _ in ELEMENTS * 3], cur_present]
     args += _rank_item_block(cid(cur_code), cur_stats, slot)
     for code in sorted(owned):
         args += _rank_item_block(cid(code), table.get(code), slot)

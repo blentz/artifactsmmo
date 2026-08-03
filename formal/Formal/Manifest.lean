@@ -705,6 +705,9 @@ open Formal.PriorityBand
 
 
 -- GearPolicy (Phase G1 of composition-correctness plan):
+#check @Formal.EquipmentScoring.AScore_no_monster                    -- no monster/no wearer atk ⇒ 200*flatUtil
+#check @Formal.GearPolicy.oTerm_nonneg                               -- armor offense term ≥ 0 under nonneg data
+#check @Formal.GearPolicy.oTerm_mono_in_boost                        -- offense term monotone in dmg%/crit
 #check @Formal.GearPolicy.armor_score_nonneg                         -- AScore ≥ 0 under nonneg data
 #check @Formal.GearPolicy.armor_weakly_dominates_empty_slot          -- any armor ≥ empty baseline
 #check @Formal.GearPolicy.armor_strictly_dominates_empty_slot        -- nontrivial armor > empty

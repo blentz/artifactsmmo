@@ -606,6 +606,9 @@ open Formal.PriorityBand
 #print axioms Formal.GoalSystem.sellInventory_cold_satisfied_zero
 #print axioms Formal.GoalSystem.sellInventory_cold_inv_max_zero
 #print axioms Formal.GoalSystem.sellInventory_cold_not_sellable_zero
+#print axioms Formal.EquipmentScoring.AScore_no_monster
+#print axioms Formal.GearPolicy.oTerm_nonneg
+#print axioms Formal.GearPolicy.oTerm_mono_in_boost
 #print axioms Formal.GearPolicy.armor_score_nonneg
 #print axioms Formal.GearPolicy.armor_weakly_dominates_empty_slot
 #print axioms Formal.GearPolicy.armor_strictly_dominates_empty_slot

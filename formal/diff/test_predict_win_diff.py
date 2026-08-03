@@ -133,6 +133,9 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         hp = p_max_hp
         max_hp = p_max_hp
         equipment: dict[str, str] = {}
+        # The Combat purpose carries the fighter's own attack (armor_score prices
+        # a piece's damage-% against it); the loadout itself is monkeypatched.
+        attack: dict[str, int] = {}
 
     with MonkeyPatch.context() as mp:
         mp.setattr(combat_mod, "pick_loadout_cached", lambda code, state, gd: loadout)

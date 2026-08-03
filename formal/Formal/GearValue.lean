@@ -70,11 +70,14 @@ open Formal.EquipmentScoring
 
 /-- The `gear_value(Combat)` score atom, dispatched on whether the item fills the
 weapon slot (Python `stats.type_ == "weapon"`): `WScore` against the monster's
-resistance for the weapon slot, `AScore` against the monster's attack otherwise.
+resistance for the weapon slot, `AScore` against the monster's attack, the
+monster's resistance AND the WEARER's attack otherwise (armor is priced on both
+halves of the swing — see `EquipmentScoring.AScore`).
 Mirrors `EquipmentScoring.WScore`/`AScore`. -/
 def combatValue (isWeapon : Bool) (item : Item)
-    (monsterAtk monsterRes : ElemStats) : Int :=
-  if isWeapon then WScore item monsterRes else AScore item monsterAtk
+    (monsterAtk monsterRes playerAtk : ElemStats) : Int :=
+  if isWeapon then WScore item monsterRes
+  else AScore item monsterAtk monsterRes playerAtk
 
 /-- The `gear_value(Gather)` score atom: the signed per-skill effect the gather
 picker minimizes (more negative = better). Mirrors `PurposeRouting.gatherScore`. -/
@@ -84,34 +87,42 @@ def gatherValue (skillEffect : Item → Int) (item : Item) : Int :=
 /-- `weapon_score_nonneg` restated on the `gear_value(Combat)` weapon form: the
 weapon-slot combat value is `≥ 0` under nonneg per-element attacks and crit.
 Unfolds to `EquipmentScoring.WScore`; discharged by the existing clamp theorem. -/
-theorem combatValue_weapon_nonneg (item : Item) (monsterAtk monsterRes : ElemStats)
+theorem combatValue_weapon_nonneg (item : Item)
+    (monsterAtk monsterRes playerAtk : ElemStats)
     (hatk : ∀ e ∈ elements, 0 ≤ elemGet item.attack e) (hcrit : 0 ≤ item.crit) :
-    0 ≤ combatValue true item monsterAtk monsterRes := by
+    0 ≤ combatValue true item monsterAtk monsterRes playerAtk := by
   unfold combatValue
   exact weapon_score_nonneg item monsterRes hatk hcrit
 
 /-- `armor_score_nonneg` restated on the `gear_value(Combat)` armor form. Unfolds
 to `EquipmentScoring.AScore`; discharged by `GearPolicy.armor_score_nonneg`. -/
-theorem combatValue_armor_nonneg (item : Item) (monsterAtk monsterRes : ElemStats)
+theorem combatValue_armor_nonneg (item : Item)
+    (monsterAtk monsterRes playerAtk : ElemStats)
     (hAtk : ∀ e ∈ elements, 0 ≤ elemGet monsterAtk e)
     (hRes : ∀ e ∈ elements, 0 ≤ elemGet item.resistance e)
-    (hUtil : 0 ≤ item.flatUtil) :
-    0 ≤ combatValue false item monsterAtk monsterRes := by
+    (hUtil : 0 ≤ item.flatUtil)
+    (hPAtk : ∀ e ∈ elements, 0 ≤ elemGet playerAtk e)
+    (hDmg : 0 ≤ item.dmg)
+    (hDmgElem : ∀ e ∈ elements, 0 ≤ elemGet item.dmgElem e)
+    (hCrit : 0 ≤ item.crit) :
+    0 ≤ combatValue false item monsterAtk monsterRes playerAtk := by
   unfold combatValue
-  exact Formal.GearPolicy.armor_score_nonneg item monsterAtk hAtk hRes hUtil
+  exact Formal.GearPolicy.armor_score_nonneg item monsterAtk monsterRes playerAtk
+    hAtk hRes hUtil hPAtk hDmg hDmgElem hCrit
 
 /-- `pickslot_score_optimal` restated on the `gear_value(Combat)` weapon form: the
 weapon-slot argmax dominates every feasible candidate's combat value. The combat
 purpose just instantiates the parametric `score` with `combatValue true`. -/
 theorem combatValue_pickslot_optimal (playerLevel : Int)
-    (monsterAtk monsterRes : ElemStats) (items : List Item) (c : Item) (cs : List Item)
+    (monsterAtk monsterRes playerAtk : ElemStats)
+    (items : List Item) (c : Item) (cs : List Item)
     (hcand : candidates playerLevel items = c :: cs) :
     ∀ y ∈ candidates playerLevel items,
-      combatValue true y monsterAtk monsterRes
+      combatValue true y monsterAtk monsterRes playerAtk
         ≤ combatValue true
-            (argmaxBy (fun i => combatValue true i monsterAtk monsterRes) c cs)
-            monsterAtk monsterRes :=
-  pickslot_score_optimal (fun i => combatValue true i monsterAtk monsterRes)
+            (argmaxBy (fun i => combatValue true i monsterAtk monsterRes playerAtk) c cs)
+            monsterAtk monsterRes playerAtk :=
+  pickslot_score_optimal (fun i => combatValue true i monsterAtk monsterRes playerAtk)
     playerLevel items c cs hcand
 
 /-- `pickGatherSlot_score_optimal` restated on the `gear_value(Gather)` form: the
@@ -132,10 +143,10 @@ theorem gatherValue_pickGatherSlot_optimal (skillEffect : Item → Int) (playerL
 /-- Alignment: `PurposeRouting.combatScore` (the augmented Python `weapon_score`)
 is exactly `2 * (weapon `gear_value(Combat)` atom) + nonToolBonus`. The `monsterAtk`
 argument is irrelevant to the weapon branch. -/
-theorem combatScore_eq_combatValue (monsterAtk monsterRes : ElemStats)
+theorem combatScore_eq_combatValue (monsterAtk monsterRes playerAtk : ElemStats)
     (ci : Formal.PurposeRouting.CombatItem) :
     Formal.PurposeRouting.combatScore monsterRes ci
-      = 2 * combatValue true ci.base monsterAtk monsterRes
+      = 2 * combatValue true ci.base monsterAtk monsterRes playerAtk
           + Formal.PurposeRouting.nonToolBonus ci := by
   unfold combatValue Formal.PurposeRouting.combatScore
   rfl
@@ -156,26 +167,33 @@ that with ONE picker over ANY benefit function, and folds the previously-separat
 argmax/argmin duality — so no optimality content is lost. -/
 
 /-- The per-task gear purpose, mirroring the Python `Combat`/`Rank`/`Gather`
-value objects. `combat` carries the monster's attack/resistance and the slot's
-weapon flag; `rank` carries the monster-independent per-item ruler (the genuine
+value objects. `combat` carries the monster's attack/resistance, the FIGHTER's own
+per-element attack (which `AScore` needs to price a piece's damage-%), and the
+slot's weapon flag; `rank` carries the monster-independent per-item ruler (the genuine
 `rankValue ∘ stats`, modeled as a per-item integer because the picker is
 parametric in ANY per-item benefit — `rankValue`'s bit-identity to `equipValue`
 is pinned separately by `rank_eq_equipValue`); `gather` carries the skill effect
 the gather picker minimizes. -/
 inductive Purpose where
-  | combat (monsterAtk monsterRes : ElemStats) (isWeapon : Bool)
+  | combat (monsterAtk monsterRes playerAtk : ElemStats) (isWeapon : Bool)
   | rank   (rankOf : Item → Int)
   | gather (skillEffect : Item → Int)
 
 /-- The SINGLE per-slot benefit the unified picker MAXIMIZES (argmax), dispatched
 on purpose. Combat/Rank use `gear_value` directly; Gather negates `gatherValue`
-(`gear_value(Gather)`), so the gather argmin becomes a unified argmax. -/
+(`gear_value(Gather)`), so the gather argmin becomes a unified argmax.
+
+The utility-fill arm is `200 * flatUtil`, which `EquipmentScoring.AScore_no_monster`
+proves IS `AScore i [] [] []` — the live `_benefit` computes it as
+`armor_score(stats, {}, {}, {})`, on the same `200 *` scale as every other armor
+score, so the two stay bit-identical. -/
 def purposeBenefit : Purpose → Item → Int
-  | .combat monsterAtk monsterRes isWeapon =>
-      fun i => combatValue isWeapon i monsterAtk monsterRes
+  | .combat monsterAtk monsterRes playerAtk isWeapon =>
+      fun i => combatValue isWeapon i monsterAtk monsterRes playerAtk
   | .rank rankOf => rankOf
   | .gather skillEffect =>
-      fun i => if i.isUtilityFill then i.flatUtil else - gatherValue skillEffect i
+      fun i => if i.isUtilityFill then 200 * i.flatUtil
+               else - gatherValue skillEffect i
 
 /-- On a NON-utility-fill item the Gather benefit is exactly `-gatherValue` (the
 `else` arm) — the atom that lets the gather folds reduce to the dedicated
@@ -205,15 +223,15 @@ theorem pickSlot_score_optimal_purpose (p : Purpose) (playerLevel : Int)
 
 /-- Combat instance of the unified optimality (weapon OR armor slot): subsumes the
 existing `combatValue_pickslot_optimal`. -/
-theorem pickSlot_purpose_combat_optimal (monsterAtk monsterRes : ElemStats)
+theorem pickSlot_purpose_combat_optimal (monsterAtk monsterRes playerAtk : ElemStats)
     (isWeapon : Bool) (playerLevel : Int) (items : List Item) (c : Item) (cs : List Item)
     (hcand : candidates playerLevel items = c :: cs) :
     ∀ y ∈ candidates playerLevel items,
-      combatValue isWeapon y monsterAtk monsterRes
+      combatValue isWeapon y monsterAtk monsterRes playerAtk
         ≤ combatValue isWeapon
-            (argmaxBy (purposeBenefit (.combat monsterAtk monsterRes isWeapon)) c cs)
-            monsterAtk monsterRes :=
-  pickSlot_score_optimal_purpose (.combat monsterAtk monsterRes isWeapon)
+            (argmaxBy (purposeBenefit (.combat monsterAtk monsterRes playerAtk isWeapon)) c cs)
+            monsterAtk monsterRes playerAtk :=
+  pickSlot_score_optimal_purpose (.combat monsterAtk monsterRes playerAtk isWeapon)
     playerLevel items c cs hcand
 
 /-- Rank instance of the unified optimality: the monster-independent ruler's

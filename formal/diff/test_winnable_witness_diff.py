@@ -158,7 +158,8 @@ def test_witness_rows_pin_projection_and_verdict() -> None:
         # (1) projection fidelity: re-derive from production, compare to emitted.
         loadout = pick_loadout(
             Combat(game_data.monster_attack(row.monster_code),
-                   game_data.monster_resistance(row.monster_code)), state, game_data)
+                   game_data.monster_resistance(row.monster_code),
+                   dict(state.attack)), state, game_data)
         p = project_loadout_stats(state, loadout, game_data)
         m_resist = game_data.monster_resistance(row.monster_code)
         m_attack = game_data.monster_attack(row.monster_code)
