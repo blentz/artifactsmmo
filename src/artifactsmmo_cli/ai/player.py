@@ -1918,6 +1918,15 @@ class GamePlayer:
                 # replay to gate on LIV-001 (xpToNextLevel curve consistency).
                 "xp": self.state.xp, "max_xp": self.state.max_xp,
                 "skill_xp": dict(self.state.skill_xp),
+                # Skill LEVELS, distinct from `skill_xp` (per-cycle xp DELTAS)
+                # directly above. This is the exact input `_skill_affinity`
+                # ranks roles on, and without it the role decision is invisible
+                # in the artifact used to debug it: the 2026-08-03 traces show
+                # `role` (see below) but nothing explaining why THAT role was
+                # chosen, so "Robby is the best miner on the account but is
+                # serving alchemy" could only be established by querying the
+                # live API rather than by reading the trace.
+                "skills": dict(self.state.skills),
                 "inventory_used": self.state.inventory_used,
                 "inventory_max": self.state.inventory_max,
                 "bank_accessible": not self._blockers.is_blocked("bank"),
