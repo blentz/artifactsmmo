@@ -2717,15 +2717,15 @@ class GamePlayer:
                 self._role = decision.claim
                 self._role_held_cycles = 0
             else:
-                # Lost the claim race — most commonly `decision.claim ==
-                # self._role` (our TTL lapsed during a stall and a sibling
-                # took the role over `live_leases`; `decide_role` returns
-                # `claim=current` to re-claim it). Leaving `self._role` set
-                # here would make this character renew a lease it does not
-                # hold (a harmless no-op) but ALSO keep computing
-                # `_supply_target` for a role a sibling actually owns, every
-                # cycle, forever — two characters permanently specializing
-                # identically, defeating the whole feature.
+                # The claim did not land. Roles are not exclusive, so this is
+                # no longer a lost race against a sibling — `claim` returns
+                # False for exactly one reason now, a DB write that failed
+                # (see `CoordinationStore.claim`). Believing we hold it anyway
+                # would leave this character supplying for a role that has no
+                # live row: invisible in every sibling's holder count, so the
+                # role's demand is never divided by us and a sibling joins a
+                # role we are already working, which is the pile-on the
+                # splitting rule exists to price.
                 self._role = None
                 self._role_held_cycles = 0
         elif decision.keep is not None:

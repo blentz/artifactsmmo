@@ -8,6 +8,7 @@ to get validation; construct as `Cycle(...)` directly to skip validation (SQLMod
 default for table models, optimised for ORM round-trips).
 """
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -158,19 +159,34 @@ class LearnedSetting(SQLModel, table=True):
 
 
 class RoleLease(SQLModel, table=True):
-    """Exclusive claim on a specialization role, held by one character at a
-    time. `role` is UNIQUE, so a concurrent double-claim raises IntegrityError
-    in exactly one place (CoordinationStore.claim) and the loser re-reads —
-    which doubles as the cold-start allocator (no tiebreak rule needed).
+    """One character's claim on a specialization role. NOT exclusive: any
+    number of characters may hold the same role at once.
+
+    `role` was UNIQUE, which made a role a scarce resource and forced a fixed
+    five-way partition of the roster. Live 2026-08-03 showed what that costs:
+    `mining` was the strongest skill for FOUR of five characters, one `miner`
+    slot existed, and the three losers of the startup race cascaded into roles
+    they had no levels in (the account's best miner, mining 21, served alchemy
+    16). Allocation has to follow demand — zero alchemists when nothing needs
+    alchemy, three loggers when woodcutting demand warrants it — so the
+    scarcity had to go.
+
+    The key is now UNIQUE `(role, character)`, which is the row's actual
+    identity: "this character holds this role". It is load-bearing, not
+    decorative. `CoordinationStore.live_leases` returns holders per role and
+    `role_selection` DIVIDES a role's demand by its holder count, so a
+    duplicated row would silently halve the demand a role advertises. The
+    constraint makes that unrepresentable rather than merely unlikely.
 
     `expires_at` is the single liveness rule in the coordination system: a row
     is real if unexpired. A crashed child stops renewing and its lease
     evaporates without supervisor involvement."""
 
     __tablename__ = "role_leases"
+    __table_args__ = (UniqueConstraint("role", "character", name="uq_role_lease_holder"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    role: str = Field(index=True, unique=True)
+    role: str = Field(index=True)
     character: str = Field(index=True)
     claimed_at: str
     expires_at: str

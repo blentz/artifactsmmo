@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, create_engine, select
 
@@ -129,23 +129,44 @@ class CoordinationStore:
         return (now + timedelta(seconds=LEASE_TTL_SECONDS)).isoformat()
 
     def claim(self, role: str, now: datetime) -> bool:
-        """Take `role` if it is unheld or its lease has expired.
+        """Record that THIS character holds `role`, and returns whether it does.
 
-        Returns True when this character holds it afterwards. The UNIQUE
-        constraint on `role` resolves the concurrent-claim race: the loser
-        takes IntegrityError HERE, returns False, and picks another role next
-        cycle. This is also the cold-start allocator — five children that all
-        pick the same top-demand role serialize into distinct roles over
-        successive rounds, so no tiebreak rule is needed."""
+        Roles are not exclusive (see `RoleLease`), so there is nothing to win
+        and nothing to lose: a sibling already holding `role` is not an
+        obstacle, it is a fact `role_selection` already priced in when it
+        divided the role's demand by the holder count. The claim writes this
+        character's own `(role, character)` row and refreshes its TTL — the
+        same operation whether nobody, one sibling, or four siblings hold it.
+
+        `False` therefore means one thing only: the write did not land, because
+        the DB itself failed. The caller must not then believe it holds the
+        role (it would renew a lease that does not exist and supply for a role
+        no board entry shows it serving).
+
+        NO IntegrityError HANDLING, deliberately. Under the old UNIQUE(`role`)
+        key the constraint violation WAS the concurrency control — two
+        characters inserting the same role collided and one lost. The key is
+        now UNIQUE(`role`, `character`), which only two writers for the SAME
+        character could violate, and `play --all` runs exactly one process per
+        character (`MultiRun._child_argv`), each holding one `CoordinationStore`
+        pinned to one name. The old `except IntegrityError` branch is
+        unreachable under the new key, so it is gone rather than kept as a
+        second, dead level of error handling."""
         _require_utc(now)
         stamp = now.isoformat()
         try:
             with SqlSession(self._engine) as s:
-                row = s.exec(select(RoleLease).where(RoleLease.role == role)).first()
+                row = s.exec(
+                    select(RoleLease).where(
+                        RoleLease.role == role,
+                        RoleLease.character == self._character,
+                    )
+                ).first()
                 if row is not None:
-                    if row.character != self._character and row.expires_at > stamp:
-                        return False
-                    row.character = self._character
+                    # Re-claim of a role we already have a row for (live or
+                    # lapsed). `claimed_at` is refreshed too: this is a new
+                    # holding, and the field's only reader wants when THIS
+                    # holding began.
                     row.claimed_at = stamp
                     row.expires_at = self._expiry(now)
                     s.add(row)
@@ -154,14 +175,18 @@ class CoordinationStore:
                                     claimed_at=stamp, expires_at=self._expiry(now)))
                 s.commit()
                 return True
-        except IntegrityError:
-            return False
         except SQLAlchemyError as e:
             print(f"[coordination] claim failed: {e}")
             return False
 
     def renew(self, role: str, now: datetime) -> None:
-        """Extend this character's lease on `role`. No-op if it holds none."""
+        """Extend this character's lease on `role`. No-op if it holds none.
+
+        The no-op is the whole difference from `claim`, and it is load-bearing
+        now that holder COUNT drives demand splitting: a caller whose `claim`
+        failed but whose `self._role` is momentarily stale must not have its
+        per-cycle renewal quietly insert a lease row, inflating the divisor
+        every sibling sees for that role."""
         _require_utc(now)
         try:
             with SqlSession(self._engine) as s:
@@ -196,18 +221,34 @@ class CoordinationStore:
         except SQLAlchemyError as e:
             print(f"[coordination] release failed: {e}")
 
-    def live_leases(self, now: datetime) -> dict[str, str]:
-        """`{role: character}` over UNEXPIRED leases only, across ALL
-        characters. One of the two deliberately unfiltered reads."""
+    def live_leases(self, now: datetime) -> dict[str, frozenset[str]]:
+        """`{role: {character, ...}}` over UNEXPIRED leases only, across ALL
+        characters. One of the two deliberately unfiltered reads.
+
+        A SET of holders, not one holder: roles stopped being exclusive, so
+        `dict[role, character]` could no longer express the state the whole
+        design now turns on. A role with no live holder is ABSENT from the
+        result rather than mapped to an empty set — the same "unobserved is
+        not zero" discipline the rest of the coordination surface follows, and
+        it keeps `.get(role, frozenset())` the single reading idiom.
+
+        Frozenset rather than a list or tuple because the two things callers
+        ask are membership ("do I hold this?") and cardinality ("how many
+        siblings am I splitting this role's demand with?"). Neither has an
+        order, and an unordered type keeps a caller from inventing one as a
+        tiebreak."""
         _require_utc(now)
         stamp = now.isoformat()
+        holders: dict[str, set[str]] = {}
         try:
             with SqlSession(self._engine) as s:
                 rows = s.exec(select(RoleLease).where(RoleLease.expires_at > stamp)).all()
-                return {r.role: r.character for r in rows}
         except SQLAlchemyError as e:
             print(f"[coordination] live_leases failed: {e}")
             return {}
+        for row in rows:
+            holders.setdefault(row.role, set()).add(row.character)
+        return {role: frozenset(names) for role, names in holders.items()}
 
     def _demand_expiry(self, now: datetime) -> str:
         return (now + timedelta(seconds=DEMAND_TTL_SECONDS)).isoformat()

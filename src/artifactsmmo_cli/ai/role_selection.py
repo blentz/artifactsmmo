@@ -1,6 +1,27 @@
 """Pure hysteresis core for role claim/hold/release.
 
-Three parameters, each defending a different failure:
+ROLES ARE NOT EXCLUSIVE. Any number of characters may hold the same role at
+once, and a role may have no holder at all: zero alchemists when nothing needs
+alchemy, three loggers when woodcutting demand warrants three. Exclusivity was
+a fixed five-way partition of the roster wearing demand's clothes, and live
+2026-08-03 showed the bill — `mining` was the strongest skill for FOUR of five
+characters, exactly one `miner` lease existed, and the three that lost the
+startup race cascaded into roles they had no levels in (the account's best
+miner, mining 21, was serving alchemy 16 because a mining-12 sibling had won
+the lease first). Under a one-holder-per-role rule that is not a bug, it is
+the construction.
+
+The one thing exclusivity genuinely bought was a cap on pile-on, and DEMAND
+SPLITTING replaces it: a role's demand, as seen by a character deciding
+whether to serve it, is divided by one plus the number of OTHER characters
+already holding it. The first holder sees the whole board, the second sees a
+half, the third a third. Nothing is forbidden and no rank is reserved — a role
+carrying genuinely large demand still out-scores a quiet one at three holders,
+which is precisely the "three woodcutters" case, while a role with two holders
+and modest demand stops attracting a fourth on its own weight. See
+`_effective_demand`.
+
+Three hysteresis parameters, each defending a different failure:
 
   * ROLE_MIN_HOLD_CYCLES — thrash between two near-equal roles. Sized from the
     2026-07-31 traces: characters ran 519-587 cycles per session and the copper
@@ -20,20 +41,28 @@ Three parameters, each defending a different failure:
 
   * release-on-UNSERVABLE (`ROLE_UNSERVABLE_CYCLES`) — the hole
     release-on-idle does NOT cover. A role can be held by a character that
-    cannot do it: the lease is exclusive, so every request for that role's
-    skills routes to the holder by design, and if the holder cannot produce
-    what was asked, the demand is never served and no sibling may take over.
-    Live 2026-08-01: a level-1 character held `alchemist` while a level-21
-    sibling held `miner`. Release-on-idle cannot fire here — it triggers on
-    demand reading ZERO, and this demand is positive, merely unservable.
+    cannot do it. Live 2026-08-01: a level-1 character held `alchemist` while
+    a level-21 sibling held `miner`. Release-on-idle cannot fire here — it
+    triggers on demand reading ZERO, and this demand is positive, merely
+    unservable. Non-exclusivity RE-FOUNDS this rule rather than retiring it:
+    the old justification ("the lease is exclusive, so no sibling may take
+    over") is gone, but an incapable holder now does something exclusivity
+    never let it do — it counts toward the role's holder count and DIVIDES the
+    demand every capable sibling sees for it, damping the exact signal that
+    would recruit one. Sitting on a role you cannot serve went from blocking
+    to actively misinforming.
 
 A fourth failure surfaced in review of the first three: release-on-idle, taken
 alone, can cause infinite claim/release CHURN rather than a stable release.
-When demand is all-zero and only one role is unleased, an idle character
-releases it (nothing needs it), immediately re-claims it next cycle (it is
-still the only free role), holds ROLE_MIN_HOLD_CYCLES, releases again, and
-repeats forever — the role never actually frees up for anyone, and the
-character never rests. `decide_role`'s `idle_released` parameter closes this:
+When demand is all-zero, an idle character releases its role (nothing needs
+it) and immediately re-claims the same one next cycle — with every role at
+zero demand the claim ranks on skill affinity alone, and that is a fixed
+property of the character, so it re-picks exactly what it just dropped, holds
+ROLE_MIN_HOLD_CYCLES, releases again, and repeats forever. Non-exclusivity
+made this MORE reachable, not less: the original repro needed every other role
+leased away, and now nothing is ever unavailable, so the re-pick is the
+character's own top affinity every time. `decide_role`'s `idle_released`
+parameter closes this:
 the CALLER remembers which roles it has voluntarily released while idle, and
 a role in that set is not claimable again until its own demand turns
 positive. See `decide_role`'s docstring for why this must be a parameter, not
@@ -60,7 +89,16 @@ ROLE_MIN_HOLD_CYCLES = 100
 """Cycles a role must be held before it may be voluntarily released."""
 
 ROLE_SWITCH_MARGIN = Fraction(2)
-"""A rival role must carry this multiple of the current role's unmet demand."""
+"""A rival role must carry this multiple of the current role's unmet demand.
+
+Both sides of the comparison are now EFFECTIVE demand — split by holder count
+(`_effective_demand`) — rather than raw. Comparing raw demand would make the
+margin blind to the only thing that changed: a role with 1000 raw demand and
+four holders is already being worked on by four characters and is a far worse
+place to go than a role with 300 and none. Splitting both sides is also what
+makes joining a crowded role self-limiting rather than a one-way ratchet — a
+character's own share shrinks as siblings pile in behind it, so the margin
+eventually points back out."""
 
 ROLE_IDLE_DWELL_CYCLES = 100
 """Consecutive cycles a held role's own demand must read ZERO before the role
@@ -108,10 +146,17 @@ counters answer different questions and are exposed to different noise:
     attempted — a cycle where a guard preempted selection contributes nothing
     either way. 25 consecutive independent failed searches is decisive.
 
-WHY NOT LONGER. Every cycle of this run is a cycle in which the whole fleet's
-demand for these skills is parked behind one character that cannot serve it. At
-100 the role would stay locked for a fifth of a traced session (519-587 cycles)
-before anyone else could try; 25 caps that at ~5%.
+WHY NOT LONGER. Under exclusivity the answer was that the whole fleet's demand
+for these skills sat parked behind one character that could not serve it. That
+argument died with the exclusive lease — a capable sibling can now join the
+role without waiting for anyone. What did NOT die is milder and still real:
+every cycle an incapable holder stays, it divides the role's advertised demand
+for every character weighing it (see `_effective_demand`), so the fleet is told
+the role is better covered than it is. At 100 the misinformation would stand
+for a fifth of a traced session (519-587 cycles); 25 caps it at ~5%. The
+constant is UNCHANGED — its lower bound (25 consecutive independent failed
+searches is decisive) never depended on exclusivity, and re-tuning a measured
+threshold on a changed rationale with no new measurement would be guessing.
 
 25 <= ROLE_MIN_HOLD_CYCLES, which is the same inequality
 `ROLE_IDLE_DWELL_CYCLES` relies on and for the same reason: the run is only
@@ -163,15 +208,53 @@ def _skill_affinity(catalog: tuple[Role, ...],
             for role in catalog}
 
 
-def _best_free_role(live_leases: Mapping[str, str], demand_by_role: Mapping[str, int],
-                    character: str, catalog: tuple[Role, ...],
-                    idle_released: frozenset[str],
-                    unservable_released: frozenset[str],
-                    skill_levels: Mapping[str, int]) -> tuple[str | None, int]:
-    """Best-scoring role not leased by SOMEONE ELSE, with its raw demand.
+def _effective_demand(demand_by_role: Mapping[str, int], role_name: str,
+                      live_leases: Mapping[str, frozenset[str]],
+                      character: str) -> Fraction:
+    """`role_name`'s demand as THIS character should read it: the raw board
+    figure divided by one plus the number of OTHER characters already holding
+    the role.
 
-    SCORE = (demand + 1) x (1 + affinity). Demand and skill fit BOTH matter, so
-    neither may be a filter:
+    This is the whole replacement for exclusivity. A role is never unavailable,
+    so nothing stops a pile-on except the shrinking return of joining one: the
+    first character to weigh a role sees its full demand, a second sees a half,
+    a third a third, and the series falls away fast enough that a quiet role
+    out-scores a crowded one long before the roster runs out. It is not a cap —
+    a role carrying eight times another's demand still wins at four holders,
+    which is exactly the "sometimes we need three woodcutters" case the fixed
+    partition could not express.
+
+    OTHER characters, not all holders: a character weighing the role it already
+    holds must see the same figure it would see as a newcomer, or `decide_role`
+    would compare its own role against rivals on a scale its own membership had
+    shrunk, and every holder would want to leave the moment it arrived.
+
+    Exact `Fraction`, never float: this is a decision boundary (`>=
+    ROLE_SWITCH_MARGIN`, `>` on scores), and 100/3 must compare reproducibly
+    rather than to whatever the last bit of a double happens to say. Negative
+    raw demand cannot occur — `publish_demand` drops non-positive rows and
+    `demand_by_role` sums — and is not defended against here, because clamping
+    would hide a corrupted board instead of letting it read as the zero it is.
+    """
+    others = len(live_leases.get(role_name, frozenset()) - {character})
+    return Fraction(demand_by_role.get(role_name, 0), others + 1)
+
+
+def _best_role(live_leases: Mapping[str, frozenset[str]],
+               demand_by_role: Mapping[str, int],
+               character: str, catalog: tuple[Role, ...],
+               idle_released: frozenset[str],
+               unservable_released: frozenset[str],
+               skill_levels: Mapping[str, int]) -> str | None:
+    """The best role for this character to serve, or None if it may serve none.
+
+    Not "best FREE role" any more — no role is ever taken. Every catalog entry
+    is a candidate on every cycle; what used to be a hard skip for a role a
+    sibling held is now a division of that role's demand by its holder count
+    (`_effective_demand`).
+
+    SCORE = (effective demand + 1) x (1 + affinity). Demand and skill fit BOTH
+    matter, so neither may be a filter:
 
       * Skill fit cannot veto. Affinity maxes out at 1, so it can at most DOUBLE
         a role's effective demand — a role carrying more than twice the demand
@@ -186,13 +269,16 @@ def _best_free_role(live_leases: Mapping[str, str], demand_by_role: Mapping[str,
         fit while a single unit of real demand elsewhere already outweighs a
         one-step fit advantage.
 
-    Fractions, not floats: this is a decision, and an exact ratio makes the tie
-    boundary reproducible rather than a rounding artifact.
+    The offset is also what makes "a role nobody needs attracts nobody" true
+    rather than merely likely: a zero-demand role scores at most (0+1)x(1+1) =
+    2, and any role carrying two or more units of effective demand scores at
+    least 3, so no amount of skill fit can pull a character onto a role the
+    fleet is silent about while a real request is outstanding.
 
     Ties are resolved by catalog order — a declared, semantic order, never a
-    repr or alphabetical sort. Ties are also harmless: the UNIQUE constraint on
-    RoleLease.role serializes concurrent claimants regardless, which is what
-    makes the cold-start allocator converge on distinct roles.
+    repr or alphabetical sort. Ties are harmless in a way they were not under
+    exclusivity: two characters agreeing on the same role is now a legal
+    outcome, not a race one of them has to lose.
 
     A role in `idle_released` is skipped, but ONLY while its demand is still
     non-positive — see `decide_role` for why. The moment real demand shows up
@@ -203,30 +289,26 @@ def _best_free_role(live_leases: Mapping[str, str], demand_by_role: Mapping[str,
     that set shrinks (see `decide_role`)."""
     affinity = _skill_affinity(catalog, skill_levels)
     best: str | None = None
-    best_demand = 0
-    # Sentinel below every reachable score, the same role the old `-1` played
-    # for raw demand: role demand is a sum of published quantities and never
-    # negative, so the lowest real score is (0 + 1) x (1 + 0) = 1. A separate
+    # Sentinel below every reachable score: effective demand is never negative,
+    # so the lowest real score is (0 + 1) x (1 + 0) = 1. A separate
     # `best is None` guard would be a second, unobservable test of the same
     # condition.
     best_score = Fraction(-1)
     for role in catalog:
-        holder = live_leases.get(role.name)
-        if holder is not None and holder != character:
-            continue
-        demand = demand_by_role.get(role.name, 0)
-        if role.name in idle_released and demand <= 0:
+        if role.name in idle_released and demand_by_role.get(role.name, 0) <= 0:
             continue
         if role.name in unservable_released:
             continue
-        score = (Fraction(demand) + 1) * (1 + affinity[role.name])
+        share = _effective_demand(demand_by_role, role.name, live_leases, character)
+        score = (share + 1) * (1 + affinity[role.name])
         if score > best_score:
-            best, best_demand, best_score = role.name, demand, score
-    return best, max(best_demand, 0)
+            best, best_score = role.name, score
+    return best
 
 
 def decide_role(current: str | None, held_cycles: int,
-                live_leases: Mapping[str, str], demand_by_role: Mapping[str, int],
+                live_leases: Mapping[str, frozenset[str]],
+                demand_by_role: Mapping[str, int],
                 character: str, catalog: tuple[Role, ...],
                 idle_released: frozenset[str] = frozenset(),
                 zero_demand_cycles: int = 0,
@@ -277,23 +359,38 @@ def decide_role(current: str | None, held_cycles: int,
     itself is released from the shared lease either way, so a better-suited
     sibling can take it immediately; only this character is held back.
 
+    `live_leases`: `{role: {holder, ...}}` — every holder of every role, not
+    one holder per role. Roles are not exclusive, so a single holder can no
+    longer describe the board, and the COUNT is what the whole allocation now
+    rests on (`_effective_demand`). A role with no live holder is absent from
+    the mapping, so read it with `.get(name, frozenset())`.
+
     `skill_levels`: this character's skill -> level map (the caller's
-    `state.skills`). Used ONLY to bias the claim (see `_best_free_role`); the
+    `state.skills`). Used ONLY to bias the claim (see `_best_role`); the
     hold/release rules stay demand-driven, because skill fit is a statement
     about what this character could produce, not about what the fleet needs."""
     if current is None:
-        best, _ = _best_free_role(live_leases, demand_by_role, character, catalog,
-                                  idle_released, unservable_released, skill_levels)
+        best = _best_role(live_leases, demand_by_role, character, catalog,
+                          idle_released, unservable_released, skill_levels)
         return RoleDecision(claim=best) if best is not None else RoleDecision()
 
-    if live_leases.get(current) != character:
-        # Our lease lapsed (TTL expired during a stall) or a sibling took it.
-        # Re-claim rather than assume we still hold it.
+    if character not in live_leases.get(current, frozenset()):
+        # Our lease lapsed — the TTL expired during a stall and nothing renewed
+        # it. A sibling can no longer take a role FROM us (its own claim writes
+        # its own row and leaves ours alone), so this is now purely a liveness
+        # fact about our own row. Re-claim rather than assume we still hold it:
+        # every sibling reads holder counts off this table, and a character
+        # supplying for a role with no live row is invisible to all of them.
         return RoleDecision(claim=current)
 
     if held_cycles < ROLE_MIN_HOLD_CYCLES:
         return RoleDecision(keep=current)
 
+    # RAW, not split. "Is anyone asking for this role's output at all" is a
+    # property of the board, not of how many characters serve it, and splitting
+    # cannot change the answer anyway: a positive demand stays positive over
+    # any holder count, and zero stays zero. Using the share here would read as
+    # if crowding could make a role idle, which it cannot.
     own_demand = demand_by_role.get(current, 0)
     if own_demand <= 0:
         if zero_demand_cycles >= ROLE_IDLE_DWELL_CYCLES:
@@ -303,24 +400,31 @@ def decide_role(current: str | None, held_cycles: int,
         return RoleDecision(keep=current)
 
     # Positive demand from here down. A role whose demand exists but has gone
-    # unserved for a full run is worse than an idle one: the exclusive lease
-    # routes every request for these skills here, so nobody else can serve them
-    # either. Checked BEFORE the margin scan because it is not a comparison
-    # against a rival -- there may be no rival at all, and the release is still
-    # the right move.
+    # unserved for a full run is worse than an idle one: this character counts
+    # as a holder, so it is dividing the role's advertised demand for every
+    # capable sibling weighing it while producing nothing itself. Checked
+    # BEFORE the margin scan because it is not a comparison against a rival --
+    # there may be no rival at all, and the release is still the right move.
     if unservable_cycles >= ROLE_UNSERVABLE_CYCLES:
         return RoleDecision(release=current, unservable=True)
 
-    rival_best = -1
+    # Rivals are compared on EFFECTIVE demand, and no rival is excluded: a role
+    # a sibling holds is not off-limits, it is merely already partly served,
+    # which the division already says. Our own side is split the same way --
+    # `_effective_demand` counts only OTHER holders, so a role we hold alone
+    # reads at full strength and one we share reads at our real share.
+    own_share = _effective_demand(demand_by_role, current, live_leases, character)
+    # Sentinel below every reachable share (never negative), so an empty
+    # catalog scan cannot clear the margin.
+    rival_best = Fraction(-1)
     for role in catalog:
         if role.name == current:
             continue
-        holder = live_leases.get(role.name)
-        if holder is not None and holder != character:
-            continue
-        rival_best = max(rival_best, demand_by_role.get(role.name, 0))
+        rival_best = max(
+            rival_best,
+            _effective_demand(demand_by_role, role.name, live_leases, character))
 
-    if rival_best >= own_demand * ROLE_SWITCH_MARGIN:
+    if rival_best >= own_share * ROLE_SWITCH_MARGIN:
         return RoleDecision(release=current)
     return RoleDecision(keep=current)
 

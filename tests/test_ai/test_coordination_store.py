@@ -46,16 +46,37 @@ def test_store_creates_its_parent_directory(tmp_path: Path) -> None:
     assert db_path.exists()
 
 
-def test_role_is_unique(engine) -> None:
+def test_one_role_may_be_held_by_several_characters(engine) -> None:
+    """`role` was UNIQUE, which made the roster a fixed five-way partition and
+    forced four of five characters off the skill they were actually best at.
+    Two characters on one role is now a legal, expected state."""
+    with SqlSession(engine) as s:
+        s.add(RoleLease(role="miner", character="HAL",
+                        claimed_at="2026-08-01T00:00:00+00:00",
+                        expires_at="2026-08-01T00:10:00+00:00"))
+        s.add(RoleLease(role="miner", character="C3P0",
+                        claimed_at="2026-08-01T00:00:00+00:00",
+                        expires_at="2026-08-01T00:10:00+00:00"))
+        s.commit()
+    with SqlSession(engine) as s:
+        rows = s.exec(select(RoleLease)).all()
+        assert {row.character for row in rows} == {"HAL", "C3P0"}
+
+
+def test_the_same_character_cannot_hold_one_role_twice(engine) -> None:
+    """The replacement key, UNIQUE(role, character), and it is load-bearing:
+    `live_leases` counts holders and `role_selection` DIVIDES a role's demand
+    by that count, so a duplicated row would silently halve the demand the role
+    advertises to every sibling."""
     with SqlSession(engine) as s:
         s.add(RoleLease(role="miner", character="HAL",
                         claimed_at="2026-08-01T00:00:00+00:00",
                         expires_at="2026-08-01T00:10:00+00:00"))
         s.commit()
     with SqlSession(engine) as s:
-        s.add(RoleLease(role="miner", character="C3P0",
-                        claimed_at="2026-08-01T00:00:00+00:00",
-                        expires_at="2026-08-01T00:10:00+00:00"))
+        s.add(RoleLease(role="miner", character="HAL",
+                        claimed_at="2026-08-01T00:05:00+00:00",
+                        expires_at="2026-08-01T00:15:00+00:00"))
         with pytest.raises(IntegrityError):
             s.commit()
 
@@ -99,7 +120,7 @@ def test_material_demand_minimal_construction() -> None:
 
 def test_multiple_distinct_roles_allowed(engine) -> None:
     """Two different roles held by different characters is not a conflict —
-    only a duplicate `role` value triggers the UNIQUE constraint."""
+    only a duplicate `(role, character)` pair triggers the UNIQUE constraint."""
     with SqlSession(engine) as s:
         s.add(RoleLease(role="miner", character="HAL",
                         claimed_at="2026-08-01T00:00:00+00:00",
@@ -130,17 +151,48 @@ def test_material_demand_allows_same_item_for_multiple_characters(engine) -> Non
 _T0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
 
 
-def test_claim_succeeds_then_blocks_other_character(tmp_path: Path) -> None:
+def test_a_second_character_claiming_a_held_role_also_succeeds(tmp_path: Path) -> None:
+    """The exclusivity removal at the store level: a sibling already holding a
+    role is not an obstacle, and `live_leases` reports BOTH holders. This used
+    to return False for C3P0 and report `{"miner": "HAL"}`."""
     db = str(tmp_path / "coord.db")
     hal = CoordinationStore(db_path=db, character="HAL")
     c3po = CoordinationStore(db_path=db, character="C3P0")
     try:
         assert hal.claim("miner", _T0) is True
-        assert c3po.claim("miner", _T0) is False
-        assert hal.live_leases(_T0) == {"miner": "HAL"}
+        assert c3po.claim("miner", _T0) is True
+        assert hal.live_leases(_T0) == {"miner": frozenset({"HAL", "C3P0"})}
     finally:
         hal.close()
         c3po.close()
+
+
+def test_three_characters_can_hold_the_same_role_simultaneously(tmp_path: Path) -> None:
+    """The owner's requirement, stated literally: "there may be times we need
+    zero alchemists and three woodcutters"."""
+    db = str(tmp_path / "coord.db")
+    stores = [CoordinationStore(db_path=db, character=n)
+              for n in ("HAL", "C3P0", "R2D2")]
+    try:
+        for store in stores:
+            assert store.claim("logger", _T0) is True
+        assert stores[0].live_leases(_T0) == {
+            "logger": frozenset({"HAL", "C3P0", "R2D2"})}
+    finally:
+        for store in stores:
+            store.close()
+
+
+def test_a_role_nobody_claimed_is_absent_from_live_leases(tmp_path: Path) -> None:
+    """Absent, never an empty set: "unobserved" and "observed to be zero" are
+    the same fact here, and `.get(role, frozenset())` is the one read idiom."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        assert hal.claim("miner", _T0) is True
+        assert "logger" not in hal.live_leases(_T0)
+    finally:
+        hal.close()
 
 
 def test_expired_lease_is_not_live_and_can_be_reclaimed(tmp_path: Path) -> None:
@@ -152,10 +204,33 @@ def test_expired_lease_is_not_live_and_can_be_reclaimed(tmp_path: Path) -> None:
         assert hal.claim("miner", _T0) is True
         assert hal.live_leases(later) == {}
         assert c3po.claim("miner", later) is True
-        assert c3po.live_leases(later) == {"miner": "C3P0"}
+        assert c3po.live_leases(later) == {"miner": frozenset({"C3P0"})}
     finally:
         hal.close()
         c3po.close()
+
+
+def test_reclaiming_an_expired_own_lease_reuses_the_row(tmp_path: Path) -> None:
+    """`claim` on a role this character already has a (lapsed) row for must
+    UPDATE that row, not insert a second one — the UNIQUE(role, character) key
+    would reject the insert, and a duplicate would corrupt the holder count."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    later = _T0 + timedelta(seconds=LEASE_TTL_SECONDS + 1)
+    try:
+        assert hal.claim("miner", _T0) is True
+        assert hal.claim("miner", later) is True
+        assert hal.live_leases(later) == {"miner": frozenset({"HAL"})}
+    finally:
+        hal.close()
+    engine = create_engine(f"sqlite:///{db}")
+    try:
+        with SqlSession(engine) as s:
+            rows = s.exec(select(RoleLease)).all()
+            assert len(rows) == 1
+            assert rows[0].claimed_at == later.isoformat()
+    finally:
+        engine.dispose()
 
 
 def test_renew_extends_expiry(tmp_path: Path) -> None:
@@ -166,7 +241,7 @@ def test_renew_extends_expiry(tmp_path: Path) -> None:
     try:
         assert hal.claim("miner", _T0) is True
         hal.renew("miner", mid)
-        assert hal.live_leases(later) == {"miner": "HAL"}
+        assert hal.live_leases(later) == {"miner": frozenset({"HAL"})}
     finally:
         hal.close()
 
@@ -180,6 +255,23 @@ def test_release_frees_the_role(tmp_path: Path) -> None:
         assert hal.live_leases(_T0) == {}
     finally:
         hal.close()
+
+
+def test_release_drops_only_the_releasing_characters_row(tmp_path: Path) -> None:
+    """With several holders, `release` must remove exactly one of them — it
+    filters on `character`, and a release that dropped every row for the role
+    would evict siblings that never asked to leave."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        assert hal.claim("miner", _T0) is True
+        assert c3po.claim("miner", _T0) is True
+        hal.release("miner")
+        assert hal.live_leases(_T0) == {"miner": frozenset({"C3P0"})}
+    finally:
+        hal.close()
+        c3po.close()
 
 
 def test_reclaiming_own_live_lease_is_idempotent(tmp_path: Path) -> None:
@@ -222,7 +314,7 @@ def test_release_is_noop_when_character_holds_no_lease(tmp_path: Path) -> None:
     try:
         assert c3po.claim("miner", _T0) is True
         hal.release("miner")
-        assert hal.live_leases(_T0) == {"miner": "C3P0"}
+        assert hal.live_leases(_T0) == {"miner": frozenset({"C3P0"})}
     finally:
         hal.close()
         c3po.close()
@@ -290,15 +382,20 @@ class TestDegradationOnDbError:
         assert "[coordination] sibling_demand failed" in capsys.readouterr().out
 
 
-def test_claim_new_role_race_returns_false_on_integrity_error(tmp_path: Path) -> None:
-    """Two characters both try to claim a role that neither holds yet. This
-    reproduces the genuine race the docstring describes: HAL's `claim` reads
-    "no row for this role" and decides to insert, but before it flushes,
-    C3P0 concretely wins the row first (via a second, real engine/session on
-    the same file) — so HAL's own insert collides with the real UNIQUE
-    constraint and takes the `except IntegrityError` branch. This uses a real
-    second connection to create genuine DB state, not a mock of the unit
-    under test's return value."""
+def test_a_rival_taking_the_role_mid_claim_does_not_fail_the_claim(tmp_path: Path) -> None:
+    """The race that USED to be decisive, now proven benign.
+
+    HAL's `claim` reads "no row for me on this role" and decides to insert;
+    before it flushes, C3P0 concretely takes the role first (a second, real
+    engine/session on the same file). Under UNIQUE(`role`) that collided and
+    HAL lost the role. Under UNIQUE(`role`, `character`) the two writes are to
+    different rows: HAL's insert lands, and BOTH characters hold `miner`.
+
+    This is why `claim` no longer carries an `except IntegrityError` branch —
+    there is no interleaving of two DIFFERENT characters' claims that can
+    violate the new key. A real second connection creating genuine DB state,
+    not a mock of the unit under test.
+    """
     db = str(tmp_path / "coord.db")
     hal = CoordinationStore(db_path=db, character="HAL")
     rival_engine = create_engine(f"sqlite:///{db}")
@@ -317,8 +414,8 @@ def test_claim_new_role_race_returns_false_on_integrity_error(tmp_path: Path) ->
     # while it is being iterated ("deque mutated during iteration").
     event.listen(SqlSession, "before_flush", _rival_claims_first, once=True)
     try:
-        assert hal.claim("miner", _T0) is False
-        assert hal.live_leases(_T0) == {"miner": "C3P0"}
+        assert hal.claim("miner", _T0) is True
+        assert hal.live_leases(_T0) == {"miner": frozenset({"HAL", "C3P0"})}
     finally:
         if event.contains(SqlSession, "before_flush", _rival_claims_first):
             event.remove(SqlSession, "before_flush", _rival_claims_first)
@@ -484,7 +581,27 @@ def test_concurrent_first_open_of_an_unseeded_db_creates_the_schema_once(tmp_pat
         check.close()
 
 
-def test_exactly_one_process_wins_a_contested_role(tmp_path: Path) -> None:
+def test_every_process_claiming_one_role_is_recorded_exactly_once(tmp_path: Path) -> None:
+    """Replaces `test_exactly_one_process_wins_a_contested_role`.
+
+    "Exactly one winner" was the property EXCLUSIVITY bought, and it is gone on
+    purpose — it is the mechanism that stranded four of five characters on
+    skills they had not trained. What matters now is that the lease table is a
+    correct multi-holder registry under real concurrency, and that is three
+    facts, none of which the old test could have caught:
+
+      * nobody loses — all five `claim` calls return True, so no character is
+        silently pushed to a second-choice role by scheduling order;
+      * nobody is dropped — `live_leases` names all five, because a holder
+        missing from the count would make the role look emptier than it is and
+        recruit yet another sibling;
+      * nobody is doubled — exactly five ROWS, because `role_selection` divides
+        this role's demand by the holder count, and a duplicate row would halve
+        the demand the role advertises to the whole fleet.
+
+    Five real spawned processes on one SQLite file: the interleaving is the
+    thing under test, so it cannot be simulated in-process.
+    """
     db = str(tmp_path / "coord.db")
     # Seeded on purpose: this test isolates the CLAIM race, so the schema must
     # already exist when the children start. The unseeded case — five siblings
@@ -508,14 +625,20 @@ def test_exactly_one_process_wins_a_contested_role(tmp_path: Path) -> None:
         assert p.exitcode == 0
 
     results = dict(queue.get() for _ in names)
-    winners = [n for n, won in results.items() if won]
-    assert len(winners) == 1
+    assert results == {n: True for n in names}
 
     check = CoordinationStore(db_path=db, character="observer")
     try:
-        assert check.live_leases(_T0) == {"miner": winners[0]}
+        assert check.live_leases(_T0) == {"miner": frozenset(names)}
     finally:
         check.close()
+
+    engine = create_engine(f"sqlite:///{db}")
+    try:
+        with SqlSession(engine) as s:
+            assert len(s.exec(select(RoleLease)).all()) == len(names)
+    finally:
+        engine.dispose()
 
 
 # --- demand board -----------------------------------------------------------

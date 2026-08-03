@@ -45,8 +45,15 @@ _T0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
 # ---------------------------------------------------------------------------
 
 def test_two_stores_converge_on_distinct_roles(tmp_path) -> None:
-    """The cold-start allocator: both characters want the same top-demand role,
-    the UNIQUE constraint serializes them, and they end up on different roles."""
+    """Cold start, end to end over the real store: two characters whose unmet
+    needs point at DIFFERENT skills specialize apart.
+
+    Nothing serializes them any more — the UNIQUE(`role`) constraint that used
+    to is gone, and both claims would succeed even on the same role. They
+    diverge because `sibling_demand` excludes self, so each one is ranking the
+    OTHER's need: HAL wants copper_bar (mining), so C3P0 reads `miner`, and
+    vice versa. That is demand doing the allocating, which is the point —
+    exclusivity was never what made this case work."""
     db = str(tmp_path / "coord.db")
     hal = CoordinationStore(db_path=db, character="HAL")
     c3po = CoordinationStore(db_path=db, character="C3P0")
@@ -67,7 +74,8 @@ def test_two_stores_converge_on_distinct_roles(tmp_path) -> None:
             held[store.character] = decision.claim
 
         assert held["HAL"] != held["C3P0"]
-        assert hal.live_leases(_T0) == {held["HAL"]: "HAL", held["C3P0"]: "C3P0"}
+        assert hal.live_leases(_T0) == {held["HAL"]: frozenset({"HAL"}),
+                                        held["C3P0"]: frozenset({"C3P0"})}
     finally:
         hal.close()
         c3po.close()
@@ -294,9 +302,41 @@ def test_update_coordination_claims_a_role_when_none_held(tmp_path):
         p._update_coordination(p.state, p.game_data)
         assert p._role in {r.name for r in ROLE_CATALOG}
         assert p._role_held_cycles == 0
-        assert store.live_leases(datetime.now(tz=timezone.utc))[p._role] == "hero"
+        assert store.live_leases(datetime.now(tz=timezone.utc))[p._role] == frozenset({"hero"})
     finally:
         store.close()
+
+
+def test_update_coordination_joins_a_role_two_siblings_already_hold(tmp_path):
+    """End to end through the real store: the third character on one role.
+
+    `make_state` gives hero mining 3 as its best skill, so `miner` is its
+    top-affinity role, and two siblings already hold it. Under exclusivity the
+    lease would have been unavailable and hero would have cascaded to its
+    second choice — the precise mechanism that put the account's best miner on
+    alchemy. Hero must now simply join, and the lease table must name all
+    three."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state()
+    p.game_data = _make_planner_gd()
+    store = CoordinationStore(db_path=db, character="hero")
+    siblings = [CoordinationStore(db_path=db, character=n) for n in ("HAL", "C3P0")]
+    p.set_coordination_store(store)
+    now = datetime.now(tz=timezone.utc)
+    try:
+        for sibling in siblings:
+            assert sibling.claim("miner", now) is True
+
+        p._update_coordination(p.state, p.game_data)
+
+        assert p._role == "miner"
+        assert store.live_leases(datetime.now(tz=timezone.utc))["miner"] == frozenset(
+            {"hero", "HAL", "C3P0"})
+    finally:
+        store.close()
+        for sibling in siblings:
+            sibling.close()
 
 
 def test_update_coordination_keeps_and_increments_held_cycles(tmp_path):
@@ -317,11 +357,13 @@ def test_update_coordination_keeps_and_increments_held_cycles(tmp_path):
         store.close()
 
 
-def test_update_coordination_does_not_set_role_when_the_claim_loses_the_race(tmp_path, monkeypatch):
-    """`CoordinationStore.claim` can return False (a sibling won the UNIQUE-
-    constraint race between `decide_role` reading `live_leases` and this
-    character's own `claim` call). `_update_coordination` must not commit to
-    a role it never actually holds."""
+def test_update_coordination_does_not_set_role_when_the_claim_does_not_land(tmp_path, monkeypatch):
+    """`CoordinationStore.claim` can still return False — no longer because a
+    sibling won a race (roles are not exclusive, so there is no race to lose)
+    but because the DB write itself failed. `_update_coordination` must not
+    commit to a role that has no lease row: it would supply for a role no
+    sibling's holder count includes, so the role's demand is never divided by
+    this character and a sibling joins work already being done."""
     p = GamePlayer(character="hero")
     p.state = make_state()
     p.game_data = _make_planner_gd()
@@ -336,16 +378,16 @@ def test_update_coordination_does_not_set_role_when_the_claim_loses_the_race(tmp
         store.close()
 
 
-def test_update_coordination_clears_a_stale_role_when_a_reclaim_loses_the_race(tmp_path, monkeypatch):
-    """The critical defect: `decide_role` returns `claim=current` when THIS
-    character's own lease lapsed (a stall) and a sibling took the role over
-    via `live_leases` — the re-claim path, distinct from a cold-start claim.
-    If that re-claim then loses the race, `self._role` must be cleared, not
-    left stale: leaving it set makes the character renew a lease it does not
-    hold (a no-op) and keep computing `_supply_target` for a role a sibling
-    actually owns — every cycle, forever, since the same failing re-claim
-    repeats identically next cycle. Two characters would end up specialized
-    identically, defeating the whole feature."""
+def test_update_coordination_clears_a_stale_role_when_a_reclaim_does_not_land(tmp_path, monkeypatch):
+    """The critical defect, on the re-claim path rather than the cold-start
+    one: `decide_role` returns `claim=current` when THIS character is absent
+    from `live_leases[current]` — its own lease lapsed during a stall. (A
+    sibling can no longer take the role away; its claim writes its own row.)
+    If that re-claim does not land, `self._role` must be cleared, not left
+    stale: leaving it set makes the character renew a lease that does not
+    exist (a no-op) and keep computing `_supply_target` for a role it is not
+    on the board for — every cycle, forever, since the same failing re-claim
+    repeats identically next cycle."""
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p.state = make_state()
@@ -415,24 +457,28 @@ def test_update_coordination_releases_an_idle_role_after_min_hold(tmp_path):
 
 
 def test_update_coordination_idle_release_does_not_immediately_reclaim(tmp_path):
-    """The exact churn hole Task 6's `idle_released` ruling closes: with
-    every OTHER role already leased to a sibling, `miner` is hero's only
-    free role. Releasing it while idle must NOT be followed by reclaiming it
-    on the very next re-decide — without `idle_released` threaded through,
-    this is an infinite claim/hold/release loop that never actually frees
-    the role for anyone."""
+    """The churn hole Task 6's `idle_released` ruling closes, through the real
+    caller.
+
+    `miner` is hero's top-affinity role (`make_state` gives mining 3, its best
+    skill), and the whole board is silent, so the claim ranks on affinity alone
+    — a fixed property of the character. Releasing `miner` as idle and then
+    re-deciding must NOT hand it straight back, or the loop is infinite.
+
+    Non-exclusivity made this MORE reachable, not less. The original version of
+    this test had to lease every OTHER role to a sibling to corner hero on
+    `miner`; now no role is ever unavailable, and hero still re-picks `miner`
+    every cycle for the reason that actually drives it — it is what hero is
+    best at. Hero does move on to some other role here (nothing is idle-blocked
+    yet but `miner`), and that is fine: what must never happen is going back."""
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p.state = make_state()
     p.game_data = _make_planner_gd()
     store = CoordinationStore(db_path=db, character="hero")
-    sibling = CoordinationStore(db_path=db, character="rival")
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        for role in ROLE_CATALOG:
-            if role.name != "miner":
-                assert sibling.claim(role.name, now) is True
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
@@ -442,13 +488,13 @@ def test_update_coordination_idle_release_does_not_immediately_reclaim(tmp_path)
         assert p._role is None  # released: own demand is zero
         assert "miner" in p._role_idle_released
 
-        # Re-decide again immediately: miner is STILL the only free role and
-        # STILL has zero demand. Without idle_released this reclaims it.
+        # Re-decide immediately: `miner` still scores highest on affinity and
+        # still has zero demand. Without idle_released this reclaims it.
         p._update_coordination(p.state, p.game_data)
-        assert p._role is None
+        assert p._role != "miner"
+        assert "miner" not in store.live_leases(datetime.now(tz=timezone.utc))
     finally:
         store.close()
-        sibling.close()
 
 
 def _mining_demand_gd() -> GameData:

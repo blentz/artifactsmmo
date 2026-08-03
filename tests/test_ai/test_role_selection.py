@@ -32,23 +32,77 @@ def _decide(current, held_cycles, leases, demand, idle_released=frozenset(),
                        zero_demand_cycles=zero_demand_cycles, **kwargs)
 
 
+def _held(**by_role):
+    """`{role: frozenset(holders)}` from `role=("A", "B")` kwargs — the
+    `live_leases` shape, written without a frozenset literal at every site."""
+    return {role: frozenset(names) for role, names in by_role.items()}
+
+
 def test_claims_highest_demand_role_when_holding_none() -> None:
     d = _decide(None, 0, {}, {"miner": 10, "logger": 3})
     assert (d.claim, d.keep, d.release) == ("miner", None, None)
 
 
-def test_skips_roles_held_by_a_sibling() -> None:
-    d = _decide(None, 0, {"miner": "C3P0"}, {"miner": 10, "logger": 3})
+def test_a_role_a_sibling_holds_is_damped_not_skipped() -> None:
+    # Under exclusivity this was `test_skips_roles_held_by_a_sibling` and the
+    # answer was "logger" no matter how lopsided the demand. A held role is now
+    # a candidate whose demand is HALVED: miner's 10 becomes 5, which still
+    # beats logger's 3, so the character joins the role that actually needs the
+    # work instead of being pushed to a quieter one.
+    d = _decide(None, 0, _held(miner=("C3P0",)), {"miner": 10, "logger": 3})
+    assert d.claim == "miner"
+
+
+def test_a_sibling_holding_a_role_can_still_tip_the_claim_elsewhere() -> None:
+    # The other side of the same rule: halving is not cosmetic. miner's 10
+    # outranks logger's 6 when miner is unheld, and loses to it when one
+    # sibling is already on miner (10/2 = 5 < 6).
+    demand = {"miner": 10, "logger": 6}
+    assert _decide(None, 0, {}, demand).claim == "miner"
+    assert _decide(None, 0, _held(miner=("C3P0",)), demand).claim == "logger"
+
+
+def test_demand_splitting_damps_each_successive_joiner() -> None:
+    # The saturation rule, stated as the monotone series it is: the Nth
+    # character to weigh a role sees demand/N. `logger` at 24 out-scores a
+    # steady rival at 7 for the first three joiners (24, 12, 8) and loses to it
+    # on the fourth (24/4 = 6), with nothing forbidden at any point.
+    demand = {"logger": 24, "fisher": 7}
+    holders = []
+    claims = []
+    for name in ("A", "B", "C", "D"):
+        claims.append(_decide(None, 0, _held(logger=tuple(holders)), demand).claim)
+        holders.append(name)
+    assert claims == ["logger", "logger", "logger", "fisher"]
+
+
+def test_three_characters_can_serve_one_role_at_once() -> None:
+    # "there may be times we need ... three woodcutters". Demand large enough
+    # that a third of it still dominates: nothing caps the count but the falling
+    # share itself.
+    d = _decide(None, 0, _held(logger=("A", "B")), {"logger": 90, "fisher": 5})
     assert d.claim == "logger"
 
 
-def test_claims_nothing_when_every_role_is_leased() -> None:
-    leases = {r.name: "C3P0" for r in ROLE_CATALOG}
+def test_a_role_with_no_demand_attracts_no_holder() -> None:
+    # "there may be times we need zero alchemists". A silent role scores at most
+    # (0+1)x(1+1) = 2 and any role carrying >= 2 effective demand scores >= 3,
+    # so no skill fit can pull a character onto it while a real request stands —
+    # even when the character is far better suited to the silent one.
+    demand = {"alchemist": 0, "miner": 4}
+    assert _decide(None, 0, {}, demand, skill_levels={"alchemy": 30}).claim == "miner"
+
+
+def test_no_role_is_ever_unavailable_however_crowded() -> None:
+    # The exclusivity check is gone, not merely relaxed: with every role held by
+    # a sibling the character used to claim NOTHING. It must now still pick the
+    # best-scoring one.
+    leases = {r.name: frozenset({"C3P0"}) for r in ROLE_CATALOG}
     d = _decide(None, 0, leases, {"miner": 10})
-    assert (d.claim, d.keep, d.release) == (None, None, None)
+    assert d.claim == "miner"
 
 
-def test_claims_an_unleased_role_even_with_zero_demand() -> None:
+def test_claims_a_role_even_with_zero_demand() -> None:
     d = _decide(None, 0, {}, {})
     assert d.claim is not None
 
@@ -62,13 +116,13 @@ def test_zero_demand_ties_break_by_catalog_order_not_last_writer() -> None:
 
 
 def test_keeps_current_role_before_min_hold_even_if_another_is_better() -> None:
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES - 1, {"logger": _ME},
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES - 1, _held(logger=(_ME,)),
                 {"logger": 1, "miner": 100})
     assert d.keep == "logger"
 
 
 def test_switches_after_min_hold_when_margin_is_cleared() -> None:
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME},
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)),
                 {"logger": 1, "miner": 100})
     assert d.release == "logger"
 
@@ -76,28 +130,30 @@ def test_switches_after_min_hold_when_margin_is_cleared() -> None:
 def test_holds_when_margin_is_not_cleared() -> None:
     # miner is better but not MARGIN times better.
     demand = {"logger": 10, "miner": int(10 * ROLE_SWITCH_MARGIN) - 1}
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME}, demand)
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), demand)
     assert d.keep == "logger"
 
 
 def test_switches_exactly_at_the_margin_boundary() -> None:
     # "must carry this multiple" is inclusive: exactly 2x clears the margin.
     demand = {"logger": 10, "miner": int(10 * ROLE_SWITCH_MARGIN)}
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME}, demand)
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), demand)
     assert d.release == "logger"
 
 
 def test_releases_on_idle_after_min_hold_with_no_better_alternative() -> None:
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME}, {})
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {})
     assert d.release == "logger"
 
 
-def test_releases_on_idle_even_when_every_rival_role_is_leased_away() -> None:
-    # The idle guard (own_demand <= 0) must fire on its OWN: with no free
-    # rival role, the margin loop's rival_best stays at its -1 sentinel and
-    # -1 >= 0 is False, so a weakened "own_demand < 0" guard would wrongly
-    # keep the role here even though nothing needs it.
-    leases = {r.name: (_ME if r.name == "logger" else "C3P0") for r in ROLE_CATALOG}
+def test_releases_on_idle_even_when_every_rival_role_is_crowded() -> None:
+    # The idle guard (own_demand <= 0) must fire on its OWN. Every rival is
+    # held by a sibling AND at zero demand, so every rival share is 0 and the
+    # margin test reads 0 >= 0, which is TRUE -- the margin would release too,
+    # for the wrong reason and without the `unservable=False` idle semantics.
+    # The idle guard is checked first and is what must fire here.
+    leases = {r.name: frozenset({_ME if r.name == "logger" else "C3P0"})
+              for r in ROLE_CATALOG}
     d = _decide("logger", ROLE_MIN_HOLD_CYCLES, leases, {})
     assert d.release == "logger"
 
@@ -108,14 +164,14 @@ def test_idle_release_needs_a_full_run_of_zero_observations() -> None:
     # sit on a level root publishes nothing at all, and those silences run for
     # dozens of consecutive cycles live -- releasing on the strength of a
     # single sample drops a role a sibling still needs.
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME}, {},
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {},
                 zero_demand_cycles=ROLE_IDLE_DWELL_CYCLES - 1)
     assert d.keep == "logger"
     assert d.release is None
 
 
 def test_idle_release_fires_exactly_at_the_dwell_boundary() -> None:
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME}, {},
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {},
                 zero_demand_cycles=ROLE_IDLE_DWELL_CYCLES)
     assert d.release == "logger"
 
@@ -135,7 +191,7 @@ def test_no_zero_demand_run_never_releases_on_idle() -> None:
     # The parameter's default: a caller that does not track the run gets the
     # conservative behaviour (hold), never a release from a single sample.
     d = decide_role(current="logger", held_cycles=ROLE_MIN_HOLD_CYCLES,
-                    live_leases={"logger": _ME}, demand_by_role={},
+                    live_leases=_held(logger=(_ME,)), demand_by_role={},
                     character=_ME, catalog=ROLE_CATALOG)
     assert d.keep == "logger"
 
@@ -146,7 +202,7 @@ def test_a_single_demand_flap_does_not_release_a_needed_role() -> None:
     # and publishes nothing. Under the shipped single-sample rule the role was
     # released on the first blink after the dwell; under the run rule the role
     # survives the whole run, because every non-blink cycle breaks the run.
-    leases = {"logger": _ME}
+    leases = _held(logger=(_ME,))
     current, zero_run = "logger", 0
     releases = 0
     for held, cycle in enumerate(range(400)):
@@ -164,7 +220,7 @@ def test_a_single_demand_flap_does_not_release_a_needed_role() -> None:
 
 
 def test_idle_role_is_kept_before_min_hold() -> None:
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES - 1, {"logger": _ME}, {})
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES - 1, _held(logger=(_ME,)), {})
     assert d.keep == "logger"
 
 
@@ -184,38 +240,72 @@ def test_margin_is_exactly_two() -> None:
 # proven in both directions). ---
 
 
-def test_best_free_role_treats_a_role_still_leased_to_self_as_available() -> None:
-    # current is None (e.g. process restarted) but our OWN lease on "miner"
-    # is still live. _best_free_role must not treat "holder == character" as
-    # "leased by someone else" -- we should reclaim our own role.
-    d = _decide(None, 0, {"miner": _ME}, {"miner": 100, "logger": 3})
+def test_our_own_lease_never_damps_the_role_we_are_weighing() -> None:
+    # current is None (e.g. process restarted) but our OWN lease on "miner" is
+    # still live. `_effective_demand` counts OTHER holders only, so miner reads
+    # at its full 100, not 50 -- a character must not be pushed off a role by
+    # its own membership.
+    d = _decide(None, 0, _held(miner=(_ME,)), {"miner": 100, "logger": 3})
     assert d.claim == "miner"
 
 
-def test_rival_role_held_by_a_sibling_is_excluded_from_the_margin_check() -> None:
-    # miner carries huge demand but is leased to C3P0, so it must NOT count
-    # toward the margin comparison; only the unleased "fisher" may.
+def test_a_rival_a_sibling_holds_is_damped_not_excluded_from_the_margin() -> None:
+    # Under exclusivity a rival role a sibling held was skipped outright, so
+    # `logger` was kept no matter how much demand `miner` carried. It is now
+    # weighed at its SHARE: 1000 over two holders is 500, which clears 2x
+    # logger's 5, so the character joins the role that plainly needs help.
     d = _decide("logger", ROLE_MIN_HOLD_CYCLES,
-                {"logger": _ME, "miner": "C3P0"},
+                _held(logger=(_ME,), miner=("C3P0",)),
                 {"logger": 5, "miner": 1000, "fisher": 1})
+    assert d.release == "logger"
+
+
+def test_enough_siblings_on_a_rival_role_stop_it_clearing_the_margin() -> None:
+    # The damping is what decides it, not the raw figure: the same 1000-demand
+    # rival with nine siblings already on it reads as 100... which still clears
+    # 2x50. Pushed to the boundary instead: logger 50 (ours alone) against
+    # miner 180 shared by two siblings -- 180/3 = 60, and 60 < 100, so we stay.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES,
+                _held(logger=(_ME,), miner=("C3P0", "R2D2")),
+                {"logger": 50, "miner": 180})
     assert d.keep == "logger"
 
 
-def test_rival_role_leased_to_self_still_counts_toward_the_margin() -> None:
-    # A role other than `current` that happens to show ourself as holder
-    # (degenerate/defensive case) is not "leased by someone else" and its
-    # demand must still be weighed as a genuine rival.
+def test_siblings_piling_onto_our_role_eventually_push_us_out_of_it() -> None:
+    # The self-limiting half of demand splitting, and the only place OUR side
+    # of the margin is split by anything. `logger` carries 24 but two siblings
+    # joined it, so our share is 8; `miner`'s 16 is untouched, and 16 >= 2 x 8
+    # clears the margin. Weighing our own side RAW (24) would read the rival as
+    # needing 48 and keep three characters on a role that needs one -- the
+    # pile-on would be a one-way ratchet with no way back out.
     d = _decide("logger", ROLE_MIN_HOLD_CYCLES,
-                {"logger": _ME, "miner": _ME},
-                {"logger": 5, "miner": 100})
+                _held(logger=(_ME, "A", "B")), {"logger": 24, "miner": 16})
     assert d.release == "logger"
+
+
+def test_a_role_we_share_with_nobody_is_weighed_whole_on_our_side() -> None:
+    # The same demand figures with the siblings gone: `logger`'s 24 is ours
+    # alone, so 16 < 2 x 24 and we stay. Splitting is what moved us above, not
+    # the raw numbers.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES,
+                _held(logger=(_ME,)), {"logger": 24, "miner": 16})
+    assert d.keep == "logger"
+
+
+def test_our_own_membership_does_not_shrink_our_side_of_the_margin() -> None:
+    # `_effective_demand` subtracts `character` before counting, on BOTH sides.
+    # If it did not, holding `logger` alone would read as logger/2 = 2 here and
+    # the 5-demand `miner` rival (5 >= 2*2) would spuriously clear the margin.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)),
+                {"logger": 5, "miner": 5})
+    assert d.keep == "logger"
 
 
 def test_current_role_is_skipped_inside_its_own_rival_scan() -> None:
     # Sanity check on the `role.name == current: continue` guard: with every
     # other role pinned to zero demand, "logger" must not nominate itself as
     # its own rival (which would spuriously clear the margin at demand 0).
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME},
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)),
                 {"logger": 5, "miner": 0, "fisher": 0})
     assert d.keep == "logger"
 
@@ -236,10 +326,28 @@ def test_current_role_is_skipped_inside_its_own_rival_scan() -> None:
 # that still has positive demand at the moment it is released.
 
 
+def _join(leases, role):
+    """Add `_ME` to `role`'s holder set, keeping any siblings already on it —
+    a claim no longer displaces anyone."""
+    leases[role] = leases.get(role, frozenset()) | {_ME}
+
+
+def _leave(leases, role):
+    """Drop `_ME` from `role`'s holders, and drop the KEY entirely when that
+    empties it: `live_leases` omits unheld roles rather than mapping them to an
+    empty set, so leaving one behind would feed `decide_role` a shape the real
+    store never produces."""
+    remaining = leases[role] - {_ME}
+    if remaining:
+        leases[role] = remaining
+    else:
+        del leases[role]
+
+
 def _run_cycles(sibling_leases, demand, cycles, start_current=None, start_held=0):
     leases = dict(sibling_leases)
     if start_current is not None:
-        leases[start_current] = _ME
+        _join(leases, start_current)
     current = start_current
     held_cycles = start_held
     idle_released = frozenset()
@@ -259,12 +367,12 @@ def _run_cycles(sibling_leases, demand, cycles, start_current=None, start_held=0
                     zero_demand_cycles=zero_demand_cycles)
         if d.claim is not None:
             current = d.claim
-            leases[current] = _ME
+            _join(leases, current)
             held_cycles = 0
             zero_demand_cycles = 0
             state_changes += 1
         elif d.release is not None:
-            del leases[d.release]
+            _leave(leases, d.release)
             idle_released = idle_released | {d.release}
             current = None
             held_cycles = 0
@@ -336,23 +444,35 @@ def test_decide_role_switches_once_then_never_reverts() -> None:
     assert set(trajectory[-100:]) == {"miner"}
 
 
-def test_decide_role_stabilizes_the_idle_churn_scenario() -> None:
-    # Coordinator review Finding 2 (reviewer-constructed repro): demand
-    # all-zero, sibling leases cover every role except one. Without
-    # idle_released, decide_role loops claim -> hold -> release -> claim on
-    # that same role forever (observed: 7 non-keep events over 350 cycles).
-    # With idle_released threaded as the caller would, the character claims
-    # the free role once, holds it out ROLE_MIN_HOLD_CYCLES, releases it
-    # once, and then reaches a genuine no-op state (nothing free, nothing
-    # held) for the rest of the run -- exactly 2 state changes, not an
-    # unbounded, periodic churn.
-    leases = {r.name: "C3P0" for r in ROLE_CATALOG if r.name != "logger"}
-    trajectory, state_changes = _run_cycles(leases, {}, cycles=350)
+def test_decide_role_terminates_the_idle_churn_instead_of_cycling() -> None:
+    # Coordinator review Finding 2, restated for a world with no scarcity.
+    # Demand is all-zero, so every role is idle and the claim ranks on skill
+    # affinity alone -- a fixed property of the character. Without
+    # `idle_released` that is a PERPETUAL loop: release the top-affinity role
+    # because nothing needs it, re-pick the very same role next cycle because
+    # it is still the top-affinity one, forever. The original repro needed four
+    # of five roles leased away to corner the character; now that nothing is
+    # ever unavailable, the loop is the DEFAULT shape, so the guard matters
+    # more, not less.
+    #
+    # With `idle_released` threaded as the caller does, the churn is bounded by
+    # the catalog: each role can be claimed and idle-released at most once, and
+    # then the candidate set is empty and the character rests permanently. The
+    # bound (not a fixed count) is the honest property -- which roles are
+    # walked, and in what order, is affinity's business, not this rule's.
+    trajectory, state_changes = _run_cycles({}, {}, cycles=1400)
 
-    assert state_changes == 2
-    # Once released, "logger" never reappears as `current` -- no re-claim.
-    last_held_at = max(i for i, c in enumerate(trajectory) if c == "logger")
+    assert state_changes <= 2 * len(ROLE_CATALOG)
+    # Terminates in the rest state, and stays there: once the last role is
+    # released, `current` is None for every remaining cycle.
+    last_held_at = max(i for i, c in enumerate(trajectory) if c is not None)
     assert all(c is None for c in trajectory[last_held_at + 1:])
+    assert len(trajectory) - last_held_at > ROLE_MIN_HOLD_CYCLES
+    # Every role was visited at most once -- no role is ever re-claimed after
+    # its idle release, which is exactly what `idle_released` buys.
+    visited = [c for c in trajectory if c is not None]
+    assert len(set(visited)) == len(
+        [i for i in range(len(visited)) if i == 0 or visited[i] != visited[i - 1]])
 
 
 def test_idle_released_role_is_claimable_again_once_demand_turns_positive() -> None:
@@ -377,7 +497,7 @@ def test_idle_released_default_is_empty_and_changes_nothing() -> None:
 # so the demand is never served and no sibling may take over. Live: a level-1
 # character held `alchemist` while a level-21 sibling held `miner`.
 
-_LOR_LEASES = {"alchemist": _ME}
+_LOR_LEASES = _held(alchemist=(_ME,))
 _LOR_DEMAND = {"alchemist": 40}
 
 
@@ -439,7 +559,7 @@ def test_an_idle_release_is_not_flagged_unservable() -> None:
     # Zero demand is a different verdict: the role is FINISHED, not impossible.
     # It must stay re-claimable the moment demand returns, so the caller must
     # not be told to block it.
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME}, {})
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {})
     assert d.release == "logger"
     assert d.unservable is False
 
@@ -447,7 +567,7 @@ def test_an_idle_release_is_not_flagged_unservable() -> None:
 def test_a_margin_release_is_not_flagged_unservable() -> None:
     # Losing a demand-margin contest says nothing about capability — the role
     # was being served fine, a rival simply carries more demand.
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME},
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)),
                 {"logger": 1, "miner": 100}, unservable_cycles=0)
     assert d.release == "logger"
     assert d.unservable is False
@@ -512,12 +632,12 @@ def test_skill_fit_decides_when_the_board_is_completely_quiet() -> None:
     assert _decide(None, 0, {}, {}, skill_levels=_JEWELER).claim == "jeweler"
 
 
-def test_a_character_with_no_levels_in_the_free_role_still_claims_it() -> None:
-    # PREFER, never forbid: hard-excluding an ill-suited role would leave a
-    # fresh character permanently unspecialized. Every role but `jeweler` is
-    # leased away and hero has zero jewelrycrafting — it still claims it.
-    leases = {r.name: "C3P0" for r in ROLE_CATALOG if r.name != "jeweler"}
-    d = _decide(None, 0, leases, {}, skill_levels=_MINER)
+def test_a_character_with_no_levels_in_a_needed_role_still_claims_it() -> None:
+    # PREFER, never forbid: hard-excluding an ill-suited role would leave the
+    # fleet's only outstanding request unanswered whenever nobody trained for
+    # it. `jeweler` is the sole role carrying demand and hero has zero
+    # jewelrycrafting against mining 21 — it still claims `jeweler`.
+    d = _decide(None, 0, {}, {"jeweler": 10}, skill_levels=_MINER)
     assert d.claim == "jeweler"
 
 
@@ -537,11 +657,72 @@ def test_skill_levels_default_is_empty_and_changes_nothing() -> None:
     assert dict(NO_SKILL_LEVELS) == {}
 
 
+def test_no_skill_reading_leaves_the_claim_ranked_by_demand_alone() -> None:
+    # A character the caller has no `state.skills` for (the NO_SKILL_LEVELS
+    # default) must behave exactly as it did before skill-awareness: uniform
+    # affinity, so the claim is the effective-demand argmax and nothing else.
+    # Split demand and raw demand disagree here on purpose -- miner's raw 30
+    # leads, but two siblings are on it (10), so `logger`'s untouched 12 wins.
+    demand = {"miner": 30, "logger": 12, "fisher": 4}
+    leases = _held(miner=("C3P0", "R2D2"))
+    assert _decide(None, 0, leases, demand).claim == "logger"
+    assert _decide(None, 0, leases, demand, skill_levels=NO_SKILL_LEVELS).claim == "logger"
+
+
+# --- The observed roster, 2026-08-03 ---
+# Real levels off the live account. `mining` is the strongest skill for FOUR of
+# the five characters, and under one exclusive `miner` lease that is not a
+# tuning problem, it is arithmetic: four of them CANNOT have it.
+
+_ROBBY = {"mining": 21, "alchemy": 16}
+"""The account's best miner. It was serving `alchemist` (alchemy 16), because
+`HAL` (mining 12) won the startup race for the single `miner` lease and
+`_best_free_role` skipped every leased role outright."""
+
+_LIVE_DEMAND = {"miner": 40, "logger": 10, "alchemist": 6, "fisher": 4, "jeweler": 2}
+"""Mining-led board, matching a roster whose bottleneck is ore and bars."""
+
+
+def test_the_best_miner_serves_mining_even_though_a_sibling_already_mines() -> None:
+    # THE OBSERVED DEFECT, and the exact input that produced it: HAL holds
+    # `miner`, Robby is deciding. Splitting halves miner to 20, which with
+    # Robby's perfect mining affinity scores (20+1)x2 = 42 -- far past
+    # `alchemist`'s (6+1)x(1+16/21) = 12.33 and `logger`'s (10+1)x1 = 11.
+    d = _decide(None, 0, _held(miner=("HAL",)), _LIVE_DEMAND, skill_levels=_ROBBY)
+    assert d.claim == "miner"
+
+
+def test_the_same_inputs_produced_the_alchemy_misallocation_under_exclusivity() -> None:
+    # Pins WHY the scenario above is a fix and not a coincidence. Exclusivity is
+    # simulated the only way it still can be -- by removing `miner` from the
+    # catalog Robby may choose from, which is precisely what the old
+    # "skip a role someone else holds" filter did. The same demand and the same
+    # skills then hand Robby `alchemist`: the live misallocation, reproduced.
+    without_miner = tuple(r for r in ROLE_CATALOG if r.name != "miner")
+    d = decide_role(current=None, held_cycles=0, live_leases=_held(miner=("HAL",)),
+                    demand_by_role=_LIVE_DEMAND, character="Robby",
+                    catalog=without_miner, skill_levels=_ROBBY)
+    assert d.claim == "alchemist"
+
+
+def test_robby_leaves_alchemy_for_mining_once_it_may_join_a_held_role() -> None:
+    # The migration path for a character ALREADY stuck where the old rule put
+    # it: `alchemist`'s 6 is Robby's alone, `miner`'s 40 is shared with HAL
+    # (20), and 20 >= 2 x 6 clears the switch margin. The release is not
+    # flagged unservable -- Robby can serve alchemy fine, mining is simply
+    # where the fleet needs it.
+    d = _decide("alchemist", ROLE_MIN_HOLD_CYCLES,
+                _held(alchemist=(_ME,), miner=("HAL",)),
+                _LIVE_DEMAND, skill_levels=_ROBBY)
+    assert d.release == "alchemist"
+    assert d.unservable is False
+
+
 def test_skill_fit_does_not_reopen_the_margin_rule() -> None:
     # The hold/release side stays demand-driven: a well-suited rival role does
     # NOT pull a character off a role that is still carrying demand, because
     # skill fit says what this character could produce, not what the fleet needs.
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, {"logger": _ME},
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)),
                 {"logger": 10, "jeweler": 15}, skill_levels=_JEWELER)
     assert d.keep == "logger"
 
