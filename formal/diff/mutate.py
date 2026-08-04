@@ -148,6 +148,7 @@ BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selectio
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
 PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
+SLOT_OCCUPANCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "slot_occupancy.py"
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 ACHIEVABILITY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "achievability_core.py"
@@ -1003,6 +1004,75 @@ GEAR_VALUE_RANK_MUTATIONS = [
      "                          stats.inventory_space, stats.haste, stats.subtype)",
      "        return rank_value(combat_raw_of(stats), stats.wisdom, stats.prospecting,\n"
      "                          stats.inventory_space, 0, stats.subtype)"),
+]
+
+
+# gear_value combat_raw_of mutations -- the ItemStats -> pure-core adapter's
+# dmg_elements HOIST (the equip-loop fix, 2026-08-04). Dropping it restores the
+# live divergence: the monster-blind rulers stop pricing element damage % that
+# `armor_score` prices, so the progression tree scores life_amulet 10000 above
+# fire_and_earth_amulet while the combat picker scores it 42000 below.
+# OWN run_group (feedback: unit-killed mutants need their own group) — killed by
+# tests/ai/test_equip_loop_closure.py.
+GEAR_VALUE_DMG_ELEMENTS_MUTATIONS = [
+    ("gear_value: drop the dmg_elements hoist from combat_raw_of",
+     "    dmg = stats.dmg + (sum(stats.dmg_elements.values()) if stats.dmg_elements else 0)",
+     "    dmg = stats.dmg"),
+]
+
+
+# slot_occupancy mutations -- the ONE authority rule for slot occupancy. Every
+# clause is a dominance requirement whose loss lets the acquisition path
+# pre-empt `pick_loadout` on a swap the picker reverses, i.e. re-opens the
+# 2026-08-04 equip loop. Killed by tests/ai/test_equip_loop_closure.py.
+SLOT_OCCUPANCY_MUTATIONS = [
+    ("slot_occupancy: drop the flat-utility clause",
+     "    if _flat_utility(candidate) < _flat_utility(incumbent):",
+     "    if False:"),
+    ("slot_occupancy: drop the critical-strike clause",
+     "    if candidate.critical_strike < incumbent.critical_strike:",
+     "    if False:"),
+    ("slot_occupancy: drop the non-tool tiebreak clause",
+     '    if candidate.subtype == "tool" and incumbent.subtype != "tool":',
+     "    if False:"),
+    ("slot_occupancy: drop the per-element attack clause",
+     "        if candidate.attack.get(elem, 0) < incumbent.attack.get(elem, 0):",
+     "        if False:"),
+    ("slot_occupancy: drop the per-element resistance clause",
+     "        if candidate.resistance.get(elem, 0) < incumbent.resistance.get(elem, 0):",
+     "        if False:"),
+    ("slot_occupancy: drop the per-element damage clause",
+     "        if (candidate.dmg + candidate.dmg_elements.get(elem, 0)\n"
+     "                < incumbent.dmg + incumbent.dmg_elements.get(elem, 0)):",
+     "        if False:"),
+]
+
+
+# progression_tree gear-branch occupancy mutations -- the deferral that keeps an
+# owned, contested candidate out of the ranking (so it can neither burn a
+# cooldown nor sit there as a permanently-unservable root).
+TREE_OCCUPANCY_MUTATIONS = [
+    ("progression_tree: drop the owned/occupied guard",
+     "        if incumbent is not None and _already_owned(code, state):",
+     "        if False:"),
+    ("progression_tree: drop the occupancy deferral",
+     "            if incumbent_stats is not None and not may_displace(stats, incumbent_stats):",
+     "            if False:"),
+    ("progression_tree: ownership ignores the bank",
+     "    return (state.inventory.get(code, 0) > 0\n"
+     "            or (state.bank_items or {}).get(code, 0) > 0)",
+     "    return state.inventory.get(code, 0) > 0"),
+]
+
+
+# UpgradeEquipmentGoal inventory-path occupancy mutation -- the SECOND producer
+# of a displacing equip. Its own `_is_upgrade_over` is level-based, so a
+# higher-level piece that is worse for the current monster passes it; only the
+# deferral stops the goal re-equipping what OptimizeLoadout just swapped out.
+UPGRADE_GOAL_OCCUPANCY_MUTATIONS = [
+    ("progression goal: drop the occupancy deferral on inventory upgrades",
+     "                if current_stats is not None and not may_displace(stats, current_stats):",
+     "                if False:"),
 ]
 
 
@@ -6051,6 +6121,16 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_synergy_assembly.py", survivors)
     run_group(PROGRESSION_TREE_IMPURE_SRC, FALLBACK_ORDER_MUTATIONS,
               "tests/test_ai/test_progression_tree.py", survivors)
+    # Equip-loop closure (2026-08-04): four unit-killed groups, each on its own
+    # run_group so a survivor names the exact authority that stopped deferring.
+    run_group(SLOT_OCCUPANCY_SRC, SLOT_OCCUPANCY_MUTATIONS,
+              "tests/ai/test_equip_loop_closure.py", survivors)
+    run_group(PROGRESSION_TREE_IMPURE_SRC, TREE_OCCUPANCY_MUTATIONS,
+              "tests/ai/test_equip_loop_closure.py", survivors)
+    run_group(PROGRESSION_GOAL_SRC, UPGRADE_GOAL_OCCUPANCY_MUTATIONS,
+              "tests/ai/test_equip_loop_closure.py", survivors)
+    run_group(GEAR_VALUE_SRC, GEAR_VALUE_DMG_ELEMENTS_MUTATIONS,
+              "tests/ai/test_equip_loop_closure.py", survivors)
     run_group(PLAYER_SRC, FOCUS_CHARGE_MUTATIONS,
               "tests/test_ai/test_player_focus_ledger.py", survivors)
     run_group(REQUIREMENT_GRAPH_MEMO_SRC, MEMO_ENRICH_MUTATIONS,

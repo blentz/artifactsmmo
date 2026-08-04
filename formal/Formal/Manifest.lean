@@ -712,6 +712,8 @@ open Formal.PriorityBand
 #check @Formal.GearPolicy.armor_weakly_dominates_empty_slot          -- any armor ≥ empty baseline
 #check @Formal.GearPolicy.armor_strictly_dominates_empty_slot        -- nontrivial armor > empty
 #check @Formal.GearPolicy.armor_score_mono_in_resistance             -- AScore monotone in resistance
+#check @Formal.GearPolicy.wTerm_mono_in_atk                          -- weapon element term monotone in attack
+#check @Formal.GearPolicy.weapon_score_mono_of_dominates             -- WScore monotone under stat dominance (slot_occupancy.may_displace)
 #check @Formal.GearPolicy.pickSlot_empty_returns_some                -- empty slot + candidates ⇒ pick fills
 
 -- PurposeRouting (Phase G2):

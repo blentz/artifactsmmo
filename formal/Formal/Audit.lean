@@ -613,6 +613,8 @@ open Formal.PriorityBand
 #print axioms Formal.GearPolicy.armor_weakly_dominates_empty_slot
 #print axioms Formal.GearPolicy.armor_strictly_dominates_empty_slot
 #print axioms Formal.GearPolicy.armor_score_mono_in_resistance
+#print axioms Formal.GearPolicy.wTerm_mono_in_atk
+#print axioms Formal.GearPolicy.weapon_score_mono_of_dominates
 #print axioms Formal.GearPolicy.pickSlot_empty_returns_some
 #print axioms Formal.PurposeRouting.combatScore_strict_of_strict_wscore
 #print axioms Formal.PurposeRouting.combatScore_tiebreaks_nontool_over_tool

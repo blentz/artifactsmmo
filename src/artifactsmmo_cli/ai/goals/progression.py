@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
+from artifactsmmo_cli.ai.equipment.slot_occupancy import may_displace
 from artifactsmmo_cli.ai.forced_craft_grind import forced_craft_grind
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gather_skill_gate import openable_gather_grinds
@@ -512,6 +513,17 @@ class UpgradeEquipmentGoal(Goal):
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
                 if not self._is_upgrade_over(item_code, stats, current, current_stats, game_data, active):
+                    continue
+                # OCCUPANCY DEFERRAL (see equipment/slot_occupancy): every pick
+                # here is an OWNED item, so the whole upgrade is the equip
+                # itself — and displacing an incumbent is `pick_loadout`'s call.
+                # Pre-empt it only on stat-wise dominance, which the scorers'
+                # monotonicity makes a fixed point for every monster; otherwise
+                # let the combat picker decide per fight. Without this the goal
+                # re-equipped an item OptimizeLoadout had just swapped out, one
+                # API request and one cooldown per cycle (live 2026-08-04,
+                # life_amulet vs fire_and_earth_amulet).
+                if current_stats is not None and not may_displace(stats, current_stats):
                     continue
                 cand = UpgradeCandidate(item_code=item_code, value=value, level=stats.level,
                                         craft_level=0, relevant=relevant, fills_empty=False)

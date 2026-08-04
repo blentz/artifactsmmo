@@ -265,6 +265,67 @@ theorem armor_score_mono_in_resistance
     exact oTerm_mono_in_boost _ _ _ _ _ _ (hPAtk e he) (hBoost e he)
   omega
 
+/-! ## Monotonicity of the WEAPON score.
+
+The armor half above is what licenses the live occupancy rule in
+`ai/equipment/slot_occupancy.may_displace`: a candidate that dominates the
+incumbent stat-wise scores at least as high for EVERY monster and EVERY wearer,
+so `pickSlot`'s strict-improvement rule can never swap it back and the equip is
+a fixed point. `may_displace` is applied to weapon slots too, so the same
+statement is owed for `WScore` — otherwise the rule would rest on a proof that
+covers only half the slots. -/
+
+/-- Pointwise monotonicity of `wTerm` in the wearer's attack: the clamp makes
+the second factor nonneg for ANY monster resistance, so more attack on an
+element never scores lower there. -/
+theorem wTerm_mono_in_atk (a b monRes : Int) (hab : a ≤ b) :
+    wTerm a monRes ≤ wTerm b monRes := by
+  unfold wTerm
+  exact Int.mul_le_mul_of_nonneg_right hab (Int.le_max_left _ _)
+
+/-- **Weapon dominance**: if `a`'s per-element attack is bounded above by `b`'s
+on every element and `a.crit ≤ b.crit`, then `WScore a ≤ WScore b` against ANY
+monster resistance.
+
+`hAtkA`/`hCritA` are the nonnegativity hypotheses the products need (real item
+stats always satisfy them); they are hypotheses rather than assumptions baked
+into `Item` for the same reason `armor_score_nonneg` states them — narrowing
+`Item` would silently narrow every theorem over it. -/
+theorem weapon_score_mono_of_dominates
+    (a b : Item) (monsterRes : ElemStats)
+    (hAtkA : ∀ e ∈ elements, 0 ≤ elemGet a.attack e)
+    (hCritA : 0 ≤ a.crit)
+    (hAtk : ∀ e ∈ elements, elemGet a.attack e ≤ elemGet b.attack e)
+    (hCrit : a.crit ≤ b.crit) :
+    WScore a monsterRes ≤ WScore b monsterRes := by
+  unfold WScore
+  have hSumA : 0 ≤ (elements.map
+      (fun e => wTerm (elemGet a.attack e) (elemGet monsterRes e))).sum := by
+    apply sum_nonneg_of_terms
+    intro x hx
+    rw [List.mem_map] at hx
+    obtain ⟨e, he, hxe⟩ := hx
+    rw [← hxe]
+    exact wTerm_nonneg _ _ (hAtkA e he)
+  have hSumLe : (elements.map
+      (fun e => wTerm (elemGet a.attack e) (elemGet monsterRes e))).sum ≤
+      (elements.map
+      (fun e => wTerm (elemGet b.attack e) (elemGet monsterRes e))).sum := by
+    apply map_sum_le_map_sum
+    intro e he
+    exact wTerm_mono_in_atk _ _ _ (hAtk e he)
+  have hSumB : 0 ≤ (elements.map
+      (fun e => wTerm (elemGet b.attack e) (elemGet monsterRes e))).sum := by
+    omega
+  calc (elements.map (fun e => wTerm (elemGet a.attack e) (elemGet monsterRes e))).sum
+        * (200 + a.crit)
+      ≤ (elements.map (fun e => wTerm (elemGet b.attack e) (elemGet monsterRes e))).sum
+        * (200 + a.crit) :=
+        Int.mul_le_mul_of_nonneg_right hSumLe (by omega)
+    _ ≤ (elements.map (fun e => wTerm (elemGet b.attack e) (elemGet monsterRes e))).sum
+        * (200 + b.crit) :=
+        Int.mul_le_mul_of_nonneg_left (by omega) hSumB
+
 /-! ## Composition lemma: empty slot + nontrivial armor candidate ⇒
 `pickSlot` returns SOME armor. -/
 

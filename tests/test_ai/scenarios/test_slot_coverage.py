@@ -147,6 +147,7 @@ from artifactsmmo_cli.ai.scenario import (
 from artifactsmmo_cli.ai.thresholds import CURRENCY_GRIND_BATCH
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
+from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
 
@@ -433,38 +434,33 @@ def test_bag_slot_banked_stock_credited() -> None:
     assert gd.npc_location("tasks_trader") is None
 
 
-def test_l10_bag_pursuit_satchel_gated_but_vest_still_wins() -> None:
-    """RE-DERIVED AGAIN (region soundness, 2026-07-26) — renamed, because the old
-    name asserted "satchel_live", which is now false.
+def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
+    """RE-DERIVED AGAIN 2026-08-04 (dmg_elements hoist, the equip-loop fix) —
+    renamed, because the previous name asserted "vest_still_wins", which is now
+    false AND was the very mis-valuation this branch fixed.
+
+    adventurer_vest (hp 60, dmg 6, wisdom 20) beat the EQUIPPED iron_armor
+    (hp 50, dmg_earth 10, dmg_fire 10, res 10) on the old pursuit ruler only
+    because `combat_raw` could not see per-element damage %: 66020 vs 54000.
+    Now that `combat_raw_of` hoists `dmg_elements` the way `armor_score`
+    already priced it (170ed8d8), iron_armor scores 70000 and the vest is
+    correctly a DOWNGRADE — the L10 armor slots are all at their fixed point
+    and near_term_gear is EMPTY. The character's cowhide is no longer spent
+    buying 10 wisdom with 14 points of element damage; the tree falls through
+    to the char-level trunk and grinds the same winnable cow directly.
 
     satchel needs jasper_crystal, bought with tasks_coin from tasks_trader, who
     stands on a tile conditional on the tasks_farmer achievement — 0/100 on the
     real account, now pinned in the bundle. The trader is unroutable, so the
-    satchel chain is SHUT and bag_slot is no longer a near_term_gear candidate at
-    all, not even a fallback root.
-
-    What this test still covers is unchanged and is the part that matters: at
-    this loadout adventurer_vest wins body_armor_slot and the cowhide is spent on
-    it. That was the outcome before, when satchel merely lost the ranking; it is
-    the outcome now, when satchel is not in the ranking. The vest assertions
-    below are therefore untouched — only the satchel expectations are inverted.
+    satchel chain is SHUT and bag_slot is not a near_term_gear candidate at all,
+    not even a fallback root (region soundness, 2026-07-26).
 
     Prior derivation (2026-07-07 hp-derivation fix wave): the original pin
     ('satchel invisible at L10') was CONTAMINATED — it relied on the
     harness's hand-declared max_hp (240) undershooting the server's real
     115 + 5*level + gear formula (375 at this loadout), which made cow read
-    unwinnable. At the real 375 hp cow IS winnable and the satchel chain
-    genuinely opens at L10 (GAP-1 does not block it here — the bank stock is
-    irrelevant once the monster-drop leaf is winnable on its own).
-
-    The ACTUAL L10 behavior differs from the l12_bag_pursuit twin: at this
-    loadout iron_armor (body_armor_slot) is NOT yet a fixed point either —
-    adventurer_vest (craftable from the SAME banked cowhide) is also a
-    near_term_gear candidate, and outranks bag_slot outright. bag_slot ->
-    satchel survives only as a fallback root; the chosen path spends the
-    cowhide on the vest instead. l12_bag_pursuit isolates the satchel chain
-    in full by pushing every other slot (vest, helmet, ring1) to its own
-    fixed point so none of them can compete."""
+    unwinnable. At the real 375 hp cow IS winnable, which is why the trunk
+    grind below has a live fight to plan."""
     gd = _bundle()
     state = _state("l10_bag_pursuit", gd)
     objective = CharacterObjective.from_game_data(gd)
@@ -474,15 +470,16 @@ def test_l10_bag_pursuit_satchel_gated_but_vest_still_wins() -> None:
     # monster-drop leaf this scenario is built on is still winnable above.
     assert not is_attainable_now("satchel", state, gd)
     assert gd.npc_location("tasks_trader") is None
-    assert objective.near_term_gear(state) == {
-        "body_armor_slot": "adventurer_vest"}
+    assert objective.near_term_gear(state) == {}
+    # The attribution: the vest is not merely unranked, it is genuinely worse.
+    assert pursuit_value(gd.item_stats("adventurer_vest")) \
+        < pursuit_value(gd.item_stats("iron_armor"))
 
     report = _run("l10_bag_pursuit")
-    assert report.decision.chosen_root == ObtainItem(
-        code="adventurer_vest", quantity=1, slot="body_armor_slot")
+    assert report.decision.chosen_root == ReachCharLevel(level=20)
     assert not any(r.code == "satchel" for r in report.decision.fallback_roots
                    if isinstance(r, ObtainItem)), report.decision.fallback_roots
-    assert repr(report.selected_goal).startswith("GatherMaterials(cowhide"), (
+    assert repr(report.selected_goal).startswith("GrindCharacterXP(cow"), (
         repr(report.selected_goal))
     assert report.plan and repr(report.plan[0]).startswith("Fight(cow"), report.plan
 

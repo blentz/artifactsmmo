@@ -469,7 +469,16 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "weapon_slot": "mithril_sword", "helmet_slot": "mithril_helm",
             "body_armor_slot": "mithril_platebody", "leg_armor_slot": "mithril_platelegs",
             "boots_slot": "mithril_boots", "ring1_slot": "mithril_ring",
-            "ring2_slot": "copper_ring", "amulet_slot": "greater_sapphire_amulet",
+            # ring2 RE-DERIVED 2026-08-04 (dmg_elements hoist, the equip-loop
+            # fix): a level-1 copper_ring on a level-48 mithril-clad character
+            # was a fixture artifact, and once combat_raw prices mithril_helm's
+            # 40 points of element damage % the crown's gain over that helm
+            # (50030) falls BELOW royal_skeleton_ring's gain over the
+            # copper_ring (80030) — a NON-event root would have taken the head
+            # of the ranking and this scenario would stop isolating the event
+            # seam it exists for. Rings are duplicate-allowed, so a 2nd
+            # mithril_ring is the honest fixed point for ring2.
+            "ring2_slot": "mithril_ring", "amulet_slot": "greater_sapphire_amulet",
             "shield_slot": "wooden_shield",
             "utility1_slot": "health_splash_potion", "utility2_slot": "health_splash_potion",
         },
@@ -533,8 +542,18 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         skills={"mining": 10, "woodcutting": 10, "weaponcrafting": 10,
                 "gearcrafting": 10, "alchemy": 5},
         equipment={
-            "weapon_slot": "iron_dagger", "helmet_slot": "adventurer_helmet",
-            "body_armor_slot": "adventurer_vest", "leg_armor_slot": "iron_legs_armor",
+            # helmet/body RE-FIXED-POINT 2026-08-04 (dmg_elements hoist, the
+            # equip-loop fix): the adventurer pieces bought their extra wisdom
+            # with element damage % that combat_raw could not see, so they
+            # LOOKED like the L12 argmax. Now that the hoist prices dmg_<elem>
+            # exactly as armor_score already did, iron_armor (cr 70) and
+            # iron_helm (cr 58) outrank adventurer_vest (cr 66) and
+            # adventurer_helmet (cr 55) — the same verdict 170ed8d8 reached on
+            # the monster-relative side. Equipping the true argmax keeps every
+            # non-bag slot at its fixed point, which is this scenario's whole
+            # isolation methodology.
+            "weapon_slot": "iron_dagger", "helmet_slot": "iron_helm",
+            "body_armor_slot": "iron_armor", "leg_armor_slot": "iron_legs_armor",
             "boots_slot": "iron_boots", "ring1_slot": "forest_ring",
             # ring2 RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are
             # duplicate-allowed, so near_term_gear's true fixed point is BOTH
@@ -550,8 +569,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         bank={"cowhide": 5, "feather": 2},
         derive_combat_stats=True,
         description="L12 twin of l10_bag_pursuit: cow winnable, every other "
-                     "slot at its own near_term_gear fixed point (vest, "
-                     "helmet, both rings) — satchel is the sole remaining "
+                     "slot at its own near_term_gear fixed point (iron armor, "
+                     "iron helm, both rings) — satchel is the sole remaining "
                      "candidate and the task-funding chain fires."),
 
     # --- Artifact slots (deliverable 3). L35, plausible combat loadout
@@ -712,7 +731,14 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # emerald_amulet cr70) — those combat upgrades were masking the
             # rune. Equipping the true argmax in each restores the "every other
             # slot at its own fixed point, rune_slot the SOLE target" design.
-            "weapon_slot": "mushmush_bow", "helmet_slot": "hard_leather_helmet",
+            # helmet RE-FIXED-POINT AGAIN 2026-08-04 (dmg_elements hoist, the
+            # equip-loop fix): hard_leather_helmet (cr 93, all resistance) is no
+            # longer the L30 helmet argmax now that combat_raw prices
+            # per-element damage % the way armor_score already did —
+            # skeleton_helmet (cr 106) outranks it and was masking the rune
+            # again. Equipping the true argmax restores this scenario's "every
+            # other slot at its own fixed point, rune_slot the SOLE target".
+            "weapon_slot": "mushmush_bow", "helmet_slot": "skeleton_helmet",
             "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
             "boots_slot": "adventurer_boots", "ring1_slot": "ring_of_the_adept",
             # ring2 RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are

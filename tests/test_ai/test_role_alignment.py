@@ -277,18 +277,31 @@ def test_decide_tree_role_flips_the_gear_pick() -> None:
 def test_decide_tree_role_signal_alone_makes_the_pick_aged() -> None:
     """The Task-13 review's MANDATORY precondition, exercised.
 
-    `l10_bag_pursuit` offers a single gearcrafting candidate with focus,
-    synergy and achievability ALL inert — so `aged_pick` is False for a
-    role-less character and for a `logger` (which owns gearcrafting, hence
-    ALIGNED). A `miner` misaligns it, `focus_aging_pick` takes the d'Hondt
-    interleave, and `aged_pick` MUST flip to True or the player skips its seat
-    bump and the interleave schedule drifts from the seat ledger.
+    The state offers a single gearcrafting candidate with focus, synergy and
+    achievability ALL inert — so `aged_pick` is False for a role-less character
+    and for a `logger` (which owns gearcrafting, hence ALIGNED). A `miner`
+    misaligns it, `focus_aging_pick` takes the d'Hondt interleave, and
+    `aged_pick` MUST flip to True or the player skips its seat bump and the
+    interleave schedule drifts from the seat ledger.
 
     Drop the role clause from `decide_tree`'s `aged_pick` guard and the miner
-    case reads False — the exact silent drift the guard's comment warns of."""
+    case reads False — the exact silent drift the guard's comment warns of.
+
+    RE-DERIVED 2026-08-04 (dmg_elements hoist, the equip-loop fix): plain
+    `l10_bag_pursuit` no longer offers ANY gear candidate — pricing per-element
+    damage % made its equipped iron gear the L10 fixed point, so the
+    adventurer_vest candidate this test used to ride is gone (see
+    test_slot_coverage.test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point).
+    One slot is knocked back to copper_armor to restore EXACTLY the shape this
+    test needs — one craftable candidate (iron_armor, gearcrafting), nothing
+    else. The derived combat stats stay at the untouched loadout's values,
+    which is irrelevant here: this test reads `aged_pick`, not winnability."""
     gd = _bundle()
     objective = CharacterObjective.from_game_data(gd)
-    state = scenario_state(SCENARIOS["l10_bag_pursuit"], gd)
+    base = scenario_state(SCENARIOS["l10_bag_pursuit"], gd)
+    state = replace(base, equipment={**base.equipment,
+                                     "body_armor_slot": "copper_armor"})
+    assert objective.near_term_gear(state) == {"body_armor_slot": "iron_armor"}
 
     def aged(role: str | None) -> bool:
         return decide_tree(state, gd, objective,

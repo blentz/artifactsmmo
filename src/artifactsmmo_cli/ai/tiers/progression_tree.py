@@ -18,6 +18,7 @@ from collections.abc import Callable, Mapping
 from fractions import Fraction
 from types import MappingProxyType
 
+from artifactsmmo_cli.ai.equipment.slot_occupancy import may_displace
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.requirement_graph_memo import CHAR_XP, SKILL_PREFIX
 from artifactsmmo_cli.ai.requirement_projections import requirement_closure
@@ -59,6 +60,15 @@ Empty seats + unaged focus reproduce the plain `gear_target_pick` argmax, so
 every default-arg caller is unaffected."""
 
 
+def _already_owned(code: str, state: WorldState) -> bool:
+    """The character holds a copy (bag or bank) — so the only work this gear
+    candidate still represents is the EQUIP, which is `pick_loadout`'s call.
+    An UNOWNED candidate is left alone: acquiring it is real work that
+    terminates, and by the time it lands this gate applies."""
+    return (state.inventory.get(code, 0) > 0
+            or (state.bank_items or {}).get(code, 0) > 0)
+
+
 def _structural_candidates(state: WorldState, game_data: GameData,
                             objective: CharacterObjective) -> list[GearCandidate]:
     """Semantics item 2 (structural slots): near-term gear whose pursuit_value
@@ -70,7 +80,17 @@ def _structural_candidates(state: WorldState, game_data: GameData,
     prospecting artifact that flat equip_value mistakenly scored highest
     (the cross-slot bug). Both the candidate stats AND the current-equipped
     baseline (`_item_value`, also pursuit_value) are on the SAME ruler, so
-    the gain is consistent."""
+    the gain is consistent.
+
+    OCCUPANCY DEFERRAL: a candidate the character ALREADY OWNS whose slot is
+    already OCCUPIED buys nothing but the equip itself, and that equip is
+    `pick_loadout`'s call, not this ruler's. Admitted only when it
+    `may_displace` the incumbent (see `equipment/slot_occupancy`) — otherwise
+    the tree proposes a swap the combat picker reverses next cycle (live
+    2026-08-04: `life_amulet` +10000 here, `fire_and_earth_amulet` +42000
+    there, alternating forever). Dropping the candidate rather than merely
+    refusing the action also keeps it out of the ranking, so it cannot sit
+    there as a permanently-unservable root starving the interleave."""
     candidates = []
     for slot, code in objective.near_term_gear(state).items():
         stats = game_data.item_stats(code)
@@ -87,7 +107,12 @@ def _structural_candidates(state: WorldState, game_data: GameData,
         if (stats.type_ == "weapon"
                 and marginal_weapon_winnability(code, state, game_data) <= 0):
             continue
-        current_value = objective._item_value(state.equipment.get(slot))
+        incumbent = state.equipment.get(slot)
+        if incumbent is not None and _already_owned(code, state):
+            incumbent_stats = game_data.item_stats(incumbent)
+            if incumbent_stats is not None and not may_displace(stats, incumbent_stats):
+                continue
+        current_value = objective._item_value(incumbent)
         gain = Fraction(pursuit_value(stats) - current_value)
         if gain > 0:
             candidates.append(GearCandidate(slot=slot, code=code, gain=gain, level=stats.level))
