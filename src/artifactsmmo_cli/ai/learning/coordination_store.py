@@ -207,7 +207,22 @@ class CoordinationStore:
         understood is a table that will be misread, and it was. Swept HERE
         because this is the only place a row is ever ADDED, so the sweep runs at
         exactly the cadence the table grows and adds no write to the steady
-        state (`renew`, the every-cycle writer, stays a pure extend)."""
+        state (`renew`, the every-cycle writer, stays a pure extend).
+
+        Also DROPS THIS CHARACTER'S OTHER ROLES. A character holds at most one
+        role, but that invariant lives only in `GamePlayer._role`, in memory —
+        nothing in the DB enforced it. A restart loses that in-memory value
+        (resets to `None`) while the character's previous `role_leases` row
+        survives, live, for up to `LEASE_TTL_SECONDS`. Claiming a new role after
+        such a restart then left BOTH rows live: the old role's holder count
+        stayed inflated for up to ten minutes (dividing its demand by too many
+        holders, so it under-recruited), and anyone reading the table saw one
+        character apparently holding two roles at once. The normal, in-process
+        switch never hit this — `release()` already deletes the old row before
+        the new `claim`, and `decide_role`'s reclaim path re-claims the SAME
+        role — so this delete is a no-op there, live rows for OTHER characters
+        are untouched (filtered on `character`), and it cannot touch the row
+        just written above (filtered on `role != role`)."""
         _require_utc(now)
         stamp = now.isoformat()
         try:
@@ -229,6 +244,13 @@ class CoordinationStore:
                 else:
                     s.add(RoleLease(role=role, character=self._character,
                                     claimed_at=stamp, expires_at=self._expiry(now)))
+                for other in s.exec(
+                    select(RoleLease).where(
+                        RoleLease.character == self._character,
+                        RoleLease.role != role,
+                    )
+                ).all():
+                    s.delete(other)
                 # `<= stamp` is the exact complement of `live_leases`' `> stamp`
                 # liveness test, read off the same `now` and compared the same
                 # lexicographic way, so every row deleted here was already

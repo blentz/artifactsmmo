@@ -373,10 +373,19 @@ def test_a_claim_sweeps_expired_lease_rows(tmp_path: Path) -> None:
     """RESIDUAL 3. Nothing used to delete a lapsed lease, so `role_leases`
     accumulated one tombstone per (character, role-ever-held) and read as if
     every character held several roles at once. `claim` is the only place a row
-    is ever added, so it is where the sweep belongs."""
+    is ever added, so it is where the sweep belongs.
+
+    The claimer here (KITT) is a THIRD character, never a holder of `miner` or
+    `logger`: the one-role-per-character cleanup `claim` also does is scoped
+    to the CLAIMER's own rows, so a claimer with no prior role of its own
+    isolates the expired-row sweep from that cleanup. HAL's dead `miner` row
+    (expired, different character) is what the sweep is expected to remove;
+    C3P0's renewed `logger` row (live, different character) is what it must
+    leave alone."""
     db = str(tmp_path / "coord.db")
     hal = CoordinationStore(db_path=db, character="HAL")
     c3po = CoordinationStore(db_path=db, character="C3P0")
+    kitt = CoordinationStore(db_path=db, character="KITT")
     later = _T0 + timedelta(seconds=LEASE_TTL_SECONDS + 1)
     try:
         assert hal.claim("miner", _T0) is True
@@ -385,13 +394,14 @@ def test_a_claim_sweeps_expired_lease_rows(tmp_path: Path) -> None:
         c3po.renew("logger", later)
         assert _lease_rows(db) == {("miner", "HAL"), ("logger", "C3P0")}
 
-        assert c3po.claim("fisher", later) is True
+        assert kitt.claim("fisher", later) is True
 
         # HAL's dead `miner` row is gone; the live rows are untouched.
-        assert _lease_rows(db) == {("logger", "C3P0"), ("fisher", "C3P0")}
+        assert _lease_rows(db) == {("logger", "C3P0"), ("fisher", "KITT")}
     finally:
         hal.close()
         c3po.close()
+        kitt.close()
 
 
 def test_sweeping_expired_rows_does_not_change_the_live_holder_count(tmp_path: Path) -> None:
@@ -433,6 +443,77 @@ def test_sweeping_expired_rows_does_not_change_the_live_holder_count(tmp_path: P
         for store in holders:
             store.close()
         joiner.close()
+
+
+def test_claiming_a_new_role_drops_this_characters_other_role(tmp_path: Path) -> None:
+    """The restart bug: `GamePlayer._role` is in-memory only and resets to
+    `None` on restart, but the character's previous `role_leases` row
+    survives, live, in the DB. Claiming a different role after such a
+    restart must leave exactly one live row for this character — the new
+    one — not two."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        assert hal.claim("miner", _T0) is True
+        assert hal.claim("logger", _T0) is True
+        assert _lease_rows(db) == {("logger", "HAL")}
+    finally:
+        hal.close()
+
+
+def test_claiming_a_new_role_does_not_touch_a_siblings_row_for_the_old_role(tmp_path: Path) -> None:
+    """The cleanup is scoped strictly to THIS character: a sibling's row for
+    the role being abandoned must survive untouched."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        assert hal.claim("miner", _T0) is True
+        assert c3po.claim("miner", _T0) is True
+        assert hal.claim("logger", _T0) is True
+        assert _lease_rows(db) == {("miner", "C3P0"), ("logger", "HAL")}
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_claiming_a_new_role_moves_the_live_holder_count(tmp_path: Path) -> None:
+    """Holder count is what actually drives demand splitting
+    (`role_selection._effective_demand`), so the property under test is
+    `live_leases`, not the raw table: A's count must drop by exactly one and
+    B's must rise by exactly one."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        assert hal.claim("miner", _T0) is True
+        assert c3po.claim("miner", _T0) is True
+        assert hal.live_leases(_T0) == {"miner": frozenset({"HAL", "C3P0"})}
+
+        assert hal.claim("logger", _T0) is True
+
+        assert hal.live_leases(_T0) == {
+            "miner": frozenset({"C3P0"}),
+            "logger": frozenset({"HAL"}),
+        }
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_reclaiming_the_held_role_is_idempotent_and_keeps_the_row(tmp_path: Path) -> None:
+    """Claiming the role you already hold must remain a no-op on the table —
+    the `role != role` filter that drops other-role rows must not also
+    sweep away the row `claim` just wrote for the SAME role."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        assert hal.claim("miner", _T0) is True
+        assert hal.claim("miner", _T0) is True
+        assert _lease_rows(db) == {("miner", "HAL")}
+        assert hal.live_leases(_T0) == {"miner": frozenset({"HAL"})}
+    finally:
+        hal.close()
 
 
 def test_renew_extends_expiry(tmp_path: Path) -> None:
