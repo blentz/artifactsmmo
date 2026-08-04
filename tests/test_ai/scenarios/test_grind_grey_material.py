@@ -19,11 +19,14 @@ has a same-family next tier within `GREY_FARM_NEXT_TIER_MARGIN`), and
 `select_drop_fight` therefore emitted NO fight. The goal had no acquisition edge
 at all — hence `nodes=4 depth=2`, a search that gave up immediately.
 
-Meanwhile `skill_grind_target.is_obtainable` calls that same rung obtainable (it
-asks only winnable + spawn-known, never the grey policy), so `LevelSkill`
-stayed applicable and the arbiter re-picked it forever. The fix — the
-skill-grind exemption in `GatherMaterialsGoal.relevant_actions` — makes the two
-models agree again.
+Meanwhile `skill_grind_target.is_obtainable` called that same rung obtainable
+(it asked only winnable + spawn-known, on its own private walk that never
+consulted the grey policy), so `LevelSkill` stayed applicable and the arbiter
+re-picked it forever. `890966e1` fixed the symptom with the skill-grind
+exemption in `GatherMaterialsGoal.relevant_actions`; the two walks were then
+merged onto the shared oracle `ai/drop_obtainability`, which is what makes them
+structurally unable to disagree again (`test_drop_obtainability.py` carries the
+catalog-wide property).
 
 These tests assert a PLAN EXISTS, not that a helper returns True: the bug was
 the absence of a plan, so only the planner can prove it gone.
@@ -34,13 +37,19 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
+from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
 from artifactsmmo_cli.ai.level_skill_expand import next_grind_goal
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
+from artifactsmmo_cli.ai.tiers.skill_grind_target import (
+    GRIND_ALLOWS_GREY,
+    is_obtainable,
+    skill_grind_target,
+)
 from artifactsmmo_cli.ai.world_state import WorldState
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
@@ -90,6 +99,31 @@ def test_grind_descends_to_the_live_wool_goal(game_data: GameData,
     assert skill_grind_target(SKILL, state, game_data) == "iron_ring"
     goal = next_grind_goal(SKILL, state, game_data)
     assert repr(goal) == "GatherMaterials(wool, {wool:2})"
+
+
+def test_both_sides_agree_on_wool(player: GamePlayer, game_data: GameData,
+                                  state: WorldState) -> None:
+    """THE WOOL CASE, at the seam. The L21 jewelrycrafting grind asks both sides
+    about `wool` and gets the SAME answer, because both now call the shared
+    oracle with the grind's standing grey exemption.
+
+    Selection: `is_obtainable` (via the rung walk) passes GRIND_ALLOWS_GREY.
+    Emission: `GatherMaterialsGoal(skill_grind=True)` passes the same exemption
+    to `select_drop_fight`. Before the unification the first said yes and the
+    second said no — the whole livelock in one line."""
+    assert GRIND_ALLOWS_GREY is True
+    assert drop_obtainable("wool", state, game_data,
+                           allow_grey=GRIND_ALLOWS_GREY) is True
+    assert is_obtainable("wool", state, game_data, frozenset()) is True
+    assert is_obtainable("iron_ring", state, game_data, frozenset()) is True
+    fight = select_drop_fight("wool", player._build_actions(), state, game_data,
+                              allow_grey=GRIND_ALLOWS_GREY)
+    assert fight is not None and fight.monster_code == "sheep"
+    assert fight.drop_farm is True
+    # And the un-exempt policy is refused on BOTH sides, still together.
+    assert drop_obtainable("wool", state, game_data, allow_grey=False) is False
+    assert select_drop_fight("wool", player._build_actions(), state, game_data,
+                             allow_grey=False) is None
 
 
 def test_real_planner_finds_a_plan_for_wool(player: GamePlayer,

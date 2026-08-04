@@ -276,12 +276,18 @@ def test_relevant_actions_pursues_winnable_boss_drop() -> None:
 
 
 def test_relevant_actions_dropper_with_no_locations_uses_zero_distance() -> None:
-    """A winnable dropper whose FightAction carries no locations → distance 0;
-    selection still emits it as the sole winner."""
+    """An oracle-APPROVED dropper (spawn-known, winnable) whose FightAction in
+    the caller's pool carries no locations → distance 0; the ranking still emits
+    it as the sole winner.
+
+    The action's empty `locations` is a property of the POOL, not of the world:
+    the spawn gate is the oracle's `monster_spawn_known`, which reads game data.
+    Keeping the dist-0 arm means a location-less action never crashes
+    `nearest_or_error`."""
     gd = GameData()
     gd._monster_level = {"chicken": 1}
     gd._monster_drops = {"chicken": [("raw_egg", 5, 1, 1)]}
-    gd._monster_locations = {"chicken": []}
+    gd._monster_locations = {"chicken": [(0, 1)]}
     fill_monster_stat_defaults(gd)
     gd._monster_hp = {"chicken": 10}
     state = _winnable_state()
@@ -290,6 +296,29 @@ def test_relevant_actions_dropper_with_no_locations_uses_zero_distance() -> None
     relevant = goal.relevant_actions(actions, state, gd)
     fights = [a for a in relevant if isinstance(a, FightAction)]
     assert [f.monster_code for f in fights] == ["chicken"]
+
+
+def test_relevant_actions_rejects_dropper_with_no_known_spawn() -> None:
+    """THE UNIFIED SPAWN GATE. A winnable dropper with no routable spawn is not
+    a source: `_producible` has always said so (its docstring calls the spawn
+    gate load-bearing), and emission now says the same because both ask the one
+    oracle. Before the unification emission only asked "is there a FightAction
+    in this list", so a synthetic pool could emit a fight for a monster the
+    reachability walks called unreachable — the divergence, running the other
+    way round from the wool livelock."""
+    gd = GameData()
+    gd._monster_level = {"chicken": 1}
+    gd._monster_drops = {"chicken": [("raw_egg", 5, 1, 1)]}
+    gd._monster_locations = {"chicken": []}
+    fill_monster_stat_defaults(gd)
+    gd._monster_hp = {"chicken": 10}
+    state = _winnable_state()
+    assert gd.monster_spawn_known("chicken") is False
+    assert _producible("raw_egg", state, gd) is False
+    goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 1})
+    actions = [FightAction(monster_code="chicken", locations=frozenset())]
+    relevant = goal.relevant_actions(actions, state, gd)
+    assert not [a for a in relevant if isinstance(a, FightAction)]
 
 
 def test_relevant_actions_drops_unwinnable_dropper_keeps_winnable() -> None:

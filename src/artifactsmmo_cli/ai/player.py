@@ -938,6 +938,15 @@ class GamePlayer:
         if isinstance(root, ObtainItem):
             for leaf in monster_drop_inputs(root.code, game_data):
                 droppers = [m for m, *_ in game_data.monsters_dropping(leaf)]
+                # DELIBERATELY not the shared drop oracle
+                # (ai/drop_obtainability). This is a DIAGNOSTIC listing for the
+                # `plan` CLI, not a verdict any decision reads: it shows every
+                # dropper and marks the winnable ones, and it consults
+                # `self.history` — the LEARNED-LOSS veto, which the planner
+                # paths deliberately omit (they call is_winnable cold, see
+                # ai/combat_targets). Routing it through the oracle would either
+                # drop the learned losses from the display or push `history`
+                # into a predicate the planner must keep history-free.
                 winnable = sorted(
                     m for m in droppers
                     if is_winnable(state, game_data, m, self.history)

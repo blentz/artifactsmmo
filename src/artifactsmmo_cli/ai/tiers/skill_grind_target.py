@@ -21,7 +21,7 @@ the committed weaponcrafting objective. The recursive `_obtainable` filter exclu
 such items so the reachable `copper_dagger` wins.
 """
 
-from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.tiers.skill_grind_selection import (
     GrindCandidate,
@@ -29,22 +29,40 @@ from artifactsmmo_cli.ai.tiers.skill_grind_selection import (
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 
+GRIND_ALLOWS_GREY = True
+"""The grind's standing exemption from the 2026-07-06 grey directive, named so
+the oracle call below reads as a POLICY and not as a magic literal.
+
+A skill grind fights a grey mob for the RUNG'S MATERIAL, not for its xp, so the
+directive's preference — "grind the skill and craft the better item instead of
+farming greys for a soon-obsolete one" — is not an alternative to suppress in
+favour of: it is precisely what this walk is selecting. The exemption is the
+same one `GatherMaterialsGoal(skill_grind=True)` passes on the emission side
+(`ai/goals/gathering.py`), and it is deliberately NOT widened to any other
+caller — see `ai/grey_farm.py`'s module docstring for the three structural
+exemptions and the directive they bend around."""
+
 
 def is_obtainable(code: str, state: WorldState, game_data: GameData,
                   visited: frozenset[str]) -> bool:
     """Recursive reachability: an item is obtainable when it is a gatherable
-    resource drop, a winnable+locatable monster drop, OR craftable with EVERY
-    recipe input recursively obtainable. A craftable item whose chain bottoms out
-    in an un-gettable leaf (e.g. wooden_stick) is NOT obtainable. Cycle-safe."""
+    resource drop, a fightable monster drop, OR craftable with EVERY recipe
+    input recursively obtainable. A craftable item whose chain bottoms out in an
+    un-gettable leaf (e.g. wooden_stick) is NOT obtainable. Cycle-safe.
+
+    The mob-drop arm is the shared oracle `drop_obtainable`, the SAME verdict
+    `GatherMaterialsGoal` emits fights from. It used to be a private
+    `winnable + spawn_known` walk that never consulted the grey policy, so this
+    function could call a rung buildable while emission refused the only edge
+    that built it — the wool/iron_ring livelock (see the oracle's docstring).
+    Passing the grind's own `allow_grey` keeps the two answers identical."""
     if code in visited:
         return False
     recipe = game_data.crafting_recipe(code)
     if recipe is None:
         if code in game_data.resource_drops.values():
             return True
-        return any(is_winnable(state, game_data, monster_code)
-                   and game_data.monster_spawn_known(monster_code)
-                   for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
+        return drop_obtainable(code, state, game_data, allow_grey=GRIND_ALLOWS_GREY)
     nxt = visited | {code}
     return all(is_obtainable(mat, state, game_data, nxt) for mat in recipe)
 

@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
 from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target, target_potion_pure
@@ -23,6 +23,21 @@ from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldS
 
 # Single source: the duplicate-allowed slot types, read from actions/equip.py's
 # DUPLICATE_SLOT_TYPES — no copy, so this can't drift from that set.
+ATTAINABILITY_ALLOWS_GREY = True
+"""The grey policy the ATTAINABILITY walks pass to the shared drop oracle
+(`ai/drop_obtainability`) — here and in `tiers/strategy`, which imports it from
+this module so the two cannot drift.
+
+Attainability asks "is there a real acquisition source at all", a reachability
+question the 2026-07-06 grey directive does not arbitrate: that directive
+chooses between farming greys for a soon-obsolete recipe and grinding the skill
+for its successor, and BOTH of those are attainable routes. Suppressing greys
+here would mark an item unattainable that the tree can genuinely pursue —
+and the goal that pursues it (`UpgradeEquipmentGoal`, GAP-6) already carries
+its own structural exemption from the directive. Named rather than a bare
+`True` so the choice is visible to the next reader, and grep-able against
+`skill_grind_target.GRIND_ALLOWS_GREY`, the other standing exemption."""
+
 _DUPLICATE_FILL_TYPES = DUPLICATE_SLOT_TYPES
 """Multi-slot equip types whose empty slots are filled by repeating the best
 attainable item. See actions/equip.py's DUPLICATE_SLOT_TYPES comment for which
@@ -215,9 +230,8 @@ def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool
     def leaf_ok(leaf: str, path: frozenset[str]) -> bool:
         if _gatherable(leaf, game_data):
             return True
-        if any(is_winnable(rested, game_data, monster_code)
-               and game_data.monster_spawn_known(monster_code)
-               for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(leaf)):
+        if drop_obtainable(leaf, rested, game_data,
+                           allow_grey=ATTAINABILITY_ALLOWS_GREY):
             return True
         if game_data.is_task_earnable(leaf):
             # Task-earned currency (tasks_coin) is producible-NOW: the C4

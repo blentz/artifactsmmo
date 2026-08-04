@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, field
 from fractions import Fraction
 from types import MappingProxyType
 
-from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import progression_tree
@@ -17,7 +17,12 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
 )
-from artifactsmmo_cli.ai.tiers.objective import GOLD, CharacterObjective, _permanent_vendor_purchases
+from artifactsmmo_cli.ai.tiers.objective import (
+    ATTAINABILITY_ALLOWS_GREY,
+    GOLD,
+    CharacterObjective,
+    _permanent_vendor_purchases,
+)
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -181,10 +186,8 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
             return True
         if currency in game_data.gatherable_drop_items():
             return True
-        return any(
-            is_winnable(state, game_data, monster_code)
-            and game_data.monster_spawn_known(monster_code)
-            for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(currency))
+        return drop_obtainable(currency, state, game_data,
+                               allow_grey=ATTAINABILITY_ALLOWS_GREY)
     # A purchase is producible when the currency can be PRODUCED — or is
     # ALREADY EARNED: currency on hand (inventory + bank) covering the price
     # counts even when its droppers are currently unwinnable (the incremental
@@ -193,11 +196,10 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
         state.inventory.get(currency, 0) + bank.get(currency, 0) >= price
         or _currency_producible(currency)
         for price, currency in _permanent_vendor_purchases(code, game_data))
-    # Winnable drop: state-aware (preserves the winnability gate).
-    winnable_drop = any(
-        is_winnable(state, game_data, monster_code)
-        and game_data.monster_spawn_known(monster_code)
-        for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
+    # Fightable drop: the shared oracle, state-aware (preserves the winnability
+    # and spawn gates this docstring calls load-bearing).
+    winnable_drop = drop_obtainable(code, state, game_data,
+                                    allow_grey=ATTAINABILITY_ALLOWS_GREY)
     return leaf_attainable_pure(
         code in game_data.gatherable_drop_items(),
         winnable_drop,

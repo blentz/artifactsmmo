@@ -443,13 +443,19 @@ class GatherMaterialsGoal(Goal):
             if item in bid_items:
                 continue  # a GE bid is already in flight for this item (bid_vs_craft exclusion)
             # One selection, shared with UpgradeEquipmentGoal's target and
-            # material edges (ai/drop_fight_selection.py). The grey POLICY stays
-            # here: `grey_farm_allowed` governs recipe-material farming — the
+            # material edges (ai/drop_fight_selection.py), which in turn asks
+            # the shared oracle ai/drop_obtainability — the SAME verdict the
+            # tiers/ reachability walks consult. Nothing is decided here that
+            # selection cannot see except this action pool itself (the oracle's
+            # named residual). Live Robby L12 could not gather feathers from L1
+            # chickens without the drop_farm variant the selection returns (the
+            # plain fight fails the xpPositive gate).
+            #
+            # The grey POLICY is this call site's, and only the ARGUMENT below:
+            # `grey_farm_allowed` governs ordinary recipe-material farming — the
             # drop must serve a recipe AND the next-tier recipe must be too far
             # a grind away, since when a same-family recipe is within reach,
-            # grinding the skill beats farming greys. Live Robby L12 could not
-            # gather feathers from L1 chickens without the drop_farm variant the
-            # selection returns (the plain fight fails the xpPositive gate).
+            # grinding the skill beats farming greys.
             #
             # `self.skill_grind` is the THIRD structural-demand exemption from
             # that next-tier suppression, alongside UpgradeEquipmentGoal's
@@ -459,16 +465,18 @@ class GatherMaterialsGoal(Goal):
             # already picked as the best in-skill craft, so "grind the skill
             # instead of farming greys for a soon-obsolete item" is not an
             # alternative to suppress in favour of — it is what the fight
-            # serves. Suppressing greys here left a rung whose only material
-            # source is a low-level mob with NO acquisition edge at all, while
-            # `skill_grind_target.is_obtainable` (winnable + spawn-known, grey
-            # policy not consulted) still called that rung obtainable: the
-            # planner then found no plan and `_execute_level_skill` raised
-            # "grind produced no leg" every cycle (live Robby 2026-08-03, L21
-            # jewelrycrafting 14, iron_ring <- wool <- L5 sheep: 8 of 16
-            # consecutive cycles, and every one of the 54 "produced no leg"
-            # records across 39 older traces). The exemption makes rung
-            # selection and material emission agree again.
+            # serves. It is the same standing exemption the rung walk passes
+            # (`skill_grind_target.GRIND_ALLOWS_GREY`), so the two sides now
+            # hand the oracle the SAME policy for the same demand. Suppressing
+            # greys here left a rung whose only material source is a low-level
+            # mob with NO acquisition edge at all, while `is_obtainable` (then a
+            # private winnable + spawn-known walk that never consulted the grey
+            # policy) still called that rung obtainable: the planner found no
+            # plan and `_execute_level_skill` raised "grind produced no leg"
+            # every cycle (live Robby 2026-08-03, L21 jewelrycrafting 14,
+            # iron_ring <- wool <- L5 sheep: 8 of 16 consecutive cycles, and
+            # every one of the 54 "produced no leg" records across 39 older
+            # traces).
             fight = select_drop_fight(
                 item, actions, state, game_data,
                 allow_grey=(self.skill_grind

@@ -794,6 +794,12 @@ def _gd_drop_leaf(char_beats_chicken: bool = True) -> GameData:
     gd._monster_hp = {"chicken": 60 if char_beats_chicken else 99999}
     gd._monster_attack = {"chicken": {"air": 4 if char_beats_chicken else 9999}}
     gd._monster_drops = {"chicken": [("feather", 8, 1, 1)]}
+    # The chicken's spawn tile, matching the FightAction `_drop_leaf_actions`
+    # hands in. The shared drop oracle (ai/drop_obtainability) gates on
+    # `monster_spawn_known`, exactly as tiers/strategy._producible always has,
+    # so a fixture that supplies a Fight for a monster with no spawn on file is
+    # describing a world the reachability walks call unreachable.
+    gd._monster_locations = {"chicken": [(0, 1)]}
     fill_monster_stat_defaults(gd)
     return gd
 
