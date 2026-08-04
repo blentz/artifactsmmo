@@ -323,6 +323,43 @@ def test_build_pool_wires_on_stderr_to_the_character(capsys):
     assert captured.err == "[alice] alice said this\n[bob] bob said this\n"
 
 
+# --- _on_stagger: headless announces the hold, TUI stays quiet -------------
+
+
+def test_on_stagger_prints_to_stderr_with_the_character_name_in_headless_mode(capsys):
+    mrun = _run(tui=False)
+    mrun._on_stagger("alice", 12.0)
+    captured = capsys.readouterr()
+    assert captured.err == "[alice] holding 12s before start (rate stagger)\n"
+
+
+def test_on_stagger_formats_a_fractional_wait_without_a_trailing_zero(capsys):
+    mrun = _run(tui=False)
+    mrun._on_stagger("alice", 0.5)
+    captured = capsys.readouterr()
+    assert captured.err == "[alice] holding 0.5s before start (rate stagger)\n"
+
+
+def test_on_stagger_is_silent_in_tui_mode(capsys):
+    """Printing to the real stderr while Textual owns the alternate screen
+    would corrupt the TUI -- the same reason `_on_stderr` stays quiet there."""
+    mrun = _run(tui=True)
+    mrun._on_stagger("alice", 12.0)
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
+def test_build_pool_wires_on_stagger_to_the_pool(capsys):
+    """End-to-end through build_pool: the pool's on_stagger callback must
+    actually be MultiRun._on_stagger."""
+    mrun = _run(tui=False)
+    pool = mrun.build_pool(characters=["alice", "bob"], rates=_RATES)
+    assert pool._on_stagger == mrun._on_stagger
+    pool._on_stagger("alice", 12.0)
+    captured = capsys.readouterr()
+    assert captured.err == "[alice] holding 12s before start (rate stagger)\n"
+
+
 # --- run(): headless vs TUI, and loud failure on bad API data --------------
 #
 # run() itself needs a real API token and network to exercise for real; every

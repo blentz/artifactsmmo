@@ -31,11 +31,13 @@ class SupervisorPool:
         supervisors: Sequence[CharacterSupervisor],
         stagger_seconds: float = 0.0,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        on_stagger: Callable[[str, float], None] | None = None,
     ) -> None:
         self._supervisors = tuple(supervisors)
         self._by_name = {s.character: s for s in self._supervisors}
         self._stagger_seconds = stagger_seconds
         self._sleep = sleep
+        self._on_stagger = on_stagger
 
     def characters(self) -> tuple[str, ...]:
         return tuple(s.character for s in self._supervisors)
@@ -99,6 +101,18 @@ class SupervisorPool:
         It also applies once per child LIFETIME, not per restart: `run()` owns
         the restart loop internally, and a lone child restarting has nothing to
         collide with. Restart pacing stays `RestartPolicy`'s job.
+
+        A genuinely-delayed child (`wait_seconds > 0`) is announced through
+        `on_stagger` BEFORE the sleep, so the hold is visible the moment the
+        pool starts rather than staying silent until the child eventually
+        spawns -- that silence is exactly what read as "the program doesn't
+        start up now" with several characters appearing dead at once. A child
+        with nothing to wait for (index 0, or any pool built with no stagger)
+        is never announced: `holding 0s` would misreport a delay that never
+        happens.
         """
-        await self._sleep(index * self._stagger_seconds)
+        wait_seconds = index * self._stagger_seconds
+        if wait_seconds > 0 and self._on_stagger is not None:
+            self._on_stagger(supervisor.character, wait_seconds)
+        await self._sleep(wait_seconds)
         await supervisor.run()

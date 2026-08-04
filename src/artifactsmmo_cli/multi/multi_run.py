@@ -141,6 +141,7 @@ class MultiRun:
             # each other in the one bucket they all share, whereas the divided
             # `budget` above is what each child then polices itself with.
             stagger_seconds=limits.account.sustainable_interval(),
+            on_stagger=self._on_stagger,
         )
 
     def _on_event(self, event: ChildEvent) -> None:
@@ -163,6 +164,16 @@ class MultiRun:
         information instead."""
         if not self._tui:
             print(f"[{character}] {line}", file=sys.stderr)
+
+    def _on_stagger(self, character: str, wait_seconds: float) -> None:
+        """Announce a child's rate-stagger hold, mirroring `_on_stderr`'s
+        convention: printed with the same `[Name]` prefix to the real stderr
+        in headless mode, quiet in TUI mode for the same alternate-screen
+        reason. This is the parent's own line -- the child process behind
+        `character` does not exist yet, so nothing else could emit it."""
+        if not self._tui:
+            print(f"[{character}] holding {wait_seconds:g}s before start "
+                  f"(rate stagger)", file=sys.stderr)
 
     def run(self) -> None:
         # The whole body is wrapped so `_cleanup_coordination_db` runs on

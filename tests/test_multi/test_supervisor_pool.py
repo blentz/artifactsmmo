@@ -128,6 +128,95 @@ async def test_the_only_child_of_a_pool_is_never_delayed():
     assert delays == [0.0]
 
 
+# --- on_stagger: the hold is announced at pool start, not at spawn ---------
+
+
+@pytest.mark.asyncio
+async def test_every_staggered_child_is_announced_before_it_sleeps():
+    """The whole point is to make the silence visible: each child with a
+    non-zero wait must be announced with its own name and duration, and the
+    announcement must land BEFORE the sleep it describes -- i.e. at pool
+    start, not once the child eventually gets to run."""
+    seen: list = []
+    announced: list[tuple[str, float]] = []
+    gate = asyncio.Event()
+
+    async def fake_sleep(delay: float) -> None:
+        if delay:
+            await gate.wait()
+
+    pool = SupervisorPool(
+        [_supervisor(n, seen) for n in ("alice", "bob", "carol")],
+        stagger_seconds=12.0,
+        sleep=fake_sleep,
+        on_stagger=lambda character, wait: announced.append((character, wait)),
+    )
+    task = asyncio.ensure_future(pool.run())
+    try:
+        # Bob and carol are announced immediately: nothing has spawned yet,
+        # so this can only be true if the announcement happens at pool start.
+        # (alice, index 0, has no delay and may finish before this poll
+        # notices -- that race is fine and irrelevant to what this test
+        # checks, so `seen` is never asserted on here.)
+        async with asyncio.timeout(10.0):
+            while len(announced) < 2:
+                await asyncio.sleep(0.01)
+        assert announced == [("bob", 12.0), ("carol", 24.0)]
+    finally:
+        gate.set()
+        await asyncio.wait_for(task, timeout=10.0)
+    assert announced == [("bob", 12.0), ("carol", 24.0)]
+
+
+@pytest.mark.asyncio
+async def test_the_zero_wait_child_is_never_announced():
+    """Index 0 (and any pool with no stagger at all) waits 0.0s -- announcing
+    a `holding 0s` would misreport a delay that never happens."""
+    announced: list[tuple[str, float]] = []
+    pool = SupervisorPool(
+        [_supervisor("alice", [])],
+        stagger_seconds=12.0,
+        on_stagger=lambda character, wait: announced.append((character, wait)),
+    )
+    await asyncio.wait_for(pool.run(), timeout=10.0)
+    assert announced == []
+
+
+@pytest.mark.asyncio
+async def test_no_stagger_pool_never_announces_either():
+    """A pool built with no stagger at all (single-character, or a
+    `--rate-budget`-less run) must stay silent for every child, not just
+    index 0."""
+    announced: list[tuple[str, float]] = []
+    pool = SupervisorPool(
+        [_supervisor(n, []) for n in ("alice", "bob")],
+        on_stagger=lambda character, wait: announced.append((character, wait)),
+    )
+    await asyncio.wait_for(pool.run(), timeout=10.0)
+    assert announced == []
+
+
+@pytest.mark.asyncio
+async def test_on_stagger_defaults_to_none_and_is_never_called():
+    """The default pool (no `on_stagger` passed) must not crash when a child
+    is genuinely staggered -- this is the branch that guards the callback."""
+    gate = asyncio.Event()
+
+    async def fake_sleep(delay: float) -> None:
+        if delay:
+            await gate.wait()
+
+    pool = SupervisorPool(
+        [_supervisor(n, []) for n in ("alice", "bob")],
+        stagger_seconds=12.0,
+        sleep=fake_sleep,
+    )
+    task = asyncio.ensure_future(pool.run())
+    await asyncio.sleep(0.05)
+    gate.set()
+    await asyncio.wait_for(task, timeout=10.0)  # no raise
+
+
 @pytest.mark.asyncio
 async def test_state_reports_each_child():
     seen: list = []
