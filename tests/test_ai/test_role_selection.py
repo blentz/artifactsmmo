@@ -1015,3 +1015,75 @@ def test_serves_item_is_the_shared_predicate_both_readers_call() -> None:
     assert serves_item("iron_ore", "mining", _IRON_LEVEL, _LOR_SKILLS) is False
     assert serves_item("iron_ore", "mining", {}, _LOR_SKILLS) is True
     assert serves_item("iron_ore", "mining", _IRON_LEVEL, {}) is True
+
+
+# ---------------------------------------------------------------------------
+# RoleDecision.reason — the rule that fired, named where it fired
+#
+# The TUI log renders a role transition as a discrete event, and the operator's
+# first question about one is WHY. The caller cannot answer it: it sees
+# `release="miner"` and would have to re-implement the branch it just called to
+# tell idle from outranked. So the reason is written at each return, and every
+# phrase is built only from arguments this function was given.
+# ---------------------------------------------------------------------------
+
+def test_a_claim_reports_the_demand_it_claimed_on() -> None:
+    d = _decide(None, 0, {}, {"miner": 10, "logger": 3})
+    assert d.claim == "miner"
+    assert d.reason == "demand 10"
+
+
+def test_no_claimable_role_says_so() -> None:
+    # Every role blocked as unservable: nothing to claim, and the reason names
+    # the eligibility wall rather than leaving the no-op unexplained.
+    blocked = frozenset(role.name for role in ROLE_CATALOG)
+    d = _decide(None, 0, {}, {"miner": 10}, unservable_released=blocked)
+    assert (d.claim, d.keep, d.release) == (None, None, None)
+    assert d.reason == "no claimable role"
+
+
+def test_a_lapsed_lease_reclaim_says_the_lease_lapsed() -> None:
+    d = _decide("miner", ROLE_MIN_HOLD_CYCLES, {}, {"miner": 10})
+    assert d.claim == "miner"
+    assert d.reason == "lease lapsed"
+
+
+def test_the_min_hold_keep_reports_its_progress_through_the_dwell() -> None:
+    d = _decide("miner", 7, _held(miner=(_ME,)), {"miner": 10})
+    assert d.keep == "miner"
+    assert d.reason == f"held 7/{ROLE_MIN_HOLD_CYCLES}"
+
+
+def test_an_idle_release_reports_the_run_of_silent_cycles() -> None:
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {"miner": 3})
+    assert d.release == "logger"
+    assert d.reason == f"no demand for {ROLE_IDLE_DWELL_CYCLES} cycles"
+
+
+def test_an_idle_keep_reports_the_run_so_far() -> None:
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {},
+                zero_demand_cycles=4)
+    assert d.keep == "logger"
+    assert d.reason == "idle 4 cycles"
+
+
+def test_an_unservable_release_reports_the_demand_and_the_failed_run() -> None:
+    d = _decide("alchemist", ROLE_MIN_HOLD_CYCLES, _LOR_LEASES, _LOR_DEMAND,
+                unservable_cycles=ROLE_UNSERVABLE_CYCLES)
+    assert d.release == "alchemist"
+    assert d.reason == f"demand 40 unserved for {ROLE_UNSERVABLE_CYCLES} cycles"
+
+
+def test_a_margin_release_reports_both_sides_of_the_comparison() -> None:
+    # Exact `Fraction` arithmetic all the way to the string: the comparison is
+    # a decision boundary and the log must show the numbers it was decided on.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)),
+                {"logger": 1, "miner": 100})
+    assert d.release == "logger"
+    assert d.reason == "outranked 100 vs 1"
+
+
+def test_a_working_keep_reports_the_demand_it_is_serving() -> None:
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {"logger": 12})
+    assert d.keep == "logger"
+    assert d.reason == "demand 12"

@@ -210,12 +210,28 @@ class RoleDecision:
     which only skips a role while its demand is non-positive, would let it
     re-claim on the very next cycle). Returning the reason here keeps
     `ROLE_UNSERVABLE_CYCLES`'s threshold in ONE place instead of having the
-    caller re-derive the verdict from its own counter."""
+    caller re-derive the verdict from its own counter.
+
+    `reason` is the same argument carried one step further, for a reader rather
+    than for control flow: a short human phrase naming the rule that fired and
+    the numbers it fired on. Written at each `return` below, because that is
+    the only place the rule is known — the caller sees `release="miner"` and
+    cannot tell idle from outranked without re-implementing the branch it just
+    called, which is exactly the two-copies-of-three-lines drift `_claimable`
+    exists to prevent. It does NOT duplicate `unservable`: that is a boolean the
+    caller ACTS on, this is prose carrying counters the boolean cannot hold, and
+    nothing branches on it.
+
+    Every phrase is built from arguments this function was given. Nothing here
+    infers a cause it was not told (e.g. WHICH item's demand moved the board, or
+    which level gate dropped it) — that lives in `demand_by_role`'s inputs and
+    is not reconstructible from the aggregate."""
 
     keep: str | None = None
     claim: str | None = None
     release: str | None = None
     unservable: bool = False
+    reason: str = ""
 
 
 def _skill_affinity(catalog: tuple[Role, ...],
@@ -448,7 +464,10 @@ def decide_role(current: str | None, held_cycles: int,
     if current is None:
         best = _best_role(live_leases, demand_by_role, character, catalog,
                           idle_released, unservable_released, skill_levels)
-        return RoleDecision(claim=best) if best is not None else RoleDecision()
+        if best is None:
+            return RoleDecision(reason="no claimable role")
+        return RoleDecision(claim=best,
+                            reason=f"demand {demand_by_role.get(best, 0)}")
 
     if character not in live_leases.get(current, frozenset()):
         # Our lease lapsed — the TTL expired during a stall and nothing renewed
@@ -457,10 +476,11 @@ def decide_role(current: str | None, held_cycles: int,
         # fact about our own row. Re-claim rather than assume we still hold it:
         # every sibling reads holder counts off this table, and a character
         # supplying for a role with no live row is invisible to all of them.
-        return RoleDecision(claim=current)
+        return RoleDecision(claim=current, reason="lease lapsed")
 
     if held_cycles < ROLE_MIN_HOLD_CYCLES:
-        return RoleDecision(keep=current)
+        return RoleDecision(keep=current,
+                            reason=f"held {held_cycles}/{ROLE_MIN_HOLD_CYCLES}")
 
     # ONE scan over the rivals, feeding BOTH release rules below. A rival a
     # sibling holds is not off-limits, it is merely already partly served,
@@ -502,10 +522,11 @@ def decide_role(current: str | None, held_cycles: int,
         # claim, a hold, and another release per role -- on an all-zero board
         # that walked the entire catalog before settling.
         if zero_demand_cycles >= ROLE_IDLE_DWELL_CYCLES and rival_best > 0:
-            return RoleDecision(release=current)
+            return RoleDecision(release=current,
+                                reason=f"no demand for {zero_demand_cycles} cycles")
         # Idle with nowhere better, or idle but not for long enough to be sure:
         # a requester on a level root is momentarily silent, not finished.
-        return RoleDecision(keep=current)
+        return RoleDecision(keep=current, reason=f"idle {zero_demand_cycles} cycles")
 
     # Positive demand from here down. A role whose demand exists but has gone
     # unserved for a full run is worse than an idle one: this character counts
@@ -515,15 +536,18 @@ def decide_role(current: str | None, held_cycles: int,
     # rival -- there may be no eligible rival at all, and the release is still
     # the right move.
     if unservable_cycles >= ROLE_UNSERVABLE_CYCLES:
-        return RoleDecision(release=current, unservable=True)
+        return RoleDecision(release=current, unservable=True,
+                            reason=f"demand {own_demand} unserved for "
+                                   f"{unservable_cycles} cycles")
 
     # Our own side is split the same way the rivals are -- `_effective_demand`
     # counts only OTHER holders, so a role we hold alone reads at full strength
     # and one we share reads at our real share.
     own_share = _effective_demand(demand_by_role, current, live_leases, character)
     if rival_best >= own_share * ROLE_SWITCH_MARGIN:
-        return RoleDecision(release=current)
-    return RoleDecision(keep=current)
+        return RoleDecision(release=current,
+                            reason=f"outranked {rival_best} vs {own_share}")
+    return RoleDecision(keep=current, reason=f"demand {own_demand}")
 
 
 def serves_item(item_code: str, skill: str,

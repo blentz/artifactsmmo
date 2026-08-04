@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
+from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RoleChange
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
@@ -1057,6 +1057,102 @@ def test_notify_observer_role_and_supply_target_none_by_default():
     snap = calls[0]
     assert snap.role is None
     assert snap.supply_target is None
+    assert snap.role_change is None
+
+
+def test_notify_observer_carries_this_cycles_role_change():
+    """The log pane renders the transition as an event, and it can only do that
+    from a snapshot field: `build_log_lines` is pure over ONE snapshot, and the
+    widget cannot diff its way there because `replace_history` replays a
+    bounded buffer whose earlier cycles may be gone."""
+    calls: list[CycleSnapshot] = []
+    player = GamePlayer(character="hero", cycle_observer=calls.append)
+    player.state = make_state()
+    player._role = "miner"
+    player._role_change = RoleChange(previous=None, current="miner",
+                                     reason="demand 12")
+    player._notify_observer("X", "Y", "ok", goal_rank_trace=[])
+    change = calls[0].role_change
+    assert change is not None
+    assert (change.previous, change.current, change.reason) == (None, "miner", "demand 12")
+
+
+# ---------------------------------------------------------------------------
+# GamePlayer._update_coordination — detecting the transition at the SOURCE
+# ---------------------------------------------------------------------------
+
+def test_update_coordination_records_a_claim_as_a_transition(tmp_path):
+    p = GamePlayer(character="hero")
+    p.state = make_state(bank_items={})
+    p.game_data = _mining_demand_gd()
+    store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
+    p.set_coordination_store(store)
+    try:
+        p._update_coordination(p.state, p.game_data)
+        assert p._role is not None
+        change = p._role_change
+        assert change is not None
+        assert (change.previous, change.current) == (None, p._role)
+        # The reason comes from the rule that fired, not from a second
+        # derivation here — an empty board claims on affinity at demand 0.
+        assert change.reason == "demand 0"
+    finally:
+        store.close()
+
+
+def test_update_coordination_records_a_release_as_a_transition(tmp_path):
+    p, store, sibling = _held_miner(tmp_path)
+    try:
+        p._role_unservable_cycles = ROLE_UNSERVABLE_CYCLES
+        p._update_coordination(p.state, p.game_data)
+        change = p._role_change
+        assert change is not None
+        assert (change.previous, change.current) == ("miner", None)
+        assert change.reason == f"demand 5 unserved for {ROLE_UNSERVABLE_CYCLES} cycles"
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_update_coordination_records_no_transition_when_the_role_is_kept(tmp_path):
+    """The quiet case, and the one the log's silence depends on: holding a role
+    is not an event."""
+    p, store, sibling = _held_miner(tmp_path)
+    try:
+        p._role_change = RoleChange(previous=None, current="miner")  # prove it CLEARS
+        p._update_coordination(p.state, p.game_data)
+        assert p._role == "miner"
+        assert p._role_change is None
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_update_coordination_does_not_log_a_lapsed_lease_reclaim(tmp_path):
+    """`decide_role` answers a lapsed lease with `claim=<the same role>`. The
+    character never stopped holding it as far as the operator is concerned, so
+    re-taking the row is not a role CHANGE — comparing the role before and
+    after gets this right for free, where a per-branch 'this branch changed the
+    role' flag would have logged a transition from miner to miner."""
+    p, store, sibling = _held_miner(tmp_path)
+    try:
+        store.release("miner")               # the lease lapses under us
+        p._update_coordination(p.state, p.game_data)
+        assert p._role == "miner"            # re-claimed
+        assert p._role_change is None
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_update_coordination_clears_the_role_change_without_a_store():
+    """Every single-character run takes this path on every cycle."""
+    p = GamePlayer(character="hero")
+    p.state = make_state()
+    p.game_data = _mining_demand_gd()
+    p._role_change = RoleChange(previous=None, current="miner")
+    p._update_coordination(p.state, p.game_data)
+    assert p._role_change is None
 
 
 # ---------------------------------------------------------------------------

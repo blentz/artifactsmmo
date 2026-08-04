@@ -49,6 +49,35 @@ class PlanTreeNode(BaseModel):
     children: tuple["PlanTreeNode", ...] = ()
 
 
+class RoleChange(BaseModel):
+    """The specialization role this character gave up or took THIS cycle.
+
+    Carried on the snapshot rather than diffed by the widget that renders it.
+    `build_log_lines` is pure over ONE snapshot, and the alternative — a widget
+    holding the previous snapshot — cannot survive `LogPane.replace_history`:
+    the store's per-character buffer is a bounded `deque`, so a replay starts at
+    whatever cycle is still retained and its predecessor is simply gone. The
+    same history would then render one way live and another way after a focus
+    switch. Detecting the transition where it HAPPENS (the player's coordination
+    block) makes both renderings the same function of the same data.
+
+    A release and the following claim are SEPARATE cycles by construction —
+    `_update_coordination` sets `_role = None` on a release and only claims on a
+    later cycle — so `previous` and `current` are never both non-None. Both
+    being None cannot occur: the field is only set when the role actually
+    changed.
+
+    `reason` comes from `role_selection.RoleDecision.reason`, i.e. from the rule
+    that fired. Empty when the decision named none; renderers omit the clause
+    rather than inventing one."""
+
+    model_config = ConfigDict(frozen=True)
+
+    previous: str | None = None
+    current: str | None = None
+    reason: str = ""
+
+
 class CycleSnapshot(BaseModel):
     """Everything a watcher needs about one bot cycle. Frozen at end-of-cycle."""
 
@@ -137,4 +166,14 @@ class CycleSnapshot(BaseModel):
 
     supply_target: str | None = None
     """`repr` of the sibling demand being served this cycle, or None. This is
-    the trace field that proves collusion actually fired."""
+    the trace field that proves collusion actually fired.
+
+    Shape: `repr((item_code, target banked quantity, unmet demand))`, the triple
+    `GamePlayer._pick_supply_target` returns. `tui.plan_format
+    .parse_supply_target` is the one reader that takes it apart."""
+
+    role_change: RoleChange | None = None
+    """The role transition that happened on THIS cycle, or None on the
+    overwhelming majority of cycles where the role did not change (and on every
+    single-character run). See `RoleChange` for why the transition is detected
+    at the source instead of being diffed by the log widget."""

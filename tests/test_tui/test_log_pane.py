@@ -2,7 +2,12 @@
 
 from unittest.mock import patch
 
-from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode, RootScoreView
+from artifactsmmo_cli.ai.cycle_snapshot import (
+    CycleSnapshot,
+    PlanTreeNode,
+    RoleChange,
+    RootScoreView,
+)
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.tui.widgets.log_pane import LogPane, build_log_lines
 
@@ -229,3 +234,136 @@ class TestFightSummary:
             _snap(action="Fight(mushmush)", outcome="error:fight_lost", fight=lost))
 
         assert any("loss" in line for line in lines)
+
+
+_SUPPLY = repr(("ash_wood", 62, 50))
+
+
+class TestSpecializationIsQuietWhenNothingHappens:
+    """The property most likely to regress: a character with no role and no
+    sibling demand — every cycle of every single-character run — must render
+    EXACTLY as it did before specialization existed."""
+
+    def test_a_plain_cycle_is_still_one_line(self):
+        assert len(build_log_lines(_snap())) == 1
+
+    def test_a_ranked_cycle_is_still_two_lines(self):
+        assert len(build_log_lines(_ranked_snap())) == 2
+
+    def test_a_role_with_nothing_to_supply_adds_no_line(self):
+        """Holding a role is not, by itself, an event: the log stays quiet
+        until the character is actually producing for a sibling."""
+        assert build_log_lines(_snap(role="logger")) == build_log_lines(_snap())
+
+    def test_an_unparseable_supply_target_adds_no_line(self):
+        """Degrade to silence, never to a partial or invented figure."""
+        assert build_log_lines(_snap(role="logger", supply_target="ash_wood")) == \
+            build_log_lines(_snap())
+
+
+class TestSupplyContinuationLine:
+    def test_a_supply_cycle_names_the_role_and_the_progress(self):
+        lines = build_log_lines(_snap(role="logger", supply_target=_SUPPLY))
+        assert len(lines) == 2
+        assert "role: logger" in lines[1]
+        assert "supplying ash_wood 12/62" in lines[1]
+
+    def test_the_continuation_line_is_dim(self):
+        """Same dim-continuation treatment as the `why` line above it."""
+        line = build_log_lines(_snap(role="logger", supply_target=_SUPPLY))[1]
+        assert line.startswith("[dim]   role:") and line.endswith("[/dim]")
+
+    def test_it_sits_below_the_why_line(self):
+        lines = build_log_lines(_ranked_snap(role="logger", supply_target=_SUPPLY))
+        assert "why:" in lines[1]
+        assert "role: logger" in lines[2]
+
+    def test_a_supply_target_with_no_role_says_so_rather_than_None(self):
+        """Unreachable in production (`_pick_supply_target` returns None
+        without a role) — pinned so the rendering can never leak a bare
+        `None` into the pane if that ever stops holding."""
+        line = build_log_lines(_snap(supply_target=_SUPPLY))[1]
+        assert "role: none" in line and "None" not in line
+
+
+class TestRoleTransitionEvent:
+    def test_a_claim_renders_an_event_line(self):
+        change = RoleChange(previous=None, current="logger", reason="demand 50")
+        lines = build_log_lines(_snap(role="logger", role_change=change))
+        assert len(lines) == 2
+        assert "* role: none -> logger" in lines[0]
+        assert "(demand 50)" in lines[0]
+
+    def test_a_release_renders_the_role_it_gave_up(self):
+        change = RoleChange(previous="miner", current=None,
+                            reason="no demand for 100 cycles")
+        line = build_log_lines(_snap(role_change=change))[0]
+        assert "* role: miner -> none" in line
+        assert "(no demand for 100 cycles)" in line
+
+    def test_the_event_sits_above_the_decision_line(self):
+        """A peer event, not a note on the action — and the action it happened
+        alongside is still shown."""
+        change = RoleChange(previous=None, current="logger", reason="demand 50")
+        lines = build_log_lines(_snap(role_change=change))
+        assert "* role:" in lines[0]
+        assert "harvest(ash_tree)" in lines[1]
+
+    def test_the_event_carries_the_same_timestamp_gutter(self):
+        change = RoleChange(previous=None, current="logger", reason="demand 50")
+        lines = build_log_lines(_snap(cycle_index=45, role_change=change))
+        assert lines[0].startswith("[dim]14:30:45[/dim] c 45")
+        assert lines[1].startswith("[dim]14:30:45[/dim] c 45")
+
+    def test_an_empty_reason_omits_the_clause_rather_than_inventing_one(self):
+        change = RoleChange(previous=None, current="logger")
+        line = build_log_lines(_snap(role_change=change))[0]
+        assert "* role: none -> logger" in line
+        assert "(" not in line
+
+    def test_no_transition_adds_no_line(self):
+        assert build_log_lines(_snap(role="logger", role_change=None)) == \
+            build_log_lines(_snap())
+
+
+class TestReplaceHistoryEquivalence:
+    """A focus switch re-renders a whole list of snapshots. Because the role
+    transition is carried ON the snapshot rather than diffed by this widget,
+    the replay is the same function of the same data as the live append — the
+    property a stateful widget could not hold, since the store's per-character
+    buffer is a bounded deque and a replay may start mid-run."""
+
+    _HISTORY = (
+        _snap(cycle_index=44),
+        _snap(cycle_index=45, role="logger",
+              role_change=RoleChange(previous=None, current="logger",
+                                     reason="demand 50")),
+        _snap(cycle_index=46, role="logger", supply_target=_SUPPLY),
+    )
+
+    def test_replay_matches_line_by_line_appends(self):
+        live = LogPane()
+        live_lines = []
+        with patch.object(live, "write", side_effect=live_lines.append):
+            for snap in self._HISTORY:
+                live.update_snapshot(snap)
+
+        switched = LogPane()
+        replayed = []
+        with patch.object(switched, "write", side_effect=replayed.append):
+            switched.replace_history(self._HISTORY)
+
+        assert replayed == live_lines
+
+    def test_replay_from_mid_run_does_not_invent_a_transition(self):
+        """The buffer is bounded, so a switch can replay a suffix. Starting at
+        cycle 46 must render cycle 46 exactly as it rendered live, even though
+        the claim that put the character on `logger` has been evicted."""
+        suffix = self._HISTORY[2:]
+        pane = LogPane()
+        captured = []
+        with patch.object(pane, "write", side_effect=captured.append):
+            pane.replace_history(suffix)
+
+        assert captured == build_log_lines(suffix[0])
+        assert not any("* role:" in line for line in captured)

@@ -209,6 +209,76 @@ def test_unknown_metagoal_falls_back_to_short_root_label():
     assert tree[0].children == ()          # prerequisites(unknown) -> []
 
 
+# ---------------------------------------------------------------------------
+# Cross-character specialization: the held role and the sibling demand served
+# ---------------------------------------------------------------------------
+
+def _supplying_tree(**kwargs):
+    gd = _gd()
+    state = make_state(skills={"jewelrycrafting": 1}, equipment={"amulet_slot": None})
+    chosen = ObtainItem("life_amulet")
+    return build_plan_tree(_decision(chosen, chosen, [_rs(chosen, 2)]), state, gd, None,
+                           **kwargs)
+
+
+def test_chosen_root_is_annotated_with_the_held_role():
+    root = _supplying_tree(role="logger")[0]
+    assert "[logger]" in root.detail
+
+
+def test_the_role_annotation_joins_the_score_rather_than_replacing_it():
+    """A supplying character's root has to answer both questions at once: why
+    it won the ranking, and which role it is holding while it works."""
+    root = _supplying_tree(role="logger")[0]
+    assert "gear" in root.detail and "2.00" in root.detail and "[logger]" in root.detail
+
+
+def test_no_role_leaves_the_detail_exactly_as_it_was():
+    """The single-character shape: byte-identical to the pre-specialization
+    tree, not merely 'close'."""
+    assert _supplying_tree()[0].detail == "gear · 2.00"
+
+
+def test_the_role_annotates_a_root_that_is_absent_from_the_ranking():
+    """The score and the role are independent: a root with no RootScore still
+    shows the role rather than dropping both."""
+    gd = _gd()
+    state = make_state(skills={"jewelrycrafting": 1})
+    chosen = ObtainItem("life_amulet")
+    other = ObtainItem("copper_boots")
+    tree = build_plan_tree(_decision(chosen, chosen, [_rs(other, 2)]), state, gd, None,
+                           role="logger")
+    assert tree[0].detail == "[logger]"
+
+
+def test_the_supply_target_becomes_a_child_of_the_chosen_root():
+    root = _supplying_tree(supply_target=("ash_wood", 62, 50))[0]
+    supply = next(c for c in root.children if c.label == "supplying ash_wood")
+    assert supply.detail == "banked 12 / 62   demand 50"
+    assert supply.children == ()
+
+
+def test_the_supply_child_is_a_step_not_a_prerequisite():
+    """`kind='step'` is what keeps it from reading as a material the objective
+    above it is waiting on — it is separate work, not a prerequisite."""
+    root = _supplying_tree(supply_target=("ash_wood", 62, 50))[0]
+    supply = next(c for c in root.children if c.label == "supplying ash_wood")
+    assert supply.kind == "step" and supply.status == "current"
+
+
+def test_no_supply_target_adds_no_child():
+    plain = _supplying_tree()[0]
+    assert [c for c in plain.children if c.label.startswith("supplying")] == []
+    # ...and the prerequisite children are untouched.
+    assert {c.label for c in plain.children} == {"golden_ring", "topaz ×2"}
+
+
+def test_the_supply_child_sits_beside_the_prerequisites_not_instead_of_them():
+    root = _supplying_tree(supply_target=("ash_wood", 62, 50))[0]
+    assert {c.label for c in root.children} == {
+        "golden_ring", "topaz ×2", "supplying ash_wood"}
+
+
 def test_snapshot_carries_plan_tree():
     node = PlanTreeNode(key="k", label="life_amulet", kind="obtain", status="unmet")
     snap = CycleSnapshot(cycle_index=1, timestamp="t", character="hero",

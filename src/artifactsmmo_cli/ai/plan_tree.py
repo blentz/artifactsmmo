@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
-from artifactsmmo_cli.tui.plan_format import short_root
+from artifactsmmo_cli.tui.plan_format import short_root, supply_detail
 
 # Matches UpgradeEquipmentGoal.max_depth — a chain longer than this is treated as
 # a leaf rather than recursed (defence against a pathological recipe/gate graph).
@@ -57,10 +57,33 @@ def _expand(node: MetaGoal, decision: StrategyDecision, state: WorldState,
                         children=tuple(children))
 
 
+def _supply_node(supply_target: tuple[str, int, int] | None,
+                 ) -> tuple[PlanTreeNode, ...]:
+    """The chosen root's supply child — the sibling demand this character is
+    producing for — or an empty tuple when it is producing for nobody.
+
+    A CHILD of the chosen root rather than a second root, because it is work
+    this character is doing right now and the plan pane's top level is the
+    ranked-root ladder; and `kind="step"` rather than `obtain`, because it is
+    NOT a prerequisite of the objective above it — it is the other thing the
+    arbiter is spending cycles on. The `step` kind is what already carries that
+    meaning for the synthetic serve node, and it takes the same dim-cyan style
+    and `•` glyph, so it cannot be misread as a material the root is waiting
+    on."""
+    if supply_target is None:
+        return ()
+    item_code, quantity, demand = supply_target
+    return (PlanTreeNode(key=f"supply:{item_code}", label=f"supplying {item_code}",
+                         kind="step", status="current",
+                         detail=supply_detail(quantity, demand)),)
+
+
 def build_plan_tree(decision: StrategyDecision, state: WorldState,
                     game_data: GameData, serve_step: str | None,
                     ctx: SelectionContext = NO_PROFILE_CONTEXT,
                     grind_children: tuple[PlanTreeNode, ...] = (),
+                    role: str | None = None,
+                    supply_target: tuple[str, int, int] | None = None,
                     ) -> tuple[PlanTreeNode, ...]:
     """Chosen root expands its prerequisite subtree; other ranked roots become
     leaf stubs. The current step gains a synthetic serve child. Bounded by a
@@ -74,7 +97,18 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
     `grind_children` are the runtime skill-grind legs the player captured this
     cycle (empty unless the executed action was a LevelSkill); they graft onto
     the current step's synthetic serve child so the tree shows the whole action
-    chain below a LevelSkill step instead of stopping at it."""
+    chain below a LevelSkill step instead of stopping at it.
+
+    `role` and `supply_target` are this character's cross-character
+    specialization state (`GamePlayer._role` / `._supply_target`, the same two
+    fields `CycleSnapshot.role` / `.supply_target` carry). The role annotates
+    the chosen root; the supply target becomes a child of it. Both default to
+    the single-character shape — no role, nothing to supply — under which the
+    tree is byte-identical to the one built before they existed. They are
+    passed explicitly rather than read off `ctx.supply_target` so the plan pane
+    and the log pane are rendering the same cycle's fields: `ctx` is the
+    SELECTION context, and a cycle whose selection was preempted still carries
+    the previous one."""
     if decision.chosen_root is None:
         return ()
     chosen_node = _expand(decision.chosen_root, decision, state, game_data,
@@ -84,9 +118,19 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
     # so without this the winner is the only node with no value, and a user cannot
     # see WHY it beat the rest (or how dominant it is).
     chosen_score = next((r for r in decision.ranking if r.root_repr == chosen_repr), None)
+    # Details accumulate rather than compete: a supplying character's root has to
+    # show BOTH why it won the ranking and which role it is holding while it
+    # works. An empty list joins to "", which is the same detail a root absent
+    # from the ranking has always had, so the unannotated case is unchanged.
+    details: list[str] = []
     if chosen_score is not None:
-        chosen_node = chosen_node.model_copy(
-            update={"detail": f"{chosen_score.category} · {float(chosen_score.score):.2f}"})
+        details.append(f"{chosen_score.category} · {float(chosen_score.score):.2f}")
+    if role is not None:
+        details.append(f"[{role}]")
+    chosen_node = chosen_node.model_copy(update={
+        "detail": "   ".join(details),
+        "children": chosen_node.children + _supply_node(supply_target),
+    })
     roots: list[PlanTreeNode] = [chosen_node]
     for i, r in enumerate(decision.ranking):
         if r.root_repr == chosen_repr:

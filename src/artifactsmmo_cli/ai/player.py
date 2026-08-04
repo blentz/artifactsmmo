@@ -56,6 +56,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
     GoalAttempt,
     GoalRankEntry,
     PlanTreeNode,
+    RoleChange,
     RootScoreView,
 )
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
@@ -391,6 +392,13 @@ class GamePlayer:
         # None whenever no coordination store is attached, no role is held, or
         # nothing the held role produces is in sibling demand.
         self._supply_target: tuple[str, int, int] | None = None
+        # The role transition that happened on THIS cycle, or None — the same
+        # per-cycle lifecycle as `_supply_target` (recomputed at the end of
+        # every `_update_coordination`, cleared when there is no store). Read
+        # by `_notify_observer` onto `CycleSnapshot.role_change`; see that
+        # field's docstring for why the log pane is told about the transition
+        # instead of diffing consecutive snapshots itself.
+        self._role_change: RoleChange | None = None
 
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
@@ -2353,6 +2361,8 @@ class GamePlayer:
                     if selected_goal_name and action_name else (selected_goal_name or action_name),
                     self._last_ctx,
                     grind_children,
+                    self._role,
+                    self._supply_target,
                 )
                 if self._last_decision is not None and self.game_data is not None else ()
             ),
@@ -2368,6 +2378,7 @@ class GamePlayer:
             interleave_seats=dict(self._interleave_seats),
             role=self._role,
             supply_target=repr(self._supply_target) if self._supply_target is not None else None,
+            role_change=self._role_change,
         )
         self._cycle_observer(snap)
 
@@ -2723,7 +2734,9 @@ class GamePlayer:
         nothing from the per-IP rate budget that actually binds this bot."""
         if self._coordination is None:
             self._supply_target = None
+            self._role_change = None
             return
+        role_before = self._role
         now = datetime.now(tz=timezone.utc)
         if self._role is not None:
             self._coordination.renew(self._role, now)
@@ -2806,6 +2819,19 @@ class GamePlayer:
                 self._role_held_cycles = 0
         elif decision.keep is not None:
             self._role_held_cycles += 1
+
+        # ONE comparison over the whole branch above, rather than a
+        # `_role_change = ...` at each of the four sites that can move the
+        # role. Every one of them either leaves `self._role` alone or sets it,
+        # so the assignment IS the transition, and re-stating "this branch
+        # changes the role" per branch is the copy that drifts. It also gets
+        # the two cases a per-branch version reads wrong for free: a lease-lapse
+        # re-claim of the SAME role is not a transition (and must not log as
+        # one), and a claim that fails to land IS one (the character really did
+        # stop holding the role).
+        self._role_change = (
+            RoleChange(previous=role_before, current=self._role, reason=decision.reason)
+            if self._role != role_before else None)
 
         self._supply_target = self._pick_supply_target(item_demand, skill_of_item, state,
                                                        level_of_item)
