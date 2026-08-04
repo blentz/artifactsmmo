@@ -20,6 +20,7 @@ import dataclasses
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -217,13 +218,45 @@ class SupplyBankGoal(Goal):
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:
-        """Scope the search to the target's craft/gather closure + the deposit.
+        """Scope the search to the target's craft/gather closure + the deposit,
+        MINUS any withdraw of the target itself.
 
         Without this the goal planned against the whole ~1800-action pool with
         no heuristic — an unscoped Dijkstra, and (being `memo_exempt`) one that
         no doomed-memo could ever suppress. See `_production_goal` for why the
         scoping is delegated rather than copied, and `_production_state` for
         why the bank is asked the question minus the target's own copies.
+
+        THE TARGET'S OWN WITHDRAW IS REFUSED (live livelock, trace
+        2026-08-04 01:11 R2D2, 38 of 83 cycles spent on no-op bank traffic).
+        This goal's success condition is "the item is IN THE BANK", so sourcing
+        that same item FROM the bank is definitionally a no-op: `Withdraw` moves
+        `q` from bank to bag and the closing `DepositAll` moves it straight
+        back, leaving `state.bank_items[item]` exactly where it started.
+
+        `_production_state` does NOT prevent it, and neither does any state
+        projection, because the incentive is a COST, not a precondition:
+
+        1. The delegate's `withdrawable` set is built from `craftable_mats |
+           set(self._needed)` — recipe structure, not bank contents — and
+           `_production_goal` puts the target in `needed`. So stripping the
+           target's banked copies from the state hands the delegate a bank
+           without them, and the target's `WithdrawItemAction` is admitted
+           anyway.
+        2. `GOAPPlanner.plan` uses the projection only for `relevant_actions`;
+           A* then searches from the REAL state, where
+           `GatherAction.cost` adds `_BANKED_REGATHER_PENALTY` (100.0) to EVERY
+           gather while any of the drop item is banked. Draining the bank first
+           (2.0 per withdraw) buys that 100.0 back on every subsequent gather,
+           so "withdraw the whole banked stock, gather, deposit it all again"
+           is genuinely the LEAST-COST satisfying plan — A* is answering the
+           question it was asked. The penalty is right for every consumer goal;
+           it is exactly backwards for the one goal that is trying to PUT the
+           item there.
+
+        Only the target is excluded. Every other banked code stays withdrawable
+        — supplying a crafted bar from banked ore is real production, not a
+        null cycle, and that withdraw is the delegate's whole point.
 
         NO `heuristic` override accompanies this. The default 0.0 is Dijkstra —
         trivially admissible AND consistent — and `Goal.heuristic`'s contract
@@ -236,5 +269,8 @@ class SupplyBankGoal(Goal):
         and where an over-estimate would hide. Not confident it is consistent,
         so it is not added; the action scoping above is what bounds the search.
         """
-        return self._production_goal(state).relevant_actions(
+        admitted = self._production_goal(state).relevant_actions(
             actions, self._production_state(state), game_data)
+        return [action for action in admitted
+                if not (isinstance(action, WithdrawItemAction)
+                        and action.code == self._item_code)]

@@ -16,9 +16,12 @@ planner proves nothing. These drive the REAL `GOAPPlanner` over the REAL
 `build_actions` pool.
 """
 
+from itertools import pairwise
+
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
@@ -28,28 +31,42 @@ from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 
 _ORE = "supply_ore"
 _BAR = "supply_bar"
+_HELM = "supply_helm"
 
 
 def _gd() -> GameData:
-    """One gatherable ore, one bar crafted from it, a bank and a workshop.
+    """One gatherable ore, one bar crafted from it, a helm crafted from the bar,
+    a bank and a workshop.
 
     Deliberately minimal: nothing here protects the ore from being banked
     (no task, no crafting target, no consumable), so `select_bank_deposits`
     reports it as surplus and `DepositAllAction` is the plan's final leg —
     the same shape a supply producer is in live, where `_own_unmet_demand`
     has already netted out everything the producer needs for itself.
+
+    The helm is EQUIPPABLE and that is load-bearing, not decoration:
+    `build_actions` emits a `WithdrawItemAction` for a material only when the
+    material sits in some EQUIPPABLE's recipe closure (factory.py — the
+    per-craft and residual withdraw passes both key off
+    `materials_to_withdraw`, seeded from items with an equip slot). Without a
+    slotted item downstream, the ore has no withdraw in the pool at all and
+    every "the plan must not withdraw the target" assertion below would pass
+    vacuously. Live, the supply demand EXISTS because a sibling is building
+    gear, so the equippable is always there.
     """
     gd = GameData()
     gd._item_stats = {
         _ORE: ItemStats(code=_ORE, level=1, type_="resource", subtype="mining"),
         _BAR: ItemStats(code=_BAR, level=1, type_="resource", subtype="craft",
                         crafting_skill="mining", crafting_level=1),
+        _HELM: ItemStats(code=_HELM, level=1, type_="helmet",
+                         crafting_skill="gearcrafting", crafting_level=1),
     }
-    gd._crafting_recipes = {_BAR: {_ORE: 4}}
+    gd._crafting_recipes = {_BAR: {_ORE: 4}, _HELM: {_BAR: 2}}
     gd._resource_drops = {"supply_rocks": _ORE}
     gd._resource_skill = {"supply_rocks": ("mining", 1)}
     gd._resource_locations = {"supply_rocks": [(3, 3)]}
-    gd._workshop_locations = {"mining": (2, 2)}
+    gd._workshop_locations = {"mining": (2, 2), "gearcrafting": (2, 2)}
     gd._bank_location = (0, 0)
     gd._taskmaster_location = (1, 1)
     return gd
@@ -70,11 +87,18 @@ def _deep_chain_gd() -> GameData:
 
 
 def _state(gd: GameData, *, bank: dict[str, int] | None = None,
-           inventory: dict[str, int] | None = None):
+           inventory: dict[str, int] | None = None, bag: int = 60,
+           name: str = "producer"):
+    """`bag` is the bag capacity. The default 60 is the historical fixture size;
+    the livelock tests below pass 120 — the capacity R2D2 actually had in the
+    live trace, and the one that makes "withdraw the WHOLE banked stock, gather,
+    re-deposit it all" fit in the bag at all. At 60 the drain plan is refused by
+    `has_room` rather than by any rule about supplying, and the regression test
+    would pass for the wrong reason."""
     return scenario_state(
-        ScenarioCharacter(name="producer", level=10, skills={"mining": 5},
+        ScenarioCharacter(name=name, level=10, skills={"mining": 5},
                           inventory=dict(inventory or {}),
-                          inventory_max=60, inventory_slots_max=60,
+                          inventory_max=bag, inventory_slots_max=bag,
                           bank=dict(bank) if bank is not None else None),
         gd)
 
@@ -299,6 +323,131 @@ def test_an_unvisited_bank_still_plans_the_full_quantity() -> None:
 
     assert plan, "an unvisited bank must not make the goal unplannable"
     assert sum(isinstance(a, GatherAction) for a in plan) == 6
+
+
+def _target_withdraws(actions: list, code: str) -> list:
+    return [a for a in actions
+            if isinstance(a, WithdrawItemAction) and a.code == code]
+
+
+def test_the_plan_never_withdraws_the_item_it_is_supplying() -> None:
+    """THE LIVELOCK (live trace 2026-08-04 01:11, R2D2 — 38 of 83 cycles were
+    no-op bank traffic against the per-IP rate budget this feature exists to
+    conserve).
+
+    A goal satisfied by "the item is IN THE BANK" must never source that item
+    FROM the bank: `Withdraw` then `DepositAll` returns the banked count to
+    exactly where it started. A* nonetheless preferred it, because
+    `GatherAction.cost` charges `_BANKED_REGATHER_PENALTY` (100.0) per gather
+    while ANY of the drop is banked — so emptying the bank at 2.0 per withdraw
+    bought 100.0 back on each of the 26 remaining gathers, making
+    "drain, gather, re-deposit" the genuinely LEAST-COST satisfying plan.
+
+    The fixture is the live shape: a stocked bank, a bag already holding some
+    of the target, and a real deficit on top."""
+    gd = _gd()
+    state = _state(gd, bank={_ORE: 59}, inventory={_ORE: 20}, bag=120)
+    goal = SupplyBankGoal(item_code=_ORE, quantity=105, demand=46)
+    actions = _actions(gd, state)
+    assert _target_withdraws(actions, _ORE), (
+        "the pool must OFFER a withdraw of the target, or this proves nothing")
+
+    planner = GOAPPlanner()
+    plan = planner.plan(state, goal, actions, gd)
+
+    assert not planner.last_stats.timed_out
+    assert plan, "the goal must still be plannable without its own withdraw"
+    assert _target_withdraws(plan, _ORE) == [], (
+        "the producer withdrew the item it is supposed to be supplying")
+    assert sum(isinstance(a, GatherAction) for a in plan) == 26, (
+        "exactly the deficit is minted: 105 banked target - 59 banked - 20 held")
+    assert isinstance(plan[-1], DepositAllAction)
+
+
+def test_the_plan_reaches_the_target_and_never_lowers_the_banked_count() -> None:
+    """Behavioural, not structural: simulate the whole plan and watch the bank.
+
+    A withdraw of the target shows up here as a DIP in `bank_items[_ORE]` —
+    the exact signature of the live churn, where the recomputed
+    `banked + demand` target marched 118, 117, 116, 109, ... as the producer
+    ate its own stock. Monotone non-decreasing, ending at the target, is the
+    property the goal actually promises."""
+    gd = _gd()
+    state = _state(gd, bank={_ORE: 59}, inventory={_ORE: 20}, bag=120)
+    goal = SupplyBankGoal(item_code=_ORE, quantity=105, demand=46)
+
+    plan = GOAPPlanner().plan(state, goal, _actions(gd, state), gd)
+    assert plan
+
+    banked = [(state.bank_items or {}).get(_ORE, 0)]
+    for action in plan:
+        assert action.is_applicable(state, gd), f"{action!r} must be executable"
+        state = action.apply(state, gd)
+        banked.append((state.bank_items or {}).get(_ORE, 0))
+
+    assert all(b <= nxt for b, nxt in pairwise(banked)), (
+        f"the banked count must never fall while SUPPLYING the bank: {banked}")
+    assert goal.is_satisfied(state), "the plan must actually reach the target"
+
+
+def test_relevant_actions_refuses_the_target_withdraw_but_keeps_the_inputs() -> None:
+    """The exclusion is surgical. Supplying the BAR must still withdraw banked
+    ORE — a supply job legitimately consumes banked INPUTS, and that withdraw is
+    the delegate's whole point. Only the target's own withdraw is a null cycle."""
+    gd = _gd()
+    state = _state(gd, bank={_ORE: 40, _BAR: 3})
+    goal = SupplyBankGoal(item_code=_BAR, quantity=7, demand=4)
+    actions = _actions(gd, state)
+    assert _target_withdraws(actions, _BAR), "the pool must offer the bar withdraw"
+
+    admitted = goal.relevant_actions(actions, state, gd)
+
+    assert _target_withdraws(admitted, _BAR) == [], "the target's withdraw is a no-op"
+    assert _target_withdraws(admitted, _ORE), (
+        "a banked INPUT must stay withdrawable, or crafted supply targets regress")
+
+
+def test_a_banked_input_is_withdrawn_for_a_crafted_supply_target() -> None:
+    """The same claim at the planner, not the action set: with the ore banked
+    and the bag empty, the least-cost way to bank 4 bars is to withdraw the ore
+    and craft — the plan must actually take it."""
+    gd = _gd()
+    state = _state(gd, bank={_ORE: 40})
+    goal = SupplyBankGoal(item_code=_BAR, quantity=4, demand=4)
+
+    planner = GOAPPlanner()
+    plan = planner.plan(state, goal, _actions(gd, state), gd)
+
+    assert not planner.last_stats.timed_out
+    assert plan, "a crafted target fed from banked inputs must be plannable"
+    assert _target_withdraws(plan, _ORE), (
+        "the banked ore must be withdrawn, not re-gathered")
+    assert isinstance(plan[-1], DepositAllAction)
+
+
+def test_two_producers_of_the_same_item_do_not_churn_the_bank() -> None:
+    """The observed two-character scenario: R2D2 and a sibling both hold
+    `miner` and both serve iron_ore, so each one's withdraw lowered the other's
+    recomputed `banked + demand` target and the pair traded the same stock back
+    and forth without ever producing anything.
+
+    Both producers plan against the SAME bank; neither plan may take a unit of
+    the target out of it."""
+    gd = _gd()
+    bank = {_ORE: 59}
+    first = _state(gd, bank=bank, inventory={_ORE: 20}, bag=120, name="r2d2")
+    second = _state(gd, bank=bank, inventory={}, bag=120, name="sibling")
+    goal = SupplyBankGoal(item_code=_ORE, quantity=105, demand=46)
+
+    plans = [GOAPPlanner().plan(s, goal, _actions(gd, s), gd)
+             for s in (first, second)]
+
+    for plan in plans:
+        assert plan, "both producers must still have real work to do"
+        assert _target_withdraws(plan, _ORE) == [], (
+            "two producers of one item must not trade its banked stock")
+        assert any(isinstance(a, GatherAction) for a in plan), (
+            "a producer's plan must MINT units, not shuffle them")
 
 
 def test_no_heuristic_override() -> None:
