@@ -1215,9 +1215,9 @@ class GameData:
             self._requirement_graph_memo = RequirementGraphMemo(self)
         return self._requirement_graph_memo
 
-    def producing_skill(self, item_code: str) -> str | None:
-        """The skill that PRODUCES `item_code`: its craft skill if craftable,
-        else the gathering skill of a resource that drops it, else None.
+    def producing_requirement(self, item_code: str) -> tuple[str, int] | None:
+        """(skill that PRODUCES `item_code`, the level that skill must reach),
+        or None when the API exposes no producing skill at all.
 
         Composes the two item-keyed maps the requirement-model unification
         epic already built onto `RequirementGraph` (`craft_skill` /
@@ -1225,13 +1225,39 @@ class GameData:
         `resource_drops` a second time. `gather_skill` was populated but left
         deliberately UNCONSUMED by that epic pending a first reader (see
         `RequirementGraph`'s docstring) — cross-character role coordination
-        (emergent-specialization spec, Task 11) is that reader."""
+        (emergent-specialization spec, Task 11) is that reader.
+
+        SKILL AND LEVEL COME OUT TOGETHER, from ONE lookup, on purpose. The two
+        maps disagree for an item that is both craftable and gatherable, and
+        craft wins here (a bar is made, not dug). A second method resolving the
+        level on its own would have to re-make that choice, and the pair only
+        means anything if both halves describe the SAME route: routing
+        `iron_bar` to `mining` while reading the level off the gather gate
+        would gate the fleet on a requirement no producer actually faces.
+
+        Both levels are real API readings, not invented floors:
+          * CRAFT — `ItemStats.crafting_level`, i.e. `item.craft.level` off
+            `/v3/items`, recorded by `build_requirement_graph`.
+          * GATHER — `resource_skill_level(resource)`, i.e. the `level` of the
+            resource node off `/v3/resources`, resolved from resource-keyed to
+            ITEM-keyed by `_gather_skill_by_item`, which takes the EASIEST
+            (lowest-level) resource dropping the item, since gathering it
+            anywhere satisfies the demand."""
         graph = self.requirement_graph.graph()
         craft = graph.craft_skill.get(item_code)
         if craft is not None:
-            return craft[0]
-        gather = graph.gather_skill.get(item_code)
-        return gather[0] if gather is not None else None
+            return craft
+        return graph.gather_skill.get(item_code)
+
+    def producing_skill(self, item_code: str) -> str | None:
+        """The skill that PRODUCES `item_code`, dropping the level requirement.
+
+        The skill-only projection of `producing_requirement`, never a second
+        derivation of it: callers that only rank by skill (the progression
+        tree's role alignment) stay unchanged, and the craft-before-gather
+        precedence lives in exactly one place."""
+        requirement = self.producing_requirement(item_code)
+        return requirement[0] if requirement is not None else None
 
     @property
     def resource_drops(self) -> Mapping[str, str]:

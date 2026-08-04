@@ -3,7 +3,7 @@
 import json
 import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
@@ -107,7 +107,7 @@ from artifactsmmo_cli.ai.role_catalog import (
     role_skill_level,
     role_skills,
 )
-from artifactsmmo_cli.ai.role_selection import decide_role, demand_by_role
+from artifactsmmo_cli.ai.role_selection import decide_role, demand_by_role, serves_item
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.should_replan import should_replan
 from artifactsmmo_cli.ai.strategy_driver import (
@@ -2545,12 +2545,20 @@ class GamePlayer:
 
     def _pick_supply_target(
         self, item_demand: dict[str, int], skill_of_item: dict[str, str | None],
-        state: "WorldState",
+        state: "WorldState", level_of_item: Mapping[str, int],
     ) -> "tuple[str, int, int] | None":
         """The highest-demand item this character's HELD role can produce, as
         (item_code, target banked quantity, unmet demand) — or None when no
         role is held, nothing the role's owned skills produce is in demand,
         or the bank has never been visited this session (see below).
+
+        CAN PRODUCE, at this character's current levels — `serves_item` is the
+        same gate `demand_by_role` applies when it decides whether the demand
+        counts toward the role at all, read here so the two cannot disagree.
+        Without it a `miner` recruited by copper demand it can serve would
+        still TARGET the higher-demand mithril it cannot, and fail to plan
+        every cycle until release-on-unservable gave the role away — a stall
+        the level requirement predicted before the first search.
 
         Target banked quantity is current bank holding + demand: enough that
         producing exactly the still-unmet amount satisfies `SupplyBankGoal`,
@@ -2577,7 +2585,16 @@ class GamePlayer:
         best_code: str | None = None
         best_demand = 0
         for code, qty in item_demand.items():
-            if skill_of_item.get(code) not in owned_skills:
+            skill = skill_of_item.get(code)
+            # Three separate tests, in `demand_by_role`'s own order and idiom:
+            # no producing skill at all, then not this role's, then not within
+            # this character's reach. Keeping them apart is what lets each be
+            # mutated and killed on its own.
+            if skill is None:
+                continue
+            if skill not in owned_skills:
+                continue
+            if not serves_item(code, skill, level_of_item, state.skills):
                 continue
             if qty > best_demand:
                 best_code, best_demand = code, qty
@@ -2600,9 +2617,11 @@ class GamePlayer:
 
           * `_pick_supply_target() is None` while role demand is positive. It
             cannot happen: `demand_by_role` and `_pick_supply_target` route on
-            the SAME producing-skill map, so positive role demand always names
-            an item the role owns. The only None left is "bank never visited",
-            which is a first-cycles transient, not an inability.
+            the SAME producing-skill map AND apply the SAME level gate
+            (`serves_item`), so positive role demand always names an item the
+            role owns and this character can produce. The only None left is
+            "bank never visited", which is a first-cycles transient, not an
+            inability.
           * `SupplyBankGoal.is_plannable() == False`. Measured False for none of
             it: at alchemy level 1 it returns True for every alchemy craftable
             in the bundle (small_health_potion through health_potion) and for
@@ -2667,8 +2686,21 @@ class GamePlayer:
         self._coordination.publish_demand(self._own_unmet_demand(state, game_data), now)
 
         item_demand = self._coordination.sibling_demand(now)
-        skill_of_item = {code: game_data.producing_skill(code) for code in item_demand}
-        by_role = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG)
+        # ONE lookup per item, split into the two shapes the pure module takes.
+        # Splitting here rather than asking `GameData` twice keeps the skill and
+        # the level describing the SAME production route (see
+        # `producing_requirement`); an item with no producing skill at all
+        # contributes to neither map, and `demand_by_role` drops it.
+        producing = {code: game_data.producing_requirement(code) for code in item_demand}
+        skill_of_item = {code: req[0] if req is not None else None
+                         for code, req in producing.items()}
+        level_of_item = {code: req[1] for code, req in producing.items() if req is not None}
+        # PER-CHARACTER demand: `state.skills` gates out every item this
+        # character's levels cannot produce, so it is never recruited to a role
+        # by demand it provably cannot serve (live 2026-08-03: `Lor` at mining 8
+        # held `miner` against iron demand that gates at mining 10).
+        by_role = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG,
+                                 level_of_item, state.skills)
         # Extend or break the zero-demand RUN before deciding, so the count
         # passed in includes this cycle's observation. `decide_role` releases on
         # idle only once the run reaches ROLE_IDLE_DWELL_CYCLES: a sibling that
@@ -2731,7 +2763,8 @@ class GamePlayer:
         elif decision.keep is not None:
             self._role_held_cycles += 1
 
-        self._supply_target = self._pick_supply_target(item_demand, skill_of_item, state)
+        self._supply_target = self._pick_supply_target(item_demand, skill_of_item, state,
+                                                       level_of_item)
 
     def _selection_context(self, combat_monster: str | None = None) -> SelectionContext:
         assert self.state is not None

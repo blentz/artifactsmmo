@@ -52,6 +52,16 @@ Three hysteresis parameters, each defending a different failure:
     would recruit one. Sitting on a role you cannot serve went from blocking
     to actively misinforming.
 
+    It stays, but it is no longer the FIRST line of defence. Release-on-
+    unservable is REACTIVE — 25 cycles of the planner finding nothing — and
+    most of what it caught was knowable before the first one: live 2026-08-03,
+    `Lor` (mining 8) held `miner` against iron demand every unit of which gates
+    at mining 10. `demand_by_role` now drops demand this character provably
+    cannot serve, so that case never recruits it at all. What is left for this
+    rule is the genuinely surprising failure — a plan that dies for a reason no
+    level requirement predicts — which is the only thing 25 cycles of evidence
+    were ever the right way to learn.
+
 Release-on-idle is NARROWED to the case that motivates it, and the narrowing
 is what stops the rule from being pure churn. Its original justification —
 "a finished role must be freed so a sibling can take it" — died with
@@ -98,6 +108,15 @@ NO_SKILL_LEVELS: Mapping[str, int] = MappingProxyType({})
 Read-only so the shared default can never be mutated by a caller, and empty so
 `_skill_affinity` gives every role the SAME affinity — which makes the claim
 fall back to demand alone, exactly the pre-skill-awareness ranking."""
+
+NO_ITEM_LEVELS: Mapping[str, int] = MappingProxyType({})
+"""The "caller knows no item level requirements" default for `level_of_item`.
+
+Separate constant from `NO_SKILL_LEVELS` despite the identical value: they are
+read by `serves_item` as two INDEPENDENT unknowns (what the item demands, what
+the character has), and either one being absent is enough to leave the demand
+ungated. Collapsing them into one name would tie two defaults that must be
+allowed to move apart."""
 
 ROLE_MIN_HOLD_CYCLES = 100
 """Cycles a role must be held before it may be voluntarily released."""
@@ -507,18 +526,79 @@ def decide_role(current: str | None, held_cycles: int,
     return RoleDecision(keep=current)
 
 
+def serves_item(item_code: str, skill: str,
+                level_of_item: Mapping[str, int],
+                skill_levels: Mapping[str, int]) -> bool:
+    """Whether a character at `skill_levels` can produce `item_code` at all,
+    given that `skill` is what produces it.
+
+    THE one level gate, with two readers -- `demand_by_role` here and
+    `GamePlayer._pick_supply_target`. They must agree: role demand says WHICH
+    role to serve and the supply target says WHICH ITEM to make for it, so a
+    role recruited on servable demand that then targets an unservable item is
+    the same stall by a longer route. `_claimable`'s lesson, applied to a
+    second pair of readers: two copies of three lines drift, and did.
+
+    Both unknowns default to SERVABLE, and neither default is a guess:
+
+      * No requirement recorded for the item (`level_of_item` has no entry).
+        Refusing on an unknown requirement would starve a role of demand the
+        character may well be able to serve, on no evidence at all -- inventing
+        a gate is exactly as wrong as inventing a level.
+      * No reading for the producing skill (`skill_levels` has no entry). This
+        is the `NO_SKILL_LEVELS` caller, and it must rank by demand alone,
+        exactly as it did before any of this existed. A live character never
+        takes this path: `WorldState.skills` carries every trainable skill off
+        the character schema, so absence really does mean "no reading", never
+        "level 0".
+
+    Level 0 is not special-cased: a recorded requirement of 0 is met by any
+    reading, which is what a requirement of 0 means."""
+    required = level_of_item.get(item_code)
+    if required is None:
+        return True
+    owned = skill_levels.get(skill)
+    if owned is None:
+        return True
+    return owned >= required
+
+
 def demand_by_role(item_demand: Mapping[str, int],
                    skill_of_item: Mapping[str, str | None],
-                   catalog: tuple[Role, ...]) -> dict[str, int]:
-    """Aggregate item-keyed demand into role-keyed demand.
+                   catalog: tuple[Role, ...],
+                   level_of_item: Mapping[str, int] = NO_ITEM_LEVELS,
+                   skill_levels: Mapping[str, int] = NO_SKILL_LEVELS) -> dict[str, int]:
+    """Aggregate item-keyed demand into role-keyed demand, AS ONE CHARACTER
+    SHOULD READ IT.
 
     `skill_of_item` maps an item code to the skill that PRODUCES it (its craft
     skill, or its gathering skill for a raw resource), or None when the API
     exposes no producing skill -- in which case no role owns it and the demand
     is dropped rather than assigned to an arbitrary role.
 
-    Passed in rather than derived from GameData so this module stays pure and
-    testable without a game-data fixture."""
+    PER-CHARACTER, not a shared board. `level_of_item` (the level the producing
+    skill must reach) and `skill_levels` (this character's own levels) turn the
+    result from "what the fleet wants" into "what the fleet wants THAT I COULD
+    PRODUCE", and demand this character cannot serve is dropped rather than
+    counted toward its attraction to the role. Live 2026-08-03: `iron_rocks` /
+    `iron_ore` / `iron_bar` all gate at mining 10, `Lor` had mining 8 and `R2D2`
+    9, and both were nonetheless recruited to `miner` by the account's iron
+    demand and parked there producing nothing. Routing on the producing SKILL
+    alone cannot see that, and `_skill_affinity` cannot either -- it measures a
+    character against its OWN best skill, so mining 8 scores a perfect 1.0 for
+    `miner` when 8 is the best that character has anywhere.
+
+    This does NOT retire release-on-unservable (`ROLE_UNSERVABLE_CYCLES`),
+    which still covers the plan that fails for reasons no level gate predicts.
+    It removes the 25 wasted cycles for the case that WAS predictable: the
+    requirement is in the item catalog and the level is on the character.
+
+    Nothing is gated when the caller supplies neither map (the defaults), so a
+    caller with no readings gets the pre-existing demand-only aggregate --
+    see `serves_item` for why both unknowns read as servable.
+
+    All four maps are passed in rather than derived from GameData so this
+    module stays pure and testable without a game-data fixture."""
     totals = {role.name: 0 for role in catalog}
     owner: dict[str, str] = {}
     for role in catalog:
@@ -530,6 +610,8 @@ def demand_by_role(item_demand: Mapping[str, int],
             continue
         role_name = owner.get(skill)
         if role_name is None:
+            continue
+        if not serves_item(item_code, skill, level_of_item, skill_levels):
             continue
         totals[role_name] += quantity
     return totals

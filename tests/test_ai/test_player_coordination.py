@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.role_selection import (
 from artifactsmmo_cli.ai.strategy_driver import map_means
 from artifactsmmo_cli.ai.tiers.means import SUPPLY_DEMAND_MIN, MeansKind, _fires
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_role_selection import _LOR_SKILLS, _ROBBY_SKILLS
 from tests.test_ai.test_strategy_driver import _make_planner_gd
 
 _T0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
@@ -93,10 +94,13 @@ def _skill_gd() -> GameData:
     gd._item_stats = {
         "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource",
                                 crafting_skill="mining", crafting_level=1),
+        "iron_bar": ItemStats(code="iron_bar", level=10, type_="resource",
+                              crafting_skill="mining", crafting_level=10),
     }
-    gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
-    gd._resource_drops = {"copper_rocks": "copper_ore"}
-    gd._resource_skill = {"copper_rocks": ("mining", 1)}
+    gd._crafting_recipes = {"copper_bar": {"copper_ore": 10},
+                            "iron_bar": {"iron_ore": 10}}
+    gd._resource_drops = {"copper_rocks": "copper_ore", "iron_rocks": "iron_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1), "iron_rocks": ("mining", 10)}
     return gd
 
 
@@ -112,6 +116,25 @@ def test_producing_skill_falls_back_to_the_gathering_skill():
 
 def test_producing_skill_none_when_the_api_exposes_neither():
     assert _skill_gd().producing_skill("no_such_item") is None
+
+
+def test_producing_requirement_reads_a_craftables_level_off_the_recipe():
+    """A CRAFTED item's requirement is `item.craft.level` off /v3/items,
+    carried through `ItemStats.crafting_level` onto `RequirementGraph`."""
+    assert _skill_gd().producing_requirement("iron_bar") == ("mining", 10)
+
+
+def test_producing_requirement_reads_a_gathered_items_level_off_the_resource():
+    """A GATHERED item's requirement is the resource NODE's level off
+    /v3/resources — a different table entirely — resolved from resource-keyed
+    to item-keyed by `_gather_skill_by_item`. `iron_ore` has no craft entry,
+    so its 10 comes from `iron_rocks`, not from any item field."""
+    assert _skill_gd().producing_requirement("iron_ore") == ("mining", 10)
+    assert _skill_gd().producing_requirement("copper_ore") == ("mining", 1)
+
+
+def test_producing_requirement_none_when_the_api_exposes_neither():
+    assert _skill_gd().producing_requirement("no_such_item") is None
 
 
 # ---------------------------------------------------------------------------
@@ -202,14 +225,16 @@ def test_role_owned_skills_raises_for_an_unknown_role():
 def test_pick_supply_target_none_without_a_held_role():
     p = GamePlayer(character="hero")
     assert p._role is None
-    result = p._pick_supply_target({"copper_ore": 5}, {"copper_ore": "mining"}, make_state())
+    result = p._pick_supply_target({"copper_ore": 5}, {"copper_ore": "mining"},
+                                   make_state(), {})
     assert result is None
 
 
 def test_pick_supply_target_none_for_an_unknown_role():
     p = GamePlayer(character="hero")
     p._role = "not_a_real_role"
-    result = p._pick_supply_target({"copper_ore": 5}, {"copper_ore": "mining"}, make_state())
+    result = p._pick_supply_target({"copper_ore": 5}, {"copper_ore": "mining"},
+                                   make_state(), {})
     assert result is None
 
 
@@ -218,7 +243,22 @@ def test_pick_supply_target_ignores_demand_outside_the_role_skills():
     p._role = "miner"  # owns {mining, weaponcrafting}
     item_demand = {"ash_plank": 9}  # woodcutting/gearcrafting -> logger's territory
     skill_of_item = {"ash_plank": "woodcutting"}
-    assert p._pick_supply_target(item_demand, skill_of_item, make_state()) is None
+    # bank_items={}, NOT the `make_state()` default of "never visited": with the
+    # default this returns None for the bank reason no matter what the skill
+    # filter does, and the assertion pins nothing (a dropped ownership test
+    # survived here).
+    state = make_state(bank_items={})
+    assert p._pick_supply_target(item_demand, skill_of_item, state, {}) is None
+
+
+def test_pick_supply_target_ignores_demand_with_no_producing_skill_at_all():
+    """`skill_of_item` carries None for an item the API exposes no producer
+    for. It is not the role's, and it is not anybody's — skipped before the
+    level gate is consulted, since there is no skill to read a level in."""
+    p = GamePlayer(character="hero")
+    p._role = "miner"
+    assert p._pick_supply_target({"mystery": 9}, {"mystery": None},
+                                 make_state(bank_items={}), {}) is None
 
 
 def test_pick_supply_target_picks_the_highest_demand_match():
@@ -227,7 +267,37 @@ def test_pick_supply_target_picks_the_highest_demand_match():
     item_demand = {"copper_ore": 4, "iron_ore": 9}
     skill_of_item = {"copper_ore": "mining", "iron_ore": "mining"}
     state = make_state(bank_items={"iron_ore": 1})
-    assert p._pick_supply_target(item_demand, skill_of_item, state) == ("iron_ore", 10, 9)
+    assert p._pick_supply_target(item_demand, skill_of_item, state, {}) == ("iron_ore", 10, 9)
+
+
+def test_pick_supply_target_skips_an_item_this_character_cannot_produce():
+    """The gate `demand_by_role` applies, applied to the ITEM choice as well.
+    A `miner` at mining 8 recruited by copper demand must target the copper it
+    can gather, not the higher-demand iron it cannot — otherwise the role is
+    served by a goal that can never plan, and the fix would only have moved the
+    stall from role selection to supply selection."""
+    p = GamePlayer(character="hero")
+    p._role = "miner"
+    item_demand = {"copper_ore": 4, "iron_ore": 9}
+    skill_of_item = {"copper_ore": "mining", "iron_ore": "mining"}
+    level_of_item = {"copper_ore": 1, "iron_ore": 10}
+    state = make_state(bank_items={}, skills=dict(_LOR_SKILLS))
+    assert p._pick_supply_target(item_demand, skill_of_item, state,
+                                 level_of_item) == ("copper_ore", 4, 4)
+
+
+def test_pick_supply_target_keeps_an_item_the_character_can_produce():
+    """The other side of the same gate: at mining 21 the iron is servable and
+    remains the highest-demand target. Pins that the gate is a level
+    comparison, not a blanket skip of anything carrying a requirement."""
+    p = GamePlayer(character="hero")
+    p._role = "miner"
+    item_demand = {"copper_ore": 4, "iron_ore": 9}
+    skill_of_item = {"copper_ore": "mining", "iron_ore": "mining"}
+    level_of_item = {"copper_ore": 1, "iron_ore": 10}
+    state = make_state(bank_items={}, skills=dict(_ROBBY_SKILLS))
+    assert p._pick_supply_target(item_demand, skill_of_item, state,
+                                 level_of_item) == ("iron_ore", 9, 9)
 
 
 def test_pick_supply_target_none_when_the_bank_has_never_been_visited():
@@ -241,7 +311,7 @@ def test_pick_supply_target_none_when_the_bank_has_never_been_visited():
     item_demand = {"copper_ore": 3}
     skill_of_item = {"copper_ore": "mining"}
     state = make_state(bank_items=None)
-    assert p._pick_supply_target(item_demand, skill_of_item, state) is None
+    assert p._pick_supply_target(item_demand, skill_of_item, state, {}) is None
 
 
 def test_pick_supply_target_treats_a_visited_empty_bank_as_zero():
@@ -255,7 +325,7 @@ def test_pick_supply_target_treats_a_visited_empty_bank_as_zero():
     item_demand = {"copper_ore": 3}
     skill_of_item = {"copper_ore": "mining"}
     state = make_state(bank_items={})
-    assert p._pick_supply_target(item_demand, skill_of_item, state) == ("copper_ore", 3, 3)
+    assert p._pick_supply_target(item_demand, skill_of_item, state, {}) == ("copper_ore", 3, 3)
 
 
 # ---------------------------------------------------------------------------
@@ -879,6 +949,85 @@ def test_update_coordination_claims_the_role_its_skills_fit(tmp_path):
         assert p._role == "jeweler"
     finally:
         store.close()
+
+
+def _iron_gated_gd() -> GameData:
+    """`iron_rocks` gates at mining 10, `ash_tree` at woodcutting 1 — the two
+    real gates behind the 2026-08-03 misallocation, in the smallest catalog
+    that can express it."""
+    gd = _make_planner_gd()
+    gd._item_stats = {}
+    gd._crafting_recipes = {}
+    gd._resource_drops = {"iron_rocks": "iron_ore", "ash_tree": "ash_wood"}
+    gd._resource_skill = {"iron_rocks": ("mining", 10), "ash_tree": ("woodcutting", 1)}
+    return gd
+
+
+def _decide_with_skills(tmp_path, name, skills) -> str | None:
+    """One full `_update_coordination` for a cold-start character with `skills`,
+    against a sibling publishing iron-dominated demand."""
+    db = str(tmp_path / f"coord_{name}.db")
+    p = GamePlayer(character=name)
+    p.state = make_state(bank_items={}, skills=skills)
+    p.game_data = _iron_gated_gd()
+    store = CoordinationStore(db_path=db, character=name)
+    sibling = CoordinationStore(db_path=db, character="rival")
+    p.set_coordination_store(store)
+    try:
+        sibling.publish_demand({"iron_ore": 30, "ash_wood": 6},
+                               datetime.now(tz=timezone.utc))
+        p._update_coordination(p.state, p.game_data)
+        return p._role
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_update_coordination_does_not_recruit_a_character_below_the_item_gate(tmp_path):
+    """THE OBSERVED CASE through the real seam, level requirement and all.
+
+    Iron dominates the board 30:6, and `Lor`'s mining 8 is its best skill
+    anywhere, so both demand and self-relative affinity pointed at `miner` —
+    which it then held, unable to gather or craft a single unit, until
+    release-on-unservable would have taken 25 wasted cycles to notice. The
+    requirement is in the item catalog and the level is on the character, so
+    the gate is decided before the first planner search instead."""
+    assert _decide_with_skills(tmp_path, "Lor", dict(_LOR_SKILLS)) == "logger"
+
+
+def test_update_coordination_still_recruits_a_character_above_the_item_gate(tmp_path):
+    """Same board, same catalog, mining 21: the iron IS servable, so it counts
+    and `miner` wins on it. The gate reads levels, it does not mute mining."""
+    assert _decide_with_skills(tmp_path, "Robby", dict(_ROBBY_SKILLS)) == "miner"
+
+
+def test_update_coordination_supply_target_respects_the_same_gate(tmp_path):
+    """The level gate reaches `_supply_target` too, not just the role. A miner
+    at mining 8 holding `miner` must be pointed at the copper it can gather,
+    never at the higher-demand iron it cannot — the two readers of
+    `serves_item` seeing the same board."""
+    db = str(tmp_path / "coord.db")
+    gd = _iron_gated_gd()
+    gd._resource_drops = {**gd._resource_drops, "copper_rocks": "copper_ore"}
+    gd._resource_skill = {**gd._resource_skill, "copper_rocks": ("mining", 1)}
+    p = GamePlayer(character="Lor")
+    p.state = make_state(bank_items={}, skills=dict(_LOR_SKILLS))
+    p.game_data = gd
+    store = CoordinationStore(db_path=db, character="Lor")
+    sibling = CoordinationStore(db_path=db, character="rival")
+    p.set_coordination_store(store)
+    now = datetime.now(tz=timezone.utc)
+    try:
+        sibling.publish_demand({"iron_ore": 30, "copper_ore": 4}, now)
+        store.claim("miner", now)
+        p._role = "miner"
+        p._role_held_cycles = 3  # below ROLE_MIN_HOLD_CYCLES: stays "miner"
+        p._update_coordination(p.state, p.game_data)
+        assert p._role == "miner"
+        assert p._supply_target == ("copper_ore", 4, 4)
+    finally:
+        store.close()
+        sibling.close()
 
 
 # ---------------------------------------------------------------------------

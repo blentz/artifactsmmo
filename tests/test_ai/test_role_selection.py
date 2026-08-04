@@ -2,6 +2,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG
 from artifactsmmo_cli.ai.role_selection import (
+    NO_ITEM_LEVELS,
     NO_SKILL_LEVELS,
     ROLE_IDLE_DWELL_CYCLES,
     ROLE_MIN_HOLD_CYCLES,
@@ -9,6 +10,7 @@ from artifactsmmo_cli.ai.role_selection import (
     ROLE_UNSERVABLE_CYCLES,
     decide_role,
     demand_by_role,
+    serves_item,
 )
 
 _ME = "HAL"
@@ -871,3 +873,145 @@ def test_demand_for_a_skill_no_role_owns_is_dropped_even_when_present() -> None:
     skill_of_item = {"raw_fish": "fishing_prep_unowned"}
     got = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG)
     assert sum(got.values()) == 0
+
+
+# --- The level gate: demand a character provably cannot serve ---------------
+#
+# Live 2026-08-03. `Lor` (mining 8) and `R2D2` (mining 9) both held `miner`
+# while every unit of the account's iron demand gated at mining 10. R2D2
+# eventually escaped via release-on-unservable — 25 cycles of the planner
+# finding nothing — and became a productive `logger`. Lor never did, and was
+# still parked on `miner` producing nothing. Routing on the producing SKILL
+# alone cannot see the gap, and `_skill_affinity` cannot either: it divides by
+# the character's OWN best skill, so mining 8 is a perfect 1.0 fit for `miner`
+# when 8 is the best Lor has anywhere.
+#
+# Levels are the real ones off the account (the first `state.skills` of each
+# character's 2026-08-03 play trace). The requirements are the real ones off
+# the committed `gamedata_bundle.json`: `iron_rocks` is a mining-10 resource,
+# so `iron_ore` gathers at 10, and `iron_bar`'s craft is mining 10.
+
+_LOR_SKILLS = {"alchemy": 1, "cooking": 1, "fishing": 1, "gearcrafting": 5,
+               "jewelrycrafting": 3, "mining": 8, "weaponcrafting": 1,
+               "woodcutting": 5}
+"""Lor, the character that stayed stuck. Mining 8 is its BEST skill anywhere,
+which is exactly why affinity alone rated it a perfect `miner`."""
+
+_ROBBY_SKILLS = {"alchemy": 16, "cooking": 12, "fishing": 4, "gearcrafting": 15,
+                 "jewelrycrafting": 14, "mining": 21, "weaponcrafting": 10,
+                 "woodcutting": 15}
+"""Robby, the account's real miner. Mining 21 clears every iron gate."""
+
+_IRON_DEMAND = {"iron_ore": 30, "iron_bar": 9}
+_IRON_SKILL = {"iron_ore": "mining", "iron_bar": "mining"}
+_IRON_LEVEL = {"iron_ore": 10, "iron_bar": 10}
+
+
+def test_iron_demand_does_not_attract_lor_who_cannot_mine_it() -> None:
+    # THE OBSERVED CASE. Every unit of iron demand gates at mining 10; Lor has
+    # 8, so none of it counts toward `miner` and the role carries nothing.
+    got = demand_by_role(_IRON_DEMAND, _IRON_SKILL, ROLE_CATALOG,
+                         _IRON_LEVEL, _LOR_SKILLS)
+    assert got["miner"] == 0
+    assert sum(got.values()) == 0
+
+
+def test_iron_demand_still_attracts_robby_who_can_mine_it() -> None:
+    # The other side, and the reason this is a gate and not a mute: the SAME
+    # board reads at full strength for the character that can actually serve it.
+    got = demand_by_role(_IRON_DEMAND, _IRON_SKILL, ROLE_CATALOG,
+                         _IRON_LEVEL, _ROBBY_SKILLS)
+    assert got["miner"] == 39
+
+
+def test_lor_claims_a_role_it_can_serve_instead_of_parking_on_miner() -> None:
+    # End to end through the claim. Iron dominates the board 30:6, so before
+    # the gate Lor took `miner` (mining 8 scores affinity 1.0 against its own
+    # best skill) and sat there. With the iron gated out, `miner` scores at most
+    # (0+1)x(1+1) = 2 and the ash_wood demand Lor's woodcutting 5 CAN serve wins.
+    item_demand = {"iron_ore": 30, "ash_wood": 6}
+    skill_of_item = {"iron_ore": "mining", "ash_wood": "woodcutting"}
+    level_of_item = {"iron_ore": 10, "ash_wood": 1}
+    by_role = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG,
+                             level_of_item, _LOR_SKILLS)
+    assert _decide(None, 0, {}, by_role, skill_levels=_LOR_SKILLS).claim == "logger"
+    # Ungated, the same inputs hand Lor the role it cannot serve — the live bug.
+    ungated = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG)
+    assert _decide(None, 0, {}, ungated, skill_levels=_LOR_SKILLS).claim == "miner"
+
+
+def test_a_role_carrying_both_servable_and_unservable_demand_keeps_the_servable() -> None:
+    # Mixed demand on ONE role: copper gates at mining 1, iron at 10. Lor's
+    # mining 8 serves the copper and not the iron, so `miner` attracts on the
+    # copper alone rather than all-or-nothing in either direction.
+    item_demand = {"copper_ore": 4, "iron_ore": 30}
+    skill_of_item = {"copper_ore": "mining", "iron_ore": "mining"}
+    level_of_item = {"copper_ore": 1, "iron_ore": 10}
+    got = demand_by_role(item_demand, skill_of_item, ROLE_CATALOG,
+                         level_of_item, _LOR_SKILLS)
+    assert got["miner"] == 4
+
+
+def test_an_item_with_no_known_requirement_still_counts() -> None:
+    # No entry in `level_of_item` means the catalog exposes no requirement for
+    # the item, NOT that it requires something unreachable. Refusing on an
+    # unknown would silently starve the role, so it counts.
+    got = demand_by_role({"iron_ore": 30, "mystery_ore": 7}, _IRON_SKILL | {
+        "mystery_ore": "mining"}, ROLE_CATALOG, _IRON_LEVEL, _LOR_SKILLS)
+    assert got["miner"] == 7
+
+
+def test_a_requirement_of_zero_gates_nothing() -> None:
+    # `ItemStats.crafting_level` is 0 for an item the API records no craft
+    # level for. Zero is a real requirement that every reading meets, so it
+    # must pass the comparison rather than be special-cased into an unknown.
+    got = demand_by_role({"trinket": 5}, {"trinket": "mining"}, ROLE_CATALOG,
+                         {"trinket": 0}, {"mining": 0})
+    assert got["miner"] == 5
+
+
+def test_a_requirement_exactly_at_the_characters_level_is_servable() -> None:
+    # The boundary itself: mining 10 serves a mining-10 gate. Off by one here
+    # and R2D2 at mining 9 would look capable, or Robby at 21 would not.
+    servable = demand_by_role(_IRON_DEMAND, _IRON_SKILL, ROLE_CATALOG,
+                              _IRON_LEVEL, {"mining": 10})
+    walled = demand_by_role(_IRON_DEMAND, _IRON_SKILL, ROLE_CATALOG,
+                            _IRON_LEVEL, {"mining": 9})
+    assert (servable["miner"], walled["miner"]) == (39, 0)
+
+
+def test_no_skill_reading_leaves_demand_ungated() -> None:
+    # The `NO_SKILL_LEVELS` caller: no reading for the producing skill is not
+    # evidence of level 0, so nothing is gated and the aggregate is exactly the
+    # pre-gate one. This is the path every single-character run takes.
+    gated = demand_by_role(_IRON_DEMAND, _IRON_SKILL, ROLE_CATALOG,
+                           _IRON_LEVEL, NO_SKILL_LEVELS)
+    assert gated == demand_by_role(_IRON_DEMAND, _IRON_SKILL, ROLE_CATALOG)
+    assert gated["miner"] == 39
+
+
+def test_the_gate_defaults_are_empty_and_change_nothing() -> None:
+    # No hidden default state, the same guarantee `NO_SKILL_LEVELS` carries for
+    # `decide_role`: omitting both maps must equal passing the exported empties.
+    assert demand_by_role(_IRON_DEMAND, _IRON_SKILL, ROLE_CATALOG) == demand_by_role(
+        _IRON_DEMAND, _IRON_SKILL, ROLE_CATALOG, NO_ITEM_LEVELS, NO_SKILL_LEVELS)
+    assert dict(NO_ITEM_LEVELS) == {}
+
+
+def test_a_reading_for_another_skill_does_not_stand_in_for_the_producing_one() -> None:
+    # `skill_levels` is read at the PRODUCING skill's key, never at whatever
+    # else the character happens to have. Lor's gearcrafting 5 says nothing
+    # about mining, and a lookup that fell back to any reading would leave the
+    # gate answering a question about the wrong skill.
+    got = demand_by_role(_IRON_DEMAND, _IRON_SKILL, ROLE_CATALOG,
+                         _IRON_LEVEL, {"gearcrafting": 50})
+    assert got["miner"] == 39  # no `mining` reading at all -> ungated, not walled
+
+
+def test_serves_item_is_the_shared_predicate_both_readers_call() -> None:
+    # Pinned directly, because `GamePlayer._pick_supply_target` reads it too and
+    # the two must not drift (see its docstring). Each of the three verdicts.
+    assert serves_item("iron_ore", "mining", _IRON_LEVEL, _ROBBY_SKILLS) is True
+    assert serves_item("iron_ore", "mining", _IRON_LEVEL, _LOR_SKILLS) is False
+    assert serves_item("iron_ore", "mining", {}, _LOR_SKILLS) is True
+    assert serves_item("iron_ore", "mining", _IRON_LEVEL, {}) is True
