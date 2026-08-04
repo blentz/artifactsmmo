@@ -1308,6 +1308,7 @@ class GamePlayer:
             stats = self.planner.last_stats
             detail = (f"goal={goal!r} nodes={stats.nodes_explored} "
                       f"depth={stats.max_depth_reached}")
+            self._mark_grind_failure_doomed()
             if stats.timed_out:
                 raise RuntimeError(
                     f"LevelSkill({action.skill}) grind sub-plan EXHAUSTED the "
@@ -1331,6 +1332,40 @@ class GamePlayer:
         # what lets a grind-embedded defeat reach the trace too.
         self._last_grind_leg = first
         return self._execute(first, client)
+
+    def _mark_grind_failure_doomed(self) -> None:
+        """Mark the goal whose plan contains this failing LevelSkill step as
+        doomed, so the arbiter stops re-picking it every cycle.
+
+        A grind expansion that produces no leg degrades to an `error:other`
+        cycle that changes NO state, so the next replan re-derives the identical
+        decision and the bot repeats the identical failing action forever: live
+        Robby 2026-08-03 ran the same `LevelSkill(jewelrycrafting->15)` failure
+        for 8 of 16 consecutive cycles, and live C3P0 2026-08-01 for 9.5h.
+        Nothing dampened it, because the DOOMED MEMO only ever sees a planning
+        failure and this goal PLANS fine — it is the plan's LevelSkill STEP that
+        cannot be expanded. Marking here is the missing edge: the memo's key is
+        the plannability signature (character level + skill levels), exactly the
+        thing an errored, state-preserving cycle cannot change, so the entry
+        stands until the character actually levels — and self-clears the moment
+        it does, or when the escalating re-probe window (20 -> 160 cycles)
+        elapses. The StuckDetector's repeated-action-failure recovery stays as
+        the backstop it is; it is not one (it keys on `repr(action)`, so two
+        gear roots grinding two skills split the count below its threshold).
+
+        Both fault arms mark. A dead end is conclusive by construction, and a
+        cheap-budget TIMEOUT is just as conclusive here: unlike the arbiter's
+        two-pass planning, the grind expansion has no full-budget escalation to
+        stay available for — one shot per cycle is all it ever gets.
+
+        No plan cache means no goal to attribute the failure to (a `plan_once`
+        diagnostic run, which executes nothing); the raise below still reports
+        the fault.
+        """
+        assert self.state is not None
+        if self._plan_cache is not None:
+            self._arbiter._memo.mark(self._plan_cache.goal_repr, self.state,
+                                     self._cycle_counter)
 
     def _execute(self, action: Action, client: AuthenticatedClient) -> tuple[WorldState, str]:
         """Execute an action. Returns (new_state, outcome_str).

@@ -965,4 +965,27 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "planner re-targets to a reachable candidate (the "
                      "utility-potion branch) instead of thrashing "
                      "GrindCharacterXP against an unwinnable monster."),
+    # Live Robby 2026-08-03 (L21, jewelrycrafting 14), 8 of 16 consecutive
+    # cycles of `LevelSkill(jewelrycrafting->15) -> error:other`. The banked
+    # iron_bar makes iron_ring (jewelrycrafting 10) the cheapest in-skill rung,
+    # so the grind descends to its OTHER material, wool — a mob-only drop whose
+    # sole source is the level-5 sheep, GREY at 21. Reproduces the exact live
+    # goal `GatherMaterials(wool, {wool:2})`.
+    "l21_grey_material_grind": ScenarioCharacter(
+        name="l21_grey_material_grind", level=21, gold=500,
+        derive_combat_stats=True,
+        skills={"alchemy": 16, "cooking": 12, "fishing": 5, "gearcrafting": 15,
+                "jewelrycrafting": 14, "mining": 21, "weaponcrafting": 10,
+                "woodcutting": 15},
+        equipment={
+            "weapon_slot": "highwayman_dagger", "helmet_slot": "lucky_wizard_hat",
+            "body_armor_slot": "mushmush_jacket", "leg_armor_slot": "adventurer_pants",
+            "boots_slot": "adventurer_boots", "ring1_slot": "air_ring",
+            "amulet_slot": "wisdom_amulet",
+        },
+        bank={"iron_bar": 6},
+        inventory_max=140,
+        description="L21 jewelrycrafting-14 grind whose rung (iron_ring) needs "
+                     "wool, a drop of the GREY level-5 sheep: the skill-grind "
+                     "grey-farm exemption is what makes it plannable."),
 }

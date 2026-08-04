@@ -19,7 +19,13 @@ Policy (user directive 2026-07-06): grey farming is allowed IFF
      tree's attainable-argmax already arbitrated the target against every
      craftable same-family alternative, and nothing arms a grind toward a
      not-yet-attainable one). A grey fight can never enter an xp-grind
-     plan either way. AND
+     plan either way. A SKILL-GRIND GatherMaterialsGoal is the third such
+     goal (2026-08-03): it too holds the demand gate structurally (its
+     target is a material of the rung `skill_grind_target` picked) and it
+     too does not consult the next-tier suppression below, because that
+     suppression's whole preference — "grind the skill instead" — is
+     exactly what this goal is doing. Rationale and the livelock it fixes
+     are on the call site in `ai/goals/gathering.py`. AND
   2. the NEXT-TIER recipe of that recipe's family is too far a skill-grind
      away (or absent). When a same-family recipe just a few levels up exists
      (health_potion at alchemy 18 vs large_health_potion at 20), grinding the

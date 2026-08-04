@@ -450,9 +450,29 @@ class GatherMaterialsGoal(Goal):
             # grinding the skill beats farming greys. Live Robby L12 could not
             # gather feathers from L1 chickens without the drop_farm variant the
             # selection returns (the plain fight fails the xpPositive gate).
+            #
+            # `self.skill_grind` is the THIRD structural-demand exemption from
+            # that next-tier suppression, alongside UpgradeEquipmentGoal's
+            # (GAP-6, ai/goals/progression.py) — see ai/grey_farm.py's module
+            # docstring. THIS GOAL *IS* the skill grind the directive prefers:
+            # its target is one material of the rung `skill_grind_target`
+            # already picked as the best in-skill craft, so "grind the skill
+            # instead of farming greys for a soon-obsolete item" is not an
+            # alternative to suppress in favour of — it is what the fight
+            # serves. Suppressing greys here left a rung whose only material
+            # source is a low-level mob with NO acquisition edge at all, while
+            # `skill_grind_target.is_obtainable` (winnable + spawn-known, grey
+            # policy not consulted) still called that rung obtainable: the
+            # planner then found no plan and `_execute_level_skill` raised
+            # "grind produced no leg" every cycle (live Robby 2026-08-03, L21
+            # jewelrycrafting 14, iron_ring <- wool <- L5 sheep: 8 of 16
+            # consecutive cycles, and every one of the 54 "produced no leg"
+            # records across 39 older traces). The exemption makes rung
+            # selection and material emission agree again.
             fight = select_drop_fight(
                 item, actions, state, game_data,
-                allow_grey=grey_farm_allowed(item, state, game_data))
+                allow_grey=(self.skill_grind
+                            or grey_farm_allowed(item, state, game_data)))
             if fight is not None:
                 result.append(fight)
                 # Companion combat swap so A* can satisfy FightAction's

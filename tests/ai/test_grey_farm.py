@@ -251,6 +251,36 @@ class TestGatherEmitsDropFarmFights:
         assert not any(isinstance(a, FightAction) and a.is_applicable(state, gd)
                        for a in relevant)
 
+    def test_skill_grind_farms_a_grey_the_policy_suppresses(self) -> None:
+        """A SKILL-GRIND gather is the third structural-demand exemption from
+        the next-tier suppression (ai/grey_farm.py's module docstring): the
+        goal's target IS a material of the rung the grind crafts, so "grind the
+        skill instead of farming greys" is what this fight already serves.
+
+        Same state as `test_grey_dropper_not_emitted_when_next_tier_close`
+        (alchemy 19, policy says NO) — only `skill_grind=True` differs, and the
+        REAL planner must now find the drop-farm plan. Live Robby 2026-08-03:
+        without this, iron_ring's wool (sole source: the grey L5 sheep) had no
+        acquisition edge at all and the grind raised "produced no leg" every
+        cycle."""
+        gd = _gd(alchemy_next_tier_level=20)
+        state = make_state(level=12, skills={"alchemy": 19},
+                           inventory={}, bank_items={})
+        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2},
+                                   skill_grind=True)
+        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))]
+        plan = GOAPPlanner().plan(state, goal, actions, gd, budget_seconds=10.0)
+        assert [repr(a) for a in plan] == ["Fight(chicken)", "Fight(chicken)"]
+
+    def test_skill_grind_exemption_does_not_change_the_policy(self) -> None:
+        """The 2026-07-06 directive is routed AROUND, never weakened: the
+        policy verdict for the very item the grind farms stays False, so every
+        non-grind caller (UpgradeEquipment closure materials, the craft
+        completeness census) still suppresses it."""
+        gd = _gd(alchemy_next_tier_level=20)
+        state = make_state(level=12, skills={"alchemy": 19})
+        assert grey_farm_allowed("feather", state, gd) is False
+
     def test_in_band_dropper_is_not_flagged(self) -> None:
         """A dropper the character still earns xp from needs no bypass — the
         plain fight is kept (no drop_farm fork of its learned-cost key)."""

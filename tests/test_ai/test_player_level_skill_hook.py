@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.planner import PlanStats
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
@@ -165,6 +166,86 @@ def test_level_skill_step_degrades_not_crash_when_no_leg() -> None:
     assert outcome == "error:other"
     assert new_state is refreshed
     fetch.assert_called_once()
+
+
+# --- The failing grind must DAMPEN the goal that ordered it -------------------
+#
+# A grind expansion that produces no leg leaves the world untouched, so the next
+# replan re-derives the same decision and the bot repeats the same failing
+# action forever (live Robby 2026-08-03: 8 of 16 consecutive cycles; live C3P0
+# 2026-08-01: 9.5h). The doomed memo never saw it, because the OUTER goal plans
+# fine — it is the plan's LevelSkill STEP that cannot be expanded.
+
+
+def _cached_goal_player(goal_repr: str) -> GamePlayer:
+    """An under-skill player mid-plan, as the run loop leaves it: `_plan_cache`
+    names the goal whose plan holds the LevelSkill step about to fail."""
+    player = _under_skill_player()
+    goal = GatherMaterialsGoal(target_item="trinket", needed={"trinket": 1})
+    player._plan_cache = PlanCache(
+        selected_goal=goal, plan=[LevelSkill("gearcrafting", 5)],
+        crafting_target=None, latch_active=False, goal_repr=goal_repr)
+    return player
+
+
+def _raise_no_leg(player: GamePlayer, stats: PlanStats) -> None:
+    with patch.object(player, "_build_actions", return_value=[]), \
+            patch.object(player.planner, "plan", return_value=[]), \
+            patch.object(player.planner, "last_stats", stats):
+        with pytest.raises(RuntimeError):
+            player._execute_level_skill(LevelSkill("gearcrafting", 5), MagicMock())
+
+
+def test_dead_end_grind_marks_the_ordering_goal_doomed() -> None:
+    """The missing backoff edge: a dead-end expansion marks the cached goal in
+    the arbiter's doomed memo, so the next cycle's arbiter skips it instead of
+    re-picking the identical failing LevelSkill."""
+    player = _cached_goal_player("UpgradeEquipment(life_ring->ring2_slot)")
+    assert player.state is not None
+    _raise_no_leg(player, PlanStats(nodes_explored=4, max_depth_reached=2,
+                                    timed_out=False))
+    assert player._arbiter._memo.is_doomed(
+        "UpgradeEquipment(life_ring->ring2_slot)", player.state,
+        player._cycle_counter) is True
+
+
+def test_timed_out_grind_marks_the_ordering_goal_doomed() -> None:
+    """The other arm marks too. Unlike the arbiter's two-pass planning, the
+    grind expansion has no full-budget escalation for a cheap timeout to stay
+    available for — one shot per cycle is all it gets, so a timeout here is as
+    conclusive as a dead end (C3P0's 109 failures were ALL timeouts)."""
+    player = _cached_goal_player("UpgradeEquipment(life_ring->ring1_slot)")
+    assert player.state is not None
+    _raise_no_leg(player, PlanStats(nodes_explored=63944, max_depth_reached=84,
+                                    timed_out=True))
+    assert player._arbiter._memo.is_doomed(
+        "UpgradeEquipment(life_ring->ring1_slot)", player.state,
+        player._cycle_counter) is True
+
+
+def test_grind_failure_with_no_plan_cache_marks_nothing() -> None:
+    """No cached plan means no goal to attribute the failure to (a `plan_once`
+    diagnostic run executes nothing). The raise still reports the fault; the
+    memo stays empty rather than doom an arbitrary goal."""
+    player = _under_skill_player()
+    assert player._plan_cache is None
+    _raise_no_leg(player, PlanStats(nodes_explored=4, max_depth_reached=2,
+                                    timed_out=False))
+    assert player._arbiter._memo._entries == {}
+
+
+def test_successful_grind_leaves_the_memo_alone() -> None:
+    """Only a FAILED expansion dooms: a grind that yields a leg must not
+    suppress the goal that ordered it."""
+    player = _cached_goal_player("UpgradeEquipment(life_ring->ring2_slot)")
+    leg = GatherAction(resource_code="gear_rocks", locations=frozenset({(3, 3)}))
+    advanced = replace(player.state, x=3, y=3)
+    with patch.object(player, "_build_actions", return_value=[]), \
+            patch.object(player.planner, "plan", return_value=[leg]), \
+            patch.object(GatherAction, "execute", return_value=advanced):
+        player._execute_level_skill(LevelSkill("gearcrafting", 5), MagicMock())
+
+    assert player._arbiter._memo._entries == {}
 
 
 # --- Cross-skill nested grind (REAL planner, no planner.plan mock) ------------
