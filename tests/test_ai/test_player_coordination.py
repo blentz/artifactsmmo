@@ -436,13 +436,17 @@ def test_update_coordination_renews_the_lease_only_while_a_role_is_held(tmp_path
 
 
 def test_update_coordination_releases_an_idle_role_after_min_hold(tmp_path):
+    db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
-    p.state = make_state()
-    p.game_data = _make_planner_gd()
-    store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
+    p.state = make_state(bank_items={})
+    p.game_data = _two_role_demand_gd()
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="rival")
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
+        # Somewhere to go: `logger` wants work, `miner` (hero's role) does not.
+        sibling.publish_demand({"ash_wood": 5}, now)
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES  # eligible; own demand is 0
@@ -452,6 +456,33 @@ def test_update_coordination_releases_an_idle_role_after_min_hold(tmp_path):
         p._update_coordination(p.state, p.game_data)
         assert "miner" in p._role_idle_released
         assert p._role_held_cycles == 0
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_update_coordination_keeps_an_idle_role_when_nothing_else_wants_work(tmp_path):
+    """RESIDUAL 2 through the real caller. Same setup as the test above with
+    the sibling's request withdrawn: with the whole board silent there is
+    nowhere better to go, so the release would buy nothing and cost a lease
+    write, a claim and another dwell — repeated once per role until the catalog
+    ran out."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state(bank_items={})
+    p.game_data = _two_role_demand_gd()
+    store = CoordinationStore(db_path=db, character="hero")
+    p.set_coordination_store(store)
+    now = datetime.now(tz=timezone.utc)
+    try:
+        store.claim("miner", now)
+        p._role = "miner"
+        p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
+        p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES - 1
+        p._update_coordination(p.state, p.game_data)
+        assert p._role == "miner"
+        assert p._role_idle_released == frozenset()
+        assert store.live_leases(now).get("miner") == frozenset({"hero"})
     finally:
         store.close()
 
@@ -473,12 +504,15 @@ def test_update_coordination_idle_release_does_not_immediately_reclaim(tmp_path)
     yet but `miner`), and that is fine: what must never happen is going back."""
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
-    p.state = make_state()
-    p.game_data = _make_planner_gd()
+    p.state = make_state(bank_items={})
+    p.game_data = _two_role_demand_gd()
     store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="rival")
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
+        # `logger` wants work, which is what makes the idle release fire at all.
+        sibling.publish_demand({"ash_wood": 5}, now)
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
@@ -495,6 +529,7 @@ def test_update_coordination_idle_release_does_not_immediately_reclaim(tmp_path)
         assert "miner" not in store.live_leases(datetime.now(tz=timezone.utc))
     finally:
         store.close()
+        sibling.close()
 
 
 def _mining_demand_gd() -> GameData:
@@ -505,6 +540,21 @@ def _mining_demand_gd() -> GameData:
     gd._crafting_recipes = {}
     gd._resource_drops = {"copper_rocks": "copper_ore"}
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
+    return gd
+
+
+def _two_role_demand_gd() -> GameData:
+    """`_mining_demand_gd` plus a woodcutting resource, so a sibling can put
+    demand on a role hero does NOT hold.
+
+    Release-on-idle now requires a DESTINATION — some claimable role carrying
+    positive demand — because freeing a finished role no longer helps a sibling
+    (nothing is exclusive) and the only thing a release still buys is moving
+    this character somewhere useful. A catalog that can only express miner
+    demand cannot express that destination."""
+    gd = _mining_demand_gd()
+    gd._resource_drops = {"copper_rocks": "copper_ore", "ash_tree": "ash_wood"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1), "ash_tree": ("woodcutting", 1)}
     return gd
 
 
@@ -741,13 +791,17 @@ def test_update_coordination_does_not_block_an_idle_release(tmp_path):
     nothing needed it any more is a different verdict — it must stay
     re-claimable the instant demand returns, which is what `_role_idle_released`
     (conditional on non-positive demand) already provides."""
+    db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
-    p.state = make_state()
-    p.game_data = _mining_demand_gd()
-    store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
+    p.state = make_state(bank_items={})
+    p.game_data = _two_role_demand_gd()
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="rival")
     p.set_coordination_store(store)
+    now = datetime.now(tz=timezone.utc)
     try:
-        store.claim("miner", datetime.now(tz=timezone.utc))
+        sibling.publish_demand({"ash_wood": 5}, now)
+        store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
         p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES - 1
@@ -756,6 +810,7 @@ def test_update_coordination_does_not_block_an_idle_release(tmp_path):
         assert p._role_unservable_released == {}
     finally:
         store.close()
+        sibling.close()
 
 
 def test_update_coordination_does_not_reclaim_an_unservable_role(tmp_path):

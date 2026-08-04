@@ -195,7 +195,19 @@ class CoordinationStore:
         character (`MultiRun._child_argv`), each holding one `CoordinationStore`
         pinned to one name. The old `except IntegrityError` branch is
         unreachable under the new key, so it is gone rather than kept as a
-        second, dead level of error handling."""
+        second, dead level of error handling.
+
+        Also SWEEPS EXPIRED ROWS, of every character, in the same transaction.
+        `role_leases` otherwise only ever grows: nothing deletes a lapsed lease
+        (`release` deletes only a role the caller is voluntarily giving up), so
+        the table accumulates one tombstone per (character, role-ever-held) and
+        anyone reading it directly sees characters apparently holding several
+        roles at once. Behaviour was never wrong — `live_leases` filters on
+        `expires_at` — but a table that has to be read through a filter to be
+        understood is a table that will be misread, and it was. Swept HERE
+        because this is the only place a row is ever ADDED, so the sweep runs at
+        exactly the cadence the table grows and adds no write to the steady
+        state (`renew`, the every-cycle writer, stays a pure extend)."""
         _require_utc(now)
         stamp = now.isoformat()
         try:
@@ -217,6 +229,22 @@ class CoordinationStore:
                 else:
                     s.add(RoleLease(role=role, character=self._character,
                                     claimed_at=stamp, expires_at=self._expiry(now)))
+                # `<= stamp` is the exact complement of `live_leases`' `> stamp`
+                # liveness test, read off the same `now` and compared the same
+                # lexicographic way, so every row deleted here was already
+                # excluded from the holder COUNT that divides a role's demand.
+                # The sweep therefore cannot move any allocation decision — and
+                # expiry is monotone, so a row dead at `now` is dead at every
+                # later read too.
+                #
+                # AFTER the write above, not before: our own row is flushed by
+                # the time this query runs and carries a fresh future expiry, so
+                # re-claiming our own LAPSED lease still UPDATES that row rather
+                # than sweeping it away and inserting a second one.
+                for dead in s.exec(
+                    select(RoleLease).where(RoleLease.expires_at <= stamp)
+                ).all():
+                    s.delete(dead)
                 s.commit()
                 return True
         except SQLAlchemyError as e:

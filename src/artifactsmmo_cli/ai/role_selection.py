@@ -52,21 +52,35 @@ Three hysteresis parameters, each defending a different failure:
     would recruit one. Sitting on a role you cannot serve went from blocking
     to actively misinforming.
 
+Release-on-idle is NARROWED to the case that motivates it, and the narrowing
+is what stops the rule from being pure churn. Its original justification —
+"a finished role must be freed so a sibling can take it" — died with
+exclusivity: nobody is ever blocked from a role now, so freeing one grants no
+sibling anything it did not already have. What survives is the OTHER half:
+a character parked on a dead role is not serving the roles that are alive, so
+release-on-idle is the only rule that can move it (the `ROLE_SWITCH_MARGIN`
+scan below is only reached when the held role's own demand is POSITIVE, so it
+cannot). That reason is entirely about the destination, so the rule is now
+gated on one existing: an idle role is released only when some role this
+character could actually claim carries positive demand. On an all-zero board
+the character keeps what it has instead of walking the whole catalog one
+`ROLE_MIN_HOLD_CYCLES` dwell at a time, claiming and releasing five roles to
+serve nothing (~505 cycles of DB writes on the DEFAULT shape of a quiet
+board). See `decide_role`.
+
 A fourth failure surfaced in review of the first three: release-on-idle, taken
 alone, can cause infinite claim/release CHURN rather than a stable release.
-When demand is all-zero, an idle character releases its role (nothing needs
-it) and immediately re-claims the same one next cycle — with every role at
-zero demand the claim ranks on skill affinity alone, and that is a fixed
-property of the character, so it re-picks exactly what it just dropped, holds
-ROLE_MIN_HOLD_CYCLES, releases again, and repeats forever. Non-exclusivity
-made this MORE reachable, not less: the original repro needed every other role
-leased away, and now nothing is ever unavailable, so the re-pick is the
-character's own top affinity every time. `decide_role`'s `idle_released`
-parameter closes this:
-the CALLER remembers which roles it has voluntarily released while idle, and
-a role in that set is not claimable again until its own demand turns
-positive. See `decide_role`'s docstring for why this must be a parameter, not
-module state.
+The character releases its role and immediately re-claims the same one next
+cycle, because the claim ranks on effective demand AND skill affinity, and
+affinity is a fixed property of the character — a strong fit for the dead role
+can out-score a weak fit for the live one that triggered the release (a role
+at zero demand scores up to 2, and a role whose demand is split across several
+holders can score less than that). It then holds ROLE_MIN_HOLD_CYCLES,
+releases again, and repeats forever. `decide_role`'s `idle_released` parameter
+closes this: the CALLER remembers which roles it has voluntarily released
+while idle, and a role in that set is not claimable again until its own demand
+turns positive. See `decide_role`'s docstring for why this must be a
+parameter, not module state.
 
 Pure: no I/O, no clock, no classes beyond the frozen result record.
 """
@@ -124,7 +138,7 @@ one, and clearing that outlier too would push the release threshold past a
 whole session (519-587 cycles) and make the mechanism dead. The residual is
 benign by construction: a role released during a genuinely long idle stretch
 is re-claimable the instant its demand turns positive again, because
-`_best_free_role` only skips an `idle_released` role WHILE its demand is
+`_claimable` only skips an `idle_released` role WHILE its demand is
 non-positive."""
 
 ROLE_UNSERVABLE_CYCLES = 25
@@ -240,6 +254,44 @@ def _effective_demand(demand_by_role: Mapping[str, int], role_name: str,
     return Fraction(demand_by_role.get(role_name, 0), others + 1)
 
 
+def _claimable(role_name: str, demand_by_role: Mapping[str, int],
+               idle_released: frozenset[str],
+               unservable_released: frozenset[str]) -> bool:
+    """Whether this character may take `role_name` at all this cycle.
+
+    THE eligibility rule, and deliberately the ONLY one: every part of the
+    decision that weighs a role other than the one being held reads it — the
+    claim ranking (`_best_role`) and the rival scan inside `decide_role`. The
+    two used to disagree. The ranking skipped the released sets and the scan
+    did not, so a character could give up its role because some rival looked
+    better on the board and then be refused that very rival on the next cycle,
+    landing somewhere worse and repeating the lap every `ROLE_MIN_HOLD_CYCLES`.
+    One predicate with two readers cannot drift back apart; two copies of the
+    same three lines can, and did.
+
+    `unservable_released` is unconditional: the role was given up BECAUSE its
+    demand was positive and this character could not serve it, so positive
+    demand is precisely the wrong signal to re-open it on. The caller owns when
+    that set shrinks (see `decide_role`).
+
+    `idle_released` is conditional on the role's own demand still being
+    non-positive — it was given up as FINISHED, and real demand un-finishes it.
+
+    That conditionality makes the `idle_released` half arithmetically INERT in
+    the rival scan, and it is still read there on purpose. A role it skips has
+    non-positive demand, hence a zero share, and a zero share can never clear
+    `own_share * ROLE_SWITCH_MARGIN` on the only path that scan is compared on
+    (`own_demand > 0`, so `own_share > 0`); it can never be the positive rival
+    the idle rule looks for either. Reading the whole predicate anyway costs
+    one comparison over five roles and removes the drift, whereas a rival scan
+    that filtered on `unservable_released` alone would be a second, subtly
+    different copy of the rule — the exact defect this function exists to
+    close."""
+    if role_name in unservable_released:
+        return False
+    return role_name not in idle_released or demand_by_role.get(role_name, 0) > 0
+
+
 def _best_role(live_leases: Mapping[str, frozenset[str]],
                demand_by_role: Mapping[str, int],
                character: str, catalog: tuple[Role, ...],
@@ -280,13 +332,9 @@ def _best_role(live_leases: Mapping[str, frozenset[str]],
     exclusivity: two characters agreeing on the same role is now a legal
     outcome, not a race one of them has to lose.
 
-    A role in `idle_released` is skipped, but ONLY while its demand is still
-    non-positive — see `decide_role` for why. The moment real demand shows up
-    for it, it competes for the claim like any other role again. A role in
-    `unservable_released` is skipped UNCONDITIONALLY: it was given up BECAUSE
-    its demand was positive and this character could not serve it, so positive
-    demand is precisely the wrong signal to re-open it on. The caller owns when
-    that set shrinks (see `decide_role`)."""
+    Which roles are candidates at all is `_claimable`'s business, not this
+    function's — the same predicate `decide_role`'s rival scan reads, so a
+    rival that can trigger a release is always a rival that can be claimed."""
     affinity = _skill_affinity(catalog, skill_levels)
     best: str | None = None
     # Sentinel below every reachable score: effective demand is never negative,
@@ -295,9 +343,7 @@ def _best_role(live_leases: Mapping[str, frozenset[str]],
     # condition.
     best_score = Fraction(-1)
     for role in catalog:
-        if role.name in idle_released and demand_by_role.get(role.name, 0) <= 0:
-            continue
-        if role.name in unservable_released:
+        if not _claimable(role.name, demand_by_role, idle_released, unservable_released):
             continue
         share = _effective_demand(demand_by_role, role.name, live_leases, character)
         score = (share + 1) * (1 + affinity[role.name])
@@ -330,16 +376,27 @@ def decide_role(current: str | None, held_cycles: int,
     run recorded yet", so a caller that does not track it never releases on
     idle.
 
+    A full run is NECESSARY but not SUFFICIENT: the idle release also requires
+    an eligible rival role carrying positive demand. Exclusivity used to supply
+    the other half of the justification (free the role so a sibling may have
+    it), and that half is gone -- no sibling is blocked from any role now. What
+    remains is only worth a release when there is a live role to move to; with
+    the whole board silent, releasing serves nobody, and the character would
+    claim, hold, and release its way through the entire catalog to end up
+    exactly as idle as it started.
+
     `idle_released`: roles THIS caller has previously released while idle
-    (demand was non-positive at release time). Without it, a character with
-    nowhere better to go re-claims the very role it just released on the next
-    cycle -- release-on-idle alone produces claim/release CHURN, not a stable
-    release, whenever it is the only unleased role. The caller owns this set
+    (demand was non-positive at release time). Without it a character can
+    re-claim the very role it just released on the next cycle, because the
+    claim ranks on skill affinity as well as demand and a strong fit for the
+    dead role can out-score a weak fit for the live one whose demand triggered
+    the release -- release-on-idle alone is then claim/release CHURN, not a
+    stable release. The caller owns this set
     (decide_role stays pure: no I/O, no clock, no module-level state); it adds
     a role on every `release` this function returns and never needs to remove
     one for correctness, because a role's presence in the set only matters
     while its demand is non-positive -- once demand turns positive,
-    `_best_free_role` stops skipping it automatically.
+    `_claimable` stops skipping it automatically.
 
     `unservable_cycles`: how many CONSECUTIVE cycles -- including this one --
     the caller has observed the held role's POSITIVE demand go unserved. Owned
@@ -386,6 +443,25 @@ def decide_role(current: str | None, held_cycles: int,
     if held_cycles < ROLE_MIN_HOLD_CYCLES:
         return RoleDecision(keep=current)
 
+    # ONE scan over the rivals, feeding BOTH release rules below. A rival a
+    # sibling holds is not off-limits, it is merely already partly served,
+    # which the EFFECTIVE-demand division already says; a rival this character
+    # could not claim (`_claimable`) is excluded outright, because a release it
+    # triggered would be answered next cycle by a claim that is refused it.
+    #
+    # Sentinel below every reachable share (never negative), so a scan that
+    # finds no eligible rival at all can neither clear the margin nor read as
+    # somewhere to go.
+    rival_best = Fraction(-1)
+    for role in catalog:
+        if role.name == current:
+            continue
+        if not _claimable(role.name, demand_by_role, idle_released, unservable_released):
+            continue
+        rival_best = max(
+            rival_best,
+            _effective_demand(demand_by_role, role.name, live_leases, character))
+
     # RAW, not split. "Is anyone asking for this role's output at all" is a
     # property of the board, not of how many characters serve it, and splitting
     # cannot change the answer anyway: a positive demand stays positive over
@@ -393,37 +469,39 @@ def decide_role(current: str | None, held_cycles: int,
     # if crowding could make a role idle, which it cannot.
     own_demand = demand_by_role.get(current, 0)
     if own_demand <= 0:
-        if zero_demand_cycles >= ROLE_IDLE_DWELL_CYCLES:
+        # Release-on-idle, gated on there being SOMEWHERE TO GO. `rival_best >
+        # 0` is exactly "some role this character could claim carries positive
+        # demand" -- splitting divides by a positive integer, so a share is
+        # positive precisely when its raw demand is.
+        #
+        # The gate is the whole rule's justification made into a condition.
+        # Freeing a finished role no longer helps a sibling (nobody is blocked
+        # from a role any more); the one thing a release still buys is moving
+        # THIS character off a dead role onto a live one, and the margin scan
+        # below cannot do it because it is only reached on positive own demand.
+        # With no live role anywhere, releasing serves nothing and costs a
+        # claim, a hold, and another release per role -- on an all-zero board
+        # that walked the entire catalog before settling.
+        if zero_demand_cycles >= ROLE_IDLE_DWELL_CYCLES and rival_best > 0:
             return RoleDecision(release=current)
-        # Idle, but not for long enough to be sure. Hold the role: a
-        # requester on a level root is momentarily silent, not finished.
+        # Idle with nowhere better, or idle but not for long enough to be sure:
+        # a requester on a level root is momentarily silent, not finished.
         return RoleDecision(keep=current)
 
     # Positive demand from here down. A role whose demand exists but has gone
     # unserved for a full run is worse than an idle one: this character counts
     # as a holder, so it is dividing the role's advertised demand for every
-    # capable sibling weighing it while producing nothing itself. Checked
-    # BEFORE the margin scan because it is not a comparison against a rival --
-    # there may be no rival at all, and the release is still the right move.
+    # capable sibling weighing it while producing nothing itself. Decided
+    # BEFORE the margin comparison because it is not a comparison against a
+    # rival -- there may be no eligible rival at all, and the release is still
+    # the right move.
     if unservable_cycles >= ROLE_UNSERVABLE_CYCLES:
         return RoleDecision(release=current, unservable=True)
 
-    # Rivals are compared on EFFECTIVE demand, and no rival is excluded: a role
-    # a sibling holds is not off-limits, it is merely already partly served,
-    # which the division already says. Our own side is split the same way --
-    # `_effective_demand` counts only OTHER holders, so a role we hold alone
-    # reads at full strength and one we share reads at our real share.
+    # Our own side is split the same way the rivals are -- `_effective_demand`
+    # counts only OTHER holders, so a role we hold alone reads at full strength
+    # and one we share reads at our real share.
     own_share = _effective_demand(demand_by_role, current, live_leases, character)
-    # Sentinel below every reachable share (never negative), so an empty
-    # catalog scan cannot clear the margin.
-    rival_best = Fraction(-1)
-    for role in catalog:
-        if role.name == current:
-            continue
-        rival_best = max(
-            rival_best,
-            _effective_demand(demand_by_role, role.name, live_leases, character))
-
     if rival_best >= own_share * ROLE_SWITCH_MARGIN:
         return RoleDecision(release=current)
     return RoleDecision(keep=current)

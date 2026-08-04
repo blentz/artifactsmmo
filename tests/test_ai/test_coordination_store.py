@@ -86,7 +86,11 @@ def test_legacy_unique_role_only_index_is_migrated(tmp_path: Path) -> None:
 
     store = CoordinationStore(db_path=str(db_path), character="C3P0")
     try:
-        assert store.claim("miner", datetime.now(tz=timezone.utc)) is True
+        # Claimed WHILE the seeded HAL lease is still live (it expires at
+        # 00:10). `claim` sweeps expired rows, so claiming at wall-clock `now`
+        # would delete the very row this test is asserting the migration
+        # preserved and prove nothing about the migration.
+        assert store.claim("miner", datetime(2026, 8, 1, 0, 5, tzinfo=timezone.utc)) is True
     finally:
         store.close()
 
@@ -351,6 +355,84 @@ def test_reclaiming_an_expired_own_lease_reuses_the_row(tmp_path: Path) -> None:
             assert rows[0].claimed_at == later.isoformat()
     finally:
         engine.dispose()
+
+
+def _lease_rows(db: str) -> set[tuple[str, str]]:
+    """Every `(role, character)` in `role_leases`, live or lapsed — the view
+    someone gets who reads the table directly instead of through
+    `live_leases`."""
+    engine = create_engine(f"sqlite:///{db}")
+    try:
+        with SqlSession(engine) as s:
+            return {(row.role, row.character) for row in s.exec(select(RoleLease)).all()}
+    finally:
+        engine.dispose()
+
+
+def test_a_claim_sweeps_expired_lease_rows(tmp_path: Path) -> None:
+    """RESIDUAL 3. Nothing used to delete a lapsed lease, so `role_leases`
+    accumulated one tombstone per (character, role-ever-held) and read as if
+    every character held several roles at once. `claim` is the only place a row
+    is ever added, so it is where the sweep belongs."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    later = _T0 + timedelta(seconds=LEASE_TTL_SECONDS + 1)
+    try:
+        assert hal.claim("miner", _T0) is True
+        assert c3po.claim("logger", _T0) is True
+        # Both rows have lapsed by `later`; C3P0 renews only its own.
+        c3po.renew("logger", later)
+        assert _lease_rows(db) == {("miner", "HAL"), ("logger", "C3P0")}
+
+        assert c3po.claim("fisher", later) is True
+
+        # HAL's dead `miner` row is gone; the live rows are untouched.
+        assert _lease_rows(db) == {("logger", "C3P0"), ("fisher", "C3P0")}
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_sweeping_expired_rows_does_not_change_the_live_holder_count(tmp_path: Path) -> None:
+    """The sweep must be invisible to allocation. `live_leases` already filters
+    on the same `expires_at` comparison off the same clock, so every row the
+    sweep deletes was already excluded from the holder count that divides a
+    role's demand — the view before and after must be identical."""
+    db = str(tmp_path / "coord.db")
+    holders = [CoordinationStore(db_path=db, character=n) for n in ("HAL", "C3P0")]
+    joiner = CoordinationStore(db_path=db, character="K9")
+    later = _T0 + timedelta(seconds=LEASE_TTL_SECONDS + 1)
+    try:
+        for store in holders:
+            assert store.claim("miner", later) is True
+        # Tombstones seeded directly rather than through `claim`, which would
+        # sweep them itself: the point is the state a long session leaves
+        # behind, not how it got there.
+        engine = create_engine(f"sqlite:///{db}")
+        try:
+            with SqlSession(engine) as s:
+                for role, name in (("alchemist", "HAL"), ("logger", "C3P0"),
+                                   ("fisher", "R2D2")):
+                    s.add(RoleLease(role=role, character=name,
+                                    claimed_at=_T0.isoformat(),
+                                    expires_at=(_T0 + timedelta(seconds=1)).isoformat()))
+                s.commit()
+        finally:
+            engine.dispose()
+        before = joiner.live_leases(later)
+        assert before == {"miner": frozenset({"HAL", "C3P0"})}
+        assert len(_lease_rows(db)) == 5
+
+        assert joiner.claim("miner", later) is True
+
+        assert _lease_rows(db) == {("miner", "HAL"), ("miner", "C3P0"), ("miner", "K9")}
+        # The only difference in the live view is the joiner itself.
+        assert joiner.live_leases(later) == {"miner": before["miner"] | {"K9"}}
+    finally:
+        for store in holders:
+            store.close()
+        joiner.close()
 
 
 def test_renew_extends_expiry(tmp_path: Path) -> None:

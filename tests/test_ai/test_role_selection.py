@@ -141,21 +141,45 @@ def test_switches_exactly_at_the_margin_boundary() -> None:
     assert d.release == "logger"
 
 
-def test_releases_on_idle_after_min_hold_with_no_better_alternative() -> None:
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {})
+def test_releases_on_idle_after_min_hold_for_a_role_that_wants_work() -> None:
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {"miner": 3})
     assert d.release == "logger"
+    assert d.unservable is False
 
 
-def test_releases_on_idle_even_when_every_rival_role_is_crowded() -> None:
-    # The idle guard (own_demand <= 0) must fire on its OWN. Every rival is
-    # held by a sibling AND at zero demand, so every rival share is 0 and the
-    # margin test reads 0 >= 0, which is TRUE -- the margin would release too,
-    # for the wrong reason and without the `unservable=False` idle semantics.
-    # The idle guard is checked first and is what must fire here.
+def test_an_idle_role_is_kept_when_the_whole_board_is_silent() -> None:
+    # The narrowing, stated on its own. Release-on-idle's surviving purpose is
+    # to move this character OFF a dead role and ONTO a live one -- freeing the
+    # role helps no sibling now that nothing is exclusive. With no live role
+    # anywhere there is no destination, so releasing buys nothing and costs a
+    # claim, a dwell and another release for every role in the catalog.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {})
+    assert d.keep == "logger"
+    assert d.release is None
+
+
+def test_releases_on_idle_even_when_the_role_that_wants_work_is_crowded() -> None:
+    # The gate is "somewhere to go", not "somewhere uncrowded to go": a rival
+    # already worked by four siblings still reads as positive demand, and a
+    # dead role is worse than a fifth of a live one. Every rival except `miner`
+    # is at zero demand, so nothing but the crowded one can be what fires here.
     leases = {r.name: frozenset({_ME if r.name == "logger" else "C3P0"})
               for r in ROLE_CATALOG}
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, leases, {})
+    leases["miner"] = frozenset({"C3P0", "R2D2", "K9", "TARS"})
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, leases, {"miner": 4})
     assert d.release == "logger"
+
+
+def test_an_idle_role_is_kept_when_the_only_live_rival_cannot_be_claimed() -> None:
+    # RESIDUAL 1, on the idle path. `miner` carries the board's only demand but
+    # this character released it as UNSERVABLE, so the claim next cycle would
+    # refuse it (`_claimable`) and the character would land on a zero-demand
+    # role instead -- strictly worse than the role it is already on. A rival it
+    # cannot take is not somewhere to go.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)),
+                {"miner": 500}, unservable_released=frozenset({"miner"}))
+    assert d.keep == "logger"
+    assert d.release is None
 
 
 def test_idle_release_needs_a_full_run_of_zero_observations() -> None:
@@ -164,14 +188,14 @@ def test_idle_release_needs_a_full_run_of_zero_observations() -> None:
     # sit on a level root publishes nothing at all, and those silences run for
     # dozens of consecutive cycles live -- releasing on the strength of a
     # single sample drops a role a sibling still needs.
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {},
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {"miner": 3},
                 zero_demand_cycles=ROLE_IDLE_DWELL_CYCLES - 1)
     assert d.keep == "logger"
     assert d.release is None
 
 
 def test_idle_release_fires_exactly_at_the_dwell_boundary() -> None:
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {},
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {"miner": 3},
                 zero_demand_cycles=ROLE_IDLE_DWELL_CYCLES)
     assert d.release == "logger"
 
@@ -191,7 +215,7 @@ def test_no_zero_demand_run_never_releases_on_idle() -> None:
     # The parameter's default: a caller that does not track the run gets the
     # conservative behaviour (hold), never a release from a single sample.
     d = decide_role(current="logger", held_cycles=ROLE_MIN_HOLD_CYCLES,
-                    live_leases=_held(logger=(_ME,)), demand_by_role={},
+                    live_leases=_held(logger=(_ME,)), demand_by_role={"miner": 3},
                     character=_ME, catalog=ROLE_CATALOG)
     assert d.keep == "logger"
 
@@ -220,7 +244,10 @@ def test_a_single_demand_flap_does_not_release_a_needed_role() -> None:
 
 
 def test_idle_role_is_kept_before_min_hold() -> None:
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES - 1, _held(logger=(_ME,)), {})
+    # A live rival on the board, so the dwell on `held_cycles` is the only
+    # thing that can be holding the release back.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES - 1, _held(logger=(_ME,)),
+                {"miner": 3})
     assert d.keep == "logger"
 
 
@@ -301,6 +328,39 @@ def test_our_own_membership_does_not_shrink_our_side_of_the_margin() -> None:
     assert d.keep == "logger"
 
 
+def test_a_rival_this_character_cannot_claim_does_not_trigger_a_release() -> None:
+    # RESIDUAL 1, on the margin path. `miner` carries 200x `logger`'s demand,
+    # which clears the switch margin many times over -- but this character
+    # released `miner` as UNSERVABLE, so `_claimable` would refuse it on the
+    # very next cycle. Releasing for a rival it cannot take drops it onto a
+    # worse role and repeats the lap every ROLE_MIN_HOLD_CYCLES. The rival scan
+    # and the claim ranking read the same predicate, so this cannot happen.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)),
+                {"logger": 5, "miner": 1000},
+                unservable_released=frozenset({"miner"}))
+    assert d.keep == "logger"
+    assert d.release is None
+
+
+def test_the_same_rival_does_trigger_a_release_once_it_is_claimable() -> None:
+    # The positive control for the test above: identical board, nothing
+    # blocked. The margin still fires, so the filter narrowed exactly the
+    # unclaimable case and nothing else.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)),
+                {"logger": 5, "miner": 1000})
+    assert d.release == "logger"
+
+
+def test_an_idle_released_rival_carrying_demand_still_triggers_a_release() -> None:
+    # The two released sets have OPPOSITE re-entry rules and the shared
+    # predicate must keep that distinction on the rival scan too: an
+    # idle-released role is skipped only WHILE its demand is non-positive, so a
+    # role that went back into real demand is a legitimate destination again.
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)),
+                {"logger": 5, "miner": 1000}, idle_released=frozenset({"miner"}))
+    assert d.release == "logger"
+
+
 def test_current_role_is_skipped_inside_its_own_rival_scan() -> None:
     # Sanity check on the `role.name == current: continue` guard: with every
     # other role pinned to zero demand, "logger" must not nominate itself as
@@ -344,7 +404,8 @@ def _leave(leases, role):
         del leases[role]
 
 
-def _run_cycles(sibling_leases, demand, cycles, start_current=None, start_held=0):
+def _run_cycles(sibling_leases, demand, cycles, start_current=None, start_held=0,
+                skill_levels=NO_SKILL_LEVELS):
     leases = dict(sibling_leases)
     if start_current is not None:
         _join(leases, start_current)
@@ -364,7 +425,8 @@ def _run_cycles(sibling_leases, demand, cycles, start_current=None, start_held=0
         else:
             zero_demand_cycles = 0
         d = _decide(current, held_cycles, leases, demand, idle_released,
-                    zero_demand_cycles=zero_demand_cycles)
+                    zero_demand_cycles=zero_demand_cycles,
+                    skill_levels=skill_levels)
         if d.claim is not None:
             current = d.claim
             _join(leases, current)
@@ -444,35 +506,65 @@ def test_decide_role_switches_once_then_never_reverts() -> None:
     assert set(trajectory[-100:]) == {"miner"}
 
 
-def test_decide_role_terminates_the_idle_churn_instead_of_cycling() -> None:
-    # Coordinator review Finding 2, restated for a world with no scarcity.
-    # Demand is all-zero, so every role is idle and the claim ranks on skill
-    # affinity alone -- a fixed property of the character. Without
-    # `idle_released` that is a PERPETUAL loop: release the top-affinity role
-    # because nothing needs it, re-pick the very same role next cycle because
-    # it is still the top-affinity one, forever. The original repro needed four
-    # of five roles leased away to corner the character; now that nothing is
-    # ever unavailable, the loop is the DEFAULT shape, so the guard matters
-    # more, not less.
-    #
-    # With `idle_released` threaded as the caller does, the churn is bounded by
-    # the catalog: each role can be claimed and idle-released at most once, and
-    # then the candidate set is empty and the character rests permanently. The
-    # bound (not a fixed count) is the honest property -- which roles are
-    # walked, and in what order, is affinity's business, not this rule's.
-    trajectory, state_changes = _run_cycles({}, {}, cycles=1400)
+def test_an_all_zero_demand_board_settles_without_walking_the_catalog() -> None:
+    # RESIDUAL 2. An all-zero board used to walk every role in turn -- claim,
+    # hold ROLE_MIN_HOLD_CYCLES, release as idle, claim the next -- about 505
+    # cycles of DB writes and role changes serving nothing, and under
+    # non-exclusivity that is the DEFAULT shape of a quiet board, not an edge
+    # case. Release-on-idle now requires a destination (some claimable role
+    # with positive demand), and with the whole board silent there is none, so
+    # the character claims once and stays put.
+    trajectory, state_changes = _run_cycles({}, {}, cycles=600)
 
-    assert state_changes <= 2 * len(ROLE_CATALOG)
-    # Terminates in the rest state, and stays there: once the last role is
-    # released, `current` is None for every remaining cycle.
-    last_held_at = max(i for i, c in enumerate(trajectory) if c is not None)
-    assert all(c is None for c in trajectory[last_held_at + 1:])
-    assert len(trajectory) - last_held_at > ROLE_MIN_HOLD_CYCLES
-    # Every role was visited at most once -- no role is ever re-claimed after
-    # its idle release, which is exactly what `idle_released` buys.
-    visited = [c for c in trajectory if c is not None]
-    assert len(set(visited)) == len(
-        [i for i in range(len(visited)) if i == 0 or visited[i] != visited[i - 1]])
+    assert state_changes == 1
+    assert set(trajectory) == {ROLE_CATALOG[0].name}
+
+
+def test_a_role_is_released_when_a_claimable_rival_starts_wanting_work() -> None:
+    # The other side of the same gate: the narrowing must not make the rule
+    # inert. The character is parked on `miner`, which nothing needs, while
+    # `fisher` carries real demand -- so it must leave, which is the ONLY rule
+    # that can move it (the margin scan is never reached on zero own demand).
+    trajectory, state_changes = _run_cycles({}, {"fisher": 20}, cycles=600,
+                                            start_current="miner")
+
+    assert state_changes == 2  # release miner as idle, then claim fisher
+    assert trajectory[0] == "miner"
+    assert set(trajectory[-100:]) == {"fisher"}
+
+
+_STUCK_MINER = {"mining": 20}
+"""A character with mining levels and nothing else -- affinity 1 for `miner`
+and 0 for every other role, which is what makes the re-claim below possible."""
+
+
+def test_a_released_role_is_not_immediately_re_claimed_over_a_live_one() -> None:
+    # `idle_released` is still load-bearing under the narrowed rule, and this
+    # is exactly the state that proves it: `miner` has just been released as
+    # idle because `alchemist` wants work, and the claim ranks on affinity as
+    # well as demand. `miner` scores (0+1)x(1+1) = 2 on affinity alone;
+    # `alchemist`'s single unit of demand is split four ways and its affinity
+    # is 0, so it scores (1/4+1)x1 = 1.25. Without the skip the character takes
+    # `miner` straight back and churns on it forever, one lap per dwell.
+    leases = _held(alchemist=("A", "B", "C"))
+    demand = {"alchemist": 1}
+    assert _decide(None, 0, leases, demand, skill_levels=_STUCK_MINER).claim == "miner"
+    assert _decide(None, 0, leases, demand, idle_released=frozenset({"miner"}),
+                   skill_levels=_STUCK_MINER).claim == "alchemist"
+
+
+def test_the_narrowed_idle_release_still_terminates_in_a_stable_role() -> None:
+    # The same scenario driven as a caller drives it. The character starts on
+    # `miner`, which nothing needs; `alchemist` wants one unit, split three
+    # ways. It releases `miner` after the dwell, is kept off it by
+    # `idle_released`, lands on `alchemist`, and stays there -- two state
+    # changes over 1400 cycles, not a lap every dwell.
+    trajectory, state_changes = _run_cycles(
+        _held(alchemist=("A", "B", "C")), {"alchemist": 1}, cycles=1400,
+        start_current="miner", skill_levels=_STUCK_MINER)
+
+    assert state_changes == 2
+    assert set(trajectory[-1000:]) == {"alchemist"}
 
 
 def test_idle_released_role_is_claimable_again_once_demand_turns_positive() -> None:
@@ -559,7 +651,7 @@ def test_an_idle_release_is_not_flagged_unservable() -> None:
     # Zero demand is a different verdict: the role is FINISHED, not impossible.
     # It must stay re-claimable the moment demand returns, so the caller must
     # not be told to block it.
-    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {})
+    d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {"miner": 3})
     assert d.release == "logger"
     assert d.unservable is False
 
