@@ -14,14 +14,23 @@ one execution reaching the line. See the paired tests below (`..._none`/
 `..._some`, `..._without_role`/`..._with_role`, etc.).
 """
 
-from datetime import datetime, timezone
+import io
+from contextlib import redirect_stdout
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
+from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RoleChange
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
-from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
+from artifactsmmo_cli.ai.learning.coordination_store import (
+    BANK_CLAIM_TTL_SECONDS,
+    CoordinationStore,
+)
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG
 from artifactsmmo_cli.ai.role_selection import (
@@ -33,7 +42,13 @@ from artifactsmmo_cli.ai.role_selection import (
 )
 from artifactsmmo_cli.ai.strategy_driver import map_means
 from artifactsmmo_cli.ai.tiers.means import SUPPLY_DEMAND_MIN, MeansKind, _fires
+from artifactsmmo_cli.rate_limited_error import RateLimitedError
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_actions_execute import (
+    make_api_result,
+    make_char_schema,
+    make_get_character_result,
+)
 from tests.test_ai.test_role_selection import _LOR_SKILLS, _ROBBY_SKILLS
 from tests.test_ai.test_strategy_driver import _make_planner_gd
 
@@ -1235,3 +1250,265 @@ def test_a_sub_threshold_coordinated_demand_is_targeted_but_never_fires(tmp_path
     finally:
         store.close()
         sibling.close()
+
+
+# ---------------------------------------------------------------------------
+# Bank-stock claims (2026-08-05). The bank is ACCOUNT-shared, so all five
+# children hold the same `bank_items` and `bank_drain_excess` derives the same
+# shed licence from it; the losers of that race pay HTTP 478 out of the per-IP
+# request budget. The claim is WRITTEN at the general withdraw seam
+# (`_execute`, any WithdrawItemAction) and READ only by the drain — see
+# `ai/bank_drain`'s module docstring for why those two scopes differ.
+#
+# Coverage note: `branch = false`, so each conditional is pinned at BOTH
+# outcomes — store/no store, withdraw/non-withdraw, success/structured
+# failure/transport failure.
+# ---------------------------------------------------------------------------
+
+def _bank_sync_patches(bank_rows):
+    """The four API reads `_execute` makes around a successful bank action:
+    the post-action character refetch is skipped on success, but `_sync_bank`
+    pages `/my/bank/items` and reads `/my/bank`. Real patches of the API
+    surface, never of `GamePlayer` itself."""
+    items = MagicMock()
+    items.data = bank_rows
+    details = MagicMock()
+    details.data = MagicMock()
+    details.data.gold = 0
+    details.data.slots = 60
+    return (patch("artifactsmmo_cli.ai.player.get_bank_items", return_value=items),
+            patch("artifactsmmo_cli.ai.player.get_bank_details", return_value=details))
+
+
+def test_update_coordination_reads_sibling_bank_claims(tmp_path):
+    """The read half, wired: what a sibling committed to withdrawing reaches
+    `SelectionContext.sibling_bank_claims`, which is what `bank_drain_excess`
+    nets against the shared bank snapshot."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state(bank_items={"sap": 111})
+    p.game_data = _make_planner_gd()
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="rival")
+    p.set_coordination_store(store)
+    try:
+        sibling.claim_bank_stock({"sap": 90}, datetime.now(tz=timezone.utc))
+        p._update_coordination(p.state, p.game_data)
+        assert p._sibling_bank_claims == {"sap": 90}
+        assert p._selection_context(combat_monster=None).sibling_bank_claims == {"sap": 90}
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_update_coordination_clears_sibling_bank_claims_without_a_store():
+    """The single-character path, and the bit-identical guarantee: with no
+    store the claim map is EMPTY, not stale, so `bank_drain_excess` computes
+    exactly what it computed before this feature existed."""
+    p = GamePlayer(character="hero")
+    p.state = make_state()
+    p.game_data = _make_planner_gd()
+    p._sibling_bank_claims = {"sap": 90}  # prove it gets CLEARED, not left stale
+    p._update_coordination(p.state, p.game_data)
+    assert p._coordination is None
+    assert p._sibling_bank_claims == {}
+    assert p._selection_context(combat_monster=None).sibling_bank_claims == {}
+
+
+def test_a_character_never_reads_back_its_own_bank_claim(tmp_path):
+    """Self-exclusion end to end: after committing to a withdraw, this
+    character's own drain licence must NOT shrink — it would stop planning the
+    very drain it is executing."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state(bank_items={"sap": 111})
+    p.game_data = _make_planner_gd()
+    store = CoordinationStore(db_path=db, character="hero")
+    p.set_coordination_store(store)
+    try:
+        store.claim_bank_stock({"sap": 90}, datetime.now(tz=timezone.utc))
+        p._update_coordination(p.state, p.game_data)
+        assert p._sibling_bank_claims == {}
+    finally:
+        store.close()
+
+
+def test_claim_bank_stock_is_a_noop_without_a_store():
+    p = GamePlayer(character="hero")
+    p._claim_bank_stock(WithdrawItemAction(code="sap", quantity=5))  # must not raise
+
+
+def test_release_bank_stock_is_a_noop_without_a_store():
+    p = GamePlayer(character="hero")
+    p._release_bank_stock(WithdrawItemAction(code="sap", quantity=5))  # must not raise
+
+
+def test_release_bank_stock_leaves_a_claim_alone_for_a_non_withdraw_action(tmp_path):
+    """`_release_bank_stock` is called from the failure branches for EVERY
+    action, so it has to distinguish. A Move that 478s must not free the units
+    an in-flight withdraw is holding."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    store = CoordinationStore(db_path=db, character="hero")
+    observer = CoordinationStore(db_path=db, character="observer")
+    p.set_coordination_store(store)
+    now = datetime.now(tz=timezone.utc)
+    try:
+        store.claim_bank_stock({"sap": 22}, now)
+        p._release_bank_stock(MoveAction(x=1, y=1))
+        assert observer.sibling_bank_claims(now) == {"sap": 22}
+        p._release_bank_stock(WithdrawItemAction(code="sap", quantity=22))
+        assert observer.sibling_bank_claims(now) == {}
+    finally:
+        store.close()
+        observer.close()
+
+
+def test_execute_publishes_the_claim_before_the_withdraw_request(tmp_path):
+    """ORDERING is the whole mechanism: a claim published after the request
+    would be invisible to the sibling that is deriving its licence right now.
+    The assertion runs INSIDE the patched API call, so it can only pass if the
+    claim landed first."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state(x=4, y=0, bank_items={"sap": 111})
+    p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
+    observer = CoordinationStore(db_path=db, character="observer")
+    seen: list[dict[str, int]] = []
+
+    def _spy(*_args, **_kwargs):
+        seen.append(observer.sibling_bank_claims(datetime.now(tz=timezone.utc)))
+        raise ApiActionError(478, "Missing required item(s)")
+
+    action = WithdrawItemAction(code="sap", quantity=111, bank_location=(4, 0))
+    char = make_char_schema(x=4, y=0)
+    empty = MagicMock()
+    empty.data = []
+    items_patch, details_patch = _bank_sync_patches([])
+    try:
+        with redirect_stdout(io.StringIO()):
+            with patch("artifactsmmo_cli.ai.actions.withdraw_item.withdraw_item",
+                       side_effect=_spy), \
+                 patch("artifactsmmo_cli.ai.player.get_character",
+                       return_value=make_get_character_result(char)), \
+                 patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty), \
+                 patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty), \
+                 items_patch, details_patch:
+                _new_state, outcome = p._execute(action, MagicMock())
+        assert outcome == "error:HTTP_478"
+        assert seen == [{"sap": 111}], "the claim must be visible to siblings before the request"
+    finally:
+        p._coordination.close()
+        observer.close()
+
+
+def test_execute_releases_the_claim_when_the_withdraw_is_rejected(tmp_path):
+    """A structured server rejection means the withdraw did not happen — 478
+    "Missing required item(s)" above all, the very case where the units belong
+    to someone else. Holding the claim would compound the contention this
+    mechanism exists to relieve."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state(x=4, y=0, bank_items={"sap": 111})
+    p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
+    observer = CoordinationStore(db_path=db, character="observer")
+    action = WithdrawItemAction(code="sap", quantity=111, bank_location=(4, 0))
+    char = make_char_schema(x=4, y=0)
+    empty = MagicMock()
+    empty.data = []
+    items_patch, details_patch = _bank_sync_patches([])
+    try:
+        with redirect_stdout(io.StringIO()):
+            with patch("artifactsmmo_cli.ai.actions.withdraw_item.withdraw_item",
+                       side_effect=ApiActionError(478, "Missing required item(s)")), \
+                 patch("artifactsmmo_cli.ai.player.get_character",
+                       return_value=make_get_character_result(char)), \
+                 patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty), \
+                 patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty), \
+                 items_patch, details_patch:
+                _new_state, outcome = p._execute(action, MagicMock())
+        assert outcome == "error:HTTP_478"
+        assert observer.sibling_bank_claims(datetime.now(tz=timezone.utc)) == {}
+    finally:
+        p._coordination.close()
+        observer.close()
+
+
+def test_execute_releases_the_claim_when_the_withdraw_is_rate_limited(tmp_path):
+    """A 429 is rejected before it reaches game logic, so the units were never
+    taken — the same release case as a structured rejection."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state(x=4, y=0, bank_items={"sap": 111})
+    p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
+    observer = CoordinationStore(db_path=db, character="observer")
+    action = WithdrawItemAction(code="sap", quantity=111, bank_location=(4, 0))
+    try:
+        with redirect_stdout(io.StringIO()):
+            with patch("artifactsmmo_cli.ai.actions.withdraw_item.withdraw_item",
+                       side_effect=RateLimitedError({"Retry-After": "1"})), \
+                 patch("artifactsmmo_cli.ai.player.time.sleep"):
+                _new_state, outcome = p._execute(action, MagicMock())
+        assert outcome == GamePlayer.RATE_LIMITED_OUTCOME
+        assert observer.sibling_bank_claims(datetime.now(tz=timezone.utc)) == {}
+    finally:
+        p._coordination.close()
+        observer.close()
+
+
+def test_execute_keeps_the_claim_when_the_withdraw_succeeds(tmp_path):
+    """THE deviation from "release on success", and the reason the mechanism is
+    not inert.
+
+    The reason a claim must be released is that a claim outliving its withdraw
+    is stock nobody can touch. After a SUCCESSFUL withdraw the units are gone,
+    so the claim withholds nothing that exists — what it shadows is the sibling
+    snapshots that still show them, which IS the race: `bank_items` is only
+    re-read after that sibling's own bank action or every
+    `BANK_REFRESH_INTERVAL` actions. Releasing here would collapse the useful
+    window to one HTTP round-trip. It expires on `BANK_CLAIM_TTL_SECONDS`
+    instead, which is sized for exactly that settlement window."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state(x=4, y=0, bank_items={"sap": 111})
+    p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
+    observer = CoordinationStore(db_path=db, character="observer")
+    action = WithdrawItemAction(code="sap", quantity=5, bank_location=(4, 0))
+    char = make_char_schema(x=4, y=0)
+    items_patch, details_patch = _bank_sync_patches([])
+    try:
+        with redirect_stdout(io.StringIO()):
+            with patch("artifactsmmo_cli.ai.actions.withdraw_item.withdraw_item",
+                       return_value=make_api_result(char)), \
+                 items_patch, details_patch:
+                _new_state, outcome = p._execute(action, MagicMock())
+        assert outcome == "ok"
+        now = datetime.now(tz=timezone.utc)
+        assert observer.sibling_bank_claims(now) == {"sap": 5}
+        # ...and it is genuinely TTL-bounded, not permanent.
+        assert observer.sibling_bank_claims(
+            now + timedelta(seconds=BANK_CLAIM_TTL_SECONDS + 1)) == {}
+    finally:
+        p._coordination.close()
+        observer.close()
+
+
+def test_execute_claims_nothing_for_a_non_withdraw_action(tmp_path):
+    """The other side of the `isinstance` gate: only a withdraw takes bank
+    stock, so only a withdraw announces one."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state(x=0, y=0)
+    p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
+    observer = CoordinationStore(db_path=db, character="observer")
+    char = make_char_schema(x=3, y=5)
+    try:
+        with redirect_stdout(io.StringIO()):
+            with patch("artifactsmmo_cli.ai.actions.movement.action_move",
+                       return_value=make_api_result(char)):
+                _new_state, outcome = p._execute(MoveAction(x=3, y=5), MagicMock())
+        assert outcome == "ok"
+        assert observer.sibling_bank_claims(datetime.now(tz=timezone.utc)) == {}
+    finally:
+        p._coordination.close()
+        observer.close()

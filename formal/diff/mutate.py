@@ -5185,6 +5185,17 @@ BANK_DRAIN_KEEP_MUTATIONS = [
      "            licensed, worth_keeping(code, state, game_data, ctx), bank_qty)",
      "        excess = drain_licensed_pure(\n"
      "            bank_qty, worth_keeping(code, state, game_data, ctx), bank_qty)"),
+
+    # Cross-character contention (2026-08-05). The bank is ACCOUNT-shared, so
+    # dropping the sibling-claim subtraction restores the exact defect: five
+    # children derive the SAME licence from the SAME snapshot and race, and the
+    # losers spend an action-bucket request on HTTP 478 (7 of 72 cycles on the
+    # validation run). The mutant is a pure REVERT to the pre-coordination
+    # expression, which is why it has to be killed by a test that asserts the
+    # subtraction and not merely by one that exercises the line.
+    ("bank_drain: ignore sibling bank claims (five children race for one pile)",
+     "        bank_qty = banked - ctx.sibling_bank_claims.get(code, 0)",
+     "        bank_qty = banked"),
 ]
 
 

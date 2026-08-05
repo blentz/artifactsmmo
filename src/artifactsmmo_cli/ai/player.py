@@ -392,6 +392,14 @@ class GamePlayer:
         # None whenever no coordination store is attached, no role is held, or
         # nothing the held role produces is in sibling demand.
         self._supply_target: tuple[str, int, int] | None = None
+        # {item_code: quantity} of BANK stock siblings have committed to
+        # withdrawing, read once per cycle in `_update_coordination` and
+        # threaded into `_selection_context`'s `sibling_bank_claims`. Empty
+        # whenever no coordination store is attached (every single-character
+        # run), which keeps `bank_drain_excess` byte-identical to its
+        # pre-coordination behaviour. Same per-cycle lifecycle as
+        # `_supply_target`.
+        self._sibling_bank_claims: dict[str, int] = {}
         # The role transition that happened on THIS cycle, or None — the same
         # per-cycle lifecycle as `_supply_target` (recomputed at the end of
         # every `_update_coordination`, cleared when there is no store). Read
@@ -1384,6 +1392,21 @@ class GamePlayer:
             self._arbiter._memo.mark(self._plan_cache.goal_repr, self.state,
                                      self._cycle_counter)
 
+    def _claim_bank_stock(self, action: WithdrawItemAction) -> None:
+        """Announce to siblings that this withdraw is taking `action.quantity`
+        of `action.code` out of the shared bank. No-op without a coordination
+        store, which is every single-character run."""
+        if self._coordination is not None:
+            self._coordination.claim_bank_stock(
+                {action.code: action.quantity}, datetime.now(tz=timezone.utc))
+
+    def _release_bank_stock(self, action: Action) -> None:
+        """Drop this character's bank-stock claim after a withdraw that
+        provably did not happen. No-op for a non-withdraw action and without a
+        coordination store."""
+        if self._coordination is not None and isinstance(action, WithdrawItemAction):
+            self._coordination.release_bank_stock()
+
     def _execute(self, action: Action, client: AuthenticatedClient) -> tuple[WorldState, str]:
         """Execute an action. Returns (new_state, outcome_str).
 
@@ -1415,6 +1438,16 @@ class GamePlayer:
             # propagating out of run() and crashing the session.
             if isinstance(action, LevelSkill):
                 return self._execute_level_skill(action, client)
+            # Publish what this withdraw is taking out of the ACCOUNT-SHARED
+            # bank BEFORE the request, so a sibling deriving its shed licence
+            # in the meantime nets these units out instead of racing us for
+            # them (`ai/bank_drain`'s module docstring; `CoordinationStore
+            # .claim_bank_stock`). The GENERAL seam on purpose — every
+            # WithdrawItemAction, whoever emitted it — so a supply or
+            # currency-ferry withdraw is announced too. No-op without a
+            # coordination store.
+            if isinstance(action, WithdrawItemAction):
+                self._claim_bank_stock(action)
             self._acquire_action()
             new_state = action.execute(self.state, client)
             # Re-sync bank state after visiting bank
@@ -1439,6 +1472,10 @@ class GamePlayer:
             # `except httpx.HTTPError` retry loop already treats a 429 as
             # transient with no changes there.
             self._last_error = _error_text(e)
+            # The units were never taken, so a surviving claim would hide real
+            # bank stock from every sibling for the rest of its TTL — the one
+            # case `release_bank_stock` exists for.
+            self._release_bank_stock(action)
             delay = retry_after_seconds(e.headers, self._rate_limit_attempts)
             self._rate_limit_attempts += 1
             print(f"[{self._now()}] Rate limited (HTTP 429) — waiting {delay:.0f}s")
@@ -1446,6 +1483,14 @@ class GamePlayer:
             return self.state, self.RATE_LIMITED_OUTCOME
         except ApiActionError as e:
             self._last_error = _error_text(e)
+            # A STRUCTURED server rejection means the withdraw did not happen —
+            # 478 "Missing required item(s)" most of all, which is precisely the
+            # case where the units are someone else's and holding a claim on
+            # them would compound the contention this mechanism exists to
+            # relieve. Not done in the `httpx.HTTPError` branch below, which is
+            # a transport failure: there the request may well have LANDED, and
+            # a claim on units that really are gone must stand until its TTL.
+            self._release_bank_stock(action)
             if e.code == ERROR_CODE_COOLDOWN:
                 print(f"[{self._now()}] Server cooldown (HTTP 499) — refreshing state")
                 outcome = "error:cooldown"
@@ -2734,10 +2779,16 @@ class GamePlayer:
         nothing from the per-IP rate budget that actually binds this bot."""
         if self._coordination is None:
             self._supply_target = None
+            self._sibling_bank_claims = {}
             self._role_change = None
             return
         role_before = self._role
         now = datetime.now(tz=timezone.utc)
+        # Bank stock a sibling has already committed to withdrawing. Read here
+        # with the rest of the coordination block (one SQLite query, no API
+        # call) so the shed licence this cycle derives is netted against it —
+        # see `ai/bank_drain`'s module docstring for the contention it fixes.
+        self._sibling_bank_claims = self._coordination.sibling_bank_claims(now)
         if self._role is not None:
             self._coordination.renew(self._role, now)
         self._coordination.publish_demand(self._own_unmet_demand(state, game_data), now)
@@ -2887,6 +2938,12 @@ class GamePlayer:
             # empty frozenset keeps the gear ranking byte-identical to the
             # four-factor product.
             role_skills=self._role_owned_skills(),
+            # Bank stock siblings have committed to withdrawing, same source
+            # and same lifecycle as `supply_target`: set by
+            # `_update_coordination`, empty on every single-character run.
+            # `bank_drain.bank_drain_excess` subtracts it from the bank's
+            # available quantity so five children stop racing for one pile.
+            sibling_bank_claims=self._sibling_bank_claims,
         )
 
     def _role_owned_skills(self) -> frozenset[str]:

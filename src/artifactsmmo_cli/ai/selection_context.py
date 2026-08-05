@@ -90,6 +90,26 @@ class SelectionContext:
     # real `Role`, so the empty frozenset is an unambiguous "no role" sentinel
     # — `_role_map` returns `{}` for it, the inert four-factor product.
     role_skills: frozenset[str] = field(default_factory=frozenset)
+    # {item_code: quantity} of BANK stock a SIBLING has already committed to
+    # withdrawing this cycle — `CoordinationStore.sibling_bank_claims`, read
+    # once per cycle by the player's coordination block and threaded here as
+    # DATA, the same seam as `supply_target` and `role_skills`. Empty (the
+    # default) on every single-character run and whenever no coordination
+    # store is attached, which makes `bank_drain.bank_drain_excess`
+    # byte-identical to its pre-coordination behaviour.
+    #
+    # The bank is ACCOUNT-shared, so all five `play --all` children hold the
+    # same `bank_items` and derive the same shed licence from it; the losers
+    # of that race pay HTTP 478 "Missing required item(s)" out of the per-IP
+    # request budget (7 of 72 cycles, 2026-08-05 validation run). Subtracting
+    # this from the bank's AVAILABLE quantity is what stops four characters
+    # planning the same withdraw.
+    #
+    # AVAILABILITY, NOT OWNERSHIP: it never reaches `destroyable`. A sibling's
+    # claim does not change what the ACCOUNT owns (the bank is shared, so the
+    # keep authority's ownership cap is account-wide and unaffected) — it
+    # changes only how many copies are still there to take.
+    sibling_bank_claims: dict[str, int] = field(default_factory=dict)
 
 
 NO_PROFILE_CONTEXT = SelectionContext(

@@ -62,7 +62,42 @@ valuation is quantity-typed, why "reachable consumer" is now a requirement-graph
 question rather than the `level_distance_keep_ceiling` proxy, and why the cap is on
 the BANK's own stock rather than inventory-credited.
 
-Pure: reads state/game_data/ctx only, no I/O.
+CROSS-CHARACTER CONTENTION (2026-08-05, the disposal epic's own side-effect).
+The bank is ACCOUNT-shared. Every `play --all` child holds the same
+`state.bank_items` snapshot, so all five independently derive the SAME licence
+for the SAME codes and race for the same stock; the losers spend an
+action-bucket request on HTTP 478 "Missing required item(s)" (7 of 72 cycles on
+the validation run, ~10% of that run's requests, against the per-IP rate budget
+that is this bot's binding constraint). `ctx.sibling_bank_claims` — live claims
+published by siblings via `CoordinationStore.claim_bank_stock` — is subtracted
+from the bank's AVAILABLE quantity below, so the second character to look sees
+what the first left.
+
+WHY THE SUBTRACTION IS HERE AND NOT AT EVERY WITHDRAW. The claim is WRITTEN at
+the general seam (`GamePlayer._execute`, for any `WithdrawItemAction`, so a
+supply or currency-ferry withdraw is published too and this drain yields to it).
+It is READ only here, because a claim that suppresses a withdraw is a liveness
+hazard everywhere else: `SupplyBankGoal` and the currency ferry
+(`Withdraw(event_ticket x100)`) withdraw to make FORWARD PROGRESS, and a sibling
+claim that made those unplannable would convert an optimisation into a stall.
+The drain is discretionary housekeeping (`DRAIN_BANK_JUNK_VALUE` = 15, below
+every objective rung), so yielding a pile to a sibling costs exactly nothing —
+it drains next cycle instead. It is also where the measured contention was: all
+seven observed 478s were drain withdraws (`sap`, `egg`). The other candidate
+read site, `WithdrawItemAction.is_applicable`, is a Lean-pinned planner
+precondition; making plan admissibility depend on a mutable cross-character read
+there would make the planner non-deterministic, which is materially harder AND
+worse.
+
+This stays an OPTIMISATION, never a correctness mechanism: the existing
+`error:HTTP_478 -> _sync_bank -> replan` path remains the backstop, and a
+coordination store that is absent or failing yields an empty claim map, which is
+byte-identical to pre-coordination behaviour. No second layer of handling is
+added around it.
+
+Pure: reads state/game_data/ctx only, no I/O. The sibling claims arrive as DATA
+on `ctx` (the same seam as `supply_target` / `role_skills`) — this module reads
+no store and no clock.
 """
 
 from artifactsmmo_cli.ai.game_data import GameData
@@ -83,7 +118,16 @@ def bank_drain_excess(state: WorldState, game_data: GameData,
     """
     bank = state.bank_items or {}
     out: dict[str, int] = {}
-    for code, bank_qty in bank.items():
+    for code, banked in bank.items():
+        # AVAILABILITY: the bank is ACCOUNT-shared, so every `play --all` child
+        # reads the SAME `bank_items` and derives the SAME licence from it —
+        # five characters concluding they may each take the same 17 eggs, four
+        # of them paying HTTP 478 for it. `ctx.sibling_bank_claims` is what a
+        # sibling has already committed to withdrawing (empty on every
+        # single-character run, which makes this line inert). Applied to the
+        # bank's QUANTITY, before both the emptiness test and the surplus, so a
+        # claimed pile is neither drained nor half-drained.
+        bank_qty = banked - ctx.sibling_bank_claims.get(code, 0)
         if bank_qty <= 0:
             continue
         # PROTECTION: the keep authority's ownership cap. Never melt the last tool.

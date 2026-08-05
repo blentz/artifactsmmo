@@ -207,6 +207,43 @@ class MaterialDemand(SQLModel, table=True):
     expires_at: str
 
 
+class BankStockClaim(SQLModel, table=True):
+    """One character's claim on BANK stock it is withdrawing. Upsert key is
+    (character, item_code), the same shape as `MaterialDemand`.
+
+    The bank is ACCOUNT-shared, so every `play --all` child holds the same
+    `bank_items` snapshot and `bank_drain.bank_drain_excess` derives the same
+    shed licence from it — five characters independently concluding they may
+    take the same 17 eggs. The losers of that race spend an action-bucket
+    request on HTTP 478 "Missing required item(s)"; the 2026-08-05 validation
+    run wasted 7 of 72 cycles that way. This table is where a character says
+    "these units are spoken for" so siblings subtract them before deriving
+    their own licence.
+
+    Carries the same `expires_at` liveness rule as `RoleLease` and
+    `MaterialDemand` — a row is real if unexpired — so the coordination system
+    still has exactly ONE liveness rule. `claimed_at` is diagnostic only:
+    nothing orders claims by it, because an ordering would be a decision
+    tiebreak and the loser of a simultaneous claim is already covered by the
+    HTTP 478 -> replan backstop.
+
+    NOT a lock. Nothing blocks on it and nothing consults it for correctness:
+    the withdraw itself is authoritative, and a claim that is missed simply
+    reproduces today's behaviour."""
+
+    __tablename__ = "bank_stock_claims"
+    __table_args__ = (
+        UniqueConstraint("character", "item_code", name="uq_bank_stock_claim_holder"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    character: str = Field(index=True)
+    item_code: str = Field(index=True)
+    quantity: int
+    claimed_at: str
+    expires_at: str
+
+
 class PlanBodyLogBase(SQLModel):
     """One computed plan body, logged at re-plan time. Counted by the Phase-2
     macro detector."""

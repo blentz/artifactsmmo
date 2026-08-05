@@ -1,5 +1,9 @@
-"""Tests for the coordination tables: RoleLease and MaterialDemand, and the
-CoordinationStore that operates on RoleLease."""
+"""Tests for the coordination tables — RoleLease, MaterialDemand and
+BankStockClaim — and the CoordinationStore that operates on them.
+
+All three carry the same `expires_at` liveness rule (a row is real if
+unexpired), and all three cross-character reads (`live_leases`,
+`sibling_demand`, `sibling_bank_claims`) live in that one file."""
 
 import multiprocessing
 import tempfile
@@ -13,12 +17,25 @@ from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, create_engine, select
 
 from artifactsmmo_cli.ai.learning.coordination_store import (
+    BANK_CLAIM_TTL_SECONDS,
     DEMAND_TTL_SECONDS,
     LEASE_TTL_SECONDS,
     CoordinationStore,
     _require_utc,
 )
-from artifactsmmo_cli.ai.learning.models import MaterialDemand, RoleLease
+from artifactsmmo_cli.ai.learning.models import BankStockClaim, MaterialDemand, RoleLease
+
+
+def _bank_claim_rows(db_path: Path) -> int:
+    """Row COUNT in `bank_stock_claims`, read directly. `sibling_bank_claims`
+    filters on expiry, so it cannot see a tombstone the sweep failed to remove —
+    the table has to be counted to prove the sweep runs."""
+    engine = create_engine(f"sqlite:///{db_path}")
+    try:
+        with SqlSession(engine) as s:
+            return len(s.exec(select(BankStockClaim)).all())
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture(name="engine")
@@ -664,6 +681,35 @@ class TestDegradationOnDbError:
         assert hal.sibling_demand(_T0) == {}
         assert "[coordination] sibling_demand failed" in capsys.readouterr().out
 
+    def test_claim_bank_stock_swallows_error(self, tmp_path: Path, capsys) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        _break_engine(hal)
+        hal.claim_bank_stock({"egg": 17}, _T0)
+        assert "[coordination] claim_bank_stock failed" in capsys.readouterr().out
+
+    def test_release_bank_stock_swallows_error(self, tmp_path: Path, capsys) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        hal.claim_bank_stock({"egg": 17}, _T0)
+        _break_engine(hal)
+        hal.release_bank_stock()
+        assert "[coordination] release_bank_stock failed" in capsys.readouterr().out
+
+    def test_sibling_bank_claims_swallows_error_and_returns_empty(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """THE unavailable-store contract for this feature: an empty claim map
+        is exactly pre-coordination behaviour, so `bank_drain_excess` computes
+        what it computed before. Handled here and NOT re-handled upstream —
+        there is no second layer of error handling around the HTTP 478
+        backstop."""
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        _break_engine(hal)
+        assert hal.sibling_bank_claims(_T0) == {}
+        assert "[coordination] sibling_bank_claims failed" in capsys.readouterr().out
+
 
 def test_a_rival_taking_the_role_mid_claim_does_not_fail_the_claim(tmp_path: Path) -> None:
     """The race that USED to be decisive, now proven benign.
@@ -805,6 +851,23 @@ def _claim_worker(db_path: str, character: str, role: str, barrier: object, out:
     try:
         barrier.wait()
         out.put((character, store.claim(role, _T0)))
+    finally:
+        store.close()
+
+
+def _bank_claim_worker(db_path: str, character: str, quantity: int,
+                       barrier: object, out: object) -> None:
+    """Module-level so it is picklable by multiprocessing's spawn start method.
+
+    Waits on `barrier` AFTER the store is constructed and BEFORE the claim, so
+    all five children write to `bank_stock_claims` at the same moment — the
+    interleaving is the thing under test. Reports what THIS child sees of its
+    siblings afterwards, so the test can check both the write and the read."""
+    store = CoordinationStore(db_path=db_path, character=character)
+    try:
+        barrier.wait()
+        store.claim_bank_stock({"egg": quantity}, _T0)
+        out.put((character, store.sibling_bank_claims(_T0).get("egg", 0)))
     finally:
         store.close()
 
@@ -1057,3 +1120,326 @@ def test_sibling_demand_rejects_non_utc_offset_now(tmp_path: Path) -> None:
             hal.sibling_demand(_NON_UTC_NOW)
     finally:
         hal.close()
+
+
+# ---------------------------------------------------------------------------
+# Bank-stock claims: the third member of the lease/demand family.
+#
+# The bank is ACCOUNT-shared, so all five `play --all` children hold the same
+# `bank_items` snapshot and `bank_drain.bank_drain_excess` derives the same shed
+# licence from it. The losers of that race pay HTTP 478 "Missing required
+# item(s)" out of the per-IP request budget (7 of 72 cycles, 2026-08-05).
+#
+# Coverage note: `branch = false`, so every conditional added here is pinned to
+# EACH outcome (positive/non-positive quantity, expired/live, self/sibling).
+# ---------------------------------------------------------------------------
+
+
+def test_the_second_character_sees_the_firsts_bank_claim(tmp_path: Path) -> None:
+    """The whole point: two characters, one bank. HAL commits to 17 eggs, and
+    C3P0's view of what is still takeable is netted against it."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        assert c3po.sibling_bank_claims(_T0) == {}
+        hal.claim_bank_stock({"egg": 17}, _T0)
+        assert c3po.sibling_bank_claims(_T0) == {"egg": 17}
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_a_character_does_not_see_its_own_bank_claim(tmp_path: Path) -> None:
+    """Self-exclusion is load-bearing, not tidiness: the reader SUBTRACTS this
+    from its own bank view to decide what it may still take, so counting its own
+    in-flight withdraw would make it stop planning the drain it is executing."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        hal.claim_bank_stock({"egg": 17}, _T0)
+        assert hal.sibling_bank_claims(_T0) == {}
+    finally:
+        hal.close()
+
+
+def test_bank_claims_sum_across_several_siblings(tmp_path: Path) -> None:
+    """Two siblings taking the same code both reduce what is left — the sum, not
+    the max: they are taking DIFFERENT copies."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    lor = CoordinationStore(db_path=db, character="Lor")
+    try:
+        hal.claim_bank_stock({"sap": 22}, _T0)
+        c3po.claim_bank_stock({"sap": 3, "egg": 9}, _T0)
+        assert lor.sibling_bank_claims(_T0) == {"sap": 25, "egg": 9}
+    finally:
+        hal.close()
+        c3po.close()
+        lor.close()
+
+
+def test_an_expired_bank_claim_frees_the_stock_again(tmp_path: Path) -> None:
+    """The single liveness rule: a row is real if unexpired. A character that
+    crashed between claiming and withdrawing must not hold the pile forever."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_bank_stock({"egg": 17}, _T0)
+        just_live = _T0 + timedelta(seconds=BANK_CLAIM_TTL_SECONDS - 1)
+        assert c3po.sibling_bank_claims(just_live) == {"egg": 17}
+        expired = _T0 + timedelta(seconds=BANK_CLAIM_TTL_SECONDS + 1)
+        assert c3po.sibling_bank_claims(expired) == {}
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_a_released_bank_claim_frees_the_stock_immediately(tmp_path: Path) -> None:
+    """The failed-withdraw path: the units are still in the bank, so waiting out
+    the TTL would hide real stock from every sibling."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_bank_stock({"egg": 17}, _T0)
+        assert c3po.sibling_bank_claims(_T0) == {"egg": 17}
+        hal.release_bank_stock()
+        assert c3po.sibling_bank_claims(_T0) == {}
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_release_bank_stock_drops_only_the_releasing_characters_rows(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    lor = CoordinationStore(db_path=db, character="Lor")
+    try:
+        hal.claim_bank_stock({"egg": 17}, _T0)
+        c3po.claim_bank_stock({"egg": 9}, _T0)
+        hal.release_bank_stock()
+        assert lor.sibling_bank_claims(_T0) == {"egg": 9}
+    finally:
+        hal.close()
+        c3po.close()
+        lor.close()
+
+
+def test_release_bank_stock_is_a_noop_when_nothing_is_claimed(tmp_path: Path) -> None:
+    """The common case — every non-withdraw failure reaches `release` too."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.release_bank_stock()
+        assert c3po.sibling_bank_claims(_T0) == {}
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_claiming_bank_stock_replaces_this_characters_previous_claim(tmp_path: Path) -> None:
+    """Replace-wholesale, like `publish_demand`: a character executes ONE action
+    at a time, so the rows from a settled withdraw are stale the moment a new one
+    is committed. Merging would keep a finished withdraw's units invisible."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_bank_stock({"egg": 17}, _T0)
+        hal.claim_bank_stock({"sap": 22}, _T0)
+        assert c3po.sibling_bank_claims(_T0) == {"sap": 22}
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_a_non_positive_bank_claim_is_not_stored(tmp_path: Path) -> None:
+    """A claim on zero units is not a claim; storing it would put rows in
+    `sibling_bank_claims` that can never subtract anything."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_bank_stock({"egg": 0, "sap": -3, "gold_ore": 2}, _T0)
+        assert c3po.sibling_bank_claims(_T0) == {"gold_ore": 2}
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_claiming_bank_stock_sweeps_expired_rows(tmp_path: Path) -> None:
+    """`claim_bank_stock` is the only place a row is ever ADDED, so the sweep
+    runs at exactly the cadence the table grows — the same argument `claim`
+    makes for `role_leases`. Without it the table only ever grows, one tombstone
+    per (character, code-ever-withdrawn)."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_bank_stock({"egg": 17}, _T0)
+        later = _T0 + timedelta(seconds=BANK_CLAIM_TTL_SECONDS + 1)
+        assert _bank_claim_rows(tmp_path / "coord.db") == 1
+        c3po.claim_bank_stock({"sap": 4}, later)
+        # HAL's row is gone, C3P0's survives: only the dead are swept.
+        assert _bank_claim_rows(tmp_path / "coord.db") == 1
+        assert hal.sibling_bank_claims(later) == {"sap": 4}
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_the_sweep_leaves_a_live_siblings_bank_claim_alone(tmp_path: Path) -> None:
+    """The complement of the sweep test: a LIVE sibling row must survive another
+    character's claim, or a claim would double as a steal."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    lor = CoordinationStore(db_path=db, character="Lor")
+    try:
+        hal.claim_bank_stock({"egg": 17}, _T0)
+        c3po.claim_bank_stock({"sap": 4}, _T0)
+        assert lor.sibling_bank_claims(_T0) == {"egg": 17, "sap": 4}
+    finally:
+        hal.close()
+        c3po.close()
+        lor.close()
+
+
+def test_the_same_character_cannot_claim_one_item_twice(engine) -> None:
+    """UNIQUE(character, item_code) is the row's identity: a duplicate would
+    DOUBLE the quantity `sibling_bank_claims` sums, hiding stock that is really
+    there."""
+    with SqlSession(engine) as s:
+        s.add(BankStockClaim(character="HAL", item_code="egg", quantity=17,
+                             claimed_at="2026-08-01T00:00:00+00:00",
+                             expires_at="2026-08-01T00:01:00+00:00"))
+        s.commit()
+    with SqlSession(engine) as s:
+        s.add(BankStockClaim(character="HAL", item_code="egg", quantity=5,
+                             claimed_at="2026-08-01T00:00:00+00:00",
+                             expires_at="2026-08-01T00:01:00+00:00"))
+        with pytest.raises(IntegrityError):
+            s.commit()
+
+
+def test_two_characters_may_claim_the_same_item(engine) -> None:
+    """The other half of the key: siblings taking different copies of one code
+    is the normal case, and both rows must stand so the quantities SUM."""
+    with SqlSession(engine) as s:
+        s.add(BankStockClaim(character="HAL", item_code="egg", quantity=17,
+                             claimed_at="2026-08-01T00:00:00+00:00",
+                             expires_at="2026-08-01T00:01:00+00:00"))
+        s.add(BankStockClaim(character="C3P0", item_code="egg", quantity=9,
+                             claimed_at="2026-08-01T00:00:00+00:00",
+                             expires_at="2026-08-01T00:01:00+00:00"))
+        s.commit()
+        assert len(s.exec(select(BankStockClaim)).all()) == 2
+
+
+def test_bank_claim_ttl_is_far_shorter_than_the_lease() -> None:
+    """The derivation, pinned. The claim covers a SETTLEMENT window (one
+    cooldown-bound cycle: acquire, request, `_sync_bank`), not a production run,
+    so a crashed character costs the fleet a couple of cycles of one code's shed
+    rather than a whole lease epoch."""
+    assert BANK_CLAIM_TTL_SECONDS < LEASE_TTL_SECONDS
+    assert BANK_CLAIM_TTL_SECONDS < DEMAND_TTL_SECONDS
+    # Two cycles at the upper end of the observed 15-25s cooldown-bound cadence.
+    assert BANK_CLAIM_TTL_SECONDS == 60
+
+
+def test_claim_bank_stock_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.claim_bank_stock({"egg": 17}, _NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_claim_bank_stock_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="offset"):
+            hal.claim_bank_stock({"egg": 17}, _NON_UTC_NOW)
+    finally:
+        hal.close()
+
+
+def test_sibling_bank_claims_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.sibling_bank_claims(_NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_sibling_bank_claims_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="offset"):
+            hal.sibling_bank_claims(_NON_UTC_NOW)
+    finally:
+        hal.close()
+
+
+def test_every_process_claiming_bank_stock_is_recorded_exactly_once(tmp_path: Path) -> None:
+    """Five real spawned processes writing `bank_stock_claims` on one SQLite
+    file at once — the production shape, and the one thing an in-process test
+    cannot simulate.
+
+    Three facts, each of which a lost or doubled row would break:
+
+      * nobody is dropped — all five claims are present, because a missing row
+        is a sibling that re-derives the same licence and pays HTTP 478 for it,
+        which is the whole defect this table exists to fix;
+      * nobody is doubled — exactly five ROWS under UNIQUE(character,
+        item_code), because a duplicate would hide bank stock that is really
+        there and starve the drain instead of serialising it;
+      * the quantities SUM — each child sees exactly the other four's units, so
+        five characters splitting one pile subtract each other's copies rather
+        than each other's presence.
+    """
+    db = str(tmp_path / "coord.db")
+    # Seeded on purpose, exactly as the role-claim race test is: this test
+    # isolates the CLAIM race, and the concurrent `create_all` race has its own
+    # test above.
+    seed = CoordinationStore(db_path=db, character="seed")
+    seed.close()
+
+    ctx = multiprocessing.get_context("spawn")
+    queue = ctx.Queue()
+    quantities = {"HAL": 17, "C3P0": 9, "R2D2": 111, "Robby": 22, "KITT": 3}
+    barrier = ctx.Barrier(len(quantities))
+    procs = [ctx.Process(target=_bank_claim_worker, args=(db, n, q, barrier, queue))
+             for n, q in quantities.items()]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join(timeout=30)
+        assert p.exitcode == 0, f"a child died claiming bank stock: {p.exitcode}"
+
+    seen = dict(queue.get() for _ in quantities)
+    assert sorted(seen) == sorted(quantities)
+    assert _bank_claim_rows(tmp_path / "coord.db") == len(quantities)
+
+    total = sum(quantities.values())
+    observer = CoordinationStore(db_path=db, character="observer")
+    try:
+        assert observer.sibling_bank_claims(_T0) == {"egg": total}
+    finally:
+        observer.close()
+    # Each child either raced ahead of some siblings or behind them, so what it
+    # SAW is a subset — but it can never have seen its own units, and it can
+    # never have seen more than everyone else's.
+    for name, seen_qty in seen.items():
+        assert 0 <= seen_qty <= total - quantities[name]

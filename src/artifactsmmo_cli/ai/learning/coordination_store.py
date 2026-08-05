@@ -28,7 +28,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, create_engine, select
 
-from artifactsmmo_cli.ai.learning.models import MaterialDemand, RoleLease
+from artifactsmmo_cli.ai.learning.models import BankStockClaim, MaterialDemand, RoleLease
 from artifactsmmo_cli.ai.learning.schema_init import exclusive_schema_lock
 
 LEASE_TTL_SECONDS = 600
@@ -43,6 +43,35 @@ DEMAND_TTL_SECONDS = 600
 LEASE_TTL_SECONDS on purpose: a crashed character's demand stops being served
 at the same moment its role frees up, so there is exactly ONE liveness rule in
 the coordination system."""
+
+BANK_CLAIM_TTL_SECONDS = 60
+"""Seconds a bank-stock claim survives. DELIBERATELY MUCH SHORTER than the two
+above, and derived from the cycle cadence rather than picked.
+
+A role is held for a whole production run, so its lease is renewed every cycle
+and only has to outlive the longest legitimate gap BETWEEN cycles (600s). A
+bank-stock claim is the opposite: it is written once, immediately before one
+withdraw request, and is never renewed. Its job is to cover the settlement
+window — from the moment this character commits the withdraw until a sibling's
+own `bank_items` catches up — and nothing longer.
+
+LOWER BOUND (must not expire mid-withdraw). Between the claim and the outcome
+the character does: `_acquire_action()` (may block on this child's share of the
+per-IP action budget), the withdraw request itself, then `_sync_bank`'s paged
+`/my/bank/items` + `/my/bank` reads on the account bucket. That is bounded by
+one cycle, and a cycle is cooldown-bound — the bot sleeps 15-25s between
+actions (`RateGovernor`'s docstring records the same figure, and it is why the
+governor adds no latency to a cooldown-bound bot).
+
+UPPER BOUND (a crashed character must not starve the fleet). A claim outlives
+its writer only on a crash, and until it expires the units are invisible to
+every sibling's drain licence. At 60s that costs at most two cycles of one
+code's shed; at LEASE_TTL_SECONDS it would cost twenty, and the shed rungs are
+the ones that were already starved (`DrainBankJunkGoal`).
+
+60s = two cycles at the upper end of that observed 15-25s cadence, which is
+"the withdraw plus a whole cycle of slack" — the smallest value that covers the
+lower bound twice over while staying an order of magnitude under the lease."""
 
 
 def _migrate_role_lease_unique_index(conn: Connection) -> None:
@@ -391,6 +420,116 @@ class CoordinationStore:
                 ).all()
         except SQLAlchemyError as e:
             print(f"[coordination] sibling_demand failed: {e}")
+            return {}
+        for row in rows:
+            totals[row.item_code] = totals.get(row.item_code, 0) + row.quantity
+        return totals
+
+    def _bank_claim_expiry(self, now: datetime) -> str:
+        return (now + timedelta(seconds=BANK_CLAIM_TTL_SECONDS)).isoformat()
+
+    def claim_bank_stock(self, claims: Mapping[str, int], now: datetime) -> None:
+        """Record that THIS character is taking `claims` out of the shared bank.
+
+        Replace-wholesale, exactly like `publish_demand` and for the same
+        reason: a character executes ONE action at a time, so it has at most
+        one live withdraw intent, and the rows from a previous withdraw are
+        stale the moment a new one is committed. Merging would leave a settled
+        withdraw's units invisible to every sibling until their TTL.
+
+        WHEN IT IS RELEASED — this is the one place the design deviates from
+        "release on success", so it is stated rather than assumed. The reason a
+        claim must be released is that a claim outliving its withdraw is stock
+        nobody can touch. On a FAILED withdraw the stock is still in the bank
+        and that reason bites exactly, so `release_bank_stock` is called
+        immediately (see `GamePlayer._execute`). On a SUCCESSFUL withdraw the
+        units are GONE, so the claim withholds nothing that exists — what it
+        does is shadow the sibling snapshots that still show them, which is the
+        whole race: `bank_items` is only re-read after that sibling's OWN bank
+        action or every `BANK_REFRESH_INTERVAL` actions, so releasing on
+        success would collapse the useful window to one HTTP round-trip and
+        leave the mechanism inert. It is therefore left to expire on
+        `BANK_CLAIM_TTL_SECONDS`, which is sized for exactly that settlement
+        window.
+
+        Non-positive quantities are dropped rather than stored (mirrors
+        `publish_demand`): a claim on zero units is not a claim, and storing it
+        would make `sibling_bank_claims` carry rows that can never subtract
+        anything.
+
+        Also SWEEPS EXPIRED ROWS of every character, in the same transaction
+        and for the same reason `claim` does it on `role_leases`: this is the
+        only place a row is ever ADDED, so the sweep runs at exactly the
+        cadence the table grows, and `sibling_bank_claims` already excludes
+        every row it deletes."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        expiry = self._bank_claim_expiry(now)
+        try:
+            with SqlSession(self._engine) as s:
+                for stale in s.exec(
+                    select(BankStockClaim).where(
+                        BankStockClaim.character == self._character
+                    )
+                ).all():
+                    s.delete(stale)
+                for item_code, quantity in claims.items():
+                    if quantity > 0:
+                        s.add(BankStockClaim(character=self._character,
+                                             item_code=item_code,
+                                             quantity=quantity,
+                                             claimed_at=stamp,
+                                             expires_at=expiry))
+                for dead in s.exec(
+                    select(BankStockClaim).where(BankStockClaim.expires_at <= stamp)
+                ).all():
+                    s.delete(dead)
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[coordination] claim_bank_stock failed: {e}")
+
+    def release_bank_stock(self) -> None:
+        """Drop every bank-stock claim this character holds. No-op if it holds
+        none.
+
+        Called when a withdraw FAILED: the units are still in the bank, so a
+        surviving claim is stock nobody can touch for up to
+        `BANK_CLAIM_TTL_SECONDS`. All of them rather than one code, because
+        `claim_bank_stock` replaces wholesale — this character's rows are
+        exactly the one withdraw that just failed."""
+        try:
+            with SqlSession(self._engine) as s:
+                for row in s.exec(
+                    select(BankStockClaim).where(
+                        BankStockClaim.character == self._character
+                    )
+                ).all():
+                    s.delete(row)
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[coordination] release_bank_stock failed: {e}")
+
+    def sibling_bank_claims(self, now: datetime) -> dict[str, int]:
+        """Unexpired bank-stock claims summed by item across every OTHER
+        character. The THIRD deliberately unfiltered read.
+
+        Own claims are excluded because the reader subtracts this from its own
+        bank view to decide what it may still take: subtracting its own
+        in-flight withdraw would make it stop planning the very drain it is
+        already executing."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        totals: dict[str, int] = {}
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(
+                    select(BankStockClaim).where(
+                        BankStockClaim.expires_at > stamp,
+                        BankStockClaim.character != self._character,
+                    )
+                ).all()
+        except SQLAlchemyError as e:
+            print(f"[coordination] sibling_bank_claims failed: {e}")
             return {}
         for row in rows:
             totals[row.item_code] = totals.get(row.item_code, 0) + row.quantity

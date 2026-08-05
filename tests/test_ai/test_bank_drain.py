@@ -14,6 +14,10 @@ out of the withdraw -> discard pipeline, and its being shared is what makes this
 module's "no withdraw/redeposit cycle" claim true.
 """
 
+import ast
+from pathlib import Path
+
+import artifactsmmo_cli.ai.bank_drain as bank_drain_module
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -373,3 +377,127 @@ def test_goal_satisfied_and_metadata():
     assert goal.value(surplus, gd) == 15.0
     assert goal.desired_state(surplus, gd) == {"bank_junk_drained": True}
     assert repr(goal) == "DrainBankJunk"
+
+
+# ---------------------------------------------------------------------------
+# Cross-character contention (2026-08-05). The bank is ACCOUNT-shared, so all
+# five `play --all` children read the SAME `state.bank_items` and derive the
+# SAME licence from it; the losers of that race pay HTTP 478 "Missing required
+# item(s)" out of the per-IP budget. `ctx.sibling_bank_claims` is what a sibling
+# has already committed to withdrawing, threaded in as DATA.
+#
+# Coverage note: `branch = false`, so the subtraction is pinned at each
+# outcome — no claim, a partial claim, a claim that empties the pile, and a
+# claim larger than the pile.
+# ---------------------------------------------------------------------------
+
+
+def test_two_characters_with_one_bank_snapshot_do_not_both_claim_the_same_units():
+    """THE defect, stated as a test. Both characters hold the identical bank
+    snapshot and the identical context, so today they derive the identical
+    licence and race. Once the first has committed to its units, the second
+    sees only what is left."""
+    gd = _gd()
+    state = make_state(level=5, inventory={}, bank_items={"sap": 100})
+
+    # Both derive the same licence from the same snapshot — the race.
+    first = bank_drain_excess(state, gd, _ctx())
+    assert first == {"sap": 100}
+
+    # The first character commits to 60 of them; the second sees 40.
+    second = bank_drain_excess(state, gd, _ctx(sibling_bank_claims={"sap": 60}))
+    assert second == {"sap": 40}
+
+
+def test_a_sibling_claim_on_the_whole_pile_drops_the_code_entirely():
+    """Not "drain zero of it" — ABSENT from the map. `DrainBankJunkGoal
+    .is_satisfied` reads emptiness and `relevant_actions` iterates the keys, so
+    a zero-valued entry would emit `Withdraw(sap x0)`."""
+    gd = _gd()
+    state = make_state(level=5, inventory={}, bank_items={"sap": 100})
+    assert bank_drain_excess(state, gd, _ctx(sibling_bank_claims={"sap": 100})) == {}
+
+
+def test_a_sibling_claim_larger_than_the_pile_is_not_negative():
+    """A stale claim can outlive the stock it named (the sibling withdrew, and
+    this character's own `bank_items` has since caught up). The subtraction must
+    floor at "nothing available", never wrap into a negative quantity that
+    `drain_licensed_pure` would read as a licence."""
+    gd = _gd()
+    state = make_state(level=5, inventory={}, bank_items={"sap": 10})
+    assert bank_drain_excess(state, gd, _ctx(sibling_bank_claims={"sap": 999})) == {}
+
+
+def test_a_sibling_claim_on_a_different_code_leaves_this_one_alone():
+    """The claim is per-code: yielding the eggs must not yield the sap. This is
+    what makes the mechanism a de-confliction rather than a global pause — five
+    characters spread across five codes instead of stacking on one."""
+    gd = _gd()
+    state = make_state(level=5, inventory={}, bank_items={"sap": 100})
+    assert bank_drain_excess(state, gd, _ctx(sibling_bank_claims={"egg": 17})) == {"sap": 100}
+
+
+def test_the_default_context_is_byte_identical_to_pre_coordination_behaviour():
+    """The unavailable-store contract. `sibling_bank_claims` defaults to `{}` —
+    every single-character run, every `formal/diff` helper, every audit adapter
+    — and a store that is absent or erroring yields `{}` too
+    (`CoordinationStore.sibling_bank_claims` degrades to empty). All three
+    reduce to the SAME call, so the drain computes exactly what it computed
+    before this feature existed."""
+    gd = _gd()
+    state = make_state(level=5, inventory={}, bank_items={"sap": 100})
+    assert _ctx().sibling_bank_claims == {}
+    assert bank_drain_excess(state, gd, _ctx()) == bank_drain_excess(
+        state, gd, _ctx(sibling_bank_claims={}))
+
+
+def test_a_sibling_claim_never_relaxes_the_ownership_cap():
+    """AVAILABILITY, NOT OWNERSHIP. The bank is account-shared, so a sibling's
+    claim does not change what the ACCOUNT owns — it changes only how many
+    copies are still there to take. A claim must therefore never make the drain
+    take MORE than the keep authority's `destroyable` allows: the last axe stays
+    banked whatever any sibling says about it."""
+    gd = _gd()
+    # One tool, all copies banked: `keep_owned` protects exactly one.
+    state = make_state(level=5, skills={"woodcutting": 1}, inventory={},
+                       bank_items={"copper_axe": 3})
+    bare = bank_drain_excess(state, gd, _ctx())
+    claimed = bank_drain_excess(state, gd, _ctx(sibling_bank_claims={"copper_axe": 1}))
+    assert claimed["copper_axe"] <= bare["copper_axe"]
+    # ...and the protected copy survives in BOTH: the claim only ever subtracts.
+    assert bare["copper_axe"] < 3
+
+
+def test_the_pure_core_reaches_no_store_no_clock_and_no_io():
+    """The purity constraint, enforced rather than asserted in a comment.
+
+    `bank_drain_excess` is a pure function and `worth_keeping` /
+    `drain_licensed_pure` are proved cores mirrored in Lean. Sibling claims
+    arrive as DATA on `SelectionContext` precisely so none of that changes — so
+    the module must not have grown an import of the coordination store, the
+    clock, sqlite, or the network. Reading the module's own import graph is the
+    check that cannot rot: a future edit that reaches for the store to "just
+    look up the claims here" fails this test, not review."""
+    source = Path(bank_drain_module.__file__).read_text()
+    tree = ast.parse(source)
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            imported.add(node.module)
+    forbidden = {"datetime", "time", "sqlite3", "sqlalchemy", "sqlmodel", "httpx",
+                 "artifactsmmo_cli.ai.learning.coordination_store",
+                 "artifactsmmo_cli.ai.learning.store",
+                 "artifactsmmo_cli.ai.player"}
+    assert imported & forbidden == set(), f"bank_drain must stay pure; got {imported}"
+    # And nothing reaches them transitively through a module attribute either:
+    # the ONLY names the module binds from outside are the four pure helpers
+    # plus the three type carriers.
+    assert imported == {
+        "artifactsmmo_cli.ai.game_data",
+        "artifactsmmo_cli.ai.inventory_keep",
+        "artifactsmmo_cli.ai.keep_valuation",
+        "artifactsmmo_cli.ai.selection_context",
+        "artifactsmmo_cli.ai.world_state",
+    }
