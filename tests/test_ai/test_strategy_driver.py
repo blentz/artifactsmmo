@@ -1897,7 +1897,7 @@ def test_equip_step_uses_root_slot_for_second_ring():
     type's first slot), so a 2nd copper_ring fills the empty second ring slot."""
     gd = GameData()
     gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
-                                               attack={"fire": 2})}
+                                               hp_bonus=2)}
     gd._crafting_recipes = {"copper_ring": {"bar": 1}}
     gd._resource_drops = {"rocks": "bar"}
     # ring1 already worn; a spare copper_ring in inventory to equip into ring2.
@@ -1918,7 +1918,7 @@ def test_arbiter_equips_second_ring_into_empty_slot():
     200 for a duplicate ring."""
     gd = GameData()
     gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
-                                               attack={"fire": 6})}
+                                               hp_bonus=6)}
     gd._crafting_recipes = {"copper_ring": {"bar": 1}}
     gd._resource_drops = {"rocks": "bar"}
     gd._resource_skill = {"rocks": ("mining", 1)}
@@ -1946,7 +1946,7 @@ def test_second_ring_not_equippable_without_a_spare():
     equip when only one copy is owned."""
     gd = GameData()
     gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
-                                               attack={"fire": 6})}
+                                               hp_bonus=6)}
     state = make_state(level=5, inventory={},
                        equipment={"ring1_slot": "copper_ring"})
     equip = EquipAction(code="copper_ring", slot="ring2_slot")

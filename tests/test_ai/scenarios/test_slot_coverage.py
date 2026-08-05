@@ -145,6 +145,7 @@ from artifactsmmo_cli.ai.scenario import (
     scenario_state,
 )
 from artifactsmmo_cli.ai.thresholds import CURRENCY_GRIND_BATCH
+from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
@@ -435,19 +436,17 @@ def test_bag_slot_banked_stock_credited() -> None:
 
 
 def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
-    """RE-DERIVED AGAIN 2026-08-04 (dmg_elements hoist, the equip-loop fix) —
-    renamed, because the previous name asserted "vest_still_wins", which is now
-    false AND was the very mis-valuation this branch fixed.
+    """RE-DERIVED AGAIN 2026-08-04 (pursuit_value unification).
 
-    adventurer_vest (hp 60, dmg 6, wisdom 20) beat the EQUIPPED iron_armor
-    (hp 50, dmg_earth 10, dmg_fire 10, res 10) on the old pursuit ruler only
-    because `combat_raw` could not see per-element damage %: 66020 vs 54000.
-    Now that `combat_raw_of` hoists `dmg_elements` the way `armor_score`
-    already priced it (170ed8d8), iron_armor scores 70000 and the vest is
-    correctly a DOWNGRADE — the L10 armor slots are all at their fixed point
-    and near_term_gear is EMPTY. The character's cowhide is no longer spent
-    buying 10 wisdom with 14 points of element damage; the tree falls through
-    to the char-level trunk and grinds the same winnable cow directly.
+    The previous derivation had `iron_armor` beating `adventurer_vest` on the
+    flat `combat_raw` sum (70000 to 66020) while the RULER said the opposite
+    (equip_value 174_400 to 142_000) — the acquisition path and the picker
+    holding different opinions about one slot, which is the whole defect class
+    this epic removes. `pursuit_value`'s combat term is the ruler's own now, so
+    the vest wins on both and the scenario's loadout was re-converged to it
+    (see scenario.py's RE-FIXED-POINT note). With every slot at the ruler's own
+    fixed point, near_term_gear is EMPTY and the tree falls through to the
+    char-level trunk, grinding the same winnable cow directly.
 
     satchel needs jasper_crystal, bought with tasks_coin from tasks_trader, who
     stands on a tile conditional on the tasks_farmer achievement — 0/100 on the
@@ -471,17 +470,26 @@ def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
     assert not is_attainable_now("satchel", state, gd)
     assert gd.npc_location("tasks_trader") is None
     assert objective.near_term_gear(state) == {}
-    # The attribution: the vest is not merely unranked, it is genuinely worse.
+    # The attribution: the equipped vest is not merely unranked, it is the
+    # RULER's own argmax for the slot — and the acquisition ruler agrees, which
+    # is the property that stops the two authorities fighting over it.
     assert pursuit_value(gd.item_stats("adventurer_vest")) \
-        < pursuit_value(gd.item_stats("iron_armor"))
+        > pursuit_value(gd.item_stats("iron_armor"))
+    assert equip_value(gd.item_stats("adventurer_vest")) \
+        > equip_value(gd.item_stats("iron_armor"))
 
     report = _run("l10_bag_pursuit")
     assert report.decision.chosen_root == ReachCharLevel(level=20)
     assert not any(r.code == "satchel" for r in report.decision.fallback_roots
                    if isinstance(r, ObtainItem)), report.decision.fallback_roots
-    assert repr(report.selected_goal).startswith("GrindCharacterXP(cow"), (
+    # The grind target moved with the re-converged loadout (2026-08-04): at the
+    # ruler's own fixed point this L10 build beats `flying_snake`, which out-XPs
+    # the cow it used to grind. Still a plain combat grind on the trunk, which
+    # is what this pin is about.
+    assert repr(report.selected_goal).startswith("GrindCharacterXP(flying_snake"), (
         repr(report.selected_goal))
-    assert report.plan and repr(report.plan[0]).startswith("Fight(cow"), report.plan
+    assert report.plan and repr(report.plan[0]).startswith("Fight(flying_snake"), \
+        report.plan
 
 
 def test_l12_bag_pursuit_satchel_chain_gated() -> None:

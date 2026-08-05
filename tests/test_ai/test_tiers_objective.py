@@ -170,7 +170,7 @@ def _gd_near_term() -> GameData:
         "copper_helmet": ItemStats(code="copper_helmet", level=5, type_="helmet",
                                    resistance={"air": 4}),
         "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring", hp_bonus=2),
-        "silver_ring": ItemStats(code="silver_ring", level=5, type_="ring", attack={"fire": 4}),
+        "silver_ring": ItemStats(code="silver_ring", level=5, type_="ring", hp_bonus=4),
         "drop_only_boots": ItemStats(code="drop_only_boots", level=1, type_="boots",
                                      resistance={"water": 3}),
     }
@@ -476,7 +476,7 @@ def test_artifact_slots_duplicate_filled():
     carve-out. Acquisition is bounded by ownership downstream (min slots, owned)."""
     gd = GameData()
     gd._item_stats = {"ancient_relic": ItemStats(code="ancient_relic", level=1,
-                                                  type_="artifact", attack={"fire": 3})}
+                                                  type_="artifact", hp_bonus=3)}
     gd._crafting_recipes = {"ancient_relic": {"bar": 1}}
     gd._resource_drops = {"rocks": "bar"}
     gd._resource_skill = {"rocks": ("mining", 1)}
@@ -491,7 +491,7 @@ def test_near_term_gear_duplicate_fills_empty_second_ring():
     copper_ring attainable-now -> ring2_slot also targets copper_ring."""
     gd = GameData()
     gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
-                                               attack={"fire": 2})}
+                                               hp_bonus=2)}
     gd._crafting_recipes = {"copper_ring": {"bar": 1}}
     gd._resource_drops = {"rocks": "bar"}
     gd._resource_skill = {"rocks": ("mining", 1)}

@@ -847,7 +847,7 @@ def test_near_term_gear_targets_both_ring_slots_for_a_ring() -> None:
     gd = GameData()
     gd._item_stats = {
         "iron_ring": ItemStats(code="iron_ring", level=1, type_="ring",
-                               subtype="", attack={"fire": 20}),
+                               subtype="", hp_bonus=20),
     }
     gd._resource_drops = {"iron_vein": "iron_ring"}
     bare = scenario_state(

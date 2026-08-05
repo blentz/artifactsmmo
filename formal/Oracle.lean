@@ -205,18 +205,6 @@ def runStrategicValue (args : Array Json) : Json :=
     (intArg args 0) (intArg args 1) (intArg args 2) (intArg args 3) (intArg args 4)
     (intArg args 5) (intArg args 6) (intArg args 7) (intArg args 8) (intArg args 9)))]
 
-/-- Evaluate the HAND `Formal.GearValue.combatRaw` (the shared genuine-combat
-    signal) on the 8 combat summands. args layout (8 ints): attack, resistance,
-    hp_restore, hp_bonus, dmg, critical_strike, lifesteal, combat_buff. The four
-    efficiency fields are irrelevant to `combatRaw` and set to 0. Returns the
-    Lean-computed combat raw — the differential pins `gear_value_core.combat_raw`
-    to this def (every dropped summand diverges). -/
-def runCombatRaw (args : Array Json) : Json :=
-  let s : Formal.EquipValueAugmented.RawStats :=
-    ⟨intArg args 0, intArg args 1, intArg args 2, intArg args 3, intArg args 4,
-     intArg args 5, 0, 0, 0, 0, intArg args 6, intArg args 7⟩
-  Json.mkObj [("value", Json.num (Formal.GearValue.combatRaw s))]
-
 /-- Evaluate the `equipCapFromPeers` (dominance + slot gate) model in Lean.
     args layout: equippable(0/1), slotCount, peer_count, then for each
     peer: fitsAllSlots(0/1), strictlyHigher(0/1), coversSkillEffects(0/1),
@@ -279,6 +267,24 @@ def runRankValue (args : Array Json) : Json :=
   let ci : Formal.PurposeRouting.CombatItem :=
     ⟨itemFromBlock (fun i => intArg args (i + 2)), intArg args 1 != 0⟩
   Json.mkObj [("value", Json.num (Formal.GearValue.rankValue isWeapon ci))]
+
+/-- Evaluate the HAND `Formal.GearValue.rankCombat` and `rankEfficiency` — the
+    two terms the ONE gear ruler is the SUM of, and the pair the ECONOMICS layer
+    (`tiers/pursuit_value`) reads. Replaces the retired `runCombatRaw`, whose
+    subject (a flat 8-stat sum) no longer exists.
+
+    args layout (25 ints): isWeapon(0/1), isTool(0/1), the standard 18-int item
+    block, then flatCombat, wisdom, prospecting, inventorySpace, haste. Returns
+    BOTH terms, so the differential pins the SPLIT and not merely the sum: moving
+    a stat from one side to the other diverges even though the total is unchanged. -/
+def runRankComponents (args : Array Json) : Json :=
+  let isWeapon := intArg args 0 != 0
+  let ci : Formal.PurposeRouting.CombatItem :=
+    ⟨itemFromBlock (fun i => intArg args (i + 2)), intArg args 1 != 0⟩
+  Json.mkObj
+    [("combat", Json.num (Formal.GearValue.rankCombat isWeapon ci (intArg args 20))),
+     ("efficiency", Json.num (Formal.GearValue.rankEfficiency isWeapon
+       (intArg args 21) (intArg args 22) (intArg args 23) (intArg args 24)))]
 
 /-- Build an `ElemStats` (monster atk OR res) from 4 ints at offset `o`. -/
 def elemFromArgs (args : Array Json) (o : Nat) : ElemStats :=
@@ -2844,8 +2850,10 @@ def runOne (item : Json) : Json :=
     runEquipCapValue (intArg args 0) (intArg args 1)
   else if kind == "strategic_value" then
     runStrategicValue args
-  else if kind == "combat_raw" then
-    runCombatRaw args
+  else if kind == "rank_components" then
+    -- args: [isWeapon(0/1), isTool(0/1), 18-int item block, flatCombat,
+    --        wisdom, prospecting, inventorySpace, haste]
+    runRankComponents args
   else if kind == "rank_value" then
     -- args: [isWeapon(0/1), isTool(0/1), 18-int item block]
     runRankValue args

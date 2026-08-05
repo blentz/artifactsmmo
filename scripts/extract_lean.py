@@ -415,7 +415,8 @@ MODULES: tuple[ModuleSpec, ...] = (
         output=f"{GENERATED_DIR}/EquipmentScoring.lean",
         core_name="EquipmentScoring",
         functions=("weapon_score_raw_pure", "weapon_score_pure",
-                   "gather_score_pure", "armor_score_pure"),
+                   "gather_score_pure", "armor_score_efficiency_pure",
+                   "armor_score_combat_pure", "armor_score_pure"),
     ),
     ModuleSpec(
         source="src/artifactsmmo_cli/ai/tiers/equip_value.py",

@@ -135,21 +135,21 @@ def test_l10_gearcrafting_gap_combat_blocked_retargets_not_char_grind() -> None:
     The GUARANTEE (never GrindCharacterXP against the unwinnable) is the
     criterion; the specific re-target is pinned to the ACTUAL observed value.
 
-    RE-DERIVED 2026-08-04 (gear-ruler unification): unifying Rank onto
-    `armor_score` raised the utility-potion branch's gain ~100x (it rides
-    `equip_value`, unlike the structural branch's `pursuit_value`), so the
-    achievability factor now promotes the craftable `small_health_potion` over
-    the gather-first `wooden_shield` and the re-target moved BACK to
-    `GatherMaterials(sunflower)`/`small_health_potion` — where it sat before the
-    2026-07-08 pursuit_value landing. Still a plannable, combat-free gather; the
+    RE-DERIVED 2026-08-04 (pursuit_value unification): `_utility_candidates`
+    joined `_structural_candidates` on `pursuit_value`, so the merged argmax
+    stopped comparing two rulers ~1000x apart. On the ONE ruler `wooden_shield`
+    leads `small_health_potion` 52_800_000 to 6_000_000 and the achievability
+    factor narrows without reversing, so the re-target is
+    `GatherMaterials(ash_wood)`/`wooden_shield` — the 2026-07-08 pursuit_value
+    landing's verdict, restored. Still a plannable, combat-free gather; the
     GUARANTEE (not GrindCharacterXP) is unchanged, which is the criterion."""
     report = _run(CRITERION_1_RAMP)
     # GUARANTEE: re-target to a reachable non-combat goal, never XP-thrash.
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "GatherMaterials(sunflower, {sunflower:3})"
+    assert repr(report.selected_goal) == "GatherMaterials(ash_wood, {ash_wood:10})"
     assert report.decision.chosen_root == ObtainItem(
-        code="small_health_potion", quantity=1, slot="utility1_slot")
+        code="wooden_shield", quantity=1, slot="shield_slot")
 
 
 def test_l10_gearcrafting_gap_combat_blocked_search_bounded() -> None:
@@ -169,20 +169,25 @@ def test_l20_dual_utility_chosen_root_is_char_level_when_winnable() -> None:
 
     FIXTURE RE-FIXED-POINT 2026-07-08 (Task-3 pursuit_value): the scenario's
     helmet_slot/body_armor_slot were re-equipped to the combat-dominant
-    pursuit_value argmax (hard_leather_helmet / mushmush_jacket) — the old
-    efficiency picks (wolf_ears +50 wisdom, adventurer_vest) that flat
-    equip_value over-ranked were genuine COMBAT upgrades under pursuit_value,
-    so the band read inadequate and the tree wanted the helmet. Restoring the
-    true combat fixed point makes the band genuinely adequate again, so this
-    criterion-2 pin (grind XP when full-build + winnable) holds with its
-    ORIGINAL assertions (see scenario.py's l20_dual_utility re-fixed-point
-    comment)."""
+    pursuit_value argmax — the old efficiency picks (wolf_ears +50 wisdom,
+    adventurer_vest) that flat equip_value over-ranked were genuine COMBAT
+    upgrades under pursuit_value, so the band read inadequate and the tree
+    wanted the helmet. Restoring the true combat fixed point makes the band
+    genuinely adequate again.
+
+    RE-FIXED-POINT AGAIN 2026-08-04 (pursuit_value unification): five more
+    slots (weapon/legs/boots/both rings/amulet) converged onto the ONE ruler's
+    argmax — battlestaff, hard_leather_pants/boots, steel_ring,
+    air_and_water_amulet. The GRIND TARGET moved with the loadout: at the
+    stronger build `pig` is winnable and out-XPs `highwayman`, so the pins
+    below name it. Criterion 2 (grind XP when full-build + winnable) is
+    unchanged; only which monster the grind picks."""
     report = _run(CRITERION_2_WINNABLE)
     assert report.decision.chosen_root == ReachCharLevel(level=30)
     assert isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "GrindCharacterXP(highwayman)"
-    assert [repr(a) for a in report.plan] == ["Fight(highwayman)"]
+    assert repr(report.selected_goal) == "GrindCharacterXP(pig)"
+    assert [repr(a) for a in report.plan] == ["Fight(pig)"]
 
 
 def test_l20_dual_utility_search_bounded() -> None:

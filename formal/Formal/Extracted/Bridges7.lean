@@ -95,11 +95,50 @@ theorem weapon_score_raw_bridge (enc : Int → String)
              dictGetD_encElem enc hinj,
              Int.zero_add, Int.add_zero, Int.add_assoc]
 
+/-- BRIDGE (universal over injective element embeddings): the extracted COMBAT
+slice `armor_score_combat_pure` equals the hand `Formal.EquipmentScoring.ACombat`
+— DEFENSE sum (no clamp; armor scoring has none), OFFENSE sum (the wearer's own
+output through the weapon clamp, scaled by the piece's damage/crit percentages),
+the `200 *` scaling that puts them on one denominator, and the IN-FIGHT flat
+stats. No efficiency stat appears on either side. -/
+theorem armor_score_combat_bridge (enc : Int → String)
+    (hinj : ∀ a b : Int, enc a = enc b → a = b)
+    (item : Formal.EquipmentScoring.Item)
+    (monsterAtk monsterRes playerAtk : Formal.EquipmentScoring.ElemStats)
+    (hpRestore hpBonus lifesteal combatBuff : Int) :
+    Extracted.EquipmentScoring.armor_score_combat_pure
+        (Formal.EquipmentScoring.elements.map enc)
+        (encElem enc item.resistance) (encElem enc monsterAtk)
+        (encElem enc monsterRes) (encElem enc playerAtk)
+        item.dmg (encElem enc item.dmgElem) item.crit
+        hpRestore hpBonus lifesteal combatBuff
+      = Formal.EquipmentScoring.ACombat item monsterAtk monsterRes playerAtk
+          (hpRestore + hpBonus + lifesteal + combatBuff) := by
+  simp only [Extracted.EquipmentScoring.armor_score_combat_pure,
+             Formal.EquipmentScoring.ACombat, Formal.EquipmentScoring.aTerm,
+             Formal.EquipmentScoring.oTerm, Formal.EquipmentScoring.wTerm,
+             Formal.EquipmentScoring.elements,
+             List.map_cons, List.map_nil, List.foldl_cons, List.foldl_nil,
+             List.sum_cons, List.sum_nil,
+             dictGetD_encElem enc hinj,
+             Int.zero_add, Int.add_zero, Int.add_assoc]
+
+/-- BRIDGE: the extracted EFFICIENCY slice IS the hand `AEfficiency`,
+definitionally — both are `200 * (wisdom + prospecting + inventorySpace +
+haste)`. This is the term `tiers/pursuit_value` bounds; pinning it here is what
+stops the economics layer re-deriving utility on a scale of its own. -/
+theorem armor_score_efficiency_bridge
+    (wisdom prospecting inventorySpace haste : Int) :
+    Extracted.EquipmentScoring.armor_score_efficiency_pure
+        wisdom prospecting inventorySpace haste
+      = Formal.EquipmentScoring.AEfficiency wisdom prospecting inventorySpace haste :=
+  rfl
+
 /-- BRIDGE (universal over injective element embeddings): the extracted
 `armor_score_pure` equals the hand `Formal.EquipmentScoring.AScore`, for every
-profile — DEFENSE sum (no clamp; armor scoring has none), OFFENSE sum (the
-wearer's own output through the weapon clamp, scaled by the piece's damage/crit
-percentages) and the `200 *` scaling that puts them on one denominator. -/
+profile. Now discharged THROUGH the two slice bridges plus
+`AScore_decomp` — the same partition the Python has, so the bridge and the code
+are decomposed the same way rather than one being re-flattened to match. -/
 theorem armor_score_bridge (enc : Int → String)
     (hinj : ∀ a b : Int, enc a = enc b → a = b)
     (item : Formal.EquipmentScoring.Item)
@@ -113,15 +152,13 @@ theorem armor_score_bridge (enc : Int → String)
         item.dmg (encElem enc item.dmgElem) item.crit
         hpRestore hpBonus wisdom prospecting inventorySpace haste lifesteal combatBuff
       = Formal.EquipmentScoring.AScore item monsterAtk monsterRes playerAtk := by
-  simp only [Extracted.EquipmentScoring.armor_score_pure,
-             Formal.EquipmentScoring.AScore, Formal.EquipmentScoring.aTerm,
-             Formal.EquipmentScoring.oTerm, Formal.EquipmentScoring.wTerm,
-             Formal.EquipmentScoring.elements,
-             List.map_cons, List.map_nil, List.foldl_cons, List.foldl_nil,
-             List.sum_cons, List.sum_nil,
-             dictGetD_encElem enc hinj,
-             Int.zero_add, Int.add_zero, Int.add_assoc]
-  omega
+  unfold Extracted.EquipmentScoring.armor_score_pure
+  rw [armor_score_combat_bridge enc hinj item monsterAtk monsterRes playerAtk
+        hpRestore hpBonus lifesteal combatBuff,
+      armor_score_efficiency_bridge,
+      Formal.EquipmentScoring.AScore_decomp item monsterAtk monsterRes playerAtk
+        (hpRestore + hpBonus + lifesteal + combatBuff)
+        wisdom prospecting inventorySpace haste (by omega)]
 
 /-- BRIDGE: the extracted composite `weapon_score_pure` equals the hand
 `Formal.PurposeRouting.combatScore` (`2 * WScore + nonToolBonus`) when the

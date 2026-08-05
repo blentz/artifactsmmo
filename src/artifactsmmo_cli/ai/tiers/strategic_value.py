@@ -1,31 +1,48 @@
-"""Strategic value: efficiency-weighted item score for cross-slot objective priority.
+"""Strategic value: the ONE gear ruler read for ACQUISITION priority.
 
-Separate from the proved COMBAT scorer `equip_value` (tiers/equip_value.py),
-which sums every stat 1:1 and ranks within-slot combat loadout. `equip_value`
-is consumed by 10 modules and is deliberately left untouched (#16 plan,
-PLAN_acquisition_timing.md). `strategic_value` instead re-weights the
-non-combat EFFICIENCY stats (wisdom, prospecting, inventory_space, haste) by a
-per-stat efficiency rate so a bag's compounding value isn't scored like raw
-attack, while combat stats keep a single shared weight so combat-slot ordering
-is preserved. It feeds cross-slot gear priority (via `pursuit_value`) + #14
-acquisition timing ONLY — never the combat loadout pick.
+`equip_value` (tiers/equip_value.py) = `gear_value(stats, Rank)` answers "which
+piece is better". `strategic_value` answers the different, ECONOMIC question:
+what is worth spending gold and cycles ACQUIRING, under a leveling horizon.
+It does NOT compute a second score. It takes the ruler's own two terms —
+`gear_components(stats, Rank)` = (COMBAT, EFFICIENCY) — and re-weights them, so
+the two layers can never reach contradictory verdicts about the same item.
 
-The per-stat WEIGHTS are derived (openapi rates for wisdom/prospecting; a
-gather/craft-cadence proxy for inventory_space; an empirical probe for haste —
-PLAN_acquisition_timing.md Phase 1) and supplied by the impure layer that owns
-game_data; this module is the pure, total, nonneg-int weighted sum the objective
-proofs are parametric over. Mirrored in Formal/StrategicValue.lean (hand model)
-and Formal/Extracted/StrategicValue.lean (extracted), bridged in Bridges9.lean.
+* COMBAT is the ruler's combat term verbatim (monster-relative defense +
+  offense at the canonical adversary, plus the in-fight flat stats). It used to
+  be a flat 8-stat sum `combat_raw` defined alongside the ruler; that sum
+  weighted a resistance PERCENTAGE 1:1 against an HP amount, and it is gone.
+* EFFICIENCY is the four time-buying stats (wisdom, prospecting,
+  inventory_space, haste) — the SAME four the ruler isolates in
+  `armor_score_efficiency` — re-weighted per stat, because a bag's compounding
+  value should not be priced like raw attack, and optionally CAPPED.
+
+Because the ruler's combat term takes no utility stat as an input at all
+(`armor_score_combat_pure` has no such parameter), utility enters this score
+exactly once, through the efficiency block.
+
+The per-stat efficiency WEIGHTS are derived (openapi rates for
+wisdom/prospecting; a gather/craft-cadence proxy for inventory_space; an
+empirical probe for haste — PLAN_acquisition_timing.md Phase 1) and supplied by
+the impure layer that owns game_data; `strategic_value_pure` is the pure, total,
+nonneg-int weighted sum the objective proofs are parametric over. Mirrored in
+Formal/StrategicValue.lean (hand model) and Formal/Extracted/StrategicValue.lean
+(extracted), bridged in Bridges9.lean.
 """
 
 from artifactsmmo_cli.ai.game_data import ItemStats
-from artifactsmmo_cli.ai.gear_value import combat_raw_of
+from artifactsmmo_cli.ai.gear_value import gear_components
+from artifactsmmo_cli.ai.gear_value_core import Rank
 
 # Fixed-point scale for the efficiency weights. The documented per-point rates
 # are sub-unit (openapi: wisdom/prospecting = "1% extra per 10 points" = 0.001
 # benefit fraction per point), so we carry every weight in 1/STRATEGIC_SCALE
 # units to stay inside the proved nonneg-INT core (mirrors the ×10000 fixed
 # point used in predict_win's lifesteal arithmetic).
+#
+# It doubles as the LEXICOGRAPHIC RADIX: paired with an efficiency block bounded
+# to `|block| <= (SCALE - 1) // 2`, weighting combat by SCALE makes the score an
+# order-embedding of the pair (combat, efficiency) ordered lexicographically.
+# See `pursuit_value` for the derivation and the dominance property it buys.
 STRATEGIC_SCALE = 1000
 
 # Combat stats keep weight 1 (= SCALE), the DOMINANT weight: the cross-slot gap
@@ -54,13 +71,16 @@ DEFAULT_STRATEGIC_WEIGHTS: tuple[int, int, int, int, int] = (
 )
 
 
-def _combat_raw_of_stats(stats: ItemStats) -> int:
-    """The genuine-combat signal for an equippable, via the ONE shared
-    `combat_raw` primitive (`ai/gear_value.combat_raw_of`). strategic_value's
-    combat input MUST be this exact atom so it can never drift into a third
-    combat ruler: the 8-stat sum (attack + resistance + hp_restore + hp_bonus +
-    dmg + critical_strike + lifesteal + combat_buff) is owned in one place."""
-    return combat_raw_of(stats)
+def _combat_of_stats(stats: ItemStats) -> int:
+    """strategic_value's combat input: the ONE gear ruler's own COMBAT term at
+    the Rank purpose (`ai/gear_value.gear_components`).
+
+    It MUST be the ruler's own term and not a scalar computed here, or the
+    economics layer becomes a second ruler that can disagree with the picker
+    about the same slot — the livelock class documented in
+    `equipment/slot_occupancy.py`. Taking `[0]` of the ruler's partition is
+    what makes that impossible by construction rather than by re-tuning."""
+    return gear_components(stats, Rank)[0]
 
 
 def strategic_value_pure(
@@ -79,12 +99,15 @@ def strategic_value_pure(
     five inputs (combat_raw, wisdom, prospecting, inventory_space, haste) scaled
     by its own weight and added together.
 
-    `combat_raw` is the already-summed genuine-combat signal (attack +
-    resistance + hp_restore + hp_bonus + dmg + critical_strike + lifesteal +
-    combat_buff) carrying ONE shared `combat_weight`, so the combat ordering
-    `equip_value` produces is preserved when combat_weight dominates the
-    efficiency weights. The four efficiency stats each carry their own derived
-    rate weight. Every summand is exact integer arithmetic, matching the Lean
+    `combat_raw` is the caller's already-computed combat scalar — in production
+    the ONE gear ruler's own combat term (`gear_components(stats, Rank)[0]`),
+    hoisted here by the `strategic_value` wrapper — carrying ONE shared
+    `combat_weight`, so the combat ordering `equip_value` produces is preserved
+    exactly when combat_weight dominates the efficiency weights. The four
+    efficiency stats each carry their own derived rate weight. The core stays
+    parametric in the scalar: it is the WEIGHTED SUM that is proved here, not
+    any particular combat formula.
+    Every summand is exact integer arithmetic, matching the Lean
     `Formal.StrategicValue.strategicValue` model directly.
 
     For nonneg stats and nonneg weights the result is nonneg and monotone
@@ -107,45 +130,54 @@ def strategic_value(
     efficiency_budget: int | None = None,
     horizon: tuple[int, int] | None = None,
 ) -> int:
-    """Efficiency-weighted cross-slot value of an equippable (#14/#16) — never
-    the combat loadout pick (that stays on the proved `equip_value`).
+    """ACQUISITION value of an equippable (#14/#16) — never the combat loadout
+    pick (that stays on `equip_value`, the same ruler read un-re-weighted).
 
-    Hoists the ItemStats dict sums to the ints the extracted core takes:
-    `combat_raw` is the genuine-combat signal (attack + resistance + hp_restore +
-    hp_bonus + dmg + critical_strike + lifesteal + combat_buff) — exactly
-    `equip_value`'s raw signal MINUS the four efficiency stats, which are weighted
-    separately.
+    value = COMBAT × combat_weight + EFFICIENCY, where COMBAT is
+    `gear_components(stats, Rank)[0]` — the ONE ruler's own combat term — and
+    EFFICIENCY is the weighted sum of the four time-buying stats the ruler
+    isolates, optionally BOUNDED to `[-efficiency_budget, +efficiency_budget]`.
 
-    value = combat_raw × combat_weight + EFFICIENCY, where EFFICIENCY is the
-    weighted efficiency-stat sum optionally CAPPED at `efficiency_budget`. Combat
-    and the efficiency rates are different dimensions (stat-points vs
-    cooldown-seconds), so combat dominance is STRUCTURAL: with the budget set
-    below one combat-raw point (× weight), any combat item outranks any
-    all-efficiency item, and efficiency only orders gear among efficiency-bearing
-    / empty slots (#16 sub-budget decision). `efficiency_budget=None` leaves the
-    block uncapped (the plain weighted sum). The cap is policy in this wrapper;
-    the proved core `strategic_value_pure` stays a pure weighted sum. Derived
-    weights + budget come from `strategic_weights(state, history)`.
+    Combat dominance is STRUCTURAL, by an order-embedding rather than by the
+    numbers happening to work out. With `2 * efficiency_budget < combat_weight`
+    the map `(c, e) ↦ c * combat_weight + clamp(e)` is strictly monotone in `c`:
+    two items whose combat terms differ by even ONE unit cannot be reordered by
+    any efficiency stats whatsoever, because the whole efficiency range spans
+    less than one combat unit. Efficiency still totally ORDERS items whose
+    combat terms tie — utility slots keep their ranking. `efficiency_budget=None`
+    leaves the block unbounded (the plain weighted sum, no dominance claim).
+    The bound is policy in this wrapper; the proved core `strategic_value_pure`
+    stays a pure weighted sum. Derived weights + budget come from
+    `strategic_weights(state, history)`.
+
+    The bound is SYMMETRIC because efficiency stats can be NEGATIVE in the live
+    catalog (obsidian_battleaxe / mesh_armor carry `inventory_space` −25 / −10).
+    A one-sided cap would leave the block's SPAN unbounded below, and a span
+    wider than `combat_weight` breaks the embedding. Flooring at 0 instead would
+    have bounded it at the cost of making every inventory penalty invisible.
 
     `horizon=(num, den)` (#14 acquisition timing) scales the efficiency block by
     `num/den` — the fraction of the character's leveling still ahead,
     `(max_level − level) / max_level`. Efficiency benefits (saved cooldowns)
     accrue over the REMAINING climb, so they are worth most early and decay to 0
     at max level (the bot won't chase a rune at L49). Combat is NOT scaled — a
-    weapon is needed regardless of horizon. Scaling only shrinks the (already
-    capped) efficiency block, so combat dominance is preserved. `None` ⇒ factor 1.
+    weapon is needed regardless of horizon. Scaling only shrinks |efficiency|
+    (`num <= den`), so it can only strengthen dominance. `None` ⇒ factor 1.
     """
-    combat_raw = _combat_raw_of_stats(stats)
+    combat = _combat_of_stats(stats)
     combat_w, wisdom_w, prospecting_w, inventory_w, haste_w = weights
-    combat_part = combat_raw * combat_w
-    # Efficiency block via the proved core with combat zeroed out, then capped,
-    # then horizon-scaled (#14). Cap-before-scale keeps the result ≤ budget.
+    combat_part = combat * combat_w
+    # Efficiency block via the proved core with combat zeroed out, then bounded,
+    # then horizon-scaled (#14). Bound-before-scale keeps the result in range.
     efficiency_part = strategic_value_pure(
         0, stats.wisdom, stats.prospecting, stats.inventory_space, stats.haste,
         0, wisdom_w, prospecting_w, inventory_w, haste_w,
     )
-    if efficiency_budget is not None and efficiency_part > efficiency_budget:
-        efficiency_part = efficiency_budget
+    if efficiency_budget is not None:
+        if efficiency_part > efficiency_budget:
+            efficiency_part = efficiency_budget
+        if efficiency_part < -efficiency_budget:
+            efficiency_part = -efficiency_budget
     if horizon is not None:
         num, den = horizon
         efficiency_part = efficiency_part * num // den

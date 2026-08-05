@@ -64,6 +64,72 @@ def gather_score_pure(skill_effects: dict[str, int], skill: str) -> int:
     return skill_effects.get(skill, 0)
 
 
+def armor_score_efficiency_pure(wisdom: int, prospecting: int,
+                                inventory_space: int, haste: int) -> int:
+    """PURE CORE (mechanically extracted): the EFFICIENCY slice of the ruler's
+    flat-utility block — ``200 * (wisdom + prospecting + inventory_space +
+    haste)``.
+
+    These four are the stats that buy TIME rather than damage: an XP rate, a
+    drop rate, carrying capacity and a cooldown reduction. Splitting them out
+    is what lets ``tiers/pursuit_value`` read the ONE ruler with combat
+    dominating utility WITHOUT recomputing utility on a second scale — the
+    pursuit score reuses this exact term instead of re-summing the stats, so
+    utility cannot be counted twice. See ``armor_score_combat_pure`` for the
+    other half and ``armor_score_pure`` for the identity that they partition
+    the score.
+
+    The ``200 *`` is the SAME scale ``armor_score_pure`` has always carried the
+    flat-utility block at (the defense sum's factor), so this is a
+    re-association of the existing formula, not a re-weighting: no item's
+    ``armor_score`` changes by one unit.
+    """
+    return 200 * (wisdom + prospecting + inventory_space + haste)
+
+
+def armor_score_combat_pure(elements: list[str], resistance: dict[str, int],
+                            monster_attack: dict[str, int],
+                            monster_resistance: dict[str, int],
+                            player_attack: dict[str, int],
+                            dmg: int, dmg_elements: dict[str, int],
+                            critical_strike: int,
+                            hp_restore: int, hp_bonus: int, lifesteal: int,
+                            combat_buff: int) -> int:
+    """PURE CORE (mechanically extracted): the COMBAT slice of the armor score
+    — ``200*defense + offense + 200*(hp_restore + hp_bonus + lifesteal +
+    combat_buff)``.
+
+    Everything ``armor_score_pure`` computes EXCEPT the four efficiency stats.
+    The two monster-relative sums are unchanged and carry the full derivation
+    in ``armor_score_pure``'s docstring; the four flat stats kept here are the
+    ones that act inside a FIGHT — an HP pool (``hp_restore``/``hp_bonus``),
+    a heal-on-crit fraction (``lifesteal``) and a utility-slot damage/antipoison
+    buff (``combat_buff``).
+
+    This function does NOT take ``wisdom``/``prospecting``/``inventory_space``/
+    ``haste`` at all, which is the mechanical guarantee that the pursuit
+    ruler's combat term is free of utility: there is no parameter through which
+    a utility stat could reach it.
+
+    NOTE the split re-prices nothing. ``hp_restore`` used to sit in a flat
+    8-stat sum (``combat_raw``) that added a resistance PERCENTAGE to an HP
+    amount 1:1; here it is 200 per point while one point of per-element
+    resistance is ``200 * monster_attack[e]`` — 6600 at the canonical
+    adversary's 33 attack. That 33:1 exchange rate is the canonical duel's,
+    not an invented constant.
+    """
+    defense = 0
+    for elem in elements:
+        defense = defense + monster_attack.get(elem, 0) * resistance.get(elem, 0)
+    offense = 0
+    for elem in elements:
+        offense = offense + (player_attack.get(elem, 0)
+                             * max(0, 100 - monster_resistance.get(elem, 0))
+                             * (2 * (dmg + dmg_elements.get(elem, 0)) + critical_strike))
+    flat_combat = hp_restore + hp_bonus + lifesteal + combat_buff
+    return 200 * defense + offense + 200 * flat_combat
+
+
 def armor_score_pure(elements: list[str], resistance: dict[str, int],
                      monster_attack: dict[str, int],
                      monster_resistance: dict[str, int],
@@ -74,7 +140,13 @@ def armor_score_pure(elements: list[str], resistance: dict[str, int],
                      inventory_space: int, haste: int, lifesteal: int,
                      combat_buff: int) -> int:
     """PURE CORE (mechanically extracted, P4b): ``200*defense + offense +
-    200*flatUtility``.
+    200*flatUtility``, expressed as its COMBAT slice plus its EFFICIENCY slice.
+
+    The two summands PARTITION the score: every stat reaches exactly one of
+    them, so ``armor_score_combat_pure + armor_score_efficiency_pure`` is the
+    whole score and nothing is double-counted. That identity is what
+    ``tiers/pursuit_value`` rides — it re-reads these two existing terms
+    lexicographically instead of building a second scorer.
 
     UNIT — the two monster-relative terms are BOTH in **1/20000 of one HP of
     damage swing per combat turn**; nothing else in this function is, and the
@@ -144,17 +216,11 @@ def armor_score_pure(elements: list[str], resistance: dict[str, int],
     Bridged to the hand ``Formal.EquipmentScoring.AScore`` over the same
     injective element encoding.
     """
-    defense = 0
-    for elem in elements:
-        defense = defense + monster_attack.get(elem, 0) * resistance.get(elem, 0)
-    offense = 0
-    for elem in elements:
-        offense = offense + (player_attack.get(elem, 0)
-                             * max(0, 100 - monster_resistance.get(elem, 0))
-                             * (2 * (dmg + dmg_elements.get(elem, 0)) + critical_strike))
-    flat_utility = (hp_restore + hp_bonus + wisdom + prospecting + inventory_space
-                    + haste + lifesteal + combat_buff)
-    return 200 * defense + offense + 200 * flat_utility
+    return (armor_score_combat_pure(elements, resistance, monster_attack,
+                                    monster_resistance, player_attack, dmg,
+                                    dmg_elements, critical_strike, hp_restore,
+                                    hp_bonus, lifesteal, combat_buff)
+            + armor_score_efficiency_pure(wisdom, prospecting, inventory_space, haste))
 
 
 def weapon_score_raw(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
@@ -241,3 +307,22 @@ def armor_score(armor: ItemStats, monster_attack: dict[str, int],
                             armor.hp_restore, armor.hp_bonus, armor.wisdom,
                             armor.prospecting, armor.inventory_space, armor.haste,
                             armor.lifesteal, armor.combat_buff)
+
+
+def armor_score_efficiency(armor: ItemStats) -> int:
+    """The EFFICIENCY slice of ``armor_score`` — monster-independent, so it
+    takes no adversary. See ``armor_score_efficiency_pure``."""
+    return armor_score_efficiency_pure(armor.wisdom, armor.prospecting,
+                                       armor.inventory_space, armor.haste)
+
+
+def armor_score_combat(armor: ItemStats, monster_attack: dict[str, int],
+                       monster_resistance: dict[str, int],
+                       player_attack: dict[str, int]) -> int:
+    """The COMBAT slice of ``armor_score`` — the same score minus its
+    efficiency slice. See ``armor_score_combat_pure``."""
+    return armor_score_combat_pure(list(ELEMENTS), armor.resistance, monster_attack,
+                                   monster_resistance, player_attack,
+                                   armor.dmg, armor.dmg_elements, armor.critical_strike,
+                                   armor.hp_restore, armor.hp_bonus,
+                                   armor.lifesteal, armor.combat_buff)

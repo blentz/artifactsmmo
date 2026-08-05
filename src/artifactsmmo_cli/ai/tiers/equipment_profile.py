@@ -2,10 +2,11 @@
 (spec docs/superpowers/specs/2026-07-08-equipment-profiles-design.md).
 
 A profile is a weight vector over strategic_value's five inputs
-(combat_raw, wisdom, prospecting, inventory_space, haste) in
+(the gear ruler's own COMBAT term, then wisdom, prospecting,
+inventory_space, haste) in
 1/STRATEGIC_SCALE fixed-point units. COMBAT zeroes the efficiency stats so
-gear ranks by combat content alone (fixing the flat-parity bug where a
-prospecting artifact outranked a weapon). UTILITY keeps the combat FLOOR
+gear ranks by the ruler's combat term alone (fixing the flat-parity bug where
+a prospecting artifact outranked a weapon). UTILITY keeps the combat FLOOR
 (combat still dominates shared slots structurally) and gives the four
 efficiency stats their own nonzero weights so efficiency-slot gear
 (rings/artifacts/utility) gets ordered and pursued.

@@ -67,19 +67,20 @@ EXPECTATIONS: dict[str, Golden] = {
         goal_class="GatherMaterials(copper_ore", first_action="Gather"),
 
     # l10_copper_adequate: full copper set but shield_slot is empty.
-    # RE-DERIVED 2026-08-04 (gear-ruler unification): unifying Rank onto
-    # `armor_score` moved `_utility_candidates`' gain (which rides `equip_value`)
-    # from 61 to 6000, against `_structural_candidates`' unchanged pursuit_value
-    # gain of 8000 for wooden_shield. The shield still leads on raw gain, but the
-    # two are now within 1.34x, so the ACHIEVABILITY factor decides: the potion is
-    # craftable now (1) and the shield needs 10 ash_wood gathered (905/1534), so
-    # the weighted order is 6000 vs 4720 and chosen_root is
-    # ObtainItem(small_health_potion, utility1_slot). Craftable-now, so the goal
-    # is the UpgradeEquipment craft itself (withdraw the banked sunflower, craft,
-    # equip) rather than a gather descent.
+    # RE-DERIVED 2026-08-04 (pursuit_value unification). `_utility_candidates`
+    # joined `_structural_candidates` on `pursuit_value`, so the merged argmax
+    # stopped comparing two rulers ~1000x apart. On the ONE ruler the shield
+    # leads 52_800_000 to the potion's 6_000_000 — 8.8x, so the ACHIEVABILITY
+    # factor (shield 905/1534 for 10 gathered ash_wood, potion 1 for
+    # craftable-now) narrows without reversing it, and chosen_root is
+    # ObtainItem(wooden_shield, shield_slot). This restores the 2026-07-08
+    # "combat/gear pursuit outranks potion-stocking" ruling; the brief potion
+    # win under the previous commit came from the two branches riding
+    # incommensurate rulers, not from a judgement about potions. The shield
+    # needs ash_wood gathered, so the goal is the gather descent.
     "l10_copper_adequate": Golden(
-        goal_class="UpgradeEquipment(small_health_potion",
-        first_action="Withdraw(sunflower"),
+        goal_class="GatherMaterials(ash_wood",
+        first_action="Gather(ash_tree"),
 
     # l12_taskgated_bag: GEAR-FIRST re-derivation 2026-07-08 (Task-3
     # pursuit_value; user ruling). The tree's chosen_root is

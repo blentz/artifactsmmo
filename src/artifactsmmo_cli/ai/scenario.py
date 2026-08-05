@@ -512,11 +512,17 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         skills={"mining": 10, "woodcutting": 10, "weaponcrafting": 10,
                 "gearcrafting": 10, "alchemy": 5},
         equipment={
-            "weapon_slot": "iron_dagger", "helmet_slot": "iron_helm",
-            "body_armor_slot": "iron_armor", "leg_armor_slot": "iron_legs_armor",
+            # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
+            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # now the ONE gear ruler's own. Slots that were a fixed point only
+            # for the retired flat `combat_raw` sum are re-converged here, so
+            # this scenario keeps isolating the gap it was built for instead of
+            # leaking unrelated candidates into the ranking.
+            "weapon_slot": "greater_wooden_staff", "helmet_slot": "adventurer_helmet",
+            "body_armor_slot": "adventurer_vest", "leg_armor_slot": "iron_legs_armor",
             "boots_slot": "iron_boots", "ring1_slot": "iron_ring",
             "ring2_slot": "iron_ring", "shield_slot": "iron_shield",
-            "amulet_slot": "life_amulet",
+            "amulet_slot": "air_and_water_amulet",
             "utility1_slot": "small_health_potion", "utility2_slot": "small_health_potion",
         },
         utility_quantities={"utility1_slot": 20, "utility2_slot": 20},
@@ -552,17 +558,23 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # the monster-relative side. Equipping the true argmax keeps every
             # non-bag slot at its fixed point, which is this scenario's whole
             # isolation methodology.
-            "weapon_slot": "iron_dagger", "helmet_slot": "iron_helm",
-            "body_armor_slot": "iron_armor", "leg_armor_slot": "iron_legs_armor",
-            "boots_slot": "iron_boots", "ring1_slot": "forest_ring",
+            # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
+            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # now the ONE gear ruler's own. Slots that were a fixed point only
+            # for the retired flat `combat_raw` sum are re-converged here, so
+            # this scenario keeps isolating the gap it was built for instead of
+            # leaking unrelated candidates into the ranking.
+            "weapon_slot": "greater_wooden_staff", "helmet_slot": "adventurer_helmet",
+            "body_armor_slot": "adventurer_vest", "leg_armor_slot": "iron_legs_armor",
+            "boots_slot": "iron_boots", "ring1_slot": "iron_ring",
             # ring2 RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are
             # duplicate-allowed, so near_term_gear's true fixed point is BOTH
             # ring slots holding the single best attainable-now ring
             # (forest_ring) — a distinct, weaker 2nd ring (iron_ring) is no
             # longer a fixed point once _slot_assignments duplicates the
             # best instead of ranking distinct items into each slot.
-            "ring2_slot": "forest_ring", "shield_slot": "iron_shield",
-            "amulet_slot": "life_amulet",
+            "ring2_slot": "iron_ring", "shield_slot": "iron_shield",
+            "amulet_slot": "air_and_water_amulet",
             "utility1_slot": "small_health_potion", "utility2_slot": "small_health_potion",
         },
         utility_quantities={"utility1_slot": 20, "utility2_slot": 20},
@@ -609,8 +621,15 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # each restores the "artifact slots the SOLE target" design.
             "weapon_slot": "wooden_club", "helmet_slot": "piggy_helmet",
             "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
-            "boots_slot": "snakeskin_boots", "ring1_slot": "ring_of_the_adept",
-            "ring2_slot": "ring_of_the_adept", "amulet_slot": "emerald_amulet",
+            "boots_slot": "snakeskin_boots",
+            # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
+            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # now the ONE gear ruler's own, so slots that were a fixed point
+            # only for the retired flat `combat_raw` sum are re-converged here.
+            # Without this the scenario leaks unrelated candidates into the
+            # ranking and stops isolating the gap it was built for.
+            "ring1_slot": "gold_ring",
+            "ring2_slot": "gold_ring", "amulet_slot": "emerald_amulet",
             "shield_slot": "slime_shield", "bag_slot": "satchel",
             "utility1_slot": "minor_health_potion", "utility2_slot": "minor_health_potion",
         },
@@ -665,8 +684,13 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # dropper), not an arbiter-level chosen_root assertion.
             "weapon_slot": "dreadful_staff", "helmet_slot": "piggy_helmet",
             "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
-            "boots_slot": "snakeskin_boots", "ring1_slot": "ring_of_the_adept",
-            "ring2_slot": "ring_of_the_adept", "amulet_slot": "emerald_amulet",
+            "boots_slot": "snakeskin_boots",
+            # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
+            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # now the ONE gear ruler's own, so slots that were a fixed point
+            # only for the retired flat `combat_raw` sum are re-converged here.
+            "ring1_slot": "gold_ring",
+            "ring2_slot": "gold_ring", "amulet_slot": "emerald_amulet",
             "shield_slot": "slime_shield", "bag_slot": "satchel",
             "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
             "artifact3_slot": "perfect_pearl",
@@ -738,9 +762,13 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # skeleton_helmet (cr 106) outranks it and was masking the rune
             # again. Equipping the true argmax restores this scenario's "every
             # other slot at its own fixed point, rune_slot the SOLE target".
-            "weapon_slot": "mushmush_bow", "helmet_slot": "skeleton_helmet",
+            # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
+            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # now the ONE gear ruler's own, so slots that were a fixed point
+            # only for the retired flat `combat_raw` sum are re-converged here.
+            "weapon_slot": "battlestaff", "helmet_slot": "lucky_wizard_hat",
             "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
-            "boots_slot": "adventurer_boots", "ring1_slot": "ring_of_the_adept",
+            "boots_slot": "snakeskin_boots", "ring1_slot": "gold_ring",
             # ring2 RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are
             # duplicate-allowed. ring_of_the_adept (ring1) is not itself
             # attainable-now at this loadout (already owned, not currently
@@ -748,7 +776,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # rings, life_ring is the argmax and near_term_gear's true fixed
             # point for ring2 is a 2nd life_ring, not the weaker forest_ring
             # a distinct-ranked-fill used to leave in place.
-            "ring2_slot": "life_ring", "amulet_slot": "emerald_amulet",
+            "ring2_slot": "gold_ring", "amulet_slot": "emerald_amulet",
             "shield_slot": "iron_shield", "bag_slot": "satchel",
             "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
             "artifact3_slot": "perfect_pearl",
@@ -800,16 +828,22 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # the true pursuit_value argmax in both restores this scenario's
             # "no structural gear candidate" design intent (band-adequate), so
             # the XP-outranks-empty-utility verdict is isolated again.
-            "weapon_slot": "mushmush_bow", "helmet_slot": "hard_leather_helmet",
-            "body_armor_slot": "mushmush_jacket", "leg_armor_slot": "adventurer_pants",
-            "boots_slot": "adventurer_boots", "ring1_slot": "life_ring",
+            # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
+            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # now the ONE gear ruler's own, so slots that were a fixed point
+            # only for the retired flat `combat_raw` sum are re-converged here.
+            # Without this the scenario leaks unrelated candidates into the
+            # ranking and stops isolating the gap it was built for.
+            "weapon_slot": "battlestaff", "helmet_slot": "hard_leather_helmet",
+            "body_armor_slot": "mushmush_jacket", "leg_armor_slot": "hard_leather_pants",
+            "boots_slot": "hard_leather_boots", "ring1_slot": "steel_ring",
             # ring2 RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are
             # duplicate-allowed, so the true near_term_gear fixed point is a
             # 2nd life_ring (the argmax attainable-now ring, matching ring1)
             # rather than the weaker forest_ring a distinct-ranked-fill used
             # to leave in place — restores this scenario's "no structural
             # gear candidate" design intent.
-            "ring2_slot": "life_ring", "amulet_slot": "wisdom_amulet",
+            "ring2_slot": "steel_ring", "amulet_slot": "air_and_water_amulet",
             "shield_slot": "iron_shield", "bag_slot": "satchel",
             "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
             "artifact3_slot": "perfect_pearl",
@@ -834,12 +868,18 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         equipment={
             # helmet/body RE-FIXED-POINT 2026-07-08 (Task-3 pursuit_value) —
             # see l20_dual_utility's comment; same combat-argmax fixed point.
-            "weapon_slot": "mushmush_bow", "helmet_slot": "hard_leather_helmet",
-            "body_armor_slot": "mushmush_jacket", "leg_armor_slot": "adventurer_pants",
-            "boots_slot": "adventurer_boots", "ring1_slot": "life_ring",
+            # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
+            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # now the ONE gear ruler's own, so slots that were a fixed point
+            # only for the retired flat `combat_raw` sum are re-converged here.
+            # Without this the scenario leaks unrelated candidates into the
+            # ranking and stops isolating the gap it was built for.
+            "weapon_slot": "battlestaff", "helmet_slot": "hard_leather_helmet",
+            "body_armor_slot": "mushmush_jacket", "leg_armor_slot": "hard_leather_pants",
+            "boots_slot": "hard_leather_boots", "ring1_slot": "steel_ring",
             # ring2 RE-DERIVED (Task 2, GAP-2 review, 2026-07-08) — see
             # l20_dual_utility's comment; same fixed-point loadout.
-            "ring2_slot": "life_ring", "amulet_slot": "wisdom_amulet",
+            "ring2_slot": "steel_ring", "amulet_slot": "air_and_water_amulet",
             "shield_slot": "iron_shield", "bag_slot": "satchel",
             "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
             "artifact3_slot": "perfect_pearl",
@@ -935,7 +975,21 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     "l10_gearcrafting_gap": ScenarioCharacter(
         name="l10_gearcrafting_gap", level=10,
         skills={"mining": 10, "weaponcrafting": 5, "gearcrafting": 5},
-        equipment=dict(_COPPER_SET),
+        # RE-FIXED-POINT 2026-08-04 (pursuit_value unification): was
+        # `dict(_COPPER_SET)`. Once `near_term_gear` ranks on the ONE gear
+        # ruler's own combat term, seven other slots open L10-tier candidates
+        # that outrank the boots and this scenario stops isolating its
+        # crafting-skill gap. Every slot EXCEPT boots is converged to the
+        # ruler's fixed point; boots_slot is deliberately left a tier behind
+        # so iron_boots remains the sole candidate, which is the criterion.
+        equipment={**_COPPER_SET,
+                   "weapon_slot": "greater_wooden_staff",
+                   "helmet_slot": "iron_helm",
+                   "body_armor_slot": "adventurer_vest",
+                   "leg_armor_slot": "iron_legs_armor",
+                   "ring1_slot": "iron_ring", "ring2_slot": "iron_ring",
+                   "shield_slot": "iron_shield",
+                   "amulet_slot": "air_and_water_amulet"},
         derive_combat_stats=True,
         description="Criterion 1 (no-deadlock-on-skilling-gear): L10, copper "
                      "gear, mining 10 / gearcrafting+weaponcrafting 5 — "
@@ -959,7 +1013,17 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         skills={"mining": 10, "woodcutting": 10, "weaponcrafting": 5,
                 "gearcrafting": 5, "jewelrycrafting": 5, "cooking": 5,
                 "alchemy": 5, "fishing": 5},
-        equipment=dict(_COPPER_SET),
+        # RE-FIXED-POINT 2026-08-04 — see l10_gearcrafting_gap. Same converged
+        # loadout, boots_slot held a tier behind so the grey-farmed feather
+        # leaf this scenario exists to pin is still the binding constraint.
+        equipment={**_COPPER_SET,
+                   "weapon_slot": "greater_wooden_staff",
+                   "helmet_slot": "iron_helm",
+                   "body_armor_slot": "adventurer_vest",
+                   "leg_armor_slot": "iron_legs_armor",
+                   "ring1_slot": "iron_ring", "ring2_slot": "iron_ring",
+                   "shield_slot": "iron_shield",
+                   "amulet_slot": "air_and_water_amulet"},
         bank={"iron_bar": 10},
         derive_combat_stats=True,
         description="GAP-9: L12, copper gear, gearcrafting 5, iron_bar banked "

@@ -9,7 +9,7 @@ from pathlib import Path
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.scoring import armor_score, gather_score, weapon_score
 from artifactsmmo_cli.ai.equipment.slot_occupancy import may_displace
-from artifactsmmo_cli.ai.gear_value import gear_value
+from artifactsmmo_cli.ai.gear_value import gear_components, gear_value
 from artifactsmmo_cli.ai.gear_value_core import (
     RANK_MONSTER_RESISTANCE,
     RANK_MONSTER_TOTAL_ATTACK,
@@ -17,7 +17,6 @@ from artifactsmmo_cli.ai.gear_value_core import (
     Combat,
     Gather,
     Rank,
-    combat_raw,
     rank_adversary,
 )
 from artifactsmmo_cli.ai.item_catalog import ItemStats
@@ -212,14 +211,52 @@ def test_rank_keeps_the_non_tool_tiebreak() -> None:
     assert gear_value(dagger, Rank) == gear_value(net, Rank) + 1
 
 
-# --- the untouched economics atom --------------------------------------------
+# --- the ruler's own (COMBAT, EFFICIENCY) partition, which the ECONOMICS layer
+# --- reads instead of a flat sum of its own ----------------------------------
 
-def test_combat_raw_sums_eight_stats() -> None:
-    """`combat_raw` is NOT a gear ruler — it is `strategic_value`'s single
-    "how much combat is in this item" scalar. It keeps its own tests because it
-    keeps its own job."""
-    assert combat_raw(attack=3, resistance=2, hp_restore=1, hp_bonus=4, dmg=5,
-                      critical_strike=6, lifesteal=7, combat_buff=8) == 36
+def test_gear_components_partition_the_ruler() -> None:
+    """`combat + efficiency == gear_value` on BOTH branches, for every item.
+    This identity is what makes `tiers/pursuit_value` a re-reading of the one
+    ruler rather than a second scorer. Mirrors `GearValue.rankValue_decomp`."""
+    for stats in (MUSHMUSH_JACKET, ADVENTURER_VEST, LIFE_AMULET,
+                  FIRE_AND_EARTH_AMULET,
+                  ItemStats(code="w", level=1, type_="weapon",
+                            attack={"fire": 6}, wisdom=100)):
+        combat, efficiency = gear_components(stats, Rank)
+        assert combat + efficiency == gear_value(stats, Rank)
+
+
+def test_efficiency_term_is_the_four_time_buying_stats() -> None:
+    """200 per point (the scale `armor_score` has always carried flat utility
+    at), all four weighted alike, and NOTHING else in it."""
+    stats = ItemStats(code="u", level=1, type_="artifact", hp_bonus=99,
+                      wisdom=1, prospecting=2, inventory_space=3, haste=4)
+    assert gear_components(stats, Rank)[1] == 200 * (1 + 2 + 3 + 4)
+
+
+def test_weapon_efficiency_term_is_zero() -> None:
+    """`weapon_score` (`2 * WScore + nonToolBonus`) has no flat-utility block,
+    so the ruler cannot see a weapon's wisdom. Reporting 0 rather than the
+    stat sum keeps the partition exact instead of inventing a term the ruler
+    does not have — the four live voidstone tools are the blast radius."""
+    tool = ItemStats(code="voidstone_pickaxe", level=1, type_="weapon",
+                     subtype="tool", attack={"earth": 5}, prospecting=100)
+    combat, efficiency = gear_components(tool, Rank)
+    assert efficiency == 0
+    assert combat == gear_value(tool, Rank)
+
+
+def test_combat_term_prices_resistance_far_above_hp_restore() -> None:
+    """The category error this replaced: the retired flat `combat_raw` weighted
+    a resistance PERCENTAGE 1:1 against an HP amount. On the ruler's own term
+    one point of per-element resistance is worth `RANK_REFERENCE_ATTACK` (33)
+    points of hp_restore — the canonical duel's exchange rate, not a constant
+    anyone chose here."""
+    one_resist = ItemStats(code="r", level=1, type_="amulet",
+                           resistance={"fire": 1})
+    one_heal = ItemStats(code="h", level=1, type_="amulet", hp_restore=1)
+    assert (gear_components(one_resist, Rank)[0]
+            == RANK_REFERENCE_ATTACK * gear_components(one_heal, Rank)[0])
 
 
 def test_combat_purpose_matches_weapon_and_armor_score() -> None:

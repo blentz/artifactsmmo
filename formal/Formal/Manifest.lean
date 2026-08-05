@@ -706,6 +706,9 @@ open Formal.PriorityBand
 
 -- GearPolicy (Phase G1 of composition-correctness plan):
 #check @Formal.EquipmentScoring.AScore_no_monster                    -- no monster/no wearer atk ⇒ 200*flatUtil
+#check @Formal.EquipmentScoring.ACombat                              -- AScore's COMBAT slice (no efficiency parameter at all)
+#check @Formal.EquipmentScoring.AEfficiency                          -- AScore's EFFICIENCY slice (the four time-buying stats)
+#check @Formal.EquipmentScoring.AScore_decomp                        -- the two slices PARTITION AScore (no double count)
 #check @Formal.GearPolicy.oTerm_nonneg                               -- armor offense term ≥ 0 under nonneg data
 #check @Formal.GearPolicy.oTerm_mono_in_boost                        -- offense term monotone in dmg%/crit
 #check @Formal.GearPolicy.armor_score_nonneg                         -- AScore ≥ 0 under nonneg data
@@ -841,7 +844,9 @@ open Formal.PriorityBand
 #check @Formal.EquipValueAugmented.copper_dagger_strictly_outranks_fishing_net
 
 -- GearValue (unified Rank ruler core; equip_value delegates to gear_value(_, Rank)):
-#check @Formal.GearValue.rawSum_decomp          -- rawSum = combatRaw + efficiency stats
+#check @Formal.GearValue.rankCombat             -- the ruler's COMBAT term (economics layer's input)
+#check @Formal.GearValue.rankEfficiency         -- the ruler's EFFICIENCY term (0 on the weapon branch)
+#check @Formal.GearValue.rankValue_decomp       -- THE PARTITION: rankValue = rankCombat + rankEfficiency
 #check @Formal.GearValue.gearValue                          -- the ONE gear ruler (combatScore on the weapon slot, AScore otherwise)
 #check @Formal.GearValue.rankValue_eq_gearValue_canonical   -- ONE ALGORITHM: Rank IS gear_value at the canonical adversary
 #check @Formal.GearValue.gearValue_armor_eq_combatValue     -- the armor branch is the raw combatValue the picker theorems ride
@@ -1095,6 +1100,8 @@ open Formal.PriorityBand
 -- (`equip_value_pure`) was retired onto the unified GearValue hand pins
 -- below; only the live `tool_value_pure` duality remains extracted here.
 #check @Extracted.Bridges.weapon_score_raw_bridge                     -- extracted = hand WScore, ∀ profiles/embeddings
+#check @Extracted.Bridges.armor_score_combat_bridge                   -- extracted combat slice = hand ACombat, ∀ profiles
+#check @Extracted.Bridges.armor_score_efficiency_bridge               -- extracted efficiency slice = hand AEfficiency
 #check @Extracted.Bridges.armor_score_bridge                          -- extracted = hand AScore (no clamp), ∀ profiles
 #check @Extracted.Bridges.weapon_score_bridge                         -- extracted composite = combatScore (isTool = subtype)
 #check @Extracted.Bridges.weapon_score_raw_nonneg_extracted           -- THE clamp theorem (transferred)
@@ -1112,10 +1119,16 @@ open Formal.PriorityBand
 -- model Formal/StrategicValue.lean and bridged in Formal/Extracted/Bridges9.lean.
 -- Separate from equip_value (combat scorer) — re-weights non-combat efficiency
 -- stats so bags/runes get a meaningful, non-1:1 cross-slot value.
-#check @Formal.StrategicValue.combatRawOf                             -- shared combat-raw input = GearValue.combatRaw (one ruler)
-#check @Formal.StrategicValue.combatRawOf_eq                          -- combatRawOf is definitionally GearValue.combatRaw
-#check @Formal.StrategicValue.combatRawOf_nonneg                      -- shared combat-raw nonneg under nonneg combat fields
-#check @Formal.StrategicValue.strategicValue_combatRawOf             -- strategic_value fed shared combat-raw = genuine-combat sum × weight + efficiency
+#check @Formal.StrategicValue.combatOf                                -- combat input = GearValue.rankCombat (a TERM of the one ruler)
+#check @Formal.StrategicValue.combatOf_eq_rankCombat                  -- combatOf is definitionally GearValue.rankCombat
+#check @Formal.StrategicValue.combatOf_add_efficiency_eq_rankValue    -- combat input + efficiency term reconstruct the ruler exactly
+#check @Formal.StrategicValue.clampEff                                -- symmetric efficiency bound (live items carry NEGATIVE efficiency)
+#check @Formal.StrategicValue.clampEff_mem                            -- the bound holds: |clampEff| ≤ budget
+#check @Formal.StrategicValue.clampEff_id                             -- inside the budget the bound is the identity
+#check @Formal.StrategicValue.pursuitValue                            -- pursuit_value: the ruler's two terms read lexicographically
+#check @Formal.StrategicValue.pursuit_combat_dominates                -- STRUCTURAL cross-slot combat dominance (∀ integer inputs)
+#check @Formal.StrategicValue.pursuit_efficiency_orders               -- no regression: efficiency still totally orders on a combat tie
+#check @Formal.StrategicValue.live_pursuit_span_ok                    -- the live (1000, 499) parameters satisfy the span hypothesis
 #check @Formal.StrategicValue.strategicValue_nonneg                   -- hand: nonneg stats+weights ⇒ nonneg (gap-bound precond)
 #check @Formal.StrategicValue.strategicValue_mono_combatRaw           -- hand: monotone in combat_raw
 #check @Formal.StrategicValue.strategicValue_mono_wisdom              -- hand: monotone in wisdom

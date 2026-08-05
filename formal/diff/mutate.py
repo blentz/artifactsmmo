@@ -822,16 +822,16 @@ SCORING_MUTATIONS = [
     # Killed by the AScore byte-equality in test_equipment_scoring_diff.py and the
     # armor arm of test_loadout_picker_diff.py.
     ("equipment_scoring: drop armor offense term (damage %/crit invisible)",
-     "    return 200 * defense + offense + 200 * flat_utility",
-     "    return 200 * defense + 200 * flat_utility"),
+     "    return 200 * defense + offense + 200 * flat_combat",
+     "    return 200 * defense + 200 * flat_combat"),
     # Drop the 200x that puts the defense sum on the offense sum's denominator.
     # Defense then reads 200x too cheap against offense, so a pure-damage piece
     # beats a genuinely defensive one against a hard-hitting monster. Killed by
     # the same byte-equality diffs (and by the rosenblood case in
     # tests/ai/test_armor_score_offense.py).
     ("equipment_scoring: drop the 200x defense scaling (mixes two units)",
-     "    return 200 * defense + offense + 200 * flat_utility",
-     "    return defense + offense + 200 * flat_utility"),
+     "    return 200 * defense + offense + 200 * flat_combat",
+     "    return defense + offense + 200 * flat_combat"),
     # Drop the per-element damage % read. `dmg_elements` is how the game expresses
     # ELEMENT SPECIALIZATION on armor (copper_armor +5 fire/earth vs feather_coat
     # +5 air/water), so without it two element-opposite pieces score identically
@@ -979,15 +979,17 @@ LOADOUT_PICKER_ARTIFACT_MUTATIONS = [
 GEAR_VALUE_DISPATCH_MUTATIONS = [
     ("gear_value: swap weapon_score and armor_score dispatch",
      "        if stats.type_ == \"weapon\":\n"
-     "            return weapon_score(stats, dict(purpose.monster_resistance))\n"
-     "        return armor_score(stats, dict(purpose.monster_attack),\n"
-     "                           dict(purpose.monster_resistance),\n"
-     "                           dict(purpose.player_attack))",
-     "        if stats.type_ == \"weapon\":\n"
-     "            return armor_score(stats, dict(purpose.monster_attack),\n"
-     "                               dict(purpose.monster_resistance),\n"
-     "                               dict(purpose.player_attack))\n"
-     "        return weapon_score(stats, dict(purpose.monster_resistance))"),
+     "            return (weapon_score(stats, dict(purpose.monster_resistance)), 0)\n"
+     "        return (armor_score_combat(stats, dict(purpose.monster_attack),\n"
+     "                                   dict(purpose.monster_resistance),\n"
+     "                                   dict(purpose.player_attack)),\n"
+     "                armor_score_efficiency(stats))",
+     "        if stats.type_ != \"weapon\":\n"
+     "            return (weapon_score(stats, dict(purpose.monster_resistance)), 0)\n"
+     "        return (armor_score_combat(stats, dict(purpose.monster_attack),\n"
+     "                                   dict(purpose.monster_resistance),\n"
+     "                                   dict(purpose.player_attack)),\n"
+     "                armor_score_efficiency(stats))"),
 ]
 
 
@@ -999,8 +1001,8 @@ GEAR_VALUE_DISPATCH_MUTATIONS = [
 # test_loadout_picker_diff.py::test_rank_pick_matches_lean.
 GEAR_VALUE_RANK_MUTATIONS = [
     ("gear_value: Rank scores against an EMPTY adversary, not the canonical one",
-     "        return gear_value(stats, rank_adversary())",
-     "        return gear_value(stats, Combat({}, {}, {}))"),
+     "        return gear_components(stats, rank_adversary())",
+     "        return gear_components(stats, Combat({}, {}, {}))"),
 ]
 
 
@@ -1031,17 +1033,46 @@ RANK_ADVERSARY_MUTATIONS = [
 ]
 
 
-# gear_value combat_raw_of mutations -- the ItemStats -> pure-core adapter's
-# dmg_elements HOIST (the equip-loop fix, 2026-08-04). Dropping it restores the
-# live divergence: the monster-blind rulers stop pricing element damage % that
-# `armor_score` prices, so the progression tree scores life_amulet 10000 above
-# fire_and_earth_amulet while the combat picker scores it 42000 below.
-# OWN run_group (feedback: unit-killed mutants need their own group) — killed by
-# tests/ai/test_equip_loop_closure.py.
-GEAR_VALUE_DMG_ELEMENTS_MUTATIONS = [
-    ("gear_value: drop the dmg_elements hoist from combat_raw_of",
-     "    dmg = stats.dmg + (sum(stats.dmg_elements.values()) if stats.dmg_elements else 0)",
-     "    dmg = stats.dmg"),
+# pursuit_value CROSS-SLOT DOMINANCE mutations (2026-08-04). `pursuit_value` is
+# the ONE ruler read LEXICOGRAPHICALLY: `combat * SCALE + clamp(efficiency)`,
+# and the property that makes it an order-embedding is `2 * EFFICIENCY_BUDGET <
+# STRATEGIC_SCALE`. Break that inequality and a prospecting artifact can outrank
+# a combat weapon cross-slot again — the exact 2026-07-08 defect. OWN run_group
+# (unit-killed mutants need their own group) — killed by
+# tests/test_ai/test_pursuit_value.py.
+#
+# Replaces the retired `combat_raw_of` dmg_elements-hoist mutant: that adapter
+# is gone, and the divergence it guarded (a monster-blind ruler blind to
+# per-element damage %) is now impossible by construction — the economics layer
+# reads `armor_score`'s own term, which has priced `dmg_elements` since
+# 170ed8d8.
+PURSUIT_DOMINANCE_MUTATIONS = [
+    ("pursuit_value: budget widened past half the scale — the efficiency SPAN "
+     "exceeds one combat unit and cross-slot dominance is no longer structural",
+     "EFFICIENCY_BUDGET = (STRATEGIC_SCALE - 1) // 2",
+     "EFFICIENCY_BUDGET = STRATEGIC_SCALE - 1"),
+    ("pursuit_value: efficiency stats re-weighted to combat parity — a bag "
+     "priced like a weapon, the original cross-slot bug",
+     "_EFFICIENCY_RATE = 1",
+     "_EFFICIENCY_RATE = STRATEGIC_SCALE"),
+]
+
+# strategic_value SYMMETRIC-BOUND mutations. The bound must clamp BOTH ends:
+# live items carry negative efficiency stats (obsidian_battleaxe
+# inventory_space -25), so a one-sided cap leaves the block's span unbounded
+# below and the order-embedding stops being one. OWN run_group — killed by
+# tests/test_ai/test_tiers_strategic_value.py.
+STRATEGIC_BOUND_MUTATIONS = [
+    ("strategic_value: drop the lower bound (span unbounded below)",
+     "        if efficiency_part < -efficiency_budget:\n"
+     "            efficiency_part = -efficiency_budget",
+     "        if False:\n"
+     "            efficiency_part = -efficiency_budget"),
+    ("strategic_value: drop the upper bound (span unbounded above)",
+     "        if efficiency_part > efficiency_budget:\n"
+     "            efficiency_part = efficiency_budget",
+     "        if False:\n"
+     "            efficiency_part = efficiency_budget"),
 ]
 
 
@@ -1255,6 +1286,7 @@ LEVEL_SKILL_ACTION_MUTATIONS = [
 ]
 
 STRATEGIC_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategic_value.py"
+PURSUIT_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "pursuit_value.py"
 
 # strategic_value mutations -- anchors for the EXTRACTED strategic_value_pure
 # (efficiency-weighted cross-slot scorer, #16). Killed by the differential test
@@ -2729,45 +2761,64 @@ KIT_SELECTION_MUTATIONS = [
 # Utility-stat valuation (2026-06-15 novice_guide discard fix). hp_bonus/wisdom/
 # prospecting must count so artifacts are scored, equipped, and not discarded.
 ARMOR_UTILITY_MUTATIONS = [
-    ("armor_score: drop whole flat utility (hp_bonus+wisdom+prospecting+inventory_space+haste+lifesteal+combat_buff) score 0",
-     "    return 200 * defense + offense + 200 * flat_utility",
+    ("armor_score: drop the in-fight flat block (hp_restore/hp_bonus/lifesteal/"
+     "combat_buff) — a resistance-free healer scores 0",
+     "    return 200 * defense + offense + 200 * flat_combat",
      "    return 200 * defense + offense"),
     ("armor_score: drop lifesteal — lifesteal gear undervalued",
-     "                    + haste + lifesteal + combat_buff)",
-     "                    + haste + combat_buff)"),
+     "    flat_combat = hp_restore + hp_bonus + lifesteal + combat_buff",
+     "    flat_combat = hp_restore + hp_bonus + combat_buff"),
     ("armor_score: drop combat_buff — buff potions undervalued",
-     "                    + haste + lifesteal + combat_buff)",
-     "                    + haste + lifesteal)"),
+     "    flat_combat = hp_restore + hp_bonus + lifesteal + combat_buff",
+     "    flat_combat = hp_restore + hp_bonus + lifesteal"),
     ("armor_score: drop hp_restore — healing potions score 0 and the tree's "
      "utility branch empties",
-     "    flat_utility = (hp_restore + hp_bonus + wisdom",
-     "    flat_utility = (hp_bonus + wisdom"),
+     "    flat_combat = hp_restore + hp_bonus + lifesteal + combat_buff",
+     "    flat_combat = hp_bonus + lifesteal + combat_buff"),
+    # THE PARTITION. `armor_score_pure` is the SUM of its two slices; dropping
+    # either drops a whole stat family from the one ruler.
+    ("armor_score: drop the efficiency slice — wisdom/prospecting/inventory/"
+     "haste invisible to the ruler",
+     "            + armor_score_efficiency_pure(wisdom, prospecting, inventory_space, haste))",
+     "            + 0)"),
+    ("armor_score_efficiency: drop wisdom from the efficiency slice",
+     "    return 200 * (wisdom + prospecting + inventory_space + haste)",
+     "    return 200 * (prospecting + inventory_space + haste)"),
+    ("armor_score_efficiency: drop the 200x scale — utility priced 200x too "
+     "cheap against defense",
+     "    return 200 * (wisdom + prospecting + inventory_space + haste)",
+     "    return (wisdom + prospecting + inventory_space + haste)"),
 ]
-# `combat_raw` (gear_value_core.py): `strategic_value`/`pursuit_value`'s single
-# genuine-combat scalar. NOT a gear ruler -- the gear ruler is `gear_value`, whose
-# Rank and Combat purposes are one algorithm (see GEAR_VALUE_RANK_MUTATIONS and
-# RANK_ADVERSARY_MUTATIONS). Each dropped summand is killed by the `combat_raw`
-# differential vs the oracle's `Formal.GearValue.combatRaw`. The two `rank_value`
-# mutants that used to live here died with the flat Rank sum itself; the
-# `nonToolBonus` and the `2 *` weapon scale are now `weapon_score`'s, covered by
-# ARMOR_SCORE/weapon-score mutants and the Rank differential.
-GEAR_VALUE_CORE_MUTATIONS = [
-    ("combat_raw: drop attack — weapon attack uncounted",
-     "    return (attack + resistance + hp_restore", "    return (resistance + hp_restore"),
-    ("combat_raw: drop resistance — armor resistance uncounted",
-     "attack + resistance + hp_restore + hp_bonus", "attack + hp_restore + hp_bonus"),
-    ("combat_raw: drop hp_restore — heal-on-use uncounted",
-     "resistance + hp_restore + hp_bonus + dmg", "resistance + hp_bonus + dmg"),
-    ("combat_raw: drop hp_bonus — max-hp gear uncounted",
-     "hp_restore + hp_bonus + dmg + critical_strike", "hp_restore + dmg + critical_strike"),
-    ("combat_raw: drop dmg — the dominance divergence regression",
-     "hp_bonus + dmg + critical_strike", "hp_bonus + critical_strike"),
-    ("combat_raw: drop critical_strike — crit gear uncounted",
-     "+ dmg + critical_strike\n", "+ dmg\n"),
-    ("combat_raw: drop lifesteal — lifesteal gear uncounted",
-     "+ lifesteal + combat_buff)", "+ combat_buff)"),
-    ("combat_raw: drop combat_buff — buff potions uncounted",
-     "+ lifesteal + combat_buff)", "+ lifesteal)"),
+# THE PARTITION (`gear_value.gear_components`): the ECONOMICS layer's combat
+# input is one of the two terms the ONE gear ruler is the SUM of. RETIRED with
+# the flat sum itself: the eight `combat_raw: drop <stat>` mutants that used to
+# live here — their subject (`gear_value_core.combat_raw`) no longer exists, and
+# every stat they guarded is now guarded by ARMOR_UTILITY_MUTATIONS (the flat
+# families) or by the monster-relative terms above.
+#
+# What replaces them is sharper: `test_gear_value_diff.test_rank_components_-
+# match_oracle` compares BOTH terms against `Formal.GearValue.rankCombat` /
+# `rankEfficiency` SEPARATELY, so a mutant that merely MOVES a stat from one
+# side to the other — leaving `gear_value` bit-identical, and therefore
+# invisible to the sum-only Rank differential — still dies. That is exactly the
+# double-counting failure mode the unification has to exclude.
+GEAR_VALUE_PARTITION_MUTATIONS = [
+    ("gear_components: leak the efficiency slice INTO the combat term (utility "
+     "counted twice by pursuit_value, and cross-slot dominance broken)",
+     "        return (armor_score_combat(stats, dict(purpose.monster_attack),\n"
+     "                                   dict(purpose.monster_resistance),\n"
+     "                                   dict(purpose.player_attack)),\n"
+     "                armor_score_efficiency(stats))",
+     "        return (armor_score_combat(stats, dict(purpose.monster_attack),\n"
+     "                                   dict(purpose.monster_resistance),\n"
+     "                                   dict(purpose.player_attack))\n"
+     "                + armor_score_efficiency(stats),\n"
+     "                armor_score_efficiency(stats))"),
+    ("gear_components: the WEAPON branch reports a non-zero efficiency term the "
+     "ruler does not have, so combat + efficiency stops equalling gear_value",
+     "            return (weapon_score(stats, dict(purpose.monster_resistance)), 0)",
+     "            return (weapon_score(stats, dict(purpose.monster_resistance)),\n"
+     "                    armor_score_efficiency(stats))"),
 ]
 
 
@@ -6099,7 +6150,7 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_combat.py", survivors)
     run_group(SCORING_SRC, ARMOR_UTILITY_MUTATIONS,
               "formal/diff/test_equipment_scoring_diff.py", survivors)
-    run_group(GEAR_VALUE_CORE_SRC, GEAR_VALUE_CORE_MUTATIONS,
+    run_group(GEAR_VALUE_SRC, GEAR_VALUE_PARTITION_MUTATIONS,
               "formal/diff/test_gear_value_diff.py", survivors)
     run_group(GEAR_VALUE_CORE_SRC, RANK_ADVERSARY_MUTATIONS,
               "tests/ai/test_gear_value_core.py", survivors)
@@ -6156,8 +6207,10 @@ def _collect_all_groups() -> None:
               "tests/ai/test_equip_loop_closure.py", survivors)
     run_group(PROGRESSION_GOAL_SRC, UPGRADE_GOAL_OCCUPANCY_MUTATIONS,
               "tests/ai/test_equip_loop_closure.py", survivors)
-    run_group(GEAR_VALUE_SRC, GEAR_VALUE_DMG_ELEMENTS_MUTATIONS,
-              "tests/ai/test_equip_loop_closure.py", survivors)
+    run_group(PURSUIT_VALUE_SRC, PURSUIT_DOMINANCE_MUTATIONS,
+              "tests/test_ai/test_pursuit_value.py", survivors)
+    run_group(STRATEGIC_VALUE_SRC, STRATEGIC_BOUND_MUTATIONS,
+              "tests/test_ai/test_tiers_strategic_value.py", survivors)
     run_group(PLAYER_SRC, FOCUS_CHARGE_MUTATIONS,
               "tests/test_ai/test_player_focus_ledger.py", survivors)
     run_group(REQUIREMENT_GRAPH_MEMO_SRC, MEMO_ENRICH_MUTATIONS,

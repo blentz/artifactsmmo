@@ -254,10 +254,24 @@ def test_decide_tree_role_flips_the_gear_pick() -> None:
     demotes the gearcrafting boots (raw-gain leader) below the jewelrycrafting
     amulet its own skill produces. Without the `role` argument reaching
     `focus_aging_pick`/`focus_aging_order` inside `decide_tree`, both calls
-    return the role-less pick and this fails."""
+    return the role-less pick and this fails.
+
+    RE-DERIVED 2026-08-04 (pursuit_value unification): `l12_gearcrafting_gap`
+    was re-fixed-pointed onto the ONE gear ruler, which closed its amulet slot
+    — so the jewelrycrafting competitor this test needs no longer exists in the
+    stock scenario. The amulet slot is re-opened HERE (one `replace`, the same
+    technique `test_decide_tree_role_signal_alone_makes_the_pick_aged` uses)
+    rather than by de-converging the shared scenario, which would leak the
+    candidate into every other test that rides it.
+    """
     gd = _bundle()
     objective = CharacterObjective.from_game_data(gd)
-    state = scenario_state(SCENARIOS["l12_gearcrafting_gap"], gd)
+    base = scenario_state(SCENARIOS["l12_gearcrafting_gap"], gd)
+    state = replace(base, equipment={**base.equipment, "amulet_slot": None})
+    assert objective.near_term_gear(state) == {
+        "boots_slot": "iron_boots",              # gearcrafting
+        "amulet_slot": "air_and_water_amulet",   # jewelrycrafting
+    }
 
     roleless = decide_tree(state, gd, objective, ctx=NO_PROFILE_CONTEXT)
     jeweler = decide_tree(state, gd, objective,
@@ -301,7 +315,12 @@ def test_decide_tree_role_signal_alone_makes_the_pick_aged() -> None:
     base = scenario_state(SCENARIOS["l10_bag_pursuit"], gd)
     state = replace(base, equipment={**base.equipment,
                                      "body_armor_slot": "copper_armor"})
-    assert objective.near_term_gear(state) == {"body_armor_slot": "iron_armor"}
+    # RE-DERIVED 2026-08-04 (pursuit_value unification): the L10 body argmax on
+    # the ONE ruler is adventurer_vest, not iron_armor (equip_value 174_400 vs
+    # 142_000 — the ruler has said so since Rank was unified onto armor_score;
+    # only the acquisition path's flat sum disagreed). Still ONE candidate, still
+    # gearcrafting, so the logger/miner alignment shape this test needs is intact.
+    assert objective.near_term_gear(state) == {"body_armor_slot": "adventurer_vest"}
 
     def aged(role: str | None) -> bool:
         return decide_tree(state, gd, objective,

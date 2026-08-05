@@ -26,7 +26,6 @@ from artifactsmmo_cli.ai.role_alignment import role_alignment_pure
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.achievability_core import achievability_pure
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
@@ -154,7 +153,16 @@ def _utility_candidates(state: WorldState, game_data: GameData,
     potion_type_weight's docstring for when boost/resist targets join this
     path). Same `gain > 0` guard _structural_candidates has: a zero-weighted
     family (unmodeled) or a zero-value item must never arm the gear branch or
-    appear as a candidate."""
+    appear as a candidate.
+
+    Scored on `pursuit_value`, the SAME ruler `_structural_candidates` uses.
+    The two candidate lists are merged into one argmax by `_gear_ranking_rows`
+    / `focus_aging_order`, so scoring them on different rulers made that
+    comparison meaningless — for years the potion branch rode a ruler ~500x
+    smaller than its competitor's. A potion carries no efficiency stat, so
+    `pursuit_value == 1000 * equip_value` for it exactly; the switch changes no
+    potion-vs-potion or potion-vs-gear VERDICT that held before, it only makes
+    the merged ranking a comparison of like with like."""
     candidates = []
     for slot, code in objective.utility_potion_targets(state).items():
         if getattr(state, _UTILITY_SLOT_QTY_ATTR[slot]) > 0:
@@ -162,7 +170,7 @@ def _utility_candidates(state: WorldState, game_data: GameData,
         stats = game_data.item_stats(code)
         if stats is None:
             continue
-        gain = potion_type_weight("hp_restore") * Fraction(equip_value(stats))
+        gain = potion_type_weight("hp_restore") * Fraction(pursuit_value(stats))
         if gain > 0:
             candidates.append(GearCandidate(slot=slot, code=code, gain=gain, level=stats.level))
     return candidates

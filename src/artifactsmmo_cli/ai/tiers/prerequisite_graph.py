@@ -19,16 +19,26 @@ from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
-RECYCLE_LEAF_VALUE_FLOOR = 10000
+RECYCLE_LEAF_VALUE_FLOOR = 256_000_000
 """pursuit_value below which a recyclable item is JUNK (obsolete gear) a skill
 grind may recover cheaply, vs CURRENT-TIER gear it must not churn. Only consulted
 under a grind's `exclude_recycle_leaf` descent (see `prerequisites`): a RECYCLE
 source leafs a material iff the recycled item's pursuit_value is below this floor.
-Calibrated to the combat-dominant `pursuit_value` scale (live: obsolete
-fishing_net/copper_axe ~5000-8000 recover; current-tier wooden_staff/fire_staff
-13000-21000 and up are skipped so the grind gathers fresh). Tunable — a proxy for
-'current-tier', not load-bearing for correctness; the null-cycle guard
-(GatherMaterialsGoal.exclude_recycle) protects the rung independently."""
+
+THE ONE absolute pursuit_value threshold in the codebase, so it is re-derived
+whenever that ruler's scale moves. Calibrated exactly as before, against the
+same four live witnesses, at the current scale: obsolete fishing_net / copper_axe
+score 200_000_000 and must recover; current-tier wooden_staff (328_001_000) and
+fire_staff (656_001_000) must be skipped so the grind gathers fresh. The floor is
+the geometric mean of the two adjacent witnesses (√(200.0M × 328.0M) = 256.1M),
+the same midpoint rule the retired 10000 satisfied on the retired scale
+(√(8000 × 13000) = 10198). `tests/test_ai/test_pursuit_value.py` pins all four
+witnesses against the catalog bundle, so a scale change fails the suite instead
+of silently reclassifying every recyclable.
+
+Tunable — a proxy for 'current-tier', not load-bearing for correctness; the
+null-cycle guard (GatherMaterialsGoal.exclude_recycle) protects the rung
+independently."""
 
 
 def _source_leafs(source: Source, game_data: GameData,

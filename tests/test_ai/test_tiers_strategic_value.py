@@ -4,6 +4,8 @@ The formal differential + mutation gate proves exact-integer agreement with the
 Lean core; these tests cover the pure function in the main suite.
 """
 from artifactsmmo_cli.ai.game_data import ItemStats
+from artifactsmmo_cli.ai.gear_value import gear_components
+from artifactsmmo_cli.ai.gear_value_core import Rank
 from artifactsmmo_cli.ai.tiers.strategic_value import (
     DEFAULT_STRATEGIC_WEIGHTS,
     STRATEGIC_SCALE,
@@ -29,7 +31,7 @@ def test_pure_bag_value():
 
 
 def test_combat_weight_dominates_efficiency():
-    """One point of combat_raw (×1000) outscores a 35-slot bag (×1)."""
+    """One unit of the combat term (×1000) outscores a 35-slot bag (×1)."""
     bag = strategic_value_pure(0, 0, 0, 35, 0, 1000, 1, 1, 1, 1)
     combat = strategic_value_pure(1, 0, 0, 0, 0, 1000, 1, 1, 1, 1)
     assert combat > bag
@@ -47,25 +49,27 @@ def test_monotone_in_inventory_space():
 
 # ---- wrapper (ItemStats → strategic_value) ----
 
-def test_wrapper_combat_raw_excludes_efficiency_stats():
-    """combat_raw = attack+resistance+hp_restore+hp_bonus+dmg+crit+lifesteal+
-    combat_buff (equip_value's raw MINUS the four efficiency stats), ×SCALE.
-    A pure-combat weapon (attack 30) → 30 × 1000 = 30000."""
+def test_wrapper_combat_term_is_the_rulers_own():
+    """The combat input is `gear_components(stats, Rank)[0]`, ×SCALE — NOT a
+    stat sum computed here. A pure-attack weapon (earth 30) scores
+    `weapon_score` = `2 * (30 * 100) * 200 + nonToolBonus` = 1_200_001."""
     s = ItemStats(code="iron_sword", level=2, type_="weapon", attack={"earth": 30})
-    assert strategic_value(s) == 30 * STRATEGIC_SCALE
+    assert gear_components(s, Rank) == (1_200_001, 0)
+    assert strategic_value(s) == 1_200_001 * STRATEGIC_SCALE
 
 
-def test_wrapper_combat_raw_sums_every_combat_field():
-    """Every combat field contributes to combat_raw (so a dropped term is caught):
-    attack(2+3) + resistance(4) + hp_restore(5) + hp_bonus(6) + dmg(7) + crit(8)
-    + lifesteal(9) + combat_buff(10) = 54 → 54 × 1000 = 54000. Efficiency stats
-    (wisdom/prospecting/inventory/haste) are NOT in combat_raw."""
+def test_wrapper_combat_term_prices_every_combat_field_monster_relatively():
+    """Every combat field still reaches the score, but at the RULER's exchange
+    rates rather than 1:1: 4 earth resistance is `200 * 33 * 4` = 26_400 while
+    5 hp_restore is `200 * 5` = 1_000. The retired flat `combat_raw` called
+    those 4 and 5 — a resistance percentage weighed against an HP amount."""
     s = ItemStats(
-        code="kitchen_sink", level=1, type_="weapon",
-        attack={"fire": 2, "air": 3}, resistance={"earth": 4}, hp_restore=5,
+        code="kitchen_sink", level=1, type_="amulet",
+        resistance={"earth": 4}, hp_restore=5,
         hp_bonus=6, dmg=7, critical_strike=8, lifesteal=9, combat_buff=10,
     )
-    assert strategic_value(s) == 54 * STRATEGIC_SCALE
+    assert gear_components(s, Rank) == (322_800, 0)
+    assert strategic_value(s) == 322_800 * STRATEGIC_SCALE
 
 
 def test_wrapper_efficiency_stats_downweighted():
@@ -97,9 +101,22 @@ def test_efficiency_budget_caps_efficiency_block_below_combat():
     bag = ItemStats(code="bag", level=1, type_="bag", inventory_space=100)
     capped = strategic_value(bag, (1000, 1, 1, 50, 0), efficiency_budget=999)
     assert capped == 999  # combat_part 0 + min(999, 5000)
-    # A single combat-raw point outranks the capped bag.
+    # A one-attack weapon (combat term 40001) outranks the capped bag.
     weapon = ItemStats(code="w", level=1, type_="weapon", attack={"earth": 1})
-    assert strategic_value(weapon, (1000, 1, 1, 50, 0), efficiency_budget=999) == 1000
+    assert (strategic_value(weapon, (1000, 1, 1, 50, 0), efficiency_budget=999)
+            == 40_001 * 1000)
+
+
+def test_efficiency_budget_is_symmetric():
+    """Efficiency stats are NEGATIVE on live items (obsidian_battleaxe:
+    inventory_space -25), so the bound is two-sided. A one-sided cap would leave
+    the block's SPAN unbounded below, and a span wider than the combat weight
+    breaks the order-embedding `pursuit_value` relies on."""
+    penalised = ItemStats(code="p", level=1, type_="body_armor", inventory_space=-100)
+    assert strategic_value(penalised, (1000, 1, 1, 50, 0), efficiency_budget=999) == -999
+    # ...and inside the bound the penalty is carried through unflattened.
+    mild = ItemStats(code="m", level=1, type_="body_armor", inventory_space=-5)
+    assert strategic_value(mild, (1000, 1, 1, 50, 0), efficiency_budget=999) == -250
 
 
 def test_efficiency_budget_none_is_uncapped():
@@ -122,8 +139,11 @@ def test_horizon_scales_efficiency_only_not_combat():
     inventory 10 (weight 50 → eff 500) at horizon 1/2 → eff 250, combat stays."""
     item = ItemStats(code="m", level=1, type_="body_armor",
                      resistance={"earth": 10}, inventory_space=10)
-    # combat_raw 10 → 10000; efficiency 10*50=500; horizon 1/2 → 250.
-    assert strategic_value(item, (1000, 1, 1, 50, 0), horizon=(1, 2)) == 10000 + 250
+    # combat term 66000 (= 200 * 33 * 10) → 66_000_000; efficiency 10*50=500;
+    # horizon 1/2 → 250.
+    assert gear_components(item, Rank)[0] == 66_000
+    assert (strategic_value(item, (1000, 1, 1, 50, 0), horizon=(1, 2))
+            == 66_000_000 + 250)
 
 
 def test_horizon_zero_at_max_level_kills_efficiency():
@@ -147,4 +167,4 @@ def test_horizon_preserves_combat_dominance():
     weapon = ItemStats(code="w", level=1, type_="weapon", attack={"earth": 1})
     capped_bag = strategic_value(bag, (1000, 1, 1, 50, 0), efficiency_budget=999, horizon=(49, 50))
     one_combat = strategic_value(weapon, (1000, 1, 1, 50, 0), efficiency_budget=999, horizon=(49, 50))
-    assert capped_bag < one_combat == 1000
+    assert capped_bag < one_combat == 40_001 * 1000

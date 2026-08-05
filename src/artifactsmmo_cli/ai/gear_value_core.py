@@ -115,16 +115,11 @@ def rank_adversary() -> Combat:
     )
 
 
-def combat_raw(attack: int, resistance: int, hp_restore: int, hp_bonus: int,
-               dmg: int, critical_strike: int, lifesteal: int,
-               combat_buff: int) -> int:
-    """The genuine-combat stat sum `strategic_value` weighs (`pursuit_value`'s
-    combat input). Mirrors Formal.GearValue.combatRaw.
-
-    NOT a gear ruler: `strategic_value` is the ECONOMICS layer (acquisition
-    priority under a gold budget and a leveling horizon), which needs a single
-    scalar "how much combat is in this item" to weigh against efficiency stats.
-    The gear RULER question — "which piece is better" — is answered in exactly
-    one place, `gear_value`, for both the Rank and the Combat purpose."""
-    return (attack + resistance + hp_restore + hp_bonus + dmg + critical_strike
-            + lifesteal + combat_buff)
+# RETIRED: `combat_raw(attack, resistance, hp_restore, hp_bonus, dmg,
+# critical_strike, lifesteal, combat_buff)` — a flat 8-stat sum that was
+# `strategic_value`/`pursuit_value`'s "how much combat is in this item" scalar.
+# It added a resistance PERCENTAGE to an HP amount to a damage figure 1:1, the
+# same category error the Rank/Combat unification removed from the gear ruler,
+# surviving one layer up in the ECONOMICS layer. The economics layer now reads
+# the ruler's OWN combat term (`ai/gear_value.gear_components`), so there is one
+# scoring algorithm and no flat sum left to disagree with it.

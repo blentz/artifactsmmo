@@ -15,15 +15,18 @@ below from live `/v3/items` + `/v3/monsters` stats:
     equip_value   life_amulet 61      fire_and_earth_amulet 41   (life wins)
     armor_score   life_amulet 6000    fire_and_earth_amulet 48000 (f&e wins)
 
-`armor_score` prices `dmg_elements` (170ed8d8); `combat_raw` — under
-`equip_value`, `strategic_value` and the progression tree's `pursuit_value` —
-did not, and `fire_and_earth_amulet`'s ENTIRE offensive value lives there.
+`armor_score` prices `dmg_elements` (170ed8d8); the flat 8-stat `combat_raw`
+sum — under `equip_value`, `strategic_value` and the progression tree's
+`pursuit_value` — did not, and `fire_and_earth_amulet`'s ENTIRE offensive value
+lives there.
 
 The fix has two halves and this file pins both:
 
-1. ARITHMETIC. `combat_raw_of` hoists `dmg_elements` into the core's `dmg` int,
-   exactly as it already hoists the `attack` and `resistance` dicts, so both
-   rulers read the same stats. The pair now ties at 61 / 30000.
+1. ARITHMETIC. There is now ONE ruler and the acquisition path reads its own
+   COMBAT term (`gear_value.gear_components`), so "which stats exist" is not a
+   question the two layers can answer differently. `combat_raw` — the flat sum
+   that could not see per-element damage % — is deleted, along with the
+   `dmg_elements` hoist that had been patching it.
 2. STRUCTURE. No monster-blind total order can agree with a monster-relative
    one on every monster, so ties are not enough. `equipment/slot_occupancy`
    makes the acquisition path DEFER: it may pre-empt `pick_loadout` for an item
@@ -137,20 +140,27 @@ def test_the_two_amulets_now_score_the_same_way_on_both_rulers() -> None:
     61 / 30000 — a 10000 gain the progression tree chased every cycle — while
     the monster-relative scorer had it 48000 to 6000 the other way.
 
-    Two fixes landed on top of each other and this pins the state after both:
+    Three fixes landed on top of each other and this pins the state after all:
 
-    1. the `dmg_elements` hoist made `combat_raw` (hence `pursuit_value`) stop
-       disagreeing about which stats EXIST — the pair ties there at 30000;
+    1. the `dmg_elements` hoist made the acquisition path stop disagreeing about
+       which stats EXIST;
     2. unifying Rank onto `armor_score` made `equip_value` stop being a separate
        formula at all. It now prefers the element amulet 70000 to 6000, the same
        DIRECTION the monster-relative scorer does, because it is the same
-       function evaluated against the catalog-median monster instead of a wolf.
+       function evaluated against the catalog-median monster instead of a wolf;
+    3. `pursuit_value`'s combat term became that same ruler's own combat term,
+       so it stopped merely TYING the pair (30000 each, on a flat sum that could
+       not see per-element damage) and now prefers the element amulet by the
+       same ratio the ruler does. A tie was enough to stop the loop; agreement
+       is what stops the two layers holding different opinions at all.
     """
     assert equip_value(_LIFE_AMULET) == 6000
     assert equip_value(_FIRE_AND_EARTH_AMULET) == 70000
     assert equip_value(_FIRE_AND_EARTH_AMULET) > equip_value(_LIFE_AMULET)
-    assert pursuit_value(_LIFE_AMULET) == 30000
-    assert pursuit_value(_FIRE_AND_EARTH_AMULET) == 30000
+    # Neither amulet carries an efficiency stat, so pursuit is exactly 1000x.
+    assert pursuit_value(_LIFE_AMULET) == 1000 * 6000
+    assert pursuit_value(_FIRE_AND_EARTH_AMULET) == 1000 * 70000
+    assert pursuit_value(_FIRE_AND_EARTH_AMULET) > pursuit_value(_LIFE_AMULET)
 
     # The monster-relative half is untouched and still prefers the element
     # amulet by the damage it adds to a 40-earth output vs res_earth -10.
@@ -277,11 +287,11 @@ def test_an_unowned_target_is_still_pursued() -> None:
     remaining work is the contested equip. Acquiring gear he does not own is
     real, terminating work and must stay proposed — otherwise closing the loop
     would close gear progression with it."""
-    gd = _gd(_MUSHMUSH_JACKET, _PIGGY_ARMOR)
-    state = _state(25, {}, {_BODY: "mushmush_jacket"}, _FOREST_WHIP_ATTACK)
-    objective = _Objective({_BODY: "piggy_armor"})
+    gd = _gd(_ADVENTURER_VEST, _MUSHMUSH_JACKET)
+    state = _state(21, {}, {_BODY: "adventurer_vest"}, _FOREST_WHIP_ATTACK)
+    objective = _Objective({_BODY: "mushmush_jacket"})
     candidates = _structural_candidates(state, gd, objective)
-    assert [(c.slot, c.code) for c in candidates] == [(_BODY, "piggy_armor")]
+    assert [(c.slot, c.code) for c in candidates] == [(_BODY, "mushmush_jacket")]
 
 
 def test_a_dominating_owned_item_is_still_proposed() -> None:
@@ -332,23 +342,31 @@ def test_the_tree_leg_of_the_loop_closes_on_a_positive_gain_swap() -> None:
     """The deferral must hold where the monster-blind ruler genuinely PREFERS
     the candidate, not only where the two rulers happen to tie.
 
-    Owned `piggy_armor` outranks the worn `mushmush_jacket` by 114020 on
+    Owned `mushmush_jacket` outranks the worn `piggy_armor` by 41_399_980 on
     `pursuit_value` — a huge positive gain the tree would chase every cycle —
-    but it trades away 3 crit, so against a light hitter `pick_loadout` puts
-    the jacket straight back. Without the deferral this alternates forever;
-    with it, the tree proposes nothing and the slot never moves. (Against a
-    monster where piggy IS better, the picker equips it — see
-    `test_deferring_loses_nothing_the_picker_equips_it_when_it_helps`.)"""
-    gd = _gd(_MUSHMUSH_JACKET, _PIGGY_ARMOR)
-    state = _state(25, {"piggy_armor": 1}, {_BODY: "mushmush_jacket"},
-                   _FOREST_WHIP_ATTACK)
-    objective = _Objective({_BODY: "piggy_armor"})
+    but it trades away 150 hp and all the fire resistance, so against a
+    400-FIRE hitter `pick_loadout` puts piggy straight back. Without the
+    deferral this alternates forever; with it, the tree proposes nothing and
+    the slot never moves. (Against a monster where the jacket IS better, the
+    picker equips it — see
+    `test_deferring_loses_nothing_the_picker_equips_it_when_it_helps`.)
 
-    assert pursuit_value(_PIGGY_ARMOR) > pursuit_value(_MUSHMUSH_JACKET)
+    The two items swapped ROLES here when Rank was unified onto `armor_score`
+    and `pursuit_value` followed it: the monster-blind ruler now prefers the
+    jacket's 10% GLOBAL damage over piggy's fire-and-earth-only resistance,
+    because the catalog-median adversary attacks in every element equally. The
+    LOOP being closed is identical — a monster-blind preference the
+    monster-relative picker reverses — only its direction changed."""
+    gd = _gd(_MUSHMUSH_JACKET, _PIGGY_ARMOR)
+    state = _state(25, {"mushmush_jacket": 1}, {_BODY: "piggy_armor"},
+                   _FOREST_WHIP_ATTACK)
+    objective = _Objective({_BODY: "mushmush_jacket"})
+
+    assert pursuit_value(_MUSHMUSH_JACKET) > pursuit_value(_PIGGY_ARMOR)
     assert _structural_candidates(state, gd, objective) == []
 
-    seen = _alternate(state, gd, objective, _WOLF_ATK, _WOLF_RES, _BODY)
-    assert set(seen) == {"mushmush_jacket"}, seen
+    seen = _alternate(state, gd, objective, _ROSENBLOOD_ATK, _ROSENBLOOD_RES, _BODY)
+    assert set(seen) == {"piggy_armor"}, seen
 
 
 # --- 170ed8d8's win, on BOTH rulers now -------------------------------------
@@ -385,22 +403,28 @@ def test_a_purely_defensive_item_still_wins_where_defence_matters() -> None:
     jacket on the monster-relative ruler — a damage-only valuation would invert
     that, and `pursuit_value` (the acquisition economics) agrees.
 
-    VERDICT CHANGE, and an honest one: `equip_value` now puts the jacket AHEAD
-    (317600 to 280200), because Rank IS `armor_score` and the adversary it scores
-    against is the catalog MEDIAN — which attacks in every element equally. A
-    monster-blind ruler cannot know you will meet rosenblood, so it dilutes
-    piggy's fire-and-earth-only resistance across four elements while the
-    jacket's 10% GLOBAL damage applies whatever shows up. That is the same
-    number `armor_score` itself returns for the median monster, so the two
-    authorities are not disagreeing — they are one function asked about two
+    VERDICT CHANGE, and an honest one: both MONSTER-BLIND rulers now put the
+    jacket AHEAD (`equip_value` 317600 to 280200), because Rank IS `armor_score`
+    and the adversary it scores against is the catalog MEDIAN — which attacks in
+    every element equally. A monster-blind ruler cannot know you will meet
+    rosenblood, so it dilutes piggy's fire-and-earth-only resistance across four
+    elements while the jacket's 10% GLOBAL damage applies whatever shows up.
+    That is the same number `armor_score` itself returns for the median monster,
+    so the authorities are not disagreeing — they are ONE function asked about
     different adversaries, and `may_displace` (below) is what keeps them from
-    fighting over the slot."""
+    fighting over the slot.
+
+    `pursuit_value` used to side with piggy here, on a flat sum that added
+    piggy's 15 resistance points and 30 wisdom to its 150 hp 1:1. It now follows
+    the ruler, which is the whole point of the economics layer reading the
+    ruler's own combat term: the acquisition path can no longer hold an opinion
+    the picker's own formula does not."""
     piggy = armor_score(_PIGGY_ARMOR, _ROSENBLOOD_ATK, _ROSENBLOOD_RES,
                         _FOREST_WHIP_ATTACK)
     jacket = armor_score(_MUSHMUSH_JACKET, _ROSENBLOOD_ATK, _ROSENBLOOD_RES,
                          _FOREST_WHIP_ATTACK)
     assert piggy > jacket
-    assert pursuit_value(_PIGGY_ARMOR) > pursuit_value(_MUSHMUSH_JACKET)
+    assert pursuit_value(_MUSHMUSH_JACKET) > pursuit_value(_PIGGY_ARMOR)
     assert equip_value(_MUSHMUSH_JACKET) > equip_value(_PIGGY_ARMOR)
     assert not may_displace(_PIGGY_ARMOR, _MUSHMUSH_JACKET)
     assert not may_displace(_MUSHMUSH_JACKET, _PIGGY_ARMOR)

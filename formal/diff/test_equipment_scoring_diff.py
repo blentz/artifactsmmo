@@ -392,6 +392,34 @@ def test_combat_buff_potion_scores_its_utility_value():
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["ring1_slot"])
 
 
+def test_hp_restore_armor_scores_its_pool_value():
+    """`hp_restore` is a per-item HP pool the armor score counts, exactly like
+    `hp_bonus`. A utility item carrying only hp_restore=30 outscores a plain
+    peer, and Python agrees with the Lean oracle — exercises hp_restore in the
+    combat slice.
+
+    ADDED 2026-08-04. `hp_restore` joined the flat block when Rank was unified
+    onto `armor_score`, but no differential witness came with it: the group's
+    "drop hp_restore" mutant was bound to THIS file and SURVIVED (it was killed
+    only by a test in another group's suite). Without this witness a
+    regression that scores every healing potion 0 — emptying the progression
+    tree's utility branch, which gates on `gain > 0` — reaches the gate
+    unnoticed."""
+    table = _table(
+        ItemStats(code="heal_pot", level=1, type_="ring", hp_restore=30),
+        ItemStats(code="plain_ring", level=1, type_="ring"),
+    )
+    monster_atk = {"fire": 5}
+    monster_res = {"fire": 0}
+    inventory = {"heal_pot": 1, "plain_ring": 1}
+    equipment = {"ring1_slot": None}
+    game_data = _FakeGameData(table, monster_atk, monster_res)
+    state = _make_state(5, inventory, equipment)
+    result = pick_loadout(Combat(monster_atk, monster_res, _PLAYER_ATK), state, game_data)
+    assert result.get("ring1_slot") == "heal_pot"
+    _check(table, monster_atk, monster_res, 5, inventory, equipment, ["ring1_slot"])
+
+
 def test_upgrade_swaps():
     """A strictly better owned weapon replaces the equipped one."""
     table = _table(

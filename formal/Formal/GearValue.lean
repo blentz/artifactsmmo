@@ -31,27 +31,22 @@ theorem would have told a false story about live code. `rankValue_eq_-
 combatValue_canonical` is strictly stronger about the property that matters —
 Rank cannot disagree with Combat because it IS Combat.
 
-`combatRaw` and `rawSum_decomp` are UNCHANGED and stay here: `combatRaw` is not
-a gear ruler but `StrategicValue`'s single "how much combat is in this item"
-scalar, and `StrategicValue.combatRawOf` is defined as it.
+ALSO RETIRED: `combatRaw` (the flat 8-stat sum `attack + resistance + hpRestore
++ hpBonus + dmg + crit + lifesteal + combatBuff`) and `rawSum_decomp`. That
+scalar was `StrategicValue`'s "how much combat is in this item" input, i.e. a
+SECOND ruler living one layer up — free to disagree with this one about the same
+slot, and guilty of the same 1:1 category error (a resistance PERCENTAGE added
+to an HP amount) the Rank/Combat unification had just removed here. Both the
+definition and the theorem are GONE, not weakened: the Python function they
+modelled (`gear_value_core.combat_raw`) no longer exists. `rankCombat` /
+`rankEfficiency` / `rankValue_decomp` below replace them with a strictly stronger
+correspondence — the economics layer's combat input is not merely SHARED with
+this ruler, it is one of the two terms this ruler is the sum of.
 -/
 
 namespace Formal.GearValue
 
 open Formal.EquipValueAugmented
-
-/-- The genuine-combat signal shared by the Rank ruler and strategic_value:
-the combat slice of `rawSum` (attack, resistance, hp, dmg, crit, lifesteal,
-combat-buff), excluding the efficiency utility stats. -/
-def combatRaw (s : RawStats) : Int :=
-  s.attack + s.resistance + s.hpRestore + s.hpBonus + s.dmg + s.crit
-    + s.lifesteal + s.combatBuff
-
-/-- `rawSum` splits into the combat signal plus the four efficiency stats. -/
-theorem rawSum_decomp (s : RawStats) :
-    rawSum s = combatRaw s + s.wisdom + s.prospecting + s.inventorySpace + s.haste := by
-  unfold rawSum combatRaw
-  omega
 
 /-! ### Combat & Gather purposes: `gear_value(Combat/Gather)` unifies the
 per-monster scorers.
@@ -138,6 +133,54 @@ theorem rankValue_eq_gearValue_canonical (isWeapon : Bool)
     rankValue isWeapon ci
       = gearValue isWeapon ci canonicalAttack canonicalResistance canonicalAttack :=
   rfl
+
+/-! #### The Rank ruler's own (COMBAT, EFFICIENCY) partition.
+
+Mirrors the live `ai/gear_value.gear_components(stats, Rank)`. The economics
+layer (`Formal.StrategicValue`, `tiers/pursuit_value`) consumes THESE two terms
+rather than a scalar of its own, which is what makes "one scoring algorithm"
+true of the acquisition path as well as the picker. -/
+
+/-- The Rank purpose's COMBAT term: `EquipmentScoring.ACombat` at the canonical
+adversary on the armor branch, the whole augmented weapon score on the weapon
+branch. `flatCombat` is the piece's `hp_restore + hp_bonus + lifesteal +
+combatBuff`. -/
+def rankCombat (isWeapon : Bool) (ci : Formal.PurposeRouting.CombatItem)
+    (flatCombat : Int) : Int :=
+  if isWeapon then Formal.PurposeRouting.combatScore canonicalResistance ci
+  else ACombat ci.base canonicalAttack canonicalResistance canonicalAttack flatCombat
+
+/-- The Rank purpose's EFFICIENCY term.
+
+ZERO on the weapon branch, deliberately: `PurposeRouting.combatScore` is
+`2 * WScore + nonToolBonus` and has no flat-utility block at all, so a weapon's
+`wisdom`/`prospecting` are invisible to the RULER. Reporting 0 keeps
+`rankValue_decomp` an exact identity instead of inventing a term the ruler does
+not have. (Live blast radius: the four voidstone tools, 100 prospecting each,
+and only as a tiebreak between weapons of identical `WScore`.) -/
+def rankEfficiency (isWeapon : Bool)
+    (wisdom prospecting inventorySpace haste : Int) : Int :=
+  if isWeapon then 0 else AEfficiency wisdom prospecting inventorySpace haste
+
+/-- **THE PARTITION, on the Rank purpose.** The ruler IS the sum of the two terms
+the economics layer weighs — on BOTH branches, for every item. So the acquisition
+score cannot contain a stat the ruler does not, cannot omit one the ruler has,
+and cannot count one twice. -/
+theorem rankValue_decomp (isWeapon : Bool)
+    (ci : Formal.PurposeRouting.CombatItem)
+    (flatCombat wisdom prospecting inventorySpace haste : Int)
+    (hflat : ci.base.flatUtil
+      = flatCombat + wisdom + prospecting + inventorySpace + haste) :
+    rankValue isWeapon ci
+      = rankCombat isWeapon ci flatCombat
+        + rankEfficiency isWeapon wisdom prospecting inventorySpace haste := by
+  unfold rankValue gearValue rankCombat rankEfficiency
+  cases isWeapon with
+  | true => simp
+  | false =>
+    simp only [if_false, Bool.false_eq_true]
+    exact AScore_decomp ci.base canonicalAttack canonicalResistance canonicalAttack
+      flatCombat wisdom prospecting inventorySpace haste hflat
 
 /-- The armor branch of `gearValue` is exactly the raw `combatValue` atom the
 picker optimality theorems are stated on, so nothing is lost by the augmentation

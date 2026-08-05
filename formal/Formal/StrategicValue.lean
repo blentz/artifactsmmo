@@ -33,10 +33,15 @@ efficiency so combat ordering is preserved).
 These are transferred onto the extracted `Extracted.StrategicValue` def by the
 Bridges9 bridge.
 
-`combatRaw` is the ONE shared genuine-combat primitive: `combatRawOf` below
-delegates to `Formal.GearValue.combatRaw` (the same atom the `equip_value`
-ranker uses, mirrored by `ai/gear_value.combat_raw_of` in Python), so
-strategic_value's combat input cannot drift into a third combat ruler.
+The combat INPUT is not computed here and is not a formula of this layer's own:
+it is `Formal.GearValue.rankCombat`, one of the two terms the ONE gear ruler is
+the sum of (`GearValue.rankValue_decomp`). It used to be `GearValue.combatRaw`,
+a flat 8-stat sum defined alongside the ruler — a second ruler in all but name,
+which added a resistance PERCENTAGE to an HP amount 1:1. `combatOf` /
+`combatOf_eq_rankCombat` below replace `combatRawOf` / `combatRawOf_eq` with that
+strictly stronger correspondence, and `pursuitValue` below adds what the flat sum
+never had: a proof that combat dominance is an ORDER-EMBEDDING, true for all
+integer inputs rather than for the magnitudes the live catalog happens to carry.
 -/
 
 namespace Formal.StrategicValue
@@ -67,44 +72,121 @@ def strategicValue (s : Stats) (w : Weights) : Int :=
     + s.inventorySpace * w.inventory
     + s.haste * w.haste
 
-/-! ## The shared combat-raw primitive.
+/-! ## The combat input IS the gear ruler's own combat term.
 
-`combatRawOf` is strategic_value's combat input, defined as `Formal.GearValue.combatRaw`
-— the SAME genuine-combat atom the unified Rank ruler (`equip_value`) uses.
-Python mirror: `tiers/strategic_value._combat_raw_of_stats` → `gear_value.combat_raw_of`
-→ `gear_value_core.combat_raw`. There is exactly ONE combat_raw definition, so
-strategic_value's combat ordering cannot diverge from equip_value's. -/
+RETIRED: `combatRawOf` (= `GearValue.combatRaw`, the flat 8-stat sum) together
+with `combatRawOf_eq`, `combatRawOf_nonneg` and `strategicValue_combatRawOf`.
+Their subject — the Python `gear_value_core.combat_raw` — no longer exists, so
+keeping them would have told a false story about live code. Nothing that
+survives is weaker: `combatOf` is the same *role* filled by a strictly stronger
+object. Sharing an ATOM only guaranteed the two layers read the same stats;
+being one of the ruler's two SUMMANDS guarantees they cannot disagree about the
+piece at all, because `GearValue.rankValue_decomp` makes the ruler their sum. -/
 
-/-- strategic_value's combat input = the unified `GearValue.combatRaw` primitive. -/
-def combatRawOf (s : Formal.EquipValueAugmented.RawStats) : Int :=
-  Formal.GearValue.combatRaw s
+/-- strategic_value's combat input: the ONE gear ruler's own COMBAT term at the
+Rank purpose. Python mirror: `tiers/strategic_value._combat_of_stats` →
+`gear_value.gear_components(stats, Rank)[0]`. -/
+def combatOf (isWeapon : Bool) (ci : Formal.PurposeRouting.CombatItem)
+    (flatCombat : Int) : Int :=
+  Formal.GearValue.rankCombat isWeapon ci flatCombat
 
-/-- `combatRawOf` is definitionally the one shared `GearValue.combatRaw`. -/
-theorem combatRawOf_eq (s : Formal.EquipValueAugmented.RawStats) :
-    combatRawOf s = Formal.GearValue.combatRaw s := rfl
+theorem combatOf_eq_rankCombat (isWeapon : Bool)
+    (ci : Formal.PurposeRouting.CombatItem) (flatCombat : Int) :
+    combatOf isWeapon ci flatCombat
+      = Formal.GearValue.rankCombat isWeapon ci flatCombat := rfl
 
-/-- The shared combat-raw is nonneg when its combat fields are, so feeding it as
-strategic_value's `combatRaw` input keeps the nonneg contract satisfiable. -/
-theorem combatRawOf_nonneg (s : Formal.EquipValueAugmented.RawStats)
-    (ha : 0 ≤ s.attack) (hr : 0 ≤ s.resistance) (hhr : 0 ≤ s.hpRestore)
-    (hhb : 0 ≤ s.hpBonus) (hd : 0 ≤ s.dmg) (hc : 0 ≤ s.crit)
-    (hl : 0 ≤ s.lifesteal) (hcb : 0 ≤ s.combatBuff) :
-    0 ≤ combatRawOf s := by
-  unfold combatRawOf Formal.GearValue.combatRaw
+/-- The combat input plus the ruler's efficiency term reconstruct the ruler
+EXACTLY — the no-double-count / no-dropped-stat statement, carried onto this
+layer's own name for the input. -/
+theorem combatOf_add_efficiency_eq_rankValue (isWeapon : Bool)
+    (ci : Formal.PurposeRouting.CombatItem)
+    (flatCombat wisdom prospecting inventorySpace haste : Int)
+    (hflat : ci.base.flatUtil
+      = flatCombat + wisdom + prospecting + inventorySpace + haste) :
+    combatOf isWeapon ci flatCombat
+      + Formal.GearValue.rankEfficiency isWeapon wisdom prospecting inventorySpace haste
+      = Formal.GearValue.rankValue isWeapon ci :=
+  (Formal.GearValue.rankValue_decomp isWeapon ci flatCombat wisdom prospecting
+    inventorySpace haste hflat).symm
+
+/-! ## The pursuit reading: combat dominance as an ORDER-EMBEDDING.
+
+`tiers/pursuit_value.pursuit_value` is `strategicValue` with the combat weight
+pinned to `STRATEGIC_SCALE` and the efficiency block BOUNDED to
+`[-budget, +budget]`. The point of the bound is not to shrink utility but to
+make the score an order-embedding of the pair `(combat, efficiency)` ordered
+LEXICOGRAPHICALLY, which is what "combat dominates cross-slot" means precisely.
+
+The live invariant this protects (docstring of `tiers/pursuit_value`): a
+prospecting-201 artifact must not outrank a modest combat weapon just because
+201 > 30. Under `pursuit_combat_dominates` that cannot happen for ANY stat
+magnitudes, not merely for the ones in today's item table. -/
+
+/-- Symmetric two-sided clamp. Mirrors the `strategic_value` wrapper's
+`efficiency_budget` handling — symmetric because live items carry NEGATIVE
+efficiency stats (obsidian_battleaxe: `inventory_space = -25`), so a one-sided
+cap would leave the block's span unbounded below. -/
+def clampEff (budget e : Int) : Int :=
+  if e > budget then budget else if e < -budget then -budget else e
+
+/-- The clamp does what its name says, for any nonneg budget. -/
+theorem clampEff_mem (budget e : Int) (hb : 0 ≤ budget) :
+    -budget ≤ clampEff budget e ∧ clampEff budget e ≤ budget := by
+  unfold clampEff
+  split
+  · omega
+  · split <;> omega
+
+/-- Inside the budget the clamp is the identity, so efficiency ORDERING is
+untouched wherever the bound does not bind (which, on the pinned catalog, is
+everywhere — the largest live efficiency block is 406 against a budget of 499). -/
+theorem clampEff_id (budget e : Int) (hlo : -budget ≤ e) (hhi : e ≤ budget) :
+    clampEff budget e = e := by
+  unfold clampEff
+  split
+  · omega
+  · split <;> omega
+
+/-- The pursuit score: the ruler's two terms read lexicographically. -/
+def pursuitValue (scale budget combat efficiency : Int) : Int :=
+  combat * scale + clampEff budget efficiency
+
+/-- **STRUCTURAL COMBAT DOMINANCE.** When the whole efficiency span
+(`2 * budget`) is narrower than one unit of scaled combat, a strictly greater
+combat term is a strictly greater pursuit value — for EVERY pair of efficiency
+blocks, of any magnitude and either sign.
+
+This is the theorem the flat `combat_raw` era never had. It says the property is
+a fact of the arithmetic, quantified over all integer inputs, and not a
+coincidence of the magnitudes the current catalog happens to contain. -/
+theorem pursuit_combat_dominates (scale budget ca cb ea eb : Int)
+    (hb : 0 ≤ budget) (hspan : 2 * budget < scale) (hlt : cb < ca) :
+    pursuitValue scale budget cb eb < pursuitValue scale budget ca ea := by
+  unfold pursuitValue
+  obtain ⟨hea_lo, hea_hi⟩ := clampEff_mem budget ea hb
+  obtain ⟨heb_lo, heb_hi⟩ := clampEff_mem budget eb hb
+  have hstep : (cb + 1) * scale ≤ ca * scale :=
+    Int.mul_le_mul_of_nonneg_right (by omega) (by omega)
+  rw [Int.add_mul, Int.one_mul] at hstep
   omega
 
-/-- strategic_value fed the shared `combatRawOf` is well-defined and expands to the
-genuine-combat sum × combat weight plus the efficiency block — i.e. the combat
-input is literally the one shared `combat_raw` definition, not a re-derived sum. -/
-theorem strategicValue_combatRawOf
-    (rs : Formal.EquipValueAugmented.RawStats) (w : Weights)
-    (wi pr inv ha : Int) :
-    strategicValue ⟨combatRawOf rs, wi, pr, inv, ha⟩ w
-      = (rs.attack + rs.resistance + rs.hpRestore + rs.hpBonus + rs.dmg + rs.crit
-          + rs.lifesteal + rs.combatBuff) * w.combat
-        + wi * w.wisdom + pr * w.prospecting + inv * w.inventory + ha * w.haste := by
-  unfold strategicValue combatRawOf Formal.GearValue.combatRaw
-  rfl
+/-- **EFFICIENCY STILL ORDERS.** On a combat TIE the pursuit value is strictly
+increasing in the efficiency block (inside the budget) — utility slots keep a
+total ranking, which is the no-regression half of the design: the defect being
+fixed was utility outranking COMBAT, never utility being ignored. -/
+theorem pursuit_efficiency_orders (scale budget c ea eb : Int)
+    (hea_lo : -budget ≤ ea) (hea_hi : ea ≤ budget)
+    (heb_lo : -budget ≤ eb) (heb_hi : eb ≤ budget)
+    (hlt : eb < ea) :
+    pursuitValue scale budget c eb < pursuitValue scale budget c ea := by
+  unfold pursuitValue
+  rw [clampEff_id budget ea hea_lo hea_hi, clampEff_id budget eb heb_lo heb_hi]
+  omega
+
+/-- The live parameters (`STRATEGIC_SCALE = 1000`,
+`EFFICIENCY_BUDGET = (1000 - 1) / 2 = 499`) satisfy the span hypothesis, so the
+dominance theorem is not vacuous at the values production actually uses. -/
+theorem live_pursuit_span_ok : 2 * (499 : Int) < 1000 := by decide
 
 /-! ## Nonnegativity. -/
 

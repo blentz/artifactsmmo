@@ -134,6 +134,59 @@ theorem AScore_no_monster (item : Item) :
     AScore item [] [] [] = 200 * item.flatUtil := by
   simp [AScore, aTerm, oTerm, wTerm, elemGet, elements]
 
+/-! ### Splitting `AScore` into its COMBAT and EFFICIENCY slices.
+
+The ECONOMICS layer (`Formal.StrategicValue`, live `tiers/pursuit_value`) must
+let combat DOMINATE utility when ranking what to acquire cross-slot. It used to
+do that with a scalar of its own — a flat 8-stat sum `combatRaw` that added a
+resistance PERCENTAGE to an HP amount to a damage figure 1:1 — which is a second
+ruler, free to disagree with this one about the same slot.
+
+Instead it now reads THIS score's own two halves. `flatUtil` is the piece's
+`hp_restore + hp_bonus + wisdom + prospecting + inventorySpace + haste +
+lifesteal + combatBuff` sum; splitting it at the four TIME-buying stats
+(wisdom / prospecting / inventorySpace / haste) splits `AScore` itself, and
+`AScore_decomp` below is the statement that the two halves PARTITION it — every
+stat lands in exactly one, so nothing is dropped and nothing is counted twice.
+Mirrors the Python `armor_score_combat_pure` / `armor_score_efficiency_pure`,
+whose sum IS `armor_score_pure`. -/
+
+/-- The EFFICIENCY slice: the four time-buying stats on the same `200 *` scale
+`AScore` already carries its flat-utility block at. Mirrors the Python
+`armor_score_efficiency_pure`. -/
+def AEfficiency (wisdom prospecting inventorySpace haste : Int) : Int :=
+  200 * (wisdom + prospecting + inventorySpace + haste)
+
+/-- The COMBAT slice: `AScore` with only the IN-FIGHT part of the flat block —
+both monster-relative sums unchanged, plus `200 * flatCombat` where `flatCombat`
+is `hp_restore + hp_bonus + lifesteal + combatBuff`.
+
+It takes no efficiency stat as an argument, which is the structural reason the
+pursuit ruler's combat term cannot contain utility: there is no parameter
+through which utility could reach it. Mirrors `armor_score_combat_pure`. -/
+def ACombat (item : Item) (monsterAtk monsterRes playerAtk : ElemStats)
+    (flatCombat : Int) : Int :=
+  200 * (elements.map (fun e => aTerm (elemGet monsterAtk e) (elemGet item.resistance e))).sum
+    + (elements.map (fun e => oTerm (elemGet playerAtk e) (elemGet monsterRes e)
+          (item.dmg + elemGet item.dmgElem e) item.crit)).sum
+    + 200 * flatCombat
+
+/-- **THE PARTITION.** Whenever the piece's flat block splits into its in-fight
+part and its four efficiency stats, the score splits the same way — the two
+slices sum to `AScore` exactly, for every item, every adversary and every
+wearer. This is what lets the economics layer re-weight combat against utility
+without recomputing either on a scale of its own. -/
+theorem AScore_decomp (item : Item) (monsterAtk monsterRes playerAtk : ElemStats)
+    (flatCombat wisdom prospecting inventorySpace haste : Int)
+    (hflat : item.flatUtil
+      = flatCombat + wisdom + prospecting + inventorySpace + haste) :
+    AScore item monsterAtk monsterRes playerAtk
+      = ACombat item monsterAtk monsterRes playerAtk flatCombat
+        + AEfficiency wisdom prospecting inventorySpace haste := by
+  unfold AScore ACombat AEfficiency
+  rw [hflat]
+  omega
+
 /-! ### Feasibility and the per-slot pick. -/
 
 /-- A candidate is FEASIBLE for the slot iff it is level-feasible

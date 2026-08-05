@@ -115,21 +115,23 @@ class TestPerScenarioPins:
         the equipped slots, but shield_slot is empty (wooden_shield) and
         utility1_slot is unprovisioned (small_health_potion).
 
-        RE-DERIVED 2026-08-04 (gear-ruler unification). The merged argmax still
-        compares TWO rulers — `_structural_candidates` scores gain on
-        `pursuit_value`, `_utility_candidates` on `equip_value` — and unifying
-        Rank onto `armor_score` moved the second one ~100x, from 61 to 6000.
-        The shield still leads on RAW GAIN (8000 vs 6000), which is what the
-        2026-07-08 "combat/gear pursuit outranks potion-stocking" ruling
-        asserted; what changed is that the potion is no longer so far below the
-        shield that the ACHIEVABILITY factor is inert against it. The potion is
-        craftable now (achievability 1); the shield needs 10 ash_wood gathered
-        (achievability 905/1534), so the weighted order is 6000 vs 4720 and the
-        cheap root wins — the achievability factor doing exactly its job. The
-        potion is craftable-now, so the step is the craft itself."""
+        RE-DERIVED 2026-08-04 (pursuit_value unification). The merged argmax
+        finally compares ONE ruler: `_utility_candidates` joined
+        `_structural_candidates` on `pursuit_value`, closing the last
+        cross-ruler magnitude comparison in the tree (it scored potions on
+        `equip_value`, ~1000x smaller than its competitor).
+
+        The shield wins, restoring the 2026-07-08 "combat/gear pursuit outranks
+        potion-stocking" ruling. On the ONE ruler the gap is 52_800_000 to
+        6_000_000 — the shield's four 2% resistances are worth 8.8x the potion's
+        30 HP pool once both are priced as damage swing per turn — so the
+        ACHIEVABILITY factor (shield 905/1534 for 10 gathered ash_wood, potion 1
+        for craftable-now) narrows it to 31.2M vs 6.0M without reversing it. The
+        brief potion win under the previous commit came from the two branches
+        riding rulers ~1000x apart, not from a judgement about potions."""
         d, _ = _decide("l8_overstocked")
-        assert d.chosen_root == ObtainItem(code="small_health_potion", quantity=1,
-                                           slot="utility1_slot")
+        assert d.chosen_root == ObtainItem(code="wooden_shield", quantity=1,
+                                           slot="shield_slot")
         assert len(d.ranking) == 3  # trunk + shield + potion
 
     def test_l10_copper_adequate_pins_gear_branch_not_xp(self):
@@ -139,14 +141,13 @@ class TestPerScenarioPins:
         This is NOT the XP-branch case (that needs a fully-saturated synthetic
         state — see TestSyntheticBranches).
 
-        RE-DERIVED 2026-08-04 (gear-ruler unification) — same cause as
-        `test_l8_overstocked_pins_gear_branch`: the shield still leads on raw
-        gain (8000 vs 6000), and the achievability factor promotes the
-        craftable-now potion over the gather-first shield now that the two gains
-        are within 1.34x of each other instead of 130x apart."""
+        RE-DERIVED 2026-08-04 (pursuit_value unification) — same cause as
+        `test_l8_overstocked_pins_gear_branch`: both branches now rank on the
+        ONE ruler, where the shield leads 52_800_000 to 6_000_000 and
+        achievability narrows without reversing."""
         d, _ = _decide("l10_copper_adequate")
-        assert d.chosen_root == ObtainItem(code="small_health_potion", quantity=1,
-                                           slot="utility1_slot")
+        assert d.chosen_root == ObtainItem(code="wooden_shield", quantity=1,
+                                           slot="shield_slot")
         assert len(d.ranking) == 3
         assert d.ranking[0].root_repr == "ReachCharLevel(level=20)"
 
@@ -191,15 +192,25 @@ class TestPerScenarioPins:
         held/banked stock credits attainability, all five of those recipes
         open (iron_boots's full recipe, iron_bar via gatherable iron_ore +
         feather via the banked 2 — boolean stock credit, not gated on the
-        recipe's higher qty-3 demand) and iron_boots's higher equip_value
-        contribution (66) outranks small_health_potion (61) outright ->
-        GEAR branch, boots_slot, gather leaf for the still-short feather
-        (2 banked, 3 needed — the STEP goal is quantity-aware even though
-        attainability isn't)."""
+        recipe's higher qty-3 demand).
+
+        RE-DERIVED 2026-08-04 (pursuit_value unification): the WEAPON wins now.
+        `iron_sword` scores 702_000_000 against `iron_boots`' 71_999_993 because
+        `pursuit_value`'s combat term is the ruler's own, and the ruler prices a
+        weapon as damage DEALT per turn while armor is damage swung. That is not
+        an accident of scale here: this scenario has NO attack at all
+        (`derive_combat_stats` off), and the weapon-slot winnability guard —
+        which suppresses any weapon that unlocks nothing — measures
+        `marginal_weapon_winnability(iron_sword) == 7`, i.e. seven monsters the
+        character cannot beat bare-handed and could beat armed. A character who
+        cannot win a fight should buy a sword before boots.
+
+        (The retired flat `combat_raw` scored the sword's 24 attack against the
+        boots' resistance + hp 1:1, which is why the boots used to lead.)"""
         d, _ = _decide("l12_taskgated_bag")
-        assert d.chosen_root == ObtainItem(code="iron_boots", quantity=1,
-                                           slot="boots_slot")
-        assert d.chosen_step == ObtainItem(code="feather", quantity=3)
+        assert d.chosen_root == ObtainItem(code="iron_sword", quantity=1,
+                                           slot="weapon_slot")
+        assert d.chosen_step == ObtainItem(code="iron_ore", quantity=10)
         # 7, not 8: satchel left the ranking (region soundness). Its recipe needs
         # jasper_crystal, sold ONLY by tasks_trader, who stands on
         # (5,11,overworld) — a tile gated `conditional` on the tasks_farmer
@@ -267,11 +278,16 @@ class TestServabilityDemotion:
     fallback_roots = [wooden_shield, small_health_potion, ReachCharLevel(20)].
 
     GEAR-FIRST re-derivation 2026-07-08 (Task-3 pursuit_value; user ruling):
-    the SHIELD (a structural candidate, now scored by combat-dominant
-    pursuit_value ×1000) outranks the POTION (a utility-potion candidate, kept
-    on equip_value × potion_weight ×~2) in the merged argmax, so the two swap
-    order — combat/gear pursuit outranks potion-stocking, potions still pursued
-    once no structural upgrade remains. Was [TRUNK, POTION, SHIELD].
+    the SHIELD (a structural candidate) outranks the POTION (a utility-potion
+    candidate) in the merged argmax — combat/gear pursuit outranks
+    potion-stocking, potions still pursued once no structural upgrade remains.
+    Was [TRUNK, POTION, SHIELD].
+
+    ONE-RULER re-derivation 2026-08-04: `_utility_candidates` moved from
+    `equip_value` to `pursuit_value`, so the merged argmax stopped comparing two
+    rulers ~1000x apart. The shield/potion order the 2026-07-08 ruling asks for
+    is now a consequence of the ruler (52_800_000 vs 6_000_000) rather than of
+    the two branches' incommensurate scales.
 
     TRUNK-LAST correction 2026-07-27 (live trace): the trunk used to sit at
     index 0, so ONE unservable gear step promoted the XP trunk over servable
@@ -293,30 +309,30 @@ class TestServabilityDemotion:
     def test_servable_chosen_is_untouched(self):
         d = self._decide_with(lambda root, step: True)
         assert d.chosen_root == self.DAGGER
-        assert d.fallback_roots == [self.POTION, self.SHIELD, self.TRUNK]
+        assert d.fallback_roots == [self.SHIELD, self.POTION, self.TRUNK]
 
     def test_unservable_chosen_promotes_the_next_gear_candidate_not_the_trunk(self):
         """THE 2026-07-27 REGRESSION. One unservable gear step must not
         abandon the gear branch: the promotion takes the next servable GEAR
         candidate, and the trunk stays behind it."""
         d = self._decide_with(lambda root, step: root != self.DAGGER)
-        assert d.chosen_root == self.POTION
+        assert d.chosen_root == self.SHIELD
         assert d.chosen_root != self.TRUNK
         # The demoted pair survives in the fallbacks, ahead of the rest —
         # original priority order minus the promotion.
-        assert d.fallback_roots == [self.DAGGER, self.SHIELD, self.TRUNK]
+        assert d.fallback_roots == [self.DAGGER, self.POTION, self.TRUNK]
         assert d.fallback_steps[0] == ObtainItem(code="copper_bar", quantity=6)
 
     def test_walk_skips_unservable_fallbacks_in_order(self):
-        servable = lambda root, step: root not in (self.DAGGER, self.POTION)  # noqa: E731
+        servable = lambda root, step: root not in (self.DAGGER, self.SHIELD)  # noqa: E731
         d = self._decide_with(servable)
-        # DAGGER unservable, POTION (the next gear candidate) unservable too,
-        # so the walk skips it and reaches the SHIELD — still gear, still ahead
+        # DAGGER unservable, SHIELD (the next gear candidate) unservable too,
+        # so the walk skips it and reaches the POTION — still gear, still ahead
         # of the trunk.
-        assert d.chosen_root == self.SHIELD
+        assert d.chosen_root == self.POTION
         # Demoted pairs (chosen first, then the skipped fallbacks) keep their
         # relative order after the promoted pair leaves the list.
-        assert d.fallback_roots == [self.DAGGER, self.POTION, self.TRUNK]
+        assert d.fallback_roots == [self.DAGGER, self.SHIELD, self.TRUNK]
 
     def test_every_gear_pair_unservable_still_reaches_the_trunk(self):
         """The trunk stays in the list, just last: a FULLY blocked gear branch
@@ -334,7 +350,7 @@ class TestServabilityDemotion:
         logged `ReachCharLevel, servable: true` and read as the tree choosing XP
         when every one was a displaced gear pick."""
         d = self._decide_with(lambda root, step: root != self.DAGGER)
-        assert d.chosen_root == self.POTION
+        assert d.chosen_root == self.SHIELD
         assert d.promoted_from == self.DAGGER
 
     def test_no_promotion_records_nothing(self):
@@ -352,14 +368,14 @@ class TestServabilityDemotion:
     def test_all_unservable_keeps_original_choice(self):
         d = self._decide_with(lambda root, step: False)
         assert d.chosen_root == self.DAGGER
-        assert d.fallback_roots == [self.POTION, self.SHIELD, self.TRUNK]
+        assert d.fallback_roots == [self.SHIELD, self.POTION, self.TRUNK]
 
     def test_default_none_predicate_is_untouched(self):
         gd = _bundle()
         state = scenario_state(SCENARIOS["l10_weapon_upgrade"])
         d = decide_tree(state, gd, CharacterObjective.from_game_data(gd))
         assert d.chosen_root == self.DAGGER
-        assert d.fallback_roots == [self.POTION, self.SHIELD, self.TRUNK]
+        assert d.fallback_roots == [self.SHIELD, self.POTION, self.TRUNK]
 
     def test_predicate_sees_root_step_pairs(self):
         seen: list[tuple[object, object]] = []
@@ -371,7 +387,7 @@ class TestServabilityDemotion:
         self._decide_with(spy)
         # Walk order: chosen pair first, then fallbacks in order.
         assert seen[0] == (self.DAGGER, ObtainItem(code="copper_bar", quantity=6))
-        assert [r for r, _ in seen[1:]] == [self.POTION, self.SHIELD, self.TRUNK]
+        assert [r for r, _ in seen[1:]] == [self.SHIELD, self.POTION, self.TRUNK]
 
 
 # --- Synthetic-GameData unit tests (coverage of branches the 6 scenarios
@@ -633,17 +649,26 @@ def _bundle_with_currency_gated_artifact() -> GameData:
     sold by a second permanent vendor for 100 `event_ticket` each -- a genuine
     two-hop chain (`_currency_cost`'s recursive arm, not just its base case),
     totalling 1000 tickets exactly as `requirement_graph_memo.py`'s own
-    docstring describes. hp_bonus 40 -> pursuit_value 40000 (`combat_raw *
-    1000`), a 1.6x gain gap over life_ring's real 25020 -- comfortably under
+    docstring describes. a 1.6x gain gap over the ring slot's real argmax -- comfortably under
     achievability_core.A_MIN's documented 2x boundary (a maximally distant
     candidate can only lose to a maximally close one below that gap), which is
     the exact property this test exercises. `event_ticket` is made gatherable
     (a resource drop) so it is attainable-now by itself; the poor/rich split
     below turns entirely on how much of it is HELD, not on whether it can be
-    acquired in principle."""
+    acquired in principle.
+
+    RE-DERIVED 2026-08-04 (pursuit_value unification). The near candidate used
+    to be `life_ring` (hp_bonus) and the trophy carried hp_bonus 40. On the ONE
+    ruler the ring slot's argmax is `iron_ring` (4% global damage,
+    pursuit 105_600_000) rather than `life_ring` (hp_bonus 25, 5_000_020), so
+    the near witness moved with it; the trophy's hp_bonus was re-derived to 845
+    (200 * 845 * 1000 = 169_000_000) to keep the SAME ~1.6x gain gap the test
+    needs -- comfortably under achievability_core.A_MIN's 2x boundary, which is
+    the property being exercised. Neither the mechanism nor the gap changed,
+    only the two items' absolute numbers."""
     gd = _bundle()
     gd.items.stats["lich_race_trophy"] = ItemStats(
-        code="lich_race_trophy", level=15, type_="artifact", hp_bonus=40)
+        code="lich_race_trophy", level=15, type_="artifact", hp_bonus=845)
     gd.world.npc_stock["trophy_vendor"] = {"lich_race_trophy": 10}
     gd.world.npc_buy_currency["trophy_vendor"] = {"lich_race_trophy": "lich_race_medal"}
     gd.world.npc_tiles["trophy_vendor"] = (5, 5)
@@ -656,14 +681,15 @@ def _bundle_with_currency_gated_artifact() -> GameData:
 
 _ACHIEVABILITY_WITNESS_BANK = {
     "iron_bar": 8, "iron_ore": 80, "cloth": 2, "mushroom": 5,
-    "wool": 6, "life_ring": 1,
+    "wool": 6, "life_ring": 1, "iron_ring": 1,
 }
-"""Covers life_ring's ENTIRE real requirement multiset (empirically confirmed
-against the committed bundle: `requirement_multiset_for("life_ring")` ==
-these item tokens plus `gold`/`skill:jewelrycrafting`/`skill:mining`/`char_xp`,
-handled separately below) so `_effort_for("life_ring", ...)` is exactly 0 --
-the achievability FLOOR every other candidate in the decision is scored
-against (`achievability_pure`'s `min_effort`)."""
+"""Covers the near candidate's ENTIRE real requirement multiset so its
+`_effort_for(...)` is exactly 0 -- the achievability FLOOR every other
+candidate in the decision is scored against (`achievability_pure`'s
+`min_effort`). Holds BOTH rings: `life_ring` was the near candidate before the
+pursuit_value unification and `iron_ring` is it now (see
+`_bundle_with_currency_gated_artifact`), and keeping both makes the floor
+independent of which one the ruler picks for the slot."""
 
 
 def _state_with(gd: GameData, inventory: dict[str, int]) -> WorldState:
@@ -708,7 +734,7 @@ def _ordered_candidates(state: WorldState, gd: GameData) -> list[GearCandidate]:
 
 class TestAchievabilityReversalWitness:
     def test_achievability_reorders_the_live_bundle_and_is_reversible(self) -> None:
-        """THE acceptance test. With ordinary holdings the craftable life_ring
+        """THE acceptance test. With ordinary holdings the craftable iron_ring
         outranks the currency-gated lich_race_trophy; give the character 1000
         event_tickets and the trophy returns to the top. If the second half
         failed, the factor would be a blanket penalty on long chains rather
@@ -720,8 +746,8 @@ class TestAchievabilityReversalWitness:
         poor_order = [c.code for c in _ordered_candidates(poor, gd)]
         rich_order = [c.code for c in _ordered_candidates(rich, gd)]
 
-        assert poor_order.index("life_ring") < poor_order.index("lich_race_trophy")
-        assert rich_order.index("lich_race_trophy") < rich_order.index("life_ring")
+        assert poor_order.index("iron_ring") < poor_order.index("lich_race_trophy")
+        assert rich_order.index("lich_race_trophy") < rich_order.index("iron_ring")
 
     def test_reversal_is_falsifiable_by_the_inert_achievability_default(self) -> None:
         """OVERRIDE (supersedes the brief's `git stash` step, per a standing
@@ -743,6 +769,6 @@ class TestAchievabilityReversalWitness:
                           focus_aging_order(candidates, {}, {}, {}, real_achievability)]
         inert_order = [c.code for c in focus_aging_order(candidates, {}, {})]
 
-        assert weighted_order.index("life_ring") < weighted_order.index("lich_race_trophy")
-        assert inert_order.index("lich_race_trophy") < inert_order.index("life_ring")
+        assert weighted_order.index("iron_ring") < weighted_order.index("lich_race_trophy")
+        assert inert_order.index("lich_race_trophy") < inert_order.index("iron_ring")
         assert weighted_order != inert_order
