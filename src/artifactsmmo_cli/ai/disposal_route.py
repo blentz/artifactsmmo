@@ -8,18 +8,28 @@ deleted (live Robby trace 2026-07-04: copper_helmet×33, copper_ring×14,
 wooden_shield×8 recyclable gear plus 40 bankable gems destroyed):
 
     RECYCLE  iff  an applicable RecycleAction exists this cycle
-    DEPOSIT  iff  no recycle, the bank can take it, and the item has future value
-    DELETE   otherwise (true junk only)
+    DEPOSIT  iff  no recycle, the bank can take it, and the bank is STILL UNDER
+                  this code's keep quantity
+    DELETE   otherwise (true junk, or a bank already holding all we want)
 
 Inputs are EXECUTABILITY-NOW facts so every route yields an action executable
 this cycle and overstock always clears — preserving the 2026-06-24 liveness
-fix (the Withdraw↔Deposit bag-full livelock). `future_value` is generic over
-the API taxonomy (recipe demand or equippability), never a hardcoded item
-list; items with neither (sap over cap, slimeballs) still delete, preserving
-the anti-hoard rationale on the discard guards.
+fix (the Withdraw↔Deposit bag-full livelock).
+
+`bank_under_cap` REPLACED a boolean `_future_value` on 2026-08-05 (live
+diagnosis: `.superpowers/sdd/2026-08-01-emergent-specialization/`
+`currency-and-piles-report.md`). That boolean asked "does some recipe anywhere
+consume this code, or is it equippable" — true for nearly every gatherable, so
+the route banked 703 sap, 510 raw_wolf_meat and five more piles that
+`ai/bank_drain` was simultaneously licensing for withdrawal. The two gates now
+read ONE quantity-typed valuation (`ai/keep_valuation.worth_keeping`), so the
+anti-livelock invariant `drained(code) > 0 ⇒ route(code) ≠ DEPOSIT` holds by
+construction. Junk still deletes: a code with keep 0 and an empty bank has
+surplus 0, which is not under cap.
 
 The pure `disposal_route` is the differential target proved in
-formal/Formal/DisposalRoute.lean over `Bool` (exhaustive 8-case diff).
+formal/Formal/DisposalRoute.lean over `Bool` (exhaustive 8-case diff); the
+quantity layer feeding its third input is proved in the same file.
 """
 
 from enum import Enum
@@ -32,6 +42,11 @@ from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.bank_room import bank_has_room
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import keep_owned
+from artifactsmmo_cli.ai.keep_valuation import (
+    bank_quantity,
+    bank_under_cap_pure,
+    worth_keeping,
+)
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -47,14 +62,14 @@ class Route(Enum):
     DELETE = "delete"
 
 
-def disposal_route(recyclable: bool, bank_ok: bool, future_value: bool) -> Route:
+def disposal_route(recyclable: bool, bank_ok: bool, bank_under_cap: bool) -> Route:
     """Recycle when executable now; else deposit when the bank can take it AND
-    the item has future value; else delete. Proved in
+    is still under this code's keep quantity; else delete. Proved in
     formal/Formal/DisposalRoute.lean (`disposalRoute`): delete fires ONLY when
     the item can be neither recycled nor usefully banked."""
     if recyclable:
         return Route.RECYCLE
-    if bank_ok and future_value:
+    if bank_ok and bank_under_cap:
         return Route.DEPOSIT
     return Route.DELETE
 
@@ -94,17 +109,6 @@ def _applicable_recycle(code: str, excess_qty: int, state: WorldState,
     return None
 
 
-def _future_value(code: str, game_data: GameData) -> bool:
-    """Generic over the API taxonomy: an item has future value when some known
-    recipe consumes it (including far-future skill-gated recipes — those are
-    exactly the deposit-eligible materials per `reachable_recipe_demand`'s
-    contract) or it is equippable gear/utility."""
-    if game_data.max_recipe_demand(code) > 0:
-        return True
-    stats = game_data.item_stats(code)
-    return stats is not None and bool(ITEM_TYPE_TO_SLOTS.get(stats.type_))
-
-
 def overstock_disposal(code: str, excess_qty: int, state: WorldState,
                        game_data: GameData, bank_accessible: bool,
                        ctx: SelectionContext) -> Action:
@@ -118,7 +122,9 @@ def overstock_disposal(code: str, excess_qty: int, state: WorldState,
     bank_location = game_data.bank_location_or_none
     bank_ok = bank_location is not None and bank_has_room(
         bank_accessible, state.bank_items, game_data.bank_capacity)
-    route = disposal_route(recycle is not None, bank_ok, _future_value(code, game_data))
+    under_cap = bank_under_cap_pure(worth_keeping(code, state, game_data, ctx),
+                                    bank_quantity(code, state))
+    route = disposal_route(recycle is not None, bank_ok, under_cap)
     if route is Route.RECYCLE:
         assert recycle is not None  # disposal_route: RECYCLE ⇒ recyclable
         return recycle

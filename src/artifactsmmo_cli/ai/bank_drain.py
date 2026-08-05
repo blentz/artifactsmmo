@@ -14,6 +14,20 @@ So the drain only WITHDRAWS the over-cap excess into the bag; the existing
 cycle. Withdraw is bank->bag and the shed is bag->gone, so the bank holding
 monotonically decreases — no withdraw/redeposit cycle.
 
+THAT LAST CLAIM WAS FALSE UNTIL 2026-08-05, and making it true is why this
+module now reads `ai/keep_valuation`. The shed step routes through
+`ai/disposal_route`, whose DEPOSIT arm asked a BOOLEAN ("does some recipe
+anywhere consume this code") while the drain asked a QUANTITY. Every one of the
+live bank piles satisfied the boolean, so the drain withdrew and the route
+deposited the same copies straight back. Both sides now read one
+`keep_valuation.worth_keeping`, and the anti-livelock invariant
+
+    drained(code) > 0  ⇒  route(code) ≠ DEPOSIT
+
+falls out of `bank_surplus_pure` being the same number on both sides (proved in
+formal/Formal/DisposalRoute.lean: `drained_is_never_deposited`, and in the
+post-withdraw state `withdrawn_is_never_redeposited`).
+
 PROTECTION IS THE AUTHORITY'S (item-protection-authority epic, Task 9 — this was
 the LAST code-set consumer). The drain used to exclude `guards._gear_protected`,
 a frozenset whose profile-less arm was `target_gear | target_tools`: "keep ALL
@@ -41,31 +55,19 @@ ladder to protect, so the ownership cap is the ONLY thing between it and the
 withdraw->discard pipeline. 18 axes banked, 0 in bag: `keep_owned` 1 → at most 17
 drain, never 18.
 
-`junk_excess` is the surviving WORTH-HOARDING POLICY (the analogue of SELL's ratio
-gate — a policy, not a protection):
-  * `cap = max(useful_quantity_cap(code), max_recipe_demand(code))`. The
-    `max_recipe_demand` term is what makes the BANK safe for far-future materials:
-    the inventory cap is 0 for a skill-gated material (which is why it deposits here
-    in the first place), but the bank must KEEP enough to craft with later — else a
-    banked level-10 drop (gold_ore, jasper_crystal, magic_wood) would be withdrawn
-    and destroyed before its recipe is ever reachable, or worse, withdrawn and
-    re-deposited forever (`disposal_route` routes a recipe-demanded material back to
-    DEPOSIT). An item with NO recipe consumer at any level, and not currency /
-    consumable / equippable, has cap 0 — genuine junk that fully drains;
-  * the level-distance ceiling clamps how much of a far-out-of-band material the
-    bank hoards (re-gather it when in band);
-  * the cap covers TOTAL holdings, so inventory already holding some toward it
-    shrinks the bank allowance: `junk_excess = bank_qty - max(0, cap - inv_qty)`.
+The surviving WORTH-HOARDING POLICY (the analogue of SELL's ratio gate — a policy,
+not a protection) is `ai/keep_valuation.worth_keeping`, and the surplus it licenses
+is `keep_valuation.bank_surplus_pure(keep, bank_qty)`. See that module for why the
+valuation is quantity-typed, why "reachable consumer" is now a requirement-graph
+question rather than the `level_distance_keep_ceiling` proxy, and why the cap is on
+the BANK's own stock rather than inventory-credited.
 
 Pure: reads state/game_data/ctx only, no I/O.
 """
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.inventory_caps import (
-    level_distance_keep_ceiling,
-    useful_quantity_cap,
-)
 from artifactsmmo_cli.ai.inventory_keep import destroyable
+from artifactsmmo_cli.ai.keep_valuation import drain_licensed_pure, worth_keeping
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -73,7 +75,7 @@ from artifactsmmo_cli.ai.world_state import WorldState
 def bank_drain_excess(state: WorldState, game_data: GameData,
                       ctx: SelectionContext) -> dict[str, int]:
     """Map each over-cap bank code to the number of BANK copies that may be pulled
-    out for shedding: `min(destroyable, junk_excess)` — see the module docstring.
+    out for shedding: `min(destroyable, bank_surplus)` — see the module docstring.
 
     `ctx` is the per-cycle `SelectionContext` the keep authority reads (`gear_keep` =
     the active-profile gear demand, `step_profile` = the active goal's material
@@ -88,20 +90,10 @@ def bank_drain_excess(state: WorldState, game_data: GameData,
         licensed = destroyable(code, state, game_data, ctx)
         if licensed <= 0:
             continue
-        # POLICY: is it worth hoarding at all? The near-term value/need cap OR the
-        # item's full eventual recipe demand, whichever is larger, clamped by the
-        # level-distance ceiling.
-        cap = max(useful_quantity_cap(code, state, game_data,
-                                      gear_keep=ctx.gear_keep or None),
-                  game_data.max_recipe_demand(code))
-        ceiling = level_distance_keep_ceiling(game_data.item_stats(code), state.level)
-        if ceiling is not None and cap > ceiling:
-            cap = ceiling
-        inv_qty = state.inventory.get(code, 0)
-        room_under_cap = cap - inv_qty
-        allowed_in_bank = room_under_cap if room_under_cap > 0 else 0
-        junk_excess = bank_qty - allowed_in_bank
-        excess = junk_excess if junk_excess < licensed else licensed
+        # POLICY: THE valuation — the same number `disposal_route`'s DEPOSIT arm
+        # reads, which is what makes the drain monotone (module docstring).
+        excess = drain_licensed_pure(
+            licensed, worth_keeping(code, state, game_data, ctx), bank_qty)
         if excess > 0:
             out[code] = excess
     return out

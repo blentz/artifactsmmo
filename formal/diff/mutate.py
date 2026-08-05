@@ -75,6 +75,7 @@ MONSTER_DROP_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
 LIQUIDATION_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "liquidation_venue.py"
 DISPOSAL_ROUTE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "disposal_route.py"
+KEEP_VALUATION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "keep_valuation.py"
 BUY_SOURCE_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "buy_source_venue.py"
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
@@ -4021,12 +4022,12 @@ DISPOSAL_ROUTE_MUTATIONS = [
     # Weaken the deposit guard `and` -> `or`: junk with an open bank (or value
     # with a closed bank) now deposits — the anti-hoard guard dies at (0,1,0).
     ("disposal_route: deposit guard and -> or (bank hoards junk)",
-     "    if bank_ok and future_value:",
-     "    if bank_ok or future_value:"),
+     "    if bank_ok and bank_under_cap:",
+     "    if bank_ok or bank_under_cap:"),
     # Drop the bank_ok conjunct: deposit fires with no bank room at (0,0,1).
     ("disposal_route: deposit without bank room",
-     "    if bank_ok and future_value:",
-     "    if future_value:"),
+     "    if bank_ok and bank_under_cap:",
+     "    if bank_under_cap:"),
     # Flip the delete fallback to deposit: true junk never clears by deletion
     # at (0,0,0) — and (0,1,0) hoards.
     ("disposal_route: delete fallback -> deposit",
@@ -4052,17 +4053,15 @@ DISPOSAL_ROUTE_ADAPTER_MUTATIONS = [
     ("disposal_route adapter: recycle probe ascends (recycles 1 instead of max)",
      "    for qty in range(excess_qty, 0, -1):",
      "    for qty in range(1, excess_qty + 1):"),
-    # Blind future_value to recipe demand: gems consumed by far-future recipes
-    # read as junk and delete. Killed by test_recipe_demanded_material_deposits.
-    ("disposal_route adapter: future_value blind to recipe demand",
-     "    if game_data.max_recipe_demand(code) > 0:",
-     "    if game_data.max_recipe_demand(code) > 10**9:"),
-    # Blind future_value to equippability: non-craftable gear (novice_guide,
-    # utility potions) reads as junk. Killed by test_alchemy_craftable_is_not_recycled
-    # and test_recycle_impossible_falls_to_deposit.
-    ("disposal_route adapter: future_value blind to equippability",
-     "    return stats is not None and bool(ITEM_TYPE_TO_SLOTS.get(stats.type_))",
-     "    return False"),
+    # THE DEPOSIT GATE (replaced the boolean `_future_value` 2026-08-05). Read a
+    # keep of 0 for everything: nothing is ever under cap, so every overstock that
+    # cannot be recycled DELETES instead of banking — the copper_helmet x33 trace
+    # bug, re-armed. Killed by test_recipe_demanded_material_deposits and
+    # test_recycle_impossible_falls_to_deposit.
+    ("disposal_route adapter: deposit gate reads keep 0 (nothing is ever bankable)",
+     "    under_cap = bank_under_cap_pure(worth_keeping(code, state, game_data, ctx),\n"
+     "                                    bank_quantity(code, state))",
+     "    under_cap = bank_under_cap_pure(0, bank_quantity(code, state))"),
     # The routed BATCH recycle is built OUTSIDE the destruction licence, so it must
     # stamp its own ownership floor or a plan can apply it twice and destroy past
     # `destroyable` (whole-branch review, CRITICAL 1). Killed by
@@ -4070,6 +4069,87 @@ DISPOSAL_ROUTE_ADAPTER_MUTATIONS = [
     ("disposal_route adapter: routed recycle carries no ownership floor",
      "    floor = keep_owned(code, state, game_data, ctx)",
      "    floor = 0"),
+]
+
+# The one disposal_route adapter mutant no test in test_disposal_route.py can see
+# (every fixture there banks nothing): blind the DEPOSIT gate to what the BANK
+# already holds and the route stops agreeing with `ai/bank_drain`, re-banking every
+# drained pile — THE withdraw<->redeposit livelock this epic closed. Its own group,
+# bound to the live-bank invariant test that kills it.
+DISPOSAL_ROUTE_LIVELOCK_MUTATIONS = [
+    ("disposal_route adapter: deposit gate blind to the banked stock (livelock)",
+     "    under_cap = bank_under_cap_pure(worth_keeping(code, state, game_data, ctx),\n"
+     "                                    bank_quantity(code, state))",
+     "    under_cap = bank_under_cap_pure(worth_keeping(code, state, game_data, ctx), 0)"),
+]
+
+# keep_valuation PURE-CORE mutations -- the ONE quantity-typed "worth keeping"
+# valuation both `ai/bank_drain` and `ai/disposal_route` read. Each perturbs the
+# shared number so the Python cores diverge from the Lean
+# `Formal.DisposalRoute.bankSurplus` / `drainLicensed` / `bankUnderCap` oracle.
+# Killed by formal/diff/test_keep_valuation_diff.py.
+KEEP_VALUATION_MUTATIONS = [
+    # Invert the surplus: a bank UNDER cap reads as junk and one OVER cap reads
+    # as room — the two gates swap and the livelock returns inverted.
+    ("keep_valuation: surplus inverted (keep - bank instead of bank - keep)",
+     "    return bank_qty - keep",
+     "    return keep - bank_qty"),
+    # Off-by-one in the drain's licence bound: `<` -> `<=` picks the ownership
+    # licence on a tie, so at surplus == destroyable the drain over-withdraws by
+    # taking the wrong (equal) arm's provenance -- and `<` -> `>` swaps the min
+    # for a max, letting whichever bound is WEAKER win.
+    ("keep_valuation: drain bound min -> max (either cap leaks)",
+     "    return surplus if surplus < destroyable else destroyable",
+     "    return surplus if surplus > destroyable else destroyable"),
+    # Loosen the DEPOSIT gate to include the exactly-at-cap boundary: a bank
+    # holding precisely the keep quantity accepts more forever, and a code the
+    # drain has just emptied down to cap is re-banked. THE livelock, at the edge.
+    ("keep_valuation: deposit gate < 0 -> <= 0 (banks at the cap boundary)",
+     "    return bank_surplus_pure(keep, bank_qty) < 0",
+     "    return bank_surplus_pure(keep, bank_qty) <= 0"),
+]
+
+# keep_valuation ADAPTER mutations -- the impure valuation assembly, which the
+# Int-level differential cannot see. Killed by DEDICATED unit tests in
+# tests/test_ai/test_keep_valuation.py.
+KEEP_VALUATION_ADAPTER_MUTATIONS = [
+    # Drop the eventual-demand term: a far-skill-gated but future-useful material
+    # (the banked level-20 gemstone whose recipe is 9 mining levels out) has a
+    # near-term cap of 0, so the whole stock drains and deletes. Killed by
+    # test_worth_keeping_takes_the_eventual_demand_when_it_is_larger.
+    ("keep_valuation: drop the eventual reachable demand (near-term cap alone)",
+     "    return near if near > eventual else eventual",
+     "    return near"),
+    # Drop the near-term cap: an in-band material the character is actively
+    # crafting with keeps only the bare transitive demand, with no batch buffer.
+    # Killed by test_worth_keeping_takes_the_near_term_cap_when_it_is_larger.
+    ("keep_valuation: drop the near-term useful cap (eventual demand alone)",
+     "    return near if near > eventual else eventual",
+     "    return eventual"),
+    # Ignore the requirement graph's reachability verdict: a recipe off the top of
+    # the progression ladder counts as a consumer, so the bank hoards a material
+    # nothing can ever craft with. Killed by
+    # test_demand_is_zero_when_every_consumer_is_off_the_progression_ladder.
+    ("keep_valuation: consumer reachability ignored (unreachable recipes count)",
+     "        if ingredients.get(code, 0) > 0 and consumer_reachable(consumer, graph):",
+     "        if ingredients.get(code, 0) > 0:"),
+    # Ignore WHICH recipe consumes the code: any recipe at all grants the demand,
+    # so an item consumed by nothing keeps its neighbours' demand. Killed by
+    # test_demand_is_zero_when_no_recipe_consumes_the_item_at_all.
+    ("keep_valuation: consumer scan ignores the ingredient list",
+     "        if ingredients.get(code, 0) > 0 and consumer_reachable(consumer, graph):",
+     "        if consumer_reachable(consumer, graph):"),
+    # Widen the progression cap to infinity: nothing is ever unreachable. Killed by
+    # test_demand_is_zero_when_every_consumer_is_off_the_progression_ladder.
+    ("keep_valuation: progression cap ignored (every gate is attainable)",
+     "    return gate is None or gate[1] <= MAX_ATTAINABLE_SKILL_LEVEL",
+     "    return True"),
+    # An unvisited bank (`bank_items is None`) reads as holding the WORLD, so
+    # nothing is ever deposit-eligible before the first bank visit. Killed by
+    # test_bank_quantity_reads_an_unvisited_bank_as_empty.
+    ("keep_valuation: unvisited bank is not read as empty",
+     "    bank = state.bank_items or {}\n    return bank.get(code, 0)",
+     "    bank = state.bank_items or {}\n    return bank.get(code, 0) + 1"),
 ]
 
 # discard_overstock goal-wiring mutation: the goal stops threading the
@@ -4905,14 +4985,15 @@ BANK_DRAIN_KEEP_MUTATIONS = [
      "            continue"),
 
     ("bank_drain: drop the worth-hoarding cap (drains future recipe demand)",
-     "        cap = max(useful_quantity_cap(code, state, game_data,\n"
-     "                                      gear_keep=ctx.gear_keep or None),\n"
-     "                  game_data.max_recipe_demand(code))",
-     "        cap = 0"),
+     "        excess = drain_licensed_pure(\n"
+     "            licensed, worth_keeping(code, state, game_data, ctx), bank_qty)",
+     "        excess = drain_licensed_pure(licensed, 0, bank_qty)"),
 
-    ("bank_drain: min -> max over the licence and the policy (either bound leaks)",
-     "        excess = junk_excess if junk_excess < licensed else licensed",
-     "        excess = junk_excess if junk_excess > licensed else licensed"),
+    ("bank_drain: drop the ownership licence bound (the policy alone decides)",
+     "        excess = drain_licensed_pure(\n"
+     "            licensed, worth_keeping(code, state, game_data, ctx), bank_qty)",
+     "        excess = drain_licensed_pure(\n"
+     "            bank_qty, worth_keeping(code, state, game_data, ctx), bank_qty)"),
 ]
 
 
@@ -5970,6 +6051,12 @@ def _collect_all_groups() -> None:
               "formal/diff/test_disposal_route_diff.py", survivors)
     run_group(DISPOSAL_ROUTE_SRC, DISPOSAL_ROUTE_ADAPTER_MUTATIONS,
               "tests/test_ai/test_disposal_route.py", survivors)
+    run_group(DISPOSAL_ROUTE_SRC, DISPOSAL_ROUTE_LIVELOCK_MUTATIONS,
+              "tests/test_ai/test_keep_valuation.py", survivors)
+    run_group(KEEP_VALUATION_SRC, KEEP_VALUATION_MUTATIONS,
+              "formal/diff/test_keep_valuation_diff.py", survivors)
+    run_group(KEEP_VALUATION_SRC, KEEP_VALUATION_ADAPTER_MUTATIONS,
+              "tests/test_ai/test_keep_valuation.py", survivors)
     run_group(DISCARD_OVERSTOCK_GOAL_SRC, DISCARD_OVERSTOCK_ROUTING_MUTATIONS,
               "tests/test_ai/test_disposal_route.py", survivors)
     run_group(BUY_SOURCE_VENUE_SRC, BUY_SOURCE_VENUE_MUTATIONS,

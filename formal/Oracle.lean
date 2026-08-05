@@ -1537,10 +1537,28 @@ def runLiquidationVenue (args : Array Json) : Json :=
   let realized := Formal.LiquidationVenue.realizedProceeds npcPay geProceeds venue
   Json.mkObj [("venue", Json.num code), ("realized", Json.num realized)]
 
+/-- Compute one keep_valuation result using the SAME proved
+`Formal.DisposalRoute.bankSurplus` / `drainLicensed` / `bankUnderCap` — the ONE
+quantity-typed "worth keeping" valuation both `ai/bank_drain` and
+`ai/disposal_route` read.
+
+args layout (3 Ints): `[destroyable, keep, bankQty]`. Emits the surplus, the
+drain licence, and the DEPOSIT gate, so a single differential example pins all
+three at once (they must stay consistent — that consistency IS the
+anti-livelock invariant). -/
+def runKeepValuation (args : Array Json) : Json :=
+  let destroyable := intArg args 0
+  let keep := intArg args 1
+  let bankQty := intArg args 2
+  Json.mkObj [
+    ("surplus", Json.num (Formal.DisposalRoute.bankSurplus keep bankQty)),
+    ("licensed", Json.num (Formal.DisposalRoute.drainLicensed destroyable keep bankQty)),
+    ("under_cap", Json.num (if Formal.DisposalRoute.bankUnderCap keep bankQty then 1 else 0))]
+
 /-- Compute one disposal_route result using the SAME proved
 `Formal.DisposalRoute.disposalRoute`.
 
-args layout (3 Ints, each 0/1): `[recyclable, bankOk, futureValue]`. Emits the
+args layout (3 Ints, each 0/1): `[recyclable, bankOk, bankUnderCap]`. Emits the
 chosen route (`0` = RECYCLE, `1` = DEPOSIT, `2` = DELETE, matching the Python
 `Route` encoding in the differential test). -/
 def runDisposalRoute (args : Array Json) : Json :=
@@ -2965,6 +2983,8 @@ def runOne (item : Json) : Json :=
     runLiquidationVenue args
   else if kind == "disposal_route" then
     runDisposalRoute args
+  else if kind == "keep_valuation" then
+    runKeepValuation args
   else if kind == "buy_source_venue" then
     runBuySourceVenue args
   else if kind == "sell_post_price" then

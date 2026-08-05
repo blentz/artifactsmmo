@@ -303,6 +303,10 @@ open Formal.PriorityBand
 #print axioms Formal.DisposalRoute.delete_only_when_worthless
 #print axioms Formal.DisposalRoute.delete_iff_worthless
 #print axioms Formal.DisposalRoute.route_total
+#print axioms Formal.DisposalRoute.drained_is_never_deposited
+#print axioms Formal.DisposalRoute.withdrawn_is_never_redeposited
+#print axioms Formal.DisposalRoute.drain_fires_witness
+#print axioms Formal.DisposalRoute.bank_under_cap_witness
 #print axioms Formal.BuySourceVenue.venue_total
 #print axioms Formal.BuySourceVenue.ge_iff_fillable_and_cheaper
 #print axioms Formal.BuySourceVenue.ge_requires_fillable_order

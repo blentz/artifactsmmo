@@ -365,12 +365,17 @@ open Formal.PriorityBand
 #check @Formal.LiquidationVenue.chosen_venue_maximizes   -- safety/no-value-loss: realized ≥ npcPay and ≥ any order
 #check @Formal.LiquidationVenue.ge_stable_under_higher_ge -- monotonicity: ↑order keeps GE
 #check @Formal.LiquidationVenue.ge_stable_under_lower_npc -- monotonicity: ↓npc floor keeps GE
--- DisposalRoute required roles (overstock disposal route over Bool³):
+-- DisposalRoute required roles (overstock disposal route over Bool³, plus the
+-- quantity-typed keep valuation over Int that feeds its DEPOSIT gate):
 #check @Formal.DisposalRoute.recycle_first            -- priority: executable recycle always wins
-#check @Formal.DisposalRoute.deposit_when_bankable    -- priority: bankable + future value ⇒ deposit
-#check @Formal.DisposalRoute.delete_only_when_worthless -- safety: delete ⇒ no recycle ∧ (no bank ∨ no value)
+#check @Formal.DisposalRoute.deposit_when_bankable    -- priority: bankable + bank under cap ⇒ deposit
+#check @Formal.DisposalRoute.delete_only_when_worthless -- safety: delete ⇒ no recycle ∧ (no bank ∨ bank at cap)
 #check @Formal.DisposalRoute.delete_iff_worthless     -- dominance: exact delete firing condition
 #check @Formal.DisposalRoute.route_total              -- totality: always recycle, deposit, or delete
+#check @Formal.DisposalRoute.drained_is_never_deposited -- liveness: drained ⇒ never routed back to the bank
+#check @Formal.DisposalRoute.withdrawn_is_never_redeposited -- liveness: post-withdraw state stays at/over cap
+#check @Formal.DisposalRoute.drain_fires_witness      -- non-vacuity: the drain hypothesis is satisfiable (703 sap)
+#check @Formal.DisposalRoute.bank_under_cap_witness   -- non-vacuity: DEPOSIT stays reachable (130/400 iron_ore)
 -- BuySourceVenue required roles (immediate-fill BUY source venue, DUAL of LiquidationVenue):
 #check @Formal.BuySourceVenue.venue_total                -- totality: always NPC or GE
 #check @Formal.BuySourceVenue.ge_iff_fillable_and_cheaper -- dominance: GE ⇔ fillable order strictly cheaper
