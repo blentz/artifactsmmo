@@ -9,6 +9,7 @@ loop: no-seller skip, non-BUY skip.
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
@@ -713,6 +714,180 @@ def test_relevant_actions_no_gold_withdraw_when_pocket_covers() -> None:
     template = WithdrawGoldAction(quantity=100, bank_location=(1, 1))
     relevant = goal.relevant_actions([template], state, gd)
     assert not [a for a in relevant if isinstance(a, WithdrawGoldAction)]
+
+
+def _ticket_vendor_gd() -> GameData:
+    """The LIVE R2D2 shape (2026-08-05): `lich_race_medal` is a recipe-less
+    artifact sold ONLY by the permanent `archaeologist` for 100 `event_ticket`.
+    The tickets accumulate passively from combat and are banked by DepositAll,
+    so the pay stack lives in the BANK while `NpcBuyAction`'s non-gold gate
+    reads the POCKET."""
+    gd = GameData()
+    gd._item_stats = {
+        "lich_race_medal": ItemStats(code="lich_race_medal", level=10,
+                                     type_="artifact"),
+    }
+    gd._npc_stock = {"archaeologist": {"lich_race_medal": 100}}
+    gd._npc_buy_currency = {"archaeologist": {"lich_race_medal": "event_ticket"}}
+    gd._npc_locations = {"archaeologist": (6, 13)}
+    gd._task_coin_rewards = {"chicken": 1}  # min_task_coin_reward defined
+    return gd
+
+
+def _medal_state():
+    """0 tickets in the bag, 148 in the bank — the live stalled state."""
+    return make_state(inventory={}, bank_items={"event_ticket": 148}, x=0, y=0)
+
+
+def test_item_currency_deficit_sizes_pocket_shortfall() -> None:
+    """The item-currency twin of `gold_deficit`. 148 tickets in the BANK, 0 in
+    the bag: affordability is granted (148 >= 100) but the buy edge's gate reads
+    the pocket, so the analysis must report a 100-ticket pocket shortfall for
+    the ferry to close. Pre-fix this figure did not exist and the goal was
+    admitted with no edge able to fire."""
+    gd = _ticket_vendor_gd()
+    result = analyze_currency_leaves({"lich_race_medal": 1}, _medal_state(), gd)
+    assert result.blocked is False
+    assert result.currency_deficits == (("event_ticket", 100),), result.currency_deficits
+
+
+def test_item_currency_deficit_zero_when_pocket_covers() -> None:
+    """Pocket already holds the full price → no shortfall, no ferry (the
+    `shortfall > 0` gate)."""
+    gd = _ticket_vendor_gd()
+    state = make_state(inventory={"event_ticket": 100},
+                       bank_items={"event_ticket": 48}, x=0, y=0)
+    result = analyze_currency_leaves({"lich_race_medal": 1}, state, gd)
+    assert result.currency_deficits == (), result.currency_deficits
+
+
+def test_item_currency_deficit_partial_pocket() -> None:
+    """Pocket 60 + bank 88 covers the 100 price; the ferry moves only the
+    missing 40, not the whole price."""
+    gd = _ticket_vendor_gd()
+    state = make_state(inventory={"event_ticket": 60},
+                       bank_items={"event_ticket": 88}, x=0, y=0)
+    result = analyze_currency_leaves({"lich_race_medal": 1}, state, gd)
+    assert result.currency_deficits == (("event_ticket", 40),), result.currency_deficits
+
+
+def test_item_currency_deficit_skips_owned_leaf() -> None:
+    """A leaf already OWNED is not going to be bought, so its price must not
+    enter the ferry demand (the `lf.owned >= lf.qty` gate) — mirrors
+    `gold_demand`'s still-unowned restriction."""
+    gd = _ticket_vendor_gd()
+    state = make_state(inventory={},
+                       bank_items={"event_ticket": 148, "lich_race_medal": 1},
+                       x=0, y=0)
+    result = analyze_currency_leaves({"lich_race_medal": 1}, state, gd)
+    assert result.currency_deficits == (), result.currency_deficits
+
+
+def test_item_currency_deficit_capped_at_bank_stock() -> None:
+    """Item-currency affordability is PER-LEAF (never jointly budgeted — the
+    Task-4 joint check is gold-only), so two leaves can each be affordable off
+    a stack that cannot pay for both. The ferry withdraws what actually exists:
+    demand 200, pocket 0, bank 150 → 150, never a withdraw the bank cannot
+    serve."""
+    gd = _ticket_vendor_gd()
+    gd._item_stats["lich_race_charm"] = ItemStats(
+        code="lich_race_charm", level=10, type_="artifact")
+    gd._npc_stock["archaeologist"]["lich_race_charm"] = 100
+    gd._npc_buy_currency["archaeologist"]["lich_race_charm"] = "event_ticket"
+    state = make_state(inventory={}, bank_items={"event_ticket": 150}, x=0, y=0)
+    result = analyze_currency_leaves(
+        {"lich_race_medal": 1, "lich_race_charm": 1}, state, gd)
+    assert result.currency_deficits == (("event_ticket", 150),), result.currency_deficits
+
+
+def test_item_currency_route_skips_gold_vendor() -> None:
+    """A leaf with BOTH a gold vendor and an item-currency vendor routes the
+    ferry off the ITEM vendor: gold is not an inventory stack and is ferried by
+    WithdrawGold, so the gold leg must be skipped when picking `item_route`."""
+    gd = _ticket_vendor_gd()
+    gd._npc_stock["pawnbroker"] = {"lich_race_medal": 900}
+    gd._npc_buy_currency["pawnbroker"] = {"lich_race_medal": "gold"}
+    gd._npc_locations["pawnbroker"] = (2, 2)
+    state = make_state(inventory={}, bank_items={"event_ticket": 148},
+                       gold=0, bank_gold=0, x=0, y=0)
+    result = analyze_currency_leaves({"lich_race_medal": 1}, state, gd)
+    assert result.blocked is False, "the item-currency vendor funds the leaf"
+    assert result.currency_deficits == (("event_ticket", 100),), result.currency_deficits
+
+
+def test_item_currency_unaffordable_leaf_still_blocks() -> None:
+    """The affordability gate itself is unchanged: 40 tickets against a 100
+    price is NOT a route, so the leaf blocks and no ferry is sized — the
+    analysis must never mint a withdraw for a purchase it cannot make."""
+    gd = _ticket_vendor_gd()
+    state = make_state(inventory={}, bank_items={"event_ticket": 40}, x=0, y=0)
+    result = analyze_currency_leaves({"lich_race_medal": 1}, state, gd)
+    assert result.blocked is True
+    assert result.currency_deficits == (), result.currency_deficits
+
+
+def test_item_currency_route_takes_the_cheapest_vendor() -> None:
+    """`npc_purchases` is cheapest-first and the route stops at the FIRST
+    coverable vendor, so a pricier second item-currency vendor never overwrites
+    it — the ferry sizes the stack the least-cost search will actually spend."""
+    gd = _ticket_vendor_gd()
+    gd._npc_stock["relic_hunter"] = {"lich_race_medal": 300}
+    gd._npc_buy_currency["relic_hunter"] = {"lich_race_medal": "bone_shard"}
+    gd._npc_locations["relic_hunter"] = (9, 9)
+    state = make_state(inventory={},
+                       bank_items={"event_ticket": 148, "bone_shard": 900},
+                       x=0, y=0)
+    result = analyze_currency_leaves({"lich_race_medal": 1}, state, gd)
+    assert result.currency_deficits == (("event_ticket", 100),), result.currency_deficits
+
+
+def test_relevant_actions_ferries_item_currency_via_withdraw() -> None:
+    """Admit/emit symmetry at the goal seam — the live R2D2 stall. With the
+    pay currency banked, `relevant_actions` must admit a WithdrawItemAction for
+    the CURRENCY (a code the factory never emits an item withdraw for), sized to
+    the pocket deficit and carrying the template's bank location/accessibility,
+    alongside the NpcBuy edge it enables."""
+    gd = _ticket_vendor_gd()
+    goal = GatherMaterialsGoal(target_item="lich_race_medal",
+                               needed={"lich_race_medal": 1})
+    template = WithdrawItemAction(code="copper_ore", quantity=7,
+                                  bank_location=(4, 1), accessible=True)
+    relevant = goal.relevant_actions([template], _medal_state(), gd)
+    withdraws = [a for a in relevant if isinstance(a, WithdrawItemAction)
+                 and a.code == "event_ticket"]
+    assert [w.quantity for w in withdraws] == [100], withdraws
+    assert withdraws[0].bank_location == (4, 1)
+    assert withdraws[0].accessible is True
+    assert any(isinstance(a, NpcBuyAction) and a.item_code == "lich_race_medal"
+               for a in relevant), "the currency-buy edge itself must be admitted"
+
+
+def test_relevant_actions_no_item_currency_withdraw_when_pocket_covers() -> None:
+    """Pocket holds the price already → no ferry edge (the buy pays straight
+    from the bag)."""
+    gd = _ticket_vendor_gd()
+    goal = GatherMaterialsGoal(target_item="lich_race_medal",
+                               needed={"lich_race_medal": 1})
+    state = make_state(inventory={"event_ticket": 100},
+                       bank_items={"event_ticket": 48}, x=0, y=0)
+    template = WithdrawItemAction(code="copper_ore", quantity=7,
+                                  bank_location=(4, 1), accessible=True)
+    relevant = goal.relevant_actions([template], state, gd)
+    assert not [a for a in relevant if isinstance(a, WithdrawItemAction)
+                and a.code == "event_ticket"]
+
+
+def test_relevant_actions_item_currency_ferry_needs_a_template() -> None:
+    """No WithdrawItemAction anywhere in the pool (a bank-locked early
+    character) → nothing to resize, so no ferry is minted and the buy edge is
+    still offered rather than the whole goal crashing."""
+    gd = _ticket_vendor_gd()
+    goal = GatherMaterialsGoal(target_item="lich_race_medal",
+                               needed={"lich_race_medal": 1})
+    relevant = goal.relevant_actions([], _medal_state(), gd)
+    assert not [a for a in relevant if isinstance(a, WithdrawItemAction)]
+    assert any(isinstance(a, NpcBuyAction) and a.item_code == "lich_race_medal"
+               for a in relevant)
 
 
 def test_tasks_coin_leaf_blocked_and_funded() -> None:

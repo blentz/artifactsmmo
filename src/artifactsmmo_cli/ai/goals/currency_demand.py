@@ -100,6 +100,32 @@ Item-currency legs are untouched by this task: item-currency affordability
 stays per-leaf (independent stacks, no shared pool the way gold is), computed
 exactly as before and never entered into the joint gold budget.
 
+ITEM-CURRENCY POCKET DEFICIT — the gold ferry's missing twin (2026-08-05).
+`gold_deficit` exists because affordability is granted on pocket+bank while
+`NpcBuyAction`'s gold gate reads the POCKET only. The item-currency arm has the
+IDENTICAL asymmetry and had NO ferry: `item_affordable` credits
+`inventory + bank` of the currency stack, but `NpcBuyAction.is_applicable`'s
+non-gold branch reads `state.inventory.get(currency, 0)` alone. A bank-held
+currency therefore ADMITTED the goal (is_plannable True) while every emitted
+`NpcBuy` edge stayed inapplicable forever, so the search died at zero length
+every cycle — the exact admit/emit break the gold ferry was written to close.
+Live R2D2 2026-08-05: 148 `event_ticket` in the bank, 0 in the bag,
+`lich_race_medal` @ `archaeologist` priced at 100 `event_ticket`,
+`GatherMaterials(lich_race_medal)` reported `nodes=4 plan_len=0` for 15
+consecutive cycles while the arbiter fell through to an unrelated goal. Unlike
+gold, no `WithdrawItemAction` for such a currency even EXISTS in the factory
+pool (`actions/factory.py` emits item withdraws only for equippables, recipe
+materials and `tasks_coin`), so the ferry must be minted from a template rather
+than looked up — `GatherMaterialsGoal.relevant_actions` resizes one so the bank
+location/accessibility of the real pool survive.
+
+`currency_deficits` is the sizing figure, computed exactly like `gold_demand`:
+summed over the STILL-UNOWNED leaves only (an owned leaf is not going to be
+bought, so ferrying its price is dead weight), at the SAME vendor that granted
+affordability (`item_route`), then `demand - pocket` and capped at KNOWN bank
+stock. The ferry is transfer-only and spends nothing, so — as with gold — it
+cannot disturb any affordability verdict already reached above.
+
 ONE closure walk serves two consumers (DRY), each reading a DIFFERENT signal:
   - `blocked`  — GatherMaterialsGoal.is_plannable fast-fails when any currency-buy
     leaf is unaffordable (currency_afford_plannable_pure is the proved live
@@ -134,14 +160,27 @@ class _CurrencyLeaf(NamedTuple):
     only the gold arm is, Task 4). `gold_price` is this leaf's cheapest
     permanent GOLD-vendor UNIT price, or None when no gold vendor sells it.
     `fundable` holds this leaf's tasks_coin vendor options (unchanged funding-
-    target arm)."""
+    target arm).
+
+    `item_route` is the (currency, total_price) of the FIRST permanent
+    item-currency vendor whose price this character can cover from pocket+bank
+    — the vendor that GRANTED item-affordability. It is carried rather than
+    collapsed to a bool because the ferry below must know WHICH stack, and HOW
+    MUCH of it, the emitted purchase will actually spend."""
 
     leaf: str
     qty: int
     owned: int
-    item_affordable: bool
+    item_route: tuple[str, int] | None
     gold_price: int | None
     fundable: list[tuple[str, int, str]]
+
+    @property
+    def item_affordable(self) -> bool:
+        """True iff some permanent item-currency vendor is coverable — the
+        single fact the joint-gold admission and the blocking verdict read.
+        Derived from `item_route` so the two can never disagree."""
+        return self.item_route is not None
 
 
 class CurrencyLeafAnalysis(NamedTuple):
@@ -159,11 +198,17 @@ class CurrencyLeafAnalysis(NamedTuple):
     must chain WithdrawGold → NpcBuy — GatherMaterialsGoal.relevant_actions
     sizes that withdraw edge from this figure (admit/emit symmetry). 0 when
     pocket gold alone covers (or nothing gold-priced remains to buy).
+    `currency_deficits`: the ITEM-currency twin of `gold_deficit` — ordered
+    (currency_code, pocket_shortfall) pairs, one per distinct item currency the
+    closure's still-unowned leaves will spend, sized `demand - pocket` and
+    capped at KNOWN bank stock. Emitted in closure-walk order (deterministic,
+    never alphabetical).
     """
 
     blocked: bool
     funding_target: tuple[str, int] | None
     gold_deficit: int
+    currency_deficits: tuple[tuple[str, int], ...]
 
 
 def _classify_leaves(
@@ -212,11 +257,18 @@ def _classify_leaves(
         owned = state.inventory.get(leaf, 0) + bank.get(leaf, 0)
         # Item-currency affordability is independent per leaf (unchanged from
         # Task 3): a separate, unshared stack per currency, never budgeted
-        # jointly the way gold is below.
-        item_affordable = any(
-            state.inventory.get(currency, 0) + bank.get(currency, 0) >= price * qty
-            for _npc, price, currency in permanent if currency != GOLD
-        )
+        # jointly the way gold is below. The GRANTING vendor is kept (not just
+        # a bool) so the pocket ferry can size the exact stack the emitted
+        # NpcBuy will spend — `npc_purchases` is cheapest-first, so the first
+        # coverable vendor is the one the planner's least-cost search takes.
+        item_route: tuple[str, int] | None = None
+        for _npc, price, currency in permanent:
+            if currency == GOLD:
+                continue
+            total = price * qty
+            if state.inventory.get(currency, 0) + bank.get(currency, 0) >= total:
+                item_route = (currency, total)
+                break
         gold_prices = [price for _npc, price, currency in permanent if currency == GOLD]
         gold_price = min(gold_prices) if gold_prices else None
         fundable = [
@@ -224,8 +276,33 @@ def _classify_leaves(
             for npc, price, currency in permanent
             if currency == TASKS_COIN_CODE
         ]
-        leaves.append(_CurrencyLeaf(leaf, qty, owned, item_affordable, gold_price, fundable))
+        leaves.append(_CurrencyLeaf(leaf, qty, owned, item_route, gold_price, fundable))
     return leaves
+
+
+def _currency_deficits(
+    leaves: list[_CurrencyLeaf], state: WorldState,
+) -> tuple[tuple[str, int], ...]:
+    """POCKET shortfall per item currency the closure's still-unowned leaves
+    will spend — the item-currency twin of `gold_deficit` (see the module
+    docstring). Demand is summed per currency over the leaves whose
+    affordability an item-currency vendor granted, in closure-walk order; the
+    shortfall is `demand - pocket`, capped at KNOWN bank stock (an unknown bank
+    credits nothing, GAP-1, and a WithdrawItemAction against it is inapplicable
+    anyway). Currencies already covered from the pocket contribute nothing."""
+    bank = state.bank_items or {}
+    demand: dict[str, int] = {}
+    for lf in leaves:
+        if lf.item_route is None or lf.owned >= lf.qty:
+            continue
+        currency, total = lf.item_route
+        demand[currency] = demand.get(currency, 0) + total
+    out: list[tuple[str, int]] = []
+    for currency, total in demand.items():
+        shortfall = min(total - state.inventory.get(currency, 0), bank.get(currency, 0))
+        if shortfall > 0:
+            out.append((currency, shortfall))
+    return tuple(out)
 
 
 def _admit_gold_leaves(
@@ -315,4 +392,5 @@ def analyze_currency_leaves(
 
     return CurrencyLeafAnalysis(
         blocked=blocked, funding_target=funding_target,
-        gold_deficit=max(0, gold_demand - state.gold))
+        gold_deficit=max(0, gold_demand - state.gold),
+        currency_deficits=_currency_deficits(leaves, state))

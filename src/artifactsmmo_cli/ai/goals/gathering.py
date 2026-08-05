@@ -588,13 +588,37 @@ class GatherMaterialsGoal(Goal):
         # Resized from a factory-emitted action so bank location/accessibility
         # survive; capped at the KNOWN bank balance (a None bank ferries
         # nothing — WithdrawGoldAction.is_applicable rejects it anyway).
-        deficit = analyze_currency_leaves(self._needed, state, game_data).gold_deficit
+        analysis = analyze_currency_leaves(self._needed, state, game_data)
+        deficit = analysis.gold_deficit
         if deficit > 0 and state.bank_gold is not None and state.bank_gold > 0:
             template = next(
                 (a for a in actions if isinstance(a, WithdrawGoldAction)), None)
             if template is not None:
                 result.append(dataclasses.replace(
                     template, quantity=min(deficit, state.bank_gold)))
+
+        # ITEM-CURRENCY ferry — the gold ferry's twin, same admit/emit break
+        # (2026-08-05). NpcBuyAction's non-gold branch gates on the POCKET stack
+        # (`state.inventory[currency]`) while `analyze_currency_leaves` grants
+        # affordability on pocket + bank, so a bank-held currency admitted this
+        # goal while every NpcBuy edge stayed inapplicable and the search died
+        # at zero length forever. Live R2D2: 148 bank event_ticket, 0 in the
+        # bag, lich_race_medal @ archaeologist at 100 event_ticket, 15 cycles of
+        # `nodes=4 plan_len=0`.
+        #
+        # MINTED FROM A TEMPLATE, not looked up: unlike gold, `actions/factory`
+        # emits NO WithdrawItemAction for such a currency at all (item withdraws
+        # are built only for equippables, recipe materials and tasks_coin), so
+        # there is nothing in the pool to resize by code. Any pool
+        # WithdrawItemAction serves as the template — the fields that must
+        # survive are `bank_location` / `accessible`, which every construction
+        # site threads identically from the same ctx.
+        currency_template = next(
+            (a for a in actions if isinstance(a, WithdrawItemAction)), None)
+        if currency_template is not None:
+            for currency, shortfall in analysis.currency_deficits:
+                result.append(dataclasses.replace(
+                    currency_template, code=currency, quantity=shortfall))
 
         return result
 
