@@ -3116,17 +3116,31 @@ example : ∀ (rows : List Formal.GearTaxonomy.Row) (t : String),
     t ∈ Formal.GearTaxonomy.combatGearTypes rows → ∃ r ∈ rows, r.type = t :=
   @Formal.GearTaxonomy.combatGear_subset_equippable
 
--- GearValue (unified Rank ruler core). The Python equip_value delegates to
--- gear_value(_, Rank); these pin the two arithmetic identities that justify it.
--- rawSum_decomp: rawSum splits into the combat signal + the four efficiency stats.
+-- GearValue. rawSum_decomp: rawSum splits into strategic_value's combat signal
+-- plus the four efficiency stats (combatRaw is the ECONOMICS layer's scalar, not
+-- a gear ruler -- see StrategicValue.combatRawOf).
 example : ∀ (s : Formal.EquipValueAugmented.RawStats),
     Formal.EquipValueAugmented.rawSum s =
       Formal.GearValue.combatRaw s + s.wisdom + s.prospecting + s.inventorySpace + s.haste :=
   @Formal.GearValue.rawSum_decomp
--- rank_eq_equipValue: the Rank ruler is bit-identical to the augmented equipValue.
-example : ∀ (s : Formal.EquipValueAugmented.RawStats) (isTool : Bool),
-    Formal.GearValue.rankValue s isTool = Formal.EquipValueAugmented.equipValue s isTool :=
-  @Formal.GearValue.rank_eq_equipValue
+-- rankValue_eq_combatValue_canonical: ONE ALGORITHM. The Python
+-- gear_value(_, Rank) is gear_value(_, Combat) against the canonical adversary,
+-- so Rank cannot hold an opinion the combat picker disagrees with. Replaces the
+-- retired rank_eq_equipValue, whose subject (a separate flat Rank stat sum) no
+-- longer exists in either the model or the Python.
+example : ∀ (isWeapon : Bool) (ci : Formal.PurposeRouting.CombatItem),
+    Formal.GearValue.rankValue isWeapon ci
+      = Formal.GearValue.gearValue isWeapon ci Formal.GearValue.canonicalAttack
+          Formal.GearValue.canonicalResistance Formal.GearValue.canonicalAttack :=
+  @Formal.GearValue.rankValue_eq_gearValue_canonical
+-- The two live orderings the unification was required to fix, on the MONSTER-BLIND
+-- purpose -- the side that was still wrong.
+example : Formal.GearValue.rankValue false Formal.GearValue.adventurerVest
+    < Formal.GearValue.rankValue false Formal.GearValue.mushmushJacket :=
+  Formal.GearValue.rank_prefers_mushmush_jacket_over_adventurer_vest
+example : Formal.GearValue.rankValue false Formal.GearValue.lifeAmulet
+    < Formal.GearValue.rankValue false Formal.GearValue.fireAndEarthAmulet :=
+  Formal.GearValue.rank_prefers_fire_and_earth_amulet_over_life_amulet
 
 -- GearValue Combat/Gather: gear_value(Combat/Gather) subsumes the per-monster
 -- scorers; the EquipmentScoring trio role theorems restate on the gear_value forms.

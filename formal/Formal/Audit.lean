@@ -712,7 +712,14 @@ open Formal.PriorityBand
 #print axioms Formal.EquipValueAugmented.equipValue_tool_zero_eq_zero
 #print axioms Formal.EquipValueAugmented.copper_dagger_strictly_outranks_fishing_net
 #print axioms Formal.GearValue.rawSum_decomp
-#print axioms Formal.GearValue.rank_eq_equipValue
+#print axioms Formal.GearValue.gearValue
+#print axioms Formal.GearValue.rankValue_eq_gearValue_canonical
+#print axioms Formal.GearValue.gearValue_armor_eq_combatValue
+#print axioms Formal.GearValue.rankValue_armor_nonneg
+#print axioms Formal.GearValue.rankValue_weapon_nonneg
+#print axioms Formal.GearValue.rank_prices_resistance_and_damage_equally
+#print axioms Formal.GearValue.rank_prefers_mushmush_jacket_over_adventurer_vest
+#print axioms Formal.GearValue.rank_prefers_fire_and_earth_amulet_over_life_amulet
 #print axioms Formal.GearValue.combatValue_weapon_nonneg
 #print axioms Formal.GearValue.combatValue_armor_nonneg
 #print axioms Formal.GearValue.combatValue_pickslot_optimal

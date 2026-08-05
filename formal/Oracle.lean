@@ -217,20 +217,6 @@ def runCombatRaw (args : Array Json) : Json :=
      intArg args 5, 0, 0, 0, 0, intArg args 6, intArg args 7⟩
   Json.mkObj [("value", Json.num (Formal.GearValue.combatRaw s))]
 
-/-- Evaluate the HAND `Formal.GearValue.rankValue` (the unified Rank ruler) on a
-    PRECOMPUTED combat_raw scalar plus the efficiency stats. args layout (6 ints):
-    combat_raw, wisdom, prospecting, inventory_space, haste, is_tool(0/1). The
-    combat_raw scalar is carried in the `attack` field (the other 7 combat fields
-    are 0) so `combatRaw s = combat_raw`; `rankValue` then recomposes
-    `2 * (combat_raw + wisdom + prospecting + inventory_space + haste) +
-    nonToolBonus`. Pins `gear_value_core.rank_value` (the `2 *` scale + the
-    nonToolBonus term). -/
-def runRankValue (args : Array Json) : Json :=
-  let s : Formal.EquipValueAugmented.RawStats :=
-    ⟨intArg args 0, 0, 0, 0, 0, 0,
-     intArg args 1, intArg args 2, intArg args 3, intArg args 4, 0, 0⟩
-  Json.mkObj [("value", Json.num (Formal.GearValue.rankValue s (intArg args 5 != 0)))]
-
 /-- Evaluate the `equipCapFromPeers` (dominance + slot gate) model in Lean.
     args layout: equippable(0/1), slotCount, peer_count, then for each
     peer: fitsAllSlots(0/1), strictlyHigher(0/1), coversSkillEffects(0/1),
@@ -278,6 +264,21 @@ def itemFromBlock (b : Nat → Int) : Item :=
     resistance := [(0, b 7), (1, b 8), (2, b 9), (3, b 10)],
     crit := b 11, flatUtil := b 12, dmg := b 13,
     dmgElem := [(0, b 14), (1, b 15), (2, b 16), (3, b 17)] }
+
+/-- Evaluate the HAND `Formal.GearValue.rankValue` (the unified Rank ruler) on a
+    full ITEM, because Rank is no longer a stat sum: it is `combatValue` against
+    the canonical adversary, so it reads exactly what `WScore`/`AScore` read.
+
+    args layout (20 ints): isWeapon(0/1), isTool(0/1), then the standard 18-int
+    item block `[code, level, fits, atk0..3, res0..3, crit, flatUtil, dmg,
+    dmgElem0..3]`. Pins the live `gear_value(stats, Rank)` — including the
+    canonical adversary's own constants, since dropping or changing them moves
+    every armor value, and the weapon branch's `nonToolBonus`. -/
+def runRankValue (args : Array Json) : Json :=
+  let isWeapon := intArg args 0 != 0
+  let ci : Formal.PurposeRouting.CombatItem :=
+    ⟨itemFromBlock (fun i => intArg args (i + 2)), intArg args 1 != 0⟩
+  Json.mkObj [("value", Json.num (Formal.GearValue.rankValue isWeapon ci))]
 
 /-- Build an `ElemStats` (monster atk OR res) from 4 ints at offset `o`. -/
 def elemFromArgs (args : Array Json) (o : Nat) : ElemStats :=
@@ -342,11 +343,14 @@ args layout:
 * 15:       currentPresent (0/1)
 * 16..:     current EXTENDED block, then candidate EXTENDED blocks
 
-Each EXTENDED block is `stride` ints: the 18-int item block + skillEffect
-(block+18) + isUtilityFill (block+19). For the Rank purpose (purposeKind == 2)
-the block additionally carries the 6 `rankValue` inputs at block+20..block+25 —
-`[combat_raw, wisdom, prospecting, inventory_space, haste, is_tool]` — so
-`stride` is 26; for Combat/Gather it is 20.
+Each EXTENDED block is 21 ints for EVERY purpose: the 18-int item block +
+skillEffect (block+18) + isUtilityFill (block+19) + isTool (block+20). Rank used
+to need 6 EXTRA out-of-block ints (`[combat_raw, wisdom, prospecting,
+inventory_space, haste, is_tool]`, stride 26) because it was a separate stat sum
+whose breakdown the `Item` record aggregates away. It is now `gearValue` at the
+canonical adversary, so it reads the SAME item block the Combat purpose reads and
+needs only the tool flag `PurposeRouting.CombatItem` already carries — ONE stride
+for all three purposes, which is itself evidence of the unification.
 
 The skill effect is carried per item (the 14th int) and reassembled into the
 abstract `skillEffect : Item → Int` keyed by item code — binding the abstract
@@ -354,10 +358,10 @@ Gather benefit to the per-item integer the live Python `gather_score` returns.
 The 15th int (`isUtilityFill`, 0/1) flags the artifact-type utility-fill items
 whose Gather benefit is the flat utility (`Item.flatUtil`) rather than
 `-gatherValue` — the `_UTILITY_FILL_TYPES` fast-path in the live `_benefit`.
-The 6 Rank inputs feed the SAME `Formal.GearValue.rankValue` def `runRankValue`
-consumes (combat_raw in `attack`, other combat fields 0, so `combatRaw s =
-combat_raw`), reassembled into the abstract `rankOf : Item → Int` keyed by code —
-binding the abstract `Purpose.rank` benefit to the live `gear_value(_, Rank)`.
+The Rank benefit is the SAME `Formal.GearValue.rankValue` def `runRankValue`
+consumes, applied to the block's own `Item` and reassembled into the abstract
+`rankOf : Item → Int` keyed by code — binding the abstract `Purpose.rank` benefit
+to the live `gear_value(_, Rank)`.
 
 Emits the picked item's CODE (or -1 = none / leave-as-is), its BENEFIT, the MAX
 feasible benefit, and the current item's benefit (for the no-downgrade assertion). -/
@@ -369,9 +373,9 @@ def runLoadoutPicker (args : Array Json) : Json :=
   let monRes := elemFromArgs args 7
   let playerAtk := elemFromArgs args 11
   let curPresent := intArg args 15 != 0
-  -- Rank (purposeKind == 2) extends each block with the 6 `rankValue` inputs at
-  -- block+20..block+25, so the stride is 26; Combat/Gather use the 20-int layout.
-  let stride := if purposeKind == 2 then 26 else 20
+  -- ONE stride for every purpose: Rank reads the same item block Combat does,
+  -- because Rank IS gear_value at the canonical adversary.
+  let stride := 21
   -- Build an Item from a block at `base`: the 18-int item block, then the
   -- skillEffect (base+18, read separately into the pair), then isUtilityFill
   -- (base+19). `itemFromBlock` sets the default `isUtilityFill := false`; the
@@ -379,15 +383,11 @@ def runLoadoutPicker (args : Array Json) : Json :=
   let mkItem := fun (base : Nat) =>
     { itemFromBlock (fun i => intArg args (base + i)) with
         isUtilityFill := intArg args (base + 19) != 0 }
-  -- Per-item Rank ruler value from the 6 rank inputs at base+15..base+20, reusing
-  -- the SAME `Formal.GearValue.rankValue` def `runRankValue` consumes: combat_raw
-  -- is carried in `attack` (other combat fields 0) so `combatRaw s = combat_raw`.
+  -- Per-item Rank value: the SAME `Formal.GearValue.rankValue` def `runRankValue`
+  -- consumes, i.e. `combatValue` against the canonical adversary, read off the
+  -- item block itself.
   let rankAt := fun (base : Nat) =>
-    let s : Formal.EquipValueAugmented.RawStats :=
-      ⟨intArg args (base + 20), 0, 0, 0, 0, 0,
-       intArg args (base + 21), intArg args (base + 22), intArg args (base + 23),
-       intArg args (base + 24), 0, 0⟩
-    Formal.GearValue.rankValue s (intArg args (base + 25) != 0)
+    Formal.GearValue.rankValue isWeapon ⟨mkItem base, intArg args (base + 20) != 0⟩
   let curBase := 16
   let curPair : Option (Item × Int) :=
     if curPresent then some (mkItem curBase, intArg args (curBase + 18))
@@ -403,7 +403,7 @@ def runLoadoutPicker (args : Array Json) : Json :=
     ((allPairs.find? (fun p => p.1.code == it.code)).map (fun p => p.2)).getD 0
   let p : Formal.GearValue.Purpose :=
     if purposeKind == 2 then
-      -- Per-code Rank ruler map, built only on the Rank path (stride 21).
+      -- Per-code Rank ruler map, built only on the Rank path.
       let rankPairs : List (Item × Int) :=
         (match curPair with | some pr => [(pr.1, rankAt curBase)] | none => []) ++
         (List.range nCand).map (fun k =>
@@ -2847,6 +2847,7 @@ def runOne (item : Json) : Json :=
   else if kind == "combat_raw" then
     runCombatRaw args
   else if kind == "rank_value" then
+    -- args: [isWeapon(0/1), isTool(0/1), 18-int item block]
     runRankValue args
   else if kind == "consumable_cap_value" then
     -- args: [hpRestore]

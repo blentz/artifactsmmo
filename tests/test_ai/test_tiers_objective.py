@@ -14,9 +14,9 @@ def _gd() -> GameData:
     gd._item_stats = {
         "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon", attack={"air": 4}),
         "iron_sword": ItemStats(code="iron_sword", level=10, type_="weapon", attack={"fire": 30}),
-        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring", attack={"fire": 2}),
-        "gold_ring": ItemStats(code="gold_ring", level=20, type_="ring", attack={"fire": 8}),
-        "ruby_ring": ItemStats(code="ruby_ring", level=30, type_="ring", attack={"fire": 6}),
+        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring", hp_bonus=2),
+        "gold_ring": ItemStats(code="gold_ring", level=20, type_="ring", hp_bonus=8),
+        "ruby_ring": ItemStats(code="ruby_ring", level=30, type_="ring", hp_bonus=6),
         "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),  # not equippable
     }
     # Make the targeted gear attainable: each is craftable from one gatherable raw.
@@ -44,8 +44,8 @@ def test_best_gear_per_slot():
 def test_paired_ring_slots_duplicate_best_over_second_distinct():
     """RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are duplicate-
     allowed (DUPLICATE_SLOT_TYPES), so a 2nd copy of the best ring
-    (gold_ring, attack 8) strictly dominates the 2nd-ranked DISTINCT ring
-    (ruby_ring, attack 6) — both slots target gold_ring. Previously pinned
+    (gold_ring, hp_bonus 8) strictly dominates the 2nd-ranked DISTINCT ring
+    (ruby_ring, hp_bonus 6) — both slots target gold_ring. Previously pinned
     ring1=gold_ring/ring2=ruby_ring encoded the same "ranked-distinct" quirk
     Task 2 fixed for artifacts; rings share `_slot_assignments` and shared
     the bug."""
@@ -169,7 +169,7 @@ def _gd_near_term() -> GameData:
                                   resistance={"earth": 40}),
         "copper_helmet": ItemStats(code="copper_helmet", level=5, type_="helmet",
                                    resistance={"air": 4}),
-        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring", attack={"fire": 2}),
+        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring", hp_bonus=2),
         "silver_ring": ItemStats(code="silver_ring", level=5, type_="ring", attack={"fire": 4}),
         "drop_only_boots": ItemStats(code="drop_only_boots", level=1, type_="boots",
                                      resistance={"water": 3}),
@@ -459,7 +459,7 @@ def test_ring_slots_duplicate_fill_when_one_attainable():
     two identical rings) instead of leaving ring2_slot untargeted."""
     gd = GameData()
     gd._item_stats = {
-        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring", attack={"fire": 2}),
+        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring", hp_bonus=2),
         "iron_sword": ItemStats(code="iron_sword", level=1, type_="weapon", attack={"fire": 5}),
     }
     gd._crafting_recipes = {"copper_ring": {"bar": 1}, "iron_sword": {"bar": 1}}
@@ -504,8 +504,8 @@ def test_near_term_gear_duplicate_fills_empty_second_ring():
 def test_artifact_slots_duplicate_best_over_second_ranked_distinct():
     """GAP-2 review quirk (Task 2, follow-up wave): with TWO distinct
     attainable artifacts, artifact2_slot must get a 2nd copy of the BEST
-    artifact (perfect_relic, equip_value from attack 100) rather than the
-    2nd-ranked DISTINCT artifact (lesser_relic, attack 5) — duplicating the
+    artifact (perfect_relic, equip_value from hp_bonus 100) rather than the
+    2nd-ranked DISTINCT artifact (lesser_relic, hp_bonus 5) — duplicating the
     top item is dup-allowed (DUPLICATE_SLOT_TYPES) and strictly higher value
     than any lower-ranked distinct item, since `attainable` is already
     sorted descending by value. Ownership is NOT a constraint at this
@@ -515,9 +515,9 @@ def test_artifact_slots_duplicate_best_over_second_ranked_distinct():
     gd = GameData()
     gd._item_stats = {
         "perfect_relic": ItemStats(code="perfect_relic", level=1, type_="artifact",
-                                    attack={"fire": 100}),
+                                    hp_bonus=100),
         "lesser_relic": ItemStats(code="lesser_relic", level=1, type_="artifact",
-                                   attack={"fire": 5}),
+                                   hp_bonus=5),
     }
     gd._crafting_recipes = {"perfect_relic": {"bar": 1}, "lesser_relic": {"bar": 1}}
     gd._resource_drops = {"rocks": "bar"}

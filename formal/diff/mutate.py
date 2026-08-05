@@ -991,19 +991,43 @@ GEAR_VALUE_DISPATCH_MUTATIONS = [
 ]
 
 
-# gear_value Rank-dispatch mutation -- the monster-independent `rank_value` ruler
-# feeding `pick_loadout(Rank)` (the `EquipOwnedGoal` live caller). Dropping the
-# `haste` summand makes `gear_value(_, Rank)` diverge from the oracle's
-# `Formal.GearValue.rankValue` (which still credits haste), so the Rank picker's
-# chosen benefit no longer matches the proved-optimal rank benefit. Killed by the
-# RANK differential test_loadout_picker_diff.py::test_rank_pick_matches_lean
-# (closes the formerly-deferred Rank picker binding with mutation teeth).
+# gear_value Rank-dispatch mutation -- the ONE-ALGORITHM re-entry. Rank is not a
+# formula here, it is `gear_value(stats, rank_adversary())`; re-routing it to a
+# DIFFERENT adversary is exactly the divergence this unification removed, and it
+# is caught by the value-level Rank differential vs the oracle's
+# `Formal.GearValue.rankValue` (which is pinned at the canonical adversary) and by
+# test_loadout_picker_diff.py::test_rank_pick_matches_lean.
 GEAR_VALUE_RANK_MUTATIONS = [
-    ("gear_value: drop haste from the Rank ruler (haste -> 0)",
-     "        return rank_value(combat_raw_of(stats), stats.wisdom, stats.prospecting,\n"
-     "                          stats.inventory_space, stats.haste, stats.subtype)",
-     "        return rank_value(combat_raw_of(stats), stats.wisdom, stats.prospecting,\n"
-     "                          stats.inventory_space, 0, stats.subtype)"),
+    ("gear_value: Rank scores against an EMPTY adversary, not the canonical one",
+     "        return gear_value(stats, rank_adversary())",
+     "        return gear_value(stats, Combat({}, {}, {}))"),
+]
+
+
+# Canonical-adversary mutations (gear_value_core.py) -- the ONLY thing that makes
+# Rank differ from Combat, so every constant of it is load-bearing. Each mutant
+# moves every armor Rank value and diverges from the oracle's
+# `Formal.GearValue.canonicalAttack` / `canonicalResistance`; the uniformity and
+# symmetry mutants additionally break the two ordering pins in
+# tests/ai/test_gear_value_core.py. OWN run_group (unit-killed mutants need one).
+RANK_ADVERSARY_MUTATIONS = [
+    ("rank_adversary: reference attack off by one (33 -> 32)",
+     "RANK_REFERENCE_ATTACK = RANK_MONSTER_TOTAL_ATTACK // len(ELEMENTS)",
+     "RANK_REFERENCE_ATTACK = RANK_MONSTER_TOTAL_ATTACK // len(ELEMENTS) - 1"),
+    ("rank_adversary: median monster attack replaced by the catalog minimum",
+     "RANK_MONSTER_TOTAL_ATTACK = 135",
+     "RANK_MONSTER_TOTAL_ATTACK = 4"),
+    ("rank_adversary: non-zero reference resistance clamps the offense term",
+     "RANK_MONSTER_RESISTANCE = 0",
+     "RANK_MONSTER_RESISTANCE = 100"),
+    ("rank_adversary: asymmetric duel — the wearer stops attacking, so every "
+     "damage %% is priced at zero",
+     "        player_attack={e: RANK_REFERENCE_ATTACK for e in ELEMENTS},",
+     "        player_attack={},"),
+    ("rank_adversary: the reference monster stops attacking, so resistance is "
+     "priced at zero",
+     "        monster_attack={e: RANK_REFERENCE_ATTACK for e in ELEMENTS},",
+     "        monster_attack={},"),
 ]
 
 
@@ -2709,19 +2733,24 @@ ARMOR_UTILITY_MUTATIONS = [
      "    return 200 * defense + offense + 200 * flat_utility",
      "    return 200 * defense + offense"),
     ("armor_score: drop lifesteal — lifesteal gear undervalued",
-     "                    + lifesteal + combat_buff)",
-     "                    + combat_buff)"),
+     "                    + haste + lifesteal + combat_buff)",
+     "                    + haste + combat_buff)"),
     ("armor_score: drop combat_buff — buff potions undervalued",
-     "                    + lifesteal + combat_buff)",
-     "                    + lifesteal)"),
+     "                    + haste + lifesteal + combat_buff)",
+     "                    + haste + lifesteal)"),
+    ("armor_score: drop hp_restore — healing potions score 0 and the tree's "
+     "utility branch empties",
+     "    flat_utility = (hp_restore + hp_bonus + wisdom",
+     "    flat_utility = (hp_bonus + wisdom"),
 ]
-# Unified gear-value core (gear_value_core.py): the shared `combat_raw` atom and
-# the `rank_value` Rank ruler that `equip_value` AND the inventory_caps dominance
-# gate now both route through (replaces the retired `equip_value_pure` mutants and
-# the deleted inventory_caps `_equip_value` dominance mutants). Each dropped
-# `combat_raw` summand is killed by the `combat_raw` differential vs the oracle's
-# `Formal.GearValue.combatRaw`; the `nonToolBonus` + `2 *` scale are killed by the
-# `rank_value` differential vs `Formal.GearValue.rankValue`.
+# `combat_raw` (gear_value_core.py): `strategic_value`/`pursuit_value`'s single
+# genuine-combat scalar. NOT a gear ruler -- the gear ruler is `gear_value`, whose
+# Rank and Combat purposes are one algorithm (see GEAR_VALUE_RANK_MUTATIONS and
+# RANK_ADVERSARY_MUTATIONS). Each dropped summand is killed by the `combat_raw`
+# differential vs the oracle's `Formal.GearValue.combatRaw`. The two `rank_value`
+# mutants that used to live here died with the flat Rank sum itself; the
+# `nonToolBonus` and the `2 *` weapon scale are now `weapon_score`'s, covered by
+# ARMOR_SCORE/weapon-score mutants and the Rank differential.
 GEAR_VALUE_CORE_MUTATIONS = [
     ("combat_raw: drop attack — weapon attack uncounted",
      "    return (attack + resistance + hp_restore", "    return (resistance + hp_restore"),
@@ -2739,10 +2768,6 @@ GEAR_VALUE_CORE_MUTATIONS = [
      "+ lifesteal + combat_buff)", "+ combat_buff)"),
     ("combat_raw: drop combat_buff — buff potions uncounted",
      "+ lifesteal + combat_buff)", "+ lifesteal)"),
-    ("rank_value: drop nonToolBonus — non-tool tiebreak lost",
-     "+ haste) + non_tool_bonus", "+ haste)"),
-    ("rank_value: drop the 2 * scale — strict-raw tiebreak unprotected",
-     "return 2 * (combat_raw_value", "return (combat_raw_value"),
 ]
 
 
@@ -6076,6 +6101,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_equipment_scoring_diff.py", survivors)
     run_group(GEAR_VALUE_CORE_SRC, GEAR_VALUE_CORE_MUTATIONS,
               "formal/diff/test_gear_value_diff.py", survivors)
+    run_group(GEAR_VALUE_CORE_SRC, RANK_ADVERSARY_MUTATIONS,
+              "tests/ai/test_gear_value_core.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, RESTORE_FAMILY_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)
     run_group(LOCATION_CATALOG_SRC, EVENT_VISIBILITY_MUTATIONS,

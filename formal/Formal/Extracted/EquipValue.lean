@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/tiers/equip_value.py (sha256: a2dad3e78fdfce9dc820bee5f7d2ffab04674823ec55a047b23bf37afa36d531) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/tiers/equip_value.py (sha256: 47a6204e6aa0415e2e187a2777a80da72819e9ecdd7ce12ef6ded7ac43ab210a) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.EquipValue

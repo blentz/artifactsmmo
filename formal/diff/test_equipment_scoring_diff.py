@@ -98,7 +98,7 @@ def _item_block(code_id: int, stats: ItemStats | None, slot: str) -> list[int]:
     """18-int Lean Item block: [code, level, fits, atk0..3, res0..3, crit, flatUtil,
     dmg, dmgElem0..3].
 
-    flatUtil = hp_bonus + wisdom + prospecting + … (the monster-independent utility
+    flatUtil = hp_restore + hp_bonus + wisdom + prospecting + … (the monster-independent utility
     the armor/artifact score adds; novice_guide: 25+25+25 = 75). The trailing 5 are
     the OFFENSE inputs AScore prices a non-weapon piece with: the global damage %
     and the per-element damage %."""
@@ -107,8 +107,9 @@ def _item_block(code_id: int, stats: ItemStats | None, slot: str) -> list[int]:
     fits = 1 if slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []) else 0
     return [code_id, stats.level, fits, *_elem_block(stats, "attack"),
             *_elem_block(stats, "resistance"), stats.critical_strike,
-            stats.hp_bonus + stats.wisdom + stats.prospecting + stats.inventory_space
-            + stats.haste + stats.lifesteal + stats.combat_buff,
+            stats.hp_restore + stats.hp_bonus + stats.wisdom + stats.prospecting
+            + stats.inventory_space + stats.haste + stats.lifesteal
+            + stats.combat_buff,
             stats.dmg, *_elem_block(stats, "dmg_elements")]
 
 

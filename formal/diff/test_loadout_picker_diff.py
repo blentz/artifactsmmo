@@ -23,16 +23,16 @@ loop for the two LIVE-WIRED purposes:
   (the established ``equipment_scoring`` convention): the chosen item's
   ``weapon_score_raw`` equals the oracle's max-feasible / no-downgrade benefit.
 
-RANK COVERAGE — BINDING NOW CLOSED (was DEFERRED; closed for the ``EquipOwnedGoal``
-live caller). The Lean ``Purpose.rank`` carries an ABSTRACT ``rankOf : Item → Int``
-because the 18-int oracle ``Item`` block aggregates the utility stats into one
-``flatUtil`` int, losing the breakdown ``rankValue`` needs. Rather than invent an
-``Item → RawStats`` projection, the oracle ``runLoadoutPicker`` now carries the 6
-``rankValue`` inputs ``[combat_raw, wisdom, prospecting, inventory_space, haste,
-is_tool]`` per item OUT-OF-BLOCK (block+20..block+25, stride 26 for
-``purposeKind == 2``), reassembled into the abstract ``rankOf`` via the SAME
-``Formal.GearValue.rankValue`` def the value-level ``rank_value`` differential
-(``test_gear_value_diff.py::test_rank_value_matches_oracle``) already pins. The
+RANK COVERAGE — BINDING. The Lean ``Purpose.rank`` carries an ABSTRACT
+``rankOf : Item → Int``; it is instantiated at ``Formal.GearValue.rankValue``,
+which IS ``combatValue`` against the canonical adversary and therefore reads
+exactly the 18-int oracle ``Item`` block. The retired flat Rank stat sum needed 6
+EXTRA out-of-block ints per item (``[combat_raw, wisdom, prospecting,
+inventory_space, haste, is_tool]``, stride 26) because a stat sum has a breakdown
+the ``Item`` record aggregates away into one ``flatUtil``; a monster-relative
+score does not, so Rank and Combat now share ONE 20-int layout. The value-level
+differential (``test_gear_value_diff.py::test_rank_matches_oracle``) pins the same
+def. The
 first LIVE caller ``EquipOwnedGoal`` picks a loadout with the Rank purpose (every
 prior ``pick_loadout`` call site used ``Combat`` or ``Gather``), so the Rank
 picker DECISION now has live behavior; ``test_rank_pick_matches_lean`` binds the
@@ -52,7 +52,7 @@ from artifactsmmo_cli.ai.equipment.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.loadout_picker import _benefit, pick_loadout
 from artifactsmmo_cli.ai.equipment.scoring import armor_score, gather_score, weapon_score_raw
 from artifactsmmo_cli.ai.game_data import ItemStats
-from artifactsmmo_cli.ai.gear_value import combat_raw_of, gear_value
+from artifactsmmo_cli.ai.gear_value import gear_value
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
@@ -96,7 +96,8 @@ def _elem_block(stats: ItemStats | None, which: str) -> list[int]:
 
 def _item_block(code_id: int, stats: ItemStats | None, slot: str,
                 skill: str | None) -> list[int]:
-    """20-int extended Lean block: 18-int item block + skillEffect + isUtilityFill.
+    """21-int extended Lean block: 18-int item block + skillEffect +
+    isUtilityFill + isTool.
 
     flatUtil aggregates the monster-independent utility stats (== the Python
     armor/utility flat term); ``dmg`` + ``dmgElem0..3`` are the OFFENSE inputs the
@@ -104,19 +105,22 @@ def _item_block(code_id: int, stats: ItemStats | None, slot: str,
     effect (``gather_score``) the abstract Gather benefit reads, 0 when no skill;
     isUtilityFill flags the artifact-type utility-fill items whose Gather benefit
     is the flat utility (``armor_score(stats, {}, {}, {})``) rather than
-    ``-gather_score``.
+    ``-gather_score``; isTool is the `subtype == "tool"` flag
+    `PurposeRouting.CombatItem` carries, which the Rank benefit's `nonToolBonus`
+    reads (the fishing_net tiebreak).
     """
     if stats is None:
-        return [code_id, *([0] * 19)]
+        return [code_id, *([0] * 20)]
     fits = 1 if slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []) else 0
-    flat = (stats.hp_bonus + stats.wisdom + stats.prospecting + stats.inventory_space
-            + stats.haste + stats.lifesteal + stats.combat_buff)
+    flat = (stats.hp_restore + stats.hp_bonus + stats.wisdom + stats.prospecting
+            + stats.inventory_space + stats.haste + stats.lifesteal
+            + stats.combat_buff)
     eff = gather_score(stats, skill) if skill is not None else 0
     is_utility_fill = 1 if stats and stats.type_ in _UTILITY_FILL_TYPES else 0
     return [code_id, stats.level, fits, *_elem_block(stats, "attack"),
             *_elem_block(stats, "resistance"), stats.critical_strike, flat,
             stats.dmg, *_elem_block(stats, "dmg_elements"), eff,
-            is_utility_fill]
+            is_utility_fill, 1 if stats.subtype == "tool" else 0]
 
 
 def _owned_codes(state: WorldState) -> set[str]:
@@ -512,8 +516,11 @@ def test_gather_no_downgrade_on_tie_keeps_current():
 # ---------------------------------------------------------------------------
 # RANK: the monster-independent ruler picker (purposeKind == 2). Closes the
 # previously-deferred Rank differential for the ``EquipOwnedGoal`` live caller.
-# The oracle carries the 6 ``rankValue`` inputs per item OUT-OF-BLOCK (stride 21)
-# and reassembles the abstract ``rankOf`` via ``Formal.GearValue.rankValue``.
+# The oracle reads the SAME 20-int extended block Combat reads and reassembles the
+# abstract ``rankOf`` via ``Formal.GearValue.rankValue`` — which IS ``combatValue``
+# at the canonical adversary. The 6 out-of-block ``rankValue`` inputs (stride 26)
+# the retired flat Rank sum needed are gone: a stat sum has a breakdown the ``Item``
+# record cannot carry, a monster-relative score does not.
 # ---------------------------------------------------------------------------
 
 # Single-slot types so each item code fits exactly one slot → no cross-slot
@@ -525,17 +532,9 @@ _RANK_CODES = ["r_a", "r_b", "r_c", "r_d", "r_e", "r_f", "r_g", "r_h"]
 
 
 def _rank_item_block(code_id: int, stats: ItemStats | None, slot: str) -> list[int]:
-    """26-int Rank block: the 20-int extended block + the 6 ``rankValue`` inputs
-    ``[combat_raw, wisdom, prospecting, inventory_space, haste, is_tool]`` — the
-    SAME inputs ``runRankValue`` (Oracle.lean) consumes, computed exactly as the
-    live ``gear_value(_, Rank)`` reads them (``combat_raw_of`` + ItemStats fields
-    + ``subtype == 'tool'``)."""
-    block = _item_block(code_id, stats, slot, None)
-    if stats is None:
-        return [*block, 0, 0, 0, 0, 0, 0]
-    is_tool = 1 if stats.subtype == "tool" else 0
-    return [*block, combat_raw_of(stats), stats.wisdom, stats.prospecting,
-            stats.inventory_space, stats.haste, is_tool]
+    """The Rank block IS the shared 20-int extended block — Rank reads exactly what
+    the Combat purpose reads, which is the whole content of the unification."""
+    return _item_block(code_id, stats, slot, None)
 
 
 def _oracle_rank_pick(level: int, cur_code: str | None,

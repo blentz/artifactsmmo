@@ -842,7 +842,14 @@ open Formal.PriorityBand
 
 -- GearValue (unified Rank ruler core; equip_value delegates to gear_value(_, Rank)):
 #check @Formal.GearValue.rawSum_decomp          -- rawSum = combatRaw + efficiency stats
-#check @Formal.GearValue.rank_eq_equipValue     -- rankValue = augmented equipValue (bit-identical)
+#check @Formal.GearValue.gearValue                          -- the ONE gear ruler (combatScore on the weapon slot, AScore otherwise)
+#check @Formal.GearValue.rankValue_eq_gearValue_canonical   -- ONE ALGORITHM: Rank IS gear_value at the canonical adversary
+#check @Formal.GearValue.gearValue_armor_eq_combatValue     -- the armor branch is the raw combatValue the picker theorems ride
+#check @Formal.GearValue.rankValue_armor_nonneg -- Rank inherits AScore nonneg (armor branch)
+#check @Formal.GearValue.rankValue_weapon_nonneg -- Rank inherits WScore clamp nonneg (weapon branch)
+#check @Formal.GearValue.rank_prices_resistance_and_damage_equally -- symmetric-duel calibration
+#check @Formal.GearValue.rank_prefers_mushmush_jacket_over_adventurer_vest -- wisdom no longer 1:1 vs combat
+#check @Formal.GearValue.rank_prefers_fire_and_earth_amulet_over_life_amulet -- the 2026-08-04 equip loop
 -- GearValue Combat/Gather (gear_value(Combat/Gather) subsumes the per-monster scorers;
 -- the EquipmentScoring trio restated on the gear_value forms):
 #check @Formal.GearValue.combatValue_weapon_nonneg          -- weapon_score_nonneg on gear_value(Combat) weapon

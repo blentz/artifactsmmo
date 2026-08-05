@@ -20,7 +20,7 @@ def test_armor_score_pure_includes_combat_buff():
     accepted as a parameter but dropped from the return sum, so combat-buff gear
     (antidotes, boost items) scored as if the buff were worthless."""
     kw = dict(monster_resistance={}, player_attack={}, dmg=0, dmg_elements={},
-              critical_strike=0, hp_bonus=0, wisdom=0, prospecting=0,
+              critical_strike=0, hp_restore=0, hp_bonus=0, wisdom=0, prospecting=0,
               inventory_space=0, haste=0, lifesteal=0)
     base = armor_score_pure(["fire"], {"fire": 0}, {"fire": 0}, combat_buff=0, **kw)
     buffed = armor_score_pure(["fire"], {"fire": 0}, {"fire": 0}, combat_buff=7, **kw)

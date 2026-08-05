@@ -1,5 +1,20 @@
 # Sub-project 2 — Unified Value Ruler — Design
 
+> **SUPERSEDED IN PART, 2026-08-04 (gear-ruler unification).** This document's
+> `Rank` = `2 * (combat_raw + wisdom + prospecting + inventory_space + haste) +
+> nonToolBonus` is RETIRED. It unified the two monster-INDEPENDENT rulers with
+> each other but left them a different algorithm from `Combat`, and that
+> remaining split produced two live defects: the `life_amulet` /
+> `fire_and_earth_amulet` equip loop and the `adventurer_vest` >
+> `mushmush_jacket` inversion. `Rank` is now `Combat` evaluated against a
+> canonical adversary derived from the pinned catalog
+> (`ai/gear_value_core.rank_adversary`), so there is ONE algorithm parameterised
+> by what the caller knows. `combat_raw` survives, but only as
+> `strategic_value`/`pursuit_value`'s economics scalar — it is no longer a gear
+> ruler. Everything below about Combat/Gather, the module layout, and the
+> consumer routing still holds. See
+> `.superpowers/sdd/2026-08-01-emergent-specialization/gear-ruler-unification-report.md`.
+
 **Status:** approved (brainstorm 2026-06-28) · **Epic:** Holistic Gear-Loadout
 Architecture (`2026-06-28-gear-loadout-architecture-design.md`, on main).
 **Branch:** `feat/gear-unified-ruler` (off main = gear sub-project A merged, tip `f5eabf71`).

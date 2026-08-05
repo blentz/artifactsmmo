@@ -49,15 +49,22 @@ def test_weapon_outranks_prospecting_artifact_pursuit():
     assert pursuit_value(weapon) > pursuit_value(artifact)
 
 
-def test_equip_value_gets_cross_slot_backwards():
-    """Non-vacuity: the OLD flat scorer ranked the artifact ABOVE the weapon.
-    equip_value(weapon) = 2*30 + 1(nonTool) = 61;
-    equip_value(artifact) = 2*201 + 1 = 403. Artifact wrongly wins."""
+def test_equip_value_now_agrees_with_pursuit_value_cross_slot():
+    """The FLAT-PARITY bug this module was built to work around is gone at the
+    source. The retired flat `equip_value` ranked the artifact ABOVE the weapon
+    (403 to 61) because it summed 201 prospecting 1:1 against 30 attack; Rank is
+    now `weapon_score`/`armor_score` against the canonical adversary, which
+    prices 30 attack as damage and prospecting as flat utility, so it reaches
+    `pursuit_value`'s verdict independently.
+
+    `pursuit_value` keeps its own budget: it answers the ECONOMIC question (what
+    to spend gold and cycles ACQUIRING, under a leveling horizon), not the gear
+    question (which piece is better). Agreement here is a check that the two
+    layers no longer contradict each other, not a reason to merge them."""
     weapon = _weapon(30)
     artifact = _artifact(201)
-    assert equip_value(weapon) == 61
-    assert equip_value(artifact) == 403
-    assert equip_value(artifact) > equip_value(weapon)  # the bug
+    assert equip_value(weapon) > equip_value(artifact)
+    assert pursuit_value(weapon) > pursuit_value(artifact)
 
 
 def test_bag_still_pursued_no_regression():

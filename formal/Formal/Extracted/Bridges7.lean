@@ -104,14 +104,14 @@ theorem armor_score_bridge (enc : Int → String)
     (hinj : ∀ a b : Int, enc a = enc b → a = b)
     (item : Formal.EquipmentScoring.Item)
     (monsterAtk monsterRes playerAtk : Formal.EquipmentScoring.ElemStats)
-    (hpBonus wisdom prospecting inventorySpace haste lifesteal combatBuff : Int)
-    (hflat : item.flatUtil = hpBonus + wisdom + prospecting + inventorySpace + haste + lifesteal + combatBuff) :
+    (hpRestore hpBonus wisdom prospecting inventorySpace haste lifesteal combatBuff : Int)
+    (hflat : item.flatUtil = hpRestore + hpBonus + wisdom + prospecting + inventorySpace + haste + lifesteal + combatBuff) :
     Extracted.EquipmentScoring.armor_score_pure
         (Formal.EquipmentScoring.elements.map enc)
         (encElem enc item.resistance) (encElem enc monsterAtk)
         (encElem enc monsterRes) (encElem enc playerAtk)
         item.dmg (encElem enc item.dmgElem) item.crit
-        hpBonus wisdom prospecting inventorySpace haste lifesteal combatBuff
+        hpRestore hpBonus wisdom prospecting inventorySpace haste lifesteal combatBuff
       = Formal.EquipmentScoring.AScore item monsterAtk monsterRes playerAtk := by
   simp only [Extracted.EquipmentScoring.armor_score_pure,
              Formal.EquipmentScoring.AScore, Formal.EquipmentScoring.aTerm,
@@ -261,10 +261,12 @@ theorem gather_pick_optimal_extracted
 /-! ## equip_value.py: the tool duality.
 
 The augmented composite Rank value (`equip_value_pure`) was retired when the
-Python `equip_value` collapsed onto the unified `gear_value(_, Rank)` core; its
-soundness now rides the HAND `Formal.GearValue.rankValue` / `rank_eq_equipValue`
-pins (Contracts) + the `gear_value_core` differential, not a mechanical
-extraction. Only the live `tool_value_pure` core remains extracted here. -/
+Python `equip_value` collapsed onto the unified `gear_value(_, Rank)` core, and
+Rank itself is now `Formal.GearValue.rankValue` = `combatValue` at the canonical
+adversary — so its soundness rides `armor_score_bridge`/`weapon_score_bridge`
+above (the SAME two bridges the Combat purpose rides, which is the point of the
+unification) plus the `gear_value` differential. Only the live `tool_value_pure`
+core remains extracted here. -/
 
 /-- The two cores read dicts through their own emitted `_dictGetD` copies;
 the copies have identical equations. -/

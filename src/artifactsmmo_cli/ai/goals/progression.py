@@ -648,12 +648,12 @@ class UpgradeEquipmentGoal(Goal):
             item_code, stats, current_code, current_stats, game_data, active_skills)
 
     def _upgrade_value(self, stats: ItemStats) -> int:
-        """Unified combat/utility value of an equippable: ranks on
-        ``2*(combat_raw + wisdom + prospecting + inventory_space + haste) +
-        nonToolBonus``, where ``combat_raw`` sums the 8 genuine-combat stats
-        (attack + resistance + hp_restore + hp_bonus + dmg + critical_strike +
-        lifesteal + combat_buff). Delegates to the shared tiers.equip_value
-        (exact int since P4a)."""
+        """Unified combat/utility value of an equippable — the ONE gear ruler
+        (`gear_value(stats, Rank)`: `weapon_score`/`armor_score` against the
+        catalog-median canonical adversary), shared with the combat loadout
+        picker so this goal can never target a piece the picker will refuse.
+        Compared only against the item currently in the SAME slot, so the
+        ruler's absolute scale is not load-bearing here."""
         return equip_value(stats)
 
     def _is_upgrade_over_impl(

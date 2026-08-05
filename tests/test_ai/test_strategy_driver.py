@@ -240,11 +240,13 @@ def test_select_fallback_equip_not_shadowed_by_dead_upgrade_goal():
         "copper_legs_armor": ItemStats(code="copper_legs_armor", level=5,
                                        type_="leg_armor",
                                        crafting_skill="gearcrafting",
-                                       crafting_level=5),
+                                       crafting_level=5,
+                                       resistance={"earth": 2}),
         "feather_coat": ItemStats(code="feather_coat", level=5,
                                   type_="body_armor",
                                   crafting_skill="gearcrafting",
-                                  crafting_level=5),
+                                  crafting_level=5,
+                                  dmg_elements={"air": 5, "water": 5}),
     }
     gd._crafting_recipes = {
         "copper_legs_armor": {"copper_bar": 5, "feather": 2},

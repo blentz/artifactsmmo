@@ -92,36 +92,26 @@ def test_gear_value_counts_utility_stats_so_artifact_not_discarded():
     artifacts (novice_guide: combat stats 0, wisdom/prospecting/hp 25) are not
     trivially dominated and discarded (the Delete(novice_guide×4) trace bug).
 
-    Behavior change vs. the old _equip_value: gear_value applies 2× + nonToolBonus
-    (all items here are non-tool, subtype="") so the absolute values differ from the
-    old formula, but the ordering and non-zero property are preserved.
-    Spec: docs/superpowers/specs/2026-06-28-gear-unified-ruler-design.md —
-    "the delete-dominance gate now scores on dmg + critical_strike" (the nonToolBonus
-    change is part of the unified ruler).
+    SCALE: Rank is now `armor_score` against the catalog-median canonical
+    adversary, so each flat-utility point is worth 200 (the scorer's own
+    denominator) instead of 2. Which stats count, and the non-zero property this
+    gate depends on, are unchanged.
     """
     art = ItemStats(code="novice_guide", level=10, type_="artifact",
                     hp_bonus=25, wisdom=25, prospecting=25)
-    # raw = 25 (hp_bonus); rank_value(25, 25, 25, 0, 0, "") = 2*(25+25+25)+1 = 151
-    assert gear_value(art, Rank) == 151
-    # A combat peer with a small attack no longer out-values it.
-    weak = ItemStats(code="w", level=1, type_="weapon", attack={"fire": 10})
-    assert gear_value(art, Rank) > gear_value(weak, Rank)
+    assert gear_value(art, Rank) == 200 * 75
     # A bag's inventory_space also counts → not valued 0 / discarded.
-    # rank_value(0, 0, 0, 35, 0, "") = 2*(35)+1 = 71
     bag = ItemStats(code="backpack", level=10, type_="bag", inventory_space=35)
-    assert gear_value(bag, Rank) == 71
+    assert gear_value(bag, Rank) == 200 * 35
     # Haste (cooldown reduction) also counts.
-    # rank_value(0, 0, 0, 0, 8, "") = 2*(8)+1 = 17
     legs = ItemStats(code="haste_legs", level=1, type_="leg_armor", haste=8)
-    assert gear_value(legs, Rank) == 17
-    # Lifesteal (combat sustain) also counts (it's part of combat_raw).
-    # combat_raw(lifesteal=15)=15; rank_value(15, 0, 0, 0, 0, "") = 2*15+1 = 31
+    assert gear_value(legs, Rank) == 200 * 8
+    # Lifesteal (combat sustain) also counts.
     ring = ItemStats(code="vampiric_ring", level=1, type_="ring", lifesteal=15)
-    assert gear_value(ring, Rank) == 31
+    assert gear_value(ring, Rank) == 200 * 15
     # Combat-buff potions count so they aren't discarded as worthless (PLAN #3a).
-    # combat_raw(combat_buff=20)=20; rank_value(20, 0, 0, 0, 0, "") = 2*20+1 = 41
     pot = ItemStats(code="enchanted_boost_potion", level=1, type_="utility", combat_buff=20)
-    assert gear_value(pot, Rank) == 41
+    assert gear_value(pot, Rank) == 200 * 20
 
 
 def _gd_with_sap_recipes() -> GameData:
@@ -771,9 +761,9 @@ class TestEquippableDominanceArmorAndAccessories:
         gd = GameData()
         gd._item_stats = {
             "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
-                                      attack={"fire": 3}),
+                                      hp_bonus=3),
             "iron_ring": ItemStats(code="iron_ring", level=5, type_="ring",
-                                    attack={"fire": 8}),
+                                    hp_bonus=8),
         }
         gd._crafting_recipes = {}
         # Only 1 iron — bot still wants copper for ring2_slot.
@@ -793,9 +783,9 @@ class TestEquippableDominanceArmorAndAccessories:
         gd = GameData()
         gd._item_stats = {
             "copper_artifact": ItemStats(code="copper_artifact", level=1, type_="artifact",
-                                          attack={"fire": 2}),
+                                          hp_bonus=2),
             "iron_artifact": ItemStats(code="iron_artifact", level=5, type_="artifact",
-                                        attack={"fire": 7}),
+                                        hp_bonus=7),
         }
         gd._crafting_recipes = {}
         # 2 irons — copper still needed for 3rd slot.
@@ -809,9 +799,9 @@ class TestEquippableDominanceArmorAndAccessories:
         gd = GameData()
         gd._item_stats = {
             "copper_amulet": ItemStats(code="copper_amulet", level=1, type_="amulet",
-                                        attack={"fire": 3}),
+                                        hp_bonus=3),
             "iron_amulet": ItemStats(code="iron_amulet", level=5, type_="amulet",
-                                      attack={"fire": 8}),
+                                      hp_bonus=8),
         }
         gd._crafting_recipes = {}
         state = make_state(inventory={"copper_amulet": 1, "iron_amulet": 1})

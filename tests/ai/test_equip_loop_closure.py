@@ -131,18 +131,24 @@ _ALL = {it.code: it for it in
 
 # --- The four numbers -------------------------------------------------------
 
-def test_the_two_amulets_now_score_equal_on_the_monster_blind_ruler() -> None:
+def test_the_two_amulets_now_score_the_same_way_on_both_rulers() -> None:
     """`fire_and_earth_amulet`'s whole offence is `dmg_elements`. Before the
     hoist the monster-blind ruler scored it 41 / 20000 against `life_amulet`'s
     61 / 30000 — a 10000 gain the progression tree chased every cycle — while
     the monster-relative scorer had it 48000 to 6000 the other way.
 
-    Counting the same stats does not make the two rulers AGREE (that is what
-    `may_displace` is for), but it stops them from disagreeing about which
-    stats exist, which is what turned a 10-point damage spread into a
-    10000-point phantom gain."""
-    assert equip_value(_LIFE_AMULET) == 61
-    assert equip_value(_FIRE_AND_EARTH_AMULET) == 61
+    Two fixes landed on top of each other and this pins the state after both:
+
+    1. the `dmg_elements` hoist made `combat_raw` (hence `pursuit_value`) stop
+       disagreeing about which stats EXIST — the pair ties there at 30000;
+    2. unifying Rank onto `armor_score` made `equip_value` stop being a separate
+       formula at all. It now prefers the element amulet 70000 to 6000, the same
+       DIRECTION the monster-relative scorer does, because it is the same
+       function evaluated against the catalog-median monster instead of a wolf.
+    """
+    assert equip_value(_LIFE_AMULET) == 6000
+    assert equip_value(_FIRE_AND_EARTH_AMULET) == 70000
+    assert equip_value(_FIRE_AND_EARTH_AMULET) > equip_value(_LIFE_AMULET)
     assert pursuit_value(_LIFE_AMULET) == 30000
     assert pursuit_value(_FIRE_AND_EARTH_AMULET) == 30000
 
@@ -353,13 +359,14 @@ def test_mushmush_jacket_beats_adventurer_vest_on_both_rulers() -> None:
     the tree's `pursuit_value` — whose efficiency budget is what keeps wisdom
     sub-dominant — agrees.
 
-    FLAT `equip_value` still does NOT (167 vs 173): it weights wisdom 1:1 with
-    combat, the known flat-parity limitation `pursuit_value` exists to fix, and
-    it is not this branch's business. What matters is that the limitation can no
-    longer produce a LOOP: `may_displace` refuses the vest over the jacket
-    outright, so no goal riding `equip_value` can pre-empt the picker with it."""
+    `equip_value` now agrees too (317600 vs 174400). It used to get this
+    BACKWARDS, 167 to 173, because the flat sum weighted 10 extra wisdom the same
+    as 4 points of global damage plus 3 points of crit; unifying Rank onto
+    `armor_score` removed the separate formula that could hold the wrong opinion.
+    `may_displace` still refuses the vest over the jacket outright, so the loop
+    was closed structurally even while the flat ruler disagreed."""
     assert pursuit_value(_MUSHMUSH_JACKET) > pursuit_value(_ADVENTURER_VEST)
-    assert equip_value(_ADVENTURER_VEST) > equip_value(_MUSHMUSH_JACKET)
+    assert equip_value(_MUSHMUSH_JACKET) > equip_value(_ADVENTURER_VEST)
     assert may_displace(_ADVENTURER_VEST, _MUSHMUSH_JACKET) is False
 
     gd = _gd(_MUSHMUSH_JACKET, _ADVENTURER_VEST)
@@ -373,17 +380,30 @@ def test_mushmush_jacket_beats_adventurer_vest_on_both_rulers() -> None:
 
 
 def test_a_purely_defensive_item_still_wins_where_defence_matters() -> None:
-    """`piggy_armor` carries 150 hp and 15 points of resistance and only one
-    offensive stat. Against a 400-fire hitter it must beat the pure-offence
-    jacket on the monster-relative ruler AND outrank it monster-blind — a
-    damage-only valuation would have inverted both."""
+    """`piggy_armor` carries 150 hp and 15 points of resistance, all of it in
+    fire and earth. Against a 400-FIRE hitter it must beat the pure-offence
+    jacket on the monster-relative ruler — a damage-only valuation would invert
+    that, and `pursuit_value` (the acquisition economics) agrees.
+
+    VERDICT CHANGE, and an honest one: `equip_value` now puts the jacket AHEAD
+    (317600 to 280200), because Rank IS `armor_score` and the adversary it scores
+    against is the catalog MEDIAN — which attacks in every element equally. A
+    monster-blind ruler cannot know you will meet rosenblood, so it dilutes
+    piggy's fire-and-earth-only resistance across four elements while the
+    jacket's 10% GLOBAL damage applies whatever shows up. That is the same
+    number `armor_score` itself returns for the median monster, so the two
+    authorities are not disagreeing — they are one function asked about two
+    different adversaries, and `may_displace` (below) is what keeps them from
+    fighting over the slot."""
     piggy = armor_score(_PIGGY_ARMOR, _ROSENBLOOD_ATK, _ROSENBLOOD_RES,
                         _FOREST_WHIP_ATTACK)
     jacket = armor_score(_MUSHMUSH_JACKET, _ROSENBLOOD_ATK, _ROSENBLOOD_RES,
                          _FOREST_WHIP_ATTACK)
     assert piggy > jacket
     assert pursuit_value(_PIGGY_ARMOR) > pursuit_value(_MUSHMUSH_JACKET)
-    assert equip_value(_PIGGY_ARMOR) > equip_value(_MUSHMUSH_JACKET)
+    assert equip_value(_MUSHMUSH_JACKET) > equip_value(_PIGGY_ARMOR)
+    assert not may_displace(_PIGGY_ARMOR, _MUSHMUSH_JACKET)
+    assert not may_displace(_MUSHMUSH_JACKET, _PIGGY_ARMOR)
 
 
 # --- may_displace, branch by branch -----------------------------------------

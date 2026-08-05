@@ -70,7 +70,7 @@ def armor_score_pure(elements: list[str], resistance: dict[str, int],
                      player_attack: dict[str, int],
                      dmg: int, dmg_elements: dict[str, int],
                      critical_strike: int,
-                     hp_bonus: int, wisdom: int, prospecting: int,
+                     hp_restore: int, hp_bonus: int, wisdom: int, prospecting: int,
                      inventory_space: int, haste: int, lifesteal: int,
                      combat_buff: int) -> int:
     """PURE CORE (mechanically extracted, P4b): ``200*defense + offense +
@@ -118,16 +118,28 @@ def armor_score_pure(elements: list[str], resistance: dict[str, int],
     threshold to damage-per-turn would need an invented exchange rate, so it
     stays out rather than entering the sum on a made-up scale.
 
-    NOT IN THE UNIT — ``flat_utility`` (hp_bonus + wisdom + prospecting +
-    inventory_space + haste + lifesteal + combat_buff) is monster-INDEPENDENT
-    per-item utility carried over unconverted (each is scaled by the same 200 as
-    ``defense``, so its weight RELATIVE to defense is exactly what it was before
-    this term existed). wisdom is an XP rate, prospecting a drop rate, hp a pool
-    not a rate — none is damage-per-turn and none is claimed to be. Its
-    load-bearing formal role is the empty-slot gate: it makes a resistance-free
-    ARTIFACT (novice_guide: res 0, hp 25, wisdom 25, prospecting 25 → 200*75 =
-    15000) score > 0 so ``pick_loadout`` fills the slot instead of discarding it
-    as worthless.
+    NOT IN THE UNIT — ``flat_utility`` (hp_restore + hp_bonus + wisdom +
+    prospecting + inventory_space + haste + lifesteal + combat_buff) is
+    monster-INDEPENDENT per-item utility carried over unconverted (each is scaled
+    by the same 200 as ``defense``, so its weight RELATIVE to defense is exactly
+    what it was before this term existed). wisdom is an XP rate, prospecting a
+    drop rate, hp a pool not a rate — none is damage-per-turn and none is claimed
+    to be. Its load-bearing formal role is the empty-slot gate: it makes a
+    resistance-free ARTIFACT (novice_guide: res 0, hp 25, wisdom 25,
+    prospecting 25 → 200*75 = 15000) score > 0 so ``pick_loadout`` fills the slot
+    instead of discarding it as worthless.
+
+    ``hp_restore`` JOINED that block when Rank was unified onto this function.
+    It is a per-item HP pool, exactly like ``hp_bonus``, and it was the ONE stat
+    the two rulers disagreed about EXISTING: the retired flat Rank sum counted
+    it, this function did not, and `equipment/slot_occupancy._flat_utility`
+    already had to add it back by hand ("plus hp_restore, which no scorer
+    reads") to keep its displacement rule sound. With Rank routed through here,
+    omitting it would have scored every healing potion 0 and emptied the
+    progression tree's utility-slot branch (`tiers/progression_tree.
+    _utility_candidates` gates on `gain > 0`); it also means
+    ``pick_loadout(Combat)`` can finally see a utility-slot heal, which it
+    previously priced at 0 and would never equip.
 
     Bridged to the hand ``Formal.EquipmentScoring.AScore`` over the same
     injective element encoding.
@@ -140,8 +152,8 @@ def armor_score_pure(elements: list[str], resistance: dict[str, int],
         offense = offense + (player_attack.get(elem, 0)
                              * max(0, 100 - monster_resistance.get(elem, 0))
                              * (2 * (dmg + dmg_elements.get(elem, 0)) + critical_strike))
-    flat_utility = (hp_bonus + wisdom + prospecting + inventory_space + haste
-                    + lifesteal + combat_buff)
+    flat_utility = (hp_restore + hp_bonus + wisdom + prospecting + inventory_space
+                    + haste + lifesteal + combat_buff)
     return 200 * defense + offense + 200 * flat_utility
 
 
@@ -226,6 +238,6 @@ def armor_score(armor: ItemStats, monster_attack: dict[str, int],
     return armor_score_pure(list(ELEMENTS), armor.resistance, monster_attack,
                             monster_resistance, player_attack,
                             armor.dmg, armor.dmg_elements, armor.critical_strike,
-                            armor.hp_bonus, armor.wisdom, armor.prospecting,
-                            armor.inventory_space, armor.haste, armor.lifesteal,
-                            armor.combat_buff)
+                            armor.hp_restore, armor.hp_bonus, armor.wisdom,
+                            armor.prospecting, armor.inventory_space, armor.haste,
+                            armor.lifesteal, armor.combat_buff)

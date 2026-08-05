@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
+from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -776,11 +777,18 @@ class TestUpgradeEquipmentGoalPriority:
         # staff (value 8, craftable) beats stick (1) and net (5) in inventory.
         assert goal.find_upgrade_target(state, gd) == ("wooden_staff", "weapon_slot")
 
-    def test_value_ranking_prefers_shield_over_fishing_net(self):
-        """Regression: with an empty weapon slot the picker chose fishing_net
-        (attack 5, fishing penalty) over a wooden_shield (resist 2/2/2/2 = 8)
-        because the tiebreak was alphabetical. Rank by stat value so the
-        better gear is the committed target."""
+    def test_value_ranking_is_by_damage_swing_not_alphabetical(self):
+        """Regression: with an empty weapon slot the picker chose between
+        fishing_net (attack water 5) and wooden_shield (resist 2/2/2/2) on an
+        ALPHABETICAL tiebreak. It must rank by stat value instead.
+
+        VERDICT CHANGE: the flat ruler summed the shield's four 2% resistances
+        1:1 against the net's 5 attack and made the shield win 17 to 10. Rank is
+        now a real damage swing against the catalog-median monster (132 total
+        attack), where the net deals 5 HP/turn and the shield saves 2.64 — so the
+        net wins on the merits. The regression this test guards is the
+        ALPHABETICAL tiebreak, and that is still gone: the winner is decided by
+        value, and the values are far apart."""
         gd = make_game_data(item_stats={
             "fishing_net": ItemStats(code="fishing_net", level=1, type_="weapon",
                                       crafting_skill="weaponcrafting", crafting_level=1,
@@ -793,12 +801,14 @@ class TestUpgradeEquipmentGoalPriority:
             "fishing_net": {"ash_plank": 6},
             "wooden_shield": {"ash_plank": 6},
         }
-        # Both slots empty, both craftable. Shield must win on value.
+        # Both slots empty, both craftable. The higher-value item wins.
         state = make_state(inventory={}, level=5,
                            skills={"weaponcrafting": 5, "gearcrafting": 5})
         goal = UpgradeEquipmentGoal()
         target = goal._find_craftable_upgrade_target(state, gd)
-        assert target == ("wooden_shield", "shield_slot")
+        assert equip_value(gd.item_stats("fishing_net")) > equip_value(
+            gd.item_stats("wooden_shield"))
+        assert target == ("fishing_net", "weapon_slot")
 
     def test_craftable_tiebreak_prefers_ring_over_dagger_deterministically(self):
         """Regression: copper_dagger and copper_ring are both L1, craft_level 1.

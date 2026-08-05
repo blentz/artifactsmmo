@@ -135,21 +135,21 @@ def test_l10_gearcrafting_gap_combat_blocked_retargets_not_char_grind() -> None:
     The GUARANTEE (never GrindCharacterXP against the unwinnable) is the
     criterion; the specific re-target is pinned to the ACTUAL observed value.
 
-    RE-DERIVED 2026-07-08 (Task-3 pursuit_value bug-fix landing): under
-    combat-dominant `pursuit_value` the structural gather `wooden_shield`
-    (shield_slot, gathered from ash_wood via ash_tree — no combat) now
-    outranks the utility-potion branch, so the re-target shifted from
-    `GatherMaterials(sunflower)`/`small_health_potion` to
-    `GatherMaterials(ash_wood)`/`wooden_shield`. Still a plannable,
-    combat-free gather — the GUARANTEE (not GrindCharacterXP) is unchanged."""
+    RE-DERIVED 2026-08-04 (gear-ruler unification): unifying Rank onto
+    `armor_score` raised the utility-potion branch's gain ~100x (it rides
+    `equip_value`, unlike the structural branch's `pursuit_value`), so the
+    achievability factor now promotes the craftable `small_health_potion` over
+    the gather-first `wooden_shield` and the re-target moved BACK to
+    `GatherMaterials(sunflower)`/`small_health_potion` — where it sat before the
+    2026-07-08 pursuit_value landing. Still a plannable, combat-free gather; the
+    GUARANTEE (not GrindCharacterXP) is unchanged, which is the criterion."""
     report = _run(CRITERION_1_RAMP)
     # GUARANTEE: re-target to a reachable non-combat goal, never XP-thrash.
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "GatherMaterials(ash_wood, {ash_wood:10})"
-    assert [repr(a) for a in report.plan] == ["Gather(ash_tree)"]
+    assert repr(report.selected_goal) == "GatherMaterials(sunflower, {sunflower:3})"
     assert report.decision.chosen_root == ObtainItem(
-        code="wooden_shield", quantity=1, slot="shield_slot")
+        code="small_health_potion", quantity=1, slot="utility1_slot")
 
 
 def test_l10_gearcrafting_gap_combat_blocked_search_bounded() -> None:

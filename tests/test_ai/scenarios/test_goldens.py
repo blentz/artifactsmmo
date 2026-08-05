@@ -67,18 +67,19 @@ EXPECTATIONS: dict[str, Golden] = {
         goal_class="GatherMaterials(copper_ore", first_action="Gather"),
 
     # l10_copper_adequate: full copper set but shield_slot is empty.
-    # GEAR-FIRST re-derivation 2026-07-08 (Task-3 pursuit_value; user ruling):
-    # the empty shield_slot's wooden_shield is a STRUCTURAL candidate scored by
-    # combat-dominant pursuit_value (gain 8000), which outranks the empty
-    # utility slot's small_health_potion (utility, gain 61) — so chosen_root is
-    # ObtainItem(wooden_shield, shield_slot), not the potion (the flat-ranking
-    # empty-utility pick that used to win). wooden_shield isn't craftable-now,
-    # so the mapper resolves to GatherMaterials(ash_wood), first action
-    # Gather(ash_tree). Combat/gear outranks potion-stocking; potion still
-    # pursued once no structural upgrade remains.
+    # RE-DERIVED 2026-08-04 (gear-ruler unification): unifying Rank onto
+    # `armor_score` moved `_utility_candidates`' gain (which rides `equip_value`)
+    # from 61 to 6000, against `_structural_candidates`' unchanged pursuit_value
+    # gain of 8000 for wooden_shield. The shield still leads on raw gain, but the
+    # two are now within 1.34x, so the ACHIEVABILITY factor decides: the potion is
+    # craftable now (1) and the shield needs 10 ash_wood gathered (905/1534), so
+    # the weighted order is 6000 vs 4720 and chosen_root is
+    # ObtainItem(small_health_potion, utility1_slot). Craftable-now, so the goal
+    # is the UpgradeEquipment craft itself (withdraw the banked sunflower, craft,
+    # equip) rather than a gather descent.
     "l10_copper_adequate": Golden(
-        goal_class="GatherMaterials(ash_wood",
-        first_action="Gather(ash_tree"),
+        goal_class="UpgradeEquipment(small_health_potion",
+        first_action="Withdraw(sunflower"),
 
     # l12_taskgated_bag: GEAR-FIRST re-derivation 2026-07-08 (Task-3
     # pursuit_value; user ruling). The tree's chosen_root is

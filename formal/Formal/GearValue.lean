@@ -4,21 +4,36 @@ import Formal.PurposeRouting
 /-!
 # Formal.GearValue
 
-**The unified gear value ruler core: `combatRaw` + `rankValue`.**
+**ONE gear ruler. `Rank` is `Combat` against a canonical adversary.**
 
-The Python `ai/gear_value_core.py` extracts the shared combat-signal atom
-(`combat_raw`) and the monster-independent `Rank` ruler (`rank_value`) so the
-`equip_value` ranker and `strategic_value` share ONE computation. This module
-mirrors that core and pins it to the existing augmented-equip-value model:
+The Python `ai/gear_value.gear_value(stats, purpose)` answers "which piece is
+better" with a SINGLE algorithm — `weapon_score` for the weapon slot,
+`armor_score` for every other slot — and the purposes differ only in what the
+caller supplies. `Combat` is handed a real monster and a real wearer; `Rank` has
+neither, so `gear_value_core.rank_adversary()` supplies the catalog-median one.
+This module mirrors that:
 
-* `combatRaw` is the genuine-combat slice of `rawSum` (drops the efficiency
-  utility stats wisdom/prospecting/inventorySpace/haste).
-* `rawSum_decomp` proves `rawSum = combatRaw + (the four efficiency stats)` —
-  the decomposition that justifies the split.
-* `rankValue` recomposes them as `2 * (combatRaw + efficiency) + nonToolBonus`
-  and `rank_eq_equipValue` proves it is bit-identical to
-  `EquipValueAugmented.equipValue` (so the 7 `equip_value` callers are
-  unaffected when the Python `equip_value` delegates to `gear_value(_, Rank)`).
+* `combatValue` is the shared score atom (`WScore`/`AScore` dispatched on the
+  weapon flag);
+* `rankValue isWeapon item` is DEFINITIONALLY `combatValue` at the canonical
+  adversary — `rankValue_eq_combatValue_canonical` is `rfl`, which is the whole
+  content of "there is one algorithm";
+* the two live orderings that forced the unification (`mushmush_jacket` over
+  `adventurer_vest`, `fire_and_earth_amulet` over `life_amulet`) are discharged
+  as kernel-checked arithmetic on the canonical adversary.
+
+RETIRED: `rankValue` used to be a separate flat stat sum, `2 * (combatRaw +
+wisdom + prospecting + inventorySpace + haste) + nonToolBonus`, pinned
+bit-identical to `EquipValueAugmented.equipValue` by `rank_eq_equipValue`. Both
+that definition and that theorem are GONE, not weakened: the Python function
+they modelled (`gear_value_core.rank_value`) no longer exists, so keeping the
+theorem would have told a false story about live code. `rankValue_eq_-
+combatValue_canonical` is strictly stronger about the property that matters —
+Rank cannot disagree with Combat because it IS Combat.
+
+`combatRaw` and `rawSum_decomp` are UNCHANGED and stay here: `combatRaw` is not
+a gear ruler but `StrategicValue`'s single "how much combat is in this item"
+scalar, and `StrategicValue.combatRawOf` is defined as it.
 -/
 
 namespace Formal.GearValue
@@ -32,22 +47,11 @@ def combatRaw (s : RawStats) : Int :=
   s.attack + s.resistance + s.hpRestore + s.hpBonus + s.dmg + s.crit
     + s.lifesteal + s.combatBuff
 
-/-- The unified Rank ruler: `2 * (combatRaw + efficiency) + nonToolBonus`. -/
-def rankValue (s : RawStats) (isTool : Bool) : Int :=
-  2 * (combatRaw s + s.wisdom + s.prospecting + s.inventorySpace + s.haste)
-    + nonToolBonus isTool
-
 /-- `rawSum` splits into the combat signal plus the four efficiency stats. -/
 theorem rawSum_decomp (s : RawStats) :
     rawSum s = combatRaw s + s.wisdom + s.prospecting + s.inventorySpace + s.haste := by
   unfold rawSum combatRaw
   omega
-
-/-- The Rank ruler is bit-identical to the augmented `equipValue`. -/
-theorem rank_eq_equipValue (s : RawStats) (isTool : Bool) :
-    rankValue s isTool = equipValue s isTool := by
-  unfold rankValue equipValue
-  rw [rawSum_decomp]
 
 /-! ### Combat & Gather purposes: `gear_value(Combat/Gather)` unifies the
 per-monster scorers.
@@ -79,6 +83,71 @@ def combatValue (isWeapon : Bool) (item : Item)
   if isWeapon then WScore item monsterRes
   else AScore item monsterAtk monsterRes playerAtk
 
+/-! ### The canonical adversary: what makes `Rank` an INSTANCE of `Combat`.
+
+Mirrors `ai/gear_value_core.rank_adversary()`. Every constant is the MEDIAN of
+the pinned live catalog (`formal/sim/game_data_snapshot.json`, 58 monsters / 232
+per-element resistance entries), re-derived from that file by
+`tests/ai/test_gear_value_core.py` so a catalog shift fails the suite. -/
+
+/-- Median TOTAL per-element attack over the 58 catalog monsters (min 4, max
+1250), spread UNIFORMLY over the 4 elements: `135 / 4 = 33`.
+
+UNIFORM because a monster-independent ruler has no evidence for preferring one
+element. The SAME magnitude is used for the reference WEARER's attack, making
+the canonical duel SYMMETRIC — which is what fixes the defense-vs-offense
+exchange rate without inventing a constant: with both sides at `m` per element,
+`r`% resistance in every element stops `4*m*r/100` HP per turn and `r`% global
+damage adds `0.01*r*4*m`, exactly equal (`rank_prices_resistance_and_damage_-
+equally` below). -/
+def rankReferenceAttack : Int := 33
+
+/-- Median of the 232 catalog monster resistance entries (range -80..115). Zero
+is the empirical centre AND leaves `AScore`'s `max 0 (100 - monRes)` offense
+clamp at its maximum; a UNIFORM resistance is a pure scale factor on the offense
+sum, so this choice moves offense-vs-defense only, never a within-term order. -/
+def rankReferenceResistance : Int := 0
+
+/-- The canonical adversary's (and reference wearer's) per-element attack. -/
+def canonicalAttack : ElemStats := elements.map (fun e => (e, rankReferenceAttack))
+
+/-- The canonical adversary's per-element resistance. -/
+def canonicalResistance : ElemStats := elements.map (fun e => (e, rankReferenceResistance))
+
+/-- The LIVE `ai/gear_value.gear_value(stats, purpose)` — the one gear ruler, at
+whatever adversary the caller supplies. The weapon branch is the AUGMENTED
+`PurposeRouting.combatScore` (`2 * WScore + nonToolBonus`), because that is what
+the Python `weapon_score` returns and what carries the fishing_net tiebreak;
+`combatValue` above is its RAW atom, related by `combatScore_eq_combatValue`. -/
+def gearValue (isWeapon : Bool) (ci : Formal.PurposeRouting.CombatItem)
+    (monsterAtk monsterRes playerAtk : ElemStats) : Int :=
+  if isWeapon then Formal.PurposeRouting.combatScore monsterRes ci
+  else AScore ci.base monsterAtk monsterRes playerAtk
+
+/-- **The unified Rank ruler**: `gear_value(_, Rank)` IS `gear_value(_, Combat)`
+against the canonical adversary. Mirrors the Python `gear_value`'s Rank branch,
+which is literally `return gear_value(stats, rank_adversary())`. -/
+def rankValue (isWeapon : Bool) (ci : Formal.PurposeRouting.CombatItem) : Int :=
+  gearValue isWeapon ci canonicalAttack canonicalResistance canonicalAttack
+
+/-- **ONE ALGORITHM** — the load-bearing statement of this whole unification:
+Rank is not a second formula that has to be kept in agreement with Combat, it is
+Combat with a particular adversary substituted, by definition. -/
+theorem rankValue_eq_gearValue_canonical (isWeapon : Bool)
+    (ci : Formal.PurposeRouting.CombatItem) :
+    rankValue isWeapon ci
+      = gearValue isWeapon ci canonicalAttack canonicalResistance canonicalAttack :=
+  rfl
+
+/-- The armor branch of `gearValue` is exactly the raw `combatValue` atom the
+picker optimality theorems are stated on, so nothing is lost by the augmentation
+living only on the weapon side. -/
+theorem gearValue_armor_eq_combatValue (ci : Formal.PurposeRouting.CombatItem)
+    (monsterAtk monsterRes playerAtk : ElemStats) :
+    gearValue false ci monsterAtk monsterRes playerAtk
+      = combatValue false ci.base monsterAtk monsterRes playerAtk :=
+  rfl
+
 /-- The `gear_value(Gather)` score atom: the signed per-skill effect the gather
 picker minimizes (more negative = better). Mirrors `PurposeRouting.gatherScore`. -/
 def gatherValue (skillEffect : Item → Int) (item : Item) : Int :=
@@ -109,6 +178,109 @@ theorem combatValue_armor_nonneg (item : Item)
   unfold combatValue
   exact Formal.GearPolicy.armor_score_nonneg item monsterAtk monsterRes playerAtk
     hAtk hRes hUtil hPAtk hDmg hDmgElem hCrit
+
+/-- Every value the canonical adversary carries is nonneg, so every `elemGet`
+into it is — the one fact the Rank nonneg corollaries need about the adversary. -/
+private theorem elemGet_nonneg_of_all {s : ElemStats} (h : ∀ kv ∈ s, 0 ≤ kv.2)
+    (e : Int) : 0 ≤ elemGet s e := by
+  unfold elemGet
+  cases hf : s.find? (fun kv => kv.1 == e) with
+  | none => exact Int.le_refl 0
+  | some kv => exact h kv (List.mem_of_find?_eq_some hf)
+
+theorem canonicalAttack_nonneg (e : Int) : 0 ≤ elemGet canonicalAttack e :=
+  elemGet_nonneg_of_all
+    (by unfold canonicalAttack rankReferenceAttack elements; decide) e
+
+/-- Rank inherits `AScore`'s nonnegativity on the armor branch: the canonical
+adversary's attack and resistance are nonneg, so the existing
+`combatValue_armor_nonneg` discharges it with no new hypotheses about the
+adversary. -/
+theorem rankValue_armor_nonneg (ci : Formal.PurposeRouting.CombatItem)
+    (hRes : ∀ e ∈ elements, 0 ≤ elemGet ci.base.resistance e)
+    (hUtil : 0 ≤ ci.base.flatUtil)
+    (hDmg : 0 ≤ ci.base.dmg)
+    (hDmgElem : ∀ e ∈ elements, 0 ≤ elemGet ci.base.dmgElem e)
+    (hCrit : 0 ≤ ci.base.crit) :
+    0 ≤ rankValue false ci :=
+  combatValue_armor_nonneg ci.base _ _ _ (fun e _ => canonicalAttack_nonneg e) hRes
+    hUtil (fun e _ => canonicalAttack_nonneg e) hDmg hDmgElem hCrit
+
+/-- Rank inherits `WScore`'s clamp nonnegativity on the weapon branch. -/
+theorem rankValue_weapon_nonneg (ci : Formal.PurposeRouting.CombatItem)
+    (hatk : ∀ e ∈ elements, 0 ≤ elemGet ci.base.attack e) (hcrit : 0 ≤ ci.base.crit) :
+    0 ≤ rankValue true ci := by
+  have h := combatValue_weapon_nonneg ci.base canonicalAttack canonicalResistance
+    canonicalAttack hatk hcrit
+  unfold rankValue gearValue Formal.PurposeRouting.combatScore
+    Formal.PurposeRouting.nonToolBonus
+  unfold combatValue at h
+  simp only [if_true] at h ⊢
+  cases ci.isTool <;> simp <;> omega
+
+/-! #### The two live orderings the unification was required to fix.
+
+Both are stated on `rankValue`, i.e. on the MONSTER-BLIND purpose — that is the
+side that was still wrong. Stats are verbatim from `/v3/items`; `flatUtil` is the
+piece's `hp_restore + hp_bonus + wisdom + prospecting + inventorySpace + haste +
+lifesteal + combatBuff` sum, exactly as the Python adapter computes it. -/
+
+/-- `mushmush_jacket`: hp_bonus 60 + wisdom 10 = flatUtil 70, dmg 10, crit 3. -/
+def mushmushJacket : Formal.PurposeRouting.CombatItem :=
+  { isTool := false, base :=
+  { code := 0, level := 10, attack := [], resistance := [], crit := 3, fits := true,
+    flatUtil := 70, dmg := 10 } }
+
+/-- `adventurer_vest`: hp_bonus 60 + wisdom 20 = flatUtil 80, dmg 6, crit 0. -/
+def adventurerVest : Formal.PurposeRouting.CombatItem :=
+  { isTool := false, base :=
+  { code := 1, level := 10, attack := [], resistance := [], crit := 0, fits := true,
+    flatUtil := 80, dmg := 6 } }
+
+/-- `life_amulet`: hp_bonus 30 = flatUtil 30, no damage percentages. -/
+def lifeAmulet : Formal.PurposeRouting.CombatItem :=
+  { isTool := false, base :=
+  { code := 2, level := 15, attack := [], resistance := [], crit := 0, fits := true,
+    flatUtil := 30 } }
+
+/-- `fire_and_earth_amulet`: hp_bonus 20 = flatUtil 20, +5% fire and +5% earth. -/
+def fireAndEarthAmulet : Formal.PurposeRouting.CombatItem :=
+  { isTool := false, base :=
+  { code := 3, level := 20, attack := [], resistance := [], crit := 0, fits := true,
+    flatUtil := 20, dmgElem := [(0, 5), (1, 5)] } }
+
+/-- **The owner's original complaint, closed on the Rank side.** The retired flat
+sum scored the vest 173 to the jacket's 167 because it weighted 10 extra wisdom
+the same as 4 points of global damage plus 3 points of crit. `AScore` had said
+otherwise since 170ed8d8; Rank now says it too, because it IS `AScore`. -/
+theorem rank_prefers_mushmush_jacket_over_adventurer_vest :
+    rankValue false adventurerVest < rankValue false mushmushJacket := by
+  decide +kernel
+
+/-- **The 2026-08-04 equip loop, closed on the Rank side.** The acquisition path
+scored `life_amulet` above `fire_and_earth_amulet` and equipped it; the combat
+picker scored them 48000 to 6000 the other way and equipped it back, one API
+request and one cooldown per leg, forever. Rank now agrees with the picker's
+direction. -/
+theorem rank_prefers_fire_and_earth_amulet_over_life_amulet :
+    rankValue false lifeAmulet < rankValue false fireAndEarthAmulet := by
+  decide +kernel
+
+/-- The symmetric-duel calibration claim, checked: at the canonical adversary a
+piece with `r`% resistance in EVERY element and a piece with `r`% GLOBAL damage
+score identically. This is what makes the reference magnitude a pure
+combat-vs-flat-utility knob rather than a hidden defense-vs-offense thumb. -/
+theorem rank_prices_resistance_and_damage_equally (r : Int) :
+    rankValue false ⟨{ code := 0, level := 0, attack := [], crit := 0, fits := true,
+                       resistance := elements.map (fun e => (e, r)) }, false⟩
+      = rankValue false ⟨{ code := 0, level := 0, attack := [], resistance := [],
+                           crit := 0, fits := true, dmg := r }, false⟩ := by
+  have hmax : max (0 : Int) 100 = 100 := by decide
+  simp [rankValue, gearValue, AScore, aTerm, oTerm, wTerm, elements, elemGet,
+        canonicalAttack, canonicalResistance, rankReferenceAttack,
+        rankReferenceResistance, hmax]
+  omega
+
 
 /-- `pickslot_score_optimal` restated on the `gear_value(Combat)` weapon form: the
 weapon-slot argmax dominates every feasible candidate's combat value. The combat
@@ -171,8 +343,8 @@ value objects. `combat` carries the monster's attack/resistance, the FIGHTER's o
 per-element attack (which `AScore` needs to price a piece's damage-%), and the
 slot's weapon flag; `rank` carries the monster-independent per-item ruler (the genuine
 `rankValue ∘ stats`, modeled as a per-item integer because the picker is
-parametric in ANY per-item benefit — `rankValue`'s bit-identity to `equipValue`
-is pinned separately by `rank_eq_equipValue`); `gather` carries the skill effect
+parametric in ANY per-item benefit — `rankValue`'s identity to the canonical `combatValue`
+is pinned separately by `rankValue_eq_combatValue_canonical`); `gather` carries the skill effect
 the gather picker minimizes. -/
 inductive Purpose where
   | combat (monsterAtk monsterRes playerAtk : ElemStats) (isWeapon : Bool)

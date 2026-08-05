@@ -1,7 +1,13 @@
 """ItemStats adapter + dispatch for the unified gear value ruler."""
 
 from artifactsmmo_cli.ai.equipment.scoring import armor_score, gather_score, weapon_score
-from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank, combat_raw, rank_value
+from artifactsmmo_cli.ai.gear_value_core import (
+    Combat,
+    Gather,
+    Rank,
+    combat_raw,
+    rank_adversary,
+)
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 
 
@@ -38,8 +44,25 @@ def combat_raw_of(stats: ItemStats) -> int:
 def gear_value(stats: ItemStats, purpose: object) -> int:
     """Unified gear value over a purpose (Rank / Combat / Gather).
 
-    LAYERING DIRECTION: gear_value -> scoring. The Combat/Gather branches
-    DELEGATE to the proven per-monster scorers in ``equipment/scoring.py``
+    ONE ALGORITHM. Rank and Combat are the SAME computation — the weapon slot
+    maximizes `weapon_score` against the adversary's resistance, every other
+    slot maximizes `armor_score` against the adversary's attack, resistance and
+    the wearer's own attack. They differ ONLY in what the caller supplies:
+    Combat is handed the monster it is about to fight and the character that
+    will fight it; Rank has neither, so it substitutes the catalog-median
+    adversary (`gear_value_core.rank_adversary`). The Rank branch below is
+    literally a re-entry into the Combat branch.
+
+    This replaced a separate flat stat sum (`rank_value` = `2 * (combat_raw +
+    wisdom + prospecting + inventory_space + haste) + nonToolBonus`). That sum
+    weighted `wisdom` 1:1 against every combat stat and could not see the
+    monster-relative shape of `dmg` / `dmg_elements` / `critical_strike` at all,
+    so it disagreed with `armor_score` about which piece was better — the
+    2026-08-04 amulet equip loop and the `adventurer_vest` > `mushmush_jacket`
+    inversion were the same defect seen from two call sites.
+
+    LAYERING DIRECTION: gear_value -> scoring. All three branches DELEGATE to
+    the proven scorers in ``equipment/scoring.py``
     (`weapon_score`/`armor_score`/`gather_score`). That module must NOT import
     this one (it would cycle). ``pick_loadout(Gather(...))`` in
     ``equipment/loadout_picker.py`` selects gear using the `*_score` functions
@@ -47,8 +70,7 @@ def gear_value(stats: ItemStats, purpose: object) -> int:
     framing is realized by gear_value calling them, one direction only.
     """
     if purpose is Rank or isinstance(purpose, Rank):
-        return rank_value(combat_raw_of(stats), stats.wisdom, stats.prospecting,
-                          stats.inventory_space, stats.haste, stats.subtype)
+        return gear_value(stats, rank_adversary())
     if isinstance(purpose, Combat):
         # gear_value(Combat) mirrors pick_loadout's per-slot scorer: the weapon
         # slot maximizes weapon_score against the monster's resistance; every

@@ -61,15 +61,16 @@ def _utility_item(prospecting: int) -> ItemStats:
 class TestCombatCalibration:
     def test_combat_profile_ranks_weapon_over_prospecting_artifact(self):
         """THE bug-gone pin: under COMBAT, a real combat item strictly
-        outranks a high-prospecting utility item (flat equip_value ranked
-        the artifact higher — perfect_pearl over a weapon)."""
+        outranks a high-prospecting utility item (the retired flat equip_value
+        ranked the artifact higher — perfect_pearl over a weapon)."""
         weapon = _combat_item(30)
         artifact = _utility_item(201)
         assert score_for_profile(weapon, ProfileKind.COMBAT) > \
             score_for_profile(artifact, ProfileKind.COMBAT)
-        # and equip_value (the OLD ruler) gets it wrong — proving the fix
-        # is real, not vacuous:
-        assert equip_value(artifact) > equip_value(weapon)
+        # `equip_value` reaches the same verdict now that Rank is
+        # `weapon_score`/`armor_score` against the canonical adversary rather
+        # than a flat 1:1 stat sum — the two rulers no longer contradict.
+        assert equip_value(weapon) > equip_value(artifact)
 
     def test_combat_profile_orders_combat_items_by_combat_raw(self):
         lo, hi = _combat_item(10), _combat_item(25)

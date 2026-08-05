@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/equipment/scoring.py (sha256: 639f257fad9a9d118dd52baa898ae907cfd001ab08da53bf2979966ff78ddf0c) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/equipment/scoring.py (sha256: 1689161ffd63d17b3928bffa99b7764caf3738c59908cea79bfdf3e0a1885e4e) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.EquipmentScoring
@@ -33,7 +33,7 @@ def gather_score_pure (skill_effects : List (String × Int)) (skill : String) :
   (_dictGetD skill_effects skill 0)
 
 /-- Extracted from `armor_score_pure` (line 67). -/
-def armor_score_pure (elements : List String) (resistance : List (String × Int)) (monster_attack : List (String × Int)) (monster_resistance : List (String × Int)) (player_attack : List (String × Int)) (dmg : Int) (dmg_elements : List (String × Int)) (critical_strike : Int) (hp_bonus : Int) (wisdom : Int) (prospecting : Int) (inventory_space : Int) (haste : Int) (lifesteal : Int) (combat_buff : Int) :
+def armor_score_pure (elements : List String) (resistance : List (String × Int)) (monster_attack : List (String × Int)) (monster_resistance : List (String × Int)) (player_attack : List (String × Int)) (dmg : Int) (dmg_elements : List (String × Int)) (critical_strike : Int) (hp_restore : Int) (hp_bonus : Int) (wisdom : Int) (prospecting : Int) (inventory_space : Int) (haste : Int) (lifesteal : Int) (combat_buff : Int) :
     Int :=
   let defense := 0
   let defense := List.foldl
@@ -47,7 +47,7 @@ def armor_score_pure (elements : List String) (resistance : List (String × Int)
       let offense := (offense + (((_dictGetD player_attack elem 0) * (max 0 (100 - (_dictGetD monster_resistance elem 0)))) * ((2 * (dmg + (_dictGetD dmg_elements elem 0))) + critical_strike)))
       offense)
     offense elements
-  let flat_utility := ((((((hp_bonus + wisdom) + prospecting) + inventory_space) + haste) + lifesteal) + combat_buff)
+  let flat_utility := (((((((hp_restore + hp_bonus) + wisdom) + prospecting) + inventory_space) + haste) + lifesteal) + combat_buff)
   (((200 * defense) + offense) + (200 * flat_utility))
 
 end Extracted.EquipmentScoring

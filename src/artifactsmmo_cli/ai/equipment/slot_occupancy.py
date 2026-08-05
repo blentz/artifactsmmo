@@ -43,13 +43,15 @@ from artifactsmmo_cli.ai.game_data import ItemStats
 
 
 def _flat_utility(stats: ItemStats) -> int:
-    """The monster-INDEPENDENT stat block the scorers carry unconverted.
+    """The monster-INDEPENDENT stat block the scorers carry unconverted —
+    EXACTLY `armor_score`'s own `flat_utility` term, `hp_restore` included.
 
-    `armor_score`'s own `flat_utility` term plus `hp_restore`, which no scorer
-    reads. Including it can only make `may_displace` STRICTER, never wronger:
-    dominance is a sufficient condition, so a superset of stats keeps the
-    fixed-point argument sound while also stopping the acquisition path from
-    trading away a consumable's restore value behind the picker's back.
+    `hp_restore` used to be listed here as a deliberate superset ("plus
+    hp_restore, which no scorer reads"), because `armor_score` omitted it while
+    the acquisition path's ruler counted it. Unifying Rank onto `armor_score`
+    closed that gap at the source: `hp_restore` is now IN `flat_utility`, so
+    this block is the scorer's block rather than a hand-maintained superset of
+    it, and the two can no longer drift apart.
     """
     return (stats.hp_bonus + stats.wisdom + stats.prospecting
             + stats.inventory_space + stats.haste + stats.lifesteal
