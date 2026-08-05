@@ -36,6 +36,19 @@ the same midpoint rule the retired 10000 satisfied on the retired scale
 witnesses against the catalog bundle, so a scale change fails the suite instead
 of silently reclassifying every recyclable.
 
+RE-DERIVED AND UNCHANGED when `equipment/scoring.RULER_SCALE` moved onto the
+armor terms. This threshold reads `pursuit_value`, whose COMBAT term is
+`gear_components(stats, Rank)[0]`, and all four calibration witnesses are
+WEAPONS — whose combat term that change left bit-identical (the factor was
+already on the weapon side; what moved was the ARMOR side, up to meet it). So
+the geometric mean is the same number it was: √(200.0M × 328.0M) = 256.1M.
+
+What DID move is armor, by design: 55 armor items (level-35/40 shields, books
+and amulets among them) now sit above the floor where they used to sit below it,
+because they were being measured on a ruler that priced them at HALF a weapon's
+magnitude for the same real swing. Classifying a level-40 shield as junk
+relative to a level-6 staff was the asymmetry, not the floor.
+
 Tunable — a proxy for 'current-tier', not load-bearing for correctness; the
 null-cycle guard (GatherMaterialsGoal.exclude_recycle) protects the rung
 independently."""

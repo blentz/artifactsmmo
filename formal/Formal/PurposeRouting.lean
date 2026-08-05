@@ -58,10 +58,11 @@ deriving Repr, DecidableEq
 
 /-! ## Combat-purpose score: WScore plus non-tool tiebreaker.
 
-The augmented integer score is `2 * WScore + nonToolBonus`. The factor of
-2 keeps every strict `WScore` inequality strict in the augmented score
-(adding `0` or `1` to one side cannot flip a `≥ 2` gap). On WScore ties
-the `nonToolBonus` (1 for non-tool, 0 for tool) decides. -/
+The weapon slot's COMBAT term is `rulerScale * WScore + nonToolBonus`. The
+`rulerScale` factor — the SAME one every other ruler term carries, see
+`EquipmentScoring.rulerScale` — keeps every strict `WScore` inequality strict in
+the augmented score (adding `0` or `1` to one side cannot flip a `≥ 2` gap). On
+WScore ties the `nonToolBonus` (1 for non-tool, 0 for tool) decides. -/
 
 def nonToolBonus (ci : CombatItem) : Int := if ci.isTool then 0 else 1
 
@@ -79,9 +80,18 @@ theorem nonToolBonus_le_one (ci : CombatItem) : nonToolBonus ci ≤ 1 := by
   unfold nonToolBonus
   split <;> decide
 
-/-- Combat-purpose score: `2 * WScore + nonToolBonus`. -/
+/-- **THE TIE-BREAK IS SUB-QUANTUM.** The bonus is strictly smaller than the
+ruler's quantum, which is the whole reason it can decide a tie without ever
+disturbing a genuine ordering: every ruler term is a multiple of `rulerScale`,
+so two distinct terms differ by at least `rulerScale`, and the bonus moves a
+score by at most `rulerScale - 1`. -/
+theorem nonToolBonus_lt_rulerScale (ci : CombatItem) : nonToolBonus ci < rulerScale := by
+  unfold nonToolBonus rulerScale
+  split <;> decide
+
+/-- The weapon slot's COMBAT term: `rulerScale * WScore + nonToolBonus`. -/
 def combatScore (monsterRes : ElemStats) (ci : CombatItem) : Int :=
-  2 * WScore ci.base monsterRes + nonToolBonus ci
+  rulerScale * WScore ci.base monsterRes + nonToolBonus ci
 
 /-! ### The two key combatScore theorems. -/
 
@@ -92,7 +102,7 @@ theorem combatScore_strict_of_strict_wscore
     (a b : CombatItem) (monsterRes : ElemStats)
     (hStrict : WScore a.base monsterRes < WScore b.base monsterRes) :
     combatScore monsterRes a < combatScore monsterRes b := by
-  unfold combatScore
+  unfold combatScore rulerScale
   have hAb : 0 ≤ nonToolBonus a := nonToolBonus_nonneg a
   have hAle : nonToolBonus a ≤ 1 := nonToolBonus_le_one a
   have hBb : 0 ≤ nonToolBonus b := nonToolBonus_nonneg b
@@ -111,10 +121,111 @@ theorem combatScore_tiebreaks_nontool_over_tool
     (hNonTool : nonTool.isTool = false)
     (hTie     : WScore tool.base monsterRes = WScore nonTool.base monsterRes) :
     combatScore monsterRes tool < combatScore monsterRes nonTool := by
-  unfold combatScore
+  unfold combatScore rulerScale
   rw [hTie]
   have ht := nonToolBonus_tool tool hTool
   have hn := nonToolBonus_nontool nonTool hNonTool
+  omega
+
+/-! ## The weapon slot's RULER value: its combat term plus the shared efficiency
+term.
+
+`combatScore` above is only HALF the weapon slot's ruler value, exactly as
+`EquipmentScoring.ACombat` is only half an armor slot's. The other half is
+`EquipmentScoring.AEfficiency` — the SAME function, on the SAME four stats, at
+the SAME price — which is what "one ruler" means once a weapon can carry wisdom
+or prospecting. Before this, `weapon_score` had no flat-utility block at all and
+a weapon's efficiency stats reached no purpose: the four voidstone tools carry
+100 prospecting each and obsidian_battleaxe carries `inventory_space = -25`, and
+none of it was priced.
+
+Mirrors the Python `equipment/scoring.weapon_score_pure`. -/
+
+/-- The weapon slot's ruler value: combat term + shared efficiency term. -/
+def weaponScore (monsterRes : ElemStats) (ci : CombatItem)
+    (wisdom prospecting inventorySpace haste : Int) : Int :=
+  combatScore monsterRes ci + AEfficiency wisdom prospecting inventorySpace haste
+
+/-- **THE PARTITION, on the weapon slot.** The same statement `AScore_decomp`
+makes for armor: the ruler value IS the sum of the two terms the economics layer
+weighs, so the acquisition score can neither omit a stat the ruler has nor count
+one twice. Definitional. -/
+theorem weaponScore_decomp (monsterRes : ElemStats) (ci : CombatItem)
+    (wisdom prospecting inventorySpace haste : Int) :
+    weaponScore monsterRes ci wisdom prospecting inventorySpace haste
+      = combatScore monsterRes ci
+        + AEfficiency wisdom prospecting inventorySpace haste := rfl
+
+/-- **A STAT COSTS THE SAME IN EVERY SLOT.** What the four efficiency stats
+contribute to a WEAPON's ruler value is literally `AEfficiency` — the term the
+armor branch adds — so no stat is priced by which slot happens to carry it. -/
+theorem weaponScore_efficiency_eq_AEfficiency (monsterRes : ElemStats) (ci : CombatItem)
+    (wisdom prospecting inventorySpace haste : Int) :
+    weaponScore monsterRes ci wisdom prospecting inventorySpace haste
+        - combatScore monsterRes ci
+      = AEfficiency wisdom prospecting inventorySpace haste := by
+  unfold weaponScore
+  omega
+
+/-- **CROSS-SLOT COMMENSURABILITY.** A weapon whose raw per-turn swing is `d`
+natural units and a piece of armor whose defense stops the same `d` natural units
+score the SAME ruler combat term, up to the sub-quantum non-tool tie-break. This
+is the property the `rulerScale` factor was moved onto the armor terms to buy:
+before, the armor side was `1 *` its terms while the weapon side was `2 *`, so
+the identical real effect scored half as much on armor.
+
+NOT VACUOUS: `hoff` holds for any armor with `dmg = 0`, `dmgElem = []` and
+`crit = 0` (`oTerm _ _ 0 0 = 0`), and `hw`/`ha` are satisfiable simultaneously —
+e.g. `d = 0` for a stat-less pair, or a 5-attack weapon against zero resistance
+(`WScore = 100000`) against armor whose `Σ monAtk * res` is `500`. -/
+theorem ruler_commensurate (ci : CombatItem) (item : Item)
+    (monsterAtk monsterRes playerAtk : ElemStats) (d : Int)
+    (hw : WScore ci.base monsterRes = d)
+    (hoff : (elements.map (fun e => oTerm (elemGet playerAtk e) (elemGet monsterRes e)
+              (item.dmg + elemGet item.dmgElem e) item.crit)).sum = 0)
+    (ha : 200 * (elements.map (fun e => aTerm (elemGet monsterAtk e)
+            (elemGet item.resistance e))).sum = d) :
+    combatScore monsterRes ci - nonToolBonus ci
+      = ACombat item monsterAtk monsterRes playerAtk 0 := by
+  rw [ACombat_defense_only item monsterAtk monsterRes playerAtk hoff, ha]
+  unfold combatScore
+  rw [hw]
+  omega
+
+/-- **The fishing_net invariant on the FULL weapon ruler value.** Two weapons
+carrying the same efficiency stats — which is the historical pair exactly
+(fishing_net and wooden_stick carry none) — keep the strict `WScore` ordering in
+their full ruler values. The efficiency hypothesis is what the ruler genuinely
+says: a weapon that is worse at fighting but carries 100 prospecting IS worth
+more overall, on the same terms an artifact is, and pursuing it over a better
+weapon is prevented one layer up by
+`Formal.StrategicValue.pursuit_combat_dominates`, which reads `combatScore`
+alone. -/
+theorem weaponScore_strict_of_strict_wscore
+    (a b : CombatItem) (monsterRes : ElemStats)
+    (wisdom prospecting inventorySpace haste : Int)
+    (hStrict : WScore a.base monsterRes < WScore b.base monsterRes) :
+    weaponScore monsterRes a wisdom prospecting inventorySpace haste
+      < weaponScore monsterRes b wisdom prospecting inventorySpace haste := by
+  unfold weaponScore
+  have h := combatScore_strict_of_strict_wscore a b monsterRes hStrict
+  omega
+
+/-- **Tie-break to non-tool on the FULL weapon ruler value.** On a `WScore` tie
+with equal efficiency stats the real weapon strictly outranks the tool — the
+2026-06-06 fishing_net-over-wooden_stick pick, closed on the score the picker
+actually reads. -/
+theorem weaponScore_tiebreaks_nontool_over_tool
+    (tool nonTool : CombatItem) (monsterRes : ElemStats)
+    (wisdom prospecting inventorySpace haste : Int)
+    (hTool    : tool.isTool    = true)
+    (hNonTool : nonTool.isTool = false)
+    (hTie     : WScore tool.base monsterRes = WScore nonTool.base monsterRes) :
+    weaponScore monsterRes tool wisdom prospecting inventorySpace haste
+      < weaponScore monsterRes nonTool wisdom prospecting inventorySpace haste := by
+  unfold weaponScore
+  have h := combatScore_tiebreaks_nontool_over_tool tool nonTool monsterRes
+    hTool hNonTool hTie
   omega
 
 /-! ## Gather purpose: skill-effect minimization.

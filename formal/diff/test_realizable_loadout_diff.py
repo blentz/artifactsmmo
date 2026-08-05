@@ -36,6 +36,7 @@ from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.realizable_loadout import is_realizable, ownership
 from artifactsmmo_cli.ai.equipment.scoring import armor_score, weapon_score
 from artifactsmmo_cli.ai.game_data import ItemStats
+from artifactsmmo_cli.ai.gear_value import gear_value
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -389,14 +390,15 @@ def test_pick_loadout_no_downgrade_or_stolen(item_types, item_levels, item_atks,
         chosen_stats = gd.item_stats(chosen)
         if current_stats is None or chosen_stats is None:
             continue
-        if slot == "weapon_slot":
-            cur_score = weapon_score(current_stats, monster_res)
-            new_score = weapon_score(chosen_stats, monster_res)
-        else:
-            cur_score = armor_score(current_stats, monster_atk, monster_res,
-                                    dict(state.attack))
-            new_score = armor_score(chosen_stats, monster_atk, monster_res,
-                                    dict(state.attack))
+        # Score BOTH with the ruler's own dispatch — `gear_value(_, Combat)`,
+        # the exact benefit `pick_loadout` maximizes. Dispatching on the SLOT
+        # instead was wrong for a fixture that can seat any code in any slot: a
+        # stat-less RING sitting in `weapon_slot` was scored with `weapon_score`
+        # (= the non-tool +1) while the picker scored it with `armor_score`
+        # (= 0), so a genuine 1 > 0 improvement read as a 1 > 1 tie.
+        purpose = Combat(monster_atk, monster_res, dict(state.attack))
+        cur_score = gear_value(current_stats, purpose)
+        new_score = gear_value(chosen_stats, purpose)
         assert new_score > cur_score, {
             "slot": slot, "current": current, "chosen": chosen,
             "cur_score": cur_score, "new_score": new_score,

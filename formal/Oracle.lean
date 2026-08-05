@@ -257,16 +257,22 @@ def itemFromBlock (b : Nat → Int) : Item :=
     full ITEM, because Rank is no longer a stat sum: it is `combatValue` against
     the canonical adversary, so it reads exactly what `WScore`/`AScore` read.
 
-    args layout (20 ints): isWeapon(0/1), isTool(0/1), then the standard 18-int
+    args layout (24 ints): isWeapon(0/1), isTool(0/1), the standard 18-int
     item block `[code, level, fits, atk0..3, res0..3, crit, flatUtil, dmg,
-    dmgElem0..3]`. Pins the live `gear_value(stats, Rank)` — including the
-    canonical adversary's own constants, since dropping or changing them moves
-    every armor value, and the weapon branch's `nonToolBonus`. -/
+    dmgElem0..3]`, then wisdom, prospecting, inventorySpace, haste. The four
+    efficiency stats are carried separately because the model `Item` lumps every
+    monster-independent stat into `flatUtil`; the WEAPON branch needs them
+    individually now that it prices them (they are inert on the armor branch,
+    where `flatUtil` already carries them). Pins the live
+    `gear_value(stats, Rank)` — including the canonical adversary's own
+    constants, since dropping or changing them moves every armor value, and the
+    weapon branch's `nonToolBonus`. -/
 def runRankValue (args : Array Json) : Json :=
   let isWeapon := intArg args 0 != 0
   let ci : Formal.PurposeRouting.CombatItem :=
     ⟨itemFromBlock (fun i => intArg args (i + 2)), intArg args 1 != 0⟩
-  Json.mkObj [("value", Json.num (Formal.GearValue.rankValue isWeapon ci))]
+  Json.mkObj [("value", Json.num (Formal.GearValue.rankValue isWeapon ci
+    (intArg args 20) (intArg args 21) (intArg args 22) (intArg args 23)))]
 
 /-- Evaluate the HAND `Formal.GearValue.rankCombat` and `rankEfficiency` — the
     two terms the ONE gear ruler is the SUM of, and the pair the ECONOMICS layer
@@ -283,7 +289,7 @@ def runRankComponents (args : Array Json) : Json :=
     ⟨itemFromBlock (fun i => intArg args (i + 2)), intArg args 1 != 0⟩
   Json.mkObj
     [("combat", Json.num (Formal.GearValue.rankCombat isWeapon ci (intArg args 20))),
-     ("efficiency", Json.num (Formal.GearValue.rankEfficiency isWeapon
+     ("efficiency", Json.num (Formal.GearValue.rankEfficiency
        (intArg args 21) (intArg args 22) (intArg args 23) (intArg args 24)))]
 
 /-- Build an `ElemStats` (monster atk OR res) from 4 ints at offset `o`. -/
@@ -349,14 +355,16 @@ args layout:
 * 15:       currentPresent (0/1)
 * 16..:     current EXTENDED block, then candidate EXTENDED blocks
 
-Each EXTENDED block is 21 ints for EVERY purpose: the 18-int item block +
-skillEffect (block+18) + isUtilityFill (block+19) + isTool (block+20). Rank used
-to need 6 EXTRA out-of-block ints (`[combat_raw, wisdom, prospecting,
+Each EXTENDED block is 25 ints for EVERY purpose: the 18-int item block +
+skillEffect (block+18) + isUtilityFill (block+19) + isTool (block+20) + the four
+efficiency stats wisdom / prospecting / inventorySpace / haste (block+21..24).
+Rank used to need 6 EXTRA out-of-block ints (`[combat_raw, wisdom, prospecting,
 inventory_space, haste, is_tool]`, stride 26) because it was a separate stat sum
 whose breakdown the `Item` record aggregates away. It is now `gearValue` at the
-canonical adversary, so it reads the SAME item block the Combat purpose reads and
-needs only the tool flag `PurposeRouting.CombatItem` already carries — ONE stride
-for all three purposes, which is itself evidence of the unification.
+canonical adversary, so it reads the SAME item block the Combat purpose reads;
+the four efficiency stats came back only because the model `Item` lumps them into
+`flatUtil` and the WEAPON branch now prices them individually — ONE stride for
+all three purposes still, which is the evidence of the unification.
 
 The skill effect is carried per item (the 14th int) and reassembled into the
 abstract `skillEffect : Item → Int` keyed by item code — binding the abstract
@@ -381,7 +389,7 @@ def runLoadoutPicker (args : Array Json) : Json :=
   let curPresent := intArg args 15 != 0
   -- ONE stride for every purpose: Rank reads the same item block Combat does,
   -- because Rank IS gear_value at the canonical adversary.
-  let stride := 21
+  let stride := 25
   -- Build an Item from a block at `base`: the 18-int item block, then the
   -- skillEffect (base+18, read separately into the pair), then isUtilityFill
   -- (base+19). `itemFromBlock` sets the default `isUtilityFill := false`; the
@@ -394,6 +402,8 @@ def runLoadoutPicker (args : Array Json) : Json :=
   -- item block itself.
   let rankAt := fun (base : Nat) =>
     Formal.GearValue.rankValue isWeapon ⟨mkItem base, intArg args (base + 20) != 0⟩
+      (intArg args (base + 21)) (intArg args (base + 22))
+      (intArg args (base + 23)) (intArg args (base + 24))
   let curBase := 16
   let curPair : Option (Item × Int) :=
     if curPresent then some (mkItem curBase, intArg args (curBase + 18))

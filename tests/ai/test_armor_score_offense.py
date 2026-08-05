@@ -18,7 +18,7 @@ two verdicts on the monster alone, which is what being in one unit buys.
 """
 
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
-from artifactsmmo_cli.ai.equipment.scoring import armor_score
+from artifactsmmo_cli.ai.equipment.scoring import RULER_SCALE, armor_score
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -99,9 +99,9 @@ def test_mushmush_jacket_beats_adventurer_vest_against_mushmush() -> None:
                          _FOREST_WHIP_ATTACK)
     vest = armor_score(_ADVENTURER_VEST, _MUSHMUSH_ATK, _MUSHMUSH_RES,
                        _FOREST_WHIP_ATTACK)
-    # 40 * 130 * 23 + 200*(60+10) vs 40 * 130 * 12 + 200*(60+20)
-    assert jacket == 133600, jacket
-    assert vest == 78400, vest
+    # RULER_SCALE * (40*130*23 + 200*(60+10)) vs RULER_SCALE * (40*130*12 + 200*(60+20))
+    assert jacket == RULER_SCALE * 133600, jacket
+    assert vest == RULER_SCALE * 78400, vest
     assert jacket > vest
 
     gd = _gd(_MUSHMUSH_JACKET, _ADVENTURER_VEST)
@@ -133,8 +133,10 @@ def test_defensive_piece_wins_when_the_monster_hits_hard() -> None:
                         _FOREST_WHIP_ATTACK)
     jacket = armor_score(_MUSHMUSH_JACKET, _ROSENBLOOD_ATK, _ROSENBLOOD_RES,
                          _FOREST_WHIP_ATTACK)
-    assert piggy == 836000, piggy   # 200*400*10 + 0 + 200*(150+30)
-    assert jacket == 96800, jacket  # 0 + 40*90*23 + 200*(60+10)
+    # RULER_SCALE * (200*400*10 + 0 + 200*(150+30)) vs
+    # RULER_SCALE * (0 + 40*90*23 + 200*(60+10))
+    assert piggy == RULER_SCALE * 836000, piggy
+    assert jacket == RULER_SCALE * 96800, jacket
     assert piggy > jacket
 
     gd = _gd(_PIGGY_ARMOR, _MUSHMUSH_JACKET)
@@ -182,7 +184,7 @@ def test_utility_artifact_still_scores_positive_and_is_pickable() -> None:
     (25+25+25, on the score's common 200x denominator) keeps it discoverable."""
     score = armor_score(_NOVICE_GUIDE, _MUSHMUSH_ATK, _MUSHMUSH_RES,
                         _FOREST_WHIP_ATTACK)
-    assert score == 200 * 75, score
+    assert score == RULER_SCALE * 200 * 75, score
     assert score > 0
 
     gd = _gd(_NOVICE_GUIDE)
@@ -200,7 +202,7 @@ def test_damage_percent_is_worthless_without_an_attack_to_scale() -> None:
     than a conversion constant — with no attack the offense term is 0, not
     'small'."""
     bare = armor_score(_MUSHMUSH_JACKET, _MUSHMUSH_ATK, _MUSHMUSH_RES, {})
-    assert bare == 200 * (60 + 10), bare
+    assert bare == RULER_SCALE * 200 * (60 + 10), bare
     armed = armor_score(_MUSHMUSH_JACKET, _MUSHMUSH_ATK, _MUSHMUSH_RES,
                         _FOREST_WHIP_ATTACK)
     assert armed > bare

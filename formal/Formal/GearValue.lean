@@ -110,28 +110,41 @@ def canonicalAttack : ElemStats := elements.map (fun e => (e, rankReferenceAttac
 def canonicalResistance : ElemStats := elements.map (fun e => (e, rankReferenceResistance))
 
 /-- The LIVE `ai/gear_value.gear_value(stats, purpose)` — the one gear ruler, at
-whatever adversary the caller supplies. The weapon branch is the AUGMENTED
-`PurposeRouting.combatScore` (`2 * WScore + nonToolBonus`), because that is what
-the Python `weapon_score` returns and what carries the fishing_net tiebreak;
-`combatValue` above is its RAW atom, related by `combatScore_eq_combatValue`. -/
+whatever adversary the caller supplies. The weapon branch is
+`PurposeRouting.weaponScore` (`combatScore + AEfficiency`), because that is what
+the Python `weapon_score` returns: the augmented combat term that carries the
+fishing_net tiebreak, PLUS the same flat-utility term the armor branch prices
+(`AScore` reaches it through `flatUtil`). `combatValue` above is the weapon
+branch's RAW atom, related by `combatScore_eq_combatValue`.
+
+The four efficiency stats are explicit parameters because the model `Item`
+lumps every monster-independent stat into one `flatUtil` field; on the armor
+branch they are already inside `flatUtil` and the parameters are ignored, which
+is exactly the shape `ACombat`/`AEfficiency` already had. -/
 def gearValue (isWeapon : Bool) (ci : Formal.PurposeRouting.CombatItem)
-    (monsterAtk monsterRes playerAtk : ElemStats) : Int :=
-  if isWeapon then Formal.PurposeRouting.combatScore monsterRes ci
+    (monsterAtk monsterRes playerAtk : ElemStats)
+    (wisdom prospecting inventorySpace haste : Int) : Int :=
+  if isWeapon then
+    Formal.PurposeRouting.weaponScore monsterRes ci wisdom prospecting inventorySpace haste
   else AScore ci.base monsterAtk monsterRes playerAtk
 
 /-- **The unified Rank ruler**: `gear_value(_, Rank)` IS `gear_value(_, Combat)`
 against the canonical adversary. Mirrors the Python `gear_value`'s Rank branch,
 which is literally `return gear_value(stats, rank_adversary())`. -/
-def rankValue (isWeapon : Bool) (ci : Formal.PurposeRouting.CombatItem) : Int :=
+def rankValue (isWeapon : Bool) (ci : Formal.PurposeRouting.CombatItem)
+    (wisdom prospecting inventorySpace haste : Int) : Int :=
   gearValue isWeapon ci canonicalAttack canonicalResistance canonicalAttack
+    wisdom prospecting inventorySpace haste
 
 /-- **ONE ALGORITHM** — the load-bearing statement of this whole unification:
 Rank is not a second formula that has to be kept in agreement with Combat, it is
 Combat with a particular adversary substituted, by definition. -/
 theorem rankValue_eq_gearValue_canonical (isWeapon : Bool)
-    (ci : Formal.PurposeRouting.CombatItem) :
-    rankValue isWeapon ci
-      = gearValue isWeapon ci canonicalAttack canonicalResistance canonicalAttack :=
+    (ci : Formal.PurposeRouting.CombatItem)
+    (wisdom prospecting inventorySpace haste : Int) :
+    rankValue isWeapon ci wisdom prospecting inventorySpace haste
+      = gearValue isWeapon ci canonicalAttack canonicalResistance canonicalAttack
+          wisdom prospecting inventorySpace haste :=
   rfl
 
 /-! #### The Rank ruler's own (COMBAT, EFFICIENCY) partition.
@@ -150,17 +163,19 @@ def rankCombat (isWeapon : Bool) (ci : Formal.PurposeRouting.CombatItem)
   if isWeapon then Formal.PurposeRouting.combatScore canonicalResistance ci
   else ACombat ci.base canonicalAttack canonicalResistance canonicalAttack flatCombat
 
-/-- The Rank purpose's EFFICIENCY term.
+/-- The Rank purpose's EFFICIENCY term: `AEfficiency` on BOTH branches — the
+ruler prices the four time-buying stats by what they are, never by which slot
+carries them.
 
-ZERO on the weapon branch, deliberately: `PurposeRouting.combatScore` is
-`2 * WScore + nonToolBonus` and has no flat-utility block at all, so a weapon's
-`wisdom`/`prospecting` are invisible to the RULER. Reporting 0 keeps
-`rankValue_decomp` an exact identity instead of inventing a term the ruler does
-not have. (Live blast radius: the four voidstone tools, 100 prospecting each,
-and only as a tiebreak between weapons of identical `WScore`.) -/
-def rankEfficiency (isWeapon : Bool)
-    (wisdom prospecting inventorySpace haste : Int) : Int :=
-  if isWeapon then 0 else AEfficiency wisdom prospecting inventorySpace haste
+It used to be `if isWeapon then 0 else AEfficiency …`, and the `0` was honest
+about the ruler of the day rather than about the item: `combatScore` had no
+flat-utility block at all, so a weapon's `wisdom`/`prospecting` were invisible
+to the RULER and reporting anything else would have broken `rankValue_decomp`.
+`PurposeRouting.weaponScore` now carries the same term, so the branch is gone
+and with it the asymmetry. (Live blast radius that was: the four voidstone tools
+at 100 prospecting each, and obsidian_battleaxe's `inventory_space = -25`.) -/
+def rankEfficiency (wisdom prospecting inventorySpace haste : Int) : Int :=
+  AEfficiency wisdom prospecting inventorySpace haste
 
 /-- **THE PARTITION, on the Rank purpose.** The ruler IS the sum of the two terms
 the economics layer weighs — on BOTH branches, for every item. So the acquisition
@@ -171,12 +186,12 @@ theorem rankValue_decomp (isWeapon : Bool)
     (flatCombat wisdom prospecting inventorySpace haste : Int)
     (hflat : ci.base.flatUtil
       = flatCombat + wisdom + prospecting + inventorySpace + haste) :
-    rankValue isWeapon ci
+    rankValue isWeapon ci wisdom prospecting inventorySpace haste
       = rankCombat isWeapon ci flatCombat
-        + rankEfficiency isWeapon wisdom prospecting inventorySpace haste := by
+        + rankEfficiency wisdom prospecting inventorySpace haste := by
   unfold rankValue gearValue rankCombat rankEfficiency
   cases isWeapon with
-  | true => simp
+  | true => simp [Formal.PurposeRouting.weaponScore]
   | false =>
     simp only [if_false, Bool.false_eq_true]
     exact AScore_decomp ci.base canonicalAttack canonicalResistance canonicalAttack
@@ -186,8 +201,10 @@ theorem rankValue_decomp (isWeapon : Bool)
 picker optimality theorems are stated on, so nothing is lost by the augmentation
 living only on the weapon side. -/
 theorem gearValue_armor_eq_combatValue (ci : Formal.PurposeRouting.CombatItem)
-    (monsterAtk monsterRes playerAtk : ElemStats) :
+    (monsterAtk monsterRes playerAtk : ElemStats)
+    (wisdom prospecting inventorySpace haste : Int) :
     gearValue false ci monsterAtk monsterRes playerAtk
+        wisdom prospecting inventorySpace haste
       = combatValue false ci.base monsterAtk monsterRes playerAtk :=
   rfl
 
@@ -240,23 +257,32 @@ adversary's attack and resistance are nonneg, so the existing
 `combatValue_armor_nonneg` discharges it with no new hypotheses about the
 adversary. -/
 theorem rankValue_armor_nonneg (ci : Formal.PurposeRouting.CombatItem)
+    (wisdom prospecting inventorySpace haste : Int)
     (hRes : ∀ e ∈ elements, 0 ≤ elemGet ci.base.resistance e)
     (hUtil : 0 ≤ ci.base.flatUtil)
     (hDmg : 0 ≤ ci.base.dmg)
     (hDmgElem : ∀ e ∈ elements, 0 ≤ elemGet ci.base.dmgElem e)
     (hCrit : 0 ≤ ci.base.crit) :
-    0 ≤ rankValue false ci :=
+    0 ≤ rankValue false ci wisdom prospecting inventorySpace haste :=
   combatValue_armor_nonneg ci.base _ _ _ (fun e _ => canonicalAttack_nonneg e) hRes
     hUtil (fun e _ => canonicalAttack_nonneg e) hDmg hDmgElem hCrit
 
-/-- Rank inherits `WScore`'s clamp nonnegativity on the weapon branch. -/
+/-- Rank inherits `WScore`'s clamp nonnegativity on the weapon branch. The four
+efficiency stats now reach the weapon branch too, so they carry the same
+nonnegativity hypothesis every other summand of a nonneg theorem carries —
+added, not silently assumed. (`obsidian_battleaxe`'s `inventory_space = -25`
+shows the hypothesis is not free: a weapon CAN carry a negative efficiency stat,
+and the ruler now prices that penalty.) -/
 theorem rankValue_weapon_nonneg (ci : Formal.PurposeRouting.CombatItem)
-    (hatk : ∀ e ∈ elements, 0 ≤ elemGet ci.base.attack e) (hcrit : 0 ≤ ci.base.crit) :
-    0 ≤ rankValue true ci := by
+    (wisdom prospecting inventorySpace haste : Int)
+    (hatk : ∀ e ∈ elements, 0 ≤ elemGet ci.base.attack e) (hcrit : 0 ≤ ci.base.crit)
+    (hEff : 0 ≤ wisdom + prospecting + inventorySpace + haste) :
+    0 ≤ rankValue true ci wisdom prospecting inventorySpace haste := by
   have h := combatValue_weapon_nonneg ci.base canonicalAttack canonicalResistance
     canonicalAttack hatk hcrit
-  unfold rankValue gearValue Formal.PurposeRouting.combatScore
-    Formal.PurposeRouting.nonToolBonus
+  unfold rankValue gearValue Formal.PurposeRouting.weaponScore
+    Formal.PurposeRouting.combatScore Formal.PurposeRouting.nonToolBonus
+    AEfficiency rulerScale
   unfold combatValue at h
   simp only [if_true] at h ⊢
   cases ci.isTool <;> simp <;> omega
@@ -297,7 +323,7 @@ sum scored the vest 173 to the jacket's 167 because it weighted 10 extra wisdom
 the same as 4 points of global damage plus 3 points of crit. `AScore` had said
 otherwise since 170ed8d8; Rank now says it too, because it IS `AScore`. -/
 theorem rank_prefers_mushmush_jacket_over_adventurer_vest :
-    rankValue false adventurerVest < rankValue false mushmushJacket := by
+    rankValue false adventurerVest 0 0 0 0 < rankValue false mushmushJacket 0 0 0 0 := by
   decide +kernel
 
 /-- **The 2026-08-04 equip loop, closed on the Rank side.** The acquisition path
@@ -306,7 +332,7 @@ picker scored them 48000 to 6000 the other way and equipped it back, one API
 request and one cooldown per leg, forever. Rank now agrees with the picker's
 direction. -/
 theorem rank_prefers_fire_and_earth_amulet_over_life_amulet :
-    rankValue false lifeAmulet < rankValue false fireAndEarthAmulet := by
+    rankValue false lifeAmulet 0 0 0 0 < rankValue false fireAndEarthAmulet 0 0 0 0 := by
   decide +kernel
 
 /-- The symmetric-duel calibration claim, checked: at the canonical adversary a
@@ -315,13 +341,13 @@ score identically. This is what makes the reference magnitude a pure
 combat-vs-flat-utility knob rather than a hidden defense-vs-offense thumb. -/
 theorem rank_prices_resistance_and_damage_equally (r : Int) :
     rankValue false ⟨{ code := 0, level := 0, attack := [], crit := 0, fits := true,
-                       resistance := elements.map (fun e => (e, r)) }, false⟩
+                       resistance := elements.map (fun e => (e, r)) }, false⟩ 0 0 0 0
       = rankValue false ⟨{ code := 0, level := 0, attack := [], resistance := [],
-                           crit := 0, fits := true, dmg := r }, false⟩ := by
+                           crit := 0, fits := true, dmg := r }, false⟩ 0 0 0 0 := by
   have hmax : max (0 : Int) 100 = 100 := by decide
   simp [rankValue, gearValue, AScore, aTerm, oTerm, wTerm, elements, elemGet,
         canonicalAttack, canonicalResistance, rankReferenceAttack,
-        rankReferenceResistance, hmax]
+        rankReferenceResistance, rulerScale, hmax]
   omega
 
 
@@ -355,13 +381,13 @@ theorem gatherValue_pickGatherSlot_optimal (skillEffect : Item → Int) (playerL
 
 /-! ### Alignment with `PurposeRouting`'s dispatch scores. -/
 
-/-- Alignment: `PurposeRouting.combatScore` (the augmented Python `weapon_score`)
-is exactly `2 * (weapon `gear_value(Combat)` atom) + nonToolBonus`. The `monsterAtk`
-argument is irrelevant to the weapon branch. -/
+/-- Alignment: `PurposeRouting.combatScore` (the weapon branch's COMBAT term) is
+exactly `rulerScale * (weapon `gear_value(Combat)` atom) + nonToolBonus`. The
+`monsterAtk` argument is irrelevant to the weapon branch. -/
 theorem combatScore_eq_combatValue (monsterAtk monsterRes playerAtk : ElemStats)
     (ci : Formal.PurposeRouting.CombatItem) :
     Formal.PurposeRouting.combatScore monsterRes ci
-      = 2 * combatValue true ci.base monsterAtk monsterRes playerAtk
+      = rulerScale * combatValue true ci.base monsterAtk monsterRes playerAtk
           + Formal.PurposeRouting.nonToolBonus ci := by
   unfold combatValue Formal.PurposeRouting.combatScore
   rfl
@@ -398,16 +424,16 @@ inductive Purpose where
 on purpose. Combat/Rank use `gear_value` directly; Gather negates `gatherValue`
 (`gear_value(Gather)`), so the gather argmin becomes a unified argmax.
 
-The utility-fill arm is `200 * flatUtil`, which `EquipmentScoring.AScore_no_monster`
-proves IS `AScore i [] [] []` — the live `_benefit` computes it as
-`armor_score(stats, {}, {}, {})`, on the same `200 *` scale as every other armor
-score, so the two stay bit-identical. -/
+The utility-fill arm is `rulerScale * (200 * flatUtil)`, which
+`EquipmentScoring.AScore_no_monster` proves IS `AScore i [] [] []` — the live
+`_benefit` computes it as `armor_score(stats, {}, {}, {})`, on the same scale as
+every other armor score, so the two stay bit-identical. -/
 def purposeBenefit : Purpose → Item → Int
   | .combat monsterAtk monsterRes playerAtk isWeapon =>
       fun i => combatValue isWeapon i monsterAtk monsterRes playerAtk
   | .rank rankOf => rankOf
   | .gather skillEffect =>
-      fun i => if i.isUtilityFill then 200 * i.flatUtil
+      fun i => if i.isUtilityFill then rulerScale * (200 * i.flatUtil)
                else - gatherValue skillEffect i
 
 /-- On a NON-utility-fill item the Gather benefit is exactly `-gatherValue` (the

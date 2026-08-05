@@ -37,7 +37,7 @@ The fix has two halves and this file pins both:
 from dataclasses import replace
 
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
-from artifactsmmo_cli.ai.equipment.scoring import armor_score
+from artifactsmmo_cli.ai.equipment.scoring import RULER_SCALE, armor_score
 from artifactsmmo_cli.ai.equipment.slot_occupancy import may_displace
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value_core import Combat
@@ -154,12 +154,12 @@ def test_the_two_amulets_now_score_the_same_way_on_both_rulers() -> None:
        same ratio the ruler does. A tie was enough to stop the loop; agreement
        is what stops the two layers holding different opinions at all.
     """
-    assert equip_value(_LIFE_AMULET) == 6000
-    assert equip_value(_FIRE_AND_EARTH_AMULET) == 70000
+    assert equip_value(_LIFE_AMULET) == RULER_SCALE * 6000
+    assert equip_value(_FIRE_AND_EARTH_AMULET) == RULER_SCALE * 70000
     assert equip_value(_FIRE_AND_EARTH_AMULET) > equip_value(_LIFE_AMULET)
     # Neither amulet carries an efficiency stat, so pursuit is exactly 1000x.
-    assert pursuit_value(_LIFE_AMULET) == 1000 * 6000
-    assert pursuit_value(_FIRE_AND_EARTH_AMULET) == 1000 * 70000
+    assert pursuit_value(_LIFE_AMULET) == 1000 * RULER_SCALE * 6000
+    assert pursuit_value(_FIRE_AND_EARTH_AMULET) == 1000 * RULER_SCALE * 70000
     assert pursuit_value(_FIRE_AND_EARTH_AMULET) > pursuit_value(_LIFE_AMULET)
 
     # The monster-relative half is untouched and still prefers the element
@@ -167,8 +167,8 @@ def test_the_two_amulets_now_score_the_same_way_on_both_rulers() -> None:
     life = armor_score(_LIFE_AMULET, _WOLF_ATK, _WOLF_RES, _BATTLEAXE_ATTACK)
     fae = armor_score(_FIRE_AND_EARTH_AMULET, _WOLF_ATK, _WOLF_RES,
                       _BATTLEAXE_ATTACK)
-    assert life == 6000, life           # 0 + 0 + 200*30
-    assert fae == 48000, fae            # 0 + 40*110*(2*5) + 200*20
+    assert life == RULER_SCALE * 6000, life   # RULER_SCALE * (0 + 0 + 200*30)
+    assert fae == RULER_SCALE * 48000, fae    # RULER_SCALE * (40*110*(2*5) + 200*20)
     assert fae > life
 
 

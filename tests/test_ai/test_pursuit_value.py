@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.equipment.scoring import RULER_SCALE
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value import gear_components
 from artifactsmmo_cli.ai.gear_value_core import Rank
@@ -131,7 +132,8 @@ def test_pursuit_value_is_the_rulers_two_terms_lexicographically():
                   ItemStats(code="mix", level=1, type_="helmet",
                             resistance={"fire": 5}, wisdom=50, prospecting=50)):
         combat, efficiency = gear_components(stats, Rank)
-        assert pursuit_value(stats) == combat * STRATEGIC_SCALE + efficiency // 200
+        assert (pursuit_value(stats)
+                == combat * STRATEGIC_SCALE + efficiency // (RULER_SCALE * 200))
 
 
 def test_utility_is_counted_once_not_twice():
@@ -162,8 +164,8 @@ def test_two_artifacts_order_by_efficiency():
 
 def test_utility_ordering_agrees_with_the_rulers_own_efficiency_term():
     """The tiebreak is not a re-weighting: `PURSUIT_WEIGHTS` gives all four
-    stats the same rate, exactly as the ruler's `armor_score_efficiency` does,
-    so the two order utility items identically (200x apart in scale)."""
+    stats the same rate, exactly as the ruler's `gear_score_efficiency` does,
+    so the two order utility items identically (a constant factor apart)."""
     items = [ItemStats(code=f"u{i}", level=1, type_="artifact",
                        wisdom=i, prospecting=2 * i, inventory_space=i, haste=i)
              for i in range(0, 60, 7)]
@@ -191,15 +193,24 @@ def test_consumer_1_recycle_leaf_floor_is_recalibrated_to_the_new_scale():
     """`tiers/prerequisite_graph.RECYCLE_LEAF_VALUE_FLOOR` — THE only absolute
     pursuit_value threshold in the codebase. Pinned against the same four live
     witnesses its docstring has always named: obsolete tools must recycle,
-    current-tier staves must not."""
+    current-tier staves must not.
+
+    RE-DERIVED and UNCHANGED at `RULER_SCALE`: all four witnesses are WEAPONS,
+    whose pursuit COMBAT term that change left bit-identical (the factor was
+    already on the weapon side; the ARMOR side moved up to meet it). The
+    witnesses' exact values are pinned so a scale move on the weapon side would
+    fail here rather than silently reclassify every recyclable."""
     gd = _bundle()
-    for junk in ("fishing_net", "copper_axe"):
+    for junk, expected in (("fishing_net", 200_000_000), ("copper_axe", 200_000_000)):
         stats = gd.item_stats(junk)
         assert stats is not None
+        assert pursuit_value(stats) == expected, junk
         assert pursuit_value(stats) < RECYCLE_LEAF_VALUE_FLOOR, junk
-    for current in ("wooden_staff", "fire_staff"):
+    for current, expected in (("wooden_staff", 328_001_000),
+                              ("fire_staff", 656_001_000)):
         stats = gd.item_stats(current)
         assert stats is not None
+        assert pursuit_value(stats) == expected, current
         assert pursuit_value(stats) >= RECYCLE_LEAF_VALUE_FLOOR, current
 
 

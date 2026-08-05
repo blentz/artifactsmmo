@@ -96,8 +96,8 @@ def _elem_block(stats: ItemStats | None, which: str) -> list[int]:
 
 def _item_block(code_id: int, stats: ItemStats | None, slot: str,
                 skill: str | None) -> list[int]:
-    """21-int extended Lean block: 18-int item block + skillEffect +
-    isUtilityFill + isTool.
+    """25-int extended Lean block: 18-int item block + skillEffect +
+    isUtilityFill + isTool + the four efficiency stats.
 
     flatUtil aggregates the monster-independent utility stats (== the Python
     armor/utility flat term); ``dmg`` + ``dmgElem0..3`` are the OFFENSE inputs the
@@ -107,10 +107,14 @@ def _item_block(code_id: int, stats: ItemStats | None, slot: str,
     is the flat utility (``armor_score(stats, {}, {}, {})``) rather than
     ``-gather_score``; isTool is the `subtype == "tool"` flag
     `PurposeRouting.CombatItem` carries, which the Rank benefit's `nonToolBonus`
-    reads (the fishing_net tiebreak).
+    reads (the fishing_net tiebreak); the four efficiency stats
+    (wisdom / prospecting / inventory_space / haste) are carried SEPARATELY from
+    ``flatUtil`` because the model ``Item`` lumps every monster-independent stat
+    into that one field and the Rank benefit's WEAPON branch now prices those
+    four individually (``AEfficiency``), exactly as the armor branch does.
     """
     if stats is None:
-        return [code_id, *([0] * 20)]
+        return [code_id, *([0] * 24)]
     fits = 1 if slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []) else 0
     flat = (stats.hp_restore + stats.hp_bonus + stats.wisdom + stats.prospecting
             + stats.inventory_space + stats.haste + stats.lifesteal
@@ -120,7 +124,8 @@ def _item_block(code_id: int, stats: ItemStats | None, slot: str,
     return [code_id, stats.level, fits, *_elem_block(stats, "attack"),
             *_elem_block(stats, "resistance"), stats.critical_strike, flat,
             stats.dmg, *_elem_block(stats, "dmg_elements"), eff,
-            is_utility_fill, 1 if stats.subtype == "tool" else 0]
+            is_utility_fill, 1 if stats.subtype == "tool" else 0,
+            stats.wisdom, stats.prospecting, stats.inventory_space, stats.haste]
 
 
 def _owned_codes(state: WorldState) -> set[str]:

@@ -10,6 +10,42 @@ NOT import ``gear_value`` — that would cycle.  The loadout picker
 from artifactsmmo_cli.ai.equipment.elements import ELEMENTS
 from artifactsmmo_cli.ai.game_data import ItemStats
 
+RULER_SCALE = 2
+"""THE RULER'S QUANTUM. Every term of the gear ruler — the weapon slot's combat
+term, the armor slots' combat term, and the shared efficiency term both slots
+read — is carried at this multiple of its NATURAL unit, and nothing else in the
+ruler is.
+
+WHY IT EXISTS: the ``nonToolBonus`` (0 for a tool, 1 for a real weapon) is the
+one sub-unit quantity in the ruler. Because ``0 <= nonToolBonus < RULER_SCALE``
+and every other term is a MULTIPLE of ``RULER_SCALE``, the bonus can never flip
+a strict inequality between two ruler terms: two distinct terms differ by at
+least ``RULER_SCALE``, and the bonus moves a score by at most
+``RULER_SCALE - 1``. That is the fishing_net invariant, and it is a fact about
+the arithmetic, not about today's catalog. See ``weapon_score_combat_pure``.
+
+WHY IT MULTIPLIES *EVERY* TERM: it used to multiply only the weapon term
+(``weapon_score = 2 * raw + nonToolBonus`` against ``armor_score = 1 *`` its
+terms), which left weapons at twice armor's magnitude for the same real swing.
+Live witness on the pinned bundle at the canonical adversary: ``copper_dagger``
+(level 1) scored 282_001 and ``steel_armor`` (level 20) scored 282_000 — a tie —
+while the dagger's true contribution is 7.05 HP of swing per turn and the
+armor's is 14.10, exactly 2x. Cross-slot rankings (``tiers/pursuit_value``,
+``tiers/progression_tree``) compare the two by design, so the factor was an
+unearned thumb on the scale for every weapon. Applying it to the WHOLE ruler
+keeps the tie-break safe AND makes the two slots commensurable, because
+commensurability is then a property of the definition (one constant, one place)
+rather than of the numbers happening to line up.
+
+UNIT: the two monster-relative terms are ``1/20000`` of one HP of damage swing
+per combat turn BEFORE this factor (see ``armor_score_pure`` for the
+derivation), so the ruler's unit is ``1/(RULER_SCALE * 20000)`` = ``1/40000`` of
+one HP of swing per turn. The ruler is an ORDERING, so the absolute unit matters
+only where an absolute threshold reads it; ``tiers/prerequisite_graph.
+RECYCLE_LEAF_VALUE_FLOOR`` is the only one, and it consumes
+``pursuit_value``'s COMBAT term, which this change leaves bit-identical on the
+weapon branch (its four calibration witnesses are all weapons)."""
+
 
 def weapon_score_raw_pure(elements: list[str], attack: dict[str, int],
                           critical_strike: int,
@@ -26,6 +62,16 @@ def weapon_score_raw_pure(elements: list[str], attack: dict[str, int],
     crit 35) and Robby ground slimes bare-handed-with-a-pickaxe at
     180/230 HP loss per fight.
 
+    UNIT — this is the ruler's NATURAL unit, ``1/20000`` of one HP of damage
+    swing per combat turn, the SAME unit ``armor_score_combat_pure``'s two
+    monster-relative sums are in. Per element the wielder deals
+    ``atk[e] * max(0, 100 - res[e])/100`` HP per turn and the crit factor
+    ``(200 + crit)/200`` multiplies it, so ``atk * clamp * (200 + crit)`` is that
+    product over the common denominator 20000, exactly as
+    ``armor_score_combat_pure``'s offense sum is. The RULER carries it at
+    ``RULER_SCALE *`` this (``weapon_score_combat_pure``), as it carries every
+    other term.
+
     The ItemStats reads (``weapon.attack``, ``weapon.critical_strike``)
     and the module-level ``ELEMENTS`` tuple are hoisted to plain-data
     parameters by the ``weapon_score_raw`` wrapper, so this body is
@@ -41,17 +87,85 @@ def weapon_score_raw_pure(elements: list[str], attack: dict[str, int],
     return score * (200 + critical_strike)
 
 
-def weapon_score_pure(elements: list[str], attack: dict[str, int], subtype: str,
-                      critical_strike: int,
-                      monster_resistance: dict[str, int]) -> int:
-    """PURE CORE (mechanically extracted, P4b): ``2 * raw + nonToolBonus``.
+def gear_score_efficiency_pure(wisdom: int, prospecting: int,
+                               inventory_space: int, haste: int) -> int:
+    """PURE CORE (mechanically extracted): the ruler's flat-utility EFFICIENCY
+    term — ``RULER_SCALE * 200 * (wisdom + prospecting + inventory_space +
+    haste)``.
 
-    Bridged to the hand ``Formal.PurposeRouting.combatScore`` (strict-raw
-    preservation + the non-tool tie-break, the fishing_net invariant).
+    ONE FUNCTION FOR EVERY SLOT. Both ``weapon_score_pure`` and
+    ``armor_score_pure`` add THIS term, so the ruler prices a point of wisdom (or
+    prospecting, or inventory space, or haste) identically no matter which slot
+    carries it. It used to be an armor-only block (``armor_score_efficiency_pure``),
+    which meant a weapon's efficiency stats were invisible to the ruler
+    altogether — live witnesses: the four voidstone tools
+    (``voidstone_pickaxe`` / ``_axe`` / ``_gloves`` / ``_fishing_rod``, 100
+    prospecting each) contributed nothing from that prospecting to any purpose,
+    and ``obsidian_battleaxe``'s ``inventory_space`` −25 penalty was free.
+
+    These four are the stats that buy TIME rather than damage: an XP rate, a
+    drop rate, carrying capacity and a cooldown reduction. Splitting them out is
+    what lets ``tiers/pursuit_value`` read the ONE ruler with combat dominating
+    utility WITHOUT recomputing utility on a second scale — the pursuit score
+    reuses this exact term instead of re-summing the stats, so utility cannot be
+    counted twice. See ``armor_score_combat_pure`` / ``weapon_score_combat_pure``
+    for the other halves, and ``armor_score_pure`` / ``weapon_score_pure`` for
+    the identities that they partition the score.
+
+    The ``200 *`` is the SAME scale the flat-utility block has always been
+    carried at (the defense sum's factor); the ``RULER_SCALE *`` is the factor
+    EVERY ruler term carries, so this is a re-association plus the one uniform
+    rescale, not a re-weighting: no item's ruler value changes RELATIVE to
+    another item's because of this term's scale.
+    """
+    return RULER_SCALE * 200 * (wisdom + prospecting + inventory_space + haste)
+
+
+def weapon_score_combat_pure(elements: list[str], attack: dict[str, int],
+                             subtype: str, critical_strike: int,
+                             monster_resistance: dict[str, int]) -> int:
+    """PURE CORE (mechanically extracted, P4b): the weapon slot's COMBAT term,
+    ``RULER_SCALE * raw + nonToolBonus``.
+
+    THE FISHING_NET INVARIANT LIVES HERE. ``nonToolBonus`` is ``0`` for a
+    ``subtype == "tool"`` piece and ``1`` otherwise; since ``raw`` is an integer
+    and every ruler term is a multiple of ``RULER_SCALE``, a ``+1`` can never
+    flip a strict raw inequality, and on a raw TIE it strictly orders the real
+    weapon above the tool. Without it a tool tied on raw attack (fishing_net at
+    5 water vs wooden_stick at 5 earth against a zero-resistance slime) was
+    picked by the left-fold argmax purely on iteration order — the 2026-06-06
+    trace bug where Robby kept fishing_net equipped for combat against slimes.
+
+    This is the term ``gear_components`` hands the economics layer as the
+    weapon branch's COMBAT half, so it is what
+    ``Formal.StrategicValue.pursuit_combat_dominates`` dominates utility with.
+    Bridged to the hand ``Formal.PurposeRouting.combatScore``.
     """
     non_tool_bonus = 0 if subtype == "tool" else 1
-    return 2 * weapon_score_raw_pure(elements, attack, critical_strike,
-                                     monster_resistance) + non_tool_bonus
+    return RULER_SCALE * weapon_score_raw_pure(elements, attack, critical_strike,
+                                               monster_resistance) + non_tool_bonus
+
+
+def weapon_score_pure(elements: list[str], attack: dict[str, int], subtype: str,
+                      critical_strike: int,
+                      monster_resistance: dict[str, int],
+                      wisdom: int, prospecting: int,
+                      inventory_space: int, haste: int) -> int:
+    """PURE CORE (mechanically extracted, P4b): the weapon slot's ruler value,
+    expressed as its COMBAT term plus the SHARED EFFICIENCY term.
+
+    The two summands PARTITION the score exactly as they do for armor
+    (``armor_score_pure``): every stat reaches exactly one of them, so nothing is
+    dropped and nothing is double-counted. ``weapon_score_combat_pure`` takes no
+    efficiency stat at all — there is no parameter through which one could reach
+    it — which is the mechanical guarantee the pursuit ruler's combat term is
+    utility-free on the weapon branch just as it is on the armor branch.
+
+    Bridged to the hand ``Formal.PurposeRouting.weaponScore``.
+    """
+    return (weapon_score_combat_pure(elements, attack, subtype, critical_strike,
+                                     monster_resistance)
+            + gear_score_efficiency_pure(wisdom, prospecting, inventory_space, haste))
 
 
 def gather_score_pure(skill_effects: dict[str, int], skill: str) -> int:
@@ -64,29 +178,6 @@ def gather_score_pure(skill_effects: dict[str, int], skill: str) -> int:
     return skill_effects.get(skill, 0)
 
 
-def armor_score_efficiency_pure(wisdom: int, prospecting: int,
-                                inventory_space: int, haste: int) -> int:
-    """PURE CORE (mechanically extracted): the EFFICIENCY slice of the ruler's
-    flat-utility block — ``200 * (wisdom + prospecting + inventory_space +
-    haste)``.
-
-    These four are the stats that buy TIME rather than damage: an XP rate, a
-    drop rate, carrying capacity and a cooldown reduction. Splitting them out
-    is what lets ``tiers/pursuit_value`` read the ONE ruler with combat
-    dominating utility WITHOUT recomputing utility on a second scale — the
-    pursuit score reuses this exact term instead of re-summing the stats, so
-    utility cannot be counted twice. See ``armor_score_combat_pure`` for the
-    other half and ``armor_score_pure`` for the identity that they partition
-    the score.
-
-    The ``200 *`` is the SAME scale ``armor_score_pure`` has always carried the
-    flat-utility block at (the defense sum's factor), so this is a
-    re-association of the existing formula, not a re-weighting: no item's
-    ``armor_score`` changes by one unit.
-    """
-    return 200 * (wisdom + prospecting + inventory_space + haste)
-
-
 def armor_score_combat_pure(elements: list[str], resistance: dict[str, int],
                             monster_attack: dict[str, int],
                             monster_resistance: dict[str, int],
@@ -96,8 +187,8 @@ def armor_score_combat_pure(elements: list[str], resistance: dict[str, int],
                             hp_restore: int, hp_bonus: int, lifesteal: int,
                             combat_buff: int) -> int:
     """PURE CORE (mechanically extracted): the COMBAT slice of the armor score
-    — ``200*defense + offense + 200*(hp_restore + hp_bonus + lifesteal +
-    combat_buff)``.
+    — ``RULER_SCALE * (200*defense + offense + 200*(hp_restore + hp_bonus +
+    lifesteal + combat_buff))``.
 
     Everything ``armor_score_pure`` computes EXCEPT the four efficiency stats.
     The two monster-relative sums are unchanged and carry the full derivation
@@ -111,12 +202,20 @@ def armor_score_combat_pure(elements: list[str], resistance: dict[str, int],
     ruler's combat term is free of utility: there is no parameter through which
     a utility stat could reach it.
 
-    NOTE the split re-prices nothing. ``hp_restore`` used to sit in a flat
-    8-stat sum (``combat_raw``) that added a resistance PERCENTAGE to an HP
-    amount 1:1; here it is 200 per point while one point of per-element
+    NOTE the split re-prices nothing WITHIN this term. ``hp_restore`` used to sit
+    in a flat 8-stat sum (``combat_raw``) that added a resistance PERCENTAGE to
+    an HP amount 1:1; here it is 200 per point while one point of per-element
     resistance is ``200 * monster_attack[e]`` — 6600 at the canonical
     adversary's 33 attack. That 33:1 exchange rate is the canonical duel's,
     not an invented constant.
+
+    The ``RULER_SCALE *`` is the ruler's quantum, carried by every term on every
+    slot (see ``RULER_SCALE``). It is what makes this term COMMENSURABLE with
+    ``weapon_score_combat_pure``: both are ``RULER_SCALE`` times a value in
+    ``1/20000`` of one HP of swing per turn, so a weapon that adds one HP of
+    swing and a piece of armor that stops one HP of swing now score the same
+    number. Before it lived here, armor was at HALF the weapon's magnitude for
+    the same real effect.
     """
     defense = 0
     for elem in elements:
@@ -127,7 +226,7 @@ def armor_score_combat_pure(elements: list[str], resistance: dict[str, int],
                              * max(0, 100 - monster_resistance.get(elem, 0))
                              * (2 * (dmg + dmg_elements.get(elem, 0)) + critical_strike))
     flat_combat = hp_restore + hp_bonus + lifesteal + combat_buff
-    return 200 * defense + offense + 200 * flat_combat
+    return RULER_SCALE * (200 * defense + offense + 200 * flat_combat)
 
 
 def armor_score_pure(elements: list[str], resistance: dict[str, int],
@@ -139,18 +238,22 @@ def armor_score_pure(elements: list[str], resistance: dict[str, int],
                      hp_restore: int, hp_bonus: int, wisdom: int, prospecting: int,
                      inventory_space: int, haste: int, lifesteal: int,
                      combat_buff: int) -> int:
-    """PURE CORE (mechanically extracted, P4b): ``200*defense + offense +
-    200*flatUtility``, expressed as its COMBAT slice plus its EFFICIENCY slice.
+    """PURE CORE (mechanically extracted, P4b): ``RULER_SCALE * (200*defense +
+    offense + 200*flatUtility)``, expressed as its COMBAT slice plus the SHARED
+    EFFICIENCY slice.
 
     The two summands PARTITION the score: every stat reaches exactly one of
-    them, so ``armor_score_combat_pure + armor_score_efficiency_pure`` is the
+    them, so ``armor_score_combat_pure + gear_score_efficiency_pure`` is the
     whole score and nothing is double-counted. That identity is what
     ``tiers/pursuit_value`` rides — it re-reads these two existing terms
-    lexicographically instead of building a second scorer.
+    lexicographically instead of building a second scorer. ``weapon_score_pure``
+    is the SAME two-term shape over the SAME efficiency function, which is why a
+    stat prices identically whichever slot carries it.
 
     UNIT — the two monster-relative terms are BOTH in **1/20000 of one HP of
-    damage swing per combat turn**; nothing else in this function is, and the
-    docstring says so rather than pretending otherwise.
+    damage swing per combat turn** before the ``RULER_SCALE`` factor every ruler
+    term carries (so ``1/40000`` after it); nothing else in this function is, and
+    the docstring says so rather than pretending otherwise.
 
     * ``defense = Σ_e mon_atk[e] * armor_res[e]``. The real damage a hit loses to
       this piece is ``Σ_e mon_atk[e] * res[e]/100`` HP per turn, so ``defense``
@@ -220,7 +323,7 @@ def armor_score_pure(elements: list[str], resistance: dict[str, int],
                                     monster_resistance, player_attack, dmg,
                                     dmg_elements, critical_strike, hp_restore,
                                     hp_bonus, lifesteal, combat_buff)
-            + armor_score_efficiency_pure(wisdom, prospecting, inventory_space, haste))
+            + gear_score_efficiency_pure(wisdom, prospecting, inventory_space, haste))
 
 
 def weapon_score_raw(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
@@ -236,18 +339,18 @@ def weapon_score_raw(weapon: ItemStats, monster_resistance: dict[str, int]) -> i
                                  weapon.critical_strike, monster_resistance)
 
 
-def weapon_score(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
-    """Estimated damage-per-hit a weapon deals against a monster.
+def weapon_score_combat(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
+    """The COMBAT slice of ``weapon_score`` — the same score minus its efficiency
+    slice.
 
-    Returns the EXACT integer surrogate ``2 * weapon_score_raw +
+    Returns the EXACT integer surrogate ``RULER_SCALE * weapon_score_raw +
     nonToolBonus``, where ``nonToolBonus = 0 if subtype == "tool" else 1``.
     BIT-EQUIVALENT to the Lean ``PurposeRouting.combatScore`` model
     (Formal/PurposeRouting.lean), which proves:
 
     * any strict WScore ordering is PRESERVED in the augmented score
-      (``combatScore_strict_of_strict_wscore``) — multiplying the raw
-      WScore by 2 protects every strict inequality from the +0/+1
-      tiebreaker;
+      (``combatScore_strict_of_strict_wscore``) — the ``RULER_SCALE`` factor
+      protects every strict inequality from the +0/+1 tiebreaker;
     * on a WScore TIE, the non-tool weapon strictly outranks the tool
       (``combatScore_tiebreaks_nontool_over_tool``).
 
@@ -257,9 +360,27 @@ def weapon_score(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
     the formal closure of the 2026-06-06 trace bug where Robby kept
     fishing_net equipped for combat against slimes despite owning combat
     weapons that scored equal.
+
+    See ``weapon_score_combat_pure``.
+    """
+    return weapon_score_combat_pure(list(ELEMENTS), weapon.attack, weapon.subtype,
+                                    weapon.critical_strike, monster_resistance)
+
+
+def weapon_score(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
+    """Ruler value of a WEAPON against a monster: its combat term plus the
+    efficiency term every slot shares.
+
+    ``= weapon_score_combat + gear_score_efficiency``, the same two-term shape
+    ``armor_score`` has, over the same two functions. A weapon's
+    ``wisdom``/``prospecting``/``inventory_space``/``haste`` used to reach no
+    purpose at all; now they price exactly as they do on armor. BIT-EQUIVALENT
+    to the Lean ``PurposeRouting.weaponScore``.
     """
     return weapon_score_pure(list(ELEMENTS), weapon.attack, weapon.subtype,
-                             weapon.critical_strike, monster_resistance)
+                             weapon.critical_strike, monster_resistance,
+                             weapon.wisdom, weapon.prospecting,
+                             weapon.inventory_space, weapon.haste)
 
 
 def gather_score(item: ItemStats, skill: str) -> int:
@@ -281,9 +402,11 @@ def armor_score(armor: ItemStats, monster_attack: dict[str, int],
                 player_attack: dict[str, int]) -> int:
     """Combat value of a NON-WEAPON piece against one monster, for one fighter.
 
-    UNIT: **1/20000 of one HP of damage swing per combat turn**, for the two
-    monster-relative terms (see ``armor_score_pure`` for the full derivation and
-    for the terms that are deliberately NOT in that unit).
+    UNIT: **1/40000 of one HP of damage swing per combat turn** for the two
+    monster-relative terms — ``RULER_SCALE`` times the natural ``1/20000`` (see
+    ``armor_score_pure`` for the full derivation and for the terms that are
+    deliberately NOT in that unit, and ``RULER_SCALE`` for the factor). The SAME
+    unit ``weapon_score`` is in, which is the point of the factor.
 
     Both halves of the swing are counted and they are commensurate by
     construction — the piece's DEFENSE (damage it stops the monster dealing,
@@ -309,11 +432,14 @@ def armor_score(armor: ItemStats, monster_attack: dict[str, int],
                             armor.lifesteal, armor.combat_buff)
 
 
-def armor_score_efficiency(armor: ItemStats) -> int:
-    """The EFFICIENCY slice of ``armor_score`` — monster-independent, so it
-    takes no adversary. See ``armor_score_efficiency_pure``."""
-    return armor_score_efficiency_pure(armor.wisdom, armor.prospecting,
-                                       armor.inventory_space, armor.haste)
+def gear_score_efficiency(item: ItemStats) -> int:
+    """The EFFICIENCY slice of the ruler, for ANY slot — monster-independent, so
+    it takes no adversary. The weapon branch and the armor branch of
+    ``ai/gear_value.gear_components`` both read THIS function, which is what
+    makes a stat cost the same wherever it is carried. See
+    ``gear_score_efficiency_pure``."""
+    return gear_score_efficiency_pure(item.wisdom, item.prospecting,
+                                      item.inventory_space, item.haste)
 
 
 def armor_score_combat(armor: ItemStats, monster_attack: dict[str, int],

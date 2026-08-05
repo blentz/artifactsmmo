@@ -13,12 +13,13 @@ the two layers can never reach contradictory verdicts about the same item.
   weighted a resistance PERCENTAGE 1:1 against an HP amount, and it is gone.
 * EFFICIENCY is the four time-buying stats (wisdom, prospecting,
   inventory_space, haste) — the SAME four the ruler isolates in
-  `armor_score_efficiency` — re-weighted per stat, because a bag's compounding
-  value should not be priced like raw attack, and optionally CAPPED.
+  `gear_score_efficiency` for EVERY slot — re-weighted per stat, because a bag's
+  compounding value should not be priced like raw attack, and optionally CAPPED.
 
-Because the ruler's combat term takes no utility stat as an input at all
-(`armor_score_combat_pure` has no such parameter), utility enters this score
-exactly once, through the efficiency block.
+Because NEITHER of the ruler's combat terms takes a utility stat as an input at
+all (`armor_score_combat_pure` / `weapon_score_combat_pure` have no such
+parameter), utility enters this score exactly once, through the efficiency
+block — on the weapon slot as well as the armor slots.
 
 The per-stat efficiency WEIGHTS are derived (openapi rates for
 wisdom/prospecting; a gather/craft-cadence proxy for inventory_space; an

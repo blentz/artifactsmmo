@@ -69,8 +69,9 @@ def test_rank_matches_oracle(attack, resistance, dmg_elements, dmg, critical_str
     Diverges on: a changed canonical-adversary attack or resistance, a
     non-uniform adversary, a dropped `flat_utility` summand (including the
     `hp_restore` that joined it), a dropped defense or offense term, the weapon
-    branch's `2 *` scale, and the `nonToolBonus` (subtype == "tool" is the only
-    branch that zeroes it)."""
+    branch's `RULER_SCALE` factor (on EITHER slot -- both terms carry it now),
+    the weapon branch's efficiency term, and the `nonToolBonus` (subtype ==
+    "tool" is the only branch that zeroes it)."""
     stats = ItemStats(
         code="x", level=1, type_=type_, subtype=subtype,
         attack=dict(zip(ELEMENTS, attack, strict=True)),
@@ -85,7 +86,8 @@ def test_rank_matches_oracle(attack, resistance, dmg_elements, dmg, critical_str
     is_tool = 1 if subtype == "tool" else 0
     py = gear_value(stats, Rank)
     lean = run_oracle("rank_value",
-                      [[is_weapon, is_tool, *_item_block(stats, 1)]])[0]["value"]
+                      [[is_weapon, is_tool, *_item_block(stats, 1),
+                        wisdom, prospecting, inventory_space, haste]])[0]["value"]
     assert py == lean
 
 
@@ -109,7 +111,8 @@ def test_rank_components_match_oracle(attack, resistance, dmg_elements, dmg,
     term (or an in-fight stat leaked out of it) — exactly the double-counting the
     economics layer must not do. Diverges on: moving any of the four efficiency
     stats into the combat slice, dropping `hp_restore`/`lifesteal`/`combat_buff`
-    from it, or giving the WEAPON branch a non-zero efficiency term."""
+    from it, or re-zeroing the WEAPON branch's efficiency term (which is what
+    made a weapon's wisdom/prospecting invisible to every purpose)."""
     stats = ItemStats(
         code="x", level=1, type_=type_, subtype=subtype,
         attack=dict(zip(ELEMENTS, attack, strict=True)),

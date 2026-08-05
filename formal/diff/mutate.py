@@ -822,16 +822,16 @@ SCORING_MUTATIONS = [
     # Killed by the AScore byte-equality in test_equipment_scoring_diff.py and the
     # armor arm of test_loadout_picker_diff.py.
     ("equipment_scoring: drop armor offense term (damage %/crit invisible)",
-     "    return 200 * defense + offense + 200 * flat_combat",
-     "    return 200 * defense + 200 * flat_combat"),
+     "    return RULER_SCALE * (200 * defense + offense + 200 * flat_combat)",
+     "    return RULER_SCALE * (200 * defense + 200 * flat_combat)"),
     # Drop the 200x that puts the defense sum on the offense sum's denominator.
     # Defense then reads 200x too cheap against offense, so a pure-damage piece
     # beats a genuinely defensive one against a hard-hitting monster. Killed by
     # the same byte-equality diffs (and by the rosenblood case in
     # tests/ai/test_armor_score_offense.py).
     ("equipment_scoring: drop the 200x defense scaling (mixes two units)",
-     "    return 200 * defense + offense + 200 * flat_combat",
-     "    return defense + offense + 200 * flat_combat"),
+     "    return RULER_SCALE * (200 * defense + offense + 200 * flat_combat)",
+     "    return RULER_SCALE * (defense + offense + 200 * flat_combat)"),
     # Drop the per-element damage % read. `dmg_elements` is how the game expresses
     # ELEMENT SPECIALIZATION on armor (copper_armor +5 fire/earth vs feather_coat
     # +5 air/water), so without it two element-opposite pieces score identically
@@ -979,17 +979,11 @@ LOADOUT_PICKER_ARTIFACT_MUTATIONS = [
 GEAR_VALUE_DISPATCH_MUTATIONS = [
     ("gear_value: swap weapon_score and armor_score dispatch",
      "        if stats.type_ == \"weapon\":\n"
-     "            return (weapon_score(stats, dict(purpose.monster_resistance)), 0)\n"
-     "        return (armor_score_combat(stats, dict(purpose.monster_attack),\n"
-     "                                   dict(purpose.monster_resistance),\n"
-     "                                   dict(purpose.player_attack)),\n"
-     "                armor_score_efficiency(stats))",
+     "            return (weapon_score_combat(stats, dict(purpose.monster_resistance)),\n"
+     "                    gear_score_efficiency(stats))",
      "        if stats.type_ != \"weapon\":\n"
-     "            return (weapon_score(stats, dict(purpose.monster_resistance)), 0)\n"
-     "        return (armor_score_combat(stats, dict(purpose.monster_attack),\n"
-     "                                   dict(purpose.monster_resistance),\n"
-     "                                   dict(purpose.player_attack)),\n"
-     "                armor_score_efficiency(stats))"),
+     "            return (weapon_score_combat(stats, dict(purpose.monster_resistance)),\n"
+     "                    gear_score_efficiency(stats))"),
 ]
 
 
@@ -2763,8 +2757,8 @@ KIT_SELECTION_MUTATIONS = [
 ARMOR_UTILITY_MUTATIONS = [
     ("armor_score: drop the in-fight flat block (hp_restore/hp_bonus/lifesteal/"
      "combat_buff) — a resistance-free healer scores 0",
-     "    return 200 * defense + offense + 200 * flat_combat",
-     "    return 200 * defense + offense"),
+     "    return RULER_SCALE * (200 * defense + offense + 200 * flat_combat)",
+     "    return RULER_SCALE * (200 * defense + offense)"),
     ("armor_score: drop lifesteal — lifesteal gear undervalued",
      "    flat_combat = hp_restore + hp_bonus + lifesteal + combat_buff",
      "    flat_combat = hp_restore + hp_bonus + combat_buff"),
@@ -2779,16 +2773,55 @@ ARMOR_UTILITY_MUTATIONS = [
     # either drops a whole stat family from the one ruler.
     ("armor_score: drop the efficiency slice — wisdom/prospecting/inventory/"
      "haste invisible to the ruler",
-     "            + armor_score_efficiency_pure(wisdom, prospecting, inventory_space, haste))",
+     "                                    hp_bonus, lifesteal, combat_buff)\n"
+     "            + gear_score_efficiency_pure(wisdom, prospecting, inventory_space, haste))",
+     "                                    hp_bonus, lifesteal, combat_buff)\n"
      "            + 0)"),
-    ("armor_score_efficiency: drop wisdom from the efficiency slice",
-     "    return 200 * (wisdom + prospecting + inventory_space + haste)",
-     "    return 200 * (prospecting + inventory_space + haste)"),
-    ("armor_score_efficiency: drop the 200x scale — utility priced 200x too "
+    ("gear_score_efficiency: drop wisdom from the efficiency slice",
+     "    return RULER_SCALE * 200 * (wisdom + prospecting + inventory_space + haste)",
+     "    return RULER_SCALE * 200 * (prospecting + inventory_space + haste)"),
+    ("gear_score_efficiency: drop the 200x scale — utility priced 200x too "
      "cheap against defense",
-     "    return 200 * (wisdom + prospecting + inventory_space + haste)",
-     "    return (wisdom + prospecting + inventory_space + haste)"),
+     "    return RULER_SCALE * 200 * (wisdom + prospecting + inventory_space + haste)",
+     "    return RULER_SCALE * (wisdom + prospecting + inventory_space + haste)"),
+    # THE RULER'S QUANTUM. Dropping it from ONE term re-opens the cross-slot
+    # asymmetry this constant exists to close (armor at half a weapon's
+    # magnitude for the same real swing); dropping it from the weapon COMBAT
+    # term also re-opens the fishing_net tie-break, since a +1 then flips a
+    # strict raw inequality.
+    ("RULER_SCALE: drop the ruler quantum from the ARMOR combat term — armor "
+     "back at half a weapon's magnitude for the same HP swing",
+     "    return RULER_SCALE * (200 * defense + offense + 200 * flat_combat)",
+     "    return (200 * defense + offense + 200 * flat_combat)"),
+    ("RULER_SCALE: retune the quantum to 3 — the tie-break stays safe but the "
+     "constant stops being the one the Lean model names",
+     "RULER_SCALE = 2",
+     "RULER_SCALE = 3"),
 ]
+# The WEAPON slot's two former asymmetries, each with its own mutant. Bound to
+# `tests/ai/test_weapon_ruler_parity.py` rather than to the equipment-scoring
+# differential, which compares the RAW `weapon_score_raw` (no efficiency, no
+# quantum) on the weapon slot and so cannot see either of these.
+WEAPON_RULER_MUTATIONS = [
+    ("weapon_score: drop the efficiency slice — a weapon's wisdom/prospecting/"
+     "inventory/haste invisible to the ruler again (the voidstone regression)",
+     "                                     monster_resistance)\n"
+     "            + gear_score_efficiency_pure(wisdom, prospecting, inventory_space, haste))",
+     "                                     monster_resistance)\n"
+     "            + 0)"),
+    ("weapon_score_combat: invert the non-tool test — the ruler tie-breaks "
+     "TOWARD the tool, which is the 2026-06-06 fishing_net pick itself",
+     "    non_tool_bonus = 0 if subtype == \"tool\" else 1",
+     "    non_tool_bonus = 1 if subtype == \"tool\" else 0"),
+    ("RULER_SCALE: drop the ruler quantum from the WEAPON combat term — the "
+     "non-tool +1 can flip a strict raw inequality (fishing_net)",
+     "    return RULER_SCALE * weapon_score_raw_pure(elements, attack, critical_strike,\n"
+     "                                               monster_resistance) + non_tool_bonus",
+     "    return weapon_score_raw_pure(elements, attack, critical_strike,\n"
+     "                                 monster_resistance) + non_tool_bonus"),
+]
+
+
 # THE PARTITION (`gear_value.gear_components`): the ECONOMICS layer's combat
 # input is one of the two terms the ONE gear ruler is the SUM of. RETIRED with
 # the flat sum itself: the eight `combat_raw: drop <stat>` mutants that used to
@@ -2808,17 +2841,17 @@ GEAR_VALUE_PARTITION_MUTATIONS = [
      "        return (armor_score_combat(stats, dict(purpose.monster_attack),\n"
      "                                   dict(purpose.monster_resistance),\n"
      "                                   dict(purpose.player_attack)),\n"
-     "                armor_score_efficiency(stats))",
+     "                gear_score_efficiency(stats))",
      "        return (armor_score_combat(stats, dict(purpose.monster_attack),\n"
      "                                   dict(purpose.monster_resistance),\n"
      "                                   dict(purpose.player_attack))\n"
-     "                + armor_score_efficiency(stats),\n"
-     "                armor_score_efficiency(stats))"),
-    ("gear_components: the WEAPON branch reports a non-zero efficiency term the "
-     "ruler does not have, so combat + efficiency stops equalling gear_value",
-     "            return (weapon_score(stats, dict(purpose.monster_resistance)), 0)",
-     "            return (weapon_score(stats, dict(purpose.monster_resistance)),\n"
-     "                    armor_score_efficiency(stats))"),
+     "                + gear_score_efficiency(stats),\n"
+     "                gear_score_efficiency(stats))"),
+    ("gear_components: the WEAPON branch reports a ZERO efficiency term again, "
+     "so a weapon's utility stats stop reaching the economics layer",
+     "            return (weapon_score_combat(stats, dict(purpose.monster_resistance)),\n"
+     "                    gear_score_efficiency(stats))",
+     "            return (weapon_score_combat(stats, dict(purpose.monster_resistance)), 0)"),
 ]
 
 
@@ -6152,6 +6185,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_equipment_scoring_diff.py", survivors)
     run_group(GEAR_VALUE_SRC, GEAR_VALUE_PARTITION_MUTATIONS,
               "formal/diff/test_gear_value_diff.py", survivors)
+    run_group(SCORING_SRC, WEAPON_RULER_MUTATIONS,
+              "tests/ai/test_weapon_ruler_parity.py", survivors)
     run_group(GEAR_VALUE_CORE_SRC, RANK_ADVERSARY_MUTATIONS,
               "tests/ai/test_gear_value_core.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, RESTORE_FAMILY_MUTATIONS,

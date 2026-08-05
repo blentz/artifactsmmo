@@ -2,9 +2,9 @@
 
 from artifactsmmo_cli.ai.equipment.scoring import (
     armor_score_combat,
-    armor_score_efficiency,
     gather_score,
-    weapon_score,
+    gear_score_efficiency,
+    weapon_score_combat,
 )
 from artifactsmmo_cli.ai.gear_value_core import (
     Combat,
@@ -30,23 +30,29 @@ def gear_components(stats: ItemStats, purpose: object) -> tuple[int, int]:
     damage figure 1:1 — the same category error the Rank/Combat unification
     removed from the gear ruler, surviving one layer up.
 
-    The WEAPON branch's efficiency term is 0, not "the weapon's efficiency
-    stats": `weapon_score` (`2 * WScore + nonToolBonus`) has no flat-utility
-    block at all, so a weapon's `wisdom`/`prospecting` are invisible to the
-    ruler. Reporting 0 keeps `combat + efficiency == gear_value` exact rather
-    than inventing a term the ruler does not have. Four live items are affected
-    (the voidstone tools, 100 prospecting each) and only as a tiebreak between
-    weapons of IDENTICAL weapon_score.
+    BOTH branches read the SAME efficiency function (`scoring.
+    gear_score_efficiency`), so a point of wisdom / prospecting / inventory_space
+    / haste enters the ruler at the same price no matter which slot carries it.
+    The weapon branch used to report efficiency 0 — not because the weapon had
+    none but because `weapon_score` had no flat-utility block at all, so those
+    stats reached NO purpose. Five live items were affected: the four voidstone
+    tools (100 prospecting each) and obsidian_battleaxe (inventory_space −25,
+    a penalty it was not paying).
+
+    Neither branch's COMBAT term takes an efficiency stat as a parameter
+    (`armor_score_combat_pure` / `weapon_score_combat_pure`), which is the
+    mechanical reason utility enters the economics layer exactly once.
     """
     if purpose is Rank or isinstance(purpose, Rank):
         return gear_components(stats, rank_adversary())
     if isinstance(purpose, Combat):
         if stats.type_ == "weapon":
-            return (weapon_score(stats, dict(purpose.monster_resistance)), 0)
+            return (weapon_score_combat(stats, dict(purpose.monster_resistance)),
+                    gear_score_efficiency(stats))
         return (armor_score_combat(stats, dict(purpose.monster_attack),
                                    dict(purpose.monster_resistance),
                                    dict(purpose.player_attack)),
-                armor_score_efficiency(stats))
+                gear_score_efficiency(stats))
     raise ValueError(f"unsupported purpose: {purpose!r}")
 
 
@@ -76,8 +82,9 @@ def gear_value(stats: ItemStats, purpose: object) -> int:
 
     LAYERING DIRECTION: gear_value -> scoring. All three branches DELEGATE to
     the proven scorers in ``equipment/scoring.py``
-    (`weapon_score`/`armor_score_combat` + `armor_score_efficiency`, whose sum
-    IS `armor_score` / `gather_score`). That module must NOT import this one
+    (`weapon_score_combat`/`armor_score_combat`, each plus the shared
+    `gear_score_efficiency`, whose sums ARE `weapon_score` / `armor_score`, and
+    `gather_score`). That module must NOT import this one
     (it would cycle). ``pick_loadout(Gather(...))`` in
     ``equipment/loadout_picker.py`` selects gear using the `*_score` functions
     this module delegates to. The "scorers are specializations of gear_value"

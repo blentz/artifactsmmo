@@ -6,7 +6,11 @@ weapon_score / armor_score directly), not tautologies.
 """
 
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
-from artifactsmmo_cli.ai.equipment.scoring import armor_score, weapon_score
+from artifactsmmo_cli.ai.equipment.scoring import (
+    RULER_SCALE,
+    armor_score,
+    weapon_score,
+)
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
@@ -132,7 +136,7 @@ def test_combat_purpose_armor_slot_picks_same_as_legacy() -> None:
     m_res = gd.monster_resistance("yellow_slime")
 
     stats = gd._item_stats
-    assert armor_score(stats["leather_armor"], m_atk, m_res, {}) == 16000
+    assert armor_score(stats["leather_armor"], m_atk, m_res, {}) == RULER_SCALE * 16000
     assert armor_score(stats["water_robe"], m_atk, m_res, {}) == 0
 
     state = _make_state(
@@ -260,7 +264,7 @@ def test_gather_fills_empty_artifact_slot() -> None:
     so the empty-slot gate passes. The mutant that reverts the artifact branch to
     -gather_score (0) leaves the slot empty."""
     gd = _gd_gather_artifact()
-    assert armor_score(gd._item_stats["novice_guide"], {}, {}, {}) == 200 * 75
+    assert armor_score(gd._item_stats["novice_guide"], {}, {}, {}) == RULER_SCALE * 200 * 75
     state = _make_state(level=1, inventory={"novice_guide": 1},
                         equipment={"artifact1_slot": None})
     result = pick_loadout(Gather("woodcutting"), state, gd)

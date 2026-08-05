@@ -7,7 +7,12 @@ import statistics
 from pathlib import Path
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
-from artifactsmmo_cli.ai.equipment.scoring import armor_score, gather_score, weapon_score
+from artifactsmmo_cli.ai.equipment.scoring import (
+    RULER_SCALE,
+    armor_score,
+    gather_score,
+    weapon_score,
+)
 from artifactsmmo_cli.ai.equipment.slot_occupancy import may_displace
 from artifactsmmo_cli.ai.gear_value import gear_components, gear_value
 from artifactsmmo_cli.ai.gear_value_core import (
@@ -191,11 +196,11 @@ def test_hp_restore_is_priced_by_the_one_ruler() -> None:
     `gain > 0` utility-slot gate empties out."""
     potion = ItemStats(code="small_health_potion", level=5, type_="utility",
                        hp_restore=60)
-    assert gear_value(potion, Rank) == 200 * 60
+    assert gear_value(potion, Rank) == RULER_SCALE * 200 * 60
     adversary = rank_adversary()
     assert armor_score(potion, dict(adversary.monster_attack),
                        dict(adversary.monster_resistance),
-                       dict(adversary.player_attack)) == 200 * 60
+                       dict(adversary.player_attack)) == RULER_SCALE * 200 * 60
 
 
 # --- the non-tool tiebreak survives the move ----------------------------------
@@ -231,19 +236,74 @@ def test_efficiency_term_is_the_four_time_buying_stats() -> None:
     at), all four weighted alike, and NOTHING else in it."""
     stats = ItemStats(code="u", level=1, type_="artifact", hp_bonus=99,
                       wisdom=1, prospecting=2, inventory_space=3, haste=4)
-    assert gear_components(stats, Rank)[1] == 200 * (1 + 2 + 3 + 4)
+    assert gear_components(stats, Rank)[1] == RULER_SCALE * 200 * (1 + 2 + 3 + 4)
 
 
-def test_weapon_efficiency_term_is_zero() -> None:
-    """`weapon_score` (`2 * WScore + nonToolBonus`) has no flat-utility block,
-    so the ruler cannot see a weapon's wisdom. Reporting 0 rather than the
-    stat sum keeps the partition exact instead of inventing a term the ruler
-    does not have — the four live voidstone tools are the blast radius."""
+def test_weapon_efficiency_term_prices_the_same_stats_as_armors() -> None:
+    """A WEAPON's efficiency stats reach the ruler, at the SAME price armor pays.
+
+    The four live voidstone tools carry 100 prospecting each and the ruler used
+    to see none of it: `weapon_score` had no flat-utility block, so
+    `gear_components` reported efficiency 0 on the weapon branch and a weapon's
+    wisdom / prospecting / inventory_space / haste contributed to no purpose at
+    all. Both branches now read `scoring.gear_score_efficiency`."""
     tool = ItemStats(code="voidstone_pickaxe", level=1, type_="weapon",
                      subtype="tool", attack={"earth": 5}, prospecting=100)
     combat, efficiency = gear_components(tool, Rank)
-    assert efficiency == 0
-    assert combat == gear_value(tool, Rank)
+    assert efficiency == RULER_SCALE * 200 * 100
+    assert combat + efficiency == gear_value(tool, Rank)
+    # The combat term still takes no efficiency stat: dropping the prospecting
+    # moves ONLY the efficiency half.
+    bare = ItemStats(code="bare_pickaxe", level=1, type_="weapon",
+                     subtype="tool", attack={"earth": 5})
+    assert gear_components(bare, Rank) == (combat, 0)
+
+
+def test_a_stat_costs_the_same_on_a_weapon_as_on_armor() -> None:
+    """NO DOUBLE COUNT, NO SLOT PREMIUM: 100 prospecting is worth exactly the
+    same number of ruler units whether an artifact or a weapon carries it, and
+    it lands in the EFFICIENCY term on both."""
+    for stat in ("wisdom", "prospecting", "inventory_space", "haste"):
+        weapon = ItemStats(code="w", level=1, type_="weapon", **{stat: 100})
+        artifact = ItemStats(code="a", level=1, type_="artifact", **{stat: 100})
+        bare_w = ItemStats(code="w0", level=1, type_="weapon")
+        bare_a = ItemStats(code="a0", level=1, type_="artifact")
+        assert (gear_value(weapon, Rank) - gear_value(bare_w, Rank)
+                == gear_value(artifact, Rank) - gear_value(bare_a, Rank)
+                == RULER_SCALE * 200 * 100), stat
+        assert gear_components(weapon, Rank)[1] == gear_components(artifact, Rank)[1]
+
+
+def test_weapons_and_armor_are_on_one_scale_cross_slot() -> None:
+    """THE COMMENSURABILITY FIX, on live catalog witnesses.
+
+    `RULER_SCALE` used to multiply only the weapon term, so a weapon's number was
+    twice an armor's for the same real effect. At the canonical adversary
+    `copper_dagger` (level 1) and `steel_armor` (level 20) both scored 282_00x —
+    a tie — while the dagger contributes 7.05 HP of swing per turn and the armor
+    14.10. Cross-slot rankings (`pursuit_value`, the progression tree) compare
+    exactly these numbers, so the tie was a 2x thumb on the weapon's side.
+
+    The unit is `1/(RULER_SCALE * 20000)` of one HP of damage swing per turn on
+    BOTH slots; the assertions below are stated in HP/turn to say so."""
+    # Stats verbatim from /v3/items (the pinned bundle).
+    dagger = ItemStats(code="copper_dagger", level=1, type_="weapon",
+                       attack={"air": 6}, critical_strike=35)
+    armor = ItemStats(code="steel_armor", level=20, type_="body_armor",
+                      resistance={"earth": 5, "water": 5}, hp_bonus=90,
+                      dmg_elements={"earth": 15, "water": 15})
+    unit = RULER_SCALE * 20000  # ruler units per HP of swing per turn
+    # copper_dagger: 6 attack, unresisted, x the (200+35)/200 crit multiplier
+    # (the `- 1` strips the non-tool tie-break, which is not a swing).
+    assert gear_value(dagger, Rank) - 1 == RULER_SCALE * 6 * 100 * 235
+    assert (gear_value(dagger, Rank) - 1) / unit == 7.05
+    # steel_armor: 2 elements x 33 reference attack x 5% resistance (defense),
+    # + 2 elements x 33 attack x 15% element damage (offense), + 90 hp.
+    assert gear_value(armor, Rank) == RULER_SCALE * (66_000 + 198_000 + 18_000)
+    assert gear_value(armor, Rank) / unit == 14.1
+    # The armor delivers twice the dagger's swing, and now scores twice as much.
+    # Before the quantum moved onto the armor terms these two TIED at 282_00x.
+    assert gear_value(armor, Rank) == 2 * (gear_value(dagger, Rank) - 1)
 
 
 def test_combat_term_prices_resistance_far_above_hp_restore() -> None:

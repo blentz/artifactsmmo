@@ -14,8 +14,9 @@ combat first, efficiency as the tiebreak::
 
     pursuit_value(stats) = combat * STRATEGIC_SCALE + clamp(efficiency_block)
 
-Utility therefore enters ONCE. The ruler's combat term literally cannot contain
-it: ``equipment/scoring.armor_score_combat_pure`` has no wisdom / prospecting /
+Utility therefore enters ONCE. Neither of the ruler's combat terms can contain
+it: ``equipment/scoring.armor_score_combat_pure`` and
+``equipment/scoring.weapon_score_combat_pure`` have no wisdom / prospecting /
 inventory_space / haste parameter to pass it through.
 
 WHY LEXICOGRAPHIC IS STRUCTURAL. With ``|clamp(e)| <= EFFICIENCY_BUDGET`` and

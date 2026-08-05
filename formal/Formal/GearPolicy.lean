@@ -108,7 +108,7 @@ theorem armor_score_nonneg (item : Item) (monsterAtk monsterRes playerAtk : Elem
     (hDmgElem : ∀ e ∈ elements, 0 ≤ elemGet item.dmgElem e)
     (hCrit : 0 ≤ item.crit) :
     0 ≤ AScore item monsterAtk monsterRes playerAtk := by
-  unfold AScore
+  unfold AScore rulerScale
   have hsum : 0 ≤ (elements.map
       (fun e => aTerm (elemGet monsterAtk e) (elemGet item.resistance e))).sum := by
     apply sum_nonneg_of_terms
@@ -170,7 +170,7 @@ theorem armor_strictly_dominates_empty_slot
     (hCrit : 0 ≤ item.crit) :
     baselineScore < AScore item monsterAtk monsterRes playerAtk := by
   rw [baselineScore_def]
-  unfold AScore
+  unfold AScore rulerScale
   -- The offense sum is ≥ 0 (it only ever ADDS to the strict defense gain).
   have hoff : 0 ≤ (elements.map
       (fun e' => oTerm (elemGet playerAtk e') (elemGet monsterRes e')
@@ -246,7 +246,7 @@ theorem armor_score_mono_in_resistance
                 ≤ 2 * (b.dmg + elemGet b.dmgElem e) + b.crit) :
     AScore a monsterAtk monsterRes playerAtk
       ≤ AScore b monsterAtk monsterRes playerAtk := by
-  unfold AScore
+  unfold AScore rulerScale
   have hSumLe : (elements.map
       (fun e => aTerm (elemGet monsterAtk e) (elemGet a.resistance e))).sum ≤
       (elements.map

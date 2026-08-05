@@ -17,10 +17,12 @@ SCORES. **Byte-equivalent integer model.** The Python `weapon_score` and
 the Lean oracle uses:
   * `WScore = Σ_elem atk * max(0, 100 - res)`   (Python `weapon_score` returns
     this integer DIRECTLY; the inner `max(0, 100 - res)` is the integer clamp.)
-  * `AScore = 200 * Σ_elem mon_atk * armor_res + Σ_elem oTerm + 200 * flatUtil`
-    (Python `armor_score` returns this integer directly; the defense sum has NO
-    clamp — armor scoring has none — while the offense sum reuses the weapon
-    clamp `max(0, 100 - monRes)` because it prices the WEARER's output.)
+  * `AScore = rulerScale * (200 * Σ_elem mon_atk * armor_res + Σ_elem oTerm +
+    200 * flatUtil)` (Python `armor_score` returns this integer directly; the
+    defense sum has NO clamp — armor scoring has none — while the offense sum
+    reuses the weapon clamp `max(0, 100 - monRes)` because it prices the
+    WEARER's output. `rulerScale` is the ruler's quantum, carried by EVERY term
+    on every slot — see `rulerScale` below.)
 Production Python uses pure integer arithmetic — there is no floating-point step
 anywhere in the score computation, so the Python value is BIT-EQUAL to the Lean
 `WScore`/`AScore` for every input. The previous float surrogate caveat is closed:
@@ -65,6 +67,26 @@ deriving Repr, DecidableEq
 
 /-- The 4 game elements as integer keys (fire, earth, water, air). -/
 def elements : List Int := [0, 1, 2, 3]
+
+/-- **THE RULER'S QUANTUM.** Every term of the gear ruler — the weapon slot's
+combat term (`PurposeRouting.combatScore`), the armor slots' combat term
+(`ACombat`), and the shared efficiency term both slots read (`AEfficiency`) — is
+carried at this multiple of its NATURAL unit, and nothing else in the ruler is.
+Mirrors the Python `equipment/scoring.RULER_SCALE`.
+
+It buys two things AT ONCE, which is why it is one constant and not two:
+
+* **the tie-break stays safe.** `PurposeRouting.nonToolBonus ∈ {0, 1}` is the
+  only sub-quantum quantity in the ruler; since every other term is a MULTIPLE
+  of `rulerScale = 2`, two distinct terms differ by at least 2 and a `+1` can
+  never flip a strict inequality (`nonToolBonus_lt_rulerScale`).
+* **the slots are commensurable.** The factor used to multiply ONLY the weapon
+  term, leaving weapons at twice armor's magnitude for the same real swing —
+  live witness `copper_dagger` (7.05 HP of swing per turn) tying `steel_armor`
+  (14.10) at 282_000. Applying it to every term makes commensurability a
+  property of the definition rather than of the numbers lining up
+  (`ruler_commensurate`). -/
+def rulerScale : Int := 2
 
 /-- Per-element weapon surrogate term: `atk * max(0, 100 - res)`. The clamp mirrors
 the Python float `max(0.0, 1 - res/100)`; here `res` is the MONSTER's resistance. -/
@@ -120,18 +142,19 @@ the offense sum existed. Its load-bearing role is the empty-slot gate: it makes 
 utility-only artifact (no resistance, no damage %) score > 0 so pick_loadout
 fills its slot (novice_guide: defense 0 + offense 0 + `200 * 75`). -/
 def AScore (item : Item) (monsterAtk monsterRes playerAtk : ElemStats) : Int :=
-  200 * (elements.map (fun e => aTerm (elemGet monsterAtk e) (elemGet item.resistance e))).sum
-    + (elements.map (fun e => oTerm (elemGet playerAtk e) (elemGet monsterRes e)
-          (item.dmg + elemGet item.dmgElem e) item.crit)).sum
-    + 200 * item.flatUtil
+  rulerScale *
+    (200 * (elements.map (fun e => aTerm (elemGet monsterAtk e) (elemGet item.resistance e))).sum
+      + (elements.map (fun e => oTerm (elemGet playerAtk e) (elemGet monsterRes e)
+            (item.dmg + elemGet item.dmgElem e) item.crit)).sum
+      + 200 * item.flatUtil)
 
-/-- `AScore` against NO monster and NO wearer attack is exactly `200 * flatUtil`:
-both monster-relative sums vanish (`aTerm 0 _ = 0`, and `oTerm 0 _ _ _ = 0`
-because `wTerm 0 _ = 0`). This is the Gather utility-fill benefit the live
-`loadout_picker._benefit` computes as `armor_score(stats, {}, {}, {})` — pinned
-here so the two cannot drift. -/
+/-- `AScore` against NO monster and NO wearer attack is exactly
+`rulerScale * (200 * flatUtil)`: both monster-relative sums vanish
+(`aTerm 0 _ = 0`, and `oTerm 0 _ _ _ = 0` because `wTerm 0 _ = 0`). This is the
+Gather utility-fill benefit the live `loadout_picker._benefit` computes as
+`armor_score(stats, {}, {}, {})` — pinned here so the two cannot drift. -/
 theorem AScore_no_monster (item : Item) :
-    AScore item [] [] [] = 200 * item.flatUtil := by
+    AScore item [] [] [] = rulerScale * (200 * item.flatUtil) := by
   simp [AScore, aTerm, oTerm, wTerm, elemGet, elements]
 
 /-! ### Splitting `AScore` into its COMBAT and EFFICIENCY slices.
@@ -152,10 +175,17 @@ Mirrors the Python `armor_score_combat_pure` / `armor_score_efficiency_pure`,
 whose sum IS `armor_score_pure`. -/
 
 /-- The EFFICIENCY slice: the four time-buying stats on the same `200 *` scale
-`AScore` already carries its flat-utility block at. Mirrors the Python
-`armor_score_efficiency_pure`. -/
+`AScore` already carries its flat-utility block at, times the ruler's quantum.
+Mirrors the Python `gear_score_efficiency_pure`.
+
+SLOT-INDEPENDENT. `PurposeRouting.weaponScore` adds THIS SAME term, so the ruler
+prices a point of wisdom / prospecting / inventory space / haste identically
+whichever slot carries it (`PurposeRouting.weaponScore_efficiency_eq_AEfficiency`).
+It used to be armor-only, which is why a weapon's efficiency stats reached no
+purpose at all — the four voidstone tools' 100 prospecting and
+obsidian_battleaxe's `inventory_space = -25` were both free. -/
 def AEfficiency (wisdom prospecting inventorySpace haste : Int) : Int :=
-  200 * (wisdom + prospecting + inventorySpace + haste)
+  rulerScale * 200 * (wisdom + prospecting + inventorySpace + haste)
 
 /-- The COMBAT slice: `AScore` with only the IN-FIGHT part of the flat block —
 both monster-relative sums unchanged, plus `200 * flatCombat` where `flatCombat`
@@ -166,10 +196,11 @@ pursuit ruler's combat term cannot contain utility: there is no parameter
 through which utility could reach it. Mirrors `armor_score_combat_pure`. -/
 def ACombat (item : Item) (monsterAtk monsterRes playerAtk : ElemStats)
     (flatCombat : Int) : Int :=
-  200 * (elements.map (fun e => aTerm (elemGet monsterAtk e) (elemGet item.resistance e))).sum
-    + (elements.map (fun e => oTerm (elemGet playerAtk e) (elemGet monsterRes e)
-          (item.dmg + elemGet item.dmgElem e) item.crit)).sum
-    + 200 * flatCombat
+  rulerScale *
+    (200 * (elements.map (fun e => aTerm (elemGet monsterAtk e) (elemGet item.resistance e))).sum
+      + (elements.map (fun e => oTerm (elemGet playerAtk e) (elemGet monsterRes e)
+            (item.dmg + elemGet item.dmgElem e) item.crit)).sum
+      + 200 * flatCombat)
 
 /-- **THE PARTITION.** Whenever the piece's flat block splits into its in-fight
 part and its four efficiency stats, the score splits the same way — the two
@@ -183,8 +214,32 @@ theorem AScore_decomp (item : Item) (monsterAtk monsterRes playerAtk : ElemStats
     AScore item monsterAtk monsterRes playerAtk
       = ACombat item monsterAtk monsterRes playerAtk flatCombat
         + AEfficiency wisdom prospecting inventorySpace haste := by
-  unfold AScore ACombat AEfficiency
+  unfold AScore ACombat AEfficiency rulerScale
   rw [hflat]
+  omega
+
+/-! ### Cross-slot commensurability.
+
+The armor combat term and the weapon combat term are both `rulerScale` times a
+value in the SAME natural unit (`1/20000` of one HP of damage swing per turn), so
+they can be compared directly. `PurposeRouting.ruler_commensurate` states the
+consequence on the two live score functions; here is the arithmetic fact it
+rides — the armor combat term of a piece with no offense boost and no in-fight
+flat stats is exactly `rulerScale` times its `200 *` defense sum. -/
+
+/-- The armor COMBAT term of a piece whose offense sum and in-fight flat block
+are zero is exactly `rulerScale * (200 * defenseSum)` — the same shape
+`PurposeRouting.combatScore` has around `WScore`. Not vacuous: any armor with
+`dmg = 0`, `dmgElem = []` and `crit = 0` has offense sum 0. -/
+theorem ACombat_defense_only (item : Item) (monsterAtk monsterRes playerAtk : ElemStats)
+    (hoff : (elements.map (fun e => oTerm (elemGet playerAtk e) (elemGet monsterRes e)
+              (item.dmg + elemGet item.dmgElem e) item.crit)).sum = 0) :
+    ACombat item monsterAtk monsterRes playerAtk 0
+      = rulerScale * (200 *
+          (elements.map (fun e => aTerm (elemGet monsterAtk e)
+            (elemGet item.resistance e))).sum) := by
+  unfold ACombat rulerScale
+  rw [hoff]
   omega
 
 /-! ### Feasibility and the per-slot pick. -/

@@ -705,7 +705,9 @@ open Formal.PriorityBand
 
 
 -- GearPolicy (Phase G1 of composition-correctness plan):
-#check @Formal.EquipmentScoring.AScore_no_monster                    -- no monster/no wearer atk ⇒ 200*flatUtil
+#check @Formal.EquipmentScoring.rulerScale                           -- THE RULER'S QUANTUM: every term carries this factor
+#check @Formal.EquipmentScoring.AScore_no_monster                    -- no monster/no wearer atk ⇒ rulerScale*200*flatUtil
+#check @Formal.EquipmentScoring.ACombat_defense_only                 -- defense-only armor combat term = rulerScale*(200*defense)
 #check @Formal.EquipmentScoring.ACombat                              -- AScore's COMBAT slice (no efficiency parameter at all)
 #check @Formal.EquipmentScoring.AEfficiency                          -- AScore's EFFICIENCY slice (the four time-buying stats)
 #check @Formal.EquipmentScoring.AScore_decomp                        -- the two slices PARTITION AScore (no double count)
@@ -722,6 +724,13 @@ open Formal.PriorityBand
 -- PurposeRouting (Phase G2):
 #check @Formal.PurposeRouting.combatScore_strict_of_strict_wscore       -- strict WScore order preserved
 #check @Formal.PurposeRouting.combatScore_tiebreaks_nontool_over_tool   -- WScore tie ⇒ non-tool wins
+#check @Formal.PurposeRouting.nonToolBonus_lt_rulerScale                -- the tie-break is SUB-QUANTUM (never flips an ordering)
+#check @Formal.PurposeRouting.weaponScore                               -- the weapon slot's RULER value = combat term + shared efficiency
+#check @Formal.PurposeRouting.weaponScore_decomp                        -- THE PARTITION on the weapon slot (no double count)
+#check @Formal.PurposeRouting.weaponScore_efficiency_eq_AEfficiency     -- a stat costs the SAME in every slot
+#check @Formal.PurposeRouting.ruler_commensurate                        -- equal real swing ⇒ equal ruler combat term, cross-slot
+#check @Formal.PurposeRouting.weaponScore_strict_of_strict_wscore       -- strict WScore order preserved on the FULL weapon score
+#check @Formal.PurposeRouting.weaponScore_tiebreaks_nontool_over_tool   -- fishing_net invariant on the FULL weapon score
 #check @Formal.PurposeRouting.combat_picks_nontool_over_tied_tool       -- argmax over [tool,nontool] = nontool on tie
 #check @Formal.PurposeRouting.pickGatherSlot_score_optimal              -- gather pick = argmin gatherScore
 #check @Formal.PurposeRouting.argminBy_le                               -- argmin is lower bound
@@ -845,7 +854,7 @@ open Formal.PriorityBand
 
 -- GearValue (unified Rank ruler core; equip_value delegates to gear_value(_, Rank)):
 #check @Formal.GearValue.rankCombat             -- the ruler's COMBAT term (economics layer's input)
-#check @Formal.GearValue.rankEfficiency         -- the ruler's EFFICIENCY term (0 on the weapon branch)
+#check @Formal.GearValue.rankEfficiency         -- the ruler's EFFICIENCY term (AEfficiency on EVERY branch)
 #check @Formal.GearValue.rankValue_decomp       -- THE PARTITION: rankValue = rankCombat + rankEfficiency
 #check @Formal.GearValue.gearValue                          -- the ONE gear ruler (combatScore on the weapon slot, AScore otherwise)
 #check @Formal.GearValue.rankValue_eq_gearValue_canonical   -- ONE ALGORITHM: Rank IS gear_value at the canonical adversary
@@ -861,7 +870,7 @@ open Formal.PriorityBand
 #check @Formal.GearValue.combatValue_armor_nonneg           -- armor_score_nonneg on gear_value(Combat) armor
 #check @Formal.GearValue.combatValue_pickslot_optimal       -- pickslot_score_optimal on gear_value(Combat)
 #check @Formal.GearValue.gatherValue_pickGatherSlot_optimal -- pickGatherSlot_score_optimal on gear_value(Gather)
-#check @Formal.GearValue.combatScore_eq_combatValue         -- combatScore = 2*combatValue + nonToolBonus
+#check @Formal.GearValue.combatScore_eq_combatValue         -- combatScore = rulerScale*combatValue + nonToolBonus
 #check @Formal.GearValue.gatherValue_eq_gatherScore         -- gatherValue = PurposeRouting.gatherScore
 -- GearValue unified purpose picker (Task 3, 2026-06-28): per-slot optimality ∀ purpose
 #check @Formal.GearValue.pickSlot_score_optimal_purpose     -- unified argmax: best maximizes benefit ∀ purpose
@@ -1101,11 +1110,14 @@ open Formal.PriorityBand
 -- below; only the live `tool_value_pure` duality remains extracted here.
 #check @Extracted.Bridges.weapon_score_raw_bridge                     -- extracted = hand WScore, ∀ profiles/embeddings
 #check @Extracted.Bridges.armor_score_combat_bridge                   -- extracted combat slice = hand ACombat, ∀ profiles
-#check @Extracted.Bridges.armor_score_efficiency_bridge               -- extracted efficiency slice = hand AEfficiency
+#check @Extracted.Bridges.gear_score_efficiency_bridge                 -- extracted efficiency slice = hand AEfficiency (both slots)
 #check @Extracted.Bridges.armor_score_bridge                          -- extracted = hand AScore (no clamp), ∀ profiles
-#check @Extracted.Bridges.weapon_score_bridge                         -- extracted composite = combatScore (isTool = subtype)
+#check @Extracted.Bridges.weapon_score_combat_bridge                  -- extracted weapon COMBAT term = combatScore (isTool = subtype)
+#check @Extracted.Bridges.weapon_score_bridge                         -- extracted composite = weaponScore (combat + shared efficiency)
 #check @Extracted.Bridges.weapon_score_raw_nonneg_extracted           -- THE clamp theorem (transferred)
 #check @Extracted.Bridges.weapon_score_strict_extracted               -- strict WScore order survives tiebreaker (transferred)
+#check @Extracted.Bridges.weapon_score_full_strict_extracted          -- ... and on the FULL extracted weapon score
+#check @Extracted.Bridges.weapon_score_full_tiebreak_extracted        -- fishing_net invariant on the FULL extracted weapon score
 #check @Extracted.Bridges.weapon_score_tiebreak_extracted             -- fishing_net invariant: non-tool wins ties (transferred)
 #check @Extracted.Bridges.pickslot_no_downgrade_extracted             -- per-slot pick never downgrades (transferred)
 #check @Extracted.Bridges.gather_score_absent_zero                    -- no skill entry ⇒ score 0 (docstring contract)

@@ -3125,10 +3125,29 @@ example : ∀ (rows : List Formal.GearTaxonomy.Row) (t : String),
 example : ∀ (isWeapon : Bool) (ci : Formal.PurposeRouting.CombatItem)
     (flatCombat wisdom prospecting inventorySpace haste : Int),
     ci.base.flatUtil = flatCombat + wisdom + prospecting + inventorySpace + haste →
-    Formal.GearValue.rankValue isWeapon ci =
+    Formal.GearValue.rankValue isWeapon ci wisdom prospecting inventorySpace haste =
       Formal.GearValue.rankCombat isWeapon ci flatCombat
-        + Formal.GearValue.rankEfficiency isWeapon wisdom prospecting inventorySpace haste :=
+        + Formal.GearValue.rankEfficiency wisdom prospecting inventorySpace haste :=
   @Formal.GearValue.rankValue_decomp
+-- PurposeRouting. nonToolBonus_lt_rulerScale: the tie-break is SUB-QUANTUM. Every
+-- ruler term is a multiple of rulerScale, so two distinct terms differ by at least
+-- rulerScale and a +1 can never flip a strict ordering. This is what keeps the
+-- fishing_net tie-break safe once the same factor is carried by every term rather
+-- than by the weapon term alone.
+example : ∀ (ci : Formal.PurposeRouting.CombatItem),
+    Formal.PurposeRouting.nonToolBonus ci < Formal.EquipmentScoring.rulerScale :=
+  @Formal.PurposeRouting.nonToolBonus_lt_rulerScale
+-- PurposeRouting. weaponScore_efficiency_eq_AEfficiency: a stat costs the SAME in
+-- every slot. What the four efficiency stats contribute to a WEAPON's ruler value
+-- is literally AEfficiency -- the term the armor branch adds -- so no stat is
+-- priced by which slot happens to carry it.
+example : ∀ (monsterRes : Formal.EquipmentScoring.ElemStats)
+    (ci : Formal.PurposeRouting.CombatItem)
+    (wisdom prospecting inventorySpace haste : Int),
+    Formal.PurposeRouting.weaponScore monsterRes ci wisdom prospecting inventorySpace haste
+        - Formal.PurposeRouting.combatScore monsterRes ci
+      = Formal.EquipmentScoring.AEfficiency wisdom prospecting inventorySpace haste :=
+  @Formal.PurposeRouting.weaponScore_efficiency_eq_AEfficiency
 -- StrategicValue. pursuit_combat_dominates: cross-slot combat dominance is an
 -- ORDER-EMBEDDING, quantified over ALL integer inputs -- a strictly greater
 -- combat term is a strictly greater pursuit value whatever the efficiency stats
@@ -3151,18 +3170,21 @@ example : ∀ (scale budget c ea eb : Int),
 -- so Rank cannot hold an opinion the combat picker disagrees with. Replaces the
 -- retired rank_eq_equipValue, whose subject (a separate flat Rank stat sum) no
 -- longer exists in either the model or the Python.
-example : ∀ (isWeapon : Bool) (ci : Formal.PurposeRouting.CombatItem),
-    Formal.GearValue.rankValue isWeapon ci
+example : ∀ (isWeapon : Bool) (ci : Formal.PurposeRouting.CombatItem)
+    (wisdom prospecting inventorySpace haste : Int),
+    Formal.GearValue.rankValue isWeapon ci wisdom prospecting inventorySpace haste
       = Formal.GearValue.gearValue isWeapon ci Formal.GearValue.canonicalAttack
-          Formal.GearValue.canonicalResistance Formal.GearValue.canonicalAttack :=
+          Formal.GearValue.canonicalResistance Formal.GearValue.canonicalAttack
+          wisdom prospecting inventorySpace haste :=
   @Formal.GearValue.rankValue_eq_gearValue_canonical
 -- The two live orderings the unification was required to fix, on the MONSTER-BLIND
--- purpose -- the side that was still wrong.
-example : Formal.GearValue.rankValue false Formal.GearValue.adventurerVest
-    < Formal.GearValue.rankValue false Formal.GearValue.mushmushJacket :=
+-- purpose -- the side that was still wrong. (The four efficiency arguments are
+-- inert on the armor branch: AScore already reads them through flatUtil.)
+example : Formal.GearValue.rankValue false Formal.GearValue.adventurerVest 0 0 0 0
+    < Formal.GearValue.rankValue false Formal.GearValue.mushmushJacket 0 0 0 0 :=
   Formal.GearValue.rank_prefers_mushmush_jacket_over_adventurer_vest
-example : Formal.GearValue.rankValue false Formal.GearValue.lifeAmulet
-    < Formal.GearValue.rankValue false Formal.GearValue.fireAndEarthAmulet :=
+example : Formal.GearValue.rankValue false Formal.GearValue.lifeAmulet 0 0 0 0
+    < Formal.GearValue.rankValue false Formal.GearValue.fireAndEarthAmulet 0 0 0 0 :=
   Formal.GearValue.rank_prefers_fire_and_earth_amulet_over_life_amulet
 
 -- GearValue Combat/Gather: gear_value(Combat/Gather) subsumes the per-monster

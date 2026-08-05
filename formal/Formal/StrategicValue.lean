@@ -104,8 +104,8 @@ theorem combatOf_add_efficiency_eq_rankValue (isWeapon : Bool)
     (hflat : ci.base.flatUtil
       = flatCombat + wisdom + prospecting + inventorySpace + haste) :
     combatOf isWeapon ci flatCombat
-      + Formal.GearValue.rankEfficiency isWeapon wisdom prospecting inventorySpace haste
-      = Formal.GearValue.rankValue isWeapon ci :=
+      + Formal.GearValue.rankEfficiency wisdom prospecting inventorySpace haste
+      = Formal.GearValue.rankValue isWeapon ci wisdom prospecting inventorySpace haste :=
   (Formal.GearValue.rankValue_decomp isWeapon ci flatCombat wisdom prospecting
     inventorySpace haste hflat).symm
 

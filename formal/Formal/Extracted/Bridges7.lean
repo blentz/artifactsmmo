@@ -20,9 +20,12 @@ onto the unified `Formal.GearValue.rankValue` hand pin):
   the encoded dicts equals the hand score over the original `ElemStats`,
   for EVERY item / monster profile. The production embedding
   (`fire ↦ "fire"`, ...) is one instance.
-* `Formal.PurposeRouting.combatScore` — the augmented weapon score
-  (`2 * WScore + nonToolBonus`); the `isTool` flag is the Python
-  `subtype == "tool"` test, carried as a hypothesis.
+* `Formal.PurposeRouting.combatScore` — the weapon slot's COMBAT term
+  (`rulerScale * WScore + nonToolBonus`); the `isTool` flag is the Python
+  `subtype == "tool"` test, carried as a hypothesis. The weapon slot's full
+  ruler value is `Formal.PurposeRouting.weaponScore` = that term plus the
+  SHARED `AEfficiency`, bridged through both slice bridges exactly as
+  `armor_score_bridge` is.
 * `Formal.PurposeRouting.gatherScore` — parametric in the per-item effect
   read; the extracted `gather_score_pure` IS that read, so the gather
   optimality contract is restated on the extracted def directly.
@@ -75,6 +78,12 @@ private theorem dictGetD_encElem (enc : Int → String)
 
 /-! ## scoring.py: weapon / armor / gather. -/
 
+/-- The extracted module constant and the hand `rulerScale` are the same integer.
+Both sides name the ruler's quantum ONCE, so a change to it on either side that
+is not mirrored on the other fails here rather than silently rescaling one slot. -/
+theorem rulerScale_bridge :
+    Extracted.EquipmentScoring.RULER_SCALE = Formal.EquipmentScoring.rulerScale := rfl
+
 /-- BRIDGE (universal over injective element embeddings): the extracted
 `weapon_score_raw_pure` over the encoded element list and dicts equals the
 hand `Formal.EquipmentScoring.WScore`, for EVERY item attack profile and
@@ -115,6 +124,7 @@ theorem armor_score_combat_bridge (enc : Int → String)
       = Formal.EquipmentScoring.ACombat item monsterAtk monsterRes playerAtk
           (hpRestore + hpBonus + lifesteal + combatBuff) := by
   simp only [Extracted.EquipmentScoring.armor_score_combat_pure,
+             rulerScale_bridge,
              Formal.EquipmentScoring.ACombat, Formal.EquipmentScoring.aTerm,
              Formal.EquipmentScoring.oTerm, Formal.EquipmentScoring.wTerm,
              Formal.EquipmentScoring.elements,
@@ -124,15 +134,19 @@ theorem armor_score_combat_bridge (enc : Int → String)
              Int.zero_add, Int.add_zero, Int.add_assoc]
 
 /-- BRIDGE: the extracted EFFICIENCY slice IS the hand `AEfficiency`,
-definitionally — both are `200 * (wisdom + prospecting + inventorySpace +
-haste)`. This is the term `tiers/pursuit_value` bounds; pinning it here is what
-stops the economics layer re-deriving utility on a scale of its own. -/
-theorem armor_score_efficiency_bridge
+definitionally — both are `rulerScale * (200 * (wisdom + prospecting +
+inventorySpace + haste))`. This is the term `tiers/pursuit_value` bounds, and it
+is the term BOTH slots read; pinning it here is what stops the economics layer
+re-deriving utility on a scale of its own, and what stops the two slots pricing
+the same stat differently. -/
+theorem gear_score_efficiency_bridge
     (wisdom prospecting inventorySpace haste : Int) :
-    Extracted.EquipmentScoring.armor_score_efficiency_pure
+    Extracted.EquipmentScoring.gear_score_efficiency_pure
         wisdom prospecting inventorySpace haste
-      = Formal.EquipmentScoring.AEfficiency wisdom prospecting inventorySpace haste :=
-  rfl
+      = Formal.EquipmentScoring.AEfficiency wisdom prospecting inventorySpace haste := by
+  unfold Extracted.EquipmentScoring.gear_score_efficiency_pure
+    Formal.EquipmentScoring.AEfficiency
+  rw [rulerScale_bridge]
 
 /-- BRIDGE (universal over injective element embeddings): the extracted
 `armor_score_pure` equals the hand `Formal.EquipmentScoring.AScore`, for every
@@ -155,27 +169,53 @@ theorem armor_score_bridge (enc : Int → String)
   unfold Extracted.EquipmentScoring.armor_score_pure
   rw [armor_score_combat_bridge enc hinj item monsterAtk monsterRes playerAtk
         hpRestore hpBonus lifesteal combatBuff,
-      armor_score_efficiency_bridge,
+      gear_score_efficiency_bridge,
       Formal.EquipmentScoring.AScore_decomp item monsterAtk monsterRes playerAtk
         (hpRestore + hpBonus + lifesteal + combatBuff)
         wisdom prospecting inventorySpace haste (by omega)]
 
-/-- BRIDGE: the extracted composite `weapon_score_pure` equals the hand
-`Formal.PurposeRouting.combatScore` (`2 * WScore + nonToolBonus`) when the
-`CombatItem`'s tool flag is the Python `subtype == "tool"` test. -/
-theorem weapon_score_bridge (enc : Int → String)
+/-- BRIDGE: the extracted `weapon_score_combat_pure` equals the hand
+`Formal.PurposeRouting.combatScore` (`rulerScale * WScore + nonToolBonus`) when
+the `CombatItem`'s tool flag is the Python `subtype == "tool"` test. This is the
+weapon slot's COMBAT term — the term the fishing_net invariant is about and the
+term the economics layer dominates utility with. -/
+theorem weapon_score_combat_bridge (enc : Int → String)
     (hinj : ∀ a b : Int, enc a = enc b → a = b)
     (ci : Formal.PurposeRouting.CombatItem)
     (monsterRes : Formal.EquipmentScoring.ElemStats) (subtype : String)
     (hTool : ci.isTool = (subtype == "tool")) :
-    Extracted.EquipmentScoring.weapon_score_pure
+    Extracted.EquipmentScoring.weapon_score_combat_pure
         (Formal.EquipmentScoring.elements.map enc)
         (encElem enc ci.base.attack) subtype ci.base.crit (encElem enc monsterRes)
       = Formal.PurposeRouting.combatScore monsterRes ci := by
-  unfold Extracted.EquipmentScoring.weapon_score_pure
+  unfold Extracted.EquipmentScoring.weapon_score_combat_pure
     Formal.PurposeRouting.combatScore Formal.PurposeRouting.nonToolBonus
   rw [weapon_score_raw_bridge enc hinj ci.base monsterRes, hTool]
-  by_cases h : subtype = "tool" <;> simp [h]
+  by_cases h : subtype = "tool" <;> simp [h, Extracted.EquipmentScoring.RULER_SCALE,
+    Formal.EquipmentScoring.rulerScale]
+
+/-- BRIDGE: the extracted composite `weapon_score_pure` equals the hand
+`Formal.PurposeRouting.weaponScore` — the weapon slot's COMBAT term plus the
+SHARED `AEfficiency` term. Discharged THROUGH the two slice bridges, exactly as
+`armor_score_bridge` is, so the weapon branch and the armor branch are
+decomposed the same way and the efficiency term on each side is provably the
+same function of the same four stats. -/
+theorem weapon_score_bridge (enc : Int → String)
+    (hinj : ∀ a b : Int, enc a = enc b → a = b)
+    (ci : Formal.PurposeRouting.CombatItem)
+    (monsterRes : Formal.EquipmentScoring.ElemStats) (subtype : String)
+    (wisdom prospecting inventorySpace haste : Int)
+    (hTool : ci.isTool = (subtype == "tool")) :
+    Extracted.EquipmentScoring.weapon_score_pure
+        (Formal.EquipmentScoring.elements.map enc)
+        (encElem enc ci.base.attack) subtype ci.base.crit (encElem enc monsterRes)
+        wisdom prospecting inventorySpace haste
+      = Formal.PurposeRouting.weaponScore monsterRes ci
+          wisdom prospecting inventorySpace haste := by
+  unfold Extracted.EquipmentScoring.weapon_score_pure
+    Formal.PurposeRouting.weaponScore
+  rw [weapon_score_combat_bridge enc hinj ci monsterRes subtype hTool,
+      gear_score_efficiency_bridge]
 
 /-- TRANSFERRED (THE clamp theorem, `weapon_score_nonneg`): the extracted
 raw weapon score is nonnegative whenever every per-element attack is —
@@ -195,28 +235,35 @@ theorem weapon_score_raw_nonneg_extracted (enc : Int → String)
   exact Formal.EquipmentScoring.weapon_score_nonneg item monsterRes hatk hcrit
 
 /-- TRANSFERRED (`combatScore_strict_of_strict_wscore`): any strict raw
-WScore ordering survives the +0/+1 tiebreaker in the extracted composite
-score — the `2 *` factor protects it, for ANY two subtypes. -/
+WScore ordering survives the +0/+1 tiebreaker in the extracted weapon COMBAT
+term — the `rulerScale` factor protects it, for ANY two subtypes.
+
+Restated on `weapon_score_combat_pure`. Its subject used to be
+`weapon_score_pure`, which WAS this term; now that function is the combat term
+PLUS the shared efficiency term, so the property belongs to the half that has
+it. Nothing is weakened: the statement is character-for-character what it was,
+about the same arithmetic. `weapon_score_full_strict_extracted` below carries it
+onto the composite. -/
 theorem weapon_score_strict_extracted (enc : Int → String)
     (hinj : ∀ a b : Int, enc a = enc b → a = b)
     (a b : Formal.EquipmentScoring.Item)
     (monsterRes : Formal.EquipmentScoring.ElemStats) (subA subB : String)
     (hStrict : Formal.EquipmentScoring.WScore a monsterRes
       < Formal.EquipmentScoring.WScore b monsterRes) :
-    Extracted.EquipmentScoring.weapon_score_pure
+    Extracted.EquipmentScoring.weapon_score_combat_pure
         (Formal.EquipmentScoring.elements.map enc)
         (encElem enc a.attack) subA a.crit (encElem enc monsterRes)
-      < Extracted.EquipmentScoring.weapon_score_pure
+      < Extracted.EquipmentScoring.weapon_score_combat_pure
         (Formal.EquipmentScoring.elements.map enc)
         (encElem enc b.attack) subB b.crit (encElem enc monsterRes) := by
-  rw [weapon_score_bridge enc hinj ⟨a, subA == "tool"⟩ monsterRes subA rfl,
-      weapon_score_bridge enc hinj ⟨b, subB == "tool"⟩ monsterRes subB rfl]
+  rw [weapon_score_combat_bridge enc hinj ⟨a, subA == "tool"⟩ monsterRes subA rfl,
+      weapon_score_combat_bridge enc hinj ⟨b, subB == "tool"⟩ monsterRes subB rfl]
   exact Formal.PurposeRouting.combatScore_strict_of_strict_wscore
     ⟨a, subA == "tool"⟩ ⟨b, subB == "tool"⟩ monsterRes hStrict
 
 /-- TRANSFERRED (`combatScore_tiebreaks_nontool_over_tool`, the fishing_net
 invariant): on a raw WScore tie the non-tool weapon strictly outranks the
-tool in the extracted composite score. -/
+tool in the extracted weapon COMBAT term. -/
 theorem weapon_score_tiebreak_extracted (enc : Int → String)
     (hinj : ∀ a b : Int, enc a = enc b → a = b)
     (toolItem nonToolItem : Formal.EquipmentScoring.Item)
@@ -224,18 +271,74 @@ theorem weapon_score_tiebreak_extracted (enc : Int → String)
     (subN : String) (hN : subN ≠ "tool")
     (hTie : Formal.EquipmentScoring.WScore toolItem monsterRes
       = Formal.EquipmentScoring.WScore nonToolItem monsterRes) :
-    Extracted.EquipmentScoring.weapon_score_pure
+    Extracted.EquipmentScoring.weapon_score_combat_pure
         (Formal.EquipmentScoring.elements.map enc)
         (encElem enc toolItem.attack) "tool" toolItem.crit (encElem enc monsterRes)
-      < Extracted.EquipmentScoring.weapon_score_pure
+      < Extracted.EquipmentScoring.weapon_score_combat_pure
         (Formal.EquipmentScoring.elements.map enc)
         (encElem enc nonToolItem.attack) subN nonToolItem.crit
         (encElem enc monsterRes) := by
-  rw [weapon_score_bridge enc hinj ⟨toolItem, true⟩ monsterRes "tool" (by simp),
-      weapon_score_bridge enc hinj ⟨nonToolItem, false⟩ monsterRes subN
+  rw [weapon_score_combat_bridge enc hinj ⟨toolItem, true⟩ monsterRes "tool" (by simp),
+      weapon_score_combat_bridge enc hinj ⟨nonToolItem, false⟩ monsterRes subN
         (by simp [hN])]
   exact Formal.PurposeRouting.combatScore_tiebreaks_nontool_over_tool
     ⟨toolItem, true⟩ ⟨nonToolItem, false⟩ monsterRes rfl rfl hTie
+
+/-- TRANSFERRED (`weaponScore_strict_of_strict_wscore`): the strict raw ordering
+survives on the FULL extracted weapon score too, for weapons carrying the same
+efficiency stats — which the historical pair does (fishing_net and wooden_stick
+carry none). -/
+theorem weapon_score_full_strict_extracted (enc : Int → String)
+    (hinj : ∀ a b : Int, enc a = enc b → a = b)
+    (a b : Formal.EquipmentScoring.Item)
+    (monsterRes : Formal.EquipmentScoring.ElemStats) (subA subB : String)
+    (wisdom prospecting inventorySpace haste : Int)
+    (hStrict : Formal.EquipmentScoring.WScore a monsterRes
+      < Formal.EquipmentScoring.WScore b monsterRes) :
+    Extracted.EquipmentScoring.weapon_score_pure
+        (Formal.EquipmentScoring.elements.map enc)
+        (encElem enc a.attack) subA a.crit (encElem enc monsterRes)
+        wisdom prospecting inventorySpace haste
+      < Extracted.EquipmentScoring.weapon_score_pure
+        (Formal.EquipmentScoring.elements.map enc)
+        (encElem enc b.attack) subB b.crit (encElem enc monsterRes)
+        wisdom prospecting inventorySpace haste := by
+  rw [weapon_score_bridge enc hinj ⟨a, subA == "tool"⟩ monsterRes subA
+        wisdom prospecting inventorySpace haste rfl,
+      weapon_score_bridge enc hinj ⟨b, subB == "tool"⟩ monsterRes subB
+        wisdom prospecting inventorySpace haste rfl]
+  exact Formal.PurposeRouting.weaponScore_strict_of_strict_wscore
+    ⟨a, subA == "tool"⟩ ⟨b, subB == "tool"⟩ monsterRes
+    wisdom prospecting inventorySpace haste hStrict
+
+/-- TRANSFERRED (`weaponScore_tiebreaks_nontool_over_tool`, the fishing_net
+invariant on the score the picker actually reads): on a raw WScore tie with equal
+efficiency stats the non-tool weapon strictly outranks the tool in the FULL
+extracted weapon score. -/
+theorem weapon_score_full_tiebreak_extracted (enc : Int → String)
+    (hinj : ∀ a b : Int, enc a = enc b → a = b)
+    (toolItem nonToolItem : Formal.EquipmentScoring.Item)
+    (monsterRes : Formal.EquipmentScoring.ElemStats)
+    (subN : String) (hN : subN ≠ "tool")
+    (wisdom prospecting inventorySpace haste : Int)
+    (hTie : Formal.EquipmentScoring.WScore toolItem monsterRes
+      = Formal.EquipmentScoring.WScore nonToolItem monsterRes) :
+    Extracted.EquipmentScoring.weapon_score_pure
+        (Formal.EquipmentScoring.elements.map enc)
+        (encElem enc toolItem.attack) "tool" toolItem.crit (encElem enc monsterRes)
+        wisdom prospecting inventorySpace haste
+      < Extracted.EquipmentScoring.weapon_score_pure
+        (Formal.EquipmentScoring.elements.map enc)
+        (encElem enc nonToolItem.attack) subN nonToolItem.crit
+        (encElem enc monsterRes)
+        wisdom prospecting inventorySpace haste := by
+  rw [weapon_score_bridge enc hinj ⟨toolItem, true⟩ monsterRes "tool"
+        wisdom prospecting inventorySpace haste (by simp),
+      weapon_score_bridge enc hinj ⟨nonToolItem, false⟩ monsterRes subN
+        wisdom prospecting inventorySpace haste (by simp [hN])]
+  exact Formal.PurposeRouting.weaponScore_tiebreaks_nontool_over_tool
+    ⟨toolItem, true⟩ ⟨nonToolItem, false⟩ monsterRes
+    wisdom prospecting inventorySpace haste rfl rfl hTie
 
 /-- TRANSFERRED (`pickslot_no_downgrade` instantiated at the extracted raw
 weapon score): the per-slot pick under the EXTRACTED score never downgrades

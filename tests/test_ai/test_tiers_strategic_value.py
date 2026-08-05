@@ -3,6 +3,7 @@
 The formal differential + mutation gate proves exact-integer agreement with the
 Lean core; these tests cover the pure function in the main suite.
 """
+from artifactsmmo_cli.ai.equipment.scoring import RULER_SCALE
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.gear_value import gear_components
 from artifactsmmo_cli.ai.gear_value_core import Rank
@@ -68,8 +69,8 @@ def test_wrapper_combat_term_prices_every_combat_field_monster_relatively():
         resistance={"earth": 4}, hp_restore=5,
         hp_bonus=6, dmg=7, critical_strike=8, lifesteal=9, combat_buff=10,
     )
-    assert gear_components(s, Rank) == (322_800, 0)
-    assert strategic_value(s) == 322_800 * STRATEGIC_SCALE
+    assert gear_components(s, Rank) == (RULER_SCALE * 322_800, 0)
+    assert strategic_value(s) == RULER_SCALE * 322_800 * STRATEGIC_SCALE
 
 
 def test_wrapper_efficiency_stats_downweighted():
@@ -141,9 +142,9 @@ def test_horizon_scales_efficiency_only_not_combat():
                      resistance={"earth": 10}, inventory_space=10)
     # combat term 66000 (= 200 * 33 * 10) → 66_000_000; efficiency 10*50=500;
     # horizon 1/2 → 250.
-    assert gear_components(item, Rank)[0] == 66_000
+    assert gear_components(item, Rank)[0] == RULER_SCALE * 66_000
     assert (strategic_value(item, (1000, 1, 1, 50, 0), horizon=(1, 2))
-            == 66_000_000 + 250)
+            == RULER_SCALE * 66_000_000 + 250)
 
 
 def test_horizon_zero_at_max_level_kills_efficiency():

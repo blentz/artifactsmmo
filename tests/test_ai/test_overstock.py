@@ -3,6 +3,7 @@
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
+from artifactsmmo_cli.ai.equipment.scoring import RULER_SCALE
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value import gear_value
 from artifactsmmo_cli.ai.gear_value_core import Rank
@@ -99,19 +100,19 @@ def test_gear_value_counts_utility_stats_so_artifact_not_discarded():
     """
     art = ItemStats(code="novice_guide", level=10, type_="artifact",
                     hp_bonus=25, wisdom=25, prospecting=25)
-    assert gear_value(art, Rank) == 200 * 75
+    assert gear_value(art, Rank) == RULER_SCALE * 200 * 75
     # A bag's inventory_space also counts → not valued 0 / discarded.
     bag = ItemStats(code="backpack", level=10, type_="bag", inventory_space=35)
-    assert gear_value(bag, Rank) == 200 * 35
+    assert gear_value(bag, Rank) == RULER_SCALE * 200 * 35
     # Haste (cooldown reduction) also counts.
     legs = ItemStats(code="haste_legs", level=1, type_="leg_armor", haste=8)
-    assert gear_value(legs, Rank) == 200 * 8
+    assert gear_value(legs, Rank) == RULER_SCALE * 200 * 8
     # Lifesteal (combat sustain) also counts.
     ring = ItemStats(code="vampiric_ring", level=1, type_="ring", lifesteal=15)
-    assert gear_value(ring, Rank) == 200 * 15
+    assert gear_value(ring, Rank) == RULER_SCALE * 200 * 15
     # Combat-buff potions count so they aren't discarded as worthless (PLAN #3a).
     pot = ItemStats(code="enchanted_boost_potion", level=1, type_="utility", combat_buff=20)
-    assert gear_value(pot, Rank) == 200 * 20
+    assert gear_value(pot, Rank) == RULER_SCALE * 200 * 20
 
 
 def _gd_with_sap_recipes() -> GameData:

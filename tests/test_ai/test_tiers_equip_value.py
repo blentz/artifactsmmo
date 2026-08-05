@@ -19,6 +19,7 @@ wearer (`ai/gear_value_core`), so:
   * one point of weapon attack (no crit)  = 2 * 100 * 200       = 40000
 """
 
+from artifactsmmo_cli.ai.equipment.scoring import RULER_SCALE
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.gear_value_core import RANK_REFERENCE_ATTACK
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
@@ -50,32 +51,32 @@ def test_values_utility_stats_wisdom_prospecting_hp_bonus():
     valued 0 and the item was discarded."""
     art = ItemStats(code="novice_guide", level=10, type_="artifact",
                     hp_bonus=25, wisdom=25, prospecting=25)
-    assert equip_value(art) == 200 * 75
+    assert equip_value(art) == RULER_SCALE * 200 * 75
 
 
 def test_values_inventory_space_so_bags_are_pursued():
     """A bag's only stat is inventory_space (backpack=+35) → 200 * 35."""
     bag = ItemStats(code="backpack", level=10, type_="bag", inventory_space=35)
-    assert equip_value(bag) == 200 * 35
+    assert equip_value(bag) == RULER_SCALE * 200 * 35
 
 
 def test_values_haste_efficiency():
     """Haste (cooldown reduction) is flat utility → 200 * 8."""
     legs = ItemStats(code="haste_legs", level=1, type_="leg_armor", haste=8)
-    assert equip_value(legs) == 200 * 8
+    assert equip_value(legs) == RULER_SCALE * 200 * 8
 
 
 def test_values_lifesteal_combat_sustain():
     """Lifesteal (heal-on-crit) is flat utility → 200 * 15."""
     ring = ItemStats(code="vampiric_ring", level=1, type_="ring", lifesteal=15)
-    assert equip_value(ring) == 200 * 15
+    assert equip_value(ring) == RULER_SCALE * 200 * 15
 
 
 def test_values_combat_buff_potion():
     """Combat-buff potions (boost_dmg/res/hp + antipoison, summed into
     combat_buff) → 200 * 20, so the bot equips them (PLAN #3a)."""
     pot = ItemStats(code="enchanted_boost_potion", level=1, type_="utility", combat_buff=20)
-    assert equip_value(pot) == 200 * 20
+    assert equip_value(pot) == RULER_SCALE * 200 * 20
 
 
 def test_values_hp_restore_so_healing_potions_are_pursued():
@@ -83,7 +84,7 @@ def test_values_hp_restore_so_healing_potions_are_pursued():
     `armor_score`. Without it every healing potion would rank 0 and the
     progression tree's `gain > 0` utility gate would empty out."""
     pot = ItemStats(code="small_health_potion", level=1, type_="utility", hp_restore=60)
-    assert equip_value(pot) == 200 * 60
+    assert equip_value(pot) == RULER_SCALE * 200 * 60
 
 
 def test_resistance_outweighs_flat_utility_by_the_reference_attack():

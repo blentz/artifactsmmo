@@ -5,6 +5,7 @@ Covers armor-slot optimization and the empty-slot (no current stats) path.
 
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.scoring import (
+    RULER_SCALE,
     armor_score_pure,
     weapon_score,
     weapon_score_raw,
@@ -24,8 +25,9 @@ def test_armor_score_pure_includes_combat_buff():
               inventory_space=0, haste=0, lifesteal=0)
     base = armor_score_pure(["fire"], {"fire": 0}, {"fire": 0}, combat_buff=0, **kw)
     buffed = armor_score_pure(["fire"], {"fire": 0}, {"fire": 0}, combat_buff=7, **kw)
-    # The flat-utility sum is carried on the score's common 200x denominator.
-    assert buffed - base == 200 * 7
+    # The flat-utility sum is carried on the score's common 200x denominator,
+    # times the ruler's quantum.
+    assert buffed - base == RULER_SCALE * 200 * 7
 
 
 def _gd() -> GameData:
@@ -311,9 +313,9 @@ class TestWeaponScoreRawWrapper:
         # fire term clamps to 0 (res 120 > 100); earth term is 3 * 50; both
         # items have crit 0, so the crit factor is exactly 200.
         assert weapon_score_raw(sword, res) == 3 * 50 * 200
-        assert weapon_score(sword, res) == 2 * (3 * 50 * 200) + 1   # non-tool bonus
+        assert weapon_score(sword, res) == RULER_SCALE * (3 * 50 * 200) + 1  # non-tool
         assert weapon_score_raw(net, res) == 5 * 100 * 200
-        assert weapon_score(net, res) == 2 * (5 * 100 * 200)        # tool: no bonus
+        assert weapon_score(net, res) == RULER_SCALE * (5 * 100 * 200)  # tool: no bonus
 
 
 class TestGatherLoadout:
