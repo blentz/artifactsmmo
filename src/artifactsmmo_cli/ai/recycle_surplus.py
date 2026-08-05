@@ -46,6 +46,13 @@ the gear chain — far better than the `DiscardOverstock` DELETE that destroys t
 Proactive (idle-time) recovery is the only feasible point: under space pressure
 the recovered materials have nowhere to go (see the design spec / HTTP 497).
 
+THE HOARD-URGENCY LADDER MOVED OUT on 2026-08-05. `URGENCY_STEP` /
+`recycle_urgency_pure` / `recycle_urgency` used to live here because recycle was
+the only rung the arbiter hoisted out of the starved discretionary band. Part 2
+of the disposal-unification epic hoists SELL_IDLE and DRAIN_BANK_JUNK the same
+way, so the ladder has three consumers and now lives in `ai/shed_urgency.py`
+(`shed_urgency` / `shed_urgency_pure`) — one implementation, not three copies.
+
 Pure: reads state/game_data/ctx only, no I/O.
 """
 
@@ -54,25 +61,6 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import bankable, destroyable
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
-
-URGENCY_STEP = 5
-"""Surplus copies per +1x urgency: every 5 spares of the piling grind item add
-one urgency multiple (a ~40-copy hoard is 8x more urgent than <5)."""
-
-
-def recycle_urgency_pure(max_surplus: int) -> int:
-    """Urgency multiplier for the largest surplus pile: ``max(1, ceil(q/5))``.
-
-    <=5 surplus is baseline (1x); each further 5 copies add 1x, so the pile the
-    skill grind keeps feeding becomes progressively harder to ignore instead of
-    growing unbounded in the starved discretionary tier."""
-    return max(1, -(-max_surplus // URGENCY_STEP))
-
-
-def recycle_urgency(surplus: dict[str, int]) -> int:
-    """Urgency of a `recyclable_surplus` map: driven by its LARGEST pile (the
-    current grind item is by construction the code that piles up)."""
-    return recycle_urgency_pure(max(surplus.values(), default=0))
 
 
 def recyclable_surplus(state: WorldState, game_data: GameData,

@@ -6,8 +6,9 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.inventory_keep import keep_owned
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus, recycle_urgency
+from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.shed_urgency import shed_urgency
 from artifactsmmo_cli.ai.world_state import WorldState
 
 RECYCLE_SURPLUS_VALUE = 20.0
@@ -17,10 +18,11 @@ idle, low-pressure cycles to reclaim materials before surplus gear would pile up
 and be DELETED under space pressure (the copper_helmet×9 discard, trace
 2026-06-14 122022).
 
-value() scales by `recycle_urgency` (every 5 surplus copies of the largest pile
-add 1x — a ~40 hoard is 8x). Band position, not value(), drives selection; the
-selection-visible half of the same urgency is the arbiter's COLLECT-band hoist
-at RECYCLE_HOIST_URGENCY (strategy_driver._build_candidates)."""
+value() scales by the shared `ai/shed_urgency.shed_urgency` ladder (every 5
+surplus copies of the largest pile add 1x — a ~40 hoard is 8x). Band position,
+not value(), drives selection; the selection-visible half of the same urgency is
+the arbiter's COLLECT-band hoist at RECYCLE_HOIST_URGENCY
+(strategy_driver._build_candidates)."""
 
 
 class RecycleSurplusGoal(Goal):
@@ -55,7 +57,7 @@ class RecycleSurplusGoal(Goal):
         surplus = recyclable_surplus(state, self._gd, self._ctx)
         if not surplus:
             return 0.0
-        return RECYCLE_SURPLUS_VALUE * recycle_urgency(surplus)
+        return RECYCLE_SURPLUS_VALUE * shed_urgency(surplus)
 
     def is_satisfied(self, state: WorldState) -> bool:
         surplus = recyclable_surplus(state, self._gd, self._ctx)

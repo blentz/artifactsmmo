@@ -36,11 +36,23 @@ bank-full cascade's SELL rung (craft > recycle > sell > discard) and the WHOLE
 licensed surplus is offered. `SellInventoryGoal` passes `relief=True` there — it is
 mapped from `GuardKind.SELL_RELIEF`, whose firing predicate IS `not bank_has_room`.
 
+THE BANK ARM (part 2 of the disposal-unification epic, 2026-08-05). Everything
+above is BAG-side: `sellable_surplus` iterates `state.inventory`, so a code whose
+ENTIRE surplus sits in the bank was structurally invisible to the sell route — the
+703 sap and 510 raw_wolf_meat of the live diagnosis could never be sold, only
+deleted. `bank_sellable_surplus` is the bank-side twin, and it deliberately does
+NOT re-derive the bank licence: it filters `ai/bank_drain.bank_drain_excess`,
+which is already `min(destroyable, bank_surplus_pure(worth_keeping, bank_qty))`.
+Answering the same question twice in two modules is exactly how the drain and the
+disposal route came to contradict each other (part 1); the sell route asks the
+one authority instead.
+
 `accumulation_steps` / `accumulation_excess` are unchanged, integer-exact (no float)
 pure cores — they mirror the Lean `Formal.AccumulationSell` defs byte-for-byte under
 the differential gate.
 """
 
+from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import bankable, destroyable
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -115,6 +127,27 @@ def sellable_surplus(state: WorldState, game_data: GameData,
     return out
 
 
+def bank_sellable_surplus(state: WorldState, game_data: GameData,
+                          ctx: SelectionContext) -> dict[str, int]:
+    """Map each SELLABLE code to the number of BANK copies that may be pulled out
+    and sold — the bank-side twin of `sellable_surplus`.
+
+    THE LICENCE IS `bank_drain.bank_drain_excess`, FILTERED, NEVER RE-DERIVED:
+    `min(destroyable, bank_surplus_pure(worth_keeping, bank_qty))`. It is the same
+    question about the same copies the drain asks, and it must return the same
+    number, or the sell route and the drain would disagree about one bank exactly
+    as the drain and the disposal route did before part 1.
+
+    NO RATIO GATE HERE, deliberately. `sellable_accumulation`'s `held >= 5 x keep`
+    gate exists to prefer a REVERSIBLE bank deposit to an IRREVERSIBLE sale while
+    the bank can still take the copies. These copies are already IN the bank and
+    already ABOVE this code's keep quantity, so "bank it instead" has no object —
+    the same reasoning that makes `sell_targets(relief=True)` drop the gate."""
+    return {code: qty for code, qty
+            in bank_drain_excess(state, game_data, ctx).items()
+            if _is_sellable(code, game_data)}
+
+
 def sellable_accumulation(state: WorldState, game_data: GameData,
                           ctx: SelectionContext) -> dict[str, int]:
     """The RATIO-GATED subset of `sellable_surplus`: only the codes held at
@@ -154,6 +187,26 @@ def worst_accumulation_steps(state: WorldState, game_data: GameData,
     worst = 0
     for code, surplus in sellable_accumulation(state, game_data, ctx).items():
         steps = accumulation_steps(state.inventory[code], state.inventory[code] - surplus)
+        if steps > worst:
+            worst = steps
+    return worst
+
+
+def worst_bank_accumulation_steps(state: WorldState, game_data: GameData,
+                                  ctx: SelectionContext) -> int:
+    """`accumulation_steps` over the BANK-side hoards (0 if none) — the bank twin
+    of `worst_accumulation_steps`, so `SellInventoryGoal.value` is not blind to a
+    hoard held entirely in the bank (it would otherwise score 0.0 on the very
+    piles the bank arm exists to shed).
+
+    Measured on OWNED copies (bag + bank) against the authority's own keep, read
+    back off the licence as `owned - licensed` — the same reading the bag side
+    takes, so the two halves cannot drift apart."""
+    bank = state.bank_items or {}
+    worst = 0
+    for code, licensed in bank_sellable_surplus(state, game_data, ctx).items():
+        owned = state.inventory.get(code, 0) + bank.get(code, 0)
+        steps = accumulation_steps(owned, owned - licensed)
         if steps > worst:
             worst = steps
     return worst

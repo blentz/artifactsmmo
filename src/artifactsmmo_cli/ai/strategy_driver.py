@@ -7,6 +7,7 @@ import os
 from dataclasses import replace
 from datetime import datetime, timezone
 
+from artifactsmmo_cli.ai.accumulation_sell import bank_sellable_surplus, sell_targets
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.wait import WaitAction
@@ -19,6 +20,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
     Candidate,
     select_pure,
 )
+from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.craft_plan_gen import _closure_items, generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
@@ -71,9 +73,10 @@ from artifactsmmo_cli.ai.obtain_sources import Source, obtain_source_map
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.raid_participation import raid_survivable_pure
-from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus, recycle_urgency
+from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.requirement_projections import demand_set
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.shed_urgency import bank_shed_hoist, shed_urgency
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
@@ -104,10 +107,27 @@ from artifactsmmo_cli.ai.tiers.taskmaster_choice import choose_taskmaster
 from artifactsmmo_cli.ai.world_state import WorldState
 
 RECYCLE_HOIST_URGENCY = 2
-"""Urgency multiple (see `recycle_urgency`: every 5 surplus copies of the
-largest pile = +1x) at which RecycleSurplus is materialized in the COLLECT band
-instead of waiting in the starved discretionary tier — i.e. >5 spares of the
+"""Urgency multiple (see `ai/shed_urgency.shed_urgency`: every 5 surplus copies
+of the largest pile = +1x) at which RecycleSurplus is materialized in the COLLECT
+band instead of waiting in the starved discretionary tier — i.e. >5 spares of the
 grind output. Below it, the pile is normal working slack."""
+
+SHED_HOIST_URGENCY = RECYCLE_HOIST_URGENCY
+"""The SAME threshold, for the BAG-side half of the SELL_IDLE hoist added on
+2026-08-05 (part 2 of the disposal-unification epic).
+
+BOUND, NOT RE-TYPED. Both rungs ask one question of one population ("is this
+BAG-held pile past normal working slack?") on one ladder (`ai/shed_urgency`), so
+two literals would be two chances to drift. The name is separate because they are
+separate decisions and a future tuning of one must be a visible edit.
+
+The BANK-side halves (the SELL_IDLE bank arm and the whole of DRAIN_BANK_JUNK)
+deliberately do NOT use this threshold — they cost a round trip and are gated on
+a full bag-load instead. See `ai/shed_urgency.bank_shed_hoist_pure`.
+
+WHY A THRESHOLD AT ALL — it is what keeps the hoist CONDITIONAL. These candidates
+are materialized in the COLLECT band, ABOVE the objective step, so an
+unconditional hoist would outrank progression on every cycle forever."""
 
 CHEAP_BUDGET_SECONDS = float(os.environ.get("ARTIFACTSMMO_CHEAP_BUDGET_SECONDS", "10.0"))
 """Per-candidate budget for the arbiter's cheap first pass. Sized ABOVE the
@@ -369,6 +389,14 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         # No `relief`: a bank route still exists (SELL_RELIEF is the guard that
         # fires when it does not), so only the RATIO-gated hoards are sold —
         # banking is reversible and preferred.
+        #
+        # No `state=` either, so NO bank arm: the arm withdraws copies INTO the
+        # bag, and neither of these two rungs wants that. SELL_PRESSURED fires at
+        # or above SELL_PRESSURE_FRACTION — minting more into a pressured bag is
+        # the opposite of its job — and a SELL_IDLE that reached the discretionary
+        # band at all is one the COLLECT-band hoist declined, i.e. a pile below
+        # SHED_HOIST_URGENCY that is not worth a bank trip. The bank arm belongs
+        # to the hoist, which is where its snapshot bound is set.
         return SellInventoryGoal(game_data=game_data, ctx=ctx,
                                  bank_accessible=ctx.bank_accessible)
     if kind is MeansKind.RECYCLE_SURPLUS:
@@ -377,8 +405,13 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
             initial_total=sum(recyclable_surplus(
                 state, game_data, ctx).values()))
     if kind is MeansKind.DRAIN_BANK_JUNK:
+        # `initial_total` exactly as RECYCLE_SURPLUS above: without it the goal is
+        # all-or-nothing and UNPLANNABLE for any pile deeper than the bag, so the
+        # discretionary rung would be dead even on the cycles it wins.
         return DrainBankJunkGoal(game_data=game_data, ctx=ctx,
-                                 bank_accessible=ctx.bank_accessible)
+                                 bank_accessible=ctx.bank_accessible,
+                                 initial_total=sum(bank_drain_excess(
+                                     state, game_data, ctx).values()))
     if kind is MeansKind.GE_BID:
         return PostBuyBidGoal(game_data=game_data, ctx=ctx)
     if kind is MeansKind.LOW_YIELD_CANCEL:
@@ -1249,7 +1282,7 @@ class StrategyArbiter:
         # recycling MINTS materials into the bag, so under space pressure the
         # deposit/discard guards own the bag instead.
         recycle_surplus_map = recyclable_surplus(state, game_data, ctx)
-        hoist_recycle = (recycle_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY
+        hoist_recycle = (shed_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY
                          and _used_fraction(state) < SELL_PRESSURE_FRACTION)
         if hoist_recycle:
             rs_goal = RecycleSurplusGoal(
@@ -1257,6 +1290,65 @@ class StrategyArbiter:
                 initial_total=sum(recycle_surplus_map.values()))
             candidates.append(Candidate(goal=rs_goal, is_means=True,
                                         repr_=repr(rs_goal), band=BAND_COLLECT))
+        # Urgent-hoard SELL and DRAIN (COLLECT band) — 2026-08-05, part 2 of the
+        # disposal-unification epic. The recycle hoist above fixed exactly ONE of
+        # the three starved shed rungs; the other two kept firing and kept losing.
+        # Measured over the five `play-trace-*.jsonl` runs in the worktree (54
+        # cycles): `drain_bank_junk` fired 44 times and was selected 0, `sell_idle`
+        # fired 32 and was selected 0, while the bank grew to 2273 shedable copies
+        # across 18 codes. The objective step is essentially always plannable, so a
+        # rung below it is not low-priority, it is unreachable.
+        #
+        # SAFE ONLY NOW. Hoisting these before part 1 would have converted a static
+        # hoard into a withdraw->redeposit livelock, because the drain licensed
+        # what the disposal route banked straight back. That contradiction is now
+        # arithmetically impossible — one `ai/keep_valuation.worth_keeping` feeds
+        # both sides, and `formal/Formal/DisposalRoute.lean` proves
+        # `drained_is_never_deposited` and, in the post-withdraw state,
+        # `withdrawn_is_never_redeposited`.
+        #
+        # ORDER WITHIN THE BAND: recycle, then sell, then drain — most to least
+        # value recovered. Recycling returns materials, a sale returns gold, and
+        # the drain's terminal route for true junk is DELETE. Same bounded,
+        # self-satisfying, never-a-blocker contract as EquipOwnedGoal, and the same
+        # pressure gate as the discretionary means: both MINT items into the bag,
+        # so under space pressure the deposit/discard guards own it instead.
+        #
+        # TWO THRESHOLDS, ONE PER POPULATION (see `ai/shed_urgency`): a BAG-side
+        # pile is already in hand and sheds in one action, so it uses the same
+        # >5-spares ladder the recycle hoist has used since 2026-07-05; a
+        # BANK-side pile costs a withdraw-then-shed round trip that carries at
+        # most one bag-load, so it must be worth a FULL load. The bag rule
+        # applied to the bank hoisted on 30 banked `nettle_leaf` and preempted a
+        # winnable fight — ordinary bank stock is not a hoard.
+        sell_bag = sell_targets(state, game_data, ctx)
+        sell_bank = bank_sellable_surplus(state, game_data, ctx)
+        hoist_sell = ((shed_urgency(sell_bag) >= SHED_HOIST_URGENCY
+                       or bank_shed_hoist(sell_bank, state.inventory_max))
+                      and _used_fraction(state) < SELL_PRESSURE_FRACTION)
+        if hoist_sell:
+            # `state=` arms AND bounds the bank arm (SellInventoryGoal.__init__):
+            # without the snapshot the arm has no termination bound and the goal
+            # keeps its bag-only behaviour.
+            si_goal = SellInventoryGoal(game_data=game_data, ctx=ctx,
+                                        bank_accessible=ctx.bank_accessible,
+                                        state=state)
+            candidates.append(Candidate(goal=si_goal, is_means=True,
+                                        repr_=repr(si_goal), band=BAND_COLLECT))
+        drain_excess_map = bank_drain_excess(state, game_data, ctx)
+        hoist_drain = (bank_shed_hoist(drain_excess_map, state.inventory_max)
+                       and ctx.bank_accessible
+                       and _used_fraction(state) < SELL_PRESSURE_FRACTION)
+        if hoist_drain:
+            # `initial_total` is what makes the rung plannable AT ALL: the
+            # all-or-nothing form is unreachable for a pile deeper than the bag
+            # (probe 2026-08-05: 1993 licensed copies -> nodes_explored=8,
+            # plan_len=0, no timeout). See DrainBankJunkGoal.is_satisfied.
+            db_goal = DrainBankJunkGoal(game_data=game_data, ctx=ctx,
+                                        bank_accessible=ctx.bank_accessible,
+                                        initial_total=sum(drain_excess_map.values()))
+            candidates.append(Candidate(goal=db_goal, is_means=True,
+                                        repr_=repr(db_goal), band=BAND_COLLECT))
         # Append step_goal + every fallback-step goal in ranking order so
         # select_pure walks them all before reaching discretionary. Trace
         # 2026-06-06 16:34 (cycles 0-1): top step's GrindCharacterXP
@@ -1294,6 +1386,20 @@ class StrategyArbiter:
                 # Already materialized in the COLLECT band this cycle; a second
                 # "RecycleSurplus" candidate would duplicate the repr the
                 # sticky-commitment machinery keys on.
+                continue
+            if hoist_sell and mk is MeansKind.SELL_IDLE:
+                # Same dedup, for the hoisted sell. The discretionary twin would
+                # carry the SAME "SellInventory" repr but NO bank-arm snapshot, so
+                # leaving it in would also give the sticky machinery two goals with
+                # one key and different behaviour. (SELL_PRESSURED maps to the same
+                # repr from the COLLECT band, but it and this hoist are mutually
+                # exclusive: it fires at or above SELL_PRESSURE_FRACTION and the
+                # hoist is gated strictly below it.)
+                continue
+            if hoist_drain and mk is MeansKind.DRAIN_BANK_JUNK:
+                # Same dedup, for the hoisted drain — and here the discretionary
+                # twin is worse than redundant: built without `initial_total` it is
+                # the all-or-nothing goal that can never plan.
                 continue
             g = map_means(mk, game_data, ctx, state, self._history)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g), band=BAND_DISCRETIONARY))

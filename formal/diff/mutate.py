@@ -37,6 +37,10 @@ EMPTY_SLOT_FILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / 
 BANK_TOOL_FILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "bank_tool_fills.py"
 RECYCLE_SURPLUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recycle_surplus.py"
 RECYCLE_SURPLUS_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "recycle_surplus.py"
+SHED_URGENCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "shed_urgency.py"
+DRAIN_BANK_JUNK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "drain_bank_junk.py"
+SHED_CENSUS_SRC = (ROOT / "src" / "artifactsmmo_cli" / "audit"
+                   / "shed_reachability_completeness.py")
 GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "guards.py"
 GATHERING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gathering.py"
 CRAFT_PLAN_GEN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_gen.py"
@@ -2546,22 +2550,46 @@ RECYCLE_SURPLUS_ELIGIBILITY_MUTATIONS = [
      "        if surplus >= 0:"),
 ]
 
-# Hoard-scaled recycle urgency (2026-07-05): every 5 surplus copies of the
-# largest pile add 1x urgency; >= RECYCLE_HOIST_URGENCY materializes the goal
-# in the COLLECT band (the discretionary tier is starved under constant grind).
+# Hoard-scaled BAG-side shed urgency (2026-07-05, moved to ai/shed_urgency.py
+# 2026-08-05 when SELL_IDLE became its second consumer): every 5 surplus copies
+# of the largest pile add 1x urgency; >= RECYCLE_HOIST_URGENCY /
+# SHED_HOIST_URGENCY materializes the goal in the COLLECT band (the
+# discretionary tier is starved under constant grind).
 # Killed by tests/test_ai/test_recycle_urgency.py.
-RECYCLE_URGENCY_MUTATIONS = [
-    ("recycle_urgency: step 5 -> 50 (hoard never escalates)",
+SHED_URGENCY_MUTATIONS = [
+    ("shed_urgency: step 5 -> 50 (hoard never escalates)",
      "URGENCY_STEP = 5",
      "URGENCY_STEP = 50"),
-    ("recycle_urgency: drop the 1x floor (empty surplus scores 0)",
+    ("shed_urgency: drop the 1x floor (empty surplus scores 0)",
      "    return max(1, -(-max_surplus // URGENCY_STEP))",
      "    return -(-max_surplus // URGENCY_STEP)"),
 ]
 
+# BANK-side hoist rule (2026-08-05, disposal-unification part 2). A bank shed
+# costs a withdraw-then-shed round trip carrying at most one bag-load, so it is
+# hoisted only at a FULL load: the bag rule (>5 copies) hoisted on 30 ordinary
+# banked nettle_leaf and preempted a winnable fight. Each mutant re-creates a
+# shipped failure mode — an unconditional hoist, a threshold that never fires, or
+# a zero-capacity bag reading every pile as a full load.
+# Killed by tests/test_ai/test_shed_hoists.py.
+BANK_SHED_HOIST_MUTATIONS = [
+    ("bank_shed_hoist: >= -> > (an exactly-one-bag-load pile stays starved)",
+     "    return max_licensed >= inventory_max * BANK_SHED_BAG_LOADS",
+     "    return max_licensed > inventory_max * BANK_SHED_BAG_LOADS"),
+    ("bank_shed_hoist: drop the bag-load scale (any surplus outranks the step)",
+     "    return max_licensed >= inventory_max * BANK_SHED_BAG_LOADS",
+     "    return max_licensed >= BANK_SHED_BAG_LOADS"),
+    ("bank_shed_hoist: zero-capacity bag reads every pile as a full load",
+     "    if inventory_max <= 0:\n        return False",
+     "    if inventory_max < 0:\n        return False"),
+    ("bank_shed_hoist: empty licence map hoists (max default 0 -> huge)",
+     "    return bank_shed_hoist_pure(max(surplus.values(), default=0), inventory_max)",
+     "    return bank_shed_hoist_pure(max(surplus.values(), default=10**9), inventory_max)"),
+]
+
 RECYCLE_URGENCY_VALUE_MUTATIONS = [
     ("recycle_surplus goal: value ignores urgency (flat 20 for any hoard)",
-     "        return RECYCLE_SURPLUS_VALUE * recycle_urgency(surplus)",
+     "        return RECYCLE_SURPLUS_VALUE * shed_urgency(surplus)",
      "        return RECYCLE_SURPLUS_VALUE"),
 ]
 
@@ -2579,18 +2607,181 @@ RECYCLE_HOIST_MUTATIONS = [
      "                initial_total=None)"),
 
     ("strategy_driver: hoist threshold >= -> > (urgency-2 hoard stays starved)",
-     "        hoist_recycle = (recycle_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY",
-     "        hoist_recycle = (recycle_urgency(recycle_surplus_map) > RECYCLE_HOIST_URGENCY"),
+     "        hoist_recycle = (shed_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY",
+     "        hoist_recycle = (shed_urgency(recycle_surplus_map) > RECYCLE_HOIST_URGENCY"),
     ("strategy_driver: drop the pressure gate on the recycle hoist",
-     "        hoist_recycle = (recycle_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY\n"
+     "        hoist_recycle = (shed_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY\n"
      "                         and _used_fraction(state) < SELL_PRESSURE_FRACTION)",
-     "        hoist_recycle = (recycle_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY)"),
+     "        hoist_recycle = (shed_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY)"),
     ("strategy_driver: hoisted recycle band COLLECT->DISCRETIONARY",
      "                                        repr_=repr(rs_goal), band=BAND_COLLECT))",
      "                                        repr_=repr(rs_goal), band=BAND_DISCRETIONARY))"),
     ("strategy_driver: drop the discretionary dedup of a hoisted recycle",
      "            if hoist_recycle and mk is MeansKind.RECYCLE_SURPLUS:",
      "            if False and mk is MeansKind.RECYCLE_SURPLUS:"),
+]
+
+# The two shed rungs hoisted 2026-08-05 (disposal-unification part 2). Every
+# mutant re-creates one half of the defect the epic closed: an unconditional
+# hoist that parks progression, a hoist that stands down and leaves the rung
+# starved, a band that puts it back below the objective step, a duplicate repr
+# the sticky machinery cannot key on, or the snapshot whose absence made the
+# drain STRUCTURALLY unplannable (plan_len=0, nodes_explored=8).
+# Killed by tests/test_ai/test_shed_hoists.py.
+SHED_HOIST_MUTATIONS = [
+    ("strategy_driver: drain hoist ignores the bag-load rule (always hoists)",
+     "        hoist_drain = (bank_shed_hoist(drain_excess_map, state.inventory_max)",
+     "        hoist_drain = (True"),
+    ("strategy_driver: drain hoist never fires (rung stays starved)",
+     "        hoist_drain = (bank_shed_hoist(drain_excess_map, state.inventory_max)\n"
+     "                       and ctx.bank_accessible",
+     "        hoist_drain = (False\n"
+     "                       and ctx.bank_accessible"),
+    ("strategy_driver: drop the pressure gate on the drain hoist",
+     "                       and ctx.bank_accessible\n"
+     "                       and _used_fraction(state) < SELL_PRESSURE_FRACTION)",
+     "                       and ctx.bank_accessible)"),
+    ("strategy_driver: hoisted drain drops the snapshot (unplannable again)",
+     "                                        initial_total=sum(drain_excess_map.values()))",
+     "                                        initial_total=None)"),
+    ("strategy_driver: hoisted drain band COLLECT->DISCRETIONARY",
+     "                                        repr_=repr(db_goal), band=BAND_COLLECT))",
+     "                                        repr_=repr(db_goal), band=BAND_DISCRETIONARY))"),
+    ("strategy_driver: drop the discretionary dedup of a hoisted drain",
+     "            if hoist_drain and mk is MeansKind.DRAIN_BANK_JUNK:",
+     "            if False and mk is MeansKind.DRAIN_BANK_JUNK:"),
+    ("strategy_driver: sell hoist blind to the BANK arm (bank-only hoard starves)",
+     "                       or bank_shed_hoist(sell_bank, state.inventory_max))",
+     "                       or False)"),
+    ("strategy_driver: sell hoist ignores every threshold (always hoists)",
+     "        hoist_sell = ((shed_urgency(sell_bag) >= SHED_HOIST_URGENCY\n"
+     "                       or bank_shed_hoist(sell_bank, state.inventory_max))\n"
+     "                      and _used_fraction(state) < SELL_PRESSURE_FRACTION)",
+     "        hoist_sell = (_used_fraction(state) < SELL_PRESSURE_FRACTION)"),
+    ("strategy_driver: hoisted sell band COLLECT->DISCRETIONARY",
+     "                                        repr_=repr(si_goal), band=BAND_COLLECT))",
+     "                                        repr_=repr(si_goal), band=BAND_DISCRETIONARY))"),
+    ("strategy_driver: hoisted sell drops the bank-arm snapshot (arm goes inert)",
+     "            si_goal = SellInventoryGoal(game_data=game_data, ctx=ctx,\n"
+     "                                        bank_accessible=ctx.bank_accessible,\n"
+     "                                        state=state)",
+     "            si_goal = SellInventoryGoal(game_data=game_data, ctx=ctx,\n"
+     "                                        bank_accessible=ctx.bank_accessible)"),
+    ("strategy_driver: drop the discretionary dedup of a hoisted sell",
+     "            if hoist_sell and mk is MeansKind.SELL_IDLE:",
+     "            if False and mk is MeansKind.SELL_IDLE:"),
+]
+
+# The drain snapshot (2026-08-05). Without it `is_satisfied` is all-or-nothing
+# and needs every licensed copy in a 120-quantity bag at once, so the goal
+# refuses STRUCTURALLY — the half of the starvation a band-only fix would miss.
+# Killed by tests/test_ai/test_shed_hoists.py.
+DRAIN_SNAPSHOT_MUTATIONS = [
+    ("drain_bank_junk: snapshot progress < -> <= (no-progress counts satisfied)",
+     "        return (self._initial_total is not None\n"
+     "                and sum(excess.values()) < self._initial_total)",
+     "        return (self._initial_total is not None\n"
+     "                and sum(excess.values()) <= self._initial_total)"),
+    ("drain_bank_junk: ignore the snapshot (all-or-nothing, unplannable again)",
+     "        return (self._initial_total is not None\n"
+     "                and sum(excess.values()) < self._initial_total)",
+     "        return False"),
+    # NEITHER THE `min` NOR THE `is_applicable` PROBE IS MUTATED HERE, and the
+    # reason is the zero-vacuousness rule rather than an oversight. Both were
+    # tried and both SURVIVED as genuinely equivalent mutants:
+    #   * raising the probe's STARTING quantity changes nothing, because the loop
+    #     descends until `is_applicable` accepts and converges on the same action;
+    #   * dropping the probe changes nothing either, because `start` is already
+    #     the free quantity, and the planner re-checks `is_applicable` on every
+    #     node anyway.
+    # They are jointly redundant with each other and with the planner. THE REAL
+    # per-cycle QUANTITY bound is `inventory_room.has_room` (the server's HTTP
+    # 497), mutated in INVENTORY_ROOM_MUTATIONS, and its structural assertion is
+    # the census's `within_bag_bound` — mutated in SHED_CENSUS_MUTATIONS. What is
+    # NOT redundant, and is mutated here, is the SNAPSHOT: without it the goal
+    # has no reachable satisfaction at all.
+]
+
+# The SELL route's BANK arm (2026-08-05). `sellable_surplus` iterates the BAG,
+# so a surplus held entirely in the bank was structurally invisible. Each mutant
+# re-creates a shipped failure: an arm with no termination bound, an arm that
+# withdraws junk it cannot sell (the drain wearing a sell hat), or a licence
+# re-derived instead of read off the one authority.
+# Killed by tests/test_ai/test_shed_hoists.py.
+SELL_BANK_ARM_MUTATIONS = [
+    ("accumulation_sell: bank arm ignores sellability (offers unsellable junk)",
+     "    return {code: qty for code, qty\n"
+     "            in bank_drain_excess(state, game_data, ctx).items()\n"
+     "            if _is_sellable(code, game_data)}",
+     "    return dict(bank_drain_excess(state, game_data, ctx))"),
+    ("sell_inventory: bank arm runs without a snapshot (no termination bound)",
+     "        if self._initial_owned is None or bank_loc is None or not self._bank_accessible:\n"
+     "            return []",
+     "        if bank_loc is None or not self._bank_accessible:\n"
+     "            return []"),
+    ("sell_inventory: bank arm withdraws without checking the sale applies",
+     "            if sale.is_applicable(landed, game_data):\n"
+     "                return sale\n"
+     "        return None",
+     "            return sale\n"
+     "        return None"),
+    # NOT MUTATED here either, and for the same reason as the drain's: raising
+    # the probe's starting quantity is EQUIVALENT (the loop descends to what
+    # `is_applicable` accepts). The PAIRING is what this arm adds over the drain,
+    # so that is what is mutated instead.
+    ("sell_inventory: bank arm offers the withdraw without its sale",
+     "                result.append(withdraw)\n                result.append(sale)",
+     "                result.append(withdraw)"),
+    ("sell_inventory: satisfaction ignores the bank arm (stops before the sale)",
+     "        if not self._bank_arm_actions(state, self._gd):\n"
+     "            return True",
+     "        return True"),
+    ("sell_inventory: progress metric counts the BANK only (a withdraw looks like progress)",
+     "        return sum(state.inventory.get(code, 0) + bank.get(code, 0)\n"
+     "                   for code in self._snapshot_codes)",
+     "        return sum(bank.get(code, 0) for code in self._snapshot_codes)"),
+    ("sell_inventory: value blind to a bank-only hoard (scores 0.0)",
+     "        steps = max(worst_accumulation_steps(state, game_data, self._ctx),\n"
+     "                    worst_bank_accumulation_steps(state, game_data, self._ctx))",
+     "        steps = worst_accumulation_steps(state, game_data, self._ctx)"),
+]
+
+# The shed-reachability census's own verdict (2026-08-05). A census that cannot
+# go red is decoration, so each mutant blinds it to one residual it gates.
+# Killed by tests/test_ai/test_shed_reachability_census.py.
+SHED_CENSUS_MUTATIONS = [
+    ("shed census: a selected rung with NO plan passes (band-only check)",
+     "    if chosen != _EXPECTED_RUNG[cell.kind] or not plan:\n        return False",
+     "    if chosen != _EXPECTED_RUNG[cell.kind]:\n        return False"),
+    ("shed census: the per-cycle bag bound is not checked",
+     "    if not within_bag_bound(plan, state):\n        return False",
+     "    if False:\n        return False"),
+    ("shed census: a QUIET cell passes even when the rung wins",
+     "        return bool(plan) and chosen != _EXPECTED_RUNG[cell.kind]",
+     "        return bool(plan)"),
+    ("shed census: a contradiction no longer fails the coherence cell",
+     "        return contradictions == 0 and swept > 0",
+     "        return swept > 0"),
+    ("shed census: a vacuous sweep (nothing licensed) passes",
+     "        return contradictions == 0 and swept > 0",
+     "        return contradictions == 0"),
+    ("shed census: a planner timeout is laundered into a pass",
+     "    if planner_failed:\n        return False\n"
+     "    if cell.kind is ShedCellKind.ROUTE_COHERENCE:",
+     "    if False:\n        return False\n"
+     "    if cell.kind is ShedCellKind.ROUTE_COHERENCE:"),
+    ("shed census: the sell cell no longer requires the staged withdraw",
+     "        return stages_withdraw_then_sale(plan, SELL_CODE)",
+     "        return True"),
+    ("shed census: a liveness cell with no licensed work is allowed",
+     "    if cell.must_be_selected and work <= 0:",
+     "    if cell.must_be_selected and work < 0:"),
+    ("shed census: a quiet cell with licensed work is allowed",
+     "    if not cell.must_be_selected and work > 0:",
+     "    if not cell.must_be_selected and work < 0:"),
+    ("shed census: the contradiction sweep skips the licence gate",
+     "        if drained <= 0:\n            continue",
+     "        if drained < 0:\n            continue"),
 ]
 
 # Recycle protection semantics (item-protection-authority epic, Task 7): recycle
@@ -6242,12 +6433,27 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_bank_selection.py", survivors)
     run_group(RECYCLE_SURPLUS_SRC, RECYCLE_SURPLUS_ELIGIBILITY_MUTATIONS,
               "tests/test_ai/test_recycle_surplus.py", survivors)
-    run_group(RECYCLE_SURPLUS_SRC, RECYCLE_URGENCY_MUTATIONS,
+    run_group(SHED_URGENCY_SRC, SHED_URGENCY_MUTATIONS,
               "tests/test_ai/test_recycle_urgency.py", survivors)
     run_group(RECYCLE_SURPLUS_GOAL_SRC, RECYCLE_URGENCY_VALUE_MUTATIONS,
               "tests/test_ai/test_recycle_urgency.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, RECYCLE_HOIST_MUTATIONS,
               "tests/test_ai/test_recycle_urgency.py", survivors)
+    # Part 2 of the disposal-unification epic. OWN run_groups, per the anchor
+    # discipline: these are unit-killed mutants and must not share a group with
+    # the recycle hoist's differential-killed ones.
+    run_group(SHED_URGENCY_SRC, BANK_SHED_HOIST_MUTATIONS,
+              "tests/test_ai/test_shed_hoists.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, SHED_HOIST_MUTATIONS,
+              "tests/test_ai/test_shed_hoists.py", survivors)
+    run_group(DRAIN_BANK_JUNK_GOAL_SRC, DRAIN_SNAPSHOT_MUTATIONS,
+              "tests/test_ai/test_shed_hoists.py", survivors)
+    run_group(ACCUMULATION_SELL_SRC, SELL_BANK_ARM_MUTATIONS[:1],
+              "tests/test_ai/test_shed_hoists.py", survivors)
+    run_group(SELL_INVENTORY_GOAL_SRC, SELL_BANK_ARM_MUTATIONS[1:],
+              "tests/test_ai/test_shed_hoists.py", survivors)
+    run_group(SHED_CENSUS_SRC, SHED_CENSUS_MUTATIONS,
+              "tests/test_ai/test_shed_reachability_census.py", survivors)
     run_group(RECYCLE_SURPLUS_SRC, RECYCLE_KIT_MUTATIONS,
               "tests/test_ai/test_recycle_protection.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHER_REARM_MUTATIONS[4:],

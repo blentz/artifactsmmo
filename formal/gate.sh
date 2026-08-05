@@ -64,15 +64,19 @@ echo "== (b'''') mutation anchors =="; ( cd "$ROOT" && uv run python formal/diff
 echo "== (c) ruff =="; ( cd "$ROOT" && uv run ruff check src/ tests/ )
 echo "== (c') mypy strict =="; ( cd "$ROOT" && uv run mypy src/ )
 echo "== (c'') openapi conformance (strict) =="; ( cd "$ROOT" && uv run python formal/diff/openapi_conformance.py --strict )
-# census-gate.yml's five --check scripts. Measured standalone 2026-07-25:
+# census-gate.yml's six --check scripts. Measured standalone 2026-07-25:
 # inventory 56s, recycle 1s, craft 99s, obtain-parity 1s, requirement-parity
 # 1s (~2:39 total) -- comfortably inside the gate's headroom, so they run
 # here rather than being deferred like full mutation execution below. Placed
 # before the differential phase per the same cheapest-real-failure-first
 # principle: these are Python-only census scripts, no Lean oracle build
 # needed, so they can fail before differential pays for `lake build oracle`.
-echo "== (c''') census (--check x5) =="
+# shed-reachability added 2026-08-05 (disposal-unification part 2), measured
+# standalone at 2s: four `StrategyArbiter.select` drives plus one pure catalog
+# sweep. Placed FIRST because it is the cheapest of the six.
+echo "== (c''') census (--check x6) =="
 ( cd "$ROOT" \
+  && uv run python scripts/gen_shed_reachability.py --check \
   && uv run python scripts/gen_inventory_completeness.py --check \
   && uv run python scripts/gen_recycle_source_completeness.py --check \
   && uv run python scripts/gen_craft_completeness.py --check \

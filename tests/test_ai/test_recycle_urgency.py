@@ -2,6 +2,10 @@
 1x urgency (40-ish hoard = 8x), and past the hoist threshold RecycleSurplus is
 materialized in the COLLECT band so it actually outranks the grind instead of
 waiting in the starved discretionary tier.
+
+The urgency ladder itself moved to `ai/shed_urgency` on 2026-08-05 (two more
+rungs now read it — see `test_shed_hoists.py`); these cases still exercise it
+through the recycle rung it was written for.
 """
 
 from artifactsmmo_cli.ai.arbiter_select import BAND_COLLECT, BAND_STEP
@@ -12,7 +16,7 @@ from artifactsmmo_cli.ai.goals.recycle_surplus import (
     RecycleSurplusGoal,
 )
 from artifactsmmo_cli.ai.planner import GOAPPlanner
-from artifactsmmo_cli.ai.recycle_surplus import recycle_urgency, recycle_urgency_pure
+from artifactsmmo_cli.ai.shed_urgency import shed_urgency, shed_urgency_pure
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
@@ -31,28 +35,28 @@ _ALL_SLOTS: dict[str, str | None] = {
 # ── pure core ────────────────────────────────────────────────────────────────
 
 def test_urgency_baseline_below_five() -> None:
-    assert recycle_urgency_pure(0) == 1
-    assert recycle_urgency_pure(1) == 1
-    assert recycle_urgency_pure(4) == 1
-    assert recycle_urgency_pure(5) == 1
+    assert shed_urgency_pure(0) == 1
+    assert shed_urgency_pure(1) == 1
+    assert shed_urgency_pure(4) == 1
+    assert shed_urgency_pure(5) == 1
 
 
 def test_urgency_steps_every_five() -> None:
-    assert recycle_urgency_pure(6) == 2
-    assert recycle_urgency_pure(10) == 2
-    assert recycle_urgency_pure(11) == 3
+    assert shed_urgency_pure(6) == 2
+    assert shed_urgency_pure(10) == 2
+    assert shed_urgency_pure(11) == 3
 
 
 def test_urgency_forty_hoard_is_eight_x() -> None:
     """The spec example: a ~40-copy hoard is 8x more urgent than <5."""
-    assert recycle_urgency_pure(40) == 8
-    assert recycle_urgency_pure(39) == 8
-    assert recycle_urgency_pure(41) == 9
+    assert shed_urgency_pure(40) == 8
+    assert shed_urgency_pure(39) == 8
+    assert shed_urgency_pure(41) == 9
 
 
 def test_urgency_of_surplus_map_uses_largest_pile() -> None:
-    assert recycle_urgency({}) == 1
-    assert recycle_urgency({"copper_helmet": 39, "copper_ring": 1}) == 8
+    assert shed_urgency({}) == 1
+    assert shed_urgency({"copper_helmet": 39, "copper_ring": 1}) == 8
 
 
 # ── goal value scales with urgency ───────────────────────────────────────────

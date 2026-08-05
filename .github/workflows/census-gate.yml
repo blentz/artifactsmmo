@@ -26,10 +26,25 @@ name: census-gate
 #              the SEVEN-INERT-COMMITS divergence bug — the recycle route that
 #              reached A* but not the generator — impossible to ship again. A
 #              planner TIMEOUT is classified as the bug, never an explained gap.
+#   shed:      can a rung licensed to shed actually BE selected, and do the drain
+#              and the disposal route still agree? -> shed_starvation_bug == 0 AND
+#              disposal_contradiction_bug == 0
+#              The disposal-unification ACCEPTANCE gate. Its LIVENESS cells demand
+#              the arbiter SELECT the shed rung and return a non-empty,
+#              bag-bounded plan — both halves, because the drain used to be
+#              ranked below the always-plannable objective step AND, once given a
+#              slot, returned plan_len=0 (all-or-nothing satisfaction against a
+#              120-quantity bag). Its QUIET cell demands the rung NOT win when it
+#              is licensed nothing, which is what stops the fix from becoming an
+#              unconditional hoist that parks progression forever. Its sweep is
+#              the adapter-level twin of Formal.DisposalRoute's
+#              `drained_is_never_deposited`: no catalog code may be both
+#              drain-licensed and still under its bank keep cap.
 #
 # The craft + inventory gates were documented long before they were enforced
 # here; the recycle gate shipped with its epic (2026-07-14), the parity gate
-# with the one-obtain-model epic (2026-07-15).
+# with the one-obtain-model epic (2026-07-15), the shed gate with part 2 of the
+# disposal-unification epic (2026-08-05).
 on:
   pull_request:
     paths:
@@ -39,6 +54,7 @@ on:
       - "scripts/gen_recycle_source_completeness.py"
       - "scripts/gen_obtain_parity.py"
       - "scripts/gen_requirement_parity.py"
+      - "scripts/gen_shed_reachability.py"
       - ".github/workflows/census-gate.yml"
   push:
     branches: [main]
@@ -49,6 +65,7 @@ on:
       - "scripts/gen_recycle_source_completeness.py"
       - "scripts/gen_obtain_parity.py"
       - "scripts/gen_requirement_parity.py"
+      - "scripts/gen_shed_reachability.py"
       - ".github/workflows/census-gate.yml"
   workflow_dispatch: {}
 
@@ -71,6 +88,9 @@ jobs:
           bash generate_openapi_client.sh
       - name: Sync deps
         run: uv sync --dev
+
+      - name: shed-reachability census — shed_starvation_bug == 0 AND disposal_contradiction_bug == 0
+        run: uv run python scripts/gen_shed_reachability.py --check
 
       - name: inventory census — inventory_bug == 0 AND every KeepReason has a passing LIVENESS cell
         run: uv run python scripts/gen_inventory_completeness.py --check
