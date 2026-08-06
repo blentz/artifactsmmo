@@ -1112,4 +1112,32 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "rung must PAY XP (ash_plank at gap 14 does not) and must "
                      "not EAT the objective's ash_wood. Live Robby 2026-08-05: "
                      "14h, 660 cycles, character level 22 -> 22."),
+    "l12_deep_chain_grind": ScenarioCharacter(
+        name="l12_deep_chain_grind", level=12, gold=268,
+        derive_combat_stats=True,
+        # Live R2D2 2026-08-06. weaponcrafting 5 is the grind under test; mining
+        # 12 is what makes its chosen chain worthless, because copper_rocks is a
+        # level-1 resource and 12 - 1 = 11 >= GREY_SKILL_GAP.
+        skills={"alchemy": 4, "cooking": 4, "fishing": 1, "gearcrafting": 8,
+                "jewelrycrafting": 2, "mining": 12, "weaponcrafting": 5,
+                "woodcutting": 11},
+        equipment={
+            "weapon_slot": "wooden_staff", "helmet_slot": "copper_helmet",
+            "body_armor_slot": "copper_armor", "leg_armor_slot": "copper_legs_armor",
+            "boots_slot": "copper_boots", "ring1_slot": "copper_ring",
+        },
+        # THE TRAP: `yellow_slimeball` in the bank covers 2 of sticky_sword's
+        # recipe, leaving `copper_bar: 5` — so the OLD one-level count scored
+        # sticky_sword 5 and `apprentice_gloves` (6 feather) 6, and the sword won
+        # by one. Each of those 5 bars is 10 copper_ore, so the sword is really
+        # ~51 actions against the gloves' 7, and every one of those ore gathers
+        # is grey at mining 12. No copper_bar and no feather held, so both chains
+        # must be costed from their leaves — which is the whole point.
+        inventory={"copper_ore": 1},
+        bank={"yellow_slimeball": 8},
+        inventory_max=122,
+        description="L12 weaponcrafting-5 whose cheapest-LOOKING rung "
+                     "(sticky_sword, 5 recipe entries) is really ~51 actions of "
+                     "zero-xp copper_ore gathering, against apprentice_gloves at "
+                     "7. Live R2D2: 129 grind cycles, weaponcrafting never moved."),
 }

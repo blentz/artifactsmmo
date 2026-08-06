@@ -561,6 +561,18 @@ example : ∀ (skill : String) (level : Int)
     (∀ d ∈ cands, d.code ≠ "") →
     Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands ≠ "" :=
   @Formal.SkillGrindSelection.grind_actionable
+-- beats_prefers_cheaper_chain / costlier_chain_never_beats: among equally-wanted
+-- candidates the CHEAPEST WHOLE-CHAIN cost wins, in both directions. This is the
+-- key whose absence let a one-level `mats_missing` proxy misprice deep chains
+-- three times over; pinning both directions stops the ordering drifting again.
+example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
+    c.wanted = b.wanted → c.acquire_steps < b.acquire_steps →
+    Extracted.SkillGrindSelection._beats c (some b) = true :=
+  @Formal.SkillGrindSelection.beats_prefers_cheaper_chain
+example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
+    c.wanted = b.wanted → b.acquire_steps < c.acquire_steps →
+    Extracted.SkillGrindSelection._beats c (some b) = false :=
+  @Formal.SkillGrindSelection.costlier_chain_never_beats
 -- beats_prefers_wanted: a wanted candidate beats a non-wanted incumbent (wanted-first key).
 example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
     c.wanted = true → b.wanted = false →

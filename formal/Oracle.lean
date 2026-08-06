@@ -2216,7 +2216,7 @@ args layout (mixed String/Int):
 * `[0]`  skill          (String)
 * `[1]`  current_level  (Int)
 * then candidate blocks of 7:
-  `code(String), craft_skill(String), craft_level(Int), mats_missing(Int),
+  `code(String), craft_skill(String), craft_level(Int), acquire_steps(Int),
    obtainable(0/1 Int), wanted(0/1 Int), xp_positive(0/1 Int)`
 
 Strings are read directly via `strArg` (the diff side packs them as JSON
@@ -2233,7 +2233,7 @@ def runSkillGrindSelection (args : Array Json) : Json :=
       { code := strArg args base,
         craft_skill := strArg args (base + 1),
         craft_level := intArg args (base + 2),
-        mats_missing := intArg args (base + 3),
+        acquire_steps := intArg args (base + 3),
         obtainable := intArg args (base + 4) != 0,
         wanted := intArg args (base + 5) != 0,
         xp_positive := intArg args (base + 6) != 0 })

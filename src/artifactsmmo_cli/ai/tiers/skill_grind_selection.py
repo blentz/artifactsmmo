@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class GrindCandidate:
-    """A craftable item considered for a skill grind. `mats_missing`,
+    """A craftable item considered for a skill grind. `acquire_steps`,
     `obtainable`, `wanted` and `xp_positive` are HOISTED (computed against
     holdings / recipe-closure reachability / the objective's gear+tool targets /
     the server's level_penalty band by the impure wrapper) so this core stays
@@ -29,11 +29,16 @@ class GrindCandidate:
     gear/tool target (`is_target`); a wanted item produces a keeper while
     leveling, a non-wanted one only a throwaway. `xp_positive` =
     `ai/skill_xp_positive` says crafting it still pays skill xp at the current
-    level."""
+    level.
+
+    `acquire_steps` = the WHOLE-CHAIN action cost of making one of this item
+    from what the character already holds (`min_gathers + min_crafts` over the
+    recipe closure, the proved lower bound from `ai/min_plan_length`). It
+    replaced a one-level `mats_missing` count on 2026-08-06 — see `_beats`."""
     code: str
     craft_skill: str
     craft_level: int
-    mats_missing: int
+    acquire_steps: int
     obtainable: bool
     wanted: bool
     xp_positive: bool
@@ -41,24 +46,47 @@ class GrindCandidate:
 
 def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
     """True when feasible `c` strictly precedes `best` in the selection order
-    `(wanted desc, -mats_missing, craft_level)`: a WANTED item (an objective
-    gear/tool target) outranks a throwaway, THEN fewest missing materials, THEN
-    highest craft level. A None `best` (no incumbent) is always beaten. A full tie
-    keeps the incumbent (first-seen in candidate order) — deterministic without a
-    string tie-break.
+    `(wanted desc, -acquire_steps, craft_level)`: a WANTED item (an objective
+    gear/tool target) outranks a throwaway, THEN the cheapest chain to build,
+    THEN highest craft level. A None `best` (no incumbent) is always beaten. A
+    full tie keeps the incumbent (first-seen in candidate order) — deterministic
+    without a string tie-break.
 
-    Wanted-first (2026-06-24): pure fewest-materials greed made the bot craft a
+    Wanted-first (2026-06-24): pure cheapest-chain greed made the bot craft a
     value-10 `apprentice_gloves` (feathers already in bag) to level weaponcrafting
     while ignoring `copper_dagger` (value 83, the committed weapon). Crafting a
-    wanted item gains the SAME skill XP and yields a keeper, so it dominates."""
+    wanted item gains the SAME skill XP and yields a keeper, so it dominates.
+    `wanted` is a VALUE axis, orthogonal to cost, which is why it survived the
+    2026-08-06 rework below.
+
+    COST IS MEASURED IN ACTIONS, NOT RECIPE SLOTS (2026-08-06). This key was
+    `mats_missing` — the count of recipe entries not currently held — for its
+    whole life, and that is a one-level proxy that systematically misprices deep
+    chains. Live R2D2 at weaponcrafting 5: `sticky_sword` scored `mats_missing`
+    5 (five `copper_bar`) and `apprentice_gloves` scored 6 (six `feather`), so
+    the sword won by one. Their real costs are 51 actions and 7 — the 5 bars
+    hide 50 `copper_ore` gathers. The bot picked the sword and spent 129 grind
+    cycles gathering ore that paid no xp in EITHER skill, never reaching the
+    craft; weaponcrafting sat at level 5 the entire time.
+
+    That was the third recurrence of one flaw. Each earlier one was patched by
+    bolting another key onto this ordering rather than fixing the key that was
+    lying: `wanted` (2026-06-24) and the `xp_positive` filter (2026-08-05, live
+    Robby). Both were real, but neither addressed a cost proxy that cannot see
+    past the first level of a recipe. `acquire_steps` is that cost measured
+    properly — `min_gathers + min_crafts` over the full closure, discounting
+    what is already held — reusing the SAME proved lower bound the planner's
+    reachability gate uses (`ai/min_plan_length`, Formal.PlanModel), so there is
+    one notion of "how much work is this item" in the codebase instead of two
+    that disagree."""
     if best is None:
         return True
     if c.wanted and not best.wanted:
         return True
     if best.wanted and not c.wanted:
         return False
-    if c.mats_missing != best.mats_missing:
-        return c.mats_missing < best.mats_missing
+    if c.acquire_steps != best.acquire_steps:
+        return c.acquire_steps < best.acquire_steps
     if c.craft_level != best.craft_level:
         return c.craft_level > best.craft_level
     return False

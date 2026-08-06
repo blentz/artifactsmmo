@@ -1,14 +1,15 @@
 """Pick the in-skill item to craft NOW to gain XP toward a skill gate.
 
-Among items that are same-skill, in-level, and OBTAINABLE (every recipe input
-reachable by gather/craft/winnable-drop), prefer the shallowest material chain
-(fewest missing on hand), then the highest skill level (more XP); a full tie keeps
-the FIRST-SEEN candidate (insertion order) — there is no string/alphabetical
-tie-break. Returns None when no such in-skill recipe exists — the caller (the
-LevelSkill action's is_applicable / grind expansion, always same-skill, never
-cross-skill) then has no craftable rung. Inclusion is a recipe-table
-+ reachability fact, free of bank-freshness false positives (only `mats_missing`
-ordering reads holdings).
+Among items that are same-skill, in-level, OBTAINABLE (every recipe input
+reachable by gather/craft/winnable-drop) and XP-POSITIVE (the craft is not in the
+server's zero-xp band), prefer the CHEAPEST CHAIN TO BUILD — `acquire_steps`,
+counted in actions over the whole recipe closure — then the highest skill level
+(more XP); a full tie keeps the FIRST-SEEN candidate (insertion order) — there is
+no string/alphabetical tie-break. Returns None when no such in-skill recipe
+exists — the caller (the LevelSkill action's is_applicable / grind expansion,
+always same-skill, never cross-skill) then has no craftable rung. Inclusion is a
+recipe-table + reachability fact, free of bank-freshness false positives (only
+`acquire_steps` ordering reads holdings).
 
 `reserved`: recipe-input codes of the COMMITTED objective that the grind must not
 consume (Trace 2026-06-11 19:22: copper_helmet would have eaten the 5 bars held
@@ -23,6 +24,8 @@ such items so the reachable `copper_dagger` wins.
 
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.min_crafts import min_crafts
+from artifactsmmo_cli.ai.min_gathers import min_gathers
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.skill_grind_selection import (
     GrindCandidate,
@@ -70,10 +73,24 @@ def is_obtainable(code: str, state: WorldState, game_data: GameData,
 
 def build_grind_candidates(skill: str, state: WorldState,
                            game_data: GameData) -> list[GrindCandidate]:
-    """Hoist every in-skill craftable into a `GrindCandidate` (mats_missing
-    against inventory+bank, recursive obtainability). No reservation filter —
-    the caller (`skill_grind_target`) applies its own single-set filter."""
+    """Hoist every in-skill craftable into a `GrindCandidate` (whole-chain
+    `acquire_steps` against inventory+bank, recursive obtainability). No
+    reservation filter — the caller (`skill_grind_target`) applies its own
+    single-set filter.
+
+    `acquire_steps` is `min_gathers + min_crafts` over the recipe CLOSURE, the
+    same proved lower bound the planner's reachability gate uses. The old
+    one-level `mats_missing` count is gone: it priced `sticky_sword` (5 missing
+    `copper_bar`, really 51 actions) below `apprentice_gloves` (6 missing
+    `feather`, really 7) and cost live R2D2 129 grind cycles at zero xp. Full
+    rationale on `skill_grind_selection._beats`.
+
+    `recipe_closure` is built ONCE per call and shared across candidates, so the
+    added cost is one closure walk per rung rather than one per material."""
     bank = state.bank_items or {}
+    owned = {code: state.inventory.get(code, 0) + bank.get(code, 0)
+             for code in set(state.inventory) | set(bank)}
+    recipes = game_data.crafting_recipes
     candidates: list[GrindCandidate] = []
     for code, stats in game_data.all_item_stats.items():
         if stats.crafting_skill != skill:
@@ -81,15 +98,13 @@ def build_grind_candidates(skill: str, state: WorldState,
         recipe = game_data.crafting_recipe(code)
         if not recipe:
             continue
-        mats_missing = sum(
-            max(0, qty - state.inventory.get(mat, 0) - bank.get(mat, 0))
-            for mat, qty in recipe.items()
-        )
+        acquire_steps = (min_gathers(code, 1, recipes, owned)
+                         + min_crafts(code, 1, recipes, owned))
         candidates.append(GrindCandidate(
             code=code,
             craft_skill=stats.crafting_skill,
             craft_level=stats.crafting_level,
-            mats_missing=mats_missing,
+            acquire_steps=acquire_steps,
             obtainable=is_obtainable(code, state, game_data, frozenset()),
             # No objective context in this standalone path: the live grind goes
             # through the LevelSkill action (its is_applicable calls

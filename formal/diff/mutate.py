@@ -1251,6 +1251,36 @@ _GRIND_GUARD = (
     "        if (c.craft_skill != skill or c.craft_level > current_level\n"
     "                or not c.obtainable or not c.xp_positive):\n"
 )
+# skill_grind_target hoist mutations -- the acquire_steps HOIST itself (the pure
+# core can only rank what it is handed, so a shallow hoist defeats every ordering
+# theorem above without touching skill_grind_selection.py). Killed by
+# tests/test_ai/scenarios/test_grind_deep_chain.py, which drives the REAL
+# catalog.
+SKILL_GRIND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_grind_target.py"
+
+SKILL_GRIND_TARGET_MUTATIONS = [
+    # THE REGRESSION: go back to counting recipe entries instead of chain
+    # actions -- the one-level proxy that mispriced sticky_sword at 5 against
+    # apprentice_gloves at 6 while their real costs were 51 and 7.
+    ("skill_grind_target: acquire_steps back to one-level mats_missing",
+     "        acquire_steps = (min_gathers(code, 1, recipes, owned)\n"
+     "                         + min_crafts(code, 1, recipes, owned))\n",
+     "        acquire_steps = sum(\n"
+     "            max(0, qty - owned.get(mat, 0)) for mat, qty in recipe.items())\n"),
+    # drop the crafts term -- gathers only; under-counts multi-craft chains.
+    ("skill_grind_target: acquire_steps drops the craft term",
+     "        acquire_steps = (min_gathers(code, 1, recipes, owned)\n"
+     "                         + min_crafts(code, 1, recipes, owned))\n",
+     "        acquire_steps = min_gathers(code, 1, recipes, owned)\n"),
+    # ignore holdings -- every chain costed from scratch, so material already
+    # banked stops making a rung cheaper.
+    ("skill_grind_target: acquire_steps ignores holdings",
+     "        acquire_steps = (min_gathers(code, 1, recipes, owned)\n"
+     "                         + min_crafts(code, 1, recipes, owned))\n",
+     "        acquire_steps = (min_gathers(code, 1, recipes, {})\n"
+     "                         + min_crafts(code, 1, recipes, {}))\n"),
+]
+
 SKILL_GRIND_SELECTION_MUTATIONS = [
     # THE LOAD-BEARING ONE: drop the same-skill guard -- selection may return a
     # CROSS-SKILL item, the exact failure grind_same_skill forbids. The diff
@@ -1290,11 +1320,23 @@ SKILL_GRIND_SELECTION_MUTATIONS = [
      "                or not c.obtainable):\n"
      "            continue\n"
      "        if best is not None and best.xp_positive and not c.xp_positive:\n"),
-    # flip the fewest-missing ordering in _beats -- breaks the (-mats_missing,
+    # flip the cheapest-chain ordering in _beats -- breaks the (-acquire_steps,
     # craft_level) selection order; killed by the diff's tie/ordering cases.
-    ("skill_grind_selection: _beats fewest-missing flip",
-     "        return c.mats_missing < best.mats_missing\n",
-     "        return c.mats_missing > best.mats_missing\n"),
+    ("skill_grind_selection: _beats cheapest-chain flip",
+     "        return c.acquire_steps < best.acquire_steps\n",
+     "        return c.acquire_steps > best.acquire_steps\n"),
+    # DEMOTE cost below craft_level -- the "prefer the highest rung" instinct.
+    # A 51-action rung would outrank a 7-action one whenever it crafts higher,
+    # which is exactly the mispricing the 2026-08-06 rework removed.
+    ("skill_grind_selection: _beats craft_level outranks chain cost",
+     "    if c.acquire_steps != best.acquire_steps:\n"
+     "        return c.acquire_steps < best.acquire_steps\n"
+     "    if c.craft_level != best.craft_level:\n"
+     "        return c.craft_level > best.craft_level\n",
+     "    if c.craft_level != best.craft_level:\n"
+     "        return c.craft_level > best.craft_level\n"
+     "    if c.acquire_steps != best.acquire_steps:\n"
+     "        return c.acquire_steps < best.acquire_steps\n"),
     # neuter the wanted-first clause -- a WANTED keeper no longer beats a cheaper
     # throwaway, reviving the apprentice_gloves-over-copper_dagger inversion.
     # Killed by test_wanted_beats_cheaper_throwaway_diff.
@@ -6237,6 +6279,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_skill_xp_curve_diff.py", survivors)
     run_group(SKILL_GRIND_SELECTION_SRC, SKILL_GRIND_SELECTION_MUTATIONS,
               "formal/diff/test_skill_grind_selection_diff.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, SKILL_GRIND_TARGET_MUTATIONS,
+              "tests/test_ai/scenarios/test_grind_deep_chain.py", survivors)
     run_group(LEVEL_SKILL_ACTION_SRC, LEVEL_SKILL_ACTION_MUTATIONS,
               "formal/diff/test_level_skill_diff.py", survivors)
     run_group(STRATEGIC_VALUE_SRC, STRATEGIC_VALUE_MUTATIONS,

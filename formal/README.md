@@ -293,6 +293,64 @@ filter removed*. The scenario was vacuous and was fixed to hold no spruce, match
 the live state (Robby was mid-`SupplyBank(spruce_wood)` precisely because he had
 none). Both defects' tests are confirmed to FAIL against the pre-fix code.
 
+### AcquireSteps finding (2026-08-06) — REAL BUG #20, and the flaw behind three of them
+
+The grind selector mispriced a chain for the THIRD time, and the recurrence was
+the finding. Live R2D2 (L12, weaponcrafting 5): 129 `LevelSkill(weaponcrafting)`
+cycles across two runs moved weaponcrafting XP exactly zero times, every cycle
+`ok`, skill pinned at level 5.
+
+**The rung was fine; the RANKING was wrong.** `sticky_sword` is same-skill,
+in-level, obtainable and xp-positive — a legitimate choice. But the selector
+ordered candidates by `mats_missing`, the count of recipe entries not currently
+held:
+
+    sticky_sword      {copper_bar: 5, yellow_slimeball: 2}  -> 5 missing, ~51 actions
+    apprentice_gloves {feather: 6}                          -> 6 missing, ~7 actions
+
+The sword won by one and cost seven times more, because each `copper_bar` hides
+10 `copper_ore`. Worse, at mining 12 the `copper_rocks` gather is itself grey
+(gap 11), so those ~50 cycles paid nothing in EITHER skill and never reached the
+craft.
+
+**THE ARCHITECTURAL FLAW.** `mats_missing` is a one-level proxy that cannot see
+past the first line of a recipe, and it had misled the selector three times:
+
+| date | symptom | repair |
+|---|---|---|
+| 2026-06-24 | `apprentice_gloves` (0 missing) beat the committed `copper_dagger` | added the `wanted` key ABOVE it |
+| 2026-08-05 | grey `ash_plank` (0 missing) beat `spruce_plank` | added the `xp_positive` FILTER |
+| 2026-08-06 | `sticky_sword` (5 missing, 51 actions) beat `apprentice_gloves` (6 missing, 7 actions) | **fixed the proxy** |
+
+The first two repairs were correct on their own terms and neither touched the key
+that was lying — each bolted another term onto the ordering to compensate. That
+is the pattern to recognise: when the same class of misjudgement recurs at
+successive levels, the defect is in the measure, not in the cases.
+
+`acquire_steps` replaces it with `min_gathers + min_crafts` over the whole recipe
+closure, discounting holdings — the SAME proved lower bound the planner's
+reachability gate already uses (`ai/min_plan_length`, `Formal.PlanModel`), so the
+codebase now has one notion of "how much work is this item" instead of two that
+disagreed. `wanted` survives because it is a VALUE axis, orthogonal to cost.
+Measured cost of the deeper computation: end-to-end `plan_from_state` 96.5 ms ->
+98.3 ms (~2%), because the hoist is dominated by the pre-existing `is_obtainable`
+walk. No memoisation needed.
+
+**New roles.** `beats_prefers_cheaper_chain` and `costlier_chain_never_beats` pin
+the cost ordering in BOTH directions. Nothing previously stated what the ordering
+key was supposed to MEAN — only that the fold respected whatever `_beats` did —
+which is why a mispriced key could satisfy every existing theorem.
+
+**A differential weakness this exposed.** Both new ordering mutants SURVIVED a
+400-example sweep at first. The generator drew every field uniformly, so a
+candidate reached the ordering keys only if same-skill (1/4) AND in-level AND
+obtainable (1/2) AND xp-positive (1/2) — under one feasible entry per 8-candidate
+list on average, so two live candidates almost never met and `_beats` was barely
+exercised. The sweep is now feasibility-biased, with the original uniform sweep
+kept alongside it to keep hammering the filters. Uniform sampling is not the same
+as thorough sampling when the property under test lives behind a conjunction of
+filters.
+
 ### Intentionally NOT proved (no decision logic) — gear sub-project D (2026-06-29)
 
 `ai/loadout_profiles_core.py`-style cores get full Lean lockstep, but sub-project

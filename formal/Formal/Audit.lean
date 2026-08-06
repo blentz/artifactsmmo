@@ -85,6 +85,8 @@ open Formal.PriorityBand
 #print axioms Formal.SkillGrindSelection.grind_obtainable
 #print axioms Formal.SkillGrindSelection.grind_xp_positive
 #print axioms Formal.SkillGrindSelection.grind_actionable
+#print axioms Formal.SkillGrindSelection.beats_prefers_cheaper_chain
+#print axioms Formal.SkillGrindSelection.costlier_chain_never_beats
 #print axioms Formal.SkillGrindSelection.beats_prefers_wanted
 #print axioms Formal.SkillGrindSelection.unwanted_not_beats_wanted
 #print axioms Formal.MonsterDropApply.applyDrops_monotone

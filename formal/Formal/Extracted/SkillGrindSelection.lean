@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py (sha256: 178ab684ec38e096a91acac38b5dacd28c882ad887df2cfc10dbf2abd98cbb3f) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py (sha256: 6e94039e3210256155aa5e76d10b5ab6582282238fc168c75ec9566088d7bd39) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.SkillGrindSelection
@@ -8,12 +8,12 @@ structure GrindCandidate where
   code : String
   craft_skill : String
   craft_level : Int
-  mats_missing : Int
+  acquire_steps : Int
   obtainable : Bool
   wanted : Bool
   xp_positive : Bool
 
-/-- Extracted from `_beats` (line 42). -/
+/-- Extracted from `_beats` (line 47). -/
 def _beats (c : GrindCandidate) (best : Option GrindCandidate) :
     Bool :=
   (match best with
@@ -28,9 +28,9 @@ def _beats (c : GrindCandidate) (best : Option GrindCandidate) :
        then
         false
        else
-        (if (!(decide ((c.mats_missing) = (best_1.mats_missing))))
+        (if (!(decide ((c.acquire_steps) = (best_1.acquire_steps))))
          then
-          (decide ((c.mats_missing) < (best_1.mats_missing)))
+          (decide ((c.acquire_steps) < (best_1.acquire_steps)))
          else
           (if (!(decide ((c.craft_level) = (best_1.craft_level))))
            then
@@ -38,7 +38,7 @@ def _beats (c : GrindCandidate) (best : Option GrindCandidate) :
            else
             false)))))
 
-/-- Extracted from `skill_grind_selection_pure` (line 67). -/
+/-- Extracted from `skill_grind_selection_pure` (line 95). -/
 def skill_grind_selection_pure (skill : String) (current_level : Int) (candidates : List GrindCandidate) :
     String :=
   let best : Option GrindCandidate := none

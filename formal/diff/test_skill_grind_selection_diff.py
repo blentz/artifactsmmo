@@ -34,21 +34,33 @@ def _args(skill: str, level: int, candidates) -> list:
     return args
 
 
+# FEASIBILITY BIAS (2026-08-06). The generator below used to draw every field
+# uniformly, which sounds thorough and is not: a candidate reaches the ORDERING
+# keys only if it is same-skill (1/4) AND in level AND obtainable (1/2) AND
+# xp-positive (1/2), so an 8-candidate list carried well under one feasible
+# entry on average and the `_beats` ordering was almost never exercised by two
+# live candidates at once. Mutants that flipped the ordering therefore SURVIVED
+# a 400-example sweep. Biasing craft_skill and the two flags toward feasible —
+# while still drawing the unfeasible cases often enough to pin the filters —
+# makes multi-candidate ordering the common case instead of a rarity.
+_TARGET_SKILL = "weaponcrafting"
+_feasible_heavy = st.tuples(
+    st.sampled_from(_CODES),                                   # code
+    # 4:1 toward the target skill, so cross-skill filtering still gets covered.
+    st.sampled_from([_TARGET_SKILL] * 4 + ["gearcrafting"]),   # craft_skill
+    st.integers(min_value=0, max_value=12),                    # craft_level
+    st.integers(min_value=0, max_value=60),                    # acquire_steps
+    st.sampled_from([True] * 4 + [False]),                     # obtainable
+    st.booleans(),                                             # wanted
+    st.sampled_from([True] * 4 + [False]),                     # xp_positive
+)
+
+
 @settings(max_examples=400, deadline=None)
 @given(
-    skill=st.sampled_from(_SKILLS),
-    current_level=st.integers(min_value=0, max_value=10),
-    candidates=st.lists(
-        st.tuples(
-            st.sampled_from(_CODES),    # code
-            st.sampled_from(_SKILLS),   # craft_skill (cross-skill cases occur)
-            st.integers(min_value=0, max_value=12),   # craft_level
-            st.integers(min_value=0, max_value=20),   # mats_missing
-            st.booleans(),                            # obtainable
-            st.booleans(),                            # wanted (objective gear/tool target)
-            st.booleans(),                            # xp_positive (pays skill xp)
-        ),
-        min_size=0, max_size=8),
+    skill=st.just(_TARGET_SKILL),
+    current_level=st.integers(min_value=6, max_value=12),
+    candidates=st.lists(_feasible_heavy, min_size=0, max_size=8),
 )
 def test_python_matches_lean(skill, current_level, candidates):
     py_cands = [
@@ -59,6 +71,67 @@ def test_python_matches_lean(skill, current_level, candidates):
 
     lean = run_oracle("skill_grind_selection", [_args(skill, current_level, candidates)])[0]
     assert py == lean["code"], (skill, current_level, candidates, py, lean)
+
+
+@settings(max_examples=200, deadline=None)
+@given(
+    skill=st.sampled_from(_SKILLS),
+    current_level=st.integers(min_value=0, max_value=10),
+    candidates=st.lists(
+        st.tuples(
+            st.sampled_from(_CODES),    # code
+            st.sampled_from(_SKILLS),   # craft_skill (cross-skill cases occur)
+            st.integers(min_value=0, max_value=12),   # craft_level
+            st.integers(min_value=0, max_value=60),   # acquire_steps
+            st.booleans(),                            # obtainable
+            st.booleans(),                            # wanted
+            st.booleans(),                            # xp_positive
+        ),
+        min_size=0, max_size=8),
+)
+def test_python_matches_lean_unbiased(skill, current_level, candidates):
+    """The original uniform sweep, kept alongside the feasibility-biased one: it
+    is the arm that hammers the FILTERS (cross-skill, over-level, unobtainable,
+    grey) and the empty-result path, which the biased generator now visits less
+    often."""
+    py_cands = [
+        GrindCandidate(code, cs, cl, mm, ob, wt, xp)
+        for (code, cs, cl, mm, ob, wt, xp) in candidates
+    ]
+    py = skill_grind_selection_pure(skill, current_level, py_cands)
+
+    lean = run_oracle("skill_grind_selection", [_args(skill, current_level, candidates)])[0]
+    assert py == lean["code"], (skill, current_level, candidates, py, lean)
+
+
+def test_cheapest_chain_wins_diff():
+    """The cost ordering, pinned deterministically on BOTH sides. Two equally
+    wanted, equally feasible rungs differing only in chain cost: the cheap one
+    must win, and the higher craft_level must not buy its way past it — that
+    inversion is exactly what let a 51-action rung outrank a 7-action one."""
+    cands = [
+        ("iron_sword", "weaponcrafting", 5, 51, True, False, True),   # deep chain
+        ("copper_dagger", "weaponcrafting", 1, 7, True, False, True),  # shallow
+    ]
+    py = skill_grind_selection_pure(
+        "weaponcrafting", 10, [GrindCandidate(*c) for c in cands])
+    lean = run_oracle("skill_grind_selection", [_args("weaponcrafting", 10, cands)])[0]
+    assert py == "copper_dagger", "the costlier chain won — cost ordering regressed"
+    assert py == lean["code"]
+
+
+def test_craft_level_breaks_only_exact_cost_ties_diff():
+    """`craft_level` is the tie-break BELOW cost, never above it. Equal cost ->
+    the higher rung wins; unequal cost -> cost decides regardless of level."""
+    tied = [
+        ("copper_dagger", "weaponcrafting", 1, 7, True, False, True),
+        ("iron_sword", "weaponcrafting", 5, 7, True, False, True),
+    ]
+    py = skill_grind_selection_pure(
+        "weaponcrafting", 10, [GrindCandidate(*c) for c in tied])
+    lean = run_oracle("skill_grind_selection", [_args("weaponcrafting", 10, tied)])[0]
+    assert py == "iron_sword"
+    assert py == lean["code"]
 
 
 def test_wanted_beats_cheaper_throwaway_diff():
@@ -101,7 +174,7 @@ def test_unwanted_never_displaces_a_wanted_incumbent_diff():
 
 def test_zero_xp_rung_never_selected_diff():
     """THE 2026-08-05 LIVELOCK, at the selection layer. A grey rung with its
-    materials ALREADY IN HAND (mats_missing 0 — the top of the ranking) must lose
+    materials ALREADY IN HAND (acquire_steps 0 — the top of the ranking) must lose
     to a costlier rung that actually pays xp. Ordering could not fix this: the
     grey rung wins every ranking key it participates in, so the filter is the
     only thing standing between the bot and 288 zero-xp cycles.

@@ -28,7 +28,7 @@ its negation.)
 `xp_positive` joined the conjunction on 2026-08-06: a rung whose craft pays no
 skill xp (`Formal.SkillXpPositive`, the server's level_penalty band) can never
 advance the skill it was selected to advance, so grinding it is a non-terminating
-no-op. It is a FILTER and not a ranking key because no `mats_missing` count can
+no-op. It is a FILTER and not a ranking key because no `acquire_steps` count can
 redeem a rung that yields zero — see the Python core's docstring for the 14h
 live livelock that ordering alone could not have fixed. -/
 def feasible (skill : String) (level : Int) (c : GrindCandidate) : Prop :=
@@ -268,9 +268,40 @@ theorem grind_actionable (skill : String) (level : Int) (cands : List GrindCandi
     · simp at hcontra
   exact hne b hbmem
 
+/-- `beats_prefers_cheaper_chain`: among candidates of equal `wanted` standing,
+a STRICTLY CHEAPER chain always beats a costlier incumbent — regardless of craft
+level, which is only the tie-break below it.
+
+THE ROLE THAT WOULD HAVE CAUGHT ALL THREE RECURRENCES. This ordering key was a
+one-level `mats_missing` count until 2026-08-06, and nothing in Lean or in the
+differential said what the key was supposed to MEAN — only that the fold
+respected whatever `_beats` did. So each time the proxy mispriced a chain, the
+repair was another key bolted on top (`wanted` 2026-06-24, the `xp_positive`
+filter 2026-08-05) rather than a correction to the key itself. Stating the
+cost-ordering property explicitly makes "cheapest chain wins" a checked contract:
+`acquire_steps` now carries the whole-closure action count
+(`min_gathers + min_crafts`), so a future proxy that cannot see past the first
+recipe level cannot satisfy this theorem's intent silently. -/
+theorem beats_prefers_cheaper_chain (c b : GrindCandidate)
+    (hw : c.wanted = b.wanted) (hcost : c.acquire_steps < b.acquire_steps) :
+    _beats c (some b) = true := by
+  have hne : ¬ (c.acquire_steps = b.acquire_steps) := by omega
+  simp [_beats, hw, hne, hcost]
+
+/-- `costlier_chain_never_beats`: the converse guard — a STRICTLY COSTLIER chain
+never displaces an equally-wanted incumbent, whatever its craft level. Together
+with `beats_prefers_cheaper_chain` this pins `acquire_steps` as a strict
+second key, so neither direction can drift. -/
+theorem costlier_chain_never_beats (c b : GrindCandidate)
+    (hw : c.wanted = b.wanted) (hcost : b.acquire_steps < c.acquire_steps) :
+    _beats c (some b) = false := by
+  have hne : ¬ (c.acquire_steps = b.acquire_steps) := by omega
+  have hlt : ¬ (c.acquire_steps < b.acquire_steps) := by omega
+  simp [_beats, hw, hne, hlt]
+
 /-- `beats_prefers_wanted`: a WANTED candidate strictly beats a non-wanted
 incumbent — the wanted-first primary key (an objective gear/tool target outranks
-a throwaway regardless of its material count or craft level). -/
+a throwaway regardless of its chain cost or craft level). -/
 theorem beats_prefers_wanted (c b : GrindCandidate)
     (hc : c.wanted = true) (hb : b.wanted = false) :
     _beats c (some b) = true := by

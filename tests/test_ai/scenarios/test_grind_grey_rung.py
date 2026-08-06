@@ -138,18 +138,28 @@ def test_reservation_reaches_the_grind_through_the_context(
     the `reserved` parameter existed and no production caller ever passed one, so
     this is the test that would have caught a dead guard.
 
-    Unreserved, the grind reaches for `copper_legs_armor` and descends to
-    `copper_ore`. With the objective's copper reserved it must pick a rung that
-    leaves it alone — `iron_shield`, descending to `iron_ore`."""
+    Derived from the rung the selector actually picks rather than hard-coded, so
+    the test survives an honest change to the ranking (the 2026-08-06 cost rework
+    moved this pick from `copper_legs_armor` to `leather_boots`) while still
+    failing if the reservation stops being consulted. What must hold is the
+    BEHAVIOUR: reserving the chosen rung's materials moves the grind onto a
+    different chain."""
+    rung = skill_grind_target(_RESERVE_SKILL, state, game_data)
+    assert rung is not None
+    mats = sorted(game_data.crafting_recipe(rung))
+
     plain = next_grind_goal(_RESERVE_SKILL, state, game_data, NO_PROFILE_CONTEXT)
-    assert repr(plain) == "GatherMaterials(copper_ore, {copper_ore:10})"
+    assert plain is not None
 
     ctx = dataclasses.replace(NO_PROFILE_CONTEXT,
-                              step_profile={"copper_bar": 5, "feather": 2})
+                              step_profile={m: 1 for m in mats})
     reserved = next_grind_goal(_RESERVE_SKILL, state, game_data, ctx)
     assert reserved is not None, "grind must still produce a goal under reservation"
-    assert repr(reserved) == "GatherMaterials(iron_ore, {iron_ore:10})", (
+    assert repr(reserved) != repr(plain), (
         "the grind ignored ctx.step_profile — the reserved guard is dead again")
+    # ...and what it moved to must genuinely avoid the reserved materials.
+    alt = skill_grind_target(_RESERVE_SKILL, state, game_data, frozenset(mats))
+    assert alt is not None and not (set(game_data.crafting_recipe(alt)) & set(mats))
 
 
 def test_reservation_never_creates_a_dead_end(game_data: GameData,
