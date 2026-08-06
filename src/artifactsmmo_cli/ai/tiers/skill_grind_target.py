@@ -23,6 +23,7 @@ such items so the reachable `copper_dagger` wins.
 
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.skill_grind_selection import (
     GrindCandidate,
     skill_grind_selection_pure,
@@ -94,6 +95,12 @@ def build_grind_candidates(skill: str, state: WorldState,
             # through the LevelSkill action (its is_applicable calls
             # skill_grind_target for the rung); wanted has no bearing there.
             wanted=False,
+            # The server's level_penalty band: a rung more than
+            # GREY_SKILL_GAP-1 levels below the current skill pays NO craft xp,
+            # so grinding it can never reach the gate it was invoked to open
+            # (rationale + the 14h livelock on `skill_grind_selection_pure`).
+            xp_positive=skill_xp_positive(stats.crafting_level,
+                                          state.skills.get(skill, 0)),
         ))
     return candidates
 

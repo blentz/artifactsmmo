@@ -89,6 +89,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | Scalarizer | core | monotonicity |
 | ShoppingList | resources | dominance, monotonicity, safety, totality |
 | SkillGrindSelection | crafting, planner | safety, totality |
+| SkillXpPositive | crafting, gathering, planner | safety |
 | StepDispatch | core, planner | totality, safety, reachability |
 | StoreWarmup | core | safety |
 | StrategicValue | items, characters | safety, monotonicity |

@@ -1,9 +1,9 @@
--- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py (sha256: cd0b9e55b9bca9d140f486a44bf676b749fbd926f44352ccfd6c9096e614bbd4) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py (sha256: 178ab684ec38e096a91acac38b5dacd28c882ad887df2cfc10dbf2abd98cbb3f) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.SkillGrindSelection
 
-/-- Extracted from `@dataclass GrindCandidate` (line 22). -/
+/-- Extracted from `@dataclass GrindCandidate` (line 23). -/
 structure GrindCandidate where
   code : String
   craft_skill : String
@@ -11,8 +11,9 @@ structure GrindCandidate where
   mats_missing : Int
   obtainable : Bool
   wanted : Bool
+  xp_positive : Bool
 
-/-- Extracted from `_beats` (line 37). -/
+/-- Extracted from `_beats` (line 42). -/
 def _beats (c : GrindCandidate) (best : Option GrindCandidate) :
     Bool :=
   (match best with
@@ -37,13 +38,13 @@ def _beats (c : GrindCandidate) (best : Option GrindCandidate) :
            else
             false)))))
 
-/-- Extracted from `skill_grind_selection_pure` (line 62). -/
+/-- Extracted from `skill_grind_selection_pure` (line 67). -/
 def skill_grind_selection_pure (skill : String) (current_level : Int) (candidates : List GrindCandidate) :
     String :=
   let best : Option GrindCandidate := none
   let best := List.foldl
     (fun best c =>
-      (if ((!(decide ((c.craft_skill) = skill))) || (decide ((c.craft_level) > current_level)) || (!(c.obtainable)))
+      (if ((!(decide ((c.craft_skill) = skill))) || (decide ((c.craft_level) > current_level)) || (!(c.obtainable)) || (!(c.xp_positive)))
        then
         best
        else

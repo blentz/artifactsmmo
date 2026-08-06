@@ -76,9 +76,14 @@ open Formal.PriorityBand
 #print axioms pickslot_empty_fills
 #print axioms pickslot_no_candidates_keeps
 #print axioms weapon_score_nonneg
+#print axioms Formal.SkillXpPositive.gate_iff
+#print axioms Formal.SkillXpPositive.gate_false_iff
+#print axioms Formal.SkillXpPositive.gate_antitone
+#print axioms Formal.SkillXpPositive.gate_of_reachable
 #print axioms Formal.SkillGrindSelection.grind_same_skill
 #print axioms Formal.SkillGrindSelection.grind_in_level
 #print axioms Formal.SkillGrindSelection.grind_obtainable
+#print axioms Formal.SkillGrindSelection.grind_xp_positive
 #print axioms Formal.SkillGrindSelection.grind_actionable
 #print axioms Formal.SkillGrindSelection.beats_prefers_wanted
 #print axioms Formal.SkillGrindSelection.unwanted_not_beats_wanted

@@ -2215,9 +2215,9 @@ extracted `Extracted.SkillGrindSelection.skill_grind_selection_pure`.
 args layout (mixed String/Int):
 * `[0]`  skill          (String)
 * `[1]`  current_level  (Int)
-* then candidate blocks of 6:
+* then candidate blocks of 7:
   `code(String), craft_skill(String), craft_level(Int), mats_missing(Int),
-   obtainable(0/1 Int), wanted(0/1 Int)`
+   obtainable(0/1 Int), wanted(0/1 Int), xp_positive(0/1 Int)`
 
 Strings are read directly via `strArg` (the diff side packs them as JSON
 strings), so the extracted String-keyed `craft_skill == skill` / `code`
@@ -2226,16 +2226,17 @@ comparisons run unchanged. Emits the chosen in-skill item `{"code": String}`
 def runSkillGrindSelection (args : Array Json) : Json :=
   let skill := strArg args 0
   let currentLevel := intArg args 1
-  let nCand := (args.size - 2) / 6
+  let nCand := (args.size - 2) / 7
   let candidates : List Extracted.SkillGrindSelection.GrindCandidate :=
     (List.range nCand).map (fun k =>
-      let base := 2 + 6 * k
+      let base := 2 + 7 * k
       { code := strArg args base,
         craft_skill := strArg args (base + 1),
         craft_level := intArg args (base + 2),
         mats_missing := intArg args (base + 3),
         obtainable := intArg args (base + 4) != 0,
-        wanted := intArg args (base + 5) != 0 })
+        wanted := intArg args (base + 5) != 0,
+        xp_positive := intArg args (base + 6) != 0 })
   let result := Extracted.SkillGrindSelection.skill_grind_selection_pure
     skill currentLevel candidates
   Json.mkObj [("code", Json.str result)]
@@ -2844,6 +2845,14 @@ def runXpPositive (args : Array Json) : Json :=
   let n := fun i => (intArg args i).toNat
   Json.mkObj [("positive", Json.bool (Formal.XpPositive.xpPositiveGate (n 0) (n 1)))]
 
+/-- `skill_xp_positive` — the GATHER/CRAFT twin of `xp_positive`: args
+`[contentLevel, skillLevel]`; emits the extracted
+`Extracted.SkillXpPositive.skill_xp_positive` verdict. The differential pins the
+production `ai/skill_xp_positive` to this integer gate. -/
+def runSkillXpPositive (args : Array Json) : Json :=
+  Json.mkObj [("positive", Json.bool
+    (Extracted.SkillXpPositive.skill_xp_positive (intArg args 0) (intArg args 1)))]
+
 /-- `xp_value` — C0b exact xp value: args `[charLevel, monsterLevel,
 monsterHp, mult10, wisdom]`; emits the proven `Formal.XpValue.xpPerKill`
 (bit-identical to the refactored `monster_catalog.xp_per_kill`). -/
@@ -3059,6 +3068,8 @@ def runOne (item : Json) : Json :=
     runCycleStepD args
   else if kind == "xp_positive" then
     runXpPositive args
+  else if kind == "skill_xp_positive" then
+    runSkillXpPositive args
   else if kind == "xp_value" then
     runXpValue args
   else if kind == "next_craft" then

@@ -11,6 +11,7 @@ import Formal.PredictWin
 import Formal.LoadoutProjection
 import Formal.EquipmentScoring
 import Formal.SkillGrindSelection
+import Formal.SkillXpPositive
 import Formal.DoomedMemo
 import Formal.NextCraftAction
 import Formal.CraftPlanDriver
@@ -473,13 +474,37 @@ example : ∀ (item : Item) (monsterRes : ElemStats),
     0 ≤ WScore item monsterRes :=
   @weapon_score_nonneg
 
+/-! ### SkillXpPositive role contracts.
+
+The gather/craft zero-xp band (the GATHER/CRAFT twin of the combat `XpPositive`
+gate). Pinned here so a weakened band — in particular one that drops the
+`gate_of_reachable` liveness fact, or relaxes the antitonicity that keeps the
+grind filter stable under its own progress — fails to elaborate. -/
+
+example : ∀ (content skill : Int),
+    Extracted.SkillXpPositive.skill_xp_positive content skill = true ↔
+      1 ≤ content ∧ skill < content + Extracted.SkillXpPositive.GREY_SKILL_GAP :=
+  @Formal.SkillXpPositive.gate_iff
+example : ∀ (content skill : Int), 1 ≤ content →
+    (Extracted.SkillXpPositive.skill_xp_positive content skill = false ↔
+      content + Extracted.SkillXpPositive.GREY_SKILL_GAP ≤ skill) :=
+  @Formal.SkillXpPositive.gate_false_iff
+example : ∀ (content skill skill' : Int), skill ≤ skill' →
+    Extracted.SkillXpPositive.skill_xp_positive content skill' = true →
+    Extracted.SkillXpPositive.skill_xp_positive content skill = true :=
+  @Formal.SkillXpPositive.gate_antitone
+example : ∀ (content skill : Int), 1 ≤ content → skill ≤ content →
+    Extracted.SkillXpPositive.skill_xp_positive content skill = true :=
+  @Formal.SkillXpPositive.gate_of_reachable
+
 /-! ### SkillGrindSelection role contracts.
 
 The recipe-aware skill-grind target selector: a non-empty selected code ALWAYS
-belongs to a same-skill ∧ in-level ∧ obtainable candidate (the cross-skill
-outcome is unrepresentable at the selection layer), and a feasible candidate with
-a non-empty code forces a non-empty result. Names fully qualified to avoid `open`
-clashes; binder order matches each theorem signature. -/
+belongs to a same-skill ∧ in-level ∧ obtainable ∧ xp-positive candidate (the
+cross-skill outcome is unrepresentable at the selection layer, and so is a
+zero-xp rung), and a feasible candidate with a non-empty code forces a non-empty
+result. Names fully qualified to avoid `open` clashes; binder order matches each
+theorem signature. -/
 
 -- grind_same_skill: a non-empty selected code is a candidate whose craft_skill
 -- is the committed skill -- NO cross-skill selection, ever.
@@ -506,13 +531,33 @@ example : ∀ (skill : String) (level : Int)
       ∧ c.code = Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands
       ∧ c.obtainable = true :=
   @Formal.SkillGrindSelection.grind_obtainable
+-- grind_xp_positive: the selected candidate PAYS SKILL XP -- a zero-xp rung
+-- (the server's level_penalty band) can never be selected, which is what makes
+-- every grind cycle advance the skill it was invoked to raise.
+example : ∀ (skill : String) (level : Int)
+    (cands : List Extracted.SkillGrindSelection.GrindCandidate),
+    Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands ≠ "" →
+    ∃ c, c ∈ cands
+      ∧ c.code = Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands
+      ∧ c.xp_positive = true :=
+  @Formal.SkillGrindSelection.grind_xp_positive
 -- grind_actionable: a feasible candidate with a non-empty code forces a
 -- non-empty result (the selector never returns "" while an actionable in-skill
 -- craft exists).
+--
+-- `feasible` is INLINED here rather than referenced by name. Adding a conjunct
+-- to its definition STRENGTHENS this theorem's hypothesis and therefore WEAKENS
+-- the theorem -- silently, if the contract merely named it, because the name
+-- still elaborates. Spelling the conjunction out makes any future narrowing of
+-- `feasible` fail to elaborate against this pin, which is what part 5 of the
+-- gate is for. (The 2026-08-06 xp_positive conjunct is the first such change,
+-- and it is a genuine weakening: the selector now really does return "" when
+-- every in-level rung is grey.)
 example : ∀ (skill : String) (level : Int)
     (cands : List Extracted.SkillGrindSelection.GrindCandidate)
     (c : Extracted.SkillGrindSelection.GrindCandidate), c ∈ cands →
-    Formal.SkillGrindSelection.feasible skill level c →
+    (c.craft_skill = skill ∧ c.craft_level ≤ level ∧ c.obtainable = true
+      ∧ c.xp_positive = true) →
     (∀ d ∈ cands, d.code ≠ "") →
     Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands ≠ "" :=
   @Formal.SkillGrindSelection.grind_actionable

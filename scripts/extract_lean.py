@@ -427,6 +427,13 @@ MODULES: tuple[ModuleSpec, ...] = (
         functions=("tool_value_pure",),
     ),
     ModuleSpec(
+        source="src/artifactsmmo_cli/ai/skill_xp_positive.py",
+        output=f"{GENERATED_DIR}/SkillXpPositive.lean",
+        core_name="SkillXpPositive",
+        functions=("skill_xp_positive",),
+        constants=("GREY_SKILL_GAP",),
+    ),
+    ModuleSpec(
         source="src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py",
         output=f"{GENERATED_DIR}/SkillGrindSelection.lean",
         core_name="SkillGrindSelection",

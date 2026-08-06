@@ -351,13 +351,24 @@ class TestUnmetSkillGateFallsBack:
         mining resource gatherable now grants mining xp), so `_finish([lvl])`
         fires."""
         gd = _gd_copper_ring()
-        # Wire copper_rocks as a mining resource gatherable at level 0, so
-        # best_gather_resource_drop makes LevelSkill("mining", 1) applicable.
-        gd._resource_skill = {"copper_rocks": ("mining", 0)}
+        # Wire copper_rocks as a mining resource gatherable NOW, so
+        # best_gather_resource_drop makes the LevelSkill applicable.
+        #
+        # Both levels are catalog-legal (2026-08-06): every real resource is
+        # level >= 1 and every real skill starts at 1, and `skill_xp_positive`
+        # treats level-0 content as "no level on file" and refuses it — the same
+        # unknown-content guard the combat gate carries. The old fixture used a
+        # level-0 resource at skill 0, a state the server cannot produce, and it
+        # became unreachable once the grind started requiring its content to pay
+        # xp. Raising copper_bar's requirement to mining 2 keeps the SKILL GATE
+        # UNMET (the point of the test) with a character at the real floor.
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
+        gd._item_stats["copper_bar"] = dataclasses.replace(
+            gd._item_stats["copper_bar"], crafting_level=2)
         state = make_state(inventory={}, bank_items={},
-                           skills={"mining": 0, "jewelrycrafting": 5})
+                           skills={"mining": 1, "jewelrycrafting": 5})
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
-        lvl = LevelSkill(skill="mining", target_level=1)
+        lvl = LevelSkill(skill="mining", target_level=2)
         assert lvl.is_applicable(state, gd)
         actions = [*_copper_ring_actions(), lvl]
 

@@ -1,0 +1,43 @@
+# GREY_SKILL_GAP corroboration report
+traces=53 snapshot=/home/blentz/.cache/artifactsmmo/gamedata-api.artifactsmmo.com.json
+model: skill_xp_positive(content, skill) = content >= 1 and skill < content + 11
+
+## GATHER (load-bearing: 2464 cycles)
+ gap   pays   zero  verdict
+   0     19      1  mixed
+   1    124     19  mixed
+   2    173     12  mixed
+   3     67      4  mixed
+   4     17      1  mixed
+   5    100     11  mixed
+   6    326     11  mixed
+   7    252     11  mixed
+   8    182      7  mixed
+   9    180     10  mixed
+  10    148     11  mixed
+  11      0    312  ZERO
+  14      1     86  mixed  <-- outlier: 1/87 paying (attribution lag)
+  15      5    100  mixed  <-- outlier: 5/105 paying (attribution lag)
+  16      0    140  ZERO
+  20      0    134  ZERO
+
+## CRAFT (ADVISORY — attribution lag: 277 cycles)
+ gap   pays   zero  verdict
+   0      0      9  ZERO  <-- VIOLATION: model says pays, bucket never paid
+   1      1      2  mixed
+   2      0      8  ZERO  <-- VIOLATION: model says pays, bucket never paid
+   3      0     13  ZERO  <-- VIOLATION: model says pays, bucket never paid
+   4      4      2  mixed
+   5     10     13  mixed
+   6     10      9  mixed
+   7      0      4  ZERO  <-- VIOLATION: model says pays, bucket never paid
+   8     15      7  mixed
+   9      8     10  mixed
+  10     10     24  mixed
+  11      1     56  mixed  <-- outlier: 1/57 paying (attribution lag)
+  12      0     45  ZERO
+  14      0      5  ZERO
+  20      0     11  ZERO
+
+OUT-OF-BAND OUTLIERS (attribution lag, see module docstring): gap=14: 1/87; gap=15: 5/105
+VIOLATIONS: none — GREY_SKILL_GAP = 11 holds on every gather bucket

@@ -1178,6 +1178,42 @@ XP_POSITIVE_MUTATIONS = [
      "        if False:\n            return 0\n"),
 ]
 
+# skill_xp_positive mutations -- anchors the GATHER/CRAFT zero-xp band in
+# ai/skill_xp_positive.py, the twin of the combat gate above. The constant is
+# corroborated by formal/diff/gather_xp_replay.py (2464 live gather cycles) and
+# the model is Formal.SkillXpPositive; killed by
+# formal/diff/test_skill_xp_positive_diff.py, whose boundary sweep is exhaustive
+# precisely so an off-by-a-tier mutant cannot survive.
+SKILL_XP_POSITIVE_SRC = ROOT / "src/artifactsmmo_cli/ai/skill_xp_positive.py"
+
+SKILL_XP_POSITIVE_MUTATIONS = [
+    # narrow the band by one -- the replayed gap-10 bucket (148 paying gathers)
+    # would be called grey, so the grind skips a tier that really pays.
+    ("skill_xp_positive: GREY_SKILL_GAP 11 becomes 10",
+     "GREY_SKILL_GAP = 11\n",
+     "GREY_SKILL_GAP = 10\n"),
+    # widen the band by one -- gap 11 (0/312 paying) would be called payable,
+    # reinstating exactly one zero-xp grind tier. This is the mutant that maps
+    # onto the original defect's shape.
+    ("skill_xp_positive: GREY_SKILL_GAP 11 becomes 12",
+     "GREY_SKILL_GAP = 11\n",
+     "GREY_SKILL_GAP = 12\n"),
+    # inclusive edge -- flips the verdict at exactly gap GREY_SKILL_GAP - 1.
+    ("skill_xp_positive: strict < becomes <=",
+     "    return content_level >= 1 and skill_level < content_level + GREY_SKILL_GAP\n",
+     "    return content_level >= 1 and skill_level <= content_level + GREY_SKILL_GAP\n"),
+    # drop the band entirely -- every content level pays, which is the
+    # pre-fix behaviour the whole core exists to replace.
+    ("skill_xp_positive: drop the band",
+     "    return content_level >= 1 and skill_level < content_level + GREY_SKILL_GAP\n",
+     "    return content_level >= 1\n"),
+    # drop the real-content guard -- level-0 ("no level on file") content is
+    # reported as a paying grind target, mirroring the combat gate's mutant.
+    ("skill_xp_positive: drop unknown-content guard",
+     "    return content_level >= 1 and skill_level < content_level + GREY_SKILL_GAP\n",
+     "    return skill_level < content_level + GREY_SKILL_GAP\n"),
+]
+
 # xp_value mutations -- anchors the EXACT xp formula in monster_catalog.
 # xp_per_kill (post-C0b integer refactor) whose full value is mirrored by the
 # proven Formal.XpValue.xpPerKill. Killed by formal/diff/test_xp_value_diff.py
@@ -1208,26 +1244,52 @@ XP_VALUE_MUTATIONS = [
 # skill_grind_selection_pure (the recipe-aware skill-grind target selector).
 # Each substring is copied verbatim from skill_grind_selection.py (indentation
 # included) so the mutation applies unambiguously; killed by the differential
-# test formal/diff/test_skill_grind_selection_diff.py, which encodes the four
+# test formal/diff/test_skill_grind_selection_diff.py, which encodes the five
 # role theorems (grind_same_skill / grind_in_level / grind_obtainable /
-# grind_actionable) from formal/Formal/SkillGrindSelection.lean.
+# grind_xp_positive / grind_actionable) from formal/Formal/SkillGrindSelection.lean.
+_GRIND_GUARD = (
+    "        if (c.craft_skill != skill or c.craft_level > current_level\n"
+    "                or not c.obtainable or not c.xp_positive):\n"
+)
 SKILL_GRIND_SELECTION_MUTATIONS = [
     # THE LOAD-BEARING ONE: drop the same-skill guard -- selection may return a
     # CROSS-SKILL item, the exact failure grind_same_skill forbids. The diff
     # MUST kill this.
     ("skill_grind_selection: drop same-skill guard",
-     "        if c.craft_skill != skill or c.craft_level > current_level or not c.obtainable:\n",
-     "        if c.craft_level > current_level or not c.obtainable:\n"),
+     _GRIND_GUARD,
+     "        if (c.craft_level > current_level\n"
+     "                or not c.obtainable or not c.xp_positive):\n"),
     # drop the obtainable guard -- an unobtainable item can win, violating
     # grind_obtainable (the live weaponcrafting bug).
     ("skill_grind_selection: drop obtainable guard",
-     "        if c.craft_skill != skill or c.craft_level > current_level or not c.obtainable:\n",
-     "        if c.craft_skill != skill or c.craft_level > current_level:\n"),
+     _GRIND_GUARD,
+     "        if (c.craft_skill != skill or c.craft_level > current_level\n"
+     "                or not c.xp_positive):\n"),
     # drop the in-level guard -- an over-level item can win, violating
     # grind_in_level.
     ("skill_grind_selection: drop in-level guard",
-     "        if c.craft_skill != skill or c.craft_level > current_level or not c.obtainable:\n",
-     "        if c.craft_skill != skill or not c.obtainable:\n"),
+     _GRIND_GUARD,
+     "        if (c.craft_skill != skill\n"
+     "                or not c.obtainable or not c.xp_positive):\n"),
+    # THE 2026-08-05 LIVELOCK: drop the xp-positive guard -- a grey rung whose
+    # craft pays NOTHING can win the ranking (it has the fewest missing
+    # materials, being the cheapest tier), and the grind spins on it forever.
+    # Violates grind_xp_positive; killed by
+    # test_zero_xp_rung_never_selected_diff.
+    ("skill_grind_selection: drop xp-positive guard",
+     _GRIND_GUARD,
+     "        if (c.craft_skill != skill or c.craft_level > current_level\n"
+     "                or not c.obtainable):\n"),
+    # DEMOTE the xp-positive guard from a FILTER to a ranking key -- the fix that
+    # looks equivalent and is not: a zero-xp rung still wins whenever no
+    # xp-positive rung exists, which is exactly Robby's woodcutting-15 state.
+    # Killed by test_all_candidates_grey_selects_nothing_diff.
+    ("skill_grind_selection: xp-positive as tie-break not filter",
+     _GRIND_GUARD,
+     "        if (c.craft_skill != skill or c.craft_level > current_level\n"
+     "                or not c.obtainable):\n"
+     "            continue\n"
+     "        if best is not None and best.xp_positive and not c.xp_positive:\n"),
     # flip the fewest-missing ordering in _beats -- breaks the (-mats_missing,
     # craft_level) selection order; killed by the diff's tie/ordering cases.
     ("skill_grind_selection: _beats fewest-missing flip",
@@ -6524,6 +6586,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_no_combat_deadlock.py", survivors)
     run_group(MONSTER_CATALOG_SRC, XP_POSITIVE_MUTATIONS,
               "formal/diff/test_xp_positive_diff.py", survivors)
+    run_group(SKILL_XP_POSITIVE_SRC, SKILL_XP_POSITIVE_MUTATIONS,
+              "formal/diff/test_skill_xp_positive_diff.py", survivors)
     run_group(MONSTER_CATALOG_SRC, XP_VALUE_MUTATIONS,
               "formal/diff/test_xp_value_diff.py", survivors)
     run_group(BOOST_SELECTION_SRC, BOOST_SELECTION_MUTATIONS,

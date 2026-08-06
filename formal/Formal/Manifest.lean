@@ -108,10 +108,18 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @pickslot_empty_fills         -- empty slot + candidate ⇒ filled with argmax
 #check @pickslot_no_candidates_keeps -- no feasible candidate ⇒ slot left as-is
 #check @weapon_score_nonneg          -- WScore ≥ 0 (the clamp earns this)
+-- SkillXpPositive required roles (gather/craft zero-xp band — the GATHER/CRAFT
+-- twin of the combat XpPositive gate):
+#check @Formal.SkillXpPositive.gate_iff            -- gate is exactly the integer band
+#check @Formal.SkillXpPositive.gate_false_iff      -- zero band is the exact complement
+#check @Formal.SkillXpPositive.gate_antitone       -- leveling never un-greys a target
+#check @Formal.SkillXpPositive.gate_of_reachable   -- at-or-above-level content always pays
+
 -- SkillGrindSelection required roles (recipe-aware skill-grind target selector):
 #check @Formal.SkillGrindSelection.grind_same_skill -- non-empty result is a same-skill candidate
 #check @Formal.SkillGrindSelection.grind_in_level   -- selected candidate is in level
 #check @Formal.SkillGrindSelection.grind_obtainable -- selected candidate is obtainable
+#check @Formal.SkillGrindSelection.grind_xp_positive -- selected candidate pays skill xp
 #check @Formal.SkillGrindSelection.grind_actionable -- feasible non-empty candidate ⇒ non-empty result
 #check @Formal.SkillGrindSelection.beats_prefers_wanted   -- wanted candidate beats non-wanted incumbent
 #check @Formal.SkillGrindSelection.unwanted_not_beats_wanted -- non-wanted never displaces wanted incumbent

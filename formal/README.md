@@ -74,6 +74,7 @@ uv sync --dev
 | `npc_buy_*_pure` (`ai/actions/npc_buy_core.py`, `ai/actions/npc.py::NpcBuyAction`) | `NpcBuyInventory.lean` | `npc_buy_is_applicable_imp_free_ge` (passing check ⇒ quantity ≤ free); `npc_buy_is_applicable_imp_gold_ge` (pass ⇒ price·quantity ≤ gold); `npc_buy_apply_inventory_safe` (wellformed + is_applicable ⇒ post.used ≤ cap); `npc_buy_chain_safe` (chain of N buys with Σqs ≤ free stays ≤ cap — reuses the Phase-3 GatherApply chain_safe template). See Phase-5 finding below. |
 | every `Action.apply` (24 files under `ai/actions/`) | `ApplyBaseline.lean` | `preserves_baseline` 8-conjunct predicate (every apply preserves the server-snapshot stat fields `attack`, `dmg`, `dmg_elements`, `resistance`, `critical_strike`, `initiative`, `wisdom`, `skill_xp`). **Phase-14 disclosed-gap closure**: all 24 concrete `Action.apply` methods now modeled in Lean — `moveApply`, `moveSemanticApply`, `mapTransitionApply`, `gatherApply`, `npcBuyApply`, `withdrawGoldApply`, `withdrawItemApply`, `claimApply`, `craftApply`, `recycleApply`, `npcSellApply`, `depositGoldApply`, `depositAllApply`, `useConsumableApply`, `deleteApply`, `equipApply`, `unequipApply`, `optimizeLoadoutApply`, `acceptTaskApply`, `completeTaskApply`, `taskCancelApply`, `taskExchangeApply`, `taskTradeApply`, `restApply`, `buyBankExpansionApply`, `fightApply` — grouped by structural family (position-only / inventory-mint / inventory-consume / equipment-swap / task-transition / misc / fight). Headline `all_actions_preserve_baseline : ∀ s a, preservesBaseline s (a.run s)` enumerates all 24. Per-action `mutates_only_declared_fields` contracts (Move/Rest/BuyBankExpansion/Equip/Claim/Fight) pin which non-baseline fields each apply may touch. The new `projected_skill_xp_delta` field is intentionally outside the modeled baseline and is mutated by Gather/Craft for planner-side XP accounting (regression-pinned in the differential). See Phase-4 / Phase-14 findings below. |
 | `_winnable_farm_target` cascade (`ai/winnable_cascade.py`, extracted from `ai/player.py::Player._winnable_farm_target`) | `WinnableCascade.lean` | 3-tier precedence `task → path-if-winnable → pick-winnable`: `task_wins` (task tier bypasses the winnable check by design), `path_wins_when_winnable`, `pick_wins_when_no_path`, `pick_wins_when_path_not_winnable` (safety: the cascade NEVER returns a path monster that failed the winnable check), `totality`, `path_result_was_winnable` (contrapositive safety). See Phase-11 finding below. |
+| `skill_xp_positive` (`ai/skill_xp_positive.py`) | `SkillXpPositive.lean` | the GATHER/CRAFT zero-xp band, twin of the combat `XpPositive` gate: `gate_iff` (exactly the integer band), `gate_false_iff` (the zero band is the exact complement for real content), `gate_antitone` (raising the SKILL never un-greys a target — what makes the grind filter stable under its own progress), `gate_monotone_content`, `gate_of_reachable` (at-or-above-level content always pays — the liveness fact the grind filter rests on). Band corroborated over 2464 live gather cycles by `diff/gather_xp_replay.py`; see the 2026-08-06 finding below. |
 
 The float-heavy parts modeled exactly where reducible (predict_win); the inherently-heuristic geometric estimate in `SkillXpCurve` is abstracted and disclosed in that file's header. Components depending on others' verdicts (e.g. `combat_capable` on `predict_win`) abstract the dependency as an input — the dependency itself is proven in its own module.
 
@@ -238,6 +239,59 @@ that is unfaithful to the re-arming real bot, so the in-model discharge is
 REFUSED as a false-story proof). "Modulo only LIV-001" is honestly unreachable.
 The authoritative audit — statements, line citations, why each is irreducible,
 and what discharge would require — is `docs/LEVEL_FIFTY_RESIDUALS.md`.
+
+### SkillXpPositive finding (2026-08-06) — REAL BUGS #18 and #19, the zero-xp grind
+
+Found by auditing live traces, not by a failing test: 5 characters ran 14h and
+returned `ok` on 3222 of 3230 cycles, yet Robby ended at character level 22 → 22
+with gold DOWN 8431 → 5513. The damage was only visible in a derivative —
+`skill_xp["woodcutting"]` pinned at 4229 across 104 consecutive successful cycles.
+
+**REAL BUG #18 — the grind selected content that pays no xp.** The server zeroes
+gather and craft xp once content sits far enough below the SKILL level. The
+codebase modelled this for COMBAT only (`XpPositive`, enforced by FightAction's
+`xp_per_kill > 0` gate); `GatherAction`/`CraftAction` carried an UPPER skill bound
+(`skills[skill] >= required`) and no lower one anywhere. Because `mats_missing` is
+`skill_grind_selection_pure`'s first non-`wanted` ranking key, the grind picked
+whichever rung's materials were already stockpiled — systematically the cheapest
+and therefore GREYEST tier. At woodcutting 15 that was `ash_plank` (craft level
+1, gap 14, pays nothing) over `spruce_plank` (10). Fix: `xp_positive` is hoisted
+onto `GrindCandidate` and applied as a FILTER, not a ranking key — a rung that
+pays zero is worthless at any `mats_missing`, so ordering could never have fixed
+it. `best_gather_resource_drop` gained the same gate and now returns None when
+even its highest in-range resource is grey (Robby also burned 24 cycles gathering
+`sunflower_field` at alchemy 17).
+
+**REAL BUG #19 — the grind ate the committed objective's materials.** The
+objective was `hardwood_plank` (4 ash_wood + 6 birch_wood); `birch_tree` needs
+woodcutting 20 and the character had 15. So the arbiter gathered the reachable
+ash, failed on birch, fell back to `LevelSkill(woodcutting->20)` — whose rung
+`ash_plank` CONSUMES 10 ash_wood — and the ash demand re-armed, forever.
+`skill_grind_target` had carried a `reserved` parameter for exactly this since
+2026-06-11, but **no production caller ever passed one**: the guard was dead code
+for two months. `next_grind_goal` now passes `ctx.step_profile`, the committed
+step's material demand that every keep/deposit/sell/recycle protection already
+consults. It is a PREFERENCE, not a hard exclusion: `LevelSkill.is_applicable`
+gates on the UNRESERVED target and has no `ctx`, so an emptying reservation would
+recreate the selection-says-yes/emission-says-no split behind the wool livelock.
+
+**Boundary is OBSERVED, not assumed.** The docs say "10+ levels below → 0" for
+both gathering and crafting, but the prose is ambiguous at the edge.
+`diff/gather_xp_replay.py` replays 2464 live gather cycles: gap 10 pays 148/159,
+gap 11 pays **0/312**, with the SAME resources (`copper_rocks`, `ash_tree`) on
+both sides — so the split is a property of the gap, not of any resource. Hence
+`GREY_SKILL_GAP = 11`, one WIDER than combat's doc-cited `>= 10`. The two
+constants are deliberately not shared. The 6 apparent payers at gap ≥ 11 all
+carry a delta shaped like the NEIGHBOURING resource (spruce's +25/+17 on `ash_tree`
+cycles), i.e. one-snapshot attribution lag; they are reported as OUTLIERS rather
+than asserted away.
+
+**Non-vacuity was verified, not assumed.** The first version of the scenario
+fixture banked 60 spruce_wood, which gave `spruce_plank` `mats_missing = 0` too —
+the tie then fell through to `craft_level` and the paying rung won *even with the
+filter removed*. The scenario was vacuous and was fixed to hold no spruce, matching
+the live state (Robby was mid-`SupplyBank(spruce_wood)` precisely because he had
+none). Both defects' tests are confirmed to FAIL against the pre-fix code.
 
 ### Intentionally NOT proved (no decision logic) — gear sub-project D (2026-06-29)
 

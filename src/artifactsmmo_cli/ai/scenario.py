@@ -1078,4 +1078,38 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         description="L21 jewelrycrafting-14 grind whose rung (iron_ring) needs "
                      "wool, a drop of the GREY level-5 sheep: the skill-grind "
                      "grey-farm exemption is what makes it plannable."),
+    "l22_grey_rung_grind": ScenarioCharacter(
+        name="l22_grey_rung_grind", level=22, gold=8431,
+        derive_combat_stats=True,
+        skills={"alchemy": 17, "cooking": 12, "fishing": 5, "gearcrafting": 15,
+                "jewelrycrafting": 15, "mining": 21, "weaponcrafting": 10,
+                "woodcutting": 15},
+        equipment={
+            "weapon_slot": "highwayman_dagger", "helmet_slot": "lucky_wizard_hat",
+            "body_armor_slot": "mushmush_jacket", "leg_armor_slot": "adventurer_pants",
+            "boots_slot": "adventurer_boots", "ring1_slot": "air_ring",
+            "amulet_slot": "wisdom_amulet",
+        },
+        # THE TRAP, verbatim from the live state: a pile of ash_wood makes the
+        # grey `ash_plank` (woodcutting 1) the rung with ZERO missing materials,
+        # so it wins `mats_missing` — the selector's first non-`wanted` key —
+        # against `spruce_plank` (woodcutting 10), which needs spruce_wood.
+        # `ash_plank`'s craft pays nothing 14 levels down, so the pre-fix grind
+        # crafted it forever. The ash pile is ALSO what the objective is
+        # accumulating (hardwood_plank = 4 ash_wood + 6 birch_wood), which is
+        # what makes this scenario carry BOTH defects at once.
+        inventory={"ash_wood": 40},
+        inventory_max=142,
+        # NO spruce_wood anywhere. This is load-bearing, not incidental: with
+        # spruce banked, `spruce_plank` ALSO scores mats_missing 0, the tie falls
+        # through to `craft_level` (higher wins) and the paying rung is selected
+        # even with the xp filter removed — i.e. the scenario would be VACUOUS.
+        # Robby was mid-`SupplyBank(spruce_wood x60)` precisely because he had
+        # none, which is what let the grey rung win outright.
+        bank={},
+        description="L22 woodcutting-15 chasing hardwood_plank (4 ash_wood + 6 "
+                     "birch_wood, birch_tree needs woodcutting 20). The grind "
+                     "rung must PAY XP (ash_plank at gap 14 does not) and must "
+                     "not EAT the objective's ash_wood. Live Robby 2026-08-05: "
+                     "14h, 660 cycles, character level 22 -> 22."),
 }

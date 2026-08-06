@@ -22,15 +22,25 @@ namespace Formal.SkillGrindSelection
 open Extracted.SkillGrindSelection
 
 /-- A candidate is FEASIBLE for `skill` at `level`: same craft skill, in level,
-obtainable. (The extracted fold's `continue` guard is exactly its negation.) -/
+obtainable, and xp-positive. (The extracted fold's `continue` guard is exactly
+its negation.)
+
+`xp_positive` joined the conjunction on 2026-08-06: a rung whose craft pays no
+skill xp (`Formal.SkillXpPositive`, the server's level_penalty band) can never
+advance the skill it was selected to advance, so grinding it is a non-terminating
+no-op. It is a FILTER and not a ranking key because no `mats_missing` count can
+redeem a rung that yields zero — see the Python core's docstring for the 14h
+live livelock that ordering alone could not have fixed. -/
 def feasible (skill : String) (level : Int) (c : GrindCandidate) : Prop :=
   c.craft_skill = skill ∧ c.craft_level ≤ level ∧ c.obtainable = true
+    ∧ c.xp_positive = true
 
 /-- The fold step used by `skill_grind_selection_pure` (matches the extracted
 inline lambda). -/
 def step (skill : String) (level : Int)
     (best : Option GrindCandidate) (c : GrindCandidate) : Option GrindCandidate :=
-  if ((!(decide (c.craft_skill = skill))) || (decide (c.craft_level > level)) || (!c.obtainable))
+  if ((!(decide (c.craft_skill = skill))) || (decide (c.craft_level > level)) || (!c.obtainable)
+      || (!c.xp_positive))
   then best
   else (if _beats c best then some c else best)
 
@@ -47,12 +57,12 @@ theorem unfold_select (skill : String) (level : Int) (cands : List GrindCandidat
 feasible. -/
 theorem guard_false_feasible (skill : String) (level : Int) (c : GrindCandidate)
     (hg : ((!(decide (c.craft_skill = skill))) || (decide (c.craft_level > level))
-            || (!c.obtainable)) = false) :
+            || (!c.obtainable) || (!c.xp_positive)) = false) :
     feasible skill level c := by
   simp only [Bool.or_eq_false_iff, Bool.not_eq_eq_eq_not, Bool.not_false,
     decide_eq_true_eq, decide_eq_false_iff_not] at hg
-  obtain ⟨⟨hskill, hlevel⟩, hobt⟩ := hg
-  refine ⟨hskill, ?_, hobt⟩
+  obtain ⟨⟨⟨hskill, hlevel⟩, hobt⟩, hxp⟩ := hg
+  refine ⟨hskill, ?_, hobt, hxp⟩
   omega
 
 /-- Structural characterization of `step`: its result is either the incoming
@@ -63,7 +73,7 @@ theorem step_cases (skill : String) (level : Int)
       ∨ (step skill level best d = some d ∧ feasible skill level d) := by
   unfold step
   by_cases hg : ((!(decide (d.craft_skill = skill))) || (decide (d.craft_level > level))
-            || (!d.obtainable)) = true
+            || (!d.obtainable) || (!d.xp_positive)) = true
   · rw [if_pos hg]; exact Or.inl rfl
   · rw [Bool.not_eq_true] at hg
     rw [if_neg (by rw [hg]; simp)]
@@ -145,7 +155,21 @@ theorem grind_obtainable (skill : String) (level : Int) (cands : List GrindCandi
     ∃ c, c ∈ cands ∧ c.code = skill_grind_selection_pure skill level cands
       ∧ c.obtainable = true := by
   obtain ⟨c, hm, hc, hf⟩ := result_feasible skill level cands h
-  exact ⟨c, hm, hc, hf.2.2⟩
+  exact ⟨c, hm, hc, hf.2.2.1⟩
+
+/-- `grind_xp_positive`: the selected candidate PAYS SKILL XP. This is the role
+that makes the grind terminating — the selector can never hand back a rung whose
+craft sits in the server's zero-xp band, so every grind cycle moves the skill it
+was invoked to raise. Before this the selector's ranking preferred whichever rung
+had its materials already stockpiled, which is systematically the cheapest and
+therefore greyest tier (live Robby 2026-08-05: `ash_plank` at woodcutting 15, 288
+cycles, zero xp). -/
+theorem grind_xp_positive (skill : String) (level : Int) (cands : List GrindCandidate)
+    (h : skill_grind_selection_pure skill level cands ≠ "") :
+    ∃ c, c ∈ cands ∧ c.code = skill_grind_selection_pure skill level cands
+      ∧ c.xp_positive = true := by
+  obtain ⟨c, hm, hc, hf⟩ := result_feasible skill level cands h
+  exact ⟨c, hm, hc, hf.2.2.2⟩
 
 /-- `step` never maps `some → none`: once the accumulator is `some`, it stays
 `some` after one step. -/
@@ -185,11 +209,11 @@ theorem step_feasible_some (skill : String) (level : Int)
       -- guard is false (c feasible), so step = (if _beats c none then some c else none);
       -- _beats c none = true, hence step = some c ≠ none = best, contradiction
       exfalso
-      obtain ⟨hskill, hlevel, hobt⟩ := hf
+      obtain ⟨hskill, hlevel, hobt, hxp⟩ := hf
       have hguard : ((!(decide (c.craft_skill = skill))) || (decide (c.craft_level > level))
-          || (!c.obtainable)) = false := by
+          || (!c.obtainable) || (!c.xp_positive)) = false := by
         simp only [Bool.or_eq_false_iff, Bool.not_eq_eq_eq_not, Bool.not_false,
-          decide_eq_true_eq, decide_eq_false_iff_not, hskill, hobt,
+          decide_eq_true_eq, decide_eq_false_iff_not, hskill, hobt, hxp,
           and_true, true_and]
         omega
       have : step skill level none c = some c := by

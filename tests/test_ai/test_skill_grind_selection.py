@@ -6,9 +6,11 @@ from artifactsmmo_cli.ai.tiers.skill_grind_selection import (
 )
 
 
-def _c(code, skill="weaponcrafting", level=1, missing=0, obtainable=True, wanted=False):
+def _c(code, skill="weaponcrafting", level=1, missing=0, obtainable=True, wanted=False,
+       xp_positive=True):
     return GrindCandidate(code=code, craft_skill=skill, craft_level=level,
-                          mats_missing=missing, obtainable=obtainable, wanted=wanted)
+                          mats_missing=missing, obtainable=obtainable, wanted=wanted,
+                          xp_positive=xp_positive)
 
 
 def test_wanted_beats_cheaper_throwaway():
@@ -72,3 +74,36 @@ def test_full_tie_keeps_first_seen():
     # (deterministic, no string tie-break). Exercises the `return False` leaf.
     cands = [_c("first", level=2, missing=1), _c("second", level=2, missing=1)]
     assert skill_grind_selection_pure("weaponcrafting", 5, cands) == "first"
+
+
+def test_zero_xp_rung_loses_to_costlier_paying_rung():
+    # THE 2026-08-05 LIVELOCK in miniature. The grey rung has its materials
+    # already in hand (missing=0), which wins EVERY ranking key it takes part
+    # in — so only a filter can stop it. Robby ground the ash_plank equivalent
+    # for 288 cycles at zero woodcutting xp.
+    cands = [
+        _c("ash_plank", level=1, missing=0, xp_positive=False),
+        _c("spruce_plank", level=10, missing=6, xp_positive=True),
+    ]
+    assert skill_grind_selection_pure("weaponcrafting", 15, cands) == "spruce_plank"
+
+
+def test_empty_when_every_in_level_rung_is_grey():
+    # No paying rung at all -> "" rather than "pick the grey one anyway". The
+    # empty result is what lets next_grind_goal fall through to the gather
+    # fallback instead of committing the cycle to a zero-xp craft.
+    cands = [
+        _c("ash_plank", level=1, missing=0, xp_positive=False),
+        _c("copper_dagger", level=2, missing=0, xp_positive=False, wanted=True),
+    ]
+    assert skill_grind_selection_pure("weaponcrafting", 15, cands) == ""
+
+
+def test_grey_filter_outranks_the_wanted_preference():
+    # `wanted` is the FIRST ranking key, so a wanted-but-grey rung would win the
+    # ordering outright. The filter runs before ranking, so it does not.
+    cands = [
+        _c("wanted_but_grey", level=1, missing=0, wanted=True, xp_positive=False),
+        _c("plain_but_paying", level=10, missing=5, wanted=False, xp_positive=True),
+    ]
+    assert skill_grind_selection_pure("weaponcrafting", 15, cands) == "plain_but_paying"

@@ -89,8 +89,33 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
     descent fell all the way to ash_wood — 50 gathers of WOODCUTTING xp per
     weaponcrafting grind cycle). Defaults to `NO_PROFILE_CONTEXT`, reproducing
     the pre-epic descent byte-for-byte for every caller that doesn't wire it
-    in."""
-    rung = skill_grind_target(skill, state, game_data)
+    in.
+
+    RESERVATION (live Robby 2026-08-05, 104 cycles / ~2h of zero progress): the
+    committed objective was `hardwood_plank` (4 ash_wood + 6 birch_wood).
+    `birch_wood` needs woodcutting 20 and the character had 15, so the arbiter
+    alternated: gather the 4 reachable ash_wood, fail on birch, fall back to
+    `LevelSkill(woodcutting->20)` — whose rung was `ash_plank`, which CONSUMES
+    10 ash_wood. The grind ate the very materials the objective had just
+    accumulated, the ash demand re-armed, and the pair ping-ponged forever.
+
+    `skill_grind_target` has carried a `reserved` guard for exactly this since
+    2026-06-11 (copper_helmet eating copper_legs_armor's bars), but NO production
+    caller ever passed one — it was dead code. `ctx.step_profile` is the
+    committed step's material demand, already the authority every
+    keep/deposit/sell/recycle protection consults; the grind was the one consumer
+    that never asked.
+
+    RESERVATION IS A PREFERENCE, NOT A DEAD END. `LevelSkill.is_applicable` gates
+    on the UNRESERVED `skill_grind_target` and has no `ctx` to pass, so letting
+    the reservation empty the candidate set here would let the two walks
+    disagree — the applicable action would raise "no grind rung at execution",
+    which is precisely the selection-says-yes/emission-says-no split behind the
+    wool livelock. So: prefer a rung that leaves the objective's materials alone,
+    and fall back to the unreserved choice when every rung would consume them.
+    Liveness is unchanged; only the tie is."""
+    rung = (skill_grind_target(skill, state, game_data, frozenset(ctx.step_profile))
+            or skill_grind_target(skill, state, game_data))
     if rung is not None:
         bank = state.bank_items or {}
         held = state.inventory.get(rung, 0) + bank.get(rung, 0)
