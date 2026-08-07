@@ -11,6 +11,7 @@ import Formal.PredictWin
 import Formal.LoadoutProjection
 import Formal.EquipmentScoring
 import Formal.SkillGrindSelection
+import Formal.ProgressionChoice
 import Formal.SkillXpPositive
 import Formal.DoomedMemo
 import Formal.NextCraftAction
@@ -473,6 +474,51 @@ example : ∀ (item : Item) (monsterRes : ElemStats),
     (∀ e ∈ elements, 0 ≤ elemGet item.attack e) → 0 ≤ item.crit →
     0 ≤ WScore item monsterRes :=
   @weapon_score_nonneg
+
+/-! ### ProgressionChoice role contracts.
+
+The unified objective. Statements are pinned in full so a future weakening — most
+importantly one that lets the cycles-to-50 figure influence the order for an
+UNREACHABLE candidate, where S-014 declares it void — fails to elaborate. -/
+
+example : ∀ (c : Extracted.ProgressionChoice.ProgressionCandidate),
+    c.failed = false → c.reachable_level < Extracted.ProgressionChoice.TARGET_LEVEL →
+    Extracted.ProgressionChoice.candidate_band c
+      = Extracted.ProgressionChoice._BAND_UNREACHABLE :=
+  @Formal.ProgressionChoice.band_iff_unreachable
+example : ∀ (x y : Extracted.ProgressionChoice.ProgressionCandidate),
+    Extracted.ProgressionChoice.candidate_band x = Extracted.ProgressionChoice._BAND_FINITE →
+    Extracted.ProgressionChoice.candidate_band y = Extracted.ProgressionChoice._BAND_UNREACHABLE →
+    Formal.ProgressionChoice.precedes x y :=
+  @Formal.ProgressionChoice.finite_precedes_unreachable
+example : ∀ (x y : Extracted.ProgressionChoice.ProgressionCandidate),
+    ¬ (Extracted.ProgressionChoice.candidate_band x = Extracted.ProgressionChoice._BAND_FAILED) →
+    Extracted.ProgressionChoice.candidate_band y = Extracted.ProgressionChoice._BAND_FAILED →
+    Formal.ProgressionChoice.precedes x y :=
+  @Formal.ProgressionChoice.nonfailed_precedes_failed
+example : ∀ (x y : Extracted.ProgressionChoice.ProgressionCandidate),
+    Extracted.ProgressionChoice.candidate_band x = Extracted.ProgressionChoice._BAND_FINITE →
+    Extracted.ProgressionChoice.candidate_band y = Extracted.ProgressionChoice._BAND_FINITE →
+    Extracted.ProgressionChoice.objective_j x < Extracted.ProgressionChoice.objective_j y →
+    Formal.ProgressionChoice.precedes x y :=
+  @Formal.ProgressionChoice.finite_orders_by_j
+example : ∀ (x y : Extracted.ProgressionChoice.ProgressionCandidate),
+    Extracted.ProgressionChoice.candidate_band x = Extracted.ProgressionChoice._BAND_UNREACHABLE →
+    Extracted.ProgressionChoice.candidate_band y = Extracted.ProgressionChoice._BAND_UNREACHABLE →
+    y.reachable_level < x.reachable_level →
+    Formal.ProgressionChoice.precedes x y :=
+  @Formal.ProgressionChoice.unreachable_prefers_progress
+-- THE VOID-FIELD PIN: equal level and equal cost force an IDENTICAL key, so the
+-- meaningless cycles-to-50 figure cannot influence the order.
+example : ∀ (x y : Extracted.ProgressionChoice.ProgressionCandidate),
+    Extracted.ProgressionChoice.candidate_band x = Extracted.ProgressionChoice._BAND_UNREACHABLE →
+    Extracted.ProgressionChoice.candidate_band y = Extracted.ProgressionChoice._BAND_UNREACHABLE →
+    x.reachable_level = y.reachable_level → x.acquire_cost = y.acquire_cost →
+    Extracted.ProgressionChoice.sort_key x = Extracted.ProgressionChoice.sort_key y :=
+  @Formal.ProgressionChoice.unreachable_ignores_cycles
+example : ∀ (x y : Extracted.ProgressionChoice.ProgressionCandidate),
+    Formal.ProgressionChoice.precedes x y ∨ Formal.ProgressionChoice.precedes y x :=
+  @Formal.ProgressionChoice.sort_key_total
 
 /-! ### SkillXpPositive role contracts.
 

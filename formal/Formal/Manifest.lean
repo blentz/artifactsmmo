@@ -115,6 +115,17 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.SkillXpPositive.gate_antitone       -- leveling never un-greys a target
 #check @Formal.SkillXpPositive.gate_of_reachable   -- at-or-above-level content always pays
 
+-- ProgressionChoice required roles (the unified progression objective J):
+#check @Formal.ProgressionChoice.band_iff_unreachable        -- level field ALONE decides the band
+#check @Formal.ProgressionChoice.band_trichotomy             -- exactly three bands
+#check @Formal.ProgressionChoice.finite_precedes_unreachable -- reaching 50 beats not reaching it
+#check @Formal.ProgressionChoice.nonfailed_precedes_failed   -- a crash never outranks a usable candidate
+#check @Formal.ProgressionChoice.finite_orders_by_j          -- lower J wins in the finite band
+#check @Formal.ProgressionChoice.unreachable_prefers_progress -- furthest progress first
+#check @Formal.ProgressionChoice.unreachable_tie_prefers_cheaper -- then cheaper acquisition
+#check @Formal.ProgressionChoice.unreachable_ignores_cycles  -- the void field cannot reach the order
+#check @Formal.ProgressionChoice.sort_key_total              -- the order is total, so choose is total
+
 -- SkillGrindSelection required roles (recipe-aware skill-grind target selector):
 #check @Formal.SkillGrindSelection.grind_same_skill -- non-empty result is a same-skill candidate
 #check @Formal.SkillGrindSelection.grind_in_level   -- selected candidate is in level

@@ -80,6 +80,15 @@ open Formal.PriorityBand
 #print axioms Formal.SkillXpPositive.gate_false_iff
 #print axioms Formal.SkillXpPositive.gate_antitone
 #print axioms Formal.SkillXpPositive.gate_of_reachable
+#print axioms Formal.ProgressionChoice.band_iff_unreachable
+#print axioms Formal.ProgressionChoice.band_trichotomy
+#print axioms Formal.ProgressionChoice.finite_precedes_unreachable
+#print axioms Formal.ProgressionChoice.nonfailed_precedes_failed
+#print axioms Formal.ProgressionChoice.finite_orders_by_j
+#print axioms Formal.ProgressionChoice.unreachable_prefers_progress
+#print axioms Formal.ProgressionChoice.unreachable_tie_prefers_cheaper
+#print axioms Formal.ProgressionChoice.unreachable_ignores_cycles
+#print axioms Formal.ProgressionChoice.sort_key_total
 #print axioms Formal.SkillGrindSelection.grind_same_skill
 #print axioms Formal.SkillGrindSelection.grind_in_level
 #print axioms Formal.SkillGrindSelection.grind_obtainable

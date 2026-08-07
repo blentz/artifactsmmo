@@ -1240,6 +1240,55 @@ XP_VALUE_MUTATIONS = [
 ]
 
 
+# progression_choice mutations -- the unified objective J. Killed by
+# formal/diff/test_progression_choice_diff.py (the sort key, pinned pointwise
+# against the proved Lean model) and tests/test_ai/test_progression_choice.py
+# (the acceptance suite harvested from the spec's witness ledger).
+PROGRESSION_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_choice.py"
+
+PROGRESSION_CHOICE_MUTATIONS = [
+    # THE ORIGINAL DEFECT, reintroduced: rank gear ahead of xp unconditionally by
+    # putting the unreachable band first. This is `branch_pick_pure`'s lexicographic
+    # pivot in disguise -- one band always wins -- and it must not survive.
+    ("progression_choice: unreachable band outranks finite",
+     "_BAND_FINITE = 0\n_BAND_UNREACHABLE = 1\n",
+     "_BAND_FINITE = 1\n_BAND_UNREACHABLE = 0\n"),
+    # let a FAILED projection win: a crash would masquerade as progress (S-012).
+    ("progression_choice: FAILED band no longer ranks last",
+     "_BAND_FAILED = 2\n",
+     "_BAND_FAILED = -1\n"),
+    # drop the acquisition cost from J -- gear becomes free and every upgrade
+    # outranks grinding, which is the 2950/2950 behaviour we are replacing (S-004).
+    ("progression_choice: J drops the acquisition cost",
+     "    return c.acquire_cost + c.cycles_to_fifty\n",
+     "    return c.cycles_to_fifty\n"),
+    # drop the projection from J -- ranks by price alone, so the cheapest thing
+    # always wins regardless of what it buys (S-004).
+    ("progression_choice: J drops the projection",
+     "    return c.acquire_cost + c.cycles_to_fifty\n",
+     "    return c.acquire_cost\n"),
+    # flip the furthest-progress key so a LOWER ceiling wins (S-006 first key).
+    ("progression_choice: unreachable prefers the lower ceiling",
+     "        return (band, TARGET_LEVEL - c.reachable_level, c.acquire_cost)\n",
+     "        return (band, c.reachable_level, c.acquire_cost)\n"),
+    # THE VOID-FIELD MUTANT: rank unreachable candidates by cycles-to-50, the
+    # figure S-014 declares meaningless below the target. This is the failure the
+    # withdrawn S-009 embodied one layer up -- a comparison on a field that carries
+    # no information in the band where it fires.
+    ("progression_choice: unreachable ranks on the void cycles field",
+     "        return (band, TARGET_LEVEL - c.reachable_level, c.acquire_cost)\n",
+     "        return (band, TARGET_LEVEL - c.reachable_level, c.cycles_to_fifty)\n"),
+    # decide unreachability with <= instead of < : level 50 itself becomes
+    # unreachable, so nothing is ever in the finite band (S-014 boundary).
+    ("progression_choice: band boundary off by one",
+     "    if c.reachable_level < TARGET_LEVEL:\n",
+     "    if c.reachable_level <= TARGET_LEVEL:\n"),
+    # ignore the FAILED flag entirely (S-012 / S-014 interaction).
+    ("progression_choice: FAILED flag ignored",
+     "    if c.failed:\n        return _BAND_FAILED\n",
+     "    if False:\n        return _BAND_FAILED\n"),
+]
+
 # skill_grind_selection mutations -- pure-core anchors for
 # skill_grind_selection_pure (the recipe-aware skill-grind target selector).
 # Each substring is copied verbatim from skill_grind_selection.py (indentation
@@ -6277,6 +6326,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_realizable_loadout_diff.py", survivors)
     run_group(SKILL_XP_CURVE_SRC, SKILL_XP_CURVE_MUTATIONS,
               "formal/diff/test_skill_xp_curve_diff.py", survivors)
+    run_group(PROGRESSION_CHOICE_SRC, PROGRESSION_CHOICE_MUTATIONS,
+              "formal/diff/test_progression_choice_diff.py", survivors)
     run_group(SKILL_GRIND_SELECTION_SRC, SKILL_GRIND_SELECTION_MUTATIONS,
               "formal/diff/test_skill_grind_selection_diff.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, SKILL_GRIND_TARGET_MUTATIONS,

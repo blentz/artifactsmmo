@@ -74,6 +74,7 @@ import Formal.Extracted.Bridges7
 import Formal.Extracted.Bridges9
 import Formal.Extracted.StrategicValue
 import Formal.Extracted.SkillGrindSelection
+import Formal.Extracted.ProgressionChoice
 import Formal.Extracted.SkillXpPositive
 import Formal.InventoryChainSafe
 import Formal.Contracts
@@ -166,6 +167,7 @@ import Formal.Liveness.StateFieldGapSemantics
 import Formal.XpPositive
 import Formal.XpValue
 import Formal.SkillGrindSelection
+import Formal.ProgressionChoice
 import Formal.SkillXpPositive
 import Formal.MonsterDropApply
 import Formal.Liveness.NoWait
