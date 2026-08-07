@@ -511,7 +511,21 @@ class LearningStore:
         """Number of cycles with outcome=='ok' recorded for this action_repr. The raw
         (NOT warmup-gated) success tally — `success_rate` returns 1.0 below 5 samples,
         so it cannot distinguish a single win from a single loss; the monotonic-win
-        winnability inference needs the unsmoothed count."""
+        winnability inference needs the unsmoothed count.
+
+        SEARCH-CACHED (2026-08-07), like its sibling `action_cost`. This is the
+        hottest read in the codebase and it was the only one of its family issuing
+        a fresh SELECT every call: `is_winnable` -> `_won_at_or_above_level` walks
+        every monster at or above a level, so one `cheapest_path_to_level` walk
+        fired **3,617** queries and took ~400ms, of which ~95% was SQLite. The
+        tally is a read-only count over history the planner does not write during a
+        search — exactly the invariant `search_cache` documents — so the memo is
+        sound for the same reason `action_cost`'s is. Outside a search the cache is
+        None and every call still hits the DB."""
+        return self._cached(("win_count", action_repr),
+                            lambda: self._win_count_uncached(action_repr))
+
+    def _win_count_uncached(self, action_repr: str) -> int:
         try:
             with SqlSession(self._engine) as s:
                 stmt = (

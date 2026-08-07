@@ -108,6 +108,40 @@ class TestSessionLifecycle:
         assert store.win_count("Fight(never)") == 0
         store.close()
 
+    def test_win_count_is_memoised_inside_a_search(self, tmp_db_path):
+        """`win_count` is the hottest read in the codebase and was the only member
+        of its family issuing a fresh SELECT per call.
+
+        `is_winnable` -> `_won_at_or_above_level` walks every monster at or above a
+        level, so ONE `cheapest_path_to_level` walk fired 3,617 queries and took
+        ~400ms, ~95% of it SQLite. Memoised it is ~23ms. This pins the memo so the
+        query storm cannot come back silently."""
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        store.record_cycle(Cycle(
+            ts="2026-05-17T00:00:00+00:00", session_id="x", cycle_index=0,
+            character="testchar", outcome="ok", action_repr="Fight(chicken)"))
+
+        calls: list[int] = []
+        original = store._win_count_uncached
+
+        def counting(action_repr: str) -> int:
+            calls.append(1)
+            return original(action_repr)
+
+        store._win_count_uncached = counting  # type: ignore[method-assign]
+        with store.search_cache():
+            assert [store.win_count("Fight(chicken)") for _ in range(5)] == [1] * 5
+        assert len(calls) == 1, "win_count hit the DB more than once inside a search"
+
+        # ...and OUTSIDE a search there is no cache, so every call still reads the
+        # DB — a later cycle must see a fight recorded since.
+        calls.clear()
+        assert store.win_count("Fight(chicken)") == 1
+        assert store.win_count("Fight(chicken)") == 1
+        assert len(calls) == 2
+        store.close()
+
     def test_end_session_without_start_is_noop(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="testchar")
         store.end_session()
