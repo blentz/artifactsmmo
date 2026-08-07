@@ -182,9 +182,31 @@ class PathPlan(BaseModel):
         return self.segments[0].monster_code if self.segments else None
 
 
-DEFAULT_FIGHT_CYCLES = 30.0
-"""Fallback cycle cost per Fight when learning store has no observations.
-~30s server cooldown is the typical post-fight cooldown."""
+FIGHT_CYCLES_PER_KILL = 1.0
+"""Cycles consumed by one Fight. A cycle IS one executed action, so a fight
+costs exactly one — the server cooldown that follows it is wall-clock time, not
+another cycle.
+
+This replaced `DEFAULT_FIGHT_CYCLES = 30.0` on 2026-08-07, whose docstring read
+"~30s server cooldown is the typical post-fight cooldown" — i.e. it was a
+duration in SECONDS, named cycles, and divided into an xp-per-kill to produce a
+supposed cycles-per-level. Measured against the traces the constant was almost
+exactly the real mean fight cooldown (29.10s over 2483 fights), and the
+projection it fed was 80x the observed cost: `cheapest_path_to_level` reported
+7698 cycles per character level where the traces show 96 fight-cycles per level.
+
+Wall-clock cost per action is a real quantity and the learning store still
+records it (`action_cost` -> median actual_cooldown_seconds). It is simply not
+this projection's unit, and nothing here may divide by it. Callers that DO want
+the duration — `tiers/strategic_weights`, which combines it with move and
+deposit cooldowns into a round-trip time — take
+`TYPICAL_FIGHT_COOLDOWN_SECONDS` below. One constant serving both meanings under
+one wrong name is what made the confusion invisible."""
+
+TYPICAL_FIGHT_COOLDOWN_SECONDS = 30.0
+"""Fallback WALL-CLOCK cooldown of one Fight, in seconds, for callers reasoning
+about elapsed time rather than cycle counts. Corroborated at 29.10s mean /
+29.85s median over 2483 observed fights in the committed traces."""
 
 
 def cheapest_path_to_level(
@@ -197,8 +219,14 @@ def cheapest_path_to_level(
     at each step.
 
     XP per kill comes from the documented formula (`game_data.xp_per_kill`)
-    — no magic guess. Cycle cost per kill comes from the learning store
-    when observed; otherwise DEFAULT_FIGHT_CYCLES.
+    — no magic guess. One kill costs exactly one cycle
+    (`FIGHT_CYCLES_PER_KILL`), so xp-per-kill is already xp-per-cycle; the
+    learning store supplies a measured per-cycle rate instead wherever it has
+    observations.
+
+    The returned `total_cycles` is denominated in CYCLES — planner actions —
+    and is directly comparable to the fight-cycles-per-level a trace shows
+    (`formal/diff/level_cost_replay.py` corroborates it).
 
     Returns a PathPlan with `blocked=True` and `total_cycles=inf` when no
     beatable monster exists at some intermediate level.
@@ -242,21 +270,27 @@ def cheapest_path_to_level(
 
         best_code: str | None = None
         best_xp_per_cycle = 0.0
-        best_cost = DEFAULT_FIGHT_CYCLES
         for code, _lvl in beatable:
-            fight_repr = f"Fight({code})"
             observed = expected_yield_per_cycle(f"FarmMonster({code})", store)
-            cost = store.action_cost(fight_repr, default=DEFAULT_FIGHT_CYCLES)
             if observed.sample_count > 0 and observed.char_xp > 0:
+                # Already per-CYCLE (see `expected_yield_per_cycle`: "average
+                # per-cycle reward").
                 xp_per_cycle = observed.char_xp
             else:
-                # Documented formula. Yields exact XP-per-kill server-side.
-                xp_per_kill = game_data.xp_per_kill(code, sim_level, wisdom=wisdom)
-                xp_per_cycle = xp_per_kill / max(cost, 1.0)
+                # Documented formula: exact XP per kill, and one kill is one
+                # cycle (FIGHT_CYCLES_PER_KILL), so per-kill IS per-cycle.
+                #
+                # This branch used to divide by `store.action_cost(...)`, a
+                # median cooldown in SECONDS. That made it xp-per-second while
+                # the branch above stayed xp-per-cycle, and the `>` below then
+                # compared the two directly — so any monster with observations
+                # outranked any monster without by roughly the cooldown factor
+                # (~29x), whatever their real merit. Both branches now yield the
+                # same unit, which is what makes this argmax meaningful at all.
+                xp_per_cycle = game_data.xp_per_kill(code, sim_level, wisdom=wisdom)
             if xp_per_cycle > best_xp_per_cycle:
                 best_code = code
                 best_xp_per_cycle = xp_per_cycle
-                best_cost = cost
 
         if best_code is None or best_xp_per_cycle <= 0:
             return PathPlan(target_level=target_level, total_cycles=float("inf"),
@@ -269,7 +303,7 @@ def cheapest_path_to_level(
             monster_code=best_code,
             estimated_cycles=cycles_for_this_level,
             xp_per_cycle=best_xp_per_cycle,
-            cycles_per_kill=best_cost,
+            cycles_per_kill=FIGHT_CYCLES_PER_KILL,
         ))
         sim_level += 1
         xp_to_next = max(1, state.max_xp)

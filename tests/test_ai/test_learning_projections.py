@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from sqlalchemy.exc import OperationalError
 from sqlmodel import Session
 
@@ -299,14 +300,69 @@ class TestCheapestPathToLevel:
         state = make_state(level=1, xp=0, max_xp=100)
         plan = cheapest_path_to_level(2, state, store, gd)
         store.close()
-        # xp_per_kill(chicken, L1) = 22 per documented formula.
-        # cycle cost = DEFAULT_FIGHT_CYCLES (30) since no observations.
-        # xp_per_cycle = 22/30 ≈ 0.733; cycles to gain 100 XP = ~136.
+        # xp_per_kill(chicken, L1) = 22 per documented formula, and ONE KILL IS
+        # ONE CYCLE, so xp_per_cycle = 22 and gaining 100 XP costs ceil(100/22)
+        # ≈ 4.5 cycles.
+        #
+        # This test used to assert 100 < total_cycles < 200, pinning the old
+        # `xp_per_kill / DEFAULT_FIGHT_CYCLES` where the divisor was a 30-SECOND
+        # cooldown masquerading as a cycle count. Those bounds were the bug's
+        # own arithmetic written down as an expectation, which is why the suite
+        # stayed green while the projection ran ~80x high (2026-08-07).
         assert not plan.blocked
         assert plan.segments[0].monster_code == "chicken"
-        assert plan.segments[0].xp_per_cycle > 0
-        # Within reasonable bounds (formula-derived, not magic)
-        assert 100 < plan.total_cycles < 200
+        assert plan.segments[0].xp_per_cycle == 22
+        assert plan.segments[0].cycles_per_kill == 1.0
+        assert 4 < plan.total_cycles < 6
+
+    def test_total_cycles_is_denominated_in_kills_not_seconds(self, monkeypatch, tmp_path):
+        """THE UNIT, pinned directly. A projected cycle is one executed action,
+        so the projected cost of a level is the NUMBER OF KILLS it takes — never
+        that number scaled by a cooldown duration.
+
+        Stated as an identity rather than a range so no future divisor can slip
+        back in unnoticed: whatever the xp arithmetic, total_cycles must equal
+        xp_needed / xp_per_kill."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd_with_monsters({"chicken": 1})
+        gd._monster_hp = {"chicken": 60}
+        gd._monster_type = {"chicken": "normal"}
+        state = make_state(level=1, xp=0, max_xp=100)
+        plan = cheapest_path_to_level(2, state, store, gd)
+        store.close()
+
+        xp_per_kill = gd.xp_per_kill("chicken", 1, wisdom=state.wisdom)
+        assert plan.total_cycles == pytest.approx(100 / xp_per_kill)
+        # ...and emphatically NOT the seconds-scaled figure the old code gave.
+        assert plan.total_cycles < 100 / xp_per_kill * 2
+
+    def test_observed_and_formula_branches_share_one_unit(self, monkeypatch, tmp_path):
+        """Both arms of the per-monster loop must yield xp per CYCLE.
+
+        They did not: the observed arm returned `expected_yield_per_cycle`
+        (per-cycle, correct) while the formula arm divided by a cooldown in
+        seconds, so the two were compared across a ~29x unit gap and any monster
+        with observations beat any monster without, regardless of merit. Here the
+        observed monster is genuinely WORSE per kill, and must lose."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        # chicken is OBSERVED but feeble: 2 char-xp per cycle.
+        _populate(store, [
+            _make_cycle(i, "FarmMonster(chicken)", delta_xp=2) for i in range(5)
+        ])
+        gd = self._gd_with_monsters({"chicken": 1, "cow": 1})
+        gd._monster_hp = {"chicken": 60, "cow": 60}
+        gd._monster_type = {"chicken": "normal", "cow": "normal"}
+        state = make_state(level=1, xp=0, max_xp=100)
+        plan = cheapest_path_to_level(2, state, store, gd)
+        store.close()
+
+        # cow has no observations, so it is costed by the formula (22 xp/kill).
+        # 22 per cycle beats the observed 2 per cycle, and would NOT have under
+        # the old mixed units (2 vs 22/30 = 0.73).
+        assert plan.segments[0].monster_code == "cow"
+        assert plan.segments[0].xp_per_cycle == 22
 
     def test_uses_observed_xp_when_available(self, monkeypatch, tmp_path):
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)

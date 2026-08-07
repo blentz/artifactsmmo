@@ -1,0 +1,19 @@
+# cheapest_path_to_level unit corroboration
+traces=73
+
+char       cycles   fights  levels  fight/lvl  total/lvl
+C3P0         4210      605       5        121        842
+HAL          4122      464       4        116       1030
+Lor          4075      553      10         55        408
+R2D2         4063      746       6        124        677
+Robby        4050      115       1        115       4050
+
+OBSERVED fight-cycles per character level : 96   <-- the comparable figure
+OBSERVED total   cycles per character level: 789   (includes non-combat work)
+
+A projection denominated in ACTIONS should land near the fight-cycles
+figure; the acceptance band is [0.1x, 10x] of 96, i.e. [10, 955].
+
+Pre-fix reference: the projection reported 7698 cycles/level for R2D2,
+which is 81x the observed fight-cycles figure — the
+seconds-as-cycles error this constant's rename removed.

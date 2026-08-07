@@ -22,7 +22,7 @@ among efficiency-bearing / empty slots and can never outrank a real combat
 upgrade. This module returns that budget alongside the weights.
 """
 
-from artifactsmmo_cli.ai.learning.projections import DEFAULT_FIGHT_CYCLES
+from artifactsmmo_cli.ai.learning.projections import TYPICAL_FIGHT_COOLDOWN_SECONDS
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.tiers.strategic_value import STRATEGIC_SCALE
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -76,7 +76,7 @@ def strategic_weights(
     if history is None:
         return (COMBAT_WEIGHT, 0, 0, 0, 0), EFFICIENCY_BUDGET
 
-    fight_cd = history.action_class_cost(_FIGHT_CLASS, default=DEFAULT_FIGHT_CYCLES)
+    fight_cd = history.action_class_cost(_FIGHT_CLASS, default=TYPICAL_FIGHT_COOLDOWN_SECONDS)
     f_fight = history.action_class_fraction(_FIGHT_CLASS)
     move_cd = history.action_class_cost(_MOVE_CLASS, default=_UNLEARNED_CD)
     deposit_cd = history.action_class_cost(_DEPOSIT_CLASS, default=_UNLEARNED_CD)

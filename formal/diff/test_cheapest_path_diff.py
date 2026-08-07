@@ -4,13 +4,18 @@ with the proved Lean `cheapestPath` GREEDY MODEL on STRUCTURAL outputs
 
 Lean models the algorithm abstractly: given a list of monsters with
 pre-computed Nat `xpPerCycle`, it picks the best beatable monster
-level-by-level. Python's `xp_per_cycle` is a float derived from
-`game_data.xp_per_kill(...) / DEFAULT_FIGHT_CYCLES` when there are
-no observations. We drive Python WITHOUT observations (empty store)
-and we pass Lean the integer `xp_per_kill` values directly. Since
-both sides apply the SAME monotone scaling (divide by the same
-constant), the GREEDY argmax is identical, and tie-breaking matches
-because both iterate in the SAME insertion-ordered sequence.
+level-by-level. We drive Python WITHOUT observations (empty store)
+and pass Lean the integer `xp_per_kill` values directly.
+
+Both sides now use the SAME numbers: one kill is one cycle
+(`FIGHT_CYCLES_PER_KILL`), so Python's xp-per-cycle IS xp-per-kill and
+no scaling is applied on either side. Until 2026-08-07 Python divided
+by `DEFAULT_FIGHT_CYCLES`, a 30-SECOND cooldown misnamed as a cycle
+count; this diff still passed, because a uniform divisor cannot change
+an argmax — which is exactly why a structural differential could not
+have caught that bug, and why the unit is pinned by
+`tests/test_ai/test_learning_projections.py` and corroborated against
+live traces by `formal/diff/level_cost_replay.py` instead.
 
 OUT-OF-SCOPE for this diff (deliberately): the exact float
 `total_cycles` and per-segment `cycles` values. The Lean model uses
