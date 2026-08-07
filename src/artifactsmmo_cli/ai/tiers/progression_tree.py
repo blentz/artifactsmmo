@@ -20,12 +20,14 @@ from types import MappingProxyType
 
 from artifactsmmo_cli.ai.equipment.slot_occupancy import may_displace
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.requirement_graph_memo import CHAR_XP, SKILL_PREFIX
 from artifactsmmo_cli.ai.requirement_projections import requirement_closure
 from artifactsmmo_cli.ai.role_alignment import role_alignment_pure
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.achievability_core import achievability_pure
+from artifactsmmo_cli.ai.tiers.branch_objective import branch_from_ranking, branch_ranking
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
@@ -430,6 +432,7 @@ def decide_tree(state: WorldState, game_data: GameData,
                 seats: Mapping[str, int] = _NO_SEATS,
                 committed_root_code: str | None = None,
                 enable_synergy: bool = False,
+                store: LearningStore | None = None,
                 ) -> "strategy.StrategyDecision":
     """The tree assembly: trunk milestone, gear/xp branch pivot, and the
     chosen root/step — composing the Task-1 pure cores exactly per the
@@ -470,7 +473,23 @@ def decide_tree(state: WorldState, game_data: GameData,
     candidates = _structural_candidates(state, game_data, objective) \
         + _utility_candidates(state, game_data, objective)
     gear_target_exists = candidates != []
-    branch = branch_pick_pure(band_adequate, gear_target_exists)
+
+    # THE PIVOT. With a learning store the branch is chosen by the unified
+    # objective `J` (`tiers/branch_objective`): every gear root and the xp trunk
+    # get one projection to level 50, priced in one currency — actions — and the
+    # cheapest wins. Without a store there is nothing to project against, so the
+    # legacy boolean pivot stands (see `StrategyEngine.decide`'s `store`).
+    #
+    # `band_adequate` is NOT consulted on the `J` path and that is the point: it
+    # was a PROXY for "gear has stopped paying", and its switch
+    # (`winnable AND NOT has_structural_upgrade`) never flipped against a 50-level
+    # catalogue — GEAR in 2950 of 2950 cycles, zero character levels gained in 13h.
+    # `J` measures the same thing directly. It stays a live parameter because the
+    # store-less path still reads it.
+    j_ranking = (branch_ranking(state, game_data, candidates, store)
+                 if store is not None else None)
+    branch = (branch_from_ranking(j_ranking) if j_ranking is not None
+              else branch_pick_pure(band_adequate, gear_target_exists))
 
     # Synergy weighting (spec 2026-07-19 §3): the third selection factor after
     # magnitude (gain) and staleness (falloff). Computed once here and shared by
@@ -619,4 +638,5 @@ def decide_tree(state: WorldState, game_data: GameData,
         fallback_roots=fallback_roots,
         aged_pick=aged_pick,
         promoted_from=promoted_from,
+        j_ranking=j_ranking or [],
     )

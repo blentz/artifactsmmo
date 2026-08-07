@@ -196,9 +196,16 @@ class LearningStore:
     @contextmanager
     def search_cache(self) -> Iterator[None]:
         """Memoize learned-stat queries (action_cost median / success_rate /
-        goal_avg_cycles_to_satisfy) for the duration of one planner search. Safe
-        because the DB is not written during planning. Reentrant: a nested
-        enter reuses the outer cache; the original cache is restored on exit."""
+        win_count / goal_avg_cycles_to_satisfy) for the duration of one READ-ONLY
+        decision episode. Safe because the DB is not written inside one — that is
+        the whole condition, and it holds for the strategy decision exactly as it
+        does for the planner search nested within it. Reentrant: a nested enter
+        reuses the outer cache; the original cache is restored on exit.
+
+        The player opens it around the WHOLE `StrategyEngine.decide` (not just the
+        planner) because the unified objective runs one `cheapest_path_to_level`
+        walk per candidate and each walk asks `is_winnable` about every monster at
+        or above a level — ~3.6k reads per walk uncached."""
         prev = self._search_cache
         if prev is None:
             self._search_cache = {}

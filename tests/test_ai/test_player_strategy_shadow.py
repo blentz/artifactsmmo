@@ -70,6 +70,12 @@ def test_emit_trace_strategy_record_keeps_to_trace_shape():
     assert set(rec["strategy"].keys()) == {
         "interrupt", "chosen_root", "chosen_step", "desired_state",
         "ranking", "fallback_steps", "fallback_roots",
+        # ADDED with the unified objective's branch pivot: the J ranking that
+        # chose GEAR or XP, or [] when J was not consulted (no learning store).
+        # Additive — every existing key keeps its name and meaning, and this is
+        # the only place the pivot is legible, since `ranking` scores gear on
+        # `pursuit_value` against a trunk pinned at a constant 1.0.
+        "j_ranking",
     }
     assert "tree" not in rec
     assert "enacted" not in rec

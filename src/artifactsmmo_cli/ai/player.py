@@ -4,6 +4,7 @@ import json
 import re
 import time
 from collections.abc import Callable, Mapping
+from contextlib import nullcontext
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
@@ -642,16 +643,26 @@ class GamePlayer:
         # or whenever the committed root is not an item goal (e.g. the xp trunk).
         prior_root = self._last_decision.chosen_root if self._last_decision else None
         committed_root_code = prior_root.code if isinstance(prior_root, ObtainItem) else None
-        decision = self._strategy.decide(
-            state, game_data,
-            step_servable=servable_pred,
-            band_adequate=self._tree_band_adequate(),
-            ctx=ctx,
-            focus=self._gear_focus,
-            seats=self._interleave_seats,
-            committed_root_code=committed_root_code,
-            enable_synergy=True,
-        )
+        # The search cache spans the WHOLE decision, not just the planner search
+        # inside it: the unified objective runs one `cheapest_path_to_level` walk
+        # per candidate, and each walk asks `is_winnable` about every monster at
+        # or above a level. Uncached that is ~3.6k SQL reads per walk (~400ms);
+        # cached, ~30ms. Sound for the same reason the planner's own cache is —
+        # nothing here writes the learning DB — and `search_cache` is reentrant,
+        # so the planner's nested enter reuses this one instead of shadowing it.
+        with (self.history.search_cache() if self.history is not None
+              else nullcontext()):
+            decision = self._strategy.decide(
+                state, game_data,
+                step_servable=servable_pred,
+                band_adequate=self._tree_band_adequate(),
+                ctx=ctx,
+                focus=self._gear_focus,
+                seats=self._interleave_seats,
+                committed_root_code=committed_root_code,
+                enable_synergy=True,
+                store=self.history,
+            )
         # Focus-ledger bump lives at the `_plan_or_reuse` seam (once per
         # run-loop iteration, fresh-decide OR cache-hit), NOT here — bumping
         # on every decide() call would undercount a root pursued across a
@@ -911,17 +922,26 @@ class GamePlayer:
         # diagnostic reflects the synergy-active production decision rather than a
         # synergy-blind one (the two-plan-producers trap: a second decide site that
         # silently omits the flag). Mirrors `_decide_band` exactly.
+        #
+        # `store` and the search cache are wired for the same reason and it matters
+        # more here, not less: the whole point of this site is to SHOW what
+        # production would decide. Omitting the store would make `plan` report the
+        # legacy boolean pivot's branch while the bot ran the unified objective's —
+        # a diagnostic that contradicts production is worse than none.
         prior_root = self._last_decision.chosen_root if self._last_decision else None
         committed_root_code = prior_root.code if isinstance(prior_root, ObtainItem) else None
-        decision = self._strategy.decide(
-            state, game_data,
-            step_servable=self._step_servable(state, game_data, ctx),
-            band_adequate=self._tree_band_adequate(),
-            ctx=ctx,
-            focus=self._gear_focus,
-            seats=self._interleave_seats,
-            committed_root_code=committed_root_code,
-            enable_synergy=True)
+        with (self.history.search_cache() if self.history is not None
+              else nullcontext()):
+            decision = self._strategy.decide(
+                state, game_data,
+                step_servable=self._step_servable(state, game_data, ctx),
+                band_adequate=self._tree_band_adequate(),
+                ctx=ctx,
+                focus=self._gear_focus,
+                seats=self._interleave_seats,
+                committed_root_code=committed_root_code,
+                enable_synergy=True,
+                store=self.history)
         self._bump_focus(decision)
         self._last_decision = decision
         step = decision.chosen_step

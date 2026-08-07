@@ -9,8 +9,10 @@ from types import MappingProxyType
 
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import progression_tree
+from artifactsmmo_cli.ai.tiers.branch_objective import finite_j
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -24,6 +26,7 @@ from artifactsmmo_cli.ai.tiers.objective import (
     _permanent_vendor_purchases,
 )
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
+from artifactsmmo_cli.ai.tiers.progression_choice import ProgressionCandidate
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _NO_FOCUS: Mapping[tuple[str, str], int] = MappingProxyType({})
@@ -283,6 +286,17 @@ class StrategyDecision:
     # read as the tree choosing XP, when the tree had chosen GEAR every time
     # and promotion walked to the trunk sitting at fallback index 0.
     promoted_from: MetaGoal | None = None
+    # The unified objective's branch verdict: every gear root plus the xp trunk
+    # in `J` order, or EMPTY when `J` was not consulted (no learning store — see
+    # `decide`'s `store`). Diagnostic only; the branch itself is already decided
+    # by the time this is attached.
+    #
+    # It is here because the tree's own `ranking` CANNOT show it. That list scores
+    # gear on `pursuit_value` and pins the trunk at a constant `score=1.0`, so a
+    # trace reader watching it sees gear at 2.6e8 against a trunk at 1.0 and reads
+    # a landslide — a display artifact of two incomparable scales, not the pivot.
+    # `J` puts both arms on one scale, and this is where that scale is legible.
+    j_ranking: list[ProgressionCandidate] = field(default_factory=list)
 
     def to_trace(self) -> dict[str, object]:
         return {
@@ -293,6 +307,16 @@ class StrategyDecision:
             "ranking": [rs.to_dict() for rs in self.ranking],
             "fallback_steps": [repr(s) for s in self.fallback_steps],
             "fallback_roots": [repr(r) for r in self.fallback_roots],
+            # `j` is NULL outside the finite band — see `finite_j`. Printing the
+            # sum anyway would put a meaningless number in the trace under the
+            # objective's own name, which is the same "a quantity that isn't what
+            # it claims to be" defect this objective exists to retire.
+            "j_ranking": [
+                {"identity": c.identity, "j": finite_j(c),
+                 "acquire_cost": c.acquire_cost, "reachable_level": c.reachable_level,
+                 "cycles_to_fifty": c.cycles_to_fifty, "failed": c.failed}
+                for c in self.j_ranking
+            ],
         }
 
 
@@ -308,6 +332,7 @@ class StrategyEngine:
                seats: Mapping[str, int] = _NO_SEATS,
                committed_root_code: str | None = None,
                enable_synergy: bool = False,
+               store: LearningStore | None = None,
                ) -> StrategyDecision:
         """THE FLIP (Phase 4b): thin delegate to the progression tree — the
         flat scalar ranking pipeline is deleted (Task 2). The tree is
@@ -338,10 +363,19 @@ class StrategyEngine:
         `committed_root_code` (the prior cycle's committed root item, or None)
         and `enable_synergy` (the player's opt-in) feed the synergy weighting in
         `decide_tree` (spec 2026-07-19 §3). Both default to the inert case, so
-        every caller that does not opt in is byte-identical to today."""
+        every caller that does not opt in is byte-identical to today.
+
+        `store` is the learning store the unified objective `J` projects against,
+        and supplying it IS the opt-in: with a store the branch is chosen by `J`
+        (`tiers/branch_objective`), without one by the legacy `branch_pick_pure`
+        pivot. One parameter carries both the data channel and the switch because
+        `J` is not merely disabled without observations — it is undefined, since
+        `cheapest_path_to_level` cannot project a path without them. A separate
+        boolean flag could be set True with no store to project against, which is
+        a state that has no meaning."""
         return progression_tree.decide_tree(
             state, game_data, self.objective,
             band_adequate=band_adequate, step_servable=step_servable,
             ctx=ctx, focus=focus, seats=seats,
             committed_root_code=committed_root_code,
-            enable_synergy=enable_synergy)
+            enable_synergy=enable_synergy, store=store)
