@@ -11,12 +11,35 @@ Written 2026-08-08 against local `main` @ `5a2d1b8d`.
 | 1 — pricer over `obtain_sources` | **DONE, INERT**, gate green | `f1ee73c6` |
 | 1b — `skill_grind_cycles` pure core | **DONE** | `ce49405f` |
 | 1b — gated-craft route in the pricer | **DONE, INERT** | `cfcd8596` |
-| 2 — switch `J`'s `acquire_cost` | **UNBLOCKED — next** | — |
+| 2 — switch `J`'s `acquire_cost` | **DONE, LIVE**, gate green | `b4f21cbb` |
 | 3 — project every stat | not started | — |
 | 4 — prospecting through the drop cost | not started | — |
 | 5 — retire `bid_vs_craft`'s duplicate | not started | — |
 
-### The blocker is CLEARED — what increment 2 must now check
+### Increment 2 is LIVE — what it changed, and what is still unverified
+
+`J` now prices acquisition over all six routes. Measured on
+`l12_deep_chain_grind`: `iron_sword` 65 → **96** (venue hops plus the
+weaponcrafting gate), `copper_dagger` 62 → **70**, `feather` 2 → **14**.
+
+**The suite passed identically before and after the switch.** Not one test
+changed, because nothing in it was sensitive to `acquire_cost` at all. A test now
+compares `gear_candidate`'s figure against what `min_plan_length` would have said
+and fails if they agree, so the switch cannot silently revert.
+
+**A regression the suite could not see, found by activating and looking.** With
+the gate priced but no observed grind rate, the gated route was withheld and the
+item read as UNOBTAINABLE — so every jewelry item priced in the millions for a
+character who had never crafted jewelry. That is an OVER-estimate, the one
+direction the soundness contract forbids, because these bounds PRUNE. An unknown
+grind now costs ZERO; the unknown positive term is omitted. Two tests written an
+hour earlier had been pinning the wrong behaviour and were rewritten.
+
+**STILL UNVERIFIED ON A LIVE RUN.** Every figure above is from the committed
+fixture. Before this drives a real character it needs a `plan <char>` against
+live state showing changed `acquire_cost` values in the descent.
+
+### The former blocker — what increment 2 had to check
 
 `cfcd8596` prices the skill gate, so `iron_sword` at weaponcrafting 5 costs the
 grind plus the chain rather than reading as unobtainable. Switching `J` is
