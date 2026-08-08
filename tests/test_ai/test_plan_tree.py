@@ -3,7 +3,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.plan_tree import build_plan_tree
+from artifactsmmo_cli.ai.plan_tree import _rank_detail, build_plan_tree
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
 from tests.test_ai.fixtures import make_state
@@ -296,3 +296,22 @@ def test_snapshot_carries_grind_expansion():
                          selected_goal="g", action="LevelSkill(woodcutting)", outcome="ok",
                          grind_expansion=(leg,))
     assert snap.grind_expansion[0].label == "GatherAsh()"
+
+
+class TestRankDetail:
+    """What a root's standing reads as in the plan pane."""
+
+    def test_shows_the_objective_value_when_the_pivot_priced_it(self):
+        """J leads, explicitly labelled and lower-is-better. Showing `score`
+        alone made gear look like a landslide (2.6e8 against the trunk's 1.0) on
+        live cycles where J had the trunk winning by 0.006% — two unrelated
+        scales sharing one column (2026-08-08)."""
+        row = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
+                        cost=0, score=Fraction(264000025), step_repr="s", j=32981)
+        assert _rank_detail(row) == "J 32981"
+
+    def test_falls_back_to_score_when_the_objective_is_absent(self):
+        """No store, or a candidate outside the finite band where J is void."""
+        row = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
+                        cost=0, score=Fraction(5, 2), step_repr="s")
+        assert _rank_detail(row) == "2.50"

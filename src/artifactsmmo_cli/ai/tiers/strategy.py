@@ -235,6 +235,20 @@ class RootScore:
     score: Fraction
     step_repr: str
     instrumental: bool = False
+    j: int | None = None
+    """The unified objective's value for this root — LOWER IS BETTER, the
+    opposite of `score`, which is why it is a separate field and not folded in.
+
+    `score` is `pursuit_value` for gear and the constant `Fraction(1)` for the xp
+    trunk. Those are two unrelated scales sharing a column, and printed together
+    they read as a landslide that never happened: live 2026-08-08, gear showed
+    `2.6e8` against the trunk's `1.0` while `J` had the two within 0.006% of each
+    other and the trunk winning. Reporting a root's `J` beside its score is what
+    lets a reader see the decision that was actually taken.
+
+    None when `J` was not consulted (no learning store) — and None for any root
+    outside the finite band, since the objective is void there (see
+    `branch_objective.finite_j`)."""
 
     def to_dict(self) -> dict[str, object]:
         # P4a float boundary: scores are exact Fractions internally; the trace

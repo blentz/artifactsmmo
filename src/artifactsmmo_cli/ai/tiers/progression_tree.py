@@ -28,13 +28,16 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionC
 from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.achievability_core import achievability_pure
 from artifactsmmo_cli.ai.tiers.branch_objective import (
+    TRUNK_IDENTITY,
     branch_from_ranking,
     branch_ranking,
     candidate_identity,
+    finite_j,
     justifying_identities,
 )
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.progression_choice import ProgressionCandidate
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     _NO_SYNERGY,
     FOCUS_FLAT,
@@ -56,6 +59,10 @@ _NO_FOCUS: Mapping[tuple[str, str], int] = MappingProxyType({})
 avoids a mutable `{}` default (ruff B006). `decide_tree` only reads it
 (`.get`), never mutates it — the anti-starvation ledger is owned and mutated
 by `GamePlayer` (Task 6)."""
+
+_NO_J: Mapping[str, int] = MappingProxyType({})
+"""Immutable empty J map — 'the objective was not consulted'. Every lookup misses
+and the display rows carry `j=None`, which is exactly the store-less case."""
 
 _NO_SEATS: Mapping[str, int] = MappingProxyType({})
 """Immutable empty-seats default (sibling of `_NO_FOCUS`): the d'Hondt seat
@@ -187,20 +194,46 @@ def _candidate_root(candidate: GearCandidate) -> ObtainItem:
     return ObtainItem(code=candidate.code, quantity=1, slot=candidate.slot)
 
 
+def _j_by_identity(
+    ranking: "list[ProgressionCandidate]") -> Mapping[str, int]:
+    """Each root's unified-objective value, keyed as `j_ranking` names it.
+
+    Candidates outside the finite band are OMITTED rather than mapped to a
+    number: `J` is void for them (`finite_j`), and a row reporting `j=None` says
+    "the objective could not price this" where a 0 would claim it priced it at
+    nothing. Written as a loop rather than a comprehension so `finite_j` is
+    called once per candidate and the result type is honestly `int`."""
+    out: dict[str, int] = {}
+    for candidate in ranking:
+        value = finite_j(candidate)
+        if value is not None:
+            out[candidate.identity] = value
+    return out
+
+
 def _gear_ranking_rows(state: WorldState, game_data: GameData,
                        ordered: list[GearCandidate],
                        ctx: SelectionContext = NO_PROFILE_CONTEXT,
+                       j_by_identity: Mapping[str, int] = _NO_J,
                        ) -> "list[strategy.RootScore]":
     """Semantics item 7: one row per gear candidate, best-first. Contribution
     mirrors score in every row (no separate weighting exists in this display
-    path — the trunk row does the same: contribution == score == Fraction(1))."""
+    path — the trunk row does the same: contribution == score == Fraction(1)).
+
+    `j_by_identity` carries each candidate's unified-objective value into the
+    display so a reader can see the scale the pivot actually used, instead of
+    inferring a verdict from `score` — which is `pursuit_value` here and a bare
+    `Fraction(1)` on the trunk row, two scales that share a column and nothing
+    else. Empty (the default) leaves every `j` None, which is what every caller
+    without a learning store gets."""
     rows = []
     for candidate in ordered:
         root = _candidate_root(candidate)
         step = strategy.actionable_step(root, state, game_data, ctx) or root
         rows.append(strategy.RootScore(
             root_repr=repr(root), category="gear", contribution=candidate.gain,
-            cost=0, score=candidate.gain, step_repr=repr(step)))
+            cost=0, score=candidate.gain, step_repr=repr(step),
+            j=j_by_identity.get(candidate_identity(candidate))))
     return rows
 
 
@@ -671,14 +704,23 @@ def decide_tree(state: WorldState, game_data: GameData,
             chosen_root, chosen_step, fallback_roots, fallback_steps, step_servable)
     promoted_from = tree_pick_root if chosen_root is not tree_pick_root else None
 
+    # Each root's unified-objective value, keyed the way `j_ranking` names them,
+    # so the display can show the scale the pivot actually decided on. `score`
+    # stays exactly what it was — `pursuit_value` for gear, the constant 1 for the
+    # trunk — because it is a HIGHER-IS-BETTER field and `J` is lower-is-better;
+    # folding one into the other would be a sign error dressed up as a tidy-up,
+    # which is the defect class this whole objective exists to retire.
+    j_by_identity = _j_by_identity(j_ranking) if j_ranking else _NO_J
     trunk_row = strategy.RootScore(
         root_repr=repr(trunk), category="char_level", contribution=Fraction(1),
-        cost=0, score=Fraction(1), step_repr=repr(trunk))
+        cost=0, score=Fraction(1), step_repr=repr(trunk),
+        j=j_by_identity.get(TRUNK_IDENTITY))
     # The display ranking keeps EVERY candidate, demoted ones included — it is a
     # diagnostic, and a reader comparing it against `j_ranking` needs to see the
     # roots the objective ruled out, not a list quietly pruned to the survivors.
     ranking = [trunk_row,
-               *_gear_ranking_rows(state, game_data, [*ordered, *demoted], ctx)]
+               *_gear_ranking_rows(state, game_data, [*ordered, *demoted], ctx,
+                                   j_by_identity)]
 
     # interrupt/desired_state are trace-shape compatibility only: RestoreHP
     # preemption lives in the engine-independent arbiter guard ladder, and

@@ -68,9 +68,16 @@ def _print_report(player: GamePlayer, report: PlanReport) -> None:
             verdict = f"WINNABLE via {win}" if win else "NOT WINNABLE — gear unbuildable!"
             print(f"  {di.get('item')}: droppers={di.get('droppers')} -> {verdict}")
     print("-" * 70)
-    print("descent (top 8):")
+    # J leads, because J is what chose. `score` follows in parentheses as the
+    # per-category figure it has always been — NOT a comparable ranking: it is
+    # `pursuit_value` for gear and a constant 1 for the xp trunk, so reading a
+    # winner off it shows gear ahead 2.6e8 to 1.0 on cycles where J had the trunk
+    # winning by 0.006% (live 2026-08-08).
+    print("descent (top 8) — J is the decision, lower wins; score is per-category:")
     for rs in d.ranking[:8]:
-        print(f"  {rs.score} {rs.category:11s} {rs.root_repr}  ->  step={rs.step_repr}")
+        j = f"J={rs.j}" if rs.j is not None else "J=n/a"
+        print(f"  {j:>12s} (score {float(rs.score):.3g}) {rs.category:11s} "
+              f"{rs.root_repr}  ->  step={rs.step_repr}")
     print("=" * 70)
 
 

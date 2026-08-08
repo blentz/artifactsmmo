@@ -32,6 +32,7 @@ from artifactsmmo_cli.ai.tiers.progression_choice import (
     rank_candidates,
 )
 from artifactsmmo_cli.ai.tiers.progression_tree import (
+    _j_by_identity,
     _structural_candidates,
     _utility_candidates,
     decide_tree,
@@ -380,6 +381,55 @@ def test_demoted_candidates_stay_reachable_behind_the_trunk(game_data, store):
     demoted_positions = [i for i, r in enumerate(decision.fallback_roots)
                          if isinstance(r, ObtainItem) and r.code in demoted]
     assert min(demoted_positions) > trunk_at
+
+
+def test_j_by_identity_maps_only_finite_band_candidates():
+    """The display map carries a value only where `J` means something.
+
+    Built as a direct unit because the committed offline scenarios cannot reach
+    the finite band at all — every candidate there is unreachable, so a
+    scenario-driven test would exercise the empty case and quietly prove nothing.
+    The live characters DID reach it on 2026-08-08, once the delta_xp fix let the
+    projection complete a path to 50."""
+    finite = ProgressionCandidate(identity="weapon_slot:staff", acquire_cost=2,
+                                  reachable_level=TARGET_LEVEL,
+                                  cycles_to_fifty=9986, failed=False)
+    unreachable = ProgressionCandidate(identity="helmet_slot:iron_helm",
+                                       acquire_cost=2, reachable_level=17,
+                                       cycles_to_fifty=0, failed=False)
+    mapping = _j_by_identity([finite, unreachable])
+    assert mapping == {"weapon_slot:staff": 9988}
+    assert "helmet_slot:iron_helm" not in mapping, (
+        "a void J must be absent, not reported as a number"
+    )
+
+
+def test_display_ranking_carries_the_objective_value(game_data, store):
+    """The display must show the scale the pivot decided on.
+
+    `score` is `pursuit_value` for gear and a constant `Fraction(1)` for the xp
+    trunk — two unrelated scales in one column. Read as a ranking it showed gear
+    ahead 2.6e8 to 1.0 on live cycles where `J` had the trunk winning by 0.006%,
+    which is what sent a reader looking for a bug in the pivot (2026-08-08).
+    `j` is the row's real standing, and lower wins."""
+    state, objective, _gear = _candidates("l12_deep_chain_grind", game_data)
+    with store.search_cache():
+        decision = decide_tree(state, game_data, objective,
+                               band_adequate=False, store=store)
+    trunk_row = next(r for r in decision.ranking if r.category == "char_level")
+    # Still the legacy constant — deliberately NOT overwritten with J, which is
+    # lower-is-better and would invert the field's meaning.
+    assert trunk_row.score == Fraction(1)
+    by_identity = {c.identity: finite_j(c) for c in decision.j_ranking}
+    assert trunk_row.j == by_identity[TRUNK_IDENTITY]
+
+
+def test_display_ranking_has_no_objective_value_without_a_store(game_data):
+    """No store means no objective, so every row reports `j=None` rather than a
+    number the pivot never computed."""
+    state, objective, _gear = _candidates("l12_deep_chain_grind", game_data)
+    decision = decide_tree(state, game_data, objective, band_adequate=False)
+    assert all(r.j is None for r in decision.ranking)
 
 
 def test_display_ranking_keeps_the_demoted_candidates(game_data, store):

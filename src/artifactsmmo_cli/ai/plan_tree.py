@@ -14,13 +14,29 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
 )
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
-from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
+from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.tui.plan_format import short_root, supply_detail
 
 # Matches UpgradeEquipmentGoal.max_depth — a chain longer than this is treated as
 # a leaf rather than recursed (defence against a pathological recipe/gate graph).
 _DEPTH_CAP = 32
+
+
+def _rank_detail(row: RootScore) -> str:
+    """How a root's standing reads in the plan pane: its `J` when the objective
+    decided, otherwise its per-category score.
+
+    `J` leads because `J` is what chose. `score` is NOT a comparable ranking — it
+    is `pursuit_value` for gear and a constant 1.0 for the xp trunk — so showing
+    it alone made gear look like a landslide (2.6e8 against 1.0) on cycles where
+    `J` had the trunk winning by 0.006%, which is what sent a reader hunting for a
+    bug in the pivot on 2026-08-08. Lower `J` wins, hence the explicit label:
+    an unlabelled number next to a higher-is-better one invites the wrong reading
+    twice over."""
+    if row.j is not None:
+        return f"J {row.j}"
+    return f"{float(row.score):.2f}"
 
 
 def _label(node: MetaGoal) -> tuple[str, str]:
@@ -124,7 +140,7 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
     # from the ranking has always had, so the unannotated case is unchanged.
     details: list[str] = []
     if chosen_score is not None:
-        details.append(f"{chosen_score.category} · {float(chosen_score.score):.2f}")
+        details.append(f"{chosen_score.category} · {_rank_detail(chosen_score)}")
     if role is not None:
         details.append(f"[{role}]")
     chosen_node = chosen_node.model_copy(update={
@@ -138,5 +154,5 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
         roots.append(PlanTreeNode(
             key=r.root_repr, label=short_root(r.root_repr), kind="root_stub",
             status="unmet",
-            detail=f"root {i + 1} · {r.category} · {float(r.score):.2f}"))
+            detail=f"root {i + 1} · {r.category} · {_rank_detail(r)}"))
     return tuple(roots)
