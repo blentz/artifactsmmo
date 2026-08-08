@@ -27,7 +27,12 @@ from artifactsmmo_cli.ai.role_alignment import role_alignment_pure
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.achievability_core import achievability_pure
-from artifactsmmo_cli.ai.tiers.branch_objective import branch_from_ranking, branch_ranking
+from artifactsmmo_cli.ai.tiers.branch_objective import (
+    branch_from_ranking,
+    branch_ranking,
+    candidate_identity,
+    justifying_identities,
+)
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
@@ -491,6 +496,31 @@ def decide_tree(state: WorldState, game_data: GameData,
     branch = (branch_from_ranking(j_ranking) if j_ranking is not None
               else branch_pick_pure(band_adequate, gear_target_exists))
 
+    # THE GEAR BRANCH MAY ONLY PURSUE A CANDIDATE THAT JUSTIFIED CHOOSING IT.
+    # `J` names the gear roots that beat the trunk; the five selection factors
+    # below then order THOSE, keeping their calibration but losing the freedom to
+    # commit to a root the objective has just shown buys no progression.
+    #
+    # Live R2D2 2026-08-07: `J` chose GEAR because `greater_wooden_staff` raised
+    # the reachable level 18 -> 25, and `focus_aging_pick` — ranking on gain, with
+    # `aged_pick` null, so not even the focus ledger — committed to
+    # `adventurer_vest`, reach 18 and the dearest candidate on the board. HAL hit
+    # the same board the same cycle and picked the staff. Two selectors answering
+    # two different questions, and only one of them was looking at level 50.
+    #
+    # `eligible` is the whole list whenever the filter cannot apply — the XP
+    # branch (nothing to pursue), no store (no ranking), or the degenerate case of
+    # a GEAR verdict with an empty justifying set, which `branch_from_ranking`
+    # cannot produce but which must not silently empty the candidate list if it
+    # ever did. Every one of those reduces to the pre-filter behaviour exactly.
+    justifying = (justifying_identities(j_ranking)
+                  if j_ranking is not None and branch is Branch.GEAR else frozenset())
+    eligible = [c for c in candidates if candidate_identity(c) in justifying] or candidates
+    # The rest stay reachable as LAST-RESORT fallbacks, behind the trunk (below):
+    # dropping them outright would remove options the servability walk relies on
+    # when both the justifying pick and the trunk turn out unservable.
+    demoted = [c for c in candidates if c not in eligible]
+
     # Synergy weighting (spec 2026-07-19 §3): the third selection factor after
     # magnitude (gain) and staleness (falloff). Computed once here and shared by
     # every candidate; `enable_synergy` is the caller's opt-in (the player wires
@@ -519,10 +549,16 @@ def decide_tree(state: WorldState, game_data: GameData,
     # product exactly.
     role = _role_map(candidates, ctx.role_skills, game_data)
 
-    ordered = focus_aging_order(candidates, focus, seats, synergy, achievability, role)
-    pick = (focus_aging_pick(candidates, focus, seats, synergy, achievability, role)
-            if candidates else None)
-    if candidates:
+    # Aging pick/order run over `eligible`, not `candidates`: the objective has
+    # already ruled the rest out for THIS branch, and letting them into the argmax
+    # is exactly how the branch's justification and the pursued root came apart.
+    # With no filter applied `eligible is candidates`, so every existing caller is
+    # byte-identical — including the seat ledger, since these are still the same
+    # two calls on the same list.
+    ordered = focus_aging_order(eligible, focus, seats, synergy, achievability, role)
+    pick = (focus_aging_pick(eligible, focus, seats, synergy, achievability, role)
+            if eligible else None)
+    if eligible:
         # Drift-risk hardening: the display order's element 0 must always
         # agree with the aging pick — focus_aging_order is built FROM
         # focus_aging_pick (Task 3), so this is a same-cycle consistency
@@ -560,14 +596,22 @@ def decide_tree(state: WorldState, game_data: GameData,
     # reading as NOT aged here, so the player would skip its seat bump and the
     # interleave schedule and the seat ledger would drift apart. This guard
     # must stay clause-for-clause identical to `focus_aging_pick`'s.
+    #
+    # It must also scan the SAME LIST. Since the unified objective filters the
+    # candidates handed to `focus_aging_pick`, this mirror reads `eligible` too —
+    # scanning the full `candidates` would let a stale or synergy-carrying entry
+    # that `J` excluded from the pick declare the decision aged, and the player
+    # would consume a d'Hondt seat for an interleave that never ran. That is the
+    # same list-mismatch drift the paragraphs above describe, arriving by a new
+    # route.
     aged_pick = branch is Branch.GEAR and not (
-        all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)
+        all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in eligible)
         and all(synergy.get((c.slot, c.code), Fraction(1)) == Fraction(1)
-                for c in candidates)
+                for c in eligible)
         and all(achievability.get((c.slot, c.code), Fraction(1)) == Fraction(1)
-                for c in candidates)
+                for c in eligible)
         and all(role.get((c.slot, c.code), Fraction(1)) == Fraction(1)
-                for c in candidates))
+                for c in eligible))
 
     fallback_roots: list[MetaGoal]
     fallback_steps: list[MetaGoal]
@@ -593,10 +637,17 @@ def decide_tree(state: WorldState, game_data: GameData,
         # unservable the promotion still reaches it, so a fully-blocked gear
         # branch yields to XP exactly as before rather than deadlocking.
         # Yielding the branch is the last resort, not the first.
+        #
+        # The candidates the objective DEMOTED come after the trunk, not before
+        # it. They are still reachable, so a board where the justifying pick and
+        # the trunk are both unservable cannot deadlock — but a candidate `J` has
+        # shown buys no progression must never be tried ahead of simply grinding.
         extra_roots, extra_steps = _candidate_fallbacks(
             state, game_data, ordered, skip=pick, ctx=ctx)
-        fallback_roots = [*extra_roots, trunk]
-        fallback_steps = [*extra_steps, trunk]
+        demoted_roots, demoted_steps = _candidate_fallbacks(
+            state, game_data, demoted, ctx=ctx)
+        fallback_roots = [*extra_roots, trunk, *demoted_roots]
+        fallback_steps = [*extra_steps, trunk, *demoted_steps]
     else:
         # XP branch: the trunk IS the chosen decision. Any gear candidates
         # (possible now that band_adequate is caller-supplied: adequate band
@@ -623,7 +674,11 @@ def decide_tree(state: WorldState, game_data: GameData,
     trunk_row = strategy.RootScore(
         root_repr=repr(trunk), category="char_level", contribution=Fraction(1),
         cost=0, score=Fraction(1), step_repr=repr(trunk))
-    ranking = [trunk_row, *_gear_ranking_rows(state, game_data, ordered, ctx)]
+    # The display ranking keeps EVERY candidate, demoted ones included — it is a
+    # diagnostic, and a reader comparing it against `j_ranking` needs to see the
+    # roots the objective ruled out, not a list quietly pruned to the survivors.
+    ranking = [trunk_row,
+               *_gear_ranking_rows(state, game_data, [*ordered, *demoted], ctx)]
 
     # interrupt/desired_state are trace-shape compatibility only: RestoreHP
     # preemption lives in the engine-independent arbiter guard ladder, and

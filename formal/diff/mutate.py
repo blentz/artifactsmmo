@@ -3404,8 +3404,10 @@ FALLBACK_ORDER_MUTATIONS = [
     # while servable gear candidates sat behind the trunk (Robby: 9 of 15
     # cycles on ReachCharLevel with 7 structural candidates live).
     ("tree: xp trunk back to fallback index 0 (abandons gear on one bad step)",
-     "        fallback_roots = [*extra_roots, trunk]\n        fallback_steps = [*extra_steps, trunk]",
-     "        fallback_roots = [trunk, *extra_roots]\n        fallback_steps = [trunk, *extra_steps]"),
+     "        fallback_roots = [*extra_roots, trunk, *demoted_roots]\n"
+     "        fallback_steps = [*extra_steps, trunk, *demoted_steps]",
+     "        fallback_roots = [trunk, *extra_roots, *demoted_roots]\n"
+     "        fallback_steps = [trunk, *extra_steps, *demoted_steps]"),
     # Promotion silently rewrites history: `promoted_from` always None, so a
     # displaced pick again reads as the tree's own decision. This is the
     # diagnostic that made the trunk-at-index-0 defect invisible for as long as
@@ -3417,8 +3419,46 @@ FALLBACK_ORDER_MUTATIONS = [
     # so a fully-blocked gear branch can no longer yield to XP and the arbiter
     # is left holding an unservable pick. Trunk-last must not become trunk-gone.
     ("tree: xp trunk dropped from the gear-branch fallbacks entirely",
-     "        fallback_roots = [*extra_roots, trunk]\n        fallback_steps = [*extra_steps, trunk]",
-     "        fallback_roots = [*extra_roots]\n        fallback_steps = [*extra_steps]"),
+     "        fallback_roots = [*extra_roots, trunk, *demoted_roots]\n"
+     "        fallback_steps = [*extra_steps, trunk, *demoted_steps]",
+     "        fallback_roots = [*extra_roots, *demoted_roots]\n"
+     "        fallback_steps = [*extra_steps, *demoted_steps]"),
+    # The objective-demoted candidates jump AHEAD of the trunk: a root `J` has
+    # shown buys no progression gets tried before simply grinding, which is the
+    # 2026-08-07 R2D2 defect re-entering through the fallback walk rather than
+    # through the pick.
+    ("tree: objective-demoted candidates promoted ahead of the trunk",
+     "        fallback_roots = [*extra_roots, trunk, *demoted_roots]\n"
+     "        fallback_steps = [*extra_steps, trunk, *demoted_steps]",
+     "        fallback_roots = [*extra_roots, *demoted_roots, trunk]\n"
+     "        fallback_steps = [*extra_steps, *demoted_steps, trunk]"),
+]
+
+# The unified objective's grip on ROOT selection (2026-08-07). Its own run_group
+# against tests/test_ai/test_branch_objective.py so a survivor names this
+# authority rather than hiding among the fallback-order mutants.
+BRANCH_OBJECTIVE_ROOT_MUTATIONS = [
+    # THE FIX ITSELF: the gear branch stops honouring `J`'s justifying set and
+    # goes back to letting the five selection factors pick any candidate. Live
+    # R2D2 2026-08-07 — `J` chose GEAR because a weapon raised the reachable level
+    # 18 -> 25, and the branch committed to a body armour worth zero ceiling gain.
+    ("tree: gear branch ignores the objective's justifying set",
+     "    eligible = [c for c in candidates if candidate_identity(c) in justifying]"
+     " or candidates",
+     "    eligible = candidates"),
+    # The `or candidates` safety net removed: a GEAR verdict whose justifying set
+    # somehow came back empty would empty the candidate list instead of falling
+    # back to the unfiltered one, and the branch would have nothing to pursue.
+    ("tree: empty justifying set empties the candidate list",
+     "    eligible = [c for c in candidates if candidate_identity(c) in justifying]"
+     " or candidates",
+     "    eligible = [c for c in candidates if candidate_identity(c) in justifying]"),
+    # The filter leaks onto the XP branch, where no gear root is being pursued and
+    # the candidates are fallbacks: it would prune the arbiter's alternatives on
+    # exactly the cycles that have no gear pick to justify.
+    ("tree: justifying filter applied on the xp branch too",
+     "                  if j_ranking is not None and branch is Branch.GEAR else frozenset())",
+     "                  if j_ranking is not None else frozenset())"),
 ]
 
 SYNERGY_ASSEMBLY_MUTATIONS = [
@@ -3633,20 +3673,28 @@ ROLE_MAP_MUTATIONS = [
     # The map is built but never handed to the pick/order: the factor computes
     # and is discarded — the Task-13 inert state, restored.
     ("tree: role map not threaded into the aging pick and order",
-     "    ordered = focus_aging_order(candidates, focus, seats, synergy, achievability, role)\n"
-     "    pick = (focus_aging_pick(candidates, focus, seats, synergy, achievability, role)\n"
-     "            if candidates else None)",
-     "    ordered = focus_aging_order(candidates, focus, seats, synergy, achievability)\n"
-     "    pick = (focus_aging_pick(candidates, focus, seats, synergy, achievability)\n"
-     "            if candidates else None)"),
+     "    ordered = focus_aging_order(eligible, focus, seats, synergy, achievability, role)\n"
+     "    pick = (focus_aging_pick(eligible, focus, seats, synergy, achievability, role)\n"
+     "            if eligible else None)",
+     "    ordered = focus_aging_order(eligible, focus, seats, synergy, achievability)\n"
+     "    pick = (focus_aging_pick(eligible, focus, seats, synergy, achievability)\n"
+     "            if eligible else None)"),
     # THE Task-13 review precondition: decide_tree's aged_pick mirror loses its
     # role clause while focus_aging_pick keeps its own. A pick steered purely by
     # role then takes the d'Hondt interleave but reads as NOT aged, so the
     # player skips its seat bump and the schedule drifts from the ledger.
     ("tree: aged_pick guard ignores the role signal (seat ledger drifts)",
      "        and all(role.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n"
-     "                for c in candidates))",
+     "                for c in eligible))",
      "        )"),
+    # The aged_pick mirror scans the FULL candidate list while focus_aging_pick
+    # sees only the objective-eligible one. A stale or synergy-carrying entry that
+    # `J` excluded from the pick then declares the decision aged, and the player
+    # consumes a d'Hondt seat for an interleave that never ran — the same
+    # list-mismatch drift the role clause guards, arriving by the filter's route.
+    ("tree: aged_pick guard scans the unfiltered candidate list",
+     "        all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in eligible)",
+     "        all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)"),
 ]
 
 # GamePlayer._role_owned_skills (player.py) — resolves the held role NAME
@@ -6697,6 +6745,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_synergy_assembly.py", survivors)
     run_group(PROGRESSION_TREE_IMPURE_SRC, FALLBACK_ORDER_MUTATIONS,
               "tests/test_ai/test_progression_tree.py", survivors)
+    run_group(PROGRESSION_TREE_IMPURE_SRC, BRANCH_OBJECTIVE_ROOT_MUTATIONS,
+              "tests/test_ai/test_branch_objective.py", survivors)
     # Equip-loop closure (2026-08-04): four unit-killed groups, each on its own
     # run_group so a survivor names the exact authority that stopped deferring.
     run_group(SLOT_OCCUPANCY_SRC, SLOT_OCCUPANCY_MUTATIONS,

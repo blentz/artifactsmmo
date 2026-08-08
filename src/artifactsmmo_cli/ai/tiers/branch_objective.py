@@ -63,6 +63,7 @@ from artifactsmmo_cli.ai.tiers.progression_choice import (
     candidate_band,
     objective_j,
     rank_candidates,
+    sort_key,
 )
 from artifactsmmo_cli.ai.tiers.progression_tree_core import Branch, GearCandidate
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -167,7 +168,7 @@ def gear_candidate(c: GearCandidate, state: WorldState, store: LearningStore,
     )
     reachable_level, cycles = _outcome(projected, store, game_data)
     return ProgressionCandidate(
-        identity=f"{c.slot}:{c.code}",
+        identity=candidate_identity(c),
         acquire_cost=acquire_cost,
         reachable_level=reachable_level,
         cycles_to_fifty=cycles,
@@ -215,6 +216,42 @@ def finite_j(c: ProgressionCandidate) -> int | None:
     (`Formal.ProgressionChoice.unreachable_ignores_cycles`). Reporting the sum
     anyway would publish a meaningless number under the objective's own name."""
     return objective_j(c) if candidate_band(c) == _FINITE_BAND else None
+
+
+def justifying_identities(ranking: list[ProgressionCandidate]) -> frozenset[str]:
+    """The gear candidates that BEAT the trunk under `J` — i.e. exactly the ones
+    whose existence justified choosing the gear branch at all.
+
+    THE RULE: the gear branch may only pursue a candidate that justified choosing
+    it. Without this the branch verdict and the root choice answer two different
+    questions, and live data showed them disagreeing. R2D2, 2026-08-07: `J` chose
+    GEAR because `greater_wooden_staff` raised the reachable level from 18 to 25,
+    and the bot then pursued `adventurer_vest` — reach 18, zero ceiling gain, and
+    the most expensive candidate on the board. HAL, in the same situation on the
+    same cycle, pursued the staff. The branch was being justified by an item the
+    bot did not go and get.
+
+    Defined by `J`'s own order rather than by a hand-written "raises the ceiling"
+    test, so it stays correct in every band: below the top band a candidate beats
+    the trunk only by reaching further (the trunk's zero acquisition cost wins any
+    tie on S-006's second key), while in the finite band it beats the trunk by
+    saving more cycles than it costs. One rule, no per-band special cases, and it
+    follows automatically if the core's ordering ever changes.
+
+    Empty when the trunk is first — the XP branch, where nothing is filtered
+    because no gear candidate is being pursued in the first place."""
+    trunk_key = next((sort_key(c) for c in ranking if c.identity == TRUNK_IDENTITY), None)
+    if trunk_key is None:
+        return frozenset()
+    return frozenset(c.identity for c in ranking
+                     if c.identity != TRUNK_IDENTITY and sort_key(c) < trunk_key)
+
+
+def candidate_identity(c: GearCandidate) -> str:
+    """The `J` identity of a gear candidate — the one place the `(slot, code)`
+    naming lives, so `gear_candidate` and any filter built on
+    `justifying_identities` cannot drift apart."""
+    return f"{c.slot}:{c.code}"
 
 
 def branch_from_ranking(ranking: list[ProgressionCandidate]) -> Branch:

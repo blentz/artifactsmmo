@@ -18,10 +18,13 @@ from artifactsmmo_cli.ai.tiers.branch_objective import (
     TRUNK_IDENTITY,
     branch_from_ranking,
     branch_ranking,
+    candidate_identity,
     finite_j,
     gear_candidate,
+    justifying_identities,
     trunk_candidate,
 )
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_choice import (
     TARGET_LEVEL,
@@ -33,7 +36,13 @@ from artifactsmmo_cli.ai.tiers.progression_tree import (
     _utility_candidates,
     decide_tree,
 )
-from artifactsmmo_cli.ai.tiers.progression_tree_core import Branch, GearCandidate
+from artifactsmmo_cli.ai.tiers.progression_tree_core import (
+    FOCUS_FLAT,
+    FOCUS_SPAN,
+    Branch,
+    GearCandidate,
+    focus_aging_pick,
+)
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
@@ -246,3 +255,138 @@ def test_unequippable_candidate_reads_as_worthless(game_data, store):
         weak = gear_candidate(junk, state, store, game_data)
     assert weak.reachable_level == trunk.reachable_level
     assert weak.acquire_cost > trunk.acquire_cost
+
+
+def test_justifying_set_is_the_candidates_that_beat_the_trunk():
+    """The gear branch may only pursue a candidate that justified choosing it.
+    R2D2's live board, 2026-08-07."""
+    trunk = ProgressionCandidate(identity=TRUNK_IDENTITY, acquire_cost=0,
+                                 reachable_level=18, cycles_to_fifty=0, failed=False)
+    staff = ProgressionCandidate(identity="weapon_slot:greater_wooden_staff",
+                                 acquire_cost=2, reachable_level=25,
+                                 cycles_to_fifty=0, failed=False)
+    vest = ProgressionCandidate(identity="body_armor_slot:adventurer_vest",
+                                acquire_cost=4, reachable_level=18,
+                                cycles_to_fifty=0, failed=False)
+    assert justifying_identities(rank_candidates([staff, vest, trunk])) == {
+        "weapon_slot:greater_wooden_staff"}
+
+
+def test_justifying_set_is_empty_on_the_xp_branch():
+    """Nothing beats the trunk, so nothing is filtered — there is no gear root
+    being pursued to filter."""
+    trunk = ProgressionCandidate(identity=TRUNK_IDENTITY, acquire_cost=0,
+                                 reachable_level=17, cycles_to_fifty=0, failed=False)
+    junk = ProgressionCandidate(identity="helmet_slot:iron_helm", acquire_cost=2,
+                                reachable_level=17, cycles_to_fifty=0, failed=False)
+    assert justifying_identities(rank_candidates([junk, trunk])) == frozenset()
+
+
+def test_justifying_set_without_a_trunk_is_empty():
+    """No trunk means no baseline to beat — filter nothing rather than
+    everything."""
+    lone = ProgressionCandidate(identity="weapon_slot:x", acquire_cost=2,
+                                reachable_level=25, cycles_to_fifty=0, failed=False)
+    assert justifying_identities([lone]) == frozenset()
+
+
+def test_candidate_identity_matches_the_projected_identity(game_data, store):
+    """`justifying_identities` filters on strings minted by `gear_candidate`; if
+    the two disagreed the filter would match nothing and silently empty the
+    eligible list."""
+    state, _objective, gear = _candidates("l1_fresh", game_data)
+    c = gear[0]
+    with store.search_cache():
+        projected = gear_candidate(c, state, store, game_data)
+    assert projected.identity == candidate_identity(c)
+
+
+def test_gear_root_is_the_one_that_justified_the_branch(game_data, store):
+    """The live R2D2 defect, as a test.
+
+    `J` chose GEAR because a weapon raised the reachable level, while the gear
+    branch committed to a body armour with zero ceiling gain.
+
+    NOT THE GUARD FOR THAT FIX — this one passes with the filter removed, because
+    in every committed scenario the raw-gain argmax already IS the ceiling-raiser.
+    It pins the agreement that must hold; `test_aged_weapon_still_wins_the_gear_
+    branch` is the test that bites."""
+    state, objective, gear = _candidates("l1_fresh", game_data)
+    with store.search_cache():
+        ranking = branch_ranking(state, game_data, gear, store)
+        decision = decide_tree(state, game_data, objective,
+                               band_adequate=False, store=store)
+    assert branch_from_ranking(ranking) is Branch.GEAR
+    assert justifying_identities(ranking) == {"weapon_slot:copper_dagger"}, (
+        "fixture drift: this test only bites while exactly one candidate "
+        "justifies the branch"
+    )
+    assert isinstance(decision.chosen_root, ObtainItem)
+    assert decision.chosen_root.code == "copper_dagger", (
+        "the gear branch pursued a root that did not justify choosing it"
+    )
+
+
+def test_aged_weapon_still_wins_the_gear_branch(game_data, store):
+    """The R2D2 shape, reproduced through the mechanism that actually caused it.
+
+    In every committed scenario the raw-gain argmax happens to BE the
+    ceiling-raiser (weapons carry the top gain), so the plain decision cannot
+    exhibit the split — an earlier version of the test above passed with the
+    filter removed, i.e. it was vacuous. What diverged live was the five
+    selection factors: a focus ledger, synergy, achievability or role steering
+    the pick away from the one candidate the objective had endorsed.
+
+    Here the weapon is aged far past `FOCUS_FLAT`, so `focus_aging_pick` decays it
+    and hands the cycle to another candidate. That is correct anti-starvation
+    behaviour among interchangeable roots — and wrong when the decayed root is the
+    ONLY one buying progression, because the alternatives it rotates to cannot
+    advance the character at all. The objective's filter has to win that argument.
+    """
+    state, objective, gear = _candidates("l1_fresh", game_data)
+    aged = {("weapon_slot", "copper_dagger"): FOCUS_FLAT + FOCUS_SPAN}
+    seats: dict[str, int] = {}
+
+    unfiltered = focus_aging_pick(gear, aged, dict(seats))
+    assert unfiltered is not None and unfiltered.code != "copper_dagger", (
+        "fixture drift: aging no longer moves the pick off the weapon, so this "
+        "test would prove nothing"
+    )
+
+    with store.search_cache():
+        decision = decide_tree(state, game_data, objective, band_adequate=False,
+                               focus=aged, seats=seats, store=store)
+    assert isinstance(decision.chosen_root, ObtainItem)
+    assert decision.chosen_root.code == "copper_dagger", (
+        "aging rotated the gear branch onto a root that buys no progression, "
+        "while the root that justified choosing the branch went unpursued"
+    )
+
+
+def test_demoted_candidates_stay_reachable_behind_the_trunk(game_data, store):
+    """Filtering must not cost liveness: every demoted root stays in the fallback
+    list, after the trunk, so a board whose justifying pick AND trunk are both
+    unservable cannot deadlock — while a root that buys no progression is never
+    tried ahead of simply grinding."""
+    state, objective, gear = _candidates("l1_fresh", game_data)
+    with store.search_cache():
+        decision = decide_tree(state, game_data, objective,
+                               band_adequate=False, store=store)
+    codes = [r.code for r in decision.fallback_roots if isinstance(r, ObtainItem)]
+    demoted = {c.code for c in gear if c.code != "copper_dagger"}
+    assert demoted <= set(codes), "a demoted candidate vanished from the fallbacks"
+    trunk_at = next(i for i, r in enumerate(decision.fallback_roots)
+                    if isinstance(r, ReachCharLevel))
+    demoted_positions = [i for i, r in enumerate(decision.fallback_roots)
+                         if isinstance(r, ObtainItem) and r.code in demoted]
+    assert min(demoted_positions) > trunk_at
+
+
+def test_display_ranking_keeps_the_demoted_candidates(game_data, store):
+    """The `ranking` rows are a diagnostic — a reader comparing them against
+    `j_ranking` must see the roots the objective ruled out."""
+    state, objective, gear = _candidates("l1_fresh", game_data)
+    with store.search_cache():
+        decision = decide_tree(state, game_data, objective,
+                               band_adequate=False, store=store)
+    assert len(decision.ranking) == len(gear) + 1  # + the trunk row
