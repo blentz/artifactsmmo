@@ -76,6 +76,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.learning.xp_gain import xp_gained
 from artifactsmmo_cli.ai.level_skill_expand import next_grind_goal
 from artifactsmmo_cli.ai.loadout_profiles import (
     active_profile_gear,
@@ -3151,11 +3152,23 @@ class GamePlayer:
         # Per-skill XP delta. Sparse: only skills whose XP changed appear.
         # Phase G-B projections read this column to attribute skill-XP yield
         # per cycle, separately from character XP (delta_xp).
+        # Level-aware, for the same reason as `delta_xp` below: a skill level-up
+        # resets its xp into the new level, so a plain difference reports the
+        # cycle that earned the MOST as a large loss. 96 of 9047 recorded skill
+        # deltas were negative, every one a level-up. An unresolvable pair
+        # (`xp_gained` -> None, i.e. a multi-level jump, or no threshold captured)
+        # is OMITTED rather than written as 0 — the reader must see "not measured"
+        # and not "measured as nothing".
         skill_deltas: dict[str, int] = {}
         for skill_name, new_xp in new_state.skill_xp.items():
             prev_xp = prev_state.skill_xp.get(skill_name, 0)
-            if new_xp != prev_xp:
-                skill_deltas[skill_name] = new_xp - prev_xp
+            gained = xp_gained(
+                prev_state.skills.get(skill_name, 0), prev_xp,
+                prev_state.skill_max_xp.get(skill_name, 0),
+                new_state.skills.get(skill_name, 0), new_xp,
+            )
+            if gained is not None and gained != 0:
+                skill_deltas[skill_name] = gained
         consumables = self._compute_consumables_expended(prev_state, new_state)
         cycle = Cycle(
             ts=datetime.now(tz=timezone.utc).isoformat(),
@@ -3179,7 +3192,15 @@ class GamePlayer:
             planner_nodes=planner_nodes, planner_depth=planner_depth,
             planner_timed_out=planner_timed_out, plan_len=plan_len,
             delta_gold=new_state.gold - prev_state.gold,
-            delta_xp=new_state.xp - prev_state.xp,
+            # Level-aware: `new.xp - prev.xp` is right only while the level holds.
+            # On level-up the server resets xp into the new level, so the naive
+            # difference recorded the BEST cycles as large losses — 30 of 22333
+            # rows, and enough to drag C3P0's observed grind rate from ~21.6 to
+            # 2.52 char-xp/cycle. None (unresolvable) is stored as None, which the
+            # column already permits, so "could not tell" stays distinct from
+            # "earned nothing".
+            delta_xp=xp_gained(prev_state.level, prev_state.xp, prev_state.max_xp,
+                               new_state.level, new_state.xp),
             delta_hp=new_state.hp - prev_state.hp,
             delta_inv_used=new_state.inventory_used - prev_state.inventory_used,
             drops_json=json.dumps(drops, ensure_ascii=False) if drops else None,

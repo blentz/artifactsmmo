@@ -92,6 +92,17 @@ class WorldState:
     (only BuyBankExpansionAction does so today); every other apply preserves
     it automatically via `dataclasses.replace`."""
     skill_xp: dict[str, int] = field(default_factory=dict)
+    skill_max_xp: dict[str, int] = field(default_factory=dict)
+    """skill_name -> XP threshold for that skill's CURRENT level, from
+    `<skill>_max_xp` on the API schema.
+
+    Captured so `learning.xp_gain.xp_gained` can compute what a cycle really
+    earned when a skill levels up: without the old level's threshold, the reset
+    of `skill_xp` into the new level is indistinguishable from a loss, and 96 of
+    9047 recorded skill deltas were negative for exactly that reason. Empty by
+    default (like `skill_xp`) so constructions that do not come from the schema
+    keep working; a caller with no threshold to hand simply cannot resolve a
+    level-up, and `xp_gained` says so rather than guessing."""
     wisdom: int = 0
     """Wisdom stat — factors into documented XP-per-kill formula
     (+0.1% XP per wisdom point). Defaults 0 so older WorldState
@@ -244,9 +255,11 @@ class WorldState:
 
         skills: dict[str, int] = {}
         skill_xp: dict[str, int] = {}
+        skill_max_xp: dict[str, int] = {}
         for skill in SKILL_NAMES:
             skills[skill] = _require(char, f"{skill}_level")
             skill_xp[skill] = _require(char, f"{skill}_xp")
+            skill_max_xp[skill] = _require(char, f"{skill}_max_xp")
 
         attack: dict[str, int] = {}
         dmg_elements: dict[str, int] = {}
@@ -280,6 +293,7 @@ class WorldState:
             gold=char.gold,
             skills=skills,
             skill_xp=skill_xp,
+            skill_max_xp=skill_max_xp,
             wisdom=_require(char, "wisdom"),
             x=char.x,
             y=char.y,

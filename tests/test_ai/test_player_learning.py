@@ -140,6 +140,82 @@ def test_record_learning_cycle_empty_skill_delta_when_no_change(tmp_path):
     store.close()
 
 
+def test_record_learning_cycle_char_xp_across_a_level_up(tmp_path):
+    """The level-up cycle must record what it EARNED, not the xp reset.
+
+    Live 2026-08-07: 30 of 22333 rows were negative, every one a level-up, and
+    they dragged C3P0's observed grind rate from ~21.6 to 2.52 char-xp/cycle.
+    Modelled on its real 10->11 crossing, which was written as -2097."""
+    store = LearningStore(db_path=str(tmp_path / "learn.db"), character="hero")
+    store.start_session()
+
+    prev = make_state(level=10, xp=2097, max_xp=2100)
+    new = make_state(level=11, xp=3, max_xp=2400)
+    player = GamePlayer(character="hero")
+    player.history = store
+    player._record_learning_cycle(
+        prev_state=prev, new_state=new,
+        action_repr="Fight(red_slime)", action_class="FightAction",
+        outcome="ok", selected_goal="GrindCharacterXP(red_slime)",
+        predicted_cost=1.0, actual_cooldown_seconds=1.0,
+        planner_nodes=1, planner_depth=1, planner_timed_out=False, plan_len=1,
+    )
+    with Session(store._engine) as s:
+        rows = list(s.exec(select(Cycle)))
+    assert rows[0].delta_xp == 6, "3 left in the old level plus 3 into the new"
+    store.close()
+
+
+def test_record_learning_cycle_skill_xp_across_a_level_up(tmp_path):
+    """Same correction for skill xp — 96 of 9047 deltas were negative."""
+    store = LearningStore(db_path=str(tmp_path / "learn.db"), character="hero")
+    store.start_session()
+
+    prev = make_state(skills={"woodcutting": 5}, skill_xp={"woodcutting": 190},
+                      skill_max_xp={"woodcutting": 200})
+    new = make_state(skills={"woodcutting": 6}, skill_xp={"woodcutting": 15},
+                     skill_max_xp={"woodcutting": 250})
+    player = GamePlayer(character="hero")
+    player.history = store
+    player._record_learning_cycle(
+        prev_state=prev, new_state=new,
+        action_repr="Gather(ash_tree)", action_class="GatherAction",
+        outcome="ok", selected_goal="GatherMaterials",
+        predicted_cost=1.0, actual_cooldown_seconds=1.0,
+        planner_nodes=1, planner_depth=1, planner_timed_out=False, plan_len=1,
+    )
+    with Session(store._engine) as s:
+        rows = list(s.exec(select(Cycle)))
+    assert json.loads(rows[0].delta_skill_xp_json) == {"woodcutting": 25}
+    store.close()
+
+
+def test_record_learning_cycle_omits_an_unresolvable_skill_delta(tmp_path):
+    """A two-level skill jump cannot be resolved from the CURRENT threshold
+    alone, so it is omitted — recording 0 would be a fabricated measurement that
+    drags the mean exactly like the negative it replaced."""
+    store = LearningStore(db_path=str(tmp_path / "learn.db"), character="hero")
+    store.start_session()
+
+    prev = make_state(skills={"mining": 4}, skill_xp={"mining": 10},
+                      skill_max_xp={"mining": 100})
+    new = make_state(skills={"mining": 6}, skill_xp={"mining": 5},
+                     skill_max_xp={"mining": 300})
+    player = GamePlayer(character="hero")
+    player.history = store
+    player._record_learning_cycle(
+        prev_state=prev, new_state=new,
+        action_repr="Gather(iron_rocks)", action_class="GatherAction",
+        outcome="ok", selected_goal="GatherMaterials",
+        predicted_cost=1.0, actual_cooldown_seconds=1.0,
+        planner_nodes=1, planner_depth=1, planner_timed_out=False, plan_len=1,
+    )
+    with Session(store._engine) as s:
+        rows = list(s.exec(select(Cycle)))
+    assert json.loads(rows[0].delta_skill_xp_json) == {}
+    store.close()
+
+
 def test_fight_records_combat_loadout_profile(tmp_path):
     """_record_loadout_for_action stores 'combat:<monster>' for a FightAction."""
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
