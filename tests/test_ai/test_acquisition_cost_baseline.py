@@ -9,9 +9,11 @@ visibly, instead of a silent re-ranking nobody can attribute.
 increment lands, the corresponding assertion should be UPDATED, and the update
 is the deliverable. A failure here means the fix is working.
 
-THE DEFECT. `J`'s `acquire_cost` is `ai/min_plan_length`, which models exactly
-three actions — gather, craft, equip — and treats **any item without a recipe as
-a raw gatherable costing one gather**. It has no notion of vendors, monsters,
+THE DEFECT. `J`'s `acquire_cost` WAS `ai/min_plan_length` until the activation
+commit; these tests call it directly, so they keep pinning the retired model as a
+museum piece rather than as the live one. It models exactly three actions —
+gather, craft, equip — and treats **any item without a recipe as a raw
+gatherable costing one gather**. It has no notion of vendors, monsters,
 currency, the bank, or skill gates. So a route it cannot express is not priced
 expensively; it is priced at very nearly nothing, because the item looks raw.
 
@@ -185,3 +187,34 @@ def test_the_skill_gate_is_invisible_to_the_cost(game_data) -> None:
     assert stats.crafting_level == 10
     # No skill argument exists to pass — that is the point.
     assert _cost(game_data, "iron_sword") == 65
+
+
+def test_J_NOW_USES_THE_ROUTE_AWARE_COST(game_data) -> None:
+    """ACTIVATION, asserted where it can be seen — `J`'s own `acquire_cost`.
+
+    Green tests are not runtime activation (`feedback_verify_runtime_activation`),
+    and this epic's own core sat INERT for four commits on purpose. This test
+    exists so the switch cannot silently revert: it compares what
+    `gear_candidate` actually reports against what `min_plan_length` would have
+    said, and fails if they agree.
+
+    Measured at the switch: `iron_sword` 65 -> 96 (venue hops plus the
+    weaponcrafting gate), `copper_dagger` 62 -> 70, `feather` 2 -> 14.
+
+    The characterisation tests ABOVE still pass because they call
+    `min_plan_length` directly — they pin the old model as a museum piece, not
+    as the live one. If both this and those ever agree, activation has been
+    undone."""
+    state = scenario_state(SCENARIOS["l12_deep_chain_grind"], game_data)
+    store = LearningStore(db_path=":memory:", character="activation_probe")
+    store.start_session()
+    try:
+        candidate = gear_candidate(
+            GearCandidate(slot="weapon_slot", code="iron_sword",
+                          gain=Fraction(1), level=10),
+            state, store, game_data)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+    assert candidate.acquire_cost != _cost(game_data, "iron_sword")
+    assert candidate.acquire_cost > _cost(game_data, "iron_sword")

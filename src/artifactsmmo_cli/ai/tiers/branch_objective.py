@@ -40,23 +40,47 @@ see level 50. Treat a claim that "J is trading cost against cycles" as unverifie
 below that band.
 
 THE CURRENCY IS ACTIONS, AND THAT IS LOAD-BEARING. `acquire_cost` comes from
-`min_plan_length` (a lower bound on plan length, proved
-`Formal.PlanModel.min_plan_length_le_plan`); `cycles_to_fifty` comes from
+`ai/acquisition_cost.acquisition_actions`, a route-aware lower bound over all six
+ways an item can be obtained; `cycles_to_fifty` comes from
 `cheapest_path_to_level`, denominated in cycles, one cycle per executed action.
 S-004 may add them only because they are the same unit. That projection was
 denominated in SECONDS until 2026-08-07 and ran ~80x high — see
 `ai/learning/projections.FIGHT_CYCLES_PER_KILL`. Anything mixed in here that is
 not an action count (a gold price, a level gap, a wall-clock cooldown) reintroduces
 exactly that class of bug, silently.
+
+WHAT CHANGED WHEN `min_plan_length` WAS RETIRED FROM THIS SEAT. It modelled three
+actions — gather, craft, equip — and treated any item WITHOUT A RECIPE as a raw
+gatherable, so a vendor item and a drop farm both priced at 2 while a craft chain
+priced correctly. Cost was decided by whether an item had a recipe, never by how
+it is obtained. Measured on `l12_deep_chain_grind`: `iron_sword` 65 -> 96 (venue
+hops and the weaponcrafting gate now included), `feather` 2 -> 14 (the drop farm
+priced), `copper_dagger` 62 -> 70.
+
+An item whose materials have NO route this cycle now prices in the millions
+(`acquisition_cost_core.UNOBTAINABLE_PER_UNIT` per missing unit) rather than
+cheaply. That is intended: in the unreachable band S-006 ranks by furthest
+progress and breaks ties on cost, so a genuinely obtainable candidate now beats
+an unobtainable one it used to lose to. It also means a candidate can price
+unobtainable one cycle and finitely the next, since every route is STATE-AWARE.
+`J` only ever compares candidates within a single cycle, so that is sound here —
+but a reader of consecutive traces will see the ranking move for reasons that are
+about the world, not about the objective.
+
+The bank is no longer credited as free holdings. `min_plan_length` had no
+withdraw action, so its callers passed inventory PLUS bank; here WITHDRAW is a
+priced route, and counting the bank as owned as well would credit the same copy
+twice.
 """
 
 from dataclasses import replace
 from math import ceil
 
+from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.min_plan_length import min_plan_length
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers.progression_choice import (
     TARGET_LEVEL,
     ProgressionCandidate,
@@ -72,17 +96,6 @@ TRUNK_IDENTITY = "xp_trunk"
 """Identity of the XP-trunk candidate. `J` has no `kind` field by design (S-009
 was withdrawn), so the trunk is recognised by this identity and by nothing else —
 it competes on the same scalar as every gear root, at zero acquisition cost."""
-
-
-def _held(state: WorldState) -> dict[str, int]:
-    """Inventory + bank, the holdings `min_plan_length` credits against. Same
-    accumulation `ProgressionGoal.is_reachable` performs before its own
-    `min_plan_length` call, so a candidate already sitting in the bank costs the
-    one Equip action there and here alike."""
-    owned = dict(state.inventory)
-    for code, qty in (state.bank_items or {}).items():
-        owned[code] = owned.get(code, 0) + qty
-    return owned
 
 
 def _outcome(projected: WorldState, store: LearningStore,
@@ -128,7 +141,9 @@ def trunk_candidate(state: WorldState, store: LearningStore,
 
 
 def gear_candidate(c: GearCandidate, state: WorldState, store: LearningStore,
-                   game_data: GameData) -> ProgressionCandidate:
+                   game_data: GameData,
+                   ctx: SelectionContext = NO_PROFILE_CONTEXT
+                   ) -> ProgressionCandidate:
     """One gear root: obtain and wear `c.code`, then grind to 50.
 
     The projected state is the current one HOLDING one `c.code` in inventory, and
@@ -162,10 +177,8 @@ def gear_candidate(c: GearCandidate, state: WorldState, store: LearningStore,
     reachable through the core's own contract, unused by this caller."""
     projected = replace(
         state, inventory={**state.inventory, c.code: state.inventory.get(c.code, 0) + 1})
-    acquire_cost = min_plan_length(
-        c.code, 1, game_data.crafting_recipes, _held(state),
-        game_data.max_gather_yield, equip=True,
-    )
+    acquire_cost = acquisition_actions(
+        c.code, 1, state, game_data, ctx, equip=True, store=store)
     reachable_level, cycles = _outcome(projected, store, game_data)
     return ProgressionCandidate(
         identity=candidate_identity(c),
@@ -178,7 +191,9 @@ def gear_candidate(c: GearCandidate, state: WorldState, store: LearningStore,
 
 def branch_ranking(state: WorldState, game_data: GameData,
                    candidates: list[GearCandidate],
-                   store: LearningStore) -> list[ProgressionCandidate]:
+                   store: LearningStore,
+                   ctx: SelectionContext = NO_PROFILE_CONTEXT
+                   ) -> list[ProgressionCandidate]:
     """Every gear root plus the trunk, in `J` order.
 
     The trunk goes LAST into `rank_candidates`, so `sorted`'s stability breaks an
@@ -193,7 +208,7 @@ def branch_ranking(state: WorldState, game_data: GameData,
     The caller opens that cache; without one this is ~14x slower — see
     `LearningStore.win_count`."""
     return rank_candidates(
-        [gear_candidate(c, state, store, game_data) for c in candidates]
+        [gear_candidate(c, state, store, game_data, ctx) for c in candidates]
         + [trunk_candidate(state, store, game_data)]
     )
 

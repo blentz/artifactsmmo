@@ -544,7 +544,7 @@ def decide_tree(state: WorldState, game_data: GameData,
     # catalogue — GEAR in 2950 of 2950 cycles, zero character levels gained in 13h.
     # `J` measures the same thing directly. It stays a live parameter because the
     # store-less path still reads it.
-    j_ranking = (branch_ranking(state, game_data, candidates, store)
+    j_ranking = (branch_ranking(state, game_data, candidates, store, ctx)
                  if store is not None else None)
     branch = (branch_from_ranking(j_ranking) if j_ranking is not None
               else branch_pick_pure(band_adequate, gear_target_exists))

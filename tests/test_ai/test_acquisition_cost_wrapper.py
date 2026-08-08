@@ -322,22 +322,27 @@ def test_an_undiscovered_workshop_leaves_the_route_excluded(
         store.close()
 
 
-def test_no_skill_max_xp_leaves_the_route_excluded(state, game_data) -> None:
-    """The other half of the API-data rule, pinned on the BARE fixture.
+def test_no_skill_max_xp_prices_the_grind_at_ZERO_not_infinity(
+        state, game_data) -> None:
+    """THE SOUNDNESS CONTRACT DECIDING, on the bare fixture.
 
-    `scenario_state` supplies no `skill_max_xp`, and without it the size of the
-    grind is unknown. The guard declines rather than treating a missing
-    requirement as zero — which would have made the grind FREE and the gated
-    craft the cheapest route on the board.
+    `scenario_state` supplies no `skill_max_xp`, so the size of the grind is
+    unknown. The route is still emitted, with `unlock_actions=0` — exactly what
+    `min_plan_length` charged — because this is a LOWER bound whose consumers
+    PRUNE with it, and the only safe move is to omit an unknown POSITIVE term.
 
-    That is not hypothetical: it is what the first run of this code did, and the
-    only reason it surfaced is that the route failed to appear at all. A zero
-    default would have produced a plausible number instead."""
+    This function excluded the route instead until it was measured. That reads as
+    `UNOBTAINABLE_PER_UNIT`, an OVER-estimate, and over-estimating discards
+    reachable plans. It was caught by activating `J` and watching whole
+    equipment classes vanish — not by any test, because no test was sensitive to
+    it."""
     assert not state.skill_max_xp
     store = _store_with_rate("weaponcrafting", 40)
     try:
-        assert not route_options("iron_sword", state, game_data,
-                                 NO_PROFILE_CONTEXT, store)
+        routes = route_options("iron_sword", state, game_data,
+                               NO_PROFILE_CONTEXT, store)
+        assert [r.kind for r in routes] == ["craft"]
+        assert routes[0].unlock_actions == 0
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -366,18 +371,23 @@ def test_the_sword_finally_has_a_price_neither_model_could_give(
     assert priced > 65
 
 
-def test_no_observed_rate_leaves_the_route_excluded(gated_state, game_data) -> None:
-    """No defensible default exists for "how fast does this character gain
-    weaponcrafting xp", and inventing one would put a fabricated number straight
-    into a pruning bound. No rate means no price, and no price means the route
-    stays excluded exactly as it is today — a strictly smaller claim than
-    guessing."""
+def test_no_observed_rate_prices_the_grind_at_ZERO_not_infinity(
+        gated_state, game_data) -> None:
+    """A skill the character has never ground has no observed rate — and there
+    is no defensible default for "how fast does this character gain jewelrycraft
+    xp". Inventing one would put a fabricated number into a pruning bound.
+
+    So the term is OMITTED rather than guessed, which keeps the bound sound and
+    keeps the item competing. It arrives the moment the character grinds that
+    skill even once."""
     store = LearningStore(db_path=":memory:", character="no_observations")
     store.start_session()
     try:
         assert store.skill_xp_per_cycle("weaponcrafting") is None
-        assert not route_options("iron_sword", gated_state, game_data,
-                                 NO_PROFILE_CONTEXT, store)
+        routes = route_options("iron_sword", gated_state, game_data,
+                               NO_PROFILE_CONTEXT, store)
+        assert [r.kind for r in routes] == ["craft"]
+        assert routes[0].unlock_actions == 0
     finally:
         store.end_session(exit_reason="normal")
         store.close()

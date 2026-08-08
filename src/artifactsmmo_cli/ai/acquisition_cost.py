@@ -171,22 +171,32 @@ def _gated_craft_option(item: str, state: WorldState, game_data: GameData,
     route this module may add that `obtain_sources` did not name, and a census
     pins that (`test_the_pricer_adds_nothing_but_gated_crafts`).
 
-    `None` — leaving today's exclusion in place — whenever the grind cannot be
-    priced from data:
+    `None` — no route at all — only when a grind could not open the craft anyway:
 
       * the item is not craftable, or names no crafting skill;
       * the gate is already MET (then `obtain_sources` names the craft itself,
         and adding a second copy would double the route);
-      * no workshop is known (the craft is unservable for a reason a grind
-        cannot fix);
-      * the learning store has no observed `skill_xp_per_cycle` for the skill;
-      * the API has given us no `<skill>_max_xp` for the current level.
+      * no workshop is known (a grind cannot conjure a bench, so paying it would
+        buy nothing).
 
-    The last two are the API-data rule doing its job: there is no defensible
-    default for "how fast does this character gain woodcutting xp", and inventing
-    one would put a fabricated number directly into a pruning bound. No rate
-    means no price, and no price means the route stays excluded exactly as it is
-    today — a strictly smaller claim than guessing."""
+    AN UNKNOWN GRIND COSTS 0, NOT INFINITY, AND THAT IS THE SOUNDNESS CONTRACT
+    DECIDING — not a convenience. When the learning store has no observed
+    `skill_xp_per_cycle`, or the API has given us no `<skill>_max_xp`, the size
+    of the grind is genuinely unknown. This is a LOWER bound whose consumers
+    PRUNE with it, so the only safe move is to omit an unknown POSITIVE term:
+    the route is emitted with `unlock_actions=0`, exactly reproducing what
+    `min_plan_length` charged.
+
+    Excluding it instead — which this function did until measured — reads as
+    `UNOBTAINABLE_PER_UNIT`, an OVER-estimate, and over-estimating is the one
+    direction that discards a reachable plan. Measured consequence: every
+    jewelry item priced unobtainable for a character who has never crafted
+    jewelry, because a skill with no history has no rate. Whole equipment classes
+    would drop out of the gear branch, and the ranking would look like the gear
+    simply did not exist.
+
+    So an unpriced grind under-states the cost rather than over-stating it, and
+    the term arrives the moment the character has ground that skill even once."""
     recipe = game_data.crafting_recipe(item)
     stats = game_data.item_stats(item)
     if recipe is None or stats is None or not stats.crafting_skill:
@@ -198,16 +208,15 @@ def _gated_craft_option(item: str, state: WorldState, game_data: GameData,
         return None
     rate = store.skill_xp_per_cycle(skill)
     max_xp = state.skill_max_xp.get(skill, 0)
-    if rate is None or max_xp <= 0:
-        return None
+    grind = 0 if rate is None or max_xp <= 0 else skill_grind_cycles(
+        state.skills.get(skill, 1), state.skill_xp.get(skill, 0),
+        max_xp, stats.crafting_level, rate)
     return RouteOption(
         kind=SourceKind.CRAFT.value, venue=_workshop_venue(skill),
         actions_per_application=1, yield_per=game_data.craft_yield(item),
         capacity=UNBOUNDED_CAPACITY, inputs=dict(recipe),
         unlock=f"skill:{skill}:{stats.crafting_level}",
-        unlock_actions=skill_grind_cycles(
-            state.skills.get(skill, 1), state.skill_xp.get(skill, 0),
-            max_xp, stats.crafting_level, rate),
+        unlock_actions=grind,
     )
 
 
