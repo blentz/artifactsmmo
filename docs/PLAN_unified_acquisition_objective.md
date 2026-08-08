@@ -176,16 +176,26 @@ stat is the only thing that stops this recurring.
 ### 1 — `acquire_cost` over `obtain_sources` (the cost half)
 
 New pure core, `ai/acquisition_cost.py`, replacing `min_plan_length` as `J`'s
-`acquire_cost` only. Per-route action counts:
+`acquire_cost` only. The full target model is the table below; increment 1 lands
+the shaded-in rows and leaves DROP/BUY at today's behaviour until increment 2,
+so each step has a live-trace check that can actually attribute a change.
 
-| route | actions |
-|---|---|
-| WITHDRAW | 1 (+ travel, if travel is counted — see open decisions) |
-| CRAFT | 1 per craft node, recursing into inputs (today's `min_crafts`) |
-| GATHER | `ceil(units / max_gather_yield)` (today's `ceil_gathers`) |
-| DROP | `ceil(expected_kills) × cycles_per_kill` — reuse `_expected_kills` *and* `fight_loop_cost.cycles_per_kill`, so a drop-farm is priced in the same whole-loop cycles `cycles_to_fifty` uses |
-| BUY | 1 purchase **+ the cost of obtaining the currency**, recursively |
-| RECYCLE | 1 per unit destroyed |
+| route | actions | lands in |
+|---|---|---|
+| WITHDRAW | 1 move + 1 withdraw | **1** |
+| GATHER | 1 move + `ceil(units / max_gather_yield)` (today's `ceil_gathers`) | **1** |
+| RECYCLE | 1 move + 1 per unit destroyed | **1** |
+| CRAFT | 1 move + 1 per craft node, recursing into inputs | **1** |
+| CRAFT, gate unmet | + `cost_to_reach(skill, craft_level)` | **1b** |
+| DROP | 1 move + `ceil(expected_kills) × cycles_per_kill` | **2** |
+| BUY | 1 move + 1 purchase + cost of the currency, recursively | **2** |
+
+Every route carries its venue hop per decision 2. The hop is a constant **1 per
+distinct venue tile the plan must visit, and 0 when the character is already
+standing there** — `MoveAction.is_applicable` is false on the current tile, so no
+action is emitted and none may be counted. Distance never enters. Counting one
+hop per distinct venue (rather than one per route application) keeps this a
+sound LOWER bound: a plan that gathers twenty ore pays one move, not twenty.
 
 Choosing the cheapest route per item makes this a **lower bound over a strictly
 larger action model** than `min_plan_length`, so
@@ -199,15 +209,47 @@ Consumers to migrate in the same increment or explicitly defer with a reason:
 Leaving `J` on a new model while the reachability gates stay on the old one
 recreates the two-plan-producer trap this project has already paid for twice.
 
-### 2 — Currency is not free (the BUY term's teeth)
+### 1b — `cost_to_reach(skill, level)`: a skill gate is a price, not a wall
+
+Per decision 3. `obtain_sources._craft_sources` currently returns `[]` when the
+crafting-skill gate is unmet, so the whole CRAFT route vanishes and the item
+reads as unobtainable-by-craft. Replace the exclusion with a price:
+
+```
+cost_to_reach(skill, target) = Σ over levels  xp_to_next(level) / skill_xp_per_cycle(skill)
+```
+
+sourced from `LearningStore.skill_xp_per_cycle` (observed; already exists) and
+falling back to the per-craft xp formula where there are no observations —
+mirroring `cheapest_path_to_level`'s observed/formula split, including its hard
+lesson that **both branches must yield the same unit** or the argmax silently
+prefers whichever branch has data.
+
+Watch for the grey-band interaction: gather/craft skill xp is zero at a level gap
+of 11 (`project_grey_skill_xp_gate`, measured over 2464 gathers). A projection
+that ignores it will price an out-of-band grind as free progress.
+
+This is the increment that changes which items are reachable at all, so it needs
+its own live-trace check before merge, separate from increment 1's.
+
+### 2 — DROP and BUY: kills and currency are not free
 
 `npc_purchases` returns `(npc, price, currency)`. `currency` is `gold` or an item
-code (`event_ticket`, `tasks_coin`, …). The BUY cost is `1 + acquisition_cost(currency, price)`
-— recursive, which terminates because currency chains bottom out at gold or at a
-gatherable/droppable.
+code (`event_ticket`, `tasks_coin`, …). The BUY cost is
+`hop + 1 + acquisition_cost(currency, price)` — recursive, terminating because
+currency chains bottom out at gold or at a gatherable/droppable. Gold prices at
+the observed gold-per-cycle rate (decision 1).
 
-Gold itself needs an actions-per-gold rate. This is the increment's one genuinely
-open modelling question and it is listed under open decisions below.
+DROP prices at `ceil(expected_kills) × cycles_per_kill`, reusing the proved
+`_expected_kills` and the same `fight_loop_cost.cycles_per_kill` that
+`cycles_to_fifty` uses — so a drop-farm and a level-grind are quoted in
+identical whole-loop cycles. This is also what retires `bid_vs_craft`'s
+seconds-denominated duplicate (increment 5).
+
+Recursion needs a visited-set: a currency obtainable only by buying something
+priced in that currency would otherwise loop. Terminate at a conservatively
+LARGE bound, matching `min_gathers`' existing fuel-exhaustion convention, so
+unreachability gates stay sound.
 
 ### 3 — Project every stat an item grants (the benefit half)
 
@@ -237,23 +279,79 @@ Point `bid_vs_craft` at the unified cost, converting to seconds at the boundary
 if the GE horizon genuinely needs wall-clock. One model, one unit, one conversion
 site.
 
-## Open decisions (for the user — these change the design, not the code)
+## Decisions (resolved by the user, 2026-08-08)
 
-1. **Actions-per-gold.** The BUY term needs gold priced in actions. Candidates:
-   the learning store's observed gold-per-cycle; a sell-price-derived rate; or
-   declaring gold purchases out of scope for `J` in this epic. This is a real
-   modelling choice with no obviously right answer, and it decides whether
-   increment 2 is small or large.
+### 1 — Actions-per-gold: build the term, sourced from observation
 
-2. **Is travel an action?** Today nothing in `J` counts movement. `WITHDRAW` is
-   "1 action" only if walking to the bank is free. Counting travel would make
-   `J` distance-sensitive across the board — a large, coherent change, or a
-   deliberate documented omission. It should not be decided per-route by
-   whoever writes each term.
+Gold purchases are IN scope; the BUY route prices its currency rather than
+treating it as free. The rate comes from the learning store's observed
+gold-per-cycle, on the same principle `cheapest_path_to_level` already follows
+for xp: prefer a measured rate, fall back to a derived one only where there are
+no observations. `LearningStore` already records gold per cycle.
 
-3. **Does `J` want skill levels?** `cycles_to_fifty` is character level only.
-   A gathering/crafting skill level is a hard gate on entire recipe trees, and
-   nothing in `J` values reaching it. In scope, or a separate epic?
+If a sell-price-derived rate was intended instead, it is one function behind one
+call site — noted here so the choice stays visible rather than becoming a buried
+constant.
+
+### 2 — Travel is exactly ONE action per move, and distance stays out of `J`
+
+Settled by the API's own semantics
+(<https://docs.artifactsmmo.com/concepts/maps_and_movement/>): the **server**
+runs the A* pathfind, so a move of any length is a single `/action/move` call.
+The documentation's cooldown rule is *"The cooldown is 5 seconds per map."*
+
+So distance is a **duration**, not a count. It scales the seconds a move costs
+and never the number of actions a plan contains. `MoveAction.cost` already
+encodes exactly this — `static = max(distance * 5.0, 1.0)`, the doc's rule
+verbatim — as a Dijkstra edge weight, which is the correct home for it and where
+it stays.
+
+`J` therefore counts **+1 action per venue hop** (walk to the vendor, the bank,
+the workshop, the monster tile) and is not distance-sensitive. This lands on the
+same side of the line as `haste` for the same reason, which is a good sign the
+line is in the right place: **seconds-denominated quantities do not enter an
+actions-denominated objective.** A future wall-clock objective may consume both;
+it would be a second objective with an explicit conversion, never a term folded
+into this one.
+
+### 3 — Skill levels are IN, priced as a prerequisite *inside* `acquire_cost`
+
+> *"skill levels gate crafting tiers that unlock better weapons and armor. we
+> can't craft iron items until crafting level >= 10. there is a pareto front
+> spanning all character stats — there is a reason to level up each stat in
+> service of reaching level 50."* — user
+
+Adopted, with one design commitment that follows from that framing: **a skill
+level gets no term of its own in `J`.** It is priced as the cost of a gate on the
+CRAFT route, and it therefore pays for exactly what it unlocks, automatically.
+
+Today `obtain_sources._craft_sources` returns `[]` when the skill gate is unmet —
+the route is *excluded* rather than *priced*. That is the whole bug in one line.
+An iron sword is not unobtainable at weaponcrafting 5; it costs a weaponcrafting
+grind plus a craft. So:
+
+```
+cost(CRAFT item) = cost_to_reach(skill, required_level) + craft-chain actions
+```
+
+where `cost_to_reach` is a skill-xp analogue of `cheapest_path_to_level`, built
+from `LearningStore.skill_xp_per_cycle(skill)` (the observed rate — it already
+exists) over the `LevelSkillAction` mechanism, which is already the sole
+skill-grind path.
+
+**Why no per-stat term.** The user names a Pareto front across all character
+stats. A single scalar in a single currency is precisely the instrument for
+*selecting a point on* a Pareto front — adding a hand-weighted term per stat
+would re-encode the front rather than search it, and every weight would be a
+tuning surface nobody can calibrate. Pricing each stat's *acquisition* in
+actions, against a benefit measured in the same actions, lets the trade-off
+emerge from data instead of from constants. This is the same argument that
+retired `branch_pick_pure`: a lexicographic pivot returns one extreme point of a
+front; a scalar objective finds the interior.
+
+This makes decision 3 a part of increment 1 rather than a separate epic, and it
+subsumes the `_craft_sources` skill-gate exclusion as the first thing that has
+to change.
 
 ## Anti-goals
 
