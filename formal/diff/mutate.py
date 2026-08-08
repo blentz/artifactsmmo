@@ -4318,20 +4318,20 @@ MONSTER_DROP_SELECTION_MUTATIONS = [
     # Swap distance and expected_kills in the lex key: distance dominates, inverting
     # the primary objective on any kills-vs-distance tension.
     ("monster_drop_selection: lex key swap (distance before expected_kills)",
-     "    return (_expected_kills(c), c.distance, c.monster_code)",
-     "    return (c.distance, _expected_kills(c), c.monster_code)"),
+     "    return (expected_kills(c), c.distance, c.monster_code)",
+     "    return (c.distance, expected_kills(c), c.monster_code)"),
     # Drop the distance tie-break (constant second field): candidates tying on
     # expected_kills become distance-ambiguous; Python `min` first-wins by list
     # position, diverging from the Lean distance-ordered tie-break.
     ("monster_drop_selection: drop distance tie-break (second field constant)",
-     "    return (_expected_kills(c), c.distance, c.monster_code)",
-     "    return (_expected_kills(c), 0, c.monster_code)"),
+     "    return (expected_kills(c), c.distance, c.monster_code)",
+     "    return (expected_kills(c), 0, c.monster_code)"),
     # Drop the code tie-break (constant third field): candidates tying on
     # (expected_kills, distance) become order-ambiguous; Python `min` first-wins,
     # diverging from the Lean code-ordered tie-break.
     ("monster_drop_selection: drop code tie-break (third field constant)",
-     "    return (_expected_kills(c), c.distance, c.monster_code)",
-     "    return (_expected_kills(c), c.distance, \"\")"),
+     "    return (expected_kills(c), c.distance, c.monster_code)",
+     "    return (expected_kills(c), c.distance, \"\")"),
 ]
 
 

@@ -18,7 +18,7 @@ already read.
 """
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.monster_drop_selection import MonsterDropCandidate, _expected_kills
+from artifactsmmo_cli.ai.monster_drop_selection import MonsterDropCandidate, expected_kills
 from artifactsmmo_cli.ai.requirement_projections import demand_set
 from artifactsmmo_cli.ai.source_kind import SourceKind
 
@@ -61,8 +61,8 @@ def estimate_craft_seconds(item: str, qty: int, game_data: GameData) -> float:
                                      min_quantity=min_q, max_quantity=max_q, distance=0)
                 for mob, rate, min_q, max_q in drops
             ]
-            expected_kills = min(_expected_kills(c) for c in candidates)
-            total += float(expected_kills) * _FIGHT_SECONDS * needed
+            cheapest_kills = min(expected_kills(c) for c in candidates)
+            total += float(cheapest_kills) * _FIGHT_SECONDS * needed
         else:
             total += _GATHER_SECONDS * needed
     return total
