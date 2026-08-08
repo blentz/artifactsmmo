@@ -271,6 +271,12 @@ class TestPathAlignedMonster:
         player.game_data._monster_level = {"chicken": 1, "yellow_slime": 2}
         player.game_data._monster_hp = {"chicken": 60, "yellow_slime": 70}
         player.game_data._monster_type = {"chicken": "normal", "yellow_slime": "normal"}
+        # Harmless: `cheapest_path_to_level` charges each kill the Rest its damage
+        # forces, so it reads combat stats now. Zero damage keeps this case about
+        # the xp formula picking the higher-yield monster, which is what it pins.
+        player.game_data._monster_attack = {"chicken": {}, "yellow_slime": {}}
+        player.game_data._monster_resistance = {"chicken": {}, "yellow_slime": {}}
+        player.game_data._monster_critical_strike = {"chicken": 0, "yellow_slime": 0}
         player.state = make_state(level=1, xp=0, max_xp=100, character="hero")
         # Path projection: at L1, both monsters beatable. yellow_slime
         # higher level → higher XP per formula → picked.

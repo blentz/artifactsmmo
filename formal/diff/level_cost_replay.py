@@ -11,16 +11,27 @@ whose own docstring said "~30s server cooldown", i.e. a duration in SECONDS, and
 the store override `action_cost` returns "median actual_cooldown_seconds". So a
 projected "cycle" was really a second, and the number came out ~30x too large.
 
-THE COMPARABLE OBSERVABLE IS FIGHT-CYCLES PER LEVEL, NOT TOTAL CYCLES PER LEVEL.
-The projection models a character that does nothing but fight. A trace's total
-cycles per level includes gathering, crafting, banking and resting, which the
-projection never claimed to cover, so dividing by it flatters the projection by
-roughly the fraction of cycles actually spent fighting. Measured on the
-committed traces: 789 total cycles per level, but only 96 FIGHT-cycles per
-level — and it is 96 the projection must be compared against. Reporting the
-total-cycle ratio (9.8x) instead of the fight-cycle one (80.6x) understates the
-error by the same factor it is measuring, which is how the bug survived a first
-look.
+THE COMPARABLE OBSERVABLE IS COMBAT-LOOP CYCLES PER LEVEL — NOT TOTAL, AND (SINCE
+2026-08-07) NOT FIGHT-CYCLES EITHER. The rule is that the observable must cover
+exactly what the projection models, no more and no less, and what the projection
+models has changed once already:
+
+  * Until the unit fix it modelled a character that does nothing but fight, so
+    FIGHT-cycles per level was the comparable figure. A trace's TOTAL cycles per
+    level includes gathering, crafting and banking, which the projection never
+    claimed to cover, so dividing by it flattered the projection by roughly the
+    fraction of cycles actually spent fighting. Measured then: 789 total cycles
+    per level against only 96 fight-cycles — and reporting the total-cycle ratio
+    (9.8x) instead of the fight-cycle one (80.6x) understated the error by the
+    same factor it was measuring, which is how the bug survived a first look.
+  * `cheapest_path_to_level` now charges each kill the Rest its damage forces
+    (`fight_loop_cost.cycles_per_kill`), because every character in the
+    2026-08-07 traces ran ~1 Rest per Fight and the fight action was only ~51% of
+    the loop. So the comparable observable is now FIGHT + REST cycles per level.
+
+Comparing the new projection against the old fight-only observable would report a
+clean ~2x error that is not an error at all — the mirror of the mistake above, and
+the reason this doctrine is written down rather than assumed.
 
 WHAT THIS SCRIPT CHECKS. For every character in the traces that gained at least
 one character level, it reports observed fight-cycles per level. The projection
@@ -64,7 +75,7 @@ LOW, HIGH = 0.1, 10.0
 
 def _observed(trace_dir: Path) -> tuple[dict[str, dict[str, int]], int]:
     per_char: dict[str, dict[str, int]] = collections.defaultdict(
-        lambda: {"fights": 0, "levels": 0, "cycles": 0})
+        lambda: {"fights": 0, "rests": 0, "levels": 0, "cycles": 0})
     used = 0
     for path in sorted(trace_dir.glob("play-trace-*.jsonl")):
         try:
@@ -80,6 +91,13 @@ def _observed(trace_dir: Path) -> tuple[dict[str, dict[str, int]], int]:
         for prev, cur in zip(records, records[1:], strict=False):
             if str(prev.get("action", "")).startswith("Fight(") and prev.get("outcome") == "ok":
                 d["fights"] += 1
+            # Rest is the other half of the loop the projection now charges for.
+            # Counted unconditionally rather than only after a fight: a Rest is a
+            # cycle the combat loop spent however it was scheduled, and pairing it
+            # to a preceding Fight would silently drop the ones the HP_CRITICAL
+            # guard interleaves.
+            if prev.get("action") == "Rest" and prev.get("outcome") == "ok":
+                d["rests"] += 1
             if cur["state"]["level"] > prev["state"]["level"]:
                 d["levels"] += 1
     return per_char, used
@@ -93,18 +111,20 @@ def main() -> int:
         return 2
 
     lines = ["# cheapest_path_to_level unit corroboration", f"traces={used}", ""]
-    lines.append(f"{'char':8s} {'cycles':>8s} {'fights':>8s} {'levels':>7s} "
-                 f"{'fight/lvl':>10s} {'total/lvl':>10s}")
-    tf = tl = tc = 0
+    lines.append(f"{'char':8s} {'cycles':>8s} {'fights':>8s} {'rests':>7s} {'levels':>7s} "
+                 f"{'loop/lvl':>9s} {'fight/lvl':>10s} {'total/lvl':>10s}")
+    tf = tr = tl = tc = 0
     for name, d in sorted(per_char.items()):
         if not d["levels"]:
-            lines.append(f"{name:8s} {d['cycles']:8d} {d['fights']:8d} "
-                         f"{0:7d} {'n/a':>10s} {'n/a':>10s}")
+            lines.append(f"{name:8s} {d['cycles']:8d} {d['fights']:8d} {d['rests']:7d} "
+                         f"{0:7d} {'n/a':>9s} {'n/a':>10s} {'n/a':>10s}")
             continue
         tf += d["fights"]
+        tr += d["rests"]
         tl += d["levels"]
         tc += d["cycles"]
-        lines.append(f"{name:8s} {d['cycles']:8d} {d['fights']:8d} {d['levels']:7d} "
+        lines.append(f"{name:8s} {d['cycles']:8d} {d['fights']:8d} {d['rests']:7d} "
+                     f"{d['levels']:7d} {(d['fights'] + d['rests']) / d['levels']:9.0f} "
                      f"{d['fights'] / d['levels']:10.0f} {d['cycles'] / d['levels']:10.0f}")
 
     if not tl:
@@ -114,15 +134,19 @@ def main() -> int:
         return 2
 
     fight_per_level = tf / tl
+    loop_per_level = (tf + tr) / tl
     total_per_level = tc / tl
     lines += [
         "",
-        f"OBSERVED fight-cycles per character level : {fight_per_level:.0f}   <-- the comparable figure",
-        f"OBSERVED total   cycles per character level: {total_per_level:.0f}   (includes non-combat work)",
+        f"OBSERVED combat-loop (fight+rest) cycles per level: {loop_per_level:.0f}   <-- the comparable figure",
+        f"OBSERVED fight-only cycles per character level    : {fight_per_level:.0f}   (the pre-2026-08-07 figure)",
+        f"OBSERVED total      cycles per character level    : {total_per_level:.0f}   (includes non-combat work)",
+        f"OBSERVED rests per fight                          : "
+        f"{(tr / tf) if tf else 0:.2f}   (the term `cycles_per_kill` adds)",
         "",
-        "A projection denominated in ACTIONS should land near the fight-cycles",
-        f"figure; the acceptance band is [{LOW:g}x, {HIGH:g}x] of {fight_per_level:.0f}, i.e. "
-        f"[{fight_per_level * LOW:.0f}, {fight_per_level * HIGH:.0f}].",
+        "A projection denominated in ACTIONS should land near the combat-loop",
+        f"figure; the acceptance band is [{LOW:g}x, {HIGH:g}x] of {loop_per_level:.0f}, i.e. "
+        f"[{loop_per_level * LOW:.0f}, {loop_per_level * HIGH:.0f}].",
         "",
         "Pre-fix reference: the projection reported 7698 cycles/level for R2D2,",
         f"which is {7698 / fight_per_level:.0f}x the observed fight-cycles figure — the",

@@ -7,15 +7,23 @@ pre-computed Nat `xpPerCycle`, it picks the best beatable monster
 level-by-level. We drive Python WITHOUT observations (empty store)
 and pass Lean the integer `xp_per_kill` values directly.
 
-Both sides now use the SAME numbers: one kill is one cycle
-(`FIGHT_CYCLES_PER_KILL`), so Python's xp-per-cycle IS xp-per-kill and
-no scaling is applied on either side. Until 2026-08-07 Python divided
-by `DEFAULT_FIGHT_CYCLES`, a 30-SECOND cooldown misnamed as a cycle
-count; this diff still passed, because a uniform divisor cannot change
-an argmax — which is exactly why a structural differential could not
-have caught that bug, and why the unit is pinned by
+Both sides use the SAME numbers HERE because every monster in this
+harness is built harmless (see `_make_game_data`), so the per-kill
+divisor `fight_loop_cost.cycles_per_kill` is exactly 1.0 and Python's
+xp-per-cycle is literally xp-per-kill.
+
+Two Python-side divisor bugs bracket this file, and neither was
+catchable here. Until 2026-08-07 Python divided by
+`DEFAULT_FIGHT_CYCLES`, a 30-SECOND cooldown misnamed as a cycle count;
+this diff still passed, because a UNIFORM divisor cannot change an
+argmax. Later the same day the divisor became the real combat loop
+(fight + the rest its damage forces), which is NOT uniform and CAN
+change an argmax — and this diff still cannot see it, because exercising
+it would mean handing the Lean model a float where it takes a Nat. So
+the unit and the per-monster ordering are both pinned by
 `tests/test_ai/test_learning_projections.py` and corroborated against
-live traces by `formal/diff/level_cost_replay.py` instead.
+live traces by `formal/diff/level_cost_replay.py` instead. A structural
+differential is the wrong instrument for a magnitude, twice over.
 
 OUT-OF-SCOPE for this diff (deliberately): the exact float
 `total_cycles` and per-segment `cycles` values. The Lean model uses
@@ -45,6 +53,23 @@ def _make_game_data(monsters: list[tuple[str, int, int]]) -> GameData:
     gd._monster_level = {code: lvl for code, lvl, _ in monsters}
     gd._monster_hp = {code: hp for code, _, hp in monsters}
     gd._monster_type = {code: "normal" for code, _, _ in monsters}
+    # HARMLESS monsters: empty attack/resistance and zero crit, so
+    # `expected_damage_per_fight` is 0 and `fight_loop_cost.cycles_per_kill` is
+    # exactly 1.0 for every monster here. That is what keeps this differential
+    # INTEGER and structural after the 2026-08-07 whole-loop change: with a
+    # uniform divisor of 1, Python's xp-per-cycle is still literally xp-per-kill,
+    # which is what the harness hands the Lean model.
+    #
+    # The rest term is therefore NOT exercised here, deliberately and in the same
+    # spirit as the float `total_cycles` carve-out below — a per-monster divisor
+    # would make the value passed to Lean a float, and rounding it to the Nat the
+    # model takes could flip an argmax the two sides then disagree on for reasons
+    # of rounding rather than logic. The property this diff cannot cover — that a
+    # bloodier monster loses the argmax to a gentler one — is pinned directly by
+    # `tests/test_ai/test_learning_projections.py`.
+    gd._monster_attack = {code: {} for code, _, _ in monsters}
+    gd._monster_resistance = {code: {} for code, _, _ in monsters}
+    gd._monster_critical_strike = {code: 0 for code, _, _ in monsters}
     return gd
 
 

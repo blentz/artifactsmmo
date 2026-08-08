@@ -25,6 +25,26 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
 
 
+def _harmless(gd: GameData) -> GameData:
+    """Give every monster already in `gd` empty attack/resistance and zero crit.
+
+    `cheapest_path_to_level` charges each kill the Rest its damage forces
+    (`fight_loop_cost.cycles_per_kill`), so it now reads the monster's combat
+    stats. Zero damage means a divisor of exactly 1.0, which keeps the cases
+    below pinning xp-per-kill arithmetic and monster SELECTION alone — the damage
+    term has its own tests rather than perturbing every existing expectation."""
+    codes = list(gd.monster_levels)
+    gd._monster_attack = {code: {} for code in codes}
+    gd._monster_resistance = {code: {} for code in codes}
+    gd._monster_critical_strike = dict.fromkeys(codes, 0)
+    # HP only where a case has not already set its own — several pin xp-per-kill,
+    # which reads it. The value is irrelevant to the damage term (empty attack
+    # already forces 0), it just has to exist.
+    existing = dict(getattr(gd.monsters, "hp", None) or {})
+    gd._monster_hp = {code: existing.get(code, 1) for code in codes}
+    return gd
+
+
 def _make_cycle(
     cycle_index: int,
     selected_goal: str,
@@ -275,9 +295,12 @@ class TestProjectTaskCompletion:
 
 class TestCheapestPathToLevel:
     def _gd_with_monsters(self, monsters: dict[str, int]) -> GameData:
+        """Monsters that deal NO damage, so `cycles_per_kill` is exactly 1.0 and
+        these cases keep pinning xp-per-kill arithmetic alone. Damage is given
+        its own tests below (`test_bloodier_monster_loses_the_argmax`)."""
         gd = GameData()
         gd._monster_level = monsters
-        return gd
+        return _harmless(gd)
 
     def test_returns_empty_path_when_already_at_target(self, monkeypatch, tmp_path):
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
@@ -336,6 +359,64 @@ class TestCheapestPathToLevel:
         assert plan.total_cycles == pytest.approx(100 / xp_per_kill)
         # ...and emphatically NOT the seconds-scaled figure the old code gave.
         assert plan.total_cycles < 100 / xp_per_kill * 2
+
+    def _bloody(self, gd: GameData, code: str, attack: dict[str, int]) -> GameData:
+        """Give one monster real attack, so it forces a Rest per kill."""
+        gd._monster_attack = {**dict(gd.monsters.attack), code: attack}
+        return gd
+
+    def test_bloodier_monster_loses_the_argmax(self, monkeypatch, tmp_path):
+        """THE PER-MONSTER DIVISOR, pinned where the differential cannot see it.
+
+        `cheapest_path_to_level` charged every kill exactly one cycle until
+        2026-08-07, so a monster that costs a Rest every kill ranked identically
+        to one that costs none. Measured that day, every character ran ~1 Rest per
+        Fight, i.e. the fight action was only ~51% of the loop.
+
+        A UNIFORM divisor could never change this argmax, which is why
+        `formal/diff/test_cheapest_path_diff.py` (structural, and deliberately
+        built with harmless monsters) cannot pin it. This one is per-monster: the
+        bloody monster here has a STRICTLY HIGHER xp-per-kill and must still lose,
+        because it only delivers that xp every two cycles."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd_with_monsters({"bruiser": 4, "pushover": 3})
+        gd._monster_hp = {"bruiser": 120, "pushover": 60}
+        gd._monster_type = {"bruiser": "normal", "pushover": "normal"}
+        state = make_state(level=3, xp=0, max_xp=100, attack={"earth": 40})
+        self._bloody(gd, "bruiser", {"earth": 500})
+
+        # 31 xp/kill against 22 — but the bruiser only delivers its 31 every TWO
+        # cycles (15.5/cycle), so the gentler monster wins on throughput. Pinned
+        # as an assertion so a catalogue change that closes the per-kill gap
+        # breaks this loudly instead of making it vacuous.
+        assert (gd.xp_per_kill("bruiser", 3, wisdom=state.wisdom)
+                > gd.xp_per_kill("pushover", 3, wisdom=state.wisdom)), (
+            "fixture drift: the bloody monster must be the better one PER KILL, "
+            "or this proves nothing about the divisor"
+        )
+        plan = cheapest_path_to_level(4, state, store, gd)
+        store.close()
+        assert plan.segments[0].monster_code == "pushover"
+        assert plan.segments[0].cycles_per_kill == 1.0
+
+    def test_forced_rest_doubles_the_projected_cost(self, monkeypatch, tmp_path):
+        """The magnitude, not just the ordering: a monster whose damage exceeds
+        the usable HP band costs two cycles per kill, so the level costs twice
+        what the bare fight count says."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd_with_monsters({"chicken": 1})
+        gd._monster_hp = {"chicken": 60}
+        gd._monster_type = {"chicken": "normal"}
+        state = make_state(level=1, xp=0, max_xp=100, attack={"earth": 40})
+        self._bloody(gd, "chicken", {"earth": 500})
+        plan = cheapest_path_to_level(2, state, store, gd)
+        store.close()
+
+        xp_per_kill = gd.xp_per_kill("chicken", 1, wisdom=state.wisdom)
+        assert plan.segments[0].cycles_per_kill == 2.0
+        assert plan.total_cycles == pytest.approx(100 / xp_per_kill * 2)
 
     def test_observed_and_formula_branches_share_one_unit(self, monkeypatch, tmp_path):
         """Both arms of the per-monster loop must yield xp per CYCLE.
@@ -465,6 +546,7 @@ class TestPathSuccessRateFilter:
 
         gd = GameData()
         gd._monster_level = {"chicken": 1, "yellow_slime": 2}
+        _harmless(gd)
         state = make_state(level=1, xp=0, max_xp=100)
 
         plan = cheapest_path_to_level(2, state, store, gd)
@@ -481,6 +563,7 @@ class TestIsWinnableFilter:
         # says only green_slime is winnable → path picks green_slime despite cow's XP.
         gd = GameData()
         gd._monster_level = {"cow": 8, "green_slime": 4}
+        _harmless(gd)
         monkeypatch.setattr(proj, "is_winnable",
                             lambda s, g, code, h: code == "green_slime")
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="r")
@@ -493,6 +576,7 @@ class TestIsWinnableFilter:
     def test_blocked_when_nothing_winnable(self, monkeypatch, tmp_path):
         gd = GameData()
         gd._monster_level = {"cow": 8}
+        _harmless(gd)
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: False)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="r")
         state = make_state(level=8, xp=0, max_xp=100)
@@ -507,6 +591,7 @@ class TestIsWinnableFilter:
         # lower monster than the bot (which rests first) actually grinds.
         gd = GameData()
         gd._monster_level = {"green_slime": 4}
+        _harmless(gd)
         # winnable ONLY at full hp — proves the projection passes the rested state.
         monkeypatch.setattr(proj, "is_winnable",
                             lambda s, g, code, h: s.hp == s.max_hp)
@@ -522,6 +607,7 @@ class TestIsWinnableFilter:
         # is_winnable, so the runtime cascade returns the SAME monster.
         gd = GameData()
         gd._monster_level = {"cow": 8, "green_slime": 4}
+        _harmless(gd)
         monkeypatch.setattr(proj, "is_winnable",
                             lambda s, g, code, h: code == "green_slime")
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="r")

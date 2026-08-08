@@ -15,11 +15,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, col, select
 
 from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.cycles_for_progress_core import (
     CycleRow,
     cycles_for_progress_pure,
 )
+from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.low_yield_boundary import low_yield_fires_pure
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -225,8 +227,10 @@ def cheapest_path_to_level(
     observations.
 
     The returned `total_cycles` is denominated in CYCLES — planner actions —
-    and is directly comparable to the fight-cycles-per-level a trace shows
-    (`formal/diff/level_cost_replay.py` corroborates it).
+    and counts the WHOLE combat loop: the Fight plus the Rest its damage forces
+    (`fight_loop_cost.cycles_per_kill`). It is therefore comparable to the TOTAL
+    cycles per level a trace shows, not the fight-cycles-per-level it used to
+    match (`formal/diff/level_cost_replay.py` corroborates it).
 
     Returns a PathPlan with `blocked=True` and `total_cycles=inf` when no
     beatable monster exists at some intermediate level.
@@ -270,11 +274,26 @@ def cheapest_path_to_level(
 
         best_code: str | None = None
         best_xp_per_cycle = 0.0
+        best_cycles_per_kill = FIGHT_CYCLES_PER_KILL
         for code, _lvl in beatable:
             observed = expected_yield_per_cycle(f"FarmMonster({code})", store)
+            # Cycles ONE kill of this monster really costs: the Fight plus the Rest
+            # its damage forces. Per-monster, not a constant, because that is the
+            # whole point — a monster that bleeds the character dry costs a rest
+            # every kill while a harmless one chains, and the argmax below has to
+            # see the difference or it will pick the fight with the best headline
+            # xp and the worst real throughput.
+            #
+            # `rested` (not `state`) is the judging state, matching the `is_winnable`
+            # filter above: both ask what happens starting from full HP, which is
+            # what the runtime does (the planner inserts a Rest before FightAction).
+            monster_cycles = cycles_per_kill(
+                expected_damage_per_fight(rested, game_data, code), rested.max_hp)
             if observed.sample_count > 0 and observed.char_xp > 0:
-                # Already per-CYCLE (see `expected_yield_per_cycle`: "average
-                # per-cycle reward").
+                # Already per-CYCLE, and per REAL cycle: `expected_yield_per_cycle`
+                # averages over every cycle the goal was selected, Rests included.
+                # So it must NOT be divided again — it is already whole-loop, which
+                # is exactly the unit the formula branch below is converted into.
                 xp_per_cycle = observed.char_xp
             else:
                 # Documented formula: exact XP per kill, and one kill is one
@@ -287,10 +306,20 @@ def cheapest_path_to_level(
                 # outranked any monster without by roughly the cooldown factor
                 # (~29x), whatever their real merit. Both branches now yield the
                 # same unit, which is what makes this argmax meaningful at all.
-                xp_per_cycle = game_data.xp_per_kill(code, sim_level, wisdom=wisdom)
+                #
+                # Divided by the kill's REAL cycle cost. Per-kill was treated as
+                # per-cycle until 2026-08-07 on the grounds that "one kill is one
+                # cycle" — true of the Fight action alone, and false of the loop:
+                # measured over that day's traces every character ran ~1 Rest per
+                # Fight (C3P0 22/21, Lor 31/29, Robby 4/4), so fight actions were
+                # ~51% of the cycles the grind actually spent. See
+                # `fight_loop_cost.rest_cycles_per_fight`.
+                xp_per_cycle = (game_data.xp_per_kill(code, sim_level, wisdom=wisdom)
+                                / monster_cycles)
             if xp_per_cycle > best_xp_per_cycle:
                 best_code = code
                 best_xp_per_cycle = xp_per_cycle
+                best_cycles_per_kill = monster_cycles
 
         if best_code is None or best_xp_per_cycle <= 0:
             return PathPlan(target_level=target_level, total_cycles=float("inf"),
@@ -303,7 +332,7 @@ def cheapest_path_to_level(
             monster_code=best_code,
             estimated_cycles=cycles_for_this_level,
             xp_per_cycle=best_xp_per_cycle,
-            cycles_per_kill=FIGHT_CYCLES_PER_KILL,
+            cycles_per_kill=best_cycles_per_kill,
         ))
         sim_level += 1
         xp_to_next = max(1, state.max_xp)
