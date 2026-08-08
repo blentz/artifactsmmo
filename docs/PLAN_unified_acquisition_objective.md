@@ -9,14 +9,34 @@ Written 2026-08-08 against local `main` @ `5a2d1b8d`.
 | 0 — pin the defect | **DONE**, gate green | `ae96f25f` |
 | 1 — cost core (AND/OR walk, six routes) | **DONE, INERT**, gate green | `384a46d3` |
 | 1 — pricer over `obtain_sources` | **DONE, INERT**, gate green | `f1ee73c6` |
-| 1b — `skill_grind_cycles` pure core | **DONE, NOT WIRED** | `ce49405f` |
-| 1b — gated-craft route in the pricer | next | — |
-| 2 — switch `J`'s `acquire_cost` | blocked on 1b | — |
+| 1b — `skill_grind_cycles` pure core | **DONE** | `ce49405f` |
+| 1b — gated-craft route in the pricer | **DONE, INERT** | `cfcd8596` |
+| 2 — switch `J`'s `acquire_cost` | **UNBLOCKED — next** | — |
 | 3 — project every stat | not started | — |
 | 4 — prospecting through the drop cost | not started | — |
 | 5 — retire `bid_vs_craft`'s duplicate | not started | — |
 
-### THE BLOCKER, measured — read this before wiring anything
+### The blocker is CLEARED — what increment 2 must now check
+
+`cfcd8596` prices the skill gate, so `iron_sword` at weaponcrafting 5 costs the
+grind plus the chain rather than reading as unobtainable. Switching `J` is
+therefore possible; what remains is to establish it is *safe*, and the honest
+list of what could still go wrong is short and specific:
+
+1. **`store=None` callers.** Every existing caller keeps today's behaviour
+   because `store` defaults to None — which also means a caller that forgets to
+   thread the store gets the WALL back, silently. `J`'s switch must pass it, and
+   a test must fail if it stops.
+2. **The unobtainable bound is an over-estimate risk.** Every route being
+   state-aware means a candidate can price at `UNOBTAINABLE_PER_UNIT` this cycle
+   and finitely the next. `J` compares candidates *within* one cycle, so this is
+   sound there — but the ranking will be visibly jumpy across cycles, and that
+   must not be mistaken for a bug when the trace is read.
+3. **No live-run verification exists for any of this.** Green tests are not
+   runtime activation. The switch needs a real `plan <char>` showing a changed
+   `acquire_cost` in the descent.
+
+### THE ORIGINAL BLOCKER, measured — kept for the record
 
 The pricer works, and running it against the old model on
 `l12_deep_chain_grind` says **do not switch `J` yet**:
