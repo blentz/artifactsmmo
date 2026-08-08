@@ -8,6 +8,7 @@ from sqlmodel import Session
 
 import artifactsmmo_cli.ai.learning.projections as proj
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.projections import (
@@ -103,9 +104,9 @@ class TestParseHelpers:
         """Lines 79: valid JSON but non-dict (e.g. list) → returns {}."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         _populate(store, [
-            _make_cycle(i, "FarmItems", delta_skill_xp_json="[1, 2]") for i in range(3)
+            _make_cycle(i, "PursueTask(x)", delta_skill_xp_json="[1, 2]") for i in range(3)
         ])
-        y = expected_yield_per_cycle("FarmItems", store)
+        y = expected_yield_per_cycle("PursueTask(x)", store)
         store.close()
         assert y.skill_xp == {}
 
@@ -113,9 +114,9 @@ class TestParseHelpers:
         """Lines 81-82: invalid JSON in delta_skill_xp_json → swallowed → empty."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         _populate(store, [
-            _make_cycle(i, "FarmItems", delta_skill_xp_json="{broken") for i in range(3)
+            _make_cycle(i, "PursueTask(x)", delta_skill_xp_json="{broken") for i in range(3)
         ])
-        y = expected_yield_per_cycle("FarmItems", store)
+        y = expected_yield_per_cycle("PursueTask(x)", store)
         store.close()
         assert y.skill_xp == {}
 
@@ -153,7 +154,7 @@ class TestYieldType:
 class TestExpectedYieldPerCycle:
     def test_empty_store_returns_empty_yield(self, tmp_path):
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-        y = expected_yield_per_cycle("FarmItems", store)
+        y = expected_yield_per_cycle("PursueTask(x)", store)
         store.close()
         assert y.sample_count == 0
         assert y.char_xp == 0.0
@@ -161,9 +162,9 @@ class TestExpectedYieldPerCycle:
     def test_aggregates_char_xp_and_gold(self, tmp_path):
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         _populate(store, [
-            _make_cycle(i, "FarmItems", delta_xp=10, delta_gold=2) for i in range(5)
+            _make_cycle(i, "PursueTask(x)", delta_xp=10, delta_gold=2) for i in range(5)
         ])
-        y = expected_yield_per_cycle("FarmItems", store)
+        y = expected_yield_per_cycle("PursueTask(x)", store)
         store.close()
         assert y.sample_count == 5
         assert y.char_xp == 10.0
@@ -172,11 +173,11 @@ class TestExpectedYieldPerCycle:
     def test_aggregates_skill_xp_from_json(self, tmp_path):
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         _populate(store, [
-            _make_cycle(i, "FarmItems",
+            _make_cycle(i, "PursueTask(x)",
                         delta_skill_xp_json=json.dumps({"woodcutting": 4}))
             for i in range(4)
         ])
-        y = expected_yield_per_cycle("FarmItems", store)
+        y = expected_yield_per_cycle("PursueTask(x)", store)
         store.close()
         assert y.skill_xp == {"woodcutting": 4.0}
 
@@ -197,11 +198,11 @@ class TestExpectedYieldPerCycle:
     def test_ignores_other_goals(self, tmp_path):
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         _populate(store, [
-            _make_cycle(0, "FarmItems", delta_xp=10),
+            _make_cycle(0, "PursueTask(x)", delta_xp=10),
             _make_cycle(1, "FarmMonster", delta_xp=100),
-            _make_cycle(2, "FarmItems", delta_xp=10),
+            _make_cycle(2, "PursueTask(x)", delta_xp=10),
         ])
-        y = expected_yield_per_cycle("FarmItems", store)
+        y = expected_yield_per_cycle("PursueTask(x)", store)
         store.close()
         assert y.sample_count == 2
         assert y.char_xp == 10.0
@@ -211,10 +212,10 @@ class TestCyclesForProgress:
     def test_returns_none_below_warmup(self, tmp_path):
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         _populate(store, [
-            _make_cycle(0, "FarmItems", task_progress=0),
-            _make_cycle(1, "FarmItems", task_progress=1),
+            _make_cycle(0, "PursueTask(x)", task_progress=0),
+            _make_cycle(1, "PursueTask(x)", task_progress=1),
         ])
-        assert cycles_for_progress("FarmItems", store) is None
+        assert cycles_for_progress("PursueTask(x)", store) is None
         store.close()
 
     def test_median_progress_interval(self, tmp_path):
@@ -225,9 +226,9 @@ class TestCyclesForProgress:
         cycles = []
         for i in range((WARMUP_MIN_SAMPLES + 2) * 5):
             tp = i // 5
-            cycles.append(_make_cycle(i, "FarmItems", task_progress=tp))
+            cycles.append(_make_cycle(i, "PursueTask(x)", task_progress=tp))
         _populate(store, cycles)
-        result = cycles_for_progress("FarmItems", store)
+        result = cycles_for_progress("PursueTask(x)", store)
         store.close()
         assert result is not None
         assert 4.0 <= result <= 6.0
@@ -281,7 +282,7 @@ class TestProjectTaskCompletion:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         # 15 cycles → confidence = 15 / (10*3) = 0.5
         _populate(store, [
-            _make_cycle(i, "FarmItems", delta_xp=5, delta_gold=1, task_progress=i)
+            _make_cycle(i, "PursueTask(x)", delta_xp=5, delta_gold=1, task_progress=i)
             for i in range(15)
         ])
         state = make_state(task_code="x", task_type="items",
@@ -430,7 +431,7 @@ class TestCheapestPathToLevel:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         # chicken is OBSERVED but feeble: 2 char-xp per cycle.
         _populate(store, [
-            _make_cycle(i, "FarmMonster(chicken)", delta_xp=2) for i in range(5)
+            _make_cycle(i, "GrindCharacterXP(chicken)", delta_xp=2) for i in range(5)
         ])
         gd = self._gd_with_monsters({"chicken": 1, "cow": 1})
         gd._monster_hp = {"chicken": 60, "cow": 60}
@@ -450,7 +451,7 @@ class TestCheapestPathToLevel:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         # Seed 5 FarmMonster(chicken) cycles at 20 char-xp each
         _populate(store, [
-            _make_cycle(i, "FarmMonster(chicken)", delta_xp=20) for i in range(5)
+            _make_cycle(i, "GrindCharacterXP(chicken)", delta_xp=20) for i in range(5)
         ])
         gd = self._gd_with_monsters({"chicken": 1})
         state = make_state(level=1, xp=0, max_xp=100)
@@ -477,8 +478,8 @@ class TestCheapestPathToLevel:
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         _populate(store, (
-            [_make_cycle(i, "FarmMonster(chicken)", delta_xp=2) for i in range(5)] +
-            [_make_cycle(5 + i, "FarmMonster(yellow_slime)", delta_xp=15) for i in range(5)]
+            [_make_cycle(i, "GrindCharacterXP(chicken)", delta_xp=2) for i in range(5)] +
+            [_make_cycle(5 + i, "GrindCharacterXP(yellow_slime)", delta_xp=15) for i in range(5)]
         ))
         gd = self._gd_with_monsters({"chicken": 1, "yellow_slime": 2})
         state = make_state(level=1, xp=0, max_xp=100)
@@ -618,6 +619,77 @@ class TestIsWinnableFilter:
         assert proj.is_winnable(state, gd, nxt, store) is True
 
 
+class TestTaskPursuitYield:
+    """The `FarmItems` replacement: task-pursuit yield pooled by taskmaster."""
+
+    def _gd(self) -> GameData:
+        gd = GameData()
+        gd._item_stats = {
+            "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
+                                   crafting_skill="woodcutting", crafting_level=1),
+            "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
+            "wolf_hair": ItemStats(code="wolf_hair", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {"ash_plank": {"ash_wood": 1}}
+        gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._resource_drops_full = {"ash_tree": [("ash_wood", 100, 1, 1)]}
+        gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+        return gd
+
+    def test_pools_every_task_in_the_same_taskmaster(self, tmp_path):
+        """Two different item tasks pool into one rate, weighted by their own
+        sample counts — a mean over the union, NOT a mean of means, or a 1-cycle
+        task would outvote a 9-cycle one."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        _populate(store, (
+            [_make_cycle(i, "PursueTask(ash_plank)", delta_xp=10) for i in range(9)]
+            + [_make_cycle(20, "PursueTask(ash_wood)", delta_xp=0)]
+        ))
+        y = proj.task_pursuit_yield("ash_plank", self._gd(), store)
+        store.close()
+        assert y.sample_count == 10
+        assert y.char_xp == pytest.approx(90 / 10)
+
+    def test_excludes_the_other_taskmaster(self, tmp_path):
+        """A drop-only task belongs to the MONSTERS master and must not dilute
+        the items rate."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        _populate(store, (
+            [_make_cycle(i, "PursueTask(ash_plank)", delta_xp=10) for i in range(5)]
+            + [_make_cycle(10 + i, "PursueTask(wolf_hair)", delta_xp=100) for i in range(5)]
+        ))
+        gd = self._gd()
+        items = proj.task_pursuit_yield("ash_plank", gd, store)
+        monsters = proj.task_pursuit_yield("wolf_hair", gd, store)
+        store.close()
+        assert items.sample_count == 5
+        assert items.char_xp == pytest.approx(10)
+        assert monsters.sample_count == 5
+        assert monsters.char_xp == pytest.approx(100)
+
+    def test_pools_skill_xp_too(self, tmp_path):
+        """Skill XP is pooled on the same weighted basis as char XP."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        _populate(store, [
+            _make_cycle(i, "PursueTask(ash_plank)", delta_xp=1,
+                        delta_skill_xp_json=json.dumps({"woodcutting": 6}))
+            for i in range(4)
+        ])
+        y = proj.task_pursuit_yield("ash_plank", self._gd(), store)
+        store.close()
+        assert y.skill_xp == {"woodcutting": pytest.approx(6.0)}
+
+    def test_no_task_history_is_a_cold_start(self, tmp_path):
+        """Every live character today: 0 task-goal cycles. The guard must read
+        this as 'no comparison possible', not as a zero rate."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        _populate(store, [_make_cycle(i, "GrindCharacterXP(chicken)", delta_xp=5)
+                          for i in range(5)])
+        y = proj.task_pursuit_yield("ash_plank", self._gd(), store)
+        store.close()
+        assert y.sample_count == 0
+
+
 class TestLowYieldCancelFires:
     """Unit tests for the shared low_yield_cancel_fires predicate."""
 
@@ -683,8 +755,8 @@ class TestLowYieldCancelFires:
     def test_zero_char_xp_fires_immediately(self, tmp_path):
         """FarmItems 0 xp/cycle + FarmMonster positive → fires without confidence gate."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-        cycles = [self._cycle(i, "FarmItems", delta_xp=0, task_progress=i) for i in range(5)]
-        cycles += [self._cycle(5 + i, "FarmMonster(slime)", delta_xp=15) for i in range(3)]
+        cycles = [self._cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
+        cycles += [self._cycle(5 + i, "GrindCharacterXP(slime)", delta_xp=15) for i in range(3)]
         self._seed(store, cycles)
         state = make_state(task_code="gudgeon", task_total=347, task_progress=5)
         assert low_yield_cancel_fires(state, self._gd(), store) is True
@@ -693,7 +765,7 @@ class TestLowYieldCancelFires:
     def test_no_fire_when_no_farmitems_history(self, tmp_path):
         """FarmMonster data but no FarmItems samples → cannot determine current rate."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-        cycles = [self._cycle(i, "FarmMonster(slime)", delta_xp=15) for i in range(5)]
+        cycles = [self._cycle(i, "GrindCharacterXP(slime)", delta_xp=15) for i in range(5)]
         self._seed(store, cycles)
         state = make_state(task_code="gudgeon", task_total=50, task_progress=5)
         assert low_yield_cancel_fires(state, self._gd(), store) is False
@@ -702,7 +774,7 @@ class TestLowYieldCancelFires:
     def test_no_fire_when_no_alternative_history(self, tmp_path):
         """FarmItems data but no FarmMonster cycles → no alternative repr."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-        cycles = [self._cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(35)]
+        cycles = [self._cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(35)]
         self._seed(store, cycles)
         state = make_state(task_code="x", task_total=50, task_progress=10)
         assert low_yield_cancel_fires(state, self._gd(), store) is False
@@ -712,8 +784,8 @@ class TestLowYieldCancelFires:
         """FarmItems 1 xp, FarmMonster 5 xp → 5x margin, sufficient confidence → fires."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         cycles = (
-            [self._cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(35)] +
-            [self._cycle(35 + i, "FarmMonster(chicken)", delta_xp=5) for i in range(35)]
+            [self._cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(35)] +
+            [self._cycle(35 + i, "GrindCharacterXP(chicken)", delta_xp=5) for i in range(35)]
         )
         self._seed(store, cycles)
         state = make_state(task_code="x", task_total=50, task_progress=10)
@@ -724,8 +796,8 @@ class TestLowYieldCancelFires:
         """3 FarmItems samples → confidence 0.1 < 0.5 → no fire on positive path."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         cycles = (
-            [self._cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(3)] +
-            [self._cycle(3 + i, "FarmMonster(chicken)", delta_xp=5) for i in range(3)]
+            [self._cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(3)] +
+            [self._cycle(3 + i, "GrindCharacterXP(chicken)", delta_xp=5) for i in range(3)]
         )
         self._seed(store, cycles)
         state = make_state(task_code="x", task_total=50, task_progress=3)
@@ -736,9 +808,9 @@ class TestLowYieldCancelFires:
         """Alt 1.2x better but below 1.5 margin → no fire."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         cycles = (
-            [self._cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(30)] +
-            [self._cycle(30 + i, "FarmMonster(chicken)", delta_xp=1) for i in range(30)] +
-            [self._cycle(60 + i, "FarmMonster(chicken)", delta_xp=2) for i in range(6)]
+            [self._cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(30)] +
+            [self._cycle(30 + i, "GrindCharacterXP(chicken)", delta_xp=1) for i in range(30)] +
+            [self._cycle(60 + i, "GrindCharacterXP(chicken)", delta_xp=2) for i in range(6)]
         )
         self._seed(store, cycles)
         state = make_state(task_code="x", task_total=50, task_progress=10)
@@ -749,11 +821,11 @@ class TestLowYieldCancelFires:
         """Line 378: _best_alternative_repr returns a repr but expected_yield_per_cycle
         finds zero samples for it → returns False without firing."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-        cycles = [self._cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(5)]
+        cycles = [self._cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(5)]
         self._seed(store, cycles)
         # Return a repr that has no cycles in the store for this character.
         monkeypatch.setattr(proj, "_best_alternative_repr",
-                            lambda h: "FarmMonster(ghost_that_does_not_exist)")
+                            lambda h: "GrindCharacterXP(ghost_that_does_not_exist)")
         state = make_state(task_code="x", task_total=50, task_progress=5)
         assert low_yield_cancel_fires(state, self._gd(), store) is False
         store.close()

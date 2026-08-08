@@ -25,6 +25,13 @@ from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.low_yield_boundary import low_yield_fires_pure
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.learning.yield_reprs import (
+    TASK_PURSUIT_PREFIX,
+    grind_xp_repr,
+    grind_xp_repr_prefix,
+    task_pursuit_reprs_for,
+    taskmaster_for_item,
+)
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 WARMUP_MIN_SAMPLES = 10
@@ -276,7 +283,7 @@ def cheapest_path_to_level(
         best_xp_per_cycle = 0.0
         best_cycles_per_kill = FIGHT_CYCLES_PER_KILL
         for code, _lvl in beatable:
-            observed = expected_yield_per_cycle(f"FarmMonster({code})", store)
+            observed = expected_yield_per_cycle(grind_xp_repr(code), store)
             # Cycles ONE kill of this monster really costs: the Fight plus the Rest
             # its damage forces. Per-monster, not a constant, because that is the
             # whole point — a monster that bleeds the character dry costs a rest
@@ -359,10 +366,18 @@ def project_task_completion(
     remaining_progress = state.task_total - state.task_progress
 
     # Use the per-progress-event cadence; fall back to a conservative default.
-    cycles_per_progress = cycles_for_progress("FarmItems", store) or 15.0
+    #
+    # Both aggregates read `"FarmItems"` until 2026-08-07 — a goal deleted on
+    # 2026-05-24 with 0 of 22302 live cycles matching — so `cycles_per_progress`
+    # always took the 15.0 fallback and `farm_yield` was always empty, pinning
+    # `confidence` at 0.0. That in turn made `low_yield_cancel_fires`' confidence
+    # gate unsatisfiable, a second independent reason the guard could never fire.
+    busiest = busiest_task_pursuit_repr(state.task_code, game_data, store)
+    cycles_per_progress = (
+        (cycles_for_progress(busiest, store) if busiest is not None else None) or 15.0)
     cycles_remaining = remaining_progress * cycles_per_progress
 
-    farm_yield = expected_yield_per_cycle("FarmItems", store)
+    farm_yield = task_pursuit_yield(state.task_code, game_data, store)
 
     # Confidence ramps from 0 at zero samples to 1.0 at 3 * WARMUP_MIN_SAMPLES.
     confidence_cap = WARMUP_MIN_SAMPLES * 3
@@ -392,12 +407,16 @@ of the current task's rate. Higher = more conservative cancels."""
 
 
 def _best_alternative_repr(history: LearningStore) -> str | None:
-    """Find the FarmMonster repr with the most observed cycles.
+    """Find the char-XP grind repr with the most observed cycles.
 
-    FarmMonster reprs are per-monster, e.g. "FarmMonster(chicken)". The
+    Grind reprs are per-monster, e.g. "GrindCharacterXP(chicken)". The
     canonical alternative for this comparison is whichever monster the
-    bot has actually been farming.  None rows are skipped; returns None
-    when no FarmMonster cycles exist or on DB error.
+    bot has actually been fighting. None rows are skipped; returns None
+    when no such cycles exist or on DB error.
+
+    Matched `FarmMonster(%` until 2026-08-07, and that goal was deleted on
+    2026-05-24 — so this returned None for every real character, and
+    `low_yield_cancel_fires` (which needs an alternative) could not fire at all.
     """
     try:
         with Session(history._engine) as s:
@@ -405,7 +424,7 @@ def _best_alternative_repr(history: LearningStore) -> str | None:
                 select(Cycle.selected_goal)
                 .where(
                     col(Cycle.character) == history._character,
-                    col(Cycle.selected_goal).like("FarmMonster(%"),
+                    col(Cycle.selected_goal).like(f"{grind_xp_repr_prefix()}%"),
                 )
                 .order_by(col(Cycle.id).desc())
                 .limit(50)
@@ -422,6 +441,97 @@ def _best_alternative_repr(history: LearningStore) -> str | None:
     if not counts:
         return None
     return max(counts, key=lambda k: counts[k])
+
+
+def observed_task_pursuit_reprs(history: LearningStore, window: int = 200) -> list[str]:
+    """Distinct `PursueTask(<code>)` reprs this character has actually recorded.
+
+    Read back out of history rather than enumerated from the catalogue: the point
+    is to group the reprs the WRITER emitted, and only history knows which those
+    were."""
+    try:
+        with Session(history._engine) as s:
+            stmt = (
+                select(Cycle.selected_goal)
+                .where(
+                    col(Cycle.character) == history._character,
+                    col(Cycle.selected_goal).like(f"{TASK_PURSUIT_PREFIX}%"),
+                )
+                .order_by(col(Cycle.id).desc())
+                .limit(window)
+            )
+            rows = list(s.exec(stmt))
+    except SQLAlchemyError:
+        return []
+    seen: list[str] = []
+    for r in rows:
+        if r is not None and r not in seen:
+            seen.append(r)
+    return seen
+
+
+def busiest_task_pursuit_repr(task_code: str, game_data: GameData,
+                              history: LearningStore) -> str | None:
+    """The most-recorded task-pursuit repr in `task_code`'s taskmaster, or None.
+
+    A single repr rather than the pool, because `cycles_for_progress` returns a
+    MEDIAN cadence and medians do not pool — averaging medians across tasks of
+    different lengths would invent a cadence no task ever had. The busiest repr
+    is the same choice `_best_alternative_repr` makes for the monster side."""
+    reprs = task_pursuit_reprs_for(
+        taskmaster_for_item(task_code, game_data),
+        observed_task_pursuit_reprs(history), game_data)
+    if not reprs:
+        return None
+    return max(reprs, key=lambda r: expected_yield_per_cycle(r, history).sample_count)
+
+
+def task_pursuit_yield(task_code: str, game_data: GameData,
+                       history: LearningStore) -> Yield:
+    """Per-cycle yield of pursuing tasks from the master that issues `task_code`'s
+    skill — the current-activity rate `low_yield_cancel_fires` compares against.
+
+    Pools every recorded `PursueTask(<code>)` whose code maps to the same
+    taskmaster, weighting each by its own sample count so the result is a true
+    per-cycle mean over the union and not a mean of means (which would let a
+    3-cycle task outvote a 300-cycle one).
+
+    An empty pool returns an empty `Yield`, i.e. sample_count 0 — a cold start,
+    which the caller already treats as "no comparison possible". That is the
+    honest answer for a character with no task history, and it is the state every
+    character is in today: 0 of 22302 live cycles carry ANY task goal, so this
+    guard stays quiet for a real reason now instead of a broken one."""
+    taskmaster = taskmaster_for_item(task_code, game_data)
+    reprs = task_pursuit_reprs_for(
+        taskmaster, observed_task_pursuit_reprs(history), game_data)
+    total_cycles = 0
+    char_xp_total = 0.0
+    gold_total = 0.0
+    coins_total = 0.0
+    skill_xp_totals: dict[str, float] = {}
+    for goal_repr in reprs:
+        y = expected_yield_per_cycle(goal_repr, history)
+        # No `sample_count == 0` skip: `reprs` are read back out of THIS
+        # character's own history, so every one of them has at least one cycle. A
+        # zero would contribute zero to every total anyway and the
+        # `total_cycles == 0` check below already returns the cold-start Yield —
+        # the guard was redundant, and a line that cannot execute is a line no
+        # test can honestly cover.
+        total_cycles += y.sample_count
+        char_xp_total += y.char_xp * y.sample_count
+        gold_total += y.gold * y.sample_count
+        coins_total += y.tasks_coins * y.sample_count
+        for skill, rate in y.skill_xp.items():
+            skill_xp_totals[skill] = skill_xp_totals.get(skill, 0.0) + rate * y.sample_count
+    if total_cycles == 0:
+        return Yield()
+    return Yield(
+        char_xp=char_xp_total / total_cycles,
+        skill_xp={s: t / total_cycles for s, t in skill_xp_totals.items() if t != 0},
+        gold=gold_total / total_cycles,
+        tasks_coins=coins_total / total_cycles,
+        sample_count=total_cycles,
+    )
 
 
 def low_yield_cancel_fires(
@@ -444,7 +554,13 @@ def low_yield_cancel_fires(
     if history is None or not state.task_code or state.task_total <= 0:
         return False
 
-    farm_items_yield = expected_yield_per_cycle("FarmItems", history)
+    # The CURRENT activity's rate: task pursuit, pooled over the taskmaster that
+    # issues tasks for the held item's skill (`yield_reprs.task_pursuit_reprs_for`).
+    #
+    # Was `expected_yield_per_cycle("FarmItems", ...)`, whose goal was deleted on
+    # 2026-05-24 — 0 of 22302 live cycles matched, so this returned early every
+    # single time and the guard was unreachable rather than merely quiet.
+    farm_items_yield = task_pursuit_yield(state.task_code, game_data, history)
     if farm_items_yield.sample_count == 0:
         return False
     current_char_xp_per_cycle = farm_items_yield.char_xp

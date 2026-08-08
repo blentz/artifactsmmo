@@ -1574,7 +1574,7 @@ def test_maintain_consumables_near_miss_no_combat() -> None:
 # `drive_and_contest(history=...)`; taskCancel/pursueTask take an essentially
 # EMPTY store (their PIVOT/PURSUE verdicts short-circuit before reading
 # aggregates), lowYieldCancel takes a POPULATED one (its zero-fast-path reads
-# FarmItems + FarmMonster yield rows).
+# task-pursuit + char-XP-grind yield rows).
 # ===========================================================================
 
 
@@ -1592,16 +1592,23 @@ def _yield_history(
     farm_items_xp: int,
     farm_monster_xp: int,
     *,
-    monster_repr: str = "FarmMonster(chicken)",
+    monster_repr: str = "GrindCharacterXP(chicken)",
 ) -> LearningStore:
     """A POPULATED in-memory LearningStore for the lowYieldCancel path.
 
-    Records one `FarmItems` cycle yielding `farm_items_xp` char-XP and one
-    `monster_repr` cycle yielding `farm_monster_xp` char-XP. `low_yield_cancel_fires`
-    reads `expected_yield_per_cycle("FarmItems", ...).char_xp` (the FarmItems
-    `delta_xp` mean) and the best-FarmMonster alternative's `char_xp`; with
-    FarmItems=0 and a positive monster the zero-fast-path
+    Records one `PursueTask(x)` cycle yielding `farm_items_xp` char-XP and one
+    `monster_repr` cycle yielding `farm_monster_xp` char-XP.
+    `low_yield_cancel_fires` reads the task-pursuit pool for the held item's
+    taskmaster (`yield_reprs.task_pursuit_reprs_for`) as the current rate, and
+    the busiest `GrindCharacterXP(...)` as the alternative; with the current
+    rate 0 and a positive alternative the zero-fast-path
     (`current_xp == 0 ∧ alt_xp > 0`) fires regardless of confidence.
+
+    These reprs were `FarmItems` / `FarmMonster(...)` until 2026-08-07 — goals
+    deleted on 2026-05-24, matching 0 of 22302 live cycles. This differential
+    stayed GREEN throughout, because it synthesises the rows it then reads: it
+    pinned production against the Lean model faithfully, on a repr production
+    could never actually see.
 
     Cycle requires `ts`, `cycle_index`, `outcome` (session_id/character are
     stamped by `record_cycle`); `selected_goal` + `delta_xp` are what the
@@ -1610,7 +1617,7 @@ def _yield_history(
     store.start_session()
     store.record_cycle(Cycle(
         ts="2026-06-18T00:00:00+00:00", cycle_index=0, outcome="ok",
-        selected_goal="FarmItems", delta_xp=farm_items_xp))
+        selected_goal="PursueTask(x)", delta_xp=farm_items_xp))
     store.record_cycle(Cycle(
         ts="2026-06-18T00:00:01+00:00", cycle_index=1, outcome="ok",
         selected_goal=monster_repr, delta_xp=farm_monster_xp))
@@ -1683,7 +1690,7 @@ def test_task_cancel_drives_and_selects() -> None:
     assert prod[LadderMeans.TASK_CANCEL] is True
     assert lean[LadderMeans.TASK_CANCEL] is True
     # lowYieldCancel (idx 12, above) is quiet on both sides (accepted phase /
-    # empty FarmItems history).
+    # empty task-pursuit history).
     assert prod[LadderMeans.LOW_YIELD_CANCEL] is False
     assert lean[LadderMeans.LOW_YIELD_CANCEL] is False
     # Strong selection teeth: taskCancel wins on both ladders.
@@ -1835,10 +1842,10 @@ def test_pursue_task_near_miss_too_hard() -> None:
 # ---------------------------------------------------------------------------
 # Slot 3 — lowYieldCancel (Lean idx 12).  Production `low_yield_cancel_fires`
 # (projections.py ~365 + low_yield_boundary.py): a held task (task_code set,
-# task_total>0), FarmItems yield with sample_count>0, a best-alternative
-# FarmMonster with sample_count>0, and the zero-fast-path
+# task_total>0), task-pursuit yield with sample_count>0, a best-alternative
+# GrindCharacterXP with sample_count>0, and the zero-fast-path
 # (`current_xp == 0 ∧ alt_xp > 0`). The POPULATED store from `_yield_history`
-# supplies a FarmItems cycle yielding 0 char-XP and a FarmMonster cycle yielding
+# supplies a task-pursuit cycle yielding 0 char-XP and a grind cycle yielding
 # positive char-XP, so the zero-fast-path fires.
 #
 # Lean `lowYieldCancelFires` (ProductionLadder.lean ~205): phase==inProgress
@@ -1863,7 +1870,7 @@ def _farm_items_world(*, progress: int, total: int) -> WorldState:
 
 def test_low_yield_cancel_drives_and_selects() -> None:
     """TRUE fixture: held items-task 1/5 (in-progress), a POPULATED store where
-    FarmItems yields 0 char-XP/cycle and FarmMonster(chicken) yields positive
+    Task pursuit yields 0 char-XP/cycle and GrindCharacterXP(chicken) yields positive
     char-XP/cycle -> the zero-fast-path fires -> production LOW_YIELD_CANCEL
     fires. Lean: phase=inProgress + actionsAttempted=1 -> lowYieldCancel fires.
     It is ladder idx 12, the highest firing slot, and WINS selection on BOTH

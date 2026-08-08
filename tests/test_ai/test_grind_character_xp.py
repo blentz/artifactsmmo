@@ -87,7 +87,7 @@ class TestPriority:
     def test_bonus_caps_at_ceiling(self, tmp_path):
         """Even huge observed XP doesn't push priority above PRIORITY_CEILING."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-        cycles = [_cycle(i, "FarmMonster(chicken)", delta_xp=100) for i in range(30)]
+        cycles = [_cycle(i, "GrindCharacterXP(chicken)", delta_xp=100) for i in range(30)]
         _seed(store, cycles)
         goal = GrindCharacterXPGoal("chicken")
         state = make_state(task_code=None, xp=0, level=1)

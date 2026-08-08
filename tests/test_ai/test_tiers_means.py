@@ -270,8 +270,8 @@ def _gd_task_rewards() -> GameData:
 def test_low_yield_cancel_fires_with_seeded_history(tmp_path):
     """Zero-char-XP FarmItems + positive FarmMonster → fires immediately (no confidence gate)."""
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    cycles = [_cycle(i, "FarmItems", delta_xp=0, task_progress=i) for i in range(5)]
-    cycles += [_cycle(5 + i, "FarmMonster(slime)", delta_xp=15) for i in range(3)]
+    cycles = [_cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
+    cycles += [_cycle(5 + i, "GrindCharacterXP(slime)", delta_xp=15) for i in range(3)]
     _seed_cycles(store, cycles)
     state = make_state(task_code="gudgeon", task_type="items", task_total=347, task_progress=5)
     collect, _ = active_means(state, _gd_task_rewards(), store, _ctx())
@@ -382,7 +382,7 @@ def test_bank_expand_absent_when_insufficient_gold():
 def test_low_yield_cancel_absent_when_no_alt_history(tmp_path):
     """FarmItems history present but no FarmMonster data → no fire."""
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    cycles = [_cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(5)]
+    cycles = [_cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(5)]
     _seed_cycles(store, cycles)
     state = make_state(task_code="x", task_type="items", task_total=20, task_progress=5)
     collect, _ = active_means(state, GameData(), store, _ctx())
@@ -393,7 +393,7 @@ def test_low_yield_cancel_absent_when_no_alt_history(tmp_path):
 def test_low_yield_cancel_absent_when_no_farmitems_history(tmp_path):
     """FarmMonster history but no FarmItems samples → no fire."""
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    cycles = [_cycle(i, "FarmMonster(slime)", delta_xp=15) for i in range(3)]
+    cycles = [_cycle(i, "GrindCharacterXP(slime)", delta_xp=15) for i in range(3)]
     _seed_cycles(store, cycles)
     state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5)
     collect, _ = active_means(state, GameData(), store, _ctx())
@@ -407,8 +407,8 @@ def test_low_yield_cancel_positive_path_fires_above_margin(tmp_path):
     # FarmItems: 1 xp/cycle; FarmMonster: 5 xp/cycle → 5x > 1.5 margin.
     # Need enough cycles for confidence >= 0.5 (sample_count / (10*3) >= 0.5 → >= 15 samples).
     cycles = (
-        [_cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(35)] +
-        [_cycle(35 + i, "FarmMonster(chicken)", delta_xp=5) for i in range(35)]
+        [_cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(35)] +
+        [_cycle(35 + i, "GrindCharacterXP(chicken)", delta_xp=5) for i in range(35)]
     )
     _seed_cycles(store, cycles)
     state = make_state(task_code="x", task_type="items", task_total=50, task_progress=10)
@@ -422,8 +422,8 @@ def test_low_yield_cancel_absent_below_confidence_threshold(tmp_path):
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
     # 3 FarmItems cycles → confidence = 3/30 = 0.1 < 0.5
     cycles = (
-        [_cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(3)] +
-        [_cycle(3 + i, "FarmMonster(chicken)", delta_xp=5) for i in range(3)]
+        [_cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(3)] +
+        [_cycle(3 + i, "GrindCharacterXP(chicken)", delta_xp=5) for i in range(3)]
     )
     _seed_cycles(store, cycles)
     state = make_state(task_code="x", task_type="items", task_total=50, task_progress=3)
@@ -436,9 +436,9 @@ def test_low_yield_cancel_positive_path_no_fire_below_margin(tmp_path):
     """Alt slightly better (1.2x) but below margin (1.5x) → no fire."""
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
     cycles = (
-        [_cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(30)] +
-        [_cycle(30 + i, "FarmMonster(chicken)", delta_xp=1) for i in range(30)] +
-        [_cycle(60 + i, "FarmMonster(chicken)", delta_xp=2) for i in range(6)]
+        [_cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(30)] +
+        [_cycle(30 + i, "GrindCharacterXP(chicken)", delta_xp=1) for i in range(30)] +
+        [_cycle(60 + i, "GrindCharacterXP(chicken)", delta_xp=2) for i in range(6)]
     )
     _seed_cycles(store, cycles)
     state = make_state(task_code="x", task_type="items", task_total=50, task_progress=10)
@@ -450,7 +450,7 @@ def test_low_yield_cancel_positive_path_no_fire_below_margin(tmp_path):
 def test_best_alternative_repr_returns_none_on_sqla_error(tmp_path):
     """SQLAlchemyError inside Session context → returns None → no LOW_YIELD_CANCEL."""
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    cycles = [_cycle(i, "FarmItems", delta_xp=0, task_progress=i) for i in range(5)]
+    cycles = [_cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
     _seed_cycles(store, cycles)
     state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5)
     with patch("artifactsmmo_cli.ai.learning.projections.Session") as mock_session:
@@ -464,7 +464,7 @@ def test_best_alternative_repr_returns_none_when_all_goals_none(tmp_path):
     """All selected_goal rows are None → counts dict empty → returns None → no fire."""
 
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    cycles = [_cycle(i, "FarmItems", delta_xp=0, task_progress=i) for i in range(5)]
+    cycles = [_cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
     _seed_cycles(store, cycles)
     state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5)
 
@@ -533,15 +533,15 @@ class TestPursueTask:
 def test_low_yield_cancel_absent_when_alt_repr_found_but_no_yield(tmp_path):
     """alt_repr is found but expected_yield_per_cycle returns 0 samples for it → no fire."""
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-    cycles = [_cycle(i, "FarmItems", delta_xp=0, task_progress=i) for i in range(5)]
+    cycles = [_cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
     _seed_cycles(store, cycles)
     state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5)
 
     def fake_best_alt(history: LearningStore) -> str | None:
-        return "FarmMonster(ghost)"
+        return "GrindCharacterXP(ghost)"
 
     def fake_yield(goal_repr: str, history: LearningStore, window: int = 100) -> Yield:
-        if goal_repr == "FarmMonster(ghost)":
+        if goal_repr == "GrindCharacterXP(ghost)":
             return Yield(sample_count=0)
         return Yield(sample_count=5, char_xp=0.0)
 

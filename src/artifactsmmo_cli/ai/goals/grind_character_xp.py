@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.learning.yield_reprs import grind_xp_repr
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -54,7 +55,12 @@ class GrindCharacterXPGoal(Goal):
         if history is None:
             return PRIORITY_FLOOR
 
-        fight_yield = expected_yield_per_cycle(f"FarmMonster({self._target_monster})", history)
+        # Keyed by THIS goal's own repr family. It read `FarmMonster(<monster>)`
+        # until 2026-08-07 — a goal deleted on 2026-05-24 — so `sample_count` was
+        # 0 for every real character and this returned PRIORITY_FLOOR
+        # unconditionally, making the observed-rate ranking below dead code that
+        # ~60 synthetic test cycles nonetheless exercised.
+        fight_yield = expected_yield_per_cycle(grind_xp_repr(self._target_monster), history)
         if fight_yield.sample_count == 0:
             return PRIORITY_FLOOR
         # G-H: under max-level root objective, char_xp/cycle is the metric.
