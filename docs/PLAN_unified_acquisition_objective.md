@@ -12,9 +12,49 @@ Written 2026-08-08 against local `main` @ `5a2d1b8d`.
 | 1b — `skill_grind_cycles` pure core | **DONE** | `ce49405f` |
 | 1b — gated-craft route in the pricer | **DONE, INERT** | `cfcd8596` |
 | 2 — switch `J`'s `acquire_cost` | **DONE, LIVE**, gate green | `b4f21cbb` |
-| 3 — project every stat | not started | — |
-| 4 — prospecting through the drop cost | not started | — |
-| 5 — retire `bid_vs_craft`'s duplicate | not started | — |
+| 3 — project wisdom | **DONE**, gate green | `a1e49432` |
+| 4 — prospecting through the drop cost | **DONE**, gate green | `97643db3` |
+| 5 — retire `bid_vs_craft`'s duplicate | **DESIGNED, NOT LANDED** — see below | patch in `docs/` |
+
+### Increment 5 — designed, deliberately not landed
+
+**The finding is better than the plan's version of it.** The plan said "convert
+to seconds at the boundary if the GE horizon genuinely needs wall-clock". It does
+not. Read `ge_order_config`:
+
+```python
+TTL_CYCLES = 20
+AVG_CYCLE_SECONDS = 30.0
+BID_FILL_HORIZON_SECONDS = TTL_CYCLES * AVG_CYCLE_SECONDS
+```
+
+The horizon is natively **20 CYCLES**. It was multiplied into seconds only so it
+could be compared against `estimate_craft_seconds`, whose own per-kind constants
+(fight 10, gather 6, craft 5) were themselves approximating how long an ACTION
+takes. Two conversions, in opposite directions, around a comparison that is
+really *"is my craft longer than 20 cycles?"*. Both cancel, and `AVG_CYCLE_SECONDS`
+— a tuning constant that existed solely to bridge two units neither side wanted —
+disappears with them.
+
+So increment 5 is not "unify with a conversion". It is **delete both conversions
+and compare in cycles**, with `acquisition_actions` supplying the estimate. That
+retires the second acquisition cost model outright.
+
+**Why it is not landed.** The production change is ~40 lines and was written and
+type-checked clean (`docs/increment5-bid-vs-craft.patch.txt`). Its two test
+modules are the obstacle: `test_bid_vs_craft.py` and `test_goals_post_buy_bid.py`
+drive bare `GameData()` stubs with two attributes assigned directly, which the
+route-aware model cannot run on — `obtain_sources` needs workshop locations,
+resource tiles, monster tiles and winnability, so against a stub every item is
+unobtainable and `should_bid` returns True unconditionally. Both suites need
+rebuilding on the committed fixture bundle first.
+
+**A behaviour change to check when it does land:** `should_bid` becomes
+STATE-AWARE. An item whose routes are all currently unservable prices as
+unobtainable, hence "slower than the horizon", hence BID. That is arguably right
+— if you cannot make it now, buying it is the point — but it is a new coupling
+between the bid gate and world state, and it should be asserted deliberately
+rather than discovered.
 
 ### Increment 2 is LIVE — what it changed, and what is still unverified
 

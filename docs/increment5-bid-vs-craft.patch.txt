@@ -1,0 +1,211 @@
+diff --git a/src/artifactsmmo_cli/ai/bid_vs_craft.py b/src/artifactsmmo_cli/ai/bid_vs_craft.py
+index 89f7c24f..fc2efdec 100644
+--- a/src/artifactsmmo_cli/ai/bid_vs_craft.py
++++ b/src/artifactsmmo_cli/ai/bid_vs_craft.py
+@@ -3,11 +3,13 @@ it would be SLOWER than the bid-fill horizon. A posted bid fills asynchronously,
+ running a self-craft in parallel is wasted work — this gate (and the open_orders
+ suppression at the call site) keeps the two mutually exclusive.
+ 
+-Craft-time is estimated purely, in seconds, from static game data: deterministic
+-gather/craft legs summed directly; DROP legs valued at expected-kills × fight-cost
+-using the STATIC API drop rate (the A* fight-leg cost is rate-blind, so this
+-estimator folds the rate in itself). Refining the static rate with learned
+-drops-per-fight is a documented v2 (the learning store carries no drop rate today).
++Craft-time comes from `acquisition_cost.acquisition_actions`, in CYCLES, and is
++compared against a horizon also in cycles. This module used to run its OWN
++seconds-denominated walk over `demand_set` -- the second acquisition cost model
++in the repo, with route coverage disjoint from `min_plan_length`'s (it knew drop
++farms, not vendors; that one knew neither) and units that made the two
++incomparable. Retired: one walk now answers "how much work to obtain this" for
++every consumer.
+ 
+ Built on the requirement-model unification's `RequirementGraph` / `demand_set`
+ (item-namespaced, drop-aware — see `requirement_graph.py`), not the older
+@@ -17,15 +19,13 @@ memoized accessor `craft_ladder.py` / `craft_plan_gen.py` / `strategy_driver.py`
+ already read.
+ """
+ 
++from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
+ from artifactsmmo_cli.ai.game_data import GameData
+-from artifactsmmo_cli.ai.monster_drop_selection import MonsterDropCandidate, expected_kills
++from artifactsmmo_cli.ai.learning.store import LearningStore
+ from artifactsmmo_cli.ai.requirement_projections import demand_set
++from artifactsmmo_cli.ai.selection_context import SelectionContext
+ from artifactsmmo_cli.ai.source_kind import SourceKind
+-
+-# Per-action second estimates aligned with the A* edge costs (combat.py / gathering.py).
+-_FIGHT_SECONDS = 10.0
+-_GATHER_SECONDS = 6.0
+-_CRAFT_SECONDS = 5.0
++from artifactsmmo_cli.ai.world_state import WorldState
+ 
+ 
+ def closure_leaf_kinds(item: str, game_data: GameData) -> frozenset[SourceKind]:
+@@ -42,34 +42,30 @@ def closure_leaf_kinds(item: str, game_data: GameData) -> frozenset[SourceKind]:
+     return frozenset(kinds)
+ 
+ 
+-def estimate_craft_seconds(item: str, qty: int, game_data: GameData) -> float:
+-    """Pure estimate of seconds to self-produce `qty` of `item`, folding the
+-    static drop rate into DROP legs. Deterministic legs (CRAFT, GATHER, and any
+-    other non-DROP leaf) cost their flat per-action seconds, scaled by the
+-    closure-demanded quantity of each material."""
+-    graph = game_data.requirement_graph.graph()
+-    demand = demand_set(graph, [item], {item: qty}).quantities
+-    total = 0.0
+-    for material, needed in demand.items():
+-        if material in graph.edges:
+-            total += _CRAFT_SECONDS * needed
+-            continue
+-        drops = game_data.monsters_dropping(material)
+-        if drops:
+-            candidates = [
+-                MonsterDropCandidate(monster_code=mob, rate=rate,
+-                                     min_quantity=min_q, max_quantity=max_q, distance=0)
+-                for mob, rate, min_q, max_q in drops
+-            ]
+-            cheapest_kills = min(expected_kills(c) for c in candidates)
+-            total += float(cheapest_kills) * _FIGHT_SECONDS * needed
+-        else:
+-            total += _GATHER_SECONDS * needed
+-    return total
+-
+-
+-def should_bid(item: str, qty: int, bid_fill_horizon_s: float, game_data: GameData) -> bool:
++def should_bid(item: str, qty: int, horizon_cycles: int, state: WorldState,
++               game_data: GameData, ctx: SelectionContext,
++               store: LearningStore | None = None) -> bool:
+     """Bid only when self-crafting is strictly slower than we are willing to
+     wait for a fill (a live buy-anchor's existence is the caller's job to check
+-    via `buy_post_price`)."""
+-    return estimate_craft_seconds(item, qty, game_data) > bid_fill_horizon_s
++    via `buy_post_price`).
++
++    BOTH SIDES ARE CYCLES, AND THE SECONDS ON BOTH SIDES CANCELLED. This module
++    used to estimate craft time in SECONDS from its own per-kind constants
++    (fight 10, gather 6, craft 5) and compare against
++    `BID_FILL_HORIZON_SECONDS = TTL_CYCLES * AVG_CYCLE_SECONDS`. But that horizon
++    is natively `TTL_CYCLES` — 20 decision cycles — and was multiplied into
++    seconds ONLY so it could meet a seconds estimate that was itself
++    approximating how long an ACTION takes. Two conversions, in opposite
++    directions, around a comparison that is really "is my craft longer than 20
++    cycles?". Both are gone, and `AVG_CYCLE_SECONDS` with them.
++
++    The estimate now comes from `acquisition_cost.acquisition_actions` — the same
++    route-aware walk `J` prices with. That retires the SECOND acquisition cost
++    model this repo carried: two walks over the same question, with disjoint
++    route coverage (this one knew drop farms but not vendors; `min_plan_length`
++    knew neither) and incomparable units, so neither could check the other.
++
++    `equip=False`: a bid acquires a MATERIAL, and nothing is worn at the end of
++    it."""
++    return acquisition_actions(
++        item, qty, state, game_data, ctx, equip=False, store=store) > horizon_cycles
+diff --git a/src/artifactsmmo_cli/ai/ge_bid.py b/src/artifactsmmo_cli/ai/ge_bid.py
+index 1abc0bc7..d5946b99 100644
+--- a/src/artifactsmmo_cli/ai/ge_bid.py
++++ b/src/artifactsmmo_cli/ai/ge_bid.py
+@@ -35,7 +35,7 @@ def _owned(code: str, state: WorldState) -> int:
+ 
+ def ge_bid_candidates(
+     state: WorldState, game_data: GameData, ctx: SelectionContext,
+-    bid_fill_horizon_s: float,
++    bid_fill_horizon_cycles: int,
+ ) -> list[tuple[str, int, int]]:
+     """Return `(item_code, qty, post_price)` for every objective-step material
+     that should be acquired by posting a GE buy order this cycle.
+@@ -51,7 +51,8 @@ def ge_bid_candidates(
+         qty = wanted - _owned(item, state)
+         if qty <= 0:
+             continue  # already held
+-        if not should_bid(item, qty, bid_fill_horizon_s, game_data):
++        if not should_bid(item, qty, bid_fill_horizon_cycles, state,
++                          game_data, ctx):
+             continue  # fast to self-craft — no bid
+         sellers = game_data.npcs_selling_item(item)
+         if not sellers:
+diff --git a/src/artifactsmmo_cli/ai/ge_order_config.py b/src/artifactsmmo_cli/ai/ge_order_config.py
+index 85c6bb13..087c38cc 100644
+--- a/src/artifactsmmo_cli/ai/ge_order_config.py
++++ b/src/artifactsmmo_cli/ai/ge_order_config.py
+@@ -1,14 +1,18 @@
+ """Grand Exchange order-lifecycle tuning constants.
+ 
+-`BID_FILL_HORIZON_SECONDS` is the wall-clock window we are willing to wait for a
+-posted GE buy order to fill before self-crafting would have been the faster
+-acquisition. It is `TTL_CYCLES * AVG_CYCLE_SECONDS`: a bid is left standing for
+-`TTL_CYCLES` decision cycles (the TTL-cancel horizon), and a cycle averages
+-`AVG_CYCLE_SECONDS` of wall time. `bid_vs_craft.should_bid` compares this horizon
+-against the pure craft-time estimate — bid only when self-crafting is strictly
+-slower than the fill horizon.
++`BID_FILL_HORIZON_CYCLES` is the window we are willing to wait for a posted GE
++buy order to fill before self-crafting would have been the faster acquisition. It
++IS `TTL_CYCLES` — a bid is left standing for that many decision cycles (the
++TTL-cancel horizon), and `bid_vs_craft.should_bid` compares it against a craft
++estimate in the same unit.
++
++It used to be `TTL_CYCLES * AVG_CYCLE_SECONDS`, converted to seconds only so it
++could meet a seconds-denominated craft estimate that was itself approximating how
++long an ACTION takes. Two conversions in opposite directions around a comparison
++that is really "is my craft longer than 20 cycles?". Both removed, and
++`AVG_CYCLE_SECONDS` with them — a tuning constant that existed solely to bridge
++two units neither side wanted.
+ """
+ 
+ TTL_CYCLES = 20
+-AVG_CYCLE_SECONDS = 30.0
+-BID_FILL_HORIZON_SECONDS = TTL_CYCLES * AVG_CYCLE_SECONDS
++BID_FILL_HORIZON_CYCLES = TTL_CYCLES
+diff --git a/src/artifactsmmo_cli/ai/goals/post_buy_bid.py b/src/artifactsmmo_cli/ai/goals/post_buy_bid.py
+index 8c640cf2..d9728dcb 100644
+--- a/src/artifactsmmo_cli/ai/goals/post_buy_bid.py
++++ b/src/artifactsmmo_cli/ai/goals/post_buy_bid.py
+@@ -15,7 +15,7 @@ from artifactsmmo_cli.ai.actions.base import Action
+ from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
+ from artifactsmmo_cli.ai.game_data import GameData
+ from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
+-from artifactsmmo_cli.ai.ge_order_config import BID_FILL_HORIZON_SECONDS
++from artifactsmmo_cli.ai.ge_order_config import BID_FILL_HORIZON_CYCLES
+ from artifactsmmo_cli.ai.goals.base import Goal
+ from artifactsmmo_cli.ai.learning.store import LearningStore
+ from artifactsmmo_cli.ai.selection_context import SelectionContext
+@@ -48,7 +48,7 @@ class PostBuyBidGoal(Goal):
+ 
+     def is_satisfied(self, state: WorldState) -> bool:
+         return not ge_bid_candidates(
+-            state, self._gd, self._ctx, BID_FILL_HORIZON_SECONDS)
++            state, self._gd, self._ctx, BID_FILL_HORIZON_CYCLES)
+ 
+     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
+         return {"ge_bids_posted": True}
+@@ -64,7 +64,7 @@ class PostBuyBidGoal(Goal):
+             GePostBuyOrderAction(item_code=item, quantity=qty, price=price,
+                                  ge_location=ge_loc)
+             for item, qty, price in ge_bid_candidates(
+-                state, game_data, self._ctx, BID_FILL_HORIZON_SECONDS)
++                state, game_data, self._ctx, BID_FILL_HORIZON_CYCLES)
+         ]
+ 
+     def __repr__(self) -> str:
+diff --git a/src/artifactsmmo_cli/ai/tiers/means.py b/src/artifactsmmo_cli/ai/tiers/means.py
+index 8469ab61..b7cfa386 100644
+--- a/src/artifactsmmo_cli/ai/tiers/means.py
++++ b/src/artifactsmmo_cli/ai/tiers/means.py
+@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.bank_expansion_timing import (
+ from artifactsmmo_cli.ai.consumable_supply import maintain_consumables_fires
+ from artifactsmmo_cli.ai.game_data import GameData
+ from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
+-from artifactsmmo_cli.ai.ge_order_config import BID_FILL_HORIZON_SECONDS
++from artifactsmmo_cli.ai.ge_order_config import BID_FILL_HORIZON_CYCLES
+ from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
+ from artifactsmmo_cli.ai.learning.store import LearningStore
+ from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
+@@ -253,7 +253,7 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
+         # NPC alternative to ceiling-bound the price, no open order, and a
+         # three-way venue verdict of GE_POST. Fire-and-lose: posting creates an
+         # open order that suppresses the item next cycle.
+-        return bool(ge_bid_candidates(state, game_data, ctx, BID_FILL_HORIZON_SECONDS))
++        return bool(ge_bid_candidates(state, game_data, ctx, BID_FILL_HORIZON_CYCLES))
+ 
+     if kind is MeansKind.SUPPLY_BANK:
+         # ctx.supply_target is None whenever there is no live sibling demand
