@@ -1,6 +1,53 @@
 # PLAN — Unified acquisition objective
 
-Status: **DRAFT, nothing built.** Written 2026-08-08 against local `main` @ `5a2d1b8d`.
+Written 2026-08-08 against local `main` @ `5a2d1b8d`.
+
+## Status
+
+| increment | state | commit |
+|---|---|---|
+| 0 — pin the defect | **DONE**, gate green | `ae96f25f` |
+| 1 — cost core (AND/OR walk, six routes) | **DONE, INERT**, gate green | `384a46d3` |
+| 1 — pricer over `obtain_sources` | **DONE, INERT**, gate green | `f1ee73c6` |
+| 1b — `skill_grind_cycles` pure core | **DONE, NOT WIRED** | `ce49405f` |
+| 1b — gated-craft route in the pricer | next | — |
+| 2 — switch `J`'s `acquire_cost` | blocked on 1b | — |
+| 3 — project every stat | not started | — |
+| 4 — prospecting through the drop cost | not started | — |
+| 5 — retire `bid_vs_craft`'s duplicate | not started | — |
+
+### THE BLOCKER, measured — read this before wiring anything
+
+The pricer works, and running it against the old model on
+`l12_deep_chain_grind` says **do not switch `J` yet**:
+
+| item | `min_plan_length` | route-aware | why |
+|---|---|---|---|
+| `copper_ore` | 2 | 1 | already held; gather route priced |
+| `feather` | 2 | **14** | drop farm actually priced |
+| `wolf_hair` | 2 | unobtainable | wolf not winnable — correct |
+| `backpack` | 2 | unobtainable | every fixture vendor is an EVENT npc — correct |
+| `iron_sword` | 65 | **unobtainable** | **weaponcrafting 5 vs gate 10 — WRONG** |
+
+The sword is the blocker. The workshop is known; `_craft_sources` excludes the
+route on the skill gate alone. Switching `J` today would price most gear as
+unreachable and collapse the ranking — which is exactly why the core and the
+pricer both landed INERT rather than wired.
+
+### The seam question 1b must answer explicitly
+
+`obtain_sources` answers **readiness** ("what can the executor serve right
+now?"), and a skill-gated craft genuinely is *not* servable right now. The cost
+model asks a different question — **what would it cost to obtain this** — whose
+answer may include making a route ready. So the gated-craft route belongs in the
+pricer, not in `obtain_sources`, and that is a real distinction rather than a
+convenient one.
+
+It is also how a second route model creeps back in, which this epic exists to
+prevent. So the wiring commit must carry a census asserting the pricer's route
+set is a strict SUPERSET of `obtain_sources`', with the gated-craft rows as the
+only permitted difference — the same shape as `test_obtain_graph_agreement`,
+which already pins `obtain_sources` against `RequirementGraph.leaves`.
 
 ## The thesis
 
