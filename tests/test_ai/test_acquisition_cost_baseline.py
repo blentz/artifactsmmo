@@ -208,22 +208,27 @@ def test_the_skill_gate_is_invisible_to_the_cost(game_data) -> None:
     assert _cost(game_data, "iron_sword") == 65
 
 
-def test_J_NOW_USES_THE_ROUTE_AWARE_COST(game_data) -> None:
-    """ACTIVATION, asserted where it can be seen — `J`'s own `acquire_cost`.
+def test_J_IS_BACK_ON_min_plan_length_PENDING_A_PERFORMANCE_FIX(game_data) -> None:
+    """ACTIVATION REVERTED, and this test is the thing that noticed.
 
-    Green tests are not runtime activation (`feedback_verify_runtime_activation`),
-    and this epic's own core sat INERT for four commits on purpose. This test
-    exists so the switch cannot silently revert: it compares what
-    `gear_candidate` actually reports against what `min_plan_length` would have
-    said, and fails if they agree.
+    Increment 2 switched `J`'s `acquire_cost` to `acquisition_actions`, and this
+    test asserted the two DISAGREED so the switch could not silently revert. It
+    then failed — correctly — when the switch was rolled back hours later.
 
-    Measured at the switch: `iron_sword` 65 -> 96 (venue hops plus the
-    weaponcrafting gate), `copper_dagger` 62 -> 70, `feather` 2 -> 14.
+    WHY IT WAS ROLLED BACK. The route-aware walk has a combinatorial blow-up.
+    Measured on a realistic holding (40 inventory codes, 60 bank codes):
+    `copper_dagger` (closure 31, 77 routes) and `iron_sword` (closure 34, 82
+    routes) each price in ~10ms, while `adventurer_vest` — closure 34, 82 routes,
+    structurally indistinguishable — does not finish in 25 SECONDS. Live traces
+    showed four of five characters running ~2x slower per cycle.
 
-    The characterisation tests ABOVE still pass because they call
-    `min_plan_length` directly — they pin the old model as a museum piece, not
-    as the live one. If both this and those ever agree, activation has been
-    undone."""
+    The model is CORRECT; it is too expensive. `acquisition_actions` and its
+    tests all stand. Re-activation needs a memo keyed on
+    `(item, qty, owned-read-set)` and a shortfall arm that stops rebuilding the
+    whole options mapping.
+
+    This assertion inverts again when that lands — which is the point of having
+    it at all."""
     state = scenario_state(SCENARIOS["l12_deep_chain_grind"], game_data)
     store = LearningStore(db_path=":memory:", character="activation_probe")
     store.start_session()
@@ -235,5 +240,4 @@ def test_J_NOW_USES_THE_ROUTE_AWARE_COST(game_data) -> None:
     finally:
         store.end_session(exit_reason="normal")
         store.close()
-    assert candidate.acquire_cost != _cost(game_data, "iron_sword")
-    assert candidate.acquire_cost > _cost(game_data, "iron_sword")
+    assert candidate.acquire_cost == _cost(game_data, "iron_sword")

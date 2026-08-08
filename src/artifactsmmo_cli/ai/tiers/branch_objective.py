@@ -76,10 +76,10 @@ twice.
 from dataclasses import replace
 from math import ceil
 
-from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.min_plan_length import min_plan_length
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers.progression_choice import (
     TARGET_LEVEL,
@@ -96,6 +96,19 @@ TRUNK_IDENTITY = "xp_trunk"
 """Identity of the XP-trunk candidate. `J` has no `kind` field by design (S-009
 was withdrawn), so the trunk is recognised by this identity and by nothing else —
 it competes on the same scalar as every gear root, at zero acquisition cost."""
+
+
+def _held(state: WorldState) -> dict[str, int]:
+    """Inventory + bank, the holdings `min_plan_length` credits against.
+
+    Restored with the revert above. It exists because `min_plan_length` has no
+    withdraw action and must treat a banked copy as already in hand — which is
+    exactly the approximation the route model replaced, and will replace again
+    once the walk is affordable."""
+    owned = dict(state.inventory)
+    for code, qty in (state.bank_items or {}).items():
+        owned[code] = owned.get(code, 0) + qty
+    return owned
 
 
 def _outcome(projected: WorldState, store: LearningStore,
@@ -177,8 +190,28 @@ def gear_candidate(c: GearCandidate, state: WorldState, store: LearningStore,
     reachable through the core's own contract, unused by this caller."""
     projected = replace(
         state, inventory={**state.inventory, c.code: state.inventory.get(c.code, 0) + 1})
-    acquire_cost = acquisition_actions(
-        c.code, 1, state, game_data, ctx, equip=True, store=store)
+    # REVERTED TO `min_plan_length` 2026-08-08, hours after activation, because
+    # the route-aware pricer has a COMBINATORIAL BLOW-UP. Measured on a realistic
+    # holding (40 inventory codes, 60 bank codes): `copper_dagger` and
+    # `iron_sword` price in ~10ms each at closure 31-34 / 77-82 routes, while
+    # `adventurer_vest` -- closure 34, routes 82, structurally indistinguishable
+    # -- does not finish in 25 SECONDS. Live effect: four of five characters ran
+    # ~2x slower per cycle (C3P0 312s -> 614s, HAL 287s -> 656s, Lor 323s -> 664s,
+    # Robby 266s -> 491s) across a two-hour window.
+    #
+    # The cause is structural, not a constant: `_apply`'s capacity-shortfall arm
+    # rebuilds the WHOLE options mapping (`without`) and re-walks, and the OR/AND
+    # recursion has no memoisation, so a recipe shape with several
+    # capacity-bounded routes re-derives the same subtrees exponentially.
+    #
+    # `acquisition_actions` and its tests remain, and remain correct -- this is a
+    # COST problem, not a correctness one. Re-activation needs a memo keyed on
+    # (item, qty, owned-read-set) and a shortfall arm that does not rebuild the
+    # options dict. See `docs/PLAN_unified_acquisition_objective.md`.
+    acquire_cost = min_plan_length(
+        c.code, 1, game_data.crafting_recipes, _held(state),
+        game_data.max_gather_yield, equip=True,
+    )
     reachable_level, cycles = _outcome(projected, store, game_data)
     return ProgressionCandidate(
         identity=candidate_identity(c),
