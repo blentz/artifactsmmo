@@ -16,6 +16,7 @@ most gear comes back unobtainable, and the reasons are worth reading.
 """
 
 import json
+import time
 from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
@@ -509,3 +510,79 @@ def test_the_closure_survives_a_genuine_cycle_in_real_game_data(
     options = acquisition_options("copper_bar", holding, game_data,
                                   NO_PROFILE_CONTEXT)
     assert {"copper_bar", "copper_dagger", "copper_ore"} <= set(options)
+
+
+def _live_sized(state, game_data):  # type: ignore[no-untyped-def]
+    """A holding the size a real character carries, and a target NOT in it.
+
+    THE FIRST VERSION OF THIS WAS VACUOUS. It stocked inventory and bank from the
+    same code list the targets came from, so every target was already held —
+    `copper_dagger` and `iron_sword` in the bag, `adventurer_vest` in the bank —
+    and the walk returned in ONE call without descending anything. It would have
+    passed against the exponential code it was written to catch.
+
+    The target is asserted absent from both, so the walk has to run."""
+    codes = [c for c in game_data.crafting_recipes][:60]
+    big = replace(state,
+                  inventory={c: 2 for c in codes[:40]},
+                  bank_items={c: 5 for c in codes[:60]})
+    held = set(big.inventory) | set(big.bank_items)
+    deep = [c for c, r in game_data.crafting_recipes.items()
+            if c not in held and len(r) >= 4]
+    assert deep, "fixture drift: no unheld multi-input recipe to price"
+    return big, sorted(deep)[:3]
+
+
+def test_pricing_stays_affordable_on_a_LIVE_SIZED_HOLDING(state, game_data) -> None:
+    """THE TEST WHOSE ABSENCE LET A LIVE REGRESSION SHIP.
+
+    5175 tests and nine green gate runs said nothing about the exponential
+    blow-up that took `J` live at ~2x the cycle cost, because every fixture has
+    SMALL holdings and the cost of this model is a function of HOLDINGS, not of
+    the item. The missing test was never a case — it was a DIMENSION.
+
+    Measured before the fix: a four-input recipe ran 10.1 million recursive calls
+    in 20 seconds without finishing. After: seven-input recipes price in under
+    10ms with ~10 calls.
+
+    The budget is deliberately loose. This guards against a return to
+    exponential, not a microbenchmark — a tight bound would flake on a loaded
+    machine and get deleted, which puts us back where we started."""
+    live_sized, targets = _live_sized(state, game_data)
+    store = _store_with_rate("weaponcrafting", 40)
+    try:
+        for code in targets:
+            assert code not in live_sized.inventory
+            assert code not in (live_sized.bank_items or {})
+        started = time.monotonic()
+        for code in targets:
+            acquisition_actions(code, 1, live_sized, game_data,
+                                NO_PROFILE_CONTEXT, equip=True, store=store)
+        elapsed = time.monotonic() - started
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+    assert elapsed < 2.0, (
+        f"pricing {len(targets)} unheld multi-input items took {elapsed:.1f}s — "
+        "the walk has gone superlinear in holdings again")
+
+
+def test_recipe_FAN_OUT_does_not_explode(state, game_data) -> None:
+    """Pins the specific axis that broke: cost must not blow up with the number
+    of recipe INPUTS. The old walk was exponential in fan-out — one input was
+    fine, two were fine, four did not finish."""
+    live_sized, targets = _live_sized(state, game_data)
+    widest = max(targets, key=lambda c: len(game_data.crafting_recipe(c)))
+    assert len(game_data.crafting_recipe(widest)) >= 4
+    store = _store_with_rate("weaponcrafting", 40)
+    try:
+        started = time.monotonic()
+        acquisition_actions(widest, 1, live_sized, game_data,
+                            NO_PROFILE_CONTEXT, equip=True, store=store)
+        elapsed = time.monotonic() - started
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+    assert elapsed < 1.0, (
+        f"{widest} ({len(game_data.crafting_recipe(widest))} inputs) took "
+        f"{elapsed:.1f}s — fan-out is superlinear again")

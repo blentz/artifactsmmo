@@ -133,17 +133,108 @@ class RouteOption:
     unlock_actions: int = 0
 
 
-@dataclass(frozen=True)
-class _Walk:
-    """Threaded walk state: actions so far, holdings not yet spent, and the
-    PAY-ONCE keys already settled (venue hops and unlock prerequisites share one
-    set, because they are the same mechanism at different prices). Immutable at
-    the boundary, copied on entry, so a caller's dicts are never mutated — the
-    same contract `min_gathers` keeps."""
+def _cheapest_route(item: str, options: Mapping[str, list[RouteOption]],
+                    memo: dict[str, tuple[int, RouteOption | None]],
+                    active: frozenset[str]) -> tuple[int, RouteOption | None]:
+    """`(unit cost, route)` for the cheapest way to obtain ONE `item`, memoised.
 
-    actions: int
-    owned: dict[str, int]
-    venues: set[str]
+    THE FIX FOR THE BLOW-UP. The first version of this walk chose a route by
+    re-walking the whole subtree per route AND, when a route's capacity fell
+    short, re-entering the same node with that route removed from a REBUILT
+    options mapping. Measured on a realistic holding, `adventurer_vest` — four
+    recipe inputs, 82 routes in closure — made **10.1 million** recursive calls
+    in 20 seconds without finishing, 2.09 million of them shortfall rebuilds.
+    `copper_dagger` (one input) and `iron_sword` (two) finished in ~10ms. The
+    cost was exponential in recipe FAN-OUT, which no fixture exercised because
+    fixture holdings are small.
+
+    Now each item's unit cost is computed ONCE and cached, so the walk is linear
+    in the closure rather than exponential in its fan-out.
+
+    CAPACITY IS DELIBERATELY IGNORED HERE. A capacity limit can only ever make
+    acquisition MORE expensive (you exhaust the cheap route and fall back to a
+    dearer one), so omitting it keeps this a sound LOWER bound — the direction
+    the contract requires, since every consumer PRUNES with it. That is what
+    retires the shortfall re-entry entirely rather than merely making it cheaper.
+    The old model's mixed withdraw-then-craft plan was a tighter bound; it was
+    not affordable, and a bound that does not return is worth nothing.
+
+    `active` guards recipe cycles (`copper_bar` recycles out of a
+    `copper_dagger`, which crafts from `copper_bar`): an item already being
+    priced on this path is treated as unobtainable rather than recursed into."""
+    if item in memo:
+        return memo[item]
+    routes = options.get(item, [])
+    if not routes or item in active:
+        return (UNOBTAINABLE_PER_UNIT, None)
+    inner = active | {item}
+    best: tuple[int, RouteOption | None] | None = None
+    for route in routes:
+        per_unit = -(-route.actions_per_application // max(1, route.yield_per))
+        for material, per_application in route.inputs.items():
+            unit, _ = _cheapest_route(material, options, memo, inner)
+            per_unit += unit * per_application
+        if route.unlock:
+            per_unit += route.unlock_actions
+        if best is None or per_unit < best[0]:
+            best = (per_unit, route)
+    # `best` starts at None, NOT at `UNOBTAINABLE_PER_UNIT`. A route whose inputs
+    # are themselves unobtainable costs MORE than that sentinel, so seeding the
+    # comparison with it discarded the route entirely and collapsed the whole
+    # chain to one flat unobtainable — losing the other work it carries, and with
+    # it the total order over bad chains that `acquisition_cost`'s finiteness
+    # exists to give. Caught by
+    # `test_unobtainable_is_finite_so_two_bad_chains_still_compare`.
+    assert best is not None  # routes is non-empty here
+    memo[item] = best
+    return best
+
+
+def _accumulate(item: str, qty: int, options: Mapping[str, list[RouteOption]],
+                memo: dict[str, tuple[int, RouteOption | None]],
+                owned: dict[str, int], paid: dict[str, int],
+                actions: list[int], fuel: int) -> None:
+    """Walk the demand closure once, crediting holdings and collecting the
+    PAY-ONCE keys the plan touches.
+
+    Holdings are consumed as they are credited, so a unit spent under one parent
+    is not available to a sibling — the invariant that keeps this a bound on one
+    coherent plan rather than on an optimistic superposition of plans.
+
+    `paid` maps a pay-once key (a venue, or a skill unlock) to its price, so a
+    key touched by several routes is charged once however many times it appears —
+    a plan that gathers twenty ore walks to the node once, and a grind that
+    unlocks a TIER is paid once for every recipe behind it."""
+    if qty <= 0:
+        return
+    if fuel <= 0:
+        # Fuel exhaustion means a CYCLE (an item bought with a currency bought
+        # with that item). Charge it as unobtainable rather than returning
+        # silently: a silent return prices an unservable loop at almost nothing,
+        # which is the opposite of conservative and would make it the most
+        # attractive route on the board. Matches `min_gathers`' convention of
+        # accounting the remaining need as raw work when its own fuel runs out.
+        actions[0] += UNOBTAINABLE_PER_UNIT * qty
+        return
+    held = owned.get(item, 0)
+    used = min(held, qty)
+    owned[item] = held - used
+    remaining = qty - used
+    if remaining <= 0:
+        return
+    _unit, route = _cheapest_route(item, options, memo, frozenset())
+    if route is None:
+        actions[0] += UNOBTAINABLE_PER_UNIT * remaining
+        return
+    applications = -(-remaining // max(1, route.yield_per))
+    actions[0] += applications * route.actions_per_application
+    if route.venue:
+        paid.setdefault(route.venue, 1)
+    if route.unlock:
+        paid.setdefault(route.unlock, route.unlock_actions)
+    for material, per_application in sorted(route.inputs.items()):
+        _accumulate(material, per_application * applications, options, memo,
+                    owned, paid, actions, fuel - 1)
 
 
 def acquisition_cost(
@@ -157,92 +248,19 @@ def acquisition_cost(
     `options[code]` is every route that can currently produce `code`; a code
     absent from the mapping has no route and is charged
     `UNOBTAINABLE_PER_UNIT` per unit. `owned` is credited (and consumed) first,
-    on a private copy.
+    on a private copy — the caller's mapping is never mutated.
 
-    Fuel-bounded exactly as `min_gathers` is, and for the same reason: the
-    recursion must be structural for the extracted Lean model. The seed
-    `len(options) + 1` cannot be exhausted by an acyclic route graph, since
-    every recursing frame expands a distinct code along its path. A CYCLIC one
-    — an item craftable from a material that is bought with a currency bought
-    with that item — terminates with the remaining need charged as
-    unobtainable, which is conservative in the safe direction."""
-    walk = _obtain(len(options) + 1, item, qty, options,
-                   _Walk(0, dict(owned), set()))
-    return walk.actions
+    TWO PASSES, BOTH LINEAR. `_cheapest_route` memoises a per-item unit cost;
+    `_accumulate` then walks the demand closure once, crediting holdings and
+    collecting pay-once keys. Total = per-item actions + the pay-once keys the
+    plan touched. See `_cheapest_route` for why the first version of this was
+    exponential and what was given up to fix it.
 
-
-def _obtain(fuel: int, item: str, qty: int,
-            options: Mapping[str, list[RouteOption]], walk: _Walk) -> _Walk:
-    """Add the cost of one `(item, qty)` node to the threaded walk.
-
-    Held copies are consumed FIRST and are not available to a sibling branch —
-    a unit credited under one parent cannot also satisfy another, which is the
-    invariant that keeps this a bound on a single coherent plan rather than on
-    an optimistic superposition of plans."""
-    if fuel <= 0:
-        return _Walk(walk.actions + UNOBTAINABLE_PER_UNIT * qty, walk.owned,
-                     walk.venues)
-
-    held = walk.owned.get(item, 0)
-    used = min(held, qty)
-    remaining = qty - used
-    owned = dict(walk.owned)
-    owned[item] = held - used
-    walk = _Walk(walk.actions, owned, walk.venues)
-    if remaining <= 0:
-        return walk
-
-    routes = options.get(item, [])
-    if not routes:
-        return _Walk(walk.actions + UNOBTAINABLE_PER_UNIT * remaining,
-                     walk.owned, walk.venues)
-
-    # OR over routes: cost each independently from the SAME entry state, then
-    # keep the cheapest. Each branch gets its own copy of the walk, so a route
-    # we did not take cannot leave its spent holdings or paid venues behind —
-    # the bug that would let an unchosen craft's material consumption make the
-    # chosen gather look cheaper than it is.
-    best: _Walk | None = None
-    for route in routes:
-        candidate = _apply(fuel, item, remaining, route, options, walk)
-        if best is None or candidate.actions < best.actions:
-            best = candidate
-    assert best is not None  # routes is non-empty here
-    return best
-
-
-def _apply(fuel: int, item: str, need: int, route: RouteOption,
-           options: Mapping[str, list[RouteOption]], walk: _Walk) -> _Walk:
-    """Cost of satisfying `need` units of `item` through ONE route.
-
-    A route bounded by `capacity` can only cover part of the need; the
-    REMAINDER falls back to the other routes via a recursive `_obtain` against
-    the options WITHOUT this one. That is what makes a half-full bank produce a
-    mixed withdraw-then-gather plan rather than either an over-optimistic
-    "withdraw it all" or a pessimistic "ignore the bank"."""
-    covered = min(need, route.capacity)
-    applications = -(-covered // route.yield_per)  # ceil
-
-    paid = set(walk.venues)
-    once = 0
-    if route.venue and route.venue not in paid:
-        paid.add(route.venue)
-        once += 1
-    if route.unlock and route.unlock not in paid:
-        paid.add(route.unlock)
-        once += route.unlock_actions
-
-    inner = _Walk(walk.actions + once + applications * route.actions_per_application,
-                  walk.owned, paid)
-
-    # AND over this route's inputs, once per application.
-    for material, per_application in sorted(route.inputs.items()):
-        inner = _obtain(fuel - 1, material, per_application * applications,
-                        options, inner)
-
-    shortfall = need - covered
-    if shortfall <= 0:
-        return inner
-    without = {code: [r for r in routes if r is not route]
-               for code, routes in options.items()}
-    return _obtain(fuel - 1, item, shortfall, without, inner)
+    Fuel-bounded exactly as `min_gathers` is: the seed `len(options) + 1` cannot
+    be exhausted by an acyclic route graph, since every recursing frame expands a
+    distinct code along its path."""
+    actions = [0]
+    paid: dict[str, int] = {}
+    _accumulate(item, qty, options, {}, dict(owned), paid, actions,
+                len(options) + 1)
+    return actions[0] + sum(paid.values())

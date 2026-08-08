@@ -117,17 +117,41 @@ def test_the_walk_picks_the_cheapest_route() -> None:
     assert acquisition_cost("bar", 1, options, {}) == 2   # hop + withdraw
 
 
-def test_a_capacity_bounded_route_falls_back_for_the_remainder() -> None:
-    """A half-full bank produces a MIXED plan: withdraw what is there, make the
-    rest. Neither an over-optimistic 'withdraw it all' nor a pessimistic
-    'ignore the bank'."""
+def test_capacity_is_IGNORED_because_it_can_only_raise_the_cost() -> None:
+    """A DELIBERATE LOOSENING, and the price of making the walk terminate.
+
+    The first version modelled capacity exactly: withdraw the two bars the bank
+    holds, craft the other two. That is a tighter bound — and it required
+    re-entering the node with the exhausted route removed from a REBUILT options
+    mapping, which made the walk exponential in recipe fan-out. Measured:
+    `adventurer_vest` (four inputs, 82 routes in closure) ran **10.1 million**
+    recursive calls in 20 seconds without finishing, 2.09M of them shortfall
+    rebuilds, and four of five live characters ran ~2x slower per cycle.
+
+    A capacity limit can only ever make acquisition MORE expensive — you exhaust
+    the cheap route and fall back to a dearer one — so ignoring it keeps this a
+    sound LOWER bound, which is the direction the contract requires because every
+    consumer PRUNES with it. All four bars are now priced as withdraws.
+
+    A bound that does not return is worth nothing, however tight it would have
+    been."""
     options = {
         "bar": [withdraw(stock=2), craft("smithy", {"ore": 3})],
         "ore": [gather("pit")],
     }
-    # 4 bars: bank hop + 2 withdraws, then smithy hop + 2 crafts,
-    # pit hop + 6 gathers.
-    assert acquisition_cost("bar", 4, options, {}) == (1 + 2) + (1 + 2) + (1 + 6)
+    # bank hop + 4 withdraws. The craft leg is never entered.
+    assert acquisition_cost("bar", 4, options, {}) == 1 + 4
+
+
+def test_the_cheapest_route_still_decides_when_capacity_is_irrelevant() -> None:
+    """Ignoring capacity must not turn the OR arm into first-wins. The walk
+    still picks the cheapest route; it simply does not model running out of
+    it."""
+    options = {
+        "bar": [craft("smithy", {"ore": 9}), withdraw(stock=1)],
+        "ore": [gather("pit")],
+    }
+    assert acquisition_cost("bar", 1, options, {}) == 1 + 1   # bank hop + withdraw
 
 
 def test_held_copies_are_consumed_before_any_route() -> None:
@@ -295,3 +319,14 @@ def test_deeper_chains_cost_strictly_more() -> None:
             "ingot": [craft("smithy", {"ore": 1})],
             "ore": [gather("pit")]}
     assert acquisition_cost("bar", 1, deep, {}) > acquisition_cost("bar", 1, shallow, {})
+
+
+def test_needing_nothing_costs_nothing() -> None:
+    """A zero (or already-satisfied) demand contributes no actions and no venue
+    hop. Reached for real whenever a recipe input is fully covered by holdings —
+    the walk must not charge a walk to a node it never visits."""
+    options = {"ore": [gather("pit")]}
+    assert acquisition_cost("ore", 0, options, {}) == 0
+    # ...and via a recipe whose every input is already held.
+    deep = {"blade": [craft("smithy", {"ore": 2})], "ore": [gather("pit")]}
+    assert acquisition_cost("blade", 1, deep, {"ore": 2}) == 1 + 1  # smithy + craft
