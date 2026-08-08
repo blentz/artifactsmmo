@@ -3,7 +3,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.plan_tree import _rank_detail, build_plan_tree
+from artifactsmmo_cli.ai.plan_tree import build_plan_tree, rank_detail
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
 from tests.test_ai.fixtures import make_state
@@ -308,10 +308,30 @@ class TestRankDetail:
         scales sharing one column (2026-08-08)."""
         row = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
                         cost=0, score=Fraction(264000025), step_repr="s", j=32981)
-        assert _rank_detail(row) == "J 32981"
+        assert rank_detail(row) == "32981"
 
-    def test_falls_back_to_score_when_the_objective_is_absent(self):
-        """No store, or a candidate outside the finite band where J is void."""
+    def test_shows_the_reachable_level_when_fifty_is_out_of_reach(self):
+        """R2D2's live board, 2026-08-08. Its xp trunk stalled at level 17 while
+        a gear root reached 50, so with only `j` to show the trunk fell back to
+        the legacy constant and the pane listed `1.00` beside `6490` — one
+        character mixing both scales, worse than the uniformly-wrong display it
+        replaced. The reachable level IS the ordering key in that band."""
+        row = RootScore(root_repr="r", category="char_level",
+                        contribution=Fraction(1), cost=0, score=Fraction(1),
+                        step_repr="s", reachable_level=17)
+        assert rank_detail(row) == "->L17"
+
+    def test_the_two_scales_are_visibly_different(self):
+        """A reachable level must not read as a small, excellent J."""
+        priced = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
+                           cost=0, score=Fraction(1), step_repr="s", j=17)
+        stalled = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
+                            cost=0, score=Fraction(1), step_repr="s",
+                            reachable_level=17)
+        assert rank_detail(priced) != rank_detail(stalled)
+
+    def test_falls_back_to_score_only_when_the_objective_never_ran(self):
+        """No learning store — the one case with neither figure to show."""
         row = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
                         cost=0, score=Fraction(5, 2), step_repr="s")
-        assert _rank_detail(row) == "2.50"
+        assert rank_detail(row) == "2.50"

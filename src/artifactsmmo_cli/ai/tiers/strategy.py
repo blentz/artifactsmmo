@@ -248,7 +248,20 @@ class RootScore:
 
     None when `J` was not consulted (no learning store) — and None for any root
     outside the finite band, since the objective is void there (see
-    `branch_objective.finite_j`)."""
+    `branch_objective.finite_j`). Those roots carry `reachable_level` instead."""
+
+    reachable_level: int | None = None
+    """How far this root's projection actually gets, for a root `J` cannot price.
+
+    A character can hold BOTH kinds at once and R2D2 did on 2026-08-08: its xp
+    trunk stalled at level 17 (unreachable, so `j` is None) while a gear candidate
+    reached 50 (`j=6490`). With only `j` to show, the trunk fell back to the
+    legacy `score` — the constant `1.0` — so one pane listed `1.0` beside `6490`
+    and reproduced the very cross-scale comparison this field exists to end.
+
+    In the unreachable band the ordering key IS the reachable level (furthest
+    progress first, then acquisition cost — S-006), so this is not a consolation
+    figure: it is the number that actually decided those rows."""
 
     def to_dict(self) -> dict[str, object]:
         # P4a float boundary: scores are exact Fractions internally; the trace

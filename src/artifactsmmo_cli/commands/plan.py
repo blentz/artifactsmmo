@@ -12,6 +12,7 @@ import typer
 
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.plan_report import PlanReport
+from artifactsmmo_cli.ai.plan_tree import rank_detail
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.config import Config
@@ -68,16 +69,15 @@ def _print_report(player: GamePlayer, report: PlanReport) -> None:
             verdict = f"WINNABLE via {win}" if win else "NOT WINNABLE — gear unbuildable!"
             print(f"  {di.get('item')}: droppers={di.get('droppers')} -> {verdict}")
     print("-" * 70)
-    # J leads, because J is what chose. `score` follows in parentheses as the
-    # per-category figure it has always been — NOT a comparable ranking: it is
-    # `pursuit_value` for gear and a constant 1 for the xp trunk, so reading a
-    # winner off it shows gear ahead 2.6e8 to 1.0 on cycles where J had the trunk
-    # winning by 0.006% (live 2026-08-08).
-    print("descent (top 8) — J is the decision, lower wins; score is per-category:")
+    # The objective's own figure, on the scale that ranked each root — see
+    # `plan_tree.rank_detail`, which this mirrors so the CLI and the TUI plan
+    # pane never disagree about a cycle. `score` follows in parentheses as the
+    # per-category figure it has always been, and is NOT a comparable ranking.
+    print("descent (top 8) — cycles to 50 (lower wins), or ->L<n> when 50 is "
+          "out of reach:")
     for rs in d.ranking[:8]:
-        j = f"J={rs.j}" if rs.j is not None else "J=n/a"
-        print(f"  {j:>12s} (score {float(rs.score):.3g}) {rs.category:11s} "
-              f"{rs.root_repr}  ->  step={rs.step_repr}")
+        print(f"  {rank_detail(rs):>10s} (score {float(rs.score):.3g}) "
+              f"{rs.category:11s} {rs.root_repr}  ->  step={rs.step_repr}")
     print("=" * 70)
 
 

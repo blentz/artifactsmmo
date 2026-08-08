@@ -23,19 +23,29 @@ from artifactsmmo_cli.tui.plan_format import short_root, supply_detail
 _DEPTH_CAP = 32
 
 
-def _rank_detail(row: RootScore) -> str:
-    """How a root's standing reads in the plan pane: its `J` when the objective
-    decided, otherwise its per-category score.
+def rank_detail(row: RootScore) -> str:
+    """How a root's standing reads in the plan pane, on the scale that ranked it.
 
-    `J` leads because `J` is what chose. `score` is NOT a comparable ranking — it
-    is `pursuit_value` for gear and a constant 1.0 for the xp trunk — so showing
-    it alone made gear look like a landslide (2.6e8 against 1.0) on cycles where
-    `J` had the trunk winning by 0.006%, which is what sent a reader hunting for a
-    bug in the pivot on 2026-08-08. Lower `J` wins, hence the explicit label:
-    an unlabelled number next to a higher-is-better one invites the wrong reading
-    twice over."""
+    Three cases, and every root the objective saw lands in one of the first two,
+    so none falls back to `score`:
+
+      * FINITE band — its `J`, a cycle count, lower wins.
+      * UNREACHABLE band — `->L<n>`, the level its projection actually reaches.
+        That IS the ordering key there (furthest progress first, S-006), and the
+        arrow marks it as a different quantity so it cannot be misread as a small
+        and therefore excellent `J`.
+      * NO OBJECTIVE (no learning store) — the legacy per-category `score`.
+
+    The third case must stay visibly distinct because `score` is NOT comparable
+    across rows: `pursuit_value` for gear against a constant 1.0 for the xp trunk.
+    Mixing it with `J` in one list is what made R2D2's pane show `1.00` beside
+    `6490` on 2026-08-08 — its trunk was unreachable while a gear root was not —
+    and that mixed list was harder to read than the uniformly-wrong one it
+    replaced."""
     if row.j is not None:
-        return f"J {row.j}"
+        return f"{row.j}"
+    if row.reachable_level is not None:
+        return f"->L{row.reachable_level}"
     return f"{float(row.score):.2f}"
 
 
@@ -140,7 +150,7 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
     # from the ranking has always had, so the unannotated case is unchanged.
     details: list[str] = []
     if chosen_score is not None:
-        details.append(f"{chosen_score.category} · {_rank_detail(chosen_score)}")
+        details.append(f"{chosen_score.category} · {rank_detail(chosen_score)}")
     if role is not None:
         details.append(f"[{role}]")
     chosen_node = chosen_node.model_copy(update={
@@ -154,5 +164,5 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
         roots.append(PlanTreeNode(
             key=r.root_repr, label=short_root(r.root_repr), kind="root_stub",
             status="unmet",
-            detail=f"root {i + 1} · {r.category} · {_rank_detail(r)}"))
+            detail=f"root {i + 1} · {r.category} · {rank_detail(r)}"))
     return tuple(roots)

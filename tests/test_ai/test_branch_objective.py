@@ -404,6 +404,24 @@ def test_j_by_identity_maps_only_finite_band_candidates():
     )
 
 
+def test_every_ranked_root_gets_a_figure_on_one_scale(game_data, store):
+    """No row may fall back to the legacy `score` once the objective has run.
+
+    The offline scenarios sit entirely in the unreachable band, so every row here
+    carries `reachable_level` and none carries `j` — the mirror of the live
+    finite-band case, and between them the two cover both arms."""
+    state, objective, _gear = _candidates("l12_deep_chain_grind", game_data)
+    with store.search_cache():
+        decision = decide_tree(state, game_data, objective,
+                               band_adequate=False, store=store)
+    assert decision.ranking
+    for row in decision.ranking:
+        assert (row.j is not None) != (row.reachable_level is not None), (
+            f"{row.root_repr} carries both figures or neither — it must sit on "
+            f"exactly one scale"
+        )
+
+
 def test_display_ranking_carries_the_objective_value(game_data, store):
     """The display must show the scale the pivot decided on.
 

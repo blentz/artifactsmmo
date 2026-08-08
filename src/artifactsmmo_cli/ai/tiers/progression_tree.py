@@ -201,8 +201,9 @@ def _j_by_identity(
     Candidates outside the finite band are OMITTED rather than mapped to a
     number: `J` is void for them (`finite_j`), and a row reporting `j=None` says
     "the objective could not price this" where a 0 would claim it priced it at
-    nothing. Written as a loop rather than a comprehension so `finite_j` is
-    called once per candidate and the result type is honestly `int`."""
+    nothing. Those roots are covered by `_reach_by_identity` instead. Written as a
+    loop rather than a comprehension so `finite_j` is called once per candidate
+    and the result type is honestly `int`."""
     out: dict[str, int] = {}
     for candidate in ranking:
         value = finite_j(candidate)
@@ -211,10 +212,28 @@ def _j_by_identity(
     return out
 
 
+def _reach_by_identity(
+    ranking: "list[ProgressionCandidate]") -> Mapping[str, int]:
+    """Reachable level for each root `J` cannot price — the complement of
+    `_j_by_identity`, so between them every root gets a figure on ONE of the two
+    scales and none falls back to the legacy `score`.
+
+    Only the unpriceable ones are included. A finite-band root has a `J` and does
+    not need this, and giving it both would invite a reader to compare a level
+    against a cycle count — a third scale in the same column, which is the whole
+    problem repeating."""
+    out: dict[str, int] = {}
+    for candidate in ranking:
+        if finite_j(candidate) is None:
+            out[candidate.identity] = candidate.reachable_level
+    return out
+
+
 def _gear_ranking_rows(state: WorldState, game_data: GameData,
                        ordered: list[GearCandidate],
                        ctx: SelectionContext = NO_PROFILE_CONTEXT,
                        j_by_identity: Mapping[str, int] = _NO_J,
+                       reach_by_identity: Mapping[str, int] = _NO_J,
                        ) -> "list[strategy.RootScore]":
     """Semantics item 7: one row per gear candidate, best-first. Contribution
     mirrors score in every row (no separate weighting exists in this display
@@ -233,7 +252,8 @@ def _gear_ranking_rows(state: WorldState, game_data: GameData,
         rows.append(strategy.RootScore(
             root_repr=repr(root), category="gear", contribution=candidate.gain,
             cost=0, score=candidate.gain, step_repr=repr(step),
-            j=j_by_identity.get(candidate_identity(candidate))))
+            j=j_by_identity.get(candidate_identity(candidate)),
+            reachable_level=reach_by_identity.get(candidate_identity(candidate))))
     return rows
 
 
@@ -711,16 +731,18 @@ def decide_tree(state: WorldState, game_data: GameData,
     # folding one into the other would be a sign error dressed up as a tidy-up,
     # which is the defect class this whole objective exists to retire.
     j_by_identity = _j_by_identity(j_ranking) if j_ranking else _NO_J
+    reach_by_identity = _reach_by_identity(j_ranking) if j_ranking else _NO_J
     trunk_row = strategy.RootScore(
         root_repr=repr(trunk), category="char_level", contribution=Fraction(1),
         cost=0, score=Fraction(1), step_repr=repr(trunk),
-        j=j_by_identity.get(TRUNK_IDENTITY))
+        j=j_by_identity.get(TRUNK_IDENTITY),
+        reachable_level=reach_by_identity.get(TRUNK_IDENTITY))
     # The display ranking keeps EVERY candidate, demoted ones included — it is a
     # diagnostic, and a reader comparing it against `j_ranking` needs to see the
     # roots the objective ruled out, not a list quietly pruned to the survivors.
     ranking = [trunk_row,
                *_gear_ranking_rows(state, game_data, [*ordered, *demoted], ctx,
-                                   j_by_identity)]
+                                   j_by_identity, reach_by_identity)]
 
     # interrupt/desired_state are trace-shape compatibility only: RestoreHP
     # preemption lives in the engine-independent arbiter guard ladder, and
