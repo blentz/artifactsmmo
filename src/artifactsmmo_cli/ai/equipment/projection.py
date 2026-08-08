@@ -21,6 +21,23 @@ class ProjectedStats:
     critical_strike: int
     initiative: int
     max_hp: int
+    wisdom: int = 0
+    """+1% xp per 10 points. THE stat `J` most directly cares about, since `J`'s
+    benefit term is xp-driven cycles — and it was absent from this struct until
+    2026-08-08, so a `wisdom_amulet` (+6% xp on every kill to level 50) projected
+    byte-identically to doing nothing. `cheapest_path_to_level` had always
+    CONSUMED wisdom (`xp_per_kill(..., wisdom=wisdom)`); it just read it from
+    `state.wisdom`, the server total for gear already WORN, so a candidate's own
+    wisdom never reached the formula that wanted it.
+
+    WISDOM ONLY, DELIBERATELY. `prospecting`, `inventory_space` and `lifesteal`
+    are unprojected too, and they stay that way for a concrete reason:
+    `WorldState` has no field for any of them, so there is no BASE total to add a
+    delta to. This projection is a delta from server-authoritative totals, and a
+    fabricated base would silently mis-state every candidate — worse than the
+    absence it replaced. They remain declared in
+    `audit/stat_projection_completeness.UNPRICED`, which is the difference
+    between a known gap and a forgotten one."""
 
 
 def _drop_zeros(d: dict[str, int]) -> dict[str, int]:
@@ -39,6 +56,7 @@ def project_loadout_stats(
     critical_strike = state.critical_strike
     initiative = state.initiative
     max_hp = state.max_hp
+    wisdom = state.wisdom
 
     for slot, new_code in loadout.items():
         old_code = state.equipment.get(slot)
@@ -61,6 +79,11 @@ def project_loadout_stats(
         initiative += (new_s.initiative if new_s else 0) - (old_s.initiative if old_s else 0)
         # max_hp may fall below current hp on a downgrade; intentional (conservative survivability) — do not clamp.
         max_hp += (new_s.hp_bonus if new_s else 0) - (old_s.hp_bonus if old_s else 0)
+        # Same delta form as everything above -- the server reports TOTALS, so a
+        # swap is (new contribution - old contribution). `haste` is deliberately
+        # absent: it reduces cooldown SECONDS against an objective denominated in
+        # ACTIONS. See `audit/stat_projection_completeness.UNPRICED`.
+        wisdom += (new_s.wisdom if new_s else 0) - (old_s.wisdom if old_s else 0)
 
     return ProjectedStats(
         attack=_drop_zeros(attack),
@@ -70,4 +93,5 @@ def project_loadout_stats(
         critical_strike=critical_strike,
         initiative=initiative,
         max_hp=max_hp,
+        wisdom=wisdom,
     )

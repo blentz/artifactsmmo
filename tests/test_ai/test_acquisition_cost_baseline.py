@@ -21,15 +21,20 @@ The bias runs the opposite way from the obvious guess, which is why it survived:
 nobody looks for a bug that makes the hard thing look cheap.
 """
 
+from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 
 import pytest
 
+from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
+from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
+from artifactsmmo_cli.ai.gear_value_core import Rank
+from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.min_plan_length import min_plan_length
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.branch_objective import gear_candidate, trunk_candidate
+from artifactsmmo_cli.ai.tiers.branch_objective import gear_candidate
 from artifactsmmo_cli.ai.tiers.progression_tree_core import GearCandidate
 
 _BUNDLE = (Path(__file__).resolve().parent / "scenarios" / "fixtures"
@@ -126,51 +131,65 @@ def test_a_50000_gold_backpack_is_cheaper_than_two_copper_ore(game_data) -> None
     assert _cost(game_data, "backpack") < two_ore
 
 
-def test_a_wisdom_amulet_projects_exactly_the_trunks_outcome(game_data) -> None:
-    """THE BENEFIT HALF, measured end-to-end through the production objective.
+def test_a_wisdom_ITEM_NOW_REACHES_THE_PROJECTION(game_data) -> None:
+    """INCREMENT 3, and a CORRECTION to how it was first demonstrated.
 
-    `wisdom 60` is **+6% xp on every kill from here to level 50** — the single
-    most directly `J`-relevant stat in the game, since `J`'s whole benefit term
-    is xp-driven cycles. It moves the projection by NOTHING, because the only
-    channel from gear to `cheapest_path_to_level` is `ProjectedStats`, and
-    `ProjectedStats` has no `wisdom` field.
+    The original version of this test used `wisdom_amulet` and concluded that
+    its wisdom 60 projected as zero because `ProjectedStats` had no `wisdom`
+    field. The code claim was true — `cheapest_path_to_level` read
+    `state.wisdom`, the total for gear already WORN — but the DEMONSTRATION was
+    confounded: `wisdom_amulet` carries `conditions [('level', 14)]` and the
+    scenario character is level 12, so `pick_loadout_cached` correctly refused to
+    wear it. It would have projected zero whatever `ProjectedStats` contained.
 
-    `cheapest_path_to_level` does read wisdom — `xp_per_kill(..., wisdom=wisdom)`
-    — but from `state.wisdom`, the server total for gear already WORN. The
-    channel is wired; the candidate's value never reaches it.
+    A measurement that cannot distinguish two explanations is not evidence for
+    either. This version uses `adventurer_vest` — level 10, wisdom 20, actually
+    wearable — so the only thing under test is whether the stat reaches the
+    projection.
 
-    The sword is the control: it wins on `reachable_level` purely because
-    `attack` happens to be a field the projection carries. The difference
-    between the two candidates is not their value to the character.
-
-    Increment 3 makes this test fail, which is the point of it."""
+    Before increment 3 this was 0. It is now 20."""
     state = scenario_state(SCENARIOS["l12_deep_chain_grind"], game_data)
-    store = LearningStore(db_path=":memory:", character="baseline_probe")
+    vest = game_data.item_stats("adventurer_vest")
+    assert vest.wisdom == 20
+    assert vest.level <= state.level, "fixture drift: the vest must be wearable"
+
+    holding = replace(state, inventory={**state.inventory, "adventurer_vest": 1},
+                      hp=state.max_hp)
+    projected = project_loadout_stats(
+        holding, pick_loadout_cached(Rank(), holding, game_data), game_data)
+    assert state.wisdom == 0
+    assert projected.wisdom == 20
+
+
+def test_wisdom_makes_a_COMPLETING_walk_cheaper(game_data) -> None:
+    """The payoff, in the only band where `J` can see it.
+
+    Below the top band every candidate is UNREACHABLE and S-006 ranks by
+    furthest progress, then cost — the `J` sum never consults `cycles_to_fifty`
+    there, so a wisdom item changes the ranking by nothing however well it is
+    projected. That is a real limit of the projection (it models no acquisitions
+    along the way), not of this increment, and it is why the level-12 scenario
+    shows `reach=17` with and without the vest.
+
+    Given a walk that COMPLETES, wisdom pays: 222.2 cycles -> 200.0.
+
+    Asserts the DIRECTION only. A real item bundles stats — the vest also
+    carries resistance and hp, which move `rest_cycles_per_fight` — so
+    attributing the whole 10% to wisdom would be a claim this test cannot
+    support."""
+    state = scenario_state(SCENARIOS["l12_deep_chain_grind"], game_data)
+    store = LearningStore(db_path=":memory:", character="wisdom_probe")
     store.start_session()
     try:
-        trunk = trunk_candidate(state, store, game_data)
-        amulet = gear_candidate(
-            GearCandidate(slot="amulet_slot", code="wisdom_amulet",
-                          gain=Fraction(1), level=15),
-            state, store, game_data)
-        sword = gear_candidate(
-            GearCandidate(slot="weapon_slot", code="iron_sword",
-                          gain=Fraction(1), level=10),
-            state, store, game_data)
+        near = replace(state, level=16, xp=0, max_xp=1000, inventory={})
+        bare = cheapest_path_to_level(17, near, store, game_data)
+        wise = cheapest_path_to_level(
+            17, replace(near, inventory={"adventurer_vest": 1}), store, game_data)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
-
-    assert game_data.item_stats("wisdom_amulet").wisdom == 60
-    assert game_data.item_stats("iron_sword").wisdom == 0
-
-    # The amulet is indistinguishable from doing nothing...
-    assert amulet.reachable_level == trunk.reachable_level
-    assert amulet.cycles_to_fifty == trunk.cycles_to_fifty
-    # ...so it loses to the trunk on acquisition cost alone.
-    assert amulet.acquire_cost > trunk.acquire_cost == 0
-    # ...while the sword, valued through a projected stat, moves the ceiling.
-    assert sword.reachable_level > trunk.reachable_level
+    assert not bare.blocked and not wise.blocked
+    assert wise.total_cycles < bare.total_cycles
 
 
 def test_the_skill_gate_is_invisible_to_the_cost(game_data) -> None:

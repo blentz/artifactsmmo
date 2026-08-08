@@ -85,13 +85,16 @@ def test_haste_is_excluded_for_the_unit_reason() -> None:
     assert "ACTIONS" in UNPRICED["haste"]
 
 
-def test_the_census_currently_prices_seven_of_twelve_worn_stats() -> None:
-    """Characterisation of the defect at `5a2d1b8d`, so the increments that fix
-    it have a baseline that moves visibly. Expected to CHANGE — and the change
-    is the deliverable, not a regression."""
+def test_the_census_prices_eight_of_twelve_worn_stats() -> None:
+    """Moved 7 -> 8 in increment 3, when `wisdom` graduated. The change IS the
+    deliverable, not a regression — and this assertion is the thing that makes
+    the graduation visible rather than silent.
+
+    Of the four remaining, exactly one (`haste`) is permanent."""
     census = run_census()
-    assert len(census.projected) == 7
-    assert len(census.unpriced) == 5
+    assert len(census.projected) == 8
+    assert len(census.unpriced) == 4
+    assert "wisdom" in census.projected
     assert census.ok
 
 

@@ -15,8 +15,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, col, select
 
 from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
+from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_value_core import Rank
 from artifactsmmo_cli.ai.learning.cycles_for_progress_core import (
     CycleRow,
     cycles_for_progress_pure,
@@ -256,7 +259,6 @@ def cheapest_path_to_level(
     segments: list[PathSegment] = []
     sim_level = state.level
     xp_to_next = max(1, state.max_xp - state.xp)
-    wisdom = state.wisdom
     # Project beatability at FULL HP — identical to the runtime
     # `GamePlayer._is_winnable`, which rests to max_hp before the verdict
     # because the planner inserts a Rest step before FightAction. Filtering at a
@@ -265,6 +267,19 @@ def cheapest_path_to_level(
     # HP is a recoverable resource, not equipment/inventory — so resting is not
     # speculative gear progression, just the normal pre-fight recovery.
     rested = replace(state, hp=state.max_hp)
+    # PROJECTED wisdom, not `state.wisdom`. The latter is the server total for
+    # gear already WORN, so a candidate holding a `wisdom_amulet` in inventory
+    # reported the incumbent's wisdom and its +6% xp on every kill to 50 landed
+    # nowhere. `is_winnable` and `expected_damage_per_fight` below already read
+    # the projected loadout; wisdom was the one input still read from the raw
+    # state, and that asymmetry is exactly what made every gear candidate whose
+    # value is wisdom project byte-identically to the trunk.
+    #
+    # Computed ONCE per walk rather than per monster: the loadout does not depend
+    # on which monster is being weighed, and `cheapest_path_to_level` is called
+    # per candidate per decision.
+    wisdom = project_loadout_stats(
+        rested, pick_loadout_cached(Rank(), rested, game_data), game_data).wisdom
 
     while sim_level < target_level:
         # Beatable monsters at sim_level: FightAction.is_applicable allows

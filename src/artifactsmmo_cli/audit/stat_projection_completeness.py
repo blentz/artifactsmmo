@@ -40,10 +40,12 @@ The bucket assignment is exhaustive by construction (`_classify` partitions
 left out of every list — the failure mode that let five stats go unpriced for
 the whole life of the objective.
 
-See `docs/PLAN_unified_acquisition_objective.md`. `wisdom`, `prospecting`,
-`inventory_space` and `lifesteal` are scheduled for removal from `UNPRICED` by
-increments 3 and 4. `haste` is a PERMANENT exclusion and is the one entry here
-that is not a defect — see its justification.
+See `docs/PLAN_unified_acquisition_objective.md`. `wisdom` GRADUATED in increment
+3 — the numbers above are history, not the current state. `prospecting` is
+scheduled for increment 4. `inventory_space` and `lifesteal` are expressible in
+actions but have no `WorldState` base total to project a delta from, so they wait
+on that. `haste` is a PERMANENT exclusion and is the one entry here that is not a
+defect — see its justification.
 """
 
 from dataclasses import dataclass, fields
@@ -76,6 +78,7 @@ WORN_EFFECT_TO_PROJECTED = {
     "critical_strike": "critical_strike",
     "initiative": "initiative",
     "hp_bonus": "max_hp",
+    "wisdom": "wisdom",
 }
 """Worn-gear effects `ProjectedStats` carries, mapped to the field that carries
 them. `hp_bonus` -> `max_hp` is the one rename: the item grants a BONUS, the
@@ -83,14 +86,6 @@ projection reports the resulting TOTAL, which is why this is a mapping rather
 than a set membership test."""
 
 UNPRICED: dict[str, str] = {
-    "wisdom": (
-        "+1% xp per 10 points — the single most directly J-relevant stat in the "
-        "game, since it multiplies the xp of every kill on the path to 50. "
-        "`cheapest_path_to_level` ALREADY consumes it "
-        "(`xp_per_kill(..., wisdom=wisdom)`) but sources it from `state.wisdom`, "
-        "the server total for gear already WORN — so a wisdom upgrade held in "
-        "inventory projects zero. Scheduled: increment 3."
-    ),
     "prospecting": (
         "+1% drop chance per 10 points. Its entire value is reducing "
         "kills-per-drop, which is a cost in the DROP route — a route "
