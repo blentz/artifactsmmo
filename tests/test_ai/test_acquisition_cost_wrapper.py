@@ -17,6 +17,7 @@ most gear comes back unobtainable, and the reasons are worth reading.
 
 import json
 from dataclasses import replace
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,7 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     _drop_table,
     _price_of,
     _priced,
+    _prospecting_relief,
     _workshop_venue,
     acquisition_actions,
     acquisition_options,
@@ -125,6 +127,42 @@ def test_drop_costs_expected_kills_times_whole_loop_cycles(state, game_data) -> 
                   state, game_data)
     assert opt.venue == "chicken"
     assert opt.actions_per_application > 1
+
+
+def test_prospecting_makes_a_drop_farm_cheaper(state, game_data) -> None:
+    """INCREMENT 4. The two halves meet with no new term.
+
+    Prospecting's entire value is reducing kills-per-drop, which is a cost in the
+    DROP route. Until increment 2 priced that route there was nothing for the
+    stat to reduce — pricing it earlier would have given it a coefficient on
+    zero. That is why it is last, not an afterthought.
+
+    A character wearing prospecting gear farms the same monster in strictly fewer
+    actions. `vital_armor` carries prospecting 60."""
+    gear = game_data.item_stats("vital_armor")
+    assert gear.prospecting > 0, "fixture drift: expected a prospecting item"
+    plain = _priced("feather",
+                    Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                    state, game_data)
+    lucky = _priced("feather",
+                    Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                    replace(state, prospecting=500), game_data)
+    assert lucky.actions_per_application < plain.actions_per_application
+
+
+def test_the_prospecting_rate_mirrors_the_wisdom_rate(state, game_data) -> None:
+    """"1% extra per 10 points" is decided in ONE place.
+
+    `MonsterCatalog.xp_per_kill` scales xp by `(1000 + wisdom) / 1000`; this
+    scales kills by the reciprocal of the same form. Restating the rate as a
+    literal here would let the two drift, and a rate that means one thing for xp
+    and another for drops is the unit-confusion this epic keeps finding.
+
+    Exact `Fraction`, never a float: it multiplies a `Fraction` that
+    `Formal.MonsterDropSelection` proves things about."""
+    assert _prospecting_relief(0) == Fraction(1)
+    assert _prospecting_relief(1000) == Fraction(1, 2)
+    assert isinstance(_prospecting_relief(60), Fraction)
 
 
 def test_an_item_with_no_crafting_skill_still_prices(state, game_data) -> None:

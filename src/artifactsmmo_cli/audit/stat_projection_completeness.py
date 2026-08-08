@@ -41,8 +41,8 @@ left out of every list — the failure mode that let five stats go unpriced for
 the whole life of the objective.
 
 See `docs/PLAN_unified_acquisition_objective.md`. `wisdom` GRADUATED in increment
-3 — the numbers above are history, not the current state. `prospecting` is
-scheduled for increment 4. `inventory_space` and `lifesteal` are expressible in
+3 — the numbers above are history, not the current state. `prospecting` GRADUATED in increment 4, where
+it reduces expected kills in the DROP-route cost. `inventory_space` and `lifesteal` are expressible in
 actions but have no `WorldState` base total to project a delta from, so they wait
 on that. `haste` is a PERMANENT exclusion and is the one entry here that is not a
 defect — see its justification.
@@ -79,6 +79,7 @@ WORN_EFFECT_TO_PROJECTED = {
     "initiative": "initiative",
     "hp_bonus": "max_hp",
     "wisdom": "wisdom",
+    "prospecting": "prospecting",
 }
 """Worn-gear effects `ProjectedStats` carries, mapped to the field that carries
 them. `hp_bonus` -> `max_hp` is the one rename: the item grants a BONUS, the
@@ -86,13 +87,6 @@ projection reports the resulting TOTAL, which is why this is a mapping rather
 than a set membership test."""
 
 UNPRICED: dict[str, str] = {
-    "prospecting": (
-        "+1% drop chance per 10 points. Its entire value is reducing "
-        "kills-per-drop, which is a cost in the DROP route — a route "
-        "`acquire_cost` does not price at all yet. Pricing the stat before "
-        "pricing the route it acts on would give it nothing to reduce. "
-        "Scheduled: increment 4, deliberately after increments 1-2."
-    ),
     "inventory_space": (
         "+bag slots. Pays in avoided bank round-trips, which are actions — so "
         "this IS expressible in J's currency, unlike haste. Needs a model of "

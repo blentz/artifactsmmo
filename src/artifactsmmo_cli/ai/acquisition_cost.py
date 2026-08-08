@@ -23,11 +23,15 @@ the divergence the epic exists to remove.
 """
 
 from collections.abc import Mapping
+from fractions import Fraction
 from math import ceil
 
 from artifactsmmo_cli.ai.acquisition_cost_core import RouteOption, acquisition_cost
+from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
+from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_value_core import Rank
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.monster_drop_selection import (
@@ -61,6 +65,26 @@ def _workshop_venue(skill: str) -> str:
     return f"workshop:{skill}"
 
 
+def _prospecting_relief(prospecting: int) -> Fraction:
+    """Factor by which prospecting reduces expected kills per unit dropped.
+
+    The server grants "1% extra per 10 prospecting", so the drop chance is scaled
+    by `(1000 + prospecting) / 1000` and the kills needed are scaled by its
+    RECIPROCAL. Mirrors `MonsterCatalog.xp_per_kill`'s wisdom term exactly
+    (`(1000 + wisdom) / 1000`) rather than restating the rate — one place decides
+    what "1% per 10 points" means, so the two cannot drift.
+
+    Exact `Fraction`, never a float: this multiplies a `Fraction` that
+    `Formal.MonsterDropSelection` proves things about, and a float here would
+    quietly make that proof about a different number.
+
+    THIS IS WHY PROSPECTING WAITED FOR INCREMENT 2. Its entire value is making a
+    DROP farm cheaper, and until the drop route was priced at all there was
+    nothing for it to reduce. Pricing the stat first would have given it a
+    coefficient on zero."""
+    return Fraction(1000, 1000 + prospecting)
+
+
 def _drop_actions(monster_code: str, rate: int, min_q: int, max_q: int,
                   state: WorldState, game_data: GameData) -> int:
     """Whole-loop actions to farm ONE unit off `monster_code`.
@@ -75,9 +99,11 @@ def _drop_actions(monster_code: str, rate: int, min_q: int, max_q: int,
 
     Rounded UP: a fractional action is still an action the character spends, and
     the objective is an exact integer (S-013)."""
+    projected = project_loadout_stats(
+        state, pick_loadout_cached(Rank(), state, game_data), game_data)
     kills = expected_kills(MonsterDropCandidate(
         monster_code=monster_code, rate=rate, min_quantity=min_q,
-        max_quantity=max_q, distance=0))
+        max_quantity=max_q, distance=0)) * _prospecting_relief(projected.prospecting)
     per_kill = cycles_per_kill(
         expected_damage_per_fight(state, game_data, monster_code), state.max_hp)
     return max(1, ceil(float(kills) * per_kill))

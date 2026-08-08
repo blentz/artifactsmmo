@@ -30,14 +30,18 @@ class ProjectedStats:
     `state.wisdom`, the server total for gear already WORN, so a candidate's own
     wisdom never reached the formula that wanted it.
 
-    WISDOM ONLY, DELIBERATELY. `prospecting`, `inventory_space` and `lifesteal`
-    are unprojected too, and they stay that way for a concrete reason:
-    `WorldState` has no field for any of them, so there is no BASE total to add a
+    `inventory_space` and `lifesteal` remain unprojected for a concrete reason:
+    `WorldState` has no field for either, so there is no BASE total to add a
     delta to. This projection is a delta from server-authoritative totals, and a
     fabricated base would silently mis-state every candidate — worse than the
-    absence it replaced. They remain declared in
+    absence it replaced. They stay declared in
     `audit/stat_projection_completeness.UNPRICED`, which is the difference
     between a known gap and a forgotten one."""
+    prospecting: int = 0
+    """+1% drop chance per 10 points. Pays by reducing kills-per-drop, so it
+    makes every DROP-route acquisition cheaper — see
+    `ai/acquisition_cost._drop_actions`. Unlike the three stats named above it
+    HAS a `WorldState` base total to project a delta from."""
 
 
 def _drop_zeros(d: dict[str, int]) -> dict[str, int]:
@@ -57,6 +61,7 @@ def project_loadout_stats(
     initiative = state.initiative
     max_hp = state.max_hp
     wisdom = state.wisdom
+    prospecting = state.prospecting
 
     for slot, new_code in loadout.items():
         old_code = state.equipment.get(slot)
@@ -84,6 +89,8 @@ def project_loadout_stats(
         # absent: it reduces cooldown SECONDS against an objective denominated in
         # ACTIONS. See `audit/stat_projection_completeness.UNPRICED`.
         wisdom += (new_s.wisdom if new_s else 0) - (old_s.wisdom if old_s else 0)
+        prospecting += ((new_s.prospecting if new_s else 0)
+                        - (old_s.prospecting if old_s else 0))
 
     return ProjectedStats(
         attack=_drop_zeros(attack),
@@ -94,4 +101,5 @@ def project_loadout_stats(
         initiative=initiative,
         max_hp=max_hp,
         wisdom=wisdom,
+        prospecting=prospecting,
     )

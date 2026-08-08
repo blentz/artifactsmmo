@@ -85,16 +85,17 @@ def test_haste_is_excluded_for_the_unit_reason() -> None:
     assert "ACTIONS" in UNPRICED["haste"]
 
 
-def test_the_census_prices_eight_of_twelve_worn_stats() -> None:
-    """Moved 7 -> 8 in increment 3, when `wisdom` graduated. The change IS the
-    deliverable, not a regression — and this assertion is the thing that makes
-    the graduation visible rather than silent.
+def test_the_census_prices_nine_of_twelve_worn_stats() -> None:
+    """7 -> 8 when `wisdom` graduated (increment 3), 8 -> 9 when `prospecting`
+    did (increment 4). Each change IS the deliverable, and this assertion is what
+    makes the graduation visible rather than silent.
 
-    Of the four remaining, exactly one (`haste`) is permanent."""
+    Of the three remaining, exactly one (`haste`) is permanent; the other two
+    wait on `WorldState` gaining a base total to project a delta from."""
     census = run_census()
-    assert len(census.projected) == 8
-    assert len(census.unpriced) == 4
-    assert "wisdom" in census.projected
+    assert len(census.projected) == 9
+    assert len(census.unpriced) == 3
+    assert {"wisdom", "prospecting"} <= census.projected
     assert census.ok
 
 

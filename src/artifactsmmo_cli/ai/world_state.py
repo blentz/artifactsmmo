@@ -107,6 +107,12 @@ class WorldState:
     """Wisdom stat — factors into documented XP-per-kill formula
     (+0.1% XP per wisdom point). Defaults 0 so older WorldState
     constructions don't break."""
+    prospecting: int = 0
+    """`character.prospecting`. +1% drop chance per 10 points, applied by the
+    server to fights and gathers alike. Read by the DROP-route acquisition cost,
+    where it reduces expected kills per unit. Defaults 0 so a WorldState built
+    outside `from_character_schema` (tests, scenarios) stays constructible, and
+    is `_require`d from the API where a real character exists."""
     active_events: dict[str, datetime] = field(default_factory=dict)
     """event code -> expiration (tz-aware). Per-cycle snapshot from
     GET /events/active. Defaults empty so constructions that don't supply it
@@ -295,6 +301,7 @@ class WorldState:
             skill_xp=skill_xp,
             skill_max_xp=skill_max_xp,
             wisdom=_require(char, "wisdom"),
+            prospecting=_require(char, "prospecting"),
             x=char.x,
             y=char.y,
             inventory=inventory,
