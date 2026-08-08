@@ -227,6 +227,64 @@ def test_an_unchosen_route_leaves_nothing_behind() -> None:
     assert acquisition_cost("bar", 1, options, {"ore": 3}) == 2
 
 
+def gated_craft(venue: str, inputs: dict[str, int], unlock: str,
+                unlock_actions: int) -> RouteOption:
+    return RouteOption(kind="craft", venue=venue, actions_per_application=1,
+                       yield_per=1, capacity=UNBOUNDED, inputs=inputs,
+                       unlock=unlock, unlock_actions=unlock_actions)
+
+
+def test_an_unlock_is_paid_once_however_many_applications() -> None:
+    """THE POINT OF MODELLING THE GATE AS A PAY-ONCE KEY. Reaching
+    weaponcrafting 10 is a one-time grind; crafting five daggers afterwards does
+    not grind five times. A per-application term would produce exactly that
+    error, silently, and it would look like a very expensive recipe."""
+    options = {"dagger": [gated_craft("smithy", {"ore": 1}, "skill:wc:10", 100)],
+               "ore": [gather("pit")]}
+    one = acquisition_cost("dagger", 1, options, {})
+    five = acquisition_cost("dagger", 5, options, {})
+    assert one == 1 + 100 + 1 + 1 + 1        # smithy, grind, craft, pit, gather
+    assert five == one + 4 + 4               # 4 more crafts, 4 more gathers
+
+
+def test_two_routes_behind_the_same_gate_pay_it_once() -> None:
+    """A grind unlocks a TIER, not an item. Two recipes behind weaponcrafting 10
+    share the key, so a plan needing both pays the grind once — which is why the
+    key names the skill and level rather than the item."""
+    options = {
+        "kit": [craft("bench", {"dagger": 1, "sword": 1})],
+        "dagger": [gated_craft("smithy", {}, "skill:wc:10", 100)],
+        "sword": [gated_craft("smithy", {}, "skill:wc:10", 100)],
+    }
+    # bench + smithy hops, one grind, three crafts.
+    assert acquisition_cost("kit", 1, options, {}) == 2 + 100 + 3
+
+
+def test_an_already_met_gate_costs_nothing_extra() -> None:
+    """`skill_grind_cycles` returns 0 for a met gate, so the wrapper emits an
+    unlock worth 0 rather than branching on whether a gate applies. The walk
+    must charge nothing for it — otherwise every craft would carry a phantom
+    action."""
+    options = {"dagger": [gated_craft("smithy", {}, "skill:wc:10", 0)]}
+    plain = {"dagger": [craft("smithy", {})]}
+    assert acquisition_cost("dagger", 1, options, {}) == acquisition_cost(
+        "dagger", 1, plain, {})
+
+
+def test_a_gated_route_loses_to_a_ready_one_when_the_grind_dominates() -> None:
+    """The whole reason to price the gate instead of excluding it: the walk can
+    now WEIGH a five-level grind against buying the thing, rather than being
+    told one of the two does not exist."""
+    options = {
+        "sword": [gated_craft("smithy", {}, "skill:wc:10", 500),
+                  RouteOption(kind="buy", venue="vendor",
+                              actions_per_application=1, yield_per=1,
+                              capacity=UNBOUNDED, inputs={"gold": 3})],
+        "gold": [gather("coin_node")],
+    }
+    assert acquisition_cost("sword", 1, options, {}) == 1 + 1 + 1 + 3
+
+
 def test_deeper_chains_cost_strictly_more() -> None:
     """Monotonicity sanity: adding a tier of crafting cannot make an item
     cheaper. A ranking built on a bound that is not monotone in chain depth

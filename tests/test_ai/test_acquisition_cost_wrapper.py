@@ -15,6 +15,7 @@ express, so leaving them uncovered would repeat the original omission.
 most gear comes back unobtainable, and the reasons are worth reading.
 """
 
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -31,6 +32,8 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     route_options,
 )
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_sources import (
     UNBOUNDED_CAPACITY,
     Source,
@@ -227,6 +230,209 @@ def test_an_unmet_skill_gate_reads_as_a_WALL_not_a_price(state, game_data) -> No
     assert state.skills["weaponcrafting"] < stats.crafting_level
     assert game_data.workshop_location("weaponcrafting") is not None
     assert not route_options("iron_sword", state, game_data, NO_PROFILE_CONTEXT)
+
+
+@pytest.fixture(scope="module")
+def gated_state(state):  # type: ignore[no-untyped-def]
+    """The scenario state, plus the per-skill xp fields.
+
+    `scenario_state` leaves `skill_xp`/`skill_max_xp` EMPTY — they are a
+    synthetic fixture, not a character schema. A real `WorldState` always
+    carries them: `from_character_schema` reads `<skill>_max_xp` for every skill
+    through `_require`, so a missing value would already have raised long before
+    any pricing happened.
+
+    Supplying them here is therefore restoring a production invariant the
+    fixture does not model, NOT relaxing a guard — and
+    `test_no_skill_max_xp_leaves_the_route_excluded` pins the guard itself on
+    the bare fixture, so both halves stay honest."""
+    return replace(state,
+                   skill_xp={s: 0 for s in state.skills},
+                   skill_max_xp={s: 500 for s in state.skills})
+
+
+def _store_with_rate(skill: str, xp_per_cycle: int, cycles: int = 5) -> LearningStore:
+    """A real `LearningStore` carrying observed skill-xp gains — not a stub.
+
+    `skill_xp_per_cycle` averages only strictly-positive deltas, so recording
+    `cycles` rows of `xp_per_cycle` yields exactly that rate. Mocking the store
+    would mean asserting against a number this test invented; recording rows
+    means asserting against the number the production query computes."""
+    store = LearningStore(db_path=":memory:", character="grind_probe")
+    store.start_session()
+    for i in range(cycles):
+        store.record_cycle(Cycle(
+            ts=f"2026-08-08T00:00:{i:02d}+00:00", session_id="s", cycle_index=i,
+            character="grind_probe", outcome="ok",
+            delta_skill_xp_json=json.dumps({skill: xp_per_cycle}),
+        ))
+    return store
+
+
+def test_an_unmet_gate_becomes_a_PRICE_once_a_grind_rate_is_known(
+        gated_state, game_data) -> None:
+    """INCREMENT 1B'S WHOLE POINT, end to end on real game data.
+
+    `iron_sword` needs weaponcrafting 10 against this character's 5. With no
+    store the route stays excluded — today's behaviour, unchanged. Given an
+    observed weaponcrafting rate, the same sword prices FINITELY: the grind,
+    then the workshop, then the craft chain.
+
+    `min_plan_length` said 65 (gate ignored); the pricer without a store says
+    unobtainable (gate as a wall). Both are wrong in opposite directions. This
+    is the first number that is neither."""
+    store = _store_with_rate("weaponcrafting", 40)
+    try:
+        assert not route_options("iron_sword", gated_state, game_data,
+                                 NO_PROFILE_CONTEXT)
+        gated = route_options("iron_sword", gated_state, game_data,
+                              NO_PROFILE_CONTEXT, store)
+        assert [r.kind for r in gated] == ["craft"]
+        assert gated[0].unlock == "skill:weaponcrafting:10"
+        assert gated[0].unlock_actions > 0
+        assert gated[0].inputs == game_data.crafting_recipe("iron_sword")
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_an_undiscovered_workshop_leaves_the_route_excluded(
+        gated_state, game_data) -> None:
+    """A grind cannot conjure a workshop.
+
+    Workshop locations are DISCOVERED, so a skill can be gated AND have no known
+    bench. Paying the grind would buy nothing — the craft is still unservable
+    afterwards — so the gated arm declines, matching `_craft_sources`' own
+    workshop guard exactly. Two arms of the same policy must agree, or the
+    pricer and the readiness model disagree about what a workshop means.
+
+    The committed fixture knows a workshop for every skill, so this drops the
+    one entry rather than mocking the lookup."""
+    world = replace(game_data.world, workshop_locations={
+        s: loc for s, loc in game_data.world.workshop_locations.items()
+        if s != "weaponcrafting"})
+    benchless = replace(game_data, world=world)
+    assert benchless.workshop_location("weaponcrafting") is None
+    store = _store_with_rate("weaponcrafting", 40)
+    try:
+        assert not route_options("iron_sword", gated_state, benchless,
+                                 NO_PROFILE_CONTEXT, store)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_no_skill_max_xp_leaves_the_route_excluded(state, game_data) -> None:
+    """The other half of the API-data rule, pinned on the BARE fixture.
+
+    `scenario_state` supplies no `skill_max_xp`, and without it the size of the
+    grind is unknown. The guard declines rather than treating a missing
+    requirement as zero — which would have made the grind FREE and the gated
+    craft the cheapest route on the board.
+
+    That is not hypothetical: it is what the first run of this code did, and the
+    only reason it surfaced is that the route failed to appear at all. A zero
+    default would have produced a plausible number instead."""
+    assert not state.skill_max_xp
+    store = _store_with_rate("weaponcrafting", 40)
+    try:
+        assert not route_options("iron_sword", state, game_data,
+                                 NO_PROFILE_CONTEXT, store)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_the_sword_finally_has_a_price_neither_model_could_give(
+        gated_state, game_data) -> None:
+    """END TO END, and the point of the whole increment.
+
+    `min_plan_length` says 65 (gate ignored). The pricer without a grind rate
+    says unobtainable (gate as a wall). With the rate, the sword costs the grind
+    plus the chain — finite, larger than 65, and for the first time an answer
+    that accounts for the five weaponcrafting levels standing in the way."""
+    bare = replace(gated_state, inventory={})
+    store = _store_with_rate("weaponcrafting", 40)
+    try:
+        walled = acquisition_actions("iron_sword", 1, bare, game_data,
+                                     NO_PROFILE_CONTEXT, equip=True)
+        priced = acquisition_actions("iron_sword", 1, bare, game_data,
+                                     NO_PROFILE_CONTEXT, equip=True, store=store)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+    assert walled >= UNOBTAINABLE_PER_UNIT
+    assert priced < UNOBTAINABLE_PER_UNIT
+    assert priced > 65
+
+
+def test_no_observed_rate_leaves_the_route_excluded(gated_state, game_data) -> None:
+    """No defensible default exists for "how fast does this character gain
+    weaponcrafting xp", and inventing one would put a fabricated number straight
+    into a pruning bound. No rate means no price, and no price means the route
+    stays excluded exactly as it is today — a strictly smaller claim than
+    guessing."""
+    store = LearningStore(db_path=":memory:", character="no_observations")
+    store.start_session()
+    try:
+        assert store.skill_xp_per_cycle("weaponcrafting") is None
+        assert not route_options("iron_sword", gated_state, game_data,
+                                 NO_PROFILE_CONTEXT, store)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_a_met_gate_adds_no_second_craft_route(gated_state, game_data) -> None:
+    """When the gate is MET, `obtain_sources` names the craft itself. Adding a
+    gated copy would double the route and let the walk pick between two
+    identical things — harmless for cost, but a duplicate route set is how the
+    two-plan-producer trap starts."""
+    store = _store_with_rate("gearcrafting", 40)
+    try:
+        # gearcrafting 8 in this scenario; find something it already clears.
+        ready = [c for c, r in game_data.crafting_recipes.items()
+                 if (s := game_data.item_stats(c)) is not None
+                 and s.crafting_skill == "gearcrafting"
+                 and s.crafting_level <= gated_state.skills["gearcrafting"]]
+        assert ready, "fixture drift: no gearcrafting recipe within reach"
+        for code in ready[:5]:
+            routes = route_options(code, gated_state, game_data, NO_PROFILE_CONTEXT,
+                                   store)
+            assert sum(1 for r in routes if r.kind == "craft") <= 1
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_the_pricer_adds_nothing_but_gated_crafts(gated_state, game_data) -> None:
+    """THE CENSUS THAT STOPS THIS BECOMING A RIVAL ROUTE MODEL.
+
+    `obtain_sources` is meant to be the one enumeration every producer consumes.
+    This module deliberately adds ONE route it does not name — the skill-gated
+    craft — because readiness and cost are different questions. That exception
+    must stay exactly one, or the epic has reintroduced the duplication it
+    exists to remove.
+
+    Same shape as `test_obtain_graph_agreement`, which pins `obtain_sources`
+    against `RequirementGraph.leaves`."""
+    store = _store_with_rate("weaponcrafting", 40)
+    try:
+        probes = ["iron_sword", "copper_ore", "feather", "copper_dagger",
+                  "wisdom_amulet", "wolf_hair"]
+        for code in probes:
+            ready = {s.kind.value for s in
+                     obtain_sources(code, gated_state, game_data, NO_PROFILE_CONTEXT)}
+            priced = route_options(code, gated_state, game_data, NO_PROFILE_CONTEXT,
+                                   store)
+            extra = [r for r in priced if not r.unlock]
+            assert {r.kind for r in extra} <= ready, (
+                f"{code}: pricer invented a route obtain_sources did not name")
+            assert all(r.kind == "craft" for r in priced if r.unlock), (
+                f"{code}: only a gated CRAFT may be added")
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
 
 
 def test_the_closure_terminates_on_real_data(state, game_data) -> None:

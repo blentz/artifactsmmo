@@ -29,12 +29,19 @@ from artifactsmmo_cli.ai.acquisition_cost_core import RouteOption, acquisition_c
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.monster_drop_selection import (
     MonsterDropCandidate,
     expected_kills,
 )
-from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind, obtain_sources
+from artifactsmmo_cli.ai.obtain_sources import (
+    UNBOUNDED_CAPACITY,
+    Source,
+    SourceKind,
+    obtain_sources,
+)
 from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
 from artifactsmmo_cli.ai.world_state import WorldState
 
 BANK_VENUE = "bank"
@@ -148,15 +155,84 @@ def _drop_table(item: str, monster_code: str,
     raise KeyError(f"no {monster_code} drop row for {item}")
 
 
+def _gated_craft_option(item: str, state: WorldState, game_data: GameData,
+                        store: LearningStore) -> RouteOption | None:
+    """The CRAFT route `obtain_sources` withholds because the skill gate is
+    unmet — priced with the grind that would open it.
+
+    THE SEAM, STATED OUT LOUD. `obtain_sources` answers READINESS: what can the
+    executor serve *right now*. A skill-gated craft genuinely cannot be served
+    right now, so excluding it there is correct. This module answers a different
+    question — what would it COST to obtain this — and that answer may include
+    making a route ready. The gate is a price, not a wall.
+
+    That distinction is real, but it is also how a second route model creeps
+    back in, which is the thing this epic exists to kill. So this is the ONLY
+    route this module may add that `obtain_sources` did not name, and a census
+    pins that (`test_the_pricer_adds_nothing_but_gated_crafts`).
+
+    `None` — leaving today's exclusion in place — whenever the grind cannot be
+    priced from data:
+
+      * the item is not craftable, or names no crafting skill;
+      * the gate is already MET (then `obtain_sources` names the craft itself,
+        and adding a second copy would double the route);
+      * no workshop is known (the craft is unservable for a reason a grind
+        cannot fix);
+      * the learning store has no observed `skill_xp_per_cycle` for the skill;
+      * the API has given us no `<skill>_max_xp` for the current level.
+
+    The last two are the API-data rule doing its job: there is no defensible
+    default for "how fast does this character gain woodcutting xp", and inventing
+    one would put a fabricated number directly into a pruning bound. No rate
+    means no price, and no price means the route stays excluded exactly as it is
+    today — a strictly smaller claim than guessing."""
+    recipe = game_data.crafting_recipe(item)
+    stats = game_data.item_stats(item)
+    if recipe is None or stats is None or not stats.crafting_skill:
+        return None
+    skill = stats.crafting_skill
+    if state.skills.get(skill, 1) >= stats.crafting_level:
+        return None
+    if game_data.workshop_location(skill) is None:
+        return None
+    rate = store.skill_xp_per_cycle(skill)
+    max_xp = state.skill_max_xp.get(skill, 0)
+    if rate is None or max_xp <= 0:
+        return None
+    return RouteOption(
+        kind=SourceKind.CRAFT.value, venue=_workshop_venue(skill),
+        actions_per_application=1, yield_per=game_data.craft_yield(item),
+        capacity=UNBOUNDED_CAPACITY, inputs=dict(recipe),
+        unlock=f"skill:{skill}:{stats.crafting_level}",
+        unlock_actions=skill_grind_cycles(
+            state.skills.get(skill, 1), state.skill_xp.get(skill, 0),
+            max_xp, stats.crafting_level, rate),
+    )
+
+
 def route_options(item: str, state: WorldState, game_data: GameData,
-                  ctx: SelectionContext) -> list[RouteOption]:
-    """Every currently-available route to `item`, priced."""
-    return [_priced(item, s, state, game_data)
-            for s in obtain_sources(item, state, game_data, ctx)]
+                  ctx: SelectionContext,
+                  store: LearningStore | None = None) -> list[RouteOption]:
+    """Every route to `item`, priced: the ones `obtain_sources` names, plus —
+    only when a `store` is supplied — the skill-gated craft it withholds.
+
+    `store` defaults to None so every existing caller keeps today's behaviour
+    exactly. A gated craft cannot be priced without an observed grind rate, and
+    the store is the only thing that has one."""
+    routes = [_priced(item, s, state, game_data)
+              for s in obtain_sources(item, state, game_data, ctx)]
+    if store is not None:
+        gated = _gated_craft_option(item, state, game_data, store)
+        if gated is not None:
+            routes.append(gated)
+    return routes
 
 
 def acquisition_options(item: str, state: WorldState, game_data: GameData,
-                        ctx: SelectionContext) -> dict[str, list[RouteOption]]:
+                        ctx: SelectionContext,
+                        store: LearningStore | None = None
+                        ) -> dict[str, list[RouteOption]]:
     """`route_options` over the whole closure reachable from `item`.
 
     The closure follows each route's INPUTS — recipe materials, recycle sources,
@@ -178,7 +254,7 @@ def acquisition_options(item: str, state: WorldState, game_data: GameData,
         code = frontier.pop()
         if code in options:
             continue
-        routes = route_options(code, state, game_data, ctx)
+        routes = route_options(code, state, game_data, ctx, store)
         options[code] = routes
         for route in routes:
             frontier.extend(route.inputs)
@@ -187,7 +263,8 @@ def acquisition_options(item: str, state: WorldState, game_data: GameData,
 
 def acquisition_actions(item: str, qty: int, state: WorldState,
                         game_data: GameData, ctx: SelectionContext,
-                        equip: bool) -> int:
+                        equip: bool,
+                        store: LearningStore | None = None) -> int:
     """Lower bound on planner actions to obtain (and optionally equip) `qty` of
     `item`, over every route the executor can currently serve.
 
@@ -205,6 +282,6 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
     which is what it costs."""
     owned: dict[str, int] = dict(state.inventory)
     options: Mapping[str, list[RouteOption]] = acquisition_options(
-        item, state, game_data, ctx)
+        item, state, game_data, ctx, store)
     return acquisition_cost(item, qty, options, owned) + (
         EQUIP_ACTIONS if equip else 0)

@@ -109,6 +109,18 @@ class RouteOption:
         inputs: Per-APPLICATION material demand, non-empty only for CRAFT. The
             AND arm of the walk: satisfying this option means also obtaining
             these, recursively.
+        unlock: Key naming a PREREQUISITE this route must satisfy before its
+            first application — currently a crafting-skill gate
+            (`"skill:weaponcrafting:10"`). Empty when the route is ready now.
+        unlock_actions: Actions to satisfy `unlock`, paid ONCE however many
+            applications follow, and once across every route sharing the key.
+
+    `venue` and `unlock` are the same mechanism at different prices: a
+    ONE-TIME cost, keyed, paid the first time a plan needs it. Walking to the
+    workshop costs 1; reaching weaponcrafting 10 costs the grind. Modelling the
+    gate as a second pay-once key rather than as a new concept is what keeps
+    "craft five daggers" from being charged the grind five times — the shape of
+    error a per-application term would produce silently.
     """
 
     kind: str
@@ -117,13 +129,17 @@ class RouteOption:
     yield_per: int
     capacity: int
     inputs: Mapping[str, int] = field(default_factory=dict)
+    unlock: str = ""
+    unlock_actions: int = 0
 
 
 @dataclass(frozen=True)
 class _Walk:
-    """Threaded walk state: actions so far, holdings not yet spent, venues
-    already paid for. Immutable at the boundary, copied on entry, so a caller's
-    dicts are never mutated — the same contract `min_gathers` keeps."""
+    """Threaded walk state: actions so far, holdings not yet spent, and the
+    PAY-ONCE keys already settled (venue hops and unlock prerequisites share one
+    set, because they are the same mechanism at different prices). Immutable at
+    the boundary, copied on entry, so a caller's dicts are never mutated — the
+    same contract `min_gathers` keeps."""
 
     actions: int
     owned: dict[str, int]
@@ -207,14 +223,17 @@ def _apply(fuel: int, item: str, need: int, route: RouteOption,
     covered = min(need, route.capacity)
     applications = -(-covered // route.yield_per)  # ceil
 
-    venues = set(walk.venues)
-    hop = 0
-    if route.venue and route.venue not in venues:
-        venues.add(route.venue)
-        hop = 1
+    paid = set(walk.venues)
+    once = 0
+    if route.venue and route.venue not in paid:
+        paid.add(route.venue)
+        once += 1
+    if route.unlock and route.unlock not in paid:
+        paid.add(route.unlock)
+        once += route.unlock_actions
 
-    inner = _Walk(walk.actions + hop + applications * route.actions_per_application,
-                  walk.owned, venues)
+    inner = _Walk(walk.actions + once + applications * route.actions_per_application,
+                  walk.owned, paid)
 
     # AND over this route's inputs, once per application.
     for material, per_application in sorted(route.inputs.items()):
