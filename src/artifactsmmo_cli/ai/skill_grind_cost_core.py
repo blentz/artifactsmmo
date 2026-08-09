@@ -44,14 +44,16 @@ def skill_grind_cycles(current_level: int, current_xp: int, max_xp: int,
     `max_xp` is the xp the CURRENT level requires, applied to every level in
     between (see the module docstring — the API exposes no curve).
 
-    PRECONDITION: `xp_per_cycle > 0`, and it is guaranteed by its only producer
-    rather than re-checked here. `LearningStore.skill_xp_per_cycle` averages
-    ONLY strictly-positive per-cycle deltas and returns `None` when there are
-    none, so a caller either has a positive rate or has no rate at all — and the
-    no-rate case is a different decision (the grind cannot be priced) that
-    belongs to the caller, not to this arithmetic. A guard here could never
-    fire, and an unreachable guard is exactly the dead code this epic has
-    already removed once.
+    PRECONDITION: `xp_per_cycle > 0`, enforced by the CALLER.
+
+    The rate now comes from `LearningStore.skill_xp_per_cycle_all`, the
+    UNCONDITIONAL mean, which can legitimately be 0.0 — a character that has
+    recorded cycles but gained no xp in this skill. The earlier
+    `skill_xp_per_cycle` averaged only positive deltas and so was positive by
+    construction; swapping to the honest denominator removed that guarantee, and
+    a division here would have raised. `_gated_craft_option` declines the route
+    on a non-positive rate rather than calling this, because "no evidence of
+    progress" is a routing decision, not arithmetic.
 
     Returns 0 when the gate is already met, so a caller can add this term
     unconditionally and have it vanish exactly when the skill is not a gate.

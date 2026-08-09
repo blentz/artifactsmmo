@@ -361,27 +361,79 @@ def test_an_undiscovered_workshop_leaves_the_route_excluded(
         store.close()
 
 
-def test_no_skill_max_xp_prices_the_grind_at_ZERO_not_infinity(
-        state, game_data) -> None:
-    """THE SOUNDNESS CONTRACT DECIDING, on the bare fixture.
+def test_no_skill_max_xp_DECLINES_the_route(state, game_data) -> None:
+    """`scenario_state` supplies no `skill_max_xp`, so the grind cannot be sized
+    and the route is declined.
 
-    `scenario_state` supplies no `skill_max_xp`, so the size of the grind is
-    unknown. The route is still emitted, with `unlock_actions=0` — exactly what
-    `min_plan_length` charged — because this is a LOWER bound whose consumers
-    PRUNE with it, and the only safe move is to omit an unknown POSITIVE term.
-
-    This function excluded the route instead until it was measured. That reads as
-    `UNOBTAINABLE_PER_UNIT`, an OVER-estimate, and over-estimating discards
-    reachable plans. It was caught by activating `J` and watching whole
-    equipment classes vanish — not by any test, because no test was sensitive to
-    it."""
+    This briefly charged 0 instead, on the argument that a LOWER bound should
+    omit an unknown positive term. That argument is right about pruning and wrong
+    about RANKING — see `_gated_craft_option`, and the 4.5 live hours R2D2 spent
+    on a grind that looked free."""
     assert not state.skill_max_xp
     store = _store_with_rate("weaponcrafting", 40)
     try:
-        routes = route_options("iron_sword", state, game_data,
+        assert not route_options("iron_sword", state, game_data,
+                                 NO_PROFILE_CONTEXT, store)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_a_NON_POSITIVE_observed_rate_declines_the_route(
+        gated_state, game_data) -> None:
+    """THE LIVE BUG, pinned.
+
+    A character with recorded cycles but no skill xp has an UNCONDITIONAL rate of
+    0.0. Charging a zero-cost grind there is what let `J` commit R2D2 to 207
+    `LevelSkill` actions over 4.5 hours for +270 skill xp and zero character xp.
+
+    A non-positive rate is EVIDENCE the grind is not progressing — a stronger
+    reason to decline than ignorance is. It also would have divided by zero:
+    `skill_xp_per_cycle_all` can return 0.0 where the old conditional mean was
+    positive by construction."""
+    store = LearningStore(db_path=":memory:", character="no_progress")
+    store.start_session()
+    for i in range(5):
+        store.record_cycle(Cycle(
+            ts=f"2026-08-08T00:00:{i:02d}+00:00", session_id="s", cycle_index=i,
+            character="no_progress", outcome="ok",
+            delta_skill_xp_json=json.dumps({"weaponcrafting": 0}),
+        ))
+    try:
+        assert store.skill_xp_per_cycle_all("weaponcrafting") == 0.0
+        assert not route_options("iron_sword", gated_state, game_data,
+                                 NO_PROFILE_CONTEXT, store)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_the_UNCONDITIONAL_rate_is_what_prices_a_grind(gated_state, game_data) -> None:
+    """THE DEFECT CLASS, one more time: a quantity that is not what its name says.
+
+    `skill_xp_per_cycle` averages ONLY cycles that gained xp, so one paying cycle
+    in fifty reports the paying cycle's figure as if it were the rate. Measured
+    live: 54.0 reported against 1.08 actual for R2D2 (50x), 55.0 against 0.55 for
+    HAL (100x). A grind priced on that is priced 50-100x too cheap.
+
+    The two must differ here, or this test is watching the wrong function."""
+    store = LearningStore(db_path=":memory:", character="sparse")
+    store.start_session()
+    # One paying cycle in ten: conditional says 50, unconditional says 5.
+    for i in range(10):
+        store.record_cycle(Cycle(
+            ts=f"2026-08-08T00:00:{i:02d}+00:00", session_id="s", cycle_index=i,
+            character="sparse", outcome="ok",
+            delta_skill_xp_json=json.dumps({"weaponcrafting": 50 if i == 0 else 0}),
+        ))
+    try:
+        assert store.skill_xp_per_cycle("weaponcrafting") == 50.0
+        assert store.skill_xp_per_cycle_all("weaponcrafting") == 5.0
+        routes = route_options("iron_sword", gated_state, game_data,
                                NO_PROFILE_CONTEXT, store)
         assert [r.kind for r in routes] == ["craft"]
-        assert routes[0].unlock_actions == 0
+        # Priced on 5/cycle, not 50 — so the grind is the larger, honest number.
+        assert routes[0].unlock_actions > 0
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -410,23 +462,16 @@ def test_the_sword_finally_has_a_price_neither_model_could_give(
     assert priced > 65
 
 
-def test_no_observed_rate_prices_the_grind_at_ZERO_not_infinity(
-        gated_state, game_data) -> None:
-    """A skill the character has never ground has no observed rate — and there
-    is no defensible default for "how fast does this character gain jewelrycraft
-    xp". Inventing one would put a fabricated number into a pruning bound.
-
-    So the term is OMITTED rather than guessed, which keeps the bound sound and
-    keeps the item competing. It arrives the moment the character grinds that
-    skill even once."""
+def test_no_observed_rate_declines_the_route(gated_state, game_data) -> None:
+    """A skill the character has never ground has no rate, and there is no
+    defensible default for "how fast does this character gain jewelrycraft xp".
+    The route is declined rather than priced on an invention."""
     store = LearningStore(db_path=":memory:", character="no_observations")
     store.start_session()
     try:
-        assert store.skill_xp_per_cycle("weaponcrafting") is None
-        routes = route_options("iron_sword", gated_state, game_data,
-                               NO_PROFILE_CONTEXT, store)
-        assert [r.kind for r in routes] == ["craft"]
-        assert routes[0].unlock_actions == 0
+        assert store.skill_xp_per_cycle_all("weaponcrafting") is None
+        assert not route_options("iron_sword", gated_state, game_data,
+                                 NO_PROFILE_CONTEXT, store)
     finally:
         store.end_session(exit_reason="normal")
         store.close()

@@ -499,6 +499,47 @@ class LearningStore:
         except SQLAlchemyError:
             return None
 
+
+    def skill_xp_per_cycle_all(self, skill: str,
+                               window: int = WINDOW_RECENT) -> float | None:
+        """UNCONDITIONAL mean per-cycle XP gain for `skill`: total gain divided by
+        EVERY cycle in the window, not only the ones that gained.
+
+        The distinction is not academic. `skill_xp_per_cycle` above averages only
+        cycles with a positive delta, so when one cycle in forty pays 54 xp and
+        the other thirty-nine pay nothing, it reports **54** while the character
+        is really earning **1.3** per cycle. Measured live on R2D2, 2026-08-08:
+        207 `LevelSkill(weaponcrafting->10)` actions over 4.5 hours moved
+        weaponcrafting xp 343 -> 613 and the level not at all, while
+        `skill_xp_per_cycle` said 54.0 — a 41x over-estimate.
+
+        A grind priced with the conditional mean is priced 41x too cheap, and
+        `J` will commit to it: `greater_wooden_staff` showed `acquire_cost=68`
+        for a weaponcrafting 6->10 grind that is in truth thousands of actions.
+        Anything asking "how many cycles will this grind take" wants THIS
+        function; the conditional mean answers "how much do I get when I get
+        any", which is a different question.
+
+        Returns None when the window holds no cycles at all. A cycle with no
+        entry for `skill`, or a malformed row, counts as a ZERO gain rather than
+        being skipped — that is precisely the population the conditional mean
+        drops."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.delta_skill_xp_json)
+                    .where(col(Cycle.character) == self._character)
+                    .order_by(col(Cycle.id).desc())
+                    .limit(window)
+                )
+                rows = list(s.exec(stmt))
+            if not rows:
+                return None
+            total = sum(max(0, _parse_skill_xp_value(raw, skill)) for raw in rows)
+            return float(total) / len(rows)
+        except SQLAlchemyError:
+            return None
+
     def sample_count(self, action_repr: str) -> int:
         """Number of cycles recorded for this action_repr and the store's character."""
         try:

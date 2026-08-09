@@ -205,24 +205,24 @@ def _gated_craft_option(item: str, state: WorldState, game_data: GameData,
       * no workshop is known (a grind cannot conjure a bench, so paying it would
         buy nothing).
 
-    AN UNKNOWN GRIND COSTS 0, NOT INFINITY, AND THAT IS THE SOUNDNESS CONTRACT
-    DECIDING — not a convenience. When the learning store has no observed
-    `skill_xp_per_cycle`, or the API has given us no `<skill>_max_xp`, the size
-    of the grind is genuinely unknown. This is a LOWER bound whose consumers
-    PRUNE with it, so the only safe move is to omit an unknown POSITIVE term:
-    the route is emitted with `unlock_actions=0`, exactly reproducing what
-    `min_plan_length` charged.
+    AN UNPRICEABLE GRIND DECLINES THE ROUTE. It briefly charged 0 instead, on
+    the argument that this is a LOWER bound and omitting an unknown positive term
+    is the safe direction. That argument is correct about PRUNING and wrong about
+    RANKING, and `J` does both: a bound used as a ranking key systematically
+    prefers whatever is most under-priced.
 
-    Excluding it instead — which this function did until measured — reads as
-    `UNOBTAINABLE_PER_UNIT`, an OVER-estimate, and over-estimating is the one
-    direction that discards a reachable plan. Measured consequence: every
-    jewelry item priced unobtainable for a character who has never crafted
-    jewelry, because a skill with no history has no rate. Whole equipment classes
-    would drop out of the gear branch, and the ranking would look like the gear
-    simply did not exist.
+    Measured live, 2026-08-08: with the grind priced from a rate that was 50-100x
+    too high, `greater_wooden_staff` showed `acquire_cost=68` for a
+    weaponcrafting 6->10 grind, `J` committed, and R2D2 spent 4.5 HOURS running
+    207 `LevelSkill` actions for +270 skill xp and ZERO character xp. HAL did the
+    same. A free-looking grind does not merely fail to prune — it captures the
+    bot.
 
-    So an unpriced grind under-states the cost rather than over-stating it, and
-    the term arrives the moment the character has ground that skill even once."""
+    So: no observations, a non-positive observed rate, or no `<skill>_max_xp`
+    from the API all decline the route. A non-positive rate is EVIDENCE the grind
+    is not progressing, which is a stronger reason to decline than ignorance is.
+    Declining costs the character that one route, not its progress — every other
+    root still competes."""
     recipe = game_data.crafting_recipe(item)
     stats = game_data.item_stats(item)
     if recipe is None or stats is None or not stats.crafting_skill:
@@ -232,9 +232,11 @@ def _gated_craft_option(item: str, state: WorldState, game_data: GameData,
         return None
     if game_data.workshop_location(skill) is None:
         return None
-    rate = store.skill_xp_per_cycle(skill)
+    rate = store.skill_xp_per_cycle_all(skill)
     max_xp = state.skill_max_xp.get(skill, 0)
-    grind = 0 if rate is None or max_xp <= 0 else skill_grind_cycles(
+    if not rate or rate <= 0 or max_xp <= 0:
+        return None
+    grind = skill_grind_cycles(
         state.skills.get(skill, 1), state.skill_xp.get(skill, 0),
         max_xp, stats.crafting_level, rate)
     return RouteOption(

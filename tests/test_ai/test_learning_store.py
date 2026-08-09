@@ -943,6 +943,14 @@ class TestDegradationOnDbError:
         _break_engine(store)
         assert store.recent_goal_cycles("ReachCharLevel(5)") == []
 
+    def test_skill_xp_per_cycle_all_returns_none(self, tmp_db_path):
+        """The UNCONDITIONAL rate degrades like every other query: a DB fault
+        returns None (no rate), which makes its caller decline to price a skill
+        gate rather than invent one."""
+        store = LearningStore(db_path=tmp_db_path, character="x")
+        _break_engine(store)
+        assert store.skill_xp_per_cycle_all("alchemy") is None
+
     def test_skill_xp_per_cycle_returns_none(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="hero")
         _break_engine(store)
