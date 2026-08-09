@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.learning.cycles_for_progress_core import (
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.low_yield_boundary import low_yield_fires_pure
 from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.observed_rate_core import rescale_observed_xp
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.yield_reprs import (
     TASK_PURSUIT_PREFIX,
@@ -62,6 +63,17 @@ class Yield(BaseModel):
 
     sample_count: int = 0
     """Number of cycles aggregated. < WARMUP_MIN_SAMPLES => low confidence."""
+
+    char_xp_level: int | None = None
+    """Character level the `char_xp` samples were taken at (mean over the aggregated
+    cycles, rounded), or None when no cycle recorded a level.
+
+    `char_xp` is a rate that DEPENDS on this level — the game's XP award is a
+    function of the gap between character and monster, and goes to zero ten levels
+    above it. Without this field the rate is uninterpretable away from where it was
+    measured, and reusing it anyway is exactly the defect
+    `observed_rate_core.rescale_observed_xp` exists to undo. Carried on the same
+    object, from the same rows, at no extra query."""
 
 
 class TaskProjection(BaseModel):
@@ -123,6 +135,12 @@ def expected_yield_per_cycle(goal_repr: str, store: LearningStore, window: int =
     gold_total = 0
     coins_total = 0
     skill_xp_totals: dict[str, int] = {}
+    # Levels the samples were taken at, gathered in the SAME pass. `char_xp` is a
+    # level-dependent rate (see `Yield.char_xp_level`) and a caller that reuses it
+    # at another level needs to know which one it came from; a second query for
+    # that would be paid per monster per rung, and one walk already issues
+    # thousands.
+    levels = [cycle.level for cycle in rows if cycle.level is not None]
 
     for cycle in rows:
         char_xp_total += cycle.delta_xp or 0
@@ -138,6 +156,7 @@ def expected_yield_per_cycle(goal_repr: str, store: LearningStore, window: int =
         gold=gold_total / n,
         tasks_coins=coins_total / n,
         sample_count=n,
+        char_xp_level=round(sum(levels) / len(levels)) if levels else None,
     )
 
 
@@ -311,12 +330,28 @@ def cheapest_path_to_level(
             # what the runtime does (the planner inserts a Rest before FightAction).
             monster_cycles = cycles_per_kill(
                 expected_damage_per_fight(rested, game_data, code), rested.max_hp)
-            if observed.sample_count > 0 and observed.char_xp > 0:
+            if (observed.sample_count > 0 and observed.char_xp > 0
+                    and observed.char_xp_level is not None):
                 # Already per-CYCLE, and per REAL cycle: `expected_yield_per_cycle`
                 # averages over every cycle the goal was selected, Rests included.
                 # So it must NOT be divided again — it is already whole-loop, which
                 # is exactly the unit the formula branch below is converted into.
-                xp_per_cycle = observed.char_xp
+                #
+                # RESTATED FOR THIS RUNG. The measured rate belongs to the level its
+                # samples were taken at, and this branch used to reuse it unchanged
+                # all the way up the ladder — which silently deleted the published
+                # grey-mob rule (0 XP ten or more levels above a monster) from every
+                # walk that had any observation at all. C3P0 thereby projected
+                # reaching level 50 on a LEVEL 4 slime at a flat 7.0/cycle from rung
+                # 12 to rung 49. The scaling factor is the ratio of the published
+                # award at the two levels, so it carries the penalty step and the
+                # base-term decay together, and it is dimensionless — the result is
+                # still whole-loop XP per cycle. See `observed_rate_core`.
+                xp_per_cycle = rescale_observed_xp(
+                    observed.char_xp,
+                    game_data.xp_per_kill(code, observed.char_xp_level, wisdom=wisdom),
+                    game_data.xp_per_kill(code, sim_level, wisdom=wisdom),
+                )
             else:
                 # Documented formula: exact XP per kill, and one kill is one
                 # cycle (FIGHT_CYCLES_PER_KILL), so per-kill IS per-cycle.

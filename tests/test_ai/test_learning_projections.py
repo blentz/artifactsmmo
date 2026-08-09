@@ -56,8 +56,18 @@ def _make_cycle(
     cycles_to_satisfy: int | None = None,
     delta_skill_xp_json: str = "{}",
     drops_json: str | None = None,
+    level: int | None = 1,
 ) -> dict:
-    """Kwargs for Cycle(...) — keep a single template so all tests stay consistent."""
+    """Kwargs for Cycle(...) — keep a single template so all tests stay consistent.
+
+    `level` defaults to 1 because that is the level the cases below put the
+    character at, and a learned XP rate is only interpretable against the level its
+    samples were taken at (`Yield.char_xp_level`). A row with no level makes
+    `cheapest_path_to_level` DECLINE the learned branch and answer from the
+    published formula instead — so leaving it unset here silently converted every
+    observed-branch case into a formula case, and the ones whose two arms happened
+    to agree went vacuous rather than red.
+    """
     return dict(
         ts=f"2026-05-18T00:{cycle_index:02d}:00Z",
         session_id="s1",
@@ -67,6 +77,7 @@ def _make_cycle(
         action_repr="X",
         action_class="X",
         outcome="ok",
+        level=level,
         delta_xp=delta_xp,
         delta_gold=delta_gold,
         delta_hp=0,
@@ -454,10 +465,17 @@ class TestCheapestPathToLevel:
             _make_cycle(i, "GrindCharacterXP(chicken)", delta_xp=20) for i in range(5)
         ])
         gd = self._gd_with_monsters({"chicken": 1})
+        # HP 60 so the FORMULA answer is 22, not 20. With `_harmless`'s default HP
+        # of 1 the formula also returns 20, and this case passed whether or not the
+        # observed branch was taken — it could not distinguish the thing it is
+        # named for. Found when adding the level-scoping fix, which flipped the
+        # branch this exercises without turning it red.
+        gd._monster_hp = {"chicken": 60}
         state = make_state(level=1, xp=0, max_xp=100)
         plan = cheapest_path_to_level(2, state, store, gd)
         store.close()
-        # 100 xp at 20/cycle = 5 cycles
+        assert gd.xp_per_kill("chicken", 1) == 22, "premise: the two arms differ"
+        # 100 xp at the OBSERVED 20/cycle = 5 cycles (the formula would give 22).
         assert plan.segments[0].xp_per_cycle == 20.0
         assert plan.total_cycles == 5.0
 
@@ -855,3 +873,163 @@ class TestBestAlternativeReprEdgeCases:
         result = _best_alternative_repr(store)
         assert result is None
         store.close()
+
+
+class TestLearnedRateIsLevelScoped:
+    """A learned XP rate belongs to the level it was measured at.
+
+    THE DEFECT, measured live on 2026-08-09 and written up in
+    `docs/FINDING_learned_rate_launders_grey_penalty.md`. The learned branch of
+    `cheapest_path_to_level` reused one rate at every rung of a walk that climbs up
+    to 38 levels. The game's XP award is a function of the gap between character
+    and monster and goes to ZERO ten or more levels above it, so reusing the rate
+    deleted that rule from every projection that had any observation at all.
+
+    C3P0 thereby projected reaching level 50 — the terminal objective — by farming
+    a LEVEL 4 slime at a flat 7.0 XP per cycle from rung 12 to rung 49. A trunk
+    that reaches 50 at acquisition cost zero is unbeatable in `J`, so four of five
+    live characters sat on that projection. R2D2, whose only observation was
+    negative and therefore declined, fell through to the formula branch and
+    correctly reported a wall — it was the only honest character in the account.
+    """
+
+    def _seed_grind(self, store: LearningStore, monster: str, *,
+                    at_level: int | None, xp_per_cycle: int, n: int = 20) -> None:
+        store.start_session()
+        with Session(store._engine) as s:
+            if not s.get(SessionModel, store._session_id):
+                s.add(SessionModel(session_id=store._session_id,
+                                   started_at="2026-08-09T00:00:00Z",
+                                   character="hero"))
+            for i in range(n):
+                s.add(Cycle(
+                    ts=f"2026-08-09T00:{i:02d}:00Z",
+                    session_id=store._session_id,
+                    cycle_index=i,
+                    character="hero",
+                    selected_goal=f"GrindCharacterXP({monster})",
+                    action_repr="Fight",
+                    action_class="FightAction",
+                    outcome="ok",
+                    level=at_level,
+                    delta_xp=xp_per_cycle,
+                ))
+            s.commit()
+
+    def _gd(self, monsters: dict[str, int]) -> GameData:
+        gd = GameData()
+        gd._monster_level = monsters
+        gd._monster_type = dict.fromkeys(monsters, "normal")
+        return _harmless(gd)
+
+    def test_a_low_level_monsters_rate_does_not_survive_the_grey_boundary(
+            self, monkeypatch, tmp_path):
+        """C3P0's case, reduced. A rate measured against a level-4 monster while
+        the character was level 12 must not still be earning XP at rung 30.
+
+        Before the fix every rung reported the seeded rate unchanged and the walk
+        completed; now the rate decays and the walk reports itself blocked."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        self._seed_grind(store, "green_slime", at_level=12, xp_per_cycle=7)
+        gd = self._gd({"green_slime": 4})
+        state = make_state(level=12, xp=0, max_xp=100)
+
+        plan = cheapest_path_to_level(30, state, store, gd)
+        store.close()
+
+        assert plan.blocked is True, (
+            "a level-4 monster carried the walk past the grey boundary — the "
+            "learned rate is being reused unscaled again")
+        reached = state.level + len(plan.segments)
+        assert 12 < reached < 30
+        rates = [s.xp_per_cycle for s in plan.segments]
+        assert rates == sorted(rates, reverse=True), (
+            f"the rate must decay as the gap widens, got {rates}")
+        assert rates[0] > rates[-1], (
+            f"a FLAT rate across rungs is the defect itself, got {rates}")
+
+    def test_the_walk_switches_to_a_richer_monster_as_the_gap_widens(
+            self, monkeypatch, tmp_path):
+        """The correction is not just a dampener — it changes the ARGMAX.
+
+        Observed live: once green_slime's rate decayed, C3P0's walk moved to
+        blue_slime and then red_slime. With a stale flat rate the low-level
+        monster looked best forever and the higher one was never chosen, so this
+        pins SELECTION rather than arithmetic."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        # A rich measured rate, so the observed monster genuinely wins at first and
+        # the switch below is caused by the DECAY, not by it never having led.
+        self._seed_grind(store, "green_slime", at_level=12, xp_per_cycle=30)
+        # `peer_slime` is level 13, so it is admissible from rung 12 (the walk
+        # allows monster_level <= rung + 1). A level-20 monster would be gated out
+        # of every rung the walk reaches and could never win, which would have made
+        # this case unfalsifiable rather than informative.
+        gd = self._gd({"green_slime": 4, "peer_slime": 13})
+        gd._monster_hp = {"green_slime": 60, "peer_slime": 60}
+        state = make_state(level=12, xp=0, max_xp=100)
+
+        plan = cheapest_path_to_level(30, state, store, gd)
+        store.close()
+
+        chosen = [s.monster_code for s in plan.segments]
+        assert chosen[0] == "green_slime", (
+            "the measured rate should still win at the level it was measured at")
+        assert "peer_slime" in chosen, (
+            f"never switched off the decaying monster: {chosen}")
+        assert chosen[-1] == "peer_slime"
+
+    def test_an_observation_with_no_recorded_level_falls_through_to_the_formula(
+            self, monkeypatch, tmp_path):
+        """`level` is nullable on the cycle row. A rate whose samples carry no
+        level cannot be restated for another one, so the learned branch declines
+        and the published formula answers instead — never the unscaled rate."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        self._seed_grind(store, "green_slime", at_level=None, xp_per_cycle=7)
+        gd = self._gd({"green_slime": 4})
+        gd._monster_hp = {"green_slime": 60}
+        state = make_state(level=4, xp=0, max_xp=100)
+
+        plan = cheapest_path_to_level(5, state, store, gd)
+        store.close()
+
+        assert plan.segments
+        assert plan.segments[0].xp_per_cycle == gd.xp_per_kill("green_slime", 4)
+
+    def test_yield_carries_the_level_its_samples_came_from(self, tmp_path):
+        """The field the fix rests on. Without it the rate is uninterpretable away
+        from where it was measured."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        self._seed_grind(store, "green_slime", at_level=12, xp_per_cycle=7)
+        y = expected_yield_per_cycle("GrindCharacterXP(green_slime)", store)
+        store.close()
+        assert y.char_xp == 7.0
+        assert y.char_xp_level == 12
+
+    def test_the_level_is_the_mean_over_the_window(self, tmp_path):
+        """Samples span a level-up. The rate is an average over those cycles, so
+        the level it is attributed to is the average too — one number, from the
+        same rows, in the same pass."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        self._seed_grind(store, "green_slime", at_level=10, xp_per_cycle=7, n=10)
+        with Session(store._engine) as s:
+            for i in range(10, 20):
+                s.add(Cycle(
+                    ts=f"2026-08-09T01:{i:02d}:00Z", session_id=store._session_id,
+                    cycle_index=i, character="hero",
+                    selected_goal="GrindCharacterXP(green_slime)",
+                    action_repr="Fight", action_class="FightAction", outcome="ok",
+                    level=14, delta_xp=7))
+            s.commit()
+        y = expected_yield_per_cycle("GrindCharacterXP(green_slime)", store)
+        store.close()
+        assert y.char_xp_level == 12
+
+    def test_no_samples_leaves_the_level_unset(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        y = expected_yield_per_cycle("GrindCharacterXP(nobody)", store)
+        store.close()
+        assert y.sample_count == 0
+        assert y.char_xp_level is None
