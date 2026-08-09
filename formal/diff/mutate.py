@@ -3883,8 +3883,17 @@ CHEAPEST_PATH_MUTATIONS = [
     # Python picks the unwinnable 'hard' monster while Lean (still filtering via
     # winnable=0) picks 'easy' — divergence kills this mutant.
     ("cheapest_path: drop is_winnable beatability filter",
-     "            and is_winnable(rested, game_data, code, store)",
+     "            and is_winnable(rung, game_data, code, store)",
      ""),
+    # Mutation 5: freeze the body the walk consults, reverting S-015. The rung
+    # state stops growing, so the beatability predicate is asked whether TODAY'S
+    # character can beat a monster it will not meet until it is many levels
+    # stronger, and the walk under-reports how far it can climb.
+    ("cheapest_path: freeze the rung body (revert S-015 growth)",
+     "        rung = replace(rested, level=sim_level,\n"
+     "                       max_hp=projected_max_hp(state.max_hp, state.level, sim_level),\n"
+     "                       hp=projected_max_hp(state.max_hp, state.level, sim_level))",
+     "        rung = rested"),
 ]
 
 

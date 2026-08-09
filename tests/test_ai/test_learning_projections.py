@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.learning.projections import (
     low_yield_cancel_fires,
     project_task_completion,
 )
+from artifactsmmo_cli.ai.learning.rung_state_core import HP_PER_LEVEL
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
 
@@ -1033,3 +1034,127 @@ class TestLearnedRateIsLevelScoped:
         store.close()
         assert y.sample_count == 0
         assert y.char_xp_level is None
+
+
+class TestTheWalkCarriesAGrowingBody:
+    """S-015: the projected state grows as the walk climbs.
+
+    The walk used to advance `sim_level` and nothing else, so the beatability
+    verdict at rung 40 was asked of the character's rung-12 body. The published
+    rules grant +5 max HP per level unconditionally, so that growth is arithmetic
+    the server will perform, not speculation about gear.
+
+    Ratified as W-001 after ten of twenty-two blind adversaries found it
+    independently. It is NOT the cause of the live level-17 wall — measured, twice:
+    C3P0 and R2D2 are attack-bound and growing their HP moves neither. So these
+    cases carry the whole burden of proof, and each is checked against a reverted
+    fix rather than assumed.
+
+    The beatability predicate is BACKGROUND in the spec ("clauses constrain when
+    and with what arguments the oracle consults it, never how it decides"), so
+    these substitute a predicate that reads exactly one argument — the state's
+    max_hp. That is precisely the axis S-015 changes, and it keeps the cases from
+    depending on combat arithmetic that has its own tests.
+    """
+
+    def _gd(self, monsters: dict[str, int]) -> GameData:
+        gd = GameData()
+        gd._monster_level = monsters
+        gd._monster_type = dict.fromkeys(monsters, "normal")
+        return _harmless(gd)
+
+    def _hp_gated(self, monkeypatch, gates: dict[str, int]) -> list:
+        """Beatable iff the state handed to the predicate has enough max HP.
+        Records every max_hp the walk consulted, so a case can assert on the
+        ARGUMENT rather than only on the outcome."""
+        seen: list[int] = []
+
+        def predicate(s, g, code, h):
+            seen.append(s.max_hp)
+            return s.max_hp >= gates[code]
+
+        monkeypatch.setattr(proj, "is_winnable", predicate)
+        return seen
+
+    def test_the_consult_sees_the_grown_body_not_the_one_handed_in(
+            self, monkeypatch, tmp_path):
+        """THE ARGUMENT ITSELF. A character at level 5 with 100 max HP that climbs
+        four rungs must be presented to the predicate with 120 max HP by rung 9
+        (100 + 5x4), never with 100 throughout."""
+        seen = self._hp_gated(monkeypatch, {"wolf": 0})
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd({"wolf": 6})
+        gd._monster_hp = {"wolf": 200}
+        state = make_state(level=5, xp=0, max_xp=100, max_hp=100)
+
+        cheapest_path_to_level(9, state, store, gd)
+        store.close()
+
+        assert seen, "the predicate was never consulted"
+        assert min(seen) == 100, "the first rung must use the body as handed in"
+        assert max(seen) == 100 + HP_PER_LEVEL * 3, (
+            f"the walk never grew the body it consulted: saw {sorted(set(seen))}")
+
+    def test_growth_flips_a_walk_from_blocked_to_complete(self, monkeypatch, tmp_path):
+        """W-001's exhibit, reduced. The troll is gated above the starting body and
+        below the grown one, so it is unreachable with a frozen state and reachable
+        with a growing one — and the wolf goes grey before the target, so the walk
+        cannot finish without switching to the troll."""
+        self._hp_gated(monkeypatch, {"wolf": 0, "troll": 120})
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd({"wolf": 6, "troll": 12})
+        gd._monster_hp = {"wolf": 200, "troll": 3000}
+        state = make_state(level=5, xp=0, max_xp=100, max_hp=100)
+
+        plan = cheapest_path_to_level(20, state, store, gd)
+        store.close()
+
+        assert plan.blocked is False, (
+            "the walk stalled — the troll never became beatable, so the body it "
+            "consulted was never grown")
+        assert state.level + len(plan.segments) == 20
+        assert "troll" in [s.monster_code for s in plan.segments], (
+            "never switched to the monster the growth unlocked")
+
+    def test_the_kill_cost_divides_by_the_grown_pool(self, monkeypatch, tmp_path):
+        """S-005's recovery term divides damage by the HP pool, and that pool grows
+        too. A bigger pool absorbs more fights before a rest, so the same monster
+        costs strictly fewer cycles per kill at a later rung."""
+        self._hp_gated(monkeypatch, {"wolf": 0})
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        # Built WITHOUT `_harmless`, which zeroes every monster's attack — with no
+        # damage there is no forced recovery, the divisor is a constant 1.0, and
+        # this case would pass or fail for reasons unrelated to the HP pool.
+        gd = GameData()
+        gd._monster_level = {"wolf": 6}
+        gd._monster_type = {"wolf": "normal"}
+        gd._monster_hp = {"wolf": 200}
+        # Damage tuned to sit just ABOVE the rest threshold at the starting body and
+        # just below it once grown. `rest_cycles_per_fight` saturates at one rest
+        # per fight — one Rest refills everything — so a monster that bleeds the
+        # character far past the threshold prices identically at every pool size,
+        # and the growth would be invisible for a correct reason.
+        gd._monster_attack = {"wolf": {"earth": 6}}
+        gd._monster_resistance = {"wolf": {}}
+        gd._monster_critical_strike = {"wolf": 0}
+        state = make_state(level=5, xp=0, max_xp=100, max_hp=100,
+                           attack={"earth": 40})
+
+        plan = cheapest_path_to_level(12, state, store, gd)
+        store.close()
+
+        per_kill = [s.cycles_per_kill for s in plan.segments]
+        assert per_kill[0] > 1.0, (
+            "premise: this monster must force recovery, or the divisor is constant")
+        assert per_kill[0] > per_kill[-1], (
+            f"cost per kill never fell as the HP pool grew: {per_kill}")
+
+    def test_a_walk_that_is_already_done_grows_nothing(self, monkeypatch, tmp_path):
+        """S-006 still short-circuits ahead of any of this."""
+        seen = self._hp_gated(monkeypatch, {"wolf": 0})
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        plan = cheapest_path_to_level(5, make_state(level=5, max_hp=100),
+                                      store, self._gd({"wolf": 6}))
+        store.close()
+        assert plan.segments == []
+        assert seen == []

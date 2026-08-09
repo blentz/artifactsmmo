@@ -28,6 +28,7 @@ from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.low_yield_boundary import low_yield_fires_pure
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.observed_rate_core import rescale_observed_xp
+from artifactsmmo_cli.ai.learning.rung_state_core import projected_max_hp
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.yield_reprs import (
     TASK_PURSUIT_PREFIX,
@@ -286,28 +287,49 @@ def cheapest_path_to_level(
     # HP is a recoverable resource, not equipment/inventory — so resting is not
     # speculative gear progression, just the normal pre-fight recovery.
     rested = replace(state, hp=state.max_hp)
-    # PROJECTED wisdom, not `state.wisdom`. The latter is the server total for
-    # gear already WORN, so a candidate holding a `wisdom_amulet` in inventory
-    # reported the incumbent's wisdom and its +6% xp on every kill to 50 landed
-    # nowhere. `is_winnable` and `expected_damage_per_fight` below already read
-    # the projected loadout; wisdom was the one input still read from the raw
-    # state, and that asymmetry is exactly what made every gear candidate whose
-    # value is wisdom project byte-identically to the trunk.
-    #
-    # Computed ONCE per walk rather than per monster: the loadout does not depend
-    # on which monster is being weighed, and `cheapest_path_to_level` is called
-    # per candidate per decision.
-    wisdom = project_loadout_stats(
-        rested, pick_loadout_cached(Rank(), rested, game_data), game_data).wisdom
 
     while sim_level < target_level:
+        # THE BODY THIS RUNG IS FOUGHT WITH (S-015). The walk used to advance
+        # `sim_level` and nothing else, so the beatability verdict at rung 40 was
+        # asked of the character's rung-12 body — whether TODAY'S character can beat
+        # a monster it will not meet until it is twenty-eight levels stronger. The
+        # published rules grant +5 max HP per level unconditionally, so that growth
+        # is not speculation about gear the character might acquire; it is arithmetic
+        # the server will perform.
+        #
+        # The error has a direction: this figure feeds how FAR a candidate reaches,
+        # so freezing the body UNDER-reports reachability and can report a target
+        # unreachable that the executor will in fact reach.
+        #
+        # Re-equipping comes free with the level. `predict_win` (inside `is_winnable`)
+        # and `project_loadout_stats` both pick the best loadout from inventory ∪
+        # equipped for the state they are given, and equip conditions are evaluated
+        # against that state's level — so raising the level here is exactly what makes
+        # gear whose minimum-level condition the rung newly satisfies available to the
+        # projection, which is S-015's second half.
+        rung = replace(rested, level=sim_level,
+                       max_hp=projected_max_hp(state.max_hp, state.level, sim_level),
+                       hp=projected_max_hp(state.max_hp, state.level, sim_level))
+        # PROJECTED wisdom, not `state.wisdom`. The latter is the server total for
+        # gear already WORN, so a candidate holding a `wisdom_amulet` in inventory
+        # reported the incumbent's wisdom and its +6% xp on every kill to 50 landed
+        # nowhere. `is_winnable` and `expected_damage_per_fight` below already read
+        # the projected loadout; wisdom was the one input still read from the raw
+        # state, and that asymmetry is exactly what made every gear candidate whose
+        # value is wisdom project byte-identically to the trunk.
+        #
+        # Per RUNG, not per walk, since S-015 makes the loadout a function of the
+        # rung's level. Still not per MONSTER: the `Rank()` loadout does not depend on
+        # which monster is being weighed.
+        wisdom = project_loadout_stats(
+            rung, pick_loadout_cached(Rank(), rung, game_data), game_data).wisdom
         # Beatable monsters at sim_level: FightAction.is_applicable allows
         # monster_level <= state.level + 1, AND is_winnable (the same rested
         # verdict the runtime uses) so projection and executor agree on the monster.
         beatable = [
             (code, lvl) for code, lvl in game_data.monster_levels.items()
             if 1 <= lvl <= sim_level + 1
-            and is_winnable(rested, game_data, code, store)
+            and is_winnable(rung, game_data, code, store)
         ]
         if not beatable:
             return PathPlan(target_level=target_level, total_cycles=float("inf"),
@@ -329,7 +351,7 @@ def cheapest_path_to_level(
             # filter above: both ask what happens starting from full HP, which is
             # what the runtime does (the planner inserts a Rest before FightAction).
             monster_cycles = cycles_per_kill(
-                expected_damage_per_fight(rested, game_data, code), rested.max_hp)
+                expected_damage_per_fight(rung, game_data, code), rung.max_hp)
             if (observed.sample_count > 0 and observed.char_xp > 0
                     and observed.char_xp_level is not None):
                 # Already per-CYCLE, and per REAL cycle: `expected_yield_per_cycle`
