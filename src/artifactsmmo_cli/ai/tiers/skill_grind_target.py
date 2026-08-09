@@ -25,10 +25,10 @@ such items so the reachable `copper_dagger` wins.
 import weakref
 from collections import OrderedDict
 
+from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.min_crafts import min_crafts
-from artifactsmmo_cli.ai.min_gathers import min_gathers
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.skill_grind_selection import (
     GrindCandidate,
@@ -128,7 +128,18 @@ def build_grind_candidates(skill: str, state: WorldState,
     reservation filter — the caller (`skill_grind_target`) applies its own
     single-set filter.
 
-    `acquire_steps` is `min_gathers + min_crafts` over the recipe CLOSURE, the
+    `acquire_steps` is `acquisition_cost.acquisition_actions` over every route the
+    executor can currently serve. It was `min_gathers + min_crafts` until
+    2026-08-09, and that priced a DROP as one gather: `apprentice_gloves`
+    ({feather: 6}, a 1-in-8 chicken drop, ~48 kills) came out at 7 while
+    `sticky_sword` came out at 51, so the grind picked the gloves and farmed
+    chickens. Live R2D2 2026-08-08: 198 chicken fights, weaponcrafting stuck at
+    6. The route-aware number is 75 vs 61 and inverts it. The same number also
+    prices `wooden_staff` (needs the un-gettable `wooden_stick`) as unobtainable,
+    which the `obtainable` filter was separately added to patch — one honest
+    quantity replacing two proxies. The old text follows for the history:
+
+    `acquire_steps` WAS `min_gathers + min_crafts` over the recipe CLOSURE, the
     same proved lower bound the planner's reachability gate uses. The old
     one-level `mats_missing` count is gone: it priced `sticky_sword` (5 missing
     `copper_bar`, really 51 actions) below `apprentice_gloves` (6 missing
@@ -143,10 +154,6 @@ def build_grind_candidates(skill: str, state: WorldState,
     if hit is not None:
         cache.move_to_end(key)
         return hit
-    bank = state.bank_items or {}
-    owned = {code: state.inventory.get(code, 0) + bank.get(code, 0)
-             for code in set(state.inventory) | set(bank)}
-    recipes = game_data.crafting_recipes
     candidates: list[GrindCandidate] = []
     for code, stats in game_data.all_item_stats.items():
         if stats.crafting_skill != skill:
@@ -154,8 +161,8 @@ def build_grind_candidates(skill: str, state: WorldState,
         recipe = game_data.crafting_recipe(code)
         if not recipe:
             continue
-        acquire_steps = (min_gathers(code, 1, recipes, owned)
-                         + min_crafts(code, 1, recipes, owned))
+        acquire_steps = acquisition_actions(
+            code, 1, state, game_data, NO_PROFILE_CONTEXT, equip=False)
         candidates.append(GrindCandidate(
             code=code,
             craft_skill=stats.crafting_skill,

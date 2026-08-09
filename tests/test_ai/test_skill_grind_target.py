@@ -29,6 +29,14 @@ def _gd() -> GameData:
     # obtainable (the obtainability filter only excludes un-gettable chains).
     gd._resource_drops = {"copper_rocks": "copper_bar", "iron_rocks": "iron_bar",
                           "ash_tree": "ash_plank"}
+    # `acquire_steps` is now route-aware (`acquisition_cost.acquisition_actions`),
+    # and a route is only servable where the executor could actually go: a CRAFT
+    # needs a known workshop, a GATHER needs a live tile. Without these the stub
+    # names no routes at all and every rung prices as unobtainable — which is the
+    # model being honest about a world with nowhere to craft, not a bug.
+    gd.world.workshop_locations = {"weaponcrafting": (0, 0)}
+    gd.recipes_catalog.locations = {"copper_rocks": [(1, 0)], "iron_rocks": [(2, 0)],
+                                    "ash_tree": [(3, 0)]}
     return gd
 
 
@@ -45,11 +53,33 @@ def test_prefers_materials_in_hand_over_higher_level():
     assert skill_grind_target("weaponcrafting", state, gd) == "copper_dagger"
 
 
-def test_counts_bank_toward_materials_in_hand():
+def test_the_BAG_is_free_but_the_BANK_is_a_priced_withdraw():
+    """THE SEMANTIC CHANGE, stated as the thing that actually differs.
+
+    Bank stock used to be added straight into `owned`, so a banked material cost
+    NOTHING and this test asserted `copper_dagger` won outright on that basis.
+    Under the route model only the BAG is free; the bank is a WITHDRAW route —
+    one hop plus one action per unit — which here costs exactly what gathering
+    the same bars costs, so a banked rung ties an unstocked one rather than
+    beating it.
+
+    That is why `wooden_staff` (4 `ash_plank`) now wins where `copper_dagger`
+    (6 bars) used to: six withdraws are dearer than four gathers. The old model
+    could not express the difference because it charged zero for both."""
     gd = _gd()
-    state = make_state(skills={"weaponcrafting": 3},
-                       bank_items={"copper_bar": 6})
-    assert skill_grind_target("weaponcrafting", state, gd) == "copper_dagger"
+    def steps(state):
+        return next(c.acquire_steps
+                    for c in build_grind_candidates("weaponcrafting", state, gd)
+                    if c.code == "copper_dagger")
+    empty = steps(make_state(skills={"weaponcrafting": 3}))
+    banked = steps(make_state(skills={"weaponcrafting": 3},
+                              bank_items={"copper_bar": 6}))
+    in_bag = steps(make_state(skills={"weaponcrafting": 3},
+                              inventory={"copper_bar": 6}))
+    assert in_bag < banked, "the bag must be free where the bank is not"
+    assert banked == empty, (
+        "here a withdraw and a gather are both one action per unit, so stocking "
+        "the bank buys nothing over gathering — the model saying so is correct")
 
 
 def test_none_when_nothing_craftable_at_level():

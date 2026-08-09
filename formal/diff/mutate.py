@@ -1311,23 +1311,26 @@ SKILL_GRIND_TARGET_MUTATIONS = [
     # THE REGRESSION: go back to counting recipe entries instead of chain
     # actions -- the one-level proxy that mispriced sticky_sword at 5 against
     # apprentice_gloves at 6 while their real costs were 51 and 7.
-    ("skill_grind_target: acquire_steps back to one-level mats_missing",
-     "        acquire_steps = (min_gathers(code, 1, recipes, owned)\n"
-     "                         + min_crafts(code, 1, recipes, owned))\n",
-     "        acquire_steps = sum(\n"
-     "            max(0, qty - owned.get(mat, 0)) for mat, qty in recipe.items())\n"),
-    # drop the crafts term -- gathers only; under-counts multi-craft chains.
-    ("skill_grind_target: acquire_steps drops the craft term",
-     "        acquire_steps = (min_gathers(code, 1, recipes, owned)\n"
-     "                         + min_crafts(code, 1, recipes, owned))\n",
-     "        acquire_steps = min_gathers(code, 1, recipes, owned)\n"),
-    # ignore holdings -- every chain costed from scratch, so material already
-    # banked stops making a rung cheaper.
-    ("skill_grind_target: acquire_steps ignores holdings",
-     "        acquire_steps = (min_gathers(code, 1, recipes, owned)\n"
-     "                         + min_crafts(code, 1, recipes, owned))\n",
-     "        acquire_steps = (min_gathers(code, 1, recipes, {})\n"
-     "                         + min_crafts(code, 1, recipes, {}))\n"),
+    # Back to a recipe-LINE proxy: the original 2026-08-06 defect, one level up.
+    # Kills the tier tests -- a one-line drop recipe is not one action.
+    ("skill_grind_target: acquire_steps back to counting recipe lines",
+     "        acquire_steps = acquisition_actions(\n"
+     "            code, 1, state, game_data, NO_PROFILE_CONTEXT, equip=False)\n",
+     "        acquire_steps = len(recipe)\n"),
+    # Cost-blind: every rung ties, so the selection falls through to craft_level
+    # and the cheapest chain stops mattering at all.
+    ("skill_grind_target: acquire_steps stops costing anything",
+     "        acquire_steps = acquisition_actions(\n"
+     "            code, 1, state, game_data, NO_PROFILE_CONTEXT, equip=False)\n",
+     "        acquire_steps = 0\n"),
+    # Cap the unobtainable bound: a rung whose materials nothing produces
+    # (wooden_staff <- wooden_stick) stops being priced out and becomes
+    # selectable again -- the 2026-06-13 livelock.
+    ("skill_grind_target: acquire_steps caps the unobtainable bound",
+     "        acquire_steps = acquisition_actions(\n"
+     "            code, 1, state, game_data, NO_PROFILE_CONTEXT, equip=False)\n",
+     "        acquire_steps = min(999, acquisition_actions(\n"
+     "            code, 1, state, game_data, NO_PROFILE_CONTEXT, equip=False))\n"),
 ]
 
 SKILL_GRIND_SELECTION_MUTATIONS = [
