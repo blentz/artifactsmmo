@@ -198,3 +198,31 @@ none may be treated as settled by any implementation.
 - **Deaths.** S-005 counts forced recovery. Whether a projected loss (S-009 admits
   only winnable fights, but the published rules make losses possible) should be
   priced is not decided.
+
+### S-015 · The walk carries a projected character state that grows as it climbs  [witness: W-001]
+
+The oracle carries a projected character state through the walk. On crossing a rung it increments the level AND applies the growth the published rules grant for that level, before the next rung's admissibility, beatability and reward are evaluated.
+
+Equipment conditioned on a minimum character level and satisfied by the newly reached level is available to the projection from that rung onward; the loadout is re-evaluated rather than frozen at the one the oracle was handed.
+
+This clause is about the state the oracle CONSTRUCTS for itself between rungs. It does not enlarge the input domain (S-002) and does not change how the beatability predicate decides.
+
+### S-016 · A measurement supersedes the prediction, it does not merely may  [witness: W-002]
+
+Where the observations contain a measured rate for a monster (S-0NN fixes what that means), the oracle uses it in place of the predicted one for that monster. This is not discretionary.
+
+Candidates at one rung may therefore be priced from different origins -- a measured monster against a predicted one -- and that is intended. What S-008 requires is that both are expressed in the same unit before they are compared, not that they come from the same source.
+
+### S-017 · A measured rate is restated for the rung it is used at  [witness: W-003]
+
+A measured rate belongs to the character level its samples were taken at. Before it is used at a rung, the oracle restates it for that rung by the ratio of the published per-kill award for the same monster at the two levels.
+
+The ratio is dimensionless, so the restated figure remains in the measured rate's own unit and S-008's same-unit requirement continues to hold.
+
+Where the published award at the level the samples were taken is not positive, the measurement and the published rules disagree, no ratio exists, and the monster contributes nothing at that rung. Where the published award at the rung is zero, the ordinary arithmetic already yields zero and no separate rule is needed.
+
+### S-018 · A measurement is present only when positive evidence backs it  [witness: W-004]
+
+The observations contain a measured rate for a monster only when that rate is backed by at least one recorded kill and is itself positive. Anything else -- no entry, an entry with no recorded kill, a zero rate, a negative rate -- is an ABSENT measurement, and S-008's fallback to the published prediction applies.
+
+An absent measurement is not an error and does not stop the walk. In particular a non-positive stored rate never reaches the zero-reward stop, which is a statement about what the published rules award and not about what has been observed.

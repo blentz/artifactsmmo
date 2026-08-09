@@ -7,7 +7,12 @@
  "contradiction_void_runs": 0,
  "blind_rounds": 2,
  "blindness_failures": 1,
- "pending_verification": [],
+ "pending_verification": [
+  "projected-state-levelup-growth-not-applied",
+  "s008-may-use-measurement-optional",
+  "measurement-validity-across-character-levels",
+  "what-counts-as-a-present-measurement"
+ ],
  "phases_run": [
   "ontology",
   "underdetermination"
