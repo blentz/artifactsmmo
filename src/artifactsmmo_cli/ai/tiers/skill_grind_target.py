@@ -67,7 +67,15 @@ def is_obtainable(code: str, state: WorldState, game_data: GameData,
         return False
     recipe = game_data.crafting_recipe(code)
     if recipe is None:
-        if code in game_data.resource_drops.values():
+        # The FULL drop union, not `resource_drops.values()`. The primary map
+        # keeps only the rate-best drop per resource, so it sees 26 of the 43
+        # gathered items and misses every SECONDARY drop -- all five gem stones
+        # (topaz/ruby/emerald/diamond/alexandrite, 1-in-100..200 off ordinary
+        # rocks), plus apple, algae, coconut, the saps, and `event_ticket`.
+        # A rung needing one of those fell through to `drop_obtainable`, which
+        # asks about MONSTERS, found none, and judged the rung unobtainable --
+        # filtering out a rung that is a perfectly ordinary gather.
+        if code in game_data.gatherable_drop_items():
             return True
         return drop_obtainable(code, state, game_data, allow_grey=GRIND_ALLOWS_GREY)
     nxt = visited | {code}

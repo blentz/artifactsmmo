@@ -509,8 +509,14 @@ class GatherMaterialsGoal(Goal):
                 continue  # top-level items handled by the existing loop below
             if item in bid_items:
                 continue  # a GE bid is already in flight for this item (bid_vs_craft exclusion)
+            # `gatherable_drop_items()` is the FULL drop union; the primary
+            # `resource_drops` map keeps one drop per resource and misses every
+            # secondary, so an `apple` or a gem stone read as NOT gatherable and
+            # this emitted an NPC BUY for something the character could simply
+            # go and pick up. Fails the opposite way to the grind-target site --
+            # over-buying rather than under-planning -- from the same map.
             if (game_data.crafting_recipe(item) is None
-                    and item not in game_data.resource_drops.values()
+                    and item not in game_data.gatherable_drop_items()
                     and not game_data.monsters_dropping(item)):
                 for npc_code, _price, _currency in game_data.npc_purchases(item):
                     if game_data.is_event_npc(npc_code) or game_data.npc_location(npc_code) is None:

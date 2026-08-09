@@ -71,6 +71,7 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     build_grind_candidates,
+    is_obtainable,
     skill_grind_target,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -270,3 +271,34 @@ def test_tier_unobtainable_prices_out_rather_than_lying(game_data: GameData,
     assert _routed("wooden_staff", bare, game_data) >= UNOBTAINABLE_PER_UNIT
     # ...where the old measure called it one of the cheapest rungs on the board.
     assert _steps("wooden_staff", bare, game_data) < 10
+
+
+def test_a_SECONDARY_drop_is_recognised_as_gatherable(game_data: GameData,
+                                                      state: WorldState) -> None:
+    """THE PRIMARY-MAP BLINDNESS, pinned.
+
+    `resource_drops` keeps only the rate-best drop per resource, so it sees 26 of
+    the 43 gathered items. The 17 it misses are every SECONDARY drop: the five
+    gem stones (1-in-100..200 off ordinary rocks), apple, algae, coconut, the
+    saps, and `event_ticket`.
+
+    `is_obtainable` tested membership against that primary map and then fell
+    through to `drop_obtainable`, which asks about MONSTERS — so a rung needing a
+    gem stone was judged unobtainable and filtered out, when it is an ordinary
+    gather. Fixed by consulting the full union."""
+    primary = set(game_data.resource_drops.values())
+    full = game_data.gatherable_drop_items()
+    hidden = sorted(full - primary)
+    assert hidden, "fixture drift: no secondary-drop item to test with"
+    for code in hidden:
+        assert game_data.crafting_recipe(code) is None or True
+        assert is_obtainable(code, state, game_data, frozenset()), (
+            f"{code} is gatherable but read as unobtainable — the primary-only "
+            "map is back")
+
+
+def test_the_primary_map_really_is_narrower(game_data: GameData) -> None:
+    """Guards the premise of the test above: if these two ever coincide, the
+    case it protects has evaporated and it would pass vacuously."""
+    primary = set(game_data.resource_drops.values())
+    assert primary < game_data.gatherable_drop_items()
