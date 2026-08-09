@@ -209,7 +209,7 @@ This clause is about the state the oracle CONSTRUCTS for itself between rungs. I
 
 ### S-016 · A measurement supersedes the prediction, it does not merely may  [witness: W-002]
 
-Where the observations contain a measured rate for a monster (S-0NN fixes what that means), the oracle uses it in place of the predicted one for that monster. This is not discretionary.
+Where the observations contain a measured rate for a monster (S-018 fixes what that means), the oracle uses it in place of the predicted one for that monster. This is not discretionary.
 
 Candidates at one rung may therefore be priced from different origins -- a measured monster against a predicted one -- and that is intended. What S-008 requires is that both are expressed in the same unit before they are compared, not that they come from the same source.
 
@@ -226,3 +226,41 @@ Where the published award at the level the samples were taken is not positive, t
 The observations contain a measured rate for a monster only when that rate is backed by at least one recorded kill and is itself positive. Anything else -- no entry, an entry with no recorded kill, a zero rate, a negative rate -- is an ABSENT measurement, and S-008's fallback to the published prediction applies.
 
 An absent measurement is not an error and does not stop the walk. In particular a non-positive stored rate never reaches the zero-reward stop, which is a statement about what the published rules award and not about what has been observed.
+
+### S-019 · Progress carries across rungs  [witness: W-005]
+
+The walk tracks cumulative progress. XP earned by the final kill of a rung beyond that rung's requirement is not discarded: it counts toward the next rung.
+
+Only the FIRST rung starts from the character state's current progress toward the next level. Every later rung starts from the surplus carried out of the one before it.
+
+A rung whose remaining requirement is already met by the carried surplus costs zero further kills, and is reported as crossed with whatever cost it actually incurred.
+
+### S-020 · The consult sees carried gear, and the equip is charged  [witness: W-006]
+
+The state handed to the beatability predicate carries the best loadout the character already holds and is permitted to wear at that rung -- inventory and worn together -- not only what is currently worn. Equip conditions are evaluated against the rung's level (S-015), so gear the rung newly unlocks is included.
+
+Wearing it is an executed action. Where the rung's loadout differs from the one the character arrives with, the rung's cost includes the equip actions required to reach it, under S-005.
+
+This clause is about which arguments the oracle constructs, never about how the predicate decides.
+
+### S-021 · Recovery is one action, contributed as a continuous fraction  [witness: W-007]
+
+A recovery action restores the character fully, so no single fight can force more than one.
+
+Its contribution to the cost of one kill is the continuous fraction of the usable hit-point pool that fight consumes, capped at one. The per-kill figure is therefore monotone in damage taken and is not quantised before the rung total is formed.
+
+The pool is the hit points the character is willing to spend before recovering, which is a property of the policy the executor actually runs rather than a second threshold invented here. The pool grows with the rung (S-015).
+
+### S-022 · The per-rung choice maximises reward per action, not per rung  [witness: W-008]
+
+The monster chosen for a rung is the one with the greatest reward per executed action, measured over the whole loop S-005 describes. It is not chosen by the integral cost of crossing that particular rung.
+
+This is well-founded only because progress carries (S-019): no reward is lost at a rung boundary, so the monster that earns fastest per action also reaches the target fastest. S-011's heading is to be read as naming that consequence, not a second and different criterion.
+
+### S-023 · Rates are reconciled in XP per executed action  [witness: W-009]
+
+A measured rate is XP per executed planner action over the whole combat loop -- the same unit S-004 fixes for costs, and the unit an observation of actual play naturally arrives in, since it averages over every action the pursuit spent including recovery.
+
+A prediction from the published formula is per KILL, and is converted into that unit by dividing by the rung's loop action count (S-005) before it is compared with anything.
+
+The conversion runs in that direction and never the other. Recovering a per-kill figure from a whole-loop measurement would divide by a loop length the measurement has already absorbed, and can only lose what was measured.

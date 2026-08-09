@@ -119,3 +119,123 @@ char = {level 10, xp 0, xp-per-level 100, wisdom 1.0}; target level 11; catalogu
 **Became:** `S-018` — A measurement is present only when positive evidence backs it
 
 ---
+
+### W-005 · rung-progress-surplus-carryover
+
+| | |
+|---|---|
+| **cell** | 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth)/normal |
+| **Σ dimension** | value semantics |
+| **severity** | 4 |
+
+**Distinguishing input**
+```
+character state = {level 10, max_hp 100, progress 0, progress_required 100}; target level 13; observations = {} ; catalogue = [bandit {level 15, hp 25, always beatable, 0 forced recoveries}]. Predicted XP/kill from the published formula is 31 at level 10, 28 at level 11, 26 at level 12 (the ratio term shifts as the character levels), so every rung needs a fractional number of kills that S-014 resolves upward.
+```
+
+| | behavior |
+|---|---|
+| **A** | rungs = [(rung 10, 'bandit', 4), (rung 11, 'bandit', 4), (rung 12, 'bandit', 4)], total cost = 12. A resets progress to 0 at the top of each rung: ceil(100/31)=4, ceil(100/28)=4, ceil(100/26)=4. |
+| **B** | rungs = [(rung 10, 'bandit', 4), (rung 11, 'bandit', 3), (rung 12, 'bandit', 4)], total cost = 11. B carries the overshoot of the last kill into the next rung: rung 10 banks 4*31-100 = 24, so rung 11 needs only 76 (ceil(76/28)=3) and banks 8, so rung 12 needs 92 (ceil(92/26)=4). |
+
+**Resolution:** `RATIFIED -> B`
+**Because:** The game does not discard a kill's XP at a level boundary, so a projection that restarts every rung from zero is modelling a rule that does not exist. The error compounds: it over-prices a full climb by roughly one kill per rung, over thirty-odd rungs. Author chose the carry. NOT what the implementation does today -- it resets `xp_to_next` to the full requirement at the top of every rung -- so this is an implementation change, and the direction of the error is at least the safe one (over-estimating cost) rather than manufacturing reach.
+**Became:** `S-019` — Progress carries across rungs
+
+---
+
+### W-006 · beatability-consult-loadout-worn-vs-wearable
+
+| | |
+|---|---|
+| **cell** | 6. Beatability consult (when, and with what character state)/boundary |
+| **Σ dimension** | value semantics |
+| **severity** | 4 |
+
+**Distinguishing input**
+```
+char = {level:10, xp:0, xp_max:150, hp:130, max_hp:130, attack:20, defense:5, worn:[], carried:[iron_shield{defense:+6, min_character_level:10}]}; target_level = 13; observations = {}; catalogue = [wolf{level:1, hp:20, attack:6, defense:0}, ogre{level:12, hp:348, attack:10, defense:8}]. Both implementations advance the state per rung identically (so witness 1's decision is held fixed). Bare, the ogre is unbeatable at every rung up to level 12 (140 full HP); with the carried shield worn it is beatable at level 10. The shield's only condition, minimum character level 10, already holds.
+```
+
+| | behavior |
+|---|---|
+| **A** | A (predicate consulted with the loadout as worn — carried-but-unworn gear ignored): rungs=[(level 10, "wolf", 75)], total_cost = NOT FINITE. Rung 11's wolf awards 0 XP and the ogre is unbeatable, so the walk stops. |
+| **B** | B (predicate consulted with the best loadout the character is already carrying and is permitted to wear, the equip counted as one executed action under S-005): rungs=[(level 10, "ogre", 9), (level 11, "ogre", 10), (level 12, "ogre", 5)], total_cost = 24. |
+
+**Resolution:** `RATIFIED -> C`
+**Because:** Neither branch as posed. The adversaries recommended consulting only WORN gear, which is the cleaner contract and would be wrong here: the gear branch projects a candidate by placing the item in INVENTORY, so an oracle that ignored carried gear would make every gear candidate project identically to the trunk -- a bug this codebase has already had and documented. Author kept the carried-gear reading and closed the hole the other way: the equip is an executed action and must be paid for. Today it is free, which lets the projection take an upgrade the executor would have to spend a cycle on.
+**Became:** `S-020` — The consult sees carried gear, and the equip is charged
+
+---
+
+### W-007 · recovery-quantum-discrete-vs-amortised
+
+| | |
+|---|---|
+| **cell** | 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires')/normal |
+| **Σ dimension** | value semantics |
+| **severity** | 4 |
+
+**Distinguishing input**
+```
+char = {level 5, xp 0, xp_needed 300, max_hp 100}; target = 6; observations = {}; catalogue = [ogre {level 7, hp 150, dmg_taken_per_fight 51} -> 34 xp/kill, 9 kills; dire_elk {level 6, hp 100, dmg_taken_per_fight 34} -> 28 xp/kill, 11 kills]. Both beatable-from-full-HP and permitted. Ceiling applied once at the rung total in both implementations, so recovery pricing is the ONLY difference.
+```
+
+| | behavior |
+|---|---|
+| **A** | A amortises recovery continuously (a full-heal rest is 1 action, charged as dmg/max_hp per kill): ogre 1.51 x 9 = 13.59 -> 14; dire_elk 1.34 x 11 = 14.74 -> 15. Result: rungs = [{level 6, monster 'ogre', cost 14}], total_cost = 14. |
+| **B** | B charges recovery in whole actions at its real cadence -- one rest every floor(max_hp/dmg) kills: ogre floor(100/51)=1 -> 2.0 x 9 = 18; dire_elk floor(100/34)=2 -> 1.5 x 11 = 16.5 -> 17. Result: rungs = [{level 6, monster 'dire_elk', cost 17}], total_cost = 17. |
+
+**Resolution:** `RATIFIED -> A`
+**Because:** Both readings satisfy S-005's 'must distinguish them' and they invert the winner between two monsters, so the clause as written did not pick one. Author chose the continuous fraction, which is what the implementation already computes: it is monotone in damage, so armour that merely reduces damage without removing a rest still improves the price, where a step function on floor(max_hp/damage) would hide that until a whole rest disappears.
+**Became:** `S-021` — Recovery is one action, contributed as a continuous fraction
+
+---
+
+### W-008 · argmax-per-kill-rate-vs-rung-crossing-cost
+
+| | |
+|---|---|
+| **cell** | 11. Fastest-monster selection (argmax on reward per unit cost) and tie-break/conflicting |
+| **Σ dimension** | value semantics |
+| **severity** | 4 |
+
+**Distinguishing input**
+```
+character = {level: 10, xp: 0, max_xp: 100 (i.e. 100 XP still needed for L11), full HP, wisdom_bonus 1.0}; target_level = 11; observations = {} (empty); catalogue = [bandit_lizard {level 10, hp 1250, loop_cost 7 actions/kill}, blue_slime {level 10, hp 125, loop_cost 3 actions/kill}]. Both monsters are beatable (S-009) and permitted (S-010). Published formula gives bandit_lizard 70 XP/kill (rate 10.00 XP per action) and blue_slime 25 XP/kill (rate 8.33 XP per action); but because kills are integral, bandit_lizard needs ceil(100/70)=2 kills = 14 actions while blue_slime needs ceil(100/25)=4 kills = 12 actions.
+```
+
+| | behavior |
+|---|---|
+| **A** | rungs = [(level 11, "bandit_lizard", 14)], total_cost = 14   — argmax of reward-per-cost measured PER KILL (70/7 = 10.0 > 25/3 = 8.33) |
+| **B** | rungs = [(level 11, "blue_slime", 12)], total_cost = 12   — argmax of reward-per-cost measured OVER THE RUNG (100/12 = 8.33 > 100/14 = 7.14), i.e. the monster that literally 'crosses it fastest' |
+
+**Resolution:** `RATIFIED -> A`
+**Because:** S-011's heading ('crosses it fastest') and its body ('greatest reward per unit cost') named two different criteria, and they pick different monsters. Author chose the per-kill rate, and the choice is COUPLED to the carry-over decision above: once surplus XP carries into the next rung, no reward is wasted at a rung boundary, so maximising reward per action is exactly maximising progress per action and the two criteria coincide. Had progress reset each rung, the crossing-cost reading would have been the right one, because overkill XP would genuinely be discarded.
+**Became:** `S-022` — The per-rung choice maximises reward per action, not per rung
+
+---
+
+### W-009 · measured-rate-unit-undeclared
+
+| | |
+|---|---|
+| **cell** | 9. Measured-rate lookup and unit reconciliation (observations vs prediction)/conflicting |
+| **Σ dimension** | value semantics |
+| **severity** | 5 |
+
+**Distinguishing input**
+```
+Same catalogue and character as above; target level 6; observations = [(wolf, 12.0)] — a bare number, since the spec never says an observation record carries a unit tag. wolf.loop_actions = 3 (S-005 whole loop).
+```
+
+| | behavior |
+|---|---|
+| **A** | A (reads the measured rate as XP per kill, converts the prediction to per-kill to compare): wolf = 12 xp/kill = 4.0 xp/action, loses to chicken's 6.0 → rungs = [(level 6, 'chicken', 50)], total cost = 50 |
+| **B** | B (reads the measured rate as XP per executed action, converts the prediction to per-action to compare): wolf = 12 xp/action = 36 xp/kill, beats chicken → rungs = [(level 6, 'wolf', 27)], total cost = 27 |
+
+**Resolution:** `RATIFIED -> C`
+**Because:** S-008 required the two rates to agree on a unit without ever saying which unit, which is the same shape of defect S-004 exists to memorialise -- a quantity denominated in one unit and read as another. Author named the unit rather than adding a per-record unit field: enlarging the input domain for a field nothing currently produces buys robustness against a store change that has not happened, at the cost of a hole in S-002 today.
+**Became:** `S-023` — Rates are reconciled in XP per executed action
+
+---

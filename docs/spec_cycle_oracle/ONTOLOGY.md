@@ -56,9 +56,9 @@
 | 3. At-or-above-target early exit | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001, S-006 |  |
 | 3. At-or-above-target early exit | dependency failure (beatability predicate, catalogue, observation store) | IGNORE |  | S-006's answer is total in the character state and target alone. The exit fires before any catalogue read, observation lookup or beatability consult, so there is no dependency in scope that could fail. Waived on the record rather than omitted. |
 | 3. At-or-above-target early exit | concurrent stimulus (aliased/shared arguments, two calls at once) | MISSING |  |  |
-| 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | normal | THIN | S-003, S-012 |  |
+| 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | normal | DEFINED | S-003, S-012, S-019 |  |
 | 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | boundary | MISSING |  |  |
-| 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | degenerate | THIN | S-003 |  |
+| 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | degenerate | DEFINED | S-003, S-015 |  |
 | 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | conflicting | MISSING |  |  |
 | 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | absent | MISSING |  |  |
 | 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | stale / expiry (aged inputs, TTL, version drift) | MISSING |  |  |
@@ -75,7 +75,7 @@
 | 5. Candidate monster enumeration from the catalogue | dependency failure (beatability predicate, catalogue, observation store) | MISSING |  |  |
 | 5. Candidate monster enumeration from the catalogue | concurrent stimulus (aliased/shared arguments, two calls at once) | MISSING |  |  |
 | 6. Beatability consult (when, and with what character state) | normal | DEFINED | S-009 |  |
-| 6. Beatability consult (when, and with what character state) | boundary | THIN | S-009 |  |
+| 6. Beatability consult (when, and with what character state) | boundary | DEFINED | S-009, S-020 |  |
 | 6. Beatability consult (when, and with what character state) | degenerate | THIN | S-009 |  |
 | 6. Beatability consult (when, and with what character state) | conflicting | MISSING |  |  |
 | 6. Beatability consult (when, and with what character state) | absent | MISSING |  |  |
@@ -101,16 +101,16 @@
 | 8. Predicted XP-per-kill from the published formula | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001, S-007 |  |
 | 8. Predicted XP-per-kill from the published formula | dependency failure (beatability predicate, catalogue, observation store) | MISSING |  |  |
 | 8. Predicted XP-per-kill from the published formula | concurrent stimulus (aliased/shared arguments, two calls at once) | IGNORE |  | Waived per stimulus_waivers: the prediction is arithmetic over scalars already read out of the catalogue and character state within this call. It holds no handle and publishes no state, so 'two arrive at once' collapses into the whole-call cell (subject 1, concurrent), which is recorded THIN there rather than swallowed here. |
-| 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | normal | THIN | S-008 |  |
+| 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | normal | DEFINED | S-008, S-017 |  |
 | 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | boundary | MISSING |  |  |
 | 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | degenerate | MISSING |  |  |
-| 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | conflicting | THIN | S-008 |  |
-| 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | absent | DEFINED | S-008, S-007 |  |
+| 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | conflicting | DEFINED | S-008, S-023 |  |
+| 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | absent | DEFINED | S-008, S-007, S-018 |  |
 | 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | stale / expiry (aged inputs, TTL, version drift) | MISSING |  |  |
 | 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001 |  |
 | 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | dependency failure (beatability predicate, catalogue, observation store) | MISSING |  |  |
 | 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | concurrent stimulus (aliased/shared arguments, two calls at once) | MISSING |  |  |
-| 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | normal | THIN | S-005, S-004 |  |
+| 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | normal | DEFINED | S-005, S-004, S-021 |  |
 | 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | boundary | MISSING |  |  |
 | 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | degenerate | THIN | S-005 |  |
 | 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | conflicting | MISSING |  |  |
@@ -122,7 +122,7 @@
 | 11. Fastest-monster selection (argmax on reward per unit cost) and tie-break | normal | DEFINED | S-011, S-004, S-005 |  |
 | 11. Fastest-monster selection (argmax on reward per unit cost) and tie-break | boundary | THIN | S-011 |  |
 | 11. Fastest-monster selection (argmax on reward per unit cost) and tie-break | degenerate | DEFINED | S-011 |  |
-| 11. Fastest-monster selection (argmax on reward per unit cost) and tie-break | conflicting | THIN | S-011, S-001 |  |
+| 11. Fastest-monster selection (argmax on reward per unit cost) and tie-break | conflicting | DEFINED | S-011, S-001, S-022 |  |
 | 11. Fastest-monster selection (argmax on reward per unit cost) and tie-break | absent | DEFINED | S-012 |  |
 | 11. Fastest-monster selection (argmax on reward per unit cost) and tie-break | stale / expiry (aged inputs, TTL, version drift) | MISSING |  |  |
 | 11. Fastest-monster selection (argmax on reward per unit cost) and tie-break | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001, S-011 |  |
@@ -131,7 +131,7 @@
 | 12. Walk-stop decision (no admissible monster / zero reward) | normal | DEFINED | S-012, S-013 |  |
 | 12. Walk-stop decision (no admissible monster / zero reward) | boundary | THIN | S-013 |  |
 | 12. Walk-stop decision (no admissible monster / zero reward) | degenerate | DEFINED | S-012, S-006 |  |
-| 12. Walk-stop decision (no admissible monster / zero reward) | conflicting | THIN | S-013, S-011, S-012 |  |
+| 12. Walk-stop decision (no admissible monster / zero reward) | conflicting | DEFINED | S-013, S-011, S-012, S-016 |  |
 | 12. Walk-stop decision (no admissible monster / zero reward) | absent | MISSING |  |  |
 | 12. Walk-stop decision (no admissible monster / zero reward) | stale / expiry (aged inputs, TTL, version drift) | MISSING |  |  |
 | 12. Walk-stop decision (no admissible monster / zero reward) | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001 |  |

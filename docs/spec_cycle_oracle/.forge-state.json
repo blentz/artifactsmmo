@@ -11,7 +11,12 @@
   "projected-state-levelup-growth-not-applied",
   "s008-may-use-measurement-optional",
   "measurement-validity-across-character-levels",
-  "what-counts-as-a-present-measurement"
+  "what-counts-as-a-present-measurement",
+  "rung-progress-surplus-carryover",
+  "beatability-consult-loadout-worn-vs-wearable",
+  "recovery-quantum-discrete-vs-amortised",
+  "argmax-per-kill-rate-vs-rung-crossing-cost",
+  "measured-rate-unit-undeclared"
  ],
  "phases_run": [
   "ontology",
