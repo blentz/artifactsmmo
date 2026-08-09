@@ -1,7 +1,12 @@
 """Tests for skill_grind_target: the shallow in-skill item to craft now."""
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
+from artifactsmmo_cli.ai.tiers.skill_grind_target import (
+    CACHE_MAX_ENTRIES,
+    _cache_for,
+    build_grind_candidates,
+    skill_grind_target,
+)
 from tests.test_ai.fixtures import make_state
 
 
@@ -151,3 +156,56 @@ def test_craft_level_breaks_tie_when_materials_equal():
     state = make_state(skills={"weaponcrafting": 3},
                        inventory={"copper_bar": 6, "ash_plank": 4})
     assert skill_grind_target("weaponcrafting", state, gd) == "wooden_staff"
+
+
+def test_the_memo_returns_a_hit_for_an_identical_state():
+    """`skill_grind_target` runs inside `LevelSkillAction.is_applicable`, which
+    the planner calls PER NODE, and it was unmemoised. Within one search almost
+    every node shares the determinants, so the memo turns a rebuild into a
+    lookup — measured on a live-sized holding: 95ms cold, 31us warm."""
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 3})
+    first = build_grind_candidates("weaponcrafting", state, gd)
+    assert build_grind_candidates("weaponcrafting", state, gd) is first
+
+
+def test_the_memo_key_notices_a_changed_inventory():
+    """THE HONESTY CHECK. A memo whose key is too coarse is worse than no memo:
+    it returns a stale answer and nothing ever fails. Holdings change
+    `acquire_steps`, so a changed inventory MUST miss."""
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 3})
+    first = build_grind_candidates("weaponcrafting", state, gd)
+    changed = make_state(skills={"weaponcrafting": 3}, inventory={"copper_bar": 6})
+    assert build_grind_candidates("weaponcrafting", changed, gd) is not first
+
+
+def test_the_memo_key_notices_a_changed_skill_level():
+    """Skill level drives the zero-xp band, so it belongs in the key — a stale
+    list here would grind a rung that pays nothing."""
+    gd = _gd()
+    first = build_grind_candidates(
+        "weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd)
+    later = build_grind_candidates(
+        "weaponcrafting", make_state(skills={"weaponcrafting": 9}), gd)
+    assert later is not first
+
+
+def test_each_game_data_gets_its_own_cache():
+    """Scoped by `id(game_data)` with a weakref purge, exactly as
+    `equipment/loadout_cache` does, so two fixtures never serve each other's
+    answers."""
+    state = make_state(skills={"weaponcrafting": 3})
+    assert (build_grind_candidates("weaponcrafting", state, _gd())
+            is not build_grind_candidates("weaponcrafting", state, _gd()))
+
+
+def test_the_cache_is_bounded():
+    """Inventory churns every action, so unbounded keys would accumulate for the
+    life of the process. The oldest entry is evicted at the bound."""
+    gd = _gd()
+    cache = _cache_for(gd)
+    for i in range(CACHE_MAX_ENTRIES):
+        cache[("filler", i, (), (), (), ())] = []
+    build_grind_candidates("weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd)
+    assert len(cache) <= CACHE_MAX_ENTRIES

@@ -22,6 +22,9 @@ the committed weaponcrafting objective. The recursive `_obtainable` filter exclu
 such items so the reachable `copper_dagger` wins.
 """
 
+import weakref
+from collections import OrderedDict
+
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.min_crafts import min_crafts
@@ -71,6 +74,53 @@ def is_obtainable(code: str, state: WorldState, game_data: GameData,
     return all(is_obtainable(mat, state, game_data, nxt) for mat in recipe)
 
 
+_CacheKey = tuple[str, int, tuple[tuple[str, str | None], ...],
+                  tuple[tuple[str, int], ...], tuple[tuple[str, int], ...],
+                  tuple[tuple[str, int], ...]]
+
+CACHE_MAX_ENTRIES = 4096
+"""Per-GameData LRU bound, mirroring `equipment/loadout_cache`: comfortably holds
+one arbitration cycle's distinct search states while capping long-run growth."""
+
+_caches: dict[int, "OrderedDict[_CacheKey, list[GrindCandidate]]"] = {}
+"""Keyed by `id(game_data)` with a `weakref.finalize` purge, exactly as
+`loadout_cache` does — GameData is an eq-dataclass and so unhashable, and the
+finalizer makes id-reuse impossible because the old id is evicted before the
+allocator can hand it out again."""
+
+
+def _cache_for(game_data: GameData) -> "OrderedDict[_CacheKey, list[GrindCandidate]]":
+    key = id(game_data)
+    cache = _caches.get(key)
+    if cache is None:
+        cache = OrderedDict()
+        _caches[key] = cache
+        weakref.finalize(game_data, _caches.pop, key, None)
+    return cache
+
+
+def _cache_key(skill: str, state: WorldState) -> "_CacheKey":
+    """The determinants of a candidate list, and nothing else.
+
+    `level` and `equipment` drive `is_winnable` (hence obtainability and the DROP
+    route); `inventory` and `bank_items` WITH COUNTS drive holdings, the WITHDRAW
+    route's stock and the RECYCLE route's licensed surplus; `skills` drives the
+    craft gates inside `obtain_sources`. Quantities matter, so these are counted
+    pairs rather than key sets.
+
+    Same shape as `loadout_cache._CacheKey`, for the same reason: within one
+    search almost every node shares these, so the memo turns a route walk into a
+    lookup."""
+    return (
+        skill,
+        state.level,
+        tuple(sorted(state.equipment.items())),
+        tuple(sorted(state.inventory.items())),
+        tuple(sorted((state.bank_items or {}).items())),
+        tuple(sorted(state.skills.items())),
+    )
+
+
 def build_grind_candidates(skill: str, state: WorldState,
                            game_data: GameData) -> list[GrindCandidate]:
     """Hoist every in-skill craftable into a `GrindCandidate` (whole-chain
@@ -87,6 +137,12 @@ def build_grind_candidates(skill: str, state: WorldState,
 
     `recipe_closure` is built ONCE per call and shared across candidates, so the
     added cost is one closure walk per rung rather than one per material."""
+    cache = _cache_for(game_data)
+    key = _cache_key(skill, state)
+    hit = cache.get(key)
+    if hit is not None:
+        cache.move_to_end(key)
+        return hit
     bank = state.bank_items or {}
     owned = {code: state.inventory.get(code, 0) + bank.get(code, 0)
              for code in set(state.inventory) | set(bank)}
@@ -117,6 +173,9 @@ def build_grind_candidates(skill: str, state: WorldState,
             xp_positive=skill_xp_positive(stats.crafting_level,
                                           state.skills.get(skill, 0)),
         ))
+    cache[key] = candidates
+    if len(cache) > CACHE_MAX_ENTRIES:
+        cache.popitem(last=False)
     return candidates
 
 
