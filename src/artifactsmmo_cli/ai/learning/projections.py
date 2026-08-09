@@ -15,11 +15,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, col, select
 
 from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.equipment.equip_actions_core import equip_actions
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_value_core import Rank
+from artifactsmmo_cli.ai.gear_value_core import Combat, Rank
 from artifactsmmo_cli.ai.learning.cycles_for_progress_core import (
     CycleRow,
     cycles_for_progress_pure,
@@ -287,6 +288,11 @@ def cheapest_path_to_level(
     # HP is a recoverable resource, not equipment/inventory — so resting is not
     # speculative gear progression, just the normal pre-fight recovery.
     rested = replace(state, hp=state.max_hp)
+    # What the character is WEARING as the walk starts. Each rung's chosen loadout is
+    # compared against this and the difference charged as equip actions (S-020),
+    # then this advances — so gear is paid for when it goes on, not every rung it
+    # stays on.
+    worn: dict[str, str | None] = dict(state.equipment)
 
     while sim_level < target_level:
         # THE BODY THIS RUNG IS FOUGHT WITH (S-015). The walk used to advance
@@ -404,7 +410,33 @@ def cheapest_path_to_level(
             return PathPlan(target_level=target_level, total_cycles=float("inf"),
                             segments=segments, blocked=True)
 
-        cycles_for_this_level = xp_to_next / best_xp_per_cycle
+        # THE EQUIP IS AN ACTION (S-020). Beatability above was judged with the best
+        # loadout the character is CARRYING, not merely wearing — `predict_win` picks
+        # from inventory ∪ equipped, which the gear branch depends on. But the
+        # executor has to spend a cycle putting each piece on, and S-004's unit is
+        # executed actions, so leaving it unpriced omits a real cost and hands the
+        # projection its upgrade for free.
+        #
+        # Charged ONCE per rung, against what the character is wearing when it
+        # arrives, then carried forward — so a loadout held across ten rungs is paid
+        # for once rather than ten times, and a piece the rung's level newly unlocks
+        # (S-015) is paid for at the rung that unlocks it.
+        #
+        # The loadout re-picked here is the one the CHOSEN monster's verdict would
+        # use. It is OFTEN a `pick_loadout_cached` hit on work `predict_win` already
+        # did, but not always: `is_winnable` short-circuits on a learned-loss veto or
+        # a monotonic-win inference and never reaches `predict_win` at all, and then
+        # this is a real miss. Measured cost of the whole clause, live over five
+        # walks each: C3P0 297 -> 329 ms, R2D2 284 -> 319 ms, about +10%. One extra
+        # pick per RUNG, never per monster.
+        rung_loadout = pick_loadout_cached(
+            Combat(game_data.monster_attack(best_code),
+                   game_data.monster_resistance(best_code), dict(rung.attack)),
+            rung, game_data)
+        equips = equip_actions(worn, rung_loadout)
+        worn = rung_loadout
+
+        cycles_for_this_level = xp_to_next / best_xp_per_cycle + equips
         segments.append(PathSegment(
             from_level=sim_level,
             to_level=sim_level + 1,
@@ -414,6 +446,16 @@ def cheapest_path_to_level(
             cycles_per_kill=best_cycles_per_kill,
         ))
         sim_level += 1
+        # S-019 — PROGRESS CARRIES, and it already did. `cycles_for_this_level` is a
+        # CONTINUOUS quotient with no per-rung rounding, and the total is one sum
+        # rounded once by the caller, so no kill is ever rounded up and no surplus is
+        # discarded at a level boundary. That is exactly equivalent to carrying the
+        # overshoot forward. Only the first rung starts from the character's actual
+        # progress; every later rung needs a whole level's worth.
+        #
+        # Do not "fix" this by taking integral kills per rung. That would introduce
+        # the discarded surplus S-019 forbids and over-price a full climb by roughly
+        # one kill per rung. `test_a_rung_is_not_charged_a_whole_extra_kill` pins it.
         xp_to_next = max(1, state.max_xp)
 
     total = sum(s.estimated_cycles for s in segments)

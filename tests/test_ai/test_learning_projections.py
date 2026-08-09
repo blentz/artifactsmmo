@@ -1,6 +1,7 @@
 """Tests for Phase G-B projections module."""
 
 import json
+import math
 
 import pytest
 from sqlalchemy.exc import OperationalError
@@ -1158,3 +1159,152 @@ class TestTheWalkCarriesAGrowingBody:
         store.close()
         assert plan.segments == []
         assert seen == []
+
+
+class TestProgressCarriesAcrossRungs:
+    """S-019, which the continuous formulation already satisfies — pinned so it
+    cannot be lost.
+
+    W-005 posed the gap as integral kills per rung: `ceil(100/31)` charges a whole
+    fourth kill and throws away its surplus, and over thirty-odd rungs that
+    over-prices a full climb by roughly one kill per rung. This walk never rounds a
+    rung: `estimated_cycles` is a continuous quotient and the total is one sum,
+    rounded once by the caller. That is exactly equivalent to carrying the overshoot
+    forward, so the clause holds today.
+
+    It held by construction rather than by intent, and nothing stopped a future
+    change from taking integral kills "for realism" and reintroducing the discarded
+    surplus. These are that stop.
+    """
+
+    def _gd(self, monsters: dict[str, int]) -> GameData:
+        gd = GameData()
+        gd._monster_level = monsters
+        gd._monster_type = dict.fromkeys(monsters, "normal")
+        return _harmless(gd)
+
+    def test_a_rung_is_not_charged_a_whole_extra_kill(self, monkeypatch, tmp_path):
+        """The requirement must NOT divide evenly by the rate, so rounding up would
+        be visible. 100 XP at 22 per cycle is 4.545..., never 5."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd({"chicken": 1})
+        gd._monster_hp = {"chicken": 60}
+        state = make_state(level=1, xp=0, max_xp=100)
+
+        plan = cheapest_path_to_level(2, state, store, gd)
+        store.close()
+
+        rate = plan.segments[0].xp_per_cycle
+        assert 100 % rate != 0, "premise: the rate must not divide the requirement"
+        assert plan.segments[0].estimated_cycles == pytest.approx(100 / rate)
+        assert plan.segments[0].estimated_cycles != math.ceil(100 / rate)
+
+    def test_the_total_is_the_exact_sum_not_a_sum_of_rounded_rungs(
+            self, monkeypatch, tmp_path):
+        """Where the surplus goes. Rounding each rung and summing exceeds the exact
+        sum by nearly one action per rung; this pins the exact sum."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd({"chicken": 1})
+        gd._monster_hp = {"chicken": 60}
+        state = make_state(level=1, xp=0, max_xp=100)
+
+        plan = cheapest_path_to_level(6, state, store, gd)
+        store.close()
+
+        exact = sum(s.estimated_cycles for s in plan.segments)
+        rounded = sum(math.ceil(s.estimated_cycles) for s in plan.segments)
+        assert plan.total_cycles == pytest.approx(exact)
+        assert rounded > exact, (
+            "premise: with no fractional rungs this case proves nothing")
+
+    def test_only_the_first_rung_starts_from_the_characters_own_progress(
+            self, monkeypatch, tmp_path):
+        """S-019's other half. A character already most of the way up its current
+        level pays less for THAT rung and a full level's worth for the next."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd({"chicken": 1})
+        gd._monster_hp = {"chicken": 60}
+        state = make_state(level=1, xp=90, max_xp=100)
+
+        plan = cheapest_path_to_level(3, state, store, gd)
+        store.close()
+
+        # Each rung has its OWN rate — `xp_per_kill` reads the simulated level, so
+        # the same monster pays less as the character out-levels it. Reusing rung
+        # 0's rate here compared 100/22 against 100/12 and said nothing about
+        # carry-over.
+        first, second = plan.segments[0], plan.segments[1]
+        assert first.estimated_cycles == pytest.approx(10 / first.xp_per_cycle), (
+            "the first rung must need only the 10 XP actually remaining")
+        assert second.estimated_cycles == pytest.approx(100 / second.xp_per_cycle), (
+            "every later rung needs a whole level's worth")
+        assert first.xp_per_cycle != second.xp_per_cycle, (
+            "premise: the rates differ, so the two assertions above are distinct")
+
+
+class TestTheEquipIsCharged:
+    """S-020: beatability is judged with the best CARRIED loadout, and putting it
+    on is an executed action the rung must pay for.
+
+    The carried-gear reading is deliberate and load-bearing — the gear branch
+    projects a candidate by placing the item in INVENTORY, so an oracle that looked
+    only at worn gear would make every gear candidate project byte-identically to
+    the trunk. W-006 recommended exactly that; it would have re-broken the gear
+    branch. Charging the action closes the same hole from the other side.
+    """
+
+    def _gd_with_weapon(self) -> GameData:
+        gd = GameData()
+        gd._monster_level = {"chicken": 1}
+        gd._monster_type = {"chicken": "normal"}
+        gd._item_stats = {
+            "iron_sword": ItemStats(code="iron_sword", level=1, type_="weapon",
+                                    attack={"earth": 20}),
+        }
+        return _harmless(gd)
+
+    def test_carried_gear_costs_one_action_at_the_rung_that_wears_it(
+            self, monkeypatch, tmp_path):
+        """One equip, charged once. The character carries a weapon and wears
+        nothing, so the first rung pays for putting it on and no later rung pays
+        again — `worn` advances rather than being re-compared to the bare start."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd_with_weapon()
+        bare = make_state(level=1, xp=0, max_xp=100)
+        armed = make_state(level=1, xp=0, max_xp=100,
+                           inventory={"iron_sword": 1})
+
+        bare_plan = cheapest_path_to_level(4, bare, store, gd)
+        armed_plan = cheapest_path_to_level(4, armed, store, gd)
+        store.close()
+
+        bare_first, armed_first = (bare_plan.segments[0].estimated_cycles,
+                                   armed_plan.segments[0].estimated_cycles)
+        assert armed_first == pytest.approx(bare_first + 1), (
+            "the first rung must carry exactly one equip action")
+        for i in range(1, len(armed_plan.segments)):
+            assert (armed_plan.segments[i].estimated_cycles
+                    == pytest.approx(bare_plan.segments[i].estimated_cycles)), (
+                f"rung {i} was charged for the equip again — `worn` is not advancing")
+
+    def test_wearing_nothing_and_carrying_nothing_costs_nothing(
+            self, monkeypatch, tmp_path):
+        """The sixteen empty slots of a bare character must not read as sixteen
+        equip actions. `WorldState.equipment` spells them as None and a picked
+        loadout may omit them entirely; if those two spellings disagreed, every
+        walk would open with a phantom loadout change."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        gd = self._gd_with_weapon()
+        state = make_state(level=1, xp=0, max_xp=100)
+
+        plan = cheapest_path_to_level(2, state, store, gd)
+        store.close()
+
+        rate = plan.segments[0].xp_per_cycle
+        assert plan.segments[0].estimated_cycles == pytest.approx(100 / rate), (
+            "a bare character was charged for equipping nothing")
