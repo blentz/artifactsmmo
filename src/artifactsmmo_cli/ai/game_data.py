@@ -637,22 +637,6 @@ class GameData:
     def _next_expansion_cost(self, value: int) -> None:
         self.world.next_expansion_cost = value
 
-    @property
-    def _transition_tiles(self) -> set[tuple[int, int]]:
-        return self.world.transition_tiles
-
-    @_transition_tiles.setter
-    def _transition_tiles(self, value: set[tuple[int, int]]) -> None:
-        self.world.transition_tiles = value
-
-    @property
-    def _known_tiles(self) -> set[tuple[int, int]]:
-        return self.world.known_tiles
-
-    @_known_tiles.setter
-    def _known_tiles(self, value: set[tuple[int, int]]) -> None:
-        self.world.known_tiles = value
-
     # === Public query API (delegates to the domain catalogs) ===
 
     def monster_locations(self, code: str) -> list[tuple[int, int]]:
@@ -710,14 +694,15 @@ class GameData:
 
     @property
     def known_layer_tiles(self) -> AbstractSet[tuple[int, int, str]]:
-        """Every (x, y, layer) tile that exists, content or not, ALL layers."""
+        """Every (x, y, layer) tile that exists, content or not, ALL layers.
+        Replaced an overworld-only `known_tiles`."""
         return self.world.known_layer_tiles
 
     @property
     def layered_transition_tiles(self) -> AbstractSet[tuple[int, int, str]]:
         """(x, y, layer) of every tile carrying a transition, ALL layers.
-        The all-layer form of `transition_tiles`, which sees overworld doors
-        only and so cannot show the way back OUT of an interior."""
+        Replaced an overworld-only door set that could not show the way back
+        OUT of an interior."""
         return self.world.transition_edges.keys()
 
     def transition_edge(
@@ -1364,16 +1349,6 @@ class GameData:
         return self.recipes_catalog.resource_skill
 
     @property
-    def transition_tiles(self) -> AbstractSet[tuple[int, int]]:
-        """Overworld tiles with a map-layer transition (doors)."""
-        return self.world.transition_tiles
-
-    @property
-    def known_tiles(self) -> AbstractSet[tuple[int, int]]:
-        """Every overworld tile that exists, content or not."""
-        return self.world.known_tiles
-
-    @property
     def bank_capacity(self) -> int:
         """Bank slot capacity as of the startup snapshot."""
         return self.world.bank_capacity
@@ -1699,11 +1674,7 @@ class GameData:
                 continue
 
             loc = (tile.x, tile.y)
-            self._known_tiles.add(loc)
             self.world.map_id_to_loc[tile.map_id] = loc  # teleport destinations resolve map_id -> coords
-
-            if not isinstance(transition, Unset) and transition is not None:
-                self._transition_tiles.add(loc)
 
             content = tile.interactions.content
             if isinstance(content, Unset) or content is None:

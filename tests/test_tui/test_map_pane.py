@@ -49,6 +49,10 @@ def _gd_layered() -> GameData:
         (-2, -2, "interior"): ("grand_exchange", "grand_exchange"),
         (5, 5, "underground"): ("monster", "bandit_lizard"),
         (6, 6, "underground"): ("raid", "dragon_raid"),
+        # An OVERWORLD tile in the layered facts. The legacy accessors own the
+        # overworld — they carry the active event spawns that these static
+        # facts do not — so this must not displace the entry above.
+        (2, 0, "overworld"): ("resource", "ash_tree"),
     })
     gd._resource_skill["copper_rocks"] = ("mining", 1)
     gd.world.transition_edges[(0, -3, "underground")] = (0, -3, "overworld", ())
@@ -90,7 +94,8 @@ class TestBuildTileIndex:
         assert idx[(3, 3, "interior")] == (SpriteCategory.STRUCTURE, "workshop")
         assert idx[(4, 1, "interior")] == (SpriteCategory.STRUCTURE, "bank")
         assert idx[(-2, -2, "interior")] == (SpriteCategory.STRUCTURE, "grand_exchange")
-        # The overworld entries at the SAME coordinates are untouched.
+        # The overworld entries at the SAME coordinates are untouched — the
+        # legacy (event-aware) accessors own that layer.
         assert idx[(2, 0, "overworld")] == (SpriteCategory.MONSTER, "green_slime")
         assert idx[(0, 2, "overworld")] == (SpriteCategory.MONSTER, "chicken")
 
@@ -203,7 +208,8 @@ class TestLayers:
 
     def test_known_empty_tile_uses_floor_color(self):
         gd = _gd_typed()
-        gd._known_tiles = {(1, 0)}  # in view from (0,0), no content there
+        # In view from (0,0) on the overworld, no content there.
+        gd.world.known_layer_tiles.add((1, 0, "overworld"))
         pane = MapPane(gd)
         out = pane._render_viewport(_snap(0, 0), 80, 41)
         assert any(WALKABLE_COLOR in s for s in _styles(out))

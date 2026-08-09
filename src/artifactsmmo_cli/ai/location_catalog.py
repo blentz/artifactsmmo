@@ -29,10 +29,11 @@ class LocationCatalog:
     what a tile IS — the map pane picking a sprite — needs the type, so it is
     kept rather than guessed."""
     known_layer_tiles: set[tuple[int, int, str]] = field(default_factory=set)
-    """Every tile the API returned, on EVERY layer, walkable or not. The
-    all-layer analogue of the overworld-only `known_tiles`: it answers "does
-    this map square exist" (versus void) off the overworld, which is what the
-    map pane needs to tell floor from unmapped space."""
+    """Every tile the API returned, on EVERY layer, walkable or not.
+
+    It answers "does this map square exist" (versus void) on any layer, which
+    is what the map pane needs to tell floor from unmapped space. Replaced an
+    overworld-only `known_tiles` that could not answer it off the overworld."""
     restricted_tiles: set[tuple[int, int, str]] = field(default_factory=set)  # access.type == 'restricted'
     walkable_tiles: set[tuple[int, int, str]] = field(default_factory=set)
     """Every tile the move action can path onto: access 'standard' plus
@@ -118,8 +119,6 @@ class LocationCatalog:
     bank_capacity: int = 0
     next_expansion_cost: int = 0
     slots_per_expansion: int = 0  # learned after the first expansion (response delta)
-    transition_tiles: set[tuple[int, int]] = field(default_factory=set)
-    known_tiles: set[tuple[int, int]] = field(default_factory=set)  # every overworld tile that exists, content or not
     # MapSchema.map_id -> (x, y); resolves teleport destinations
     map_id_to_loc: dict[int, tuple[int, int]] = field(default_factory=dict)
 
