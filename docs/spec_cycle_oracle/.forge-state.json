@@ -1,14 +1,15 @@
 {
- "round": 0,
+ "round": 1,
  "dry_rounds": 0,
- "void_rounds": 0,
+ "void_rounds": 1,
  "seen": [],
  "contradiction_clean_runs": 0,
  "contradiction_void_runs": 0,
  "blind_rounds": 1,
- "blindness_failures": 0,
+ "blindness_failures": 1,
  "pending_verification": [],
  "phases_run": [
-  "ontology"
+  "ontology",
+  "underdetermination"
  ]
 }
