@@ -9,6 +9,7 @@ from textual.widgets import RichLog
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.tui.plan_format import grind_chain_lines
+from artifactsmmo_cli.tui.position_text import position_text
 
 
 def build_debug_log_line(snap: CycleSnapshot) -> str:
@@ -38,7 +39,7 @@ def build_debug_log_line(snap: CycleSnapshot) -> str:
         f"  [dim]planner[/dim] nodes={snap.planner_nodes} depth={snap.planner_depth} "
         f"plan_len={snap.plan_len} timeout={timeout} "
         f"| task {task} hp {snap.hp}/{snap.max_hp} cd {snap.cooldown_remaining:.1f} "
-        f"pos ({snap.x},{snap.y}) next {snap.path_next_action or '?'} proj {proj} blocked={blocked}",
+        f"pos {position_text(snap)} next {snap.path_next_action or '?'} proj {proj} blocked={blocked}",
     ]
     if snap.goals_tried:
         attempts = "  ".join(

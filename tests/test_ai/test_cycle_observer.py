@@ -60,12 +60,23 @@ class TestObserverHook:
         assert snap.hp == 80
         assert snap.gold == 42
         assert snap.x == 2 and snap.y == -1
+        assert snap.layer == "overworld"
         assert snap.inventory == {"copper_ore": 5}
         assert snap.selected_goal == "FarmMonster(slime)"
         assert snap.action == "Fight(slime)"
         assert snap.outcome == "ok"
         assert len(snap.goal_rank) == 1
         assert snap.goal_rank[0].priority == 36.0
+
+    def test_notify_observer_carries_the_layer(self):
+        """The snapshot must carry WorldState.layer: coordinates alone name a
+        different tile on every other layer, so the map pane cannot draw the
+        right tiles without it."""
+        calls: list[CycleSnapshot] = []
+        player = GamePlayer(character="hero", cycle_observer=calls.append)
+        player.state = make_state(x=5, y=5, layer="underground")
+        player._notify_observer("G", "A", "ok", goal_rank_trace=[])
+        assert calls[0].layer == "underground"
 
     def test_notify_observer_carries_planner_trace(self):
         """planner_stats threads the trace internals onto the snapshot."""

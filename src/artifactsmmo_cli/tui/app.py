@@ -203,7 +203,7 @@ class WatchApp(App[None]):
         if not self.is_running:
             return
         others = {
-            (snap.x, snap.y): self._roster.sprite(name)
+            (snap.x, snap.y, snap.layer): self._roster.sprite(name)
             for name, snap in self._store.latest_all().items()
             if name != self.focused_character
         }

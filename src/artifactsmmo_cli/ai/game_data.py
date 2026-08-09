@@ -703,6 +703,23 @@ class GameData:
         """True when the tile is region-gated (access type 'restricted')."""
         return self.world.is_restricted(x, y, layer)
 
+    @property
+    def layered_tile_content(self) -> Mapping[tuple[int, int, str], tuple[str, str]]:
+        """(x, y, layer) -> (content type, content code), ALL layers."""
+        return self.world.layered_tile_content
+
+    @property
+    def known_layer_tiles(self) -> AbstractSet[tuple[int, int, str]]:
+        """Every (x, y, layer) tile that exists, content or not, ALL layers."""
+        return self.world.known_layer_tiles
+
+    @property
+    def layered_transition_tiles(self) -> AbstractSet[tuple[int, int, str]]:
+        """(x, y, layer) of every tile carrying a transition, ALL layers.
+        The all-layer form of `transition_tiles`, which sees overworld doors
+        only and so cannot show the way back OUT of an interior."""
+        return self.world.transition_edges.keys()
+
     def transition_edge(
         self, x: int, y: int, layer: str
     ) -> tuple[int, int, str, tuple[tuple[str, str, int], ...]] | None:
@@ -1667,10 +1684,16 @@ class GameData:
                     tuple(conds),
                 )
 
+            self.world.known_layer_tiles.add(tloc)
+
             content_any = tile.interactions.content
             if not (isinstance(content_any, Unset) or content_any is None):
                 self.world.layered_content.setdefault(
                     content_any.code, []).append(tloc)
+                self.world.layered_tile_content[tloc] = (
+                    str(getattr(content_any.type_, "value", content_any.type_)),
+                    str(content_any.code),
+                )
 
             if layer != "overworld":
                 continue

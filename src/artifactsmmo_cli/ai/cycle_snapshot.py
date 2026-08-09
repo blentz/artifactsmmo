@@ -88,6 +88,14 @@ class CycleSnapshot(BaseModel):
     # State
     x: int
     y: int
+    layer: str = "overworld"
+    """Map layer the character stands on (`WorldState.layer`).
+
+    Coordinates alone do NOT identify a tile: (0,0) exists on the overworld,
+    underground and interior layers alike. Without this the map pane drew
+    overworld content under a character standing in an interior, and the two
+    tiles printed identically in the HUD. Defaults to overworld so snapshots
+    built before this field existed still validate."""
     level: int
     xp: int
     max_xp: int

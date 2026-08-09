@@ -69,7 +69,9 @@ async def test_a_foreign_snapshot_still_places_that_character_on_the_map():
     app = _app()
     async with app.run_test():
         app.update_snapshot(_snap("bob", x=3, y=4))
-        assert (3, 4) in app.query_one("#map", MapPane)._others
+        # Keyed by layer as well as position: the same (3,4) exists on every
+        # layer, and a sibling in an interior is not on your map.
+        assert (3, 4, "overworld") in app.query_one("#map", MapPane)._others
 
 
 @pytest.mark.asyncio

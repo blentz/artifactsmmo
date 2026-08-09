@@ -9,6 +9,7 @@ from textual.widgets import Static
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.tui.item_tables import build_bank_items, build_inventory_items
+from artifactsmmo_cli.tui.position_text import position_text
 
 
 def build_character_detail(snap: CycleSnapshot) -> RenderableType:
@@ -21,7 +22,7 @@ def build_character_detail(snap: CycleSnapshot) -> RenderableType:
     t.add_row("HP", f"{snap.hp}/{snap.max_hp}")
     t.add_row("XP", f"{snap.xp}/{snap.max_xp}")
     t.add_row("Gold", str(snap.gold))
-    t.add_row("Pos", f"({snap.x},{snap.y})")
+    t.add_row("Pos", position_text(snap))
     if snap.task_code:
         t.add_row("Task", f"{snap.task_code}  {snap.task_progress}/{snap.task_total}")
     else:

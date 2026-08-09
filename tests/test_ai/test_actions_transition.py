@@ -2,8 +2,11 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
+from artifactsmmo_cli.ai.actions.transition_layer_error import TransitionLayerError
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
@@ -23,8 +26,8 @@ def _edge(**kw) -> MapTransitionAction:
 
 class TestMapTransitionAction:
     def test_repr_carries_edge_and_fee(self):
-        assert repr(_edge()) == "Transition((-4,9)->(-4,8,overworld), 5000g)"
-        assert repr(_edge(conditions=())) == "Transition((-4,9)->(-4,8,overworld))"
+        assert repr(_edge()) == "Transition((-4,9,overworld)->(-4,8,overworld), 5000g)"
+        assert repr(_edge(conditions=())) == "Transition((-4,9,overworld)->(-4,8,overworld))"
 
     def test_applicable_iff_gold_covers_the_fee(self):
         gd = GameData()
@@ -133,9 +136,9 @@ class TestKeyedTransitions:
 
     def test_repr_shows_key_conditions(self):
         assert repr(_edge(conditions=(("lich_tomb_key", "cost", 1),))) == \
-            "Transition((-4,9)->(-4,8,overworld), lich_tomb_keyx1)"
+            "Transition((-4,9,overworld)->(-4,8,overworld), lich_tomb_keyx1)"
         assert repr(_edge(conditions=(("cultist_cloak", "has_item", 1),))) == \
-            "Transition((-4,9)->(-4,8,overworld), holds cultist_cloak)"
+            "Transition((-4,9,overworld)->(-4,8,overworld), holds cultist_cloak)"
 
 
 class TestRegionAwarePlanning:
@@ -187,3 +190,38 @@ class TestRegionAwarePlanning:
         state = make_state(x=0, y=0)
         # The planner's region gate (not is_applicable) rejects it; simulate:
         assert fight.travel_region != gd.state_region(state)
+
+
+class TestPortalLayer:
+    """The portal tile is (layer, x, y) — coordinates alone name a different
+    tile on every other layer."""
+
+    def test_inapplicable_from_another_layer(self):
+        gd = GameData()
+        edge = _edge(conditions=(), portal_layer="underground")
+        assert edge.is_applicable(make_state(layer="underground"), gd) is True
+        assert edge.is_applicable(make_state(layer="overworld"), gd) is False
+        assert edge.is_applicable(make_state(layer="interior"), gd) is False
+
+    def test_repr_names_the_portal_layer(self):
+        assert repr(_edge(conditions=(), portal_layer="interior")) == (
+            "Transition((-4,9,interior)->(-4,8,overworld))")
+
+    def test_execute_refuses_to_post_from_the_wrong_layer(self):
+        """Standing on the same COORDINATES one layer up used to look like
+        "already at the portal": the move leg was skipped and the transition
+        POSTed from an unrelated tile."""
+        edge = _edge(conditions=(), portal_layer="underground")
+        state = make_state(x=-4, y=9, layer="overworld")
+        with patch("artifactsmmo_cli.ai.actions.transition.action_transition") as posted:
+            with pytest.raises(TransitionLayerError, match="underground"):
+                edge.execute(state, MagicMock())
+        posted.assert_not_called()
+
+    def test_execute_proceeds_on_the_portal_layer(self):
+        edge = _edge(conditions=(), portal_layer="underground")
+        state = make_state(x=-4, y=9, layer="underground")
+        with patch("artifactsmmo_cli.ai.actions.transition.action_transition",
+                   return_value=make_api_result(make_char_schema())) as posted:
+            edge.execute(state, MagicMock())
+        posted.assert_called_once()

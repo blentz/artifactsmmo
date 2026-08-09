@@ -17,6 +17,22 @@ class LocationCatalog:
     # teaches the planner layers/regions — consumers migrate then.
     # content code -> [(x, y, layer)]
     layered_content: dict[str, list[tuple[int, int, str]]] = field(default_factory=dict)
+    # (x, y, layer) -> (content type, content code)
+    layered_tile_content: dict[tuple[int, int, str], tuple[str, str]] = field(default_factory=dict)
+    """The same content as `layered_content`, keyed by TILE and carrying the
+    `content.type` the API reported (`monster` / `resource` / `workshop` /
+    `npc` / `bank` / `grand_exchange` / `tasks_master` / `raid`).
+
+    `layered_content` drops the type, and the type is not recoverable from the
+    code: a workshop's code is a skill name and a tasks master's is a task
+    type, neither of which identifies itself. Any consumer that must decide
+    what a tile IS — the map pane picking a sprite — needs the type, so it is
+    kept rather than guessed."""
+    known_layer_tiles: set[tuple[int, int, str]] = field(default_factory=set)
+    """Every tile the API returned, on EVERY layer, walkable or not. The
+    all-layer analogue of the overworld-only `known_tiles`: it answers "does
+    this map square exist" (versus void) off the overworld, which is what the
+    map pane needs to tell floor from unmapped space."""
     restricted_tiles: set[tuple[int, int, str]] = field(default_factory=set)  # access.type == 'restricted'
     walkable_tiles: set[tuple[int, int, str]] = field(default_factory=set)
     """Every tile the move action can path onto: access 'standard' plus

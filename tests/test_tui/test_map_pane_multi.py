@@ -32,7 +32,7 @@ def test_a_second_character_renders_at_its_own_tile():
     pane = _pane()
     pane.update_snapshot(_snap(0, 0))
     plain = pane._render_viewport(_snap(0, 0), TILE_W * 5, TILE_H * 5 + 1)
-    pane.set_others({(1, 0): roster.sprite("bob")})
+    pane.set_others({(1, 0, "overworld"): roster.sprite("bob")})
     with_bob = pane._render_viewport(_snap(0, 0), TILE_W * 5, TILE_H * 5 + 1)
     assert with_bob.plain == plain.plain  # glyphs unchanged; only colour differs
     assert with_bob.spans != plain.spans
@@ -45,7 +45,7 @@ def test_setting_others_invalidates_the_line_cache():
     pane = _pane()
     pane.update_snapshot(_snap(0, 0))
     pane._line_cache[3] = ("stale-signature", None)
-    pane.set_others({(1, 0): roster.sprite("bob")})
+    pane.set_others({(1, 0, "overworld"): roster.sprite("bob")})
     assert pane._line_cache == {}
 
 
@@ -56,7 +56,7 @@ def test_the_line_signature_changes_when_a_character_moves_onto_that_row():
     height = TILE_H * 5 + 1
     args = (1, height, (0, 0), pane._player_sprite(0.0), {})
     before = pane._line_signature(*args)
-    pane.set_others({(0, -2): roster.sprite("bob")})
+    pane.set_others({(0, -2, "overworld"): roster.sprite("bob")})
     assert pane._line_signature(*args) != before
 
 
@@ -66,7 +66,7 @@ def test_the_focused_character_wins_a_shared_tile():
     roster = CharacterRoster(["alice", "bob"])
     pane = _pane()
     pane.update_snapshot(_snap(0, 0))
-    pane.set_others({(0, 0): roster.sprite("bob")})
+    pane.set_others({(0, 0, "overworld"): roster.sprite("bob")})
     sprite, _terrain = pane._tile_sprite_and_terrain(
         0, 0, True, pane._player_sprite(0.0)
     )

@@ -73,7 +73,35 @@ _SKILL_TO_RESOURCE_KEY = {
     "fishing": "resource_fishing",
     "alchemy": "resource_alchemy",
 }
+# Map `content.type` values that all draw as a building. The sprite key IS the
+# content type for each of them (docs concepts/maps_and_movement "Content").
+_STRUCTURE_CONTENT_TYPES = frozenset({"workshop", "bank", "grand_exchange", "tasks_master"})
 TileContent = tuple[SpriteCategory, str]
+OVERWORLD = "overworld"
+
+
+def _resource_sprite_key(gd: GameData, code: str) -> str:
+    """Sprite key for a resource node, chosen by its gathering skill."""
+    skill = gd.resource_skills.get(code)
+    if skill is None:
+        return "resource_mining"
+    return _SKILL_TO_RESOURCE_KEY.get(skill[0], "resource_mining")
+
+
+def tile_content_for(content_type: str, code: str, gd: GameData) -> TileContent | None:
+    """The (category, sprite key) a map tile's content draws as, or None when
+    the content type has no sprite (a raid tile, or a type added server-side
+    after this pane was written — an unknown type draws as bare floor rather
+    than as some other thing)."""
+    if content_type == "monster":
+        return (SpriteCategory.MONSTER, code)
+    if content_type == "resource":
+        return (SpriteCategory.RESOURCE, _resource_sprite_key(gd, code))
+    if content_type == "npc":
+        return (SpriteCategory.NPC, code)
+    if content_type in _STRUCTURE_CONTENT_TYPES:
+        return (SpriteCategory.STRUCTURE, content_type)
+    return None
 
 
 def select_swing_head(mode: Mode, action_target: str | None, game_data: GameData) -> ToolHeads | None:
@@ -102,7 +130,7 @@ class MapPane(Static):
         super().__init__(**kwargs)
         self._game_data = game_data
         self._tile_index = self._build_tile_index(game_data)
-        self._known_tiles = game_data.known_tiles
+        self._known_tiles = game_data.known_layer_tiles
         self._registry = SpriteRegistry()
         self._compositor = HalfBlockCompositor()
         self._anim_frames: list[tuple[int, int]] = []
@@ -117,10 +145,11 @@ class MapPane(Static):
         # so all lines composite consistently.
         self._line_cache: dict[int, tuple[object, Strip]] = {}
         self._anim_now = 0.0
-        # Non-focused characters: world tile -> their recoloured sprite. They
-        # render statically; swing and glide frames are keyed to ONE action
-        # timeline, so only the focused character animates.
-        self._others: dict[tuple[int, int], Sprite] = {}
+        # Non-focused characters: world tile (x, y, layer) -> their recoloured
+        # sprite. They render statically; swing and glide frames are keyed to
+        # ONE action timeline, so only the focused character animates. Keyed by
+        # layer so a sibling underground is not drawn onto the overworld map.
+        self._others: dict[tuple[int, int, str], Sprite] = {}
         # Characters in trouble, rendered after the coordinates on the HUD line.
         # This used to sit in the status pane, one narrow grid cell wide, where
         # a dead child's reason was cropped away mid-diagnostic.
@@ -139,33 +168,48 @@ class MapPane(Static):
         self.refresh()
 
     @staticmethod
-    def _build_tile_index(gd: GameData) -> dict[tuple[int, int], TileContent]:
-        """Map (x,y) -> (category, code). Player resolved at render time."""
-        index: dict[tuple[int, int], TileContent] = {}
+    def _build_tile_index(gd: GameData) -> dict[tuple[int, int, str], TileContent]:
+        """Map (x,y,layer) -> (category, code). Player resolved at render time.
+
+        Keyed by LAYER as well as position because the same (x,y) exists on
+        every layer: an index keyed on coordinates alone drew overworld
+        content under a character standing underground or in an interior.
+
+        The overworld comes from the legacy accessors — they carry the ACTIVE
+        EVENT spawns, which the static all-layer map facts do not — and every
+        other layer from those static facts. Doors come from the all-layer
+        transition edges, so the way back OUT of an interior is drawn too.
+        """
+        index: dict[tuple[int, int, str], TileContent] = {}
         for code, locs in gd.all_resource_locations.items():
-            skill = gd.resource_skills.get(code)
-            key = _SKILL_TO_RESOURCE_KEY.get(skill[0], "resource_mining") if skill else "resource_mining"
+            key = _resource_sprite_key(gd, code)
             for xy in locs:
-                index[xy] = (SpriteCategory.RESOURCE, key)
+                index[(*xy, OVERWORLD)] = (SpriteCategory.RESOURCE, key)
         for _skill, loc in gd.workshop_locations.items():
             if loc is not None:
-                index[loc] = (SpriteCategory.STRUCTURE, "workshop")
+                index[(*loc, OVERWORLD)] = (SpriteCategory.STRUCTURE, "workshop")
         for npc_code, loc in gd.npc_locations.items():
-            index[loc] = (SpriteCategory.NPC, npc_code)
+            index[(*loc, OVERWORLD)] = (SpriteCategory.NPC, npc_code)
         bank_loc = gd.bank_location_or_none
         if bank_loc is not None:
-            index[bank_loc] = (SpriteCategory.STRUCTURE, "bank")
+            index[(*bank_loc, OVERWORLD)] = (SpriteCategory.STRUCTURE, "bank")
         ge_loc = gd.grand_exchange_location()
         if ge_loc is not None:
-            index[ge_loc] = (SpriteCategory.STRUCTURE, "grand_exchange")
+            index[(*ge_loc, OVERWORLD)] = (SpriteCategory.STRUCTURE, "grand_exchange")
         taskmaster_loc = gd.taskmaster_location_or_none
         if taskmaster_loc is not None:
-            index[taskmaster_loc] = (SpriteCategory.STRUCTURE, "tasks_master")
+            index[(*taskmaster_loc, OVERWORLD)] = (SpriteCategory.STRUCTURE, "tasks_master")
         for code, locs in gd.all_monster_locations.items():
             for xy in locs:
-                index[xy] = (SpriteCategory.MONSTER, code)
-        for xy in gd.transition_tiles:
-            index[xy] = (SpriteCategory.STRUCTURE, "door")
+                index[(*xy, OVERWORLD)] = (SpriteCategory.MONSTER, code)
+        for tloc, (content_type, code) in gd.layered_tile_content.items():
+            if tloc[2] == OVERWORLD:
+                continue
+            content = tile_content_for(content_type, code, gd)
+            if content is not None:
+                index[tloc] = content
+        for tloc in gd.layered_transition_tiles:
+            index[tloc] = (SpriteCategory.STRUCTURE, "door")
         return index
 
     def update_snapshot(self, snap: CycleSnapshot) -> None:
@@ -175,7 +219,12 @@ class MapPane(Static):
         self._anim_now = self._anim_start
         self._planning_active = False
         self._line_cache.clear()  # new cycle → content changes wholesale
-        if prior is not None and (prior.x, prior.y) != (snap.x, snap.y):
+        # A layer change is a TRANSITION — a door/stair/portal teleport, not a
+        # walk (docs: "allows you to teleport from one tile to another"). Its
+        # endpoints are on different maps, so gliding between the coordinates
+        # would animate a walk across tiles the character never crossed.
+        if (prior is not None and prior.layer == snap.layer
+                and (prior.x, prior.y) != (snap.x, snap.y)):
             self._anim_frames = glide_path((prior.x, prior.y), (snap.x, snap.y), MAX_ANIM_STEPS)
         else:
             self._anim_frames = []
@@ -199,7 +248,7 @@ class MapPane(Static):
         self._line_cache.clear()
         self.refresh()
 
-    def set_others(self, others: dict[tuple[int, int], Sprite]) -> None:
+    def set_others(self, others: dict[tuple[int, int, str], Sprite]) -> None:
         """Place the non-focused characters. Cheap to call on every foreign
         cycle: it does NOT touch the focused character's animation state."""
         self._others = others
@@ -320,19 +369,23 @@ class MapPane(Static):
         self._anim_now = time.monotonic()
         self.refresh()
 
-    def _hud_line(self, cx: int, cy: int) -> str:
-        content = self._tile_index.get((cx, cy))
-        coords = f"({cx},{cy})"
+    def _hud_line(self, cx: int, cy: int, layer: str) -> str:
+        content = self._tile_index.get((cx, cy, layer))
+        # The layer is named only when it is not the overworld: it disambiguates
+        # coordinates that otherwise read as a different, identically-labelled
+        # tile, and printing "overworld" on every line of a run that never
+        # leaves it is noise.
+        coords = f"({cx},{cy})" if layer == OVERWORLD else f"({cx},{cy}) {layer}"
         if content is None:
             return coords
         return f"{coords} · {content[1]}"
 
-    def hud_text(self, cx: int, cy: int) -> Text:
+    def hud_text(self, cx: int, cy: int, layer: str = OVERWORLD) -> Text:
         """The HUD line: where the viewport is centred, then anything wrong with
         the roster. This line spans both wide grid columns, which is why the
         trouble report lives here and not in the one-cell status pane."""
         text = Text(no_wrap=True, overflow="crop")
-        text.append(self._hud_line(cx, cy), style="dim")
+        text.append(self._hud_line(cx, cy, layer), style="dim")
         if self._roster_line.plain:
             text.append("   ")
             text.append_text(self._roster_line)
@@ -398,15 +451,16 @@ class MapPane(Static):
         return self._anim_frames[idx]
 
     def _tile_sprite_and_terrain(self, wx: int, wy: int, is_player: bool,
-                                 player_sprite: Sprite) -> tuple[Sprite, str]:
+                                 player_sprite: Sprite,
+                                 layer: str = OVERWORLD) -> tuple[Sprite, str]:
         if is_player:
             return player_sprite, WALKABLE_COLOR
-        other = self._others.get((wx, wy))
+        other = self._others.get((wx, wy, layer))
         if other is not None:
             return other, WALKABLE_COLOR
-        content = self._tile_index.get((wx, wy))
+        content = self._tile_index.get((wx, wy, layer))
         if content is None:
-            terrain = WALKABLE_COLOR if (wx, wy) in self._known_tiles else UNMAPPED_COLOR
+            terrain = WALKABLE_COLOR if (wx, wy, layer) in self._known_tiles else UNMAPPED_COLOR
             return BLANK_SPRITE, terrain
         category, code = content
         return self._registry.sprite_for(code, category), WALKABLE_COLOR
@@ -424,6 +478,7 @@ class MapPane(Static):
         center: tuple[int, int],
         player_sprite: Sprite,
         overlay: dict[tuple[int, int], Sprite],
+        layer: str = OVERWORLD,
     ) -> Text:
         """The rich Text for ONE screen line `y` (0 = HUD line). The single
         source of truth shared by `_render_viewport` (full, for tests) and
@@ -434,7 +489,7 @@ class MapPane(Static):
         half_h = tiles_h // 2
         cx, cy = center
         if y == 0:
-            return self.hud_text(cx, cy)
+            return self.hud_text(cx, cy, layer)
         line = Text(no_wrap=True, overflow="crop")
         trow = (y - 1) // TILE_H
         sub = (y - 1) % TILE_H
@@ -442,7 +497,7 @@ class MapPane(Static):
             wx = cx + tcol - half_w
             wy = cy + trow - half_h
             is_player = tcol == half_w and trow == half_h
-            sprite, terrain = self._tile_sprite_and_terrain(wx, wy, is_player, player_sprite)
+            sprite, terrain = self._tile_sprite_and_terrain(wx, wy, is_player, player_sprite, layer)
             tool = overlay.get((tcol - half_w, trow - half_h))
             if tool is not None:
                 sprite = overlay_sprites(sprite, tool)
@@ -464,7 +519,8 @@ class MapPane(Static):
         for y in range(self._line_count(height)):
             if y > 0:
                 text.append("\n")
-            text.append_text(self._line_text(y, width, height, center, player_sprite, ov))
+            text.append_text(
+                self._line_text(y, width, height, center, player_sprite, ov, snap.layer))
         return text
 
     def render_line(self, y: int) -> Strip:
@@ -484,11 +540,12 @@ class MapPane(Static):
         center = self._glide_center(self._anim_now) or (snap.x, snap.y)
         sprite = self._player_sprite(self._anim_now)
         overlay = self._active_overlay(self._anim_now)
-        sig = self._line_signature(y, height, center, sprite, overlay)
+        sig = self._line_signature(y, height, center, sprite, overlay, snap.layer)
         cached = self._line_cache.get(y)
         if cached is not None and cached[0] == sig:
             return cached[1]
-        strip = self._text_strip(self._line_text(y, width, height, center, sprite, overlay), width)
+        strip = self._text_strip(
+            self._line_text(y, width, height, center, sprite, overlay, snap.layer), width)
         if y == 0:
             # Opaque HUD line: overwrite any characters a closed overlay left here.
             strip = strip.apply_style(_HUD_STYLE)
@@ -502,15 +559,17 @@ class MapPane(Static):
         center: tuple[int, int],
         player_sprite: Sprite,
         overlay: dict[tuple[int, int], Sprite],
+        layer: str = OVERWORLD,
     ) -> object:
         """A cheap key capturing everything that changes a line's pixels: the
-        viewport center (scroll), the player sprite (center tile only), and any
-        tool/cloud overlay landing on this line's tile-row. Stable for static map
-        lines → cache hit; changes only on the swing/glide rows."""
+        viewport center (scroll), the layer being shown, the player sprite
+        (center tile only), and any tool/cloud overlay landing on this line's
+        tile-row. Stable for static map lines → cache hit; changes only on the
+        swing/glide rows."""
         if y == 0:
             # The roster belongs in the signature: a child dying changes no
             # coordinate, so without it the cached Strip would hide the death.
-            return ("hud", center, self._roster_line.plain)
+            return ("hud", center, layer, self._roster_line.plain)
         tiles_h = (height - 1) // TILE_H
         half_h = tiles_h // 2
         trow = (y - 1) // TILE_H
@@ -522,10 +581,10 @@ class MapPane(Static):
             sorted(
                 (xy, id(sprite))
                 for xy, sprite in self._others.items()
-                if xy[1] - center[1] == row_off
+                if xy[2] == layer and xy[1] - center[1] == row_off
             )
         )
-        return (center, trow, sub, psprite, ov, others)
+        return (center, layer, trow, sub, psprite, ov, others)
 
     def _text_strip(self, text: Text, width: int) -> Strip:
         opts = _RENDER_CONSOLE.options.update_width(width)

@@ -11,6 +11,7 @@ from artifactsmmo_api_client.api.my_characters.action_transition_my_name_action_
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.actions.transition_layer_error import TransitionLayerError
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -36,6 +37,11 @@ class MapTransitionAction(Action):
 
     portal_x: int = 0
     portal_y: int = 0
+    portal_layer: str = "overworld"
+    """Layer the PORTAL tile sits on. The same (x, y) exists on every layer,
+    so without it `execute` cannot tell "already standing on the portal" from
+    "standing on the identically-numbered tile one layer up" — and would POST
+    the transition from the wrong map."""
     dest_x: int = 0
     dest_y: int = 0
     dest_layer: str = "overworld"
@@ -74,6 +80,8 @@ class MapTransitionAction(Action):
             1 for equipped in state.equipment.values() if equipped == code)
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
+        if state.layer != self.portal_layer:
+            return False
         if not self._conditions_modeled():
             return False
         if state.gold < self._gold_cost():
@@ -105,6 +113,14 @@ class MapTransitionAction(Action):
         return float(walk) + 3.0
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
+        if state.layer != self.portal_layer:
+            # Move cannot cross layers, so there is no recovery here — only a
+            # wrong POST to make. The planner's region gate normally rules this
+            # out (a region is confined to one layer); reaching it means the
+            # plan outlived the state it was made for.
+            raise TransitionLayerError(
+                f"{self!r} needs layer {self.portal_layer!r}, "
+                f"character is on {state.layer!r}")
         if (state.x, state.y) != (self.portal_x, self.portal_y):
             state = MoveAction(x=self.portal_x, y=self.portal_y).execute(state, client)
         result = action_transition(client=client, name=state.character)
@@ -125,6 +141,6 @@ class MapTransitionAction(Action):
                   for code, qty in sorted(self._item_costs().items())]
         parts += [f", holds {code}"
                   for code in sorted(self._possession_requirements())]
-        return (f"Transition(({self.portal_x},{self.portal_y})->"
+        return (f"Transition(({self.portal_x},{self.portal_y},{self.portal_layer})->"
                 f"({self.dest_x},{self.dest_y},{self.dest_layer})"
                 f"{''.join(parts)})")

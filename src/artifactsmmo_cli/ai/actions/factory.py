@@ -342,7 +342,8 @@ def build_actions(
     for (px, py, playr), (dx, dy, dlayer, conds) in sorted(
             game_data.world.transition_edges.items()):
         actions.append(MapTransitionAction(
-            portal_x=px, portal_y=py, dest_x=dx, dest_y=dy, dest_layer=dlayer,
+            portal_x=px, portal_y=py, portal_layer=playr,
+            dest_x=dx, dest_y=dy, dest_layer=dlayer,
             conditions=conds,
             travel_region=game_data.region_of(px, py, playr)))
     layered_extra: dict[tuple[str, str], list[tuple[int, int]]] = {}

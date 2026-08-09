@@ -2374,7 +2374,7 @@ class GamePlayer:
             cycle_index=self._cycle_counter,
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
             character=self.character,
-            x=self.state.x, y=self.state.y,
+            x=self.state.x, y=self.state.y, layer=self.state.layer,
             level=self.state.level, xp=self.state.xp, max_xp=self.state.max_xp,
             hp=self.state.hp, max_hp=self.state.max_hp,
             gold=self.state.gold,

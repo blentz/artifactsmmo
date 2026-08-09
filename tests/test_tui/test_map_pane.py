@@ -6,7 +6,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
 from artifactsmmo_cli.tui.palette import LEAF, SKIN
-from artifactsmmo_cli.tui.sprites import SpriteCategory
+from artifactsmmo_cli.tui.sprites import Sprite, SpriteCategory
 from artifactsmmo_cli.tui.widgets.map_pane import (
     FALLBACK_H,
     FALLBACK_W,
@@ -15,6 +15,11 @@ from artifactsmmo_cli.tui.widgets.map_pane import (
     TILE_W,
     MapPane,
 )
+
+# A sibling sprite in a colour nothing else on the map uses, so "was this
+# character drawn?" is answerable from the rendered styles alone.
+SIBLING_COLOR = "#ff00ff"
+SIBLING_SPRITE = Sprite(rows=("m" * 8,) * 8, palette={"m": SIBLING_COLOR})
 
 
 def _gd_typed() -> GameData:
@@ -25,16 +30,36 @@ def _gd_typed() -> GameData:
     gd._taskmaster_location = (1, 2)
     gd._workshop_locations = {"mining": (3, 3)}
     gd._grand_exchange_location = (-2, -2)
-    gd._transition_tiles = {(0, -3)}
+    gd.world.transition_edges[(0, -3, "overworld")] = (0, -3, "underground", ())
     gd._resource_locations = {"ash_tree": [(2, 2)]}
     gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
     return gd
 
 
-def _snap(x: int, y: int) -> CycleSnapshot:
+def _gd_layered() -> GameData:
+    """Overworld content at the SAME coordinates as different underground
+    content, so a layer-blind index is detectable."""
+    gd = _gd_typed()
+    gd.world.layered_tile_content.update({
+        (2, 0, "underground"): ("resource", "copper_rocks"),
+        (0, 2, "underground"): ("npc", "merchant"),
+        (1, 2, "interior"): ("tasks_master", "items"),
+        (3, 3, "interior"): ("workshop", "mining"),
+        (4, 1, "interior"): ("bank", "bank"),
+        (-2, -2, "interior"): ("grand_exchange", "grand_exchange"),
+        (5, 5, "underground"): ("monster", "bandit_lizard"),
+        (6, 6, "underground"): ("raid", "dragon_raid"),
+    })
+    gd._resource_skill["copper_rocks"] = ("mining", 1)
+    gd.world.transition_edges[(0, -3, "underground")] = (0, -3, "overworld", ())
+    gd.world.known_layer_tiles.update({(1, 0, "overworld"), (1, 0, "underground")})
+    return gd
+
+
+def _snap(x: int, y: int, layer: str = "overworld") -> CycleSnapshot:
     return CycleSnapshot(
         cycle_index=0, timestamp="2026-05-18T00:00:00Z", character="hero",
-        x=x, y=y, level=1, xp=0, max_xp=100, hp=100, max_hp=100, gold=0,
+        x=x, y=y, layer=layer, level=1, xp=0, max_xp=100, hp=100, max_hp=100, gold=0,
         selected_goal="X", action="Y", outcome="ok",
     )
 
@@ -46,15 +71,93 @@ def _styles(text) -> list[str]:
 class TestBuildTileIndex:
     def test_index_stores_category_and_code(self):
         idx = MapPane._build_tile_index(_gd_typed())
-        assert idx[(2, 0)] == (SpriteCategory.MONSTER, "green_slime")
-        assert idx[(0, 2)] == (SpriteCategory.MONSTER, "chicken")
-        assert idx[(-1, 0)] == (SpriteCategory.NPC, "archaeologist")
-        assert idx[(4, 1)] == (SpriteCategory.STRUCTURE, "bank")
-        assert idx[(-2, -2)] == (SpriteCategory.STRUCTURE, "grand_exchange")
-        assert idx[(3, 3)] == (SpriteCategory.STRUCTURE, "workshop")
-        assert idx[(1, 2)] == (SpriteCategory.STRUCTURE, "tasks_master")
-        assert idx[(0, -3)] == (SpriteCategory.STRUCTURE, "door")
-        assert idx[(2, 2)] == (SpriteCategory.RESOURCE, "resource_woodcutting")
+        assert idx[(2, 0, "overworld")] == (SpriteCategory.MONSTER, "green_slime")
+        assert idx[(0, 2, "overworld")] == (SpriteCategory.MONSTER, "chicken")
+        assert idx[(-1, 0, "overworld")] == (SpriteCategory.NPC, "archaeologist")
+        assert idx[(4, 1, "overworld")] == (SpriteCategory.STRUCTURE, "bank")
+        assert idx[(-2, -2, "overworld")] == (SpriteCategory.STRUCTURE, "grand_exchange")
+        assert idx[(3, 3, "overworld")] == (SpriteCategory.STRUCTURE, "workshop")
+        assert idx[(1, 2, "overworld")] == (SpriteCategory.STRUCTURE, "tasks_master")
+        assert idx[(0, -3, "overworld")] == (SpriteCategory.STRUCTURE, "door")
+        assert idx[(2, 2, "overworld")] == (SpriteCategory.RESOURCE, "resource_woodcutting")
+
+    def test_layered_content_indexed_under_its_own_layer(self):
+        idx = MapPane._build_tile_index(_gd_layered())
+        assert idx[(2, 0, "underground")] == (SpriteCategory.RESOURCE, "resource_mining")
+        assert idx[(0, 2, "underground")] == (SpriteCategory.NPC, "merchant")
+        assert idx[(5, 5, "underground")] == (SpriteCategory.MONSTER, "bandit_lizard")
+        assert idx[(1, 2, "interior")] == (SpriteCategory.STRUCTURE, "tasks_master")
+        assert idx[(3, 3, "interior")] == (SpriteCategory.STRUCTURE, "workshop")
+        assert idx[(4, 1, "interior")] == (SpriteCategory.STRUCTURE, "bank")
+        assert idx[(-2, -2, "interior")] == (SpriteCategory.STRUCTURE, "grand_exchange")
+        # The overworld entries at the SAME coordinates are untouched.
+        assert idx[(2, 0, "overworld")] == (SpriteCategory.MONSTER, "green_slime")
+        assert idx[(0, 2, "overworld")] == (SpriteCategory.MONSTER, "chicken")
+
+    def test_content_type_without_a_sprite_is_not_indexed(self):
+        # A raid tile (and any type added server-side later) draws as bare
+        # floor rather than borrowing some other content's sprite.
+        idx = MapPane._build_tile_index(_gd_layered())
+        assert (6, 6, "underground") not in idx
+
+    def test_doors_indexed_on_every_layer(self):
+        # The way BACK OUT is a transition on the interior side; an
+        # overworld-only door set cannot show it.
+        idx = MapPane._build_tile_index(_gd_layered())
+        assert idx[(0, -3, "underground")] == (SpriteCategory.STRUCTURE, "door")
+        assert idx[(0, -3, "overworld")] == (SpriteCategory.STRUCTURE, "door")
+
+    def test_resource_without_a_known_skill_falls_back_to_mining(self):
+        gd = _gd_typed()
+        gd.world.layered_tile_content[(7, 7, "underground")] = ("resource", "mystery_node")
+        idx = MapPane._build_tile_index(gd)
+        assert idx[(7, 7, "underground")] == (SpriteCategory.RESOURCE, "resource_mining")
+
+
+class TestLayerAwareRendering:
+    def test_content_from_another_layer_is_not_drawn(self):
+        # green_slime sits at (2,0) on the OVERWORLD only; standing at (0,0)
+        # underground must not paint it (LEAF pixels come from the slime).
+        pane = MapPane(_gd_layered())
+        out = pane._render_viewport(_snap(0, 0, "underground"), 80, 41)
+        assert not any(LEAF in s for s in _styles(out))
+
+    def test_same_coordinates_render_the_layer_you_are_on(self):
+        pane = MapPane(_gd_layered())
+        over = pane._render_viewport(_snap(0, 0), 80, 41).plain
+        under = pane._render_viewport(_snap(0, 0, "underground"), 80, 41).plain
+        assert over != under
+
+    def test_known_tile_on_another_layer_is_floor_not_void(self):
+        pane = MapPane(_gd_layered())
+        out = pane._render_viewport(_snap(0, 0, "underground"), 80, 41)
+        assert any(WALKABLE_COLOR in s for s in _styles(out))
+
+    def test_sibling_on_another_layer_is_not_drawn(self):
+        pane = MapPane(_gd_layered())
+        pane.set_others({(1, 0, "interior"): SIBLING_SPRITE})
+        out = pane._render_viewport(_snap(0, 0), 80, 41)
+        assert not any(SIBLING_COLOR in s for s in _styles(out))
+
+    def test_a_layer_change_is_a_cut_not_a_walk(self):
+        # A transition teleports; gliding would animate a walk across tiles
+        # the character never crossed (and that belong to another map).
+        pane = MapPane(_gd_layered())
+        pane.update_snapshot(_snap(0, 0))
+        pane.update_snapshot(_snap(5, 5, "underground"))
+        assert pane._anim_frames == []
+
+    def test_movement_within_a_layer_still_glides(self):
+        pane = MapPane(_gd_layered())
+        pane.update_snapshot(_snap(0, 0))
+        pane.update_snapshot(_snap(5, 5))
+        assert pane._anim_frames != []
+
+    def test_sibling_on_your_layer_is_drawn(self):
+        pane = MapPane(_gd_layered())
+        pane.set_others({(1, 0, "overworld"): SIBLING_SPRITE})
+        out = pane._render_viewport(_snap(0, 0), 80, 41)
+        assert any(SIBLING_COLOR in s for s in _styles(out))
 
 
 class TestViewportGeometry:
