@@ -36,7 +36,7 @@ from artifactsmmo_cli.ai.acquisition_cost import (
 )
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.learning.models import Cycle
-from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.learning.store import MIN_DROP_KILLS, LearningStore
 from artifactsmmo_cli.ai.obtain_sources import (
     UNBOUNDED_CAPACITY,
     Source,
@@ -149,6 +149,117 @@ def test_prospecting_makes_a_drop_farm_cheaper(state, game_data) -> None:
                     Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
                     replace(state, prospecting=500), game_data)
     assert lucky.actions_per_application < plain.actions_per_application
+
+
+def _store_with_kills(monster: str, kills: int, drops: dict[str, int]) -> LearningStore:
+    """A real store carrying `kills` recorded `Fight(<monster>)` cycles, the first
+    `drops[item]` of which dropped that item. Rows, not a stub — the rate the
+    production query computes is the thing under test."""
+    store = LearningStore(db_path=":memory:", character="drop_probe")
+    store.start_session()
+    for i in range(kills):
+        got = {item: 1 for item, n in drops.items() if i < n}
+        store.record_cycle(Cycle(
+            ts=f"2026-08-08T00:{i // 60:02d}:{i % 60:02d}+00:00", session_id="s",
+            cycle_index=i, character="drop_probe", outcome="ok",
+            action_repr=f"Fight({monster})",
+            drops_json=json.dumps(got),
+        ))
+    return store
+
+
+def test_an_observed_drop_rate_replaces_the_static_table(state, game_data) -> None:
+    """The learned rate wins where there is enough of it.
+
+    `chicken/feather` is 1-in-8 in the API table. Recording 100 kills that
+    dropped 25 feathers (25%, twice the static rate) must make the farm cheaper —
+    the whole point of learning, and the direction the live measurement pointed
+    (14.8% observed vs 12.5% static)."""
+    static = _priced("feather",
+                     Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                     state, game_data)
+    store = _store_with_kills("chicken", 100, {"feather": 25})
+    try:
+        assert store.observed_drop_rate("chicken", "feather") == 0.25
+        learned = _priced("feather",
+                          Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                          state, game_data, store)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+    assert learned.actions_per_application < static.actions_per_application
+
+
+def test_a_learned_rate_is_NOT_also_given_prospecting_relief(
+        state, game_data) -> None:
+    """THE DOUBLE-COUNT GUARD, and the reason these two terms were unified.
+
+    The server applies prospecting when it ROLLS the drop, so a recorded
+    observation is already the post-bonus rate. Applying `_prospecting_relief` on
+    top would count the bonus twice.
+
+    So with a learned rate in hand, prospecting must change NOTHING — while on
+    the static fallback (no observations) it must still help, because there the
+    bonus is genuinely absent from the number."""
+    store = _store_with_kills("chicken", 100, {"feather": 25})
+    try:
+        plain = _priced("feather",
+                        Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                        state, game_data, store)
+        lucky = _priced("feather",
+                        Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                        replace(state, prospecting=500), game_data, store)
+        assert plain.actions_per_application == lucky.actions_per_application
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+    # ...and without observations, prospecting still pays.
+    static_plain = _priced("feather",
+                           Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                           state, game_data)
+    static_lucky = _priced("feather",
+                           Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                           replace(state, prospecting=500), game_data)
+    assert static_lucky.actions_per_application < static_plain.actions_per_application
+
+
+def test_too_few_kills_falls_back_to_the_static_table(state, game_data) -> None:
+    """Below the sample floor the estimate is noise, and noise here feeds a cost
+    the planner ranks on. Measured live: at n=199 `green_slime/apple` read 0.60x
+    its static rate, inside ordinary sampling error for p=0.083 and worth a 40%
+    phantom price rise if believed."""
+    store = _store_with_kills("chicken", MIN_DROP_KILLS - 1, {"feather": 20})
+    try:
+        assert store.observed_drop_rate("chicken", "feather") is None
+        sparse = _priced("feather",
+                         Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                         state, game_data, store)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+    static = _priced("feather",
+                     Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                     state, game_data)
+    assert sparse.actions_per_application == static.actions_per_application
+
+
+def test_a_monster_that_never_drops_the_item_falls_back(state, game_data) -> None:
+    """An observed rate of exactly 0 is not a usable divisor — it would mean
+    infinite kills. Falls back to the static table rather than pricing the route
+    out of existence on a run of bad luck."""
+    store = _store_with_kills("chicken", 100, {})
+    try:
+        assert store.observed_drop_rate("chicken", "feather") == 0.0
+        zero = _priced("feather",
+                       Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                       state, game_data, store)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+    static = _priced("feather",
+                     Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
+                     state, game_data)
+    assert zero.actions_per_application == static.actions_per_application
 
 
 def test_the_prospecting_rate_mirrors_the_wisdom_rate(state, game_data) -> None:

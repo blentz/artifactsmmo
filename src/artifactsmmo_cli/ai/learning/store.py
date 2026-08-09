@@ -76,6 +76,21 @@ def _parse_skill_xp_value(raw: str | None, skill: str) -> int:
         return 0
 
 
+MIN_DROP_KILLS = 50
+"""Kills of one monster required before its OBSERVED drop rate replaces the
+static API table.
+
+Below this the estimate is noise, and noise here is expensive because it feeds a
+cost the planner ranks on. Measured 2026-08-08: at n=199 `green_slime/apple`
+read 0.60x its static rate — comfortably inside sampling error for p=0.083, and
+taken literally a 40% price rise on every recipe using apples. At n>=700 the
+observed rates sat within ~3% of static.
+
+50 is a floor on ARRIVING at a usable number, not a claim that 50 is precise;
+the fallback below it is the static table, which the same measurement shows is
+close to right."""
+
+
 class LearningStore:
     """Event log + queryable learned stats. Best-effort: errors degrade to defaults."""
 
@@ -499,6 +514,60 @@ class LearningStore:
         except SQLAlchemyError:
             return None
 
+
+    def observed_drop_rate(self, monster_code: str, item_code: str,
+                           window: int = 2000,
+                           min_kills: int = MIN_DROP_KILLS) -> float | None:
+        """Units of `item_code` obtained per kill of `monster_code`, MEASURED.
+
+        Replaces the static API drop table wherever there is enough evidence,
+        and deliberately carries the character's PROSPECTING effect with it: the
+        server applies prospecting when it rolls the drop, so an observation is
+        already the post-bonus rate. That is why `acquisition_cost` applies its
+        prospecting relief ONLY on the static fallback — applying both would
+        count the bonus twice.
+
+        Measured 2026-08-08 over 4,000+ recorded kills, observed vs API static:
+        `chicken/raw_chicken` 48.3% vs 50.0%, `red_slime/red_slimeball` 9.6% vs
+        10.0%, `chicken/egg` 8.6% vs 8.3% — the table is accurate to ~3% on large
+        samples. The exceptions are the ones that matter: `chicken/feather` 14.8%
+        vs 12.5% (1.18x) and `sheep/wool` 11.8% vs 8.3% (1.42x), both saying the
+        drop route is CHEAPER than the static model priced it.
+
+        Scoped to this store's character, because prospecting is per-character
+        and is baked into the number.
+
+        `None` below `min_kills`, where the estimate is noise: at n=199
+        `green_slime/apple` read 0.60x of its static rate, which is inside
+        ordinary sampling error for p=0.083 and would otherwise be taken as a
+        40% price rise."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.drops_json)
+                    .where(col(Cycle.character) == self._character)
+                    .where(col(Cycle.action_repr) == f"Fight({monster_code})")
+                    .order_by(col(Cycle.id).desc())
+                    .limit(window)
+                )
+                rows = list(s.exec(stmt))
+            if len(rows) < min_kills:
+                return None
+            total = 0
+            for raw in rows:
+                if not raw:
+                    continue
+                try:
+                    drops = json.loads(raw)
+                except (ValueError, TypeError):
+                    continue
+                if isinstance(drops, dict):
+                    value = drops.get(item_code, 0)
+                    if isinstance(value, int):
+                        total += max(0, value)
+            return float(total) / len(rows)
+        except SQLAlchemyError:
+            return None
 
     def skill_xp_per_cycle_all(self, skill: str,
                                window: int = WINDOW_RECENT) -> float | None:

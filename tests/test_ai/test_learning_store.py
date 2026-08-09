@@ -1,5 +1,6 @@
 """Tests for LearningStore."""
 
+import json
 import multiprocessing
 import os
 import sqlite3
@@ -11,7 +12,7 @@ from sqlmodel import Session as SqlSession
 from sqlmodel import create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import Cycle, Session
-from artifactsmmo_cli.ai.learning.store import LearningStore, _parse_skill_xp_value
+from artifactsmmo_cli.ai.learning.store import MIN_DROP_KILLS, LearningStore, _parse_skill_xp_value
 
 
 @pytest.fixture
@@ -943,6 +944,12 @@ class TestDegradationOnDbError:
         _break_engine(store)
         assert store.recent_goal_cycles("ReachCharLevel(5)") == []
 
+    def test_observed_drop_rate_returns_none(self, tmp_db_path):
+        """A DB fault yields no rate, so the caller keeps the static table."""
+        store = LearningStore(db_path=tmp_db_path, character="x")
+        _break_engine(store)
+        assert store.observed_drop_rate("chicken", "feather") is None
+
     def test_skill_xp_per_cycle_all_returns_none(self, tmp_db_path):
         """The UNCONDITIONAL rate degrades like every other query: a DB fault
         returns None (no rate), which makes its caller decline to price a skill
@@ -1220,3 +1227,33 @@ def test_concurrent_open_of_a_legacy_db_migrates_the_column_once(tmp_path):
     conn.close()
     assert cols.count("delta_skill_xp_json") == 1
     assert cols.count("consumables_expended_json") == 1
+
+
+def test_observed_drop_rate_survives_unusable_rows(tmp_db_path):
+    """Rows that carry no usable drop record must count as a KILL WITH NO DROP,
+    not be skipped.
+
+    Skipping them is the same error `skill_xp_per_cycle` makes with zero-xp
+    cycles: it shrinks the denominator to the population that succeeded and
+    reports a rate far above the truth. A null, a malformed blob, and a
+    non-object payload are all evidence of a kill that dropped nothing here."""
+    store = LearningStore(db_path=tmp_db_path, character="x")
+    store.start_session()
+    payloads = [None, "not json at all", "[1, 2, 3]", json.dumps({"feather": 1})]
+    for i in range(MIN_DROP_KILLS):
+        store.record_cycle(Cycle(
+            ts=f"2026-08-08T00:00:{i % 60:02d}+00:00", session_id="s",
+            cycle_index=i, character="x", outcome="ok",
+            action_repr="Fight(chicken)",
+            drops_json=payloads[i % len(payloads)],
+        ))
+    rate = store.observed_drop_rate("chicken", "feather")
+    store.end_session(exit_reason="normal")
+    store.close()
+    # Only the rows carrying a real feather count in the numerator; the null, the
+    # malformed blob and the non-object payload are kills that dropped nothing
+    # and stay in the DENOMINATOR. Computed rather than hardcoded, so the
+    # expectation follows MIN_DROP_KILLS instead of drifting when it changes.
+    feathers = sum(1 for i in range(MIN_DROP_KILLS) if i % 4 == 3)
+    assert rate == pytest.approx(feathers / MIN_DROP_KILLS)
+    assert 0 < rate < 1
