@@ -207,11 +207,17 @@ Equipment conditioned on a minimum character level and satisfied by the newly re
 
 This clause is about the state the oracle CONSTRUCTS for itself between rungs. It does not enlarge the input domain (S-002) and does not change how the beatability predicate decides.
 
+The projected state's OWN attributes — the maximum hit points every later clause computes from, including S-021's pool — carry the published per-level growth and NOTHING ELSE. Gear reaches the beatability predicate as the loadout S-020 hands it, and it does not additionally alter the projected state's totals. The reason is not economy, it is coherence: the character state's totals are server-authoritative figures that ALREADY include whatever is worn, so adding a carried piece's bonus to them would count that piece twice — once in the total and once in the loadout. A rung that unlocks a helm granting maximum hit points therefore changes which monsters are beatable, and does not change the pool.
+
 ### S-016 · A measurement supersedes the prediction, it does not merely may  [witness: W-002]
 
 Where the observations contain a measured rate for a monster (S-018 fixes what that means), the oracle uses it in place of the predicted one for that monster. This is not discretionary.
 
 Candidates at one rung may therefore be priced from different origins -- a measured monster against a predicted one -- and that is intended. What S-008 requires is that both are expressed in the same unit before they are compared, not that they come from the same source.
+
+This clause fixes only THAT a measurement is used. WHAT VALUE it has at a rung is S-017's, and the two must be read in that order: a measurement is never ignored, and it is never used unrestated. Where S-017 restates a measurement to zero, this clause has still been obeyed — the measurement was used, and using it yielded nothing. An oracle may not reach the opposite outcome by declining to consult the measurement at all.
+
+The case this clause alone decides is the ordinary one: a rung whose published award is positive, for a monster that also carries a measurement. There the prediction and the measurement disagree by some finite factor, and the measurement governs.
 
 ### S-017 · A measured rate is restated for the rung it is used at  [witness: W-003]
 
@@ -219,7 +225,9 @@ A measured rate belongs to the character level its samples were taken at. Before
 
 The ratio is dimensionless, so the restated figure remains in the measured rate's own unit and S-008's same-unit requirement continues to hold.
 
-Where the published award at the level the samples were taken is not positive, the measurement and the published rules disagree, no ratio exists, and the monster contributes nothing at that rung. Where the published award at the rung is zero, the ordinary arithmetic already yields zero and no separate rule is needed.
+Where the published award at the level the samples were taken is not positive, the measurement and the published rules disagree, no ratio exists, and the restated rate is zero. Where the published award at the rung is zero, the ordinary arithmetic already yields zero and no separate rule is needed.
+
+BOTH OF THOSE ARE STATEMENTS ABOUT REWARD, NOT ABOUT CANDIDACY. Nothing here removes a monster from the set S-009 and S-010 admit, and this clause adds no third ground for exclusion. A monster whose restated rate is zero remains a candidate that S-011 ranks with a reward of zero, and it is S-013 — the zero-reward stop — that decides what happens when every admissible monster is in that position. Read the other way this clause would silently shrink the candidate set that S-011 quantifies over, which is not the decision it was written to make.
 
 ### S-018 · A measurement is present only when positive evidence backs it  [witness: W-004]
 
@@ -233,13 +241,24 @@ The walk tracks cumulative progress. XP earned by the final kill of a rung beyon
 
 Only the FIRST rung starts from the character state's current progress toward the next level. Every later rung starts from the surplus carried out of the one before it.
 
-A rung whose remaining requirement is already met by the carried surplus costs zero further kills, and is reported as crossed with whatever cost it actually incurred.
+CARRYING IS ACHIEVED BY NOT ROUNDING, and that is the whole of it. A rung's kill count is the exact quotient of its remaining requirement by the rate, and is NOT resolved to a whole kill; S-014's upward resolution applies to the total the oracle reports, never to an individual rung. A fractional kill carried at a rung boundary is precisely the surplus this clause preserves, so no separate accumulator exists and no surplus is ever banked as a discrete quantity.
+
+It follows that NO RUNG IS EVER CROSSED WITHOUT FIGHTING. Every rung's requirement is met by kills at that rung, whose count may be fractional but is never zero, so the whole of the walk's machinery — S-003's naming of a monster per rung, S-009 and S-010's candidacy, S-013's zero-reward stop — continues to apply at every rung without exception. This clause introduces no rung that those clauses do not already describe.
 
 ### S-020 · The consult sees carried gear, and the equip is charged  [witness: W-006]
 
 The state handed to the beatability predicate carries the best loadout the character already holds and is permitted to wear at that rung -- inventory and worn together -- not only what is currently worn. Equip conditions are evaluated against the rung's level (S-015), so gear the rung newly unlocks is included.
 
-Wearing it is an executed action. Where the rung's loadout differs from the one the character arrives with, the rung's cost includes the equip actions required to reach it, under S-005.
+WHICH loadout is best for a purpose is not decided here. It comes from the same shared loadout selection the executor uses, exactly as the beatability verdict does, and that selection is BACKGROUND: two carried pieces competing for one slot with neither dominating is its problem to settle, and it must settle it deterministically (S-001). This clause fixes only that the selection is offered inventory and worn together, and is evaluated at the rung's level.
+
+Wearing it is an executed action, and it is a SETUP cost of the rung, not part of the loop. A rung therefore has two kinds of cost:
+
+- a **per-kill loop cost** — the fight and the recovery it forces (S-005, S-021), paid once per kill and proportional to the number of kills; and
+- a **once-per-rung setup cost** — the equip actions needed to move from the loadout the character arrives with to the rung's loadout, paid once regardless of how many kills the rung takes.
+
+The rung's cost is the sum of the two. The distinction is load-bearing rather than presentational: only the per-kill part may enter a per-action RATE (S-022, S-023), because a fixed charge divided by a rate is not a rate. Folding the equip into the loop would make the selection criterion an integral-over-the-rung figure, which S-022 forbids.
+
+The loadout the character "arrives with" is the one the previous rung left it in, and the first rung's is what it is wearing at the start. Gear held across several rungs is therefore paid for once.
 
 This clause is about which arguments the oracle constructs, never about how the predicate decides.
 
@@ -249,18 +268,24 @@ A recovery action restores the character fully, so no single fight can force mor
 
 Its contribution to the cost of one kill is the continuous fraction of the usable hit-point pool that fight consumes, capped at one. The per-kill figure is therefore monotone in damage taken and is not quantised before the rung total is formed.
 
-The pool is the hit points the character is willing to spend before recovering, which is a property of the policy the executor actually runs rather than a second threshold invented here. The pool grows with the rung (S-015).
+THE POOL IS A COMPUTABLE NUMBER, not a delegation. It is a declared fraction of the rung's projected maximum hit points — the hit points the character is willing to spend before recovering — and that fraction is a constant of this model, stated once and used everywhere. It is deliberately the same threshold the executor's own recovery guard uses, so the projection prices the loop the executor really runs; but the oracle computes it rather than asking anybody, because the executor's policy is not among the background oracles this spec is permitted to consult.
+
+The maximum hit points it scales are the projected state's own (S-015): the handed maximum grown by the published per-level grant, and not raised by carried gear.
 
 ### S-022 · The per-rung choice maximises reward per action, not per rung  [witness: W-008]
 
 The monster chosen for a rung is the one with the greatest reward per executed action, measured over the whole loop S-005 describes. It is not chosen by the integral cost of crossing that particular rung.
 
-This is well-founded only because progress carries (S-019): no reward is lost at a rung boundary, so the monster that earns fastest per action also reaches the target fastest. S-011's heading is to be read as naming that consequence, not a second and different criterion.
+The actions in that ratio are the PER-KILL LOOP actions alone (S-020): the fight and the recovery it forces. A rung's once-per-rung setup cost is not in the denominator, and a monster is not penalised in the ranking for needing an equip — that charge is added to the rung total after the choice is made.
+
+This is well-founded only because progress carries (S-019) and because the rate's denominator is proportional to kills. No reward is lost at a rung boundary and no fixed charge distorts the ratio, so the monster that earns fastest per action also reaches the target fastest, and S-011's criterion and this one are the same criterion. S-011's heading names that consequence rather than a second and different rule.
 
 ### S-023 · Rates are reconciled in XP per executed action  [witness: W-009]
 
 A measured rate is XP per executed planner action over the whole combat loop -- the same unit S-004 fixes for costs, and the unit an observation of actual play naturally arrives in, since it averages over every action the pursuit spent including recovery.
 
 A prediction from the published formula is per KILL, and is converted into that unit by dividing by the rung's loop action count (S-005) before it is compared with anything.
+
+"Executed action" here means a PER-KILL LOOP action and only those — the fight and the recovery it forces. A rung's once-per-rung setup cost (S-020's equips) is outside this denominator on both sides of the conversion: it is not divided into the prediction, and a measured rate is not understood to have absorbed it. A fixed charge in a rate's denominator would make the rate depend on how many kills the rung happens to need, which is the very thing a rate exists not to depend on.
 
 The conversion runs in that direction and never the other. Recovering a per-kill figure from a whole-loop measurement would divide by a loop length the measurement has already absorbed, and can only lose what was measured.
