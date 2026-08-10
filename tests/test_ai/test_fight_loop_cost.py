@@ -55,6 +55,26 @@ def test_the_term_does_not_saturate_so_armour_keeps_paying():
     assert all(a < b for a, b in pairwise(costs))
 
 
+def test_the_ceiling_regime_is_flat_and_that_is_the_published_rule():
+    """The boundary S-021 originally over-claimed past.
+
+    A recovery restores at most a full bar, so once one fight empties the bar
+    every heavier fight costs the SAME hundred-second recovery. The term is
+    therefore flat above `max_hp`, not strictly monotone as the first version of
+    the clause asserted. This is the published rule being true, not the
+    saturation the clause forbids: the forbidden kind flattens INSIDE the band
+    where armour trades, and this one only flattens where the character is
+    losing its whole bar per fight — a regime `is_winnable` keeps out of the
+    walk, not one this cost model is asked to rank."""
+    max_hp = 100
+    ceiling = [rest_actions_per_fight(d, max_hp) for d in (100, 110, 150, 300)]
+    assert ceiling == [pytest.approx(100 / 30)] * 4
+    # Premise: strictly below the bar the term is still strictly increasing, so
+    # the flatness above is a boundary and not the term having gone dead.
+    interior = [rest_actions_per_fight(d, max_hp) for d in (70, 80, 90, 99)]
+    assert all(a < b for a, b in pairwise(interior))
+
+
 def test_rest_term_is_monotone_in_damage():
     """More damage never costs less recovery — the property that makes better
     armour rank better rather than merely differently."""
