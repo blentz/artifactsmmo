@@ -91,6 +91,8 @@ BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_exp
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
 REST_COOLDOWN_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "rest_cooldown_core.py"
+OBSERVED_RATE_CORE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
+                          / "observed_rate_core.py")
 EQUIP_ACTIONS_CORE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment"
                           / "equip_actions_core.py")
 FIGHT_LOOP_COST_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
@@ -5624,6 +5626,35 @@ REST_COOLDOWN_MUTATIONS = [
 ]
 
 
+# The sample level a measurement is restated FROM. SEPARATE GROUP, unit-killed:
+# the Lean side models the ratio, not the aggregation that picks the level to take
+# it at, so no differential can see either mutant.
+OBSERVED_RATE_MUTATIONS = [
+    # Restore the built-in, which is half-to-EVEN. Ties then resolve on the parity
+    # of the mean rather than against the character, so a two-cycle observation at
+    # adjacent levels can round UP across the grey step, find a zero award at the
+    # sample level, and stop the walk.
+    # Killed by test_a_tie_resolves_DOWNWARD.
+    ("observed_rate_core: half-to-even instead of ties-down",
+     "    doubled = 2 * sum(levels) - len(levels)\n"
+     "    return -(-doubled // (2 * len(levels)))",
+     "    return round(sum(levels) / len(levels))"),
+    # Send ties UP instead. The direction that manufactures reach, which is the
+    # one thing this module refuses to do.
+    # Killed by test_a_tie_resolves_DOWNWARD.
+    ("observed_rate_core: ties resolve UPWARD",
+     "    doubled = 2 * sum(levels) - len(levels)",
+     "    doubled = 2 * sum(levels) + len(levels)"),
+    # Truncate rather than round. A mean of 16.9 becomes 16, which is not a
+    # tiebreak at all -- it under-states the sample level everywhere, not just on
+    # the boundary this rule exists for.
+    # Killed by test_a_non_tie_rounds_to_the_nearest.
+    ("observed_rate_core: floor the mean instead of rounding it",
+     "    return -(-doubled // (2 * len(levels)))",
+     "    return sum(levels) // len(levels)"),
+]
+
+
 # The loadout-change cost. SEPARATE GROUP, unit-killed. Both mutants restore a
 # GUESSED server rule that the OpenAPI schema contradicts -- the class of error
 # this module was rewritten to remove, and one no differential can catch because
@@ -6600,6 +6631,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_fight_loop_cost.py", survivors)
     run_group(EQUIP_ACTIONS_CORE_SRC, EQUIP_ACTIONS_MUTATIONS,
               "tests/test_ai/test_equip_actions_core.py", survivors)
+    run_group(OBSERVED_RATE_CORE_SRC, OBSERVED_RATE_MUTATIONS,
+              "tests/test_ai/test_observed_rate_core.py", survivors)
     run_group(NPC_BUY_CORE_SRC, NPC_BUY_MUTATIONS,
               "formal/diff/test_npc_buy_inventory_diff.py", survivors)
     run_group(TASK_TRADE_CORE_SRC, TASK_TRADE_CORE_MUTATIONS,

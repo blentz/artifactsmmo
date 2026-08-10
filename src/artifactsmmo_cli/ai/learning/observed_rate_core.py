@@ -41,6 +41,32 @@ resolves toward NOT over-promising.
 """
 
 
+def sample_level(levels: list[int]) -> int | None:
+    """The single character level a measurement is treated as having been taken at,
+    from the levels its aggregated cycles recorded. `None` when none recorded one.
+
+    THE MEAN, ROUNDED, WITH TIES GOING DOWN. A tie is not a curiosity here: the
+    published award is a STEP function of the level gap, so the two roundings of a
+    half-integer mean can land on opposite sides of the grey boundary. One side
+    restates the rate by a finite ratio; the other finds a zero award at the sample
+    level, returns 0.0 above, and can thereby stop the whole walk. That is the
+    widest divergence a tiebreak can carry, and it must not be left to a language's
+    default.
+
+    Ties go DOWN because a lower sample level means a HIGHER published award there,
+    hence a SMALLER restated rate -- the direction that does not manufacture reach,
+    which is the rule this module resolves everything by. Python's built-in `round`
+    is half-to-EVEN, so it sends 16.5 down and 17.5 up; that is arbitrary with
+    respect to the character and is why it is not used.
+
+    Computed in integers so no binary-float representation can move a tie.
+    """
+    if not levels:
+        return None
+    doubled = 2 * sum(levels) - len(levels)
+    return -(-doubled // (2 * len(levels)))
+
+
 def rescale_observed_xp(
     observed_rate: float,
     xp_at_observed_level: int,

@@ -9,7 +9,10 @@ farming a LEVEL 4 slime at a flat 7.0 XP per cycle from rung 12 to rung 49.
 
 import pytest
 
-from artifactsmmo_cli.ai.learning.observed_rate_core import rescale_observed_xp
+from artifactsmmo_cli.ai.learning.observed_rate_core import (
+    rescale_observed_xp,
+    sample_level,
+)
 
 
 class TestRescaleObservedXp:
@@ -65,3 +68,56 @@ class TestRescaleObservedXp:
         for a reason the arithmetic could NOT have produced."""
         assert rescale_observed_xp(7.0, 7, 0) == 0.0
         assert rescale_observed_xp(0.001, 1000000, 0) == 0.0
+
+
+class TestSampleLevel:
+    """Which single level a multi-level measurement is restated FROM.
+
+    Found by the spec's own ratification pass, not by a failing run: the clause
+    said "the rounded mean" and the code said `round(...)`, which is half-to-EVEN.
+    A half-integer mean straddling the grey step therefore decided, on parity
+    alone, between a finite restated rate and a zero one -- and a zero one can stop
+    the walk. The tiebreak now goes the way the module resolves everything else.
+    """
+
+    def test_no_recorded_level_is_absent_rather_than_a_guess(self):
+        """Distinct from every numeric answer: S-018 makes an unlevelled
+        measurement ABSENT, which falls back to the published prediction, NOT a
+        rate restated to zero."""
+        assert sample_level([]) is None
+
+    def test_a_single_level_is_itself(self):
+        assert sample_level([16]) == 16
+
+    @pytest.mark.parametrize(
+        ("levels", "expected"),
+        [([16, 17], 16), ([17, 18], 17), ([16, 16, 17, 17], 16)],
+    )
+    def test_a_tie_resolves_DOWNWARD(self, levels, expected):
+        """The whole point. A lower sample level carries a HIGHER published award
+        there, hence a SMALLER restated rate -- the direction that does not
+        manufacture reach. `[17, 18]` is the case Python's half-to-even would send
+        UP, so this pins a real difference and not just a restatement of `round`."""
+        assert sample_level(levels) == expected
+
+    def test_the_half_to_even_disagreement_is_real(self):
+        """Pins that the two rules genuinely differ, so the choice above is load
+        bearing rather than a no-op rename. If this ever passes vacuously the
+        tiebreak test above is testing nothing."""
+        assert round(35 / 2) == 18
+        assert sample_level([17, 18]) == 17
+
+    @pytest.mark.parametrize(
+        ("levels", "expected"),
+        [([16, 16, 17], 16), ([16, 17, 17], 17), ([10, 20, 31], 20)],
+    )
+    def test_a_non_tie_rounds_to_the_nearest(self, levels, expected):
+        """Away from the tie the rule is ordinary nearest-rounding, so the
+        tiebreak is not smuggling in a floor."""
+        assert sample_level(levels) == expected
+
+    def test_no_binary_float_can_move_a_tie(self):
+        """Computed in integers. A mean of 0.1-style thirds is exactly the shape
+        that makes a float comparison land on the wrong side of a half."""
+        assert sample_level([1] * 3 + [2] * 3) == 1
+        assert sample_level([49, 50]) == 49

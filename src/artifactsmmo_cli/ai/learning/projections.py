@@ -28,7 +28,10 @@ from artifactsmmo_cli.ai.learning.cycles_for_progress_core import (
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.low_yield_boundary import low_yield_fires_pure
 from artifactsmmo_cli.ai.learning.models import Cycle
-from artifactsmmo_cli.ai.learning.observed_rate_core import rescale_observed_xp
+from artifactsmmo_cli.ai.learning.observed_rate_core import (
+    rescale_observed_xp,
+    sample_level,
+)
 from artifactsmmo_cli.ai.learning.rung_state_core import projected_max_hp
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.yield_reprs import (
@@ -158,7 +161,7 @@ def expected_yield_per_cycle(goal_repr: str, store: LearningStore, window: int =
         gold=gold_total / n,
         tasks_coins=coins_total / n,
         sample_count=n,
-        char_xp_level=round(sum(levels) / len(levels)) if levels else None,
+        char_xp_level=sample_level(levels),
     )
 
 
