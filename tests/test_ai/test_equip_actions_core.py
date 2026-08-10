@@ -1,43 +1,75 @@
-"""Equip actions between two loadouts (S-020)."""
+"""What a loadout change costs — item movements at the published cooldown."""
 
-from artifactsmmo_cli.ai.equipment.equip_actions_core import equip_actions
+import pytest
+
+from artifactsmmo_cli.ai.equipment.equip_actions_core import (
+    EQUIP_SECONDS_PER_ITEM,
+    equip_cost,
+    items_moved,
+)
+from artifactsmmo_cli.ai.learning.fight_loop_cost import TYPICAL_FIGHT_COOLDOWN_SECONDS
 
 
-class TestEquipActions:
-    def test_an_unchanged_loadout_costs_nothing(self):
-        worn = {"weapon_slot": "wooden_staff", "boots_slot": None}
-        assert equip_actions(worn, dict(worn)) == 0
+def test_no_change_costs_nothing():
+    """A loadout held across rungs is paid for once, not once per rung."""
+    worn = {"weapon_slot": "iron_sword", "shield_slot": "wooden_shield"}
+    assert items_moved(worn, dict(worn)) == 0
+    assert equip_cost(worn, dict(worn)) == 0.0
 
-    def test_each_changed_slot_is_one_action(self):
-        assert equip_actions(
-            {"weapon_slot": "wooden_staff", "boots_slot": None},
-            {"weapon_slot": "iron_sword", "boots_slot": "iron_boots"}) == 2
 
-    def test_replacing_an_item_is_ONE_action_not_two(self):
-        """The game equips into an occupied slot without a separate unequip, so a
-        swap is one action. Counting items moved rather than slots changed would
-        double every upgrade."""
-        assert equip_actions({"weapon_slot": "wooden_staff"},
-                             {"weapon_slot": "iron_sword"}) == 1
+def test_filling_an_empty_slot_is_one_movement():
+    assert items_moved({"shield_slot": None}, {"shield_slot": "iron_shield"}) == 1
+    assert items_moved({}, {"shield_slot": "iron_shield"}) == 1
 
-    def test_taking_a_piece_off_is_also_an_action(self):
-        assert equip_actions({"weapon_slot": "iron_sword"},
-                             {"weapon_slot": None}) == 1
 
-    def test_an_absent_slot_and_an_explicit_none_are_the_same_thing(self):
-        """`WorldState.equipment` carries every slot including the empty ones, while
-        a loadout picked for a purpose may simply omit slots it has no opinion
-        about. Treating those two spellings as different would invent one action per
-        unmentioned empty slot — on a sixteen-slot character, an entire phantom
-        loadout change at the very first rung."""
-        assert equip_actions({"weapon_slot": None, "boots_slot": None},
-                             {"weapon_slot": None}) == 0
-        assert equip_actions({}, {"weapon_slot": None, "ring1_slot": None}) == 0
+def test_emptying_a_slot_is_one_movement():
+    """Taking a piece off is work too — the walk may drop a piece whose slot the
+    rung's chosen loadout wants empty."""
+    assert items_moved({"shield_slot": "iron_shield"}, {"shield_slot": None}) == 1
+    assert items_moved({"shield_slot": "iron_shield"}, {}) == 1
 
-    def test_an_empty_string_reads_as_empty(self):
-        """The API reports an unfilled slot as `""`, and `WorldState` normalises it
-        to None — but a caller that passes the raw shape must not be charged for it."""
-        assert equip_actions({"weapon_slot": ""}, {"weapon_slot": None}) == 0
 
-    def test_slots_only_the_target_names_still_count(self):
-        assert equip_actions({}, {"weapon_slot": "iron_sword"}) == 1
+def test_a_swap_costs_two_because_the_server_refuses_an_occupied_slot():
+    """THE RULE THIS MODULE FIRST GUESSED WRONG.
+
+    `POST /action/equip` answers `491: The equipment slot is not empty`, so the
+    outgoing piece must come off before the new one goes on. Counting differing
+    SLOTS — as the first version did, on a docstring asserting the opposite —
+    priced every upgrade after a character's first as if the old item evaporated."""
+    worn = {"shield_slot": "wooden_shield"}
+    target = {"shield_slot": "iron_shield"}
+    assert items_moved(worn, target) == 2
+    # Premise: this is genuinely the occupied-slot case, not the empty one, or the
+    # test proves nothing about the rule it names.
+    assert worn["shield_slot"] is not None
+
+
+def test_the_three_spellings_of_empty_agree():
+    """`WorldState.equipment` spells every slot including the empty ones; a picked
+    loadout may omit slots it has no opinion about; the API reports unfilled as "".
+    Treating those as different would invent a movement per unmentioned empty slot
+    — on a sixteen-slot character, a phantom loadout change at every first rung."""
+    for absent in ({}, {"shield_slot": None}, {"shield_slot": ""}):
+        assert items_moved(absent, {"shield_slot": None}) == 0
+        assert items_moved({"shield_slot": ""}, absent) == 0
+
+
+def test_cost_is_the_published_three_seconds_per_item():
+    """Equip is 3 seconds per item, not a whole action. Charging a fight-equivalent
+    per piece over-priced a loadout change by roughly ten times."""
+    worn = {"shield_slot": "wooden_shield"}
+    target = {"shield_slot": "iron_shield"}
+    expected = 2 * EQUIP_SECONDS_PER_ITEM / TYPICAL_FIGHT_COOLDOWN_SECONDS
+    assert equip_cost(worn, target) == pytest.approx(expected)
+    assert equip_cost(worn, target) == pytest.approx(0.2)
+
+
+def test_outfitting_a_bare_character_is_not_sixteen_fights():
+    """The case that made the old count most obviously wrong: a bare character at
+    its first rung. Sixteen pieces are 48 published seconds, under two fights'
+    worth of time — not sixteen fights."""
+    bare = {f"slot{i}": None for i in range(16)}
+    dressed = {f"slot{i}": f"item{i}" for i in range(16)}
+    assert items_moved(bare, dressed) == 16
+    assert equip_cost(bare, dressed) == pytest.approx(16 * 3 / 30)
+    assert equip_cost(bare, dressed) < 2.0

@@ -91,6 +91,8 @@ BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_exp
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
 REST_COOLDOWN_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "rest_cooldown_core.py"
+EQUIP_ACTIONS_CORE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment"
+                          / "equip_actions_core.py")
 FIGHT_LOOP_COST_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
                        / "fight_loop_cost.py")
 NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_buy_core.py"
@@ -5622,6 +5624,33 @@ REST_COOLDOWN_MUTATIONS = [
 ]
 
 
+# The loadout-change cost. SEPARATE GROUP, unit-killed. Both mutants restore a
+# GUESSED server rule that the OpenAPI schema contradicts -- the class of error
+# this module was rewritten to remove, and one no differential can catch because
+# the Lean side models neither rule.
+EQUIP_ACTIONS_MUTATIONS = [
+    # Restore the slot count. A swap becomes ONE movement instead of two, on the
+    # assumption the server equips into an occupied slot -- which it refuses
+    # (`491: The equipment slot is not empty`). Under-charges every upgrade a
+    # character makes after its first.
+    # Killed by test_a_swap_costs_two_because_the_server_refuses_an_occupied_slot.
+    ("equip_actions_core: count differing SLOTS, not item movements",
+     "        (1 if (worn.get(slot) or None) is not None else 0)\n"
+     "        + (1 if (target.get(slot) or None) is not None else 0)\n"
+     "        for slot in set(worn) | set(target)",
+     "        1\n"
+     "        for slot in set(worn) | set(target)"),
+    # Charge a whole Fight per item instead of the published three seconds. Prices
+    # a bare character's first loadout at sixteen fights.
+    # Killed by test_cost_is_the_published_three_seconds_per_item and
+    # test_outfitting_a_bare_character_is_not_sixteen_fights.
+    ("equip_actions_core: one whole action per item, not the published 3s",
+     "    return (items_moved(worn, target) * EQUIP_SECONDS_PER_ITEM\n"
+     "            / TYPICAL_FIGHT_COOLDOWN_SECONDS)",
+     "    return float(items_moved(worn, target))"),
+]
+
+
 # The combat loop's cost model. SEPARATE GROUP, unit-killed: these encode the
 # UNIFICATION of S-005/S-009/S-021 -- that recovery is priced by its published
 # duration and amortised over the chain it ends -- and each mutant restores a
@@ -6569,6 +6598,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_rest_cooldown_core.py", survivors)
     run_group(FIGHT_LOOP_COST_SRC, FIGHT_LOOP_COST_MUTATIONS,
               "tests/test_ai/test_fight_loop_cost.py", survivors)
+    run_group(EQUIP_ACTIONS_CORE_SRC, EQUIP_ACTIONS_MUTATIONS,
+              "tests/test_ai/test_equip_actions_core.py", survivors)
     run_group(NPC_BUY_CORE_SRC, NPC_BUY_MUTATIONS,
               "formal/diff/test_npc_buy_inventory_diff.py", survivors)
     run_group(TASK_TRADE_CORE_SRC, TASK_TRADE_CORE_MUTATIONS,

@@ -311,9 +311,13 @@ The walk tracks cumulative progress. XP earned by the final kill of a rung beyon
 
 Only the FIRST rung starts from the character state's current progress toward the next level. Every later rung starts from the surplus carried out of the one before it.
 
-CARRYING IS ACHIEVED BY NOT ROUNDING, and that is the whole of it. A rung's kill count is the exact quotient of its remaining requirement by the rate, and is NOT resolved to a whole kill; S-014's upward resolution applies to the total the oracle reports, never to an individual rung. A fractional kill carried at a rung boundary is precisely the surplus this clause preserves, so no separate accumulator exists and no surplus is ever banked as a discrete quantity.
+CARRYING IS ACHIEVED BY NOT ROUNDING, and that is the whole of it. A rung's loop cost is the exact quotient of its remaining requirement by the rate, and is NOT resolved to a whole kill; S-014's upward resolution applies to the total the oracle reports, never to an individual rung. A fractional kill carried at a rung boundary is precisely the surplus this clause preserves, so no separate accumulator exists and no surplus is ever banked as a discrete quantity.
 
-It follows that NO RUNG IS EVER CROSSED WITHOUT FIGHTING. Every rung's requirement is met by kills at that rung, whose count may be fractional but is never zero, so the whole of the walk's machinery — S-003's naming of a monster per rung, S-009 and S-010's candidacy, S-013's zero-reward stop — continues to apply at every rung without exception. This clause introduces no rung that those clauses do not already describe.
+**That quotient is in ACTIONS, not kills.** The rate is XP per executed loop action (S-023), so requirement divided by rate is a count of loop actions directly, and no kill count is formed or needed anywhere in the walk. This clause and S-005 speak of "per kill" only to identify WHICH actions are in the loop; neither requires the oracle to know how many kills a rung takes, and an implementation that recovered a kill count in order to re-multiply the loop length by it would charge the loop twice.
+
+**THE REMAINING REQUIREMENT IS AT LEAST ONE UNIT OF EXPERIENCE.** A rung's requirement is the level's requirement less the progress carried into it, floored at one. The floor matters only at the top of the progress range — a character handed a state whose progress already equals its requirement, or a carry that exactly fills the next level — and there it is what stops a rung being crossed for nothing.
+
+That floor is the reason NO RUNG IS EVER CROSSED WITHOUT FIGHTING. Without it the two sentences above would contradict each other at that boundary: an exact quotient of a zero requirement is zero, while the walk's machinery — S-003's naming of a monster per rung, S-009 and S-010's candidacy, S-013's zero-reward stop — presumes a rung that is actually fought. With it, every rung has positive cost, every rung names a monster, and those clauses apply at every rung without exception. The floor is a deliberate rounding AGAINST the character, consistent with S-014, and it is the only place this clause departs from exact arithmetic.
 
 ### S-020 · The consult sees carried gear, and the equip is charged  [witness: W-006]
 
@@ -321,7 +325,16 @@ The state handed to the beatability predicate carries the best loadout the chara
 
 WHICH loadout is best for a purpose is not decided here. It comes from the same shared loadout selection the executor uses, exactly as the beatability verdict does, and that selection is BACKGROUND: two carried pieces competing for one slot with neither dominating is its problem to settle, and it must settle it deterministically (S-001). This clause fixes only that the selection is offered inventory and worn together, and is evaluated at the rung's level.
 
-Wearing it is an executed action, and it is a SETUP cost of the rung, not part of the loop. A rung therefore has two kinds of cost:
+**Changing the loadout is executed work, priced by its published duration under S-004, and counted in ITEM MOVEMENTS rather than slots.** Two published rules fix it, and neither may be guessed:
+
+- A slot that is occupied cannot be equipped into; the incoming piece is refused while the outgoing one is still worn. A slot that gains a piece is therefore ONE movement, a slot that loses one is ONE, and a slot that SWAPS is **TWO** — the old piece comes off, the new one goes on. Counting differing slots prices every upgrade after a character's first as though the displaced item evaporated.
+- The duration is **three seconds per item moved**, and a batch of `n` costs `3n` however it is grouped into requests. An item movement is therefore about a tenth of a Fight, not a whole one. This is S-004's conversion rule applying to a second non-uniform action, not a special case invented here.
+
+A movement's cost does not depend on which slot it is, which piece it is, or how many other pieces move with it. Where the loadout is unchanged the cost is zero, so gear held across many rungs is paid for once.
+
+Whether a change is POSSIBLE is not priced here and is not this clause's business: a full inventory or a piece whose removal would drop the character's hit points too far are conditions on the change happening at all, and belong to the loadout selection and the executor, both background.
+
+That cost is a SETUP cost of the rung, not part of the loop. A rung therefore has two kinds of cost:
 
 - a **per-kill loop cost** — the fight and the recovery it forces (S-005, S-021), paid once per kill and proportional to the number of kills; and
 - a **once-per-rung setup cost** — the equip actions needed to move from the loadout the character arrives with to the rung's loadout, paid once regardless of how many kills the rung takes.
@@ -372,4 +385,8 @@ A prediction from the published formula is per KILL, and is converted into that 
 
 "Executed action" here means a PER-KILL LOOP action and only those — the fight and the recovery it forces. A rung's once-per-rung setup cost (S-020's equips) is outside this denominator on both sides of the conversion: it is not divided into the prediction, and a measured rate is not understood to have absorbed it. A fixed charge in a rate's denominator would make the rate depend on how many kills the rung happens to need, which is the very thing a rate exists not to depend on.
 
-The conversion runs in that direction and never the other. Recovering a per-kill figure from a whole-loop measurement would divide by a loop length the measurement has already absorbed, and can only lose what was measured.
+**The unit governs every use of the rate, not only comparison.** Once a rate is in XP per loop action it stays there: it is the divisor S-019 divides a rung's remaining requirement by, and that quotient is a count of LOOP ACTIONS which is the rung's loop cost outright. No kill count is formed, and the loop length is never applied a second time.
+
+The conversion runs in that direction and never the other. Recovering a per-kill figure from a whole-loop measurement means MULTIPLYING by a loop length the measurement has already absorbed — and then, because the walk costs a rung in actions, multiplying by it again on the way back out. An earlier version of this sentence said "divide", naming the wrong operation and so forbidding nothing: an implementation that multiplied up to a per-kill rate, took the requirement over it to get kills, and charged the loop per kill broke no letter of the clause and over-charged every rung by a whole loop length.
+
+For a prediction the round trip is exact and harmless, because the prediction is genuinely per-kill and dividing it once is how it arrives in the unit at all. For a MEASUREMENT it is not: the measurement never carried a kill count to recover, so the loop length used to recover one is the rung's model rather than the measurement's own, and the result is a number the observation does not support.

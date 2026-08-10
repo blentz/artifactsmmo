@@ -15,7 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, col, select
 
 from artifactsmmo_cli.ai.combat import is_winnable
-from artifactsmmo_cli.ai.equipment.equip_actions_core import equip_actions
+from artifactsmmo_cli.ai.equipment.equip_actions_core import equip_cost
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
@@ -433,7 +433,7 @@ def cheapest_path_to_level(
             Combat(game_data.monster_attack(best_code),
                    game_data.monster_resistance(best_code), dict(rung.attack)),
             rung, game_data)
-        equips = equip_actions(worn, rung_loadout)
+        equips = equip_cost(worn, rung_loadout)
         worn = rung_loadout
 
         cycles_for_this_level = xp_to_next / best_xp_per_cycle + equips

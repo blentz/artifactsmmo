@@ -8,6 +8,7 @@ from sqlalchemy.exc import OperationalError
 from sqlmodel import Session
 
 import artifactsmmo_cli.ai.learning.projections as proj
+from artifactsmmo_cli.ai.equipment.equip_actions_core import EQUIP_SECONDS_PER_ITEM
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemStats
@@ -1277,11 +1278,15 @@ class TestTheEquipIsCharged:
         }
         return _harmless(gd)
 
-    def test_carried_gear_costs_one_action_at_the_rung_that_wears_it(
+    def test_carried_gear_costs_one_movement_at_the_rung_that_wears_it(
             self, monkeypatch, tmp_path):
-        """One equip, charged once. The character carries a weapon and wears
-        nothing, so the first rung pays for putting it on and no later rung pays
-        again — `worn` advances rather than being re-compared to the bare start."""
+        """One item movement, charged once. The character carries a weapon and
+        wears nothing, so the first rung pays for putting it on and no later rung
+        pays again — `worn` advances rather than being re-compared to the bare
+        start.
+
+        The charge is the published three seconds, not a whole Fight: an empty
+        slot takes one movement, and one movement is a tenth of the unit."""
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_weapon()
@@ -1295,8 +1300,12 @@ class TestTheEquipIsCharged:
 
         bare_first, armed_first = (bare_plan.segments[0].estimated_cycles,
                                    armed_plan.segments[0].estimated_cycles)
-        assert armed_first == pytest.approx(bare_first + 1), (
-            "the first rung must carry exactly one equip action")
+        one_movement = EQUIP_SECONDS_PER_ITEM / TYPICAL_FIGHT_COOLDOWN_SECONDS
+        assert armed_first == pytest.approx(bare_first + one_movement), (
+            "the first rung must carry exactly one item movement")
+        # Premise: the charge is genuinely below a whole action, or this passes
+        # equally well against the superseded one-action-per-slot pricing.
+        assert 0 < one_movement < 1
         for i in range(1, len(armed_plan.segments)):
             assert (armed_plan.segments[i].estimated_cycles
                     == pytest.approx(bare_plan.segments[i].estimated_cycles)), (
