@@ -5636,22 +5636,30 @@ OBSERVED_RATE_MUTATIONS = [
     # sample level, and stop the walk.
     # Killed by test_a_tie_resolves_DOWNWARD.
     ("observed_rate_core: half-to-even instead of ties-down",
-     "    doubled = 2 * sum(levels) - len(levels)\n"
-     "    return -(-doubled // (2 * len(levels)))",
-     "    return round(sum(levels) / len(levels))"),
+     "    doubled = 2 * sum(real) - len(real)\n"
+     "    return -(-doubled // (2 * len(real)))",
+     "    return round(sum(real) / len(real))"),
     # Send ties UP instead. The direction that manufactures reach, which is the
     # one thing this module refuses to do.
     # Killed by test_a_tie_resolves_DOWNWARD.
     ("observed_rate_core: ties resolve UPWARD",
-     "    doubled = 2 * sum(levels) - len(levels)",
-     "    doubled = 2 * sum(levels) + len(levels)"),
+     "    doubled = 2 * sum(real) - len(real)",
+     "    doubled = 2 * sum(real) + len(real)"),
+    # Let a below-one level into the mean. A recorded 0 is the absence of a
+    # reading, and the published award divides the monster's level by the
+    # character's -- so a zero that survives into the mean reaches a level at which
+    # the award is not defined at all.
+    # Killed by test_a_level_below_one_is_not_a_level.
+    ("observed_rate_core: admit levels below one into the mean",
+     "    real = [level for level in levels if level >= 1]",
+     "    real = list(levels)"),
     # Truncate rather than round. A mean of 16.9 becomes 16, which is not a
     # tiebreak at all -- it under-states the sample level everywhere, not just on
     # the boundary this rule exists for.
     # Killed by test_a_non_tie_rounds_to_the_nearest.
     ("observed_rate_core: floor the mean instead of rounding it",
-     "    return -(-doubled // (2 * len(levels)))",
-     "    return sum(levels) // len(levels)"),
+     "    return -(-doubled // (2 * len(real)))",
+     "    return sum(real) // len(real)"),
 ]
 
 

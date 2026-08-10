@@ -45,6 +45,16 @@ def sample_level(levels: list[int]) -> int | None:
     """The single character level a measurement is treated as having been taken at,
     from the levels its aggregated cycles recorded. `None` when none recorded one.
 
+    A RECORDED LEVEL BELOW ONE IS NOT A LEVEL. Characters begin at 1, so the API
+    cannot produce a smaller one, and a zero is the absence of a reading rather
+    than a reading of zero. It is dropped here, exactly as a missing level is, and
+    for the same reason: the mean must not be contaminated by a value that is not
+    evidence. Left in, a zero is not merely wrong but UNDEFINED downstream -- the
+    published award divides the monster's level by the character's, so a sample
+    level of zero has no award at all, neither positive nor non-positive, and the
+    two rules that decide those cases both claim it. Excluding it means the only
+    levels that reach the mean are ones the game can actually have issued.
+
     THE MEAN, ROUNDED, WITH TIES GOING DOWN. A tie is not a curiosity here: the
     published award is a STEP function of the level gap, so the two roundings of a
     half-integer mean can land on opposite sides of the grey boundary. One side
@@ -61,10 +71,11 @@ def sample_level(levels: list[int]) -> int | None:
 
     Computed in integers so no binary-float representation can move a tie.
     """
-    if not levels:
+    real = [level for level in levels if level >= 1]
+    if not real:
         return None
-    doubled = 2 * sum(levels) - len(levels)
-    return -(-doubled // (2 * len(levels)))
+    doubled = 2 * sum(real) - len(real)
+    return -(-doubled // (2 * len(real)))
 
 
 def rescale_observed_xp(

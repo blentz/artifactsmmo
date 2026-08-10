@@ -121,3 +121,24 @@ class TestSampleLevel:
         that makes a float comparison land on the wrong side of a half."""
         assert sample_level([1] * 3 + [2] * 3) == 1
         assert sample_level([49, 50]) == 49
+
+    @pytest.mark.parametrize("bogus", [0, -3])
+    def test_a_level_below_one_is_not_a_level(self, bogus):
+        """Characters start at 1, so the API cannot issue a smaller level. A zero
+        is the ABSENCE of a reading, not a reading of zero, and it is dropped like
+        a missing one -- otherwise it drags the mean toward a value the published
+        award is not even defined at."""
+        assert sample_level([bogus, 20, 20]) == 20
+
+    def test_only_bogus_levels_is_the_same_as_none(self):
+        """The degenerate arm. Not zero, not an error: ABSENT, so S-008's fallback
+        to the published prediction applies and the walk continues."""
+        assert sample_level([0]) is None
+        assert sample_level([0, 0, -1]) is None
+
+    def test_a_zero_would_otherwise_be_undefined_not_merely_wrong(self):
+        """Why this is excluded rather than clamped. The published award divides
+        the monster's level by the character's, so at a sample level of zero there
+        is no award to compare -- neither positive nor non-positive, which is the
+        one gap both of the restatement's degenerate rules claim."""
+        assert sample_level([0, 1]) == 1

@@ -218,6 +218,20 @@ fractional, it is resolved **upward**: a partial action is still an action the
 character has to spend, and an objective that rounded down would systematically
 under-price every path it projects.
 
+**THE RESOLUTION HAPPENS AT THE POINT OF REPORT, ONCE, AND ON THE TOTAL.** It is
+not a property of the value the oracle carries. The oracle's total is EXACTLY the
+sum of its rungs' costs (S-003), each an exact quotient (S-019); the whole-number
+resolution is applied to that sum when it is presented, and never to a rung. So
+S-003's identity holds on the values the oracle returns — a consumer that re-adds
+the rungs gets the total back, not a different number — and a reader who compares
+a REPORTED total against the rungs it was reported alongside should expect it to
+be no smaller, by less than one action.
+
+Stating this was forced: rounding described as if it were stored makes "the total
+is the sum of the rungs" false for every walk whose quotients do not sum to a
+whole number, which is nearly all of them, and the two clauses then prescribe
+different observable values on the same input.
+
 ---
 
 ## RESIDUALS
@@ -305,6 +319,8 @@ The ratio is dimensionless, so the restated figure remains in the measured rate'
 
 That is an approximation, and this clause says so rather than implying exactness. The published award is a STEP function of the gap between character and monster, so the mean of the awards at two levels is not in general the award at the mean level, and the two diverge most sharply across the grey boundary — a span half below it and half above it restates as though all of it were near the step, when in truth half of it earned nothing. The approximation is accepted because the alternative is to keep per-level sample partitions, which changes what is RECORDED, and this spec governs only how what is recorded is used.
 
+**A RECORDED LEVEL BELOW ONE IS NOT A LEVEL, AND NEVER REACHES THE MEAN.** Characters begin at level one, so the game cannot issue a smaller one; a recorded zero is the ABSENCE of a reading rather than a reading of zero, and it is dropped exactly as a missing level is. This is not tidiness. A sample level of zero is the one value at which the published award is neither positive nor non-positive but UNDEFINED — the award divides the monster's level by the character's — so both of the degenerate rules below would claim it and they prescribe opposite outcomes. Excluding it at the source means the only levels that reach the mean are ones the game can have issued, and every rule below then applies to a value it is defined at. A measurement whose every cycle recorded such a level has no sample level at all and is ABSENT by the rule two paragraphs down.
+
 **THE MEAN IS OVER THE SAME POPULATION THE RATE IS AVERAGED OVER, LESS ONLY THE CYCLES THAT NAMED NO LEVEL.** That single rule settles the whole membership question and every corner of it. A cycle that recorded a level but NO KILLS contributes its level, because it contributed to the rate — the rate is a per-cycle average and an idle cycle drags it down, so the level that idle cycle was spent at is part of where the measurement was taken. A cycle that recorded kills but no level contributes to the rate and not to the mean, since it has nothing to contribute. The two denominators therefore differ by exactly the unlevelled cycles and by nothing else.
 
 Dropping the unlevelled cycles from the RATE as well would change a measurement's value on the basis of a field that says nothing about the monster, which is why the populations are not simply made identical. Weighting the mean by kills is likewise declined: it would make the level a property of where the character FOUGHT rather than of where the rate was measured, and the rate being restated is per cycle, not per kill.
@@ -341,7 +357,7 @@ Only the FIRST rung starts from the character state's current progress toward th
 
 **WHAT THE FLOOR BUYS IS A POSITIVE COST, AND NOT A WHOLE ACTION.** A rung floored this way is charged one unit of experience' worth of loop — a small fraction of a fight, not a fight. The clause does not pretend otherwise. Positivity is all the walk's machinery needs: S-003's naming of a monster per rung, S-009 and S-010's candidacy, and S-013's zero-reward stop all presume a rung that is fought, and a zero would let a rung be crossed at no cost at all while still claiming a monster. A charge below one action is an under-price, but it is bounded by one action and confined to an input the server cannot produce, which is a smaller price than the alternative of special-casing the rung out of the walk entirely.
 
-**A FLOORED RUNG CARRIES NOTHING OUT.** Where the floor binds, the excess that provoked it is discarded, and the next rung starts from the level's full requirement exactly as every non-first rung does. That is not a second rounding decision; it follows from there being no accumulator. The character's own recorded progress enters the walk ONCE, at the first rung. Every later rung's requirement is the level's requirement entire, and the only surplus that crosses a boundary is the unrounded fraction of the previous quotient. An excess large enough to make the floor bind is not a fraction, so there is nothing in the walk for it to be carried in.
+**A FLOORED RUNG CARRIES NOTHING OUT.** Where the floor binds, the excess that provoked it is discarded, and the next rung starts from the level's full requirement exactly as every non-first rung does. That is not a second rounding decision; it follows from there being no accumulator. The character's own recorded progress enters the walk ONCE, at the first rung. Every later rung's requirement is the level's requirement entire, and nothing crosses a boundary at all — the exact quotient leaves no surplus to cross. So there is nothing in the walk an excess could be carried in, whatever its size.
 
 The floor binds only on a state the server cannot produce — progress at or beyond the requirement is a level the character has already been granted — so this rule governs a HANDED input rather than anything the walk generates. It is stated because a total function must decide it, and because deciding it the other way silently would let a walk begin pre-advanced on experience no rung was ever charged for, which is the same understatement of cost the floor exists to prevent.
 
@@ -410,6 +426,10 @@ An earlier version of this clause asserted strict monotonicity and band-independ
 A LATER version made the opposite kind of error, and it is the more instructive one. It described the interior as cancelling EXACTLY and as strictly increasing, having checked those claims only on a bar of exactly a hundred, where one hit point is one percent and the published rounding cannot be seen at all. Both claims are false a rounding's width away from the truth, and every rung above the first has a bar S-015 has grown off that number. **The published rule governs, and the properties are its consequences**; where a stated property and the published duration disagree, the property was stated too strongly and the duration is what the server charges. A clause that describes a rule in two ways has not given an implementer one rule, and the exhibit that motivated this one could not tell them apart.
 
 The maximum hit points this scales against are the projected state's own (S-015): the handed maximum grown by the published per-level grant, and not raised by carried gear.
+
+**THE NUMERATOR IS SETTLED TOO, AND IT IS SETTLED THE OTHER WAY.** The recovery charge is a ratio of two quantities, and an earlier version of this clause fixed the provenance of the denominator and left the numerator's unstated. The DAMAGE is evaluated against the rung's re-evaluated loadout — the same loadout S-020 hands the beatability predicate, inventory and worn together, at the rung's level — and not against the gear the character happens to be wearing when the walk starts.
+
+The asymmetry is deliberate and neither half may be read as a mistake for the other. The maximum hit-point pool is a published per-level grant, so gear must not inflate it in either direction; the damage is a combat outcome, so it must be judged under the loadout the character will actually fight in, or this clause disagrees with the predicate that decided the monster was winnable at all. The same asymmetry is already in force one clause over: the walk asks "can I win?" wearing the best owned gear, and asking "how much will I bleed?" wearing something else is how the two answers drift apart. It is also what makes the sentence above true — the only quantity defensive equipment moves is damage, and it moves it HERE.
 
 **This clause and S-005 price the same executions and cannot disagree.** S-005 counts what is executed; this one prices each execution. The earlier reading, in which recovery cost a fixed one action contributed as the fraction of a hit-point pool consumed, disagreed with S-005 about rungs whose kill count did not fill a whole chain — and it disagreed over a band size that, priced in duration, does not affect the answer.
 
