@@ -69,6 +69,7 @@ character = {level 30, xp_progress 0, xp_required 1000, hp 200, max_hp 200}; tar
 **Resolution:** `RATIFIED -> A`
 **Because:** S-008's bare permissive left two conformant oracles that never agree: one always consults a measurement, one never does. That is not a tolerable freedom, because the two rank the same rung's candidates differently and so send the bot to different monsters. Author chose the requirement reading: evidence beats the model where evidence exists.
 **Became:** `S-016` — A measurement supersedes the prediction, it does not merely may
+**Reattributed to `S-017`.** S-016 failed Phase 2c's closure check twice and was WITHDRAWN; its id is retained and never reused. A withdrawn clause that decides nothing by its own terms earns no attribution, so this witness is now carried by S-017, which is what actually restates a measurement for the rung it is used at. One clause may answer two witnesses; S-017 also carries W-003.
 
 ---
 
@@ -138,9 +139,15 @@ character state = {level 10, max_hp 100, progress 0, progress_required 100}; tar
 | **A** | rungs = [(rung 10, 'bandit', 4), (rung 11, 'bandit', 4), (rung 12, 'bandit', 4)], total cost = 12. A resets progress to 0 at the top of each rung: ceil(100/31)=4, ceil(100/28)=4, ceil(100/26)=4. |
 | **B** | rungs = [(rung 10, 'bandit', 4), (rung 11, 'bandit', 3), (rung 12, 'bandit', 4)], total cost = 11. B carries the overshoot of the last kill into the next rung: rung 10 banks 4*31-100 = 24, so rung 11 needs only 76 (ceil(76/28)=3) and banks 8, so rung 12 needs 92 (ceil(92/26)=4). |
 
-**Resolution:** `RATIFIED -> B`
-**Because:** The game does not discard a kill's XP at a level boundary, so a projection that restarts every rung from zero is modelling a rule that does not exist. The error compounds: it over-prices a full climb by roughly one kill per rung, over thirty-odd rungs. Author chose the carry. NOT what the implementation does today -- it resets `xp_to_next` to the full requirement at the top of every rung -- so this is an implementation change, and the direction of the error is at least the safe one (over-estimating cost) rather than manufacturing reach.
-**Became:** `S-019` — Progress carries across rungs
+**Resolution:** `RATIFIED -> C` (superseding an earlier `RATIFIED -> B`)
+**Because:** The author's decision stands and is unchanged: a projection that restarts every rung from zero over-prices a full climb by roughly one kill per rung, and the game does not discard a kill's XP at a level boundary. **A** is rejected for that reason. But **B** is rejected too, and the ratified answer is neither.
+
+**The ratified behaviour is the exact quotient per rung, with no rung resolved to a whole kill:** `rungs = [(rung 10, 'bandit', 3.2258), (rung 11, 'bandit', 3.5714), (rung 12, 'bandit', 3.8462)], total cost = 11`. B reaches the same TOTAL by a different route and its per-rung figures are illegal — S-019 forbids resolving an individual rung to a whole kill, and S-014's upward resolution applies once, at the point of report, to the total alone. A harness that asserted B's `4/3/4` would be pinning a decision the spec forbids while its total happened to agree.
+
+**"Carrying the overshoot" was the wrong description of the mechanism, and this entry used to give it.** Not-rounding and carrying a surplus coincide only when the rate is the same at both rungs, and here it is 31, 28 and 26 — three different rates, chosen precisely to make the rungs fractional. The exact quotient forms no surplus at all, so nothing is carried; what it declines to model is the crossing action's spill, which S-019 now bounds at under one action per boundary and which measured at one action across a live four-rung climb.
+
+**The claim that this needs an implementation change was also wrong.** The implementation takes the full requirement at the top of every rung and divides exactly, which is what the ratified behaviour above requires. No change was needed and none was made.
+**Became:** `S-019` — Progress carries across rungs (the heading is retained for its permanent id; the clause itself now leads with the exact-quotient mechanism, since nothing is carried)
 
 ---
 
@@ -210,9 +217,15 @@ character = {level: 10, xp: 0, max_xp: 100 (i.e. 100 XP still needed for L11), f
 | **A** | rungs = [(level 11, "bandit_lizard", 14)], total_cost = 14   — argmax of reward-per-cost measured PER KILL (70/7 = 10.0 > 25/3 = 8.33) |
 | **B** | rungs = [(level 11, "blue_slime", 12)], total_cost = 12   — argmax of reward-per-cost measured OVER THE RUNG (100/12 = 8.33 > 100/14 = 7.14), i.e. the monster that literally 'crosses it fastest' |
 
-**Resolution:** `RATIFIED -> A`
-**Because:** S-011's heading ('crosses it fastest') and its body ('greatest reward per unit cost') named two different criteria, and they pick different monsters. Author chose the per-kill rate, and the choice is COUPLED to the carry-over decision above: once surplus XP carries into the next rung, no reward is wasted at a rung boundary, so maximising reward per action is exactly maximising progress per action and the two criteria coincide. Had progress reset each rung, the crossing-cost reading would have been the right one, because overkill XP would genuinely be discarded.
-**Became:** `S-022` — The per-rung choice maximises reward per action, not per rung
+**Resolution:** `RATIFIED -> C` (superseding an earlier `RATIFIED -> A`)
+**Because:** S-011's heading ('crosses it fastest') and its body ('greatest reward per unit cost') named two different criteria, and they pick different monsters. The author chose the per-kill rate — the monster in **A**, `bandit_lizard`.
+
+**The ratified COST is 10, not A's 14, and this entry is executable so the number matters.** Both exhibited outputs are now illegal. A's 14 is `ceil(100/70) = 2` whole kills at 7 actions each, and S-019 forbids resolving an individual rung to a whole kill: the exact quotient is `100 / (70/7) = 10`. B is priced correctly for its monster but picks the wrong one — once bandit_lizard costs 10 rather than 14, it wins under BOTH of the criteria this witness set against each other (per-kill rate 10.00 vs 8.33; reward over the rung 100/10 vs 100/12). A harness must assert `rungs = [(level 11, "bandit_lizard", 10)], total_cost = 10`.
+
+**Closed by `S-019`, not by S-022.** Phase 2c ruled this twice. S-019's exact unrounded quotient is what makes A illegal, and S-011's pre-existing argmax evaluated on that corrected cost is what makes B illegal; this pair contains no loadout change, so S-022's actual content — excluding the once-per-rung setup from the ranking denominator — is not exercised by it and could not have changed the answer.
+
+**An earlier rationale here was also wrong** and is corrected rather than deleted: it said the choice was coupled to surplus XP carrying into the next rung, so that no reward is wasted at a boundary. No surplus is ever formed (S-019), so nothing carries and the coupling never existed. The two criteria coincide for a different reason — a rung's loop cost is its remaining requirement divided by the rate, with no fixed term and no rounding, so ranking by greatest rate and by least loop cost are the same ordering.
+**Became:** `S-022` — The per-rung choice maximises reward per action, not per rung. Retained: its exclusion of the setup cost is a real decision, but it is ASSERTED and unwitnessed, and wants a pair in which a cheaper-per-action monster demands an equip that a dearer one does not.
 
 ---
 
