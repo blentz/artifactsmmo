@@ -26,6 +26,18 @@ def test_no_damage_forces_no_rest():
     assert cycles_per_kill(0, 280) == FIGHT_ACTIONS_PER_KILL
 
 
+@pytest.mark.parametrize("dmg", [0, -1, -8, -500])
+def test_a_non_positive_damage_forces_no_rest_either(dmg):
+    """The condition is NOT POSITIVE, not zero. The guard argument -- it never
+    trips, so no fight crosses it and no chain exists for a recovery to end --
+    does not distinguish zero from negative, and stopping at zero leaves the one
+    input where the retained three-second floor could still be claimed. Charging
+    that floor to a monster costing nothing changes which monster a rung NAMES,
+    not merely its price."""
+    assert rest_actions_per_fight(dmg, 285) == 0.0
+    assert cycles_per_kill(dmg, 285) == FIGHT_ACTIONS_PER_KILL
+
+
 def test_degenerate_max_hp_is_not_free():
     """A zero/negative HP pool must not read as a costless fight — it is the one
     case where the ratio is undefined, and 'free' is the dangerous answer."""
