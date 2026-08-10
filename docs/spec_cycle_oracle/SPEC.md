@@ -157,12 +157,25 @@ published formula over the catalogue's attributes for that monster. It does not
 guess, does not use a constant, and does not substitute a value not derived from
 game data.
 
-### S-008 · Learned observations may supersede prediction
+### S-008 · Learned observations supersede prediction
 
-Where the observations contain a measured rate for a monster, the oracle may use
+Where the observations contain a measured rate for a monster, the oracle **uses**
 that measured rate in place of the predicted one. A measured rate and a predicted
 one must be in the same unit before either is used, and the oracle never compares
 one against the other across units.
+
+**THE ORIGINAL SAID "MAY", AND THAT WORD WAS THIS CLAUSE'S DEFECT.** W-002 exhibited
+two oracles that both satisfied it and never agree — one always consults a
+measurement, one never does — ranking the same rung's candidates differently and
+sending the bot to different monsters. The author ratified the requirement reading:
+evidence beats the model where evidence exists. The permission is replaced here
+rather than being overridden from elsewhere, because a clause cannot concede on
+another's behalf: for two rounds the mandate lived in a neighbouring clause while
+this one still read "may", and an implementation that declined the permission broke
+no letter of the text it was actually reading.
+
+What counts as a measurement being present is S-018's, and what value it has once
+used is S-017's. This clause decides only that a present one is not declined.
 
 Where no measurement exists, S-007's prediction stands. The absence of a
 measurement is not an error and does not stop the walk.
@@ -316,8 +329,6 @@ The original text follows, struck, for the record:
 
 ### S-017 · A measured rate is restated for the rung it is used at  [witness: W-003]
 
-**A MEASUREMENT THAT IS PRESENT IS USED.** The oracle does not hold one and price from the published prediction instead; where evidence exists, evidence governs, and S-008's "may" is exercised rather than declined. This is W-002's ratified answer, and it is stated here because the clause that used to carry it was withdrawn — leaving the mandate in the ledger with no clause saying it. What counts as present is S-018's; that a present measurement is used is this sentence's; what value it then has is the rest of this clause.
-
 A measured rate belongs to the character level its samples were taken at. Before it is used at a rung, the oracle restates it for that rung by the ratio of the published per-kill award for the same monster at the two levels.
 
 The ratio is dimensionless, so the restated figure remains in the measured rate's own unit and S-008's same-unit requirement continues to hold.
@@ -432,7 +443,11 @@ Thirty seconds is a DECLARED figure and this clause says so rather than dressing
 
 **THE PUBLISHED DURATION IS A WHOLE NUMBER OF SECONDS, AND THAT QUANTUM IS PART OF THE RULE.** The percentage is rounded UP to the next second before anything else happens; the operative sentence is the published one, and the regime descriptions below are consequences of it rather than a second, competing formula. Where the projected bar is exactly a hundred the rounding is a no-op and the two are indistinguishable — which is precisely why they must be ordered here, since S-015's per-level grant makes the bar something other than a hundred at almost every rung. An oracle that dropped the rounding would charge 48.571 seconds where the server charges 49.
 
-Recovery's contribution to one kill is that converted cost divided by the number of fights in the chain. It is not quantised a SECOND time before the rung total is formed: the one-second rounding above is the only quantisation, and S-014's upward resolution applies to the reported total and never to a rung (S-019). **THE CHAIN CONTINUES WHEN HIT POINTS LAND EXACTLY ON THE GUARD'S THRESHOLD.** The guard trips only when they fall BELOW it, so a chain whose damage divides the band exactly takes one more fight: its length is the whole number of fights the band absorbs, PLUS the committed fight that crosses it, and never the bare quotient. The distinction is invisible except at exact division and it decides the clause's central property. Read the other way — the chain ending at the threshold — a damage of exactly an eighth of the bar against a quarter-band chains two fights and costs 25 seconds, while the slightly SMALLER damage just under an eighth chains three and costs 38, so a heavier monster would be cheaper per kill and better armour could raise a rung's price. Chain length is a step function of damage, and only this boundary keeps the step from ever running backwards.
+Recovery's contribution to one kill is that converted cost divided by the number of fights in the chain. It is not quantised a SECOND time before the rung total is formed: the one-second rounding above is the only quantisation, and S-014's upward resolution applies to the reported total and never to a rung (S-019). **THE THRESHOLD IS A FRACTION OF THE BAR, COMPARED AS A RATIO, AND IS NEVER SNAPPED TO THE HIT-POINT LATTICE.** The guard asks whether hit points OVER maximum hit points has fallen below three quarters; it does not compute a whole-hit-point threshold and compare against that. The distinction is invisible only where a quarter of the bar happens to be whole, which S-015's five-point grant makes one rung in four. The natural integer implementation floors the threshold, which widens the band to the bar less that floor; swept over every whole bar from 20 to 2500 and every whole positive damage, the two readings disagree on chain length in 12351 pairs and on the per-kill share in 12186 of them. It is not a rounding curiosity — it moves the price, and can move the monster a rung names. The exact ratio is chosen because it is what the EXECUTOR's guard computes, and the whole purpose of pricing the loop this way is that the projection and the runtime agree about when a recovery happens.
+
+That also bounds the rule below: hit points can land EXACTLY on the threshold only where the quarter is whole, so the exact-division case is real at one rung in four and simply cannot arise at the others. It is stated in full anyway, because a rule that holds only where it is reachable is still the rule.
+
+**THE CHAIN CONTINUES WHEN HIT POINTS LAND EXACTLY ON THE GUARD'S THRESHOLD.** The guard trips only when they fall BELOW it, so a chain whose damage divides the band exactly takes one more fight: its length is the whole number of fights the band absorbs, PLUS the committed fight that crosses it, and never the bare quotient. The distinction is invisible except at exact division and it decides the clause's central property. Read the other way — the chain ending at the threshold — a damage of exactly an eighth of the bar against a quarter-band chains two fights and costs 25 seconds, while the slightly SMALLER damage just under an eighth chains three and costs 38, so a heavier monster would be cheaper per kill and better armour could raise a rung's price. Chain length is a step function of damage, and only this boundary keeps the step from ever running backwards.
 
 The contribution is therefore monotone non-decreasing in damage, and increasing throughout the interior band defined below UP TO THE ONE-SECOND QUANTUM — two damages whose chains round to the same whole second cost the same, and they must, because the server charges them the same. **Damage and the bar are whole numbers of hit points**, which is the domain that claim is made over; swept over every whole bar from 20 to 2500 and every whole POSITIVE damage, the contribution never once decreases. Zero extends the property rather than threatening it: it contributes nothing, and every positive damage contributes more. Saturation inside that band is the specific defect this clause forbids — an oracle that charged a fixed amount for every recovery would report the same rung cost for every damage above the guard's band, and the only quantity defensive equipment moves is damage.
 

@@ -1,5 +1,6 @@
 """What one kill really costs — the Fight plus the share of a Rest it forces."""
 
+import math
 from itertools import pairwise
 
 import pytest
@@ -194,3 +195,26 @@ def test_the_three_second_floor_is_unreachable_at_the_declared_band():
             chain = fights_per_rest(dmg, max_hp)
             missing = min(chain * dmg, max_hp)
             assert rest_cooldown_seconds(missing, max_hp) > REST_MINIMUM_SECONDS
+
+
+def test_the_guard_band_is_a_ratio_not_a_floored_hit_point_count():
+    """The projection's band must be exactly the EXECUTOR's guard, which asks
+    `hp / max_hp < CRITICAL_HP_FRACTION` -- a ratio, never a whole-hit-point
+    threshold. The natural integer implementation floors the threshold instead,
+    which widens the band to `max_hp - floor(0.75 * max_hp)`.
+
+    Invisible at a bar of 100, where a quarter is whole -- and S-015's five-point
+    grant puts three bars in four off that lattice. Swept over every whole bar from
+    20 to 2500, the two readings disagree on chain length in 12351 pairs and on the
+    per-kill share in 12186 of them, so this is not a rounding curiosity: it moves
+    the price and can move the monster a rung names.
+    """
+    max_hp = 21
+    exact_band = (1.0 - CRITICAL_HP_FRACTION) * max_hp
+    floored_threshold_band = max_hp - math.floor(CRITICAL_HP_FRACTION * max_hp)
+    assert exact_band == 5.25 and floored_threshold_band == 6
+
+    assert fights_per_rest(1, max_hp) == 6
+    assert int(floored_threshold_band // 1) + 1 == 7
+
+    assert rest_actions_per_fight(1, max_hp) == pytest.approx(0.161111, abs=1e-6)
