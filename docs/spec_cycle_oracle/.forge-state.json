@@ -8,7 +8,8 @@
   "projected-state-levelup-growth-not-applied",
   "beatability-consult-loadout-worn-vs-wearable",
   "measured-rate-unit-undeclared",
-  "rung-progress-surplus-carryover"
+  "rung-progress-surplus-carryover",
+  "argmax-per-kill-rate-vs-rung-crossing-cost"
  ],
  "contradiction_clean_runs": 0,
  "contradiction_void_runs": 0,
@@ -16,8 +17,7 @@
  "blindness_failures": 1,
  "pending_verification": [
   "s008-may-use-measurement-optional",
-  "recovery-quantum-discrete-vs-amortised",
-  "argmax-per-kill-rate-vs-rung-crossing-cost"
+  "recovery-quantum-discrete-vs-amortised"
  ],
  "phases_run": [
   "ontology",
