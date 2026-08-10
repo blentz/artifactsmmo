@@ -113,7 +113,9 @@ Recovery the character is forced into by the damage it takes counts; so does
 anything else the loop requires.
 
 The loop is **chained, not per-kill**. The character fights while its hit points
-remain above the recovery guard's threshold and recovers once when they do not, so
+remain AT OR ABOVE the recovery guard's threshold and recovers once when they fall
+below it — hit points sitting exactly on the threshold do not force a recovery, and
+S-021 explains why that boundary carries the whole cost's monotonicity — so
 recovery is executed once per chain of fights rather than once per fight. The
 number of fights in a chain is determined by the guard's threshold and the damage
 per fight, and the chain includes the fight that carries the character across the
@@ -133,7 +135,14 @@ S-019 states and bounds, and no individual charge is an integer.
 A monster that forces recovery after every kill is more expensive per kill than one
 that can be fought consecutively, and the reported cost must distinguish them; so
 must two monsters that both force recovery after every kill but leave the character
-at different depths, because their recoveries do not cost the same (S-021).
+at different depths, **except where the published duration charges those depths the
+same**. Recovery is billed in whole seconds (S-021), so two depths inside one second
+of each other genuinely cost the same and the oracle must not invent a difference
+the server does not charge — at a two-hundred-point bar, adjacent whole damages
+price identically across most of the chain-of-one range. What this paragraph forbids
+is a cost that stops responding to damage ALTOGETHER, which is what a fixed
+per-recovery charge would do; it does not require strict separation at a resolution
+finer than the game bills.
 
 ### S-006 · Already at or above target costs nothing
 
@@ -297,15 +306,17 @@ The original text follows, struck, for the record:
 
 > Where the observations contain a measured rate for a monster (S-018 fixes what that means), the oracle uses it in place of the predicted one for that monster. This is not discretionary.
 
-Where the observations contain a measured rate for a monster (S-018 fixes what that means), the oracle uses it in place of the predicted one for that monster. This is not discretionary.
+> Candidates at one rung may therefore be priced from different origins -- a measured monster against a predicted one -- and that is intended. What S-008 requires is that both are expressed in the same unit before they are compared, not that they come from the same source.
+>
+> This clause fixes only THAT a measurement is used. WHAT VALUE it has at a rung is S-017's, and the two must be read in that order: a measurement is never ignored, and it is never used unrestated.
+>
+> The case this clause alone decides is the ordinary one: a rung whose published award is positive, for a monster that also carries a measurement.
 
-Candidates at one rung may therefore be priced from different origins -- a measured monster against a predicted one -- and that is intended. What S-008 requires is that both are expressed in the same unit before they are compared, not that they come from the same source.
-
-This clause fixes only THAT a measurement is used. WHAT VALUE it has at a rung is S-017's, and the two must be read in that order: a measurement is never ignored, and it is never used unrestated. Where S-017 restates a measurement to zero, this clause has still been obeyed — the measurement was used, and using it yielded nothing. An oracle may not reach the opposite outcome by declining to consult the measurement at all.
-
-The case this clause alone decides is the ordinary one: a rung whose published award is positive, for a monster that also carries a measurement. There the prediction and the measurement disagree by some finite factor, and the measurement governs.
+**THE STRUCK TEXT ABOVE WAS PARTLY UNSTRUCK BY AN EDITING SLIP, AND READ AS LIVE PROSE INSIDE A WITHDRAWN CLAUSE** — including "This is not discretionary", which flatly contradicts S-008's "may". The whole of it is historical and none of it governs. **The DECISION it carried is not lost: W-002's ratified answer is that evidence beats the model where evidence exists, and S-017 now carries that witness and states the mandate.**
 
 ### S-017 · A measured rate is restated for the rung it is used at  [witness: W-003]
+
+**A MEASUREMENT THAT IS PRESENT IS USED.** The oracle does not hold one and price from the published prediction instead; where evidence exists, evidence governs, and S-008's "may" is exercised rather than declined. This is W-002's ratified answer, and it is stated here because the clause that used to carry it was withdrawn — leaving the mandate in the ledger with no clause saying it. What counts as present is S-018's; that a present measurement is used is this sentence's; what value it then has is the rest of this clause.
 
 A measured rate belongs to the character level its samples were taken at. Before it is used at a rung, the oracle restates it for that rung by the ratio of the published per-kill award for the same monster at the two levels.
 
@@ -345,7 +356,9 @@ The observations contain a measured rate for a monster only when that rate is ba
 
 The level belongs in this list and not in S-017's arithmetic because it is a condition on the EVIDENCE, not on the value. S-017 needs a sample level to restate a rate at all; a rate that has none is not a rate the oracle knows how to interpret anywhere, so it never reaches restatement. Admitting it as present and then restating it to zero would be a different decision with a different consequence — see S-017 for why zero and absent do not interchange.
 
-An absent measurement is not an error and does not stop the walk. In particular a non-positive stored rate never reaches the zero-reward stop, which is a statement about what the published rules award and not about what has been observed.
+An absent measurement is not an error and does not stop the walk. In particular a non-positive STORED rate never reaches the zero-reward stop — it is absent, so the published prediction governs and the stop is decided on that.
+
+**THAT IS A STATEMENT ABOUT ABSENT MEASUREMENTS ONLY, AND MUST NOT BE READ AS ONE ABOUT THE STOP.** An earlier version of this sentence added that the zero-reward stop "is a statement about what the published rules award and not about what has been observed", which claims more than this clause decides and contradicts S-017: a PRESENT measurement restated to zero — because the published award at its sample level was not positive — does reach the stop, and halts the walk at a rung whose published award may be perfectly healthy. That is deliberate. Once a measurement is present it is the oracle's estimate of reward, and a zero estimate is a zero reward however it arose; the alternative is to let an observation incoherent with the published rules be quietly discarded, which restores reach on evidence known to be broken. The stop is a test of REWARD, not of provenance. Which measurements are present is this clause's decision; what happens to a present one is S-017's and S-013's.
 
 ### S-019 · Progress carries across rungs  [witness: W-005]
 
@@ -443,7 +456,9 @@ The maximum hit points this scales against are the projected state's own (S-015)
 
 The asymmetry is deliberate and neither half may be read as a mistake for the other. The maximum hit-point pool is a published per-level grant, so gear must not inflate it in either direction; the damage is a combat outcome, so it must be judged under the loadout the character will actually fight in, or this clause disagrees with the predicate that decided the monster was winnable at all. The same asymmetry is already in force one clause over: the walk asks "can I win?" wearing the best owned gear, and asking "how much will I bleed?" wearing something else is how the two answers drift apart. It is also what makes the sentence above true — the only quantity defensive equipment moves is damage, and it moves it HERE.
 
-**This clause and S-005 price the same executions and cannot disagree.** S-005 counts what is executed; this one prices each execution. The earlier reading, in which recovery cost a fixed one action contributed as the fraction of a hit-point pool consumed, disagreed with S-005 about rungs whose kill count did not fill a whole chain — and it disagreed over a band size that, priced in duration, does not affect the answer.
+**This clause and S-005 divide the work: S-005 counts what is executed, this one prices each execution.** The earlier reading, in which recovery cost a fixed one action contributed as the fraction of a hit-point pool consumed, disagreed with S-005 about rungs whose kill count did not fill a whole chain — and it disagreed over a band size that, priced in duration, does not affect the answer.
+
+An earlier version of this paragraph went further and asserted the two "cannot disagree". They can, and did, in two places that are now settled IN S-005 rather than papered over here. Its distinguishing requirement said two monsters leaving the character at different depths must always price differently; the published second is the resolution the server bills at, so depths inside one second of each other cost the same and S-005 now carries that exception. Its stopping condition said the character fights while hit points "remain above" the threshold, which recovers at exactly the threshold where this clause continues the chain; S-005 now says AT OR ABOVE. A clause that declares itself consistent with another is asserting something it cannot check from the inside, and both times it was wrong.
 
 ### S-022 · The per-rung choice maximises reward per action, not per rung  [witness: W-008]
 
