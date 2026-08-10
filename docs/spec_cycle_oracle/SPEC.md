@@ -371,11 +371,13 @@ The maximum hit points this scales against are the projected state's own (S-015)
 
 ### S-022 · The per-rung choice maximises reward per action, not per rung  [witness: W-008]
 
-The monster chosen for a rung is the one with the greatest reward per executed action, measured over the whole loop S-005 describes. It is not chosen by the integral cost of crossing that particular rung.
+**What this clause decides is the DENOMINATOR, and only the denominator.** The monster chosen for a rung is the one with the greatest reward per executed action, and the actions in that ratio are the PER-KILL LOOP actions alone (S-005): the fight and the recovery it forces. A rung's once-per-rung setup cost — the loadout change of S-020 — is **excluded**. A monster is not penalised in the ranking for needing an equip; that charge is added to the rung total after the choice is made.
 
-The actions in that ratio are the PER-KILL LOOP actions alone (S-020): the fight and the recovery it forces. A rung's once-per-rung setup cost is not in the denominator, and a monster is not penalised in the ranking for needing an equip — that charge is added to the rung total after the choice is made.
+The exclusion is the whole content. A fixed charge in a ratio's denominator is not a rate: it makes the ranking depend on how many kills the rung happens to need, so the same two monsters could rank differently at two rungs that differ only in how much experience remains. It would also make a monster's rank depend on what the character happens to be wearing when it arrives, which is a property of the previous rung, not of this choice.
 
-This is well-founded only because progress carries (S-019) and because the rate's denominator is proportional to kills. No reward is lost at a rung boundary and no fixed charge distorts the ratio, so the monster that earns fastest per action also reaches the target fastest, and S-011's criterion and this one are the same criterion. S-011's heading names that consequence rather than a second and different rule.
+**PER-KILL AND PER-RUNG ARE THE SAME CRITERION, and that is a theorem here rather than a rule.** Given a rung whose remaining requirement is a fixed positive quantity, and a loop cost with no fixed term (the exclusion above) and no rounding (S-019), the rung's loop cost is that requirement divided by the rate. Ranking by greatest rate and ranking by least rung cost are therefore the same ordering, exactly, for every catalogue. S-011's heading names that consequence; it is not a second and different rule, and no implementation can satisfy one and violate the other.
+
+It follows that the two readings W-008 exhibited cannot actually diverge, and the exhibit that made them appear to was relying on integral kills — which S-019 abolishes. **The divergence is unreachable; the exclusion is what remains, and it is reachable.** Recorded this way rather than as a choice between two live options, because a clause that rules on an impossible case carries no bits and would be right to fail an anti-vacuity check.
 
 ### S-023 · Rates are reconciled in XP per executed action  [witness: W-009]
 
