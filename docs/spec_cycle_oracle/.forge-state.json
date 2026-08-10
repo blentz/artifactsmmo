@@ -10,15 +10,14 @@
   "measured-rate-unit-undeclared",
   "rung-progress-surplus-carryover",
   "argmax-per-kill-rate-vs-rung-crossing-cost",
-  "s008-may-use-measurement-optional"
+  "s008-may-use-measurement-optional",
+  "recovery-quantum-discrete-vs-amortised"
  ],
  "contradiction_clean_runs": 0,
  "contradiction_void_runs": 0,
  "blind_rounds": 2,
  "blindness_failures": 1,
- "pending_verification": [
-  "recovery-quantum-discrete-vs-amortised"
- ],
+ "pending_verification": [],
  "phases_run": [
   "ontology",
   "underdetermination"
