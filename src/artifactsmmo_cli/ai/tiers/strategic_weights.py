@@ -22,7 +22,7 @@ among efficiency-bearing / empty slots and can never outrank a real combat
 upgrade. This module returns that budget alongside the weights.
 """
 
-from artifactsmmo_cli.ai.learning.projections import TYPICAL_FIGHT_COOLDOWN_SECONDS
+from artifactsmmo_cli.ai.learning.fight_loop_cost import TYPICAL_FIGHT_COOLDOWN_SECONDS
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.tiers.strategic_value import STRATEGIC_SCALE
 from artifactsmmo_cli.ai.world_state import WorldState

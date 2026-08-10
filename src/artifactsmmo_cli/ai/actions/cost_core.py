@@ -15,7 +15,7 @@ Three structural forms cover all 26 concrete Action subclasses:
 
 1b. **HP-deficit-dependent** cost (`Rest`): the real server cooldown scales
    with the missing-HP fraction, so `Rest` is no longer constant. Use
-   `rest_cost_pure(hp, max_hp)` = `max(3, ceil(missing_HP%)) / 10` — a full-HP
+   `rest_cost_pure(hp, max_hp)` = `rest_cooldown_seconds(...) / 10` — a full-HP
    rest stays 10.0 (matching the prior flat constant) while small deficits are
    cheap (≥ 0.3), so the planner rests instead of churning consumables.
 
@@ -48,18 +48,22 @@ all branches of `player_helpers.delete_cost` return a positive constant
 (5.0 / 25.0 / 50.0).
 """
 
+from artifactsmmo_cli.ai.rest_cooldown_core import rest_cooldown_seconds
+
 
 def rest_cost_pure(hp: int, max_hp: int) -> float:
     """Rest edge cost = real cooldown seconds / 10 (cost unit = 10s, so a
-    full-HP rest = 100s = 10.0, matching the prior flat constant). Server
-    cooldown = max(3, ceil(missing_HP%)) seconds (1s per 1% missing HP, min 3s;
-    https://docs.artifactsmmo.com/concepts/resting_and_using_items/). Dynamic so
+    full-HP rest = 100s = 10.0, matching the prior flat constant). Dynamic so
     a small deficit rests cheaply (beating a fitting consumable's 2.0) instead of
     the old flat 10.0 that made Rest always look expensive and drove wasteful
-    potion crafting."""
-    missing = max(0, max_hp - hp)
-    pct_ceil = -(-(missing * 100) // max_hp)   # ceil(missing*100/max_hp); max_hp>0
-    return max(3, pct_ceil) / 10.0
+    potion crafting.
+
+    The cooldown itself comes from `rest_cooldown_core`, which is also what the
+    projection's loop model consults. This function used to restate the published
+    formula inline while `fight_loop_cost` ignored it entirely, which is how one
+    server rule came to be modelled two incompatible ways in one codebase. The
+    ten here is this consumer's own seconds-per-unit and stays local to it."""
+    return rest_cooldown_seconds(max_hp - hp, max_hp) / 10.0
 
 
 REST_COST_MAX = rest_cost_pure(0, 1)

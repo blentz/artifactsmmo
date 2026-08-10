@@ -86,22 +86,52 @@ that could disagree with the first.
 
 ### S-004 · The unit is executed planner actions
 
-Every cost this oracle reports is a count of **executed planner actions** — one
-action, one unit. It is not a duration. No wall-clock quantity may be multiplied
-into or divided out of a reported cost, and no reported cost may be derived from a
-cooldown, a latency, or any other measure of elapsed time.
+Every cost this oracle reports is denominated in **executed planner actions**, and
+the unit of that denomination is **one Fight action**. An action whose duration is
+that of a Fight contributes one; an action that occupies the character for `k`
+times as long contributes `k`. The reported cost is therefore a count in
+fight-equivalents, never a duration, and no cost may be **reported** in seconds or
+compared against a quantity that is.
 
-This clause is load-bearing rather than pedantic: the quantity it constrains was
-denominated in seconds while named for cycles, and every consumer of it was
-therefore wrong by roughly the mean cooldown.
+Actions are taken to be uniform, and therefore to contribute exactly one, unless
+the game publishes a rule making a particular action's duration vary with its
+arguments. Where it does, that action is converted by its published duration
+divided by a Fight's, and the conversion constant is declared once (S-021).
+
+This clause is load-bearing rather than pedantic, in both directions, and each
+direction has been paid for. Reporting a duration under the name of a count made
+every consumer wrong by roughly the mean cooldown. Refusing the conversion where
+the game itself makes an action non-uniform is the same error mirrored: it prices
+a hundred-second action and a three-second action identically, and it did so on
+the one axis by which defensive equipment can pay.
 
 ### S-005 · The cost of a rung counts the whole combat loop
 
-The cost attributed to a rung counts every action the character must execute to
-cross it, not only the attacking ones. Recovery the character is forced into by the
-damage it takes counts; so does anything else the loop requires. A monster that
-must be recovered from after every kill is more expensive per kill than one that
-can be fought consecutively, and the reported cost must distinguish them.
+The cost attributed to a rung is the total fight-equivalent contribution (S-004) of
+every action the character must execute to cross it, not only the attacking ones.
+Recovery the character is forced into by the damage it takes counts; so does
+anything else the loop requires.
+
+The loop is **chained, not per-kill**. The character fights while its hit points
+remain above the recovery guard's threshold and recovers once when they do not, so
+recovery is executed once per chain of fights rather than once per fight. The
+number of fights in a chain is determined by the guard's threshold and the damage
+per fight, and the chain includes the fight that carries the character across the
+threshold — the guard is consulted before a fight, so that fight is already
+committed.
+
+A rung requires a whole number of executions of each action, but a rung's kill
+count is not generally a whole multiple of a chain. The clause therefore constrains
+the **total**, not each summand: the rung's cost is the sum over its kills of the
+per-kill contribution, where recovery's per-kill contribution is one chain's
+recovery cost divided by the fights in that chain. No summand is rounded, and the
+residue at a rung boundary is carried rather than discarded (S-019), so the total
+equals what the character executes without any individual charge being an integer.
+
+A monster that forces recovery after every kill is more expensive per kill than one
+that can be fought consecutively, and the reported cost must distinguish them; so
+must two monsters that both force recovery after every kill but leave the character
+at different depths, because their recoveries do not cost the same (S-021).
 
 ### S-006 · Already at or above target costs nothing
 
@@ -132,9 +162,19 @@ The monster chosen for a rung must be one the character can actually defeat. Tha
 verdict is taken from the shared beatability predicate (background, above), so that
 the projection and the executor never disagree about which monsters are available.
 
-Beatability is judged **from full hit points**, because recovery precedes a fight in
-the executed plan and a mid-damage verdict would be more pessimistic than what the
-character will really face.
+Beatability is judged **from full hit points**. The justification is the recovery
+guard's threshold, not an assumption that recovery precedes every fight: under the
+chained loop of S-005 the character enters most fights already damaged, so
+"recovery precedes a fight" is false as stated and must not be relied on.
+
+What is true is that the guard bounds how damaged. The character never begins a
+fight with less than the guarded fraction of its hit points, so a full-hit-point
+verdict is wrong by at most the unguarded remainder — a bounded optimism, taken
+deliberately, in exchange for a verdict that does not depend on where in a chain
+the fight falls. A verdict that did so depend would make beatability a function of
+the projection's own bookkeeping rather than of the character and the monster, and
+the executor, which consults the same predicate, has no such bookkeeping to agree
+with.
 
 ### S-010 · A rung is crossed only by a monster the character is permitted to fight
 
@@ -292,17 +332,21 @@ The loadout the character "arrives with" is the one the previous rung left it in
 
 This clause is about which arguments the oracle constructs, never about how the predicate decides.
 
-### S-021 · Recovery is one action, contributed as a continuous fraction  [witness: W-007]
+### S-021 · Recovery costs its published duration, amortised over the chain it ends  [witness: W-007]
 
-A recovery action restores the character fully, so no single fight can force more than one.
+A recovery action restores the character fully, so one ends each chain of fights (S-005) and no chain needs two.
 
-Its contribution to the cost of one kill is the continuous fraction of the usable hit-point pool that fight consumes, capped at one. The per-kill figure is therefore monotone in damage taken and is not quantised before the rung total is formed.
+**Its cost is its published duration, converted by S-004.** The game publishes that duration as a function of how much is restored: one second per one percent of the character's missing hit points, rounded up, with a floor of three seconds. The character enters a recovery having lost the damage of every fight in the chain, capped at its whole bar, since a recovery cannot restore more than everything.
 
-THE POOL IS A COMPUTABLE NUMBER, not a delegation, and here is the number: **the pool is ONE QUARTER of the rung's projected maximum hit points.** That is the hit points the character is willing to spend before recovering — it recovers on dropping below three quarters — and it is a declared constant of this model rather than a value fetched from anywhere.
+The conversion constant of S-004 is **the duration of one Fight action**, because the unit is one Fight. The oracle declares it and does not derive it from a measurement, so that the price of a rung does not move with the character whose history happens to be loaded.
 
-The constant is chosen to equal the threshold the executor's own recovery guard uses, so the projection prices the loop the executor really runs; but the oracle computes it rather than asking, because the executor's policy is not among the background oracles this spec may consult. Should the executor's threshold ever change, this constant must be changed deliberately to match — that is a maintenance obligation, not a delegation, and the two are not permitted to drift silently.
+Recovery's contribution to one kill is that converted cost divided by the number of fights in the chain. It is not quantised before the rung total is formed and it does not saturate: it is strictly monotone in damage over the whole range, from the three-second floor to the full-bar ceiling of a hundred seconds. Saturation is the specific defect this clause forbids — an oracle that charged a fixed amount for every recovery would report the same rung cost for every damage above the guard's band, and the only quantity defensive equipment moves is damage.
 
-The maximum hit points it scales are the projected state's own (S-015): the handed maximum grown by the published per-level grant, and not raised by carried gear.
+**The size of the guard's band does not enter the per-kill contribution, and no clause may make it enter.** A longer band chains more fights and ends in a proportionally longer recovery; above the three-second floor those cancel exactly, and the per-kill contribution depends only on the damage taken as a fraction of the maximum hit points. The band determines how many recovery ACTIONS are executed, which S-005 counts, and not what they cost, which this clause prices. Below the floor they do not cancel — a short chain pays the floor's unearned remainder — and there, and only there, is chaining more fights genuinely cheaper.
+
+The maximum hit points this scales against are the projected state's own (S-015): the handed maximum grown by the published per-level grant, and not raised by carried gear.
+
+**This clause and S-005 price the same executions and cannot disagree.** S-005 counts what is executed; this one prices each execution. The earlier reading, in which recovery cost a fixed one action contributed as the fraction of a hit-point pool consumed, disagreed with S-005 about rungs whose kill count did not fill a whole chain — and it disagreed over a band size that, priced in duration, does not affect the answer.
 
 ### S-022 · The per-rung choice maximises reward per action, not per rung  [witness: W-008]
 

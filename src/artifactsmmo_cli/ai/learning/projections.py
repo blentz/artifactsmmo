@@ -230,16 +230,16 @@ projection it fed was 80x the observed cost: `cheapest_path_to_level` reported
 
 Wall-clock cost per action is a real quantity and the learning store still
 records it (`action_cost` -> median actual_cooldown_seconds). It is simply not
-this projection's unit, and nothing here may divide by it. Callers that DO want
-the duration — `tiers/strategic_weights`, which combines it with move and
-deposit cooldowns into a round-trip time — take
-`TYPICAL_FIGHT_COOLDOWN_SECONDS` below. One constant serving both meanings under
-one wrong name is what made the confusion invisible."""
+this projection's unit. Callers that DO want the duration — `tiers/
+strategic_weights`, which combines it with move and deposit cooldowns into a
+round-trip time — take `fight_loop_cost.TYPICAL_FIGHT_COOLDOWN_SECONDS`. One
+constant serving both meanings under one wrong name is what made the confusion
+invisible.
 
-TYPICAL_FIGHT_COOLDOWN_SECONDS = 30.0
-"""Fallback WALL-CLOCK cooldown of one Fight, in seconds, for callers reasoning
-about elapsed time rather than cycle counts. Corroborated at 29.10s mean /
-29.85s median over 2483 observed fights in the committed traces."""
+Nothing here may divide a reported cost by a duration, with ONE declared
+exception that lives in `fight_loop_cost`: Rest is the single action whose
+cooldown is not roughly uniform, so it is priced in Fight-equivalents rather than
+counted as one. Charging it flat is what shut the defensive-gear channel."""
 
 
 def cheapest_path_to_level(
@@ -398,7 +398,7 @@ def cheapest_path_to_level(
                 # measured over that day's traces every character ran ~1 Rest per
                 # Fight (C3P0 22/21, Lor 31/29, Robby 4/4), so fight actions were
                 # ~51% of the cycles the grind actually spent. See
-                # `fight_loop_cost.rest_cycles_per_fight`.
+                # `fight_loop_cost.rest_actions_per_fight`.
                 xp_per_cycle = (game_data.xp_per_kill(code, sim_level, wisdom=wisdom)
                                 / monster_cycles)
             if xp_per_cycle > best_xp_per_cycle:

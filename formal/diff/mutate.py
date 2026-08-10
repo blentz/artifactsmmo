@@ -90,6 +90,9 @@ OPTIMAL_BUY_MIX_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "optimal_buy_mi
 BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
+REST_COOLDOWN_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "rest_cooldown_core.py"
+FIGHT_LOOP_COST_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
+                       / "fight_loop_cost.py")
 NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_buy_core.py"
 TASK_TRADE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_trade_core.py"
 APPLY_MOVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "movement.py"
@@ -5586,20 +5589,80 @@ COST_CORE_MUTATIONS = [
     ("cost_core: learned_cost_pure drop max() rate_floor clamp",
      "        return learned / max(rate, rate_floor)",
      "        return learned / rate if rate != 0 else float('-inf')"),
-    # rest_cost: drop the min-3s floor (`max(3, pct_ceil)` -> `pct_ceil`). At
-    # hp==max_hp the deficit is 0 -> pct_ceil 0 -> cost 0.0, not the pinned 0.3.
-    # Killed by the `rest_cost_pure(100, 100) == 0.3` spot-check in
-    # test_rest_cost_pure_nonneg (and the >= 0.3 floor assertion).
-    ("cost_core: rest_cost_pure drop max(3,...) min-3s floor",
-     "    return max(3, pct_ceil) / 10.0",
-     "    return pct_ceil / 10.0"),
-    # rest_cost: flip the ceil to a floor (drop the double-negation ceil trick,
-    # use plain floor division). A partial-percent deficit rounds DOWN, breaking
-    # the `rest_cost_pure(90, 100) == 1.0`/`rest_cost_pure(0, 100) == 10.0`
-    # formula spot-checks for non-divisor deficits (e.g. 95/200 -> 5.2 not 5.3).
-    ("cost_core: rest_cost_pure ceil -> floor",
-     "    pct_ceil = -(-(missing * 100) // max_hp)   # ceil(missing*100/max_hp); max_hp>0",
-     "    pct_ceil = (missing * 100) // max_hp   # ceil(missing*100/max_hp); max_hp>0"),
+]
+
+
+# The published Rest cooldown, now shared by the planner edge cost and the
+# projection's loop model. SEPARATE GROUP because these are killed by the unit
+# suite that pins the published rule, not by the Lean-mirror differential -- the
+# Lean model of `rest_cost_pure` reproduces the formula, so a mutation here moves
+# BOTH sides and the differential agrees with itself.
+REST_COOLDOWN_MUTATIONS = [
+    # Drop the min-3s floor. A zero deficit costs 0 seconds instead of the
+    # published 3, so a wasted Rest reads as free -- and in the projection, a
+    # long chain of tiny hits stops paying the floor's unearned remainder.
+    # Killed by test_the_floor_binds_below_three_percent and
+    # test_no_deficit_still_pays_the_floor.
+    ("rest_cooldown: drop max(3,...) min-3s floor",
+     "    return max(REST_MINIMUM_SECONDS, percent_ceil)",
+     "    return percent_ceil"),
+    # Flip the ceil to a floor. A partial-percent deficit rounds DOWN, so 4.1%
+    # costs 4 seconds rather than the published 5.
+    # Killed by test_the_percentage_rounds_up.
+    ("rest_cooldown: ceil -> floor",
+     "    percent_ceil = -(-(missing * 100) // max_hp)",
+     "    percent_ceil = (missing * 100) // max_hp"),
+    # Drop the upper clamp. `fight_loop_cost` asks what a Rest costs after a
+    # whole CHAIN whose damage exceeds one bar; without the clamp that Rest is
+    # priced above 100 seconds, which no Rest can cost.
+    # Killed by test_a_full_bar_is_the_ceiling.
+    ("rest_cooldown: drop the full-bar clamp",
+     "    missing = min(max(0, missing_hp), max_hp)",
+     "    missing = max(0, missing_hp)"),
+]
+
+
+# The combat loop's cost model. SEPARATE GROUP, unit-killed: these encode the
+# UNIFICATION of S-005/S-009/S-021 -- that recovery is priced by its published
+# duration and amortised over the chain it ends -- and each mutant restores a
+# specific defect that unification removed.
+FIGHT_LOOP_COST_MUTATIONS = [
+    # THE DEFECT THE UNIFICATION FIXES. Restore the superseded flat charge: one
+    # action per Rest, capped at one per fight. Every damage above the guard's
+    # band then costs the same, so better armour buys nothing in the ranking --
+    # the term saturates and the only channel defensive gear has is shut.
+    # Killed by test_the_term_does_not_saturate_so_armour_keeps_paying.
+    ("fight_loop_cost: restore the saturating flat one-action rest charge",
+     "    chain = fights_per_rest(expected_damage, max_hp)\n"
+     "    seconds = rest_cooldown_seconds(chain * expected_damage, max_hp)\n"
+     "    return seconds / (chain * TYPICAL_FIGHT_COOLDOWN_SECONDS)",
+     "    return min(1.0, expected_damage / (USABLE_HP_FRACTION * max_hp))"),
+    # Price the Rest for ONE fight's damage rather than the whole chain's, while
+    # still amortising over the chain. Recovery then looks cheaper the longer the
+    # character chains, which is the batching arbitrage the published cooldown
+    # does NOT grant above its floor.
+    # Killed by test_the_charge_is_the_published_cooldown_amortised and
+    # test_batching_is_neutral_above_the_three_second_floor.
+    ("fight_loop_cost: rest priced per fight, not per chain",
+     "    seconds = rest_cooldown_seconds(chain * expected_damage, max_hp)",
+     "    seconds = rest_cooldown_seconds(expected_damage, max_hp)"),
+    # Drop the committed crossing fight from the chain. The guard is read BEFORE
+    # a fight, so the character always takes the fight that carries it across;
+    # `pool // damage` prices a tidier loop the executor does not run, and at
+    # damage above the band it yields a chain of zero -- a division by zero in
+    # the amortisation rather than the honest single fight.
+    # Killed by test_the_guard_sets_the_chain_length.
+    ("fight_loop_cost: chain drops the committed crossing fight",
+     "    return int(USABLE_HP_FRACTION * max_hp // expected_damage) + 1",
+     "    return int(USABLE_HP_FRACTION * max_hp // expected_damage)"),
+    # Convert by a wrong unit. The seconds-per-unit is a Fight's own duration
+    # BECAUSE the unit is one Fight; using the Rest floor instead reports a cost
+    # in three-second units while calling it fight-equivalents -- exactly the
+    # named-for-one-thing-denominated-in-another defect S-004 exists to forbid.
+    # Killed by test_a_full_bar_rest_costs_more_than_three_fights.
+    ("fight_loop_cost: convert by the rest floor instead of a fight's duration",
+     "    return seconds / (chain * TYPICAL_FIGHT_COOLDOWN_SECONDS)",
+     "    return seconds / (chain * 3.0)"),
 ]
 
 
@@ -6502,6 +6565,10 @@ def _collect_all_groups() -> None:
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
     run_group(COST_CORE_SRC, COST_CORE_SENTINEL_MUTATIONS,
               "tests/test_ai/test_cost_core.py", survivors)
+    run_group(REST_COOLDOWN_CORE_SRC, REST_COOLDOWN_MUTATIONS,
+              "tests/test_ai/test_rest_cooldown_core.py", survivors)
+    run_group(FIGHT_LOOP_COST_SRC, FIGHT_LOOP_COST_MUTATIONS,
+              "tests/test_ai/test_fight_loop_cost.py", survivors)
     run_group(NPC_BUY_CORE_SRC, NPC_BUY_MUTATIONS,
               "formal/diff/test_npc_buy_inventory_diff.py", survivors)
     run_group(TASK_TRADE_CORE_SRC, TASK_TRADE_CORE_MUTATIONS,

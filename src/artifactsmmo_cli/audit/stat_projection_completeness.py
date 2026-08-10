@@ -95,7 +95,7 @@ UNPRICED: dict[str, str] = {
     ),
     "lifesteal": (
         "Heals a share of attack on a crit, so it reduces the damage taken per "
-        "fight and therefore `rest_cycles_per_fight` — the same channel armour "
+        "fight and therefore `rest_actions_per_fight` — the same channel armour "
         "already pays through. Expressible in actions today; blocked only on "
         "`expected_damage_per_fight` modelling crits. Scheduled: no increment "
         "assigned."

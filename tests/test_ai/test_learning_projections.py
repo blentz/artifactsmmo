@@ -8,8 +8,10 @@ from sqlalchemy.exc import OperationalError
 from sqlmodel import Session
 
 import artifactsmmo_cli.ai.learning.projections as proj
+from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemStats
+from artifactsmmo_cli.ai.learning.fight_loop_cost import TYPICAL_FIGHT_COOLDOWN_SECONDS
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.projections import (
@@ -414,10 +416,15 @@ class TestCheapestPathToLevel:
         assert plan.segments[0].monster_code == "pushover"
         assert plan.segments[0].cycles_per_kill == 1.0
 
-    def test_forced_rest_doubles_the_projected_cost(self, monkeypatch, tmp_path):
-        """The magnitude, not just the ordering: a monster whose damage exceeds
-        the usable HP band costs two cycles per kill, so the level costs twice
-        what the bare fight count says."""
+    def test_a_forced_full_bar_rest_costs_more_than_three_fights(
+            self, monkeypatch, tmp_path):
+        """The magnitude, not just the ordering.
+
+        This monster takes the character's whole bar, so recovery is a 100-second
+        Rest — 3.33 fights' worth of elapsed time against a ~30s Fight. The level
+        therefore costs 4.33x the bare fight count, not the 2.0x the superseded
+        flat-one-action-per-rest model reported. Pinning 2.0 here was pinning the
+        cap that shut the defensive-gear channel."""
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"chicken": 1})
@@ -429,8 +436,12 @@ class TestCheapestPathToLevel:
         store.close()
 
         xp_per_kill = gd.xp_per_kill("chicken", 1, wisdom=state.wisdom)
-        assert plan.segments[0].cycles_per_kill == 2.0
-        assert plan.total_cycles == pytest.approx(100 / xp_per_kill * 2)
+        # Premise: the damage really does take the whole bar, or the rest term
+        # is not at its ceiling and this measures some milder regime instead.
+        assert expected_damage_per_fight(state, gd, "chicken") >= state.max_hp
+        expected = 1.0 + 100 / TYPICAL_FIGHT_COOLDOWN_SECONDS
+        assert plan.segments[0].cycles_per_kill == pytest.approx(expected)
+        assert plan.total_cycles == pytest.approx(100 / xp_per_kill * expected)
 
     def test_observed_and_formula_branches_share_one_unit(self, monkeypatch, tmp_path):
         """Both arms of the per-monster loop must yield xp per CYCLE.

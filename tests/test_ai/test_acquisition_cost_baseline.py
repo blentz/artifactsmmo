@@ -174,7 +174,7 @@ def test_wisdom_makes_a_COMPLETING_walk_cheaper(game_data) -> None:
     Given a walk that COMPLETES, wisdom pays: 222.2 cycles -> 200.0.
 
     Asserts the DIRECTION only. A real item bundles stats — the vest also
-    carries resistance and hp, which move `rest_cycles_per_fight` — so
+    carries resistance and hp, which move `rest_actions_per_fight` — so
     attributing the whole 10% to wisdom would be a claim this test cannot
     support."""
     state = scenario_state(SCENARIOS["l12_deep_chain_grind"], game_data)

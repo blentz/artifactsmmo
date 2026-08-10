@@ -1,69 +1,132 @@
-"""Cycles one kill really costs — the Fight plus the Rest its damage forces."""
+"""What one kill really costs — the Fight plus the share of a Rest it forces."""
+
+from itertools import pairwise
 
 import pytest
 
 from artifactsmmo_cli.ai.learning.fight_loop_cost import (
     FIGHT_ACTIONS_PER_KILL,
+    TYPICAL_FIGHT_COOLDOWN_SECONDS,
     cycles_per_kill,
-    rest_cycles_per_fight,
+    fights_per_rest,
+    rest_actions_per_fight,
 )
+from artifactsmmo_cli.ai.rest_cooldown_core import rest_cooldown_seconds
 from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
 
 
 def test_no_damage_forces_no_rest():
     """A monster that costs nothing keeps the kill priced at the bare Fight —
     which is what the projection charged for EVERY monster until 2026-08-07."""
-    assert rest_cycles_per_fight(0, 280) == 0.0
+    assert rest_actions_per_fight(0, 280) == 0.0
     assert cycles_per_kill(0, 280) == FIGHT_ACTIONS_PER_KILL
-
-
-def test_damage_beyond_the_usable_band_saturates_at_one_rest():
-    """One Rest restores everything, so no single fight can ever force two. The
-    cap is the semantics of resting, not a safety clamp."""
-    assert rest_cycles_per_fight(10_000, 280) == 1.0
-    assert cycles_per_kill(10_000, 280) == 2.0
-
-
-def test_light_damage_lets_fights_chain():
-    """Below the rest threshold several fights fit between rests, so the rest
-    term is a FRACTION — the regime armour moves a character into."""
-    max_hp = 1000
-    usable = (1.0 - CRITICAL_HP_FRACTION) * max_hp   # 250
-    assert rest_cycles_per_fight(25, max_hp) == pytest.approx(0.1)
-    assert rest_cycles_per_fight(int(usable), max_hp) == pytest.approx(1.0)
-    assert cycles_per_kill(25, max_hp) == pytest.approx(1.1)
-
-
-def test_rest_term_is_monotone_in_damage():
-    """More damage never costs fewer rests — the property that makes better
-    armour rank better rather than merely differently."""
-    prev = -1.0
-    for damage in range(0, 400, 10):
-        cur = rest_cycles_per_fight(damage, 280)
-        assert cur >= prev
-        prev = cur
-
-
-def test_rest_term_is_monotone_in_max_hp():
-    """A bigger HP pool absorbs the same damage with fewer rests."""
-    assert (rest_cycles_per_fight(100, 200) >= rest_cycles_per_fight(100, 400)
-            >= rest_cycles_per_fight(100, 800))
-
-
-def test_the_live_2026_08_07_boards_all_saturate():
-    """The three characters measured that day all took more than the usable band
-    in one fight, which is why each was observed resting after nearly every
-    fight (0.94-1.00 rests/fight)."""
-    assert rest_cycles_per_fight(462, 525) == 1.0   # Robby vs pig
-    assert rest_cycles_per_fight(144, 280) == 1.0   # C3P0 vs red_slime
-    assert rest_cycles_per_fight(108, 280) == 1.0   # Lor  vs red_slime
 
 
 def test_degenerate_max_hp_is_not_free():
     """A zero/negative HP pool must not read as a costless fight — it is the one
     case where the ratio is undefined, and 'free' is the dangerous answer."""
-    assert rest_cycles_per_fight(10, 0) == 0.0
-    assert rest_cycles_per_fight(-5, 280) == 0.0
+    assert rest_actions_per_fight(10, 0) == 0.0
+    assert rest_actions_per_fight(-5, 280) == 0.0
+
+
+def test_a_full_bar_rest_costs_more_than_three_fights():
+    """The ceiling of the term, and the number the superseded model called ONE.
+
+    A character rested off a whole bar takes 100 seconds to do it. Against a
+    ~30s Fight that is 3.33 fights' worth of elapsed time, and pricing it at a
+    single action understated the heaviest loops by that whole factor."""
+    assert rest_actions_per_fight(10_000, 280) == pytest.approx(100 / 30)
+    assert cycles_per_kill(10_000, 280) == pytest.approx(1 + 100 / 30)
+
+
+def test_the_term_does_not_saturate_so_armour_keeps_paying():
+    """THE DEFECT THE UNIFICATION FIXES.
+
+    The superseded model capped the rest term at one, so once a fight took more
+    than the usable band EVERY heavier fight cost the same and better armour
+    bought exactly nothing in the ranking. Damage above the band must still be
+    strictly cheaper to reduce."""
+    band = int((1.0 - CRITICAL_HP_FRACTION) * 280)
+    over = [band + 20, band + 60, band + 120, band + 200]
+    # Premise: every one of these is past the point the old model saturated, so
+    # this cannot pass vacuously by testing the sub-band regime.
+    assert all(d > band for d in over)
+    costs = [rest_actions_per_fight(d, 280) for d in over]
+    assert all(a < b for a, b in pairwise(costs))
+
+
+def test_rest_term_is_monotone_in_damage():
+    """More damage never costs less recovery — the property that makes better
+    armour rank better rather than merely differently."""
+    prev = -1.0
+    for damage in range(0, 400, 10):
+        cur = rest_actions_per_fight(damage, 280)
+        assert cur >= prev
+        prev = cur
+
+
+def test_rest_term_is_monotone_in_max_hp():
+    """A bigger HP pool absorbs the same damage with less recovery."""
+    assert (rest_actions_per_fight(100, 200) >= rest_actions_per_fight(100, 400)
+            >= rest_actions_per_fight(100, 800))
+
+
+def test_the_live_2026_08_07_boards_cost_what_their_rests_took():
+    """The three characters measured that day each rested after nearly every
+    fight — one ACTION, which the capped model reproduced exactly and which is
+    why it looked calibrated. Those rests took 88, 52 and 39 seconds."""
+    assert rest_actions_per_fight(462, 525) == pytest.approx(88 / 30)   # Robby/pig
+    assert rest_actions_per_fight(144, 280) == pytest.approx(52 / 30)   # C3P0/red_slime
+    assert rest_actions_per_fight(108, 280) == pytest.approx(39 / 30)   # Lor/red_slime
+    # Premise: all three exceed the usable band, so all three are cases the
+    # superseded model priced identically at 1.0. The spread here is the point.
+    band = 1.0 - CRITICAL_HP_FRACTION
+    assert band * 525 < 462
+    assert band * 280 < 144
+    assert band * 280 < 108
+
+
+def test_the_guard_sets_the_chain_length():
+    """The character fights while its HP is still above the guard, so it commits
+    to the fight that CARRIES it across — one more than the pool strictly pays
+    for. Modelling the tidier pool/damage would price a loop nobody executes."""
+    max_hp = 1000
+    usable = (1.0 - CRITICAL_HP_FRACTION) * max_hp   # 250
+    assert fights_per_rest(25, max_hp) == 11          # 250//25 = 10, plus the crossing one
+    assert fights_per_rest(int(usable), max_hp) == 2
+    assert fights_per_rest(10_000, max_hp) == 1       # never fewer than one
+
+
+def test_batching_is_neutral_above_the_three_second_floor():
+    """THE UNIFICATION'S LOAD-BEARING FACT.
+
+    One long rest after many fights and one short rest after each cost the SAME
+    seconds, because the cooldown is proportional to HP recovered. So the pool
+    size — the disputed constant — cancels out of the per-fight figure, and the
+    exact executed action count and the amortised fraction cannot disagree about
+    what a rung costs in time.
+
+    Checked by pricing the same damage under chains of very different lengths:
+    at a fixed damage-to-bar ratio the per-fight cost is invariant."""
+    per_fight = [rest_actions_per_fight(d, d * 40) for d in (5, 10, 20, 50)]
+    # Premise: these really are different batch sizes, or invariance is trivial.
+    chains = [fights_per_rest(d, d * 40) for d in (5, 10, 20, 50)]
+    assert len(set(chains)) == 1 and chains[0] > 1
+    # Same ratio, same chain, same price — and the price is the ratio in seconds.
+    assert per_fight == [pytest.approx(per_fight[0])] * 4
+
+
+def test_the_charge_is_the_published_cooldown_amortised():
+    """No second model of resting. The term is `rest_cooldown_seconds` for the
+    whole chain's damage, divided by the chain and by a Fight's own duration."""
+    damage, max_hp = 37, 620
+    chain = fights_per_rest(damage, max_hp)
+    expected = rest_cooldown_seconds(chain * damage, max_hp) / (
+        chain * TYPICAL_FIGHT_COOLDOWN_SECONDS)
+    assert rest_actions_per_fight(damage, max_hp) == pytest.approx(expected)
+    # Premise: a real chain, not the degenerate one-fight case where any
+    # amortisation formula agrees with any other.
+    assert chain > 1
 
 
 def test_threshold_is_the_guard_the_runtime_rests_on():
@@ -72,6 +135,5 @@ def test_threshold_is_the_guard_the_runtime_rests_on():
     nobody executes."""
     max_hp = 400
     usable = (1.0 - CRITICAL_HP_FRACTION) * max_hp
-    just_under = rest_cycles_per_fight(int(usable) - 1, max_hp)
-    assert just_under < 1.0
-    assert rest_cycles_per_fight(int(usable) + 1, max_hp) == 1.0
+    assert fights_per_rest(int(usable) - 1, max_hp) == 2
+    assert fights_per_rest(int(usable) + 1, max_hp) == 1
