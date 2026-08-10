@@ -449,12 +449,21 @@ def cheapest_path_to_level(
             cycles_per_kill=best_cycles_per_kill,
         ))
         sim_level += 1
-        # S-019 — PROGRESS CARRIES, and it already did. `cycles_for_this_level` is a
-        # CONTINUOUS quotient with no per-rung rounding, and the total is one sum
-        # rounded once by the caller, so no kill is ever rounded up and no surplus is
-        # discarded at a level boundary. That is exactly equivalent to carrying the
-        # overshoot forward. Only the first rung starts from the character's actual
-        # progress; every later rung needs a whole level's worth.
+        # S-019 — NO SURPLUS IS EVER FORMED. `cycles_for_this_level` is a CONTINUOUS
+        # quotient with no per-rung rounding, so each rung's requirement is met
+        # exactly and there is nothing left over to carry. Only the first rung starts
+        # from the character's actual progress; every later rung needs a whole
+        # level's worth.
+        #
+        # This is NOT "exactly equivalent to carrying the overshoot", which is what
+        # this comment used to claim. The physical climb executes WHOLE actions, so
+        # the action that crosses a boundary earns its award at the DEPARTING rung's
+        # rate and spills the excess into the next rung, where this model charges it
+        # at the ARRIVING rung's rate. The two agree only if the rates agree, and
+        # `xp_per_kill` carries the character level in both its base term and its
+        # penalty step, so they essentially never do. The gap is bounded by the
+        # excess of one action per boundary and is declared in S-019 rather than
+        # modelled: closing it needs the per-rung accumulator this design avoids.
         #
         # Do not "fix" this by taking integral kills per rung. That would introduce
         # the discarded surplus S-019 forbids and over-price a full climb by roughly
