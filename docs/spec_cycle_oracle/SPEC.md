@@ -207,9 +207,39 @@ Equipment conditioned on a minimum character level and satisfied by the newly re
 
 This clause is about the state the oracle CONSTRUCTS for itself between rungs. It does not enlarge the input domain (S-002) and does not change how the beatability predicate decides.
 
-The projected state's OWN attributes — the maximum hit points every later clause computes from, including S-021's pool — carry the published per-level growth and NOTHING ELSE. Gear reaches the beatability predicate as the loadout S-020 hands it, and it does not additionally alter the projected state's totals. The reason is not economy, it is coherence: the character state's totals are server-authoritative figures that ALREADY include whatever is worn, so adding a carried piece's bonus to them would count that piece twice — once in the total and once in the loadout. A rung that unlocks a helm granting maximum hit points therefore changes which monsters are beatable, and does not change the pool.
+The projected state's OWN attributes are given by a closed formula and by nothing else. At a rung of level `k`, reached from a handed state of level `L0`, the projected maximum hit points are exactly `handed_maximum + G × (k − L0)`, where `G` is the published per-level grant, and likewise for every other published per-level grant. Current hit points equal that projected maximum (S-009 judges from full).
 
-### S-016 · A measurement supersedes the prediction, it does not merely may  [witness: W-002]
+**Gear never enters that formula, in EITHER direction.** A piece the re-evaluated loadout adds does not raise the projected maximum, and — this is the harder half — a piece the re-evaluated loadout DISPLACES does not lower it either. The formula's only inputs are the handed total and the number of levels gained.
+
+That is a real and accepted imprecision, stated rather than hidden: after a rung swaps a worn helm for a better one, the projected maximum still credits the departed helm's contribution, because the handed total was server-authoritative and already contained it. The alternative — re-deriving the total from the rung's loadout — would require decomposing the handed total into a base and its worn contributions, and S-002 admits no such decomposition: the oracle is given totals, never a base. A rule that cannot be evaluated from the inputs is not a rule.
+
+So gear changes which monsters are beatable (through the loadout S-020 hands the predicate) and never changes the pool. Where the two disagree about what is worn, the pool is the one that is stale, deliberately.
+
+### S-016 · WITHDRAWN — S-017 already answers W-002  [witness: W-002]
+
+**Withdrawn after failing Phase 2c's closure check twice.** The id is retained and
+never reused; W-002 stays in the ledger.
+
+The check was right both times. W-002's exhibit is a rung whose published award is
+zero, and this clause decided nothing there *by its own terms* — it fixed only THAT
+a measurement is consulted and deferred the value to S-017, which restates that
+measurement to zero and shuts the door. Rewriting it a third time to claim the
+closure would have been arguing with a correct verdict.
+
+What survives is S-017 and S-018 together: a measurement is present only on
+positive evidence (S-018), and once present it is restated for the rung before use
+(S-017). Neither leaves room for an oracle to ignore a measurement it holds, which
+was the hole in S-008's "may" that this clause was written for. The hole is closed;
+this clause is not what closes it.
+
+Recorded rather than deleted because a withdrawn clause is evidence — the next
+reader should be able to see that this question was asked, answered elsewhere, and
+that a plausible-looking clause spent two rounds failing to do work another clause
+had already done.
+
+The original text follows, struck, for the record:
+
+> Where the observations contain a measured rate for a monster (S-018 fixes what that means), the oracle uses it in place of the predicted one for that monster. This is not discretionary.
 
 Where the observations contain a measured rate for a monster (S-018 fixes what that means), the oracle uses it in place of the predicted one for that monster. This is not discretionary.
 
@@ -268,7 +298,9 @@ A recovery action restores the character fully, so no single fight can force mor
 
 Its contribution to the cost of one kill is the continuous fraction of the usable hit-point pool that fight consumes, capped at one. The per-kill figure is therefore monotone in damage taken and is not quantised before the rung total is formed.
 
-THE POOL IS A COMPUTABLE NUMBER, not a delegation. It is a declared fraction of the rung's projected maximum hit points — the hit points the character is willing to spend before recovering — and that fraction is a constant of this model, stated once and used everywhere. It is deliberately the same threshold the executor's own recovery guard uses, so the projection prices the loop the executor really runs; but the oracle computes it rather than asking anybody, because the executor's policy is not among the background oracles this spec is permitted to consult.
+THE POOL IS A COMPUTABLE NUMBER, not a delegation, and here is the number: **the pool is ONE QUARTER of the rung's projected maximum hit points.** That is the hit points the character is willing to spend before recovering — it recovers on dropping below three quarters — and it is a declared constant of this model rather than a value fetched from anywhere.
+
+The constant is chosen to equal the threshold the executor's own recovery guard uses, so the projection prices the loop the executor really runs; but the oracle computes it rather than asking, because the executor's policy is not among the background oracles this spec may consult. Should the executor's threshold ever change, this constant must be changed deliberately to match — that is a maintenance obligation, not a delegation, and the two are not permitted to drift silently.
 
 The maximum hit points it scales are the projected state's own (S-015): the handed maximum grown by the published per-level grant, and not raised by carried gear.
 

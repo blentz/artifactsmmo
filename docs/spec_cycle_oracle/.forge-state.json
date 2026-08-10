@@ -4,14 +4,14 @@
  "void_rounds": 1,
  "seen": [
   "what-counts-as-a-present-measurement",
-  "measurement-validity-across-character-levels"
+  "measurement-validity-across-character-levels",
+  "projected-state-levelup-growth-not-applied"
  ],
  "contradiction_clean_runs": 0,
  "contradiction_void_runs": 0,
  "blind_rounds": 2,
  "blindness_failures": 1,
  "pending_verification": [
-  "projected-state-levelup-growth-not-applied",
   "s008-may-use-measurement-optional",
   "rung-progress-surplus-carryover",
   "beatability-consult-loadout-worn-vs-wearable",
