@@ -171,6 +171,7 @@ char = {level:10, xp:0, xp_max:150, hp:130, max_hp:130, attack:20, defense:5, wo
 
 **Resolution:** `RATIFIED -> C`
 **Because:** Neither branch as posed. The adversaries recommended consulting only WORN gear, which is the cleaner contract and would be wrong here: the gear branch projects a candidate by placing the item in INVENTORY, so an oracle that ignored carried gear would make every gear candidate project identically to the trunk -- a bug this codebase has already had and documented. Author kept the carried-gear reading and closed the hole the other way: the equip is an executed action and must be paid for. Today it is free, which lets the projection take an upgrade the executor would have to spend a cycle on.
+**The DECISION stands; B's arithmetic does not.** Both halves — the predicate sees carried gear, and the equip is paid for — are exactly what S-020 fixes, and that is what this entry ratifies. But B priced the equip at ONE executed action, and the published rules give a different number: a slot that gains a piece is one ITEM MOVEMENT, a slot that swaps is TWO (the server refuses to equip into an occupied slot, `491`), and a movement costs three seconds — about a tenth of a Fight, not a whole one. B's totals also predate S-021's published-duration recovery. So a harness must assert the decision and the equip's price (one movement here, since the shield slot is empty: 3 s = 0.1 Fight), not B's literal 9/10/5.
 **Became:** `S-020` — The consult sees carried gear, and the equip is charged
 
 ---
@@ -193,9 +194,13 @@ char = {level 5, xp 0, xp_needed 300, max_hp 100}; target = 6; observations = {}
 | **A** | A amortises recovery continuously (a full-heal rest is 1 action, charged as dmg/max_hp per kill): ogre 1.51 x 9 = 13.59 -> 14; dire_elk 1.34 x 11 = 14.74 -> 15. Result: rungs = [{level 6, monster 'ogre', cost 14}], total_cost = 14. |
 | **B** | B charges recovery in whole actions at its real cadence -- one rest every floor(max_hp/dmg) kills: ogre floor(100/51)=1 -> 2.0 x 9 = 18; dire_elk floor(100/34)=2 -> 1.5 x 11 = 16.5 -> 17. Result: rungs = [{level 6, monster 'dire_elk', cost 17}], total_cost = 17. |
 
-**Resolution:** `RATIFIED -> A`
-**Because:** Both readings satisfy S-005's 'must distinguish them' and they invert the winner between two monsters, so the clause as written did not pick one. Author chose the continuous fraction, which is what the implementation already computes: it is monotone in damage, so armour that merely reduces damage without removing a rest still improves the price, where a step function on floor(max_hp/damage) would hide that until a whole rest disappears.
-**Became:** `S-021` — Recovery is one action, contributed as a continuous fraction
+**Resolution:** `RATIFIED -> C` (superseding an earlier `RATIFIED -> A`)
+**Because:** The question was continuous against stepped, and the answer is still CONTINUOUS, for the reason first given: a continuous charge is monotone in damage, so armour that reduces damage without removing a whole recovery still improves the price, where a step on `floor(max_hp/damage)` hides that until a whole recovery disappears. Armour's only channel into this objective is damage, and a step function closes it for most of its range.
+
+**But neither exhibited output is legal now, and the ratified WINNER has flipped.** A priced a recovery as one action charged at `damage / max_hp`; recovery is priced by its PUBLISHED duration (one second per percent of the bar restored, rounded up, floor three, cap one bar) converted at thirty seconds to the Fight. On this exhibit, with a quarter band both monsters chain a single fight: ogre restores 51% for 51 s, a share of 1.7 Fights, a loop of 2.7 actions per kill and a rate of 12.5926 XP per action; dire_elk restores 34% for 34 s, a share of 1.1333, a loop of 2.1333 and a rate of 13.125. The rung's 300 XP therefore costs **23.8235 actions on ogre and 22.8571 on dire_elk**, so a harness must assert `rungs = [{level 6, monster 'dire_elk', cost 22.8571}], total_cost = 23` — dire_elk, which is A's LOSER and B's winner at a cost neither exhibited.
+
+That the winner moved is the finding, not an embarrassment: A's model saturated, and the published-duration model is what lets a heavier hit cost proportionally more. Recorded here so the entry cannot be read as ratifying `damage / max_hp` itself.
+**Became:** `S-021` — Recovery is priced by its published duration and contributed as a continuous share (heading retained for its permanent id; "one action" was A's model and is no longer the rule)
 
 ---
 
@@ -249,6 +254,7 @@ Same catalogue and character as above; target level 6; observations = [(wolf, 12
 
 **Resolution:** `RATIFIED -> C`
 **Because:** S-008 required the two rates to agree on a unit without ever saying which unit, which is the same shape of defect S-004 exists to memorialise -- a quantity denominated in one unit and read as another. Author named the unit rather than adding a per-record unit field: enlarging the input domain for a field nothing currently produces buys robustness against a store change that has not happened, at the cost of a hole in S-002 today.
+**What is ratified here is the UNIT, not the exhibit's costs.** A's 50 and B's 27 were computed under the recovery model S-021 has since replaced, so a harness must assert that a measured rate is read as XP per executed loop action — and that a prediction is divided by the loop length once, never multiplied back up — rather than either total.
 **Became:** `S-023` — Rates are reconciled in XP per executed action
 
 ---
