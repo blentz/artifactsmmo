@@ -5,6 +5,7 @@ from itertools import pairwise
 
 import pytest
 
+from artifactsmmo_cli.ai.combat import _element_damage
 from artifactsmmo_cli.ai.learning.fight_loop_cost import (
     FIGHT_ACTIONS_PER_KILL,
     TYPICAL_FIGHT_COOLDOWN_SECONDS,
@@ -26,16 +27,17 @@ def test_no_damage_forces_no_rest():
     assert cycles_per_kill(0, 280) == FIGHT_ACTIONS_PER_KILL
 
 
-@pytest.mark.parametrize("dmg", [0, -1, -8, -500])
-def test_a_non_positive_damage_forces_no_rest_either(dmg):
-    """The condition is NOT POSITIVE, not zero. The guard argument -- it never
-    trips, so no fight crosses it and no chain exists for a recovery to end --
-    does not distinguish zero from negative, and stopping at zero leaves the one
-    input where the retained three-second floor could still be claimed. Charging
-    that floor to a monster costing nothing changes which monster a rung NAMES,
-    not merely its price."""
-    assert rest_actions_per_fight(dmg, 285) == 0.0
-    assert cycles_per_kill(dmg, 285) == FIGHT_ACTIONS_PER_KILL
+def test_damage_is_never_negative_so_zero_is_the_boundary():
+    """Damage is a count of hit points LOST: per-element it is output less block,
+    floored at zero, and a fight totals that over a positive number of rounds. A
+    negative is not a smaller damage, it is HEALING -- a restore effect on another
+    axis, which this module is never handed and does not price. So zero is the end
+    of the domain, not a midpoint, and the `<= 0` guard below is a totality
+    backstop rather than a priced case."""
+    assert _element_damage(10, 0, 500) == 0
+    assert _element_damage(0, 0, 0) == 0
+    assert rest_actions_per_fight(0, 285) == 0.0
+    assert cycles_per_kill(0, 285) == FIGHT_ACTIONS_PER_KILL
 
 
 def test_degenerate_max_hp_is_not_free():
