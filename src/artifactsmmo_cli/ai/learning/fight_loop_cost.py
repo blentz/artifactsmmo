@@ -103,6 +103,15 @@ def fights_per_rest(expected_damage: int, max_hp: int) -> int:
     below the threshold rather than exactly on it. Modelling the tidier
     `pool / damage` would price a loop the executor does not run.
 
+    That boundary also carries the per-kill cost's MONOTONICITY, which is not
+    obvious and was found by ratifying the spec rather than by a failing run.
+    Chain length is a step function of damage, so where the two readings differ --
+    a damage that divides the band exactly -- the tidier one shortens the chain by
+    a whole fight and drops the per-kill share BELOW that of a slightly smaller
+    damage. A heavier monster would then be cheaper per kill, and better armour
+    could raise a rung's price. Swept over every whole bar from 20 to 2500 hit
+    points and every whole damage, `rest_actions_per_fight` never decreases.
+
     Never returns less than one: whatever the damage, the character always takes
     at least one fight from full before any recovery is due. `expected_damage`
     and `max_hp` must both be positive — a fight that costs nothing forces no

@@ -11,7 +11,10 @@ from artifactsmmo_cli.ai.learning.fight_loop_cost import (
     fights_per_rest,
     rest_actions_per_fight,
 )
-from artifactsmmo_cli.ai.rest_cooldown_core import rest_cooldown_seconds
+from artifactsmmo_cli.ai.rest_cooldown_core import (
+    REST_MINIMUM_SECONDS,
+    rest_cooldown_seconds,
+)
 from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
 
 
@@ -157,3 +160,37 @@ def test_threshold_is_the_guard_the_runtime_rests_on():
     usable = (1.0 - CRITICAL_HP_FRACTION) * max_hp
     assert fights_per_rest(int(usable) - 1, max_hp) == 2
     assert fights_per_rest(int(usable) + 1, max_hp) == 1
+
+
+def test_a_chain_that_lands_exactly_on_the_guard_takes_one_more_fight():
+    """The boundary the whole cost's MONOTONICITY rests on. At max_hp 200 the
+    usable pool is 50, so a damage of 25 divides it exactly. The guard reads hit
+    points BEFORE a fight and trips only BELOW the threshold, so the character
+    commits a third fight rather than stopping on the line."""
+    assert fights_per_rest(25, 200) == 3
+    assert fights_per_rest(24, 200) == 3
+    assert fights_per_rest(26, 200) == 2
+
+
+def test_the_per_kill_recovery_share_never_decreases_with_damage():
+    """Found by ratifying the spec, not by a failing run. Chain length is a STEP
+    function of damage, so the wrong boundary above would let a heavier monster
+    cost LESS per kill -- meaning better armour could raise a rung's price, which
+    inverts the one channel defensive gear has into the objective."""
+    for max_hp in (20, 97, 100, 101, 200, 512, 1000):
+        shares = [rest_actions_per_fight(d, max_hp)
+                  for d in range(1, max_hp + 1)]
+        assert all(b >= a for a, b in pairwise(shares)), max_hp
+
+
+def test_the_three_second_floor_is_unreachable_at_the_declared_band():
+    """Pins a regime the published rule defines and this model cannot enter. The
+    chain ends at the guard, so accumulated damage is at least the band -- a
+    quarter of the bar -- and the floor guarantees only three seconds. Retained in
+    the rule because a smaller band would reach it; asserted here so nobody
+    'optimises' the floor away as dead code without noticing why it is dead."""
+    for max_hp in (20, 100, 337, 2500):
+        for dmg in range(1, max_hp + 1):
+            chain = fights_per_rest(dmg, max_hp)
+            missing = min(chain * dmg, max_hp)
+            assert rest_cooldown_seconds(missing, max_hp) > REST_MINIMUM_SECONDS
