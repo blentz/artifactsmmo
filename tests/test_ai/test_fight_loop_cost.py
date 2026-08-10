@@ -197,24 +197,83 @@ def test_the_three_second_floor_is_unreachable_at_the_declared_band():
             assert rest_cooldown_seconds(missing, max_hp) > REST_MINIMUM_SECONDS
 
 
+# REAL character bars, deliberately not 100. ROBBY is level 24 with 535 hit points,
+# R2D2 and HAL are both level 12 with 315 and 285. None is divisible by four, so
+# every one of them lands OFF the quarter lattice -- which is the structure a bar of
+# 100 cannot exhibit, and 100 is what this module's exhibits used for four rounds.
+LIVE_BARS = (535, 315, 285)
+
+
+def test_a_bar_of_one_hundred_is_blind_to_what_this_module_decides():
+    """Why the constants below are real bars. At 100 one hit point is one percent,
+    so the published per-second rounding is a NO-OP: no two adjacent damages price
+    the same. Real bars are full of such ties, and it is those ties that the
+    monotonicity and band-independence claims are really about."""
+    def ties(max_hp):
+        shares = [rest_actions_per_fight(d, max_hp) for d in range(1, max_hp + 1)]
+        return sum(a == b for a, b in pairwise(shares))
+
+    assert ties(100) == 0
+    assert ties(535) == 382 and ties(315) == 176 and ties(285) == 150
+
+
 def test_the_guard_band_is_a_ratio_not_a_floored_hit_point_count():
     """The projection's band must be exactly the EXECUTOR's guard, which asks
     `hp / max_hp < CRITICAL_HP_FRACTION` -- a ratio, never a whole-hit-point
     threshold. The natural integer implementation floors the threshold instead,
-    which widens the band to `max_hp - floor(0.75 * max_hp)`.
+    widening the band to `max_hp - floor(0.75 * max_hp)`.
 
-    Invisible at a bar of 100, where a quarter is whole -- and S-015's five-point
-    grant puts three bars in four off that lattice. Swept over every whole bar from
-    20 to 2500, the two readings disagree on chain length in 12351 pairs and on the
-    per-kill share in 12186 of them, so this is not a rounding curiosity: it moves
-    the price and can move the monster a rung names.
-    """
-    max_hp = 21
+    Pinned on ROBBY's real 535, where the exact quarter is 133.75 and the floored
+    band is 134. A bar of 100 has a whole quarter and cannot tell the two apart at
+    any damage at all."""
+    max_hp = 535
     exact_band = (1.0 - CRITICAL_HP_FRACTION) * max_hp
-    floored_threshold_band = max_hp - math.floor(CRITICAL_HP_FRACTION * max_hp)
-    assert exact_band == 5.25 and floored_threshold_band == 6
+    floored_band = max_hp - math.floor(CRITICAL_HP_FRACTION * max_hp)
+    assert exact_band == 133.75 and floored_band == 134
 
-    assert fights_per_rest(1, max_hp) == 6
-    assert int(floored_threshold_band // 1) + 1 == 7
+    # damage 134 divides the floored band exactly and not the true one: the whole
+    # chain doubles, and with it the number of kills a single recovery is spread
+    # over.
+    assert fights_per_rest(134, max_hp) == 1
+    assert int(floored_band // 134) + 1 == 2
+    assert rest_actions_per_fight(134, max_hp) == pytest.approx(0.866667, abs=1e-6)
 
-    assert rest_actions_per_fight(1, max_hp) == pytest.approx(0.161111, abs=1e-6)
+    # damage 67 likewise: chain 2 against 3.
+    assert fights_per_rest(67, max_hp) == 2
+    assert int(floored_band // 67) + 1 == 3
+    assert rest_actions_per_fight(67, max_hp) == pytest.approx(0.433333, abs=1e-6)
+
+
+def test_the_published_second_makes_adjacent_damages_cost_the_same():
+    """S-005 requires the cost to distinguish two monsters that leave the character
+    at different depths -- EXCEPT where the server bills them the same. Recovery is
+    charged in whole seconds, so on a real bar adjacent damages routinely tie, and
+    an oracle that manufactured a difference here would be charging what the game
+    does not."""
+    max_hp = 535
+    assert rest_actions_per_fight(30, max_hp) == rest_actions_per_fight(31, max_hp)
+    assert rest_actions_per_fight(39, max_hp) == rest_actions_per_fight(40, max_hp)
+    # ...and the cost still moves across a wider step, so this is a quantum and not
+    # the saturation the clause forbids.
+    assert rest_actions_per_fight(39, max_hp) < rest_actions_per_fight(43, max_hp)
+
+
+def test_the_exact_division_case_cannot_arise_on_an_off_lattice_bar():
+    """The round-6 rule -- a chain landing exactly on the guard continues -- is live
+    only where a quarter of the bar is whole. None of the live bars qualifies, so
+    the rule is real at one rung in four and unreachable at the others. Recorded so
+    nobody deletes it after failing to reproduce it on a real character."""
+    for max_hp in LIVE_BARS:
+        band = (1.0 - CRITICAL_HP_FRACTION) * max_hp
+        assert band != int(band), max_hp
+
+
+def test_every_live_bar_keeps_the_properties_the_clause_claims():
+    """Monotone in damage, and the three-second floor unreachable -- re-checked on
+    the real bars rather than on the exhibit's 100."""
+    for max_hp in LIVE_BARS:
+        shares = [rest_actions_per_fight(d, max_hp) for d in range(1, max_hp + 1)]
+        assert all(b >= a for a, b in pairwise(shares)), max_hp
+        for d in range(1, max_hp + 1):
+            missing = min(fights_per_rest(d, max_hp) * d, max_hp)
+            assert rest_cooldown_seconds(missing, max_hp) > REST_MINIMUM_SECONDS
