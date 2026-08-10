@@ -352,7 +352,9 @@ BOTH OF THOSE ARE STATEMENTS ABOUT REWARD, NOT ABOUT CANDIDACY. Nothing here rem
 
 ### S-018 · A measurement is present only when positive evidence backs it  [witness: W-004]
 
-The observations contain a measured rate for a monster only when that rate is backed by at least one recorded kill, is itself positive, and carries the character level its samples were taken at. Anything else -- no entry, an entry with no recorded kill, a zero rate, a negative rate, **a rate no aggregated cycle attached a level to** -- is an ABSENT measurement, and S-008's fallback to the published prediction applies.
+The observations contain a measured rate for a monster only when that rate is backed by at least one recorded kill, is itself positive, and carries the character level its samples were taken at. Anything else -- no entry, an entry with no recorded kill, a zero rate, a negative rate, **a rate no aggregated cycle attached a level to, and a rate whose every aggregated cycle recorded a level BELOW ONE** -- is an ABSENT measurement, and S-008's fallback to the published prediction applies.
+
+The last of those is S-017's exclusion reaching back into this list, and it is spelled out here so the two clauses classify the same measurement the same way. S-017 drops a below-one level as the signature of a reading that was never written; a measurement with no other kind of level therefore has no sample level, and calling it PRESENT here while S-017 calls it ABSENT would leave the taxonomy disagreeing with itself. Both roads already led to the same observable — the published prediction governs — so nothing changes but the account of why.
 
 The level belongs in this list and not in S-017's arithmetic because it is a condition on the EVIDENCE, not on the value. S-017 needs a sample level to restate a rate at all; a rate that has none is not a rate the oracle knows how to interpret anywhere, so it never reaches restatement. Admitting it as present and then restating it to zero would be a different decision with a different consequence — see S-017 for why zero and absent do not interchange.
 
