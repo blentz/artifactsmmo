@@ -5,7 +5,9 @@
  "seen": [
   "what-counts-as-a-present-measurement",
   "measurement-validity-across-character-levels",
-  "projected-state-levelup-growth-not-applied"
+  "projected-state-levelup-growth-not-applied",
+  "beatability-consult-loadout-worn-vs-wearable",
+  "measured-rate-unit-undeclared"
  ],
  "contradiction_clean_runs": 0,
  "contradiction_void_runs": 0,
@@ -14,10 +16,8 @@
  "pending_verification": [
   "s008-may-use-measurement-optional",
   "rung-progress-surplus-carryover",
-  "beatability-consult-loadout-worn-vs-wearable",
   "recovery-quantum-discrete-vs-amortised",
-  "argmax-per-kill-rate-vs-rung-crossing-cost",
-  "measured-rate-unit-undeclared"
+  "argmax-per-kill-rate-vs-rung-crossing-cost"
  ],
  "phases_run": [
   "ontology",
