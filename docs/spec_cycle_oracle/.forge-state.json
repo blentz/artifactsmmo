@@ -3,7 +3,8 @@
  "dry_rounds": 0,
  "void_rounds": 1,
  "seen": [
-  "what-counts-as-a-present-measurement"
+  "what-counts-as-a-present-measurement",
+  "measurement-validity-across-character-levels"
  ],
  "contradiction_clean_runs": 0,
  "contradiction_void_runs": 0,
@@ -12,7 +13,6 @@
  "pending_verification": [
   "projected-state-levelup-growth-not-applied",
   "s008-may-use-measurement-optional",
-  "measurement-validity-across-character-levels",
   "rung-progress-surplus-carryover",
   "beatability-consult-loadout-worn-vs-wearable",
   "recovery-quantum-discrete-vs-amortised",
