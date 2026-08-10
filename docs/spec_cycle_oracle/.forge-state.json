@@ -7,7 +7,8 @@
   "measurement-validity-across-character-levels",
   "projected-state-levelup-growth-not-applied",
   "beatability-consult-loadout-worn-vs-wearable",
-  "measured-rate-unit-undeclared"
+  "measured-rate-unit-undeclared",
+  "rung-progress-surplus-carryover"
  ],
  "contradiction_clean_runs": 0,
  "contradiction_void_runs": 0,
@@ -15,7 +16,6 @@
  "blindness_failures": 1,
  "pending_verification": [
   "s008-may-use-measurement-optional",
-  "rung-progress-surplus-carryover",
   "recovery-quantum-discrete-vs-amortised",
   "argmax-per-kill-rate-vs-rung-crossing-cost"
  ],
