@@ -172,3 +172,55 @@ def test_zero_heuristic_is_admissible_and_planner_is_dijkstra():
     plan = GOAPPlanner().plan(state, goal, actions, gd)
     assert len(plan) == 2
     assert _plan_cost(state, plan, gd) == bf["cost"]
+
+
+def _plan_under_floor(floor: float | None) -> list[str]:
+    gd, state, goal, actions = _instance()
+    planner = GOAPPlanner()
+    if floor is not None:
+        planner.set_action_floor(floor)
+    return [repr(a) for a in planner.plan(state, goal, actions, gd)]
+
+
+def test_request_budget_floor_flips_this_instance_to_the_single_step_plan():
+    """The SAME instance, priced in REQUESTS instead of seconds.
+
+    `[Move, EatAtTile]` costs 7 seconds across TWO requests; `[Rest]` costs 9
+    seconds in ONE. Seconds say the two-step plan wins, and above
+    (`test_planner_returns_optimal_plan_after_fix`) it does. But on a
+    `play --all` fleet seconds are not what the bot waits on: rate limits are
+    per-IP, each of five children holds a fifth of one budget, and the
+    2026-08-10 five-character run measured every child pinned at ~52
+    actions/hour — a mean 69s between actions against a mean 11.5s cooldown,
+    with 29-49% of the wall clock spent blocked in `RateGovernor.acquire`. At
+    that pace the two-step plan does not take 7 seconds, it takes two slots out
+    of a fixed hourly supply, and `[Rest]` buys the same full-HP state for one.
+
+    At a 5s floor: 5 + 5 = 10 against max(9, 5) = 9, so `[Rest]` wins.
+
+    The optimality theorem is untouched — the planner still returns the
+    least-cost plan under the cost function it is given; this test pins WHICH
+    cost function a request-bound fleet should give it."""
+    assert _plan_under_floor(None) == ["Move(1,0)", "EatAtTile(1,0)"]
+    assert _plan_under_floor(5.0) == ["Rest"]
+
+
+def test_request_budget_floor_is_a_lower_bound_not_a_flat_rate():
+    """The property that stops the floor from erasing every price difference.
+
+    Under a flat per-action rate the one-action plan would win for EVERY
+    positive floor, since it is always one action against two. It does not: at
+    a 3s floor the two-step plan costs max(5,3) + max(2,3) = 8, still under
+    `[Rest]`'s max(9,3) = 9, and the multi-step plan is still returned. Only at
+    5s — where the floor genuinely binds on both steps — does the choice flip.
+    Rest keeps its own 9 throughout rather than being flattened to the floor."""
+    assert _plan_under_floor(3.0) == ["Move(1,0)", "EatAtTile(1,0)"]
+    assert _plan_under_floor(5.0) == ["Rest"]
+
+
+def test_an_unset_request_budget_floor_leaves_the_search_identical():
+    """The single-character path and the no-governor path: the floor defaults to
+    0.0, `max(cost, 0.0)` is the identity on non-negative costs, and every
+    assertion in this file's optimality tests holds unchanged."""
+    assert GOAPPlanner().action_floor_seconds == 0.0
+    assert _plan_under_floor(0.0) == _plan_under_floor(None)

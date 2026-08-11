@@ -26,6 +26,55 @@ def _sell(id_, code, qty, price, age=0):
     return OpenOrder(id_, code, qty, price, OrderSide.SELL, age)
 
 
+def test_an_order_a_sibling_is_already_cancelling_is_not_a_target(game_data):
+    """The 2026-08-10 race, closed. GE orders are ACCOUNT-scoped, so every
+    `play --all` child reads the same list and ages the same order past
+    TTL_CYCLES; six of twenty ids were attacked by two or more characters and
+    the losers each paid an action-bucket request for HTTP 404 "Order not
+    found". A sibling's live claim removes the id from this character's targets
+    entirely, so the wasted request is never planned."""
+    state = make_state(open_orders=(_sell("s2", "iron", 3, 19, age=TTL_CYCLES + 1),))
+    ids = cancel_targets(state, game_data, need_gold=0, needed_items=frozenset(),
+                         sibling_claims=frozenset({"s2"}))
+    assert ids == ()
+
+
+def test_a_sibling_claim_on_another_order_leaves_this_one_a_target(game_data):
+    """Exclusion is per-id, not a blanket suppression of the whole cancel
+    channel — the liveness escape has to keep working for every order nobody
+    else has taken."""
+    state = make_state(open_orders=(
+        _sell("s2", "iron", 3, 19, age=TTL_CYCLES + 1),
+        _sell("s3", "ash", 3, 19, age=TTL_CYCLES + 1),
+    ))
+    ids = cancel_targets(state, game_data, need_gold=0, needed_items=frozenset(),
+                         sibling_claims=frozenset({"s2"}))
+    assert ids == ("s3",)
+
+
+def test_a_claimed_buy_order_does_not_count_toward_the_gold_shortfall(game_data):
+    """A claimed BUY must not be silently credited against `need_gold`: its
+    escrow is being freed by the SIBLING, so counting it here would make this
+    character stop cancelling a second order it genuinely still needs. Two
+    orders, 27 gold each, 50 short — with b1 claimed, b2 must still be taken."""
+    state = make_state(gold=0, open_orders=(
+        _buy("b1", "iron", 3, 9),
+        _buy("b2", "ash", 3, 9),
+    ))
+    ids = cancel_targets(state, game_data, need_gold=50, needed_items=frozenset(),
+                         sibling_claims=frozenset({"b1"}))
+    assert ids == ("b2",)
+
+
+def test_no_sibling_claims_is_the_default_and_changes_nothing(game_data):
+    """The single-character path: `sibling_claims` defaults empty, so every
+    caller that does not pass it gets byte-identical pre-coordination
+    behaviour."""
+    state = make_state(open_orders=(_sell("s2", "iron", 3, 19, age=TTL_CYCLES + 1),))
+    assert cancel_targets(state, game_data, need_gold=0,
+                          needed_items=frozenset()) == ("s2",)
+
+
 def test_cancels_buy_order_when_gold_needed(game_data):
     state = make_state(gold=5, open_orders=(_buy("b1", "iron", 3, 9, age=0),))
     ids = cancel_targets(state, game_data, need_gold=20, needed_items=frozenset())

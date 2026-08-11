@@ -69,6 +69,32 @@ def test_a_data_read_acquires_from_the_data_governor():
     assert fake.slept == [1.0]
 
 
+def test_wiring_governors_prices_the_planner_in_requests():
+    """Wiring a governor IS the statement "this process gets one action per
+    `sustainable_interval()` seconds", so it is also when the planner must stop
+    pricing actions at their cooldown alone. The ACTION bucket is the binding
+    one: every planner action is a `/my/{name}/action/*` call. 300/hour = 12s
+    per request."""
+    fake = _FakeTime()
+    player = GamePlayer(character="hero")
+    action_governor = RateGovernor(
+        WindowBudget(second=10, minute=None, hour=300, day=None),
+        clock=fake.clock, sleep=fake.sleep,
+    )
+    other = RateGovernor(
+        WindowBudget(second=None, minute=None, hour=6000, day=None),
+        clock=fake.clock, sleep=fake.sleep,
+    )
+    player.set_rate_governors(data=other, action=action_governor, account=other)
+    assert player.planner.action_floor_seconds == 12.0
+
+
+def test_an_ungoverned_player_leaves_the_planner_unpriced():
+    """Every single-character run: no governor, no floor, and the planner is
+    byte-identical to its pre-change self."""
+    assert GamePlayer(character="hero").planner.action_floor_seconds == 0.0
+
+
 def test_acquiring_without_a_governor_is_a_no_op():
     GamePlayer(character="hero")._acquire_data()
     GamePlayer(character="hero")._acquire_action()

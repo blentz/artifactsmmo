@@ -1,9 +1,11 @@
-"""Tests for the coordination tables — RoleLease, MaterialDemand and
-BankStockClaim — and the CoordinationStore that operates on them.
+"""Tests for the coordination tables — RoleLease, MaterialDemand,
+BankStockClaim and GeOrderClaim — and the CoordinationStore that operates on
+them.
 
-All three carry the same `expires_at` liveness rule (a row is real if
-unexpired), and all three cross-character reads (`live_leases`,
-`sibling_demand`, `sibling_bank_claims`) live in that one file."""
+All four carry the same `expires_at` liveness rule (a row is real if
+unexpired), and all four cross-character reads (`live_leases`,
+`sibling_demand`, `sibling_bank_claims`, `sibling_order_claims`) live in that
+one file."""
 
 import multiprocessing
 import tempfile
@@ -19,11 +21,17 @@ from sqlmodel import SQLModel, create_engine, select
 from artifactsmmo_cli.ai.learning.coordination_store import (
     BANK_CLAIM_TTL_SECONDS,
     DEMAND_TTL_SECONDS,
+    GE_ORDER_CLAIM_TTL_SECONDS,
     LEASE_TTL_SECONDS,
     CoordinationStore,
     _require_utc,
 )
-from artifactsmmo_cli.ai.learning.models import BankStockClaim, MaterialDemand, RoleLease
+from artifactsmmo_cli.ai.learning.models import (
+    BankStockClaim,
+    GeOrderClaim,
+    MaterialDemand,
+    RoleLease,
+)
 
 
 def _bank_claim_rows(db_path: Path) -> int:
@@ -709,6 +717,34 @@ class TestDegradationOnDbError:
         _break_engine(hal)
         assert hal.sibling_bank_claims(_T0) == {}
         assert "[coordination] sibling_bank_claims failed" in capsys.readouterr().out
+
+    def test_claim_ge_order_swallows_error(self, tmp_path: Path, capsys) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        _break_engine(hal)
+        hal.claim_ge_order("order-1", _T0)
+        assert "[coordination] claim_ge_order failed" in capsys.readouterr().out
+
+    def test_release_ge_orders_swallows_error(self, tmp_path: Path, capsys) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        hal.claim_ge_order("order-1", _T0)
+        _break_engine(hal)
+        hal.release_ge_orders()
+        assert "[coordination] release_ge_orders failed" in capsys.readouterr().out
+
+    def test_sibling_order_claims_swallows_error_and_returns_empty(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """THE unavailable-store contract for this feature: an empty claim set
+        is exactly pre-coordination behaviour, so `cancel_targets` reports what
+        it reported before and the HTTP 404 backstop catches the race as it
+        does today. Handled here and NOT re-handled upstream."""
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        _break_engine(hal)
+        assert hal.sibling_order_claims(_T0) == frozenset()
+        assert "[coordination] sibling_order_claims failed" in capsys.readouterr().out
 
 
 def test_a_rival_taking_the_role_mid_claim_does_not_fail_the_claim(tmp_path: Path) -> None:
@@ -1443,3 +1479,213 @@ def test_every_process_claiming_bank_stock_is_recorded_exactly_once(tmp_path: Pa
     # never have seen more than everyone else's.
     for name, seen_qty in seen.items():
         assert 0 <= seen_qty <= total - quantities[name]
+
+
+def _ge_claim_rows(db_path: Path) -> int:
+    """Row COUNT in `ge_order_claims`, read directly. `sibling_order_claims`
+    filters on expiry, so it cannot see a tombstone the sweep failed to remove —
+    the table has to be counted to prove the sweep runs."""
+    engine = create_engine(f"sqlite:///{db_path}")
+    try:
+        with SqlSession(engine) as s:
+            return len(s.exec(select(GeOrderClaim)).all())
+    finally:
+        engine.dispose()
+
+
+def test_a_sibling_sees_a_claimed_order_id(tmp_path: Path) -> None:
+    """The whole point: GE orders are ACCOUNT-scoped, so every character's
+    `/my/grandexchange/orders` read lists the same ids and each independently
+    ages them past TTL_CYCLES. HAL announcing the cancel is what stops C3P0
+    spending an action-bucket request on the same id."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_ge_order("6a79f5c481a11b38d8228e9c", _T0)
+        assert c3po.sibling_order_claims(_T0) == frozenset({"6a79f5c481a11b38d8228e9c"})
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_a_character_does_not_see_its_own_order_claim(tmp_path: Path) -> None:
+    """Own claims are excluded for the same reason `sibling_bank_claims`
+    excludes them: subtracting its own in-flight cancel would make a character
+    stop planning the very cancel it is already executing."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        hal.claim_ge_order("order-1", _T0)
+        assert hal.sibling_order_claims(_T0) == frozenset()
+    finally:
+        hal.close()
+
+
+def test_an_expired_order_claim_is_invisible(tmp_path: Path) -> None:
+    """One liveness rule, same as every other coordination row: real if
+    unexpired. A crashed character's claim must stop hiding an order that its
+    cancel never actually took."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_ge_order("order-1", _T0)
+        later = _T0 + timedelta(seconds=GE_ORDER_CLAIM_TTL_SECONDS + 1)
+        assert c3po.sibling_order_claims(later) == frozenset()
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_order_claim_expires_exactly_at_the_ttl(tmp_path: Path) -> None:
+    """Boundary pinned on BOTH sides — the class of defect this project keeps
+    rediscovering is a range whose ends were never checked."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_ge_order("order-1", _T0)
+        just_inside = _T0 + timedelta(seconds=GE_ORDER_CLAIM_TTL_SECONDS - 1)
+        assert c3po.sibling_order_claims(just_inside) == frozenset({"order-1"})
+        at_expiry = _T0 + timedelta(seconds=GE_ORDER_CLAIM_TTL_SECONDS)
+        assert c3po.sibling_order_claims(at_expiry) == frozenset()
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_claiming_several_orders_accumulates_them(tmp_path: Path) -> None:
+    """A cancel claim is per-ORDER and additive, unlike `claim_bank_stock`'s
+    replace-wholesale: a character may cancel several orders across consecutive
+    cycles and each id must stay hidden from siblings for its own TTL."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_ge_order("order-1", _T0)
+        hal.claim_ge_order("order-2", _T0 + timedelta(seconds=1))
+        assert c3po.sibling_order_claims(_T0 + timedelta(seconds=2)) == frozenset(
+            {"order-1", "order-2"})
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_reclaiming_the_same_order_reuses_the_row_and_extends_it(tmp_path: Path) -> None:
+    """Upsert key is (character, order_id): a re-claim refreshes the TTL rather
+    than inserting a duplicate row."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_ge_order("order-1", _T0)
+        later = _T0 + timedelta(seconds=GE_ORDER_CLAIM_TTL_SECONDS - 1)
+        hal.claim_ge_order("order-1", later)
+        assert _ge_claim_rows(tmp_path / "coord.db") == 1
+        # Would have expired on the FIRST claim's clock; the re-claim moved it.
+        assert c3po.sibling_order_claims(
+            _T0 + timedelta(seconds=GE_ORDER_CLAIM_TTL_SECONDS + 1)
+        ) == frozenset({"order-1"})
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_two_characters_may_claim_different_orders(tmp_path: Path) -> None:
+    """The key is (character, order_id), so distinct ids never collide."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_ge_order("order-1", _T0)
+        c3po.claim_ge_order("order-2", _T0)
+        assert hal.sibling_order_claims(_T0) == frozenset({"order-2"})
+        assert c3po.sibling_order_claims(_T0) == frozenset({"order-1"})
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_release_drops_this_characters_order_claims_only(tmp_path: Path) -> None:
+    """Released when the cancel provably did not happen: a surviving claim on an
+    order that is still open would hide a live order from every sibling for the
+    rest of its TTL."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_ge_order("order-1", _T0)
+        c3po.claim_ge_order("order-2", _T0)
+        hal.release_ge_orders()
+        assert c3po.sibling_order_claims(_T0) == frozenset()
+        assert hal.sibling_order_claims(_T0) == frozenset({"order-2"})
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_release_ge_orders_is_noop_when_none_claimed(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        hal.release_ge_orders()
+        assert _ge_claim_rows(tmp_path / "coord.db") == 0
+    finally:
+        hal.close()
+
+
+def test_a_claim_sweeps_expired_order_claim_rows(tmp_path: Path) -> None:
+    """Swept where rows are ADDED, so the sweep runs at exactly the cadence the
+    table grows — the same discipline `claim` and `claim_bank_stock` follow."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_ge_order("stale", _T0)
+        assert _ge_claim_rows(tmp_path / "coord.db") == 1
+        c3po.claim_ge_order(
+            "fresh", _T0 + timedelta(seconds=GE_ORDER_CLAIM_TTL_SECONDS + 1))
+        assert _ge_claim_rows(tmp_path / "coord.db") == 1
+    finally:
+        hal.close()
+        c3po.close()
+
+
+def test_claim_ge_order_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="timezone-aware"):
+            hal.claim_ge_order("order-1", datetime(2026, 8, 1))
+    finally:
+        hal.close()
+
+
+def test_sibling_order_claims_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="timezone-aware"):
+            hal.sibling_order_claims(datetime(2026, 8, 1))
+    finally:
+        hal.close()
+
+
+def test_ge_order_claim_minimal_construction() -> None:
+    row = GeOrderClaim(character="HAL", order_id="order-1",
+                       claimed_at=_T0.isoformat(), expires_at=_T0.isoformat())
+    assert row.character == "HAL"
+    assert row.order_id == "order-1"
+
+
+def test_the_same_character_cannot_claim_one_order_twice(engine) -> None:
+    """The uniqueness that makes a duplicated claim unrepresentable rather than
+    merely unlikely."""
+    with SqlSession(engine) as s:
+        s.add(GeOrderClaim(character="HAL", order_id="order-1",
+                           claimed_at="t", expires_at="t"))
+        s.add(GeOrderClaim(character="HAL", order_id="order-1",
+                           claimed_at="t", expires_at="t"))
+        with pytest.raises(IntegrityError):
+            s.commit()

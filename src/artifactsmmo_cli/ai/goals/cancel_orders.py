@@ -32,10 +32,17 @@ class CancelOrdersGoal(Goal):
     on the next cycle."""
 
     def __init__(self, game_data: GameData, need_gold: int,
-                 needed_items: frozenset[str]) -> None:
+                 needed_items: frozenset[str],
+                 sibling_claims: frozenset[str] = frozenset()) -> None:
         self._gd = game_data
         self._need_gold = need_gold
         self._needed_items = needed_items
+        # Order ids a sibling is already cancelling — held as constructor state,
+        # not re-read per planner node, because it is a per-CYCLE fact: the
+        # planner explores hypothetical futures of THIS cycle, and a claim set
+        # that changed mid-search would make `is_satisfied` non-deterministic
+        # across nodes of one plan.
+        self._sibling_claims = sibling_claims
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -45,7 +52,8 @@ class CancelOrdersGoal(Goal):
 
     def is_satisfied(self, state: WorldState) -> bool:
         return not cancel_targets(
-            state, self._gd, self._need_gold, self._needed_items)
+            state, self._gd, self._need_gold, self._needed_items,
+            self._sibling_claims)
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"ge_orders_cancelled": True}
@@ -60,7 +68,8 @@ class CancelOrdersGoal(Goal):
         return [
             GeCancelOrderAction(order_id=order_id, ge_location=ge_loc)
             for order_id in cancel_targets(
-                state, game_data, self._need_gold, self._needed_items)
+                state, game_data, self._need_gold, self._needed_items,
+                self._sibling_claims)
         ]
 
     def __repr__(self) -> str:

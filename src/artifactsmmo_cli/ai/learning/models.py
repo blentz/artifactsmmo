@@ -244,6 +244,49 @@ class BankStockClaim(SQLModel, table=True):
     expires_at: str
 
 
+class GeOrderClaim(SQLModel, table=True):
+    """One character's claim on a GRAND EXCHANGE order it is cancelling. Upsert
+    key is (character, order_id).
+
+    Grand Exchange orders are ACCOUNT-scoped: `/my/grandexchange/orders` returns
+    the same list to every `play --all` child, so all five age the same order
+    past `ge_order_config.TTL_CYCLES` and all five independently decide to
+    cancel it. The losers of that race spend an action-bucket request on
+    HTTP 404 "Order not found". Measured on the 2026-08-10 five-character run:
+    6 of 20 distinct order ids were attacked by two or more characters, costing
+    8 wasted requests out of a budget that pays out only ~52 actions per
+    character per hour — see `docs/PLAN_ge_cancel_race.md`.
+
+    Per-ORDER rows that ACCUMULATE, unlike `BankStockClaim`'s replace-wholesale.
+    A bank claim describes the one withdraw a character has in flight, so a new
+    one makes the old stale. Cancels are different: `cancel_targets` can report
+    several ids at once and the planner works through them one action per cycle,
+    so an earlier claim is still live when the next is written. Replacing would
+    un-hide an order this character is still working toward.
+
+    Carries the same `expires_at` liveness rule as `RoleLease`,
+    `MaterialDemand` and `BankStockClaim` — a row is real if unexpired — so the
+    coordination system still has exactly ONE liveness rule. `claimed_at` is
+    diagnostic only; nothing orders claims by it, because an ordering would be
+    a decision tiebreak.
+
+    NOT a lock, exactly like `BankStockClaim`. Nothing blocks on it: the cancel
+    request itself is authoritative and the HTTP 404 -> replan path still
+    exists unchanged, so a claim that is missed simply reproduces today's
+    behaviour rather than breaking anything."""
+
+    __tablename__ = "ge_order_claims"
+    __table_args__ = (
+        UniqueConstraint("character", "order_id", name="uq_ge_order_claim_holder"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    character: str = Field(index=True)
+    order_id: str = Field(index=True)
+    claimed_at: str
+    expires_at: str
+
+
 class PlanBodyLogBase(SQLModel):
     """One computed plan body, logged at re-plan time. Counted by the Phase-2
     macro detector."""

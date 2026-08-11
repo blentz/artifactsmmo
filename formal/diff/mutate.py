@@ -2046,6 +2046,62 @@ PLANNER_MUTATIONS = [
      "                        continue",
      "                    if False:\n"
      "                        continue"),
+    # Drop the request-budget floor: the edge cost falls back to the raw
+    # cooldown, so a plan of many cheap actions beats a plan of few dear ones
+    # even when the fleet is request-bound. Killed by
+    # `test_request_budget_floor_flips_this_instance_to_the_single_step_plan`,
+    # whose floored assertion returns [Move, EatAtTile] instead of [Rest].
+    ("planner: drop the request-budget floor (max(cost, floor) -> cost)",
+     "                    g = node.g_score + max(\n"
+     "                        action.cost(node.state, game_data, history),\n"
+     "                        self.action_floor_seconds,\n"
+     "                    )",
+     "                    g = node.g_score + action.cost(node.state, game_data, history)"),
+    # Make the floor a FLAT RATE rather than a lower bound. Every action costs
+    # one slot, distance stops mattering, and a dear action is silently
+    # discounted. Killed by `test_request_budget_floor_is_a_lower_bound_not_a_
+    # flat_rate`: at a 3s floor the two-step plan must still win, but under a
+    # flat rate one action always beats two.
+    ("planner: request-budget floor becomes a flat rate (max -> floor when set)",
+     "                    g = node.g_score + max(\n"
+     "                        action.cost(node.state, game_data, history),\n"
+     "                        self.action_floor_seconds,\n"
+     "                    )",
+     "                    g = node.g_score + (self.action_floor_seconds\n"
+     "                                        or action.cost(node.state, game_data, history))"),
+]
+
+
+# cancel_selection mutations -- the GE cancel-target picker. Killed by
+# tests/test_ai/test_cancel_selection.py, which the gate runs as part of the
+# unit suite; the sibling-claim filter had no mutation group before the
+# 2026-08-10 race fix added one.
+CANCEL_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "cancel_selection.py"
+
+CANCEL_SELECTION_MUTATIONS = [
+    # Drop the sibling-claim filter entirely: every child of a `play --all`
+    # fleet plans the same cancel again and all but one pay HTTP 404 out of the
+    # per-IP action budget. Killed by
+    # `test_an_order_a_sibling_is_already_cancelling_is_not_a_target`.
+    ("cancel_selection: ignore sibling claims (cancel what a sibling is cancelling)",
+     "        if o.id in sibling_claims:\n"
+     "            continue",
+     "        if False:\n"
+     "            continue"),
+    # Move the filter BELOW the triggers, so a claimed BUY still decrements
+    # `gold_short`. The sibling frees that escrow, not us, so counting it makes
+    # this character stop cancelling a second order whose gold it still needs.
+    # Killed by `test_a_claimed_buy_order_does_not_count_toward_the_gold_
+    # shortfall`.
+    ("cancel_selection: claimed BUY still credited against the gold shortfall",
+     "        if o.id in sibling_claims:\n"
+     "            continue\n"
+     "        if o.age > TTL_CYCLES:",
+     "        if o.side is OrderSide.BUY and o.id in sibling_claims:\n"
+     "            gold_short -= o.price * o.qty\n"
+     "        if o.id in sibling_claims:\n"
+     "            continue\n"
+     "        if o.age > TTL_CYCLES:"),
 ]
 
 
@@ -5133,7 +5189,8 @@ LADDER_GUARD_FIRES_MUTATIONS = [
     (
         "ladder/guards: GE_CANCEL drop cancel_targets guard (fires with no cancel target)",
         "        return bool(cancel_targets(\n"
-        "            state, game_data, 0, frozenset(step_profile or ())))",
+        "            state, game_data, 0, frozenset(step_profile or ()),\n"
+        "            ctx.sibling_order_claims))",
         "        return True",
     ),
     (
@@ -6414,6 +6471,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_scalarizer_diff.py", survivors)
     run_group(PLANNER_SRC, PLANNER_MUTATIONS,
               "formal/diff/test_planner_admissibility_diff.py", survivors)
+    run_group(CANCEL_SELECTION_SRC, CANCEL_SELECTION_MUTATIONS,
+              "tests/test_ai/test_cancel_selection.py", survivors)
     run_group(ARBITER_SELECT_SRC, ARBITER_SELECT_MUTATIONS,
               "formal/diff/test_arbiter_select_diff.py", survivors)
     run_group(TASK_DECISION_CORE_SRC, TASK_DECISION_MUTATIONS,

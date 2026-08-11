@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
+from artifactsmmo_cli.ai.actions.ge_cancel_order import GeCancelOrderAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RoleChange
@@ -29,6 +30,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.learning.coordination_store import (
     BANK_CLAIM_TTL_SECONDS,
+    GE_ORDER_CLAIM_TTL_SECONDS,
     CoordinationStore,
 )
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -1509,6 +1511,185 @@ def test_execute_claims_nothing_for_a_non_withdraw_action(tmp_path):
                 _new_state, outcome = p._execute(MoveAction(x=3, y=5), MagicMock())
         assert outcome == "ok"
         assert observer.sibling_bank_claims(datetime.now(tz=timezone.utc)) == {}
+    finally:
+        p._coordination.close()
+        observer.close()
+
+
+def test_update_coordination_reads_sibling_order_claims(tmp_path):
+    """The read half, wired: an order a sibling committed to cancelling reaches
+    `SelectionContext.sibling_order_claims`, which is what `cancel_targets`
+    filters on."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state()
+    p.game_data = _make_planner_gd()
+    store = CoordinationStore(db_path=db, character="hero")
+    sibling = CoordinationStore(db_path=db, character="rival")
+    p.set_coordination_store(store)
+    try:
+        sibling.claim_ge_order("order-1", datetime.now(tz=timezone.utc))
+        p._update_coordination(p.state, p.game_data)
+        assert p._sibling_order_claims == frozenset({"order-1"})
+        assert p._selection_context(
+            combat_monster=None).sibling_order_claims == frozenset({"order-1"})
+    finally:
+        store.close()
+        sibling.close()
+
+
+def test_update_coordination_clears_sibling_order_claims_without_a_store():
+    """The single-character path, and the bit-identical guarantee: with no store
+    the claim set is EMPTY, not stale, so `cancel_targets` reports exactly what
+    it reported before this feature existed."""
+    p = GamePlayer(character="hero")
+    p.state = make_state()
+    p.game_data = _make_planner_gd()
+    p._sibling_order_claims = frozenset({"order-1"})  # prove it is CLEARED
+    p._update_coordination(p.state, p.game_data)
+    assert p._coordination is None
+    assert p._sibling_order_claims == frozenset()
+    assert p._selection_context(combat_monster=None).sibling_order_claims == frozenset()
+
+
+def test_a_character_never_reads_back_its_own_order_claim(tmp_path):
+    """Self-exclusion end to end: after committing to a cancel, this character's
+    own target set must NOT shrink — it would stop planning the very cancel it
+    is executing."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state()
+    p.game_data = _make_planner_gd()
+    store = CoordinationStore(db_path=db, character="hero")
+    p.set_coordination_store(store)
+    try:
+        store.claim_ge_order("order-1", datetime.now(tz=timezone.utc))
+        p._update_coordination(p.state, p.game_data)
+        assert p._sibling_order_claims == frozenset()
+    finally:
+        store.close()
+
+
+def test_claim_ge_order_is_a_noop_without_a_store():
+    p = GamePlayer(character="hero")
+    p._claim_ge_order(GeCancelOrderAction(order_id="order-1", ge_location=(0, 0)))
+
+
+def test_release_ge_orders_is_a_noop_without_a_store():
+    p = GamePlayer(character="hero")
+    p._release_ge_orders(GeCancelOrderAction(order_id="order-1", ge_location=(0, 0)))
+
+
+def test_release_ge_orders_leaves_a_claim_alone_for_a_non_cancel_action(tmp_path):
+    """`_release_ge_orders` is called from the failure branches for EVERY
+    action, so it has to distinguish. A Move that fails must not un-hide the
+    order an in-flight cancel is holding."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    store = CoordinationStore(db_path=db, character="hero")
+    observer = CoordinationStore(db_path=db, character="observer")
+    p.set_coordination_store(store)
+    now = datetime.now(tz=timezone.utc)
+    try:
+        store.claim_ge_order("order-1", now)
+        p._release_ge_orders(MoveAction(x=1, y=1))
+        assert observer.sibling_order_claims(now) == frozenset({"order-1"})
+        p._release_ge_orders(GeCancelOrderAction(order_id="order-1", ge_location=(0, 0)))
+        assert observer.sibling_order_claims(now) == frozenset()
+    finally:
+        store.close()
+        observer.close()
+
+
+def test_execute_publishes_the_order_claim_before_the_cancel_request(tmp_path):
+    """ORDERING is the whole mechanism: a claim published after the request
+    would be invisible to the sibling deriving its own cancel targets right now.
+    The assertion runs INSIDE the patched API call, so it can only pass if the
+    claim landed first."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state(x=5, y=1)
+    p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
+    observer = CoordinationStore(db_path=db, character="observer")
+    seen: list[frozenset[str]] = []
+
+    def _spy(*_args, **_kwargs):
+        seen.append(observer.sibling_order_claims(datetime.now(tz=timezone.utc)))
+        raise ApiActionError(404, "Order not found.")
+
+    action = GeCancelOrderAction(order_id="order-1", ge_location=(5, 1))
+    char = make_char_schema(x=5, y=1)
+    empty = MagicMock()
+    empty.data = []
+    try:
+        with redirect_stdout(io.StringIO()):
+            with patch("artifactsmmo_cli.ai.actions.ge_cancel_order.action_ge_cancel_order",
+                       side_effect=_spy), \
+                 patch("artifactsmmo_cli.ai.player.get_character",
+                       return_value=make_get_character_result(char)), \
+                 patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty), \
+                 patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty):
+                _new_state, outcome = p._execute(action, MagicMock())
+        assert outcome == "error:HTTP_404"
+        assert seen == [frozenset({"order-1"})], \
+            "the claim must be visible to siblings before the request"
+    finally:
+        p._coordination.close()
+        observer.close()
+
+
+def test_execute_releases_the_order_claim_when_the_cancel_is_rejected(tmp_path):
+    """HTTP 404 "Order not found" is the exact error this mechanism exists to
+    stop, and when it happens anyway the order is gone — so the claim describes
+    nothing and must not keep hiding an id for the rest of its TTL."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state(x=5, y=1)
+    p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
+    observer = CoordinationStore(db_path=db, character="observer")
+    action = GeCancelOrderAction(order_id="order-1", ge_location=(5, 1))
+    char = make_char_schema(x=5, y=1)
+    empty = MagicMock()
+    empty.data = []
+    try:
+        with redirect_stdout(io.StringIO()):
+            with patch("artifactsmmo_cli.ai.actions.ge_cancel_order.action_ge_cancel_order",
+                       side_effect=ApiActionError(404, "Order not found.")), \
+                 patch("artifactsmmo_cli.ai.player.get_character",
+                       return_value=make_get_character_result(char)), \
+                 patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty), \
+                 patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty):
+                _new_state, outcome = p._execute(action, MagicMock())
+        assert outcome == "error:HTTP_404"
+        assert observer.sibling_order_claims(datetime.now(tz=timezone.utc)) == frozenset()
+    finally:
+        p._coordination.close()
+        observer.close()
+
+
+def test_execute_keeps_the_order_claim_when_the_cancel_succeeds(tmp_path):
+    """On success the order really is gone, so the claim withholds nothing that
+    exists — what it does is shadow the sibling snapshots that still list it,
+    which is the whole race. Left to expire on GE_ORDER_CLAIM_TTL_SECONDS, and
+    genuinely TTL-bounded rather than permanent — that bound is what keeps
+    `EscrowConservation`'s "no capital locked forever" pairing honest."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character="hero")
+    p.state = make_state(x=5, y=1)
+    p.set_coordination_store(CoordinationStore(db_path=db, character="hero"))
+    observer = CoordinationStore(db_path=db, character="observer")
+    action = GeCancelOrderAction(order_id="order-1", ge_location=(5, 1))
+    char = make_char_schema(x=5, y=1)
+    try:
+        with redirect_stdout(io.StringIO()):
+            with patch("artifactsmmo_cli.ai.actions.ge_cancel_order.action_ge_cancel_order",
+                       return_value=make_api_result(char)):
+                _new_state, outcome = p._execute(action, MagicMock())
+        assert outcome == "ok"
+        now = datetime.now(tz=timezone.utc)
+        assert observer.sibling_order_claims(now) == frozenset({"order-1"})
+        assert observer.sibling_order_claims(
+            now + timedelta(seconds=GE_ORDER_CLAIM_TTL_SECONDS + 1)) == frozenset()
     finally:
         p._coordination.close()
         observer.close()

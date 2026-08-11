@@ -31,6 +31,23 @@ def _governor(fake: _FakeTime, **windows: Any) -> RateGovernor:
     return RateGovernor(budget, clock=fake.clock, sleep=fake.sleep)
 
 
+def test_sustainable_interval_reports_the_binding_windows_pace() -> None:
+    """The governor is what the bot holds at runtime, so it is where the planner
+    reads the pace a request actually costs. 300/hour is one request per 12s;
+    10/second permits far faster bursts but is not sustainable, so the HOUR
+    window binds — the same rule `WindowBudget.sustainable_interval` documents."""
+    fake = _FakeTime()
+    governor = _governor(fake, second=10, hour=300)
+    assert governor.sustainable_interval() == 12.0
+
+
+def test_sustainable_interval_is_zero_when_no_window_is_declared() -> None:
+    """No declared limit means no pacing required, NOT pace infinitely slowly —
+    and a zero floor is exactly the pre-change planner."""
+    fake = _FakeTime()
+    assert _governor(fake).sustainable_interval() == 0.0
+
+
 def test_requests_under_the_limit_never_block() -> None:
     fake = _FakeTime()
     governor = _governor(fake, second=2)

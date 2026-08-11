@@ -374,7 +374,8 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         # same per-cycle demand the firing predicate used; need_gold=0 (no per-step
         # required-spend is exposed), so the goal cancels on item-need + TTL.
         return CancelOrdersGoal(game_data=game_data, need_gold=0,
-                                needed_items=frozenset(step_profile or ()))
+                                needed_items=frozenset(step_profile or ()),
+                                sibling_claims=ctx.sibling_order_claims)
     raise ValueError(f"Unknown GuardKind: {kind!r}")
 
 

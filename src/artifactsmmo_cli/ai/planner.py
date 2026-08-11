@@ -95,6 +95,23 @@ class GOAPPlanner:
 
     def __init__(self) -> None:
         self.last_stats = PlanStats()
+        self.action_floor_seconds = 0.0
+        """Seconds one REQUEST costs when the per-IP rate budget, not the action
+        cooldown, is what paces this character. Zero (the default) restores the
+        pre-change planner exactly, and is what every single-character run and
+        every caller that never wires a `RateGovernor` sees.
+
+        Set via `set_action_floor` from the action bucket's
+        `WindowBudget.sustainable_interval()`, i.e. from live `/my/rates` data
+        divided by the number of concurrent children — never a constant."""
+
+    def set_action_floor(self, seconds: float) -> None:
+        """Wire the request-budget pace. See `action_floor_seconds`.
+
+        Separate from `plan()`'s keyword arguments because it is a property of
+        the ENVIRONMENT (this process's share of one per-IP budget), constant
+        across every goal and every re-plan, not of an individual search."""
+        self.action_floor_seconds = seconds
 
     def plan(
         self,
@@ -185,7 +202,55 @@ class GOAPPlanner:
                         continue
 
                     next_state = action.apply(node.state, game_data)
-                    g = node.g_score + action.cost(node.state, game_data, history)
+                    # THE EDGE COST IS max(cooldown, one request slot).
+                    #
+                    # `action.cost(...)` prices an action at the SECONDS its
+                    # cooldown takes. That is the true price only while the
+                    # cooldown is what the bot waits on. On a `play --all` fleet
+                    # it is not: rate limits are per-IP, every child holds a
+                    # fifth of one budget, and the 2026-08-10 five-character run
+                    # measured every child pinned at ~52 actions/hour — a mean
+                    # 69s between actions against a mean 11.5s cooldown, with
+                    # 29-49% of the wall clock spent blocked in
+                    # `RateGovernor.acquire`. An action whose cooldown is
+                    # cheaper than that pace does not happen any sooner for
+                    # being cheap; it still costs one request out of a fixed
+                    # hourly supply. Pricing it at its cooldown made a plan of
+                    # many cheap actions look better than a plan of few dear
+                    # ones, which is backwards whenever requests are what bind.
+                    #
+                    # A LOWER BOUND, NOT A FLAT RATE. `max` keeps every action
+                    # dearer than the floor at its own price, so a long move
+                    # still costs more than a short one and distance does not
+                    # become free. When the floor binds for both alternatives
+                    # the comparison degenerates to "fewer actions wins", which
+                    # is the correct objective in exactly that regime.
+                    #
+                    # APPLIED HERE, NOT INSIDE `Action.cost`, for two reasons
+                    # that are both load-bearing:
+                    #   * `Goal.heuristic` is NOT `h ≡ 0` — `goals/progression`
+                    #     and `goals/gathering` return `LevelSkill(...).cost(...)`
+                    #     — and `PlannerAdmissibility.Consistent` is a TIGHT
+                    #     equality there (`skillGrind_h_consistent`). Raising
+                    #     only the EDGE keeps `h s ≤ cost s s' + h s'` slacker
+                    #     on the safe side; raising only the HEURISTIC would
+                    #     break consistency and make closed-set pruning discard
+                    #     cheaper routes. Admissibility moves the same safe way:
+                    #     `trueRemaining` rises while `h` does not.
+                    #   * `formal/diff/test_action_cost_nonneg_diff.py` pins
+                    #     ~20 EXACT equalities on live `Action.cost(...)` against
+                    #     the Lean model, and `ActionCostNonneg` carries two
+                    #     UPPER bounds on Rest (`restCost_le_restCostMax`,
+                    #     `restCost_lt_consumableCostOverheal`) that keep the
+                    #     overheal sentinel dominant. A floor inside the pure
+                    #     cost cores would falsify all of them; a floor here
+                    #     leaves every published cost formula untouched.
+                    # Non-negativity — the seal on the optimality proof — is
+                    # preserved trivially: `max(x, y) ≥ x ≥ 0` for `y ≥ 0`.
+                    g = node.g_score + max(
+                        action.cost(node.state, game_data, history),
+                        self.action_floor_seconds,
+                    )
                     # h = goal.heuristic(next_state, game_data): see h0 above.
                     # `goal.value` remains used by goal *selection* (StrategyArbiter,
                     # learning) — the planner's heuristic role is a distinct,
