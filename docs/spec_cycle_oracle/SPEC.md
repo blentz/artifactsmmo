@@ -40,9 +40,16 @@ the specification, not clauses** — the oracle does not get to choose them.
 - The maximum character level is **50**.
 - XP awarded for a kill is
   `Round(((monster_level / player_level) × 20 + monster_hp × 0.04) × level_penalty × monster_multiplier × wisdom_bonus)`.
-- The level penalty is a step function of the gap between character and monster: at
-  or below the monster's level, **100%**; five or more levels above it, **70%**; ten
-  or more levels above it, **0%** — the kill awards nothing.
+- The level penalty is a step function of the gap `g = player_level − monster_level`,
+  and the table is TOTAL: `g ≤ 0` → **100%**; `1 ≤ g ≤ 4` → **100%**;
+  `5 ≤ g ≤ 9` → **70%**; `g ≥ 10` → **0%** — the kill awards nothing.
+
+  The published prose names only three cases — at or below the monster's level, five
+  or more above, ten or more above — and never assigns `1..4`. That is not a corner:
+  a climbing character out-levels most of its candidate pool by exactly one to four,
+  so the unassigned band is the ORDINARY case, and S-011's argmax has no defined
+  reward in it. The bands are read as lower-bounded steps, so the 70% band begins AT
+  five and everything below it is still full.
 - Each level gained grants the character **+5 maximum HP** and **+2 inventory
   slots**.
 - A fight lasts at most **100 turns**; a character that has not won by then loses.
@@ -69,7 +76,18 @@ progress toward the next level, the amount of progress a level requires, its
 current and maximum hit points, its combat attributes, and what it is carrying and
 wearing.
 
-The target level is a character level in the game's legal range.
+The target level is a character level in the game's legal range, **and so is the
+character state's own current level**. A state handed a level of zero, a negative
+level, or one above the published maximum is MALFORMED INPUT and outside this
+domain.
+
+That the current level needed saying at all is the finding. An earlier version
+constrained only the TARGET, which left the walk's starting point unbounded while
+S-001 demanded a total answer for it — and at level zero the published award divides
+the monster's level by the character's, so the award is not merely wrong but
+UNDEFINED, the same shape S-017 rules out for a recorded sample level. The two ends
+are settled together here for the same reason S-019 settles both ends of handed
+progress: a range with one end open is a decision made silently.
 
 **EACH MONSTER APPEARS AT MOST ONCE IN EACH OF THEM.** The catalogue is a mapping
 from monster identity to attributes, and the observations carry at most one
@@ -277,6 +295,21 @@ deterministic (S-001) and must not depend on how the monsters happen to be named
 If at some rung no monster satisfies S-009 and S-010, the walk stops there. The
 oracle reports the rungs it did cross, and reports the total cost as **not finite**
 — the target was not reached and no number of actions is claimed to reach it.
+
+**THAT VALUE IS POSITIVE INFINITY, SPECIFICALLY.** "Not finite" names a CLASS, and
+its members do not behave alike. Positive infinity is reflexively equal to itself and
+orders above every finite cost, so a replayed call compares equal to its first result
+and an unreachable candidate sorts LAST. NaN does neither: `total == total` is false,
+which makes S-001's determinism guarantee UNOBSERVABLE — the caller issues two
+identical calls and sees them appear to disagree — and every ordering comparison
+against it is false, so an argmin over candidate costs can select the UNREACHABLE
+candidate as the CHEAPEST. `None` and non-numeric markers are excluded for the same
+reason: S-001's guarantee is only visible through some equality, and the spec has to
+name which one.
+
+Nothing here licenses ARITHMETIC on that value. A sum or mean over candidate totals
+that includes one unreachable candidate is infinite whatever the others cost — a fact
+about the aggregate, not a permission to compute it.
 
 The rungs already crossed are still reported. How far the walk got is information
 the caller needs even when it did not finish.

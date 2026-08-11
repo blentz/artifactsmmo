@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.learning.observed_rate_core import (
     rescale_observed_xp,
     sample_level,
 )
+from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
 
 
 class TestRescaleObservedXp:
@@ -142,3 +143,40 @@ class TestSampleLevel:
         is no award to compare -- neither positive nor non-positive, which is the
         one gap both of the restatement's degenerate rules claim."""
         assert sample_level([0, 1]) == 1
+
+
+class TestPublishedPenaltyBand:
+    """The band the published prose never assigns, ratified 2026-08-11 as FULL.
+
+    The game documents three cases -- at or below the monster's level 100%, five or
+    more above 70%, ten or more above 0% -- and never says what a gap of 1..4 does.
+    That is the ORDINARY case, not a corner: a climbing character out-levels most of
+    its candidate pool by one to four, so the argmax that picks a rung's monster had
+    no defined reward across most of its own pool.
+    """
+
+    @staticmethod
+    def _award(gap):
+        catalog = MonsterCatalog(levels={"m": 20}, hp={"m": 200}, types={"m": "normal"})
+        return catalog.xp_per_kill("m", 20 + gap, wisdom=0)
+
+    @pytest.mark.parametrize("gap", [1, 2, 3, 4])
+    def test_a_gap_of_one_to_four_keeps_the_full_penalty_band(self, gap):
+        """Lower-bounded steps: the 70% band begins AT five, so everything below it
+        is still full. The award still falls across 1..4 because the formula's base
+        term divides by the character's level -- what must NOT change is the PENALTY,
+        so the drop is gradual rather than the 30% cliff the other reading gives."""
+        at_gap = self._award(gap)
+        at_five = self._award(5)
+        assert at_gap > at_five, (gap, at_gap, at_five)
+
+    def test_the_seventy_percent_band_really_does_start_at_five(self):
+        """Pins that the band above is not vacuous: gap 4 to gap 5 is where the
+        penalty actually bites, and it is a cliff, not a slope."""
+        drop_inside = self._award(3) - self._award(4)
+        cliff = self._award(4) - self._award(5)
+        assert cliff > drop_inside * 2, (drop_inside, cliff)
+
+    def test_ten_levels_above_awards_nothing(self):
+        assert self._award(10) == 0
+        assert self._award(9) > 0
