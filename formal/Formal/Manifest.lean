@@ -1354,8 +1354,8 @@ open Formal.PriorityBand
 #check @Formal.XpPositive.gate_of_window                     -- picker-window targets are structurally xp-positive
 #check @Formal.XpPositive.gate_antitone                      -- levelling up never turns a zero-xp target positive
 -- XpValue (the exact combat-xp VALUE core, documented server formula):
-#check @Formal.XpValue.roundHalfEven_ge_floor                -- half-even never rounds below the floor
-#check @Formal.XpValue.roundHalfEven_le_succ_floor           -- half-even never exceeds floor + 1
+#check @Formal.XpValue.roundHalfUp_ge_floor                -- half-up never rounds below the floor
+#check @Formal.XpValue.roundHalfUp_le_succ_floor           -- half-up never exceeds floor + 1
 #check @Formal.XpValue.xpPerKill_pos_iff_gate                -- VALUE ↔ GATE: xp is positive exactly when XpPositive holds
 #check @Formal.XpValue.xpPerKill_wisdom_mono                 -- more wisdom never lowers the value
 -- PlanModel (plannability soundness: the planner's admission bound is not a lie).

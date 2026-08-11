@@ -1236,10 +1236,16 @@ XP_VALUE_MUTATIONS = [
     ("xp_value: wisdom bonus dropped",
      "               * penalty10 * mult10 * (1000 + wisdom))\n",
      "               * penalty10 * mult10 * 1000)\n"),
-    # flip the tie rule to half-odd -- the engineered .5 tie (192) rounds up.
-    ("xp_value: round-half-even becomes half-odd",
-     "        if 2 * r > den or (2 * r == den and q % 2 == 1):\n",
-     "        if 2 * r > den or (2 * r == den and q % 2 == 0):\n"),
+    # restore round-half-to-EVEN, the toolchain artifact the ratified rule replaced.
+    # The engineered .5 tie has an EVEN floor, which is the only shape where the two
+    # rules disagree, so it drops from 193 back to 192.
+    ("xp_value: half-up reverts to half-to-even",
+     "        if 2 * r >= den:\n",
+     "        if 2 * r > den or (2 * r == den and q % 2 == 1):\n"),
+    # drop the tie handling entirely -- a .5 rounds DOWN, under-stating an award.
+    ("xp_value: a tie rounds down",
+     "        if 2 * r >= den:\n",
+     "        if 2 * r > den:\n"),
     # drop the hp term's char_level factor -- mis-scales the formula.
     ("xp_value: hp term loses the char_level factor",
      "        num = ((2000 * monster_level + 4 * monster_hp * char_level)\n",

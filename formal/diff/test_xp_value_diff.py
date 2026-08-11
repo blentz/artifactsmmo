@@ -1,7 +1,7 @@
 """Differential (C0b): production's exact xp VALUE ≡ proven Lean mirror, bit for bit.
 
 `monster_catalog.xp_per_kill` was refactored to exact integer arithmetic
-(round-half-even on one rational num/den — the old float path differed at
+(round-half-UP on one rational num/den — the old float path differed at
 12/17400 grid points, all ±1 at half-integer ties). `Formal.XpValue.xpPerKill`
 is the proven mirror; this harness pins them bit-identically over random
 inputs, PLUS a deterministic sweep of the level-penalty boundaries and
@@ -45,7 +45,9 @@ def test_xp_value_python_matches_lean(char_level, monster_level, monster_hp, mty
 def test_penalty_boundaries_and_ties_exact():
     """Deterministic: penalty band edges (diff 4/5/9/10) for every type, plus a
     verified half-integer tie (bat-class case: ml=38 hp=2000 cl=8 w=100 has
-    num/den = 192.5 exactly — half-even keeps 192; the old float said 193)."""
+    num/den = 192.5 exactly — half-UP takes 193, which is also what the old float
+    path happened to give; half-to-even, the rule this replaced, kept 192 because
+    the floor was even)."""
     cases = []
     for monster_level in (1, 6, 23, 38):
         for diff in (0, 4, 5, 9, 10, 11):
@@ -57,5 +59,7 @@ def test_penalty_boundaries_and_ties_exact():
     leans = run_oracle("xp_value", batch)
     for (c, m, hp, t, w), lean in zip(cases, leans):
         assert _py(c, m, hp, t, w) == lean["xp"], (c, m, hp, t, w, lean)
-    # The tie case pins round-half-even specifically.
-    assert _py(8, 38, 2000, "normal", 100) == 192
+    # The tie case pins the HALF-UP rule specifically: an exact .5 with an EVEN
+    # floor is the only shape where half-up and half-to-even disagree, so this
+    # single assertion is what separates the ratified rule from the old one.
+    assert _py(8, 38, 2000, "normal", 100) == 193

@@ -72,7 +72,7 @@ class MonsterCatalog:
         EXACT integer arithmetic (mechanical-extraction discipline — this value
         is in the decision path: unlock_boost ranks by it, combat_picker gates
         on it being positive). The documented formula is evaluated as a single
-        rational num/den with round-half-even (Python's `round` semantics), so
+        rational num/den with round-half-UP (a tie goes to the larger award), so
         the Lean mirror (`Formal.XpValue.xpPerKill`) is bit-identical and no
         float rounding can flip a ranking. penalty and multiplier are carried
         x10 (0.7 -> 7, 1.4 -> 14), wisdom_bonus as (1000 + wisdom)/1000:
@@ -94,7 +94,12 @@ class MonsterCatalog:
                * penalty10 * mult10 * (1000 + wisdom))
         den = char_level * 10_000_000
         q, r = divmod(num, den)
-        if 2 * r > den or (2 * r == den and q % 2 == 1):
+        # HALF-UP, not half-to-even. This used to be Python's `round` semantics --
+        # a TOOLCHAIN artifact standing in for a game rule nobody had read. Parity
+        # of the quotient decided the award on a tie, so two monsters could be
+        # ranked by which side of a half they landed on. Ratified 2026-08-10 as
+        # half away from zero; on non-negative values that is this.
+        if 2 * r >= den:
             return q + 1
         return q
 

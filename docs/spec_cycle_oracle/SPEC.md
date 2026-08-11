@@ -71,6 +71,26 @@ wearing.
 
 The target level is a character level in the game's legal range.
 
+**EACH MONSTER APPEARS AT MOST ONCE IN EACH OF THEM.** The catalogue is a mapping
+from monster identity to attributes, and the observations carry at most one
+measurement per monster. A body presenting the same monster twice — two catalogue
+rows, or two measured rates — is MALFORMED INPUT and outside this domain; it is not
+something the oracle silently resolves.
+
+That is a decision about where the guarantee lives, not an evasion. Resolving a
+duplicate inside the oracle means inventing a rule nobody ratified — first wins,
+last wins, least favourable wins, or a pooling the two entries were never built to
+support — and each choice is observable: a duplicated catalogue row could otherwise
+win a rung twice, and two rates for one monster would make the walk depend on which
+was read first. The boundary that produces these bodies is the only place that can
+guarantee uniqueness, so the requirement is stated where it can be enforced rather
+than patched where it cannot.
+
+Where a producer genuinely cannot guarantee it for measurements, the repair is to
+POOL before the oracle is called — all of a monster's aggregated cycles forming one
+population, one per-cycle rate and one sample level (S-017) — never to hand the
+oracle two entries and let it choose.
+
 ### S-003 · Output shape
 
 The oracle returns, for the state and target it was given:
@@ -157,6 +177,26 @@ published formula over the catalogue's attributes for that monster. It does not
 guess, does not use a constant, and does not substitute a value not derived from
 game data.
 
+**THE FORMULA'S `Round` RESOLVES AN EXACT HALF UPWARD — AWAY FROM ZERO — AND IS
+EVALUATED IN EXACT RATIONAL ARITHMETIC.** No binary fraction is formed at any point,
+so no representation error can move a value across the boundary. A tie takes the
+LARGER award, which is the direction that does not under-state a monster's reward.
+
+Stating it was forced. The rule had been left to the implementing language, whose
+built-in rounding is half-to-EVEN, and that makes an award depend on the PARITY of
+the quotient: two monsters whose exact awards differ by nothing but which side of a
+half they land on are then ranked by an accident of representation rather than by
+the game. The identical defect was found and removed from the measured-rate sample
+level (S-017) in the same session, and from the published award itself on the
+strength of this clause.
+
+⚠️ This is a DECLARED reading of the published `Round`, not a probed one. The game's
+documentation names the operation and not its tie behaviour, and no live experiment
+has yet been run against a monster whose unrounded award is an exact half. Half-up
+is the reading a plain reader takes and the direction that does not manufacture a
+shortfall, and it is recorded here as an assumption so that a future probe has
+something to contradict.
+
 ### S-008 · Learned observations supersede prediction
 
 Where the observations contain a measured rate for a monster, the oracle **uses**
@@ -203,8 +243,24 @@ with.
 ### S-010 · A rung is crossed only by a monster the character is permitted to fight
 
 Independently of whether it can win, the monster chosen for a rung must be one the
-game and the plan admit at that rung. A monster the character would not be allowed
-to engage is not a candidate, whatever its rewards.
+game admits at that rung. A monster the character would not be allowed to engage is
+not a candidate, whatever its rewards.
+
+**THE TEST IS THE SHARED ENGAGEMENT PREDICATE, APPLIED TO THE SAME ARGUMENTS S-009
+GIVES THE BEATABILITY CONSULT** — the projected rung state (S-015) and the monster,
+with the loadout S-020 constructs. Naming it that way is what stops this clause
+being a second, private notion of availability that could disagree with the one the
+executor uses. HOW it decides is background, exactly as beatability is; this clause
+fixes only that it is consulted, and with what.
+
+**"THE PLAN" CONTRIBUTES NO RESTRICTION, AND THE PHRASE IS WITHDRAWN.** An earlier
+wording had the game "and the plan" admit a monster. S-002 hands the oracle no plan
+and no permission data, so that phrase quantified over an input which does not
+exist — an implementer could honour it only by inventing one, and two implementers
+would invent differently. It was clausification residue from prose about a caller.
+The filter is the game's engagement rules alone, and a monster is admitted unless
+those rules exclude it; the walk's own history never narrows the set, so the same
+rung admits the same monsters however the oracle reached it.
 
 ### S-011 · The monster chosen for a rung is the one that crosses it fastest
 
@@ -404,6 +460,28 @@ That floor is the reason NO RUNG IS EVER CROSSED AT ZERO COST. Without it the tw
 ### S-020 · The consult sees carried gear, and the equip is charged  [witness: W-006]
 
 The state handed to the beatability predicate carries the best loadout the character already holds and is permitted to wear at that rung -- inventory and worn together -- not only what is currently worn. Equip conditions are evaluated against the rung's level (S-015), so gear the rung newly unlocks is included.
+
+**THE SELECTION IS INVOKED ONCE PER CANDIDATE MONSTER, WITH THAT MONSTER AS THE
+PURPOSE.** It is not invoked once per rung against a monster-agnostic notion of
+"best". Every consult about a candidate — the beatability verdict of S-009 and the
+damage that prices its recovery under S-021 — is answered under the loadout chosen
+FOR THAT CANDIDATE, and the rung's setup cost is then charged against the loadout of
+the monster S-011 actually picked, once, after the choice is made.
+
+The alternative is not merely cheaper, it is WRONG, and observably so. Two carried
+rings competing for one slot, one with better raw stats and one that happens to
+blunt the monster's element: a per-rung purpose-agnostic selection takes the better
+raw stats, the monster then out-damages the bar, the admissible set empties, and the
+oracle reports the target UNREACHABLE — while the executor, which equips for the
+fight it is about to take, beats that monster comfortably. That breaks the promise
+S-009 exists to make, that the projection and the executor never disagree about
+which monsters are available. A projection may be pessimistic about cost; it may not
+invent a wall.
+
+One quantity is deliberately NOT per candidate: the projected wisdom bonus, which
+scales every award equally and so is selected once per rung under a ranking purpose.
+It does not depend on which monster is being weighed, and making it per candidate
+would let the choice of monster change the award the choice is being made on.
 
 WHICH loadout is best for a purpose is not decided here. It comes from the same shared loadout selection the executor uses, exactly as the beatability verdict does, and that selection is BACKGROUND: two carried pieces competing for one slot with neither dominating is its problem to settle, and it must settle it deterministically (S-001). This clause fixes only that the selection is offered inventory and worn together, and is evaluated at the rung's level.
 

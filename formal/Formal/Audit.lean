@@ -1050,8 +1050,8 @@ open Formal.PriorityBand
 #print axioms Formal.XpPositive.gate_false_iff
 #print axioms Formal.XpPositive.gate_of_window
 #print axioms Formal.XpPositive.gate_antitone
-#print axioms Formal.XpValue.roundHalfEven_ge_floor
-#print axioms Formal.XpValue.roundHalfEven_le_succ_floor
+#print axioms Formal.XpValue.roundHalfUp_ge_floor
+#print axioms Formal.XpValue.roundHalfUp_le_succ_floor
 #print axioms Formal.XpValue.xpPerKill_pos_iff_gate
 #print axioms Formal.XpValue.xpPerKill_wisdom_mono
 #print axioms Formal.PlanModel.minGathers_le_gathers_of_star
