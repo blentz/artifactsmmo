@@ -53,15 +53,21 @@ def test_a_sibling_claim_on_another_order_leaves_this_one_a_target(game_data):
 
 
 def test_a_claimed_buy_order_does_not_count_toward_the_gold_shortfall(game_data):
-    """A claimed BUY must not be silently credited against `need_gold`: its
-    escrow is being freed by the SIBLING, so counting it here would make this
-    character stop cancelling a second order it genuinely still needs. Two
-    orders, 27 gold each, 50 short — with b1 claimed, b2 must still be taken."""
+    """A claimed BUY must not be silently credited against `need_gold`: the
+    SIBLING is freeing that escrow, not us, so counting it here would leave this
+    character believing its shortfall is already covered and cancelling nothing.
+
+    Sized so the two readings DIVERGE. The shortfall is 20 and each order holds
+    27, so one order covers it: crediting the claimed b1 drives `gold_short` to
+    -7 and b2 is never taken, while skipping b1 outright leaves the full 20
+    outstanding and b2 is. An earlier version used a 50 shortfall, where b2 was
+    taken under both readings and the assertion proved nothing — a surviving
+    mutant caught it."""
     state = make_state(gold=0, open_orders=(
         _buy("b1", "iron", 3, 9),
         _buy("b2", "ash", 3, 9),
     ))
-    ids = cancel_targets(state, game_data, need_gold=50, needed_items=frozenset(),
+    ids = cancel_targets(state, game_data, need_gold=20, needed_items=frozenset(),
                          sibling_claims=frozenset({"b1"}))
     assert ids == ("b2",)
 
