@@ -450,13 +450,21 @@ Equipment conditioned on a minimum character level and satisfied by the newly re
 
 This clause is about the state the oracle CONSTRUCTS for itself between rungs. It does not enlarge the input domain (S-002) and does not change how the beatability predicate decides.
 
-The projected state's OWN attributes are given by a closed formula and by nothing else. At a rung of level `k`, reached from a handed state of level `L0`, the projected maximum hit points are exactly `handed_maximum + G × (k − L0)`, where `G` is the published per-level grant, and likewise for every other published per-level grant. Current hit points equal that projected maximum (S-009 judges from full).
+**THE POOL** — the maximum hit points and every other PUBLISHED PER-LEVEL GRANT — is given by a closed formula and by nothing else. At a rung of level `k`, reached from a handed state of level `L0`, the projected maximum hit points are exactly `handed_maximum + G × (k − L0)`, where `G` is the published grant. Current hit points equal that projected maximum (S-009 judges from full).
+
+**THAT IS A RULE ABOUT THE POOL, NOT ABOUT EVERY ATTRIBUTE, and an earlier version said "the projected state's OWN attributes… and by nothing else", which is both wider than intended and false of the oracle it describes.** Attributes the LOADOUT confers — wisdom, attack, resistance, and the rest — are taken from the projected loadout S-020 constructs, not from this formula. That is the whole point of re-evaluating the loadout at all: a candidate carrying an unworn wisdom amulet that the rung's level newly unlocks really does earn more XP per kill from that rung onward, and a projection that held wisdom at the handed value would price that candidate identically to one carrying nothing, which is the defect S-020 exists to prevent.
+
+The wider wording was also the more FORMAL of the two, which is what made it dangerous: an implementer reading a closed formula against a narrative aside in another clause follows the formula, and the intent dies quietly with the certificate still green.
 
 **Gear never enters that formula, in EITHER direction.** A piece the re-evaluated loadout adds does not raise the projected maximum, and — this is the harder half — a piece the re-evaluated loadout DISPLACES does not lower it either. The formula's only inputs are the handed total and the number of levels gained.
 
-That is a real and accepted imprecision, stated rather than hidden: after a rung swaps a worn helm for a better one, the projected maximum still credits the departed helm's contribution, because the handed total was server-authoritative and already contained it. The alternative — re-deriving the total from the rung's loadout — would require decomposing the handed total into a base and its worn contributions, and S-002 admits no such decomposition: the oracle is given totals, never a base. A rule that cannot be evaluated from the inputs is not a rule.
+That is a real and accepted imprecision, stated rather than hidden: after a rung swaps a worn helm for a better one, the projected maximum still credits the departed helm's contribution, because the handed total was server-authoritative and already contained it.
 
-So gear changes which monsters are beatable (through the loadout S-020 hands the predicate) and never changes the pool. Where the two disagree about what is worn, the pool is the one that is stale, deliberately.
+⚠️ **THE REASON GIVEN FOR IT WAS WRONG, AND THE CORRECTION IS RECORDED RATHER THAN QUIETLY DROPPED.** An earlier version argued that the alternative would require decomposing the handed total into a base and its worn contributions, which S-002 does not admit — "a rule that cannot be evaluated from the inputs is not a rule". But no decomposition is needed: the adjustment is a DELTA between the displaced piece and the added one, and both are catalogue attributes the oracle already has. The same delta is what produces the projected WISDOM one paragraph above. So the pool could be adjusted for gear, and is not.
+
+Keeping the pool on the handed total is therefore a CHOICE — it stays server-authoritative and never drifts from what the game last reported — and not a necessity. It is left as it stands because changing it would move every projected beatability verdict, which is a decision about behaviour and not about wording. **RESIDUAL:** whether the pool should track the rung's loadout the way wisdom does is undecided, and the argument that it cannot is withdrawn.
+
+So gear changes which monsters are beatable (through the loadout S-020 hands the predicate) and what a kill awards (through the projected wisdom), and never changes the pool. Where the two disagree about what is worn, the pool is the one that is stale, deliberately.
 
 ### S-016 · WITHDRAWN — S-017 already answers W-002  [witness: W-002]
 
