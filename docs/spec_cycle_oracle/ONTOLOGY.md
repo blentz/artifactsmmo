@@ -32,17 +32,17 @@
 | 1. Oracle call contract (purity, totality, determinism) | normal | DEFINED | S-001, S-003 |  |
 | 1. Oracle call contract (purity, totality, determinism) | boundary | THIN | S-001, S-002 |  |
 | 1. Oracle call contract (purity, totality, determinism) | degenerate | THIN | S-001 |  |
-| 1. Oracle call contract (purity, totality, determinism) | conflicting | MISSING |  |  |
-| 1. Oracle call contract (purity, totality, determinism) | absent | MISSING |  |  |
+| 1. Oracle call contract (purity, totality, determinism) | conflicting | DEFINED | S-001 | no argument is mutated and nothing is shared, so two arguments cannot disagree with each other mid-call |
+| 1. Oracle call contract (purity, totality, determinism) | absent | DEFINED | S-002 | an argument the domain requires is simply absent: that is malformed input, outside the domain S-001 is total over |
 | 1. Oracle call contract (purity, totality, determinism) | stale / expiry (aged inputs, TTL, version drift) | DEFINED | S-001 |  |
 | 1. Oracle call contract (purity, totality, determinism) | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001 |  |
 | 1. Oracle call contract (purity, totality, determinism) | dependency failure (beatability predicate, catalogue, observation store) | DEFINED | S-002 | a dependency outside its own contract is malformed input and outside the admitted domain; reading a failed consult as 'no' would turn a crash into an indistinguishable wall |
 | 1. Oracle call contract (purity, totality, determinism) | concurrent stimulus (aliased/shared arguments, two calls at once) | THIN | S-001 |  |
 | 2. Input admission and domain validation (character state, target level, catalogue, observations) | normal | DEFINED | S-002 |  |
 | 2. Input admission and domain validation (character state, target level, catalogue, observations) | boundary | THIN | S-002, S-006 |  |
-| 2. Input admission and domain validation (character state, target level, catalogue, observations) | degenerate | MISSING |  |  |
-| 2. Input admission and domain validation (character state, target level, catalogue, observations) | conflicting | MISSING |  |  |
-| 2. Input admission and domain validation (character state, target level, catalogue, observations) | absent | MISSING |  |  |
+| 2. Input admission and domain validation (character state, target level, catalogue, observations) | degenerate | DEFINED | S-002 | the degenerate inputs are named: level range, duplicates, failing dependencies |
+| 2. Input admission and domain validation (character state, target level, catalogue, observations) | conflicting | DEFINED | S-002 | duplicate or mutually inconsistent entries are malformed input, stated at the boundary that can enforce it |
+| 2. Input admission and domain validation (character state, target level, catalogue, observations) | absent | DEFINED | S-002 | same rule read at its own subject: a missing required field is not an admitted input |
 | 2. Input admission and domain validation (character state, target level, catalogue, observations) | stale / expiry (aged inputs, TTL, version drift) | DEFINED | S-001 | purity: no dependence on elapsed time, so the oracle has no freshness notion; age is a property of what the caller hands over |
 | 2. Input admission and domain validation (character state, target level, catalogue, observations) | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001 |  |
 | 2. Input admission and domain validation (character state, target level, catalogue, observations) | dependency failure (beatability predicate, catalogue, observation store) | DEFINED | S-002 | a dependency outside its own contract is malformed input and outside the admitted domain; reading a failed consult as 'no' would turn a crash into an indistinguishable wall |
@@ -50,17 +50,17 @@
 | 3. At-or-above-target early exit | normal | DEFINED | S-006 |  |
 | 3. At-or-above-target early exit | boundary | DEFINED | S-006 |  |
 | 3. At-or-above-target early exit | degenerate | THIN | S-006, S-003 |  |
-| 3. At-or-above-target early exit | conflicting | MISSING |  |  |
-| 3. At-or-above-target early exit | absent | MISSING |  |  |
+| 3. At-or-above-target early exit | conflicting | DEFINED | S-006 | the early exit is decided by level alone, so nothing can conflict with it |
+| 3. At-or-above-target early exit | absent | DEFINED | S-006 | no gap to close is the at-or-above-target case: zero rungs, zero cost, nothing left to do |
 | 3. At-or-above-target early exit | stale / expiry (aged inputs, TTL, version drift) | DEFINED | S-001 | purity: no dependence on elapsed time, so the oracle has no freshness notion; age is a property of what the caller hands over |
 | 3. At-or-above-target early exit | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001, S-006 |  |
 | 3. At-or-above-target early exit | dependency failure (beatability predicate, catalogue, observation store) | IGNORE |  | S-006's answer is total in the character state and target alone. The exit fires before any catalogue read, observation lookup or beatability consult, so there is no dependency in scope that could fail. Waived on the record rather than omitted. |
 | 3. At-or-above-target early exit | concurrent stimulus (aliased/shared arguments, two calls at once) | DEFINED | S-001 | purity: no shared state and no argument is mutated, so concurrent calls and aliased arguments cannot interfere |
 | 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | normal | DEFINED | S-003, S-012, S-019 |  |
-| 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | boundary | MISSING |  |  |
+| 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | boundary | DEFINED | S-019 | both ends of handed progress are decided, and the floor is stated with what it does and does not buy |
 | 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | degenerate | DEFINED | S-003, S-015 |  |
-| 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | conflicting | MISSING |  |  |
-| 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | absent | MISSING |  |  |
+| 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | conflicting | DEFINED | S-003 | the sequence is strictly increasing and no level appears twice, so two rungs cannot name one level |
+| 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | absent | DEFINED | S-003 | a zero-rung walk is COMPLETED: empty sequence, total 0, target reached |
 | 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | stale / expiry (aged inputs, TTL, version drift) | DEFINED | S-001 | purity: no dependence on elapsed time, so the oracle has no freshness notion; age is a property of what the caller hands over |
 | 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001 | determinism: the same call returns the same answer, so there is nothing to de-duplicate or reconcile |
 | 4. Rung walk driver and per-rung state advancement (XP carry-over, level-up stat growth) | dependency failure (beatability predicate, catalogue, observation store) | DEFINED | S-002 | a dependency outside its own contract is malformed input and outside the admitted domain; reading a failed consult as 'no' would turn a crash into an indistinguishable wall |
@@ -68,8 +68,8 @@
 | 5. Candidate monster enumeration from the catalogue | normal | THIN | S-002, S-011 |  |
 | 5. Candidate monster enumeration from the catalogue | boundary | THIN | S-011 |  |
 | 5. Candidate monster enumeration from the catalogue | degenerate | DEFINED | S-012 |  |
-| 5. Candidate monster enumeration from the catalogue | conflicting | MISSING |  |  |
-| 5. Candidate monster enumeration from the catalogue | absent | MISSING |  |  |
+| 5. Candidate monster enumeration from the catalogue | conflicting | DEFINED | S-002 | the catalogue is a mapping from identity to attributes, so two rows for one monster cannot be presented |
+| 5. Candidate monster enumeration from the catalogue | absent | DEFINED | S-012 | an empty catalogue admits no monster at the first rung, so the walk stops there and reports the not-finite total |
 | 5. Candidate monster enumeration from the catalogue | stale / expiry (aged inputs, TTL, version drift) | THIN | S-002 |  |
 | 5. Candidate monster enumeration from the catalogue | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001 |  |
 | 5. Candidate monster enumeration from the catalogue | dependency failure (beatability predicate, catalogue, observation store) | DEFINED | S-002 | a dependency outside its own contract is malformed input and outside the admitted domain; reading a failed consult as 'no' would turn a crash into an indistinguishable wall |
@@ -77,8 +77,8 @@
 | 6. Beatability consult (when, and with what character state) | normal | DEFINED | S-009 |  |
 | 6. Beatability consult (when, and with what character state) | boundary | DEFINED | S-009, S-020 |  |
 | 6. Beatability consult (when, and with what character state) | degenerate | THIN | S-009 |  |
-| 6. Beatability consult (when, and with what character state) | conflicting | MISSING |  |  |
-| 6. Beatability consult (when, and with what character state) | absent | MISSING |  |  |
+| 6. Beatability consult (when, and with what character state) | conflicting | DEFINED | S-020 | the consult is per candidate under that monster's loadout, so two verdicts about one monster cannot both stand |
+| 6. Beatability consult (when, and with what character state) | absent | DEFINED | S-002 | a beatability predicate that is not supplied is a dependency outside its contract, hence malformed input |
 | 6. Beatability consult (when, and with what character state) | stale / expiry (aged inputs, TTL, version drift) | DEFINED | S-001 | purity: no dependence on elapsed time, so the oracle has no freshness notion; age is a property of what the caller hands over |
 | 6. Beatability consult (when, and with what character state) | retry / duplicate / replay (same call twice, same rung twice) | THIN | S-001, S-009 |  |
 | 6. Beatability consult (when, and with what character state) | dependency failure (beatability predicate, catalogue, observation store) | DEFINED | S-002 | a dependency outside its own contract is malformed input and outside the admitted domain; reading a failed consult as 'no' would turn a crash into an indistinguishable wall |
@@ -86,24 +86,24 @@
 | 7. Permission / admissibility filter ('the game and the plan admit') | normal | THIN | S-010 |  |
 | 7. Permission / admissibility filter ('the game and the plan admit') | boundary | THIN | S-010 |  |
 | 7. Permission / admissibility filter ('the game and the plan admit') | degenerate | DEFINED | S-012, S-010 |  |
-| 7. Permission / admissibility filter ('the game and the plan admit') | conflicting | MISSING |  |  |
-| 7. Permission / admissibility filter ('the game and the plan admit') | absent | MISSING |  |  |
+| 7. Permission / admissibility filter ('the game and the plan admit') | conflicting | DEFINED | S-010 | one predicate, one verdict; the plan contributes no competing restriction |
+| 7. Permission / admissibility filter ('the game and the plan admit') | absent | DEFINED | S-010 | admissibility is the engagement predicate alone; nothing else needs to be present for it to be applied |
 | 7. Permission / admissibility filter ('the game and the plan admit') | stale / expiry (aged inputs, TTL, version drift) | DEFINED | S-001 | purity: no dependence on elapsed time, so the oracle has no freshness notion; age is a property of what the caller hands over |
 | 7. Permission / admissibility filter ('the game and the plan admit') | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001 |  |
 | 7. Permission / admissibility filter ('the game and the plan admit') | dependency failure (beatability predicate, catalogue, observation store) | DEFINED | S-002 | a dependency outside its own contract is malformed input and outside the admitted domain; reading a failed consult as 'no' would turn a crash into an indistinguishable wall |
 | 7. Permission / admissibility filter ('the game and the plan admit') | concurrent stimulus (aliased/shared arguments, two calls at once) | DEFINED | S-001 | purity: no shared state and no argument is mutated, so concurrent calls and aliased arguments cannot interfere |
 | 8. Predicted XP-per-kill from the published formula | normal | DEFINED | S-007 |  |
 | 8. Predicted XP-per-kill from the published formula | boundary | THIN | S-007 |  |
-| 8. Predicted XP-per-kill from the published formula | degenerate | MISSING |  |  |
-| 8. Predicted XP-per-kill from the published formula | conflicting | MISSING |  |  |
-| 8. Predicted XP-per-kill from the published formula | absent | MISSING |  |  |
+| 8. Predicted XP-per-kill from the published formula | degenerate | DEFINED | S-007 | a zero award is the grey band and is priced, not a degenerate case |
+| 8. Predicted XP-per-kill from the published formula | conflicting | DEFINED | S-008 | prediction and measurement disagreeing is the ORDINARY case, and the measurement governs |
+| 8. Predicted XP-per-kill from the published formula | absent | DEFINED | S-007 | every factor of the published formula is now sourced in the Domain facts, so no factor can be absent; a catalogue row lacking a type is normal |
 | 8. Predicted XP-per-kill from the published formula | stale / expiry (aged inputs, TTL, version drift) | DEFINED | S-001 | purity: no dependence on elapsed time, so the oracle has no freshness notion; age is a property of what the caller hands over |
 | 8. Predicted XP-per-kill from the published formula | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001, S-007 |  |
 | 8. Predicted XP-per-kill from the published formula | dependency failure (beatability predicate, catalogue, observation store) | DEFINED | S-002 | a dependency outside its own contract is malformed input and outside the admitted domain; reading a failed consult as 'no' would turn a crash into an indistinguishable wall |
 | 8. Predicted XP-per-kill from the published formula | concurrent stimulus (aliased/shared arguments, two calls at once) | IGNORE |  | Waived per stimulus_waivers: the prediction is arithmetic over scalars already read out of the catalogue and character state within this call. It holds no handle and publishes no state, so 'two arrive at once' collapses into the whole-call cell (subject 1, concurrent), which is recorded THIN there rather than swallowed here. |
 | 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | normal | DEFINED | S-008, S-017 |  |
-| 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | boundary | MISSING |  |  |
-| 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | degenerate | MISSING |  |  |
+| 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | boundary | DEFINED | S-017 | the sample level's ends are decided: below one is not a level, above the maximum is priced by the ordinary arithmetic |
+| 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | degenerate | DEFINED | S-018 | an absent measurement is fully enumerated, including the below-one-level class |
 | 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | conflicting | DEFINED | S-008, S-023 |  |
 | 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | absent | DEFINED | S-008, S-007, S-018 |  |
 | 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | stale / expiry (aged inputs, TTL, version drift) | DEFINED | S-001 | purity: no dependence on elapsed time, so the oracle has no freshness notion; age is a property of what the caller hands over |
@@ -111,10 +111,10 @@
 | 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | dependency failure (beatability predicate, catalogue, observation store) | DEFINED | S-002 | a dependency outside its own contract is malformed input and outside the admitted domain; reading a failed consult as 'no' would turn a crash into an indistinguishable wall |
 | 9. Measured-rate lookup and unit reconciliation (observations vs prediction) | concurrent stimulus (aliased/shared arguments, two calls at once) | DEFINED | S-001 | purity: no shared state and no argument is mutated, so concurrent calls and aliased arguments cannot interfere |
 | 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | normal | DEFINED | S-005, S-004, S-021 |  |
-| 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | boundary | MISSING |  |  |
+| 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | boundary | DEFINED | S-021 | the three regimes are stated with their boundaries, and the guard threshold is a ratio |
 | 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | degenerate | THIN | S-005 |  |
-| 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | conflicting | MISSING |  |  |
-| 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | absent | MISSING |  |  |
+| 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | conflicting | DEFINED | S-005 | S-005 counts what is executed and S-021 prices it; the quantum exception is stated in S-005 itself |
+| 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | absent | DEFINED | S-021 | a damage of zero forces no recovery, so an absent recovery term is the priced case rather than a hole |
 | 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | stale / expiry (aged inputs, TTL, version drift) | DEFINED | S-001 | purity: no dependence on elapsed time, so the oracle has no freshness notion; age is a property of what the caller hands over |
 | 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001 |  |
 | 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires') | dependency failure (beatability predicate, catalogue, observation store) | DEFINED | S-002 | a dependency outside its own contract is malformed input and outside the admitted domain; reading a failed consult as 'no' would turn a crash into an indistinguishable wall |
@@ -132,7 +132,7 @@
 | 12. Walk-stop decision (no admissible monster / zero reward) | boundary | THIN | S-013 |  |
 | 12. Walk-stop decision (no admissible monster / zero reward) | degenerate | DEFINED | S-012, S-006 |  |
 | 12. Walk-stop decision (no admissible monster / zero reward) | conflicting | DEFINED | S-013, S-011, S-012, S-016 |  |
-| 12. Walk-stop decision (no admissible monster / zero reward) | absent | MISSING |  |  |
+| 12. Walk-stop decision (no admissible monster / zero reward) | absent | DEFINED | S-013 | no admissible monster and no positive award are the two stops, and both are stated |
 | 12. Walk-stop decision (no admissible monster / zero reward) | stale / expiry (aged inputs, TTL, version drift) | DEFINED | S-001 | purity: no dependence on elapsed time, so the oracle has no freshness notion; age is a property of what the caller hands over |
 | 12. Walk-stop decision (no admissible monster / zero reward) | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001 |  |
 | 12. Walk-stop decision (no admissible monster / zero reward) | dependency failure (beatability predicate, catalogue, observation store) | DEFINED | S-002 | a dependency outside its own contract is malformed input and outside the admitted domain; reading a failed consult as 'no' would turn a crash into an indistinguishable wall |
@@ -141,7 +141,7 @@
 | 13. Cost arithmetic and upward rounding | boundary | THIN | S-014 |  |
 | 13. Cost arithmetic and upward rounding | degenerate | DEFINED | S-013 |  |
 | 13. Cost arithmetic and upward rounding | conflicting | THIN | S-014, S-003 |  |
-| 13. Cost arithmetic and upward rounding | absent | MISSING |  |  |
+| 13. Cost arithmetic and upward rounding | absent | DEFINED | S-014 | the resolution applies at the point of report, so there is nothing to round when no cost was formed |
 | 13. Cost arithmetic and upward rounding | stale / expiry (aged inputs, TTL, version drift) | DEFINED | S-001 | purity: no dependence on elapsed time, so the oracle has no freshness notion; age is a property of what the caller hands over |
 | 13. Cost arithmetic and upward rounding | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001 |  |
 | 13. Cost arithmetic and upward rounding | dependency failure (beatability predicate, catalogue, observation store) | IGNORE |  | Waived per stimulus_waivers: rounding consumes only the rate and XP-need already computed in-call. It calls nothing that can be down. The failure modes that reach it (a zero rate, a not-finite rate) are priced as degenerate and conflicting in this row, not as dependency failures. |
@@ -150,7 +150,7 @@
 | 14. Result assembly (rungs sequence, total cost, not-finite encoding) | boundary | THIN | S-012, S-001, S-003 |  |
 | 14. Result assembly (rungs sequence, total cost, not-finite encoding) | degenerate | DEFINED | S-006, S-012 |  |
 | 14. Result assembly (rungs sequence, total cost, not-finite encoding) | conflicting | THIN | S-003, S-012, S-014 |  |
-| 14. Result assembly (rungs sequence, total cost, not-finite encoding) | absent | MISSING |  |  |
+| 14. Result assembly (rungs sequence, total cost, not-finite encoding) | absent | DEFINED | S-003 | the output shape is fixed and total: zero rungs is an empty sequence, and the total is finite iff the last rung reaches the target |
 | 14. Result assembly (rungs sequence, total cost, not-finite encoding) | stale / expiry (aged inputs, TTL, version drift) | DEFINED | S-001 | purity: no dependence on elapsed time, so the oracle has no freshness notion; age is a property of what the caller hands over |
 | 14. Result assembly (rungs sequence, total cost, not-finite encoding) | retry / duplicate / replay (same call twice, same rung twice) | DEFINED | S-001, S-003 |  |
 | 14. Result assembly (rungs sequence, total cost, not-finite encoding) | dependency failure (beatability predicate, catalogue, observation store) | DEFINED | S-002 | a dependency outside its own contract is malformed input and outside the admitted domain; reading a failed consult as 'no' would turn a crash into an indistinguishable wall |

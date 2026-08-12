@@ -181,6 +181,25 @@ costing 2.5 and 1.25 and then stops reports **+infinity**, not 3.75. The two cla
 were flatly prescribing different values for the same call, and each was reachable —
 S-003 unconditionally, S-012 whenever a rung admits no monster.
 
+**THE SEQUENCE IS STRICTLY INCREASING, AND NO LEVEL APPEARS TWICE.** Each entry
+advances exactly one level, the first advances from the handed level, and each
+following one advances from the level the previous entry reached. A level the walk has
+advanced through is never advanced through again.
+
+That was implied by "one entry per level the walk actually advanced through" and never
+required, which is not the same thing. The guarantee below — that the highest level
+reached is recoverable from the rungs alone — is only true if the sequence cannot
+double back, and this session has repeatedly shown that an implication a
+formal-sounding clause declines to state is one an implementer may decline to draw.
+
+**A WALK OF ZERO RUNGS IS A COMPLETED WALK, NOT A STOPPED ONE.** Where the character
+already stands at or above the target (S-006), the rung sequence is EMPTY and the total
+is **0** — the sum over nothing — because the target IS reached. The not-finite
+sentinel is for a walk that fell short, and reporting an already-satisfied target as
+unreachable would be the one reading that is plainly wrong. The invariant holds
+trivially rather than by special case: the last rung reaches the target vacuously when
+there are no rungs and none were needed.
+
 The highest level the walk reached is recoverable from the rungs alone, and the total
 is NOT an independent second opinion about it. **It is tied to them by an invariant
 the oracle must maintain: the total is finite if and only if the last rung crossed

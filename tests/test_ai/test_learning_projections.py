@@ -468,6 +468,41 @@ class TestCheapestPathToLevel:
                 target, reached, plan.total_cycles)
         store.close()
 
+    def test_a_zero_rung_walk_is_completed_not_stopped(self, tmp_path):
+        """Ratified after the grid's last two open cells. A character already at or
+        above the target crosses NO rungs -- and that is a COMPLETED walk, so the
+        total is 0 (the sum over nothing) and not the not-finite sentinel a walk that
+        fell short reports. Reporting an already-satisfied target as unreachable is
+        the one reading that is plainly wrong, and S-003's finite-iff-reached
+        invariant holds vacuously rather than by special case."""
+        store = LearningStore(db_path=str(tmp_path / "z.db"), character="hero")
+        gd = self._gd_with_monsters({"chicken": 1})
+        state = make_state(level=7, xp=0, max_xp=100)
+        for target in (7, 3):
+            plan = cheapest_path_to_level(target, state, store, gd)
+            assert plan.segments == []
+            assert plan.total_cycles == 0.0
+            assert math.isfinite(plan.total_cycles)
+        store.close()
+
+    def test_the_rung_sequence_is_strictly_increasing(self, monkeypatch, tmp_path):
+        """No level appears twice and each entry advances exactly one level. S-003
+        promises the highest level reached is recoverable FROM THE RUNGS ALONE, and
+        that is only true if the sequence cannot double back -- which the text
+        implied and never required."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "s.db"), character="hero")
+        gd = self._gd_with_monsters({"chicken": 1})
+        gd._monster_hp = {"chicken": 60}
+        gd._monster_type = {"chicken": "normal"}
+        state = make_state(level=1, xp=0, max_xp=100, attack={"earth": 40})
+        plan = cheapest_path_to_level(6, state, store, gd)
+        froms = [s.from_level for s in plan.segments]
+        assert froms == sorted(set(froms)), froms
+        assert all(s.to_level == s.from_level + 1 for s in plan.segments)
+        assert froms == list(range(state.level, state.level + len(froms)))
+        store.close()
+
     def test_observed_and_formula_branches_share_one_unit(self, monkeypatch, tmp_path):
         """Both arms of the per-monster loop must yield xp per CYCLE.
 
