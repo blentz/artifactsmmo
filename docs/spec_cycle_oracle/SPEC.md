@@ -82,6 +82,28 @@ It performs no I/O and mutates none of its arguments. It returns for every input
 admitted by S-002 — it does not raise, loop forever, or return a sentinel meaning
 "could not compute".
 
+**THREE WHOLE FAMILIES OF QUESTION ARE ANSWERED BY THAT SENTENCE, AND ARE NAMED HERE
+SO NOBODY LOOKS FOR A SEPARATE RULE:**
+
+- **AGE, EXPIRY AND VERSION DRIFT.** The oracle has no notion of freshness and no
+  time-to-live of its own, because it has no dependence on elapsed time. An
+  observation recorded a thousand cycles ago and one recorded a moment ago are the
+  same evidence to it; how old the arguments are, and whether that should disqualify
+  them, is a property of what the CALLER assembles and hands over. S-017 restates a
+  measurement for the LEVEL it was taken at, which is the only staleness this
+  document models, and it is a staleness in level rather than in time.
+- **CONCURRENCY AND ALIASING.** Two calls at once cannot interfere, because there is
+  no shared state to interfere through and no argument is mutated. Passing the same
+  catalogue object to both calls is therefore safe, and so is passing one that some
+  other thread also holds — the oracle only reads it.
+- **RETRY, DUPLICATION AND REPLAY.** The same call issued twice returns the same
+  answer, and issuing it twice costs nothing but the second computation. There is no
+  idempotence key, no de-duplication, and nothing to reconcile.
+
+None of these is a gap in this document; each is a CONSEQUENCE of purity, and a
+reader who goes looking for a separate clause governing them will not find one
+because there should not be one.
+
 ### S-002 · Input domain
 
 The oracle receives a **character state**, a **target level**, a body of **learned
@@ -104,6 +126,23 @@ the monster's level by the character's, so the award is not merely wrong but
 UNDEFINED, the same shape S-017 rules out for a recorded sample level. The two ends
 are settled together here for the same reason S-019 settles both ends of handed
 progress: a range with one end open is a decision made silently.
+
+**A DEPENDENCY THAT FAILS IS MALFORMED INPUT, NOT A CASE THE ORACLE HANDLES.** The
+beatability predicate, the catalogue and the observation store are BACKGROUND to this
+document. If one raises, hangs, or returns a value outside its own contract, the
+oracle has not been given a well-formed input and owes nothing: S-001's totality is
+over the domain THIS clause admits, and a broken dependency is not in it.
+
+Stating it that way keeps S-001 honest rather than quietly widening it. The
+alternative — read a failed consult as a "no", so a predicate that raises means "not
+beatable" — is total and conservative and was rejected for a specific reason: it
+converts a broken dependency into a plausible-looking WALL. The oracle would report a
+target unreachable, the caller would believe it, and nothing anywhere would say that
+a component had failed. A wall that comes from a crash is indistinguishable from a
+wall that comes from the game, and only one of them is worth acting on.
+
+This is the same placement decision as the two below and as S-002's level range: the
+guarantee belongs at the boundary that can enforce it.
 
 **EACH MONSTER APPEARS AT MOST ONCE IN EACH OF THEM.** The catalogue is a mapping
 from monster identity to attributes, and the observations carry at most one
@@ -244,7 +283,7 @@ rounds down" — in a section the earlier reading had not reached. The ratified 
 was right, and the assumption flagged here has been discharged against the source
 rather than left for a future probe to contradict. It is noted rather than deleted
 because the sequence is the lesson: three defects this session came from a server
-rule that was guessed, and this one was guessed correctly and then checked.
+rule that was guessed, and this one was guessed, then READ AT THE SOURCE, and the guess and the source agreed.
 
 ### S-008 · Learned observations supersede prediction
 
