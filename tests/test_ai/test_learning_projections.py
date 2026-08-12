@@ -444,6 +444,30 @@ class TestCheapestPathToLevel:
         assert plan.segments[0].cycles_per_kill == pytest.approx(expected)
         assert plan.total_cycles == pytest.approx(100 / xp_per_kill * expected)
 
+    def test_the_total_is_finite_exactly_when_the_last_rung_reaches_target(
+            self, monkeypatch, tmp_path):
+        """S-003's invariant, added after the contradiction hunt found S-003 and
+        S-012 prescribing DIFFERENT TOTALS for the same call.
+
+        S-003 said the total IS the sum of the rungs; S-012 said a stopped walk
+        reports a not-finite total. Both were reachable and they disagree outright --
+        a walk crossing rungs of 2.5 and 1.25 and then stopping owes 3.75 under one
+        and +inf under the other. The repair is this invariant, so the total and the
+        rungs can never tell different stories about whether the target was reached.
+        """
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
+        store = LearningStore(db_path=str(tmp_path / "inv.db"), character="hero")
+        gd = self._gd_with_monsters({"chicken": 1})
+        gd._monster_hp = {"chicken": 60}
+        gd._monster_type = {"chicken": "normal"}
+        state = make_state(level=1, xp=0, max_xp=100, attack={"earth": 40})
+        for target in (2, 5, 50):
+            plan = cheapest_path_to_level(target, state, store, gd)
+            reached = (plan.segments[-1].to_level if plan.segments else state.level)
+            assert math.isfinite(plan.total_cycles) == (reached >= target), (
+                target, reached, plan.total_cycles)
+        store.close()
+
     def test_observed_and_formula_branches_share_one_unit(self, monkeypatch, tmp_path):
         """Both arms of the per-monster loop must yield xp per CYCLE.
 

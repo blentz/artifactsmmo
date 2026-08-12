@@ -132,11 +132,25 @@ The oracle returns, for the state and target it was given:
 - the **rungs crossed** — an ordered sequence, one entry per level the walk
   actually advanced through, each naming the monster chosen for that rung and the
   cost attributed to it; and
-- a **total cost**, the sum of those rungs' costs.
+- a **total cost** — the sum of those rungs' costs **when the target was reached**,
+  and the not-finite sentinel of S-012 when the walk stopped short.
 
-The highest level the walk reached is recoverable from the rungs alone. No second,
-independently-computed encoding of reachability is produced, so there is nothing
-that could disagree with the first.
+**THOSE TWO CASES ARE NOT THE SAME ARITHMETIC, AND SAYING SO IS THE POINT.** An
+earlier version of this clause made the total unconditionally "the sum of those
+rungs' costs", which is false exactly when S-012 fires: a walk that crosses two rungs
+costing 2.5 and 1.25 and then stops reports **+infinity**, not 3.75. The two clauses
+were flatly prescribing different values for the same call, and each was reachable —
+S-003 unconditionally, S-012 whenever a rung admits no monster.
+
+The highest level the walk reached is recoverable from the rungs alone, and the total
+is NOT an independent second opinion about it. **It is tied to them by an invariant
+the oracle must maintain: the total is finite if and only if the last rung crossed
+reaches the target.** An earlier version claimed instead that no second encoding of
+reachability exists at all, which the sentinel plainly is — so the guarantee is now
+the consistency REQUIREMENT rather than a denial that anything could disagree.
+Denying the possibility does not prevent it; stating the invariant is what an
+implementer can actually be held to, and what a consumer can rely on when it reads
+the total and the rungs and expects them to tell the same story.
 
 ### S-004 · The unit is executed planner actions
 
@@ -312,6 +326,12 @@ deterministic (S-001) and must not depend on how the monsters happen to be named
 If at some rung no monster satisfies S-009 and S-010, the walk stops there. The
 oracle reports the rungs it did cross, and reports the total cost as **not finite**
 — the target was not reached and no number of actions is claimed to reach it.
+
+**THIS IS THE ONE CASE WHERE THE TOTAL IS NOT THE SUM OF THE RUNGS** (S-003), and
+the invariant that ties the two together is stated there: the total is finite if and
+only if the last rung crossed reaches the target. A stopped walk reports rungs whose
+costs are real and a total that is a sentinel, and a consumer must not re-derive one
+from the other.
 
 **THAT VALUE IS POSITIVE INFINITY, SPECIFICALLY.** "Not finite" names a CLASS, and
 its members do not behave alike. Positive infinity is reflexively equal to itself and

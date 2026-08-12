@@ -1,0 +1,15 @@
+{
+ "void": false,
+ "canary": {
+  "hunter": true,
+  "panel": true,
+  "reason": "hunter found the planted contradiction; panel rejected the planted refinement"
+ },
+ "probed": {
+  "clauses": 22,
+  "rawClaims": 25,
+  "pairs": 19
+ },
+ "contradictions": [],
+ "clean": true
+}

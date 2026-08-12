@@ -13,13 +13,14 @@
   "s008-may-use-measurement-optional",
   "recovery-quantum-discrete-vs-amortised"
  ],
- "contradiction_clean_runs": 0,
+ "contradiction_clean_runs": 1,
  "contradiction_void_runs": 0,
- "blind_rounds": 2,
+ "blind_rounds": 3,
  "blindness_failures": 4,
  "pending_verification": [],
  "phases_run": [
   "ontology",
-  "underdetermination"
+  "underdetermination",
+  "contradiction"
  ]
 }
