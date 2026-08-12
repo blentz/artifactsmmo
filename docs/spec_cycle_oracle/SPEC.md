@@ -192,13 +192,17 @@ reached is recoverable from the rungs alone — is only true if the sequence can
 double back, and this session has repeatedly shown that an implication a
 formal-sounding clause declines to state is one an implementer may decline to draw.
 
-**A WALK OF ZERO RUNGS IS A COMPLETED WALK, NOT A STOPPED ONE.** Where the character
-already stands at or above the target (S-006), the rung sequence is EMPTY and the total
-is **0** — the sum over nothing — because the target IS reached. The not-finite
-sentinel is for a walk that fell short, and reporting an already-satisfied target as
-unreachable would be the one reading that is plainly wrong. The invariant holds
-trivially rather than by special case: the last rung reaches the target vacuously when
-there are no rungs and none were needed.
+**THE INVARIANT HOLDS VACUOUSLY ON AN EMPTY SEQUENCE.** Where S-006 reports zero rungs
+because the target is already met, the last rung reaches the target vacuously and the
+total is finite — so no special case is needed here, and the not-finite sentinel stays
+what it is, the report of a walk that fell SHORT. S-006 owns what an already-satisfied
+target returns; this clause owns only what that does to the invariant.
+
+An earlier version restated S-006 in full — its condition, both its values, and the
+alternative it rules out — which made S-006 a copy of a rule stated somewhere else. The
+anti-vacuity gate found it and called S-006 redundant, and it was right about the
+duplication and wrong about which of the two to remove: the decision belongs in the
+clause whose subject it is.
 
 The highest level the walk reached is recoverable from the rungs alone, and the total
 is NOT an independent second opinion about it. **It is tied to them by an invariant
@@ -238,6 +242,15 @@ every action the character must execute to cross it, not only the attacking ones
 Recovery the character is forced into by the damage it takes counts; so does
 anything else the loop requires.
 
+**THIS CLAUSE OWNS WHAT IS IN THE LOOP.** S-020, S-022 and S-023 each need that
+membership to state their own decision — where the setup cost sits, what the ranking
+divides by, what a rate is denominated in — and each cites it here rather than
+spelling it out again. They used to spell it out, and the anti-vacuity gate
+observed that an implementation pricing a rung at bare fights was then illegal three
+times over — so deleting this clause changed no behaviour at all, which is what made
+it test as dead weight. A
+decision restated in three places has three chances to drift and one place it belongs.
+
 The loop is **chained, not per-kill**. The character fights while its hit points
 remain AT OR ABOVE the recovery guard's threshold and recovers once when they fall
 below it — hit points sitting exactly on the threshold do not force a recovery, and
@@ -272,9 +285,15 @@ finer than the game bills.
 
 ### S-006 · Already at or above target costs nothing
 
-If the character's current level is at or above the target, the oracle reports zero
-rungs crossed and zero total cost. This is a genuine answer, not a refusal: there is
-nothing left to do.
+If the character's current level is at or above the target, the oracle reports an
+EMPTY rung sequence and a total cost of **0** — the sum over nothing. This is a genuine
+answer, not a refusal: there is nothing left to do.
+
+**IT IS A COMPLETED WALK, NOT A STOPPED ONE**, and the difference is the whole content
+of this clause. The not-finite sentinel of S-012 reports a walk that fell SHORT;
+routing an already-satisfied target through it would report success as unreachability,
+which is the one reading that is plainly wrong. S-003 says what that does to its
+finite-iff-reached invariant, and defers here for the values.
 
 ### S-007 · XP per kill comes from the published formula
 
@@ -632,7 +651,7 @@ Whether a change is POSSIBLE is not priced here and is not this clause's busines
 
 That cost is a SETUP cost of the rung, not part of the loop. A rung therefore has two kinds of cost:
 
-- a **per-kill loop cost** — the fight and the recovery it forces (S-005, S-021), paid once per kill and proportional to the number of kills; and
+- a **per-kill loop cost** — the loop S-005 defines, priced by S-021, paid once per kill and proportional to the number of kills; and
 - a **once-per-rung setup cost** — the equip actions needed to move from the loadout the character arrives with to the rung's loadout, paid once regardless of how many kills the rung takes.
 
 The rung's cost is the sum of the two. The distinction is load-bearing rather than presentational: only the per-kill part may enter a per-action RATE (S-022, S-023), because a fixed charge divided by a rate is not a rate. Folding the equip into the loop would make the selection criterion an integral-over-the-rung figure, which S-022 forbids.
@@ -703,7 +722,7 @@ An earlier version of this paragraph went further and asserted the two "cannot d
 
 ### S-022 · The per-rung choice maximises reward per action, not per rung  [witness: W-008]
 
-**What this clause decides is the DENOMINATOR, and only the denominator.** The monster chosen for a rung is the one with the greatest reward per executed action, and the actions in that ratio are the PER-KILL LOOP actions alone (S-005): the fight and the recovery it forces. A rung's once-per-rung setup cost — the loadout change of S-020 — is **excluded**. A monster is not penalised in the ranking for needing an equip; that charge is added to the rung total after the choice is made.
+**What this clause decides is the DENOMINATOR, and only the denominator.** The monster chosen for a rung is the one with the greatest reward per executed action, and the actions in that ratio are the PER-KILL LOOP actions alone, exactly as S-005 enumerates them. A rung's once-per-rung setup cost — the loadout change of S-020 — is **excluded**. A monster is not penalised in the ranking for needing an equip; that charge is added to the rung total after the choice is made.
 
 The exclusion is the whole content. A fixed charge in a ratio's denominator is not a rate: it makes the ranking depend on how many kills the rung happens to need, so the same two monsters could rank differently at two rungs that differ only in how much experience remains. It would also make a monster's rank depend on what the character happens to be wearing when it arrives, which is a property of the previous rung, not of this choice.
 
@@ -727,7 +746,7 @@ This branch has had that defect once before, when it divided by a cooldown in se
 
 A prediction from the published formula is per KILL, and is converted into that unit by dividing by the rung's loop action count (S-005) before it is compared with anything.
 
-"Executed action" here means a PER-KILL LOOP action and only those — the fight and the recovery it forces. A rung's once-per-rung setup cost (S-020's equips) is outside this denominator on both sides of the conversion: it is not divided into the prediction, and a measured rate is not understood to have absorbed it. A fixed charge in a rate's denominator would make the rate depend on how many kills the rung happens to need, which is the very thing a rate exists not to depend on.
+"Executed action" here means a PER-KILL LOOP action and only those, as S-005 defines that loop. A rung's once-per-rung setup cost (S-020's equips) is outside this denominator on both sides of the conversion: it is not divided into the prediction, and a measured rate is not understood to have absorbed it. A fixed charge in a rate's denominator would make the rate depend on how many kills the rung happens to need, which is the very thing a rate exists not to depend on.
 
 **The unit governs every use of the rate, not only comparison.** Once a rate is in XP per loop action it stays there: it is the divisor S-019 divides a rung's remaining requirement by, and that quotient is a count of LOOP ACTIONS which is the rung's loop cost outright. No kill count is formed, and the loop length is never applied a second time.
 
