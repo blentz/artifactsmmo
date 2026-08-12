@@ -39,7 +39,23 @@ the specification, not clauses** — the oracle does not get to choose them.
 
 - The maximum character level is **50**.
 - XP awarded for a kill is
-  `Round(((monster_level / player_level) × 20 + monster_hp × 0.04) × level_penalty × monster_multiplier × wisdom_bonus)`.
+  `Round(((monster_level / player_level) × 20 + monster_hp × 0.04) × level_penalty × monster_multiplier × wisdom_bonus)`,
+  and **every factor of it is published**:
+  - `wisdom_bonus` = **`1 + wisdom × 0.001`** — each wisdom point is +0.1% XP, so a
+    character with no wisdom has a bonus of **1.0**, not 0. It is a MULTIPLIER, and
+    the identity is one.
+  - `monster_multiplier` = **1.0 normal, 1.4 elite, 2.0 boss**; a row naming no type
+    is normal, so the factor is one.
+  - `Round` resolves an exact half **UPWARD**: "`.5` always rounds up, below `.5`
+    rounds down."
+
+  Leaving these unsourced was not a harmless omission. Every other term of the
+  formula was pinned numerically while these two were not, and `wisdom_bonus` read as
+  "the bonus conferred" rather than "the factor" is **0** for a zero-wisdom character
+  — which zeroes EVERY award, empties every rung, and turns an ordinary climb into an
+  unreachable target. Both factors are strictly positive, so S-013's zero-reward stop
+  is reachable only through the published level penalty, which is the one route S-013
+  actually describes.
 - The level penalty is a step function of the gap `g = player_level − monster_level`,
   and the table is TOTAL: `g ≤ 0` → **100%**; `1 ≤ g ≤ 4` → **100%**;
   `5 ≤ g ≤ 9` → **70%**; `g ≥ 10` → **0%** — the kill awards nothing.
@@ -208,12 +224,13 @@ the game. The identical defect was found and removed from the measured-rate samp
 level (S-017) in the same session, and from the published award itself on the
 strength of this clause.
 
-⚠️ This is a DECLARED reading of the published `Round`, not a probed one. The game's
-documentation names the operation and not its tie behaviour, and no live experiment
-has yet been run against a monster whose unrounded award is an exact half. Half-up
-is the reading a plain reader takes and the direction that does not manufacture a
-shortfall, and it is recorded here as an assumption so that a future probe has
-something to contradict.
+**This was recorded as a DECLARED reading and is now a PUBLISHED one.** The game's
+documentation does state the tie behaviour — "`.5` always rounds up, below `.5`
+rounds down" — in a section the earlier reading had not reached. The ratified answer
+was right, and the assumption flagged here has been discharged against the source
+rather than left for a future probe to contradict. It is noted rather than deleted
+because the sequence is the lesson: three defects this session came from a server
+rule that was guessed, and this one was guessed correctly and then checked.
 
 ### S-008 · Learned observations supersede prediction
 

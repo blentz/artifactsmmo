@@ -180,3 +180,37 @@ class TestPublishedPenaltyBand:
     def test_ten_levels_above_awards_nothing(self):
         assert self._award(10) == 0
         assert self._award(9) > 0
+
+
+class TestPublishedFormulaFactors:
+    """`wisdom_bonus` and `monster_multiplier`, checked against the published docs
+    on 2026-08-11 rather than inferred.
+
+    Both were factors the spec quoted and never defined, and the misreading is not
+    subtle: `wisdom_bonus` read as "the bonus conferred" rather than "the factor" is
+    ZERO for a zero-wisdom character, which zeroes every award and turns an ordinary
+    climb into an unreachable target. The published scale is +0.1% per point, i.e.
+    `1 + wisdom * 0.001` -- a THOUSANDTH, where an adversary's own recommendation
+    said a hundredth.
+    """
+
+    @staticmethod
+    def _cat(mtype="normal"):
+        return MonsterCatalog(levels={"m": 20}, hp={"m": 200}, types={"m": mtype})
+
+    def test_zero_wisdom_is_the_identity_not_zero(self):
+        assert self._cat().xp_per_kill("m", 20, wisdom=0) > 0
+
+    def test_wisdom_scales_by_a_thousandth_per_point(self):
+        """1000 wisdom doubles the award (1 + 1000*0.001 = 2.0). Under the
+        hundredth reading it would be 11x, so this separates the two outright."""
+        base = self._cat().xp_per_kill("m", 20, wisdom=0)
+        assert self._cat().xp_per_kill("m", 20, wisdom=1000) == pytest.approx(
+            2 * base, abs=1)
+
+    @pytest.mark.parametrize(("mtype", "factor"), [("normal", 1.0), ("elite", 1.4),
+                                                   ("boss", 2.0)])
+    def test_the_published_monster_type_multipliers(self, mtype, factor):
+        base = self._cat("normal").xp_per_kill("m", 20, wisdom=0)
+        assert self._cat(mtype).xp_per_kill("m", 20, wisdom=0) == pytest.approx(
+            factor * base, abs=1)

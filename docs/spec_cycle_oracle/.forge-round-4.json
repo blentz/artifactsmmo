@@ -1,0 +1,309 @@
+{
+ "round": 3,
+ "void": false,
+ "dry": false,
+ "canary": {
+  "ran": true,
+  "passed": true,
+  "cell": "10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires')/normal",
+  "redacted": [
+   "S-005",
+   "S-004",
+   "S-021"
+  ],
+  "reason": "adversary found the planted gap in 10. Whole-loop cost model for one kill (recovery and 'anything else the loop requires')/normal"
+ },
+ "judgeCanary": {
+  "ran": true,
+  "passed": true,
+  "decoys": 3,
+  "reason": "panel killed every planted false witness"
+ },
+ "probed": {
+  "cells": 59,
+  "adversaries": 157,
+  "rawWitnesses": 388,
+  "rootCauses": 12
+ },
+ "witnesses": [
+  {
+   "fingerprint": "nonfinite-total-encoding",
+   "evidence": "The oracle reports the rungs it did cross, and reports the total cost as **not finite** \u2014 the target was not reached and no number of actions is claimed to reach it. ... Given identical arguments the oracle returns identical results, on every call, with no dependence on call order, elapsed time, or any state not passed as an argument.",
+   "distinguishing_input": "Character state {level=10, progress=0, requirement=1000, max_hp=200}, target level 14, no learned observations, catalogue = [chicken: level 1, hp 60, 40 damage per fight]. The chicken is admissible and positive-award at level 10 (gap 9 -> 70% penalty), so rung 10 is crossed; at level 11 the gap reaches 10, the published penalty zeroes the award, and S-013 stops the walk. The SAME call is then issued a second time with the identical arguments, and the consumer compares the two results and ranks the total against a previously seen finite cost of 5: r1 = f(x); r2 = f(x); observe (r1.total == r2.total) and (r1.total >= 5).",
+   "output_a": "Both calls return rungs=[('chicken', 555.5556)], total = +infinity. Replay comparison r1.total == r2.total -> True. Ranking comparison r1.total >= 5 -> True (the stopped candidate sorts as the most expensive, i.e. last).",
+   "output_b": "Both calls return rungs=[('chicken', 555.5556)], total = NaN. Replay comparison r1.total == r2.total -> False (the duplicate call appears to have returned a different answer). Ranking comparison r1.total >= 5 -> False, and every ordering comparison against NaN is False, so an argmin over candidate costs can select the unreachable candidate as the cheapest.",
+   "sigma_dimension": "idempotence",
+   "severity": 5,
+   "recommended_default": "Fix the encoding in S-012: the not-finite total is POSITIVE INFINITY specifically \u2014 a value that is reflexively equal to itself and orders above every finite cost \u2014 and state that a replayed call must compare equal to its first result under the consumer's ordinary equality. NaN, None, and any other 'not a number' encoding are excluded, since S-001's determinism guarantee is only observable through some equality, and the spec must name it.",
+   "cell": "12. Walk-stop decision (no admissible monster / zero reward)/retry / duplicate / replay (same call twice, same rung twice)",
+   "verdict": "DEFINED",
+   "clauses": [
+    "S-001"
+   ],
+   "root_cause": "not-finite-total-encoding",
+   "question": "What exact value does the total field carry when the walk stops \u2014 +infinity, NaN, null, or a non-numeric marker \u2014 what numeric type carries a finite total alongside it, and must the not-finite value order above every finite total?",
+   "corroborations": 27,
+   "members": [
+    "replay-equality-of-not-finite-total",
+    "not-finite-total-nan-vs-inf-breaks-replay-identity",
+    "not-finite-total-encoding",
+    "nonfinite-total-encoding",
+    "s012-not-finite-inf-vs-nan",
+    "not-finite-total-unspecified-value",
+    "s012-not-finite-total-has-no-declared-encoding",
+    "stopped-walk-not-finite-total-encoding",
+    "stop-total-not-finite-value-unpinned",
+    "not-finite-encoding",
+    "nonfinite-total-nan-vs-inf-on-replay",
+    "nonfinite-total-value-unspecified",
+    "not-finite-total-names-a-class-not-a-value",
+    "nonfinite-total-encoding-on-replay",
+    "not-finite-total-encoding-unfixed",
+    "not-finite-encoding-unspecified",
+    "not-finite-encoding-nonreflexive",
+    "not-finite-encoding-unfixed",
+    "unreached-total-representation",
+    "s006-zero-total-numeric-type-vs-nonfinite-carrier",
+    "not-finite-total-representation",
+    "s012-not-finite-encoding",
+    "s012-not-finite-has-no-representation",
+    "not-finite-total-encoding-inf-vs-nan",
+    "stopped-total-vs-sum-of-rungs-identity",
+    "stopped-total-nonfinite-value-unpinned",
+    "not-finite-total-encoding-unspecified"
+   ],
+   "votes": [
+    {
+     "lens": "sigma",
+     "real": true,
+     "reason": "REAL \u2014 though not on the dimension the witness named.\n\nWhat actually differs. Both candidates agree on the rung list (`[('chicken', 555.5556)]`), so the divergence is entirely in the sentinel chosen for the cost of a walk that S-013 stopped before reaching the target: A returns +infinity, B returns NaN. That is not a naming, labelling, field-structure, or formatting difference, and the collection whose order might be irrelevant (rungs) is identical in both. It is a difference in the *value* returned for the \"unreachable\" case, and the two values are not interchangeable under any comparison a consumer performs.\n\n\u03a3-membership. I ran the two sentinels through the consumer's own two comparisons (/tmp/sigma_cell_ax7q3_lens/probe.py):\n\n  A(+inf) | r1==r2: True  | r1>=5: True  | min([5.0,total]): 5.0 | min([total,5.0]): 5.0 | sorted: [5.0, inf]\n  B(NaN)  | r1==r2: False | r1>=5: False | min([5.0,total]): 5.0 | min([total,5.0]): nan | sorted: [5.0, nan]\n\n- value semantics (in \u03a3): +inf and NaN are distinct values with distinct equality behaviour. `r1.total == r2.total` \u2014 a comparison of two results of the SAME call with the SAME arguments \u2014 yields True under A and False under B. A consumer written against the spec cannot be correct under both.\n- ordering (in \u03a3): under A the stopped candidate sorts last, i.e. as the most expensive, which is the sane reading of \"unreachable\". Under B every ordering comparison against the sentinel is False, so ordering is not merely different, it is not a total order at all: `min` returns whichever of the two happened to come first, and the unreachable candidate can be selected as the cheapest. That is a live, consequential difference in the candidate actually picked, not a tie-break cosmetic.\n\nOn the witness's label. The witness calls this \"idempotence\", and that label is wrong: both implementations are deterministic and return the identical value on both calls, so f really is idempotent in B too \u2014 NaN != NaN is an artefact of the equality predicate, not of the function returning something different. But the instruction is to judge the dimension for myself, and the difference lands squarely on value semantics and on ordering, both declared members of \u03a3. A mislabelled dimension does not make a genuine divergence unreal; it would only matter if idempotence were the ONLY dimension in \u03a3, and it is not \u2014 it is one of four, and two of the other three are hit.\n\nCaveat on scope. No spec path was actually supplied in my brief (\"the spec file(s) named above\" names none), so I judged the \u03a3-membership lens only: whether A and B are two descriptions of one behaviour or two behaviours. They are two behaviours. I did not, and could not, independently confirm that the spec is silent on which sentinel a stopped walk returns \u2014 if some clause I was not shown pins that value, the gap would be closed at the source even though the divergence itself is real."
+    },
+    {
+     "lens": "scope",
+     "real": true,
+     "reason": "SCOPE lens: REAL. The divergent quantity is the oracle's own return value, not a caller's interpretation of it. The \"Artifact under test\" header names ONE pure function that returns \"how far up the level ladder the character can climb and how many executed planner actions that costs\"; S-003 fixes the output shape as rungs plus \"a total cost\", and S-012 explicitly instructs the oracle to \"report the total cost as **not finite**\" when the walk stops. So the total is an output field of the artifact under test, and S-013 routes the witness's exact scenario (every admissible monster in the zero-award band) into S-012's reporting rule. An implementer of the oracle \u2014 and only that implementer \u2014 chooses which not-finite value is placed in that field; +infinity and NaN are both literally \"not finite\", the spec names neither, and nothing else in the document narrows it (S-014's upward resolution is stated as applying to the reported total, and behaves differently on the two encodings). Ask the literal test: if I implemented the oracle, could I make this choice? Yes \u2014 it is a `return` statement inside the artifact.\n\nThe carve-outs do not cover it. \"The progression choice core that ranks candidates using this oracle's output ... How it bands, orders or tie-breaks them is its concern\" carves out the RANKING POLICY, not the value handed to it; the oracle cannot delegate what it emits. The witness's second observable (argmin selecting the unreachable candidate, r1.total >= 5) does lean on consumer behaviour and is downstream colour, but the first observable \u2014 r1.total == r2.total evaluating False on a duplicate call with identical arguments \u2014 is a direct comparison of two values the oracle itself returned, requiring no consumer semantics beyond equality, and it bears directly on S-001's promise that \"given identical arguments the oracle returns identical results, on every call\". A witness that survives on the oracle's emitted value alone is in scope even if its dramatisation also mentions a consumer.\n\nNor is this a deployment, dependency, retry, or background-machinery concern: the beatability predicate, the learning store, the acquisition pricer and the planner are all untouched by the choice \u2014 the stop is reached through the published penalty (a Domain Fact, an input to the spec) and the encoding decision sits entirely inside the walk's own termination path."
+    },
+    {
+     "lens": "textual",
+     "real": true,
+     "reason": "Quotes are verbatim (S-012's \"reports the total cost as **not finite**...\" and S-001's determinism sentence), and the exhibit is arithmetically faithful to the spec: award Round(((1/10)*20+60*0.04)*0.7)=3 XP, guard band 50 hp at 200 max with 40 damage gives a chain of 2 (the crossing fight is committed), 80/200=40% => 40s => 1.3333 Fights => 0.6667/kill, loop 1.6667 actions/kill, rate 1.8 XP/action, 1000/1.8 = 555.5556. Both branches agree on the rungs; only the encoding of \"not finite\" differs. Searching the whole spec, nothing types the total or constrains its ordering/self-equality. S-001's determinism is satisfied by NaN (both calls return NaN; the failing comparison is the consumer's ==, and S-001 forbids only dependence on call order, elapsed time, or unpassed state). S-001's \"sentinel meaning 'could not compute'\" addresses a refusal, whereas S-012 expressly sanctions a non-numeric total meaning unreachability, so it does not forbid B on its terms. S-013's \"unbounded cost\" leans toward +infinity semantically but is a prohibition on reporting the stopped cost \"as though it were a number\" \u2014 read literally that phrase arguably favours NaN rather than excluding it. S-014's \"whole number of actions\" and the \"no smaller, by less than one action\" expectation presume a finite rounded sum of exact quotients (S-019) and are violated by +infinity too, so they do not discriminate. S-003, S-004, S-006, S-011 and S-022 say nothing about representation. The gap is decision-relevant at the oracle's own boundary: A gives a total that replays equal and sorts last; B gives one that fails self-equality and makes every ordering comparison false, so an argmin can pick the unreachable candidate. Caveat: the spec cites OBSERVATION.md for the observation alphabet, which was not among the files named to me and which I did not open; if it declares the total's type, this could be settled there \u2014 but on SPEC.md as written it is not."
+    },
+    {
+     "lens": "impact",
+     "real": true,
+     "reason": "S-012 is the only clause that fixes the stopped-walk total, and it says only \"not finite\" \u2014 a predicate satisfied by +inf, -inf and NaN alike. It never states that the value sorts above every finite total or that it equals itself, and S-013 merely defers to it. Nothing else closes the hole: S-003 (total = sum of rungs) and S-014 (report as a whole number, resolved upward) say nothing about the nonfinite case, and the ranking consumer is explicitly declared BACKGROUND (\"how it bands, orders or tie-breaks them is its concern\"), so the spec cannot lean on it to normalise the encoding.\n\nThe exhibit is spec-faithful, which I verified by recomputing it from the clauses alone: award at L10 = Round(((1/10)*20 + 60*0.04)*0.7) = 3; guard band 150 gives a chain of 2 fights (200->160 continues, 160->120 trips), 80 lost = 40% of bar -> 40s recovery -> loop 2 + 40/30, per-kill 1.66667 actions, rate 1.8 XP/action, 1000/1.8 = 555.5556 \u2014 exactly the rung reported. At L11 the gap reaches 10, the published penalty zeroes the award, S-013 stops. The divergence therefore turns purely on the unstated encoding.\n\nThe two encodings are not equally acceptable. Measured in Python: r1.total == r2.total is True for inf and False for NaN, so an auditor's replay check declares the \"pure total function\" of S-001 nondeterministic under B. Worse, min(..., key=cost) returns the stopped NaN candidate when it happens to come first in iteration order and the reachable one when it comes second, and sorted() leaves NaN wherever it started \u2014 so under B the consumer silently selects an UNREACHABLE target as the cheapest, order-dependently. That is the exact direction the spec elsewhere treats as intolerable (S-017 \"manufactures reach and captures the decision\", S-019 \"under-reporting a climb... makes a candidate look reachable when it is not\", S-020 \"a projection may be pessimistic about cost; it may not invent a wall\"). The observable is a bot committing to a level it cannot reach by fighting \u2014 a grind livelock, with no error raised. An operator or auditor would certainly file that.\n\nFix: S-012 should name the value rather than the predicate \u2014 the total is positive infinity, comparing strictly greater than every finite total, equal to itself on replay, and exempt from S-014's whole-number resolution (math.ceil raises OverflowError on inf and ValueError on NaN, so S-014's report step was never written for this total either \u2014 a second silence the same sentence should close)."
+    }
+   ],
+   "real": true,
+   "vetoedBy": [],
+   "shortCircuited": 0
+  },
+  {
+   "fingerprint": "loadout-arity-decides-the-stop",
+   "evidence": "The state handed to the beatability predicate carries the best loadout the character already holds and is permitted to wear at that rung -- inventory and worn together -- not only what is currently worn. [...] WHICH loadout is best for a purpose is not decided here. It comes from the same shared loadout selection the executor uses, exactly as the beatability verdict does, and that selection is BACKGROUND [...] a **once-per-rung setup cost** \u2014 the equip actions needed to move from the loadout the character arrives with to the rung's loadout",
+   "distinguishing_input": "Character level 19, progress 0, level requirement 100 XP, maximum HP 200, wearing nothing, carrying three shield-slot pieces: shield_fire (armour 5, resists fire), shield_earth (armour 5, resists earth), shield_plate (armour 50, no resistance). Target level 20 (one rung). Catalogue admits two monsters, both level 19, both permitted at the rung: blazing_wolf (fire, 100 HP, 260 raw damage) and stone_boar (earth, 60 HP, 260 raw damage). 260 damage >= the 200-point bar, so each is winnable ONLY under the shield that resists its element; under shield_plate neither is winnable. The shared loadout selection is deterministic in both implementations; the only difference is HOW MANY loadouts a rung constructs. Run: /home/blentz/.claude/jobs/0f7801e4/tmp/cell12_walkstop_conflicting_a7x2q9/probe.py",
+   "output_a": "One loadout per CANDIDATE (the purpose of the consult is 'beat this monster'): both monsters are admissible, S-011 picks blazing_wolf (24 XP/action vs 22), the rung is crossed. rungs = [(level 20, 'blazing_wolf', 4.2667 actions = 4.1667 loop + 0.1 equip)], total cost = 5 \u2014 a FINITE total, target reached.",
+   "output_b": "One loadout per RUNG (the purpose is 'the rung'; the shared selection's general criterion returns shield_plate): under that single loadout no monster satisfies S-009, so the rung has no admissible monster. rungs = [], total cost = NOT FINITE \u2014 the walk stops at the first rung and the target is reported unreachable.",
+   "sigma_dimension": "value semantics",
+   "severity": 5,
+   "recommended_default": "Fix the arity in S-020 explicitly: the beatability consult is performed ONCE PER CANDIDATE MONSTER, with the loadout the shared selection returns for the purpose of beating THAT monster; the rung's loadout \u2014 and therefore S-020's setup charge \u2014 is the loadout of the monster S-011 finally chooses. This is also the reading that keeps S-020's stated goal ('the projection and the executor never disagree about which monsters are available') true, since the executor equips to fight a specific monster. Add a sentence stating that the candidate pool is never narrowed by a loadout chosen for a purpose other than the consult itself.",
+   "cell": "12. Walk-stop decision (no admissible monster / zero reward)/conflicting",
+   "verdict": "DEFINED",
+   "clauses": [
+    "S-013",
+    "S-011",
+    "S-012",
+    "S-016"
+   ],
+   "root_cause": "loadout-selection-invocation-per-rung-vs-per-candidate",
+   "question": "Is the shared loadout selection invoked once per rung (monster-agnostic) or once per candidate monster with that monster as its purpose \u2014 and must its result be stable across rungs so a setup charge is not re-minted?",
+   "corroborations": 27,
+   "members": [
+    "damage-loadout-per-rung-vs-per-candidate",
+    "loadout-selection-granularity-per-rung-vs-per-candidate",
+    "loadout-arity-per-rung-vs-per-candidate",
+    "argmax-denominator-loadout-scope",
+    "argmax-loadout-scope",
+    "ranking-loadout-per-candidate-vs-one-per-rung",
+    "s011-argmax-loadout-per-candidate-vs-per-rung",
+    "loadout-scope-flips-argmax",
+    "loadout-per-candidate-vs-per-rung",
+    "loadout-scope-per-rung-vs-per-candidate",
+    "loadout-purpose-per-rung-vs-per-candidate",
+    "argmax-ranks-under-which-loadout",
+    "loadout-arity-decides-the-stop",
+    "consult-loadout-purpose-per-rung-vs-per-candidate",
+    "consult-loadout-purpose-scope",
+    "loadout-selected-per-rung-vs-per-candidate",
+    "consult-loadout-per-monster-vs-per-rung",
+    "consult-loadout-monster-blind-vs-monster-aware",
+    "consult-loadout-monster-agnostic-vs-per-candidate",
+    "loadout-arity-for-beatability-consult",
+    "consult-loadout-granularity",
+    "consult-loadout-once-per-rung-vs-once-per-candidate",
+    "s020-loadout-tie-instability-recharges-equip",
+    "loadout-selection-arity",
+    "s011-ranking-key-loadout-scope-per-candidate-vs-per-rung",
+    "s011-denominator-loadout-arity",
+    "consult-loadout-per-candidate-vs-per-rung"
+   ],
+   "votes": [
+    {
+     "lens": "sigma",
+     "real": true,
+     "reason": "Confirmed by running the named probe. Output: A \u2192 `rungs=[(20, 'blazing_wolf', '4.2667')] total=5`; B \u2192 `rungs=[] total=inf`. The divergence is in the returned value itself, not its packaging: the same input yields a finite total cost of 5 and a reached target under A, versus a non-finite total and an unreachable target under B. Reachability and the numeric cost are the primary results a caller consumes and branches on (a planner ranking this route as cost-5 versus discarding it as impossible), so this sits squarely on \"value semantics\" in \u03a3 \u2014 and the rung list differs in cardinality (one element vs zero), which is a content difference, not an ordering of an unordered collection. No relabelling, field-naming, or formatting reading of this exists: 5 and inf are different values under any encoding. The probe's W3 control (no resist shields carried) has A and B agreeing on `rungs=[] total=inf`, so the two implementations are not trivially different everywhere \u2014 the divergence is specific to the case where per-candidate loadout construction admits a monster that a single per-rung general-purpose loadout (shield_plate) rules out under S-009. The witness's dimension label is accurate; the underlying silence is how many loadouts a rung constructs, which the shared deterministic selection does not settle."
+    },
+    {
+     "lens": "scope",
+     "real": true,
+     "reason": "In scope. The divergence is in how many loadouts/consults the oracle constructs per rung (one per candidate monster vs one per rung) \u2014 the oracle's own argument-construction step, which the spec repeatedly claims for itself while carving out only the decision procedures. The \"Explicitly NOT under test\" entry for beatability says clauses constrain \"when and with what arguments the oracle consults it, never how it decides\"; S-020 likewise says the loadout selection's criterion is BACKGROUND but \"this clause fixes only that the selection is offered inventory and worn together, and is evaluated at the rung's level\" and \"is about which arguments the oracle constructs, never about how the predicate decides.\" S-020's own phrase \"best loadout for a purpose\" concedes a purpose is supplied by the caller \u2014 and the caller here is the oracle. The witness holds the background fixed (same deterministic selection, same predicate, both branches) and varies only the oracle's calling pattern, so the divergence cannot be laid at a dependency's door. The literal test passes: implementing only the oracle, I must choose per-candidate versus per-rung loadout construction; nothing in the progression choice core, the acquisition pricer, the learning store, the planner, or the executor makes that choice for me. The observable moved is S-003's own output \u2014 rungs crossed and a finite vs non-finite total. The only background input used is the selection's answer under a general criterion, taken as a fixed given rather than as the site of the ambiguity."
+    },
+    {
+     "lens": "textual",
+     "real": true,
+     "reason": "REAL. All three fragments are verbatim S-020 (lines 406, 408, 422) and in context. The spec never fixes how many loadouts a rung constructs, and S-020 says so about itself: after deferring \"WHICH loadout is best FOR A PURPOSE\" to the BACKGROUND selection, it states \"This clause fixes only that the selection is offered inventory and worn together, and is evaluated at the rung's level.\" The phrase \"for a purpose\" presupposes the selection takes a purpose argument, but no clause says which purpose(s) the oracle passes or how many times it asks. Reading A (purpose = \"beat this monster\", one loadout per candidate) and reading B (purpose = \"the rung\", one loadout per rung) are both consistent with that sentence, and \"best\" is explicitly not defined here, so a general criterion returning shield_plate (highest armour) is admissible.\n\nNothing forbids B. S-012 expressly legalises B's output shape: a rung with no monster satisfying S-009+S-010 stops the walk, the crossed rungs are reported, and the total is not finite. S-009 requires only that the verdict come from the shared predicate \u2014 B does that. S-010, S-011, S-013, S-015 and S-019 say nothing about loadout arity. If anything the definite singulars \"the rung's loadout\" (S-020 setup-cost bullet) and \"the rung's re-evaluated loadout\" (S-021 numerator paragraph) lean toward B.\n\nNor does anything forbid A. Under A there is still exactly one rung loadout once S-011 has chosen, so \"the loadout the character arrives with ... to the rung's loadout\" and \"the one the previous rung left it in\" remain well-defined, and S-021's damage stays \"the same loadout S-020 hands the beatability predicate\" per consult. So both readings survive the whole text.\n\nThe strongest counter-argument is S-009's rationale \"so that the projection and the executor never disagree about which monsters are available,\" which B arguably offends, since an executor selecting per-fight would beat blazing_wolf. But that is a purposive clause about the SOURCE of the verdict (satisfied by B) and not an operative rule on the arguments; the framing block at lines 26-28 says clauses constrain \"when and with what arguments the oracle consults it\", and this argument is exactly what S-020 declines to fix. A rationale attached to a different clause is not a prohibition.\n\nThe divergence is observable and severe: a finite total with the target reached versus a not-finite total with the target reported unreachable, on identical inputs and an identical deterministic background selection. I judged from the spec text only and did not execute the witness's probe; the arithmetic details are not load-bearing, since the split is structural."
+    },
+    {
+     "lens": "impact",
+     "real": true,
+     "reason": "REAL, and the user-impact severity is at the top of the scale.\n\nWhat actually differs. Both implementations share one deterministic loadout selection and one beatability predicate; the only free variable is how many loadouts a rung constructs before consulting S-009 \u2014 one per candidate monster (A) or one for the rung with monsters then filtered against it (B). On the witness input this is not a rounding difference or a tie-break: A returns total cost 5 (target reached), B returns NOT FINITE (target reported unreachable). I ran the probe and reproduced both, plus the W3 control where a genuinely blocked walk yields `inf` under both \u2014 so the divergence really is the arity choice and not a rigged catalogue.\n\nWhy a user/operator/auditor files this. A projection that says \"level 20 is unreachable\" for a character who can reach it in ~5 actions is a wall, and a wall is not a wrong number, it is a removed option. This cost feeds a comparative objective: an infinity does not lose by a margin, it is excluded from ranking entirely, so the bot permanently declines a route it can actually walk and spends its life on something else \u2014 the classic silent stall an operator watches for hours before filing. The two outcomes are in no sense equally acceptable, which is precisely what disqualifies this from being a don't-care carve-out: there is one answer the user wants (A) and the spec, as the witness characterises it, does not say so.\n\nThe blast radius is also wider than the stop. Even where B does not stop, per-candidate versus per-rung selection changes which monster wins the S-011/S-023 rate ranking and changes the S-020 movement charge, so every rung's cost \u2014 not only the pathological one \u2014 is a different number under the two readings. The spec bothers to price equip movements at all, which shows it contemplates the loadout varying along the walk; it is exactly that which makes the unstated arity load-bearing rather than decorative.\n\nCaveat, stated honestly because I could not read the spec. If some clause defines the shared loadout selection as taking the target monster as an argument, then B's `select_loadout_general` \u2014 whose \"highest armour, name tie-break\" criterion is invented in the probe and is not derived from any quoted clause \u2014 is not a legal instantiation, and the gap shrinks to a wording tightening rather than a true silence. That is the one way this comes back as not-real. It does not change the recommendation: the spec should state, in the S-009/S-020 neighbourhood, that beatability is consulted under a loadout selected FOR the candidate monster, and that a monster is inadmissible only when no selectable loadout makes it winnable. Absent that sentence, an implementer can land B, pass the spec, and ship a wall."
+    }
+   ],
+   "real": true,
+   "vetoedBy": [],
+   "shortCircuited": 0
+  },
+  {
+   "fingerprint": "round-tie-at-zero-award-flips-walk-stop",
+   "evidence": "XP awarded for a kill is\n  `Round(((monster_level / player_level) \u00d7 20 + monster_hp \u00d7 0.04) \u00d7 level_penalty \u00d7 monster_multiplier \u00d7 wisdom_bonus)`. ... A rung at which every admissible monster awards nothing is not crossable by fighting, and the walk stops there under S-012's reporting rule rather than dividing by a zero rate or reporting an unbounded cost as though it were a number.",
+   "distinguishing_input": "Character: level 10, progress 0, level requirement 100 XP, max HP 200, wisdom 0. Target level 11. Catalogue: exactly one monster, admissible under S-009/S-010, level 10, hp 125, published xp multiplier 0.02, dealing 0 damage (S-021's zero-damage case, so the loop is the bare Fight). Learned observations: empty. The published expression evaluates to exactly ((10/10)*20 + 125*0.04) * 1.0 * 0.02 * 1.0 = 0.5000 \u2014 a tie for `Round`. The spec fixes the tie direction for S-017's sample-level mean ('Ties go DOWN', explicitly refusing the toolchain default) and fixes the direction of every other resolution it makes (S-014 upward, S-019 floor), but it never says how the published `Round` breaks a tie, and it never says whether S-013's 'awards nothing' test is applied to the rounded output or the raw expression.",
+   "output_a": "A (Round = half away from zero, i.e. 0.5 -> 1): award 1 XP/kill, rate 1 XP per loop action, rung cost 100/1. rungs=[('hoarder_rat', 100)], total=100 (a finite count of actions; the target is reported reachable).",
+   "output_b": "B (Round = half to even, the declared Python 3.13 toolchain's built-in, i.e. 0.5 -> 0): award 0 XP/kill, so every admissible monster at the rung awards nothing, S-013 stops the walk under S-012's reporting rule. rungs=[], total=+infinity (not finite; the target is reported unreachable).",
+   "sigma_dimension": "value semantics",
+   "severity": 5,
+   "recommended_default": "State the tie direction of the published `Round` in the Domain facts, and state that S-013's zero-reward test and S-017's 'published award is not positive' test are both applied to the ROUNDED integer award. Recommend rounding half AWAY FROM ZERO (the ordinary published convention) rather than inheriting the toolchain's half-to-even \u2014 and if the server's convention is unknown, resolve the tie DOWN, by S-017's own no-manufactured-reach principle: a higher award manufactures reach, and only an under-estimate is safe for the objective.",
+   "cell": "12. Walk-stop decision (no admissible monster / zero reward)/boundary",
+   "verdict": "THIN",
+   "clauses": [
+    "S-013"
+   ],
+   "root_cause": "published-award-round-tie-direction",
+   "question": "How does the published award formula's Round resolve an exact half \u2014 half-up, half-away-from-zero, or the toolchain's half-to-even \u2014 and is the 'awards nothing' test applied before or after that rounding?",
+   "corroborations": 24,
+   "members": [
+    "published-award-round-tie-rule",
+    "xp-round-half-flips-argmax",
+    "round-mode-decides-argmax",
+    "round-tie-published-xp-formula",
+    "published-award-round-tie-undecided",
+    "published-round-tie-direction",
+    "published-round-half-tie",
+    "xp-round-tie-rule-decides-the-zero-reward-stop",
+    "published-round-half-tie-undefined",
+    "xp-round-half-tie-mode",
+    "round-tie-mode-unstated",
+    "s007-round-mode-unpinned-at-exact-half",
+    "xp-round-tie-rule",
+    "xp-round-tie-break-unspecified",
+    "xp-round-half-tie-direction",
+    "round-half-tie-mode-undecided",
+    "published-xp-formula-round-tie-direction-unfixed",
+    "xp-formula-round-tie-undecided",
+    "xp-round-tie-direction",
+    "published-award-Round-mode-unfixed",
+    "published-award-round-tie-rule-unstated",
+    "award-round-tie-in-restatement-ratio",
+    "published-award-Round-tie-mode-unfixed",
+    "round-tie-at-zero-award-flips-walk-stop"
+   ],
+   "votes": [
+    {
+     "lens": "sigma",
+     "real": true,
+     "reason": "REAL \u2014 the divergence lands squarely on value semantics (and, on the sentinel reading, error taxonomy), both declared in \u03a3.\n\nCaveat on method: no spec path was actually supplied in my briefing (the header says \"the spec file(s) named above\" but none is named), so per the blindness rules I did not go looking for one. I judged \u03a3-membership from the outputs the witness exhibits, which is what this lens asks.\n\nWhat actually differs in the observable output:\n- rungs: [('hoarder_rat', 100)] vs [] \u2014 not a reordering of an unordered collection, not a relabelling; one route ladder has a rung and the other has none.\n- total: 100 vs +infinity \u2014 a finite action count versus a non-finite one.\n- reachability of target level 11 flips: reported reachable vs reported unreachable.\n\nThese are not the same behavior described two ways. 100 and +infinity are different values, and the reachability verdict derived from them is a different verdict; any consumer ranking routes on this total (a cost feeding an objective) picks differently, and a caller asking \"can this character reach 11 by grinding\" gets opposite answers. If +infinity is instead modelled as an unreachable/no-route signal rather than a number, the difference moves to error taxonomy \u2014 still inside \u03a3. There is no reading on which it is merely naming, structure, or formatting.\n\nThe tie is genuine, not a floating-point artifact, so both branches are stably reachable rather than one being an accident of representation. I recomputed the published expression in exact rationals and in the float path: (10/10)*20 + 125*0.04 = 25, times 1.0 * 0.02 * 1.0 = exactly 1/2, and the float result is bit-exactly 0.5 (0.5 is representable). So half-away-from-zero yields 1 and half-to-even yields 0 deterministically, every run, on the declared Python 3.13 toolchain. With award=1 the rung needs ceil(100/1)=100 loop actions; with award=0 no admissible monster at the rung yields progress and the walk stops with an empty ladder.\n\nThe magnitude also rules out \"same behavior, different rendering\": this is not 100 vs 101 from a rounding wobble, it is finite vs not-finite, and it changes a boolean-grade verdict about the character's progression.\n\nThe unfixed decision is real too \u2014 the tie direction of the published Round is left open while sibling resolutions (S-017 down, S-014 up, S-019 floor) are each pinned \u2014 and it compounds with the second silence the witness names (whether S-013's \"awards nothing\" test reads the rounded output or the raw expression). Under the raw-expression reading, 0.5 > 0 keeps the monster admissible regardless of the rounding convention, which is a third distinct outcome; that only strengthens the case that the observable behavior is underdetermined here rather than weakening it."
+    },
+    {
+     "lens": "scope",
+     "real": true,
+     "reason": "SCOPE: the divergence is a property of the artifact under test. The oracle is \"ONE pure function\"; its carve-outs are the progression choice core, the acquisition pricer, the learning store's collection machinery, the beatability predicate, the planner/goal/arbiter, and non-combat routes. This witness touches none of them. S-007 places the XP prediction inside the oracle itself (\"it computes it from the game's published formula\"), nothing delegated, so an implementer of THIS function must type a rounding operation and cannot avoid choosing a tie direction. The witness's stipulations deliberately quiesce every background part: observations empty (learning store, S-008/S-017/S-018 inert), monster stipulated admissible (the explicitly-background beatability predicate fixed by hypothesis), zero damage (S-021 leaves the bare Fight). The only varying quantity is arithmetic the oracle performs. The \"Domain facts\" preamble (\"inputs to the specification, not clauses -- the oracle does not get to choose them\") forbids choosing the FORMULA; it does not define `Round`'s tie behaviour, so the underdetermination passes straight into the oracle's code rather than being relocated to another implementation -- there is no other component that could resolve it. The second half -- whether S-013's \"awards nothing\" tests the rounded award or the raw expression -- is applying this spec's own clause to this spec's own intermediate value, which cannot belong to another artifact. And the observable split (rungs=[('hoarder_rat',100)], total=100 vs rungs=[], total=+infinity) is exactly S-003's declared return, reported via S-012's rule; the consumer is background but the returned value is this spec's to fix. Corroborating: the spec fixes tie direction everywhere else it arises (S-014 upward, S-019 floor, S-017 \"Ties go DOWN\" while explicitly refusing the declared Python 3.13 half-to-even default) -- same class of decision, same toolchain, same named hazard, left open here."
+    },
+    {
+     "lens": "textual",
+     "real": true,
+     "reason": "REAL. Both quotes appear verbatim (Domain facts line 42; S-013), and the spec genuinely fails to fix the tie direction of the published `Round`. Every rounding rule the document declares is scoped elsewhere by its own text: S-014's upward resolution is stated to happen \"AT THE POINT OF REPORT, ONCE, AND ON THE TOTAL\" and is about cost in actions, not XP; S-017's \"Ties go DOWN\" is bound to the sample-level mean (\"A TIE IS DECIDED HERE\", justified \"for the same reason every other judgement in the restatement resolves the way it does\"); S-019 floors a remaining requirement; S-021 rounds seconds up. The XP formula lives in the Domain facts block, which the spec declares are \"inputs to the specification, not clauses \u2014 the oracle does not get to choose them,\" and that block says only `Round`. No clause forbids output B: S-013's \"A rung at which every admissible monster awards nothing\" is unconditioned (the level-penalty sentence is motivating context), and S-018 confirms the stop fires on any zero reward \u2014 \"The stop is a test of REWARD, not of provenance\" \u2014 so a rounded-to-zero award legally halts the walk. Nor does anything forbid A: the \"resolve against the character\" principle is stated only for the reported total (S-014) and handed-progress edges (S-019), and the \"no manufactured reach\" argument only inside S-017's restatement; neither is a general rule over the published formula, which the spec disclaims authority over. The tie is reachable rather than a representation artifact: I computed ((10/10)*20 + 125*0.04)*1.0*0.02*1.0 both in IEEE double and in exact Fraction arithmetic and it is exactly 0.5 / exactly 1/2 (scratch: /home/blentz/.claude/jobs/0f7801e4/tmp/iso/cell_w_roundtie_9f3a/tie.py). Python 3.13's built-in round (half-even, the declared toolchain's default) yields 0; half-away-from-zero yields 1. Downstream the two readings diverge maximally in the S-003 output: award 1 gives rate 1 XP per loop action (zero damage means the loop is the bare Fight, S-021) so rungs=[(monster,100)] and total 100 finite; award 0 gives rungs=[] and a not-finite total under S-012/S-013 \u2014 reachable versus unreachable for the same input. The witness's secondary point (whether \"awards nothing\" tests the rounded or raw value) is likewise unaddressed but is subsumed by the same silence. The input is inside S-002's domain \u2014 the spec places no bound on a catalogue monster's multiplier, and S-001 demands totality over that domain."
+    },
+    {
+     "lens": "impact",
+     "real": true,
+     "reason": "REAL \u2014 and the witness understates it slightly.\n\nCaveat first: no spec path was supplied in my brief (the instructions say one is \"named above\"; none is). I did not go looking for it \u2014 no directory listing, no source. I judged the claim on the clause structure the witness quotes and on the lens.\n\n1) The tie is genuinely reachable, not a float-noise artifact. I built both candidates in a scratch dir I created (/tmp/adv_cell_round_tie_zero_9f3a2c/probe.py) and ran the published expression under four natural evaluation orderings \u2014 as-written, multiplier-first, distributed, integer-ratio. All four land on binary-exact 0.5 (`raw == 0.5` is True in every one). So an implementer cannot dodge the tie by associating the product differently; whatever order they pick, they hit the undetermined case and must invent the direction.\n\n2) The two directions are not a 1-XP disagreement, they are a reachability flip. Rung cost is need/award and award=0 is absorbing: A gives award=1 \u2192 rung 100/1 = 100 actions, target reported reachable; B gives award=0 \u2192 S-013 fires, walk stops, total = +infinity, target reported unreachable. Everywhere else on the scale the rules differ by one unit and nothing else (I checked 1.5 and 2.5: 2/2 and 3/2 \u2014 cost noise). The 0/1 boundary is the single place where the tie direction changes the *kind* of answer. That is the \"prices a real route at infinity\" failure class: an objective that returns +inf doesn't rank the route low, it deletes it, and the operator sees a bot that refuses to grind a monster the game does award XP for. That is a filed bug, not a preference.\n\n3) Neither direction is inferable from the spec's own habits, which is what makes it a gap rather than an unwritten carve-out. The spec fixes the direction of every resolution it makes \u2014 S-017 down (explicitly refusing the toolchain default), S-014 up, S-019 floor. Having once said in writing \"the Python default is not what we mean here\", the spec forfeits the argument that silence elsewhere means \"inherit the Python default\". A reader with the same document in hand can defend either reading, and both readings are disciplined, not sloppy. That is exactly the condition for a real gap.\n\n4) The second half \u2014 whether S-013's \"awards nothing\" tests the rounded output or the raw expression \u2014 is independently real and has a *wider* footprint than the tie. The tie is a measure-zero input; this one is an interval. Any raw award in (0, 0.5) passes an \"awards something\" test read against the raw expression, so the walk continues and prices the rung finitely, while each actual kill credits 0 rounded XP \u2014 the character grinds forever and never levels. That reading turns an honest +infinity into a silent livelock, which is strictly worse than either outcome the witness names: the planner keeps reporting progress while state never advances. Applied to the rounded output instead, the same monster is honestly refused. One clause of prose separates \"reports unreachable\" from \"runs the character in a circle indefinitely\".\n\nNot a don't-care: the outcomes are not symmetric, the disagreement is on reachability rather than cost, and one reading of the companion clause corrupts forward progress rather than merely mispricing it. Fix is two sentences \u2014 state Round's tie direction at the published expression, and state which value S-013's test consumes."
+    }
+   ],
+   "real": true,
+   "vetoedBy": [],
+   "shortCircuited": 0
+  },
+  {
+   "fingerprint": "penalty-band-1-to-4-unstated",
+   "evidence": "The level penalty is a step function of the gap between character and monster: at or below the monster's level, **100%**; five or more levels above it, **70%**; ten or more levels above it, **0%** \u2014 the kill awards nothing.",
+   "distinguishing_input": "Character: level 40, progress 0 toward next level, requirement 1000 XP, max HP 400, no learned observations, no gear alternatives. Target level 41. Catalogue = two admissible, beatable monsters, each dealing 40 damage per fight: wolf (level 37 \u2014 the character is 3 levels above it, inside the band no sentence covers, hp 505) and bear (level 40 \u2014 gap 0, hp 250). monster_multiplier = wisdom_bonus = 1.",
+   "output_a": "Ranking key uses penalty 100% throughout gaps 1-4 (the step holds until the next stated breakpoint): wolf XP/kill = Round(18.5+20.2) = 39, bear = 30; loop cost per kill = 4/3 fights for both, so rates are 29.25 vs 22.5. Rungs = [ (level 41, 'wolf', 1000/29.25 = 34.1880\u2026) ]; reported total = 35.",
+   "output_b": "Ranking key reads 100% as granted only 'at or below the monster's level' and the reduced 70% as already in force above it: wolf = Round(38.7 \u00d7 0.7) = 27, bear = 30; rates 20.25 vs 22.5. Rungs = [ (level 41, 'bear', 1000/22.5 = 44.444\u2026) ]; reported total = 45.",
+   "sigma_dimension": "value semantics",
+   "severity": 5,
+   "recommended_default": "State the penalty as a total table over the gap g = player_level \u2212 monster_level: g \u2264 0 \u2192 100%, 1 \u2264 g \u2264 4 \u2192 100%, 5 \u2264 g \u2264 9 \u2192 70%, g \u2265 10 \u2192 0%. The three published sentences leave 1..4 unassigned and S-011's argmax has no defined reward there, yet a climbing character out-levels most of its candidate pool by one to four levels, so this is the ordinary case, not a corner.",
+   "cell": "11. Fastest-monster selection (argmax on reward per unit cost) and tie-break/normal",
+   "verdict": "DEFINED",
+   "clauses": [
+    "S-011",
+    "S-004",
+    "S-005"
+   ],
+   "root_cause": "level-penalty-band-gaps-one-to-four",
+   "question": "What level penalty applies when the character is 1 to 4 levels above the monster \u2014 the band the published step function never assigns a value to?",
+   "corroborations": 16,
+   "members": [
+    "penalty-band-1-to-4-unstated",
+    "penalty-gap-1-to-4-unstated",
+    "penalty-band-gap-1-to-4",
+    "level-penalty-gap-1-to-4-unanchored",
+    "level-penalty-undefined-for-gaps-one-to-four",
+    "level-penalty-undefined-gap-1-to-4",
+    "penalty-gap-1-to-4-unnamed",
+    "penalty-band-1-to-4-unnamed",
+    "penalty-band-gap-1-to-4-undeclared",
+    "penalty-band-gap-1-to-4-undefined",
+    "level-penalty-gap-1-to-4",
+    "level-penalty-gap-1-to-4-undefined",
+    "penalty-band-gap-1-to-4-unassigned",
+    "xp-penalty-gap-1-to-4-unbanded",
+    "penalty-gap-1-to-4-unpinned",
+    "penalty-gaps-1-to-4-undefined-in-restatement-ratio"
+   ],
+   "votes": [
+    {
+     "lens": "sigma",
+     "real": true,
+     "reason": "Note: no spec file path was supplied in my brief, so I judged strictly on the \u03a3-membership lens using the exhibited outputs (I did not open any implementation, spec, or repo file; the only command I ran re-derived the two arithmetic chains from the witness text itself, and it confirms both are internally consistent).\n\nThe difference is genuinely observable on \"value semantics\", the dimension the witness named.\n\n- The reported total differs: A yields 35, B yields 45. That is a scalar in the returned result, not a label, not a format, not a field name. 34.188\u2026 vs 44.444\u2026 before rounding \u2014 the divergence survives any reasonable rounding convention (floor: 34 vs 44; ceil: 35 vs 45; exact: two different reals).\n- The rung content differs: A's single rung is (41, 'wolf', 34.188\u2026), B's is (41, 'bear', 44.444\u2026). Different monster selected, different cost. This is not a re-ordering of an unordered collection \u2014 both plans contain exactly one rung, so there is no permutation that maps one onto the other. The chosen element itself is different.\n- The root cause is a real semantic disagreement, not two descriptions of one behavior: the two readings assign different XP to the same monster at the same level gap (wolf at gap 3 \u2192 39 under A's \"penalty stays at 100% until the next stated breakpoint\", 27 under B's \"100% applies only at-or-below the monster's level, 70% already in force above it\"). That flips the argmax of the ranking key (29.25 vs 22.5 under A; 20.25 vs 22.5 under B), which flips the selected monster, which changes the number of cycles reported.\n\nBoth implementations agree on error taxonomy (neither errors), idempotence, and ordering; the divergence lives squarely on value semantics, which is in \u03a3. Two callers running A and B on the identical input get different numbers and different plans out \u2014 an observer needs nothing but the return value to tell them apart.\n\nCaveat for the parent, offered without having read the spec: my verdict is only that the divergence is \u03a3-observable. Whether the spec actually leaves the 1-4 gap band open \u2014 the witness asserts \"the band no sentence covers\" \u2014 is the separate admissibility question I could not check without the spec text."
+    },
+    {
+     "lens": "scope",
+     "real": true,
+     "reason": "In scope. The artifact under test is the cycle oracle, and S-007 makes computing XP-per-kill from the published formula the oracle's own job (\"it computes it from the game's published formula over the catalogue's attributes\"). The level penalty is a factor of that formula, so the implementer of the oracle must write the penalty branch \u2014 this choice cannot be delegated to anyone else. It is named in none of the \"Explicitly NOT under test\" carve-outs (progression choice core, acquisition pricer, learning-store collection, beatability predicate, planner/goal/arbiter, non-combat routes). The \"Domain facts\" preamble (\"inputs to the specification, not clauses \u2014 the oracle does not get to choose them\") is a binding declaration, not a carve-out relocating the subject; it constrains the oracle rather than exempting it, and the oracle's step function is relied on elsewhere in-artifact (S-013's zero band, S-017's \"grey boundary\"). The stated bands cover gap <= 0 (100%), gap >= 5 (70%) and gap >= 10 (0%), leaving gaps 1-4 covered by no sentence; both readings are consistent with the written text. The divergence lands on the oracle's own declared observables, not a consumer's: S-003's rungs (which monster is named) and total cost, via S-011's per-rung choice. Arithmetic is coherent \u2014 wolf 18.5+20.2=38.7 gives 39 vs Round(38.7x0.7)=27, bear 30 at gap 0 under both; chain of 3 (400->360->320->280 crossing the 0.75 guard on the committed fight), 120 lost = 30% -> 30s -> 1 Fight, so 4/3 loop actions per kill for both; rates 29.25/22.5 vs 20.25/22.5 select different monsters and yield totals 35 vs 45."
+    },
+    {
+     "lens": "textual",
+     "real": true,
+     "reason": "Quote is verbatim (SPEC.md domain facts, \"The level penalty is a step function of the gap between character and monster: at or below the monster's level, 100%; five or more levels above it, 70%; ten or more levels above it, 0% \u2014 the kill awards nothing.\"). A gap of 3 satisfies NONE of the three stated conditions \u2014 not \"at or below\", not \"five or more\", not \"ten or more\" \u2014 so the enumeration leaves the 1-4 band with no value at all. I searched the whole document: the only other penalty references are S-007 (compute from the published formula), S-013 (\"ten or more levels beneath\"), and S-017's \"grey boundary\", all about the zero band at gap >= 10. Nothing names a value for gaps 1-4. \"Step function\" fixes piecewise-constancy but not which neighbouring plateau the unstated band joins; and nothing forbids B, because \"five or more levels above it, 70%\" is not written as an exclusive condition, so 70% at gap 3 breaks no letter \u2014 just as carrying 100% forward breaks none. The divergence is observable end-to-end: damage 40 on a 400 bar gives band 100, chain 3 (2 absorbed + the committed crossing fight, S-005/S-021), 120/400 = 30% -> 30s -> 1 Fight at the declared 30s constant -> 1/3 recovery per kill, loop 4/3 for both. Wolf 18.5+20.2 = 38.7 -> 39 at 100% or 27 at 70%; bear 30 either way. Rates in XP per loop action (S-023): 29.25 vs 22.5 (S-011 picks wolf) or 20.25 vs 22.5 (S-011 picks bear); S-019's exact quotient plus S-014's single upward resolution gives 35 vs 45, with a different monster named on the single rung (S-003). No setup cost (no gear alternatives, S-020) and no tie intervenes. Only mild counterweight: the cited docs URL could be consulted externally, but the spec restates the rule inline as the input to S-007 and that restatement is what is incomplete."
+    },
+    {
+     "lens": "impact",
+     "real": true,
+     "reason": "Real gap. The two readings are both defensible completions of a piecewise penalty schedule with a hole in it: if one sentence grants 100% \"at or below the monster's level\" and another states a reduced rate at some higher breakpoint, gaps 1-4 are genuinely unruled, and a coding agent has no basis to prefer carrying the step forward (A) over treating the reduction as already in force (B). Nothing in the witness's construction is incoherent: base wolf XP 38.7 decomposes identically under both, A rounds it to 39 while B applies 0.7 first for 27, bear is gap 0 and pins at 30 under both, and the 4/3 fights-per-kill loop cost divides out to 29.25/22.5/20.25 exactly as stated. USER IMPACT: this is not a don't-care carve-out. The divergence reaches the primary outputs, not a tiebreak or a display detail \u2014 A picks wolf and reports 35, B picks bear and reports 45. The operator sees a different grind target and a total that differs by 29%. And the ranking key is a prediction of what the game server actually grants, so exactly one of A and B matches reality; the other commits the character to hours on the wrong monster while quoting an ETA it cannot hit. An operator watching the plan say \"wolf, 35 cycles\" and seeing the character under-earn by a third would file a bug and be right to. The band is the common case, not an edge \u2014 farming a monster one to four levels under yourself is the ordinary state of a levelling character, so the unruled region is hit on nearly every ranking. Adjacent breakpoints in this same schedule are already known to be load-bearing and defect-prone, which is evidence the schedule must be stated as a total function of the gap rather than by two endpoints. Two honest qualifications. I was given no spec path and did not hunt for one, so I cannot independently confirm that no sentence covers gaps 1-4; if the spec anywhere phrases the reduction as applying at a gap of 5 or more, or as applying whenever the character's level exceeds the monster's, the hole closes and this collapses to a reading error. And the claimed 5/5 blast radius is overstated on the stated lens: this corrupts a projection and a target choice, it does not lose data, double-charge, or cross a tenant boundary. Real, and worth one clause fixing the whole schedule, but a wrong-plan severity rather than a corruption severity."
+    }
+   ],
+   "real": true,
+   "vetoedBy": [],
+   "shortCircuited": 0
+  }
+ ]
+}

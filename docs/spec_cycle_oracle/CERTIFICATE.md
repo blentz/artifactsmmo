@@ -106,3 +106,40 @@ check.
 | assumption | why it is unprovable here | how it is monitored |
 |---|---|---|
 | … | … | … |
+
+## Phase 2 accounting — READ THIS BEFORE TRUSTING THE COUNTERS
+
+**The loop never went formally DRY, and the operator elected to proceed anyway. That
+decision is recorded here rather than by editing a counter.**
+
+`.forge-state.json` shows `dry_rounds 0/2` and four VOID rounds. Only the FIRST was a
+real contamination. The other three were voided by the blindness gate for reasons
+that shrank each time, and the shrinking is the evidence:
+
+| round | violations | what it actually was |
+|---|---|---|
+| 3 (first attempt) | 7 / 3 agents | agents' own scratch **workspaces** misread as answer keys; the lint tracked the files they wrote but not the folder holding them |
+| 3 (re-run) | 2 / 206 agents | two adversaries on one cell invented the SAME "random" scratch name — an LLM's randomness is a function of its prompt |
+| 5 | 1 / 202 agents | the harness-ASSIGNED path was DERIVABLE, so an agent constructed a sibling's directory by changing an index |
+
+**No agent read `src/`, `tests/` or `formal/` in any round after the first.** Every
+later violation was one adversary reading ANOTHER ADVERSARY's model of the same spec
+— an independence blemish, not an implementation leak.
+
+**And it was measured, not assumed.** For rounds 3 and 5 the fingerprints emitted by
+every peer-sharing agent were checked against the surviving clusters: **not one
+appeared in any of them.** The findings those rounds produced did not rest on the
+shared models at all.
+
+The gate is all-or-nothing by design — one look at an answer key poisons a whole line
+of reasoning, so a single read must void everything. That default is right for an
+implementation leak and blunt for independence, where the harm is proportionate and
+measurable. The operator's judgement, on 2026-08-11: with the substance clean across
+four consecutive rounds, the spec would pass absent a defect in the harness itself.
+
+**What that costs, stated plainly.** This certificate cannot claim the Phase 2 loop
+converged. It claims something weaker and honest: four rounds of 157 adversaries each
+found real gaps, every one of which was ratified and closed, and the rounds were
+verified free of implementation contamination. Whether a fifth round would have been
+DRY is unknown. It is not claimed.
+
