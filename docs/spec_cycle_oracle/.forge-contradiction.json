@@ -7,9 +7,35 @@
  },
  "probed": {
   "clauses": 22,
-  "rawClaims": 25,
-  "pairs": 19
+  "rawClaims": 26,
+  "pairs": 20
  },
- "contradictions": [],
- "clean": true
+ "contradictions": [
+  {
+   "pair": "S-017\u2194S-023",
+   "severity": 4,
+   "corroborations": 1,
+   "overlapping_input": "One monster M, one measurement in the observation body, aggregating 4 cycles: three cycles recorded at character level 20 that between them killed M for 300 XP over 30 executed loop actions (fights plus the recoveries they forced), and one idle cycle recorded at character level 40 with no kills and no fights. The character is handed at level 20 with a remaining rung requirement of 1000 XP, and M is admissible at that rung.",
+   "a": {
+    "clause": "S-017",
+    "quote": "A cycle that recorded a level but NO KILLS contributes its level, because it contributed to the rate \u2014 the rate is a per-cycle average and an idle cycle drags it down, so the level that idle cycle was spent at is part of where the measurement was taken.",
+    "prescribes": "The measured rate is an average over CYCLES: 300 XP / 4 cycles = 75, and the idle cycle is a member of the averaged population (without it the rate would be 100), so it 'drags it down'. Because the mean sample level is taken over 'the same population the rate is averaged over', the idle cycle's level 40 is a member of the mean too: mean(20,20,20,40) = 25, restatement ratio taken at level 25. Rung loop cost = 1000 / 75 = 13.33."
+   },
+   "b": {
+    "clause": "S-023",
+    "quote": "A measured rate is XP per executed planner action over the whole combat loop -- the same unit S-004 fixes for costs, and the unit an observation of actual play naturally arrives in, since it averages over every action the pursuit spent including recovery.",
+    "prescribes": "The measured rate is an average over EXECUTED LOOP ACTIONS: 300 XP / 30 loop actions = 10 XP per action. The idle cycle executed no fight and no recovery, so it appears in neither numerator nor denominator and does not drag the rate down at all \u2014 the rate is identical whether that cycle is in the aggregation or not. Rung loop cost = 1000 / 10 = 100 actions (S-019: 'that quotient is a count of LOOP ACTIONS which is the rung's loop cost outright'), and the idle cycle, having contributed nothing to the rate, is not in the population the mean is taken over."
+   },
+   "genre_asymmetry": true,
+   "formal_one": "S-023",
+   "warning": "GENRE ASYMMETRY. S-023 is stated formally; the other narratively. Every implementer, reviewer and judge will silently follow the FORMAL one. If the narrative clause was your real intent, that intent is already dead and the certificate will still read green.",
+   "resolutions": [
+    "REWRITE BOTH",
+    "ADD EXPLICIT PRECEDENCE",
+    "DELETE ONE",
+    "NOT A CONTRADICTION \u2014 state the scope in the text"
+   ]
+  }
+ ],
+ "clean": false
 }

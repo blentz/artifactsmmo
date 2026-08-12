@@ -717,7 +717,13 @@ What follows is that this clause stands or falls on the exclusion alone, and it 
 
 ### S-023 · Rates are reconciled in XP per executed action  [witness: W-009]
 
-A measured rate is XP per executed planner action over the whole combat loop -- the same unit S-004 fixes for costs, and the unit an observation of actual play naturally arrives in, since it averages over every action the pursuit spent including recovery.
+A measured rate is XP per executed planner action over the whole combat loop -- the same unit S-004 fixes for costs. **That includes the recovery the loop forced, and making it true required a change to what the observations return.**
+
+An observation does NOT naturally arrive in that unit, which an earlier version of this clause asserted. The executor preempts a grind to recover, so every Rest the loop forces is filed under a DIFFERENT goal, and a rate averaged over the grind's own cycles is XP per FIGHT. Measured on 36455 live cycles: the green_slime grind is 100.0% fighting and 0% resting, while the recovery goal holds 5668 Rests. Compared against a prediction that IS per loop action, that inflated every measured monster by the whole loop factor -- Robby's pig rate was exactly DOUBLE, 27.0 against 13.5, so any monster carrying observations beat one without by up to 2x on the strength of a unit error.
+
+This branch has had that defect once before, when it divided by a cooldown in seconds and inflated measured monsters roughly 29x. An order of magnitude smaller is not a different bug; it is the same one, quieter.
+
+**Recovery is attributed to the goal that ran immediately before it**, because the damage that forced a Rest came from the fight preceding it, and cycles are ordered. A run of consecutive recoveries walks back to the last non-recovery goal. A recovery whose cause lies outside the window is DROPPED rather than guessed at -- inventing an owner would put another goal's cost on this rate, which is this same error pointed the other way.
 
 A prediction from the published formula is per KILL, and is converted into that unit by dividing by the rung's loop action count (S-005) before it is compared with anything.
 

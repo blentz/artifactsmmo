@@ -29,6 +29,9 @@ from artifactsmmo_cli.ai.learning.models import (
     SkillXpObservation,
     TaskRewardObservation,
 )
+from artifactsmmo_cli.ai.learning.recovery_attribution import (
+    attribute_forced_recovery,
+)
 from artifactsmmo_cli.ai.learning.schema_init import exclusive_schema_lock
 from artifactsmmo_cli.ai.learning.store_warmup_core import (
     WARMUP_MIN_SAMPLES,
@@ -92,6 +95,17 @@ close to right."""
 
 
 class LearningStore:
+    # How much raw stream to read to fill a window of ONE goal's cycles. Attribution
+    # needs each recovery cycle's predecessor, so the query can no longer filter by
+    # goal -- which means a goal that is sparse in recent history can UNDER-FILL its
+    # window. Measured at a factor of 3: HAL's green_slime rate fell from 200 samples
+    # to 152, not because the evidence aged out but because the read stopped early.
+    # Ten keeps a bounded read while leaving a goal that ran a tenth of the time its
+    # full window. The window's meaning does shift from "the last N cycles OF THIS
+    # GOAL, however long ago" to "this goal's cycles within the recent stream", and
+    # that is a real change: evidence from far enough back now falls out entirely.
+    _RECOVERY_STREAM_FACTOR = 10
+
     """Event log + queryable learned stats. Best-effort: errors degrade to defaults."""
 
     # Default lookback window over recent action cycles (cost/success/effect stats).
@@ -444,26 +458,46 @@ class LearningStore:
             return None
 
     def recent_goal_cycles(self, goal_repr: str, window: int = WINDOW_RECENT) -> list[Cycle]:
-        """Return up to `window` most recent Cycle rows where selected_goal=goal_repr
-        for the store's character. Newest first.
+        """Return up to `window` most recent Cycle rows for this goal, NEWEST FIRST,
+        including the recovery cycles the goal's own fighting forced.
 
-        Phase G-B projections aggregate over these rows in pure Python so the
-        scoring math stays testable with synthetic Cycle lists.
+        RECOVERY IS A DIFFERENT GOAL, AND THAT MADE THE RATE A DIFFERENT UNIT. The
+        arbiter preempts a grind with `RestoreHP` when hit points fall, so every Rest
+        the combat loop forces is filed under `RestoreHP` and NOT under the grind that
+        caused it. Measured on 36455 live cycles: `GrindCharacterXP(green_slime)` is
+        100.0% FightAction and 0% Rest, while `RestoreHP` holds 5668 Rests.
+
+        So a rate averaged over the goal's own rows alone is XP per FIGHT, while the
+        predicted branch it is compared against is XP per LOOP ACTION (S-023) -- and a
+        monster with observations outranked one without by the whole loop factor,
+        about 2.4x at live per-kill costs. That is the same defect as the seconds-vs-
+        cycles bug this branch already had once, one order of magnitude smaller and
+        therefore harder to see.
+
+        ATTRIBUTION IS TEMPORAL, and it is the only thing the data supports: a
+        recovery cycle belongs to the goal that ran immediately before it. The damage
+        that forced the Rest came from the fight that preceded it, and cycles carry a
+        monotonic id, so "the goal of the previous cycle" is computable and needs no
+        new column. A recovery preceded by nothing, or by another recovery, walks back
+        to the last non-recovery goal; recoveries at the very start of the window have
+        nothing to attach to and are dropped rather than guessed at.
         """
         try:
             with SqlSession(self._engine) as s:
+                # Read the raw stream, not a filtered slice: attribution needs each
+                # recovery cycle's PREDECESSOR, which a `where goal = x` filter has
+                # already discarded. The window is widened because the stream now
+                # includes cycles that will be attributed elsewhere.
                 stmt = (
                     select(Cycle)
-                    .where(
-                        col(Cycle.character) == self._character,
-                        col(Cycle.selected_goal) == goal_repr,
-                    )
+                    .where(col(Cycle.character) == self._character)
                     .order_by(col(Cycle.id).desc())
-                    .limit(window)
+                    .limit(window * self._RECOVERY_STREAM_FACTOR)
                 )
-                return list(s.exec(stmt))
+                stream = list(s.exec(stmt))
         except SQLAlchemyError:
             return []
+        return attribute_forced_recovery(stream, goal_repr, window)
 
     def recent_selected_goals(self, window: int) -> list[str]:
         """Return up to `window` most recent non-None Cycle.selected_goal values for

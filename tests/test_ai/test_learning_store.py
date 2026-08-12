@@ -1257,3 +1257,62 @@ def test_observed_drop_rate_survives_unusable_rows(tmp_db_path):
     feathers = sum(1 for i in range(MIN_DROP_KILLS) if i % 4 == 3)
     assert rate == pytest.approx(feathers / MIN_DROP_KILLS)
     assert 0 < rate < 1
+
+
+class TestForcedRecoveryAttribution:
+    """A grind's Rests are filed under `RestoreHP`, not under the grind.
+
+    Measured on 36455 live cycles: `GrindCharacterXP(green_slime)` is 100.0%
+    FightAction and 0% Rest, while `RestoreHP` holds 5668 Rests. So a rate averaged
+    over the grind's own rows is XP per FIGHT, while the predicted branch it is
+    ranked against is XP per LOOP ACTION -- and every monster with observations beat
+    every monster without by the whole loop factor.
+    """
+
+    @staticmethod
+    def _cycle(store, idx, goal, action, xp=0):
+        store.record_cycle(Cycle(
+            ts=f"2026-08-11T00:00:{idx:02d}+00:00", session_id="x", cycle_index=idx,
+            character="hero", selected_goal=goal, action_class=action, delta_xp=xp,
+            level=5, outcome="ok",
+        ))
+
+    def test_a_grind_owns_the_rests_its_own_fighting_forced(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        grind = "GrindCharacterXP(slime)"
+        for i, (goal, act, xp) in enumerate([
+                (grind, "FightAction", 10), (grind, "FightAction", 10),
+                ("RestoreHP", "RestAction", 0),
+                (grind, "FightAction", 10), ("RestoreHP", "RestAction", 0)]):
+            self._cycle(store, i, goal, act, xp)
+        rows = store.recent_goal_cycles(grind, window=100)
+        store.close()
+        assert len(rows) == 5, [(r.selected_goal, r.action_class) for r in rows]
+        assert sum(r.delta_xp or 0 for r in rows) == 30
+        # 30 XP over 5 cycles = 6 per LOOP ACTION, not 10 per FIGHT. That factor is
+        # the whole defect: it is what the predicted branch is compared against.
+        assert sum(r.delta_xp or 0 for r in rows) / len(rows) == 6.0
+
+    def test_a_rest_forced_by_another_goal_is_not_claimed(self, tmp_db_path):
+        """The attribution must not sweep up recovery it did not cause, or the fix
+        becomes the same error pointed the other way."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        grind = "GrindCharacterXP(slime)"
+        self._cycle(store, 0, grind, "FightAction", 10)
+        self._cycle(store, 1, "GatherMaterials(wool)", "GatherAction", 0)
+        self._cycle(store, 2, "RestoreHP", "RestAction", 0)
+        rows = store.recent_goal_cycles(grind, window=100)
+        store.close()
+        assert [r.selected_goal for r in rows] == [grind]
+
+    def test_recovery_asked_about_itself_owns_only_its_own(self, tmp_db_path):
+        """Without this the same cycle counts into two rates at once."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        self._cycle(store, 0, "GrindCharacterXP(slime)", "FightAction", 10)
+        self._cycle(store, 1, "RestoreHP", "RestAction", 0)
+        rows = store.recent_goal_cycles("RestoreHP", window=100)
+        store.close()
+        assert [r.selected_goal for r in rows] == ["RestoreHP"]
