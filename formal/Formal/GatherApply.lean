@@ -190,4 +190,62 @@ theorem is_applicable_boundary_witness :
 theorem is_applicable_off_boundary_witness :
     isApplicable { used := 6, cap := 8 } 3 = false := by decide
 
+/-! ### Batched mint (mirror `gather_apply_batch_pure` / `gather_batch_size_pure`
+in `gather_apply_core.py`). Only the slot count matters here, exactly as for
+`apply`/`applyN` above; the per-key item-dict bookkeeping is exercised by the
+Python unit tests. -/
+
+/-- Iterated `apply` that BREAKS the moment the inventory is full, mirroring
+the Python `gather_apply_batch_pure`'s fold-with-break: of the `n` requested
+steps, each one first checks whether `used ≥ cap` and stops (returning the
+current state unchanged) the instant it is, exactly like
+`apply_monster_drops_pure`'s loop. -/
+def applyBatch : Inv → Nat → Inv
+  | i, 0 => i
+  | i, n + 1 => if i.used ≥ i.cap then i else applyBatch (apply i) n
+
+/-- **Batched mint is capped**: from a well-formed inventory (`used ≤ cap`,
+the invariant `apply_inventory_safe`/`chain_safe` maintain), `n` batched
+applies land exactly at `min (used + n) cap` — the break neither overshoots
+nor stops early while room remains. -/
+theorem gather_apply_batch_used (i : Inv) (n : Nat) (hwf : i.used ≤ i.cap) :
+    (applyBatch i n).used = min (i.used + n) i.cap := by
+  induction n generalizing i with
+  | zero => simp [applyBatch]; omega
+  | succ m ih =>
+    unfold applyBatch
+    split
+    · next h => omega
+    · next h =>
+      have hwf' : (apply i).used ≤ (apply i).cap := by simp only [apply]; omega
+      have := ih (apply i) hwf'
+      simp only [apply] at this ⊢
+      omega
+
+/-- **Batch of one is the unbatched mint**: with room for at least one more
+item (the precondition every real caller of `apply` already establishes via
+`is_applicable`), a single batched step agrees with `apply` exactly —
+`gather_apply_batch_pure(inv, code, 1) == gather_apply_pure(inv, code)`. -/
+theorem gather_apply_batch_one (i : Inv) (h : i.used < i.cap) :
+    applyBatch i 1 = apply i := by
+  have hne : ¬ i.used ≥ i.cap := by omega
+  simp [applyBatch, hne]
+
+/-- **SAFETY**: the batched mint never exceeds `cap`, for ANY `qty` — including
+a demand far larger than the free quantity. Starting from a well-formed
+inventory, the break in `applyBatch` (not the caller pre-sizing `qty`) is what
+makes this hold for an arbitrarily large `n`. -/
+theorem gather_apply_batch_le_cap (i : Inv) (n : Nat) (hwf : i.used ≤ i.cap) :
+    (applyBatch i n).used ≤ i.cap := by
+  rw [gather_apply_batch_used i n hwf]
+  exact Nat.min_le_right _ _
+
+/-- Witness: a demand (`n = 50`) far larger than the headroom (`cap - used =
+2`) still lands exactly at `cap`, never past it. Grounds `gather_apply_batch_
+le_cap` on a reachable, non-vacuous instance rather than an unreachable
+hypothesis. -/
+theorem gather_apply_batch_huge_qty_witness :
+    let i : Inv := { used := 18, cap := 20 }
+    (applyBatch i 50).used = 20 := by decide
+
 end Formal.GatherApply

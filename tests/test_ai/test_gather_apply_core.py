@@ -4,6 +4,9 @@ formal/Formal/MonsterDropApply.lean)."""
 from artifactsmmo_cli.ai.actions.gather_apply_core import (
     GatherInv,
     apply_monster_drops_pure,
+    gather_apply_batch_pure,
+    gather_apply_pure,
+    gather_batch_size_pure,
     gather_is_applicable_pure,
 )
 
@@ -42,8 +45,9 @@ def test_gather_blocked_when_quantity_floor_unmet() -> None:
     assert gather_is_applicable_pure(inv, min_free=3, drop_item="copper_ore") is False
 
 
-def _inv(used=0, cap=20, **items):
-    return GatherInv(used=used, cap=cap, item_count=dict(items))
+def _inv(used=0, cap=100, slots_used=0, slots_max=20, **items):
+    return GatherInv(used=used, cap=cap, item_count=dict(items),
+                     slots_used=slots_used, slots_max=slots_max)
 
 
 def test_empty_drops_unchanged():
@@ -79,3 +83,49 @@ def test_other_items_preserved():
     out = apply_monster_drops_pure(inv, ("feather",))
     assert out.item_count["sword"] == 1 and out.item_count["shield"] == 1
     assert out.item_count["feather"] == 1
+
+
+def test_batch_size_is_the_demand_when_it_fits():
+    assert gather_batch_size_pure(_inv(), 60, "spruce_wood") == 60
+
+
+def test_batch_size_is_clamped_to_quantity_headroom():
+    assert gather_batch_size_pure(_inv(used=95, cap=100), 60, "spruce_wood") == 5
+
+
+def test_batch_size_zero_when_a_new_stack_has_no_free_slot():
+    inv = _inv(slots_used=20, slots_max=20, other=1)
+    assert gather_batch_size_pure(inv, 60, "spruce_wood") == 0
+
+
+def test_batch_size_nonzero_for_a_held_code_with_no_free_slot():
+    """Growing an existing stack needs no new slot."""
+    inv = _inv(slots_used=20, slots_max=20, spruce_wood=1)
+    assert gather_batch_size_pure(inv, 60, "spruce_wood") == 60
+
+
+def test_batch_size_zero_for_nonpositive_demand():
+    assert gather_batch_size_pure(_inv(), 0, "spruce_wood") == 0
+    assert gather_batch_size_pure(_inv(), -3, "spruce_wood") == 0
+
+
+def test_apply_batch_mints_exactly_qty():
+    post = gather_apply_batch_pure(_inv(), "spruce_wood", 10)
+    assert post.item_count["spruce_wood"] == 10
+    assert post.used == 10
+
+
+def test_apply_batch_never_mints_past_cap():
+    post = gather_apply_batch_pure(_inv(used=98, cap=100), "spruce_wood", 10)
+    assert post.used == 100
+    assert post.item_count["spruce_wood"] == 2
+
+
+def test_apply_batch_preserves_other_entries():
+    post = gather_apply_batch_pure(_inv(ash_wood=4), "spruce_wood", 3)
+    assert post.item_count["ash_wood"] == 4
+
+
+def test_apply_batch_of_one_matches_the_unbatched_core():
+    assert gather_apply_batch_pure(_inv(), "spruce_wood", 1) == gather_apply_pure(
+        _inv(), "spruce_wood")

@@ -17,6 +17,11 @@ these pure cores:
   satisfies `used' <= max` (the planner cannot mint past `inventory_max` in one
   step), and chaining `n` applies starting from `inventory_free >= n` preserves
   `used <= max` for the entire chain.
+* `gather_apply_batch_pure(inv, drop_item, qty)` mints `qty` of `drop_item` in
+  one step: `used' = min(used + qty, cap)`, `item_count[drop_item]` rises by
+  the same amount, all other entries preserved. `gather_batch_size_pure(inv,
+  demand, drop_item)` bounds `qty` so this can never mint past `cap` for any
+  `qty`, including a batch far larger than the free quantity.
 
 The planner (`src/artifactsmmo_cli/ai/planner.py`:122) re-checks
 `is_applicable(node.state, ...)` on every node it pops, so chained `apply`s in
@@ -83,6 +88,33 @@ def apply_monster_drops_pure(inv: GatherInv, drops: tuple[str, ...]) -> GatherIn
     when every drop fits (`used + len(drops) <= cap`) each drop's count rises by
     its multiplicity — so a `needed:N` goal over a monster drop is reachable."""
     for drop_item in drops:
+        if inv.used >= inv.cap:
+            break
+        inv = gather_apply_pure(inv, drop_item)
+    return inv
+
+
+def gather_batch_size_pure(inv: GatherInv, demand: int, drop_item: str) -> int:
+    """Units of `drop_item` one batched gather may mint NOW.
+
+    `min(demand, quantity headroom)`, or 0 when the drop needs a NEW stack and
+    no slot is free. The slot test matches `gather_is_applicable_pure`'s: a new
+    code needs a free slot, growing a held code does not. Bounding by
+    `cap - used` is what makes `gather_apply_batch_pure` unable to mint past
+    `inventory_max`.
+    """
+    if demand <= 0:
+        return 0
+    if drop_item not in inv.item_count and (inv.slots_max - inv.slots_used) < 1:
+        return 0
+    return max(0, min(demand, inv.cap - inv.used))
+
+
+def gather_apply_batch_pure(inv: GatherInv, drop_item: str, qty: int) -> GatherInv:
+    """Mint `qty` of `drop_item`, BREAKING when full so the planner never mints
+    past `cap` — the same fold-with-break shape as `apply_monster_drops_pure`.
+    `qty = 1` is `gather_apply_pure` exactly."""
+    for _ in range(max(0, qty)):
         if inv.used >= inv.cap:
             break
         inv = gather_apply_pure(inv, drop_item)
