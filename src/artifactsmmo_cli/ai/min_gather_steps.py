@@ -30,31 +30,17 @@ from collections.abc import Mapping
 
 def min_gather_steps(item: str, qty: int, recipes: Mapping[str, dict[str, int]],
                      owned: dict[str, int]) -> int:
-    """Lower bound on batched gather ACTIONS to obtain `qty` of `item`.
-
-    `recipes[code]` maps a craftable to its `{material: per_unit}` recipe; an
-    item absent from `recipes` (or with an empty recipe) is raw. `owned` is
-    consumed greedily on a private copy — the caller's dict is never mutated.
-    """
-    state = _min_gather_steps(len(recipes) + 1, item, qty, recipes,
-                              ([], dict(owned)))
+    state = _min_gather_steps(len(recipes) + 1, item, qty, recipes, ([], dict(owned)))
     return len(state[0])
 
 
 def _min_gather_steps(fuel: int, item: str, qty: int,
                       recipes: Mapping[str, dict[str, int]],
                       state: tuple[list[str], dict[str, int]]) -> tuple[list[str], dict[str, int]]:
-    """Collect the raw leaves whose demand is not covered by `owned`.
-
-    A leaf reached from two branches is recorded once: one batched action
-    covers the summed demand, so it is one step.
-    """
     if fuel <= 0:
-        leaves, owned = state
-        if item not in leaves:
-            leaves = [*leaves, item]
-        return (leaves, owned)
-    leaves, owned = state
+        return (state[0] if item in state[0] else [*state[0], item], state[1])
+    leaves = state[0]
+    owned = state[1]
     held = owned.get(item, 0)
     used = min(held, qty)
     owned[item] = held - used
@@ -63,9 +49,7 @@ def _min_gather_steps(fuel: int, item: str, qty: int,
         return (leaves, owned)
     recipe = recipes.get(item, {})
     if len(recipe) == 0:
-        if item not in leaves:
-            leaves = [*leaves, item]
-        return (leaves, owned)
+        return (leaves if item in leaves else [*leaves, item], owned)
     state = (leaves, owned)
     for material, per_unit in recipe.items():
         state = _min_gather_steps(fuel - 1, material, per_unit * remaining,
