@@ -807,6 +807,19 @@ class GamePlayer:
             latch_active=row.latch_active,
             goal_repr=row.goal_repr,
         )
+        # KNOWN-DEAD for a batched gather: `by_repr` above is built from
+        # `_build_actions()`, and every GatherAction construction site in
+        # factory.py passes no `quantity=` kwarg (always the default 1). A
+        # persisted tail containing `Gather(x×N)` (N>1) therefore never
+        # matches `by_repr.get(r)` and the function has already returned
+        # early at the `by_repr.get(r) is None` branch above — this
+        # `arm_step()` call only ever arms an already-unbatched
+        # (quantity==1, no-op) step. This is the SAME accepted limitation
+        # `size_intermediate_craft`'s goal-sized `Craft(code×N)` already has
+        # on this path; restart-resume cannot rehydrate a batched leg. It
+        # fails SAFE (discard -> cold replan on the next cycle), never
+        # incorrectly. The real fix is the action codec scheduled for the
+        # macro-edge work, not a change to this repr-matching scheme.
         self._plan_cache.arm_step(state.inventory, game_data)
 
     def _initialize(self, client: AuthenticatedClient) -> None:
