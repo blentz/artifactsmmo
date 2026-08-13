@@ -19,8 +19,11 @@ consulting `qty`, the per-unit core adds `qty`). It is also where the proof's
 `test_zero_demand_breaks_the_bound`, which pins the counterexample rather than
 pretending the bound is unconditional.
 
-Wire format is Nat-only (the oracle's shared recipe/owned prefix), so this
-harness covers the non-negative domain the planner actually constructs.
+Item codes and recipe demands go over the wire as Nats; the two QUANTITY fields
+(`qty` and each owned holding) are SIGNED, because both the Python and the Lean
+core take `int` and the `qty <= 0` / `held < 0` arms are reachable in the model
+even though the planner does not construct them. `test_negative_*` drive those
+arms so agreement is pinned there too rather than assumed.
 """
 import random
 
@@ -179,6 +182,34 @@ def test_zero_demand_breaks_the_bound():
     assert py_steps > py_gathers
     lean = run_oracle("min_gather_steps", [_oracle_args(recipes, {}, 0, 1)])[0]
     assert (lean["steps"], lean["gathers"]) == (py_steps, py_gathers)
+
+
+@pytest.mark.parametrize("qty", [-1, -7])
+def test_negative_qty_agrees(qty):
+    """A non-positive `qty` fails the `remaining <= 0` guard immediately: both
+    bounds are 0, on both sides. Pins the guard's boundary from below, which the
+    non-negative generators cannot reach."""
+    recipes = {0: {1: 3}, 1: {2: 4}}
+    assert _check(recipes, {}, 0, qty) == (0, 0)
+
+
+def test_negative_holding_inflates_the_demand():
+    """A NEGATIVE holding makes `used = min(held, qty)` negative, so
+    `remaining = qty - used` EXCEEDS `qty` — a debt the model charges back.
+    Reachable arm, driven on both sides: with -5 of item 1 held, a 1-unit demand
+    becomes 6, so 6*4 = 24 units of the raw leaf, still ONE batched gather."""
+    recipes = {0: {1: 1}, 1: {2: 4}}
+    steps, gathers = _check(recipes, {1: -5}, 0, 1)
+    assert (steps, gathers) == (1, 24)
+
+
+def test_negative_holding_with_zero_qty_still_gathers():
+    """`qty = 0` against a negative holding still leaves positive `remaining`,
+    so the qty <= 0 case is NOT a blanket short-circuit. Both cores must agree
+    on that or the guard's semantics have drifted."""
+    recipes = {0: {1: 2}}
+    steps, gathers = _check(recipes, {0: -3}, 0, 0)
+    assert (steps, gathers) == (1, 6)
 
 
 def test_batched_bound_can_exceed_the_ceiled_unit_bound():

@@ -1491,11 +1491,15 @@ seeding `recipes.length + 1` is the termination bound both cores share, and the
 fuel-exhausted arm is exactly where the two bounds' accounting differs, so the
 harness must reach it.
 
-args layout (all Nat ≥ 0), same recipe/owned prefix as shopping_list:
+args layout, same recipe/owned prefix as shopping_list except that the two
+QUANTITY fields are SIGNED (item codes and counts stay Nat). Both cores take
+`Int`, and the `held < 0` / `qty ≤ 0` arms are reachable in the model even
+though the planner does not build them, so the harness must be able to reach
+them too:
 * `[0]`                  nRecipe (number of `(item, sub, qty)` triples)
 * `[1 .. 3*nRecipe]`     the triples, flat: item0 sub0 qty0 ...
-* next: nOwned, then `(item, qty)` owned pairs flat
-* next: queryItem, queryQty -/
+* next: nOwned, then `(item, qty)` owned pairs flat — `qty` SIGNED
+* next: queryItem, queryQty — `queryQty` SIGNED -/
 def runMinGatherSteps (args : Array Json) : Json :=
   let g := fun i => (intArg args i).toNat
   let nRecipe := g 0
@@ -1503,11 +1507,11 @@ def runMinGatherSteps (args : Array Json) : Json :=
     (List.range nRecipe).map (fun k => (g (1 + 3*k), g (2 + 3*k), g (3 + 3*k)))
   let p1 := 1 + 3*nRecipe
   let nOwned := g p1
-  let ownedPairs : List (Nat × Nat) :=
-    (List.range nOwned).map (fun k => (g (p1 + 1 + 2*k), g (p1 + 2 + 2*k)))
+  let ownedPairs : List (Nat × Int) :=
+    (List.range nOwned).map (fun k => (g (p1 + 1 + 2*k), intArg args (p1 + 2 + 2*k)))
   let p2 := p1 + 1 + 2*nOwned
   let queryItem := g p2
-  let queryQty := g (p2 + 1)
+  let queryQty := intArg args (p2 + 1)
   let parents := (triples.map (fun t => t.1)).eraseDups
   let recipes : List (String × List (String × Int)) :=
     parents.map (fun it =>
@@ -1515,12 +1519,12 @@ def runMinGatherSteps (args : Array Json) : Json :=
        (triples.filter (fun t => decide (t.1 = it))).map
          (fun t => (toString t.2.1, Int.ofNat t.2.2))))
   let owned : List (String × Int) :=
-    ownedPairs.map (fun kv => (toString kv.1, Int.ofNat kv.2))
+    ownedPairs.map (fun kv => (toString kv.1, kv.2))
   Json.mkObj [
     ("steps", Json.num (Extracted.MinGatherSteps.min_gather_steps
-      (toString queryItem) (Int.ofNat queryQty) recipes owned)),
+      (toString queryItem) queryQty recipes owned)),
     ("gathers", Json.num (Extracted.MinGathers.min_gathers
-      (toString queryItem) (Int.ofNat queryQty) recipes owned))]
+      (toString queryItem) queryQty recipes owned))]
 
 /-- Compute one monster_drop_selection result using the SAME proved
 `Formal.MonsterDropSelection.selectMonsterForDrop`.

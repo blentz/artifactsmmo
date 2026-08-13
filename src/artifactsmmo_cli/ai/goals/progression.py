@@ -60,8 +60,10 @@ class UpgradeEquipmentGoal(Goal):
     def max_depth(self) -> int:
         """Deeper than the base 15 so a craft+equip plan whose lower bound sits
         just under the base bound is actually FOUND by the A*, not falsely
-        admitted then abandoned. is_plannable gates on min_plan_length (a PROVED
-        lower bound, Formal.PlanModel.min_plan_length_le_plan): for a 2nd
+        admitted then abandoned. is_plannable gates on min_plan_length (an
+        A*-budget HEURISTIC, not a proved bound — see that module's PROOF STATUS
+        paragraph; the cited Formal.PlanModel.min_plan_length_le_plan never
+        existed, corrected 2026-08-13): for a 2nd
         copper_ring with bar×4/ore×8 in hand the bound is 15 == base max_depth, so
         the goal was admitted, yet the real plan (gather ×12 → craft bar ×2 →
         craft ring → equip) is 16 actions > 15 — the planner returned plan_len 0

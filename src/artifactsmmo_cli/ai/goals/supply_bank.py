@@ -192,17 +192,21 @@ class SupplyBankGoal(Goal):
            be BOUGHT, in a currency the character cannot cover, has no
            acquisition edge in the admitted action set, so no plan reaches it.
         2. Depth reachability, the bound `UpgradeEquipmentGoal.is_plannable`
-           uses: obtaining `deficit` units from raw materials needs at least
-           `min_plan_length` actions (PROVED lower bound,
-           `Formal.PlanModel.min_plan_length_le_plan`), and the planner never
-           returns a plan longer than `max_depth`
-           (`Formal.PlannerDepthBound.plan_length_le_max_depth`).
+           uses: obtaining `deficit` units from raw materials is estimated at
+           `min_plan_length` actions, and the planner never returns a plan
+           longer than `max_depth` (that half IS proved —
+           `Formal.PlannerDepthBound.plan_length_le_max_depth`).
+           `min_plan_length` itself is an A*-budget HEURISTIC: the citation
+           that used to stand here, `Formal.PlanModel.min_plan_length_le_plan`,
+           names a theorem that never existed (corrected 2026-08-13; see the
+           PROOF STATUS paragraph in `ai/min_plan_length.py`).
 
         `equip=False` and no `+1` for the deposit leg, deliberately: the real
-        plan must also pay at least one deposit, so this bound is LOOSER than
-        the truth. A loose lower bound can only over-admit (waste a search),
-        never over-prune (discard a reachable plan) — and `min_plan_length` is
-        the term that carries a proof, so nothing is claimed here beyond it."""
+        plan must also pay at least one deposit, so this estimate is LOOSER than
+        the truth. Loose can only over-admit (waste a search), never over-prune
+        (discard a reachable plan) — and this docstring claims nothing beyond
+        `min_plan_length` itself, which is a heuristic, so the looseness is the
+        whole of the safety argument here rather than a proof's corollary."""
         if self.is_satisfied(state):
             return True
         produce = self._production_state(state)

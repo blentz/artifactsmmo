@@ -53,8 +53,7 @@ node the leaf list grows by AT MOST one while the total grows by `remaining`
 ## The hypothesis is REAL, not decoration
 
 `PosRecipes` (every recipe demands ≥ 1 unit of each material — the same
-predicate `Formal.PlanModel.PosRecipes` states at PlanModel.lean:673) is
-LOAD-BEARING. Without it the bound is FALSE, and the counterexample is
+predicate `Formal.PlanModel.PosRecipes` states) is LOAD-BEARING. Without it the bound is FALSE, and the counterexample is
 reachable by the actual Python:
 
     recipes = {"a": {"b": 1, "z": 0}, "b": {"a": 1}}
@@ -82,8 +81,8 @@ abbrev Recipes := List (String × List (String × Int))
 abbrev Dict := List (String × Int)
 
 /-- Every recipe demands a strictly positive quantity of each material. Stated
-exactly as `Formal.PlanModel.PosRecipes` (PlanModel.lean:673), over the
-extracted `_dictGetD` the cores themselves use for the lookup. Items with no
+exactly as `Formal.PlanModel.PosRecipes`, over the extracted `_dictGetD` the
+cores themselves use for the lookup. Items with no
 recipe give `[]`, so the condition is vacuous for them. -/
 def PosRecipes (recipes : Recipes) : Prop :=
   ∀ item mat per,
