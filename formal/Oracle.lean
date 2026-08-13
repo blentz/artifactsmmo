@@ -1925,10 +1925,16 @@ def runActionCostNonneg (args : Array Json) : Json :=
               ("nonneg", Json.bool true)]
 
 /-- Compute one gather_cost result using the proved `Formal.GatherCost.gatherCost`
-(the BATCHED `GatherAction.cost` static term). Args are the exact rational
-`(base, dist, penalty)` as `(num, den)` pairs, then the two `Nat`s:
+(the BATCHED `GatherAction.cost` static term). Args are the exact rationals
+`(base, dist, bankPenalty, loadPenalty)` as `(num, den)` pairs, then the two
+`Nat`s and the mismatch flag:
 
-`[baseNum, baseDen, distNum, distDen, penaltyNum, penaltyDen, qty, banked]`
+`[baseNum, baseDen, distNum, distDen, bankPenNum, bankPenDen,
+  loadPenNum, loadPenDen, qty, banked, mismatch]`
+
+`mismatch` (0/1) is the `pick_loadout_cached` comparison in the shipped
+`cost`; when set, the loadout penalty is charged PER UNIT of the batch
+(2026-08-13 — see `Formal/GatherCost.lean` for why once-per-action was wrong).
 
 Emits the exact result as `(num, den)`, so the Python side can compare it
 bit-exactly against the same `Fraction` the input was built from rather than
@@ -1936,10 +1942,12 @@ a float. -/
 def runGatherCost (args : Array Json) : Json :=
   let base := ratArg args 0
   let dist := ratArg args 2
-  let penalty := ratArg args 4
-  let qty := (intArg args 6).toNat
-  let banked := (intArg args 7).toNat
-  let r := Formal.GatherCost.gatherCost base dist penalty qty banked
+  let bankPenalty := ratArg args 4
+  let loadPenalty := ratArg args 6
+  let qty := (intArg args 8).toNat
+  let banked := (intArg args 9).toNat
+  let mismatch := (intArg args 10) != 0
+  let r := Formal.GatherCost.gatherCost base dist bankPenalty loadPenalty qty banked mismatch
   Json.mkObj [("cost_num", Json.num r.num),
               ("cost_den", Json.num (Int.ofNat r.den))]
 

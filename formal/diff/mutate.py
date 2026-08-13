@@ -1886,17 +1886,17 @@ STUCK_DETECTOR_MUTATIONS = [
     # drop the <no_plan> exclusion: a no-plan flood (which NO_PROGRESS owns) is
     # also counted as a repeated action (kills via the no_plan-flood test).
     ("stuck_detector: repeated drop no_plan guard",
-     '            if not rec.succeeded and rec.action_name != "<no_plan>":\n'
-     "                counts[rec.action_name] = counts.get(rec.action_name, 0) + 1",
+     '            if not rec.succeeded and rec.action_key != "<no_plan>":\n'
+     "                counts[rec.action_key] = counts.get(rec.action_key, 0) + 1",
      "            if not rec.succeeded:\n"
-     "                counts[rec.action_name] = counts.get(rec.action_name, 0) + 1"),
+     "                counts[rec.action_key] = counts.get(rec.action_key, 0) + 1"),
     # flip the failure sense: count SUCCESSES instead of failures, so a wedged
     # all-failing action reports 0 and never fires (kills via the flip-sense test).
     ("stuck_detector: repeated flip failure sense (not succeeded -> succeeded)",
-     '            if not rec.succeeded and rec.action_name != "<no_plan>":\n'
-     "                counts[rec.action_name] = counts.get(rec.action_name, 0) + 1",
-     '            if rec.succeeded and rec.action_name != "<no_plan>":\n'
-     "                counts[rec.action_name] = counts.get(rec.action_name, 0) + 1"),
+     '            if not rec.succeeded and rec.action_key != "<no_plan>":\n'
+     "                counts[rec.action_key] = counts.get(rec.action_key, 0) + 1",
+     '            if rec.succeeded and rec.action_key != "<no_plan>":\n'
+     "                counts[rec.action_key] = counts.get(rec.action_key, 0) + 1"),
     # repeated window off-by-one: count=W -> W-1 drops the oldest record, so a
     # 10-failure window spanning exactly the last 20 falls to 9 (kills via the
     # window-boundary test).
@@ -3017,6 +3017,28 @@ GATHER_REARM_MUTATIONS = [
      "                or (isinstance(action, OptimizeLoadoutAction)\n"
      "                    and action.target_skill in needed_skills)\n",
      ""),
+]
+
+# THE RE-ARM'S ACCUMULATOR (2026-08-13). GATHER_LOADOUT_PENALTY is charged PER
+# UNIT of the batch. Charged once per action it is a CONSTANT, so an
+# OptimizeLoadout re-arm recovers at most 6.0 against a 10.0 one-slot swap at
+# EVERY batch size — the re-arm above becomes admissible-but-never-chosen, which
+# is how it silently died when the goals began sizing their gathers. It also
+# breaks Formal.GatherCost's cost-neutrality invariant: the batch would cost
+# (qty-1)*6.0 LESS than the singleton chain it replaces. OWN run_group: killed by
+# the differential harness's mismatch-branch pins against the Lean oracle, which
+# is where the formula (not the plan shape) is the unit under test.
+GATHER_LOADOUT_SCALING_MUTATIONS = [
+    ("gather cost: loadout penalty once per action, not per unit (kills the re-arm)",
+     "                static += GATHER_LOADOUT_PENALTY * self.quantity",
+     "                static += GATHER_LOADOUT_PENALTY"),
+    # `pass`, not deletion: the statement is the whole body of an `if`, so
+    # removing it leaves an empty block and the mutant dies of IndentationError
+    # at COLLECTION — a pytest rc=2 harness error, which this runner correctly
+    # refuses to score as a kill.
+    ("gather cost: drop the loadout penalty entirely (re-arm never pays)",
+     "                static += GATHER_LOADOUT_PENALTY * self.quantity",
+     "                pass"),
 ]
 
 # THE OWNERSHIP BOUND ON A RECYCLE (whole-branch review, CRITICAL 1). The licence
@@ -6835,6 +6857,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_gather_rearm.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, CRAFT_PLAN_GEN_REARM_SCAN_MUTATIONS,
               "tests/test_ai/test_gather_rearm.py", survivors)
+    run_group(GATHERING_APPLY_SRC, GATHER_LOADOUT_SCALING_MUTATIONS,
+              "formal/diff/test_gather_cost_diff.py", survivors)
     run_group(RECYCLE_ACTION_SRC, RECYCLE_OWNED_FLOOR_MUTATIONS,
               "tests/test_ai/test_actions_tier2.py", survivors)
     run_group(DESTRUCTIVE_LICENSE_SRC, DESTRUCTIVE_LICENSE_FLOOR_MUTATIONS,

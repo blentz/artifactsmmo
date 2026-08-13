@@ -31,11 +31,14 @@ Lean core only — no mathlib.
 namespace Formal.StuckDetector
 
 /-- One cycle record. `state`, `goal` and `action` are abstract codes (`Nat`);
-`noPlan` is `true` iff `action_name == "<no_plan>"`; `ok` mirrors
-`CycleRecord.succeeded` (the oscillation / repeated-action checks count
-failures). `action` mirrors the action_name discriminator the repeated-action
-check groups by (the `<no_plan>` sentinel's code is irrelevant — that check
-excludes `noPlan` records). Mirrors the fields the detector reads. -/
+`noPlan` is `true` iff the record carries the `"<no_plan>"` sentinel; `ok`
+mirrors `CycleRecord.succeeded` (the oscillation / repeated-action checks count
+failures). `action` mirrors `CycleRecord.action_key` — the STABLE,
+quantity-free `Action.learning_key()` the repeated-action check groups by, NOT
+the `action_name` repr, which for a closure-sized gather carries a per-cycle
+batch size and would split one repeatedly-failing action into a bucket per size
+(the `<no_plan>` sentinel's code is irrelevant — that check excludes `noPlan`
+records). Mirrors the fields the detector reads. -/
 structure Rec where
   state : Nat
   goal : Nat
@@ -152,7 +155,7 @@ def checkStateFrozen (d : Detector) : Bool :=
     (w.any (fun r => decide (stateCount r.state w ≥ 5)))
 
 /-- Number of FAILED, non-`noPlan` records in a window whose action code is `a`.
-Mirrors `counts[action_name] += 1 for rec if not rec.succeeded and action_name !=
+Mirrors `counts[action_key] += 1 for rec if not rec.succeeded and action_key !=
 "<no_plan>"`. The `noPlan` exclusion keeps the no-plan flood (which NO_PROGRESS
 owns) from also tripping this signal. -/
 def actionFailCount (a : Nat) (w : List Rec) : Nat :=

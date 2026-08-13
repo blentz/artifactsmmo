@@ -641,18 +641,20 @@ def test_l35_artifact_fill_pearl_route_plans() -> None:
                             .startswith("GatherMaterials(small_pearls")]
     assert small_pearls_entries, report.goals_tried
     # BATCHED 2026-07-20: the currency target is now the next CURRENCY_GRIND_BATCH
-    # milestone rather than held+1, so this step plans a batch of gathers instead
-    # of exactly one. The point of the original assertion was that the route is
-    # TRIVIALLY plannable (against the 1-node dead search it replaced), and it
-    # still is -- one node per unit plus the goal node, nowhere near the 28K-node
-    # max_depth cliff the shallow-target rule guards against.
-    assert all(entry["nodes"] == 2 * CURRENCY_GRIND_BATCH
-               and entry["plan_len"] == CURRENCY_GRIND_BATCH
+    # milestone rather than held+1, so this step demands a batch instead of
+    # exactly one. CLOSURE-SIZED 2026-08-13: the goal now emits ONE gather
+    # carrying the whole outstanding batch, so the batch is spent on the
+    # quantity, not on plan length -- 2 nodes / 1 leg for any milestone size.
+    # The point of the original assertion was that the route is TRIVIALLY
+    # plannable (against the 1-node dead search it replaced), and it still is:
+    # nowhere near the 28K-node max_depth cliff the shallow-target rule guards
+    # against.
+    assert all(entry["nodes"] == 2 and entry["plan_len"] == 1
                for entry in small_pearls_entries), small_pearls_entries  # GAP-7 flip
     assert repr(report.selected_goal).startswith("GatherMaterials(small_pearls"), (
         repr(report.selected_goal), report.plan)
     assert [repr(a) for a in report.plan] == \
-        ["Gather(bass_spot->small_pearls×1)"] * CURRENCY_GRIND_BATCH, report.plan
+        [f"Gather(bass_spot->small_pearls×{CURRENCY_GRIND_BATCH})"], report.plan
     assert report.plan[0].drop_item_override == "small_pearls"
 
 

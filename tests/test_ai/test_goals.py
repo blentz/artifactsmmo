@@ -1289,10 +1289,12 @@ class TestGatherMaterialsGoal:
         ]
         result = goal.relevant_actions(actions, state, gd)
         repr_set = {repr(a) for a in result}
-        assert "Gather(copper_rocks×1)" in repr_set
+        # Sized to the closure deficit (6 copper_ore needed, none held), the way
+        # the intermediate crafts alongside it are sized.
+        assert "Gather(copper_rocks×6)" in repr_set
         assert "Rest" in repr_set
         assert "DepositAll" in repr_set
-        assert "Gather(ash_tree×1)" not in repr_set
+        assert not any(r.startswith("Gather(ash_tree") for r in repr_set)
         assert "Fight(chicken)" not in repr_set
 
     def test_relevant_actions_includes_intermediate_craft_and_gather(self):
@@ -1317,11 +1319,12 @@ class TestGatherMaterialsGoal:
         ]
         result = goal.relevant_actions(actions, state, gd)
         repr_set = {repr(a) for a in result}
-        assert "Gather(copper_rocks×1)" in repr_set
+        # 4 copper x 8 ore = 32 ore of closure demand, inventory-bounded to 20.
+        assert "Gather(copper_rocks×20)" in repr_set
         assert "Craft(copper×2)" in repr_set  # batched to inventory-bounded demand (demand=4, fit=2)
         assert "Rest" in repr_set
         assert "DepositAll" in repr_set
-        assert "Gather(ash_tree×1)" not in repr_set
+        assert not any(r.startswith("Gather(ash_tree") for r in repr_set)
         assert "Craft(iron_bar×1)" not in repr_set
         assert "Fight(chicken)" not in repr_set
 
@@ -1355,7 +1358,9 @@ class TestGatherMaterialsGoal:
         ]
         result = goal.relevant_actions(actions, state, gd)
         repr_set = {repr(a) for a in result}
-        assert "Gather(wood_grove×1)" in repr_set    # 3 levels deep: staff->plank->raw_wood
+        # 3 levels deep (staff->plank->raw_wood): 6 plank x 4 raw_wood = 24,
+        # inventory-bounded to 20.
+        assert "Gather(wood_grove×20)" in repr_set
         assert "Craft(plank×4)" in repr_set           # batched to inventory-bounded demand (demand=6, fit=4)
         assert "Craft(staff×1)" in repr_set           # top-level craft
         assert "Rest" in repr_set

@@ -72,6 +72,17 @@ class CycleRecord:
     state_key: tuple[object, ...]
     goal_name: str
     action_name: str          # "<no_plan>" when planning failed
+    action_key: str
+    """Stable, quantity-FREE identity of the action — `Action.learning_key()`
+    (`"<no_plan>"` when planning failed). Every rule that COUNTS repeats must
+    key on this, never on `action_name`: a closure gather is re-sized to the
+    outstanding deficit each cycle, so its `repr` is `Gather(x×60)`, then
+    `×47`, then `×31`, and a repr-keyed tally splits ONE repeatedly-failing
+    action into a bucket per batch size — `REPEATED_ACTION_FAILURE_THRESHOLD`
+    is then never reached and the guard-spin protection silently switches off.
+    `action_name` stays the repr so the trace and the display keep the size.
+    Required, not defaulted: a silent fallback to the repr would reintroduce
+    exactly that fragmentation at any site that forgot it."""
     planned_depth: int
     planner_timed_out: bool
     succeeded: bool
@@ -102,16 +113,19 @@ class StuckDetector:
         return None
 
     def _check_repeated_action_failure(self) -> bool:
-        """True when one named action failed >= REPEATED_ACTION_FAILURE_THRESHOLD
+        """True when one action failed >= REPEATED_ACTION_FAILURE_THRESHOLD
         times in the post-ack last-REPEATED_ACTION_WINDOW window, regardless of
         interspersed progress. The <no_plan> sentinel is excluded (NO_PROGRESS
-        owns the no-plan flood)."""
+        owns the no-plan flood).
+
+        Counted by `action_key`, not `action_name` — see CycleRecord.action_key
+        for why a repr-keyed tally cannot see a re-sized gather repeating."""
         cutoff = self._ack_index.get(StuckSignal.REPEATED_ACTION_FAILURE, 0)
         window = self._recent_since(cutoff, count=REPEATED_ACTION_WINDOW)
         counts: dict[str, int] = {}
         for rec in window:
-            if not rec.succeeded and rec.action_name != "<no_plan>":
-                counts[rec.action_name] = counts.get(rec.action_name, 0) + 1
+            if not rec.succeeded and rec.action_key != "<no_plan>":
+                counts[rec.action_key] = counts.get(rec.action_key, 0) + 1
         return any(c >= REPEATED_ACTION_FAILURE_THRESHOLD for c in counts.values())
 
     def _check_no_progress(self) -> bool:

@@ -427,6 +427,7 @@ def test_run_calls_handle_stuck_in_no_plan_path():
             state_key=(0, 0, 5, (), (), None, 0, False),
             goal_name="<none>",
             action_name="<no_plan>",
+            action_key="<no_plan>",
             planned_depth=0,
             planner_timed_out=False,
             succeeded=False,
@@ -474,6 +475,7 @@ def test_run_calls_handle_stuck_after_successful_action():
             state_key=frozen_key,
             goal_name="RestoreHP",
             action_name="Rest",
+            action_key="Rest",
             planned_depth=1,
             planner_timed_out=False,
             succeeded=True,
@@ -836,6 +838,7 @@ def test_run_records_post_action_cooldown_and_handles_stuck():
     for _ in range(9):
         player._detector.record(CycleRecord(
             state_key=frozen_key, goal_name="StubGoal()", action_name="Rest",
+            action_key="Rest",
             planned_depth=1, planner_timed_out=False, succeeded=True,
         ))
 

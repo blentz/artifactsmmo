@@ -1075,7 +1075,7 @@ class GamePlayer:
                     # Record no-plan cycle for NO_PROGRESS detection
                     self._record_cycle(self._make_cycle_record(
                         goal_name="<none>",
-                        action_name="<no_plan>",
+                        action=None,
                         planned_depth=0,
                         planner_timed_out=self.planner.last_stats.timed_out,
                         succeeded=False,
@@ -1237,7 +1237,7 @@ class GamePlayer:
                 )
                 self._record_cycle(self._make_cycle_record(
                     goal_name=repr(selected_goal),
-                    action_name=repr(action),
+                    action=action,
                     planned_depth=len(plan),
                     planner_timed_out=self.planner.last_stats.timed_out if replanned else False,
                     succeeded=outcome_for_stuck,
@@ -1981,13 +1981,23 @@ class GamePlayer:
             name: n - 1 for name, n in self._failed_action_backoff.items() if n > 1
         }
 
-    def _make_cycle_record(self, goal_name: str, action_name: str,
+    def _make_cycle_record(self, goal_name: str, action: Action | None,
                            planned_depth: int, planner_timed_out: bool, succeeded: bool) -> CycleRecord:
-        """Build a CycleRecord from current state and given action/goal info."""
+        """Build a CycleRecord from current state and the cycle's ACTION.
+
+        Takes the action itself, not a pre-formatted pair of strings, so the two
+        identities can never drift apart at a call site: `action_name` is always
+        the repr (display/trace) and `action_key` always
+        `Action.learning_key()` (the stable, quantity-free identity the stuck
+        rules count on — see `CycleRecord.action_key`). `action is None` means
+        the cycle produced no plan, and both fields carry the `<no_plan>`
+        sentinel the stuck rules exclude.
+        """
         return CycleRecord(
             state_key=_state_key(self.state) if self.state else (),
             goal_name=goal_name,
-            action_name=action_name,
+            action_name=repr(action) if action is not None else "<no_plan>",
+            action_key=action.learning_key() if action is not None else "<no_plan>",
             planned_depth=planned_depth,
             planner_timed_out=planner_timed_out,
             succeeded=succeeded,
@@ -2254,21 +2264,28 @@ class GamePlayer:
 
         elif signal == StuckSignal.REPEATED_ACTION_FAILURE:
             # Suppress the goal(s) driving the repeatedly-failing action(s). Find
-            # the action_name(s) that failed >= threshold in the window, then the
+            # the action_key(s) that failed >= threshold in the window, then the
             # goal_name(s) whose records emitted them. Drop "<none>" (the no-plan
             # placeholder, not a suppressible goal).
+            #
+            # Keyed on `action_key` (the quantity-free `Action.learning_key()`),
+            # matching the detector rule that fired this signal. Keyed on the
+            # repr, a closure gather re-sized each cycle tallies under a fresh
+            # bucket per batch size and never reaches the threshold — the tally
+            # and the detector would also disagree about what "the same action"
+            # is. See `CycleRecord.action_key`.
             window = list(self._detector._history)[-REPEATED_ACTION_WINDOW:]
             fail_counts: dict[str, int] = {}
             for r in window:
-                if not r.succeeded and r.action_name != "<no_plan>":
-                    fail_counts[r.action_name] = fail_counts.get(r.action_name, 0) + 1
+                if not r.succeeded and r.action_key != "<no_plan>":
+                    fail_counts[r.action_key] = fail_counts.get(r.action_key, 0) + 1
             repeated_actions = {
                 a for a, c in fail_counts.items()
                 if c >= REPEATED_ACTION_FAILURE_THRESHOLD
             }
             distinct = {
                 r.goal_name for r in window
-                if r.action_name in repeated_actions
+                if r.action_key in repeated_actions
                 and not r.succeeded and r.goal_name != "<none>"
             }
             # Block the failing ACTION(S) directly (not just the driving goal):
@@ -2322,8 +2339,14 @@ class GamePlayer:
         # Route around actions the REPEATED_ACTION_FAILURE recovery has blocked,
         # so a repeatedly-failing action (even guard-driven) is dropped from the
         # plan while its short backoff lasts.
+        #
+        # Matched on `learning_key()` — the SAME identity the block was recorded
+        # under. On the repr the two halves can never meet for a gather: the
+        # block is recorded from a goal-SIZED gather (`Gather(x×47)`) while the
+        # factory here always builds the unsized one (`Gather(x×1)`), so the
+        # filter would silently match nothing. See `CycleRecord.action_key`.
         if self._failed_action_backoff:
-            return [a for a in built if repr(a) not in self._failed_action_backoff]
+            return [a for a in built if a.learning_key() not in self._failed_action_backoff]
         return built
 
     def _notify_observer(

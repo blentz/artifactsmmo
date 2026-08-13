@@ -1692,7 +1692,7 @@ class TestHandleStuckExtended:
             name = "GoalA" if i % 2 == 0 else "GoalB"
             player._detector.record(CycleRecord(
                 state_key=(i, 0, 5, (), (), None, 0, False),
-                goal_name=name, action_name="X", planned_depth=1,
+                goal_name=name, action_name="X", action_key="X", planned_depth=1,
                 planner_timed_out=False, succeeded=False,
             ))
         player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 1

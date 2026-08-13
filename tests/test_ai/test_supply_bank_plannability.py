@@ -131,15 +131,25 @@ def test_planner_produces_a_plan_for_a_realistic_demand() -> None:
 def test_the_plan_is_longer_than_the_inherited_depth_bound() -> None:
     """The depth raise is load-bearing, not decorative.
 
-    Pins the defect quantitatively: the plan A* actually returns for a
-    realistic demand is longer than `Goal.max_depth` (15), so with the base
-    bound `plan_length_le_max_depth` made it unreachable by construction."""
+    Pins the defect quantitatively: the plan A* actually returns is longer than
+    `Goal.max_depth` (15), so with the base bound
+    `plan_length_le_max_depth` made it unreachable by construction.
+
+    The demand here is 480, not the 20 this test used before closure sizing
+    landed: a gather now carries the whole inventory-bounded batch, so 20 units
+    plan in TWO legs (`Gather(×20)`, `DepositAll`) and could no longer exhibit
+    the defect. What the bound binds against is now the number of
+    gather-till-full/deposit ROUNDS, so the demand has to exceed eight bagfuls
+    before the satisfying plan passes 15 legs. Restated at that demand rather
+    than deleted — the override still decides reachability, just further out."""
     gd = _gd()
     state = _state(gd, bank={})
-    goal = SupplyBankGoal(item_code=_ORE, quantity=20, demand=20)
+    goal = SupplyBankGoal(item_code=_ORE, quantity=480, demand=480)
 
-    plan = GOAPPlanner().plan(state, goal, _actions(gd, state), gd)
+    planner = GOAPPlanner()
+    plan = planner.plan(state, goal, _actions(gd, state), gd)
 
+    assert not planner.last_stats.timed_out
     assert len(plan) > Goal.max_depth.fget(goal), (  # type: ignore[attr-defined]
         "the satisfying plan must exceed the inherited bound, or this goal was "
         "never actually broken and the fix is untested")
@@ -164,7 +174,7 @@ def test_planner_banks_the_remainder_when_the_bank_is_partly_stocked() -> None:
 
     assert not planner.last_stats.timed_out
     assert plan, "the outstanding 8 units must still be plannable"
-    assert sum(isinstance(a, GatherAction) for a in plan) == 8, (
+    assert sum(a.quantity for a in plan if isinstance(a, GatherAction)) == 8, (
         "exactly the deficit is minted — not the full 20, not zero")
 
 
@@ -322,7 +332,7 @@ def test_an_unvisited_bank_still_plans_the_full_quantity() -> None:
     plan = planner.plan(state, goal, _actions(gd, state), gd)
 
     assert plan, "an unvisited bank must not make the goal unplannable"
-    assert sum(isinstance(a, GatherAction) for a in plan) == 6
+    assert sum(a.quantity for a in plan if isinstance(a, GatherAction)) == 6
 
 
 def _target_withdraws(actions: list, code: str) -> list:
@@ -359,7 +369,7 @@ def test_the_plan_never_withdraws_the_item_it_is_supplying() -> None:
     assert plan, "the goal must still be plannable without its own withdraw"
     assert _target_withdraws(plan, _ORE) == [], (
         "the producer withdrew the item it is supposed to be supplying")
-    assert sum(isinstance(a, GatherAction) for a in plan) == 26, (
+    assert sum(a.quantity for a in plan if isinstance(a, GatherAction)) == 26, (
         "exactly the deficit is minted: 105 banked target - 59 banked - 20 held")
     assert isinstance(plan[-1], DepositAllAction)
 

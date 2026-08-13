@@ -46,6 +46,12 @@ def _record(state: int, goal: int, no_plan: bool, ok: bool | None = None,
         state_key=(state,),
         goal_name=f"g{goal}",
         action_name=_NO_PLAN if no_plan else f"a{action_code}",
+        # The Lean model's `action` discriminator is the STABLE identity the
+        # repeated-action rule counts on — `CycleRecord.action_key`
+        # (`Action.learning_key()`), not the repr. These synthetic codes carry
+        # no batch quantity, so the two coincide here exactly as they do for
+        # every action except GatherAction.
+        action_key=_NO_PLAN if no_plan else f"a{action_code}",
         planned_depth=0,
         planner_timed_out=False,
         succeeded=succeeded,

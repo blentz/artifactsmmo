@@ -479,11 +479,20 @@ open Formal.PriorityBand
 #check @Formal.ActionCostNonneg.delete_cost_nonneg           -- DeleteItemAction.cost_weight ≥ 0 (all branches)
 #check @Formal.ActionCostNonneg.all_actions_cost_nonneg      -- headline: every concrete Action's cost ≥ 0 (seals PlannerAdmissibility)
 -- GatherCost (the BATCHED GatherAction.cost static term: (base+dist)*qty +
--- min(banked,qty)*penalty — non-negative and monotone in qty, so the planner
--- cannot manufacture a cheaper plan by inflating a quantity):
+-- min(banked,qty)*bankPenalty + (mismatch ? loadPenalty*qty : 0) — non-negative
+-- and monotone in qty, so the planner cannot manufacture a cheaper plan by
+-- inflating a quantity, and cost-neutral against the singleton chain):
+#check @Formal.GatherCost.loadTerm_nonneg          -- conditional loadout term ≥ 0 on both branches
+#check @Formal.GatherCost.loadTerm_monotone        -- and monotone in qty (per-unit, not per-action)
+#check @Formal.GatherCost.loadTerm_scales          -- loadout term = qty × the SINGLETON charge
 #check @Formal.GatherCost.gather_cost_nonneg      -- non-negativity for any planner-chosen qty
 #check @Formal.GatherCost.gather_cost_monotone    -- q₁ ≤ q₂ ⇒ cost never decreases
 #check @Formal.GatherCost.gather_cost_one_is_base -- qty = 1 is the pre-batching edge cost exactly
+-- Travel + loadout parity holds for EVERY banked (incl. 0, the live re-arm case);
+-- full-cost parity needs qty ≤ banked because the bank term deliberately is NOT
+-- neutral below it. Use the first for anything the re-arm depends on.
+#check @Formal.GatherCost.gather_cost_loadout_parity -- unconditional term-by-term decomposition
+#check @Formal.GatherCost.gather_cost_batch_parity  -- full-cost: qty ≤ banked ⇒ qty × singleton
 -- RealizableLoadout required roles (the multi-slot pick_loadout bug fix):
 #check @Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership -- contract: realizability ⇔ per-code demand ≤ ownership
 #check @Formal.RealizableLoadout.apply_cur_ge_1                        -- apply assert: realizable ⇒ cur ≥ 1 at every decrement

@@ -2,16 +2,25 @@
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckExit, StuckSignal
+from artifactsmmo_cli.ai.recovery import (
+    REPEATED_ACTION_FAILURE_THRESHOLD,
+    CycleRecord,
+    StuckDetector,
+    StuckExit,
+    StuckSignal,
+)
 from tests.test_ai.fixtures import make_state
 
 
 def _cycle(goal: str = "GoalA", action: str = "X", succeeded: bool = True,
            state_key: tuple = (0, 0, 5, (), (), None, 0, False)) -> CycleRecord:
     return CycleRecord(
-        state_key=state_key, goal_name=goal, action_name=action,
+        state_key=state_key, goal_name=goal, action_name=action, action_key=action,
         planned_depth=1, planner_timed_out=False, succeeded=succeeded,
     )
 
@@ -74,16 +83,45 @@ def test_detector_record_helper_creates_cycle_record():
     player.state = make_state(x=4, y=2)
     record = player._make_cycle_record(
         goal_name="FarmMonster(chicken)",
-        action_name="Fight(chicken)",
+        action=FightAction(monster_code="chicken", locations=frozenset({(1, 0)})),
         planned_depth=2,
         planner_timed_out=False,
         succeeded=True,
     )
     assert isinstance(record, CycleRecord)
     assert record.goal_name == "FarmMonster(chicken)"
+    # `action_name` stays the repr (display/trace); `action_key` is the stable
+    # identity the stuck rules count on. They coincide for every action except
+    # GatherAction.
     assert record.action_name == "Fight(chicken)"
+    assert record.action_key == "Fight(chicken)"
     assert record.planned_depth == 2
     assert record.succeeded is True
+
+
+def test_make_cycle_record_keys_a_gather_without_its_quantity():
+    """The one action whose repr and key diverge — the reason `action_key` exists."""
+    player = GamePlayer(character="testchar")
+    player.state = make_state()
+    record = player._make_cycle_record(
+        goal_name="GatherMaterials(copper_dagger)", action=_sized_gather(47),
+        planned_depth=1, planner_timed_out=False, succeeded=False,
+    )
+    assert record.action_name == "Gather(copper_rocks×47)"
+    assert record.action_key == "Gather(copper_rocks)"
+
+
+def test_make_cycle_record_no_plan_sentinel():
+    """No action means no plan: both fields carry the sentinel the stuck rules
+    exclude, so a no-plan flood cannot masquerade as a repeated action."""
+    player = GamePlayer(character="testchar")
+    player.state = make_state()
+    record = player._make_cycle_record(
+        goal_name="<none>", action=None, planned_depth=0,
+        planner_timed_out=True, succeeded=False,
+    )
+    assert record.action_name == "<no_plan>"
+    assert record.action_key == "<no_plan>"
 
 
 def test_handle_stuck_acknowledges_signal():
@@ -92,7 +130,7 @@ def test_handle_stuck_acknowledges_signal():
     player.game_data = GameData()
     player.state = make_state()
     # Record some cycles to populate detector internal counter
-    record = player._make_cycle_record(goal_name="GoalA", action_name="X",
+    record = player._make_cycle_record(goal_name="GoalA", action=RestAction(),
                                         planned_depth=1, planner_timed_out=False, succeeded=True)
     player._detector.record(record)
     initial_ack = player._detector._ack_index.get(StuckSignal.STATE_FROZEN)
@@ -141,7 +179,7 @@ def test_handle_stuck_goal_oscillation_level1_suppresses_failing_goals_only():
         name = "GoalA" if i % 2 == 0 else "GoalB"
         player._detector.record(CycleRecord(
             state_key=(i, 0, 5, (), (), None, 0, False),
-            goal_name=name, action_name="X", planned_depth=1,
+            goal_name=name, action_name="X", action_key="X", planned_depth=1,
             planner_timed_out=False, succeeded=(name == "GoalB"),
         ))
     player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
@@ -156,7 +194,7 @@ def test_handle_stuck_goal_oscillation_skips_none_placeholder():
     for i in range(8):
         player._detector.record(CycleRecord(
             state_key=(i, 0, 5, (), (), None, 0, False),
-            goal_name="<none>", action_name="<no_plan>", planned_depth=0,
+            goal_name="<none>", action_name="<no_plan>", action_key="<no_plan>", planned_depth=0,
             planner_timed_out=False, succeeded=False,
         ))
     player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
@@ -189,7 +227,7 @@ def test_handle_stuck_goal_oscillation_level3_raises_stuck_exit():
         player._record_cycle(CycleRecord(
             state_key=(i, 0, 5, (), (), None, 0, False),
             goal_name="GoalA" if i % 2 == 0 else "GoalB",
-            action_name="X", planned_depth=1,
+            action_name="X", action_key="X", planned_depth=1,
             planner_timed_out=False, succeeded=False,
         ))
     player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 2
@@ -216,12 +254,12 @@ def _wedge(player: GamePlayer, *, goal: str = "GatherMaterials", fails: int = 10
         if i % 2 == 0 and i < fails * 2:
             rec = CycleRecord(
                 state_key=(i, 0, 5, (), (), None, 0, False), goal_name=goal,
-                action_name="Withdraw(ash_plank)", planned_depth=1,
+                action_name="Withdraw(ash_plank)", action_key="Withdraw(ash_plank)", planned_depth=1,
                 planner_timed_out=False, succeeded=False)
         else:
             rec = CycleRecord(
                 state_key=(i, 0, 5, (), (), None, 0, False), goal_name=goal,
-                action_name="Move", planned_depth=1,
+                action_name="Move", action_key="Move", planned_depth=1,
                 planner_timed_out=False, succeeded=True)
         if use_record_cycle:
             player._record_cycle(rec)
@@ -298,6 +336,73 @@ def test_build_actions_excludes_backoff_blocked_action():
     player._failed_action_backoff = {"Rest": 5}
     blocked = [repr(a) for a in player._build_actions()]
     assert "Rest" not in blocked
+
+
+def _sized_gather(qty: int) -> GatherAction:
+    """A closure gather as the two consuming goals now emit it: the SAME logical
+    action, re-sized to the outstanding deficit each cycle."""
+    return GatherAction(resource_code="copper_rocks",
+                        locations=frozenset({(2, 0)}), quantity=qty)
+
+
+def test_repeated_action_failure_tallies_across_varying_batch_sizes():
+    """Guard-spin protection must see ONE repeatedly-failing gather even though
+    its `repr` changes every cycle.
+
+    Closure sizing means the same logical gather is emitted as
+    `Gather(copper_rocks×60)`, then `×47`, then `×31`, ... as the deficit
+    shrinks (or as inventory headroom moves). Keyed on `repr`, ten failures
+    fragment into ten buckets of one, `REPEATED_ACTION_FAILURE_THRESHOLD` (10)
+    is never reached, and the livelock protection silently switches off. The
+    tally therefore keys on `Action.learning_key()`, which `GatherAction`
+    overrides to be quantity-free.
+    """
+    player = GamePlayer(character="testchar")
+    quantities = [60, 47, 31, 22, 18, 13, 9, 6, 4, 2]
+    assert len({repr(_sized_gather(q)) for q in quantities}) == len(quantities), \
+        "fixture is vacuous: the reprs must all differ for this to discriminate"
+    assert len(quantities) >= REPEATED_ACTION_FAILURE_THRESHOLD
+
+    for i, qty in enumerate(quantities):
+        # Vary the state so STATE_FROZEN (checked first) cannot pre-empt the
+        # signal under test.
+        player.state = make_state(x=i)
+        player._record_cycle(player._make_cycle_record(
+            goal_name="GatherMaterials(copper_dagger)",
+            action=_sized_gather(qty),
+            planned_depth=1, planner_timed_out=False, succeeded=False,
+        ))
+
+    assert player._detector.detect() is StuckSignal.REPEATED_ACTION_FAILURE
+    player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
+    # Blocked under the quantity-free identity, and the driving goal suppressed
+    # — neither is reachable if the tally fragmented.
+    assert player._failed_action_backoff.get("Gather(copper_rocks)", 0) > 0
+    assert player._suppressed_goals.get("GatherMaterials(copper_dagger)", 0) > 0
+
+
+def test_backoff_blocks_a_gather_built_at_a_different_quantity():
+    """The block is recorded from a SIZED gather but `_build_actions` builds the
+    factory's unsized one, so a repr-keyed filter can never match. Filtering on
+    `learning_key()` makes the two halves agree."""
+    player = GamePlayer(character="testchar")
+    gd = GameData()
+    gd._resource_locations = {"copper_rocks": [(2, 0)]}
+    gd._bank_location = (4, 0)
+    gd._taskmaster_location = (1, 2)
+    player.game_data = gd
+    player.state = make_state()
+
+    unblocked = [a for a in player._build_actions()
+                 if isinstance(a, GatherAction) and a.resource_code == "copper_rocks"]
+    assert unblocked, "baseline: the factory builds a copper_rocks gather"
+    assert all(repr(a) != "Gather(copper_rocks)" for a in unblocked), \
+        "fixture is vacuous: the built repr must differ from the blocked key"
+
+    player._failed_action_backoff = {"Gather(copper_rocks)": 5}
+    blocked = [a for a in player._build_actions()
+               if isinstance(a, GatherAction) and a.resource_code == "copper_rocks"]
+    assert blocked == []
 
 
 def test_action_backoff_decrements_per_cycle():
@@ -461,6 +566,7 @@ def test_cooldown_outcome_does_not_count_as_failure_for_stuck_detection():
         detector.record(CycleRecord(
             goal_name="GrindCharacterXP(yellow_slime)",
             action_name="OptimizeLoadout(yellow_slime)",
+            action_key="OptimizeLoadout(yellow_slime)",
             planned_depth=2,
             planner_timed_out=False,
             succeeded=True,  # post-fix mapping: cooldown -> succeeded

@@ -292,7 +292,7 @@ class TestPlayCommandWiring:
             real_player._record_cycle(CycleRecord(
                 state_key=(i, 0, 5, (), (), None, 0, False),
                 goal_name="GoalA" if i % 2 == 0 else "GoalB",
-                action_name="X", planned_depth=1,
+                action_name="X", action_key="X", planned_depth=1,
                 planner_timed_out=False, succeeded=False,
             ))
         real_player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 2

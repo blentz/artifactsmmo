@@ -5,9 +5,14 @@ from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 
 def make_record(state_key=(0, 0, 5, (), (), None, 0, False),
                 goal_name="GoalA", action_name="Fight(chicken)",
-                planned_depth=2, planner_timed_out=False, succeeded=True) -> CycleRecord:
+                planned_depth=2, planner_timed_out=False, succeeded=True,
+                action_key=None) -> CycleRecord:
+    """`action_key` defaults to `action_name`, which is what `learning_key()`
+    returns for every action except GatherAction; pass it explicitly to model a
+    gather whose repr carries a per-cycle batch size."""
     return CycleRecord(
         state_key=state_key, goal_name=goal_name, action_name=action_name,
+        action_key=action_name if action_key is None else action_key,
         planned_depth=planned_depth, planner_timed_out=planner_timed_out, succeeded=succeeded,
     )
 
@@ -231,6 +236,25 @@ class TestRepeatedActionFailure:
     def test_fires_when_one_action_fails_10_of_20(self):
         det = StuckDetector()
         self._wedged(det, fails=10)
+        assert det.detect() == StuckSignal.REPEATED_ACTION_FAILURE
+
+    def test_fires_when_the_repr_varies_but_the_key_does_not(self):
+        """A closure gather is re-sized every cycle, so `action_name` is
+        `Gather(copper_rocks×60)`, then `×47`, ... — 10 distinct reprs for ONE
+        repeatedly-failing action. The tally keys on `action_key`, so it still
+        reaches the threshold; on the repr it would see ten buckets of one."""
+        det = StuckDetector()
+        quantities = [60, 47, 31, 22, 18, 13, 9, 6, 4, 2]
+        for i in range(20):
+            if i % 2 == 0:
+                det.record(make_record(
+                    action_name=f"Gather(copper_rocks×{quantities[i // 2]})",
+                    action_key="Gather(copper_rocks)", goal_name="GatherMaterials",
+                    succeeded=False, state_key=(i, 0, 5, (), (), None, 0, False)))
+            else:
+                det.record(make_record(
+                    action_name="Move", goal_name="GatherMaterials",
+                    succeeded=True, state_key=(i, 0, 5, (), (), None, 0, False)))
         assert det.detect() == StuckSignal.REPEATED_ACTION_FAILURE
 
     def test_no_fire_at_9_failures(self):

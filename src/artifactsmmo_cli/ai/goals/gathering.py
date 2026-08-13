@@ -23,7 +23,7 @@ from artifactsmmo_cli.ai.gather_skill_gate import openable_gather_grinds, skill_
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
-from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
+from artifactsmmo_cli.ai.intermediate_batch import size_closure_gather, size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.open_order import OrderSide
@@ -334,20 +334,25 @@ class GatherMaterialsGoal(Goal):
 
         result: list[Action] = []
         for action in actions:
-            if (
-                isinstance(action, GatherAction)
-                and (action.drop_item_override
-                     or game_data.resource_drop_item(action.resource_code)) in covered
-            ):
+            # Both gather skips ask the SAME question — "what does this gather
+            # effectively yield?" — through the SAME helper,
+            # `GatherAction.drop_item`, as UpgradeEquipmentGoal's own `covered`
+            # check does. They used to open-code `override or
+            # resource_drop_item(...)`; a mirrored predicate is what
+            # `ai/gather_skill_gate.py` exists to undo.
+            #
+            # `drop_item` falls back to the resource code when the drop table
+            # is unknown, where the old expression was `None`. That cannot
+            # change the emitted set: such a gather is rejected downstream by
+            # this loop's `gather_serves_closure` arm either way. Proved, not
+            # argued — tests/test_ai/test_gather_bank_prune.py::
+            # test_unknown_drop_gather_is_excluded_under_both_drop_rules.
+            if isinstance(action, GatherAction) and action.drop_item(game_data) in covered:
                 # EFFECTIVE drop item (override for a targeted secondary-drop
                 # gather, else the primary) fully bank/inventory-covered —
                 # withdraw, don't gather.
                 continue
-            if (
-                isinstance(action, GatherAction)
-                and (action.drop_item_override
-                     or game_data.resource_drop_item(action.resource_code)) in bid_items
-            ):
+            if isinstance(action, GatherAction) and action.drop_item(game_data) in bid_items:
                 continue  # a GE bid is already in flight for this item (bid_vs_craft exclusion)
             if isinstance(action, CraftAction) and action.code in bid_items:
                 continue  # a GE bid is already in flight for this item (bid_vs_craft exclusion)
@@ -359,6 +364,23 @@ class GatherMaterialsGoal(Goal):
             # CraftPotionsGoal node-cap flood, derived 2026-07-08).
             if isinstance(action, CraftAction) and action.code in craftable_mats:
                 result.append(size_intermediate_craft(action, chain, state, game_data))
+            elif (isinstance(action, GatherAction) and gather_serves_closure(
+                    action.resource_code, action.drop_item_override,
+                    game_data.resource_drops, chain)
+                    and (skill_open(action.resource_code, state, game_data)
+                         or action.resource_code in openable_locked_gathers)):
+                # Split out of the shared disjunct below so the admitted gather
+                # can be SIZED to its drop's outstanding closure deficit — one
+                # edge per material at the full deficit, so the branching factor
+                # is unchanged and only the plan DEPTH collapses.
+                #
+                # The `>= 1` guard drops nothing the `covered` prune above
+                # already dropped; it is the same fact recomputed from the
+                # chain (`covered` is recipe-wise, the deficit chain-wise), and
+                # a quantity-0 gather is a no-op edge the planner must not see.
+                sized = size_closure_gather(action, chain, state, game_data)
+                if sized.quantity >= 1:
+                    result.append(sized)
             elif (
                 (isinstance(action, RecycleAction) and action.code in recycle_sources)
                 or "recovery" in action.tags
@@ -366,11 +388,6 @@ class GatherMaterialsGoal(Goal):
                 or ("skill_grind" in action.tags
                     and (getattr(action, "skill", ""),
                          getattr(action, "target_level", 0)) in gated_skill_levels)
-                or (isinstance(action, GatherAction) and gather_serves_closure(
-                    action.resource_code, action.drop_item_override,
-                    game_data.resource_drops, chain)
-                    and (skill_open(action.resource_code, state, game_data)
-                         or action.resource_code in openable_locked_gathers))
                 or (isinstance(action, WithdrawItemAction) and action.code in withdrawable)
                 or (isinstance(action, OptimizeLoadoutAction)
                     and action.target_skill in needed_skills)

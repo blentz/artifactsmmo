@@ -26,17 +26,46 @@ from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.world_state import WorldState
 
 GATHER_LOADOUT_PENALTY = 6.0
-"""Added to GatherAction cost when the equipped loadout is suboptimal for the
-resource's skill, so the planner sequences OptimizeLoadout(Gather) before the
-gather action. Mirrors LOADOUT_PENALTY in actions/combat.py:
-  - Must stay STRICTLY ABOVE one swap's cost (SWAP_COST_PER_SLOT * 1 = 5.0):
-    a gather re-arm swaps exactly the weapon slot, and at 5.0 a single-gather
-    plan TIED with the un-swapped plan and never equipped the ferried tool
-    (live 2026-07-05: 3-action helmet plan, copper_pickaxe stayed in the bag).
-  - Must stay < SWAP_COST_PER_SLOT * 2 (10.0) so a hypothetical 2-slot swap is
-    not forced on a single gather.
+"""Added to GatherAction cost, PER UNIT of the batch, when the equipped loadout
+is suboptimal for the resource's skill — so the planner sequences
+OptimizeLoadout(Gather) before the gather. Mirrors LOADOUT_PENALTY in
+actions/combat.py.
+
+Per unit, not per action: the penalty prices gathering with the wrong tool, and
+a batch of N is N server gathers each paying that. Charging it once per action
+also broke the parity `Formal.GatherCost.gather_cost_loadout_parity` proves —
+this term is exactly `quantity` copies of the singleton charge, for EVERY bank
+level including an empty one — which is the same property the
+`(6.0 + dist) * quantity` shape exists to preserve. It was unscaled from
+`52698f54` (when `quantity` was introduced but nothing ever set it above 1)
+until closure sizing landed; at `quantity == 1` the two are identical, which is
+why the defect stayed invisible until the goals started sizing.
+
+Scaled by `self.quantity`, NOT by `effective_quantity`: a `Gather(x60)` that
+only has room for 20 units still prices 60 units of penalty. That is the same
+treatment the distance term gets (`(6.0 + dist) * self.quantity`) and it is
+deliberate — cost is compared between EDGES at planning time, where the batch
+size is what the planner chose; the inventory bound is applied at `apply`/
+`execute` time by `effective_quantity`. Pricing one term against the projected
+inventory and the other against the requested batch would make the two halves
+of the same edge disagree about how big it is.
+
+The bounds this constant must satisfy:
+  - One re-arm costs `SWAP_COST_PER_SLOT * 2 * n` (see
+    `ai/actions/optimize_loadout.py:180` — each swap is unequip + equip, so 2
+    API calls), making a one-slot gather re-arm cost 10.0. At 6.0 the penalty
+    is therefore BELOW a single swap and never
+    pays for itself on a one-unit gather; it wins by ACCUMULATING over the
+    batch, from the 2nd unit on (2 * 6.0 = 12.0 > 10.0). That is the real
+    mechanism, and it is the mechanism that a once-per-action penalty destroys.
+    (An earlier version of this docstring claimed the bound was "STRICTLY ABOVE
+    one swap's cost (SWAP_COST_PER_SLOT * 1 = 5.0)". That was never true: the
+    swap costs SWAP_COST_PER_SLOT * 2 * n, so 6.0 has always been under it. The
+    live 2026-07-05 fix worked by accumulation across gather nodes, not by
+    out-pricing a single swap.)
   - Must stay << _BANKED_REGATHER_PENALTY (100.0) so a banked-material withdraw
-    still wins over re-gathering regardless of tool mismatch.
+    still wins over re-gathering regardless of tool mismatch. Both are now
+    per-unit, so that comparison is finally like-for-like.
 The penalty fires ONLY on GatherAction — never mid-combat."""
 
 
@@ -189,14 +218,20 @@ class GatherAction(Action):
         # differs from the current equipment in any slot, so the planner sequences
         # OptimizeLoadout(Gather) before the gather.  Fires only when the resource
         # has a known skill requirement (resources without skill data carry no
-        # tool preference, so no penalty). One swap serves the whole batch, so
-        # this is added once regardless of quantity.
+        # tool preference, so no penalty). Charged PER UNIT: a batch of N is N
+        # server gathers, each one paying for the wrong tool, so this reproduces
+        # the equivalent singleton chain exactly — the same cost-parity rule
+        # that makes the distance term `* quantity`. Once-per-action collapsed
+        # the accumulator the re-arm wins by and made OptimizeLoadout
+        # unprofitable at EVERY batch size (it recovers a constant 6.0 against
+        # a 10.0 swap), silently killing the proven 2026-07-05 re-arm the moment
+        # the goals started sizing their gathers.
         skill_req = game_data.resource_skill_level(self.resource_code)
         if skill_req is not None:
             skill, _ = skill_req
             optimal = pick_loadout_cached(Gather(skill), state, game_data)
             if any(state.equipment.get(slot) != code for slot, code in optimal.items()):
-                static += GATHER_LOADOUT_PENALTY
+                static += GATHER_LOADOUT_PENALTY * self.quantity
         if history is None:
             return learned_cost_pure(static, 0.0, 1.0, has_history=False)
         # `default` must be a PER-UNIT figure (matched against `learned`,

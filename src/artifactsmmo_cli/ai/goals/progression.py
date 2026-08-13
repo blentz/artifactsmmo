@@ -23,7 +23,7 @@ from artifactsmmo_cli.ai.goals.upgrade_selection import (
     craftable_key,
     inventory_key,
 )
-from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
+from artifactsmmo_cli.ai.intermediate_batch import size_closure_gather, size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.min_plan_length import min_plan_length
 from artifactsmmo_cli.ai.recipe_closure import gather_serves_closure
@@ -300,11 +300,20 @@ class UpgradeEquipmentGoal(Goal):
                                              action.drop_item_override,
                                              game_data.resource_drops, chain):
                     continue
-                drop = (action.drop_item_override
-                        or game_data.resource_drop_item(action.resource_code))
-                if drop is not None and drop in covered:
+                # Dropping the old `drop is not None` conjunct is a no-op: the
+                # guard immediately above ends `return effective is not None
+                # and ...` (recipe_closure.py:236) over the same value, so a
+                # gather with no effective drop has already `continue`d and
+                # `drop_item`'s resource-code fallback is unreachable here.
+                if action.drop_item(game_data) in covered:
                     continue
-                result.append(action)
+                # Sized to the drop's outstanding closure deficit, exactly as
+                # GatherMaterialsGoal sizes its own admitted gathers (one
+                # `size_closure_gather`, two callers). The `>= 1` guard keeps a
+                # no-op quantity-0 edge out of the search.
+                sized = size_closure_gather(action, chain, state, game_data)
+                if sized.quantity >= 1:
+                    result.append(sized)
             elif isinstance(action, CraftAction):
                 # Keep only closure crafts (the chain intermediates + target).
                 # The target passes through unchanged; intermediates are sized to

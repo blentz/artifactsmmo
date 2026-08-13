@@ -39,6 +39,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | FallbackChain | core, planner | totality, dominance |
 | GameDataAccessors | core | safety |
 | GatherApply | resources, items | safety |
+| GatherCost | planner, action, cost | monotonicity, safety |
 | GatherSelection | resources | dominance, monotonicity, totality, reachability |
 | GePostPricing | grandexchange, undercut | fail-closed, dominance, boundedness |
 | GearLatch | items, characters | safety, monotonicity |
