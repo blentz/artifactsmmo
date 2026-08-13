@@ -13,7 +13,8 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.cost_core import learned_cost_pure
 from artifactsmmo_cli.ai.actions.gather_apply_core import (
     GatherInv,
-    gather_apply_pure,
+    gather_apply_batch_pure,
+    gather_batch_size_pure,
     gather_is_applicable_pure,
 )
 from artifactsmmo_cli.ai.actions.movement import MoveAction
@@ -46,6 +47,15 @@ class GatherAction(Action):
     tags: ClassVar[frozenset[str]] = frozenset({"gather", "produces_skill_xp"})
 
     resource_code: str
+    quantity: int = 1
+    """Units this edge mints in ONE planner node. A planner abstraction: the
+    API gathers one unit per call with a cooldown, so N units are N cycles —
+    the player holds the plan cursor until the batch lands (PlanCache
+    .step_target), the same expansion idiom LevelSkill uses.
+
+    Sized by the consuming goal from its own demand closure
+    (`size_closure_gather`), never by the factory, which has no demand context.
+    Default 1 reproduces the pre-batching edge exactly."""
     locations: frozenset[tuple[int, int]] = field(default_factory=frozenset, repr=False)
     # P1 (docs/PLAN_engagement_expansion.md): rare multi-drop targeting. When
     # set, the planner SIMULATES this gather as yielding the named secondary
@@ -69,33 +79,64 @@ class GatherAction(Action):
     # 2026-06-07: 40 banked ash_wood re-gathered for 40+ cycles). The penalty is
     # large enough to dominate any plausible bank round-trip distance, so a
     # banked-material withdraw provably sorts before re-gathering that material.
+    # Applied as `min(banked, quantity) * _BANKED_REGATHER_PENALTY` in `cost`:
+    # only the units this batch actually shares with the bank are penalized,
+    # not the whole batch and not a flat one-unit charge.
     _BANKED_REGATHER_PENALTY = 100.0
+
+    def drop_item(self, game_data: GameData) -> str:
+        """The item this gather actually yields: the targeted secondary drop
+        when overridden, else the resource's primary drop, else the resource
+        code itself."""
+        return (self.drop_item_override
+                or game_data.resource_drop_item(self.resource_code)
+                or self.resource_code)
+
+    def effective_quantity(self, state: WorldState, game_data: GameData) -> int:
+        """`min(self.quantity, inventory headroom in units)` — the largest
+        feasible batch NOW. 0 when not even one unit fits. Mirrors
+        `CraftAction.effective_quantity`."""
+        inv = GatherInv(used=state.inventory_used, cap=state.inventory_max,
+                        item_count=state.inventory,
+                        slots_used=state.inventory_slots_used,
+                        slots_max=state.inventory_slots_max)
+        return gather_batch_size_pure(inv, self.quantity, self.drop_item(game_data))
+
+    def learning_key(self) -> str:
+        """Learned-cost key, deliberately QUANTITY-FREE. `repr` carries the
+        quantity for display and plan identity, but keying learned costs on it
+        would make every batch size a fresh, empty key and silently disable
+        `learned_cost_pure` for every batched gather. The learned figure is a
+        per-unit cost, scaled by quantity in `cost`."""
+        if self.drop_item_override is not None:
+            return f"Gather({self.resource_code}->{self.drop_item_override})"
+        return f"Gather({self.resource_code})"
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if not self.locations:
             return False
-        drop_item = (self.drop_item_override
-                     or game_data.resource_drop_item(self.resource_code)
-                     or self.resource_code)
+        drop_item = self.drop_item(game_data)
         inv = GatherInv(used=state.inventory_used, cap=state.inventory_max,
                         item_count=state.inventory,
                         slots_used=state.inventory_slots_used,
                         slots_max=state.inventory_slots_max)
         skill_req = game_data.resource_skill_level(self.resource_code)
         if skill_req is None:
-            return gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS, drop_item)
+            return (gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS, drop_item)
+                    and self.effective_quantity(state, game_data) >= 1)
         skill, level = skill_req
         return (state.skills.get(skill, 1) >= level
-                and gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS, drop_item))
+                and gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS, drop_item)
+                and self.effective_quantity(state, game_data) >= 1)
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = nearest_or_error(state.x, state.y, self.locations, "gather")
-        drop_item = (self.drop_item_override
-                     or game_data.resource_drop_item(self.resource_code)
-                     or self.resource_code)
+        drop_item = self.drop_item(game_data)
         inv = GatherInv(used=state.inventory_used, cap=state.inventory_max,
-                        item_count=state.inventory)
-        post = gather_apply_pure(inv, drop_item)
+                        item_count=state.inventory,
+                        slots_used=state.inventory_slots_used,
+                        slots_max=state.inventory_slots_max)
+        post = gather_apply_batch_pure(inv, drop_item, self.effective_quantity(state, game_data))
         new_inventory = dict(post.item_count)
         # Gathering NEVER advances an items-task: the server only counts items
         # when they are DELIVERED to the taskmaster (TaskTradeAction). Modelling
@@ -120,24 +161,25 @@ class GatherAction(Action):
              history: LearningStore | None = None) -> float:
         dest = nearest_or_error(state.x, state.y, self.locations, "gather")
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
-        static = 6.0 + dist
+        static = (6.0 + dist) * self.quantity
         # Penalize re-gathering a material the bank already holds, so the
         # planner withdraws banked stock before re-gathering it (see
         # _BANKED_REGATHER_PENALTY). The penalty applies per banked unit's
-        # worth: once the bank is exhausted the deficit gathers carry no
-        # penalty, preserving optimal handling of the unavoidable shortfall.
-        drop_item = (self.drop_item_override
-                     or game_data.resource_drop_item(self.resource_code)
-                     or self.resource_code)
+        # worth: min(banked, quantity) units of THIS batch are covered by the
+        # bank, so only those units carry the penalty — once the bank is
+        # exhausted (or the batch outgrows it), the remaining deficit gathers
+        # carry no penalty, preserving optimal handling of the unavoidable
+        # shortfall.
+        drop_item = self.drop_item(game_data)
         banked = (state.bank_items or {}).get(drop_item, 0)
-        if banked > 0:
-            static += self._BANKED_REGATHER_PENALTY
+        static += min(banked, self.quantity) * self._BANKED_REGATHER_PENALTY
         # Penalize gathering with a suboptimal tool, mirroring LOADOUT_PENALTY in
         # FightAction.cost: add GATHER_LOADOUT_PENALTY when pick_loadout(Gather)
         # differs from the current equipment in any slot, so the planner sequences
         # OptimizeLoadout(Gather) before the gather.  Fires only when the resource
         # has a known skill requirement (resources without skill data carry no
-        # tool preference, so no penalty).
+        # tool preference, so no penalty). One swap serves the whole batch, so
+        # this is added once regardless of quantity.
         skill_req = game_data.resource_skill_level(self.resource_code)
         if skill_req is not None:
             skill, _ = skill_req
@@ -146,8 +188,9 @@ class GatherAction(Action):
                 static += GATHER_LOADOUT_PENALTY
         if history is None:
             return learned_cost_pure(static, 0.0, 1.0, has_history=False)
-        learned = history.action_cost(repr(self), default=static, window=50)
-        rate = history.success_rate(repr(self), window=50)
+        learned = history.action_cost(self.learning_key(), default=(6.0 + dist),
+                                      window=50) * self.quantity
+        rate = history.success_rate(self.learning_key(), window=50)
         return learned_cost_pure(static, learned, rate, has_history=True)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
@@ -167,5 +210,5 @@ class GatherAction(Action):
 
     def __repr__(self) -> str:
         if self.drop_item_override is not None:
-            return f"Gather({self.resource_code}->{self.drop_item_override})"
-        return f"Gather({self.resource_code})"
+            return f"Gather({self.resource_code}->{self.drop_item_override}×{self.quantity})"
+        return f"Gather({self.resource_code}×{self.quantity})"

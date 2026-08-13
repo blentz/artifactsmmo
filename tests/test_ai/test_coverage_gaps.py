@@ -77,7 +77,7 @@ class TestReprMethods:
         assert repr(FightAction(monster_code="wolf")) == "Fight(wolf)"
 
     def test_gather_repr(self):
-        assert repr(GatherAction(resource_code="copper")) == "Gather(copper)"
+        assert repr(GatherAction(resource_code="copper")) == "Gather(copper×1)"
 
     def test_rest_repr(self):
         assert repr(RestAction()) == "Rest"
@@ -309,7 +309,9 @@ class TestLearnedCostPenalty:
         gd = make_gd(resource_locs={"copper": [(0, 0)]})
         state = make_state(x=0, y=0)
         # 9 ok (cooldown=10) + 1 error => rate 0.9 (< 0.95), median learned cost 10.
-        self._record(store, repr(action), ok_count=9, fail_count=1, cooldown=10.0)
+        # Keyed on learning_key(), quantity-free (repr carries quantity for
+        # display/identity only) -- see GatherAction.learning_key docstring.
+        self._record(store, action.learning_key(), ok_count=9, fail_count=1, cooldown=10.0)
         cost = action.cost(state, gd, history=store)
         # learned(10) / rate(0.9) = 11.11..., strictly above the learned value.
         assert cost == pytest.approx(10.0 / 0.9)
@@ -319,7 +321,7 @@ class TestLearnedCostPenalty:
         gd = make_gd(resource_locs={"copper": [(0, 0)]})
         state = make_state(x=0, y=0)
         # All 10 ok => rate 1.0 (>= 0.95): no penalty, just the learned median.
-        self._record(store, repr(action), ok_count=10, fail_count=0, cooldown=10.0)
+        self._record(store, action.learning_key(), ok_count=10, fail_count=0, cooldown=10.0)
         assert action.cost(state, gd, history=store) == pytest.approx(10.0)
 
     def test_move_cost_penalised_by_low_success_rate(self, store):

@@ -247,7 +247,7 @@ def test_craft_cell_verdict_fails_unrelated_gather() -> None:
     plan = [GatherAction(resource_code="ash_tree")]
     verdict = craft_cell_verdict("iron_boots", plan, gd)
     assert verdict == CraftVerdict(False, f"unrelated:{plan[0]!r}")
-    assert verdict.reason == "unrelated:Gather(ash_tree)"
+    assert verdict.reason == "unrelated:Gather(ash_tree×1)"
 
 
 def test_craft_cell_verdict_fails_unrelated_rest() -> None:

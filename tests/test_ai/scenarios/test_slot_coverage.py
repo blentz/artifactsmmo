@@ -652,7 +652,7 @@ def test_l35_artifact_fill_pearl_route_plans() -> None:
     assert repr(report.selected_goal).startswith("GatherMaterials(small_pearls"), (
         repr(report.selected_goal), report.plan)
     assert [repr(a) for a in report.plan] == \
-        ["Gather(bass_spot->small_pearls)"] * CURRENCY_GRIND_BATCH, report.plan
+        ["Gather(bass_spot->small_pearls×1)"] * CURRENCY_GRIND_BATCH, report.plan
     assert report.plan[0].drop_item_override == "small_pearls"
 
 

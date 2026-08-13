@@ -396,6 +396,75 @@ class TestGatherAction:
         new_state = action.apply(state, gd)
         assert new_state.inventory.get("copper", 0) == 1
 
+    def test_default_quantity_is_one_and_repr_shows_it(self):
+        action = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+        assert action.quantity == 1
+        assert repr(action) == "Gather(spruce_tree×1)"
+
+    def test_repr_with_drop_override_shows_quantity(self):
+        action = GatherAction(resource_code="copper_rocks", quantity=3,
+                              locations=frozenset({(0, 0)}), drop_item_override="emerald_stone")
+        assert repr(action) == "Gather(copper_rocks->emerald_stone×3)"
+
+    def test_apply_mints_the_batch(self):
+        action = GatherAction(resource_code="spruce_tree", quantity=10,
+                              locations=frozenset({(0, 0)}))
+        state = make_state(x=0, y=0, inventory={}, inventory_max=50, inventory_slots_max=20)
+        gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
+        gd._resource_drops = {"spruce_tree": "spruce_wood"}
+        new_state = action.apply(state, gd)
+        drop = action.drop_item(gd)
+        assert new_state.inventory.get(drop, 0) - state.inventory.get(drop, 0) == 10
+
+    def test_effective_quantity_clamps_to_headroom(self):
+        action = GatherAction(resource_code="spruce_tree", quantity=10,
+                              locations=frozenset({(0, 0)}))
+        gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
+        gd._resource_drops = {"spruce_tree": "spruce_wood"}
+        # inventory_max=20, 16 already used by "junk" -> headroom = 4 units.
+        full = make_state(x=0, y=0, inventory={"junk": 16}, inventory_max=20, inventory_slots_max=20)
+        assert action.effective_quantity(full, gd) == 4
+
+    def test_partial_batch_stays_applicable(self):
+        """CraftAction's contract: a batch that does not fully fit degrades, it does
+        not vanish. Without this a near-full bag removes the only edge to a real
+        deficit."""
+        action = GatherAction(resource_code="spruce_tree", quantity=10,
+                              locations=frozenset({(0, 0)}))
+        gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
+        gd._resource_drops = {"spruce_tree": "spruce_wood"}
+        full = make_state(x=0, y=0, inventory={"junk": 16}, inventory_max=20, inventory_slots_max=20)
+        assert action.is_applicable(full, gd) is True
+
+    def test_cost_scales_with_quantity(self):
+        state = make_state(x=0, y=0, inventory={}, inventory_max=50, inventory_slots_max=20)
+        gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
+        one = GatherAction(resource_code="spruce_tree", quantity=1, locations=frozenset({(0, 0)}))
+        ten = GatherAction(resource_code="spruce_tree", quantity=10, locations=frozenset({(0, 0)}))
+        assert ten.cost(state, gd) > one.cost(state, gd)
+
+    def test_banked_penalty_scales_with_covered_units_only(self):
+        """The docstring has always claimed the penalty applies 'per banked unit's
+        worth'; the flat +100 could not express it. 3 banked units against a batch
+        of 10 penalizes 3 units, not 10 and not a flat one."""
+        action = GatherAction(resource_code="spruce_tree", quantity=10,
+                              locations=frozenset({(0, 0)}))
+        gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
+        gd._resource_drops = {"spruce_tree": "spruce_wood"}
+        drop = action.drop_item(gd)
+        state = make_state(x=0, y=0, inventory={}, inventory_max=50, inventory_slots_max=20)
+        banked = dataclasses.replace(state, bank_items={drop: 3})
+        unbanked = dataclasses.replace(state, bank_items={})
+        delta = action.cost(banked, gd) - action.cost(unbanked, gd)
+        assert delta == pytest.approx(3 * GatherAction._BANKED_REGATHER_PENALTY)
+
+    def test_learned_cost_key_is_quantity_free(self):
+        """Learned costs must not fragment per batch size or the learning signal is
+        silently destroyed — every new quantity would be a fresh, empty key."""
+        one = GatherAction(resource_code="spruce_tree", quantity=1, locations=frozenset({(0, 0)}))
+        sixty = GatherAction(resource_code="spruce_tree", quantity=60, locations=frozenset({(0, 0)}))
+        assert one.learning_key() == sixty.learning_key()
+
 
 class TestDepositAllAction:
     def test_applicable_with_items(self):
@@ -1241,7 +1310,9 @@ def test_gather_action_cost_uses_history_when_provided():
         store = LearningStore(db_path=path, character="testchar")
         store.start_session()
         action = GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 2)}))
-        repr_str = repr(action)
+        # Keyed on `learning_key()`, deliberately quantity-free (see GatherAction
+        # docstring) — NOT `repr(action)`, which now carries the quantity.
+        repr_str = action.learning_key()
         for i in range(5):
             store.record_cycle(Cycle(
                 ts=f"2026-05-17T00:00:{i:02d}+00:00",
@@ -1381,7 +1452,7 @@ class TestGatherRareDropTargeting:
         state = make_state(x=0, y=0, inventory={}, inventory_max=20)
         post = action.apply(state, gd)
         assert post.inventory.get("emerald_stone") == 1
-        assert repr(action) == "Gather(copper_rocks->emerald_stone)"
+        assert repr(action) == "Gather(copper_rocks->emerald_stone×1)"
 
     def test_factory_emits_targeted_gathers_for_secondary_drops(self):
         from artifactsmmo_cli.ai.actions.factory import build_actions
@@ -1397,8 +1468,8 @@ class TestGatherRareDropTargeting:
         actions = build_actions(gd, None, None, bank_accessible=False,
                                 task_exchange_min_coins=0)
         names = {repr(a) for a in actions}
-        assert "Gather(copper_rocks)" in names
-        assert "Gather(copper_rocks->emerald_stone)" in names
+        assert "Gather(copper_rocks×1)" in names
+        assert "Gather(copper_rocks->emerald_stone×1)" in names
 
 
 def test_factory_emits_equip_for_owned_recipeless_equippable():

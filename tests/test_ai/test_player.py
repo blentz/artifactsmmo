@@ -1131,7 +1131,7 @@ class TestFormatPlan:
     def test_consecutive_repeats_collapsed(self):
         from artifactsmmo_cli.ai.actions.gathering import GatherAction
         actions = [GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))] * 3
-        assert _format_plan(actions) == "Gather(copper_rocks)×3"
+        assert _format_plan(actions) == "Gather(copper_rocks×1)×3"
 
     def test_mixed_plan_collapsed(self):
         from artifactsmmo_cli.ai.actions.crafting import CraftAction
