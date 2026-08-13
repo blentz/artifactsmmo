@@ -10,6 +10,34 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-13-planner-batching-and-macro-edges-design.md`
 
+## EXECUTION ORDER — corrected 2026-08-13 mid-flight (ledger Ruling 17)
+
+**Run the tasks in this order, NOT in numeric order:**
+
+```
+1, 2, 4, 5, 6, 7, 8, 3, 9, 10, 11, 12, 13
+```
+
+Task 3 switches `min_plan_length` to the batched gather count, which makes
+`is_plannable` admit goals on the assumption that one gather action mints a
+whole material's demand. `GatherAction` does not batch until Task 5. Landing 3
+first opens a window where the admission gate is more permissive than the
+planner is capable, and A* is handed goals it cannot plan.
+
+This was verified, not theorised: with Task 3 applied and nothing else,
+`tests/test_ai/test_upgrade_reachability_gate.py::test_is_plannable_rejects_from_scratch_feather_coat`
+fails `assert True is False`, and 10 tests fail in total across
+`test_strategy_driver.py` (6), `test_supply_bank_plannability.py` (2) and
+`test_upgrade_reachability_gate.py` (2). Routing the `steel_boots` chain
+straight to A* returns `plan == []`.
+
+Those tests pin a real invariant — admission must not outrun capability — not a
+stale boundary. Task 3's work is saved at
+`.superpowers/sdd/2026-08-13-planner-gather-batching/task-3-staged.patch`;
+re-apply it when Task 3 comes up. Expect the 10 failures to resolve once
+gathers actually batch. **Any that do not are genuine regressions and must be
+fixed, never rebaselined.**
+
 ## Global Constraints
 
 - Run every Python command through `uv run` (e.g. `uv run pytest`, `uv run mypy`). Never bare `python`.
