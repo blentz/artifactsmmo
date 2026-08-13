@@ -24,9 +24,11 @@ beside an absence. What it does have is
 `Formal.MinGatherStepsBound.minGatherSteps_le_minGathers`: under `PosRecipes`
 the batched leaf count never exceeds the per-unit count — so against the RAW
 UNIT term the `is_plannable` gate can only become more permissive. That module's
-header states the one place the comparison does not carry over (the production
-term is `ceil_gathers(min_gathers …, max_gather_yield)`, and above yield 1 the
-leaf count can exceed it), with a kernel-checked witness.
+header states the one place the comparison does not carry over (the term this
+one REPLACED was `ceil_gathers(min_gathers …, max_gather_yield)`, and above
+yield 1 the leaf count can exceed it), with a kernel-checked witness. Production
+has called `min_gather_steps` directly since `c6a4089e`
+(`min_plan_length.py:47`); `ceil_gathers` is no longer on that path.
 
 ## What this models
 

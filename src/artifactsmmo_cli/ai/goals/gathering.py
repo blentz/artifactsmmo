@@ -374,10 +374,19 @@ class GatherMaterialsGoal(Goal):
                 # edge per material at the full deficit, so the branching factor
                 # is unchanged and only the plan DEPTH collapses.
                 #
-                # The `>= 1` guard drops nothing the `covered` prune above
-                # already dropped; it is the same fact recomputed from the
-                # chain (`covered` is recipe-wise, the deficit chain-wise), and
-                # a quantity-0 gather is a no-op edge the planner must not see.
+                # `size_closure_gather` floors its size at 1 whenever any
+                # closure demand remains, so the `>= 1` guard here tests DEMAND
+                # and nothing else: it drops only what the `covered` prune above
+                # already drops, recomputed from the chain (`covered` is
+                # recipe-wise, the deficit chain-wise).
+                #
+                # It must NOT become a room test, and the floor is what stops it
+                # from silently becoming one. The pool is built once
+                # (`planner.py:177`), so a gather dropped here for want of space
+                # at the DECIDE state is gone from every node in the search —
+                # including the ones after a `DepositAll` frees the room, which
+                # made `DepositAll → Gather` unplannable from a full bag. Room
+                # is `is_applicable`'s job; it runs per node.
                 sized = size_closure_gather(action, chain, state, game_data)
                 if sized.quantity >= 1:
                     result.append(sized)

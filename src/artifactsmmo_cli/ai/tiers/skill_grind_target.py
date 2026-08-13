@@ -75,9 +75,11 @@ def is_obtainable(code: str, state: WorldState, game_data: GameData,
 
     NO PRODUCTION CALLER, deliberately, since 2026-08-13. This is the NAME the
     codebase uses for the selection-side obtainability walk — `drop_obtainability`'s
-    module docstring, `goals/gathering`, `skill_grind_selection` and
-    `test_drop_obtainability` all cite it as `tiers/skill_grind_target.
-    is_obtainable` — so it keeps the name and the contract. But it hoists the
+    module docstring, `goals/gathering` and `test_drop_obtainability` cite it as
+    `tiers/skill_grind_target.is_obtainable` — so it keeps the name and the
+    contract. (`skill_grind_selection` was listed here too until 2026-08-13; it
+    names the `skill_grind_target` WRAPPER at its line 7 and contains no
+    reference to `is_obtainable` at all.) But it hoists the
     union per CALL, and the one production consumer
     (`build_selectable_grind_candidates`) sweeps ~10 candidates per cache miss,
     so calling this in that loop rebuilds the set ~10x for one sweep: measured
@@ -186,7 +188,9 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     caller gets an ImportError rather than a quietly short answer.
 
     IN-LEVEL (`craft_level <= state.skills[skill]`) is a hoisted copy of the
-    FIRST clause of `skill_grind_selection_pure`'s own filter, evaluated here
+    SECOND conjunct of `skill_grind_selection_pure`'s own filter (the four-way
+    `if` there tests `craft_skill != skill` first, then `craft_level >
+    current_level`; this said "FIRST clause" until 2026-08-13), evaluated here
     from the same `current_level` the selector is handed. Dropping those rows
     provably cannot change the selection: the core `continue`s on exactly this
     predicate before `_beats` ever sees the candidate, so the argmax over the

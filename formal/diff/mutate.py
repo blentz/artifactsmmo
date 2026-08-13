@@ -4298,9 +4298,15 @@ SIZE_CLOSURE_GATHER_MUTATIONS = [
     # gem. Killed by test_keyed_on_the_drop_item_not_the_resource_code_for_an_
     # override (both halves: the override sizes to 0, and the real demand does
     # not size at all).
+    #
+    # `action.resource_code`, NOT `action.code`: GatherAction has no `code`
+    # attribute (it is `resource_code`, gathering.py:78), so the `.code` form
+    # died of AttributeError on every input rather than on the mis-keying it
+    # names. A mutant killed for the wrong reason proves nothing about the test
+    # that "killed" it.
     ("size_closure_gather: keyed on the resource code, not the drop",
      "    drop = action.drop_item(game_data)",
-     "    drop = action.code"),
+     "    drop = action.resource_code"),
     # Ignore held stock: the gather re-gathers material already in the bag or
     # bank. Killed by test_holdings_reduce_the_deficit (60 demand, 25 held ->
     # 35) and test_fully_covered_material_sizes_to_zero.
@@ -4311,11 +4317,31 @@ SIZE_CLOSURE_GATHER_MUTATIONS = [
     # identity short-circuit is what lets callers detect a no-op resize. Killed
     # by test_returns_the_same_instance_when_quantity_already_matches.
     ("size_closure_gather: no identity short-circuit",
-     "    qty = gather_batch_size_pure(action.inv(state), demand, drop)\n"
      "    return action if action.quantity == qty else dataclasses.replace("
-     "action, quantity=qty)",
-     "    qty = gather_batch_size_pure(action.inv(state), demand, drop)\n"
-     "    return dataclasses.replace(action, quantity=qty)"),
+     "action, quantity=qty)\n\n\ndef size_closure_gather",
+     "    return dataclasses.replace(action, quantity=qty)\n\n\n"
+     "def size_closure_gather"),
+    # Drop the FLOOR: the size falls back to the raw room-bounded batch, which
+    # is 0 at a full bag (or for a new drop code with no free slot). Because
+    # `relevant_actions` runs ONCE (planner.py:177), that deletes the gather
+    # from every node in the search including the post-DepositAll ones, and
+    # `is_applicable`'s `effective_quantity >= 1` tail means a quantity-0 edge
+    # can never re-open — the slot-exhaustion livelock. Killed by
+    # test_full_bag_keeps_the_closure_gather_in_the_pool and
+    # test_full_bag_still_plans_deposit_then_gather.
+    ("size_closure_gather: drop the 1-unit floor (0 at a full bag)",
+     "    qty = 0 if demand == 0 else max(\n"
+     "        1, gather_batch_size_pure(action.inv(state), demand, drop))",
+     "    qty = gather_batch_size_pure(action.inv(state), demand, drop)"),
+    # Floor the ZERO-demand case too: a fully-covered drop becomes a 1-unit
+    # gather, so the callers' `>= 1` guard stops excluding no-op edges and the
+    # planner re-gathers material it already holds. Killed by
+    # test_fully_covered_material_sizes_to_zero and
+    # test_material_absent_from_the_chain_sizes_to_zero.
+    ("size_closure_gather: floor applies even at zero demand",
+     "    qty = 0 if demand == 0 else max(\n"
+     "        1, gather_batch_size_pure(action.inv(state), demand, drop))",
+     "    qty = max(1, gather_batch_size_pure(action.inv(state), demand, drop))"),
 ]
 
 

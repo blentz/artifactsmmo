@@ -224,7 +224,10 @@ eight theorems, and the code fix itself — `StrategyArbiter._record_attempt` ma
 no-plan non-guard failure into `_memo`, timeouts included. (That fix was drafted here as
 "`try_plan_cheap` marks…"; the cheap/full two-pass it named was deleted on 2026-08-13
 because its escalation was unreachable in practice, so there is now one budget, one walk,
-and one marking rule. REMAINING: an `Oracle` dispatch arm.)
+and one marking rule. This also used to end "REMAINING: an `Oracle` dispatch arm" — that
+was already false when written: `formal/Oracle.lean:2360-2368` dispatches both
+`DoomedMemo.ttl` and `DoomedMemo.isDoomed`, landed in `fc649417` on 2026-06-15, before
+this branch's merge-base. Nothing remains.)
 
 Design docs: `docs/superpowers/specs/2026-05-26-lean-formal-verification-design.md` (gate architecture),
 `docs/superpowers/specs/2026-05-27-lean-decision-logic-design.md` (decision-logic expansion). The retired

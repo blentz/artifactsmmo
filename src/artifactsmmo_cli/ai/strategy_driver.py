@@ -918,14 +918,32 @@ class StrategyArbiter:
                 "priority": priority,
             })
             return wait_plan
-        # Provably-sound pre-plan reachability gate: a goal whose minimum plan is
-        # longer than its max_depth can never be planned (the planner never
-        # returns a plan longer than max_depth — formal/Formal/PlannerDepthBound),
-        # so skip it instead of burning `planner._SEARCH_BUDGET_SECONDS` (named,
-        # never a literal — this comment said "90s" through a 300s era and a 15s
-        # one). This is what stops
+        # Pre-plan reachability gate: a goal whose minimum plan is longer than
+        # its max_depth can never be planned (the planner never returns a plan
+        # longer than max_depth — formal/Formal/PlannerDepthBound), so skip it
+        # instead of burning `planner._SEARCH_BUDGET_SECONDS` (named, never a
+        # literal — this comment said "90s" through a 300s era and a 15s one).
+        #
+        # NOT "provably sound", and the word was removed rather than softened:
+        # the gate consumes `min_plan_length`, whose docstring RETRACTS the
+        # citation it used to carry ("that theorem has never existed",
+        # min_plan_length.py:5-7). Treat it as an A*-budget heuristic.
+        #
+        # STALE EXAMPLE, LEFT AS A HISTORICAL MARKER (corrected 2026-08-13,
+        # whole-branch review): this comment used to end "This is what stops
         # UpgradeEquipment(copper_boots) — 80 gathers vs max_depth 32 — from
-        # stalling the first cycle.
+        # stalling the first cycle." That is now FALSE in both numbers. Task 3
+        # swapped the mint term to `min_gather_steps`, so copper_boots costs 4,
+        # not 80, and `test_upgrade_reachability_gate.py
+        # ::test_is_plannable_admits_from_scratch_copper_boots` asserts exactly
+        # the opposite of the old claim. The identical example was corrected in
+        # `goals/progression.py:223` and this copy was missed — the same
+        # cross-file duplication this branch keeps being bitten by.
+        #
+        # The honest statement: over all 321 real recipes the maximum
+        # `min_plan_length` is 15 against a threshold of 32, ZERO exceeding, so
+        # this branch is LIVE-DEAD on today's data. See `progression.py`'s
+        # `max_depth` docstring for the full account.
         if not goal.is_plannable(state, game_data, self._history):
             # A proven-unplannable goal is a CONCLUSIVE no-plan, not a timeout.
             self._last_timed_out = False

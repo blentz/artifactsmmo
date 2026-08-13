@@ -19,7 +19,15 @@ then fails to reach.
 
 ## What this does NOT prove — read before quoting it
 
-Production's mint term today is not `min_gathers` but
+HISTORICAL NOTE (corrected 2026-08-13): the paragraph below described
+production's mint term as `ceil_gathers(min_gathers …)`. That stopped being true
+at `c6a4089e` — `min_plan_length.py:47` now calls `min_gather_steps` directly,
+and the `ceil_gathers` wrapper is gone from that path. The comparison the
+paragraph draws is still the right one to understand (it is why the swap could
+only make `is_plannable` more permissive), but read it as the term this module
+REPLACED, not the term production runs.
+
+Production's mint term was not `min_gathers` but
 `ceil_gathers(min_gathers …, max_gather_yield)`, which divides the unit count by
 the resource's drop yield. For `max_gather_yield = 1` `ceil_gathers` is the
 identity and the switch is exactly the more-permissive direction proved here.

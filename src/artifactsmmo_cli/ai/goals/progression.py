@@ -122,9 +122,13 @@ class UpgradeEquipmentGoal(Goal):
         depth-reject/gather-routing branches (retargeted after their old
         2-tier witnesses, `copper_boots`/`feather_coat`, stopped exceeding
         `max_depth`) use a synthetic 35-distinct-raw-material fixture that no
-        real recipe approaches — the largest real recipe
-        (`vital_armor`/`skullforged_pants`/`hell_armor`/`eternal_red_ring`/
-        `dust_amulet`, all tied) has 7 direct inputs. This is a design
+        real recipe approaches — the largest real recipe has 7 direct inputs,
+        and EIGHT are tied there: `adamantite_fishing_rod`,
+        `dark_horned_helmet`, `duskarmor`, `dust_amulet`, `eternal_red_ring`,
+        `hell_armor`, `skullforged_pants`, `vital_armor`. (This listed five
+        until 2026-08-13, silently dropping the first three; recomputed over
+        `formal/sim/game_data_snapshot.json`, whose 321 recipes distribute
+        1:47, 2:35, 3:35, 4:55, 5:98, 6:43, 7:8.) This is a design
         decision for a follow-up task with these numbers in hand (raise the
         threshold's bite by tightening `min_crafts`, per the first residual;
         or accept the valve is currently vestigial and remove/repurpose the
@@ -389,8 +393,13 @@ class UpgradeEquipmentGoal(Goal):
                     continue
                 # Sized to the drop's outstanding closure deficit, exactly as
                 # GatherMaterialsGoal sizes its own admitted gathers (one
-                # `size_closure_gather`, two callers). The `>= 1` guard keeps a
-                # no-op quantity-0 edge out of the search.
+                # `size_closure_gather`, two callers, which floors its size at 1
+                # while demand remains). The `>= 1` guard is therefore a DEMAND
+                # test — it keeps a no-op zero-deficit edge out of the search,
+                # and cannot become a room test: the pool is built once
+                # (`planner.py:177`), so a room-based drop here would delete the
+                # gather from every post-`DepositAll` node too.
+                # `is_applicable` applies the room bound per node.
                 sized = size_closure_gather(action, chain, state, game_data)
                 if sized.quantity >= 1:
                     result.append(sized)

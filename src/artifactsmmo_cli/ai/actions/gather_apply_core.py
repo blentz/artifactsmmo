@@ -4,28 +4,47 @@ This module isolates the minimal transition GatherAction performs on the
 inventory: the planner-side mint of `+1` of `drop_item`, and the slot-availability
 precondition (`inventory_free >= MIN_FREE_SLOTS`).
 
-The Lean module `formal/Formal/GatherApply.lean` proves three contracts on
-these pure cores:
+Two levels of assurance cover these cores, and they cover DIFFERENT things.
+
+The Lean module `formal/Formal/GatherApply.lean` proves FOUR contracts, all of
+them over `Inv := {used : Nat, cap : Nat}` (GatherApply.lean:35). That structure
+has NO item dictionary, so nothing below about `item_count` is proved there —
+the Lean file says so itself at line 195 ("the per-key item-dict bookkeeping is
+exercised by the Python unit tests"). What Lean proves:
 
 * `gather_is_applicable_pure(inv, k, drop_item)` returns True iff `max - used
   >= k` AND (when `drop_item` is known) the drop fits the slot cap: a NEW drop
   code needs a free slot, growing a held code does not (`inventory_room.has_room`).
-* `gather_apply_pure(inv, code)` produces an inventory whose `used = used + 1`,
-  `max` unchanged, and `item_count[code]` incremented by 1 (all other entries
-  preserved).
+  The slot rule is proved over a `hasDrop : Bool`, not over the code itself.
+* `gather_apply_pure(inv, code)` produces an inventory whose `used = used + 1`
+  and `max` unchanged (`applyN_used`, `applyN_cap`).
 * SAFETY: `gather_is_applicable_pure(inv, k) and k >= 1` implies the post-state
   satisfies `used' <= max` (the planner cannot mint past `inventory_max` in one
   step), and chaining `n` applies starting from `inventory_free >= n` preserves
-  `used <= max` for the entire chain.
-* `gather_apply_batch_pure(inv, drop_item, qty)` mints `qty` of `drop_item` in
-  one step: `used' = min(used + qty, cap)`, `item_count[drop_item]` rises by
-  the same amount, all other entries preserved. SAFETY is `gather_apply_batch_
-  pure`'s OWN break-on-full loop, not a caller-side bound: it cannot mint past
-  `cap` for ANY `qty`, including one far larger than the free quantity.
-  `gather_batch_size_pure(inv, demand, drop_item)` is a separate sizing aid,
-  not a safety mechanism — it tells a caller how much of `demand` currently
-  has room (`min(demand, cap - used)`, or 0 when a NEW code has no free slot),
-  reusing `gather_is_applicable_pure`'s slot rule via `inventory_room.has_room`.
+  `used <= max` for the entire chain (`chain_safe`).
+* `gather_apply_batch_pure(inv, drop_item, qty)` mints `qty` in one step with
+  `used' = min(used + qty, cap)` (`gather_apply_batch_used`), bounded by
+  `gather_apply_batch_le_cap` and agreeing with the singleton at `qty = 1`
+  (`gather_apply_batch_one`). SAFETY is this function's OWN break-on-full loop,
+  not a caller-side bound: it cannot mint past `cap` for ANY `qty`, including
+  one far larger than the free quantity (`gather_apply_batch_huge_qty_witness`).
+
+The PER-KEY dictionary behaviour is pinned by tests, not by the kernel — that
+`item_count[drop_item]` rises by exactly the minted amount and every other entry
+is preserved bit-for-bit, for both the singleton and the batch. See
+`tests/test_ai/test_gather_apply_core.py` (`test_apply_batch_mints_exactly_qty`,
+`test_apply_batch_preserves_other_entries`, `test_other_items_preserved`) and
+`formal/diff/test_gather_apply_diff.py`, which binds the singleton to the Lean
+oracle over the used/cap projection.
+
+`gather_batch_size_pure(inv, demand, drop_item)` is a separate sizing aid and is
+NOT a safety mechanism — it reports how much of `demand` currently has room
+(`min(demand, cap - used)`, or 0 when a NEW code has no free slot), reusing
+`gather_is_applicable_pure`'s slot rule via `inventory_room.has_room`. It
+answers a question about the CURRENT state, so a caller that runs ONCE per plan
+(rather than per node) must not let its 0 stand as a final answer — see
+`intermediate_batch.size_closure_gather`, which floors it at 1 while demand
+remains precisely so a full bag cannot delete the gather from the whole search.
 
 The planner (`src/artifactsmmo_cli/ai/planner.py`:122) re-checks
 `is_applicable(node.state, ...)` on every node it pops, so chained `apply`s in

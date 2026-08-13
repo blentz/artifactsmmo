@@ -7,6 +7,7 @@ Covers:
 """
 
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
@@ -80,6 +81,113 @@ class TestIntermediateCraftSizedToDemand:
             f"intermediate craft should be batched to demand, "
             f"got quantity={craft_bars[0].quantity}"
         )
+
+
+class TestFullBagStillPlansDepositThenGather:
+    """A full bag must not delete the gather from the SEARCH POOL.
+
+    `planner.py:177` calls `goal.relevant_actions(...)` ONCE, before the search
+    loop, so the pool is fixed for the whole search. Sizing a closure gather at
+    the decide state and then dropping it when the size is 0 therefore removes
+    it from EVERY node, including the nodes reached after a `DepositAll` has
+    freed the room — `DepositAll` is still admitted (deposit tag) but nothing can
+    follow it, so `DepositAll → Gather` becomes unplannable and the character
+    livelocks with a full bag.
+
+    `gather_batch_size_pure` returns 0 on three distinct conditions, not one:
+    zero demand, `qty_free == 0`, and a NEW drop code with no free slot. Only
+    the first is a genuine no-op edge. The other two are ROOM facts, and room is
+    `is_applicable`'s job — it runs per node, so it re-opens the gather the
+    moment a deposit node frees space.
+
+    This is the slot-exhaustion class this repo has hit before
+    (project_slot_exhaustion_livelock: the model tracked quantity where the game
+    is slot-limited), reintroduced through the sizing guard."""
+
+    @staticmethod
+    def _gd() -> GameData:
+        gd = GameData()
+        gd._item_stats = {
+            "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
+            "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource",
+                                    crafting_skill="mining", crafting_level=1),
+            "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
+        gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._workshop_locations = {"mining": (1, 5)}
+        gd._bank_location = (4, 0)
+        return gd
+
+    @staticmethod
+    def _full_bag_state():
+        # 100/100 quantity used by an item unrelated to the closure, so
+        # `inventory_free == 0` and every closure gather sizes to 0.
+        return make_state(inventory={"ash_wood": 100}, inventory_max=100,
+                          inventory_slots_max=20, bank_items={},
+                          skills={"mining": 5, "woodcutting": 5})
+
+    def _pool(self, gd):
+        return [
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)])),
+            CraftAction(code="copper_bar", workshop_location=(1, 5)),
+            DepositAllAction(bank_location=(4, 0), game_data=gd),
+        ]
+
+    def test_full_bag_keeps_the_closure_gather_in_the_pool(self):
+        """The pool is fixed once, so a 0-size at the decide state must not
+        delete the edge — the room check belongs to `is_applicable`."""
+        gd = self._gd()
+        state = self._full_bag_state()
+        assert state.inventory_free == 0, "fixture must actually be a full bag"
+        goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
+
+        relevant = goal.relevant_actions(self._pool(gd), state, gd)
+
+        assert any(isinstance(a, GatherAction) for a in relevant), (
+            "the closure gather was deleted from the search pool at a full bag; "
+            "the pool is built ONCE (planner.py:177), so nothing can re-admit it "
+            "after a DepositAll frees room"
+        )
+
+    def test_full_bag_still_plans_deposit_then_gather(self):
+        """The consequence, end to end: from a full bag the planner must still
+        find deposit-then-gather. Pre-batching this worked because the gather
+        stayed in the pool and `is_applicable` gated it per node."""
+        gd = self._gd()
+        state = self._full_bag_state()
+        goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
+        pool = self._pool(gd)
+        deposit = next(a for a in pool if isinstance(a, DepositAllAction))
+        assert deposit.is_applicable(state, gd), (
+            "fixture must offer a real way out of the full bag")
+
+        plan = GOAPPlanner().plan(state, goal, goal.relevant_actions(pool, state, gd),
+                                  gd, budget_seconds=30.0)
+
+        assert plan, "no plan from a full bag — DepositAll → Gather is unreachable"
+        deposit_at = next(i for i, a in enumerate(plan)
+                          if isinstance(a, DepositAllAction))
+        gather_at = next(i for i, a in enumerate(plan)
+                         if isinstance(a, GatherAction))
+        assert deposit_at < gather_at, (
+            f"expected the deposit to precede the gather, got {plan}")
+
+    def test_zero_demand_gathers_are_still_excluded(self):
+        """The narrowing the guard SHOULD do is still done: when the drop is
+        already fully covered there is no deficit, and that gather is a genuine
+        no-op edge which must stay out of the search."""
+        gd = self._gd()
+        # Roomy bag that already holds the full 10-ore deficit.
+        state = make_state(inventory={"copper_ore": 10}, inventory_max=100,
+                           inventory_slots_max=20, bank_items={},
+                           skills={"mining": 5, "woodcutting": 5})
+        goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
+
+        relevant = goal.relevant_actions(self._pool(gd), state, gd)
+
+        assert not [a for a in relevant if isinstance(a, GatherAction)], (
+            "a fully-covered drop has zero deficit and must not enter the search")
 
 
 class TestSecondaryDropAdmission:

@@ -99,7 +99,13 @@ suboptimal for the resource's skill (`mismatch`) — per unit, because a batch o
 `qty` is `qty` server gathers each paying for the wrong tool.
 `base`/`dist`/`bankPenalty`/`loadPenalty` are `Rat` to match the production
 formula's float arithmetic exactly; `qty`/`banked` are `Nat`, matching
-`effective_quantity` and `bank_items` counts, which are never negative;
+`GatherAction.quantity` and `bank_items` counts, which are never negative
+(this said `effective_quantity` until 2026-08-13, which is a DIFFERENT number:
+`cost` scales every term by `self.quantity`, the batch the planner chose, and
+`gathering.py:44-51` spends a paragraph on why it must not be the
+room-bounded `effective_quantity` — pricing one term against the projected
+inventory and another against the requested batch would make the two halves of
+one edge disagree about its size);
 `mismatch` is the `Bool` the `pick_loadout_cached` comparison decides. -/
 def gatherCost (base dist bankPenalty loadPenalty : Rat) (qty banked : Nat)
     (mismatch : Bool) : Rat :=
