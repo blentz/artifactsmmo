@@ -50,11 +50,15 @@ lever on this residual is an acquisition-aware admissible heuristic, which
 carries a proof obligation against `formal/Formal/PlannerAdmissibility.lean`.
 
 What the profile DID indict, identically in both configurations: `LevelSkill.
-is_applicable` -> `tiers/skill_grind_target.build_grind_candidates`, 72% of the
-search (47.0s of 67.3s cold; 219.3s of 310.4s learned), because it priced every
-in-skill craftable when the selection core can only ever pick the in-level ones
-(69 vs 10 for R2D2 at weaponcrafting 9). Fixed 2026-08-13: 21.47s -> 9.68s cold,
-106.28s -> 49.53s learned, identical node counts and plans.
+is_applicable` -> `tiers/skill_grind_target.build_selectable_grind_candidates`.
+Cold, `is_applicable` is 48.2s of a 67.3s search (72%), of which the producer is
+47.0s (70%); learned, the producer alone is 219.3s of 310.4s (71%). It priced
+every in-skill craftable when the selection core can only ever pick the in-level
+ones (69 vs 10 for R2D2 at weaponcrafting 9). Fixed 2026-08-13: 21.47s -> ~10.2s
+cold (four runs of the fixed code: 9.68 / 10.20 / 10.23 / 10.28 — quote the
+spread, not the fast one), 106.28s -> 49.53s learned, identical node counts and
+plans both ways. An independent reviewer on ~8% slower hardware measured
+22.22s -> 10.45s, so the ratio is ~2.1-2.2x and reproduces off this machine.
 
 PER-NODE COST IS SUPERLINEAR IN HOLDINGS, and that — not SQLite — is why a live
 search is several times dearer per node than any offline harness with an empty

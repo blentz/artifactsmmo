@@ -70,7 +70,7 @@ from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scena
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
-    build_grind_candidates,
+    build_selectable_grind_candidates,
     is_obtainable,
     skill_grind_target,
 )
@@ -170,7 +170,7 @@ def test_selected_rung_is_the_cheapest_feasible_one(game_data: GameData,
     ordering theorems state, checked against the real catalog rather than
     hand-built candidates."""
     lvl = state.skills[SKILL]
-    feasible = [c for c in build_grind_candidates(SKILL, state, game_data)
+    feasible = [c for c in build_selectable_grind_candidates(SKILL, state, game_data)
                 if c.craft_skill == SKILL and c.craft_level <= lvl
                 and c.obtainable and c.xp_positive]
     assert feasible, "scenario must offer at least one feasible rung"
@@ -186,7 +186,7 @@ def test_hoisted_cost_counts_the_whole_chain(game_data: GameData,
     ore behind the bars — the term the first proxy omitted — and the gloves' cost
     has to include the chicken kills behind the feathers, which is the term the
     second proxy omitted."""
-    cands = {c.code: c for c in build_grind_candidates(SKILL, state, game_data)}
+    cands = {c.code: c for c in build_selectable_grind_candidates(SKILL, state, game_data)}
     sword = cands["sticky_sword"]
     # 5 bars x 10 ore each, less the single ore held, plus the crafts and hops.
     assert sword.acquire_steps >= 45, sword.acquire_steps

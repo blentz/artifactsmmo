@@ -134,12 +134,13 @@ def test_craft_level_is_only_a_tie_break_under_cost():
 
 
 def test_out_of_level_candidates_cannot_change_the_selection():
-    """THE THEOREM `build_grind_candidates`' in-level hoist rests on.
+    """THE THEOREM `build_selectable_grind_candidates`' in-level hoist rests on.
 
     That function stopped pricing out-of-level rungs (69 in-skill craftables
     down to 10 for live R2D2 at weaponcrafting 9, and each skipped rung is a
-    full route walk plus a full recursive obtainability walk — 47.0s of a 67.3s
-    from-scratch `greater_wooden_staff` search, profile 2026-08-13). That hoist
+    full route walk plus a full recursive obtainability walk — the producer's own
+    47.0s of a 67.3s from-scratch `greater_wooden_staff` search, under a
+    `LevelSkill.is_applicable` that was 48.2s of it; profile 2026-08-13). That hoist
     is only sound because THIS core discards the same rows itself, before
     `_beats` ever ranks them. So: appending an out-of-level candidate that would
     win every ranking key outright — wanted, zero-cost, highest level — must

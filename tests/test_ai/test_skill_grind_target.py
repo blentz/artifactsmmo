@@ -4,7 +4,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     CACHE_MAX_ENTRIES,
     _cache_for,
-    build_grind_candidates,
+    build_selectable_grind_candidates,
     skill_grind_target,
 )
 from tests.test_ai.fixtures import make_state
@@ -69,7 +69,7 @@ def test_the_BAG_is_free_but_the_BANK_is_a_priced_withdraw():
     gd = _gd()
     def steps(state):
         return next(c.acquire_steps
-                    for c in build_grind_candidates("weaponcrafting", state, gd)
+                    for c in build_selectable_grind_candidates("weaponcrafting", state, gd)
                     if c.code == "copper_dagger")
     empty = steps(make_state(skills={"weaponcrafting": 3}))
     banked = steps(make_state(skills={"weaponcrafting": 3},
@@ -195,8 +195,8 @@ def test_the_memo_returns_a_hit_for_an_identical_state():
     lookup — measured on a live-sized holding: 95ms cold, 31us warm."""
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    first = build_grind_candidates("weaponcrafting", state, gd)
-    assert build_grind_candidates("weaponcrafting", state, gd) is first
+    first = build_selectable_grind_candidates("weaponcrafting", state, gd)
+    assert build_selectable_grind_candidates("weaponcrafting", state, gd) is first
 
 
 def test_the_memo_key_notices_a_changed_inventory():
@@ -205,18 +205,18 @@ def test_the_memo_key_notices_a_changed_inventory():
     `acquire_steps`, so a changed inventory MUST miss."""
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    first = build_grind_candidates("weaponcrafting", state, gd)
+    first = build_selectable_grind_candidates("weaponcrafting", state, gd)
     changed = make_state(skills={"weaponcrafting": 3}, inventory={"copper_bar": 6})
-    assert build_grind_candidates("weaponcrafting", changed, gd) is not first
+    assert build_selectable_grind_candidates("weaponcrafting", changed, gd) is not first
 
 
 def test_the_memo_key_notices_a_changed_skill_level():
     """Skill level drives the zero-xp band, so it belongs in the key — a stale
     list here would grind a rung that pays nothing."""
     gd = _gd()
-    first = build_grind_candidates(
+    first = build_selectable_grind_candidates(
         "weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd)
-    later = build_grind_candidates(
+    later = build_selectable_grind_candidates(
         "weaponcrafting", make_state(skills={"weaponcrafting": 9}), gd)
     assert later is not first
 
@@ -226,8 +226,8 @@ def test_each_game_data_gets_its_own_cache():
     `equipment/loadout_cache` does, so two fixtures never serve each other's
     answers."""
     state = make_state(skills={"weaponcrafting": 3})
-    assert (build_grind_candidates("weaponcrafting", state, _gd())
-            is not build_grind_candidates("weaponcrafting", state, _gd()))
+    assert (build_selectable_grind_candidates("weaponcrafting", state, _gd())
+            is not build_selectable_grind_candidates("weaponcrafting", state, _gd()))
 
 
 def test_the_cache_is_bounded():
@@ -237,7 +237,7 @@ def test_the_cache_is_bounded():
     cache = _cache_for(gd)
     for i in range(CACHE_MAX_ENTRIES):
         cache[("filler", i, (), (), (), ())] = []
-    build_grind_candidates("weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd)
+    build_selectable_grind_candidates("weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd)
     assert len(cache) <= CACHE_MAX_ENTRIES
 
 
@@ -252,16 +252,17 @@ def test_out_of_level_rungs_are_never_priced():
     recursive obtainability walk) is pure waste. Live R2D2 at weaponcrafting 9:
     69 in-skill craftables, 10 in level, so 59 of 69 were priced only to be
     thrown away, and this function was 47.0s of a 67.3s from-scratch
-    `greater_wooden_staff` search (profile 2026-08-13). Drop the
+    `greater_wooden_staff` search — 70% of it, inside a `LevelSkill.is_applicable`
+    that was 48.2s, i.e. 72% (profile 2026-08-13). Drop the
     `crafting_level > current_level` guard and the first set below grows back.
     """
     gd = _gd()
-    at_three = {c.code for c in build_grind_candidates(
+    at_three = {c.code for c in build_selectable_grind_candidates(
         "weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd)}
     assert at_three == {"copper_dagger", "wooden_staff"}, at_three
     # Reaching the gate brings the rung back: this is a level test, not a
     # permanent exclusion.
-    at_ten = {c.code for c in build_grind_candidates(
+    at_ten = {c.code for c in build_selectable_grind_candidates(
         "weaponcrafting", make_state(skills={"weaponcrafting": 10}), gd)}
     assert at_ten == {"copper_dagger", "wooden_staff", "iron_dagger"}, at_ten
 

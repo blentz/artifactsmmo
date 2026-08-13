@@ -71,7 +71,21 @@ def is_obtainable(code: str, state: WorldState, game_data: GameData,
     through one walk — this is the same hoist `goals/currency_demand` already
     does for the same reason. Profile 2026-08-13 (from-scratch
     greater_wooden_staff, 23214 nodes): 904800 rebuilds inside this walk, 10.8s
-    of a 67.3s search."""
+    of a 67.3s search.
+
+    NO PRODUCTION CALLER, deliberately, since 2026-08-13. This is the NAME the
+    codebase uses for the selection-side obtainability walk — `drop_obtainability`'s
+    module docstring, `goals/gathering`, `skill_grind_selection` and
+    `test_drop_obtainability` all cite it as `tiers/skill_grind_target.
+    is_obtainable` — so it keeps the name and the contract. But it hoists the
+    union per CALL, and the one production consumer
+    (`build_selectable_grind_candidates`) sweeps ~10 candidates per cache miss,
+    so calling this in that loop rebuilds the set ~10x for one sweep: measured
+    13.03s against 10.2s on the search above (both same session). Production
+    therefore hoists once
+    and calls `_obtainable` directly. The two are the same walk — this function
+    is `_obtainable` with the hoist supplied — so a test asserting on this one is
+    asserting on what production runs. Do NOT "fix" the loop to call this."""
     return _obtainable(code, state, game_data, visited,
                        game_data.gatherable_drop_items())
 
@@ -157,12 +171,19 @@ def _cache_key(skill: str, state: WorldState) -> "_CacheKey":
     )
 
 
-def build_grind_candidates(skill: str, state: WorldState,
-                           game_data: GameData) -> list[GrindCandidate]:
-    """Hoist every in-skill, IN-LEVEL craftable into a `GrindCandidate`
-    (whole-chain `acquire_steps` against inventory+bank, recursive
-    obtainability). No reservation filter — the caller (`skill_grind_target`)
+def build_selectable_grind_candidates(skill: str, state: WorldState,
+                                      game_data: GameData) -> list[GrindCandidate]:
+    """`skill_grind_target`'s private producer: every in-skill, IN-LEVEL
+    craftable as a `GrindCandidate` (whole-chain `acquire_steps` against
+    inventory+bank, recursive obtainability). No reservation filter — the caller
     applies its own single-set filter.
+
+    NOT A GENERAL ENUMERATION OF THE SKILL'S RECIPES, which is why SELECTABLE is
+    in the name. It was `build_grind_candidates` and returned every in-skill
+    craftable until 2026-08-13; a caller wanting the pre-gate list — "what does
+    this skill unlock next?" — must NOT use this and should walk
+    `game_data.all_item_stats` itself. The rename is deliberate so that such a
+    caller gets an ImportError rather than a quietly short answer.
 
     IN-LEVEL (`craft_level <= state.skills[skill]`) is a hoisted copy of the
     FIRST clause of `skill_grind_selection_pure`'s own filter, evaluated here
@@ -175,7 +196,8 @@ def build_grind_candidates(skill: str, state: WorldState,
     obtainability walk to be discarded one line later. Live shape (R2D2,
     weaponcrafting 9, real catalog): 69 in-skill craftables, 10 in-level, so 59
     of 69 were priced for nothing. Profile 2026-08-13 (from-scratch
-    greater_wooden_staff): this function was 47.0s of a 67.3s search.
+    greater_wooden_staff): `LevelSkill.is_applicable` was 48.2s of a 67.3s
+    search (72%), of which this function was 47.0s.
 
     Deliberately NOT hoisted: `xp_positive` and `obtainable`, the selector's
     other two filter clauses. `obtainable` is one of the expensive walks, so
@@ -209,8 +231,11 @@ def build_grind_candidates(skill: str, state: WorldState,
         cache.move_to_end(key)
         return hit
     candidates: list[GrindCandidate] = []
-    # One rebuild for the whole sweep instead of one per candidate's walk — see
-    # `is_obtainable`.
+    # One rebuild for the whole sweep instead of one per candidate's walk. Not a
+    # micro-optimisation: routing this loop through the public `is_obtainable`
+    # (which hoists per CALL) instead measures 13.03s against 10.2s on the
+    # from-scratch `greater_wooden_staff` search — the sweep is ~10 candidates
+    # deep, so per-call hoisting still rebuilds the set ~10x per miss.
     gatherable = game_data.gatherable_drop_items()
     # The SAME `current_level` `skill_grind_target` hands the selection core.
     current_level = state.skills.get(skill, 0)
@@ -250,7 +275,7 @@ def build_grind_candidates(skill: str, state: WorldState,
 def skill_grind_target(skill: str, state: WorldState, game_data: GameData,
                        reserved: frozenset[str] = frozenset()) -> str | None:
     candidates = [
-        c for c in build_grind_candidates(skill, state, game_data)
+        c for c in build_selectable_grind_candidates(skill, state, game_data)
         if not any(mat in reserved for mat in (game_data.crafting_recipe(c.code) or {}))
     ]
     chosen = skill_grind_selection_pure(skill, state.skills.get(skill, 0), candidates)
