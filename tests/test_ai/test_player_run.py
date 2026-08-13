@@ -882,3 +882,106 @@ def test_items_task_builds_batched_craft_and_trade():
     crafts = [a for a in actions if isinstance(a, CraftAction) and a.code == "copper_bar"]
     assert any(t.quantity == k for t in trades), "expected a TaskTrade with quantity K"
     assert any(c.quantity == k for c in crafts), "expected a Craft with quantity K"
+
+
+def test_run_holds_plan_cursor_through_a_batched_gather():
+    """End-to-end regression for the Task 9 hold: player.run()'s advance
+    block (player.py's `if outcome == "ok" and self._plan_cache is not
+    None: ...`) must NOT advance `self._plan_cache` past a batched
+    GatherAction (quantity > 1) until the drop item's holding reaches the
+    plan-time `step_target`, even though the underlying action executed
+    successfully every cycle.
+
+    Drives two full run() cycles against the SAME single-step plan
+    [Gather(spruce_tree x3)]: cycle 1's mocked `_execute` reports holding=1
+    (< step_target=3) with outcome "ok" -- the cursor must stay at 0. Cycle
+    2 reports holding=3 (== step_target) -- the cursor must advance to 1
+    (plan exhausted, step_target resets to None). Snapshots of
+    `player._plan_cache` are taken via the `_wait_for_cooldown` seam, which
+    runs at the TOP of each loop iteration (before `_plan_or_reuse`), so
+    each snapshot reflects the PREVIOUS cycle's outcome.
+
+    This is deliberately an integration test through the REAL run() advance
+    block, not just `PlanCache.batch_satisfied` in isolation: a missed
+    wiring site (advance not actually gated on `batch_satisfied`, or
+    `arm_step` not called at the plan-install site) would leave the
+    PlanCache-level unit tests green while this one fails. Verified both
+    directions manually (see task-9-report.md): reverting the `player.py`
+    gate to unconditional `advance()` makes this test FAIL with
+    `snapshots[1] == (1, None)` instead of the asserted `(0, 3)`.
+    """
+    player = GamePlayer(character="hero")
+    client = MagicMock()
+
+    gather = GatherAction(resource_code="spruce_tree", quantity=3,
+                          locations=frozenset({(0, 0)}))
+    goal = MagicMock()
+    goal.is_satisfied.return_value = False
+    goal.__repr__ = lambda self: "StubGoal()"  # type: ignore[assignment]
+
+    player._strategy = MagicMock()
+    player._strategy.decide.return_value = _StubDecision()
+    player._arbiter = MagicMock()
+    player._arbiter.select.return_value = (goal, [gather], [])
+
+    initial_state = make_state(x=0, y=0, inventory={}, inventory_max=20,
+                               inventory_slots_max=20)
+    # spruce_tree has no configured skill requirement in the empty
+    # game data `_patch_game_data_load` yields, so GatherAction.is_applicable
+    # shortcuts on the quantity/slot floor alone -- both states below satisfy
+    # it (inventory_max=20 leaves ample headroom), so cache-hit reuse on
+    # cycle 2 never falls through to a cold replan.
+    state_partial = replace(initial_state, inventory={"spruce_tree": 1})
+    state_full = replace(initial_state, inventory={"spruce_tree": 3})
+
+    execute_calls = [0]
+
+    def fake_execute(action, client):
+        execute_calls[0] += 1
+        return (state_partial, "ok") if execute_calls[0] == 1 else (state_full, "ok")
+
+    # (cursor, step_target) snapshots of player._plan_cache, taken at the
+    # TOP of each loop iteration -- i.e. snapshots[n] reflects the state
+    # left behind by cycle n (0 = before any cycle has run).
+    snapshots: list[tuple[int | None, int | None]] = []
+    call_count = [0]
+
+    def fake_wait():
+        call_count[0] += 1
+        cache = player._plan_cache
+        snapshots.append((cache.cursor if cache else None,
+                          cache.step_target if cache else None))
+        if call_count[0] > 2:
+            raise KeyboardInterrupt
+
+    with patch.object(ClientManager_mock := MagicMock(), "client", client):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with _patch_game_data_load():
+                with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                    with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                        with patch.object(player, "_maybe_periodic_refresh"), \
+                                patch.object(player, "_reconcile_open_orders"):
+                            with patch.object(player, "_build_actions", return_value=[gather]):
+                                with patch.object(player, "_winnable_farm_target", return_value=None):
+                                    with patch.object(player, "_execute", side_effect=fake_execute):
+                                        with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                            with pytest.raises(KeyboardInterrupt):
+                                                player.run()
+
+    assert execute_calls[0] == 2, "both cycles must have actually executed the gather"
+    # snapshot 0: taken before cycle 1 -- no cache installed yet (cold start).
+    assert snapshots[0] == (None, None)
+    # snapshot 1: taken AFTER cycle 1's successful but insufficient
+    # (holding=1 < target=3) gather. The cursor MUST still be at 0 with the
+    # target still armed at 3 -- this is the hold under test.
+    assert snapshots[1] == (0, 3)
+    # snapshot 2: taken AFTER cycle 2's holding=3 satisfies the target. The
+    # cursor MUST have advanced past the single-step plan (now exhausted),
+    # and step_target resets to None (no batched step armed).
+    assert snapshots[2] == (1, None)
+
+    # cycles_since_replan must increment on BOTH cycles, INCLUDING the held
+    # one -- otherwise should_replan's staleness bound could never terminate
+    # a batch that stalls (see should_replan.py's replan_interval check).
+    assert player._plan_cache is not None
+    assert player._plan_cache.cycles_since_replan == 2
