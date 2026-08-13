@@ -138,10 +138,14 @@ def test_a_50000_gold_backpack_ties_any_quantity_of_copper_ore(game_data) -> Non
     length dimension. That is not a new defect; it is the SAME pricing gap this
     file characterises, surfacing more starkly: the backpack is not merely
     cheaper than some raw gathering, it is tied with raw gathering at every
-    quantity."""
-    hundred_ore = min_plan_length("copper_ore", 100, game_data.crafting_recipes, {},
-                                  game_data.max_gather_yield, equip=True)
-    assert _cost(game_data, "backpack") == hundred_ore
+    quantity. Broadened (Task 3 review) to actually check "ANY quantity"
+    rather than asserting it in prose while only checking one: 1, 2, and
+    100 all tie the backpack, none beats it."""
+    backpack_cost = _cost(game_data, "backpack")
+    for qty in (1, 2, 100):
+        ore_cost = min_plan_length("copper_ore", qty, game_data.crafting_recipes, {},
+                                   game_data.max_gather_yield, equip=True)
+        assert backpack_cost == ore_cost, qty
 
 
 def test_a_wisdom_ITEM_NOW_REACHES_THE_PROJECTION(game_data) -> None:

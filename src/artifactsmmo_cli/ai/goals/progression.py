@@ -101,7 +101,34 @@ class UpgradeEquipmentGoal(Goal):
         scope here; see `tests/test_ai/test_strategy_driver.py`'s
         `steel_boots` cases (which now assert admission-plus-bounded-timeout,
         not rejection) and Task 3's report for the reproducer and the exact
-        `craft_batch_size_pure` mechanism."""
+        `craft_batch_size_pure` mechanism.
+
+        SECOND RESIDUAL, found by Task 3's own code review (2026-08-13): the
+        depth-reject branch this docstring describes is LIVE-DEAD on real
+        game data, not merely loosened. Computed `min_plan_length` over all
+        321 recipes in `formal/sim/game_data_snapshot.json`: MAXIMUM 15
+        (the `greater_*_amulet` family), threshold 32, COUNT EXCEEDING = 0.
+        No real recipe ever fails this gate, so `is_plannable` can never
+        return False via the depth branch in production, and its two
+        downstream consumers of that False —
+        `strategy_driver._gather_goal_for_unreachable_equippable` and
+        `objective_step_goal`'s branch-3 fallback — are unreachable code on
+        real data: the cross-cycle material-accumulation valve those provide
+        (see `_equippable_goal`'s docstring) does not fire for ANY real
+        equippable, not just deep 3-tier ones. `steel_boots` (three tiers,
+        the `min_crafts` residual above) now neither routes to incremental
+        gathering NOR plans — it used to route, and now just times out.
+        `tests/test_ai/test_strategy_driver.py`'s 3 tests that exercise the
+        depth-reject/gather-routing branches (retargeted after their old
+        2-tier witnesses, `copper_boots`/`feather_coat`, stopped exceeding
+        `max_depth`) use a synthetic 35-distinct-raw-material fixture that no
+        real recipe approaches — the largest real recipe
+        (`vital_armor`/`skullforged_pants`/`hell_armor`/`eternal_red_ring`/
+        `dust_amulet`, all tied) has 7 direct inputs. This is a design
+        decision for a follow-up task with these numbers in hand (raise the
+        threshold's bite by tightening `min_crafts`, per the first residual;
+        or accept the valve is currently vestigial and remove/repurpose the
+        dead branches) — not something to change here."""
         return 32
 
     def value(self, state: WorldState, game_data: GameData,
@@ -187,15 +214,38 @@ class UpgradeEquipmentGoal(Goal):
         """Skip when the target needs more gather actions than max_depth.
 
         is_satisfied requires the target item EQUIPPED, which means crafting it
-        first; a gather mints +1, so obtaining the target from raw materials
-        needs ≥ `min_gathers` gather steps. The planner never returns a plan
+        first; obtaining it from raw materials needs `min_plan_length` actions
+        (gather steps + crafts + equip). The planner never returns a plan
         longer than `max_depth` (formal/Formal/PlannerDepthBound.lean:
-        plan_length_le_max_depth), so when `min_gathers > max_depth` no plan can
-        exist — running the 90s A* is pure waste. copper_boots from scratch =
-        80 gathers ≫ max_depth 32: the Robby first-cycle stall. When the
-        target (or its materials) is already in hand/bank the count drops and the
-        short craft+equip plan IS reachable, so the goal stays plannable and
-        GatherMaterials does the accumulating across cycles.
+        plan_length_le_max_depth), so when `min_plan_length > max_depth` no plan
+        can exist — running the 90s A* is pure waste.
+
+        STALE EXAMPLE, LEFT AS A HISTORICAL MARKER (corrected 2026-08-13,
+        planner-gather-batching Task 3 review): this docstring used to say
+        "copper_boots from scratch = 80 gathers >> max_depth 32: the Robby
+        first-cycle stall" as a live example of this branch firing. As of
+        Task 3's mint-term swap (`min_gather_steps`, not raw units),
+        `copper_boots` no longer exceeds `max_depth` — see
+        `test_upgrade_reachability_gate.py
+        ::test_is_plannable_admits_from_scratch_copper_boots`, which asserts
+        the OPPOSITE of the old example and drives the real planner to prove
+        it. Worse: computed over all 321 real recipes in
+        `formal/sim/game_data_snapshot.json`, the MAXIMUM `min_plan_length`
+        is 15 (`greater_topaz_amulet`/`greater_sapphire_amulet`/
+        `greater_ruby_amulet`/`greater_emerald_amulet`, all tied), and ZERO
+        exceed `max_depth` 32. This branch (and its downstream fallback,
+        `strategy_driver._gather_goal_for_unreachable_equippable`) is
+        LIVE-DEAD on today's data — see the residual entry in
+        `max_depth`'s docstring above for the full account, the reachable
+        3-tier `steel_boots` counter-shape, and why the tests exercising this
+        branch now need a synthetic (35-material) fixture that no real
+        recipe approaches.
+
+        When the target (or its materials) is already in hand/bank the count
+        drops and the short craft+equip plan IS reachable, so the goal stays
+        plannable and GatherMaterials does the accumulating across cycles —
+        this half of the mechanism remains real, just currently unreachable
+        via the depth branch on real data.
 
         Under-skill craft targets are NOT pruned here (LevelSkill epic P3a): the
         former crafting-skill fast-fail (which returned False while the character

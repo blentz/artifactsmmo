@@ -319,14 +319,51 @@ def test_gear_review_deep_chain_routes_to_flat_leaf_not_explosive_recipe():
     GatherMaterials(steel_boots, {steel_bar: 6}) (whose plan gathers 480 units
     through the multi-level recipe — 655k nodes / 90s timeout offline). It routes
     to the FLAT deepest actionable step (iron_ore), a linear, budget-feasible
-    gather. Pins the macro/micro bound so a regression to the deep goal fails."""
+    gather. Pins the macro/micro bound so a regression to the deep goal fails.
+
+    GEAR_REVIEW's guard does not consult `is_plannable` (it branches on
+    `state.inventory`/bank directly — see `map_guard`), so it is untouched by
+    Task 3 (planner-gather-batching) and is now the ONE place left that still
+    produces a flat-leaf routing for this chain (see the `steel_boots` cases
+    in this file and the "SECOND RESIDUAL" note in
+    `UpgradeEquipmentGoal.max_depth`'s docstring: the `is_plannable`-driven
+    routing this test used to share a bound with, in the now-deleted
+    `test_deep_chain_flat_leaf_plans_within_budget`, is live-dead on real
+    data and no longer produces a flat-leaf goal at all). That deleted test's
+    node-count bound (`< 5000`, vs. the deep recipe's offline 655k) is
+    restored HERE instead, on the one path that still exercises it, so the
+    performance claim is not lost."""
+    from artifactsmmo_cli.ai.actions.crafting import CraftAction
+    from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
+    from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
     gd = _deep_chain_gd()
+    gd._workshop_locations = {"gearcrafting": (0, 0)}
     state = make_state(level=2, inventory={}, bank_items={})
     goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
     assert isinstance(goal, GatherMaterialsGoal)
     # The target is the raw leaf, NOT the equippable root nor its direct recipe.
     assert goal._needed == {"iron_ore": 10}
     assert goal._target_item == "iron_ore"
+
+    actions = [
+        DepositAllAction(bank_location=(0, 0), accessible=True, game_data=gd),
+        GatherAction(resource_code="iron_rocks", locations=frozenset({(2, 0)})),
+    ]
+    for code in gd._crafting_recipes:
+        st = gd.item_stats(code)
+        ws = gd.workshop_location(st.crafting_skill) if st.crafting_skill else None
+        actions.append(CraftAction(code=code, quantity=1, workshop_location=ws))
+        actions.append(WithdrawItemAction(code=code, quantity=1, bank_location=(0, 0),
+                                          accessible=True))
+    actions.append(WithdrawItemAction(code="iron_ore", quantity=1, bank_location=(0, 0),
+                                       accessible=True))
+    planner = GOAPPlanner()
+    plan = planner.plan(state, goal, actions, gd, None, budget_seconds=30.0)
+    assert plan  # the flat-leaf goal plans, unlike the root (see the sibling tests)
+    assert not planner.last_stats.timed_out
+    # Linear, tiny node count — the deep recipe goal needed 655k nodes
+    # offline; this stays under a generous 5k ceiling.
+    assert planner.last_stats.nodes_explored < 5000, planner.last_stats.nodes_explored
 
 
 def test_equippable_goal_deep_chain_now_admits_the_root_bounded_by_timeout():
@@ -2061,42 +2098,18 @@ def test_non_ring_keeps_one_slot_per_code():
 
 
 # ---------------------------------------------------------------------------
-# objective_step_goal depth-routing: feather_coat (deep chain)
+# objective_step_goal depth-routing: wide-shallow equippable (deep chain)
 # ---------------------------------------------------------------------------
-
-def _gd_feather_coat() -> GameData:
-    """feather_coat body armour (gearcrafting-5): needs ash_plank×2 + feather×5.
-    feather is a monster drop (no crafting recipe). ash_plank is woodcrafted
-    from ash_wood×20.
-
-    Was the depth-unreachable witness for this section: with ash_wood×10 in
-    inventory, the pre-Task-3 raw-UNIT mint term counted 30 more ash_wood + 5
-    feathers = 35 raw gathers, exceeding max_depth 32. Task 3
-    (planner-gather-batching) switched the mint term to `min_gather_steps`,
-    which counts distinct raw leaves still unmet, not units — feather_coat has
-    only TWO (`ash_wood`, `feather`), so the bound is now `min_gather_steps=2 +
-    min_crafts=2 + equip=1 = 5 <= 32`, genuinely plannable (verified with the
-    real planner in `test_upgrade_reachability_gate.py
-    ::test_is_plannable_admits_from_scratch_feather_coat`). Kept here, unused
-    by the test below, as a record of feather_coat's real recipe shape; the
-    wide-shallow fixture below is the new depth-unreachable witness."""
-    gd = GameData()
-    gd._item_stats = {
-        "feather_coat": ItemStats(code="feather_coat", level=5, type_="body_armor",
-                                  crafting_skill="gearcrafting", crafting_level=5),
-        "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
-                               crafting_skill="woodcutting", crafting_level=1),
-        "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
-        "feather": ItemStats(code="feather", level=1, type_="resource"),
-    }
-    gd._crafting_recipes = {
-        "feather_coat": {"ash_plank": 2, "feather": 5},
-        "ash_plank": {"ash_wood": 20},
-    }
-    gd._resource_drops = {"ash_tree": "ash_wood"}
-    gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
-    return gd
-
+# feather_coat (ash_plank x2 + feather x5, ash_plank <- ash_wood x20) used to
+# be this section's depth-unreachable witness. Task 3 (planner-gather-
+# batching) switched the mint term to `min_gather_steps` (distinct raw leaves,
+# not units) — feather_coat has only TWO leaves (`ash_wood`, `feather`), so
+# its bound dropped to `min_gather_steps=2 + min_crafts=2 + equip=1 = 5 <= 32`
+# and it became genuinely plannable (verified with the real planner in
+# `test_upgrade_reachability_gate.py
+# ::test_is_plannable_admits_from_scratch_feather_coat`). Its `_gd_feather_coat`
+# fixture is deleted rather than kept unused (Task 3 review) — the recipe
+# shape it documented is preserved in that test's docstring instead.
 
 def _gd_many_mats_coat() -> GameData:
     """WIDE-SHALLOW witness (Ruling 13 of this branch's `progress.md`): 35

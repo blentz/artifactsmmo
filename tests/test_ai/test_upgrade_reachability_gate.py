@@ -242,8 +242,14 @@ def test_is_plannable_admits_from_scratch_feather_coat():
 
 
 def test_is_plannable_admits_short_chain():
-    """Same gear with planks already in hand: plan = ceil_gathers(5,1) + 1 craft + 1 equip
-    = 7 <= 15 -> True."""
+    """Same gear with planks already in hand: `ash_plank` demand (2) is fully
+    covered, so only `feather` remains a leaf: `min_gather_steps=1 +
+    min_crafts=1 (feather_coat itself; ash_plank needs no craft, it's fully
+    owned) + equip=1 = 3 <= 32` -> True. (Corrected 2026-08-13, Task 3
+    review: this used to say `ceil_gathers(5,1) + 1 craft + 1 equip = 7 <=
+    15` — both the arithmetic and the bound were stale leftovers from the
+    pre-Task-3 raw-unit formula and the wrong `max_depth`; verified directly
+    against `min_plan_length` above, not recomputed by hand.)"""
     state = make_state(
         skills={"gearcrafting": 5},
         inventory={"ash_plank": 2},
