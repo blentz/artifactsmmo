@@ -359,11 +359,22 @@ unbatched theorem is kept, restated over gather code 1."
 
 **Files:**
 - Modify: `src/artifactsmmo_cli/ai/min_plan_length.py`
+- Modify: `scripts/extract_lean.py` — this module IS extracted (spec at line 407). Its `imports=("ceil_gathers", "min_gathers", "min_crafts")` must become `("min_gather_steps", "min_crafts")`, and `Extracted/MinPlanLength.lean` regenerated, or `--check` fails.
 - Test: `tests/test_ai/test_min_plan_length.py`
 
 **Interfaces:**
 - Consumes: `min_gather_steps` (Task 1).
 - Produces: `min_plan_length(item, qty, recipes, owned, max_gather_yield, equip) -> int` — signature unchanged; `max_gather_yield` is now unused by the mint term and is retained only for call-site compatibility.
+
+**Direction of the change — state it accurately in the commit message.** Task 2
+proved `minGatherSteps ≤ minGathers`, so against the raw unit count the new
+bound is never larger. But the term being REPLACED is
+`ceil_gathers(min_gathers, max_gather_yield)`, not `min_gathers`. The two
+coincide only at `max_gather_yield == 1`, which is the live value today (checked
+2026-08-13: all 26 resources report `max_quantity` 1). Above 1 the leaf count
+can EXCEED the ceiled unit count — 3 distinct materials vs `ceil(3/5) = 1` — and
+admission would TIGHTEN for wide-shallow chains. Sound either way, but do not
+write "strictly more permissive" without the `max_gather_yield == 1` qualifier.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -412,9 +423,12 @@ Replace the body of `src/artifactsmmo_cli/ai/min_plan_length.py`:
 ```python
 """Lower bound on PLAN length to obtain (and optionally equip) `item`:
 `min_gather_steps + min_crafts + (1 if equip)`. One batched gather serves one
-raw material's whole demand, one craft per produced node, one equip. Sound
-lower bound on plan length over the batched gather/craft/equip action model
-(proved: Formal.PlanModel.min_gather_steps_le_plan).
+raw material's whole demand, one craft per produced node, one equip.
+
+DO NOT re-add a "(proved: Formal.PlanModel.min_plan_length_le_plan)" citation
+here. Task 2 REMOVED it: that theorem has never existed. Preserve whatever
+citation Task 2 left in place — it names a theorem that does exist and states
+its undischarged hypothesis honestly.
 
 The mint term was `ceil_gathers(min_gathers(...))` — raw UNITS — which bounded
 plan length only while one gather minted one unit. `GatherAction.quantity`
