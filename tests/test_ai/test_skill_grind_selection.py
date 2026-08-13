@@ -131,3 +131,25 @@ def test_craft_level_is_only_a_tie_break_under_cost():
     assert skill_grind_selection_pure("weaponcrafting", 15, same) == "cheap_low"
     tied = [_c("low", level=1, steps=7), _c("high", level=5, steps=7)]
     assert skill_grind_selection_pure("weaponcrafting", 15, tied) == "high"
+
+
+def test_out_of_level_candidates_cannot_change_the_selection():
+    """THE THEOREM `build_grind_candidates`' in-level hoist rests on.
+
+    That function stopped pricing out-of-level rungs (69 in-skill craftables
+    down to 10 for live R2D2 at weaponcrafting 9, and each skipped rung is a
+    full route walk plus a full recursive obtainability walk — 47.0s of a 67.3s
+    from-scratch `greater_wooden_staff` search, profile 2026-08-13). That hoist
+    is only sound because THIS core discards the same rows itself, before
+    `_beats` ever ranks them. So: appending an out-of-level candidate that would
+    win every ranking key outright — wanted, zero-cost, highest level — must
+    leave the answer untouched. If this core ever ranked such a row, the hoist
+    upstream would silently change which rung the grind picks.
+    """
+    in_level = [_c("copper_dagger", level=1, steps=7)]
+    would_win = _c("iron_dagger", level=10, steps=0, wanted=True)
+    assert skill_grind_selection_pure("weaponcrafting", 3, in_level) == "copper_dagger"
+    assert skill_grind_selection_pure(
+        "weaponcrafting", 3, [*in_level, would_win]) == "copper_dagger"
+    # And with NOTHING in level, an out-of-level row must not rescue the answer.
+    assert skill_grind_selection_pure("weaponcrafting", 3, [would_win]) == ""

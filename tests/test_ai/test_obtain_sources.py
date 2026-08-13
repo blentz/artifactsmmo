@@ -11,6 +11,9 @@ and its consumer written together are wrong together). See
 `docs/superpowers/specs/2026-07-14-one-obtain-model-design.md`.
 """
 
+import json
+from pathlib import Path
+
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -265,6 +268,38 @@ def test_source_map_covers_a_whole_closure(game_data, ctx):
     state = make_state()
     m = obtain_source_map(["ash_plank", "ash_wood"], state, game_data, ctx)
     assert set(m) == {"ash_plank", "ash_wood"}
+
+
+def test_resource_for_drop_IS_the_gatherability_test_on_the_real_catalog():
+    """`_gather_sources` asks ONE question where it used to ask two.
+
+    It gated on `item in gatherable_drop_items()` and then immediately looked up
+    `resource_for_drop(item)` — two scans of the same two tables
+    (`resource_drops_full`, then `resource_drops`), with the second's None arm
+    left permanently unreachable behind the first (it carried
+    `# pragma: no cover`). The pre-filter was deleted because the two predicates
+    are the same predicate; rebuilding a frozenset to say so cost 612013 calls
+    and 7.4s of a 67.3s from-scratch `greater_wooden_staff` search (profile
+    2026-08-13).
+
+    This pins the equivalence over the FULL real catalog — every item any recipe
+    mentions, every resource drop, every monster drop — so a future change to
+    either derivation that breaks the identity fails here rather than silently
+    dropping a GATHER source from the acquisition model.
+    """
+    bundle = (Path(__file__).parent / "scenarios" / "fixtures"
+              / "gamedata_bundle.json")
+    gd = GameData.from_cache_bundle(json.loads(bundle.read_text()))
+    gatherable = gd.gatherable_drop_items()
+    codes = set(gd.all_item_stats) | set(gatherable) | {"definitely_not_an_item"}
+    assert len(codes) > 300, len(codes)
+    disagree = [c for c in sorted(codes)
+                if (gd.resource_for_drop(c) is not None) != (c in gatherable)]
+    assert disagree == [], disagree
+    # Both directions are actually exercised, so the assertion above is not
+    # vacuous on a catalog where one side happens to be empty.
+    assert any(c in gatherable for c in codes)
+    assert any(c not in gatherable for c in codes)
 
 
 # ---------------------------------------------------------------------------

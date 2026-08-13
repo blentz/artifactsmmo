@@ -62,7 +62,23 @@ def is_obtainable(code: str, state: WorldState, game_data: GameData,
     `winnable + spawn_known` walk that never consulted the grey policy, so this
     function could call a rung buildable while emission refused the only edge
     that built it — the wool/iron_ring livelock (see the oracle's docstring).
-    Passing the grind's own `allow_grey` keeps the two answers identical."""
+    Passing the grind's own `allow_grey` keeps the two answers identical.
+
+    The FULL drop union is hoisted ONCE here and threaded down the recursion by
+    `_obtainable`: `gatherable_drop_items()` rebuilds its frozenset on every
+    call, and the walk asks the same question at every leaf. The set is a
+    function of the static drop tables alone, so it cannot change part-way
+    through one walk — this is the same hoist `goals/currency_demand` already
+    does for the same reason. Profile 2026-08-13 (from-scratch
+    greater_wooden_staff, 23214 nodes): 904800 rebuilds inside this walk, 10.8s
+    of a 67.3s search."""
+    return _obtainable(code, state, game_data, visited,
+                       game_data.gatherable_drop_items())
+
+
+def _obtainable(code: str, state: WorldState, game_data: GameData,
+                visited: frozenset[str], gatherable: frozenset[str]) -> bool:
+    """`is_obtainable`'s recursive body with the gatherable-drop union hoisted."""
     if code in visited:
         return False
     recipe = game_data.crafting_recipe(code)
@@ -75,11 +91,11 @@ def is_obtainable(code: str, state: WorldState, game_data: GameData,
         # A rung needing one of those fell through to `drop_obtainable`, which
         # asks about MONSTERS, found none, and judged the rung unobtainable --
         # filtering out a rung that is a perfectly ordinary gather.
-        if code in game_data.gatherable_drop_items():
+        if code in gatherable:
             return True
         return drop_obtainable(code, state, game_data, allow_grey=GRIND_ALLOWS_GREY)
     nxt = visited | {code}
-    return all(is_obtainable(mat, state, game_data, nxt) for mat in recipe)
+    return all(_obtainable(mat, state, game_data, nxt, gatherable) for mat in recipe)
 
 
 _CacheKey = tuple[str, int, tuple[tuple[str, str | None], ...],
@@ -131,10 +147,28 @@ def _cache_key(skill: str, state: WorldState) -> "_CacheKey":
 
 def build_grind_candidates(skill: str, state: WorldState,
                            game_data: GameData) -> list[GrindCandidate]:
-    """Hoist every in-skill craftable into a `GrindCandidate` (whole-chain
-    `acquire_steps` against inventory+bank, recursive obtainability). No
-    reservation filter — the caller (`skill_grind_target`) applies its own
-    single-set filter.
+    """Hoist every in-skill, IN-LEVEL craftable into a `GrindCandidate`
+    (whole-chain `acquire_steps` against inventory+bank, recursive
+    obtainability). No reservation filter — the caller (`skill_grind_target`)
+    applies its own single-set filter.
+
+    IN-LEVEL (`craft_level <= state.skills[skill]`) is a hoisted copy of the
+    FIRST clause of `skill_grind_selection_pure`'s own filter, evaluated here
+    from the same `current_level` the selector is handed. Dropping those rows
+    provably cannot change the selection: the core `continue`s on exactly this
+    predicate before `_beats` ever sees the candidate, so the argmax over the
+    filtered list equals the argmax over the full one. What it changes is the
+    COST of building the list, and that is why it is here — an out-of-level rung
+    still paid a full `acquisition_actions` route walk and a full recursive
+    obtainability walk to be discarded one line later. Live shape (R2D2,
+    weaponcrafting 9, real catalog): 69 in-skill craftables, 10 in-level, so 59
+    of 69 were priced for nothing. Profile 2026-08-13 (from-scratch
+    greater_wooden_staff): this function was 47.0s of a 67.3s search.
+
+    Deliberately NOT hoisted: `xp_positive` and `obtainable`, the selector's
+    other two filter clauses. `obtainable` is one of the expensive walks, so
+    filtering on it here would save nothing, and `xp_positive` is already free —
+    both stay FIELDS so a caller can still see WHY a rung is unusable.
 
     `acquire_steps` is `acquisition_cost.acquisition_actions` over every route the
     executor can currently serve. It was `min_gathers + min_crafts` until
@@ -163,8 +197,15 @@ def build_grind_candidates(skill: str, state: WorldState,
         cache.move_to_end(key)
         return hit
     candidates: list[GrindCandidate] = []
+    # One rebuild for the whole sweep instead of one per candidate's walk — see
+    # `is_obtainable`.
+    gatherable = game_data.gatherable_drop_items()
+    # The SAME `current_level` `skill_grind_target` hands the selection core.
+    current_level = state.skills.get(skill, 0)
     for code, stats in game_data.all_item_stats.items():
         if stats.crafting_skill != skill:
+            continue
+        if stats.crafting_level > current_level:
             continue
         recipe = game_data.crafting_recipe(code)
         if not recipe:
@@ -176,7 +217,7 @@ def build_grind_candidates(skill: str, state: WorldState,
             craft_skill=stats.crafting_skill,
             craft_level=stats.crafting_level,
             acquire_steps=acquire_steps,
-            obtainable=is_obtainable(code, state, game_data, frozenset()),
+            obtainable=_obtainable(code, state, game_data, frozenset(), gatherable),
             # No objective context in this standalone path: the live grind goes
             # through the LevelSkill action (its is_applicable calls
             # skill_grind_target for the rung); wanted has no bearing there.

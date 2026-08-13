@@ -248,16 +248,19 @@ def _gather_sources(item: str, game_data: GameData) -> list[Source]:
     `game_data.all_resource_locations`, which merges an event resource's
     tiles ONLY while its event is active. Gating on the same mapping (rather
     than re-deriving event-liveness) keeps this in lockstep with what the
-    executor can actually serve."""
-    if item not in game_data.gatherable_drop_items():
-        return []
+    executor can actually serve.
+
+    `resource_for_drop(item) is not None` IS the gatherability test — it scans
+    exactly the two tables `gatherable_drop_items()` unions (`resource_drops_full`
+    then `resource_drops`), so it is None precisely when `item` is absent from
+    that union. This function used to ask both, in that order; the membership
+    test was a redundant pre-filter that rebuilt a frozenset on every call and
+    left the `found is None` arm unreachable (`# pragma: no cover`). Profile
+    2026-08-13 (from-scratch greater_wooden_staff): 612013 rebuilds, 7.4s of a
+    67.3s search. `test_obtain_sources.py` pins the equivalence over the whole
+    real catalog so the two can never drift apart unnoticed."""
     found = game_data.resource_for_drop(item)
-    if found is None:  # pragma: no cover
-        # `gatherable_drop_items` and `resource_for_drop` both derive from the
-        # same `resource_drops` / `resource_drops_full` tables, so membership
-        # in the former guarantees a hit in the latter. Kept as a guard (not
-        # an assert) so a future data-source divergence degrades to "no
-        # source" rather than crashing the model.
+    if found is None:
         return []
     resource_code, _rate = found
     if not game_data.all_resource_locations.get(resource_code):

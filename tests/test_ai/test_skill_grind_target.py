@@ -239,3 +239,38 @@ def test_the_cache_is_bounded():
         cache[("filler", i, (), (), (), ())] = []
     build_grind_candidates("weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd)
     assert len(cache) <= CACHE_MAX_ENTRIES
+
+
+def test_out_of_level_rungs_are_never_priced():
+    """The in-level hoist, stated as the thing that would regress.
+
+    `iron_dagger` is weaponcrafting 10. At weaponcrafting 3 the selection core
+    discards it on `craft_level > current_level` before ranking it — the
+    theorem is `test_skill_grind_selection.
+    test_out_of_level_candidates_cannot_change_the_selection` — so building a
+    `GrindCandidate` for it (a full `acquisition_actions` route walk plus a full
+    recursive obtainability walk) is pure waste. Live R2D2 at weaponcrafting 9:
+    69 in-skill craftables, 10 in level, so 59 of 69 were priced only to be
+    thrown away, and this function was 47.0s of a 67.3s from-scratch
+    `greater_wooden_staff` search (profile 2026-08-13). Drop the
+    `crafting_level > current_level` guard and the first set below grows back.
+    """
+    gd = _gd()
+    at_three = {c.code for c in build_grind_candidates(
+        "weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd)}
+    assert at_three == {"copper_dagger", "wooden_staff"}, at_three
+    # Reaching the gate brings the rung back: this is a level test, not a
+    # permanent exclusion.
+    at_ten = {c.code for c in build_grind_candidates(
+        "weaponcrafting", make_state(skills={"weaponcrafting": 10}), gd)}
+    assert at_ten == {"copper_dagger", "wooden_staff", "iron_dagger"}, at_ten
+
+
+def test_the_in_level_hoist_leaves_the_chosen_rung_alone():
+    """The hoist changes what is BUILT, never what is PICKED. With six
+    `iron_bar` in the bag `iron_dagger` costs ONE craft — cheaper than either
+    in-level rung and higher-level on the tie-break — so a filter that leaked it
+    into the ranking would change this answer to `iron_dagger`."""
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 3}, inventory={"iron_bar": 6})
+    assert skill_grind_target("weaponcrafting", state, gd) == "wooden_staff"
