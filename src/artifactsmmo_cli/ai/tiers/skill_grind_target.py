@@ -134,7 +134,19 @@ def _cache_key(skill: str, state: WorldState) -> "_CacheKey":
 
     Same shape as `loadout_cache._CacheKey`, for the same reason: within one
     search almost every node shares these, so the memo turns a route walk into a
-    lookup."""
+    lookup.
+
+    KNOWN GAP, PRE-EXISTING AND UNFIXED (noticed while profiling, 2026-08-13).
+    `state.hp` is NOT in this key, but the `obtainable` field it guards reads it:
+    `_obtainable` -> `drop_obtainable` -> `fightable_droppers` -> `is_winnable` ->
+    `combat.predict_win`, whose docstring says in terms "Uses CURRENT hp
+    (state.hp), not projected max_hp" — a damaged character is predicted to lose
+    fights a healthy one wins. So two states differing ONLY in HP share a
+    candidate list whose `obtainable` verdicts can differ, which is exactly the
+    too-coarse-key failure `test_the_memo_key_notices_a_changed_inventory` calls
+    "worse than no memo". Adding `state.hp` is sound but would cost hit rate
+    wherever HP churns in-search, so it wants its own measurement rather than a
+    drive-by widening."""
     return (
         skill,
         state.level,

@@ -22,12 +22,50 @@ plans in 2-3 nodes, so the escalation was unreachable in practice and the cheap
 
 15s is generous for a healthy search now that gather edges carry a quantity —
 the searches that were spending 10s to reach 3873 nodes and no plan were
-enumerating a singleton-gather chain that no longer exists. Deep recipe chains
-become I/O-bound under `--learn` (each node issues LearningStore SQLite queries)
-at roughly 7.5s, so this leaves headroom over the slowest search anyone has
-measured planning successfully. A goal that still cannot be planned costs 15s
-once per DoomedMemo re-probe window instead of every cycle, because any no-plan
-— TIMEOUT INCLUDED — now marks the goal doomed.
+enumerating a singleton-gather chain that no longer exists. A goal that still
+cannot be planned costs 15s once per DoomedMemo re-probe window instead of every
+cycle, because any no-plan — TIMEOUT INCLUDED — now marks the goal doomed.
+
+THE SEARCH IS NOT I/O-BOUND UNDER `--learn`. This paragraph used to claim it was
+("each node issues LearningStore SQLite queries, at roughly 7.5s") and that claim
+is measured false — it is corrected here rather than deleted because it sent two
+separate investigations at the learning store. cProfile over the from-scratch
+`greater_wooden_staff` search (bank holds no `spruce_plank`) with a real
+`LearningStore` over the live 45087-cycle DB, 310s wall, 100080 nodes explored:
+the ENTIRE store contribution is 98985 memoised `action_cost` calls (0.089s),
+98985 `success_rate` (0.056s), and **two** `sqlite3.Cursor.execute` calls
+(0.009s). `LearningStore.search_cache()` keys are state-INDEPENDENT, so one
+decision queries each distinct statistic once no matter how many nodes read it.
+A cross-cycle learned-stat cache would save 0.145s of 310s.
+
+What `--learn` actually costs is NODES, not node latency: 100080 explored against
+23214 for the same search with `history=None` (4.31x), at 1.06 vs 0.93 ms/node
+(1.15x). One edge changes price — `Gather(spruce_tree×60)` is 900.0 cold and
+2030.66 learned (60 gathers at the observed median instead of the flat 15.0s) —
+and it is the edge the optimal plan must take, while
+`UpgradeEquipmentGoal.heuristic` stays at 50.0 because it prices only the forced
+craft-skill grind and nothing of the material acquisition that is 97% of that
+plan. With h that weak against a doubled g, A* degenerates toward breadth. The
+lever on this residual is an acquisition-aware admissible heuristic, which
+carries a proof obligation against `formal/Formal/PlannerAdmissibility.lean`.
+
+What the profile DID indict, identically in both configurations: `LevelSkill.
+is_applicable` -> `tiers/skill_grind_target.build_grind_candidates`, 72% of the
+search (47.0s of 67.3s cold; 219.3s of 310.4s learned), because it priced every
+in-skill craftable when the selection core can only ever pick the in-level ones
+(69 vs 10 for R2D2 at weaponcrafting 9). Fixed 2026-08-13: 21.47s -> 9.68s cold,
+106.28s -> 49.53s learned, identical node counts and plans.
+
+PER-NODE COST IS SUPERLINEAR IN HOLDINGS, and that — not SQLite — is why a live
+search is several times dearer per node than any offline harness with an empty
+bag. Same search, varying only the number of banked codes: 0.434 ms/node at 1,
+0.618 at 21, 0.950 at 61, 11.29 at 121. At 121 codes
+`obtain_sources._recycle_sources` is 94% of the search: it walks
+`set(inventory) | set(bank)` on EVERY `obtain_sources` call (~1.2M per search)
+and calls `destroyable` -> `inventory_caps._is_equippable_dominated` per held
+code, so the cost is O(holdings x holdings) in the innermost loop. Live R2D2 at
+`inv=65/130` with a stocked bank measured 1.99 ms/node (7537 nodes in 15s) where
+this harness measured 0.495. UNFIXED.
 
 Orthogonal to `_MAX_SEARCH_NODES`, which is the memory bound."""
 

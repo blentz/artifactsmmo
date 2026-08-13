@@ -199,7 +199,22 @@ def _recycle_sources(
     """Licensed surplus items (bag + bank) whose recipe consumes `item` —
     mirrors the retired `recoverable_materials`'s gates exactly (that module was
     subsumed by this RECYCLE arm and deleted),
-    per-source-item rather than aggregated into a material map."""
+    per-source-item rather than aggregated into a material map.
+
+    KNOWN HOT SPOT, UNFIXED (profile 2026-08-13). This is why a live planner
+    search costs several times more per node than any offline harness with an
+    empty bag — not the LearningStore, which `planner.py`'s budget docstring used
+    to blame. The loop below is O(|inventory ∪ bank|), `obtain_sources` calls it
+    ~1.2M times in one from-scratch `greater_wooden_staff` search, and every held
+    code whose recipe consumes `item` then pays `destroyable` ->
+    `inventory_caps._is_equippable_dominated` -> a pairwise gear-value
+    comparison. So the innermost cost is O(holdings × holdings). Same search,
+    varying ONLY the banked-code count: 0.434 ms/node at 1, 0.618 at 21, 0.950 at
+    61, 11.29 at 121 — and at 121 this function is 94% of the search (27.5s of
+    29.4s). Live R2D2 at `inv=65/130` with a stocked bank: 1.99 ms/node.
+    A reverse index from `item` to the held codes whose recipes consume it would
+    remove the outer scan; it needs a state-keyed memo, so it needs an
+    invalidation argument, which is why it was not done under a perf task."""
     out: list[Source] = []
     bank = state.bank_items or {}
     codes = sorted(set(state.inventory) | set(bank))
