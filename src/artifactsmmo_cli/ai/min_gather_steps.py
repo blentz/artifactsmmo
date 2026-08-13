@@ -30,7 +30,8 @@ from collections.abc import Mapping
 
 def min_gather_steps(item: str, qty: int, recipes: Mapping[str, dict[str, int]],
                      owned: dict[str, int]) -> int:
-    state = _min_gather_steps(len(recipes) + 1, item, qty, recipes, ([], dict(owned)))
+    initial_state: tuple[list[str], dict[str, int]] = ([], dict(owned))
+    state = _min_gather_steps(len(recipes) + 1, item, qty, recipes, initial_state)
     return len(state[0])
 
 

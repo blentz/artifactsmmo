@@ -404,6 +404,12 @@ MODULES: tuple[ModuleSpec, ...] = (
         functions=("_min_crafts", "min_crafts"),
     ),
     ModuleSpec(
+        source="src/artifactsmmo_cli/ai/min_gather_steps.py",
+        output=f"{GENERATED_DIR}/MinGatherSteps.lean",
+        core_name="MinGatherSteps",
+        functions=("_min_gather_steps", "min_gather_steps"),
+    ),
+    ModuleSpec(
         source="src/artifactsmmo_cli/ai/min_plan_length.py",
         output=f"{GENERATED_DIR}/MinPlanLength.lean",
         core_name="MinPlanLength",
