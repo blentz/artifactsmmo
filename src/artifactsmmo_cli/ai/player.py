@@ -750,6 +750,7 @@ class GamePlayer:
                     latch_active=self._gear_latch.active,
                     goal_repr=repr(selected_goal),
                 )
+                self._plan_cache.arm_step(state.inventory, game_data)
                 if self.history is not None:
                     plan_reprs = [repr(a) for a in plan]
                     goal_json = json.dumps(goal_to_dict(selected_goal) or {})
@@ -806,6 +807,7 @@ class GamePlayer:
             latch_active=row.latch_active,
             goal_repr=row.goal_repr,
         )
+        self._plan_cache.arm_step(state.inventory, game_data)
 
     def _initialize(self, client: AuthenticatedClient) -> None:
         """Load game data, build the strategy engine, fetch state, and seed blocker
@@ -1211,10 +1213,15 @@ class GamePlayer:
                 self._last_outcome = outcome
                 self.state = new_state
                 if outcome == "ok" and self._plan_cache is not None:
-                    self._plan_cache.advance()
+                    if self._plan_cache.batch_satisfied(new_state.inventory,
+                                                        self.game_data):
+                        self._plan_cache.advance()
+                        self._plan_cache.arm_step(new_state.inventory,
+                                                  self.game_data)
+                        if self.history is not None:
+                            self.history.update_commitment_cursor(
+                                self._plan_cache.cursor)
                     self._plan_cache.cycles_since_replan += 1
-                    if self.history is not None:
-                        self.history.update_commitment_cursor(self._plan_cache.cursor)
 
                 # After action.execute (or dry_run apply), record the cycle
                 # for stuck detection. `error:cooldown` is treated as
