@@ -394,6 +394,9 @@ open Formal.PriorityBand
 #print axioms Formal.ActionCostNonneg.move_cost_nonneg
 #print axioms Formal.ActionCostNonneg.delete_cost_nonneg
 #print axioms Formal.ActionCostNonneg.all_actions_cost_nonneg
+#print axioms Formal.GatherCost.gather_cost_nonneg
+#print axioms Formal.GatherCost.gather_cost_monotone
+#print axioms Formal.GatherCost.gather_cost_one_is_base
 #print axioms Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership
 #print axioms Formal.RealizableLoadout.apply_cur_ge_1
 #print axioms Formal.RealizableLoadout.ownership_counts_equipped

@@ -80,6 +80,7 @@ import Formal.Extracted.SkillXpPositive
 import Formal.InventoryChainSafe
 import Formal.Contracts
 import Formal.ActionCostNonneg
+import Formal.GatherCost
 import Formal.RealizableLoadout
 import Formal.ApplyBaseline
 import Formal.Phase7Invariants

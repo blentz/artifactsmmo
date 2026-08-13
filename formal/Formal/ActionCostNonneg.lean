@@ -25,8 +25,14 @@ All formulas fall into a small set of structural buckets:
   `base + per_unit·qty + dist`.
 * **Instance-parameterized** — Delete (`cost_weight ∈ {5,25,50}` from
   `player_helpers.delete_cost`).
-* **History-dependent** — Fight=10+d (+LOADOUT_PENALTY), Gather=6+d,
-  Move=max(5d,1). Formula `if no_hist: static else: learned/max(rate, 0.1)`.
+* **History-dependent** — Fight=10+d (+LOADOUT_PENALTY), Move=max(5d,1).
+  Formula `if no_hist: static else: learned/max(rate, 0.1)`. Gather is
+  STALE here as of the gather-batching branch: `gatherCost` below still
+  models the pre-batching `6+d` shape (no `quantity`, no banked-regather
+  penalty). The current static term the shipped `GatherAction.cost` actually
+  computes — `(6+dist)*quantity + min(banked,quantity)*penalty` — is proved
+  in `Formal.GatherCost` instead; see that module and `gatherCost`'s own
+  docstring below.
 
 # Writer audit for actual_cooldown_seconds
 
@@ -338,7 +344,29 @@ theorem fight_cost_nonneg (dist : Nat) (learned rate loadoutPenalty : Rat)
     rateFloorProd confidentThresholdProd true hs hl rateFloorProd_pos
   exact Rat.add_nonneg h1 hp
 
-/-- `Gather = 6 + dist` via the history-fraction core. -/
+/-- STALE as of the gather-batching branch (Phase-3 Task 6) — kept for the
+`hist`-bucket illustration and because `gather_cost_nonneg` may still be
+depended on elsewhere (see below), NOT as the current model of
+`GatherAction.cost`.
+
+What this models NOW: the pre-batching learned-blended shape only —
+`Gather = 6 + dist` fed through the generic `learnedCost` history switch, with
+NO `quantity` parameter and NO banked-regather penalty term. The shipped
+`GatherAction.cost` (`src/artifactsmmo_cli/ai/actions/gathering.py`) has
+scaled its static term by `quantity` and added a
+`min(banked, quantity) * _BANKED_REGATHER_PENALTY` term since Task 5 of that
+branch; neither appears here. `gather_cost_nonneg` below is still TRUE (it is
+a real theorem about this formula), it is just no longer a theorem about the
+formula the planner actually runs.
+
+The current, accurate static-term model for the batched gather edge is
+`Formal.GatherCost.gatherCost`, proved non-negative and monotone in
+`quantity` by `Formal.GatherCost.gather_cost_nonneg` /
+`gather_cost_monotone`. This `learnedCost`-blended shape is still the right
+place to reason about the LEARNED-HISTORY branch in the abstract (that part
+of `GatherAction.cost` is unchanged by the batching work — see
+`Formal.GatherCost`'s module docstring, "Deliberately NOT modeled here"); it
+is the `static := 6 + dist` line specifically that is out of date. -/
 def gatherCost (dist : Nat) (learned rate : Rat) : Rat :=
   let static : Rat := (6 + dist : Nat)
   learnedCost static learned rate rateFloorProd confidentThresholdProd true

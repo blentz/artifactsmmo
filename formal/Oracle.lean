@@ -1924,6 +1924,25 @@ def runActionCostNonneg (args : Array Json) : Json :=
   Json.mkObj [("cost", Json.num (Int.ofNat cost)),
               ("nonneg", Json.bool true)]
 
+/-- Compute one gather_cost result using the proved `Formal.GatherCost.gatherCost`
+(the BATCHED `GatherAction.cost` static term). Args are the exact rational
+`(base, dist, penalty)` as `(num, den)` pairs, then the two `Nat`s:
+
+`[baseNum, baseDen, distNum, distDen, penaltyNum, penaltyDen, qty, banked]`
+
+Emits the exact result as `(num, den)`, so the Python side can compare it
+bit-exactly against the same `Fraction` the input was built from rather than
+a float. -/
+def runGatherCost (args : Array Json) : Json :=
+  let base := ratArg args 0
+  let dist := ratArg args 2
+  let penalty := ratArg args 4
+  let qty := (intArg args 6).toNat
+  let banked := (intArg args 7).toNat
+  let r := Formal.GatherCost.gatherCost base dist penalty qty banked
+  Json.mkObj [("cost_num", Json.num r.num),
+              ("cost_den", Json.num (Int.ofNat r.den))]
+
 /-- Compute one inventory_chain_safe result. Single shared dispatcher for the
 four chain_safe instantiations and the TaskCancel coin step.
 
@@ -3087,6 +3106,8 @@ def runOne (item : Json) : Json :=
     runNpcBuyInventory args
   else if kind == "action_cost_nonneg" then
     runActionCostNonneg args
+  else if kind == "gather_cost" then
+    runGatherCost args
   else if kind == "inventory_chain_safe" then
     runInventoryChainSafe args
   else if kind == "inventory_profile" then

@@ -478,6 +478,12 @@ open Formal.PriorityBand
 #check @Formal.ActionCostNonneg.move_cost_nonneg             -- Move.cost ≥ 0
 #check @Formal.ActionCostNonneg.delete_cost_nonneg           -- DeleteItemAction.cost_weight ≥ 0 (all branches)
 #check @Formal.ActionCostNonneg.all_actions_cost_nonneg      -- headline: every concrete Action's cost ≥ 0 (seals PlannerAdmissibility)
+-- GatherCost (the BATCHED GatherAction.cost static term: (base+dist)*qty +
+-- min(banked,qty)*penalty — non-negative and monotone in qty, so the planner
+-- cannot manufacture a cheaper plan by inflating a quantity):
+#check @Formal.GatherCost.gather_cost_nonneg      -- non-negativity for any planner-chosen qty
+#check @Formal.GatherCost.gather_cost_monotone    -- q₁ ≤ q₂ ⇒ cost never decreases
+#check @Formal.GatherCost.gather_cost_one_is_base -- qty = 1 is the pre-batching edge cost exactly
 -- RealizableLoadout required roles (the multi-slot pick_loadout bug fix):
 #check @Formal.RealizableLoadout.isRealizable_iff_demand_le_ownership -- contract: realizability ⇔ per-code demand ≤ ownership
 #check @Formal.RealizableLoadout.apply_cur_ge_1                        -- apply assert: realizable ⇒ cur ≥ 1 at every decrement
