@@ -19,9 +19,13 @@ these pure cores:
   `used <= max` for the entire chain.
 * `gather_apply_batch_pure(inv, drop_item, qty)` mints `qty` of `drop_item` in
   one step: `used' = min(used + qty, cap)`, `item_count[drop_item]` rises by
-  the same amount, all other entries preserved. `gather_batch_size_pure(inv,
-  demand, drop_item)` bounds `qty` so this can never mint past `cap` for any
-  `qty`, including a batch far larger than the free quantity.
+  the same amount, all other entries preserved. SAFETY is `gather_apply_batch_
+  pure`'s OWN break-on-full loop, not a caller-side bound: it cannot mint past
+  `cap` for ANY `qty`, including one far larger than the free quantity.
+  `gather_batch_size_pure(inv, demand, drop_item)` is a separate sizing aid,
+  not a safety mechanism — it tells a caller how much of `demand` currently
+  has room (`min(demand, cap - used)`, or 0 when a NEW code has no free slot),
+  reusing `gather_is_applicable_pure`'s slot rule via `inventory_room.has_room`.
 
 The planner (`src/artifactsmmo_cli/ai/planner.py`:122) re-checks
 `is_applicable(node.state, ...)` on every node it pops, so chained `apply`s in
@@ -95,19 +99,24 @@ def apply_monster_drops_pure(inv: GatherInv, drops: tuple[str, ...]) -> GatherIn
 
 
 def gather_batch_size_pure(inv: GatherInv, demand: int, drop_item: str) -> int:
-    """Units of `drop_item` one batched gather may mint NOW.
+    """Units of `drop_item` a caller may currently REQUEST from a batched gather.
 
     `min(demand, quantity headroom)`, or 0 when the drop needs a NEW stack and
-    no slot is free. The slot test matches `gather_is_applicable_pure`'s: a new
-    code needs a free slot, growing a held code does not. Bounding by
-    `cap - used` is what makes `gather_apply_batch_pure` unable to mint past
-    `inventory_max`.
+    no slot is free — reusing `gather_is_applicable_pure`'s slot rule via the
+    shared `has_room` (a new code needs a free slot, growing a held code does
+    not), rather than open-coding the same predicate a second time. This is a
+    SIZING AID, not the source of `gather_apply_batch_pure`'s cap safety: that
+    safety comes from `gather_apply_batch_pure`'s own break-on-full loop, which
+    holds for ANY `qty` regardless of what this function returns.
     """
     if demand <= 0:
         return 0
-    if drop_item not in inv.item_count and (inv.slots_max - inv.slots_used) < 1:
+    new_stacks = 0 if drop_item in inv.item_count else 1
+    slots_free = inv.slots_max - inv.slots_used
+    qty_free = inv.cap - inv.used
+    if not has_room(new_stacks, added_qty=0, slots_free=slots_free, qty_free=qty_free):
         return 0
-    return max(0, min(demand, inv.cap - inv.used))
+    return max(0, min(demand, qty_free))
 
 
 def gather_apply_batch_pure(inv: GatherInv, drop_item: str, qty: int) -> GatherInv:
