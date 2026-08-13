@@ -414,7 +414,11 @@ Stated honestly rather than hidden.
 - **`FightAction` is still singleton.** Any closure whose leaf is a monster drop
   keeps the per-unit chain. `blue_slimeball` is reachable here only because the
   bank already holds 98. Deferred by explicit decision; the symmetric fix is
-  known.
+  known. Sharper than "slow": with an EMPTY bank the staff search does not merely
+  take longer, it node-caps at 1M, because
+  `UpgradeEquipmentGoal.relevant_actions` emits no `Fight` leg at all for the
+  `blue_slimeball` drop leaf. The 98 banked units are what make the objective
+  look reachable; they are not an optimisation.
 - **A doomed goal still costs 15 s per re-probe window.** Bounded and now
   visible, but not free.
 - **`drop_item_override` batches are optimistic.** One simulated gather credits
@@ -439,3 +443,42 @@ Stated honestly rather than hidden.
   new — `size_intermediate_craft` already emits goal-sized `Craft(code×N)` with
   the same mismatch. The path fails SAFE (discard → cold re-plan), and I2's
   `action_codec` is the real fix.
+
+### Found while closing the branch
+
+Four things the work surfaced that it did not fix. The first two are the reason
+the staff still does not plan; naming them is the point.
+
+- **`min_crafts` is inventory-blind.** Its twin `min_gather_steps` charges one
+  action per distinct raw leaf because ONE batched gather serves that leaf's
+  whole demand. The craft side has no such licence: real craft batching is
+  bounded by `craft_batch_size_pure`, so one produced node can need SEVERAL
+  craft actions and `min_crafts` under-counts by however many times the batch
+  cap divides the demand. The error compounds across tiers — the `steel_boots`
+  3-tier chain is the reproducer. Unmasked by this branch, not created by it:
+  making the gather term batch-aware is what left the craft term as the loose
+  one.
+- **The depth-reject branch is live-dead.** `min_plan_length` over all 321
+  recipes in the committed snapshot MAXES at **15**, against a threshold of
+  **32**, with COUNT EXCEEDING = 0. So
+  `_gather_goal_for_unreachable_equippable` and the routing branch that reaches
+  it cannot fire in production. Its tests are green because they use a
+  35-distinct-material fixture, and the largest real recipe has 7 direct
+  inputs — the fixture is not a small version of the real case, it is a
+  different case. The consequence is the one that matters: a 3-tier chain is
+  neither routed to incremental gathering NOR planned. It falls between the two.
+- **The from-scratch staff search is still over budget live.** Measured ~49.5 s
+  with a learned store against a 15 s budget; the live `plan R2D2` above shows
+  it timing out at 7580 nodes and the arbiter falling through to
+  `UpgradeEquipment(iron_shield)`. The branch fixed admission, the budget
+  structure and the silence — it did not make the search finish. The residual is
+  NODE COUNT, not node cost, so no further per-node saving reaches it. The lever
+  is an acquisition-aware admissible heuristic on `UpgradeEquipmentGoal`, which
+  carries a proof obligation against `PlannerAdmissibility.lean`.
+- **`PosRecipes` is unenforced in Python.** `MinGatherStepsBound` is explicit
+  that `PosRecipes` — every recipe demands ≥ 1 of each material — is
+  LOAD-BEARING, and that the bound is FALSE without it. `game_data.py:1914`
+  writes `recipe[mat.code] = mat.quantity` straight from the API with no
+  positivity check, so the theorem's only hypothesis is ASSERTED of API data
+  rather than established. Nothing has violated it; nothing would notice if the
+  API did.
