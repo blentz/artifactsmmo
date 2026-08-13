@@ -75,3 +75,25 @@ def test_unbatched_steps_are_always_satisfied(game_data):
     cache.arm_step({}, game_data)
     assert cache.step_target is None
     assert cache.batch_satisfied({}, game_data) is True
+
+
+def test_a_stale_target_does_not_hold_a_cursor_that_moved_off_the_gather(game_data):
+    """`step_target` is armed per step but survives `advance()`. Once the cursor
+    has moved onto a non-gather step the target belongs to a step already done,
+    so it must NOT gate the new one — otherwise a craft that follows a batched
+    gather would be pinned behind an inventory count it can never raise
+    (crafting CONSUMES the drop, so the count only falls)."""
+    gather = GatherAction(resource_code="spruce_tree", quantity=3,
+                          locations=frozenset({(0, 0)}))
+    craft = object()
+    cache = PlanCache(selected_goal=object(), plan=[gather, craft],
+                      crafting_target=None, latch_active=False, goal_repr="G")
+    drop = gather.drop_item(game_data)
+    cache.arm_step({drop: 5}, game_data)
+    assert cache.step_target == 8
+    cache.advance()
+    assert cache.current() is craft
+    # The target is still armed, but it is the previous step's; the craft is
+    # released even with the drop count BELOW it.
+    assert cache.step_target == 8
+    assert cache.batch_satisfied({drop: 0}, game_data) is True

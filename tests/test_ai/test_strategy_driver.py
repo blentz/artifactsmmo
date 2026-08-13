@@ -1,3 +1,4 @@
+import dataclasses
 import json
 from dataclasses import dataclass
 
@@ -505,6 +506,38 @@ def test_gather_helper_falls_back_to_direct_recipe_without_deeper_step():
     assert isinstance(goal, GatherMaterialsGoal)
     # Empty recipe -> needed is the (empty) direct recipe fallback.
     assert goal._target_item == "plank"
+
+
+def test_bank_stock_is_credited_before_the_depth_budget_is_judged():
+    """The helper merges BANK holdings into `owned` before pricing the root's
+    gather cost. Uncredited, a full bank still reads as a from-scratch chain and
+    the root is written off as depth-unreachable — the bot would then grind raw
+    ore it already owns 40 of instead of crafting the boots.
+
+    boots <- 6 bar <- 8 ore = 48 raw ore, against a depth budget of 15."""
+    gd = GameData()
+    gd._item_stats = {
+        "boots": ItemStats(code="boots", level=20, type_="boots",
+                           crafting_skill="gearcrafting", crafting_level=20),
+        "bar": ItemStats(code="bar", level=20, type_="resource",
+                         crafting_skill="mining", crafting_level=20),
+        "ore": ItemStats(code="ore", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"boots": {"bar": 6}, "bar": {"ore": 8}}
+    gd._resource_drops = {"rocks": "ore"}
+    gd._resource_locations = {"rocks": [(1, 0)]}
+    empty_bank = make_state(inventory={}, bank_items={})
+    # 48 raw ore > the 15 budget: the root IS depth-unreachable, so the helper
+    # routes to the deepest actionable step (the raw leaf).
+    unbanked = _gather_goal_for_unreachable_equippable("boots", empty_bank, gd, 15)
+    assert unbanked._target_item == "ore"
+    # 40 of those 48 already banked leaves 8 to gather, inside the budget, so the
+    # root is reachable after all and the helper keeps targeting it. This differs
+    # from the line above ONLY by the bank merge.
+    banked = dataclasses.replace(empty_bank, bank_items={"ore": 40})
+    routed = _gather_goal_for_unreachable_equippable("boots", banked, gd, 15)
+    assert routed._target_item == "boots"
+    assert routed._needed == {"boots": 1}
 
 
 # ---------------------------------------------------------------------------

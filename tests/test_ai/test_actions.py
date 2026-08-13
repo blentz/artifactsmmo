@@ -469,6 +469,17 @@ class TestGatherAction:
         sixty = GatherAction(resource_code="spruce_tree", quantity=60, locations=frozenset({(0, 0)}))
         assert one.learning_key() == sixty.learning_key()
 
+    def test_learned_cost_key_separates_a_drop_override_from_the_base_drop(self):
+        """A `drop_item_override` gather farms a SECONDARY drop off the same
+        tile, and secondary drops are far rarer than the primary — so its
+        measured cost per unit is a different figure. Sharing the base
+        resource's key would pool the two and make both learned costs wrong."""
+        primary = GatherAction(resource_code="rocks", locations=frozenset({(0, 0)}))
+        secondary = GatherAction(resource_code="rocks", drop_item_override="rare_gem",
+                                 locations=frozenset({(0, 0)}))
+        assert secondary.learning_key() == "Gather(rocks->rare_gem)"
+        assert secondary.learning_key() != primary.learning_key()
+
 
 class TestDepositAllAction:
     def test_applicable_with_items(self):
