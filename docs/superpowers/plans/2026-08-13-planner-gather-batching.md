@@ -200,21 +200,57 @@ min_gathers is untouched: craft_vs_buy and gather_step_target want units."
 
 ---
 
-### Task 2: Lean — batched gather in `PlanModel`, `minPlanLength` amended
+### Task 2: Lean — batched bound, and two false citations corrected
 
-`Formal.PlanModel.min_plan_length_le_plan` proves `minPlanLength ≤ plan.length` for satisfying plans. Its `Action.gather` mints exactly one unit — an abstraction the module's own "NOT modelled" section §4 declares. Once Task 3 lands, real plans can be shorter than that bound, so the theorem stops describing the running system while still compiling. Leaving it alone keeps the gate green and leaves a stale admission gate. That is the failure mode this repo calls *proofs telling false stories*.
+> **RESCOPED 2026-08-13 during execution (ledger Ruling 7).** This task
+> originally said to re-prove `Formal.PlanModel.min_plan_length_le_plan` over a
+> batched action model. **That theorem does not exist.**
+> `grep -rn "min_plan_length_le_plan" --include=*.lean formal/` returns exactly
+> one hit — line 4 of `PlanModel.lean`, inside a docstring — and
+> `min_plan_length.py` cites it as "(proved: …)". The nearest real result is
+> `minGathers_le_gathers_of_corner3` (`PlanModel.lean:3370`), whose `corner3`
+> hypothesis is marked at line 3353 "RETIRED — intentionally not discharged".
+> There is no craft lower bound at all. Nothing is falsified by batching
+> because nothing was proved.
 
-Do this **before** the Python switch so the oracle is never behind the implementation.
+What this task does instead, in order of importance:
+
+1. **Prove `minGatherSteps ≤ minGathersCount`.** The batched bound is never
+   larger than the per-unit one, so `is_plannable` becomes strictly MORE
+   permissive: no reachable goal is newly rejected. Wasted search is the only
+   exposure. This is the property that actually protects the admission gate,
+   and unlike the briefed theorem it is tractable.
+2. **Correct the two false citations** — `PlanModel.lean:4` and
+   `min_plan_length.py`'s docstring — to name what is actually proved and the
+   hypothesis it rests on.
+3. **Amend PlanModel's "NOT modelled" §4** to state plainly that the Python
+   gather now batches while the model's `Action.gather` does not.
+
+`Action.gather` is deliberately **NOT** widened with a quantity. Doing so makes
+`plan_mass_invariant` false as stated unless `ExecState.gathers` switches from
+counting actions to counting units, destabilising ~2900 lines of cost-mass
+machinery — in service of plan-length results already conditional on a retired
+hypothesis.
+
+Do this **before** the Python switch so the oracle is never behind the
+implementation.
 
 **Files:**
 - Modify: `formal/Formal/PlanModel.lean`
-- Create: `formal/Formal/Extracted/MinGatherSteps.lean`
+- Modify: `scripts/extract_lean.py` (register a `ModuleSpec`; the Extracted
+  module is **generated**, never hand-written — every file under
+  `formal/Formal/Extracted/` carries `-- GENERATED … DO NOT EDIT` and a sha256
+  drift gate, `uv run python scripts/extract_lean.py --check`)
+- Generate: `formal/Formal/Extracted/MinGatherSteps.lean`
+- Modify: `src/artifactsmmo_cli/ai/min_plan_length.py` (citation only)
 - Create: `formal/diff/test_min_gather_steps_diff.py`
-- Modify: `formal/Formal/Manifest.lean` (register the new module)
+- Modify: `formal/Formal/Manifest.lean`
 
 **Interfaces:**
-- Consumes: `min_gather_steps` from Task 1.
-- Produces: `Formal.PlanModel.Action.gather (code : String) (qty : Nat)`; `Formal.PlanModel.minPlanLengthBatched`; theorem `Formal.PlanModel.min_gather_steps_le_plan`.
+- Consumes: `min_gather_steps` from Task 1, in its extractor-compatible
+  tuple-threaded form (Task 1 fix round 2).
+- Produces: `Formal.PlanModel.minGatherSteps`; theorem
+  `Formal.PlanModel.minGatherSteps_le_minGathers`.
 
 - [ ] **Step 1: Read the existing model before touching it**
 
