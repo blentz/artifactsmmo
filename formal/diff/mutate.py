@@ -74,6 +74,8 @@ GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gathe
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 SHOPPING_LIST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "shopping_list.py"
 MIN_GATHERS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "min_gathers.py"
+MIN_GATHER_STEPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "min_gather_steps.py"
+INTERMEDIATE_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "intermediate_batch.py"
 GATHER_STEP_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_step_target.py"
 MONSTER_DROP_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster_drop_selection.py"
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
@@ -3875,6 +3877,8 @@ _ALL_SRCS = [
     CYCLE_STEP_SRC,
     # Piece-C — feasibility router for depth-unreachable equippable roots.
     GATHER_STEP_TARGET_SRC,
+    # Gather-batching epic — batch-aware plan-length bound + closure rebatcher.
+    MIN_GATHER_STEPS_SRC, INTERMEDIATE_BATCH_SRC,
     # #16 — efficiency-weighted strategic_value scorer.
     STRATEGIC_VALUE_SRC,
     # C1 — acquisition-leaf attainability (task-earnable + currency-buy disjuncts).
@@ -4160,22 +4164,158 @@ INVENTORY_KEEP_MUTATIONS = [
 # Killed by formal/diff/test_monster_drop_apply_diff.py, which binds
 # apply_monster_drops_pure to Formal.MonsterDropApply.applyDrops -- the SAME def
 # the reachability theorems (applyDrops_monotone / fight_drop_reachable) prove.
+# NOTE: every anchor below is prefixed with `for drop_item in drops:`.
+# `gather_apply_batch_pure` (added by the gather-batching epic) is the SAME
+# fold-with-break shape over `range(max(0, qty))`, so its body is byte-identical
+# to this one -- the loop header is the only line that distinguishes the two.
+# Without the prefix the anchors matched twice and the gate could no longer say
+# which loop it was mutating.
 MONSTER_DROP_APPLY_MUTATIONS = [
     # Drop the cap-break: drops mint past inventory_max, breaking the
     # never-exceed-cap projection. The diff's used-near-cap cases catch it.
     ("monster_drop_apply: drop cap-break",
-     "        if inv.used >= inv.cap:\n            break\n",
-     "        if False:\n            break\n"),
+     "    for drop_item in drops:\n        if inv.used >= inv.cap:\n            break\n",
+     "    for drop_item in drops:\n        if False:\n            break\n"),
     # Break boundary >= -> >: at exactly full (used == cap) the loop should stop
     # but now mints one more.
     ("monster_drop_apply: break boundary >= to >",
-     "        if inv.used >= inv.cap:\n",
-     "        if inv.used > inv.cap:\n"),
+     "    for drop_item in drops:\n        if inv.used >= inv.cap:\n",
+     "    for drop_item in drops:\n        if inv.used > inv.cap:\n"),
     # Skip the mint: the kill yields no loot, so a needed drop's count never
     # rises -- violates fight_drop_reachable (the goal becomes unreachable).
     ("monster_drop_apply: skip the mint",
-     "        inv = gather_apply_pure(inv, drop_item)\n",
-     "        inv = inv\n"),
+     "    for drop_item in drops:\n        if inv.used >= inv.cap:\n"
+     "            break\n        inv = gather_apply_pure(inv, drop_item)\n",
+     "    for drop_item in drops:\n        if inv.used >= inv.cap:\n"
+     "            break\n        inv = inv\n"),
+]
+
+
+# gather_batch mutations -- the batched gather pure cores added by the
+# gather-batching epic (`gather_batch_size_pure` sizing aid and
+# `gather_apply_batch_pure` mint loop) in gather_apply_core.py. Killed by
+# tests/test_ai/test_gather_apply_core.py, whose batch rows pin the demand
+# clamp, the new-stack slot rule, the exact mint count, and the cap break.
+# The `gather_apply_batch_pure` anchors carry their `for _ in range(...)`
+# header for the same disambiguation reason as MONSTER_DROP_APPLY_MUTATIONS.
+# NOT mutated: the `if demand <= 0: return 0` short-circuit. Both weakenings
+# (`< 0`, or deleting it) are EQUIVALENT mutants -- `max(0, min(demand,
+# qty_free))` already returns 0 for any non-positive demand -- so a mutant
+# there would survive for a reason no test could fix.
+GATHER_BATCH_MUTATIONS = [
+    # Drop the quantity-headroom clamp: the sizing aid hands back the full
+    # demand even when the inventory cannot hold it. Killed by
+    # test_batch_size_is_clamped_to_quantity_headroom (used=95/cap=100 must
+    # size to 5, not 60).
+    ("gather_batch: size ignores quantity headroom",
+     "    return max(0, min(demand, qty_free))",
+     "    return max(0, demand)"),
+    # Drop the slot term (new_stacks -> 0): a drop needing a NEW stack is sized
+    # as if a free slot were never required. Killed by
+    # test_batch_size_zero_when_a_new_stack_has_no_free_slot.
+    ("gather_batch: size drops the new-stack slot term",
+     "    if not has_room(new_stacks, added_qty=0, slots_free=slots_free, qty_free=qty_free):",
+     "    if not has_room(0, added_qty=0, slots_free=slots_free, qty_free=qty_free):"),
+    # Invert the held-code test: growing an ALREADY-held stack is charged a new
+    # slot it does not need. Killed by
+    # test_batch_size_nonzero_for_a_held_code_with_no_free_slot.
+    ("gather_batch: size inverts the held-code test",
+     "    new_stacks = 0 if drop_item in inv.item_count else 1\n"
+     "    slots_free = inv.slots_max - inv.slots_used\n"
+     "    qty_free = inv.cap - inv.used\n"
+     "    if not has_room(new_stacks, added_qty=0,",
+     "    new_stacks = 0 if drop_item not in inv.item_count else 1\n"
+     "    slots_free = inv.slots_max - inv.slots_used\n"
+     "    qty_free = inv.cap - inv.used\n"
+     "    if not has_room(new_stacks, added_qty=0,"),
+    # Off-by-one on the batch mint: the action yields one fewer than asked, so a
+    # goal-sized gather never closes its deficit. Killed by
+    # test_apply_batch_mints_exactly_qty.
+    ("gather_batch: apply mints qty - 1",
+     "    for _ in range(max(0, qty)):",
+     "    for _ in range(max(0, qty - 1)):"),
+    # Drop the batch cap-break: a batched mint runs past inventory_max, which is
+    # exactly the safety `gather_apply_batch_pure` owns (it holds for ANY qty,
+    # not just a caller-sized one). Killed by
+    # test_apply_batch_never_mints_past_cap.
+    ("gather_batch: apply drops the cap-break",
+     "    for _ in range(max(0, qty)):\n        if inv.used >= inv.cap:\n            break\n",
+     "    for _ in range(max(0, qty)):\n        if False:\n            break\n"),
+    # Skip the batch mint entirely: the batched gather yields nothing, so the
+    # planner projects a gather that never satisfies its demand. Killed by
+    # test_apply_batch_mints_exactly_qty.
+    ("gather_batch: apply skips the mint",
+     "    for _ in range(max(0, qty)):\n        if inv.used >= inv.cap:\n"
+     "            break\n        inv = gather_apply_pure(inv, drop_item)\n",
+     "    for _ in range(max(0, qty)):\n        if inv.used >= inv.cap:\n"
+     "            break\n        inv = inv\n"),
+]
+
+
+# min_gather_steps mutations -- the batch-aware GATHER-ACTION lower bound that
+# replaced `ceil_gathers(min_gathers(...))` inside `min_plan_length`. Killed by
+# formal/diff/test_min_gather_steps_diff.py, which binds min_gather_steps to
+# Formal.MinGatherSteps over a DAG fuzz, a cyclic fuzz, and the holdings rows.
+MIN_GATHER_STEPS_MUTATIONS = [
+    # Count leaves with MULTIPLICITY instead of distinctly: a leaf shared by two
+    # branches is charged twice, so the "bound" exceeds the real action count and
+    # is_plannable rejects reachable goals. Killed by
+    # test_shared_leaf_counted_once.
+    ("min_gather_steps: leaves counted with multiplicity (dedupe dropped)",
+     "        return (leaves if item in leaves else [*leaves, item], owned)",
+     "        return ([*leaves, item], owned)"),
+    # Never record the leaf: every bound collapses to 0, which is trivially
+    # admissible but useless -- and wrong for any real chain. Killed by
+    # test_two_level_chain_is_one_leaf.
+    ("min_gather_steps: base case records no leaf",
+     "    if len(recipe) == 0:\n"
+     "        return (leaves if item in leaves else [*leaves, item], owned)",
+     "    if len(recipe) == 0:\n"
+     "        return (leaves, owned)"),
+    # Ignore holdings: what the character already owns no longer offsets demand,
+    # so a fully-covered material still counts a gather. Killed by
+    # test_holdings_cover_everything (all demand held -> 0 steps).
+    ("min_gather_steps: holdings ignored (used -> 0)",
+     "    used = min(held, qty)",
+     "    used = 0"),
+    # Boundary <= -> < on the satisfied test: at EXACTLY covered demand
+    # (remaining == 0) the walk should stop, but now descends and charges a
+    # gather for demand that is already met. Killed by
+    # test_holdings_cover_everything and test_zero_demand_breaks_the_bound.
+    ("min_gather_steps: satisfied boundary <= to <",
+     "    if remaining <= 0:",
+     "    if remaining < 0:"),
+]
+
+
+# size_closure_gather mutations -- the goal-side rebatcher that gives a closure
+# GatherAction its inventory-bounded quantity. Killed by
+# tests/test_ai/test_intermediate_batch.py. Anchors are widened where
+# size_intermediate_craft (same module, same shape) shares the line.
+SIZE_CLOSURE_GATHER_MUTATIONS = [
+    # Key on the RESOURCE code instead of the drop item: a drop_item_override
+    # gather (a gem off ordinary rocks) is sized by demand for the rock, not the
+    # gem. Killed by test_keyed_on_the_drop_item_not_the_resource_code_for_an_
+    # override (both halves: the override sizes to 0, and the real demand does
+    # not size at all).
+    ("size_closure_gather: keyed on the resource code, not the drop",
+     "    drop = action.drop_item(game_data)",
+     "    drop = action.code"),
+    # Ignore held stock: the gather re-gathers material already in the bag or
+    # bank. Killed by test_holdings_reduce_the_deficit (60 demand, 25 held ->
+    # 35) and test_fully_covered_material_sizes_to_zero.
+    ("size_closure_gather: holdings ignored",
+     "    held = state.inventory.get(drop, 0) + (state.bank_items or {}).get(drop, 0)",
+     "    held = 0"),
+    # Always rebuild the action even when the quantity already matches: the
+    # identity short-circuit is what lets callers detect a no-op resize. Killed
+    # by test_returns_the_same_instance_when_quantity_already_matches.
+    ("size_closure_gather: no identity short-circuit",
+     "    qty = gather_batch_size_pure(action.inv(state), demand, drop)\n"
+     "    return action if action.quantity == qty else dataclasses.replace("
+     "action, quantity=qty)",
+     "    qty = gather_batch_size_pure(action.inv(state), demand, drop)\n"
+     "    return dataclasses.replace(action, quantity=qty)"),
 ]
 
 
@@ -6616,6 +6756,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_inventory_keep.py", survivors)
     run_group(GATHER_APPLY_SRC, MONSTER_DROP_APPLY_MUTATIONS,
               "formal/diff/test_monster_drop_apply_diff.py", survivors)
+    run_group(GATHER_APPLY_SRC, GATHER_BATCH_MUTATIONS,
+              "tests/test_ai/test_gather_apply_core.py", survivors)
+    run_group(MIN_GATHER_STEPS_SRC, MIN_GATHER_STEPS_MUTATIONS,
+              "formal/diff/test_min_gather_steps_diff.py", survivors)
+    run_group(INTERMEDIATE_BATCH_SRC, SIZE_CLOSURE_GATHER_MUTATIONS,
+              "tests/test_ai/test_intermediate_batch.py", survivors)
     run_group(GATHER_SELECTION_SRC, GATHER_SELECTION_MUTATIONS,
               "formal/diff/test_gather_selection_diff.py", survivors)
     run_group(SHOPPING_LIST_SRC, SHOPPING_LIST_MUTATIONS,
