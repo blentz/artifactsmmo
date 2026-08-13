@@ -1479,6 +1479,49 @@ def runGatherStepTarget (args : Array Json) : Json :=
   Json.mkObj [("code", Json.num (Int.ofNat ((code.toNat?).getD 0))),
     ("qty", Json.num qty)]
 
+/-- Compute BOTH gather lower bounds from the SAME extracted cores the planner
+runs: `Extracted.MinGatherSteps.min_gather_steps` (the BATCHED bound — distinct
+raw leaves, one batched `GatherAction` each) and `Extracted.MinGathers.min_gathers`
+(the per-unit bound — raw units). Emitting both from one call pins the
+differential AND lets the harness re-check
+`Formal.MinGatherStepsBound.minGatherSteps_le_minGathers` on live data.
+
+Recipes here may be CYCLIC (unlike `shopping_list`'s DAG generator): the fuel
+seeding `recipes.length + 1` is the termination bound both cores share, and the
+fuel-exhausted arm is exactly where the two bounds' accounting differs, so the
+harness must reach it.
+
+args layout (all Nat ≥ 0), same recipe/owned prefix as shopping_list:
+* `[0]`                  nRecipe (number of `(item, sub, qty)` triples)
+* `[1 .. 3*nRecipe]`     the triples, flat: item0 sub0 qty0 ...
+* next: nOwned, then `(item, qty)` owned pairs flat
+* next: queryItem, queryQty -/
+def runMinGatherSteps (args : Array Json) : Json :=
+  let g := fun i => (intArg args i).toNat
+  let nRecipe := g 0
+  let triples : List (Nat × Nat × Nat) :=
+    (List.range nRecipe).map (fun k => (g (1 + 3*k), g (2 + 3*k), g (3 + 3*k)))
+  let p1 := 1 + 3*nRecipe
+  let nOwned := g p1
+  let ownedPairs : List (Nat × Nat) :=
+    (List.range nOwned).map (fun k => (g (p1 + 1 + 2*k), g (p1 + 2 + 2*k)))
+  let p2 := p1 + 1 + 2*nOwned
+  let queryItem := g p2
+  let queryQty := g (p2 + 1)
+  let parents := (triples.map (fun t => t.1)).eraseDups
+  let recipes : List (String × List (String × Int)) :=
+    parents.map (fun it =>
+      (toString it,
+       (triples.filter (fun t => decide (t.1 = it))).map
+         (fun t => (toString t.2.1, Int.ofNat t.2.2))))
+  let owned : List (String × Int) :=
+    ownedPairs.map (fun kv => (toString kv.1, Int.ofNat kv.2))
+  Json.mkObj [
+    ("steps", Json.num (Extracted.MinGatherSteps.min_gather_steps
+      (toString queryItem) (Int.ofNat queryQty) recipes owned)),
+    ("gathers", Json.num (Extracted.MinGathers.min_gathers
+      (toString queryItem) (Int.ofNat queryQty) recipes owned))]
+
 /-- Compute one monster_drop_selection result using the SAME proved
 `Formal.MonsterDropSelection.selectMonsterForDrop`.
 
@@ -3000,6 +3043,8 @@ def runOne (item : Json) : Json :=
     runShoppingList args
   else if kind == "gather_step_target" then
     runGatherStepTarget args
+  else if kind == "min_gather_steps" then
+    runMinGatherSteps args
   else if kind == "monster_drop_selection" then
     runMonsterDropSelection args
   else if kind == "craft_vs_buy" then

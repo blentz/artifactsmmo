@@ -1059,6 +1059,9 @@ open Formal.PriorityBand
 #print axioms Formal.PlanModel.canonicalPlan_valid
 #print axioms Formal.PlanModel.length_eq_counts
 #print axioms Formal.PlanModel.gear_obtainable_of_perActionLength_le
+#print axioms Formal.MinGatherStepsBound.minGatherSteps_le_minGathers
+#print axioms Formal.MinGatherStepsBound.twin_step
+#print axioms Formal.MinGatherStepsBound.posRecipes_of_entries
 #print axioms Formal.ArbiterSelect.findCommitted_some_props
 #print axioms Formal.ArbiterSelect.guard_precedes_means_in_guardsFirst
 #print axioms Formal.ArbiterSelect.select_pure_any_plannable_guard_wins

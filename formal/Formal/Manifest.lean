@@ -1365,6 +1365,12 @@ open Formal.PriorityBand
 #check @Formal.PlanModel.canonicalPlan_valid                 -- CONSTRUCTIVE witness: the canonical plan obtains AND equips
 #check @Formal.PlanModel.length_eq_counts                    -- a plan's length is its gather + craft + equip counts
 #check @Formal.PlanModel.gear_obtainable_of_perActionLength_le -- OBTAINABILITY under the per-action length budget
+-- MinGatherStepsBound (the BATCHED gather bound never exceeds the per-unit one,
+-- so swapping min_plan_length's mint term can only make is_plannable more
+-- permissive; both sides are the EXTRACTED oracles, not hand models):
+#check @Formal.MinGatherStepsBound.minGatherSteps_le_minGathers -- min_gather_steps ≤ min_gathers under PosRecipes
+#check @Formal.MinGatherStepsBound.twin_step                  -- the per-node coupling invariant it rests on
+#check @Formal.MinGatherStepsBound.posRecipes_of_entries      -- PosRecipes from the table's own entries (decidable)
 -- The 112 declarations below were listed ONLY in Audit.lean: their axioms
 -- were scanned but they had no traceability row. Audit.lean is generated
 -- from this file, so they are recorded here to keep them scanned.

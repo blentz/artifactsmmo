@@ -1,8 +1,23 @@
 """Lower bound on PLAN length to obtain (and optionally equip) `item`:
 `ceil_gathers(min_gathers) + min_crafts + (1 if equip)`. The mint term is divided
 by max_gather_yield (a gather yields up to that many units); craft and equip are
-one action each. Sound lower bound on plan length over the gather/craft/equip
-action model (proved: Formal.PlanModel.min_plan_length_le_plan)."""
+one action each.
+
+PROOF STATUS (corrected 2026-08-13). This docstring used to claim "(proved:
+Formal.PlanModel.min_plan_length_le_plan)". That theorem does not exist and
+never did — the name appears nowhere in formal/ outside the citations. What is
+actually proved is narrower:
+
+* the GATHER term only, `Formal.PlanModel.minGathers_le_gathers_of_corner3`,
+  and CONDITIONALLY: it assumes `corner3`, a hypothesis explicitly RETIRED and
+  not discharged (PlanModel.lean, "STATUS (2026-06-20)");
+* nothing at all about the craft term, and nothing about the sum against a
+  real plan's length.
+
+Treat the sum as an A*-budget heuristic, not a proven bound. Its consumer
+`is_plannable` is an optimization whose both failure modes the runtime guards
+absorb (see that same PlanModel docstring for the necessity audit).
+"""
 
 from collections.abc import Mapping
 

@@ -1,7 +1,32 @@
 -- @concept: planner, plan, action @property: monotonicity, safety
 /-
-Plan-action model for the plannability-soundness theorem
-(`Formal.PlanModel.min_plan_length_le_plan`).
+Plan-action model for plannability soundness.
+
+**What is actually proved here (corrected 2026-08-13).** Earlier revisions of
+this header, and `ai/min_plan_length.py`'s docstring, cited a theorem
+`Formal.PlanModel.min_plan_length_le_plan`. **No such theorem exists** — the
+name occurred nowhere in `formal/` except this line. The results this module
+really concludes with are:
+
+  * `minGathers_le_gathers_of_corner3` (below) — the GATHER half of the bound,
+    `minGathersCount item 1 owned ≤ planGathers`, and it is **conditional**: it
+    takes `corner3` (the `item ≠ c ∧ Reaches recipes item c` craft corner) as a
+    hypothesis, RETIRED and intentionally not discharged (see its docstring for
+    the production-necessity audit that retired it).
+  * `gear_obtainable_of_perActionLength_le` / `canonicalPlan_valid` — the
+    OBTAINABILITY direction, proven unconditionally.
+
+There is **no craft lower bound and no whole-plan-length lower bound** in this
+module. Nothing here bounds `min_plan_length` against `plan.length`.
+
+The batched-gather change is therefore not falsifying a proof; it is landing
+beside an absence. What it does have is
+`Formal.MinGatherStepsBound.minGatherSteps_le_minGathers`: under `PosRecipes`
+the batched leaf count never exceeds the per-unit count — so against the RAW
+UNIT term the `is_plannable` gate can only become more permissive. That module's
+header states the one place the comparison does not carry over (the production
+term is `ceil_gathers(min_gathers …, max_gather_yield)`, and above yield 1 the
+leaf count can exceed it), with a kernel-checked witness.
 
 ## What this models
 
@@ -66,10 +91,25 @@ The following are **outside this model** and are noted here for honesty:
      may need extra deposit/withdraw steps when the bag fills.
   3. **A\* completeness** — the model assumes the planner finds a plan if one
      exists; proving A\* completeness is out of scope.
-  4. **Batch crafting / multi-drop** — `craft` produces exactly 1 copy, and
-     `gather` yields exactly 1 unit. `ceil_gathers` (via `max_gather_yield`)
-     accounts for multi-drop resources at the `minPlanLength` level; the
-     per-action model uses 1 for structural clarity.
+  4. **Batch crafting / multi-drop / BATCHED GATHERS** — `craft` produces
+     exactly 1 copy, and `Action.gather` yields exactly 1 unit. `ceil_gathers`
+     (via `max_gather_yield`) accounts for multi-drop resources at the
+     `minPlanLength` level; the per-action model uses 1 for structural clarity.
+
+     **Divergence from the running planner (2026-08-13).** The production
+     `GatherAction` now carries a `quantity`: ONE gather action serves a whole
+     material deficit. `Action.gather` here still mints exactly one unit, so
+     this model's gather COUNT is a count of units, not of API actions, and it
+     over-counts a real batched plan. `Action.gather` is deliberately NOT
+     widened with a quantity: `plan_mass_invariant` and the ~2900 lines of
+     cost-mass machinery below are stated over `ExecState.gathers` as a count
+     of ACTIONS, which a quantity-carrying gather would falsify unless that
+     counter switched to units — and the plan-length results it would serve are
+     conditional on the retired `corner3` anyway. The property that actually
+     protects the admission gate across the batching switch is proved
+     separately — over the two EXTRACTED oracles rather than over this model,
+     and free of `corner3` (its only hypothesis is `PosRecipes`):
+     `Formal.MinGatherStepsBound.minGatherSteps_le_minGathers`.
 -/
 
 import Formal.Extracted.MinGathers
