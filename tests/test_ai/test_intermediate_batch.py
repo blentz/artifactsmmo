@@ -206,6 +206,53 @@ def test_returns_the_same_instance_when_quantity_already_matches() -> None:
     assert size_closure_gather(a, {drop: 1}, state, gd) is a
 
 
+def test_a_full_bag_floors_the_size_at_one_rather_than_zero() -> None:
+    """With demand outstanding but NO room, the size floors at 1 instead of 0.
+
+    A 0 here is unrecoverable, not merely conservative: `relevant_actions` runs
+    once per plan (`planner.py:177`), so a 0-sized gather is dropped from the
+    pool for the whole search — including every node after a `DepositAll` frees
+    the room — and `is_applicable`'s `effective_quantity(...) >= 1` tail
+    re-derives 0 from `quantity` forever after. The floor keeps the edge alive
+    so `is_applicable` can gate it per node, which is where room belongs."""
+    gd = _gd_spruce()
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    drop = a.drop_item(gd)
+    # inventory_max 100, entirely consumed by an unrelated item -> zero room.
+    full = make_state(inventory={"ash_wood": 100}, inventory_max=100,
+                      inventory_slots_max=20)
+    assert full.inventory_free == 0
+    assert size_closure_gather(a, {drop: 60}, full, gd).quantity == 1
+
+
+def test_a_new_drop_code_with_no_free_slot_also_floors_at_one() -> None:
+    """The slot arm of the same rule: `gather_batch_size_pure` also returns 0
+    when the drop needs a NEW stack and every slot is taken. That is likewise a
+    property of the current state, not of the goal, so it floors too."""
+    gd = _gd_spruce()
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    drop = a.drop_item(gd)
+    # Quantity headroom to spare, but all 20 slots held by other codes.
+    no_slots = make_state(inventory={f"i{n}": 1 for n in range(20)},
+                          inventory_max=100, inventory_slots_max=20)
+    assert size_closure_gather(a, {drop: 60}, no_slots, gd).quantity == 1
+
+
+def test_the_floor_does_not_apply_when_there_is_no_demand() -> None:
+    """The floor is scoped to outstanding demand. A fully-covered drop must
+    still size to 0 — that is the no-op edge the callers' `>= 1` guard exists
+    to drop, and flooring it would put a pointless re-gather into the search."""
+    gd = _gd_spruce()
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    drop = a.drop_item(gd)
+    full = make_state(inventory={"ash_wood": 100}, inventory_max=100,
+                      inventory_slots_max=20)
+    # No room AND no demand -> 0, not the floor.
+    assert size_closure_gather(a, {}, full, gd).quantity == 0
+    covered = dataclasses.replace(full, bank_items={drop: 60})
+    assert size_closure_gather(a, {drop: 60}, covered, gd).quantity == 0
+
+
 def test_keyed_on_the_drop_item_not_the_resource_code_for_an_override() -> None:
     # A drop_item_override gather targets a secondary drop (e.g. a gem off
     # ordinary rocks); the closure demands the DROP item, not the resource

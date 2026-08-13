@@ -4316,11 +4316,19 @@ SIZE_CLOSURE_GATHER_MUTATIONS = [
     # Always rebuild the action even when the quantity already matches: the
     # identity short-circuit is what lets callers detect a no-op resize. Killed
     # by test_returns_the_same_instance_when_quantity_already_matches.
+    # Anchored via the `qty = ...` line ABOVE the return: the identical return
+    # line closes `size_intermediate_craft` too, and an earlier attempt to
+    # disambiguate with the trailing `def size_closure_gather` anchored the
+    # CRAFT function's return instead — the mutant then survived, because this
+    # group's tests say nothing about craft identity.
     ("size_closure_gather: no identity short-circuit",
+     "    qty = 0 if demand == 0 else max(\n"
+     "        1, gather_batch_size_pure(action.inv(state), demand, drop))\n"
      "    return action if action.quantity == qty else dataclasses.replace("
-     "action, quantity=qty)\n\n\ndef size_closure_gather",
-     "    return dataclasses.replace(action, quantity=qty)\n\n\n"
-     "def size_closure_gather"),
+     "action, quantity=qty)",
+     "    qty = 0 if demand == 0 else max(\n"
+     "        1, gather_batch_size_pure(action.inv(state), demand, drop))\n"
+     "    return dataclasses.replace(action, quantity=qty)"),
     # Drop the FLOOR: the size falls back to the raw room-bounded batch, which
     # is 0 at a full bag (or for a new drop code with no free slot). Because
     # `relevant_actions` runs ONCE (planner.py:177), that deletes the gather
