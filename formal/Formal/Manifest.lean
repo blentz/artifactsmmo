@@ -474,7 +474,7 @@ open Formal.PriorityBand
 #check @Formal.ActionCostNonneg.learnedCost_nonneg           -- bucket 5: full static-or-learned switch ≥ 0
 #check @Formal.ActionCostNonneg.rateFloorProd_pos            -- production rate floor 1/10 > 0
 #check @Formal.ActionCostNonneg.fight_cost_nonneg            -- Fight.cost ≥ 0
-#check @Formal.ActionCostNonneg.gather_cost_nonneg           -- Gather.cost ≥ 0
+#check @Formal.ActionCostNonneg.gather_cost_nonneg           -- Gather.cost ≥ 0 (STALE, see Formal.GatherCost)
 #check @Formal.ActionCostNonneg.move_cost_nonneg             -- Move.cost ≥ 0
 #check @Formal.ActionCostNonneg.delete_cost_nonneg           -- DeleteItemAction.cost_weight ≥ 0 (all branches)
 #check @Formal.ActionCostNonneg.all_actions_cost_nonneg      -- headline: every concrete Action's cost ≥ 0 (seals PlannerAdmissibility)

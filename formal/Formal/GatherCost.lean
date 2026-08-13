@@ -114,22 +114,31 @@ theorem gather_cost_one_is_base (base dist penalty : Rat) (banked : Nat)
 
 /-- Non-vacuity check, CONSTRUCTIVE rather than prose: these only typecheck if
 `gather_cost_nonneg`/`gather_cost_monotone`'s hypotheses (`0 ≤ base/dist/
-penalty`, `q₁ ≤ q₂`) are jointly satisfiable, applied at an unmistakably
-satisfying point (all-zero base/dist/penalty, a real batch-size jump 3 → 9).
+penalty`, `q₁ ≤ q₂`) are jointly satisfiable — witnessed at the REAL
+production constants (`base = 6`, `penalty = 100 = _BANKED_REGATHER_PENALTY`,
+`dist = 3`), not a degenerate all-zero corner where every term of the formula
+vanishes. `q₁ = 3 → q₂ = 9` is a real batch-size jump, and `banked = 7` sits
+strictly between `q₁` and `q₂` so the `min` term is live on both sides too.
 Contrast `Formal.MinGatherStepsBound`'s `PosRecipes`, which really can fail —
 these side conditions cannot, so the witness is a one-line application rather
-than a hunt for a counterexample-free corner. (A concrete NUMERIC pin of the
-formula's VALUE — e.g. `(6+3)*5 + min(7,5)*100 = 545` — is carried instead by
-the differential harness's `test_banked_exceeds_qty` against the live oracle:
-this codebase's `Rat.add`/`Rat.mul` route through well-founded-recursive
-`Nat.gcd` normalization, which does not reduce under kernel `decide` for
-compound arithmetic the way single-literal comparisons like
-`ActionCostNonneg.rateFloorProd_pos` do, and `ActionCostNonneg` never decides a
-multi-step `Rat` arithmetic chain either, for the same reason.) -/
-example : gatherCost 0 0 0 3 4 ≤ gatherCost 0 0 0 9 4 :=
-  gather_cost_monotone 0 0 0 3 9 4 (by omega) Rat.le_refl Rat.le_refl Rat.le_refl
+than a hunt for a counterexample-free corner.
 
-example : 0 ≤ gatherCost 0 0 0 3 4 :=
-  gather_cost_nonneg 0 0 0 3 4 Rat.le_refl Rat.le_refl Rat.le_refl
+Each single-literal hypothesis (`0 ≤ 6`, `0 ≤ 100`, `3 ≤ 9`, …) closes with
+`decide` — confirmed against this build, e.g. `gather_cost_nonneg 6 3 100 5 7
+(by decide) (by decide) (by decide)` typechecks. What does NOT reduce under
+kernel `decide` is a compound VALUE equality over the formula's output — e.g.
+`gatherCost 6 3 100 5 7 = 545` — because computing that result routes
+`Rat.add`/`Rat.mul` through well-founded-recursive `Nat.gcd` normalization,
+which the kernel's `decide` evaluator gets stuck unfolding for a multi-step
+arithmetic chain (single-literal comparisons like
+`ActionCostNonneg.rateFloorProd_pos` never hit this because there is no
+arithmetic to perform, only two already-normalized literals to compare). That
+numeric VALUE pin — `(6+3)*5 + min(7,5)*100 = 545` — is carried instead by the
+differential harness's `test_banked_exceeds_qty` against the live oracle. -/
+example : 0 ≤ gatherCost 6 3 100 5 7 :=
+  gather_cost_nonneg 6 3 100 5 7 (by decide) (by decide) (by decide)
+
+example : gatherCost 6 3 100 3 7 ≤ gatherCost 6 3 100 9 7 :=
+  gather_cost_monotone 6 3 100 3 9 7 (by omega) (by decide) (by decide) (by decide)
 
 end Formal.GatherCost
