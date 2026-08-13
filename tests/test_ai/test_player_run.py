@@ -13,6 +13,7 @@ from sqlmodel import select
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
@@ -28,7 +29,9 @@ from artifactsmmo_cli.ai.strategy_driver import map_means
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
+from artifactsmmo_cli.ai.world_state import SKILL_NAMES
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
 def make_minimal_game_data() -> GameData:
@@ -562,6 +565,94 @@ def test_run_survives_http_485_and_keeps_cycling():
         assert outcomes == ["error:already_equipped", "error:already_equipped"]
     finally:
         history.close()
+
+
+def test_run_records_gather_cycle_under_learning_key_not_repr():
+    """Regression for a write/read key mismatch that made GatherAction's
+    learned cost permanently inert: `run()`'s `_record_learning_cycle` call
+    (player.py ~1190) must write `action_repr=action.learning_key()`, not
+    `repr(action)` -- `cost()` reads via `learning_key()`, and for
+    `GatherAction` the two are DIFFERENT strings even at quantity=1 (`repr`
+    always carries `×N`, `learning_key` never does).
+
+    This drives the REAL run() write site end to end: a real GamePlayer, a
+    real LearningStore, and REAL execution (`dry_run=False`, the default) --
+    `_record_learning_cycle` is a documented no-op under `dry_run` (poisons
+    the learned-cost model with zero-cooldown simulated rows), so a
+    dry_run=True version of this test would silently assert nothing. Only
+    the `action_gathering` HTTP call is mocked (a successful response), same
+    as `TestGatherActionExecute` in test_actions_execute.py.
+
+    A test that calls `store.record_cycle` directly can pass whether or not
+    the loop's write site uses the right key; this one cannot: reverting
+    player.py's `action_repr=action.learning_key()` back to `repr(action)`
+    makes the assertion below fail (verified manually both ways, see the
+    task-5 fix report)."""
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    history = LearningStore(db_path=db_path, character="hero")
+    history.start_session()
+    player = GamePlayer(character="hero", history=history)
+    client = MagicMock()
+
+    # Already standing on the resource tile -- no MoveAction, no need to also
+    # mock action_move.
+    gather = GatherAction(resource_code="copper_rocks", locations=frozenset({(0, 0)}))
+    goal = WaitGoal()
+    initial_state = make_state(x=0, y=0)
+    gathered_char = make_char_schema(x=0, y=0)
+    # make_char_schema only sets `<skill>_level`; WorldState.from_character_schema
+    # also requires `<skill>_xp`/`<skill>_max_xp` per SKILL_NAMES, which a bare
+    # MagicMock auto-attribute would satisfy with another (non-JSON-serializable)
+    # MagicMock -- _record_learning_cycle's skill-xp-delta bookkeeping then
+    # chokes trying to json.dumps it. Pin them to real ints.
+    for skill in SKILL_NAMES:
+        setattr(gathered_char, f"{skill}_xp", 0)
+        setattr(gathered_char, f"{skill}_max_xp", 100)
+
+    # `_wait_for_cooldown` runs at the TOP of each loop iteration, before the
+    # plan/execute/record block -- let the first call through so one full
+    # cycle (including the write we're testing) actually happens, then stop
+    # the loop on the second.
+    call_count = [0]
+
+    def fake_wait():
+        call_count[0] += 1
+        if call_count[0] > 1:
+            raise KeyboardInterrupt
+
+    try:
+        with patch.object(ClientManager_mock := MagicMock(), "client", client):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+                with _patch_game_data_load():
+                    with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                        with patch.object(player, "_maybe_periodic_refresh"), \
+                                patch.object(player, "_reconcile_open_orders"):
+                            with patch.object(player, "_build_actions", return_value=[gather]):
+                                with patch.object(
+                                    player._arbiter, "select",
+                                    return_value=(goal, [gather], []),
+                                ):
+                                    with patch(
+                                        "artifactsmmo_cli.ai.actions.gathering.action_gathering",
+                                        return_value=make_api_result(gathered_char),
+                                    ):
+                                        with patch.object(player, "_wait_for_cooldown",
+                                                          side_effect=fake_wait):
+                                            with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                                with pytest.raises(KeyboardInterrupt):
+                                                    player.run()
+
+        with SqlSession(history._engine) as s:
+            rows = list(s.exec(select(Cycle)).all())
+        gather_rows = [r for r in rows if r.action_class == "GatherAction"]
+        assert len(gather_rows) == 1
+        assert gather_rows[0].action_repr == gather.learning_key()
+        assert gather_rows[0].action_repr != repr(gather)
+    finally:
+        history.close()
+        if os.path.exists(db_path):
+            os.unlink(db_path)
 
 
 def test_run_loads_remembered_bank_blocker(capsys):
