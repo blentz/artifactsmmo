@@ -1745,6 +1745,52 @@ choice to grind XP. Derived from goals_tried so select_pure stays pure."
 
 ---
 
+### Task 14: planner search cost — measure, then optimise
+
+> **ADDED 2026-08-13 mid-execution, at the user's request**, after Ruling 37
+> found the live planner ran ~4× slower per node than offline and Task 10 found
+> the from-scratch staff search needs 23,214 nodes / **23.0 s** against a 15 s
+> budget. The branch fixed admission and the budget structure; it did not make
+> this search fit.
+
+**Measure first.** This repo has a standing lesson that ~70 % CPU once turned
+out to be the TUI's 20 fps redraw and not the planner at all. Do not optimise
+anything before a profile says where the time goes.
+
+**What is already known**
+
+- `LearningStore.search_cache()` memoises 7 learned-stat call sites for the
+  duration of one decision. `planner.py:137` and `player.py:654,949` open it.
+- Its keys are state-independent (`("action_cost", action_repr, window)`), so
+  within one decision each distinct action is queried once. That path is
+  already optimal *within* a cycle.
+- But the cache is **per-decision**. Every cycle re-queries every action's
+  median from SQLite, for every character. The underlying rows change only when
+  a cycle is recorded — once per cycle per character — so a cross-cycle cache
+  with generation-counter invalidation would be correct and nearly free.
+- `planner.py`'s own docstring says the search is I/O-bound under `--learn`
+  because each node issues SQLite queries.
+
+**Scope**
+
+1. Profile the from-scratch staff search (23 k nodes) with `history` set, and
+   again with `history=None`, and attribute the difference. Report the top
+   cost centres by self time — candidates include `action_cost` /
+   `success_rate`, `pick_loadout_cached`, `is_winnable`, `obtain_sources`,
+   and `WorldState` copying in `apply`.
+2. Optimise **only what the profile indicts**, with a before/after measurement
+   for each change.
+3. If the fix is a cross-cycle learned-stat cache, its invalidation must be
+   proven, not assumed — a stale learned cost is a silently wrong plan, which
+   is the failure mode this whole branch has been about.
+
+**Success criterion:** the from-scratch staff search completes inside the 15 s
+budget, or a measured statement of why it cannot and what would be required.
+Do not raise the budget to make it fit — that reinstates the unreachable-
+escalation shape Task 11 deleted.
+
+---
+
 ### Task 13: mutation anchors, full gate, runtime activation
 
 **Files:**
