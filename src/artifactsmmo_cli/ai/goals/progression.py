@@ -70,8 +70,38 @@ class UpgradeEquipmentGoal(Goal):
         and the bot fell to a discretionary skill-grind (wooden_shield) instead of
         crafting the ring it could plainly make. 32 covers single-tier gear
         craft+equip from materials-in-hand while still routing genuinely deep
-        from-scratch chains (copper_boots ≈ 80 gathers, steel_boots ≈ 480) to
-        GatherMaterials accumulation via the unchanged depth-reachability split."""
+        from-scratch chains to GatherMaterials accumulation via the depth-
+        reachability split.
+
+        UPDATED 2026-08-13 (planner-gather-batching, Task 3): the mint term
+        `min_plan_length` feeds into this gate switched from raw-UNIT counting
+        to `min_gather_steps` (distinct raw leaves still unmet, not units).
+        copper_boots (80 raw copper_ore through ONE recipe leaf) is now
+        genuinely depth-REACHABLE and no longer routes to GatherMaterials —
+        verified against the real planner, see
+        `tests/test_ai/test_upgrade_reachability_gate.py
+        ::test_is_plannable_admits_from_scratch_copper_boots`. steel_boots (480
+        raw iron_ore cascading through THREE recipe tiers: steel_bar <- iron_bar
+        <- iron_ore) is ALSO now admitted, and correctly so: `min_crafts`
+        counts one craft per produced node as a sound LOWER bound
+        "irrespective of per-action craft batching" (its own docstring) — a
+        lower bound is allowed to be loose, and `is_plannable` is a
+        WASTE-AVOIDANCE filter over that bound, not a soundness gate (its
+        purpose, stated a few lines above: skip the search only when NO plan
+        CAN exist). Real craft batching (`craft_batch_size_pure`) is bounded
+        by inventory space, and for `steel_bar` that space is exhausted by
+        `iron_bar`'s own 80-raw-unit footprint before a single `steel_bar`
+        batch can exceed quantity 1, cascading across three recipe tiers — so
+        the real planner still cannot find a plan within this depth, but that
+        is now a BOUNDED cost (one timed-out search, then Task 11/12's memo),
+        not a silently-lost goal. Task 3's swap unmasked this pre-existing
+        `min_crafts` looseness; it did not create it — the raw-unit gather
+        term used to be large enough to exceed `max_depth` on its own, hiding
+        it. An inventory-aware `min_crafts` is the real fix and is out of
+        scope here; see `tests/test_ai/test_strategy_driver.py`'s
+        `steel_boots` cases (which now assert admission-plus-bounded-timeout,
+        not rejection) and Task 3's report for the reproducer and the exact
+        `craft_batch_size_pure` mechanism."""
         return 32
 
     def value(self, state: WorldState, game_data: GameData,

@@ -531,15 +531,25 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
     GatherMaterials for its recipe.
 
     UpgradeEquipmentGoal.is_plannable is False when the target's materials aren't
-    yet gathered (min_gathers > max_depth — the depth-reachability gate). Returning
-    that depth-gated UpgradeEquipment would have the arbiter SKIP it (the gate
-    short-circuits planning), and with nothing driving the gather, gear progress
-    stalls and the cheap pass falls through to doomed discretionary goals
-    (TaskExchange/LevelSkill) that escalate at the full budget — the live-bot
-    stall. Instead, while the target is depth-unreachable, drive GatherMaterials
-    for its direct recipe so the materials accumulate across cycles; once they are
-    in hand UpgradeEquipment becomes plannable and fires the craft+equip. (Mirrors
-    the GEAR_REVIEW guard's gather/upgrade split for the objective-step path.)
+    yet gathered (min_plan_length > max_depth — the depth-reachability gate;
+    min_plan_length's mint term is min_gather_steps as of planner-gather-batching
+    Task 3, not min_gathers). is_plannable is a WASTE-AVOIDANCE filter over a
+    LOWER bound, not a soundness gate — Task 3 legitimately loosened that bound
+    (see UpgradeEquipmentGoal.max_depth's docstring), so some chains this
+    function now routes straight through instead of gating (e.g. a 3+-tier
+    chain whose craft batching is itself inventory-bounded) will be admitted,
+    attempted, and time out rather than being routed to the flat-leaf fallback
+    below — a bounded cost, not a soundness break; see that same docstring for
+    the `min_crafts` residual driving it. Returning that depth-gated
+    UpgradeEquipment would have the arbiter SKIP it
+    (the gate short-circuits planning), and with nothing driving the gather, gear
+    progress stalls and the cheap pass falls through to doomed discretionary
+    goals (TaskExchange/LevelSkill) that escalate at the full budget — the
+    live-bot stall. Instead, while the target is depth-unreachable, drive
+    GatherMaterials for its direct recipe so the materials accumulate across
+    cycles; once they are in hand UpgradeEquipment becomes plannable and fires
+    the craft+equip. (Mirrors the GEAR_REVIEW guard's gather/upgrade split for
+    the objective-step path.)
 
     `ctx` is forwarded to `_gather_goal_for_unreachable_equippable`
     (one-obtain-model epic, Task 5); defaults to `NO_PROFILE_CONTEXT`."""

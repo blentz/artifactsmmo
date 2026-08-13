@@ -414,7 +414,7 @@ MODULES: tuple[ModuleSpec, ...] = (
         output=f"{GENERATED_DIR}/MinPlanLength.lean",
         core_name="MinPlanLength",
         functions=("min_plan_length",),
-        imports=("ceil_gathers", "min_gathers", "min_crafts"),
+        imports=("min_gather_steps", "min_crafts"),
     ),
     ModuleSpec(
         source="src/artifactsmmo_cli/ai/equipment/scoring.py",

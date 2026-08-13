@@ -109,26 +109,39 @@ def test_craft_chains_are_the_one_route_priced_correctly(game_data) -> None:
     """The contrast that makes the defect legible. A craft chain is walked
     properly and costs what it costs — so `J` is not uniformly blind, it is
     blind on exactly the routes `min_plan_length` cannot express. A uniform
-    error would cancel out of a ranking; this one does not."""
-    assert _cost(game_data, "iron_sword") == 65
-    assert _cost(game_data, "wisdom_amulet") == 50
+    error would cancel out of a ranking; this one does not.
+
+    Values updated by Task 3 (planner-gather-batching): the mint term switched
+    from `ceil_gathers(min_gathers)` (raw UNITS) to `min_gather_steps`
+    (distinct raw leaves). `iron_sword` needs 2 leaves (iron_ore, feather) not
+    6+2=8 units; `wisdom_amulet` needs 4 leaves not many more units. Both chains
+    are still walked and still cost more than a raw gather — the CONTRAST this
+    test demonstrates is unchanged, only the absolute numbers moved."""
+    assert _cost(game_data, "iron_sword") == 5
+    assert _cost(game_data, "wisdom_amulet") == 7
 
 
-def test_a_50000_gold_backpack_is_cheaper_than_two_copper_ore(game_data) -> None:
+def test_a_50000_gold_backpack_ties_any_quantity_of_copper_ore(game_data) -> None:
     """The comparison the ranking actually makes, in one assertion.
 
     `J` chooses between candidates by adding `acquire_cost` to projected cycles.
-    On today's model, acquiring a 50,000-gold vendor item costs strictly LESS
-    than acquiring two copper ore off the ground. Any ranking built on that is
-    deciding on a fiction, however sound the objective above it.
+    On today's model, acquiring a 50,000-gold vendor item costs no more than
+    acquiring copper ore off the ground. Any ranking built on that is deciding
+    on a fiction, however sound the objective above it.
 
-    (One ore ties the backpack at 2 rather than losing — the fiction is bounded
-    below by one gather, not by zero. Two is the smallest quantity that makes
-    the ordering strict, and stating it that way keeps the assertion true rather
-    than merely rhetorical.)"""
-    two_ore = min_plan_length("copper_ore", 2, game_data.crafting_recipes, {},
-                              game_data.max_gather_yield, equip=True)
-    assert _cost(game_data, "backpack") < two_ore
+    Before Task 3 (planner-gather-batching) this comparison used TWO copper ore
+    to make the ordering strict: `ceil_gathers` counted one mint per raw UNIT,
+    so quantity 1 tied the backpack and quantity 2 beat it. Batching
+    (`min_gather_steps`) makes one gather action mint a whole material's demand
+    regardless of quantity, so that trick no longer works — copper_ore now
+    costs the same 2 at ANY quantity, because quantity stopped being a plan-
+    length dimension. That is not a new defect; it is the SAME pricing gap this
+    file characterises, surfacing more starkly: the backpack is not merely
+    cheaper than some raw gathering, it is tied with raw gathering at every
+    quantity."""
+    hundred_ore = min_plan_length("copper_ore", 100, game_data.crafting_recipes, {},
+                                  game_data.max_gather_yield, equip=True)
+    assert _cost(game_data, "backpack") == hundred_ore
 
 
 def test_a_wisdom_ITEM_NOW_REACHES_THE_PROJECTION(game_data) -> None:
@@ -199,13 +212,14 @@ def test_the_skill_gate_is_invisible_to_the_cost(game_data) -> None:
 
     `obtain_sources._craft_sources` meanwhile EXCLUDES the craft route outright
     when the gate is unmet, so the two models disagree about the same item:
-    one says it costs 65, the other says there is no way to craft it at all.
-    Increment 1b makes both say 'it costs the grind plus the craft'."""
+    one says it costs 5 (Task 3: batched leaf count, was 65 raw units), the
+    other says there is no way to craft it at all. Increment 1b makes both say
+    'it costs the grind plus the craft'."""
     stats = game_data.item_stats("iron_sword")
     assert stats.crafting_skill == "weaponcrafting"
     assert stats.crafting_level == 10
     # No skill argument exists to pass — that is the point.
-    assert _cost(game_data, "iron_sword") == 65
+    assert _cost(game_data, "iron_sword") == 5
 
 
 def test_J_USES_THE_ROUTE_AWARE_COST(game_data) -> None:

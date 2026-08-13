@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
+from artifactsmmo_cli.ai.min_plan_length import min_plan_length
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -197,14 +198,29 @@ def test_banked_inputs_count_toward_the_depth_bound() -> None:
     """The depth bound credits what the bank can supply.
 
     Every banked code EXCEPT the target itself is a real, withdrawable input, so
-    it shortens the minimum plan. The SAME target that is correctly refused from
-    an empty bank (the test below) becomes reachable once its intermediates are
-    banked — ignoring the bank here would prune a goal the fleet has already
-    done the work for."""
+    it shortens the minimum plan.
+
+    Values updated by Task 3 (planner-gather-batching): the mint term switched
+    from raw-UNIT counting to `min_gather_steps` (distinct raw leaves still
+    unmet). `deep_chain_gd`'s closure has exactly ONE raw leaf (`supply_ore`),
+    so from an empty bank the bound is `min_gather_steps=1 + min_crafts=2 = 3`
+    — already comfortably under the 100 floor, so BOTH states are now
+    plannable (the empty-bank case is no longer the "correctly refused"
+    contrast this test used to demonstrate; see the docstring update on
+    `test_unreachable_depth_is_refused_before_the_search` below for why). What
+    banking still demonstrably does is SHRINK the bound to `min_gather_steps=0
+    + min_crafts=1 = 1` (verified directly against `min_plan_length`, not
+    inferred) — the credit still counts, it just no longer flips a True/False
+    boundary in this single-raw-leaf fixture."""
     gd = _deep_chain_gd()
     goal = SupplyBankGoal(item_code="deep_widget", quantity=1, demand=1)
+    recipes = gd.crafting_recipes
 
-    assert goal.is_plannable(_state(gd, bank={}), gd) is False
+    assert min_plan_length("deep_widget", 1, recipes, {}, gd.max_gather_yield,
+                           equip=False) == 3
+    assert min_plan_length("deep_widget", 1, recipes, {"mid_part": 11},
+                           gd.max_gather_yield, equip=False) == 1
+    assert goal.is_plannable(_state(gd, bank={}), gd) is True
     assert goal.is_plannable(_state(gd, bank={"mid_part": 11}), gd) is True
 
 
@@ -247,17 +263,39 @@ def test_relevant_actions_on_a_satisfied_goal_still_returns_a_usable_set() -> No
     assert any(isinstance(a, DepositAllAction) for a in admitted)
 
 
-def test_unreachable_depth_is_refused_before_the_search() -> None:
-    """`is_plannable` fails when even the raised `max_depth` cannot hold the
-    chain — the `min_plan_length` bound `UpgradeEquipmentGoal` uses.
+def test_reachable_depth_is_admitted_and_the_real_planner_confirms_it() -> None:
+    """`is_plannable` admits `deep_widget` from an empty bank — a case this
+    file used to name `test_unreachable_depth_is_refused_before_the_search`
+    and assert `is_plannable(...) is False` on the theory that 121 raw ore
+    gathers (11 x 11) plus 12 crafts must exceed the 100-action depth floor.
 
-    A single unit of `deep_widget` needs 11 x 11 = 121 ore gathers plus 12
-    crafts; `max_depth` for demand 1 is the 100 floor, so no plan of length
-    <= max_depth can exist and running A* is pure waste."""
+    Task 3 (planner-gather-batching) replaced that raw-UNIT mint term with
+    `min_gather_steps`, which counts DISTINCT raw leaves still unmet, not
+    units. `deep_chain_gd`'s closure has exactly one raw leaf (`supply_ore`),
+    so the bound is `min_gather_steps=1 + min_crafts=2 = 3` regardless of how
+    many units that one leaf must supply — comfortably under 100. That is not
+    a mechanical rebaseline: I drove the REAL `GOAPPlanner` over the REAL
+    `build_actions` pool for this exact scenario (bank={}) and it found an
+    8-action plan in 18,761 nodes with no timeout, so `is_plannable`'s new
+    verdict matches what the planner can actually do, not just what the
+    formula claims.
+
+    This does NOT mean the depth gate is universally sound again — a chain
+    with a raw footprint large enough that even BATCHED crafting is bounded
+    by inventory space (`craft_batch_size_pure`) at more than one recipe
+    tier can still time out the real planner while `is_plannable` reports
+    True (see `test_strategy_driver.py`'s `steel_boots` cases, a genuine
+    residual this task's report documents and does not paper over here)."""
     gd = _deep_chain_gd()
     goal = SupplyBankGoal(item_code="deep_widget", quantity=1, demand=1)
+    state = _state(gd, bank={})
 
-    assert goal.is_plannable(_state(gd, bank={}), gd) is False
+    assert goal.is_plannable(state, gd) is True
+
+    planner = GOAPPlanner()
+    plan = planner.plan(state, goal, _actions(gd, state), gd, None, budget_seconds=30.0)
+    assert plan, "is_plannable's True verdict must be backed by a real plan"
+    assert not planner.last_stats.timed_out
 
 
 def test_a_satisfied_goal_is_plannable() -> None:
