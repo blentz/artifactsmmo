@@ -319,11 +319,36 @@ already treats as must-not-be-wrong.
 
 **Amended**
 
-- `Formal.PlanModel.min_plan_length_le_plan` — must be re-established over the
-  batched action model. Under batching a plan can be shorter than the current
-  per-unit bound, so the theorem is **false as written** once I1 lands. It is
-  not enough to keep the gate green by leaving it alone; the bound is consumed
-  by `is_plannable`, so an unrepaired proof means a stale admission gate.
+- `Formal.PlanModel` — **corrected 2026-08-13 during implementation.** This
+  section originally claimed `min_plan_length_le_plan` would be "false as
+  written" once I1 landed, and named repairing it the change's highest risk.
+  That premise was wrong. **No such theorem exists.**
+  `grep -rn "min_plan_length_le_plan" --include=*.lean formal/` returns exactly
+  one hit: line 4 of `PlanModel.lean`, inside a docstring. `min_plan_length.py`
+  likewise cites it as "(proved: …)". The nearest real result is
+  `minGathers_le_gathers_of_corner3` (`PlanModel.lean:3370`), which takes
+  `corner3` as a hypothesis explicitly marked at line 3353 "**STATUS
+  (2026-06-20): `corner3` RETIRED — intentionally not discharged.**" There is
+  no craft lower bound at all.
+
+  So nothing is falsified by batching, because nothing was proved. The false
+  `proved:` citation predates this branch and is independent of it.
+
+  What I1 actually needs, and what is tractable:
+  1. `minGatherSteps ≤ minGathersCount` — the batched bound is never LARGER
+     than the per-unit one, so `is_plannable` becomes strictly MORE PERMISSIVE
+     and no reachable goal is newly rejected. Wasted search is the only
+     exposure; a missed reachable plan is not.
+  2. Correct the citations in `PlanModel.lean:4` and `min_plan_length.py` to
+     name what is actually proved, and under which undischarged hypothesis.
+  3. Amend PlanModel's "NOT modelled" §4 to say plainly that the Python gather
+     now batches while the model's `Action.gather` does not.
+
+  `Action.gather` is deliberately NOT widened with a quantity: doing so
+  destabilises ~2900 lines of cost-mass machinery (`plan_mass_invariant`
+  becomes false as stated unless `ExecState.gathers` switches from counting
+  actions to counting units) in service of plan-length results that are
+  conditional on a retired hypothesis anyway.
 
 **Gate obligations**
 
@@ -400,3 +425,17 @@ Stated honestly rather than hidden.
   not add the root.
 - **No cross-character production.** Robby can craft the staff today and will
   not be asked to.
+- **`min_plan_length`'s soundness is cited, not proved.** Discovered while
+  implementing I1 (see Formal above). The predicate that admits or rejects every
+  gear goal rests on a theorem that was never written, and on a real theorem
+  whose key hypothesis is retired undischarged. This branch makes the gate
+  strictly more permissive and proves that much, which is the direction that
+  cannot lose a reachable goal — but it does not discharge `corner3`, and no
+  craft lower bound exists. Independent of this work and worth its own epic.
+- **Restart-resume will not rehydrate batched gathers.**
+  `player.py:_resume_plan_cache` matches persisted reprs against the FACTORY
+  action pool, whose gathers carry `quantity=1`, so a persisted
+  `Gather(spruce_wood×60)` never matches and the commitment is discarded. Not
+  new — `size_intermediate_craft` already emits goal-sized `Craft(code×N)` with
+  the same mismatch. The path fails SAFE (discard → cold re-plan), and I2's
+  `action_codec` is the real fix.
