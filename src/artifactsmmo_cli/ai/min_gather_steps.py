@@ -36,32 +36,38 @@ def min_gather_steps(item: str, qty: int, recipes: Mapping[str, dict[str, int]],
     item absent from `recipes` (or with an empty recipe) is raw. `owned` is
     consumed greedily on a private copy — the caller's dict is never mutated.
     """
-    leaves: set[str] = set()
-    _min_gather_steps(len(recipes) + 1, item, qty, recipes, dict(owned), leaves)
-    return len(leaves)
+    state = _min_gather_steps(len(recipes) + 1, item, qty, recipes,
+                              ([], dict(owned)))
+    return len(state[0])
 
 
 def _min_gather_steps(fuel: int, item: str, qty: int,
                       recipes: Mapping[str, dict[str, int]],
-                      owned: dict[str, int], leaves: set[str]) -> None:
+                      state: tuple[list[str], dict[str, int]]) -> tuple[list[str], dict[str, int]]:
     """Collect the raw leaves whose demand is not covered by `owned`.
 
-    A leaf reached from two branches lands in the same set entry: one batched
-    action covers the summed demand, so it is one step.
+    A leaf reached from two branches is recorded once: one batched action
+    covers the summed demand, so it is one step.
     """
     if fuel <= 0:
-        leaves.add(item)
-        return
+        leaves, owned = state
+        if item not in leaves:
+            leaves = [*leaves, item]
+        return (leaves, owned)
+    leaves, owned = state
     held = owned.get(item, 0)
     used = min(held, qty)
     owned[item] = held - used
     remaining = qty - used
     if remaining <= 0:
-        return
+        return (leaves, owned)
     recipe = recipes.get(item, {})
     if len(recipe) == 0:
-        leaves.add(item)
-        return
+        if item not in leaves:
+            leaves = [*leaves, item]
+        return (leaves, owned)
+    state = (leaves, owned)
     for material, per_unit in recipe.items():
-        _min_gather_steps(fuel - 1, material, per_unit * remaining,
-                          recipes, owned, leaves)
+        state = _min_gather_steps(fuel - 1, material, per_unit * remaining,
+                                  recipes, state)
+    return state
