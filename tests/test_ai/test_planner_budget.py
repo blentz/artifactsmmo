@@ -3,9 +3,11 @@
 import dataclasses
 import inspect
 import time
+from pathlib import Path
 
 from artifactsmmo_api_client import AuthenticatedClient
 
+from artifactsmmo_cli.ai import strategy_driver
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -46,7 +48,20 @@ def test_explicit_budget_caps_wall_clock(make_planner_gd: GameData) -> None:
 def test_default_budget_uses_module_constant() -> None:
     sig = inspect.signature(GOAPPlanner.plan)
     assert sig.parameters["budget_seconds"].default is None
-    assert _SEARCH_BUDGET_SECONDS == 300.0
+    assert _SEARCH_BUDGET_SECONDS == 15.0
+
+
+def test_there_is_only_one_budget() -> None:
+    """The arbiter's cheap first pass is gone, constant and env override alike.
+
+    It escalated to the 300s budget only `if chosen is None`; `select_pure` takes
+    the first candidate that plans and a fallback combat grind always plans in
+    2-3 nodes, so the escalation was unreachable in practice — the 10s cheap
+    budget was the real budget for every objective, unannounced."""
+    assert not hasattr(strategy_driver, "CHEAP_BUDGET_SECONDS")
+    assert "ARTIFACTSMMO_CHEAP_BUDGET_SECONDS" not in (
+        Path(strategy_driver.__file__).read_text()), (
+        "the env override must be gone from the source, not just the module namespace")
 
 
 class _ExplodingAction(Action):

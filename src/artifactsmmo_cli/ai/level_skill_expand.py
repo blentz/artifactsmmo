@@ -138,7 +138,8 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
         #     craft chain whose node count GROWS with the banked count, because
         #     every banked copy adds another applicable Withdraw. Live C3P0
         #     2026-08-01 on the real catalog: held=1 => 24k nodes, held=3 =>
-        #     47k, held>=5 => the 10s CHEAP_BUDGET_SECONDS is exhausted and the
+        #     47k, held>=5 => the planning budget (10s at the time; one 15s
+        #     budget today) is exhausted and the
         #     sub-plan comes back EMPTY, so `_execute_level_skill` raised
         #     "grind produced no leg" every cycle for 9.5h with ZERO character
         #     progress until the run StuckExit-ed. The grind's own success is

@@ -11,14 +11,25 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
-_SEARCH_BUDGET_SECONDS = 300.0
-"""A* wall-clock budget (the MAX / escalation budget). Deep recipe chains explore
-thousands of nodes; with learned costs each node issues SQLite queries
-(action_cost/success_rate/goal_avg_cycles), making the search I/O-bound under
-`--learn`. 300s is a generous ceiling for the escalation pass so a genuinely deep
-but reachable goal is found when it is the only option; the tiered arbiter's cheap
-pass (CHEAP_BUDGET_SECONDS) plans fast goals first, so this full budget is rarely
-hit, and the doomed-goal memo skips known-unreachable goals on later cycles."""
+_SEARCH_BUDGET_SECONDS = 15.0
+"""A* wall-clock budget — ONE budget for every goal.
+
+Was 300s behind a 10s "cheap" first pass. That two-pass scheme is deleted: its
+escalation ran only when NOTHING planned, and a fallback combat grind always
+plans in 2-3 nodes, so the escalation was unreachable in practice and the cheap
+10s timeout was the real budget for every objective (live traces 2026-08-12,
+5 characters, 31 hours).
+
+15s is generous for a healthy search now that gather edges carry a quantity —
+the searches that were spending 10s to reach 3873 nodes and no plan were
+enumerating a singleton-gather chain that no longer exists. Deep recipe chains
+become I/O-bound under `--learn` (each node issues LearningStore SQLite queries)
+at roughly 7.5s, so this leaves headroom over the slowest search anyone has
+measured planning successfully. A goal that still cannot be planned costs 15s
+once per DoomedMemo re-probe window instead of every cycle, because any no-plan
+— TIMEOUT INCLUDED — now marks the goal doomed.
+
+Orthogonal to `_MAX_SEARCH_NODES`, which is the memory bound."""
 
 _MAX_SEARCH_NODES = 1_000_000
 """A* node-CREATION cap — the memory bound, independent of the wall clock.
@@ -110,8 +121,8 @@ class GOAPPlanner:
         """Return the lowest-cost action plan to satisfy `goal` from `state`, or [] if none found.
 
         ``budget_seconds`` overrides the module-level ``_SEARCH_BUDGET_SECONDS`` for this
-        call only.  Pass ``None`` (the default) to use the full 300s escalation budget;
-        the arbiter's cheap first pass passes 10s (strategy_driver.CHEAP_BUDGET_SECONDS).
+        call only.  Pass ``None`` (the default) to use the one 15s budget — which is
+        what the arbiter passes for every candidate, guards included.
         ``max_nodes`` likewise overrides ``_MAX_SEARCH_NODES`` (the memory bound).
         """
         max_depth = goal.max_depth

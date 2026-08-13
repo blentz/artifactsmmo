@@ -32,6 +32,27 @@ class GoalAttempt(BaseModel):
     plan_len: int = 0
 
 
+class ObjectiveUnplannable(BaseModel):
+    """The FIRST candidate the arbiter attempted this cycle, which produced no
+    plan — while a LOWER-ranked candidate was executed instead.
+
+    "First attempted", not "rank-1": `select_pure` short-circuits to the
+    sticky-committed goal before walking the ranked list, so under a live
+    commitment this is the committed objective. Either way it is the objective
+    the arbiter was pursuing and abandoned. A satisfied or suppressed candidate
+    is never attempted, so it never lands here.
+
+    Absent on every other cycle. The fall-through is intended; its silence was
+    not — live traces 2026-08-12 show UpgradeEquipment(greater_wooden_staff)
+    attempted first and abandoned on 955 consecutive cycles with nothing
+    recorded, so 31 hours of runtime read as a deliberate choice to grind XP."""
+
+    goal: str
+    nodes: int = 0
+    depth: int = 0
+    timed_out: bool = False
+
+
 class PlanTreeNode(BaseModel):
     """One node in the chosen objective's prerequisite tree (TUI plan screen).
 
@@ -134,6 +155,7 @@ class CycleSnapshot(BaseModel):
     planner_timed_out: bool = False
     plan_len: int = 0
     goals_tried: list[GoalAttempt] = Field(default_factory=list)
+    objective_unplannable: ObjectiveUnplannable | None = None
     suppressed_goals: list[str] = Field(default_factory=list)
     path_blocked: bool = False
 

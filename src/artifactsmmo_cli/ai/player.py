@@ -56,6 +56,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
     CycleSnapshot,
     GoalAttempt,
     GoalRankEntry,
+    ObjectiveUnplannable,
     PlanTreeNode,
     RoleChange,
     RootScoreView,
@@ -88,7 +89,7 @@ from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.plan_tree import build_plan_tree
-from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
+from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost  # noqa: F401  (test import target)
 from artifactsmmo_cli.ai.player_helpers import format_plan as _format_plan
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
@@ -114,7 +115,6 @@ from artifactsmmo_cli.ai.role_selection import decide_role, demand_by_role, serv
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.should_replan import should_replan
 from artifactsmmo_cli.ai.strategy_driver import (
-    CHEAP_BUDGET_SECONDS,
     StrategyArbiter,
     monster_drop_inputs,
     objective_step_goal,
@@ -1104,6 +1104,13 @@ class GamePlayer:
                         "timed_out": last.timed_out,
                         "plan_len": 0,
                         "goals_tried": goals_tried,
+                        # Gated on `replanned` for the same reason `goals_tried`
+                        # is empty on a cache hit: no selection ran this cycle,
+                        # so the arbiter's field still holds the LAST decide's
+                        # verdict and emitting it would date-stamp a stale
+                        # abandonment onto this cycle.
+                        "objective_unplannable": (
+                            self._arbiter.objective_unplannable if replanned else None),
                         "goal_rank": goal_rank_trace,
                         **self._path_trace_snapshot(),
                     }
@@ -1271,6 +1278,10 @@ class GamePlayer:
                     "replanned": replanned,
                     "plan_len": len(plan),
                     "goals_tried": goals_tried,
+                    # See the no-plan block: stale on a cache hit, so gated on
+                    # `replanned` exactly like the planner stats above.
+                    "objective_unplannable": (
+                        self._arbiter.objective_unplannable if replanned else None),
                     "goal_rank": goal_rank_trace,
                     **self._path_trace_snapshot(),
                 }
@@ -1362,8 +1373,11 @@ class GamePlayer:
                 f"LevelSkill({action.skill}) has no grind rung at execution — "
                 "is_applicable should have gated this")
         actions = self._build_actions()
-        sub_plan = self.planner.plan(self.state, goal, actions, self.game_data,
-                                     budget_seconds=CHEAP_BUDGET_SECONDS)
+        # No explicit budget: the grind sub-plan gets the same single budget
+        # (`planner._SEARCH_BUDGET_SECONDS`) every arbiter candidate gets. It
+        # used to take the arbiter's separate 10s cheap budget, which no longer
+        # exists.
+        sub_plan = self.planner.plan(self.state, goal, actions, self.game_data)
         if not sub_plan:
             # Two very different faults land here, and conflating them cost a
             # 9.5h live livelock its diagnosis (C3P0 2026-08-01): the message
@@ -1378,7 +1392,7 @@ class GamePlayer:
             if stats.timed_out:
                 raise RuntimeError(
                     f"LevelSkill({action.skill}) grind sub-plan EXHAUSTED the "
-                    f"{CHEAP_BUDGET_SECONDS}s planning budget — {detail}. The "
+                    f"{_SEARCH_BUDGET_SECONDS}s planning budget — {detail}. The "
                     "goal is plannable but too expensive to search from here; "
                     "this is a search blow-up, not a dead end.")
             raise RuntimeError(
@@ -2395,6 +2409,15 @@ class GamePlayer:
             )
             for g in attempts
         ]
+        raw_abandoned = stats.get("objective_unplannable")
+        objective_unplannable = (
+            ObjectiveUnplannable(
+                goal=str(raw_abandoned["goal"]), nodes=int(raw_abandoned["nodes"]),
+                depth=int(raw_abandoned["depth"]),
+                timed_out=bool(raw_abandoned["timed_out"]),
+            )
+            if isinstance(raw_abandoned, dict) else None
+        )
         plan = self._last_path_plan
         # Cooldown remaining at snapshot time (post-action; the server-set
         # cooldown the bot will wait through before the next cycle).
@@ -2451,6 +2474,7 @@ class GamePlayer:
             planner_timed_out=bool(stats.get("timed_out", False)),
             plan_len=int(stats.get("plan_len", 0)),
             goals_tried=goals_tried,
+            objective_unplannable=objective_unplannable,
             suppressed_goals=list(self._suppressed_goals.keys()),
             path_blocked=bool(stats.get("path_blocked", False)),
             chosen_root=(repr(self._last_decision.chosen_root)

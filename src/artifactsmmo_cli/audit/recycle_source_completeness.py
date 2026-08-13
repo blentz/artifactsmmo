@@ -77,10 +77,11 @@ from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 
 RECYCLE_AUDIT_BUDGET_SECONDS = 10.0
-"""Per-cell planner budget — the arbiter's cheap first-pass value
-(`strategy_driver.CHEAP_BUDGET_SECONDS`), so a cell plans exactly as the live
-bot's first pass does. A cell that needs MORE than the live first pass would not
-be proving anything about the live bot."""
+"""Per-cell planner budget. Deliberately AT OR BELOW the live bot's single
+planning budget (`planner._SEARCH_BUDGET_SECONDS`, 15s), so a cell that plans
+here is guaranteed to plan live. A cell that needs MORE than the live bot gets
+would not be proving anything about the live bot. (It was exactly the arbiter's
+10s cheap first-pass budget until that two-pass scheme was deleted.)"""
 
 CENSUS_LEVEL = 10
 """Character level for every cell. Above `water_bow`'s level (5) so the source is

@@ -39,20 +39,18 @@ CENSUS=tests/test_audit/test_inventory_census.py
 rm -f .coverage .coverage.*
 
 echo "== Lane 1: parallel bulk (-n auto, excludes scenarios + census) =="
-# No budget override here: a unit test pins CHEAP_BUDGET_SECONDS to its 10s
-# production default, so lane 1 must run with the env unset.
 uv run pytest -n auto -p no:cacheprovider tests/ \
   --ignore="$SCENARIOS" --ignore="$CENSUS" \
   --cov-fail-under=0 -q
 
-# The scenario suite drives the arbiter's cheap-pass planner search under a
-# WALL-CLOCK budget (strategy_driver.CHEAP_BUDGET_SECONDS, default 10s). Slower
-# CI hardware squeezes that budget so a legitimately node-bounded search
-# spuriously times out (e.g. l12_bag_pursuit's ReachCurrency search). Give it
-# generous headroom for lane 2 only — census results are budget-insensitive, so
-# this only lets slow-hardware searches finish; it never changes a verdict.
-export ARTIFACTSMMO_CHEAP_BUDGET_SECONDS="${ARTIFACTSMMO_CHEAP_BUDGET_SECONDS:-60}"
-
+# No planner-budget override for lane 2 any more. The arbiter's cheap/full
+# two-pass and its ARTIFACTSMMO_CHEAP_BUDGET_SECONDS escape hatch are deleted:
+# there is ONE budget (planner._SEARCH_BUDGET_SECONDS = 15s), pinned by a unit
+# test, and no env can move it. That is 50% MORE wall clock than the 10s the
+# scenarios actually ran under in lane 1 before, so the searches this override
+# was protecting (e.g. l12_bag_pursuit's ReachCurrency) have more room than
+# they did, not less — but a scenario that starts timing out on slow hardware
+# is now a real signal to fix the search, not an env var to raise.
 echo "== Lane 2: serial census + scenarios (append coverage, enforce 100%) =="
 uv run pytest -p no:cacheprovider "$CENSUS" "$SCENARIOS" \
   --cov-append -q

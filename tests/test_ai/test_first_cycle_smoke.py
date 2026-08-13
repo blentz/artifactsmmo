@@ -1,6 +1,6 @@
-"""The tiered budget bounds a cycle that has many wide candidates: with a planner
-that never plans the wide goals, selection still terminates quickly at Wait and
-memoizes them, and a second cycle skips them.
+"""The single-budget walk bounds a cycle that has many wide candidates: with a
+planner that never plans the wide goals, selection still terminates quickly at
+Wait and memoizes them, and a second cycle skips them.
 
 Offline smoke test (scripted planner, no network). Uses a state + action set that
 actually drives candidates through the planner (a task-absent state with an
@@ -16,7 +16,7 @@ from tests.test_ai.test_strategy_driver_tiered import _ScriptedPlanner
 
 
 def test_many_doomed_candidates_resolve_to_wait_then_skip():
-    planner = _ScriptedPlanner(cheap_ok=set(), full_only=set())  # nothing ever plans
+    planner = _ScriptedPlanner()  # nothing ever plans
     a = StrategyArbiter(planner, history=None)
     a.set_cycle(0)
     state = make_state(task_code=None, task_total=0)

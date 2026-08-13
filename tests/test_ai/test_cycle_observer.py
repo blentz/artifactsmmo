@@ -23,6 +23,7 @@ class TestCycleSnapshot:
         assert snap.planner_timed_out is False
         assert snap.plan_len == 0
         assert snap.goals_tried == []
+        assert snap.objective_unplannable is None
         assert snap.suppressed_goals == []
         assert snap.path_blocked is False
 
@@ -109,6 +110,35 @@ class TestObserverHook:
         assert [g.goal for g in snap.goals_tried] == ["CraftEquipment", "FightMonster"]
         assert snap.goals_tried[1].timed_out is True
         assert snap.goals_tried[1].nodes == 120
+        # Nothing was abandoned on this cycle: the first attempt planned.
+        assert snap.objective_unplannable is None
+
+    def test_notify_observer_carries_an_abandoned_objective(self):
+        """The arbiter attempted an objective, got nothing, and ran something
+        lower-ranked. 31 hours of live traces recorded no such event because it
+        did not exist; the snapshot must carry it now."""
+        calls: list[CycleSnapshot] = []
+        player = GamePlayer(character="hero", cycle_observer=calls.append)
+        player.state = make_state(level=3)
+        player._notify_observer(
+            "GrindCharacterXP(red_slime)", "Fight(red_slime)", "ok",
+            goal_rank_trace=[],
+            planner_stats={
+                "nodes": 3, "depth": 1, "timed_out": False, "plan_len": 1,
+                "goals_tried": [],
+                "objective_unplannable": {
+                    "goal": "UpgradeEquipment(greater_wooden_staff)",
+                    "nodes": 3873, "depth": 8, "timed_out": True,
+                    "plan_len": 0, "priority": 35.0,
+                },
+            },
+        )
+        abandoned = calls[0].objective_unplannable
+        assert abandoned is not None
+        assert abandoned.goal == "UpgradeEquipment(greater_wooden_staff)"
+        assert abandoned.nodes == 3873
+        assert abandoned.depth == 8
+        assert abandoned.timed_out is True
 
     def test_notify_observer_noop_when_unset(self):
         """No observer = silent skip; no exception."""

@@ -2632,12 +2632,17 @@ COMBAT_VETO_MUTATIONS = [
 ]
 
 
-# Killed by tests/test_ai/test_strategy_driver_tiered.py (the cheap-pass conclusive
-# marking policy — the feather_coat re-explosion fix).
+# Killed by tests/test_ai/test_strategy_driver_tiered.py (the doomed-memo marking
+# policy: ANY no-plan marks, timeout included — the feather_coat re-explosion fix
+# and its 2026-08-13 recurrence, the 955-cycle staff search).
 STRATEGY_DRIVER_MUTATIONS = [
-    ("strategy_driver: cheap pass marks on timeout too (drops the conclusive gate)",
-     "        elif mark_on_timeout or not timed_out:",
-     "        elif mark_on_timeout or timed_out:"),
+    # THE Task-11 defect, reinstated: exempt timeouts from marking. It was
+    # written as `mark_on_timeout=False` on a cheap pass whose escalation was
+    # unreachable, so it meant "never mark" and the same exploding search re-ran
+    # every cycle for 31 hours. Killed by test_timeout_is_memoized_too.
+    ("strategy_driver: restore the timeout carve-out (a timed-out goal is never marked)",
+     "        else:\n            self._memo.mark(r, state, self._cycle)",
+     "        elif not timed_out:\n            self._memo.mark(r, state, self._cycle)"),
     ("strategy_driver: clear requires BOTH guard and plan (drops plan-clears)",
      "        if r in guard_reprs or plan:",
      "        if r in guard_reprs and plan:"),

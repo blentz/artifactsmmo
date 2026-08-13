@@ -29,13 +29,20 @@ def tmp_db_path():
         os.unlink(path)
 
 
-def test_search_budget_spans_a_game_cooldown():
-    """Deep recipe chains (e.g. 6 ash_plank = 60 ash_wood, ~2800 search nodes)
-    become I/O-bound when learned costs query SQLite per node — such a search
-    needs ~7.5s. The budget must comfortably exceed that while staying within the
-    game's 60s+ action cooldown (we plan during the prior action's cooldown), so
-    a deep-but-reachable goal is never abandoned as a false no_plan."""
-    assert planner_mod._SEARCH_BUDGET_SECONDS >= 90.0
+def test_search_budget_clears_the_slowest_successful_search_and_fits_a_cooldown():
+    """Two-sided, because ONE budget now serves every goal.
+
+    Floor: deep recipe chains (e.g. 6 ash_plank, ~2800 search nodes) become
+    I/O-bound when learned costs query SQLite per node — ~7.5s — so the budget
+    must comfortably exceed that or a deep-but-reachable goal is abandoned as a
+    false no_plan.
+
+    Ceiling: we plan during the PRIOR action's cooldown (60s+), and a goal that
+    cannot be planned burns the whole budget before the walk moves on. The old
+    300s escalation budget would have blown straight through the cooldown; it
+    survived only because it was unreachable in practice."""
+    assert planner_mod._SEARCH_BUDGET_SECONDS >= 15.0
+    assert planner_mod._SEARCH_BUDGET_SECONDS <= 60.0
 
 
 def make_game_data(monster_locs=None, monster_levels=None) -> GameData:

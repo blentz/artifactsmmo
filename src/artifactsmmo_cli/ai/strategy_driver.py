@@ -3,7 +3,6 @@ existing goal.
 
 Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle."""
 
-import os
 from dataclasses import replace
 from datetime import datetime, timezone
 
@@ -128,22 +127,6 @@ a full bag-load instead. See `ai/shed_urgency.bank_shed_hoist_pure`.
 WHY A THRESHOLD AT ALL — it is what keeps the hoist CONDITIONAL. These candidates
 are materialized in the COLLECT band, ABOVE the objective step, so an
 unconditional hoist would outrank progression on every cycle forever."""
-
-CHEAP_BUDGET_SECONDS = float(os.environ.get("ARTIFACTSMMO_CHEAP_BUDGET_SECONDS", "10.0"))
-"""Per-candidate budget for the arbiter's cheap first pass. Sized ABOVE the
-I/O-bound planning time of a reachable goal under `--learn` (~7.5s; each A* node
-issues LearningStore SQLite queries) so a legitimately-plannable goal — e.g. the
-gear-chain GatherMaterials step — is found in the cheap pass instead of being
-starved and forcing escalation. Width-unfindable goals still exceed 10s here and
-are memoized. Guards bypass this and always get the full (300s) budget. Tunable;
-see the tiered-budget spec. (A 1s value starved real goals on the live --learn
-bot, which then escalated every doomed candidate at the full budget.)
-
-Overridable via `ARTIFACTSMMO_CHEAP_BUDGET_SECONDS` (default 10.0): the scenario
-suite drives this same cheap pass, and a 10s WALL-CLOCK budget that a fast dev
-box clears is squeezed on slower CI hardware, so a legitimately-bounded search
-(well under the 200k node cap) spuriously times out. The runner exports a larger
-value so those searches complete; production and the census gate keep 10s."""
 
 LEVEL_LOOKAHEAD = 3
 """How many levels ahead the objective step / task skill-gate targets, replacing
@@ -877,6 +860,11 @@ class StrategyArbiter:
         self._history = history
         self._committed_repr: str | None = None
         self.goals_tried: list[dict[str, object]] = []
+        # The FIRST candidate this cycle's walk actually attempted, when it
+        # produced no plan and a LOWER-ranked candidate ran instead. None on
+        # every other cycle. See `select` for why it is derived from
+        # `goals_tried` rather than reported by `select_pure`.
+        self.objective_unplannable: dict[str, object] | None = None
         # Phase B3 (docs/PLAN_c2_composed_liveness.md): the fired guard/means
         # kinds exactly as the most recent select() saw them. Emitted into the
         # per-cycle trace so the offline ladder lockstep replays selection
@@ -886,8 +874,9 @@ class StrategyArbiter:
         self._cycle = 0
         # Whether the most recent `_plans` call ended in a budget TIMEOUT (vs an
         # EXHAUSTIVE search or a definitive is_plannable=False / WaitGoal result).
-        # The cheap pass only memoizes CONCLUSIVE no-plans, so a cheap timeout
-        # still escalates instead of being skipped. See `_record_attempt`.
+        # Telemetry only: `_record_attempt` marks the memo on ANY no-plan, so
+        # nothing branches on this flag any more — it rides `goals_tried` into
+        # the trace so a reader can tell a dead end from a search blow-up.
         self._last_timed_out: bool = False
 
     def set_cycle(self, cycle: int) -> None:
@@ -936,8 +925,7 @@ class StrategyArbiter:
         # UpgradeEquipment(copper_boots) — 80 gathers vs max_depth 32 — from
         # stalling the first cycle.
         if not goal.is_plannable(state, game_data, self._history):
-            # A proven-unplannable goal is a CONCLUSIVE no-plan (not a timeout):
-            # the cheap pass may safely memoize it.
+            # A proven-unplannable goal is a CONCLUSIVE no-plan, not a timeout.
             self._last_timed_out = False
             self.goals_tried.append({
                 "goal": repr(goal),
@@ -999,20 +987,32 @@ class StrategyArbiter:
         return plan
 
     def _record_attempt(self, goal: Goal, plan: list[Action], timed_out: bool,
-                        state: WorldState, guard_reprs: set[str], *,
-                        mark_on_timeout: bool) -> list[Action]:
+                        state: WorldState, guard_reprs: set[str]) -> list[Action]:
         """Update the doomed-memo from one planning attempt and return `plan`.
 
-        - A found plan (or a guard goal) CLEARS any prior doomed mark.
-        - A no-plan result MARKS the goal doomed when it is conclusive: always for
-          the full pass (`mark_on_timeout=True`), but only on an EXHAUSTIVE search
-          (`not timed_out`) for the cheap pass, so a cheap-budget timeout stays
-          available for the full-budget escalation instead of being skipped.
-        Guards bypass the memo entirely (they always get the full budget)."""
+        - A found plan (or a memo-bypassing goal) CLEARS any prior doomed mark.
+        - Any no-plan result MARKS the goal doomed, TIMEOUT INCLUDED.
+
+        The timeout carve-out is deleted. It existed to keep a cheap-budget
+        timeout available for a full-budget escalation that, in a fleet with an
+        always-plannable fallback grind, was never reached: `select_pure` takes
+        the first candidate that plans, `GrindCharacterXP` plans in 2 nodes, so
+        `chosen` was never None and the escalation pass never ran. The carve-out
+        therefore only ever meant "never mark", and the same 3873-node search
+        re-ran on 955 consecutive cycles (live traces 2026-08-12).
+
+        `timed_out` is kept in the signature because it is the ONE fact a caller
+        cannot re-derive here, and dropping it from the parameter list would
+        invite re-introducing the carve-out later; it now only documents the
+        attempt (the trace carries it via `goals_tried`).
+
+        `guard_reprs` is the memo-bypass set: guards plus `Goal.memo_exempt`
+        goals, whose plannability flips on state the memo's signature cannot
+        track."""
         r = repr(goal)
         if r in guard_reprs or plan:
             self._memo.clear(r)
-        elif mark_on_timeout or not timed_out:
+        else:
             self._memo.mark(r, state, self._cycle)
         return plan
 
@@ -1036,6 +1036,7 @@ class StrategyArbiter:
         Returns (goal, plan, goals_tried).
         """
         self.goals_tried = []
+        self.objective_unplannable = None
 
         chosen_step: MetaGoal | None = getattr(decision, "chosen_step", None)
         chosen_root: MetaGoal | None = getattr(decision, "chosen_root", None)
@@ -1121,6 +1122,26 @@ class StrategyArbiter:
 
         self._committed_repr = new_committed
         self.goals_tried = self._dedupe_goals_tried()
+        # THE FIRST CANDIDATE ACTUALLY ATTEMPTED, when it produced no plan and
+        # something LOWER-ranked ran instead. Not "ranked[0]": `select_pure`
+        # short-circuits to the sticky-committed goal before walking the ranked
+        # list, so under a live commitment the first attempt is the committed
+        # objective — which is precisely the objective the arbiter was pursuing
+        # and abandoned. A SATISFIED or SUPPRESSED candidate never reaches
+        # `try_plan`, so it never appears here: it was not attempted, so it was
+        # not abandoned.
+        #
+        # Derived from `goals_tried` rather than reported by `select_pure`,
+        # which is mirrored in formal/Formal/ArbiterSelect.lean and stays pure.
+        #
+        # The fall-through to a lower-ranked goal is INTENDED; its silence was
+        # not. Live traces 2026-08-12 show UpgradeEquipment(greater_wooden_staff)
+        # ranked first and abandoned on 955 consecutive cycles with nothing
+        # recorded, so 31 hours of runtime read as a deliberate choice to grind.
+        first = self.goals_tried[0] if self.goals_tried else None
+        if (first is not None and not first["plan_len"]
+                and chosen is not None and repr(chosen) != first["goal"]):
+            self.objective_unplannable = dict(first)
         return chosen, plan, self.goals_tried
 
     def _resolve_step_goal(
@@ -1483,7 +1504,12 @@ class StrategyArbiter:
         actions: list[Action],
         ctx: SelectionContext,
     ) -> tuple[Goal | None, list[Action], str | None]:
-        """Tier walk: cheap pass → full-budget escalation → worth-gate bypass → Wait fallback."""
+        """Ordered walk → worth-gate bypass → Wait fallback.
+
+        ONE walk at ONE budget. The cheap/full two-pass this replaced escalated
+        only `if chosen is None`, and a fallback combat grind always plans, so
+        the escalation was unreachable in practice and the cheap budget was the
+        real budget for every objective."""
 
         def _is_suppressed_base(goal: Goal) -> bool:
             r = repr(goal)
@@ -1495,61 +1521,36 @@ class StrategyArbiter:
             r = repr(goal)
             return r != "TaskCancel" and r in _effective_suppressed
 
-        # Partition: guard candidates always get the full budget and bypass the
-        # memo (safety/gear-critical, few, rarely time out). Non-guard candidates
-        # go through the cheap pass → escalation → memo machinery.
-        guard_reprs = {c.repr_ for c in candidates if not c.is_means}
-        # memo_bypass = guards PLUS memo-exempt goals (their plannability flips on
-        # fast-churning HP/inventory the memo's (level, skills) signature can't
-        # track, so a transient no-plan must not skip or mark them (Goal.memo_exempt).
-        # Distinct from guard_reprs because exempt goals still take the CHEAP budget
-        # (they plan in a few nodes); only guards earn the full budget.
-        memo_bypass = guard_reprs | {c.repr_ for c in candidates if c.goal.memo_exempt}
+        # memo_bypass = guard candidates PLUS memo-exempt goals. Guards are
+        # safety/gear-critical, few, and rarely time out; memo-exempt goals have a
+        # plannability that flips on fast-churning HP/inventory the memo's
+        # (level, skills) signature cannot track, so a transient no-plan must not
+        # skip or mark them (`Goal.memo_exempt`). Both sets bypass the memo alone —
+        # there is no longer a second budget for either to earn.
+        memo_bypass = ({c.repr_ for c in candidates if not c.is_means}
+                       | {c.repr_ for c in candidates if c.goal.memo_exempt})
         non_wait = [c for c in candidates if not isinstance(c.goal, WaitGoal)]
-
-        def _budget_for(goal: Goal, cheap: bool) -> float | None:
-            if repr(goal) in guard_reprs:
-                return None  # guards: full budget always
-            return CHEAP_BUDGET_SECONDS if cheap else None
 
         def _skip(goal: Goal) -> bool:
             # Memo never skips guards or memo-exempt goals.
             return repr(goal) not in memo_bypass and self._memo.is_doomed(
                 repr(goal), state, self._cycle)
 
-        def try_plan_cheap(goal: Goal) -> list[Action]:
+        def try_plan(goal: Goal) -> list[Action]:
             if _skip(goal):
                 return []
-            plan = self._plans(goal, state, game_data, actions, ctx, _budget_for(goal, cheap=True))
-            # Cheap pass: memoize only a CONCLUSIVE no-plan (search exhausted, not a
-            # budget timeout). A cheap timeout stays unmemoized so it can escalate.
-            # This is the feather_coat 99%-CPU fix: a doomed goal passed over in the
-            # cheap walk (because a LATER goal plans) is now recorded instead of
-            # re-exploding every cycle (the full pass that used to mark it never ran).
+            # None = the one budget (`planner._SEARCH_BUDGET_SECONDS`).
+            plan = self._plans(goal, state, game_data, actions, ctx, None)
             return self._record_attempt(goal, plan, self._last_timed_out, state,
-                                        memo_bypass, mark_on_timeout=False)
-
-        def try_plan_full(goal: Goal) -> list[Action]:
-            if _skip(goal):
-                return []
-            plan = self._plans(goal, state, game_data, actions, ctx, _budget_for(goal, cheap=False))
-            # Full (last-resort) pass: mark on ANY no-plan, timeout included — the
-            # pragmatic backoff trigger (the exponential window re-probes later).
-            return self._record_attempt(goal, plan, self._last_timed_out, state,
-                                        memo_bypass, mark_on_timeout=True)
+                                        memo_bypass)
 
         def satisfied(goal: Goal) -> bool:
             return goal.is_satisfied(state)
 
-        # Cheap pass over non-Wait candidates (guards inside still get full budget).
+        # THE walk over non-Wait candidates, in band order.
         chosen, plan, new_committed = select_pure(
             candidates=non_wait, committed_repr=self._committed_repr,
-            try_plan=try_plan_cheap, is_satisfied=satisfied, is_suppressed=is_suppressed)
-        if chosen is None:
-            # Escalation pass at full budget; memoize timeouts.
-            chosen, plan, new_committed = select_pure(
-                candidates=non_wait, committed_repr=self._committed_repr,
-                try_plan=try_plan_full, is_satisfied=satisfied, is_suppressed=is_suppressed)
+            try_plan=try_plan, is_satisfied=satisfied, is_suppressed=is_suppressed)
         if chosen is None and worth_suppressed:
             # Last resort: objective step unplannable AND every need-serving means
             # failed, leaving only worth-suppressed task means. Re-run WITHOUT the
@@ -1557,7 +1558,7 @@ class StrategyArbiter:
             # so "objective stalled, doing income" is observable.
             chosen, plan, new_committed = select_pure(
                 candidates=non_wait, committed_repr=self._committed_repr,
-                try_plan=try_plan_full, is_satisfied=satisfied,
+                try_plan=try_plan, is_satisfied=satisfied,
                 is_suppressed=_is_suppressed_base)
             if chosen is not None:
                 self.goals_tried.append({"goal": "worth_gate_bypassed", "nodes": 0,
@@ -1571,11 +1572,17 @@ class StrategyArbiter:
         return chosen, plan, new_committed
 
     def _dedupe_goals_tried(self) -> list[dict[str, object]]:
-        """Telemetry: collapse the two-pass probes to one record per goal (the last, full-budget attempt wins)."""
-        # The two-pass walk probes a non-guard candidate at most twice (cheap
-        # then full budget); collapse those to the LAST (full-budget) attempt so
-        # goals_tried stays one record per goal (the planner-attempt telemetry is
-        # diagnostic-only; the final attempt carries the authoritative stats).
+        """Telemetry: one record per goal (the LAST attempt wins, first-seen order kept)."""
+        # KEPT after the two-pass walk was deleted, because a goal can still be
+        # probed twice in one cycle: when nothing plans AND the worth gate
+        # suppressed something, `_arbitrate` re-runs the walk without the gate,
+        # and a MEMO-BYPASSING candidate (guard or `memo_exempt`) is not skipped
+        # the second time, so it plans again and appends a second record. Only
+        # memo-marked candidates are skipped on the re-run.
+        #
+        # dict insertion order keeps the FIRST-SEEN position of each goal while
+        # the VALUE is the last attempt — `select`'s `objective_unplannable`
+        # depends on both halves of that.
         deduped: dict[str, dict[str, object]] = {}
         for attempt in self.goals_tried:
             deduped[str(attempt["goal"])] = attempt

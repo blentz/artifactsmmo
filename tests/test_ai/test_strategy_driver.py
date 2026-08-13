@@ -2447,3 +2447,109 @@ def test_equippable_goal_keeps_upgrade_path_when_vendor_item_owned():
     goal = objective_step_goal(ObtainItem("dune_bag", 1, slot="bag_slot"),
                                state, gd, _ctx(), root=ObtainItem("dune_bag", 1, slot="bag_slot"))
     assert isinstance(goal, UpgradeEquipmentGoal), repr(goal)
+
+
+# ---------------------------------------------------------------------------
+# objective_unplannable: the abandoned first-attempted candidate is LOUD
+# ---------------------------------------------------------------------------
+
+class _ScriptedArbiterPlanner:
+    """Plans `[WaitAction()]` for goal reprs in `plannable`; every other goal gets
+    no plan, reported as a budget TIMEOUT (the live shape: the staff search hit
+    the budget at 3873 nodes and returned nothing)."""
+
+    def __init__(self, plannable=()):
+        self.plannable = set(plannable)
+        self.last_stats = GOAPPlanner().last_stats
+
+    def plan(self, state, goal, actions, game_data, history=None, *, budget_seconds=None):
+        if repr(goal) in self.plannable:
+            self.last_stats = PlanStats(nodes_explored=3, max_depth_reached=1, timed_out=False)
+            return [WaitAction()]
+        self.last_stats = PlanStats(nodes_explored=3873, max_depth_reached=8, timed_out=True)
+        return []
+
+
+def _unplannable_objective_arbiter(plannable):
+    """An arbiter whose walk attempts GrindCharacterXP(chicken) (the objective
+    step under ReachCharLevel) FIRST and AcceptTask second."""
+    arbiter = StrategyArbiter(_ScriptedArbiterPlanner(plannable), history=None)
+    arbiter.set_cycle(0)
+    return arbiter
+
+
+def _select_with(arbiter, **kw):
+    state = make_state(hp=150, max_hp=150, task_code=None, task_total=0)
+    return arbiter.select(
+        _FakeDecision(chosen_step=ReachCharLevel(5)), state, _make_planner_gd(),
+        [AcceptTaskAction(taskmaster_location=(2, 1))],
+        _ctx(combat_monster="chicken"), **kw)
+
+
+def test_first_attempted_candidate_is_recorded_when_it_is_abandoned():
+    """31 hours of traces recorded NOTHING when the first-attempted objective was
+    abandoned; the run read as 'the bot chose to grind XP'. The fall-through to a
+    lower-ranked candidate is intended — only the silence is the bug."""
+    arbiter = _unplannable_objective_arbiter(plannable={"AcceptTask"})
+    goal, plan, tried = _select_with(arbiter)
+    # The walk attempted the objective step first and it produced no plan.
+    assert [t["goal"] for t in tried] == ["GrindCharacterXP(chicken)", "AcceptTask"]
+    # Fall-through is intended.
+    assert repr(goal) == "AcceptTask" and len(plan) == 1
+    assert arbiter.objective_unplannable is not None, \
+        "the abandoned objective must be recorded, not silently dropped"
+    assert arbiter.objective_unplannable["goal"] == "GrindCharacterXP(chicken)"
+    assert arbiter.objective_unplannable["nodes"] == 3873
+    assert arbiter.objective_unplannable["depth"] == 8
+    assert arbiter.objective_unplannable["timed_out"] is True
+
+
+def test_no_event_when_the_first_attempted_candidate_plans():
+    arbiter = _unplannable_objective_arbiter(plannable={"GrindCharacterXP(chicken)"})
+    goal, _plan, _tried = _select_with(arbiter)
+    assert repr(goal) == "GrindCharacterXP(chicken)"
+    assert arbiter.objective_unplannable is None
+
+
+def test_no_event_when_the_top_candidate_was_never_attempted():
+    """A SUPPRESSED candidate never reaches try_plan, so it was not abandoned —
+    the first ATTEMPTED candidate is the one that counts, and here it plans."""
+    arbiter = _unplannable_objective_arbiter(plannable={"AcceptTask"})
+    goal, _plan, tried = _select_with(
+        arbiter, suppressed={"GrindCharacterXP(chicken)"})
+    assert [t["goal"] for t in tried] == ["AcceptTask"]
+    assert repr(goal) == "AcceptTask"
+    assert arbiter.objective_unplannable is None
+
+
+def test_under_a_commitment_the_event_names_the_COMMITTED_objective():
+    """Not "rank-1". `select_pure` short-circuits to the sticky-committed goal
+    before walking the ranked list, so the first ATTEMPTED candidate under a live
+    commitment is the committed objective — which is exactly the objective the
+    arbiter was pursuing and abandoned, and the more informative of the two."""
+    arbiter = _unplannable_objective_arbiter(plannable={"AcceptTask"})
+    goal0, _plan0, _ = _select_with(arbiter)
+    assert repr(goal0) == "AcceptTask" and arbiter._committed_repr == "AcceptTask"
+
+    # Cycle 1: the COMMITTED goal stops planning; the ranked-first grind starts.
+    arbiter.set_cycle(1)
+    arbiter._planner.plannable = {"GrindCharacterXP(chicken)"}
+    goal1, _plan1, tried = _select_with(arbiter)
+    assert [t["goal"] for t in tried] == ["AcceptTask", "GrindCharacterXP(chicken)"], \
+        "the commitment is probed BEFORE the ranked walk"
+    assert repr(goal1) == "GrindCharacterXP(chicken)"
+    assert arbiter.objective_unplannable is not None
+    assert arbiter.objective_unplannable["goal"] == "AcceptTask", \
+        "the abandoned COMMITTED objective, not ranked[0], is what a trace reader needs"
+
+
+def test_event_is_cleared_on_the_next_healthy_cycle():
+    """The field is per-cycle state: a cycle whose first attempt plans must not
+    inherit the previous cycle's abandonment."""
+    arbiter = _unplannable_objective_arbiter(plannable={"AcceptTask"})
+    _select_with(arbiter)
+    assert arbiter.objective_unplannable is not None
+    arbiter.set_cycle(1)
+    arbiter._planner.plannable = {"AcceptTask", "GrindCharacterXP(chicken)"}
+    _select_with(arbiter)
+    assert arbiter.objective_unplannable is None
