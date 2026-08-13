@@ -921,7 +921,9 @@ class StrategyArbiter:
         # Provably-sound pre-plan reachability gate: a goal whose minimum plan is
         # longer than its max_depth can never be planned (the planner never
         # returns a plan longer than max_depth — formal/Formal/PlannerDepthBound),
-        # so skip it instead of burning the full 90s budget. This is what stops
+        # so skip it instead of burning `planner._SEARCH_BUDGET_SECONDS` (named,
+        # never a literal — this comment said "90s" through a 300s era and a 15s
+        # one). This is what stops
         # UpgradeEquipment(copper_boots) — 80 gathers vs max_depth 32 — from
         # stalling the first cycle.
         if not goal.is_plannable(state, game_data, self._history):
@@ -1138,9 +1140,14 @@ class StrategyArbiter:
         # not. Live traces 2026-08-12 show UpgradeEquipment(greater_wooden_staff)
         # ranked first and abandoned on 955 consecutive cycles with nothing
         # recorded, so 31 hours of runtime read as a deliberate choice to grind.
+        #
+        # There is deliberately NO `repr(chosen) != first["goal"]` conjunct: it
+        # cannot be false, so it would be a vacuous guard. `select_pure` returns
+        # a goal only when its `try_plan` came back NON-EMPTY, and the dedupe
+        # above keeps each goal's LAST attempt — so `first["plan_len"] == 0`
+        # already proves `first` is not what ran.
         first = self.goals_tried[0] if self.goals_tried else None
-        if (first is not None and not first["plan_len"]
-                and chosen is not None and repr(chosen) != first["goal"]):
+        if first is not None and not first["plan_len"] and chosen is not None:
             self.objective_unplannable = dict(first)
         return chosen, plan, self.goals_tried
 

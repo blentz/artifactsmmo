@@ -192,8 +192,9 @@ def test_next_grind_goal_descends_when_rung_is_BANKED() -> None:
     That goal is a full from-scratch craft chain (live: 60 copper_ore gathers),
     and its node count GROWS with the banked count because every banked copy
     adds another applicable Withdraw. Measured on the real catalog: held=1 =>
-    24k nodes, held=3 => 47k, held>=5 => the 10s CHEAP_BUDGET_SECONDS is
-    exhausted and the sub-plan comes back EMPTY, so `_execute_level_skill`
+    24k nodes, held=3 => 47k, held>=5 => the planning budget (10s at the time;
+    one 15s `planner._SEARCH_BUDGET_SECONDS` today) is exhausted and the
+    sub-plan comes back EMPTY, so `_execute_level_skill`
     raises "grind produced no leg" EVERY cycle, forever — the grind's own
     success is what breaks it.
 

@@ -218,10 +218,13 @@ were deleted.)
   `TieredSelection.memo_skip_sound` (which assumed an abstract `skip`; this proves
   the concrete backoff arithmetic that DECIDES `skip`).
 Kernel-checked (axioms = {propext, Quot.sound}), rostered in `Manifest.lean`,
-statement-pinned in `Contracts.lean`. REMAINING (Phase 3 of the plan): `Oracle.lean`
-dispatch arm + `formal/diff/test_doomed_memo_diff.py` + `mutate.py` anchors +
-`Audit.lean` `#print axioms`, and the actual code fix (`try_plan_cheap` marks
-no-plan non-guard failures into `_memo`) with unit tests.
+statement-pinned in `Contracts.lean`. LANDED since: `formal/diff/test_doomed_memo_diff.py`,
+`mutate.py`'s `DOOMED_MEMO_MUTATIONS` run-group, `Audit.lean` `#print axioms` for all
+eight theorems, and the code fix itself — `StrategyArbiter._record_attempt` marks EVERY
+no-plan non-guard failure into `_memo`, timeouts included. (That fix was drafted here as
+"`try_plan_cheap` marks…"; the cheap/full two-pass it named was deleted on 2026-08-13
+because its escalation was unreachable in practice, so there is now one budget, one walk,
+and one marking rule. REMAINING: an `Oracle` dispatch arm.)
 
 Design docs: `docs/superpowers/specs/2026-05-26-lean-formal-verification-design.md` (gate architecture),
 `docs/superpowers/specs/2026-05-27-lean-decision-logic-design.md` (decision-logic expansion). The retired

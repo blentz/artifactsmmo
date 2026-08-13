@@ -147,8 +147,8 @@ def test_no_leg_raise_still_names_a_genuine_DEAD_END() -> None:
 
 def test_level_skill_step_degrades_not_crash_when_no_leg() -> None:
     """Fix B (crash-SAFETY): an EMPTY grind sub-plan is reachable by an ordinary
-    planner timeout / node-cap (`GOAPPlanner.plan` returns [] under the 10s
-    CHEAP_BUDGET_SECONDS), not only by logic errors. Dispatched INSIDE
+    planner timeout / node-cap (`GOAPPlanner.plan` returns [] under the one
+    `planner._SEARCH_BUDGET_SECONDS` budget), not only by logic errors. Dispatched INSIDE
     `_execute`'s try, the guard's RuntimeError is caught and converted to an
     `error:other` cycle — the session must NOT crash (`run()` has no `except`).
     Before Fix B the dispatch was BEFORE the try, so this propagated out of

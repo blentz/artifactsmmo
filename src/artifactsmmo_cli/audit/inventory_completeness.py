@@ -104,13 +104,6 @@ from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, TASKS_COIN_CODE, WorldState
 
-INVENTORY_AUDIT_BUDGET_SECONDS = 10.0
-"""Per-cell planner budget. Deliberately AT OR BELOW the live bot's single
-planning budget (`planner._SEARCH_BUDGET_SECONDS`, 15s), so a cell that plans
-here is guaranteed to plan live; a cell needing MORE than the live bot gets
-would prove nothing about the live bot. (It was exactly the arbiter's 10s cheap
-first-pass budget until that two-pass scheme was deleted.)"""
-
 SURPLUS = 6
 """Copies held ABOVE the cap in a LIVENESS cell. Any positive number proves the
 point (`bankable`/`destroyable` return exactly this many); 6 is comfortably above
