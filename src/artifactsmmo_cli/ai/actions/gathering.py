@@ -93,10 +93,13 @@ class GatherAction(Action):
                 or self.resource_code)
 
     @staticmethod
-    def _inv(state: WorldState) -> GatherInv:
+    def inv(state: WorldState) -> GatherInv:
         """The `GatherInv` projection of `state` shared by `is_applicable`,
-        `apply`, and `effective_quantity` — one construction site instead of
-        three identical ones."""
+        `apply`, `effective_quantity` — one construction site instead of
+        three identical ones — and by `intermediate_batch.size_closure_gather`,
+        which sizes a not-yet-quantified gather and so cannot round-trip
+        through `effective_quantity`. Public because that caller is outside
+        this class."""
         return GatherInv(used=state.inventory_used, cap=state.inventory_max,
                          item_count=state.inventory,
                          slots_used=state.inventory_slots_used,
@@ -106,7 +109,7 @@ class GatherAction(Action):
         """`min(self.quantity, inventory headroom in units)` — the largest
         feasible batch NOW. 0 when not even one unit fits. Mirrors
         `CraftAction.effective_quantity`."""
-        return gather_batch_size_pure(self._inv(state), self.quantity, self.drop_item(game_data))
+        return gather_batch_size_pure(self.inv(state), self.quantity, self.drop_item(game_data))
 
     def learning_key(self) -> str:
         """Learned-cost key, deliberately QUANTITY-FREE. `repr` carries the
@@ -122,7 +125,7 @@ class GatherAction(Action):
         if not self.locations:
             return False
         drop_item = self.drop_item(game_data)
-        inv = self._inv(state)
+        inv = self.inv(state)
         skill_req = game_data.resource_skill_level(self.resource_code)
         # The `effective_quantity(...) >= 1` conjunct is belt-and-braces, not
         # a live gate: `gather_is_applicable_pure(inv, _MIN_FREE_SLOTS, ...)`
@@ -143,7 +146,7 @@ class GatherAction(Action):
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = nearest_or_error(state.x, state.y, self.locations, "gather")
         drop_item = self.drop_item(game_data)
-        post = gather_apply_batch_pure(self._inv(state), drop_item,
+        post = gather_apply_batch_pure(self.inv(state), drop_item,
                                        self.effective_quantity(state, game_data))
         new_inventory = dict(post.item_count)
         # Gathering NEVER advances an items-task: the server only counts items

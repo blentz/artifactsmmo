@@ -1,6 +1,9 @@
+import dataclasses
+
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
+from artifactsmmo_cli.ai.intermediate_batch import size_closure_gather, size_intermediate_craft
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from tests.test_ai.fixtures import make_state
 
@@ -152,3 +155,67 @@ def test_deep_chain_tight_inventory_exercises_fit_clamp() -> None:
     out_setting = size_intermediate_craft(a_setting, chain, state, gd)
     assert out_setting.quantity == 1
     assert out_setting.quantity * 12 <= usable  # interleave-safety: 1*12=12<=12
+
+
+def _gd_spruce() -> GameData:
+    gd = GameData()
+    gd._resource_drops = {"spruce_tree": "spruce_wood"}
+    return gd
+
+
+def test_sizes_to_the_net_closure_deficit() -> None:
+    gd = _gd_spruce()
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    drop = a.drop_item(gd)
+    state = make_state(inventory_max=100, inventory_slots_max=20)
+    sized = size_closure_gather(a, {drop: 60}, state, gd)
+    assert sized.quantity == 60
+
+
+def test_holdings_reduce_the_deficit() -> None:
+    gd = _gd_spruce()
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    drop = a.drop_item(gd)
+    state = make_state(inventory_max=100, inventory_slots_max=20)
+    held = dataclasses.replace(state, inventory={drop: 10}, bank_items={drop: 15})
+    sized = size_closure_gather(a, {drop: 60}, held, gd)
+    assert sized.quantity == 35  # 60 demand - (10 held + 15 banked)
+
+
+def test_fully_covered_material_sizes_to_zero() -> None:
+    gd = _gd_spruce()
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    drop = a.drop_item(gd)
+    state = make_state(inventory_max=100, inventory_slots_max=20)
+    held = dataclasses.replace(state, bank_items={drop: 60})
+    assert size_closure_gather(a, {drop: 60}, held, gd).quantity == 0
+
+
+def test_material_absent_from_the_chain_sizes_to_zero() -> None:
+    gd = _gd_spruce()
+    a = GatherAction(resource_code="spruce_tree", locations=frozenset({(0, 0)}))
+    state = make_state(inventory_max=100, inventory_slots_max=20)
+    assert size_closure_gather(a, {}, state, gd).quantity == 0
+
+
+def test_returns_the_same_instance_when_quantity_already_matches() -> None:
+    gd = _gd_spruce()
+    a = GatherAction(resource_code="spruce_tree", quantity=1, locations=frozenset({(0, 0)}))
+    drop = a.drop_item(gd)
+    state = make_state(inventory_max=20, inventory_slots_max=20)
+    assert size_closure_gather(a, {drop: 1}, state, gd) is a
+
+
+def test_keyed_on_the_drop_item_not_the_resource_code_for_an_override() -> None:
+    # A drop_item_override gather targets a secondary drop (e.g. a gem off
+    # ordinary rocks); the closure demands the DROP item, not the resource
+    # code, so demand keyed on the resource code must NOT size this gather.
+    gd = _gd_spruce()
+    a = GatherAction(resource_code="spruce_tree", drop_item_override="rare_gem",
+                     locations=frozenset({(0, 0)}))
+    state = make_state(inventory_max=100, inventory_slots_max=20)
+    # Demand on the resource code alone must not size the gather...
+    assert size_closure_gather(a, {"spruce_tree": 60}, state, gd).quantity == 0
+    # ...but demand on the actual drop item does.
+    sized = size_closure_gather(a, {"rare_gem": 25}, state, gd)
+    assert sized.quantity == 25
