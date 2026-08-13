@@ -437,11 +437,15 @@ class TestGatherAction:
         assert action.is_applicable(full, gd) is True
 
     def test_cost_scales_with_quantity(self):
+        # Exact, not merely increasing: the ruled formula is
+        # `static = (6.0 + dist) * quantity`, so ten.cost() must equal
+        # exactly 10x one.cost() -- `>` alone would pass for any increasing
+        # function and wouldn't catch a change to that formula.
         state = make_state(x=0, y=0, inventory={}, inventory_max=50, inventory_slots_max=20)
         gd = make_game_data(resource_locs={"spruce_tree": [(0, 0)]})
         one = GatherAction(resource_code="spruce_tree", quantity=1, locations=frozenset({(0, 0)}))
         ten = GatherAction(resource_code="spruce_tree", quantity=10, locations=frozenset({(0, 0)}))
-        assert ten.cost(state, gd) > one.cost(state, gd)
+        assert ten.cost(state, gd) == pytest.approx(10 * one.cost(state, gd))
 
     def test_banked_penalty_scales_with_covered_units_only(self):
         """The docstring has always claimed the penalty applies 'per banked unit's
@@ -1310,8 +1314,13 @@ def test_gather_action_cost_uses_history_when_provided():
         store = LearningStore(db_path=path, character="testchar")
         store.start_session()
         action = GatherAction(resource_code="copper_rocks", locations=frozenset({(2, 2)}))
-        # Keyed on `learning_key()`, deliberately quantity-free (see GatherAction
-        # docstring) — NOT `repr(action)`, which now carries the quantity.
+        # Records under EXACTLY what player.py:1190 writes
+        # (`action_repr=action.learning_key()`) so this is a genuine
+        # write/read round-trip, not a fixture that assumes its own
+        # conclusion. Before the writer fix, player.py wrote `repr(action)`
+        # while `cost()` read `learning_key()` -- two different strings for
+        # the same action, so this exact recording produced `cost() == 6.0`
+        # instead of the recorded 18.0 (captured RED, see task-5 fix report).
         repr_str = action.learning_key()
         for i in range(5):
             store.record_cycle(Cycle(

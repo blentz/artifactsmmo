@@ -92,15 +92,21 @@ class GatherAction(Action):
                 or game_data.resource_drop_item(self.resource_code)
                 or self.resource_code)
 
+    @staticmethod
+    def _inv(state: WorldState) -> GatherInv:
+        """The `GatherInv` projection of `state` shared by `is_applicable`,
+        `apply`, and `effective_quantity` — one construction site instead of
+        three identical ones."""
+        return GatherInv(used=state.inventory_used, cap=state.inventory_max,
+                         item_count=state.inventory,
+                         slots_used=state.inventory_slots_used,
+                         slots_max=state.inventory_slots_max)
+
     def effective_quantity(self, state: WorldState, game_data: GameData) -> int:
         """`min(self.quantity, inventory headroom in units)` — the largest
         feasible batch NOW. 0 when not even one unit fits. Mirrors
         `CraftAction.effective_quantity`."""
-        inv = GatherInv(used=state.inventory_used, cap=state.inventory_max,
-                        item_count=state.inventory,
-                        slots_used=state.inventory_slots_used,
-                        slots_max=state.inventory_slots_max)
-        return gather_batch_size_pure(inv, self.quantity, self.drop_item(game_data))
+        return gather_batch_size_pure(self._inv(state), self.quantity, self.drop_item(game_data))
 
     def learning_key(self) -> str:
         """Learned-cost key, deliberately QUANTITY-FREE. `repr` carries the
@@ -116,11 +122,16 @@ class GatherAction(Action):
         if not self.locations:
             return False
         drop_item = self.drop_item(game_data)
-        inv = GatherInv(used=state.inventory_used, cap=state.inventory_max,
-                        item_count=state.inventory,
-                        slots_used=state.inventory_slots_used,
-                        slots_max=state.inventory_slots_max)
+        inv = self._inv(state)
         skill_req = game_data.resource_skill_level(self.resource_code)
+        # The `effective_quantity(...) >= 1` conjunct is belt-and-braces, not
+        # a live gate: `gather_is_applicable_pure(inv, _MIN_FREE_SLOTS, ...)`
+        # already requires `cap - used >= _MIN_FREE_SLOTS (3)`, which implies
+        # at least 1 unit of headroom, so `effective_quantity` (bounded by
+        # that same headroom) can never be 0 once the first conjunct holds.
+        # Kept explicit so a future reader doesn't have to re-derive that —
+        # and so it stays correct if `_MIN_FREE_SLOTS` or the batch-size
+        # rule ever diverge.
         if skill_req is None:
             return (gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS, drop_item)
                     and self.effective_quantity(state, game_data) >= 1)
@@ -132,11 +143,8 @@ class GatherAction(Action):
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = nearest_or_error(state.x, state.y, self.locations, "gather")
         drop_item = self.drop_item(game_data)
-        inv = GatherInv(used=state.inventory_used, cap=state.inventory_max,
-                        item_count=state.inventory,
-                        slots_used=state.inventory_slots_used,
-                        slots_max=state.inventory_slots_max)
-        post = gather_apply_batch_pure(inv, drop_item, self.effective_quantity(state, game_data))
+        post = gather_apply_batch_pure(self._inv(state), drop_item,
+                                       self.effective_quantity(state, game_data))
         new_inventory = dict(post.item_count)
         # Gathering NEVER advances an items-task: the server only counts items
         # when they are DELIVERED to the taskmaster (TaskTradeAction). Modelling
@@ -188,7 +196,13 @@ class GatherAction(Action):
                 static += GATHER_LOADOUT_PENALTY
         if history is None:
             return learned_cost_pure(static, 0.0, 1.0, has_history=False)
-        learned = history.action_cost(self.learning_key(), default=(6.0 + dist),
+        # `default` must be a PER-UNIT figure (matched against `learned`,
+        # which is per-unit and then scaled by quantity below): under 5
+        # samples `action_cost` falls back to this default, so it must carry
+        # the same banked/loadout penalties `static` does, not just the bare
+        # `6.0 + dist`, or a low-sample quantity=1 gather would diverge from
+        # the pre-batching cost the moment it picked up any history at all.
+        learned = history.action_cost(self.learning_key(), default=(static / self.quantity),
                                       window=50) * self.quantity
         rate = history.success_rate(self.learning_key(), window=50)
         return learned_cost_pure(static, learned, rate, has_history=True)

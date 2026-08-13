@@ -72,3 +72,15 @@ class Action(ABC):
 
     def __repr__(self) -> str:
         return self.__class__.__name__
+
+    def learning_key(self) -> str:
+        """Key used for `LearningStore` lookups (`action_cost`/`success_rate`)
+        and the write side in `player.py`. Defaults to `repr(self)`, matching
+        every action except `GatherAction`, which overrides this to be
+        quantity-FREE (see its docstring): `repr` carries the quantity for
+        display/plan-identity, but a batch-quantity-keyed learned cost would
+        fragment into a fresh, empty bucket per batch size. Any writer that
+        wants the read side (`cost`'s `history.action_cost(...)`) to actually
+        find its own writes MUST record `Cycle.action_repr` as
+        `action.learning_key()`, not `repr(action)`."""
+        return repr(self)

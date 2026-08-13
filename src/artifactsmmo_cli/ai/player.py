@@ -1187,7 +1187,7 @@ class GamePlayer:
                 self._record_learning_cycle(
                     prev_state=prev_state_for_learning,
                     new_state=new_state,
-                    action_repr=repr(action),
+                    action_repr=action.learning_key(),
                     action_class=type(action).__name__,
                     outcome=outcome,
                     selected_goal=repr(selected_goal),

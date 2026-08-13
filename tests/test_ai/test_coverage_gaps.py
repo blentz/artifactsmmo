@@ -309,8 +309,11 @@ class TestLearnedCostPenalty:
         gd = make_gd(resource_locs={"copper": [(0, 0)]})
         state = make_state(x=0, y=0)
         # 9 ok (cooldown=10) + 1 error => rate 0.9 (< 0.95), median learned cost 10.
-        # Keyed on learning_key(), quantity-free (repr carries quantity for
-        # display/identity only) -- see GatherAction.learning_key docstring.
+        # Records under EXACTLY what player.py:1190 writes
+        # (`action.learning_key()`); `cost()` reads the same key. A genuine
+        # write/read round-trip, not a fixture that assumes its own
+        # conclusion: recording under `repr(action)` instead (what player.py
+        # wrote before the writer fix) makes this fail with cost()==6.0.
         self._record(store, action.learning_key(), ok_count=9, fail_count=1, cooldown=10.0)
         cost = action.cost(state, gd, history=store)
         # learned(10) / rate(0.9) = 11.11..., strictly above the learned value.
@@ -321,6 +324,7 @@ class TestLearnedCostPenalty:
         gd = make_gd(resource_locs={"copper": [(0, 0)]})
         state = make_state(x=0, y=0)
         # All 10 ok => rate 1.0 (>= 0.95): no penalty, just the learned median.
+        # Same round-trip note as above: recorded under `action.learning_key()`.
         self._record(store, action.learning_key(), ok_count=10, fail_count=0, cooldown=10.0)
         assert action.cost(state, gd, history=store) == pytest.approx(10.0)
 
