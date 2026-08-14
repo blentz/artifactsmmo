@@ -45,11 +45,13 @@ from pathlib import Path
 
 import pytest
 
+from artifactsmmo_cli.ai import strategy_driver
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.min_plan_length import min_plan_length
 from artifactsmmo_cli.ai.planner import GOAPPlanner, PlanStats
@@ -181,3 +183,49 @@ def test_from_scratch_plank_chain_is_admitted() -> None:
                              gd.max_gather_yield, equip=True)
     assert scored <= _goal().max_depth, (scored, _goal().max_depth)
     assert _goal().is_plannable(state, gd) is True
+
+
+def test_from_scratch_routes_to_the_achievable_step_not_the_equippable():
+    """The bug this fixes: `is_plannable` maxes at 15 against max_depth 32 over
+    all 321 real recipes, so it never rejects, and the arbiter planned a
+    100,080-node / ~49.5s UpgradeEquipment search instead of a 2-node gather.
+
+    `actionable_step` already returned ObtainItem('spruce_wood', 10) here.
+    Nothing was asking it."""
+    gd, state = _game_data(), _state_without_banked_planks()
+    goal = strategy_driver._equippable_goal(
+        "greater_wooden_staff", "weapon_slot", state, gd)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal._target_item == "spruce_wood"
+    assert goal.needed == {"spruce_wood": 10}
+
+
+def test_banked_materials_still_route_to_the_craft():
+    """Anti-starvation: once every direct prerequisite is satisfied — from the
+    BANK, via a ready withdraw source — the traversal returns the root and the
+    craft must fire. A routing that always gathered would never equip.
+
+    Reuses `_bank_covered_state()` (16 spruce_plank + 98 blue_slimeball, R2D2's
+    real traced bank) rather than a second fixture building the same state —
+    the file already has it under that name."""
+    gd, state = _game_data(), _bank_covered_state()
+    goal = strategy_driver._equippable_goal(
+        "greater_wooden_staff", "weapon_slot", state, gd)
+    assert isinstance(goal, UpgradeEquipmentGoal)
+
+
+def test_the_traversal_runs_once_per_decision(monkeypatch):
+    """The helper re-derives the step when not given one. Threading it through
+    must not double the walk — `actionable_step` is the expensive part."""
+    calls = []
+    real = strategy_driver.actionable_step
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(strategy_driver, "actionable_step", counting)
+    gd, state = _game_data(), _state_without_banked_planks()
+    strategy_driver._equippable_goal(
+        "greater_wooden_staff", "weapon_slot", state, gd)
+    assert len(calls) == 1, f"actionable_step ran {len(calls)} times"

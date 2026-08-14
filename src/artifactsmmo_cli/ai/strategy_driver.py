@@ -457,9 +457,15 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
 def _gather_goal_for_unreachable_equippable(
     code: str, state: WorldState, game_data: GameData, equip_max_depth: int,
     ctx: SelectionContext = NO_PROFILE_CONTEXT,
+    step: ObtainItem | None = None,
 ) -> GatherMaterialsGoal:
     """Build a budget-FEASIBLE GatherMaterials goal for a depth-unreachable
     equippable `code` (its full craft chain exceeds `equip_max_depth`).
+
+    `step` is the caller's already-computed `actionable_step` result, passed
+    so the traversal runs once per decision instead of twice (once to decide
+    whether to route here, once inside). `None` means "derive it here" — kept
+    for callers that have not computed it themselves.
 
     `ctx` (the caller's per-cycle `SelectionContext`) is forwarded to
     `actionable_step` so the routed step stops at a node with any ready
@@ -494,10 +500,11 @@ def _gather_goal_for_unreachable_equippable(
     owned: dict[str, int] = dict(state.inventory)
     for owned_code, qty in (state.bank_items or {}).items():
         owned[owned_code] = owned.get(owned_code, 0) + qty
-    step = actionable_step(ObtainItem(code=code, quantity=1), state, game_data, ctx)
-    if step is not None and isinstance(step, ObtainItem) and step.code != code:
+    resolved = step if step is not None else actionable_step(
+        ObtainItem(code=code, quantity=1), state, game_data, ctx)
+    if isinstance(resolved, ObtainItem) and resolved.code != code:
         tgt_code, tgt_qty = gather_step_target(
-            code, step.code, step.quantity,
+            code, resolved.code, resolved.quantity,
             game_data.crafting_recipes, owned, equip_max_depth,
             game_data.max_gather_yield)
         return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
@@ -586,7 +593,20 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
                     target_item=currency,
                     needed={currency: currency_grind_target_pure(held, price)})
         return GatherMaterialsGoal(target_item=code, needed={code: 1})
-    if upgrade.is_plannable(state, game_data):
+    # Route on the STEP, not on a depth-bound proxy for it. `is_plannable`
+    # compares min_plan_length against max_depth 32, and min_plan_length maxes
+    # at 15 across all 321 real recipes (see UpgradeEquipmentGoal.max_depth's
+    # SECOND RESIDUAL), so it never rejects and this routing was dead — the
+    # arbiter planned a 100,080-node search that timed out instead of the
+    # 2-node gather `actionable_step` had already identified.
+    #
+    # The direct question is the one the helper asks internally: is the deepest
+    # achievable node something OTHER than the goal itself? It self-corrects in
+    # both directions — materials missing routes to the gather, materials
+    # banked or carried leafs at the root and fires the craft — so there is no
+    # threshold to tune and no bound to rot.
+    step = actionable_step(ObtainItem(code=code, quantity=1), state, game_data, ctx)
+    if not (isinstance(step, ObtainItem) and step.code != code):
         return upgrade
     recipe = game_data.crafting_recipe(code) or {}
     if recipe:
@@ -595,7 +615,7 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
         # plan must gather through the multi-level recipe and explodes the GOAP
         # search (see _gather_goal_for_unreachable_equippable).
         return _gather_goal_for_unreachable_equippable(
-            code, state, game_data, upgrade.max_depth, ctx)
+            code, state, game_data, upgrade.max_depth, ctx, step=step)
     # Unreachable in practice: is_plannable is only False when min_gathers >
     # max_depth, which requires a non-empty recipe (a recipe-less item needs at
     # most one gather, so it is always plannable and returns above). Kept as a

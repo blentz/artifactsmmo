@@ -367,121 +367,59 @@ def test_gear_review_deep_chain_routes_to_flat_leaf_not_explosive_recipe():
     assert planner.last_stats.nodes_explored < 5000, planner.last_stats.nodes_explored
 
 
-def test_equippable_goal_deep_chain_now_admits_the_root_bounded_by_timeout():
-    """INVERTED by Task 3 (planner-gather-batching) — was
-    `test_equippable_goal_deep_chain_routes_to_flat_leaf`, asserting
-    `_equippable_goal` routed this depth-unreachable chain to the flat leaf
-    (`GatherMaterialsGoal`) instead of the explosive root recipe.
+def test_equippable_goal_deep_chain_routes_to_flat_leaf_again():
+    """REVERSED by stop-at-the-achievable-step Task 1 — was
+    `test_equippable_goal_deep_chain_now_admits_the_root_bounded_by_timeout`,
+    which asserted `_equippable_goal` returned the `UpgradeEquipment` root
+    directly (is_plannable admitted it) and pinned that ATTEMPTING it was
+    cheap: a *bounded* 2s search that reported `timed_out` rather than
+    running unbounded.
 
-    Why the expectation inverted rather than the code being wrong: per
-    `min_crafts`'s own docstring, counting one craft per produced node is a
-    sound LOWER bound "irrespective of per-action craft batching" — a lower
-    bound is allowed to be loose, and Task 3's swap to `min_gather_steps`
-    (leaf-counting, not unit-counting) made the overall `min_plan_length`
-    bound looser here, so it stopped exceeding `max_depth` and `is_plannable`
-    correctly (per its own stated purpose, `goals/progression.py`: "no plan
-    can exist... running the 90s A* is pure waste" — a WASTE-AVOIDANCE
-    filter, not a soundness gate) now admits it. That is the SAFE direction
-    of error for this predicate: over-strict silently loses a reachable goal
-    forever (the 955-cycle bug this epic exists to fix); over-permissive
-    costs one bounded search that fails loudly and gets memoised (Tasks 11
-    /12).
-
-    So `_equippable_goal` now returns the UpgradeEquipment root directly
-    (no flat-leaf routing needed — the goal reads as reachable), and the
-    thing worth pinning is that attempting it is CHEAP: a bounded 2s search
-    over the real `_deep_chain_gd` closure finds no plan and reports
-    `timed_out`, rather than either running unbounded or silently returning
-    a false-positive plan.
-
-    RESIDUAL (not fixed here, out of Task 3's scope): `min_crafts` is
-    inventory-blind — real craft batching (`craft_batch_size_pure`) is bounded
-    by inventory space, and for `steel_bar` that space is exhausted by
-    `iron_bar`'s own 80-raw-unit footprint before batching ever exceeds
-    quantity 1, cascading across `steel_boots`'s THREE recipe tiers. Task 3's
-    swap unmasked this; it did not create it — previously the raw-unit gather
-    term was large enough to exceed `max_depth` on its own, hiding the
-    craft-term looseness. An inventory-aware `min_crafts` would tighten this
-    filter back up; that is its own piece of work (Lean-extracted, proved)
-    and belongs to a follow-up task, reproduced by this exact chain."""
-    from artifactsmmo_cli.ai.actions.crafting import CraftAction
-    from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-    from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+    That was exactly the dead trigger this task removes: `is_plannable`
+    compares `min_plan_length` (which maxes at 15 across all 321 real
+    recipes) against `max_depth` 32, so it never rejects, and the arbiter
+    was planning a real ~49.5s / 100,080-node search on live data before
+    that 2s bound ever applied — the "bounded" cost in the old test was an
+    artifact of the synthetic 3-tier fixture, not something the real recipe
+    catalog exhibited. `_equippable_goal` now asks `actionable_step`
+    directly instead of `is_plannable`, so this depth-unreachable chain
+    (steel_boots <- 6 steel_bar <- 8 iron_bar <- 10 iron_ore, 480 raw units)
+    routes to the flat deepest leaf (`iron_ore`, qty 10 — the ONE recipe
+    level's worth, not the full 480) exactly as the sibling GEAR_REVIEW guard
+    already does (`test_gear_review_deep_chain_routes_to_flat_leaf_not_explosive_recipe`,
+    same chain, same target) — that test proves the flat-leaf goal actually
+    plans within a 5000-node bound, so it is not re-proved here."""
     gd = _deep_chain_gd()
     gd._workshop_locations = {"gearcrafting": (0, 0)}
     state = make_state(level=2, inventory={}, bank_items={})
     goal = _equippable_goal("steel_boots", "boots_slot", state, gd)
-    assert isinstance(goal, UpgradeEquipmentGoal)
-    assert goal.is_plannable(state, gd) is True
-
-    actions = [
-        DepositAllAction(bank_location=(0, 0), accessible=True, game_data=gd),
-        GatherAction(resource_code="iron_rocks", locations=frozenset({(2, 0)})),
-    ]
-    for code in gd._crafting_recipes:
-        st = gd.item_stats(code)
-        ws = gd.workshop_location(st.crafting_skill) if st.crafting_skill else None
-        actions.append(CraftAction(code=code, quantity=1, workshop_location=ws))
-        actions.append(WithdrawItemAction(code=code, quantity=1, bank_location=(0, 0),
-                                          accessible=True))
-    actions.append(WithdrawItemAction(code="iron_ore", quantity=1, bank_location=(0, 0),
-                                       accessible=True))
-    planner = GOAPPlanner()
-    plan = planner.plan(state, goal, actions, gd, None, budget_seconds=2.0)
-    assert plan == [], (
-        "admitted-then-unreachable must fail loudly (empty plan), never "
-        "silently succeed with a bogus plan")
-    assert planner.last_stats.timed_out, (
-        "the cost of admitting this goal must be a BOUNDED search that "
-        "reports timed_out, not an unbounded run")
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal._target_item == "iron_ore"
+    assert goal._needed == {"iron_ore": 10}
 
 
-def test_equippable_goal_deep_chain_partial_credit_also_bounded_by_timeout():
-    """INVERTED by Task 3 (planner-gather-batching) — was
-    `test_equippable_goal_deep_chain_advances_step_as_leaf_accumulates`,
-    which asserted that partial `iron_ore` bank credit still routed to a
-    bounded, ONE-level-deep `GatherMaterialsGoal` step rather than the
-    explosive root.
+def test_equippable_goal_deep_chain_partial_credit_routes_to_the_next_leaf():
+    """REVERSED by stop-at-the-achievable-step Task 1 — was
+    `test_equippable_goal_deep_chain_partial_credit_also_bounded_by_timeout`,
+    which asserted `_equippable_goal` still returned the `UpgradeEquipment`
+    root (is_plannable's dead trigger admitted it regardless of the partial
+    credit) and pinned the same bounded-timeout shape as the sibling test
+    above. See that test's rewrite for why "bounded" was a fixture artifact,
+    not a property of the real 321-recipe catalog.
 
-    `min_gather_steps` counts distinct raw leaves still unmet, not units —
-    10 banked `iron_ore` shrinks the residual (480-10=470) but not the leaf
-    count (still exactly one: `iron_ore`), so `_equippable_goal` returns the
-    UpgradeEquipment root here too. See the sibling test above for the full
-    rationale (lower bound legitimately loosened; waste-avoidance filter, not
-    a soundness gate; admitting-then-failing is the safe direction; the
-    `min_crafts` residual this leaves for a follow-up task). Pinned the same
-    way: admission plus a bounded, loudly-failing search, not a routing
-    decision that no longer holds."""
+    With 10 `iron_ore` banked, `actionable_step` finds the `iron_ore` leaf's
+    own direct prerequisite already satisfied (0 unmet — the ore is a raw
+    resource with no recipe) and so descends no further at that leaf; the
+    deepest node whose OWN prerequisites are unmet-but-satisfiable is one
+    level up, `iron_bar` (8 needed from the 10-ore credit). `_equippable_goal`
+    routes to that leaf instead of the root."""
     gd = _deep_chain_gd()
     gd._workshop_locations = {"gearcrafting": (0, 0)}
     state = make_state(level=2, inventory={}, bank_items={"iron_ore": 10})
     goal = _equippable_goal("steel_boots", "boots_slot", state, gd)
-    assert isinstance(goal, UpgradeEquipmentGoal)
-    assert goal.is_plannable(state, gd) is True
-
-    from artifactsmmo_cli.ai.actions.crafting import CraftAction
-    from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-    from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-    actions = [
-        DepositAllAction(bank_location=(0, 0), accessible=True, game_data=gd),
-        GatherAction(resource_code="iron_rocks", locations=frozenset({(2, 0)})),
-    ]
-    for code in gd._crafting_recipes:
-        st = gd.item_stats(code)
-        ws = gd.workshop_location(st.crafting_skill) if st.crafting_skill else None
-        actions.append(CraftAction(code=code, quantity=1, workshop_location=ws))
-        actions.append(WithdrawItemAction(code=code, quantity=1, bank_location=(0, 0),
-                                          accessible=True))
-    actions.append(WithdrawItemAction(code="iron_ore", quantity=1, bank_location=(0, 0),
-                                       accessible=True))
-    planner = GOAPPlanner()
-    plan = planner.plan(state, goal, actions, gd, None, budget_seconds=2.0)
-    assert plan == [], (
-        "admitted-then-unreachable must fail loudly (empty plan), never "
-        "silently succeed with a bogus plan")
-    assert planner.last_stats.timed_out, (
-        "the cost of admitting this goal must be a BOUNDED search that "
-        "reports timed_out, not an unbounded run")
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal._target_item == "iron_bar"
+    assert goal._needed == {"iron_bar": 8}
 
 
 def test_gather_helper_falls_back_to_direct_recipe_without_deeper_step():
@@ -761,11 +699,30 @@ def test_map_means_unknown_raises():
 # ---------------------------------------------------------------------------
 
 def test_objective_step_obtain_gear():
+    """REVERSED by stop-at-the-achievable-step Task 1 — used to assert
+    `objective_step_goal` mapped a from-scratch equippable ObtainItem
+    straight to `UpgradeEquipmentGoal(committed_target=...)`, because
+    `is_plannable` (the old, now-dead trigger) trivially admitted this
+    tiny 2-tier chain (6 ash_plank <- 6 ash_wood) regardless of whether
+    the materials were on hand.
+
+    `_equippable_goal` now asks `actionable_step` directly: with an empty
+    state neither `wooden_shield` nor `ash_plank` is satisfied, but
+    `gather_step_target` finds the ROOT's own total raw-unit gather cost
+    (6 ash_wood) trivially within `equip_max_depth`, so it keeps targeting
+    the root rather than descending further — `GatherMaterialsGoal(
+    wooden_shield, {wooden_shield: 1})`, which plans the gather+craft chain
+    but (unlike UpgradeEquipment) does not equip; the equip fires on the
+    NEXT cycle, once `wooden_shield` is owned, because `prerequisites`
+    treats an already-owned equippable as satisfied (`_leafs`'s
+    `owned_count_pure` check) and `actionable_step` then returns the root
+    itself, routing `_equippable_goal` straight to `UpgradeEquipmentGoal`."""
     gd = _gd()
     step = ObtainItem("wooden_shield", 1)
     g = objective_step_goal(step, make_state(), gd, _ctx())
-    assert isinstance(g, UpgradeEquipmentGoal)
-    assert g._committed_target == ("wooden_shield", "shield_slot")
+    assert isinstance(g, GatherMaterialsGoal)
+    assert g._target_item == "wooden_shield"
+    assert g._needed == {"wooden_shield": 1}
 
 
 def test_objective_step_obtain_material():
@@ -1846,26 +1803,33 @@ def _gd_boots_chain():
     return gd
 
 
-def test_objective_step_equippable_gathers_when_depth_unreachable():
-    """An equippable step whose materials aren't gathered maps to
-    GatherMaterials so the arbiter accumulates the materials, instead of a
-    depth-gated UpgradeEquipment the arbiter would skip (the live-bot stall).
+def test_objective_step_equippable_dead_ends_admit_the_root_cheaply():
+    """REVERSED by stop-at-the-achievable-step Task 1 — was
+    `test_objective_step_equippable_gathers_when_depth_unreachable`, which
+    asserted a depth-unreachable equippable (`is_plannable` False) mapped to
+    `GatherMaterialsGoal` instead of a depth-gated `UpgradeEquipmentGoal` the
+    arbiter would skip.
 
-    Was copper_boots (8 bars = 80 ore through ONE recipe leaf), depth-
-    unreachable under the pre-Task-3 raw-UNIT mint term. Task 3
-    (planner-gather-batching) switched the mint term to `min_gather_steps`,
-    which counts distinct raw leaves still unmet, not units — 29 owned
-    copper_ore only shrinks the residual (80-29=51), not the leaf count, so
-    copper_boots is now genuinely depth-REACHABLE (`min_gather_steps=1 +
-    min_crafts=2 + equip=1 = 4 <= 32`; verified with the real planner in
-    `test_upgrade_reachability_gate.py
-    ::test_is_plannable_admits_from_scratch_copper_boots`) and can no longer
-    witness this test's own claim.
+    `_equippable_goal` no longer consults `is_plannable` to decide; it asks
+    `actionable_step` directly. `many_mats_item`'s 35 `raw_i` materials have
+    no recipe, no gather source, no vendor and no drop — every branch of the
+    traversal dead-ends, so `actionable_step` returns `None` per its own
+    docstring ("None when cyclically blocked"). The brief's Step 4 covers the
+    `None` case with the SAME `isinstance(step, ObtainItem)` check used for
+    "the root is already the actionable leaf" (no separate branch needed):
+    `None` is not an `ObtainItem`, so `_equippable_goal` returns the
+    `UpgradeEquipment` root rather than routing anywhere.
 
-    The witness now is a WIDE-SHALLOW recipe (Ruling 13 of this branch's
-    `progress.md`): 35 distinct one-off raw materials with no owned credit,
-    so `min_gather_steps` counts all 35 and the bound (37) still exceeds
-    max_depth 32."""
+    `is_plannable` is still False here (min_gather_steps=37 > max_depth 32 —
+    unchanged; `is_plannable` itself was not touched by this task) — this
+    test instead pins that admitting the goal anyway is CHEAP: with zero
+    actions available for any `raw_i` the planner fails immediately, not
+    after an explosive search. That is the same "bounded cost, not a
+    soundness break" trade-off `_equippable_goal`'s docstring already
+    describes for the 3+-tier case; the difference (fixed by this task) is
+    that the goal is DEEPER-BOUNDED — it self-corrects toward the flat
+    leaf whenever `actionable_step` finds one, and only falls back to the
+    root here because there is no leaf to find at all."""
     gd = GameData()
     gd._item_stats = {"many_mats_item": ItemStats(code="many_mats_item", level=1,
                                                    type_="boots", crafting_skill="gearcrafting",
@@ -1873,7 +1837,15 @@ def test_objective_step_equippable_gathers_when_depth_unreachable():
     gd._crafting_recipes = {"many_mats_item": {f"raw_{i}": 1 for i in range(35)}}
     state = make_state(level=4, inventory={})
     goal = objective_step_goal(ObtainItem("many_mats_item", 1), state, gd, _ctx())
-    assert isinstance(goal, GatherMaterialsGoal)
+    assert isinstance(goal, UpgradeEquipmentGoal)
+    assert goal.is_plannable(state, gd) is False, (
+        "is_plannable itself is untouched by this task; it must still read "
+        "False here")
+    planner = GOAPPlanner()
+    plan = planner.plan(state, goal, [], gd, None, budget_seconds=2.0)
+    assert plan == []
+    assert not planner.last_stats.timed_out, (
+        "zero relevant actions must fail FAST, not run out a bounded budget")
 
 
 def test_objective_step_equippable_upgrades_when_materials_in_hand():
@@ -1971,7 +1943,19 @@ def test_worth_gate_breaks_sticky_pursue_task(tmp_path):
     Everything except planning runs REAL: active_guards is [] (healthy state),
     active_means fires PURSUE_TASK (items task + empty LearningStore + no skill
     gap → task_decision PURSUEs), and the objective step for copper_dagger (a
-    weapon) yields UpgradeEquipment(copper_dagger->weapon_slot)."""
+    weapon) yields the goal that keeps the objective moving.
+
+    REVERSED by stop-at-the-achievable-step Task 1 — used to assert that goal
+    was `UpgradeEquipment(copper_dagger->weapon_slot)`, because `is_plannable`
+    (the old, now-dead trigger) admitted the shallow 1-ingredient recipe
+    ({copper_ore: 1}) unconditionally. `_equippable_goal` now asks
+    `actionable_step` directly: with 0 `copper_ore` on hand, `copper_dagger`
+    is not yet craftable, but `gather_step_target` finds the ROOT's own
+    total gather cost (1 ore) trivially within `equip_max_depth` and keeps
+    targeting the root — `GatherMaterials(copper_dagger, {copper_dagger:1})`,
+    which gathers the ore and crafts the dagger but does not equip it (see
+    `test_objective_step_obtain_gear`'s rewrite for the same shape and the
+    equip-on-a-later-cycle self-correction)."""
     gd = _worth_gate_gd()
     obj = CharacterObjective(target_char_level=50, target_skill_levels={},
                              target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,
@@ -1992,8 +1976,8 @@ def test_worth_gate_breaks_sticky_pursue_task(tmp_path):
         goal, _plan, _tried = arbiter.select(decision, state, gd, [], ctx, objective=obj)
     finally:
         store.close()
-    assert isinstance(goal, UpgradeEquipmentGoal)
-    assert repr(goal) == "UpgradeEquipment(copper_dagger->weapon_slot)"
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert repr(goal) == "GatherMaterials(copper_dagger, {copper_dagger:1})"
 
 
 def test_worth_gate_bypassed_last_resort_selects_task_when_step_unplannable(tmp_path):
@@ -2003,8 +1987,15 @@ def test_worth_gate_bypassed_last_resort_selects_task_when_step_unplannable(tmp_
     `worth_gate_bypassed` trace marker (the bot earns instead of idling).
 
     Same real-fixture setup as test_worth_gate_breaks_sticky_pursue_task; the
-    injected planner fails the objective-step UpgradeEquipment goal and plans
-    everything else."""
+    injected planner fails the objective-step goal and plans everything else.
+
+    REVERSED by stop-at-the-achievable-step Task 1 — `_TrivialPlanner`'s
+    `unplannable` tuple used to name `UpgradeEquipmentGoal`, because that was
+    the goal type the objective step produced for copper_dagger (see the
+    sibling test's rewrite for why). It now produces `GatherMaterialsGoal`
+    instead, so `unplannable` is updated to match — this is a FIXTURE update
+    to keep exercising the same code path (the objective step fails to plan),
+    not a change to what the test is proving."""
     gd = _worth_gate_gd()
     obj = CharacterObjective(target_char_level=50, target_skill_levels={},
                              target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,
@@ -2020,7 +2011,7 @@ def test_worth_gate_bypassed_last_resort_selects_task_when_step_unplannable(tmp_
     store = LearningStore(db_path=str(tmp_path / "worth_bypass.db"), character="testchar")
     try:
         arbiter = StrategyArbiter(
-            _TrivialPlanner(unplannable=(UpgradeEquipmentGoal,)), history=store)
+            _TrivialPlanner(unplannable=(GatherMaterialsGoal,)), history=store)
         goal, _plan, tried = arbiter.select(decision, state, gd, [], ctx, objective=obj)
     finally:
         store.close()
