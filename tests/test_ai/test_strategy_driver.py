@@ -323,17 +323,25 @@ def test_gear_review_deep_chain_routes_to_flat_leaf_not_explosive_recipe():
     gather. Pins the macro/micro bound so a regression to the deep goal fails.
 
     GEAR_REVIEW's guard does not consult `is_plannable` (it branches on
-    `state.inventory`/bank directly — see `map_guard`), so it is untouched by
-    Task 3 (planner-gather-batching) and is now the ONE place left that still
-    produces a flat-leaf routing for this chain (see the `steel_boots` cases
-    in this file and the "SECOND RESIDUAL" note in
+    `state.inventory`/bank directly — see `map_guard`), so it was untouched by
+    Task 3 (planner-gather-batching) and was, at that point in this repo's
+    history, the ONE place left that still produced a flat-leaf routing for
+    this chain (see the "SECOND RESIDUAL" note in
     `UpgradeEquipmentGoal.max_depth`'s docstring: the `is_plannable`-driven
-    routing this test used to share a bound with, in the now-deleted
-    `test_deep_chain_flat_leaf_plans_within_budget`, is live-dead on real
-    data and no longer produces a flat-leaf goal at all). That deleted test's
-    node-count bound (`< 5000`, vs. the deep recipe's offline 655k) is
-    restored HERE instead, on the one path that still exercises it, so the
-    performance claim is not lost."""
+    routing this test used to share a bound with, in the then-deleted
+    `test_deep_chain_flat_leaf_plans_within_budget`, was live-dead on real
+    data and produced no flat-leaf goal at all). That deleted test's
+    node-count bound (`< 5000`, vs. the deep recipe's offline 655k) was
+    restored HERE instead, on the one path that then exercised it, so the
+    performance claim was not lost.
+
+    NO LONGER THE ONE PLACE, as of stop-at-the-achievable-step Task 1:
+    `_equippable_goal` now asks `actionable_step` directly instead of
+    `is_plannable` and produces the SAME `GatherMaterials(iron_ore,
+    {iron_ore: 10})` target for this identical chain — see
+    `test_equippable_goal_deep_chain_routes_to_flat_leaf_again`, which relies
+    on this test having already proved the target plans within budget rather
+    than re-proving it."""
     from artifactsmmo_cli.ai.actions.crafting import CraftAction
     from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
     from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
@@ -420,6 +428,66 @@ def test_equippable_goal_deep_chain_partial_credit_routes_to_the_next_leaf():
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal._target_item == "iron_bar"
     assert goal._needed == {"iron_bar": 8}
+
+
+def _wooden_staff_gd() -> GameData:
+    """The real `wooden_staff` recipe shape (`wooden_stick x1 + ash_wood x4`,
+    both level 1) — built as a minimal fixture rather than loading the full
+    321-recipe bundle, matching this file's convention for
+    `_equippable_goal` unit tests. `wooden_staff` is one of three real
+    equippables (with `feather_coat`, `leather_gloves`) whose from-scratch
+    gather cost fits `equip_max_depth` while an ingredient is still unmet —
+    exactly the shape `gather_step_target`'s root-fits-budget branch reads as
+    "target the root by name". `wooden_stick` has no recipe and no source
+    here, so it stays permanently unmet/unproducible; that mirrors the real
+    catalog closely enough for THIS test (which only exercises `ash_wood`,
+    the leaf `actionable_step` actually reaches) without needing to model
+    `wooden_stick`'s real (non-craft) acquisition route."""
+    gd = GameData()
+    gd._item_stats = {
+        "wooden_staff": ItemStats(code="wooden_staff", level=1, type_="weapon",
+                                  crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {"wooden_staff": {"wooden_stick": 1, "ash_wood": 4}}
+    gd._resource_drops = {"ash_tree": "ash_wood"}
+    gd._resource_locations = {"ash_tree": [(1, 0)]}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+    return gd
+
+
+def test_equippable_goal_root_by_name_falls_through_to_upgrade():
+    """Regression pin for the review finding on stop-at-the-achievable-step
+    Task 1: `gather_step_target` can return the ROOT by name — `(root, 1)` —
+    when the root's own from-holdings gather cost fits `equip_max_depth`.
+    Its own module docstring (`gather_step_target.py`) states this as a
+    PRECONDITION of the caller: "when the root chain IS depth-reachable the
+    caller never reaches here" — i.e. the caller is expected to plan the
+    root directly, not wrap it in a second `GatherMaterials` pass over
+    itself.
+
+    An interim version of this task violated that precondition: routing
+    unconditionally into `_gather_goal_for_unreachable_equippable` whenever
+    `actionable_step` found ANY unmet node, then trusting whatever it
+    returned. Measured on the real 321-recipe catalog (R2D2, empty bank):
+
+        wooden_staff  OLD  UpgradeEquipment                              5,839 nodes / 0.47s
+                      NEW  GatherMaterials(wooden_staff,{wooden_staff:1}) 102,286 nodes / 10.6s
+
+    both finding no plan — a 20x slower failure, not merely a redundant one
+    (`GatherMaterialsGoal`'s `relevant_actions` search a wider pool —
+    recycle sources, currency legs — than `UpgradeEquipmentGoal`'s
+    closure-locked one). Three of 250 real equippables take this branch:
+    `wooden_staff`, `feather_coat`, `leather_gloves`. `wooden_staff` is
+    fixtured here (see `_wooden_staff_gd`) rather than reproduced against
+    the full bundle, to keep this test fast.
+
+    `_equippable_goal` must detect the root-by-name signal and fall through
+    to `upgrade` instead of returning the wrapped `GatherMaterialsGoal`."""
+    gd = _wooden_staff_gd()
+    state = make_state(level=1, inventory={}, bank_items={})
+    goal = _equippable_goal("wooden_staff", "weapon_slot", state, gd)
+    assert isinstance(goal, UpgradeEquipmentGoal)
+    assert repr(goal) == "UpgradeEquipment(wooden_staff->weapon_slot)"
 
 
 def test_gather_helper_falls_back_to_direct_recipe_without_deeper_step():
@@ -699,30 +767,29 @@ def test_map_means_unknown_raises():
 # ---------------------------------------------------------------------------
 
 def test_objective_step_obtain_gear():
-    """REVERSED by stop-at-the-achievable-step Task 1 — used to assert
-    `objective_step_goal` mapped a from-scratch equippable ObtainItem
-    straight to `UpgradeEquipmentGoal(committed_target=...)`, because
-    `is_plannable` (the old, now-dead trigger) trivially admitted this
-    tiny 2-tier chain (6 ash_plank <- 6 ash_wood) regardless of whether
-    the materials were on hand.
+    """Unaffected in the end by stop-at-the-achievable-step Task 1, though it
+    took a detour: `_equippable_goal` now asks `actionable_step` directly
+    instead of `is_plannable` (the old, dead trigger), and with an empty
+    state neither `wooden_shield` nor `ash_plank` is satisfied, so an
+    interim version of this task routed to `GatherMaterialsGoal(
+    wooden_shield, {wooden_shield: 1})` via `gather_step_target`'s
+    root-fits-budget branch (the ROOT's total raw-unit gather cost, 6
+    ash_wood, is trivially within `equip_max_depth`).
 
-    `_equippable_goal` now asks `actionable_step` directly: with an empty
-    state neither `wooden_shield` nor `ash_plank` is satisfied, but
-    `gather_step_target` finds the ROOT's own total raw-unit gather cost
-    (6 ash_wood) trivially within `equip_max_depth`, so it keeps targeting
-    the root rather than descending further — `GatherMaterialsGoal(
-    wooden_shield, {wooden_shield: 1})`, which plans the gather+craft chain
-    but (unlike UpgradeEquipment) does not equip; the equip fires on the
-    NEXT cycle, once `wooden_shield` is owned, because `prerequisites`
-    treats an already-owned equippable as satisfied (`_leafs`'s
-    `owned_count_pure` check) and `actionable_step` then returns the root
-    itself, routing `_equippable_goal` straight to `UpgradeEquipmentGoal`."""
+    Review found that branch is a mis-fire: `gather_step_target` returning
+    the root BY NAME is a signal that the root should be planned directly
+    (its own module docstring), not license to wrap the root in a second
+    `GatherMaterials` pass over itself — measured 20x slower on a real
+    equippable (`wooden_staff`: 102,286 nodes/10.6s wrapped vs. 5,839
+    nodes/0.47s direct; see `test_equippable_goal_root_by_name_falls_through_to_upgrade`).
+    `_equippable_goal` now detects `routed._target_item == code` and falls
+    through to `UpgradeEquipmentGoal` instead, restoring the original
+    one-shot craft+equip for this shallow chain."""
     gd = _gd()
     step = ObtainItem("wooden_shield", 1)
     g = objective_step_goal(step, make_state(), gd, _ctx())
-    assert isinstance(g, GatherMaterialsGoal)
-    assert g._target_item == "wooden_shield"
-    assert g._needed == {"wooden_shield": 1}
+    assert isinstance(g, UpgradeEquipmentGoal)
+    assert g._committed_target == ("wooden_shield", "shield_slot")
 
 
 def test_objective_step_obtain_material():
@@ -1945,17 +2012,21 @@ def test_worth_gate_breaks_sticky_pursue_task(tmp_path):
     gap → task_decision PURSUEs), and the objective step for copper_dagger (a
     weapon) yields the goal that keeps the objective moving.
 
-    REVERSED by stop-at-the-achievable-step Task 1 — used to assert that goal
-    was `UpgradeEquipment(copper_dagger->weapon_slot)`, because `is_plannable`
-    (the old, now-dead trigger) admitted the shallow 1-ingredient recipe
-    ({copper_ore: 1}) unconditionally. `_equippable_goal` now asks
-    `actionable_step` directly: with 0 `copper_ore` on hand, `copper_dagger`
-    is not yet craftable, but `gather_step_target` finds the ROOT's own
-    total gather cost (1 ore) trivially within `equip_max_depth` and keeps
-    targeting the root — `GatherMaterials(copper_dagger, {copper_dagger:1})`,
-    which gathers the ore and crafts the dagger but does not equip it (see
-    `test_objective_step_obtain_gear`'s rewrite for the same shape and the
-    equip-on-a-later-cycle self-correction)."""
+    Unaffected in the end by stop-at-the-achievable-step Task 1, though it took
+    a detour through an interim state: `_equippable_goal` now asks
+    `actionable_step` directly instead of `is_plannable` (the old, dead
+    trigger), and with 0 `copper_ore` on hand `copper_dagger` is not yet
+    craftable, so an interim version of this task routed to
+    `GatherMaterials(copper_dagger, {copper_dagger:1})` via
+    `gather_step_target`'s root-fits-budget branch (the ROOT's own total
+    gather cost, 1 ore, is trivially within `equip_max_depth`).
+
+    Review found that branch is a mis-fire — see
+    `test_objective_step_obtain_gear`'s docstring and
+    `test_equippable_goal_root_by_name_falls_through_to_upgrade` for the
+    mechanism and the measured 20x slowdown it would otherwise cause.
+    `_equippable_goal` now falls through to `UpgradeEquipmentGoal` for this
+    shallow chain too, restoring the original assertion."""
     gd = _worth_gate_gd()
     obj = CharacterObjective(target_char_level=50, target_skill_levels={},
                              target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,
@@ -1976,8 +2047,8 @@ def test_worth_gate_breaks_sticky_pursue_task(tmp_path):
         goal, _plan, _tried = arbiter.select(decision, state, gd, [], ctx, objective=obj)
     finally:
         store.close()
-    assert isinstance(goal, GatherMaterialsGoal)
-    assert repr(goal) == "GatherMaterials(copper_dagger, {copper_dagger:1})"
+    assert isinstance(goal, UpgradeEquipmentGoal)
+    assert repr(goal) == "UpgradeEquipment(copper_dagger->weapon_slot)"
 
 
 def test_worth_gate_bypassed_last_resort_selects_task_when_step_unplannable(tmp_path):
@@ -1989,13 +2060,17 @@ def test_worth_gate_bypassed_last_resort_selects_task_when_step_unplannable(tmp_
     Same real-fixture setup as test_worth_gate_breaks_sticky_pursue_task; the
     injected planner fails the objective-step goal and plans everything else.
 
-    REVERSED by stop-at-the-achievable-step Task 1 — `_TrivialPlanner`'s
-    `unplannable` tuple used to name `UpgradeEquipmentGoal`, because that was
-    the goal type the objective step produced for copper_dagger (see the
-    sibling test's rewrite for why). It now produces `GatherMaterialsGoal`
-    instead, so `unplannable` is updated to match — this is a FIXTURE update
-    to keep exercising the same code path (the objective step fails to plan),
-    not a change to what the test is proving."""
+    Unaffected in the end by stop-at-the-achievable-step Task 1. An interim
+    version of this task changed the objective step's goal type for
+    copper_dagger to `GatherMaterialsGoal` (see the sibling test's
+    docstring), which briefly required `unplannable` here to name
+    `GatherMaterialsGoal` instead of `UpgradeEquipmentGoal` to keep
+    exercising the same "objective step fails to plan" path. Review found
+    that goal-type change was itself a mis-fire in `gather_step_target`'s
+    root-fits-budget handling and it was fixed at the source
+    (`_equippable_goal` now falls through to `UpgradeEquipmentGoal` again
+    for this shallow chain), so `unplannable` reverts to naming
+    `UpgradeEquipmentGoal` too."""
     gd = _worth_gate_gd()
     obj = CharacterObjective(target_char_level=50, target_skill_levels={},
                              target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,
@@ -2011,7 +2086,7 @@ def test_worth_gate_bypassed_last_resort_selects_task_when_step_unplannable(tmp_
     store = LearningStore(db_path=str(tmp_path / "worth_bypass.db"), character="testchar")
     try:
         arbiter = StrategyArbiter(
-            _TrivialPlanner(unplannable=(GatherMaterialsGoal,)), history=store)
+            _TrivialPlanner(unplannable=(UpgradeEquipmentGoal,)), history=store)
         goal, _plan, tried = arbiter.select(decision, state, gd, [], ctx, objective=obj)
     finally:
         store.close()

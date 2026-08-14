@@ -191,13 +191,28 @@ def test_from_scratch_routes_to_the_achievable_step_not_the_equippable():
     100,080-node / ~49.5s UpgradeEquipment search instead of a 2-node gather.
 
     `actionable_step` already returned ObtainItem('spruce_wood', 10) here.
-    Nothing was asking it."""
+    Nothing was asking it.
+
+    The identity assertions alone (goal type/target/needed) cannot
+    distinguish a genuinely cheap routed goal from one that is merely
+    smaller in name but still explosive to plan — review found exactly that
+    gap once (`gather_step_target` returning a ROOT by name that then took
+    102,286 nodes / 10.6s to fail, where the identity check alone would have
+    read as a 3-node pass). The spec's actual requirement — "plan within the
+    15s budget without timing out" — is asserted here directly by running
+    the real planner over the real 321-recipe action pool."""
     gd, state = _game_data(), _state_without_banked_planks()
     goal = strategy_driver._equippable_goal(
         "greater_wooden_staff", "weapon_slot", state, gd)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal._target_item == "spruce_wood"
     assert goal.needed == {"spruce_wood": 10}
+
+    planner = GOAPPlanner()
+    plan = planner.plan(state, goal, _build_actions(state, gd), gd, None,
+                        budget_seconds=BUDGET_SECONDS)
+    assert plan, "the routed goal must actually plan, not merely look small"
+    assert not planner.last_stats.timed_out, planner.last_stats
 
 
 def test_banked_materials_still_route_to_the_craft():

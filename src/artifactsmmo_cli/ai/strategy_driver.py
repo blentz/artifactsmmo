@@ -518,28 +518,36 @@ def _gather_goal_for_unreachable_equippable(
 def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameData,
                      ctx: SelectionContext = NO_PROFILE_CONTEXT) -> Goal:
     """Map an equippable target to UpgradeEquipment when it is reachable, else to
-    GatherMaterials for its recipe.
+    GatherMaterials for the strategy's next achievable step toward it.
 
-    UpgradeEquipmentGoal.is_plannable is False when the target's materials aren't
-    yet gathered (min_plan_length > max_depth — the depth-reachability gate;
-    min_plan_length's mint term is min_gather_steps as of planner-gather-batching
-    Task 3, not min_gathers). is_plannable is a WASTE-AVOIDANCE filter over a
-    LOWER bound, not a soundness gate — Task 3 legitimately loosened that bound
-    (see UpgradeEquipmentGoal.max_depth's docstring), so some chains this
-    function now routes straight through instead of gating (e.g. a 3+-tier
-    chain whose craft batching is itself inventory-bounded) will be admitted,
-    attempted, and time out rather than being routed to the flat-leaf fallback
-    below — a bounded cost, not a soundness break; see that same docstring for
-    the `min_crafts` residual driving it. Returning that depth-gated
-    UpgradeEquipment would have the arbiter SKIP it
-    (the gate short-circuits planning), and with nothing driving the gather, gear
-    progress stalls and the cheap pass falls through to doomed discretionary
-    goals (TaskExchange/LevelSkill) that escalate at the full budget — the
-    live-bot stall. Instead, while the target is depth-unreachable, drive
-    GatherMaterials for its direct recipe so the materials accumulate across
-    cycles; once they are in hand UpgradeEquipment becomes plannable and fires
-    the craft+equip. (Mirrors the GEAR_REVIEW guard's gather/upgrade split for
-    the objective-step path.)
+    Routes on the STEP, not on a depth-bound proxy for it. `is_plannable`
+    compares `min_plan_length` against `max_depth` 32, and `min_plan_length`
+    maxes at 15 across all 321 real recipes (see `UpgradeEquipmentGoal.max_depth`'s
+    SECOND RESIDUAL), so it never rejects — using it as a trigger here was dead
+    code: the arbiter planned a 100,080-node search that timed out instead of
+    the 2-node gather `actionable_step` had already identified. `is_plannable`
+    is still consulted elsewhere as a waste-avoidance filter; it is not used
+    by this function.
+
+    The direct question this function asks is the one the helper asks
+    internally: is the deepest achievable node (`actionable_step`) something
+    OTHER than the goal itself? If not — the root's own direct prerequisites
+    are already satisfied, or the traversal is cyclically blocked / every
+    branch dead-ends (`actionable_step` returns `None`) — return
+    `UpgradeEquipment` directly; a dead-ended chain is a bounded, fast-failing
+    search, not a soundness break (see `test_objective_step_equippable_dead_ends_admit_the_root_cheaply`).
+    Otherwise route to `_gather_goal_for_unreachable_equippable`'s flat-leaf
+    step — UNLESS `gather_step_target` itself decided the root's own gather
+    cost fits `equip_max_depth`, in which case it returns the root by name
+    (`(code, 1)`) as a signal that the root should be planned directly, not
+    wrapped in a second `GatherMaterials` pass over itself (measured 20x
+    slower on `wooden_staff`: 102,286 nodes/10.6s wrapped vs. 5,839
+    nodes/0.47s direct) — this function detects that and falls through to
+    `upgrade` too. Self-corrects both ways across cycles — materials missing
+    routes to the gather (which does craft, not just gather; the equip
+    follows on a later cycle once the item is owned), materials banked or
+    carried leafs at the root and fires the craft+equip — so there is no
+    threshold to tune and no bound to rot.
 
     `ctx` is forwarded to `_gather_goal_for_unreachable_equippable`
     (one-obtain-model epic, Task 5); defaults to `NO_PROFILE_CONTEXT`."""
@@ -614,12 +622,32 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
         # actionable step instead of GatherMaterials(code, DIRECT recipe), whose
         # plan must gather through the multi-level recipe and explodes the GOAP
         # search (see _gather_goal_for_unreachable_equippable).
-        return _gather_goal_for_unreachable_equippable(
+        routed = _gather_goal_for_unreachable_equippable(
             code, state, game_data, upgrade.max_depth, ctx, step=step)
-    # Unreachable in practice: is_plannable is only False when min_gathers >
-    # max_depth, which requires a non-empty recipe (a recipe-less item needs at
-    # most one gather, so it is always plannable and returns above). Kept as a
-    # total-function fallback.
+        if routed._target_item == code:
+            # gather_step_target decided the ROOT's own from-holdings gather
+            # cost fits equip_max_depth (its module docstring: "the caller
+            # plans the root chain directly" in that case — it is a signal
+            # to fall through to UpgradeEquipment, not license to wrap the
+            # root in a second GatherMaterials pass over itself).
+            # GatherMaterials(root, {root: 1}) plans the SAME closure through
+            # a wider action pool (recycle sources, currency legs) than
+            # UpgradeEquipment's closure-locked search, so "wrap and gather"
+            # is not merely redundant, it is slower: measured on the real
+            # 321-recipe catalog, wooden_staff wrapped in GatherMaterials
+            # explored 102,286 nodes / 10.6s to find no plan, versus 5,839
+            # nodes / 0.47s for UpgradeEquipment on the identical state.
+            return upgrade
+        return routed
+    # Unreachable in practice: `recipe` is only falsy for a recipe-less code,
+    # and a recipe-less item's requirement-graph node has no outgoing edges
+    # (`requirement_edges` returns {} — see `requirement_projections.py`), so
+    # `actionable_step` can never descend PAST a recipe-less root: it either
+    # returns the root itself (satisfied/producible) or None (blocked),
+    # both of which are caught by the `not (isinstance(step, ObtainItem)
+    # and step.code != code)` guard above and return `upgrade` before this
+    # line. `step.code != code` therefore implies a non-empty recipe. Kept
+    # as a total-function fallback.
     return upgrade  # pragma: no cover
 
 
