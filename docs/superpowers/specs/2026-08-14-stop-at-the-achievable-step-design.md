@@ -202,3 +202,39 @@ rather than `objective_unplannable` naming the equippable.
   chain level. That is the intended macro/micro split documented at `:485-487`,
   but it is slower in wall-clock than a single correct plan would be — the
   trade this design accepts in exchange for never timing out.
+- **Two of the three root-by-name equippables remain unsolved.** Measured on the
+  real 321-recipe bundle with an empty bank, `wooden_staff` is fixed (5,839
+  nodes / 0.50 s, restored from 102,286 / 11.0 s), but `feather_coat` (81,690
+  nodes / 15.3 s) and `leather_gloves` (47,288 / 15.2 s) exceed the budget with
+  `plan_len 0` **with or without** the `_gather_step_target_is_root` guard.
+  The guard is NEUTRAL for those two — it is not a fix for them, and saying so
+  is the point: only `wooden_staff` is actually faster direct.
+- **A bank-only recipe-less equippable can reach the direct-recipe fallback.**
+  `map_guard`'s GEAR_REVIEW branch makes none of the guarantees `_equippable_goal`'s
+  `if recipe:` guard does: `find_upgrade_target` can surface a BANK-ONLY item via
+  `_find_inventory_upgrade`, the GEAR_REVIEW gate checks `state.inventory` but not
+  the bank, and `_materials_in_hand` requires `bool(recipe)`. Such an item reaches
+  the fallback with `recipe = {}`, yielding `GatherMaterialsGoal(code, {})`.
+  Harmless — that goal's `is_satisfied` short-circuits True for a target held in
+  inventory or bank when the target is not itself a key of `needed`, so it fires
+  zero actions rather than a wrong one — but it is a path the fallback was not
+  written for, and 46 of the real equippables have no recipe.
+- **`step == root` does not imply the root is plannable inside the budget.** The
+  design premises the fall-through arm on a satisfied root being cheap to plan.
+  Live on R2D2 (level 16), `actionable_step` returned
+  `greater_wooden_staff` itself, so this design routed to `UpgradeEquipment`
+  directly — and that search still ran out the budget:
+  `nodes=2312 depth=8 plan_len=0 TIMED_OUT`. The same target on C3P0 planned in
+  7 nodes and on HAL in 4. This is NOT a regression — the trigger it replaced
+  returned `upgrade` unconditionally, so the pre-branch tree took the identical
+  branch — and the arbiter recovered on the next-ranked root rather than falling
+  through to a grind. But the premise is not universal, and the from-scratch
+  search residual above is the lever.
+- **The gather arm is not reachable on any current live character without a
+  diagnostic injection.** On all five live characters the top-ranked gear root's
+  `actionable_step` IS the root itself, so an undoomed live run exercises only
+  the anti-starvation arm. Reaching the routed gather required seeding the arbiter's
+  doomed-memo (`plan --doom`) to reproduce the in-memory suppression that occurs
+  live only after those goals have already failed once. The runtime evidence for
+  the routed arm is therefore a suppression-reproduced live run, not a
+  spontaneous one — weaker than the anti-starvation half, and named as such.
