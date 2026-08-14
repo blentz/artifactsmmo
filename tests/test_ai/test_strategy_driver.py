@@ -468,24 +468,55 @@ def test_equippable_goal_root_by_name_falls_through_to_upgrade():
     An interim version of this task violated that precondition: routing
     unconditionally into `_gather_goal_for_unreachable_equippable` whenever
     `actionable_step` found ANY unmet node, then trusting whatever it
-    returned. Measured on the real 321-recipe catalog (R2D2, empty bank):
+    returned. Re-measured on the real 321-recipe catalog (R2D2, empty bank),
+    direct (`UpgradeEquipment`) vs. wrapped (`GatherMaterials(root,{root:1})`):
 
-        wooden_staff  OLD  UpgradeEquipment                              5,839 nodes / 0.47s
-                      NEW  GatherMaterials(wooden_staff,{wooden_staff:1}) 102,286 nodes / 10.6s
+        wooden_staff     5,839 / 0.50s  vs  102,286 / 11.0s   <- 20x, the ONLY one that is
+        feather_coat    81,690 / 15.3s  vs   76,213 / 15.3s   <- both time out; NEUTRAL
+        leather_gloves  47,288 / 15.2s  vs   43,412 / 15.3s   <- both time out; NEUTRAL
 
-    both finding no plan — a 20x slower failure, not merely a redundant one
-    (`GatherMaterialsGoal`'s `relevant_actions` search a wider pool —
-    recycle sources, currency legs — than `UpgradeEquipmentGoal`'s
-    closure-locked one). Three of 250 real equippables take this branch:
-    `wooden_staff`, `feather_coat`, `leather_gloves`. `wooden_staff` is
-    fixtured here (see `_wooden_staff_gd`) rather than reproduced against
-    the full bundle, to keep this test fast.
+    all three finding no plan either way — `wooden_staff` is the one case
+    where the guard below actually restores a fast failure; `feather_coat`
+    and `leather_gloves` exceed the search budget regardless and remain
+    unsolved (a residual, not something this fix reaches). `wooden_staff` is
+    fixtured here (see `_wooden_staff_gd`) rather than reproduced against the
+    full bundle, to keep this test fast — it exercises the 20x case, not a
+    representative average of the three.
 
-    `_equippable_goal` must detect the root-by-name signal and fall through
-    to `upgrade` instead of returning the wrapped `GatherMaterialsGoal`."""
+    The FIX lives in the helper, not at this call site: the reviewer found
+    a second, unguarded call site (`GEAR_REVIEW`, see
+    `test_gear_review_root_by_name_falls_through_to_committed` below) that
+    would otherwise need the identical check duplicated — the precondition
+    belongs to `gather_step_target`, and `_gather_goal_for_unreachable_equippable`
+    is that function's only consumer, so it is the one place that detects the
+    root-by-name result and returns `None`; every caller (this one and
+    `GEAR_REVIEW`) falls through to its own reachable-root goal on that
+    signal."""
     gd = _wooden_staff_gd()
     state = make_state(level=1, inventory={}, bank_items={})
     goal = _equippable_goal("wooden_staff", "weapon_slot", state, gd)
+    assert isinstance(goal, UpgradeEquipmentGoal)
+    assert repr(goal) == "UpgradeEquipment(wooden_staff->weapon_slot)"
+
+
+def test_gear_review_root_by_name_falls_through_to_committed():
+    """Sibling regression pin to `test_equippable_goal_root_by_name_falls_through_to_upgrade`,
+    for the SECOND call site the reviewer found live: `map_guard`'s
+    `GEAR_REVIEW` branch (`:335-348`) returns early only when materials are
+    already in hand (`_materials_in_hand`); with an empty inventory that is
+    False for `wooden_staff` too, so it falls into the same
+    `_gather_goal_for_unreachable_equippable` call, unguarded, before this
+    fix. Same three real items affected (`wooden_staff`, `feather_coat`,
+    `leather_gloves` — level 1/5/10, plausible early-game GEAR_REVIEW picks,
+    so this was reachable, not dead code).
+
+    Proves the fix belongs in the HELPER: this test exercises a DIFFERENT
+    caller than the sibling test above, with no shared code path except
+    `_gather_goal_for_unreachable_equippable` itself, and passes without
+    `GEAR_REVIEW`'s call site needing its own `is None` check duplicated."""
+    gd = _wooden_staff_gd()
+    state = make_state(level=1, inventory={}, bank_items={})
+    goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
     assert isinstance(goal, UpgradeEquipmentGoal)
     assert repr(goal) == "UpgradeEquipment(wooden_staff->weapon_slot)"
 
@@ -520,7 +551,19 @@ def test_bank_stock_is_credited_before_the_depth_budget_is_judged():
     the root is written off as depth-unreachable — the bot would then grind raw
     ore it already owns 40 of instead of crafting the boots.
 
-    boots <- 6 bar <- 8 ore = 48 raw ore, against a depth budget of 15."""
+    boots <- 6 bar <- 8 ore = 48 raw ore, against a depth budget of 15.
+
+    UPDATED by the review-round-2 fix to Important 1
+    (stop-at-the-achievable-step Task 1): used to assert the banked case
+    routed to `GatherMaterialsGoal(boots, {boots: 1})` — the root wrapped in
+    a second gather pass over itself. `gather_step_target`'s own module
+    docstring states that when the root's own gather cost fits the budget
+    "the caller plans the root chain directly" — a precondition the helper
+    itself must honor (its only consumer), so it now returns `None` for this
+    case instead of a wrapped goal, and every caller falls through to its
+    own reachable-root goal (`_equippable_goal`'s `upgrade`, `GEAR_REVIEW`'s
+    `committed` — see `test_equippable_goal_root_by_name_falls_through_to_upgrade`
+    and `test_gear_review_root_by_name_falls_through_to_committed`)."""
     gd = GameData()
     gd._item_stats = {
         "boots": ItemStats(code="boots", level=20, type_="boots",
@@ -536,14 +579,15 @@ def test_bank_stock_is_credited_before_the_depth_budget_is_judged():
     # 48 raw ore > the 15 budget: the root IS depth-unreachable, so the helper
     # routes to the deepest actionable step (the raw leaf).
     unbanked = _gather_goal_for_unreachable_equippable("boots", empty_bank, gd, 15)
+    assert unbanked is not None
     assert unbanked._target_item == "ore"
     # 40 of those 48 already banked leaves 8 to gather, inside the budget, so the
-    # root is reachable after all and the helper keeps targeting it. This differs
-    # from the line above ONLY by the bank merge.
+    # root is reachable after all — the helper signals that with None rather
+    # than wrapping the root in GatherMaterials. This differs from the line
+    # above ONLY by the bank merge.
     banked = dataclasses.replace(empty_bank, bank_items={"ore": 40})
     routed = _gather_goal_for_unreachable_equippable("boots", banked, gd, 15)
-    assert routed._target_item == "boots"
-    assert routed._needed == {"boots": 1}
+    assert routed is None
 
 
 # ---------------------------------------------------------------------------
@@ -779,12 +823,17 @@ def test_objective_step_obtain_gear():
     Review found that branch is a mis-fire: `gather_step_target` returning
     the root BY NAME is a signal that the root should be planned directly
     (its own module docstring), not license to wrap the root in a second
-    `GatherMaterials` pass over itself — measured 20x slower on a real
-    equippable (`wooden_staff`: 102,286 nodes/10.6s wrapped vs. 5,839
-    nodes/0.47s direct; see `test_equippable_goal_root_by_name_falls_through_to_upgrade`).
-    `_equippable_goal` now detects `routed._target_item == code` and falls
-    through to `UpgradeEquipmentGoal` instead, restoring the original
-    one-shot craft+equip for this shallow chain."""
+    `GatherMaterials` pass over itself — measured slower on the real
+    equippable this shape affects most (`wooden_staff`: 102,286 nodes/11.0s
+    wrapped vs. 5,839 nodes/0.50s direct, 20x; two others,
+    `feather_coat`/`leather_gloves`, are NEUTRAL — both exceed the search
+    budget either way; see
+    `test_equippable_goal_root_by_name_falls_through_to_upgrade` for the full
+    three-item measurement). `_gather_goal_for_unreachable_equippable` now
+    detects this itself and returns `None` (the precondition belongs to
+    `gather_step_target`, whose only consumer the helper is); `_equippable_goal`
+    falls through to `UpgradeEquipmentGoal` on that signal, restoring the
+    original one-shot craft+equip for this shallow chain."""
     gd = _gd()
     step = ObtainItem("wooden_shield", 1)
     g = objective_step_goal(step, make_state(), gd, _ctx())
@@ -2024,9 +2073,12 @@ def test_worth_gate_breaks_sticky_pursue_task(tmp_path):
     Review found that branch is a mis-fire — see
     `test_objective_step_obtain_gear`'s docstring and
     `test_equippable_goal_root_by_name_falls_through_to_upgrade` for the
-    mechanism and the measured 20x slowdown it would otherwise cause.
-    `_equippable_goal` now falls through to `UpgradeEquipmentGoal` for this
-    shallow chain too, restoring the original assertion."""
+    mechanism and the measured effect (a real slowdown for one of the three
+    real items this shape affects, neutral for the other two — not
+    uniformly "20x"). `_gather_goal_for_unreachable_equippable` now detects
+    the root-by-name result itself and `_equippable_goal` falls through to
+    `UpgradeEquipmentGoal` for this shallow chain too, restoring the
+    original assertion."""
     gd = _worth_gate_gd()
     obj = CharacterObjective(target_char_level=50, target_skill_levels={},
                              target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,

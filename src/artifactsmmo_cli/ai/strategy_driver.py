@@ -344,8 +344,12 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         # gather_step_target core (see _gather_goal_for_unreachable_equippable).
         committed = UpgradeEquipmentGoal(initial_equipment=state.equipment,
                                          committed_target=(item, slot))
-        return _gather_goal_for_unreachable_equippable(
+        routed = _gather_goal_for_unreachable_equippable(
             item, state, game_data, committed.max_depth, ctx)
+        # None means gather_step_target decided the root itself fits the
+        # depth budget (see the helper's docstring) -- plan it directly
+        # rather than wrapping it in a second GatherMaterials pass.
+        return routed if routed is not None else committed
     if kind is GuardKind.CRAFT_POTIONS:
         # `state=` seeds the goal's frozen craft target. Without it the goal
         # re-resolves its target per planner node and can demand one its own
@@ -458,9 +462,37 @@ def _gather_goal_for_unreachable_equippable(
     code: str, state: WorldState, game_data: GameData, equip_max_depth: int,
     ctx: SelectionContext = NO_PROFILE_CONTEXT,
     step: ObtainItem | None = None,
-) -> GatherMaterialsGoal:
+) -> GatherMaterialsGoal | None:
     """Build a budget-FEASIBLE GatherMaterials goal for a depth-unreachable
-    equippable `code` (its full craft chain exceeds `equip_max_depth`).
+    equippable `code` (its full craft chain exceeds `equip_max_depth`), or
+    `None` when `gather_step_target` decides `code`'s own from-holdings
+    gather cost already fits `equip_max_depth`.
+
+    That `None` case is `gather_step_target`'s own contract, not this
+    function's: its module docstring (`gather_step_target.py`) states as a
+    PRECONDITION of ITS caller that "when the root chain IS depth-reachable
+    the caller never reaches here" — i.e. a `(code, 1)` result is a signal to
+    plan `code` directly (UpgradeEquipment), not license to wrap it in a
+    second `GatherMaterials` pass over itself. `GatherMaterialsGoal`'s
+    `relevant_actions` search a WIDER action pool (recycle sources, currency
+    legs) than `UpgradeEquipmentGoal`'s closure-locked one, so "wrap and
+    gather" is not merely redundant — measured on the real 321-recipe
+    catalog (R2D2, empty bank), it costs a REAL search, not a symbolic one:
+
+        wooden_staff     5,839 / 0.50s (direct)  vs  102,286 / 11.0s (wrapped)
+        feather_coat    81,690 / 15.3s (direct)  vs   76,213 / 15.3s (wrapped)
+        leather_gloves  47,288 / 15.2s (direct)  vs   43,412 / 15.3s (wrapped)
+
+    all three finding no plan either way. Only `wooden_staff` is actually
+    faster direct (20x); `feather_coat` and `leather_gloves` exceed the
+    search budget regardless of which goal is planned — the `None` signal is
+    NEUTRAL for those two, not a fix, and they remain unsolved (a residual
+    for the spec, not this function). It is this function's job to detect
+    the `(code, 1)` result and signal `None` uniformly; EVERY caller must
+    fall through to its own reachable-root goal (`_equippable_goal`'s
+    `upgrade`, the `GEAR_REVIEW` guard's `committed`) rather than re-deciding
+    the same predicate at each call site — see `ai/gather_skill_gate.py` for
+    what a duplicated predicate across sites costs.
 
     `step` is the caller's already-computed `actionable_step` result, passed
     so the traversal runs once per decision instead of twice (once to decide
@@ -507,6 +539,8 @@ def _gather_goal_for_unreachable_equippable(
             code, resolved.code, resolved.quantity,
             game_data.crafting_recipes, owned, equip_max_depth,
             game_data.max_gather_yield)
+        if tgt_code == code:
+            return None
         return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
     # No deeper actionable step (the root itself is the actionable leaf, or the
     # chain is cyclically blocked): fall back to the direct recipe. A recipe-less
@@ -537,17 +571,15 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
     `UpgradeEquipment` directly; a dead-ended chain is a bounded, fast-failing
     search, not a soundness break (see `test_objective_step_equippable_dead_ends_admit_the_root_cheaply`).
     Otherwise route to `_gather_goal_for_unreachable_equippable`'s flat-leaf
-    step — UNLESS `gather_step_target` itself decided the root's own gather
-    cost fits `equip_max_depth`, in which case it returns the root by name
-    (`(code, 1)`) as a signal that the root should be planned directly, not
-    wrapped in a second `GatherMaterials` pass over itself (measured 20x
-    slower on `wooden_staff`: 102,286 nodes/10.6s wrapped vs. 5,839
-    nodes/0.47s direct) — this function detects that and falls through to
-    `upgrade` too. Self-corrects both ways across cycles — materials missing
-    routes to the gather (which does craft, not just gather; the equip
-    follows on a later cycle once the item is owned), materials banked or
-    carried leafs at the root and fires the craft+equip — so there is no
-    threshold to tune and no bound to rot.
+    step. The helper itself returns `None` (not a wrapped goal) when
+    `gather_step_target` decides the root's own gather cost already fits
+    `equip_max_depth` — see the helper's docstring for why that must be
+    handled there, not re-checked here — and this function falls through to
+    `upgrade` on that signal too. Self-corrects both ways across cycles —
+    materials missing routes to the gather (which does craft, not just
+    gather; the equip follows on a later cycle once the item is owned),
+    materials banked or carried leafs at the root and fires the craft+equip —
+    so there is no threshold to tune and no bound to rot.
 
     `ctx` is forwarded to `_gather_goal_for_unreachable_equippable`
     (one-obtain-model epic, Task 5); defaults to `NO_PROFILE_CONTEXT`."""
@@ -624,21 +656,9 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
         # search (see _gather_goal_for_unreachable_equippable).
         routed = _gather_goal_for_unreachable_equippable(
             code, state, game_data, upgrade.max_depth, ctx, step=step)
-        if routed._target_item == code:
-            # gather_step_target decided the ROOT's own from-holdings gather
-            # cost fits equip_max_depth (its module docstring: "the caller
-            # plans the root chain directly" in that case — it is a signal
-            # to fall through to UpgradeEquipment, not license to wrap the
-            # root in a second GatherMaterials pass over itself).
-            # GatherMaterials(root, {root: 1}) plans the SAME closure through
-            # a wider action pool (recycle sources, currency legs) than
-            # UpgradeEquipment's closure-locked search, so "wrap and gather"
-            # is not merely redundant, it is slower: measured on the real
-            # 321-recipe catalog, wooden_staff wrapped in GatherMaterials
-            # explored 102,286 nodes / 10.6s to find no plan, versus 5,839
-            # nodes / 0.47s for UpgradeEquipment on the identical state.
-            return upgrade
-        return routed
+        # None means gather_step_target decided the root itself fits the
+        # depth budget (see the helper's docstring) -- plan it directly.
+        return routed if routed is not None else upgrade
     # Unreachable in practice: `recipe` is only falsy for a recipe-less code,
     # and a recipe-less item's requirement-graph node has no outgoing edges
     # (`requirement_edges` returns {} — see `requirement_projections.py`), so
