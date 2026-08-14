@@ -554,13 +554,23 @@ def _gather_goal_for_unreachable_equippable(
             return None
         return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
     # No deeper actionable step (the root itself is the actionable leaf, or the
-    # chain is cyclically blocked): fall back to the direct recipe. A recipe-less
-    # root never reaches here — `_equippable_goal` checks `if recipe:` before
-    # calling in, and `map_guard`'s GEAR_REVIEW branch only calls in for a
-    # target that is neither owned nor material-ready, which `find_upgrade_target`
-    # can only have surfaced via `_find_craftable_upgrade_target` (a recipe is
-    # required to be a craftable candidate at all). Neither caller consults
-    # `is_plannable` to reach here.
+    # chain is cyclically blocked): fall back to the direct recipe. `_equippable_goal`
+    # never reaches here recipe-less — its `if recipe:` guard filters that before
+    # calling in. `map_guard`'s GEAR_REVIEW branch makes no such guarantee:
+    # `find_upgrade_target` can surface a BANK-ONLY item via `_find_inventory_upgrade`
+    # (inventory OR bank, no recipe required — see that method's docstring), and the
+    # GEAR_REVIEW gate at `:335` checks `state.inventory` but not the bank, while
+    # `_materials_in_hand` requires `bool(recipe)` and so also fails. A bank-only
+    # recipe-less equippable (46 of the real ones have no recipe, e.g.
+    # `corrupted_skull`/`life_crystal`/`forest_ring`) therefore DOES reach this
+    # line with `recipe = {}`, returning `GatherMaterialsGoal(code, {})`. Not a
+    # soundness break: that goal's own `is_satisfied` short-circuits True for a
+    # target held in inventory OR bank when the target is not itself a key of
+    # `needed` (see `GatherMaterialsGoal.is_satisfied`'s docstring) — `needed={}`
+    # makes that always the case here, so it fires zero actions rather than a
+    # wrong one. Whether the bank-held item then actually gets withdrawn and
+    # equipped is a different goal's job, not this fallback's. Neither caller
+    # consults `is_plannable` to decide whether to call in.
     recipe = game_data.crafting_recipe(code) or {}
     return GatherMaterialsGoal(target_item=code, needed=dict(recipe))
 
