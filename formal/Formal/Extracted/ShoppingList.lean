@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/shopping_list.py (sha256: 4cc051d203ef9b5cc3db4696930928d79072b180c4a1c55e6c064119b2f12278) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/shopping_list.py (sha256: 8a012cc136b04b9b65958bfd8b063448dc4bf193f945b5a764d5133c836d1b6d) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.ShoppingList
