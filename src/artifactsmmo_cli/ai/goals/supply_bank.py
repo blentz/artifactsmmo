@@ -197,7 +197,7 @@ class SupplyBankGoal(Goal):
            longer than `max_depth` (that half IS proved —
            `Formal.PlannerDepthBound.plan_length_le_max_depth`).
            `min_plan_length` itself is an A*-budget HEURISTIC: the citation
-           that used to stand here, `Formal.PlanModel.min_plan_length_le_plan`,
+           that used to stand here, NOT-PROVED: `Formal.PlanModel.min_plan_length_le_plan`,
            names a theorem that never existed (corrected 2026-08-13; see the
            PROOF STATUS paragraph in `ai/min_plan_length.py`).
 

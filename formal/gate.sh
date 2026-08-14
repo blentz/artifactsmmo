@@ -51,6 +51,7 @@ echo "== (b') role manifest =="; ( cd "$HERE" && lake env lean Formal/Manifest.l
 echo "== (b'') proof-concept index =="; bash "$HERE/gate/check_proof_concept_index.sh"
 echo "== (b''') extraction drift =="; bash "$HERE/gate/check_extraction.sh"
 echo "== (b'''a) audit list derived from manifest =="; bash "$HERE/gate/check_audit_generated.sh"
+echo "== (b'''b) proof citations =="; bash "$HERE/gate/check_proof_citations.sh"
 # Anchor resolution runs here, before the two slow phases, because it is the
 # cheapest possible failure: seconds against ~580 anchors, no tests executed. A
 # stale or ambiguous anchor used to surface only at the END of the hour-long

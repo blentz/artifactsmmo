@@ -31,7 +31,7 @@ that `shopping_list` seeds with `len(recipes) + 1`, which an acyclic recipe
 graph can never exhaust (every expansion path visits distinct craftables), so
 the bound is unreachable on real data — it exists so the extracted Lean model
 (`formal/Formal/Extracted/ShoppingList.lean`) recurses structurally on a `Nat`
-fuel, exactly like the hand model `Formal.ShoppingList.rawReq`.
+fuel, exactly like the hand model `Formal.ShoppingList.expand`.
 """
 
 from collections.abc import Mapping

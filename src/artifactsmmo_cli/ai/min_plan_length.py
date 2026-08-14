@@ -2,7 +2,8 @@
 `min_gather_steps + min_crafts + (1 if equip)`. One batched gather serves one
 raw material's whole demand, one craft per produced node, one equip.
 
-DO NOT re-add a "(proved: Formal.PlanModel.min_plan_length_le_plan)" citation
+DO NOT re-add a "(proved: NOT-PROVED: Formal.PlanModel.min_plan_length_le_plan)"
+citation
 here. Task 2 REMOVED it: that theorem has never existed. Preserve whatever
 citation Task 2 left in place — it names a theorem that does exist and states
 its undischarged hypothesis honestly.
@@ -15,7 +16,7 @@ bound and this predicate began rejecting reachable goals: live 2026-08-12,
 admission against `max_depth 32` on 955 of 955 cycles.
 
 PROOF STATUS (corrected 2026-08-13). This docstring used to claim "(proved:
-Formal.PlanModel.min_plan_length_le_plan)". That theorem does not exist and
+NOT-PROVED: Formal.PlanModel.min_plan_length_le_plan)". That theorem does not exist and
 never did — the name appears nowhere in formal/ outside the citations. What is
 actually proved is narrower:
 
