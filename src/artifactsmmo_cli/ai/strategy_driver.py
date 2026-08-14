@@ -859,16 +859,24 @@ def objective_step_goal(
                 # Root craft SKILL-GATED (not a depth problem): the final
                 # craft is blocked until the crafting skill rises, but the
                 # step's materials are needed regardless — plan the literal
-                # step. Routing to the root here is a dead end: the
-                # gather_step_target root-return branch emits
-                # GatherMaterials(root) whose own skill-gate fail-fast
-                # rejects it (trace 2026-06-11 18:46 cycle 15-16: both
-                # gear roots produced 0-node dead candidates and the
-                # arbiter fell through to slime grinding with the bar
-                # objective abandoned at 1/5). Once the materials are in
-                # hand the equippable branch above handles the skill-gated
-                # root craft — UpgradeEquipmentGoal grinds the crafting skill
-                # planner-natively via the LevelSkill action (epic P3).
+                # step, even when the root's raw-gather depth already fits
+                # the budget below. `gather_step_target`'s root-return check
+                # (`_gather_step_target_is_root`) only weighs MATERIAL gather
+                # depth against `equip_max_depth` — it has no notion of a
+                # crafting-skill gap, so a materially-shallow root can still
+                # fall through to `upgrade` there. Handing `upgrade` (the
+                # WHOLE craft+equip chain, now also carrying a LevelSkill
+                # grind for the gap) to the A* before the materials are even
+                # in hand is the one-shot-chain explosion the chunking above
+                # exists to avoid — the same skill-gated dead end this guard
+                # was written to prevent (trace 2026-06-11 18:46 cycle 15-16:
+                # both gear roots stalled and the arbiter fell through to
+                # slime grinding with the bar objective abandoned at 1/5).
+                # Once the materials are in hand AND the skill has risen
+                # enough, the equippable branch above hands the now-bounded
+                # remaining chunk to `upgrade` — UpgradeEquipmentGoal grinds
+                # the crafting skill planner-natively via the LevelSkill
+                # action (epic P3).
                 if (root_stats is not None and root_stats.crafting_skill
                         and state.skills.get(root_stats.crafting_skill, 1)
                         < root_stats.crafting_level):

@@ -180,7 +180,11 @@ ablation and paste both outputs.
 - materials banked → `UpgradeEquipment`, not a gather (the anti-starvation case)
 - materials carried → `UpgradeEquipment`
 - cyclically-blocked chain → direct-recipe fallback, not a crash
-- the `:347` `GEAR_REVIEW` caller is unaffected — it never used this trigger
+- the `:347` `GEAR_REVIEW` caller is unaffected by the trigger swap — it never
+  used `is_plannable` to decide routing — but it IS changed by the root-by-name
+  guard: `map_guard` now falls through to `committed` when
+  `_gather_goal_for_unreachable_equippable` returns `None` for a root-by-name
+  result (`test_gear_review_root_by_name_falls_through_to_committed`)
 - `actionable_step` is evaluated once per decision, not twice
 
 **Runtime activation.** Green tests are not enough here. A live `plan` on a

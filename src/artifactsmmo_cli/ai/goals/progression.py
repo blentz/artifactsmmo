@@ -137,18 +137,21 @@ class UpgradeEquipmentGoal(Goal):
         dead branches — not something to change in Task 3 itself.
 
         UPDATED 2026-08-14 (stop-at-the-achievable-step, Task 1): that
-        follow-up task took the second option. `_equippable_goal` and
-        `objective_step_goal`'s branch-3 no longer read `is_plannable` to
-        decide routing — they ask `actionable_step` directly and route
-        whenever the deepest achievable node differs from the goal, not when
-        this depth gate rejects. The depth branch above is unchanged and
-        still never fires on real data (the count above still holds); it
-        simply stopped being anyone's routing trigger. The two call sites
-        this docstring names above DO fire for real equippables now,
-        including `steel_boots` — the trigger moved, not the destination.
-        `is_plannable` remains real elsewhere, purely as a waste-avoidance
-        filter over this lower bound (skip a search that provably cannot
-        find a plan), never as a routing decision."""
+        follow-up task took the second option. `_equippable_goal` — the only
+        one of the two consumers named above that actually read `is_plannable`
+        to decide routing (`objective_step_goal`'s branch-3 never did; it still
+        does not call `actionable_step` either — see "Why only one site broke"
+        in the design spec) — no longer reads it. It asks `actionable_step`
+        directly and routes whenever the deepest achievable node differs from
+        the goal, not when this depth gate rejects. The depth branch above is
+        unchanged and still never fires on real data (the count above still
+        holds); it simply stopped being anyone's routing trigger.
+        `_gather_goal_for_unreachable_equippable` (reached from
+        `_equippable_goal`) now fires for real equippables, including
+        `steel_boots` — the trigger moved, not the destination. `is_plannable`
+        remains real elsewhere, purely as a waste-avoidance filter over this
+        lower bound (skip a search that provably cannot find a plan), never as
+        a routing decision."""
         return 32
 
     def value(self, state: WorldState, game_data: GameData,

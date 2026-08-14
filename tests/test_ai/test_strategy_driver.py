@@ -488,10 +488,10 @@ def test_equippable_goal_root_by_name_falls_through_to_upgrade():
     `test_gear_review_root_by_name_falls_through_to_committed` below) that
     would otherwise need the identical check duplicated — the precondition
     belongs to `gather_step_target`, and `_gather_goal_for_unreachable_equippable`
-    is that function's only consumer, so it is the one place that detects the
-    root-by-name result and returns `None`; every caller (this one and
-    `GEAR_REVIEW`) falls through to its own reachable-root goal on that
-    signal."""
+    is one of that function's two consumers. For the helper's own two callers
+    (this one and `GEAR_REVIEW`) it is the single place that detects the
+    root-by-name result and returns `None`; each caller falls through to its
+    own reachable-root goal on that signal."""
     gd = _wooden_staff_gd()
     state = make_state(level=1, inventory={}, bank_items={})
     goal = _equippable_goal("wooden_staff", "weapon_slot", state, gd)
@@ -591,7 +591,7 @@ def test_bank_stock_is_credited_before_the_depth_budget_is_judged():
     a second gather pass over itself. `gather_step_target`'s own module
     docstring states that when the root's own gather cost fits the budget
     "the caller plans the root chain directly" — a precondition the helper
-    itself must honor (its only consumer), so it now returns `None` for this
+    itself must honor (one of its two consumers), so it now returns `None` for this
     case instead of a wrapped goal, and every caller falls through to its
     own reachable-root goal (`_equippable_goal`'s `upgrade`, `GEAR_REVIEW`'s
     `committed` — see `test_equippable_goal_root_by_name_falls_through_to_upgrade`
@@ -863,7 +863,7 @@ def test_objective_step_obtain_gear():
     `test_equippable_goal_root_by_name_falls_through_to_upgrade` for the full
     three-item measurement). `_gather_goal_for_unreachable_equippable` now
     detects this itself and returns `None` (the precondition belongs to
-    `gather_step_target`, whose only consumer the helper is); `_equippable_goal`
+    `gather_step_target`, of whose two consumers the helper is one); `_equippable_goal`
     falls through to `UpgradeEquipmentGoal` on that signal, restoring the
     original one-shot craft+equip for this shallow chain."""
     gd = _gd()
@@ -2047,12 +2047,15 @@ def _gd_skill_gated_chain():
 
 
 def test_objective_step_skill_gated_root_plans_literal_step():
-    """Skill-gated root (gearcrafting 2 < 5) with an intermediate step:
-    routing to the ROOT is a dead end (GatherMaterials(root) is rejected by
-    its own skill-gate fail-fast — trace 2026-06-11 18:46 cycles 15-16,
-    0-node dead candidates, objective abandoned at 1/5 bars). The dispatch
-    must plan the LITERAL step instead: its materials are needed regardless,
-    and the skill grind follows once they're in hand."""
+    """Skill-gated root (gearcrafting 2 < 5) with an intermediate step: the
+    root's raw-gather depth (14 ore over the 36 already held) trivially fits
+    `equip_max_depth`, so `gather_step_target`'s root-return check would fall
+    through to `upgrade` (it only weighs material depth, not the crafting-skill
+    gap) — handing the WHOLE craft+equip chain, now also carrying a LevelSkill
+    grind, to the A* before materials are even in hand (trace 2026-06-11 18:46
+    cycles 15-16: both gear roots stalled, objective abandoned at 1/5 bars).
+    The dispatch must plan the LITERAL step instead: its materials are needed
+    regardless, and the skill grind follows once they're in hand."""
     gd = _gd_skill_gated_chain()
     state = make_state(level=6, inventory={"copper_ore": 36},
                        skills={"gearcrafting": 2, "mining": 4, "woodcutting": 1,
