@@ -521,6 +521,38 @@ def test_gear_review_root_by_name_falls_through_to_committed():
     assert repr(goal) == "UpgradeEquipment(wooden_staff->weapon_slot)"
 
 
+def test_objective_step_root_by_name_falls_through_to_upgrade():
+    """THIRD sibling regression pin, review round 4: `objective_step_goal`'s
+    intermediate-step-toward-equippable-root branch (`strategy_driver.py`,
+    the `if isinstance(root, ObtainItem) and root.code != step.code:` arm)
+    calls `gather_step_target` directly and, before this fix, wrapped
+    whatever it returned unconditionally — no check for "the ROOT itself, by
+    name". `grep -rn "gather_step_target(" src/` shows exactly two direct
+    call sites of the primitive (`_gather_goal_for_unreachable_equippable`
+    and this one) — an earlier report round incorrectly called the helper
+    the "only consumer"; it is not, and this test exists because that
+    over-claim would have hidden a real, live defect at the second site.
+
+    Same three real items affected as the other two sibling tests
+    (`wooden_staff`, `feather_coat`, `leather_gloves`); `wooden_staff` is
+    fixtured via the shared `_wooden_staff_gd()` for consistency and speed.
+
+    The step (`ash_wood`) is an intermediate recipe input of the root
+    (`wooden_staff`, weapon), so this exercises `objective_step_goal`
+    directly rather than through `_equippable_goal` or `GEAR_REVIEW` — a
+    genuinely different call path, proving the shared
+    `_gather_step_target_is_root` predicate covers it too rather than
+    relying on the helper's own guard (this call site never calls the
+    helper at all)."""
+    gd = _wooden_staff_gd()
+    state = make_state(level=1, inventory={}, bank_items={})
+    step = ObtainItem("ash_wood", 4)
+    root = ObtainItem("wooden_staff", 1)
+    goal = objective_step_goal(step, state, gd, _ctx(), root=root)
+    assert isinstance(goal, UpgradeEquipmentGoal)
+    assert repr(goal) == "UpgradeEquipment(wooden_staff->weapon_slot)"
+
+
 def test_gather_helper_falls_back_to_direct_recipe_without_deeper_step():
     """When the actionable_step IS the root itself (a 1-level recipe whose only
     input is a raw leaf already at the root's depth), there is no deeper step to
@@ -852,22 +884,39 @@ def test_objective_step_obtain_material():
 def test_objective_step_intermediate_chunks_toward_equippable_root():
     """An intermediate recipe-input step (ash_plank, no slots) whose chain ROOT is
     an equippable (wooden_shield) is pursued ONE PLANNABLE CHUNK at a time — a flat
-    GatherMaterials toward the root's chain, NOT the whole-chain UpgradeEquipment.
+    GatherMaterials toward the root's chain, NOT the whole-chain UpgradeEquipment —
+    UNLESS the root's own from-holdings gather cost already fits the depth budget,
+    in which case `gather_step_target` returns the root by name and this function
+    must plan the root directly rather than wrap it in a second GatherMaterials
+    pass over itself (`wooden_shield`'s chain — 6 ash_plank <- 6 ash_wood — is
+    exactly that shape).
 
-    The old code returned UpgradeEquipmentGoal(root) here, but that hands the whole
-    craft+equip chain to the A* at once; when the chain exceeds the planner depth
-    budget (copper_boots from scratch: ~96 actions ≫ max_depth 32) the one-shot plan
-    returns plan_len 0 and the bot abandons the gear for chicken grind (trace 2026-06-21).
-    The committed root is unchanged — only its EXECUTION is chunked via
-    gather_step_target, whose own depth check picks a budget-feasible target."""
+    The old code returned UpgradeEquipmentGoal(root) unconditionally here, but that
+    hands the whole craft+equip chain to the A* at once; when the chain exceeds the
+    planner depth budget (copper_boots from scratch: ~96 actions ≫ max_depth 32) the
+    one-shot plan returns plan_len 0 and the bot abandons the gear for chicken grind
+    (trace 2026-06-21). The committed root is unchanged — only its EXECUTION is
+    chunked via gather_step_target, whose own depth check picks a budget-feasible
+    target.
+
+    FIXED, review round 4 (stop-at-the-achievable-step Task 1): this call site
+    (`objective_step_goal`'s intermediate-step-toward-equippable-root branch) had
+    the same root-by-name defect just fixed in `_gather_goal_for_unreachable_equippable`
+    and the `GEAR_REVIEW` guard — it called `gather_step_target` directly and
+    wrapped whatever it returned unconditionally, with no check for "the ROOT
+    itself, by name". Used to assert `isinstance(g, GatherMaterialsGoal)` with
+    `g._target_item` allowed to be `"wooden_shield"` among other values — that
+    allowance is exactly what hid the bug (a `GatherMaterialsGoal(wooden_shield,
+    {wooden_shield: 1})` and a genuinely-flat gather both satisfied the same
+    assertion). Now asserts `UpgradeEquipmentGoal` directly; see
+    `test_objective_step_root_by_name_falls_through_to_upgrade` for the
+    dedicated regression pin and its discrimination proof."""
     gd = _gd()
     step = ObtainItem("ash_plank", 6)
     root = ObtainItem("wooden_shield", 1)
     g = objective_step_goal(step, make_state(), gd, _ctx(), root=root)
-    assert isinstance(g, GatherMaterialsGoal)
-    # the chunk targets a node ON the wooden_shield chain (the root, an
-    # intermediate, or a raw base material), never something off-chain.
-    assert g._target_item in {"wooden_shield", "ash_plank", "ash_wood"}
+    assert isinstance(g, UpgradeEquipmentGoal)
+    assert repr(g) == "UpgradeEquipment(wooden_shield->shield_slot)"
 
 
 def test_objective_step_combat_drop_input_routes_to_flat_step():
@@ -992,20 +1041,29 @@ def test_objective_step_unreachable_root_credits_bank_then_routes_to_step():
 
 
 def test_objective_step_intermediate_reachable_root_chunks_the_craft():
-    """Even when the root chain is shallow & in hand (ash_plank x6 ready), the
-    intermediate-step is pursued via a plannable CHUNK (GatherMaterials toward the
-    shield's chain), NOT a one-shot UpgradeEquipment(root). The craft chunk fits the
-    depth budget; the EQUIP follows next cycle through the equippable branch once the
-    shield is owned (prerequisites() returns [] for owned-but-unequipped gear, so the
-    actionable step becomes the root itself). Robust: a flat chunk is always
-    plannable, where the whole craft+equip chain can overflow max_depth."""
+    """FIXED, review round 4 (stop-at-the-achievable-step Task 1, same defect as
+    `test_objective_step_intermediate_chunks_toward_equippable_root`): used to
+    assert that even with the root chain shallow & fully in hand (ash_plank x6
+    ready), the intermediate-step routed to a plannable GatherMaterials CHUNK,
+    NOT a one-shot UpgradeEquipment(root) — with the equip deferred to "next
+    cycle" once the shield became owned.
+
+    `gather_step_target` was always deciding this exact case fits the depth
+    budget and returning the root BY NAME — this call site just wrapped that
+    in `GatherMaterials(wooden_shield, {wooden_shield: 1})` instead of taking
+    the signal at face value. With the root-by-name guard
+    (`_gather_step_target_is_root`, shared with
+    `_gather_goal_for_unreachable_equippable` and the `GEAR_REVIEW` guard),
+    this now plans the craft+equip in ONE step instead of deferring the equip
+    to a cycle that was never actually necessary — strictly better, not a
+    behavior this repo needs to keep pinned as "chunked"."""
     gd = _gd()  # wooden_shield <- ash_plank x6 <- ash_wood; shallow & in hand
     state = make_state(level=5, inventory={"ash_plank": 6})
     step = ObtainItem("ash_plank", 6)
     root = ObtainItem("wooden_shield", 1)
     g = objective_step_goal(step, state, gd, _ctx(), root=root)
-    assert isinstance(g, GatherMaterialsGoal)
-    assert g._target_item in {"wooden_shield", "ash_plank", "ash_wood"}
+    assert isinstance(g, UpgradeEquipmentGoal)
+    assert repr(g) == "UpgradeEquipment(wooden_shield->shield_slot)"
 
 
 def test_objective_step_reach_char_level_with_monster():

@@ -458,6 +458,39 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
     raise ValueError(f"Unknown MeansKind: {kind!r}")
 
 
+def _gather_step_target_is_root(tgt_code: str, root_code: str) -> bool:
+    """True when `gather_step_target` targeted the ROOT itself by name.
+
+    Shared by every one of `gather_step_target`'s callers
+    (`grep -rn "gather_step_target(" src/` — two direct call sites:
+    `_gather_goal_for_unreachable_equippable` and `objective_step_goal`) so
+    the check exists exactly once rather than as a re-typed `== root_code`
+    at each site — the `ai/gather_skill_gate.py` failure mode this repo
+    documents (one predicate, two sites, drift).
+
+    A `True` result is `gather_step_target`'s own contract, not the
+    caller's: its module docstring states as a PRECONDITION of ITS caller
+    that "when the root chain IS depth-reachable the caller never reaches
+    here" — i.e. this is a signal to plan the root directly (e.g.
+    `UpgradeEquipment`), never license to wrap the root in a second
+    `GatherMaterials` pass over itself. `GatherMaterialsGoal`'s
+    `relevant_actions` search a WIDER action pool (recycle sources,
+    currency legs) than `UpgradeEquipmentGoal`'s closure-locked one, so
+    "wrap and gather" is not merely redundant — measured on the real
+    321-recipe catalog (R2D2, empty bank), direct vs. wrapped:
+
+        wooden_staff     5,839 / 0.50s   vs  102,286 / 11.0s
+        feather_coat    81,690 / 15.3s   vs   76,213 / 15.3s
+        leather_gloves  47,288 / 15.2s   vs   43,412 / 15.3s
+
+    all three finding no plan either way. Only `wooden_staff` is actually
+    faster direct (20x); `feather_coat`/`leather_gloves` exceed the search
+    budget regardless of which goal is planned — this predicate is NEUTRAL
+    for those two, not a fix, and they remain unsolved (a residual for the
+    spec, not this function)."""
+    return tgt_code == root_code
+
+
 def _gather_goal_for_unreachable_equippable(
     code: str, state: WorldState, game_data: GameData, equip_max_depth: int,
     ctx: SelectionContext = NO_PROFILE_CONTEXT,
@@ -465,34 +498,12 @@ def _gather_goal_for_unreachable_equippable(
 ) -> GatherMaterialsGoal | None:
     """Build a budget-FEASIBLE GatherMaterials goal for a depth-unreachable
     equippable `code` (its full craft chain exceeds `equip_max_depth`), or
-    `None` when `gather_step_target` decides `code`'s own from-holdings
-    gather cost already fits `equip_max_depth`.
-
-    That `None` case is `gather_step_target`'s own contract, not this
-    function's: its module docstring (`gather_step_target.py`) states as a
-    PRECONDITION of ITS caller that "when the root chain IS depth-reachable
-    the caller never reaches here" — i.e. a `(code, 1)` result is a signal to
-    plan `code` directly (UpgradeEquipment), not license to wrap it in a
-    second `GatherMaterials` pass over itself. `GatherMaterialsGoal`'s
-    `relevant_actions` search a WIDER action pool (recycle sources, currency
-    legs) than `UpgradeEquipmentGoal`'s closure-locked one, so "wrap and
-    gather" is not merely redundant — measured on the real 321-recipe
-    catalog (R2D2, empty bank), it costs a REAL search, not a symbolic one:
-
-        wooden_staff     5,839 / 0.50s (direct)  vs  102,286 / 11.0s (wrapped)
-        feather_coat    81,690 / 15.3s (direct)  vs   76,213 / 15.3s (wrapped)
-        leather_gloves  47,288 / 15.2s (direct)  vs   43,412 / 15.3s (wrapped)
-
-    all three finding no plan either way. Only `wooden_staff` is actually
-    faster direct (20x); `feather_coat` and `leather_gloves` exceed the
-    search budget regardless of which goal is planned — the `None` signal is
-    NEUTRAL for those two, not a fix, and they remain unsolved (a residual
-    for the spec, not this function). It is this function's job to detect
-    the `(code, 1)` result and signal `None` uniformly; EVERY caller must
-    fall through to its own reachable-root goal (`_equippable_goal`'s
-    `upgrade`, the `GEAR_REVIEW` guard's `committed`) rather than re-deciding
-    the same predicate at each call site — see `ai/gather_skill_gate.py` for
-    what a duplicated predicate across sites costs.
+    `None` when `_gather_step_target_is_root` says `gather_step_target`
+    targeted `code` itself — see that function's docstring for why, and for
+    the measurements backing it. `None` means: don't wrap the root in a
+    second `GatherMaterials` pass over itself; the caller must fall through
+    to its own reachable-root goal (`_equippable_goal`'s `upgrade`, the
+    `GEAR_REVIEW` guard's `committed`, `objective_step_goal`'s `upgrade`).
 
     `step` is the caller's already-computed `actionable_step` result, passed
     so the traversal runs once per decision instead of twice (once to decide
@@ -539,7 +550,7 @@ def _gather_goal_for_unreachable_equippable(
             code, resolved.code, resolved.quantity,
             game_data.crafting_recipes, owned, equip_max_depth,
             game_data.max_gather_yield)
-        if tgt_code == code:
+        if _gather_step_target_is_root(tgt_code, code):
             return None
         return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
     # No deeper actionable step (the root itself is the actionable leaf, or the
@@ -860,10 +871,22 @@ def objective_step_goal(
                 # actionable step. Sound: the step is a prerequisite ON the root's
                 # path and never harder than the root (gather_step_target +
                 # formal/Formal/StepDispatch.lean gatherTarget_*).
+                #
+                # gather_step_target can also decide the ROOT's own gather cost
+                # already fits the depth budget and return it BY NAME — its own
+                # module docstring states that as a precondition of THIS call
+                # site ("the caller plans the root chain directly"), not
+                # license to wrap the root in a second GatherMaterials pass
+                # over itself (see `_gather_step_target_is_root`, shared with
+                # `_gather_goal_for_unreachable_equippable`, for the mechanism
+                # and the measured cost of getting this wrong). `upgrade` above
+                # is already the root's reachable-root goal to fall through to.
                 tgt_code, tgt_qty = gather_step_target(
                     root.code, step.code, step.quantity,
                     game_data.crafting_recipes, owned, upgrade.max_depth,
                     game_data.max_gather_yield)
+                if _gather_step_target_is_root(tgt_code, root.code):
+                    return upgrade
                 return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
         return GatherMaterialsGoal(target_item=step.code, needed={step.code: step.quantity})
     if isinstance(step, ReachCharLevel):
