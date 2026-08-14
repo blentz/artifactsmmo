@@ -109,15 +109,17 @@ class UpgradeEquipmentGoal(Goal):
         321 recipes in `formal/sim/game_data_snapshot.json`: MAXIMUM 15
         (the `greater_*_amulet` family), threshold 32, COUNT EXCEEDING = 0.
         No real recipe ever fails this gate, so `is_plannable` can never
-        return False via the depth branch in production, and its two
-        downstream consumers of that False —
-        `strategy_driver._gather_goal_for_unreachable_equippable` and
-        `objective_step_goal`'s branch-3 fallback — are unreachable code on
-        real data: the cross-cycle material-accumulation valve those provide
-        (see `_equippable_goal`'s docstring) does not fire for ANY real
-        equippable, not just deep 3-tier ones. `steel_boots` (three tiers,
-        the `min_crafts` residual above) now neither routes to incremental
-        gathering NOR plans — it used to route, and now just times out.
+        return False via the depth branch in production. At the time of this
+        review (Task 3, 2026-08-13) its two downstream consumers of that
+        False — `strategy_driver._gather_goal_for_unreachable_equippable`
+        and `objective_step_goal`'s branch-3 fallback — were unreachable
+        code on real data: the cross-cycle material-accumulation valve those
+        provide (see `_equippable_goal`'s docstring) did not fire for ANY
+        real equippable, not just deep 3-tier ones. `steel_boots` (three
+        tiers, the `min_crafts` residual above) neither routed to
+        incremental gathering NOR planned — it used to route, and then just
+        timed out.
+
         `tests/test_ai/test_strategy_driver.py`'s 3 tests that exercise the
         depth-reject/gather-routing branches (retargeted after their old
         2-tier witnesses, `copper_boots`/`feather_coat`, stopped exceeding
@@ -128,11 +130,25 @@ class UpgradeEquipmentGoal(Goal):
         `hell_armor`, `skullforged_pants`, `vital_armor`. (This listed five
         until 2026-08-13, silently dropping the first three; recomputed over
         `formal/sim/game_data_snapshot.json`, whose 321 recipes distribute
-        1:47, 2:35, 3:35, 4:55, 5:98, 6:43, 7:8.) This is a design
-        decision for a follow-up task with these numbers in hand (raise the
-        threshold's bite by tightening `min_crafts`, per the first residual;
-        or accept the valve is currently vestigial and remove/repurpose the
-        dead branches) — not something to change here."""
+        1:47, 2:35, 3:35, 4:55, 5:98, 6:43, 7:8.) This was left as a design
+        decision for a follow-up task with these numbers in hand: raise the
+        threshold's bite by tightening `min_crafts` (the first residual), or
+        accept the valve is currently vestigial and remove/repurpose the
+        dead branches — not something to change in Task 3 itself.
+
+        UPDATED 2026-08-14 (stop-at-the-achievable-step, Task 1): that
+        follow-up task took the second option. `_equippable_goal` and
+        `objective_step_goal`'s branch-3 no longer read `is_plannable` to
+        decide routing — they ask `actionable_step` directly and route
+        whenever the deepest achievable node differs from the goal, not when
+        this depth gate rejects. The depth branch above is unchanged and
+        still never fires on real data (the count above still holds); it
+        simply stopped being anyone's routing trigger. The two call sites
+        this docstring names above DO fire for real equippables now,
+        including `steel_boots` — the trigger moved, not the destination.
+        `is_plannable` remains real elsewhere, purely as a waste-avoidance
+        filter over this lower bound (skip a search that provably cannot
+        find a plan), never as a routing decision."""
         return 32
 
     def value(self, state: WorldState, game_data: GameData,
@@ -237,13 +253,23 @@ class UpgradeEquipmentGoal(Goal):
         `formal/sim/game_data_snapshot.json`, the MAXIMUM `min_plan_length`
         is 15 (`greater_topaz_amulet`/`greater_sapphire_amulet`/
         `greater_ruby_amulet`/`greater_emerald_amulet`, all tied), and ZERO
-        exceed `max_depth` 32. This branch (and its downstream fallback,
-        `strategy_driver._gather_goal_for_unreachable_equippable`) is
-        LIVE-DEAD on today's data — see the residual entry in
-        `max_depth`'s docstring above for the full account, the reachable
-        3-tier `steel_boots` counter-shape, and why the tests exercising this
-        branch now need a synthetic (35-material) fixture that no real
-        recipe approaches.
+        exceed `max_depth` 32. This branch is LIVE-DEAD on today's data — see
+        the residual entry in `max_depth`'s docstring above for the full
+        account, the reachable 3-tier `steel_boots` counter-shape, and why
+        the tests exercising this branch now need a synthetic (35-material)
+        fixture that no real recipe approaches.
+
+        UPDATED 2026-08-14 (stop-at-the-achievable-step, Task 1): this branch
+        being dead no longer has routing consequences. `strategy_driver.
+        _gather_goal_for_unreachable_equippable` used to be its downstream
+        fallback when routing read this depth branch's False; that link is
+        gone — `_equippable_goal` and `objective_step_goal`'s branch-3 now
+        ask `actionable_step` directly, so the fallback fires on whether the
+        deepest achievable node differs from the goal, not on whether this
+        gate rejects. This method is unaffected by that change and stays a
+        waste-avoidance filter over `min_plan_length` for whichever callers
+        still consult it directly (e.g. `strategy_driver.StrategyArbiter.
+        _plans`'s pre-plan reachability check).
 
         When the target (or its materials) is already in hand/bank the count
         drops and the short craft+equip plan IS reachable, so the goal stays

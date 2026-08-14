@@ -555,7 +555,12 @@ def _gather_goal_for_unreachable_equippable(
         return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
     # No deeper actionable step (the root itself is the actionable leaf, or the
     # chain is cyclically blocked): fall back to the direct recipe. A recipe-less
-    # root never reaches here (callers gate on a non-empty recipe / is_plannable).
+    # root never reaches here — `_equippable_goal` checks `if recipe:` before
+    # calling in, and `map_guard`'s GEAR_REVIEW branch only calls in for a
+    # target that is neither owned nor material-ready, which `find_upgrade_target`
+    # can only have surfaced via `_find_craftable_upgrade_target` (a recipe is
+    # required to be a craftable candidate at all). Neither caller consults
+    # `is_plannable` to reach here.
     recipe = game_data.crafting_recipe(code) or {}
     return GatherMaterialsGoal(target_item=code, needed=dict(recipe))
 
