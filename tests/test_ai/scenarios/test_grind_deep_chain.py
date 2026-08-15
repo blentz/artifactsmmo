@@ -163,20 +163,52 @@ def test_a_drop_fed_rung_is_dearer_than_its_recipe_lines_suggest(
     assert _routed("apprentice_gloves", state, game_data) > 50
 
 
-def test_selected_rung_is_the_cheapest_feasible_one(game_data: GameData,
-                                                    state: WorldState) -> None:
-    """Stronger and proxy-independent: whatever is selected must minimise
-    `acquire_steps` over every feasible candidate. This is the property the
-    ordering theorems state, checked against the real catalog rather than
-    hand-built candidates."""
+def test_selected_rung_is_the_rate_maximal_feasible_one(game_data: GameData,
+                                                        state: WorldState) -> None:
+    """Restated 2026-08-15. Until 2026-08-14 the ordering's FIRST key was
+    `acquire_steps` ascending, so "whatever is selected minimises
+    `acquire_steps` over every feasible candidate" really was the property the
+    ordering theorems stated. It no longer is: `_beats` now ranks by XP RATE
+    (`craft_level / effective_steps`, `wanted` a marginal-cost credit) and only
+    falls to raw `acquire_steps` as the LAST tie-break (see
+    `skill_grind_selection._beats`). Cheapness and rate are different
+    quantities -- the cheapest in-level rung is usually the LOWEST-level one,
+    which is exactly the rung a rate-maximising ordering should avoid -- so an
+    assertion that the chosen rung is cheapest no longer follows from the code
+    and was passing here only by coincidence (see below).
+
+    Feasible candidates in this scenario (weaponcrafting 5, real catalog,
+    `wanted` False for all of them under the default context): the four
+    level-1 rungs (`copper_axe`, `apprentice_gloves`, `copper_pickaxe`,
+    `copper_dagger` at 69 steps, `fishing_net` at 70) and the four level-5
+    rungs (`sticky_sword` at 61, `sticky_dagger` at 109, `water_bow` at 136,
+    `fire_staff` at 146); `wooden_staff` is excluded by `obtainable`. Rate
+    orders these `sticky_sword` (5/61 ~= 0.082) first by a wide margin over
+    every other candidate, level-5 or level-1 -- and `sticky_sword` also
+    happens to be the single cheapest feasible rung by `acquire_steps`. THAT
+    COINCIDENCE is exactly what let `chosen.acquire_steps ==
+    min(acquire_steps)` keep passing after the property it named was replaced;
+    the assertion below checks rate-maximality directly (no other feasible
+    candidate has a strictly higher rate than the one selected, compared by
+    cross-multiplication to stay in integers, mirroring `_beats` itself) and
+    then states the coincidence explicitly rather than leaving it implicit."""
     lvl = state.skills[SKILL]
     feasible = [c for c in build_selectable_grind_candidates(SKILL, state, game_data)
                 if c.craft_skill == SKILL and c.craft_level <= lvl
                 and c.obtainable and c.xp_positive]
     assert feasible, "scenario must offer at least one feasible rung"
+    assert not any(c.wanted for c in feasible), (
+        "this scenario's default context has no wanted rungs -- the rate "
+        "check below is meaningless if that premise drifts")
     rung = skill_grind_target(SKILL, state, game_data)
     chosen = next(c for c in feasible if c.code == rung)
+    for c in feasible:
+        assert c.craft_level * chosen.acquire_steps <= chosen.craft_level * c.acquire_steps, (
+            f"{c.code} has a strictly better XP rate than the selected {chosen.code}")
+    # The coincidence, pinned rather than assumed: in THIS scenario the
+    # rate-maximal rung is also the cheapest one.
     assert chosen.acquire_steps == min(c.acquire_steps for c in feasible)
+    assert chosen.code == "sticky_sword"
 
 
 def test_hoisted_cost_counts_the_whole_chain(game_data: GameData,
