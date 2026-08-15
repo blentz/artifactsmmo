@@ -1,5 +1,5 @@
-"""Corroborate `GREY_SKILL_GAP` — the gather/craft zero-xp band — against live
-trace data.
+"""Corroborate `GREY_SKILL_GAP` -- the gather zero-xp band -- against the
+learning store.
 
 Server-axiom-signoff discipline, the same one `xp_formula_replay.py` applies to
 the COMBAT curve. The documented rule
@@ -7,46 +7,62 @@ the COMBAT curve. The documented rule
 falls to zero for content "10+ levels below your skill level", but the prose is
 ambiguous at the boundary: does a gap of exactly 10 pay? The decision core
 `ai/skill_xp_positive` needs an exact integer answer, so this replays every
-observed `ok` Gather cycle and reports pays/zero bucketed by
+observed `ok` `GatherAction` cycle and reports pays/zero bucketed by
 
-    gap = skill_level(at cycle start) - resource_level
+    gap = skill_level(before the gather) - resource_level
 
-A record's `state` is the RESULT of that record's OWN action, not a
-before-snapshot: ground-truthed against 19691 `Fight` cycles,
-`state[i] - state[i-1] == fight_xp` holds 19691/19691 (100%), while
-`state[i+1] - state[i] == fight_xp` (the pairing this file used before a
-code-review round caught it) holds only 10777/19691 (55%). So record i's
-action is credited against the PAIR `(records[i-1].state, records[i].state)`
--- one step BACK is the pre-action snapshot, and the record's own state is
-post.
+MIGRATION (2026-08-15, Task 6 of
+docs/superpowers/plans/2026-08-15-harnesses-read-the-learning-store.md). This
+file used to glob `play-trace-*.jsonl` and recover `gap`/`paid` by pairing each
+record against the FOLLOWING record's state snapshot -- a bug a code-review
+round caught (see git history and `skill_xp_positive.py`'s docstring): it
+manufactured a handful of below-band apparent payers out of a neighbouring
+cycle's real yield. Corrected, and measured on that trace corpus, the boundary
+was exact: 3231 gathers, 2210 paying at gap <= 10, 1021 zero at gap >= 11, no
+exception anywhere. THAT CORPUS IS GONE -- the user deleted every
+`play-trace-*.jsonl` file on 2026-08-15 -- and this script can no longer
+reproduce that figure; it is preserved as history in
+`formal/diff/gather_xp_replay_report.txt`'s git log and in
+`skill_xp_positive.py`'s docstring, not asserted here.
 
-WHAT THE OLD "ATTRIBUTION LAG" EXPLANATION ACTUALLY WAS: under the wrong
-pairing, a handful of gap >= 11 buckets showed a few apparent payers, and this
-docstring used to explain them as xp landing on a "neighbouring" cycle. It
-does not: those were exactly the off-by-one above, each one crediting a grey
-gather with the NEXT record's real yield (a `spruce_tree` gather's own xp,
-misattributed to the `ash_tree` cycle beside it, etc.). Under the corrected
-pairing there are no such outliers left to explain -- see the VIOLATIONS and
-OUTLIERS lines below, which are computed, not asserted.
+This version reads `formal/diff/store_records.load_cycles` instead: every
+`cycles` row whose `action_class == "GatherAction"` and `outcome == "ok"`,
+attributed against that row's OWN `skill_levels` (the pre-action snapshot,
+`Cycle.skill_levels_json`, added by this same migration's Task 1) and OWN
+`delta_skill_xp` (never a difference against a neighbouring row -- see
+`store_records.py`'s module docstring for why that distinction is exactly the
+bug this file already had once). `skill_levels` IS NULLABLE, NOT BACK-FILLED:
+every row written before the column landed carries it as `None`, which today
+means EVERY historical row. ROWS WITHOUT IT ARE EXCLUDED, NOT DEFAULTED, and
+this replay reports the exclusion count and reason rather than silently
+shrinking the denominator or inventing a level.
 
-Crafting is reported separately and remains structurally ADVISORY (this
-script's VIOLATION-raising and exit code stay scoped to GATHER, matching the
-plan before this fix): but under the corrected pairing CRAFT is exactly as
-clean as GATHER -- zero mixed buckets, matching the independent replay in
-`formal/diff/craft_xp_replay.py`, which finds zero below-band payers and zero
-above-band non-zero-craft observations across 450 craft cycles. "Craft results
-lag" was never a property of crafting; it was the same bug measured on noisier
-data (crafts are rarer than gathers, so fewer misattributions were needed to
-produce a visible outlier).
+CRAFT IS NO LONGER REPLAYED HERE. It used to be reported alongside GATHER,
+ADVISORY only (never raising VIOLATIONS or affecting the exit code), from the
+same trace-derived cycle pairing. `formal/diff/craft_xp_replay.py` (Task 5 of
+this migration) now owns craft exclusively, reading the learning store's
+`craft_yield` table -- a materially different source (upserted per-character
+per-item observations, not a per-cycle trace scan) that this file duplicating
+would only invite drift between two "craft" numbers measured two different
+ways. See that file's module docstring for craft's own story.
 
-What would falsify `GREY_SKILL_GAP = 11`: a gap >= 11 bucket that PREDOMINANTLY
-pays, or an in-band bucket that never pays at all. Both are reported as explicit
-VIOLATION lines and exit non-zero. Sub-majority payers in an out-of-band bucket
-are reported as OUTLIERS with their counts, so the lag rate stays visible
-instead of being asserted away.
+COVERAGE CAN COLLAPSE TO ZERO, AND THAT IS THE HONEST RESULT, NOT A BUG IN
+THIS FILE. As of this migration landing, no `cycles` row carries
+`skill_levels_json` -- the column exists but nothing has been recorded against
+it yet. A harness that reports "0 usable observations, band holds" would be
+asserting the exact vacuity this project has a standing rule against: it must
+FAIL LOUDLY instead, which is what the empty-corpus branch below does. Re-run
+once the bot has accumulated cycles since the column landed.
+
+What would falsify `GREY_SKILL_GAP = 11`, once there is anything to check: a
+gap >= 11 bucket that PREDOMINANTLY pays, or an in-band bucket that never pays
+at all. Both are reported as explicit VIOLATION lines and exit non-zero.
+Sub-majority payers in an out-of-band bucket are reported as OUTLIERS with
+their counts, so a lag rate (should one ever reappear) stays visible instead of
+being asserted away.
 
 Output: formal/diff/gather_xp_replay_report.txt + stdout.
-Usage: uv run python formal/diff/gather_xp_replay.py [TRACE_DIR] [SNAPSHOT]
+Usage: uv run python formal/diff/gather_xp_replay.py [SNAPSHOT] [DB_PATH]
 """
 
 import collections
@@ -56,72 +72,57 @@ import sys
 from pathlib import Path
 
 from artifactsmmo_cli.ai.skill_xp_positive import GREY_SKILL_GAP, skill_xp_positive
+from artifactsmmo_cli.learning_db_path import default_learn_db_path
+from store_records import CycleRecord, EmptyCorpusError, load_cycles
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPORT = REPO_ROOT / "formal" / "diff" / "gather_xp_replay_report.txt"
-_CRAFT_RE = re.compile(r"Craft\((\w+)[x×]")
+_GATHER_RE = re.compile(r"^Gather\((\w+)(?:->\w+)?\)$")  # matches GatherAction.learning_key()
 
 
-def _catalog(snapshot: Path) -> tuple[dict[str, tuple[str, int]], dict[str, tuple[str, int]]]:
-    """`{resource_code: (skill, level)}` and `{item_code: (craft_skill, craft_level)}`
-    from a raw game-data cache dump."""
+def _resource_catalog(snapshot: Path) -> dict[str, tuple[str, int]]:
+    """`{resource_code: (skill, level)}` from a raw game-data cache dump."""
     data = json.loads(snapshot.read_text())
-    resources = {r["code"]: (r["skill"], r["level"]) for r in data["resources"]}
-    crafts = {
-        i["code"]: (i["craft"]["skill"], i["craft"]["level"])
-        for i in data["items"]
-        if i.get("craft") and i["craft"].get("skill")
-    }
-    return resources, crafts
+    return {r["code"]: (r["skill"], r["level"]) for r in data["resources"]}
 
 
-def _paid(pre: dict, post: dict, skill: str) -> bool:
-    """True when `skill` gained a level or xp between the two cycle snapshots."""
-    return (post["skills"].get(skill, 0) > pre["skills"].get(skill, 0)
-            or post["skill_xp"].get(skill, 0) > pre["skill_xp"].get(skill, 0))
+def _usable_observations(
+    records: list[CycleRecord], resources: dict[str, tuple[str, int]]
+) -> tuple[list[tuple[int, bool]], int, int, int]:
+    """`(observations, excluded_not_gather, excluded_no_level, excluded_not_in_catalog)`.
 
-
-def _replay(traces: list[Path], resources: dict[str, tuple[str, int]],
-            crafts: dict[str, tuple[str, int]]) -> tuple[dict, dict, int]:
-    gathers: dict[int, list[int]] = collections.defaultdict(lambda: [0, 0])
-    crafted: dict[int, list[int]] = collections.defaultdict(lambda: [0, 0])
-    used = 0
-    for path in traces:
-        try:
-            records = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-        except json.JSONDecodeError:
+    `observations` is `(gap, paid)` pairs. A row is excluded, never defaulted,
+    for one of three reasons: it is not an `ok` `GatherAction`; its
+    `skill_levels` is `None` (no `skill_levels_json`, or the gathered skill is
+    absent from the recorded snapshot); or its resource code is not in the
+    current game-data catalog (a resource removed or renamed since the row was
+    written)."""
+    observations: list[tuple[int, bool]] = []
+    excluded_not_gather = 0
+    excluded_no_level = 0
+    excluded_not_in_catalog = 0
+    for rec in records:
+        if rec.action_class != "GatherAction" or rec.outcome != "ok":
+            excluded_not_gather += 1
             continue
-        if not records or "skills" not in (records[0].get("state") or {}):
+        match = _GATHER_RE.match(rec.action_repr or "")
+        entry = resources.get(match.group(1)) if match else None
+        if entry is None:
+            excluded_not_in_catalog += 1
             continue
-        used += 1
-        # (prev_rec, cur_rec): cur_rec HOLDS the action/outcome under test, and
-        # cur_rec["state"] is that action's RESULT; prev_rec["state"] is the
-        # snapshot from BEFORE it ran. See module docstring.
-        for prev_rec, cur_rec in zip(records, records[1:], strict=False):
-            if cur_rec.get("outcome") != "ok":
-                continue
-            pre, post = prev_rec.get("state") or {}, cur_rec.get("state") or {}
-            if "skills" not in pre or "skills" not in post:
-                continue
-            action = str(cur_rec.get("action"))
-            if action.startswith("Gather("):
-                entry = resources.get(action[len("Gather("):-1])
-                bucket = gathers
-            else:
-                match = _CRAFT_RE.match(action)
-                entry = crafts.get(match.group(1)) if match else None
-                bucket = crafted
-            if entry is None:
-                continue
-            skill, level = entry
-            gap = pre["skills"].get(skill, 1) - level
-            bucket[gap][0 if _paid(pre, post, skill) else 1] += 1
-    return gathers, crafted, used
+        skill, level = entry
+        if rec.skill_levels is None or skill not in rec.skill_levels:
+            excluded_no_level += 1
+            continue
+        gap = rec.skill_levels[skill] - level
+        paid = rec.delta_skill_xp.get(skill, 0) > 0
+        observations.append((gap, paid))
+    return observations, excluded_not_gather, excluded_no_level, excluded_not_in_catalog
 
 
-def _render(title: str, buckets: dict[int, list[int]],
-            advisory: bool) -> tuple[list[str], list[str], list[str]]:
-    lines = [f"\n## {title}", f"{'gap':>4} {'pays':>6} {'zero':>6}  verdict"]
+def _render(buckets: dict[int, list[int]]) -> tuple[list[str], list[str], list[str]]:
+    total = sum(sum(v) for v in buckets.values())
+    lines = [f"\n## GATHER (load-bearing: {total} cycles)", f"{'gap':>4} {'pays':>6} {'zero':>6}  verdict"]
     violations: list[str] = []
     outliers: list[str] = []
     for gap in sorted(buckets):
@@ -138,44 +139,86 @@ def _render(title: str, buckets: dict[int, list[int]],
         elif not predicted and pays:
             flag = f"  <-- outlier: {pays}/{pays + zero} paying (unexplained -- investigate before assuming lag)"
             outliers.append(f"gap={gap}: {pays}/{pays + zero}")
-        if flag.startswith("  <-- VIOLATION") and not advisory:
+        if flag.startswith("  <-- VIOLATION"):
             violations.append(f"gap={gap} pays={pays} zero={zero}{flag}")
         lines.append(f"{gap:4d} {pays:6d} {zero:6d}  {verdict}{flag}")
     return lines, violations, outliers
 
 
 def main() -> int:
-    trace_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else REPO_ROOT
-    snapshot = (Path(sys.argv[2]) if len(sys.argv) > 2
+    snapshot = (Path(sys.argv[1]) if len(sys.argv) > 1
                 else Path.home() / ".cache/artifactsmmo/gamedata-api.artifactsmmo.com.json")
-    traces = sorted(trace_dir.glob("play-trace-*.jsonl"))
-    if not traces:
-        print(f"no play-trace-*.jsonl under {trace_dir}", file=sys.stderr)
-        return 2
-    resources, crafts = _catalog(snapshot)
-    gathers, crafted, used = _replay(traces, resources, crafts)
+    db_path = Path(sys.argv[2]) if len(sys.argv) > 2 else Path(default_learn_db_path())
 
-    lines = [
-        "# GREY_SKILL_GAP corroboration report",
-        f"traces={used} snapshot={snapshot}",
+    if not snapshot.exists():
+        print(f"no game-data snapshot at {snapshot}", file=sys.stderr)
+        return 2
+    if not db_path.exists():
+        print(f"no learning store at {db_path}", file=sys.stderr)
+        return 2
+
+    resources = _resource_catalog(snapshot)
+    try:
+        records = load_cycles(str(db_path))
+    except EmptyCorpusError as exc:
+        print(f"gather_xp_replay: {exc}", file=sys.stderr)
+        return 1
+
+    observations, excluded_not_gather, excluded_no_level, excluded_not_in_catalog = (
+        _usable_observations(records, resources)
+    )
+
+    header = [
+        "# GREY_SKILL_GAP corroboration report (gather)",
+        f"store={db_path}",
+        f"snapshot={snapshot}",
+        f"cycle rows: {len(records)}",
+        f"  excluded (not an ok GatherAction): {excluded_not_gather}",
+        f"  excluded (skill_levels IS NULL or missing the gathered skill -- "
+        f"skill_levels_json landed 2026-08-15, rows written before it are "
+        f"excluded, not defaulted): {excluded_no_level}",
+        f"  excluded (resource_code not in current catalog): {excluded_not_in_catalog}",
+        f"usable observations: {len(observations)}",
         f"model: skill_xp_positive(content, skill) = content >= 1 and "
         f"skill < content + {GREY_SKILL_GAP}",
     ]
-    gather_lines, violations, outliers = _render(
-        f"GATHER (load-bearing: {sum(sum(v) for v in gathers.values())} cycles)",
-        gathers, advisory=False)
-    craft_lines, _, _ = _render(
-        f"CRAFT (ADVISORY — structurally scoped out of VIOLATION-raising, "
-        f"see docstring; NOT lag-affected: "
-        f"{sum(sum(v) for v in crafted.values())} cycles)", crafted, advisory=True)
-    lines += gather_lines + craft_lines
+
+    if not observations:
+        print("NO USABLE OBSERVATIONS: no cycle rows carry skill_levels_json.\n"
+              "The column landed 2026-08-15; rows written before it are excluded\n"
+              "rather than defaulted. Run the bot to accumulate observations.",
+              file=sys.stderr)
+        lines = [
+            *header,
+            "",
+            "VERDICT: NO USABLE OBSERVATIONS. Every cycle row is excluded -- either it "
+            "is not an ok GatherAction, or its skill_levels is None because "
+            "skill_levels_json had not landed (or had not yet been written for a "
+            "GatherAction row) when it was recorded. This is EXPECTED immediately "
+            "after this migration and must NOT be read as confirming or refuting "
+            "GREY_SKILL_GAP -- there is nothing to test yet. The 2026-08-14 "
+            "trace-based finding (3231 gathers, no exception at the gap 10/11 "
+            "boundary) remains the historical evidence; see skill_xp_positive.py's "
+            "docstring. Re-run once GatherAction cycles have been recorded since "
+            "skill_levels_json landed.",
+        ]
+        report = "\n".join(lines) + "\n"
+        REPORT.write_text(report)
+        print(report)
+        return 1
+
+    buckets: dict[int, list[int]] = collections.defaultdict(lambda: [0, 0])
+    for gap, paid in observations:
+        buckets[gap][0 if paid else 1] += 1
+
+    gather_lines, violations, outliers = _render(buckets)
+    lines = [*header] + gather_lines
     lines.append("")
-    lines.append("OUT-OF-BAND OUTLIERS (unexplained if any; see module docstring for why "
-                 "'attribution lag' is no longer assumed): " + (
+    lines.append("OUT-OF-BAND OUTLIERS (unexplained if any; see module docstring): " + (
         "; ".join(outliers) if outliers else "none"))
     lines.append("VIOLATIONS: " + (
         "; ".join(violations) if violations
-        else f"none — GREY_SKILL_GAP = {GREY_SKILL_GAP} holds on every gather bucket"))
+        else f"none -- GREY_SKILL_GAP = {GREY_SKILL_GAP} holds on every gather bucket"))
     report = "\n".join(lines) + "\n"
     REPORT.write_text(report)
     print(report)

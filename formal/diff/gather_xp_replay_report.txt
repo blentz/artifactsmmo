@@ -1,43 +1,11 @@
-# GREY_SKILL_GAP corroboration report
-traces=155 snapshot=/home/blentz/.cache/artifactsmmo/gamedata-api.artifactsmmo.com.json
+# GREY_SKILL_GAP corroboration report (gather)
+store=/home/blentz/.cache/artifactsmmo/learning.db
+snapshot=/home/blentz/.cache/artifactsmmo/gamedata-api.artifactsmmo.com.json
+cycle rows: 49263
+  excluded (not an ok GatherAction): 43715
+  excluded (skill_levels IS NULL or missing the gathered skill -- skill_levels_json landed 2026-08-15, rows written before it are excluded, not defaulted): 5548
+  excluded (resource_code not in current catalog): 0
+usable observations: 0
 model: skill_xp_positive(content, skill) = content >= 1 and skill < content + 11
 
-## GATHER (load-bearing: 3231 cycles)
- gap   pays   zero  verdict
-   0     20      0  PAYS
-   1    194      0  PAYS
-   2    346      0  PAYS
-   3    144      0  PAYS
-   4     19      0  PAYS
-   5    111      0  PAYS
-   6    338      0  PAYS
-   7    394      0  PAYS
-   8    293      0  PAYS
-   9    192      0  PAYS
-  10    159      0  PAYS
-  11      0    310  ZERO
-  14      0     86  ZERO
-  15      0    176  ZERO
-  16      0    314  ZERO
-  20      0    135  ZERO
-
-## CRAFT (ADVISORY — structurally scoped out of VIOLATION-raising, see docstring; NOT lag-affected: 456 cycles)
- gap   pays   zero  verdict
-   0     10      0  PAYS
-   1      4      0  PAYS
-   2      9      0  PAYS
-   3     14      0  PAYS
-   4     13      0  PAYS
-   5     25      0  PAYS
-   6     18      0  PAYS
-   7      3      0  PAYS
-   8     22      0  PAYS
-   9     43      0  PAYS
-  10     59      0  PAYS
-  11      0    146  ZERO
-  12      0     74  ZERO
-  14      0      5  ZERO
-  20      0     11  ZERO
-
-OUT-OF-BAND OUTLIERS (unexplained if any; see module docstring for why 'attribution lag' is no longer assumed): none
-VIOLATIONS: none — GREY_SKILL_GAP = 11 holds on every gather bucket
+VERDICT: NO USABLE OBSERVATIONS. Every cycle row is excluded -- either it is not an ok GatherAction, or its skill_levels is None because skill_levels_json had not landed (or had not yet been written for a GatherAction row) when it was recorded. This is EXPECTED immediately after this migration and must NOT be read as confirming or refuting GREY_SKILL_GAP -- there is nothing to test yet. The 2026-08-14 trace-based finding (3231 gathers, no exception at the gap 10/11 boundary) remains the historical evidence; see skill_xp_positive.py's docstring. Re-run once GatherAction cycles have been recorded since skill_levels_json landed.

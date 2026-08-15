@@ -14,11 +14,13 @@ now only combat modelled its band: `GatherAction`/`CraftAction` carried an
 UPPER skill bound (`skills[skill] >= required`) and no lower one at all, so a
 skill grind could pick content that pays nothing and spin on it forever.
 
-THE BOUNDARY IS OBSERVED, NOT ASSUMED. The doc prose "10+ levels below" is
-loose about whether a gap of exactly 10 pays. It does. Replaying every
-`Gather` cycle across 155 committed play-traces (`formal/diff/
-gather_xp_replay.py`, 3231 gathers, each attributed to its OWN action against
-the pre/post state pair that action actually produced) resolves it:
+THE BOUNDARY WAS OBSERVED, NOT ASSUMED — BUT ITS CORPUS IS GONE, SO IT IS NO
+LONGER RE-RUNNABLE ON DEMAND. The doc prose "10+ levels below" is loose about
+whether a gap of exactly 10 pays. It does not: this was measured on
+2026-08-14, replaying every `Gather` cycle across 155 committed
+`play-trace-*.jsonl` files (`formal/diff/gather_xp_replay.py`, each action
+attributed against the pre/post state pair it actually produced), over 3231
+gathers with zero exceptions anywhere at the gap 10 vs. gap 11 boundary:
 
     gap = skill_level - resource_level     pays / zero
       8                                    293 /   0
@@ -28,17 +30,30 @@ the pre/post state pair that action actually produced) resolves it:
      16                                      0 / 314
      20                                      0 / 135
 
-Every in-band gap bucket (0-10) pays every single time; every out-of-band
-bucket (>= 11) pays zero times, with no exception anywhere in 3231 gathers —
-2210 paying at gap <= 10, 1021 zero at gap >= 11. `formal/diff/
-craft_xp_replay.py`'s independent 450-craft-cycle replay finds the same clean
-boundary for crafting: 214 paying, all at gap <= 10, and 236 zero, all at gap
->= 11. (An earlier version of this evidence reported a handful of below-band
-payers and explained them as one-cycle attribution lag; that explanation was
-itself wrong — a code-review round found the replay was pairing each action
-against the FOLLOWING cycle's result instead of its own, which manufactured
-those apparent payers out of a neighbouring cycle's real yield. Corrected,
-there is nothing left to explain: the boundary is exact.)
+Every in-band gap bucket (0-10) paid every single time; every out-of-band
+bucket (>= 11) paid zero times — 2210 paying at gap <= 10, 1021 zero at gap
+>= 11, no exception anywhere in the 3231 gathers measured. `formal/diff/
+craft_xp_replay.py`'s independent 450-craft-cycle replay, measured the same
+day, found the same clean boundary for crafting: 214 paying, all at gap <=
+10, and 236 zero, all at gap >= 11. (An earlier version of this evidence
+reported a handful of below-band payers and explained them as one-cycle
+attribution lag; that explanation was itself wrong — a code-review round
+found the replay was pairing each action against the FOLLOWING cycle's result
+instead of its own, which manufactured those apparent payers out of a
+neighbouring cycle's real yield. Corrected, there was nothing left to
+explain: the boundary was exact.)
+
+THAT CORPUS — every `play-trace-*.jsonl` file — was deleted by the user on
+2026-08-15, the day after this measurement, and cannot be regenerated; the
+table above is the surviving record of a real, one-time observation, not a
+result this repository can reproduce by re-running a script today.
+`formal/diff/gather_xp_replay.py` now reads the learning store's
+`cycles.skill_levels_json` column (added the same day the trace corpus was
+deleted) instead of trace files, and will re-derive this boundary once enough
+gathers have been recorded since that column landed. Until then it correctly
+exits non-zero reporting zero usable observations, rather than passing green
+having checked nothing — see that file's module docstring and
+`formal/diff/gather_xp_replay_report.txt` for its current output.
 
 Hence the paying band is `gap <= 10`, i.e. `skill_level < content_level + 11`.
 
