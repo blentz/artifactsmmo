@@ -86,12 +86,15 @@ def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
     nondecreasing in content level, which justifies `craft_level` as an
     ORDINAL proxy; using it as the CARDINAL numerator of a ratio additionally
     assumes xp is proportional to it, and `level_penalty` varies across rungs
-    by a factor nobody has measured. The committed play-traces contain only
-    518 crafts across 0 distinct (craft_level, skill_level) pairs
-    (formal/diff/craft_xp_replay.py) -- the learning store's `Cycle` rows have
-    no per-skill-level column at all, only the delta each craft paid -- too
-    few to test proportionality. The assumption stands UNVERIFIED, not
-    confirmed.
+    by a factor nobody has measured. Measured over 80 crafts across 9 distinct
+    (craft_level, skill_level) pairs (formal/diff/craft_xp_replay.py): xp /
+    craft_level is NOT constant at fixed skill_level -- it falls by roughly
+    3x as craft_level rises from 1 to 10 (skill_level 11: ratio 5.46 -> 1.70;
+    skill_level 12: ratio 8.50 -> 2.30), the same direction independently at
+    both skill levels on two different items, though each craft_level=10 arm
+    is a single observation. craft_level therefore ORDERS rungs correctly but
+    misprices the ratio, and the numerator wants replacing with a directly-
+    observed per-item xp figure. Not done here; recorded as a residual.
 
     The `wanted` tie-break is spelled as two `and`/`not` branches rather than
     `if c.wanted != best.wanted: return c.wanted`: the extractor's v1 subset
