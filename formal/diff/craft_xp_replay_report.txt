@@ -11,8 +11,8 @@ distinct (item_code, skill_level) representatives: 31
 distinct (skill_level, craft_level) pairs: 25
 skill_levels with >=2 distinct craft_levels: [5, 7, 8, 9, 10, 11, 12, 13, 15, 17, 21]
 
-## BY ITEM (representative xp/unit = MAX across cycles at that skill_level; see docstring)
-item_code              skill_lvl craft_lvl  gap    n  xp/unit
+## BY ITEM (representative xp/item = MAX across cycles at that skill_level; see docstring)
+item_code              skill_lvl craft_lvl  gap    n  xp/item
 ash_plank                      5         1    4    5     6.00
 ash_plank                      6         1    5   24     5.00
 ash_plank                      7         1    6   13     5.00
@@ -30,18 +30,18 @@ copper_legs_armor              5         5    0    1   131.00
 life_amulet                    5         5    0    1   131.00
 sticky_dagger                  5         5    0    1   131.00
 water_bow                      5         5    0    2   131.00
-small_health_potion            7         5    2    5   123.00
-small_health_potion            8         5    3   10   120.00
-small_health_potion            9         5    4    8   118.00
+small_health_potion            7         5    2    5    61.50
+small_health_potion            8         5    3   10    60.00
+small_health_potion            9         5    4    8    59.00
 life_amulet                   15         5   10    1   124.00
 small_health_potion           17         5   12   48     0.00
 iron_bar                      10        10    0    3    24.00
 spruce_plank                  11        10    1    3    23.00
 iron_bar                      12        10    2    4    23.00
 iron_bar                      13        10    3    2    23.00
-earth_boost_potion            16        10    6    3   245.00
-fire_boost_potion             16        10    6    1   245.00
-fire_boost_potion             17        10    7    1   248.00
+earth_boost_potion            16        10    6    3   122.50
+fire_boost_potion             16        10    6    1   122.50
+fire_boost_potion             17        10    7    1   124.00
 iron_bar                      21        10   11    7     0.00
 life_ring                     15        15    0    1   403.00
 
@@ -51,11 +51,11 @@ skill_lvl craft_lvl n_items     mean      min      max
         5         5       4   131.00   131.00   131.00
         6         1       1     5.00     5.00     5.00
         7         1       1     5.00     5.00     5.00
-        7         5       1   123.00   123.00   123.00
+        7         5       1    61.50    61.50    61.50
         8         1       1     5.00     5.00     5.00
-        8         5       1   120.00   120.00   120.00
+        8         5       1    60.00    60.00    60.00
         9         1       2     5.00     5.00     5.00
-        9         5       1   118.00   118.00   118.00
+        9         5       1    59.00    59.00    59.00
        10         1       1     5.00     5.00     5.00
        10        10       1    24.00    24.00    24.00
        11         1       1     5.00     5.00     5.00
@@ -67,23 +67,23 @@ skill_lvl craft_lvl n_items     mean      min      max
        15         1       1     0.00     0.00     0.00
        15         5       1   124.00   124.00   124.00
        15        15       1   403.00   403.00   403.00
-       16        10       2   245.00   245.00   245.00
+       16        10       2   122.50   122.50   122.50
        17         5       1     0.00     0.00     0.00
-       17        10       1   248.00   248.00   248.00
+       17        10       1   124.00   124.00   124.00
        21         1       1     0.00     0.00     0.00
        21        10       1     0.00     0.00     0.00
 
 ## RATIO xp/craft_level, PER SKILL_LEVEL WITH >=2 DISTINCT CRAFT_LEVELS
 skill_level=5: cl=1:xp=6.00,ratio=6.000, cl=5:xp=131.00,ratio=26.200  steps: 1->5:RISES(6.00->26.20)
-skill_level=7: cl=1:xp=5.00,ratio=5.000, cl=5:xp=123.00,ratio=24.600  steps: 1->5:RISES(5.00->24.60)
-skill_level=8: cl=1:xp=5.00,ratio=5.000, cl=5:xp=120.00,ratio=24.000  steps: 1->5:RISES(5.00->24.00)
-skill_level=9: cl=1:xp=5.00,ratio=5.000, cl=5:xp=118.00,ratio=23.600  steps: 1->5:RISES(5.00->23.60)
+skill_level=7: cl=1:xp=5.00,ratio=5.000, cl=5:xp=61.50,ratio=12.300  steps: 1->5:RISES(5.00->12.30)
+skill_level=8: cl=1:xp=5.00,ratio=5.000, cl=5:xp=60.00,ratio=12.000  steps: 1->5:RISES(5.00->12.00)
+skill_level=9: cl=1:xp=5.00,ratio=5.000, cl=5:xp=59.00,ratio=11.800  steps: 1->5:RISES(5.00->11.80)
 skill_level=10: cl=1:xp=5.00,ratio=5.000, cl=10:xp=24.00,ratio=2.400  steps: 1->10:FALLS(5.00->2.40)
 skill_level=11: cl=1:xp=5.00,ratio=5.000, cl=10:xp=23.00,ratio=2.300  steps: 1->10:FALLS(5.00->2.30)
 skill_level=12: cl=1:xp=0.00,ratio=0.000, cl=10:xp=23.00,ratio=2.300  steps: 1->10:RISES(0.00->2.30)
 skill_level=13: cl=1:xp=0.00,ratio=0.000, cl=10:xp=23.00,ratio=2.300  steps: 1->10:RISES(0.00->2.30)
 skill_level=15: cl=1:xp=0.00,ratio=0.000, cl=5:xp=124.00,ratio=24.800, cl=15:xp=403.00,ratio=26.867  steps: 1->5:RISES(0.00->24.80); 5->15:RISES(24.80->26.87)
-skill_level=17: cl=5:xp=0.00,ratio=0.000, cl=10:xp=248.00,ratio=24.800  steps: 5->10:RISES(0.00->24.80)
+skill_level=17: cl=5:xp=0.00,ratio=0.000, cl=10:xp=124.00,ratio=12.400  steps: 5->10:RISES(0.00->12.40)
 skill_level=21: cl=1:xp=0.00,ratio=0.000, cl=10:xp=0.00,ratio=0.000  steps: 1->10:FLAT(0.00->0.00)
 
-VERDICT: REFUTED. Measured over 450 craft cycles (214 paying, 236 zero) across 25 distinct (craft_level, skill_level) pairs (formal/diff/craft_xp_replay.py): xp / craft_level is NOT constant at fixed skill_level in ANY qualifying bucket -- see the RATIO table's per-step directions above. The shape is not one direction across the whole range (see the report's VERDICT prose / the committed _beats docstring for the authored characterization); craft_level orders rungs correctly (monotonicity is not in question here) but does not price them proportionally.
+VERDICT: REFUTED. Measured over 450 craft cycles (214 paying, 236 zero) across 25 distinct (craft_level, skill_level) pairs (formal/diff/craft_xp_replay.py): xp / craft_level is NOT constant at fixed skill_level in 10/11 qualifying buckets (skill_level [5, 7, 8, 9, 10, 11, 12, 13, 15, 17]). The exception: skill_level [21] is FLAT -- both craft_levels there have already fallen into the zero-xp grey band (ratio 0.000 at both), which is constant only in the trivial sense that zero equals zero. See the RATIO table's per-step directions above. The shape is not one direction across the whole range (see the report's VERDICT prose / the committed _beats docstring for the authored characterization); craft_level orders rungs correctly (monotonicity is not in question here) but does not price them proportionally.

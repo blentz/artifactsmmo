@@ -21,7 +21,7 @@ model: skill_xp_positive(content, skill) = content >= 1 and skill < content + 11
   16      0    314  ZERO
   20      0    135  ZERO
 
-## CRAFT (ADVISORY — attribution lag: 456 cycles)
+## CRAFT (ADVISORY — structurally scoped out of VIOLATION-raising, see docstring; NOT lag-affected: 456 cycles)
  gap   pays   zero  verdict
    0     10      0  PAYS
    1      4      0  PAYS

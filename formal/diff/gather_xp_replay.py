@@ -165,7 +165,8 @@ def main() -> int:
         f"GATHER (load-bearing: {sum(sum(v) for v in gathers.values())} cycles)",
         gathers, advisory=False)
     craft_lines, _, _ = _render(
-        f"CRAFT (ADVISORY — attribution lag: "
+        f"CRAFT (ADVISORY — structurally scoped out of VIOLATION-raising, "
+        f"see docstring; NOT lag-affected: "
         f"{sum(sum(v) for v in crafted.values())} cycles)", crafted, advisory=True)
     lines += gather_lines + craft_lines
     lines.append("")

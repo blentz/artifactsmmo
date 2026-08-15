@@ -88,16 +88,24 @@ def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
     assumes xp is proportional to it, and `level_penalty` varies across rungs
     by a factor nobody has measured. Measured over 450 craft cycles (214
     paying, 236 exact zero) across 25 distinct (craft_level, skill_level)
-    pairs (formal/diff/craft_xp_replay.py): xp / craft_level is NOT constant
-    at fixed skill_level, and the direction is not even the same across the
-    range. Where both rungs pay (skill_level 5/7/8/9, craft_level 1 vs 5) the
-    ratio RISES 4.4x-4.9x (craft_level 1 pays ~5-6 xp/unit, craft_level 5
-    pays ~118-131) -- craft_level UNDERSTATES the level-5 rung's true payoff
-    by that same 4.4x-4.9x, which always biases the rank toward the cheaper
-    low rung. Where the comparison instead crosses a refining chain
-    (skill_level 10/11, craft_level 1 vs 10: copper_bar->iron_bar,
-    ash_plank->spruce_plank) the ratio FALLS to roughly 46-48% of its
-    craft_level=1 value. craft_level therefore ORDERS rungs correctly
+    pairs (formal/diff/craft_xp_replay.py), on a per-ITEM basis (xp /
+    (executions * craft.quantity) -- three of the thirteen items measured
+    here craft 2-at-a-time): xp / craft_level is NOT constant at fixed
+    skill_level in 10 of the 11 qualifying buckets (the 11th, skill_level
+    21, is trivially flat -- both craft_levels there already sit in the
+    zero-xp grey band). Where both rungs pay (skill_level 5/7/8/9,
+    craft_level 1 vs 5) the ratio RISES 2.4x-4.4x (craft_level 1 pays ~5-6
+    xp/item, craft_level 5 pays ~59-131 depending on the item) --
+    craft_level UNDERSTATES the level-5 rung's true payoff by that same
+    factor, which always biases the rank toward the cheaper low rung. Where
+    the comparison instead crosses a refining chain (skill_level 10/11,
+    craft_level 1 vs 10: copper_bar->iron_bar, ash_plank->spruce_plank) the
+    ratio FALLS to roughly 46-48% of its craft_level=1 value. The single
+    exception across the whole table: skill_level 15, craft_level 5 vs 15
+    (life_amulet -> life_ring), where the ratio moves only 24.80 -> 26.87
+    (+8%) -- the one comparison where craft_level's implied proportionality
+    comes closest to holding, named here rather than left out of the
+    picture it complicates. craft_level therefore ORDERS rungs correctly
     (monotonicity is not in question) but misprices the ratio in both
     directions depending on the pair, and the right numerator is directly
     observable per item in these traces (13 distinct items measured here).

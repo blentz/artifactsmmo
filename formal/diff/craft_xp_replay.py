@@ -54,22 +54,46 @@ matching skill on cheap early recipes), so `xp <= 0` was disproportionately
 dropping low-`craft_level` observations -- the corrected table below keeps
 every same-cycle, same-skill-level observation, zero or not.
 
-QUANTITY NORMALIZATION, RE-CHECKED (not merely re-asserted): the action string
-is `Craft(item_code×qty)`; a batch craft pays `qty` times a single unit's xp,
-and this is now directly confirmed exact under the corrected pairing --
-`iron_bar` posts 24 xp at qty=1 and 120 at qty=5 (24/unit both times),
-`copper_bar` posts 5/10/20 at qty=1/2/4 (5/unit), `small_health_potion` posts
-118/236 at qty=1/2 (118/unit). Under the OLD (buggy) pairing, raw per-cycle xp
-looked roughly qty-INVARIANT instead of qty-proportional -- which, in
-hindsight, was itself a symptom of the bug: a neighbouring cycle's fixed-size
-gather/craft doesn't scale with THIS cycle's batch size, so treating it as
-this craft's yield manufactured the appearance of a qty-independent constant.
-Reported "xp" below is `delta / qty` (xp per unit crafted), and because some
-batch crafts post only PART of their total in a single tracked window (a
-partial in-flight posting that under-reports, never over-reports), the
-representative statistic per `(item, skill_level)` is the MAX observed
-per-unit value, not the mean -- a mean would blend complete and partial
-postings and bias low; the max recovers the one complete reading.
+QUANTITY NORMALIZATION HAS TWO SEPARATE FACTORS, NOT ONE. A round of review
+caught that an earlier version conflated them under a single "qty" and both
+its number and its justification were wrong.
+
+(1) The action string `Craft(item_code×N)` REQUESTS N executions of the
+recipe -- but N is what was ASKED for, not necessarily what the server
+ACTUALLY ran, and `xp`/`inventory_used` only ever reflect what was actually
+executed. Worked case (`play-trace-C3P0-20260803-230040.jsonl`, cycle 28,
+mining 11): `Craft(copper_bar×4)` posts +5 xp with `inventory_used` dropping
+exactly 9 (-10 ore, +1 bar) -- ONE execution of the 10-ore recipe, not four;
+the other three requested repetitions never happened and their "missing" 15
+xp is not lurking on a later cycle, it was simply never earned. Dividing by
+the REQUESTED N (4) instead of the actual executed count (1) understates the
+true per-execution xp (5/4 = 1.25 instead of 5.00) whenever the server
+executes fewer reps than asked; it can never overstate it. That is why the
+representative statistic per `(item, skill_level)` is the MAX observed value
+across cycles, not the mean -- a mean blends truncated and untruncated
+readings and biases low, while the max, taken over enough cycles, recovers a
+reading where request and execution agreed. (An earlier version of this file
+attributed the same MAX choice to a different, disproven mechanism -- "partial
+in-window batch posting" -- which this cycle-28 case rules out directly:
+nothing about it looks like a partial post of a real 4-execution batch, it
+looks exactly like a real 1-execution craft.)
+
+(2) Independently, a recipe's OWN `craft.quantity` (the game-data snapshot's
+per-item field) is how many output items ONE execution produces, and it is
+not always 1: `small_health_potion`, `earth_boost_potion` and
+`fire_boost_potion` all craft at quantity=2. `Craft(small_health_potion×1)`
+posts 118 xp with `inventory_used` net -1 (-3 sunflower_seed... consumed, +2
+potions) -- ONE execution, TWO items, so the per-ITEM rate is 118/2 = 59, not
+118. Mixing recipes of different `craft.quantity` on a raw "xp per requested
+execution" basis silently compares two different units.
+
+Both factors are folded into a single, correctly-scaled reading:
+`xp_per_item = xp / (requested_executions * craft.quantity)`, taking the MAX
+across a (item, skill_level) group per factor (1) above. This is confirmed
+exact wherever `craft.quantity == 1` and request/execution agree: `iron_bar`
+posts 24 xp at ×1 and 120 at ×5 (24/item both times); `copper_bar` posts
+5/10/20 at ×1/2/4 (5/item). All figures and ratios reported below are on this
+per-item basis.
 
 Output: formal/diff/craft_xp_replay_report.txt + stdout.
 Usage: uv run python formal/diff/craft_xp_replay.py [TRACE_DIR] [SNAPSHOT] [LEARNING_DB]
@@ -96,29 +120,44 @@ class CraftObservation:
     action (see module docstring). Pure data; exempt from one-class-per-file
     (tightly-coupled value object for this replay only)."""
 
-    __slots__ = ("craft_level", "item_code", "qty", "skill_level", "xp")
+    __slots__ = ("craft_level", "item_code", "items_per_execution", "requested_executions", "skill_level", "xp")
 
-    def __init__(self, item_code: str, craft_level: int, skill_level: int, qty: int, xp: int) -> None:
+    def __init__(
+        self,
+        item_code: str,
+        craft_level: int,
+        skill_level: int,
+        requested_executions: int,
+        items_per_execution: int,
+        xp: int,
+    ) -> None:
         self.item_code = item_code
         self.craft_level = craft_level
         self.skill_level = skill_level
-        self.qty = qty
+        # The N in `Craft(item×N)` -- REQUESTED, not necessarily executed.
+        # See module docstring factor (1).
+        self.requested_executions = requested_executions
+        # The recipe's own `craft.quantity` -- items produced per execution.
+        # See module docstring factor (2).
+        self.items_per_execution = items_per_execution
         self.xp = xp
 
     @property
-    def xp_per_unit(self) -> float:
-        return self.xp / self.qty
+    def xp_per_item(self) -> float:
+        return self.xp / (self.requested_executions * self.items_per_execution)
 
     @property
     def gap(self) -> int:
         return self.skill_level - self.craft_level
 
 
-def _craft_catalog(snapshot: Path) -> dict[str, tuple[str, int]]:
-    """`{item_code: (craft_skill, craft_level)}` from a raw game-data cache dump."""
+def _craft_catalog(snapshot: Path) -> dict[str, tuple[str, int, int]]:
+    """`{item_code: (craft_skill, craft_level, craft_quantity)}` from a raw
+    game-data cache dump. `craft_quantity` is items produced per execution
+    (usually 1; some alchemy recipes produce 2 -- see module docstring)."""
     data = json.loads(snapshot.read_text())
     return {
-        i["code"]: (i["craft"]["skill"], i["craft"]["level"])
+        i["code"]: (i["craft"]["skill"], i["craft"]["level"], i["craft"].get("quantity", 1))
         for i in data["items"]
         if i.get("craft") and i["craft"].get("skill")
     }
@@ -150,7 +189,7 @@ def _sqlite_skill_level_note(db_path: Path) -> str:
 
 
 def _replay(
-    traces: list[Path], crafts: dict[str, tuple[str, int]]
+    traces: list[Path], crafts: dict[str, tuple[str, int, int]]
 ) -> tuple[list[CraftObservation], collections.Counter[str], int]:
     observations: list[CraftObservation] = []
     skipped: collections.Counter[str] = collections.Counter()
@@ -177,7 +216,7 @@ def _replay(
             if entry is None:
                 skipped["item_not_in_catalog"] += 1
                 continue
-            skill, craft_level = entry
+            skill, craft_level, items_per_execution = entry
             pre, post = prev_rec.get("state") or {}, cur_rec.get("state") or {}
             if "skills" not in pre or "skills" not in post:
                 skipped["missing_state"] += 1
@@ -203,23 +242,29 @@ def _replay(
                 continue
             # xp == 0 is KEPT (see module docstring: the grey band paying
             # nothing is real evidence, not missing data).
-            observations.append(CraftObservation(item_code, craft_level, pre_level, int(qty_str), xp))
+            observations.append(
+                CraftObservation(
+                    item_code, craft_level, pre_level, int(qty_str), items_per_execution, xp
+                )
+            )
     return observations, skipped, used
 
 
 def _representative_per_item(
     observations: list[CraftObservation],
 ) -> dict[tuple[str, int], tuple[float, int, int]]:
-    """`{(item_code, skill_level): (max_xp_per_unit, n_cycles, craft_level)}`.
+    """`{(item_code, skill_level): (max_xp_per_item, n_cycles, craft_level)}`.
     MAX rather than mean per the module docstring's QUANTITY NORMALIZATION
-    section: a partial in-window batch posting can only under-report a unit's
-    true xp, never over-report it, so the max across observed cycles for the
-    same item at the same skill_level recovers the complete reading."""
+    section, factor (1): a request for N executions that the server only
+    partially fulfils can only under-report the true per-execution (hence
+    per-item) xp when divided by the REQUESTED N, never over-report it, so
+    the max across observed cycles for the same item at the same skill_level
+    recovers a reading where request and execution agreed."""
     grouped: dict[tuple[str, int], list[CraftObservation]] = collections.defaultdict(list)
     for obs in observations:
         grouped[(obs.item_code, obs.skill_level)].append(obs)
     return {
-        key: (max(o.xp_per_unit for o in obs_list), len(obs_list), obs_list[0].craft_level)
+        key: (max(o.xp_per_item for o in obs_list), len(obs_list), obs_list[0].craft_level)
         for key, obs_list in grouped.items()
     }
 
@@ -230,8 +275,8 @@ def _render_by_pair(
     by_pair: dict[tuple[int, int], list[float]] = collections.defaultdict(list)
     lines = [
         "",
-        "## BY ITEM (representative xp/unit = MAX across cycles at that skill_level; see docstring)",
-        f"{'item_code':22} {'skill_lvl':>9} {'craft_lvl':>9} {'gap':>4} {'n':>4} {'xp/unit':>8}",
+        "## BY ITEM (representative xp/item = MAX across cycles at that skill_level; see docstring)",
+        f"{'item_code':22} {'skill_lvl':>9} {'craft_lvl':>9} {'gap':>4} {'n':>4} {'xp/item':>8}",
     ]
     for (item_code, skill_level), (rep_xp, n, craft_level) in sorted(
         representative.items(), key=lambda kv: (kv[1][2], kv[0][1], kv[0][0])
@@ -253,16 +298,26 @@ def _render_by_pair(
     return lines, by_pair
 
 
-def _ratio_table(by_pair: dict[tuple[int, int], list[float]]) -> tuple[list[str], dict[int, dict[int, float]]]:
+def _ratio_table(
+    by_pair: dict[tuple[int, int], list[float]],
+) -> tuple[list[str], dict[int, dict[int, float]], set[int]]:
     """Per skill_level with >=2 distinct craft_levels: mean xp per craft_level
     and the ratio xp/craft_level, plus the SIGN of the change between each
     consecutive pair of observed craft_levels -- computed facts, not a
-    judgment about whether they mean the ratio is 'basically constant'."""
+    judgment about whether they mean the ratio is 'basically constant'.
+
+    Also returns `all_flat`: the skill_levels where EVERY step is FLAT (ratio
+    unchanged craft_level to craft_level), so a caller can state precisely
+    which buckets the "not constant" claim covers instead of asserting it of
+    all of them -- a bucket where both craft_levels have already fallen into
+    the zero-xp grey band is trivially flat at 0.000, and a universal claim
+    that ignores it is falsified by its own table."""
     by_skill: dict[int, dict[int, float]] = collections.defaultdict(dict)
     for (skill_level, craft_level), xps in by_pair.items():
         by_skill[skill_level][craft_level] = statistics.mean(xps)
     lines = ["", "## RATIO xp/craft_level, PER SKILL_LEVEL WITH >=2 DISTINCT CRAFT_LEVELS"]
     qualifying = {sl: levels for sl, levels in by_skill.items() if len(levels) >= 2}
+    all_flat: set[int] = set()
     if not qualifying:
         lines.append("(none -- no skill_level has crafts observed at 2+ distinct craft_levels)")
     for skill_level in sorted(qualifying):
@@ -270,15 +325,19 @@ def _ratio_table(by_pair: dict[tuple[int, int], list[float]]) -> tuple[list[str]
         ordered_cls = sorted(levels)
         ratios = [levels[cl] / cl for cl in ordered_cls]
         steps = []
+        directions = []
         for cl_a, cl_b, r_a, r_b in zip(ordered_cls, ordered_cls[1:], ratios, ratios[1:], strict=False):
             direction = "RISES" if r_b > r_a else ("FALLS" if r_b < r_a else "FLAT")
+            directions.append(direction)
             steps.append(f"{cl_a}->{cl_b}:{direction}({r_a:.2f}->{r_b:.2f})")
+        if directions and all(d == "FLAT" for d in directions):
+            all_flat.add(skill_level)
         lines.append(
             f"skill_level={skill_level}: "
             + ", ".join(f"cl={cl}:xp={levels[cl]:.2f},ratio={r:.3f}" for cl, r in zip(ordered_cls, ratios, strict=False))
             + "  steps: " + "; ".join(steps)
         )
-    return lines, qualifying
+    return lines, qualifying, all_flat
 
 
 def main() -> int:
@@ -307,7 +366,7 @@ def main() -> int:
 
     representative = _representative_per_item(observations)
     by_item_lines, by_pair = _render_by_pair(representative)
-    ratio_lines, qualifying = _ratio_table(by_pair)
+    ratio_lines, qualifying, all_flat = _ratio_table(by_pair)
     sqlite_note = _sqlite_skill_level_note(db_path)
 
     lines = [
@@ -337,16 +396,25 @@ def main() -> int:
             "assumption stands UNVERIFIED, not confirmed."
         )
     else:
+        non_flat = sorted(set(qualifying) - all_flat)
+        flat_clause = (
+            f"The exception: skill_level {sorted(all_flat)} is FLAT -- both craft_levels "
+            "there have already fallen into the zero-xp grey band (ratio 0.000 at both), "
+            "which is constant only in the trivial sense that zero equals zero. "
+            if all_flat
+            else ""
+        )
         lines.append(
             f"VERDICT: REFUTED. Measured over {len(observations)} craft cycles "
             f"({len(paying)} paying, {len(zero)} zero) across {len(by_pair)} distinct "
             "(craft_level, skill_level) pairs (formal/diff/craft_xp_replay.py): xp / "
-            "craft_level is NOT constant at fixed skill_level in ANY qualifying bucket -- "
-            "see the RATIO table's per-step directions above. The shape is not one "
-            "direction across the whole range (see the report's VERDICT prose / the "
-            "committed _beats docstring for the authored characterization); craft_level "
-            "orders rungs correctly (monotonicity is not in question here) but does not "
-            "price them proportionally."
+            f"craft_level is NOT constant at fixed skill_level in {len(non_flat)}/"
+            f"{len(qualifying)} qualifying buckets (skill_level {non_flat}). "
+            f"{flat_clause}See the RATIO table's per-step directions above. The shape "
+            "is not one direction across the whole range (see the report's VERDICT "
+            "prose / the committed _beats docstring for the authored "
+            "characterization); craft_level orders rungs correctly (monotonicity is "
+            "not in question here) but does not price them proportionally."
         )
     report = "\n".join(lines) + "\n"
     REPORT.write_text(report)
