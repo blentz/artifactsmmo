@@ -371,19 +371,30 @@ with `wanted` demoted from a lexicographic pivot to a marginal-cost credit that
 zeroes a wanted rung's effective steps.
 
 So `beats_prefers_cheaper_chain` and `costlier_chain_never_beats` are **false on
-purpose** and are gone, replaced by `beats_prefers_higher_rate` (the new first
-key, stated for the UNWANTED pair because two wanted candidates tie on rate by
-construction and quantifying over equal-`wanted` pairs would be vacuous on half
-its domain) and `beats_prefers_wanted` (the June 2026 keeper guarantee, now
-DERIVED from the credit plus the tie-break rather than asserted by a pivot).
+purpose** and are gone. Four roles replace them:
 
-A third role — cheapness still decides at EQUAL `craft_level`, the surviving
-content of the old theorem — is **not yet stated**, pending a ruling. Its drafted
-statement is false over `Int`: at a negative `craft_level` the cross-multiplication
-reverses, and `_beats` picks the costlier rung. `craft_level` is nonnegative in
-the Python core but `Int` in the extraction, so the statement needs the same
-`0 ≤ craft_level` domain hypothesis `beats_prefers_wanted` already carries. See
-the note in `Formal/SkillGrindSelection.lean`.
+- `beats_prefers_higher_rate` — the new first key. Stated for the UNWANTED pair
+  because two wanted candidates tie on rate by construction, so quantifying over
+  equal-`wanted` pairs would be vacuous on half its domain.
+- `beats_prefers_cheaper_at_equal_level` — what survives of the old theorem:
+  cheapness still decides wherever it is the only difference. Holds by three
+  routes (unwanted at positive level via the rate; unwanted at level zero and
+  wanted via the raw-cost tie-break).
+- `beats_prefers_wanted` — the June 2026 keeper guarantee, now DERIVED from the
+  credit plus the tie-break rather than asserted by a lexicographic pivot.
+- `unwanted_not_beats_wanted` — the converse guard, the only Lean pin behind the
+  `_beats invert wanted shield` mutant.
+
+**`Int` is wider than the Python domain, and the ordering theorems feel it.**
+Three of the four carry `0 ≤` hypotheses on `craft_level` / `acquire_steps`.
+These are not slack: cross-multiplication is what turns a rate comparison into an
+integer one, and multiplying by a negative REVERSES it, so at `craft_level = -1`
+`_beats` genuinely prefers the costlier rung. `scripts/extract_lean.py` maps
+Python `int` to `Int`, while API craft levels start at 1 and an action count
+cannot be negative — so the hypotheses exclude nothing the extracted core can
+produce. Each one was added only after a counterexample was checked by
+evaluation, and each theorem's doc comment records that counterexample rather
+than merely asserting the hypothesis is needed.
 
 ### Intentionally NOT proved (no decision logic) — gear sub-project D (2026-06-29)
 

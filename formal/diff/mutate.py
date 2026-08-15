@@ -1330,22 +1330,26 @@ SKILL_GRIND_TARGET_MUTATIONS = [
     # Kills the tier tests -- a one-line drop recipe is not one action.
     ("skill_grind_target: acquire_steps back to counting recipe lines",
      "        acquire_steps = acquisition_actions(\n"
-     "            code, 1, state, game_data, NO_PROFILE_CONTEXT, equip=False)\n",
+     "            code, 1, grind_probe_state(state, code), game_data,\n"
+     "            NO_PROFILE_CONTEXT, equip=False)\n",
      "        acquire_steps = len(recipe)\n"),
     # Cost-blind: every rung ties, so the selection falls through to craft_level
     # and the cheapest chain stops mattering at all.
     ("skill_grind_target: acquire_steps stops costing anything",
      "        acquire_steps = acquisition_actions(\n"
-     "            code, 1, state, game_data, NO_PROFILE_CONTEXT, equip=False)\n",
+     "            code, 1, grind_probe_state(state, code), game_data,\n"
+     "            NO_PROFILE_CONTEXT, equip=False)\n",
      "        acquire_steps = 0\n"),
     # Cap the unobtainable bound: a rung whose materials nothing produces
     # (wooden_staff <- wooden_stick) stops being priced out and becomes
     # selectable again -- the 2026-06-13 livelock.
     ("skill_grind_target: acquire_steps caps the unobtainable bound",
      "        acquire_steps = acquisition_actions(\n"
-     "            code, 1, state, game_data, NO_PROFILE_CONTEXT, equip=False)\n",
+     "            code, 1, grind_probe_state(state, code), game_data,\n"
+     "            NO_PROFILE_CONTEXT, equip=False)\n",
      "        acquire_steps = min(999, acquisition_actions(\n"
-     "            code, 1, state, game_data, NO_PROFILE_CONTEXT, equip=False))\n"),
+     "            code, 1, grind_probe_state(state, code), game_data,\n"
+     "            NO_PROFILE_CONTEXT, equip=False))\n"),
 ]
 
 SKILL_GRIND_SELECTION_MUTATIONS = [

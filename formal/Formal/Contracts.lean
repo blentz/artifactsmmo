@@ -632,10 +632,25 @@ example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
     0 ≤ c.craft_level → 0 ≤ b.acquire_steps →
     Extracted.SkillGrindSelection._beats c (some b) = true :=
   @Formal.SkillGrindSelection.beats_prefers_wanted
--- The third pin of the 2026-08-14 restatement -- cheapness still decides at
--- EQUAL craft_level -- is absent pending a ruling; see the note in
--- Formal/SkillGrindSelection.lean for the kernel-checked counterexample that
--- blocks its drafted statement.
+-- beats_prefers_cheaper_at_equal_level: what survives of the cheapest-chain
+-- key -- cheapness still decides wherever it is the ONLY difference. The
+-- `0 ≤ craft_level` hypothesis is not slack: without it the statement is false
+-- at a negative level, where multiplying the cross-product reverses the
+-- comparison and `_beats` takes the COSTLIER rung.
+example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
+    c.wanted = b.wanted → c.craft_level = b.craft_level →
+    0 ≤ c.craft_level → c.acquire_steps < b.acquire_steps →
+    Extracted.SkillGrindSelection._beats c (some b) = true :=
+  @Formal.SkillGrindSelection.beats_prefers_cheaper_at_equal_level
+-- unwanted_not_beats_wanted: the converse guard -- an unwanted candidate never
+-- displaces a wanted incumbent. Pinning BOTH directions of the wanted tie-break
+-- is what stops the shield clause being inverted unnoticed; the two directions
+-- run through different clauses, so one pin does not cover the other.
+example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
+    c.wanted = false → b.wanted = true →
+    0 ≤ b.craft_level → 0 ≤ c.acquire_steps →
+    Extracted.SkillGrindSelection._beats c (some b) = false :=
+  @Formal.SkillGrindSelection.unwanted_not_beats_wanted
 
 /-! ### MonsterDropApply reachability contracts.
 

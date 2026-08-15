@@ -277,9 +277,8 @@ chain always wins regardless of craft level. That was true of the ordering
 until 2026-08-14 and is now false on purpose: cheapness is anti-correlated with
 xp, because the cheapest in-level rung is the lowest-level one. Live Lor picked
 a 13-action level-1 rung over a 59-action level-5 rung and sat at weaponcrafting
-8 for 757 grind cycles. The surviving content of the old theorem was to be
-`beats_prefers_cheaper_at_equal_level`; see the note below for why that one is
-not yet stated.
+8 for 757 grind cycles. The surviving content of the old theorem is
+`beats_prefers_cheaper_at_equal_level` below.
 
 STATED FOR THE UNWANTED PAIR, deliberately. Two WANTED candidates both credit to
 zero effective steps and therefore tie on rate by construction, so quantifying
@@ -294,27 +293,57 @@ theorem beats_prefers_higher_rate (c b : GrindCandidate)
     omega
   simp [_beats, hcw, hbw, hne, hrate]
 
--- `beats_prefers_cheaper_at_equal_level` — the third theorem of the 2026-08-14
--- restatement, carrying what survives of `beats_prefers_cheaper_chain` — is NOT
--- STATED HERE, deliberately and pending a ruling. As drafted it read: at equal
--- `wanted` standing and EQUAL `craft_level`, the strictly cheaper chain wins.
--- That is FALSE over `Int`, and the counterexample is kernel-checked, not
--- suspected: with both candidates unwanted, `craft_level = -1` on both,
--- `c.acquire_steps = 1` and `b.acquire_steps = 2`, the rate comparison is
--- `(-1)*2 = -2` against `(-1)*1 = -1`, so the CHEAPER candidate loses and
--- `_beats c (some b)` evaluates to `false`.
---
--- The defect is in the drafted statement, not in the ordering: a negative
--- `craft_level` is unreachable from the Python core (the API's craft levels
--- start at 1), and it flips the sense of the cross-multiplication because
--- multiplying an inequality by a negative reverses it. The sibling theorem
--- `beats_prefers_wanted` below already carries exactly this kind of
--- domain hypothesis (`0 ≤ c.craft_level`) for exactly this reason. Adding
--- `0 ≤ c.craft_level` here makes the statement true and non-vacuous (witness:
--- craft_level 3, acquire_steps 7 against 11) and costs nothing real, but that
--- is a change to a BINDING statement rather than to a provisional proof script,
--- so it is referred upward rather than made here. See the Task 2 report for the
--- verified statement and proof script, ready to paste once ruled.
+/-- `beats_prefers_cheaper_at_equal_level`: at equal `wanted` standing and EQUAL
+`craft_level`, the strictly cheaper chain still wins.
+
+This is what survives of `beats_prefers_cheaper_chain`, and stating it
+separately keeps the anti-regression guarantee that theorem was carrying:
+cheapness still decides wherever it is the only thing that differs.
+
+It holds by THREE different routes, which is why it is worth proving rather
+than assuming — an unwanted pair at positive level through the rate itself
+(equal levels make the rate comparison a comparison of steps), an unwanted pair
+at level ZERO through the final raw-cost tie-break (both cross products collapse
+to 0, so the rate ties), and a wanted pair through that same tie-break (the
+credit ties their rates at zero).
+
+WHY `0 ≤ c.craft_level` IS HERE. Without it the theorem is FALSE, and not
+subtly: at `craft_level = -1` on both candidates, `acquire_steps` 1 against 2,
+both unwanted, the cross products are `(-1)*2 = -2` against `(-1)*1 = -1`, so
+`_beats` picks the COSTLIER rung and returns `false`. Multiplying an inequality
+by a negative reverses it, and equal levels do not cancel the sign — they share
+it. `craft_level` is nonnegative in the Python core (the API's craft levels start
+at 1) but `Int` in the extraction, so this hypothesis excludes nothing the core
+can produce; it is the same domain hypothesis `beats_prefers_wanted` below
+carries, for the same reason. Non-vacuous: `craft_level 3` on both with
+`acquire_steps` 7 against 11 satisfies every hypothesis. -/
+theorem beats_prefers_cheaper_at_equal_level (c b : GrindCandidate)
+    (hw : c.wanted = b.wanted) (hlvl : c.craft_level = b.craft_level)
+    (hlvl0 : 0 ≤ c.craft_level)
+    (hcost : c.acquire_steps < b.acquire_steps) :
+    _beats c (some b) = true := by
+  have hb0 : 0 ≤ b.craft_level := hlvl ▸ hlvl0
+  cases hcw : c.wanted
+  case false =>
+    -- UNWANTED pair: no credit, so the rate is `level * steps` on both sides.
+    simp [_beats, hcw, hw ▸ hcw, hlvl, hcost]
+    by_cases heq : b.craft_level * b.acquire_steps = b.craft_level * c.acquire_steps
+    · -- the rates TIE, which at equal level means the level is 0; the raw-cost
+      -- tie-break decides, and it wants exactly `hcost`.
+      rw [if_pos heq]; omega
+    · -- the rates DIFFER, so the level is strictly positive and multiplying
+      -- `hcost` through preserves its direction.
+      rw [if_neg heq]
+      have hne0 : b.craft_level ≠ 0 := by
+        intro h; apply heq; rw [h]; simp
+      have hpos : 0 < b.craft_level := by omega
+      exact Int.mul_lt_mul_of_pos_left hcost hpos
+  case true =>
+    -- WANTED pair: both credit to zero effective steps, so both cross products
+    -- are 0 and the rate cannot separate them. The raw-cost tie-break is the
+    -- only thing left, which is precisely why it is not decoration.
+    simp [_beats, hcw, hw ▸ hcw, hlvl, hcost]
+    omega
 
 /-- `beats_prefers_wanted`: a WANTED candidate beats an UNWANTED incumbent.
 
@@ -342,5 +371,40 @@ theorem beats_prefers_wanted (c b : GrindCandidate)
   · by_cases h2 : b.acquire_steps = 0
     · exact Or.inl (Or.inr h2)
     · exact Or.inr (Int.mul_pos (by omega) (by omega))
+
+/-- `unwanted_not_beats_wanted`: an UNWANTED candidate NEVER displaces a wanted
+incumbent — however cheap its chain or high its craft level.
+
+THE CONVERSE GUARD, and the only Lean pin behind the `_beats invert wanted
+shield` mutant. `beats_prefers_wanted` above says a keeper wins when it
+challenges; this says a throwaway loses when it challenges. Both directions are
+needed because they run through different clauses: the challenger's credit fires
+in one and the incumbent's in the other, and a one-sided pin lets the shield
+clause be inverted without any theorem noticing.
+
+SURVIVES THE 2026-08-14 REWORK, unlike `costlier_chain_never_beats`. Under the
+rate ordering the incumbent's credit zeroes `best_steps`, so the challenger's
+cross product `c.craft_level * 0` is 0 while the incumbent's is
+`b.craft_level * c.acquire_steps`. Either that is positive and the throwaway
+loses on rate outright, or it is zero and the throwaway loses on the `wanted`
+tie-break underneath.
+
+BOTH `0 ≤` HYPOTHESES ARE LOAD-BEARING, checked by evaluation rather than
+assumed. Drop `0 ≤ b.craft_level` and `b.craft_level = -2` with
+`c.acquire_steps = 3` makes the incumbent's product `-6 < 0`, so the throwaway
+wins. Drop `0 ≤ c.acquire_steps` and `c.acquire_steps = -3` with
+`b.craft_level = 2` does the same. Both are unreachable from the Python core —
+craft levels start at 1 and an action count cannot be negative — so the
+hypotheses cost nothing real. Non-vacuous: an unwanted rung at level 7 / 3 steps
+against a wanted incumbent at level 2 / 41 steps satisfies all four. -/
+theorem unwanted_not_beats_wanted (c b : GrindCandidate)
+    (hcw : c.wanted = false) (hbw : b.wanted = true)
+    (hlvl : 0 ≤ b.craft_level) (hsteps : 0 ≤ c.acquire_steps) :
+    _beats c (some b) = false := by
+  -- `simp` reduces to: if the rates differ then the incumbent's cross product
+  -- is nonnegative (so the challenger's 0 does not exceed it). The credit has
+  -- already zeroed the challenger's side.
+  simp [_beats, hcw, hbw]
+  exact fun _ => Int.mul_nonneg hlvl hsteps
 
 end Formal.SkillGrindSelection
