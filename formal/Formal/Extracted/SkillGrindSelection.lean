@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py (sha256: 6e94039e3210256155aa5e76d10b5ab6582282238fc168c75ec9566088d7bd39) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py (sha256: f507b11eb8595c32a4311ae9d1dcbc04dc0a90d14b537e29406200d06bb2d916) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.SkillGrindSelection
@@ -13,32 +13,40 @@ structure GrindCandidate where
   wanted : Bool
   xp_positive : Bool
 
-/-- Extracted from `_beats` (line 47). -/
+/-- Extracted from `_beats` (line 49). -/
 def _beats (c : GrindCandidate) (best : Option GrindCandidate) :
     Bool :=
   (match best with
   | none =>
     true
   | some best_1 =>
-    (if ((c.wanted) && (!(best_1.wanted)))
+    let c_steps := (if (c.wanted) then 0 else (c.acquire_steps))
+    let best_steps := (if (best_1.wanted) then 0 else (best_1.acquire_steps))
+    let c_rate := ((c.craft_level) * best_steps)
+    let best_rate := ((best_1.craft_level) * c_steps)
+    (if (!(decide (c_rate = best_rate)))
      then
-      true
+      (decide (c_rate > best_rate))
      else
-      (if ((best_1.wanted) && (!(c.wanted)))
+      (if ((c.wanted) && (!(best_1.wanted)))
        then
-        false
+        true
        else
-        (if (!(decide ((c.acquire_steps) = (best_1.acquire_steps))))
+        (if ((best_1.wanted) && (!(c.wanted)))
          then
-          (decide ((c.acquire_steps) < (best_1.acquire_steps)))
+          false
          else
           (if (!(decide ((c.craft_level) = (best_1.craft_level))))
            then
             (decide ((c.craft_level) > (best_1.craft_level)))
            else
-            false)))))
+            (if (!(decide ((c.acquire_steps) = (best_1.acquire_steps))))
+             then
+              (decide ((c.acquire_steps) < (best_1.acquire_steps)))
+             else
+              false))))))
 
-/-- Extracted from `skill_grind_selection_pure` (line 95). -/
+/-- Extracted from `skill_grind_selection_pure` (line 145). -/
 def skill_grind_selection_pure (skill : String) (current_level : Int) (candidates : List GrindCandidate) :
     String :=
   let best : Option GrindCandidate := none

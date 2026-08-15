@@ -34,7 +34,9 @@ class GrindCandidate:
     `acquire_steps` = the WHOLE-CHAIN action cost of making one of this item
     from what the character already holds (`min_gathers + min_crafts` over the
     recipe closure, the proved lower bound from `ai/min_plan_length`). It
-    replaced a one-level `mats_missing` count on 2026-08-06 — see `_beats`."""
+    replaced a one-level `mats_missing` count on 2026-08-06 — see `_beats`. As
+    of 2026-08-14 it is the DENOMINATOR of a rate rather than the first
+    ranking key, and a wanted rung credits it to zero — see `_beats`."""
     code: str
     craft_skill: str
     craft_level: int
@@ -46,49 +48,97 @@ class GrindCandidate:
 
 def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
     """True when feasible `c` strictly precedes `best` in the selection order
-    `(wanted desc, -acquire_steps, craft_level)`: a WANTED item (an objective
-    gear/tool target) outranks a throwaway, THEN the cheapest chain to build,
-    THEN highest craft level. A None `best` (no incumbent) is always beaten. A
-    full tie keeps the incumbent (first-seen in candidate order) — deterministic
-    without a string tie-break.
 
-    Wanted-first (2026-06-24): pure cheapest-chain greed made the bot craft a
-    value-10 `apprentice_gloves` (feathers already in bag) to level weaponcrafting
-    while ignoring `copper_dagger` (value 83, the committed weapon). Crafting a
-    wanted item gains the SAME skill XP and yields a keeper, so it dominates.
-    `wanted` is a VALUE axis, orthogonal to cost, which is why it survived the
-    2026-08-06 rework below.
+        (craft_level / effective_steps  desc,   # XP-proxy per action
+         wanted                         desc,   # keeper breaks a rate tie
+         craft_level                    desc,
+         acquire_steps                  asc)    # real cost breaks the rest
 
-    COST IS MEASURED IN ACTIONS, NOT RECIPE SLOTS (2026-08-06). This key was
-    `mats_missing` — the count of recipe entries not currently held — for its
-    whole life, and that is a one-level proxy that systematically misprices deep
-    chains. Live R2D2 at weaponcrafting 5: `sticky_sword` scored `mats_missing`
-    5 (five `copper_bar`) and `apprentice_gloves` scored 6 (six `feather`), so
-    the sword won by one. Their real costs are 51 actions and 7 — the 5 bars
-    hide 50 `copper_ore` gathers. The bot picked the sword and spent 129 grind
-    cycles gathering ore that paid no xp in EITHER skill, never reaching the
-    craft; weaponcrafting sat at level 5 the entire time.
+    where `effective_steps` is 0 for a wanted rung and `acquire_steps`
+    otherwise. A None `best` (no incumbent) is always beaten. A full tie keeps
+    the incumbent (first-seen in candidate order) — deterministic without a
+    string tie-break.
 
-    That was the third recurrence of one flaw. Each earlier one was patched by
-    bolting another key onto this ordering rather than fixing the key that was
-    lying: `wanted` (2026-06-24) and the `xp_positive` filter (2026-08-05, live
-    Robby). Both were real, but neither addressed a cost proxy that cannot see
-    past the first level of a recipe. `acquire_steps` is that cost measured
-    properly — `min_gathers + min_crafts` over the full closure, discounting
-    what is already held — reusing the SAME proved lower bound the planner's
-    reachability gate uses (`ai/min_plan_length`, Formal.PlanModel), so there is
-    one notion of "how much work is this item" in the codebase instead of two
-    that disagree."""
+    RATE, NOT COST (2026-08-14). The first key was `acquire_steps` ascending —
+    cheapest chain wins — and cheapness is anti-correlated with the thing a
+    grind exists to produce: the cheapest in-level rung is the LOWEST-level
+    one, which pays the least xp per craft. So the ranking optimised against
+    its own purpose. Live Lor and HAL, both at the same moment: Lor picked
+    `apprentice_gloves` (craft level 1, 13 actions) over `sticky_dagger` (5,
+    59), HAL picked the same gloves (43 actions) over `water_bow` (5, 59), and
+    Lor's weaponcrafting sat at 8 across 757 grind cycles. Under rate the
+    order inverts — 5/59 = 0.085 beats 1/13 = 0.077 — while the 2026-08-06
+    R2D2 case is UNCHANGED, because there the cheaper rung was also the faster
+    one (1/7 = 0.143 against 5/51 = 0.098).
+
+    CROSS-MULTIPLIED, NOT DIVIDED. `c.craft_level * best_steps` against
+    `best.craft_level * c_steps` is the same comparison in integers. This core
+    is mechanically extracted to Lean over `Int` (`scripts/extract_lean.py`),
+    so a float would not survive the trip, and the cross product also disposes
+    of the zero-denominator case without a special branch: a rung at zero
+    effective steps makes the opposing product zero and wins on any positive
+    level, with two such rungs falling through to the tie-breaks.
+
+    `craft_level` IS A PROXY FOR XP, NOT XP. The server pays
+    `Round((XP_base + (content_level / skill_level) * k) * level_penalty *
+    wisdom_bonus)` and neither `XP_base` nor `k` is published or in the API
+    (`ai/skill_xp_positive`). At a fixed skill level xp is monotone
+    nondecreasing in content level, which justifies `craft_level` as an
+    ORDINAL proxy; using it as the CARDINAL numerator of a ratio additionally
+    assumes xp is proportional to it, and `level_penalty` varies across rungs
+    by a factor nobody has measured. The assumption is named here rather than
+    hidden: see `formal/diff/craft_xp_replay.py` for what the play-traces say
+    about it.
+
+    The `wanted` tie-break is spelled as two `and`/`not` branches rather than
+    `if c.wanted != best.wanted: return c.wanted`: the extractor's v1 subset
+    rejects `!=` on `Bool`, and this is the shape this function already
+    extracted for two years. Semantically identical.
+
+    WANTED IS A MARGINAL-COST CREDIT, NOT A PIVOT. A rung the objective
+    already wants is work the character owes regardless of the grind, so the
+    grind's marginal cost for it is zero — hence `effective_steps = 0` rather
+    than a key above the rate. Crafting a wanted item gains the SAME skill xp
+    and yields a keeper instead of a throwaway (2026-06-24: pure cheapest-chain
+    greed made the bot craft a value-10 `apprentice_gloves` while ignoring the
+    committed value-83 `copper_dagger`). Expressing that as a credit rather
+    than a lexicographic pivot is what stops a wanted rung at 500 steps
+    outranking a throwaway at 2 by fiat while still letting it win on merit —
+    and it keeps every term in one currency, which is the argument
+    `ai/skill_grind_cost_core` already makes.
+
+    WHY THERE ARE STILL TWO TIE-BREAKS UNDER THE CREDIT. Crediting to zero
+    makes every wanted rung tie every other wanted rung on rate, which destroys
+    the cost signal among them — two rungs both owed are not equally near, so
+    RAW `acquire_steps` is the last key. And a free throwaway also credits to
+    zero, ties a wanted keeper at rate zero, and would survive on insertion
+    order — the 2026-06-24 inversion through the back door — so `wanted` is the
+    first tie-break under the rate. Neither is decoration; each closes a case
+    the credit alone gets wrong.
+
+    HISTORY. This is the fourth attempt at this ordering. `wanted`
+    (2026-06-24), the `xp_positive` FILTER (2026-08-05, live Robby, 288
+    zero-xp cycles), and `acquire_steps` replacing a one-level `mats_missing`
+    count (2026-08-06, live R2D2, 129 cycles) were each real, and each was
+    another key bolted onto a first key that was lying about what a grind is
+    for. This one replaces that first key.
+    """
     if best is None:
         return True
+    c_steps = 0 if c.wanted else c.acquire_steps
+    best_steps = 0 if best.wanted else best.acquire_steps
+    c_rate = c.craft_level * best_steps
+    best_rate = best.craft_level * c_steps
+    if c_rate != best_rate:
+        return c_rate > best_rate
     if c.wanted and not best.wanted:
         return True
     if best.wanted and not c.wanted:
         return False
-    if c.acquire_steps != best.acquire_steps:
-        return c.acquire_steps < best.acquire_steps
     if c.craft_level != best.craft_level:
         return c.craft_level > best.craft_level
+    if c.acquire_steps != best.acquire_steps:
+        return c.acquire_steps < best.acquire_steps
     return False
 
 

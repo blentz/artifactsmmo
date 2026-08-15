@@ -33,8 +33,8 @@ def test_wanted_first_regardless_of_candidate_order():
 
 
 def test_among_wanted_fewest_missing_still_wins():
-    # Wanted is primary; among equally-wanted, the old (fewest-missing, level) key
-    # still applies.
+    # Among equally-wanted, every rate ties (the credit zeroes them all), so the
+    # final RAW acquire_steps tie-break decides. Same answer, different reason.
     cands = [
         _c("wanted_expensive", level=1, steps=5, wanted=True),
         _c("wanted_cheap", level=1, steps=1, wanted=True),
@@ -123,14 +123,70 @@ def test_deep_chain_loses_to_a_shallow_one_with_more_recipe_entries():
     assert skill_grind_selection_pure("weaponcrafting", 5, cands) == "apprentice_gloves"
 
 
-def test_craft_level_is_only_a_tie_break_under_cost():
-    # A higher craft_level is preferred ONLY when the chains cost the same.
-    # It must never buy its way past a genuinely cheaper chain — that ordering
-    # is what let a 51-action rung outrank a 7-action one for months.
-    same = [_c("cheap_low", level=1, steps=7), _c("dear_high", level=5, steps=51)]
-    assert skill_grind_selection_pure("weaponcrafting", 15, same) == "cheap_low"
+def test_craft_level_buys_its_way_past_a_cheaper_chain_only_by_paying_for_it():
+    # A higher craft_level DOES outrank a cheaper chain now -- but only when it
+    # pays proportionally more per action. This test replaced
+    # `test_craft_level_is_only_a_tie_break_under_cost` on 2026-08-14: that test
+    # passed under both orderings while asserting the opposite of what the code
+    # does, which is worse than failing.
+    # 5/51 = 0.098 loses to 1/7 = 0.143 -- the level does NOT buy its way past.
+    loses = [_c("cheap_low", level=1, steps=7), _c("dear_high", level=5, steps=51)]
+    assert skill_grind_selection_pure("weaponcrafting", 15, loses) == "cheap_low"
+    # 5/20 = 0.250 beats 1/7 = 0.143 -- same level gap, cheaper enough to win.
+    wins = [_c("cheap_low", level=1, steps=7), _c("dear_high", level=5, steps=20)]
+    assert skill_grind_selection_pure("weaponcrafting", 15, wins) == "dear_high"
+    # equal cost -> the level tie-break, unchanged.
     tied = [_c("low", level=1, steps=7), _c("high", level=5, steps=7)]
     assert skill_grind_selection_pure("weaponcrafting", 15, tied) == "high"
+
+
+def test_a_costlier_chain_wins_when_it_pays_proportionally_more_xp():
+    """THE 2026-08-14 SYMPTOM. Live Lor, weaponcrafting 8: apprentice_gloves
+    priced 13 actions at craft level 1 (rate 0.077) and sticky_dagger priced 59
+    at craft level 5 (rate 0.085). Cheapest-chain picked the gloves, and the
+    grind sat at weaponcrafting 8 for 757 cycles crafting a level-1 rung.
+
+    This is the ONLY test in the file that distinguishes the two orderings.
+    Every other cost-versus-level case here uses a `steps=0` candidate (free
+    wins under both) or an example where the cheaper rung is also the
+    higher-rate one -- including the 2026-08-06 regression guard. Verified by
+    working all 14 through both orderings by hand while planning this change.
+    """
+    cands = [_c("apprentice_gloves", level=1, steps=13),
+             _c("sticky_dagger", level=5, steps=59)]
+    assert skill_grind_selection_pure("weaponcrafting", 8, cands) == "sticky_dagger"
+
+
+def test_a_wanted_rung_wins_on_rate_because_its_chain_is_owed_anyway():
+    """A wanted rung's chain is work the objective owes regardless of the
+    grind, so the grind's MARGINAL cost for it is zero -- it wins the rate
+    comparison rather than winning by lexicographic fiat. 500 steps against 2
+    is the shape that would look absurd under raw cost and is correct under
+    marginal cost."""
+    cands = [_c("throwaway", level=5, steps=2, wanted=False),
+             _c("committed_weapon", level=1, steps=500, wanted=True)]
+    assert skill_grind_selection_pure("weaponcrafting", 8, cands) == "committed_weapon"
+
+
+def test_raw_cost_still_separates_two_rungs_the_objective_both_wants():
+    """The credit zeroes effective steps for EVERY wanted rung, so they all tie
+    on rate. Two rungs both owed are not equally near -- the cheaper is reached
+    sooner -- so RAW acquire_steps is the final tie-break. Without it this falls
+    through to insertion order, which is arbitrary."""
+    cands = [_c("owed_far", level=3, steps=40, wanted=True),
+             _c("owed_near", level=3, steps=4, wanted=True)]
+    assert skill_grind_selection_pure("weaponcrafting", 8, cands) == "owed_near"
+
+
+def test_a_free_throwaway_does_not_tie_its_way_past_a_wanted_keeper():
+    """Both credit to zero effective steps, so the RATE comparison ties at
+    zero. Without `wanted` as the first tie-break under the rate, the incumbent
+    survives on insertion order -- which is the June 2026
+    apprentice_gloves-over-copper_dagger inversion returning through the back
+    door."""
+    cands = [_c("free_throwaway", level=1, steps=0, wanted=False),
+             _c("copper_dagger", level=1, steps=2, wanted=True)]
+    assert skill_grind_selection_pure("weaponcrafting", 8, cands) == "copper_dagger"
 
 
 def test_out_of_level_candidates_cannot_change_the_selection():
