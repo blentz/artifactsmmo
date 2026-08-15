@@ -1,15 +1,22 @@
-trace=../play-trace-Robby.jsonl pairs-replayed=5822 (oracle: cycle_step_d → cycleStepDC, kernel-equal to cycleStepD)
+db=/home/blentz/.cache/artifactsmmo/learning.db  rows=49263
+(oracle-backed decision differential REMOVED this migration — see module
+ docstring; this now checks the model's FIGHT/REST invariants directly)
 
-== DECISION layer (scalars-only visibility) ==
-comparable=762 agree=709 flag-unobserved(skipped)=5060
-mismatches (trace-action, model-selected, count): [('rest', 'fight', 35), ('fight', 'rest', 18)]
+== FIGHT xp lockstep (model claim: xp += 10 flat) ==
+checked=10883  agree=2918  diverge=7965  unresolved(multi-level-jump)=0
+mismatch classes (model, real) -> count, top 12: [((10, 7), 1618), ((10, 9), 1332), ((10, 27), 1037), ((10, 3), 528), ((10, 11), 381), ((10, 21), 318), ((10, 39), 313), ((10, 15), 309), ((10, 40), 280), ((10, 26), 272), ((10, 23), 263), ((10, 41), 237)]
 
-== FIGHT dynamics: model xp projection vs real (top 12) ==
-[((10, 21), 78), ((10, 19), 69), ((10, 23), 59), ((10, 22), 53), ((10, 6), 45), ((10, 25), 37), ((10, 3), 30), ((10, 29), 10), ((10, 'rollover'), 4), (('rollover', 'rollover'), 2)]
-level-rollover agreement: agree=383 diverge=4
+== FIGHT hp lockstep (model claim: hp untouched) ==
+checked=10883  agree=0  diverge=10883
 
-== REST dynamics: model hp:=max_hp vs real next hp ==
-agree=322 diverge=0
+== REST hp lockstep (model claim: hp := max_hp) ==
+rests=9308  hp-increased=9308
+hp-delta distribution (top 10): [(90, 1408), (105, 982), (72, 462), (126, 437), (108, 395), (84, 393), (144, 351), (80, 338), (120, 320), (76, 305)]
+  FULL-heal verdict UNAVAILABLE — max_hp is not exposed by CycleRecord, so
+  'hp increased' cannot be distinguished from 'hp reached max_hp' (see
+  module docstring).
 
-Divergence classes feed docs/LEVEL_FIFTY_RESIDUALS.md; decision lockstep
-beyond the rest/fight axis awaits trace flag enrichment (Phase B3).
+Decision-layer lockstep (production ladder selection vs the Lean model,
+previously '709/762 agreement (93%)' per docs/LEVEL_FIFTY_RESIDUALS.md) is
+HISTORICAL as of this migration and cannot be re-derived from the learning
+store — see module docstring for exactly which fields are missing.

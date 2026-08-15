@@ -1,24 +1,24 @@
-trace: ../play-trace-Robby.jsonl  records=5910  consecutive-pairs=5880
+db=/home/blentz/.cache/artifactsmmo/learning.db  rows=49263
 
-== FIGHT dynamics (model: xp+=10 flat, hp untouched, loot <= DROP_BOUND=8) ==
-fights=405  rollovers=6
-xp-delta distribution (top 10): [(21, 78), (19, 69), (23, 60), (6, 59), (22, 53), (25, 37), (3, 33), (29, 10), ('rollover', 6)]
-  model-exact (+10): 0/405
-hp-delta distribution (top 10): [(-210, 48), (-114, 46), (-28, 45), (-132, 43), (-195, 37), (-24, 33), (-102, 27), (-222, 16), (-234, 15), (-120, 13)]
-  max hp LOSS in one fight: 270  (E-tower bounded-loss constant candidate)
-inventory-delta distribution (top 10): [(0, 279), (1, 113), (2, 9), (3, 4)]
-  fights exceeding DROP_BOUND=8: 0
+== FIGHT dynamics (model: xp += 10 flat, hp untouched) ==
+fights=10883  unresolved(multi-level-jump)=0
+xp-delta distribution (top 10): [(10, 2918), (7, 1618), (9, 1332), (27, 1037), (3, 528), (11, 381), (21, 318), (39, 313), (15, 309), (40, 280)]
+  model-exact (+10): 2918/10883
+hp-delta distribution (top 10): [(-90, 1889), (-72, 1417), (-105, 1172), (-108, 477), (-126, 445), (-70, 375), (-84, 356), (-60, 327), (-422, 301), (-120, 296)]
+  max hp LOSS in one fight: 541  (E-tower bounded-loss constant candidate)
+  inventory-delta / DROP_BOUND census: UNAVAILABLE — inventory_used is not
+  exposed by CycleRecord (see module docstring, SCOPE REDUCTION).
 
-== REST semantics (model: hp := max_hp) ==
-rests=357  post-hp != max_hp violations=0
+== REST dynamics (model: hp := max_hp) ==
+rests=9308
+hp-delta distribution (top 10): [(90, 1408), (105, 982), (72, 462), (126, 437), (108, 395), (84, 393), (144, 351), (80, 338), (120, 320), (76, 305)]
+  full-heal violation count: UNAVAILABLE — max_hp is not exposed by
+  CycleRecord, so 'healed some' cannot be distinguished from 'healed fully'.
 
-== LEVEL monotonicity (model: level never decreases) ==
-regressions=0
-
-== CHORE transience (2026-06-18 honesty boundary — now measured) ==
-same-chore run lengths (class, len) -> count: [(('claim', 1), 1), (('deposit', 1), 11)]
-  max same-chore run: 1  (DEBT_CAP=8 grounding; model needs max_run-1 debt)
-non-fight burst lengths between fights (top 15): [(1, 101), (2, 86), (9, 65), (3, 26), (6, 25), (12, 18), (5, 14), (10, 13), (15, 9), (4, 8), (7, 5), (13, 3), (41, 1), (590, 1), (163, 1)]
-  max burst: 689
+== DROPPED SECTIONS (see module docstring for why) ==
+LEVEL monotonicity, CHORE transience (same-chore runs / non-fight bursts),
+TASK lifecycle transitions — all needed either true chronological adjacency
+the store's (character, cycle_index) ordering cannot safely provide across
+session boundaries, or fields CycleRecord does not expose.
 
 Divergence classes above feed docs/LEVEL_FIFTY_RESIDUALS.md — measured, not assumed.

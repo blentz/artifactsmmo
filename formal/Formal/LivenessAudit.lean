@@ -711,9 +711,13 @@ open Formal.Liveness.DeferFaithful
 -- byte-for-byte clone of the noncomputable cycle with LIV-001's value passed
 -- as data; the equality theorems are rfl-shaped, so ANY drift between clone
 -- and source breaks the build — the anti-drift guarantee is the kernel. The
--- oracle's cycle_step_d entry evaluates the mirror for the trace-lockstep
--- harness (diff/trace_lockstep.py), which feeds the server's REAL max_xp per
--- cycle — the axiom replaced by observed data at every replayed step.
+-- oracle's cycle_step_d entry still evaluates this mirror, but as of the
+-- 2026-08-15 learning-store migration it has no live Python caller: the
+-- trace-lockstep harness (diff/trace_lockstep.py) drove it by feeding the
+-- server's REAL max_xp per cycle from a play-trace jsonl, and cannot do so
+-- from the learning store, where max_xp is not a `cycles` column at all.
+-- trace_lockstep.py now reads the store's summary fields directly instead —
+-- see that file's module docstring for the full accounting.
 open Formal.Liveness.CycleStepDC
 #print axioms applyActionKindC_eq
 #print axioms planForC_eq
@@ -741,9 +745,16 @@ open Formal.Liveness.WitnessAcquirable
 -- (the gap-1 combat-outcome fix the trace phases measured); inadequate states
 -- take gear-progress cycles (finite discharge grounded offline by the EMPTY
 -- acquirable frontier, WitnessAcquirable); fights cost FIGHT_LOSS_BOUND hp
--- (B1-measured 270) with death→respawn; rollovers adversarially reset gear +
--- every chore latch/debt. ai_reaches_fifty_geared is HYPOTHESIS-FREE: axioms
--- must be std + xpToNextLevel (LIV-001) ONLY.
+-- (B1-measured 270, single-character trace sample) with death→respawn;
+-- rollovers adversarially reset gear + every chore latch/debt.
+-- ai_reaches_fifty_geared is HYPOTHESIS-FREE: axioms must be std +
+-- xpToNextLevel (LIV-001) ONLY.
+--
+-- ESCALATION (2026-08-15, docs/LEVEL_FIFTY_RESIDUALS.md "RE-RUN 2026-08-15"):
+-- the fuller learning-store corpus (10,883 ok-fights, 5 characters) observes
+-- a max fight hp loss of 541, not 270 — nearly 2x FIGHT_LOSS_BOUND. Left
+-- unchanged here pending its own investigation; NOT bumped as a routine
+-- citation refresh, since a wider bound is a proof-scope change, not a typo.
 open Formal.Liveness.GearedDescent
 #print axioms cycleStepE_descends_below_fifty
 #print axioms ai_reaches_fifty_geared

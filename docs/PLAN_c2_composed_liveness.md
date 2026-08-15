@@ -42,7 +42,8 @@ Multi-cycle model↔bot binding, offline, from recorded live traces:
 
 * Oracle entry `cycle-step-d`: given a serialized State, return the Lean
   `cycleStepD` post-state projection (level, xp, phase, flags, inventoryUsed).
-* Python harness `diff/test_trace_lockstep_diff.py`: fold
+* Python harness `diff/trace_lockstep.py` (this bullet's `diff/
+  test_trace_lockstep_diff.py` was always this file's actual name): fold
   `play-trace-Robby.jsonl` into per-cycle State snapshots (the trace already
   records selection + post-state); feed cycle k's snapshot to the oracle;
   compare the oracle's post-state against cycle k+1's snapshot.
@@ -52,6 +53,13 @@ Multi-cycle model↔bot binding, offline, from recorded live traces:
   and record/report divergence classes on the dynamics layer (xp delta, fill
   delta) rather than asserting them. Divergence classes become named rows in
   `docs/LEVEL_FIFTY_RESIDUALS.md` — measured, not assumed.
+* **SUPERSEDED 2026-08-15** (Task 4,
+  docs/superpowers/plans/2026-08-15-harnesses-read-the-learning-store.md):
+  `diff/trace_lockstep.py` no longer reads `play-trace-Robby.jsonl` or calls
+  the oracle — it reads the learning store, which has no `max_xp` column, so
+  the oracle-backed DECISION-layer comparison this bullet describes can no
+  longer be run. See `docs/LEVEL_FIFTY_RESIDUALS.md`'s "RE-RUN 2026-08-15"
+  note and `trace_lockstep.py`'s own module docstring.
 
 ## Phase C0 — xp-formula / level_penalty core (NEW, user-flagged 2026-07-04)
 

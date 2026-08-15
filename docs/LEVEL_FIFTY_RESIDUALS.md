@@ -137,6 +137,39 @@ small and named: (rest, fight)×35 — production rested ABOVE the 75% gate
 fought slightly below the gate (sticky-commitment/timing tail; real but
 bounded, revisit with B3 flags). Level-rollover agreement 383/387.
 
+**RE-RUN 2026-08-15 (Task 4,
+docs/superpowers/plans/2026-08-15-harnesses-read-the-learning-store.md).**
+`trace_lockstep.py` and `trace_characterize.py` now read the learning store,
+not `play-trace-Robby.jsonl` (deleted 2026-08-15 along with 163 other trace
+files). The table above and this section's figures are left as the historical
+record of the 2026-07-04 trace; they are not updated in place. Two findings
+from the fuller corpus (49,263 rows, 5 characters) are reported here rather
+than silently folded into the numbers above:
+
+* **The decision-layer figure (709/762, 93% above) cannot be re-derived from
+  the store.** The oracle-backed `cycle_step_d` differential needs `xpNext`
+  (the trace's `max_xp`) plus `bank_accessible`, task fields, gold and
+  inventory — `max_xp` is not a `cycles` column at all, and the rest are not
+  exposed by the learning store's `CycleRecord` reader
+  (`formal/diff/store_records.py`). `trace_lockstep.py` no longer calls the
+  oracle; see its module docstring for the full accounting of what was lost
+  and why it could not be faked with defaults.
+* **Max fight hp LOSS is 541 in the full corpus, not 270.** `FIGHT_LOSS_BOUND
+  := 270` (`formal/Formal/Liveness/CycleStepE.lean:79`) was set FROM this
+  section's "B1-measured 270" figure, on a single-character, 5822-pair
+  sample. The fuller corpus (10,883 ok-fights, 5 characters) observes a worse
+  case, nearly 2x that bound. **This is an escalation-worthy finding, not a
+  routine refresh** — it means the E-tower's worst-case fight-loss assumption
+  may already be falsified by observed play (a fight losing more than
+  `FIGHT_LOSS_BOUND` hp is a real trajectory the model's `fightLoss` layer
+  does not represent). `FIGHT_LOSS_BOUND` is left at 270 here rather than
+  bumped to 541 unilaterally — matching how the XP-formula boundary finding
+  just below was handled: reported, not absorbed, pending its own
+  investigation and review.
+
+Regenerated reports: `formal/diff/trace_characterize_report.txt`,
+`formal/diff/trace_lockstep_report.txt`.
+
 ## XP formula corroboration (Phase C0c, 2026-07-04 — `formal/diff/xp_formula_replay.py`)
 
 **RE-RUN 2026-08-15 against the learning store; the 2026-07-04 figures below
