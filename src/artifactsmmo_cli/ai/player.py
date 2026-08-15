@@ -3272,6 +3272,11 @@ class GamePlayer:
             delta_inv_used=new_state.inventory_used - prev_state.inventory_used,
             drops_json=json.dumps(drops, ensure_ascii=False) if drops else None,
             delta_skill_xp_json=json.dumps(skill_deltas, ensure_ascii=False, sort_keys=True),
+            # PRE-action levels: `prev_state` is the state the action ran
+            # against, so this is the level `level_penalty` applied at when the
+            # server paid this cycle's xp.
+            skill_levels_json=json.dumps(prev_state.skills, ensure_ascii=False,
+                                         sort_keys=True),
             consumables_expended_json=json.dumps(consumables, ensure_ascii=False, sort_keys=True),
             cycles_to_satisfy=cycles_to_satisfy,
         )

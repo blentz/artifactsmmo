@@ -657,6 +657,71 @@ class TestGAMigration:
         assert "delta_skill_xp_json" in cols
 
 
+class TestSkillLevelsColumn:
+    def test_a_cycle_records_the_skill_levels_held_before_its_action(self, tmp_db_path):
+        """The gap that forced the craft-xp measurement onto play-traces:
+        `cycles` recorded skill DELTAS and never skill LEVELS, so a replay
+        could not compute `skill_level - content_level` from the store at all.
+        """
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        store.record_cycle(Cycle(
+            ts="2026-08-15T00:00:00+00:00", cycle_index=0, outcome="ok",
+            skill_levels_json=json.dumps({"mining": 11, "woodcutting": 4}),
+        ))
+        with SqlSession(store._engine) as s:
+            rows = s.execute(text("SELECT skill_levels_json FROM cycles")).all()
+        store.close()
+        assert json.loads(rows[0][0]) == {"mining": 11, "woodcutting": 4}
+
+    def test_a_cycle_written_without_levels_reads_back_as_none(self, tmp_db_path):
+        """Nullable on purpose: the 49,263 rows already in the wild were
+        written before this column existed and cannot acquire levels. A
+        consumer must exclude them, not read them as level 0."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        store.start_session()
+        store.record_cycle(Cycle(ts="2026-08-15T00:00:00+00:00",
+                                 cycle_index=0, outcome="ok"))
+        with SqlSession(store._engine) as s:
+            rows = s.execute(text("SELECT skill_levels_json FROM cycles")).all()
+        store.close()
+        assert rows[0][0] is None
+
+    def test_an_old_cycles_table_gains_the_column_on_open(self, tmp_path):
+        """The `consumables_expended_json` incident is what this mirrors: a
+        column that shipped in the model without a matching one-shot ALTER made
+        every record_cycle INSERT fail on pre-existing DBs, and learning went
+        silently dead on old caches."""
+        db_path = str(tmp_path / "old_cycles.db")
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE cycles (
+                id INTEGER PRIMARY KEY, ts TEXT NOT NULL, session_id TEXT NOT NULL,
+                cycle_index INTEGER NOT NULL, character TEXT NOT NULL,
+                selected_goal TEXT, action_repr TEXT, action_class TEXT, outcome TEXT,
+                delta_skill_xp_json TEXT NOT NULL DEFAULT '{}',
+                consumables_expended_json TEXT NOT NULL DEFAULT '{}'
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE sessions (
+                session_id TEXT PRIMARY KEY, character TEXT, started_at TEXT
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+        store = LearningStore(db_path=db_path, character="hero")
+        check = sqlite3.connect(db_path)
+        try:
+            cols = {r[1] for r in check.execute("PRAGMA table_info(cycles)")}
+        finally:
+            check.close()   # unclosed connections surface as an unraisable
+                            # warning blamed on a LATER test; close explicitly
+        assert "skill_levels_json" in cols
+        store.close()
+
+
 def test_records_and_returns_skill_max_xp_observations(tmp_path):
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
     store.record_skill_max_xp("alchemy", 1, 150)

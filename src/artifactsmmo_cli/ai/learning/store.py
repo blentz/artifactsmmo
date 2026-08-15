@@ -152,6 +152,13 @@ class LearningStore:
                 conn.exec_driver_sql(
                     "ALTER TABLE cycles ADD COLUMN consumables_expended_json TEXT NOT NULL DEFAULT '{}'"
                 )
+            # Harness-migration column (2026-08-15): cycles gains the skill
+            # levels held BEFORE the action. NULLABLE with no DEFAULT -- the
+            # rows already in the wild were written without levels, and
+            # back-filling 0 or today's level would hand a replay a fabricated
+            # observation. A consumer excludes NULL rather than defaulting it.
+            if cols and "skill_levels_json" not in cols:
+                conn.exec_driver_sql("ALTER TABLE cycles ADD COLUMN skill_levels_json TEXT")
             # Craft-xp numerator migration (2026-08-15): craft_yield gains the
             # skill level its xp was measured at. NULLABLE with no DEFAULT --
             # the rows already in the wild were measured at a level nobody

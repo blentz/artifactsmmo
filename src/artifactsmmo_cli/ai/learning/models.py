@@ -61,6 +61,23 @@ class CycleBase(SQLModel):
     # Read by Phase G-B projections to attribute skill-XP yield per cycle.
     delta_skill_xp_json: str = Field(default="{}")
 
+    skill_levels_json: str | None = Field(default=None)
+    """The character's skill levels BEFORE this cycle's action, as a JSON
+    object, or None for a row written before this column existed (2026-08-15).
+
+    PRE-ACTION, and that is load-bearing: the server's `level_penalty` applies
+    at the level held when the xp is paid, so a replay reading the level after
+    the action misattributes every action that levels the skill.
+
+    `cycles` has always carried skill DELTAS (`delta_skill_xp_json`) and never
+    LEVELS, which is why measurements needing `skill_level - content_level` had
+    to read play-trace files instead — a dependency this column removes. See
+    `docs/superpowers/specs/2026-08-15-harnesses-read-the-learning-store-design.md`.
+
+    NULLABLE, NOT BACK-FILLED. The rows already in the wild were written
+    without levels and cannot acquire them; inventing one would hand a
+    measurement a fabricated observation."""
+
     # Items consumed this cycle as JSON {item_code: qty}. Sparse — non-empty
     # only on fights that consumed equipped utility consumables. Generalizes
     # to any utility effect (Phase 2 resolves each code's effect).
