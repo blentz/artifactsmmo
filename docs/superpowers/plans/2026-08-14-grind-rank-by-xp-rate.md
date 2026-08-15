@@ -113,7 +113,7 @@ def test_a_free_throwaway_does_not_tie_its_way_past_a_wanted_keeper():
 - [ ] **Step 2: Run the new tests to verify they fail**
 
 ```bash
-uv run pytest tests/test_ai/test_skill_grind_selection.py -v -k "costlier_chain or owed_anyway or both_wants or ties_its_way"
+uv run pytest tests/test_ai/test_skill_grind_selection.py -v -k "costlier_chain or owed_anyway or both_wants or past_a_wanted_keeper"
 ```
 
 Expected: `test_a_costlier_chain_wins_when_it_pays_proportionally_more_xp` FAILS with `assert 'apprentice_gloves' == 'sticky_dagger'`, and `test_raw_cost_still_separates_two_rungs_the_objective_both_wants` PASSES already (the old key ranks on raw cost too). The other two pass under the old lexicographic `wanted`. **That one failing test is the whole discriminating surface** — record which ones failed in your report.
@@ -179,6 +179,11 @@ def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
     and it keeps every term in one currency, which is the argument
     `ai/skill_grind_cost_core` already makes.
 
+    The `wanted` tie-break is spelled as two `and`/`not` branches rather than
+    `if c.wanted != best.wanted: return c.wanted`: the extractor's v1 subset
+    rejects `!=` on `Bool`, and this is the shape this function already
+    extracted for two years. Semantically identical.
+
     WHY THERE ARE STILL TWO TIE-BREAKS UNDER THE CREDIT. Crediting to zero
     makes every wanted rung tie every other wanted rung on rate, which destroys
     the cost signal among them — two rungs both owed are not equally near, so
@@ -203,8 +208,10 @@ def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
     best_rate = best.craft_level * c_steps
     if c_rate != best_rate:
         return c_rate > best_rate
-    if c.wanted != best.wanted:
-        return c.wanted
+    if c.wanted and not best.wanted:
+        return True
+    if best.wanted and not c.wanted:
+        return False
     if c.craft_level != best.craft_level:
         return c.craft_level > best.craft_level
     if c.acquire_steps != best.acquire_steps:
@@ -426,7 +433,17 @@ Expected: `rc=0` for both.
 
 In `formal/diff/mutate.py`, `SKILL_GRIND_SELECTION_MUTATIONS` (starts line 1351) has four `_beats` entries whose anchor strings no longer exist in the source: `_beats cheapest-chain flip`, `_beats craft_level outranks chain cost`, `_beats drop wanted preference`, `_beats invert wanted shield`. The four filter-guard entries above them use `_GRIND_GUARD` and are unaffected — leave those alone.
 
-Replace the four `_beats` entries with these five:
+**Correction to this step, ruled during Task 1.** `scripts/extract_lean.py`
+rejects `!=` on `Bool`, so the `wanted` tie-break is written as two `and`/`not`
+branches — the shape the function already used. Two consequences: the existing
+anchors `_beats drop wanted preference` and `_beats invert wanted shield` still
+resolve verbatim and are **kept**, and only the other two are replaced. Their
+*comments* are now wrong, though — those two lines are a tie-break under the
+rate now, not the primary key — so rewrite both comments while leaving both
+anchor strings byte-identical.
+
+Replace the two entries `_beats cheapest-chain flip` and `_beats craft_level
+outranks chain cost` with these three:
 
 ```python
     # THE 2026-08-14 REGRESSION: flip the rate comparison so the WORST
@@ -450,13 +467,6 @@ Replace the four `_beats` entries with these five:
     ("skill_grind_selection: _beats drops the wanted credit",
      "    c_steps = 0 if c.wanted else c.acquire_steps\n",
      "    c_steps = c.acquire_steps\n"),
-    # Drop the wanted TIE-BREAK -- a free throwaway ties a wanted keeper at
-    # rate zero and survives on insertion order, which is the 2026-06-24
-    # apprentice_gloves-over-copper_dagger inversion. Killed by
-    # test_a_free_throwaway_does_not_tie_its_way_past_a_wanted_keeper.
-    ("skill_grind_selection: _beats drops the wanted tie-break",
-     "    if c.wanted != best.wanted:\n        return c.wanted\n",
-     "    if c.wanted != best.wanted:\n        return not c.wanted\n"),
     # Drop the final RAW-cost tie-break -- every wanted rung ties every other
     # on rate (they all credit to zero), so without this the choice among them
     # falls to insertion order. Killed by
@@ -466,6 +476,25 @@ Replace the four `_beats` entries with these five:
      "        return c.acquire_steps < best.acquire_steps\n",
      "    if c.acquire_steps != best.acquire_steps:\n"
      "        return c.acquire_steps > best.acquire_steps\n"),
+```
+
+And rewrite the comments on the two KEPT entries, leaving their anchor strings
+untouched. `_beats drop wanted preference` becomes:
+
+```python
+    # Neuter the wanted TIE-BREAK: a free throwaway ties a wanted keeper at rate
+    # zero (both credit to zero effective steps) and then survives on insertion
+    # order -- the 2026-06-24 apprentice_gloves-over-copper_dagger inversion,
+    # returning through the back door under the rate ordering. Killed by
+    # test_a_free_throwaway_does_not_tie_its_way_past_a_wanted_keeper.
+```
+
+and `_beats invert wanted shield` becomes:
+
+```python
+    # Invert the wanted shield: an UNWANTED candidate displaces a wanted
+    # incumbent on a rate tie. Same tie-break, opposite direction. Killed by the
+    # wanted-first scenarios (the winner flips off the keeper).
 ```
 
 - [ ] **Step 5: Verify every anchor resolves to exactly one site**
