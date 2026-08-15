@@ -1,5 +1,6 @@
 """Tests for GamePlayer."""
 
+import json
 import time
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, timedelta, timezone
@@ -132,6 +133,42 @@ class TestDryRunDoesNotPersistLearning:
                 rows = list(s.exec(select(Cycle).where(
                     Cycle.action_repr == "Fight(green_slime)")))
             assert len(rows) == 1
+        finally:
+            store.close()
+
+
+class TestRecordLearningCycleSkillLevels:
+    """The write site `Cycle.skill_levels_json` exists to keep honest: it must
+    be built from `prev_state.skills`, never `new_state.skills`. A prev/new
+    swap is exactly the error class this column exists to prevent -- see
+    `Cycle.skill_levels_json`'s docstring -- and an equivalent swap survived
+    three review rounds in the craft-XP replay this mirrors (`f08dd5aa`).
+
+    `prev` and `new` are given DIFFERENT skills on purpose: reading the wrong
+    one must produce a different `skill_levels_json`, or this test would pass
+    under either reading and be worse than no test at all."""
+
+    def test_records_prev_state_skills_not_new_state_skills(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "levels.db"), character="hero")
+        try:
+            store.start_session()
+            player = GamePlayer(character="hero", dry_run=False, history=store)
+            prev = make_state(level=5, skills={"mining": 3, "woodcutting": 2})
+            new = make_state(level=5, xp=prev.xp + 10,
+                             skills={"mining": 4, "woodcutting": 2})
+            player._record_learning_cycle(
+                prev_state=prev, new_state=new,
+                action_repr="Fight(green_slime)", action_class="FightAction",
+                outcome="ok", selected_goal="GrindCharacterXP(green_slime)",
+                predicted_cost=0.0, actual_cooldown_seconds=49.0,
+                planner_nodes=1, planner_depth=1, planner_timed_out=False,
+                plan_len=1,
+            )
+            with Session(store._engine) as s:
+                rows = list(s.exec(select(Cycle).where(
+                    Cycle.action_repr == "Fight(green_slime)")))
+            assert len(rows) == 1
+            assert json.loads(rows[0].skill_levels_json) == {"mining": 3, "woodcutting": 2}
         finally:
             store.close()
 

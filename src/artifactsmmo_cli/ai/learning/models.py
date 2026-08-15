@@ -69,9 +69,10 @@ class CycleBase(SQLModel):
     at the level held when the xp is paid, so a replay reading the level after
     the action misattributes every action that levels the skill.
 
-    `cycles` has always carried skill DELTAS (`delta_skill_xp_json`) and never
-    LEVELS, which is why measurements needing `skill_level - content_level` had
-    to read play-trace files instead — a dependency this column removes. See
+    `cycles` has always carried the character LEVEL (`level`) and skill
+    DELTAS (`delta_skill_xp_json`), but never SKILL levels, which is why
+    measurements needing `skill_level - content_level` had to read
+    play-trace files instead — a dependency this column removes. See
     `docs/superpowers/specs/2026-08-15-harnesses-read-the-learning-store-design.md`.
 
     NULLABLE, NOT BACK-FILLED. The rows already in the wild were written
