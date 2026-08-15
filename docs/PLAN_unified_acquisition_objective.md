@@ -356,7 +356,7 @@ lesson that **both branches must yield the same unit** or the argmax silently
 prefers whichever branch has data.
 
 Watch for the grey-band interaction: gather/craft skill xp is zero at a level gap
-of 11 (`project_grey_skill_xp_gate`, measured over 2464 gathers). A projection
+of 11 (`project_grey_skill_xp_gate`, measured over 3231 gathers). A projection
 that ignores it will price an out-of-band grind as free progress.
 
 This is the increment that changes which items are reachable at all, so it needs

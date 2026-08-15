@@ -59,10 +59,13 @@ each fight read from its OWN `delta_xp`, combat's boundary is 11 too:
      11                                      0 /  51     <-- band starts here
 
 10_750 paying fights, all at diff <= 10; 107 zero-xp fights, all at diff >= 11.
+Those 10_857 are the CLASSIFIABLE subset of 10_883 ok-fights; the other 26 are
+level-reset rows whose own `delta_xp` is negative, counted and excluded rather
+than read as zeros.
 
 The two constants are still NOT shared in code, and no common mechanism is
 claimed — the game documents two separate curves, and this file's `>= 11` rests
-on 3231 gathers while `monster_catalog`'s rests on 10_857 fights. They are
+on 3231 gathers while `monster_catalog`'s rests on 10_883 ok-fights. They are
 equal because both were measured and both came out 11, not because either was
 derived from the other.
 """

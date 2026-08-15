@@ -69,11 +69,13 @@ the specification, not clauses** — the oracle does not get to choose them.
 
   The prose is loose at its OTHER edge too, and this table used to inherit that
   looseness as `5 ≤ g ≤ 9` / `g ≥ 10`. Corrected 2026-08-15: a gap of exactly
-  ten pays, at 70%. Measured over the learning store's 10 857 ok-fights
+  ten pays, at 70%. Measured over the learning store's 10 883 ok-fights
   (`formal/diff/xp_formula_replay.py`) — 372 fights at gap 10, every one
   paying, across 4 characters and 5 monster/level pairs, and 107 zero-xp
-  fights, none below gap 11. The awards at gap 10 match the 70% band, never
-  the 100% one.
+  fights, none below gap 11. (10 857 of those fights are classifiable as
+  paying or zero; the other 26 are level-reset rows whose own `delta_xp` is
+  negative, counted and excluded rather than read as zeros.) The awards at gap
+  10 match the 70% band, never the 100% one.
 - Each level gained grants the character **+5 maximum HP** and **+2 inventory
   slots**.
 - A fight lasts at most **100 turns**; a character that has not won by then loses.

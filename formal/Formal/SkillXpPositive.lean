@@ -13,7 +13,7 @@ over 3231 live gather cycles — every bucket at gap ≤ 10 pays every time (gap
 159 pays / 0 zero) and every bucket at gap ≥ 11 pays zero times (gap 11: 0 / 310),
 with no outlier anywhere; an independent 456-craft-cycle replay finds the same
 split. Combat's is corroborated by `formal/diff/xp_formula_replay.py` over the
-learning store's 10_857 ok-fights — diff 10: 372 pays / 0 zero, diff 11: 0 / 51.
+learning store's 10_883 ok-fights — diff 10: 372 pays / 0 zero, diff 11: 0 / 51.
 
 Neither constant is derived from the other, and no shared mechanism is claimed:
 two independent replays over disjoint evidence landed on the same number. This

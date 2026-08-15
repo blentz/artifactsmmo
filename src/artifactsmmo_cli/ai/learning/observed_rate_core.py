@@ -18,7 +18,7 @@ with `level_penalty` a step function of that gap: 100% at or below the monster's
 level, 70% at five or more levels above it, and **0% at ELEVEN or more levels
 above it** — the kill awards nothing at all. (The published prose says "ten or
 more"; it is loose at its own edge. A gap of exactly ten pays, at the 70% rate —
-measured over the learning store's 10_857 ok-fights, 372 of them at gap 10 and
+measured over the learning store's 10_883 ok-fights, 372 of them at gap 10 and
 every one paying. See `monster_catalog.xp_per_kill` for the table.)
 
 MEASURED, live, 2026-08-09 (`docs/FINDING_learned_rate_launders_grey_penalty.md`).

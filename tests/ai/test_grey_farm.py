@@ -1,7 +1,7 @@
 """Grey-mob drop-farming policy + mechanism.
 
 Robby at L12 could not farm feathers (chicken L1): FightAction's xpPositive
-gate (proven ActionApplicability arm) zeroes fights >=10 levels down, so
+gate (proven ActionApplicability arm) zeroes fights >=11 levels down, so
 mob-drop gathering from grey mobs was impossible in-model even though the
 server still drops loot. Policy (user 2026-07-06): grey farming is allowed
 IFF the drop serves a recipe AND the next-tier recipe of that recipe's

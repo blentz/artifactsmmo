@@ -71,7 +71,20 @@ class MonsterCatalog:
     #       20                                    0 /  18
     #
     # 10_750 paying fights, all at diff <= 10; 107 zero-xp fights, all at
-    # diff >= 11; no exception at the boundary. The diff-10 payers are 4
+    # diff >= 11; no exception at the boundary. That is 10_857 classifiable
+    # fights out of 10_883 ok-fights — the other 26 are level-reset rows whose
+    # own `delta_xp` is NEGATIVE (the character crossed a level, or the name
+    # was re-created and the store kept recording under it). They are counted
+    # and excluded, never read as zeros: a negative delta says nothing about
+    # whether the fight paid, and folding them into "zero" would manufacture
+    # in-band zeros at diffs 0-7 that do not exist.
+    #
+    # `Cycle.level` is the POST-action level, so a fight that levels the
+    # character is bucketed one level high. Re-deriving under the pre-action
+    # convention moves the diff-10 paying bucket 372 -> 369 and moves nothing
+    # else; the boundary is the same either way.
+    #
+    # The diff-10 payers are 4
     # characters over 5 distinct (monster, char_level) pairs, and their awards
     # match the 0.7 band exactly (342/372 at wisdom=0, the rest a positive
     # wisdom excess) — never the 1.0 band. The earlier `>= 10` here cited a

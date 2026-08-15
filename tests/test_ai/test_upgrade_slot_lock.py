@@ -152,7 +152,7 @@ def _boots_goal() -> UpgradeEquipmentGoal:
 
 class TestTargetDropFights:
     def test_grey_winnable_dropper_emits_drop_farm_fight_and_equip(self):
-        """L12 vs L1 spider (grey: xp_per_kill == 0, >= 10 levels down): the
+        """L12 vs L1 spider (grey: xp_per_kill == 0, >= 11 levels down): the
         target's sole winnable dropper arrives as the drop_farm variant, and
         the unowned recipe-less target gets its synthesized Equip leg (the
         factory only enumerates equips for craftable/owned items)."""

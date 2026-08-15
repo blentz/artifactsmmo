@@ -8,19 +8,35 @@ Server-axiom-signoff discipline (like LIV-001's replay): the formula
 
 (https://docs.artifactsmmo.com/concepts/stats_and_fights/#xp-formula) is
 recomputed for every observed ok-fight in the learning store (`Cycle.level` is
-the character's own level at that row, `Cycle.delta_xp` the row's own xp
-delta — see `store_records.py`) using the fixture's monster level/hp, and
-compared to the real xp delta.
+the character's level at that row, `Cycle.delta_xp` the row's own xp delta —
+see `store_records.py`) using the fixture's monster level/hp, and compared to
+the real xp delta.
+
+`Cycle.level` IS THE POST-ACTION LEVEL (`player.py` records `new_state.level`),
+UNLIKE the adjacent `skill_levels_json`, which is deliberately PRE-action for
+exactly the reason spelled out in `models.CycleBase`: the server's
+`level_penalty` applies at the level held when the xp is PAID, so a fight that
+levels the character is bucketed here one level too high. That is a real
+imprecision and it is named rather than smoothed over. It does not move the
+boundary: re-deriving under the pre-action convention shifts the diff-10
+paying bucket from 372 to 369 and changes nothing else — every paying fight is
+still at diff <= 10 and every zero-xp fight still at diff >= 11 — because a
+level-up row's own `delta_xp` is negative and lands in `reset` (below)
+regardless of which level labels it.
 
 THE ZERO BOUNDARY IS MEASURED HERE, NOT ASSUMED FROM THE DOC. The doc prose is
 loose about whether a gap of exactly 10 pays. This replay reports the pays/zero
 split per `diff` bucket (`BOUNDARY` section) INDEPENDENTLY of the penalty it
 applies, so the boundary the model uses is falsifiable by the same run that
 uses it: a paying fight at or above `ZERO_BAND_DIFF`, or a zero-xp fight below
-it, shows up as a boundary violation rather than being folded into the
-mismatch classes. When this script recovered per-fight xp by DIFFERENCING
-CONSECUTIVE SNAPSHOTS it observed ZERO zero-band fights out of 399, so the
-"399/399" it was cited for never touched the boundary at all.
+it, is a boundary violation rather than being folded into the mismatch classes.
+A violation makes this script EXIT NON-ZERO, the same contract as its sibling
+`gather_xp_replay.py` — a corroboration harness that can only ever print its
+disagreement is not a check, and this one is the observation anchor for
+`monster_catalog.ZERO_BAND_DIFF`, a production constant that was changed on its
+evidence. When this script recovered per-fight xp by DIFFERENCING CONSECUTIVE
+SNAPSHOTS it observed ZERO zero-band fights out of 399, so the "399/399" it was
+cited for never touched the boundary at all.
 
 KNOWN unobservables, reported as classes rather than asserted away:
 * wisdom (gear-derived, not in the store row) — computed with wisdom = 0, so a
@@ -31,6 +47,8 @@ KNOWN unobservables, reported as classes rather than asserted away:
   delta comparison.
 
 Output: formal/diff/xp_formula_replay_report.txt + stdout.
+Exit: 0 when the boundary census is clean, 1 on any boundary violation (or an
+empty corpus).
 Usage: uv run python formal/diff/xp_formula_replay.py [db_path] [snapshot.json]
 """
 
@@ -156,7 +174,7 @@ def main() -> int:
     report = "\n".join(out)
     (Path(__file__).parent / "xp_formula_replay_report.txt").write_text(report + "\n")
     print(report)
-    return 0
+    return 1 if (pay_violations or zero_violations) else 0
 
 
 if __name__ == "__main__":

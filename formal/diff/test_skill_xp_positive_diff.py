@@ -3,7 +3,7 @@
 
 This is the GATHER/CRAFT twin of `test_xp_positive_diff.py` (the combat gate).
 The band it pins is corroborated against live play by
-`formal/diff/gather_xp_replay.py` (2464 gather cycles); this file pins the
+`formal/diff/gather_xp_replay.py` (3231 gather cycles); this file pins the
 PRODUCTION function to the PROVED model, which is the other half of the chain.
 
 The grid is swept exhaustively around the boundary rather than sampled, because

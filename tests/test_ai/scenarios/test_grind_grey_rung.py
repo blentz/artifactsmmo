@@ -12,7 +12,7 @@ TWO DEFECTS COMPOSE HERE, which is why one scenario carries both.
 
 DEFECT A — the grind picked content that pays no xp. The server zeroes gather
 and craft xp once the content sits `GREY_SKILL_GAP` levels below the SKILL
-(`ai/skill_xp_positive`, corroborated over 2464 live gathers by
+(`ai/skill_xp_positive`, corroborated over 3231 live gathers by
 `formal/diff/gather_xp_replay.py`). Only COMBAT modelled its band; gather and
 craft carried an UPPER skill bound and no lower one. At woodcutting 15 the
 in-level rungs were `ash_plank` (craft level 1) and `spruce_plank` (10), and
