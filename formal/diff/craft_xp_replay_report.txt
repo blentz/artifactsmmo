@@ -1,89 +1,9 @@
 # craft-xp proportionality replay
-traces=155/169 under /home/blentz/git/artifactsmmo
+store=/home/blentz/.cache/artifactsmmo/learning.db
 snapshot=/home/blentz/.cache/artifactsmmo/gamedata-api.artifactsmmo.com.json
-SQLITE NOTE: /home/blentz/.cache/artifactsmmo/learning.db's cycles table has NO per-skill-level column (checked live via PRAGMA table_info) -- only aggregate character `level` and the skill-xp DELTA. This is why this replay reads play-trace-*.jsonl instead.
-skipped: {'same_cycle_levelup_unmeasurable': 5, 'skill_level_regressed_or_multijump': 1}
-valid craft cycles (exact same-cycle attribution): 450
-  paying (xp > 0): 214   zero (xp == 0): 236
-  zero observations BELOW the grey band (gap < 11, i.e. a real anomaly if any exist): 0
-  paying observations AT/ABOVE the grey band (gap >= 11, i.e. a real anomaly if any exist): 0
-distinct (item_code, skill_level) representatives: 31
-distinct (skill_level, craft_level) pairs: 25
-skill_levels with >=2 distinct craft_levels: [5, 7, 8, 9, 10, 11, 12, 13, 15, 17, 21]
+craft_yield rows: 73
+  excluded (skill_level IS NULL -- written before f08dd5aa, or level unresolved): 73
+  excluded (item_code not in current craft catalog): 0
+usable observations: 0
 
-## BY ITEM (representative xp/item = MAX across cycles at that skill_level; see docstring)
-item_code              skill_lvl craft_lvl  gap    n  xp/item
-ash_plank                      5         1    4    5     6.00
-ash_plank                      6         1    5   24     5.00
-ash_plank                      7         1    6   13     5.00
-copper_bar                     8         1    7    2     5.00
-ash_plank                      9         1    8    1     5.00
-copper_bar                     9         1    8   21     5.00
-copper_bar                    10         1    9   43     5.00
-copper_bar                    11         1   10   58     5.00
-cooked_chicken                12         1   11    1     0.00
-copper_bar                    12         1   11  138     0.00
-copper_bar                    13         1   12   26     0.00
-ash_plank                     15         1   14    5     0.00
-copper_bar                    21         1   20   11     0.00
-copper_legs_armor              5         5    0    1   131.00
-life_amulet                    5         5    0    1   131.00
-sticky_dagger                  5         5    0    1   131.00
-water_bow                      5         5    0    2   131.00
-small_health_potion            7         5    2    5    61.50
-small_health_potion            8         5    3   10    60.00
-small_health_potion            9         5    4    8    59.00
-life_amulet                   15         5   10    1   124.00
-small_health_potion           17         5   12   48     0.00
-iron_bar                      10        10    0    3    24.00
-spruce_plank                  11        10    1    3    23.00
-iron_bar                      12        10    2    4    23.00
-iron_bar                      13        10    3    2    23.00
-earth_boost_potion            16        10    6    3   122.50
-fire_boost_potion             16        10    6    1   122.50
-fire_boost_potion             17        10    7    1   124.00
-iron_bar                      21        10   11    7     0.00
-life_ring                     15        15    0    1   403.00
-
-## BY (skill_level, craft_level) -- mean/min/max of the item representatives above
-skill_lvl craft_lvl n_items     mean      min      max
-        5         1       1     6.00     6.00     6.00
-        5         5       4   131.00   131.00   131.00
-        6         1       1     5.00     5.00     5.00
-        7         1       1     5.00     5.00     5.00
-        7         5       1    61.50    61.50    61.50
-        8         1       1     5.00     5.00     5.00
-        8         5       1    60.00    60.00    60.00
-        9         1       2     5.00     5.00     5.00
-        9         5       1    59.00    59.00    59.00
-       10         1       1     5.00     5.00     5.00
-       10        10       1    24.00    24.00    24.00
-       11         1       1     5.00     5.00     5.00
-       11        10       1    23.00    23.00    23.00
-       12         1       2     0.00     0.00     0.00
-       12        10       1    23.00    23.00    23.00
-       13         1       1     0.00     0.00     0.00
-       13        10       1    23.00    23.00    23.00
-       15         1       1     0.00     0.00     0.00
-       15         5       1   124.00   124.00   124.00
-       15        15       1   403.00   403.00   403.00
-       16        10       2   122.50   122.50   122.50
-       17         5       1     0.00     0.00     0.00
-       17        10       1   124.00   124.00   124.00
-       21         1       1     0.00     0.00     0.00
-       21        10       1     0.00     0.00     0.00
-
-## RATIO xp/craft_level, PER SKILL_LEVEL WITH >=2 DISTINCT CRAFT_LEVELS
-skill_level=5: cl=1:xp=6.00,ratio=6.000, cl=5:xp=131.00,ratio=26.200  steps: 1->5:RISES(6.00->26.20)
-skill_level=7: cl=1:xp=5.00,ratio=5.000, cl=5:xp=61.50,ratio=12.300  steps: 1->5:RISES(5.00->12.30)
-skill_level=8: cl=1:xp=5.00,ratio=5.000, cl=5:xp=60.00,ratio=12.000  steps: 1->5:RISES(5.00->12.00)
-skill_level=9: cl=1:xp=5.00,ratio=5.000, cl=5:xp=59.00,ratio=11.800  steps: 1->5:RISES(5.00->11.80)
-skill_level=10: cl=1:xp=5.00,ratio=5.000, cl=10:xp=24.00,ratio=2.400  steps: 1->10:FALLS(5.00->2.40)
-skill_level=11: cl=1:xp=5.00,ratio=5.000, cl=10:xp=23.00,ratio=2.300  steps: 1->10:FALLS(5.00->2.30)
-skill_level=12: cl=1:xp=0.00,ratio=0.000, cl=10:xp=23.00,ratio=2.300  steps: 1->10:RISES(0.00->2.30)
-skill_level=13: cl=1:xp=0.00,ratio=0.000, cl=10:xp=23.00,ratio=2.300  steps: 1->10:RISES(0.00->2.30)
-skill_level=15: cl=1:xp=0.00,ratio=0.000, cl=5:xp=124.00,ratio=24.800, cl=15:xp=403.00,ratio=26.867  steps: 1->5:RISES(0.00->24.80); 5->15:RISES(24.80->26.87)
-skill_level=17: cl=5:xp=0.00,ratio=0.000, cl=10:xp=124.00,ratio=12.400  steps: 5->10:RISES(0.00->12.40)
-skill_level=21: cl=1:xp=0.00,ratio=0.000, cl=10:xp=0.00,ratio=0.000  steps: 1->10:FLAT(0.00->0.00)
-
-VERDICT: REFUTED. Measured over 450 craft cycles (214 paying, 236 zero) across 25 distinct (craft_level, skill_level) pairs (formal/diff/craft_xp_replay.py): xp / craft_level is NOT constant at fixed skill_level in 10/11 qualifying buckets (skill_level [5, 7, 8, 9, 10, 11, 12, 13, 15, 17]). The exception: skill_level [21] is FLAT -- both craft_levels there have already fallen into the zero-xp grey band (ratio 0.000 at both), which is constant only in the trivial sense that zero equals zero. See the RATIO table's per-step directions above. The shape is not one direction across the whole range (see the report's VERDICT prose / the committed _beats docstring for the authored characterization); craft_level orders rungs correctly (monotonicity is not in question here) but does not price them proportionally.
+VERDICT: EMPTY CORPUS. 0 usable observations -- every craft_yield row is either excluded for a NULL skill_level or for an item_code the current catalog does not recognize. This is the EXPECTED state immediately after f08dd5aa (2026-08-15) added the column: no craft has been recorded against this store since. It is not evidence for or against proportionality -- there is nothing to test yet -- and it must not be read as either confirming or refuting the HISTORICAL trace-based REFUTED finding (see module docstring and formal/diff/craft_xp_replay_report.txt's prior content in git history). Re-run once characters have crafted since f08dd5aa.

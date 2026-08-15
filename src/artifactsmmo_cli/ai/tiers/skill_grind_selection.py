@@ -86,64 +86,77 @@ def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
     nondecreasing in content level, which justifies `craft_level` as an
     ORDINAL proxy; using it as the CARDINAL numerator of a ratio additionally
     assumes xp is proportional to it, and `level_penalty` varies across rungs
-    by a factor nobody has measured. Measured over 450 craft cycles (214
-    paying, 236 exact zero) across 25 distinct (craft_level, skill_level)
-    pairs (formal/diff/craft_xp_replay.py), on a per-ITEM basis (xp /
+    by a factor nobody has measured.
+
+    HISTORICAL FINDING (measured 2026-08-15 against `play-trace-*.jsonl`;
+    THAT CORPUS WAS DELETED THE SAME DAY -- 164 of 169 trace files -- and
+    CANNOT BE REPRODUCED). `formal/diff/craft_xp_replay.py` now reads the
+    learning store's `craft_yield` table instead, and as of this writing
+    finds ZERO usable observations there -- every row predates the
+    `skill_level` column `f08dd5aa` added, so all 73 are excluded rather
+    than defaulted (see that file's module docstring). What follows is a
+    dated citation of what was once measured, not a claim a reader can
+    re-run today.
+
+    Measured over 450 craft cycles (214 paying, 236 exact zero) across 25
+    distinct (craft_level, skill_level) pairs, on a per-ITEM basis (xp /
     (executions * craft.quantity) -- three of the thirteen items measured
-    here craft 2-at-a-time): xp / craft_level is NOT constant at fixed
+    here craft 2-at-a-time): xp / craft_level was NOT constant at fixed
     skill_level in 10 of the 11 qualifying buckets (the 11th, skill_level
-    21, is trivially flat -- both craft_levels there already sit in the
-    zero-xp grey band). Where both rungs pay (skill_level 5/7/8/9,
-    craft_level 1 vs 5) the ratio RISES 2.36x-4.37x (craft_level 1 pays ~5-6
-    xp/item, craft_level 5 pays ~59-131 depending on the item) --
-    craft_level UNDERSTATES the level-5 rung's true payoff by that same
-    factor, which always biases the rank toward the cheaper low rung. Where
-    the comparison instead runs craft_level 1 against craft_level 10
+    21, was trivially flat -- both craft_levels there already sat in the
+    zero-xp grey band). Where both rungs paid (skill_level 5/7/8/9,
+    craft_level 1 vs 5) the ratio ROSE 2.36x-4.37x (craft_level 1 paid ~5-6
+    xp/item, craft_level 5 paid ~59-131 depending on the item) --
+    craft_level UNDERSTATED the level-5 rung's true payoff by that same
+    factor, which always biased the rank toward the cheaper low rung. Where
+    the comparison instead ran craft_level 1 against craft_level 10
     (skill_level 10: copper_bar -> iron_bar, a real mining refining chain;
     skill_level 11: copper_bar against spruce_plank, which is neither a
-    refining chain nor one skill -- ash_plank has no skill_level-11
-    observation at all) the ratio FALLS to 48% and 46% of its craft_level=1
-    value. The single
-    exception across the whole table: skill_level 15, craft_level 5 vs 15
-    (life_amulet -> life_ring), where the ratio moves only 24.80 -> 26.87
-    (+8%) -- the one comparison where craft_level's implied proportionality
-    comes closest to holding, named here rather than left out of the
-    picture it complicates. craft_level therefore ORDERS rungs correctly
-    (monotonicity is not in question) but misprices the ratio in both
-    directions depending on the pair, and the right numerator is directly
-    observable per item in these traces (13 distinct items measured here).
-    Not done here; recorded as a residual for a later branch.
+    refining chain nor one skill -- ash_plank had no skill_level-11
+    observation at all) the ratio FELL to 48% and 46% of its craft_level=1
+    value. The single exception across the whole table: skill_level 15,
+    craft_level 5 vs 15 (life_amulet -> life_ring), where the ratio moved
+    only 24.80 -> 26.87 (+8%) -- the one comparison where craft_level's
+    implied proportionality came closest to holding, named here rather than
+    left out of the picture it complicates. craft_level therefore ORDERED
+    rungs correctly (monotonicity was not in question) but MISPRICED the
+    ratio in both directions depending on the pair. The right numerator was
+    directly observable per item in that corpus (13 distinct items); it is
+    not observable from the current one. Recorded as a residual for a later
+    branch, contingent on `craft_yield` accumulating levelled rows.
 
-    THAT MEASUREMENT IS PARTLY CROSS-SKILL; THIS COMPARISON NEVER IS. The
-    replay groups by (skill_level, craft_level) with NO skill component, so a
-    bucket can pit rungs of different skills against each other. Five of the
-    eleven qualifying buckets have NO within-skill step at all — skill_level 5
-    (ash_plank, woodcutting, against gearcrafting/jewelrycrafting/
-    weaponcrafting rungs), 7 (ash_plank against small_health_potion, alchemy),
-    8 and 9 (mining/woodcutting rungs against that same potion) and 11
-    (copper_bar against spruce_plank, woodcutting) — and the first four are ALL
-    FOUR buckets behind the RISES figure above. That is the property this list
-    states; it is NOT the count of buckets containing a cross-skill comparison,
-    which is larger: 15's craft_level 1 -> 5 step is also cross-skill
-    (ash_plank, woodcutting, against life_amulet, jewelrycrafting) even though
-    its 5 -> 15 step is not. At skill_level 9 the craft_level-1 side pools TWO
-    items, ash_plank and copper_bar, both at 5.00, so the mean moves either
-    way; the bucket is cross-skill on both readings. XP_base and k are unpublished -- in neither the docs nor the API
-    (`formal/diff/craft_xp_replay.py`'s own docstring) -- so whether they vary
-    by skill is not observable from here; nothing rules it out, which is all
-    the argument needs. A rise measured across skills MAY therefore be a
-    difference between skills rather than a craft_level effect. Within-skill
-    steps exist at skill_level 10, 12, 13 and 21 (mining,
-    copper_bar -> iron_bar; at 12 a cooking rung is pooled into the
-    craft_level-1 mean), at 15 (life_amulet -> life_ring, jewelrycrafting) and
-    at 17 (alchemy) -- and only two of those have BOTH rungs out of the grey
-    band: skill_level 10 and the 5 -> 15 step at skill_level 15. The REFUTED
-    verdict does not rest on the cross-skill buckets (skill_level 10 alone,
-    mining against mining, moves the ratio 5.000 -> 2.400), but the DIRECTION
-    and SIZE of the mispricing are far less settled than the figures above
-    read, and `_beats` only ever compares rungs WITHIN one skill -- so the
-    cross-skill buckets do not measure the comparison this numerator is used
-    for.
+    THAT MEASUREMENT WAS PARTLY CROSS-SKILL; THIS COMPARISON NEVER IS. The
+    replay grouped by (skill_level, craft_level) with NO skill component, so
+    a bucket could pit rungs of different skills against each other. Five of
+    the eleven qualifying buckets had NO within-skill step at all --
+    skill_level 5 (ash_plank, woodcutting, against gearcrafting/
+    jewelrycrafting/weaponcrafting rungs), 7 (ash_plank against
+    small_health_potion, alchemy), 8 and 9 (mining/woodcutting rungs against
+    that same potion) and 11 (copper_bar against spruce_plank, woodcutting)
+    -- and the first four were ALL FOUR buckets behind the RISES figure
+    above. That is the property this list states; it is NOT the count of
+    buckets containing a cross-skill comparison, which was larger: 15's
+    craft_level 1 -> 5 step was also cross-skill (ash_plank, woodcutting,
+    against life_amulet, jewelrycrafting) even though its 5 -> 15 step was
+    not. At skill_level 9 the craft_level-1 side pooled TWO items,
+    ash_plank and copper_bar, both at 5.00, so the mean moved either way;
+    the bucket was cross-skill on both readings. XP_base and k are
+    unpublished -- in neither the docs nor the API -- so whether they vary
+    by skill was not observable from that corpus; nothing ruled it out,
+    which was all the argument needed. A rise measured across skills MAY
+    therefore have been a difference between skills rather than a
+    craft_level effect. Within-skill steps existed at skill_level 10, 12,
+    13 and 21 (mining, copper_bar -> iron_bar; at 12 a cooking rung was
+    pooled into the craft_level-1 mean), at 15 (life_amulet -> life_ring,
+    jewelrycrafting) and at 17 (alchemy) -- and only two of those had BOTH
+    rungs out of the grey band: skill_level 10 and the 5 -> 15 step at
+    skill_level 15. The REFUTED verdict did not rest on the cross-skill
+    buckets (skill_level 10 alone, mining against mining, moved the ratio
+    5.000 -> 2.400), but the DIRECTION and SIZE of the mispricing were far
+    less settled than the figures above read, and `_beats` only ever
+    compares rungs WITHIN one skill -- so the cross-skill buckets did not
+    measure the comparison this numerator is used for. END HISTORICAL
+    FINDING.
 
     The `wanted` tie-break is spelled as two `and`/`not` branches rather than
     `if c.wanted != best.wanted: return c.wanted`: the extractor's v1 subset
