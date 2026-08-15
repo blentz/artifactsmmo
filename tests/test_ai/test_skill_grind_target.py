@@ -275,3 +275,35 @@ def test_the_in_level_hoist_leaves_the_chosen_rung_alone():
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3}, inventory={"iron_bar": 6})
     assert skill_grind_target("weaponcrafting", state, gd) == "wooden_staff"
+
+
+def test_a_HELD_rung_is_not_free_because_the_grind_must_CRAFT_another():
+    """LIVE BUG, Lor + HAL 2026-08-14: 704 and 693 chicken fights, 0 character
+    xp, weaponcrafting 8->8 over 757 grind cycles.
+
+    `acquire_steps` was computed against the character's ACTUAL holdings, so a
+    rung the character already carried priced at 0 — unbeatable, and re-chosen
+    every cycle forever. But the grind never ACQUIRES its rung: it must CRAFT
+    another one to earn skill xp, which is exactly why `next_grind_goal`
+    descends against a holdings-stripped probe state ("copies the character
+    already owns are not a way to serve it"). The DESCENT stripped holdings;
+    the SELECTION did not.
+
+    Live: `skill_grind_target('weaponcrafting', Lor)` returned
+    `apprentice_gloves` at steps=0 while Lor carried 3 of them, and
+    `sticky_dagger`/`fire_staff` sat at 59 steps unchosen.
+    """
+    gd = _gd()
+    # copper_dagger is the CHEAP rung; wooden_staff is the higher-level one.
+    # Holding a copper_dagger must not make it cost nothing to craft another.
+    held = make_state(skills={"weaponcrafting": 3},
+                      inventory={"copper_dagger": 3})
+    none_held = make_state(skills={"weaponcrafting": 3})
+    cands = {c.code: c for c in
+             build_selectable_grind_candidates("weaponcrafting", held, gd)}
+    baseline = {c.code: c for c in
+                build_selectable_grind_candidates("weaponcrafting", none_held, gd)}
+    assert cands["copper_dagger"].acquire_steps > 0, (
+        "a held rung priced at 0 — the grind must CRAFT another, not own one")
+    assert cands["copper_dagger"].acquire_steps == baseline["copper_dagger"].acquire_steps, (
+        "holding copies changed the cost of crafting another")

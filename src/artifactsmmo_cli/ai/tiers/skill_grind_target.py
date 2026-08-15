@@ -28,6 +28,7 @@ from collections import OrderedDict
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.grind_probe_state import grind_probe_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.skill_grind_selection import (
@@ -251,8 +252,19 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
         recipe = game_data.crafting_recipe(code)
         if not recipe:
             continue
+        # Priced against a state with THIS rung's own copies removed. A grind
+        # earns its xp from the CRAFT, so copies already carried, banked or
+        # WORN are not a way to serve it — but `acquisition_actions` prices an
+        # owned item at 0, which made a held rung unbeatable and re-selected
+        # every cycle forever. Live Lor + HAL 2026-08-14: 3 held
+        # `apprentice_gloves` priced at 0, so the grind farmed chickens for
+        # feathers — 704 fights, 0 character xp, weaponcrafting 8 -> 8 over 757
+        # grind cycles — while `sticky_dagger`/`fire_staff` sat at 59 unchosen.
+        # `next_grind_goal`'s DESCENT already used this projection; the
+        # selection did not. Same helper, so the two cannot drift apart.
         acquire_steps = acquisition_actions(
-            code, 1, state, game_data, NO_PROFILE_CONTEXT, equip=False)
+            code, 1, grind_probe_state(state, code), game_data,
+            NO_PROFILE_CONTEXT, equip=False)
         candidates.append(GrindCandidate(
             code=code,
             craft_skill=stats.crafting_skill,

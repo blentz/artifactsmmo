@@ -7,50 +7,15 @@ tree-level skill-grind dispatch did. This picks the rung and builds the
 skill_grind GatherMaterials goal; the caller plans it and executes its first leg.
 """
 
-import dataclasses
-
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.grind_probe_state import grind_probe_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
-
-
-def _grind_probe_state(state: WorldState, rung: str) -> WorldState:
-    """`state` with every carried, banked and WORN copy of `rung` removed.
-
-    The descent state for a skill grind, NOT a state anything executes against.
-    A grind earns its XP from the CRAFT, so copies the character already owns
-    are not a way to serve it — but `prerequisites` leafs an item that is
-    already owned, already worn, or has a ready withdraw source, and each of
-    those stops the descent dead at the rung. Discounting the rung's own
-    holdings is what keeps the deficit real and the descent inside the recipe
-    (see `next_grind_goal`).
-
-    The equipment slots matter as much as the bag: `ObtainItem.is_satisfied`
-    reports an EQUIPPABLE satisfied whenever its code is worn, IGNORING
-    quantity (`tiers/meta_goal.py` — "owning isn't the end-state, the objective
-    is to WEAR them"). A gear grind wears what it makes, so the very first rung
-    the character equips would otherwise leaf the rung on the `is_satisfied`
-    arm and no quantity could ever defeat it.
-
-    Only the rung's own entries are dropped; every other material and every
-    other equipped item stays, so a material that IS legitimately in hand still
-    leafs normally and the combat stats behind `_producible`'s winnability gate
-    lose only the one item the grind is about to make another of.
-    """
-    inventory = {code: qty for code, qty in state.inventory.items()
-                 if code != rung}
-    bank_items = (None if state.bank_items is None
-                  else {code: qty for code, qty in state.bank_items.items()
-                        if code != rung})
-    equipment = {slot: (None if code == rung else code)
-                 for slot, code in state.equipment.items()}
-    return dataclasses.replace(state, inventory=inventory,
-                               bank_items=bank_items, equipment=equipment)
 
 
 def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
@@ -120,7 +85,7 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
         bank = state.bank_items or {}
         held = state.inventory.get(rung, 0) + bank.get(rung, 0)
         # Descend for ONE rung against a state with the rung's own copies
-        # removed (`_grind_probe_state`). A grind must CRAFT a new rung —
+        # removed (`grind_probe_state`). A grind must CRAFT a new rung —
         # withdrawing, re-wearing or otherwise reusing a copy it already owns
         # earns zero skill XP — so the copies it has already made are
         # irrelevant to what it should do next, and letting them influence the
@@ -159,7 +124,7 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
         # churn gear to grind (recycling the rung to source its own material is
         # a null cycle; recycling OTHER current-tier gear is low priority).
         step = actionable_step(ObtainItem(rung, quantity=1),
-                               _grind_probe_state(state, rung),
+                               grind_probe_state(state, rung),
                                game_data, ctx, exclude_recycle_leaf=True)
         if isinstance(step, ObtainItem) and step.code != rung:
             # exclude_recycle={rung}: never recycle the rung to source its own
