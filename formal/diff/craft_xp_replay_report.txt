@@ -1,0 +1,39 @@
+# craft-xp proportionality replay
+db=/home/blentz/.cache/artifactsmmo/learning.db snapshot=/home/blentz/.cache/artifactsmmo/gamedata-api.artifactsmmo.com.json
+total CraftAction cycles: 875
+skipped: {'no_same_cycle_xp_for_craft_skill': 332, 'nonpositive_xp_likely_levelup': 10, 'outcome_not_ok': 15}
+valid same-cycle (craft_level, xp) observations: 518
+cycles.skill_level column present: False
+distinct craft_level values observed: [1, 5, 10, 15]
+distinct (craft_level, skill_level) pairs: 0
+
+## BY CRAFT_LEVEL (skill_level column: UNRECORDED -- see module docstring)
+craft_level     n  mean_xp/u      min      max    stdev  xp/level     cv
+          1   452       7.42     1.00   364.00    26.11     7.417  3.520
+          5    37     140.11    59.00   872.00   124.62    28.022  0.889
+         10    27      79.01    11.50   248.00    93.08     7.901  1.178
+         15     2     399.50   396.00   403.00     4.95    26.633  0.012
+
+## BY ITEM (per-unit xp, quantity-normalized)
+item_code              craft_level     n  mean_xp/u      min      max
+ash_plank                        1    93       3.98     1.20     6.00
+cooked_chicken                   1     4     263.00   168.00   364.00
+copper_bar                       1   351       4.68     1.00     6.00
+copper_boots                     1     1      63.00    63.00    63.00
+copper_dagger                    1     1      75.00    75.00    75.00
+copper_helmet                    1     1      75.00    75.00    75.00
+copper_ring                      1     1      75.00    75.00    75.00
+copper_legs_armor                5     2     131.00   131.00   131.00
+feather_coat                     5     1     131.00   131.00   131.00
+life_amulet                      5     3     128.67   124.00   131.00
+small_health_potion              5    27     143.74    59.00   872.00
+sticky_dagger                    5     1     131.00   131.00   131.00
+water_bow                        5     3     131.00   131.00   131.00
+earth_boost_potion              10     6     130.73    49.00   245.00
+fire_boost_potion               10     4     245.75   245.00   248.00
+iron_bar                        10     9      23.33    23.00    24.00
+spruce_plank                    10     8      19.50    11.50    24.00
+adventurer_boots                15     1     396.00   396.00   396.00
+life_ring                       15     1     403.00   403.00   403.00
+
+VERDICT: INCONCLUSIVE. The `cycles` table records no per-skill-level column (verified against the live sqlite schema, not assumed), so `skill_level_at_the_time` cannot be read for any of the 518 valid craft-xp observations above, across 4 distinct craft_level values [1, 5, 10, 15]. 0 (craft_level, skill_level) pairs exist to compare, so proportionality cannot be tested from this data source. The BY CRAFT_LEVEL table above pools every skill level a craft was observed at and is DESCRIPTIVE ONLY, not a test: xp/craft_level ranges 7.42-28.02 across buckets, which is exactly the spread a level_penalty effect this replay cannot isolate would produce.
