@@ -67,11 +67,14 @@ def test_a_costlier_chain_wins_when_it_pays_proportionally_more_xp():
     at craft level 5 (rate 0.085). Cheapest-chain picked the gloves, and the
     grind sat at weaponcrafting 8 for 757 cycles crafting a level-1 rung.
 
-    This is the ONLY test in the file that distinguishes the two orderings.
-    Every other cost-versus-level case here uses a `steps=0` candidate (free
-    wins under both) or an example where the cheaper rung is also the
-    higher-rate one -- including the 2026-08-06 regression guard. Verified by
-    working all 14 through both orderings by hand while planning this change.
+    All 14 tests that predate this change pass identically under the old
+    ordering and the new one, so none of them can see this key at all: each
+    cost-versus-level case among them uses a `steps=0` candidate (free wins
+    under both) or an example where the cheaper rung is also the higher-rate
+    one -- including the 2026-08-06 regression guard. Verified by working all
+    14 through both orderings by hand while planning this change. This test
+    and `test_craft_level_buys_its_way_past_a_cheaper_chain_only_by_paying_for_it`
+    are what distinguish them.
     """
     cands = [_c("apprentice_gloves", level=1, steps=13),
              _c("sticky_dagger", level=5, steps=59)]
