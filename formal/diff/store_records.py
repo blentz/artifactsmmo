@@ -22,17 +22,22 @@ The store already attributes each delta to its own row: `Cycle.delta_xp`,
 `record_cycle` call that wrote the action that caused them (see
 `LearningStore.record_cycle`). So `CycleRecord` exposes those deltas directly
 and a consumer reads `record.delta_xp`, never a difference of two `record.xp`
-values it computed itself. This does not merely avoid the bug that already
-happened; it makes that class of bug unrepresentable, because there is no
-second row's state left in a `CycleRecord` to subtract by mistake.
+values it computed itself. This does not make the mistake impossible —
+`CycleRecord` still carries the row's absolute `xp`/`hp`, and a future harness
+could difference two records exactly as before and reproduce the bug — but it
+makes the correct path the convenient one and removes any NEED to difference,
+which is what the three review rounds that missed the original bug did not
+have.
 
-`CycleRecord.skill_levels` is `None`, never `{}`, when the row carries no
-level information — `Cycle.skill_levels_json` is NULLABLE, NOT BACK-FILLED
-(see `models.CycleBase.skill_levels_json`), and every row recorded before
-2026-08-15 is in that state. `None` means "this row cannot answer a level
-question"; `{}` would claim the character held no skills at all, which is
-never true. A consumer must be able to tell the two apart to exclude the row
-rather than silently treat it as level 0.
+`CycleRecord.skill_levels` is `None` — never `{}` — whenever the row cannot
+answer a level question: `Cycle.skill_levels_json` is NULLABLE, NOT
+BACK-FILLED (see `models.CycleBase.skill_levels_json`), and every row
+recorded before 2026-08-15 is in that state; a row whose stored value parses
+to an empty object is treated the same way, since a level lookup against zero
+observed skills is exactly as unanswerable as a level lookup against a NULL
+column. `{}` would claim the character held no skills at all, which is never
+true. A consumer must be able to tell "no answer" apart from "level 0" and
+exclude the row rather than silently defaulting it.
 """
 
 import json
@@ -93,14 +98,17 @@ def _parse_skill_xp(raw: str | None) -> dict[str, int]:
 
 def _parse_skill_levels(raw: str | None) -> dict[str, int] | None:
     """Parse `skill_levels_json` to `None` when the row cannot answer a level
-    question — either the column is absent (row predates 2026-08-15) or the
-    stored value is malformed. `{}` is never returned: it would claim the
-    character held no skills, which the absence of data cannot support."""
+    question: the column is absent (row predates 2026-08-15), the stored
+    value is malformed or not a JSON object, OR the object is empty. `{}` is
+    never returned — an empty object is exactly as unable to answer "what
+    level was skill X held at" as a NULL column is, so both collapse to the
+    same `None`, and a consumer never has to special-case which reason it
+    was."""
     if raw is None:
         return None
     try:
         parsed = json.loads(raw)
-        if not isinstance(parsed, dict):
+        if not isinstance(parsed, dict) or not parsed:
             return None
         return {str(k): int(v) for k, v in parsed.items()}
     except (json.JSONDecodeError, TypeError, ValueError):
