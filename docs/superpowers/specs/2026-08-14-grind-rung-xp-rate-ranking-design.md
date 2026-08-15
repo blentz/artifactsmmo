@@ -487,19 +487,62 @@ The gate has not run since `ec613f0d`.
   primary key is a different move from those. The history is still the reason
   for the preserved regression guard, the proven ablation, and the live
   before/after.
-- **Live acceptance (2026-08-15).** Probed `skill_grind_target('weaponcrafting',
-  ...)` against live character state fetched through the same
-  `GamePlayer._initialize()` path `uv run artifactsmmo plan <char>` uses (real
-  API call via `ClientManager`, not a fixture — the `plan` CLI's own printed
-  report does not surface the grind rung, since `LevelSkill.__repr__` is
-  skill/target_level only by design, so the rung was read by calling the
-  selection function directly against the identical live `state`/`game_data`).
-  Lor (weaponcrafting level 8): selected `sticky_dagger`. HAL (weaponcrafting
-  level 9): selected `water_bow`. Neither selected `apprentice_gloves`. Both
-  match the spec's expectation exactly, not merely a higher-rate rung than the
-  old pick — the design-time state (Lor/HAL "both at the same moment" in the
-  `_beats` docstring) had already moved, but the same two rungs still won.
-  Both characters' full `plan <char>` command also independently confirmed a
-  `LevelSkill(weaponcrafting->10)` step is live and current for each (not a
-  stale committed goal), so the selection above was exercised by a plan the
-  bot would actually run this cycle, not a hypothetical.
+- **Live acceptance (2026-08-15) — two probes, two call paths.** There are two
+  distinct production callers of the selection core, and they can genuinely
+  disagree: `LevelSkill.is_applicable` (`ai/actions/level_skill.py:68`) calls
+  `skill_grind_target(skill, state, game_data)` with defaults
+  (`reserved=frozenset()`, `ctx=NO_PROFILE_CONTEXT`) — a gate check, not a
+  choice of what to craft. `level_skill_expand.next_grind_goal`
+  (`ai/level_skill_expand.py:82-84`), invoked from `_execute_level_skill` at
+  execution time, threads the real per-cycle `ctx` (`self._last_ctx`, set by
+  `GamePlayer.plan_from_state` — the same method the `plan` CLI runs — from
+  `self._selection_context()`, `ai/player.py:2978`). `ctx.near_term_targets`
+  and `ctx.supply_target` feed `_with_wanted`, and `wanted` is not a
+  tie-break — it zeroes `effective_steps`, the denominator of the primary
+  rate key — so a rung `wanted` under the real ctx can beat a higher-level
+  rung that wins under `NO_PROFILE_CONTEXT`. Both were probed, against the
+  same live-fetched state (real API via `ClientManager`, not a fixture — the
+  `plan` CLI's own printed report surfaces neither, since `LevelSkill.__repr__`
+  is deliberately skill/target_level only, a real observability gap: nobody
+  can read the grind's actual rung choice off the bot's normal output, which
+  is why this task needed a probe script at all instead of just running
+  `plan`):
+  - **Context-free (`is_applicable`'s path):** `skill_grind_target('weaponcrafting', state, game_data)`
+    with defaults. Lor (level 8): `sticky_dagger`. HAL (level 9): `water_bow`.
+  - **Ctx-threaded (`next_grind_goal`'s path):** ran `player.plan_from_state()`
+    — the exact `plan` CLI codepath — then read back `player._last_ctx` (the
+    identical object `_execute_level_skill` would thread into
+    `next_grind_goal` this cycle) and recomputed `next_grind_goal`'s own
+    rung-selection expression against it, rather than hand-building a
+    `SelectionContext` (which would just be a fixture again). Lor:
+    `ctx.near_term_targets` = 11 gear/tool codes (`greater_wooden_staff`,
+    `iron_boots`, `iron_helm`, `iron_ring`, `iron_shield`,
+    `air_and_water_amulet`, `lich_race_medal`, `mithril_axe`,
+    `mithril_fishing_rod`, `mithril_gloves`, `mithril_pickaxe`) — real, from
+    `self._objective.near_term_gear(state)`, not hand-built — and
+    `ctx.supply_target=None`; selected rung: `sticky_dagger`. HAL: identical
+    `near_term_targets`, `supply_target=None`; selected rung: `water_bow`.
+    Both agree with the context-free probe: neither `sticky_dagger` nor
+    `water_bow` is itself a near-term gear target, so `wanted` was `False` for
+    both under the real ctx and the comparison reduced to the same rate
+    computation both probes share. **Named limitation, not glossed over:**
+    `plan_from_state` never calls `_update_coordination` (that only runs
+    inside `run()`'s live loop), so `ctx.supply_target`/`ctx.role_skills`/
+    `ctx.sibling_bank_claims` sat at `GamePlayer.__init__`'s un-driven
+    defaults here — the same values a solo character with no coordination
+    store would have, not a value this probe supplied. `ctx.step_profile` was
+    `{}` for the same reason `self._last_ctx.step_profile` is `{}` in
+    production: `_selection_context` never sets it, and the one place that
+    does (`StrategyArbiter.select`, `ai/strategy_driver.py:1208`) rebinds a
+    *local* variable that never flows back to `self._last_ctx` (confirmed:
+    `self._last_ctx =` has exactly two assignment sites in `player.py`, both
+    before that binding) — so this probe's empty `step_profile` is not an
+    artifact of the probe, it is what the live object `_execute_level_skill`
+    reads actually contains.
+
+  Neither character was observed mid-execution actually crafting the rung
+  (that would require running the bot, which this task was told not to do);
+  what was verified live is that both the applicability gate's call and the
+  execution-time selection's own call — evaluated against the real ctx object
+  the live per-cycle path builds, not a hand-built stand-in — agree on the
+  same two rungs the brief named, and neither is `apprentice_gloves`.
