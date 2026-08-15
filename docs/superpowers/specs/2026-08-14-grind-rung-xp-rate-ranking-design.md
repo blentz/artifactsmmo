@@ -190,15 +190,38 @@ a pivot above it.
 
 ### The ranking
 
-Shown with Option A's placement of `wanted` (see the decision point below;
-under Option B `wanted` is instead a lexicographic key above the rate, and
-`effective_steps` is just `acquire_steps`):
+```
+effective_steps = 0 if wanted else acquire_steps
 
+(craft_level / effective_steps   desc,     # XP-proxy per action
+ wanted                          desc,     # keeper breaks a rate tie
+ craft_level                     desc,
+ acquire_steps                   asc)      # real cost breaks the rest
 ```
-(effective_steps = 0 if wanted else acquire_steps,
- craft_level / effective_steps   desc,     # XP-proxy per action
- craft_level                     desc)     # tie-break
-```
+
+**Four levels, not two, and the last two are not decoration.** This is a
+correction to the two-key sketch in the design discussion, found while writing
+the implementation plan by working all 14 existing tests through the proposed
+order by hand:
+
+- A credit of `effective_steps = 0` makes every wanted rung tie every other
+  wanted rung on rate, which **destroys the cost signal among wanted rungs**.
+  Two rungs both owed are not equally near; the cheaper is reached sooner.
+  `acquire_steps` (the *raw* count, not the credited one) as the final
+  tie-break restores it, and is what keeps
+  `test_among_wanted_fewest_missing_still_wins` honest.
+- The credit alone also cannot separate a **free throwaway from a wanted
+  keeper**: both reach `effective_steps = 0`, the rate comparison ties at
+  zero, and without a `wanted` key the incumbent survives on insertion order.
+  That is the June 2026 `apprentice_gloves`-over-`copper_dagger` inversion
+  returning through the back door. `wanted` as the *first tie-break under the
+  rate* closes it, and unlike the old lexicographic placement it cannot
+  override a genuinely better rate.
+
+Where the credit does the work is the case it was chosen for: a wanted rung at
+500 steps against an unwanted rung at 2. The credit zeroes the wanted rung's
+denominator, so the cross-product comparison hands it the win on rate — the
+marginal-cost reading — instead of a pivot doing it by fiat.
 
 Compared by **cross-multiplication, never float division**:
 
@@ -331,14 +354,26 @@ this is false, deliberately: a costlier chain that pays proportionally more XP
 now wins. Its docstring calls itself "THE ROLE THAT WOULD HAVE CAUGHT ALL THREE
 RECURRENCES", so it is replaced, not deleted:
 
-- `beats_prefers_higher_rate` — equal `wanted` standing and
-  `c.craft_level * b.effective_steps > b.craft_level * c.effective_steps`
-  implies `_beats c (some b)`.
+- `beats_prefers_higher_rate` — both candidates unwanted and
+  `c.craft_level * b.acquire_steps > b.craft_level * c.acquire_steps`
+  implies `_beats c (some b)`. Stated for the unwanted pair because two wanted
+  candidates both credit to zero steps and therefore always tie on rate by
+  construction; asserting it over equal-`wanted` pairs generally would be
+  vacuously satisfied on half its domain.
 - `beats_prefers_cheaper_at_equal_level` — equal `wanted` standing, **equal
-  `craft_level`**, strictly fewer steps implies `_beats`. This is the old
-  theorem's surviving content: cheapness still wins where it is the only thing
-  that differs, and stating it separately keeps the anti-regression guarantee
-  the old theorem was carrying.
+  `craft_level`**, strictly fewer `acquire_steps` implies `_beats`. This is the
+  old theorem's surviving content: cheapness still wins where it is the only
+  thing that differs, and stating it separately keeps the anti-regression
+  guarantee the old theorem was carrying. It must hold for the wanted pair (via
+  the final tie-break) and the unwanted pair (via the rate) alike.
+- `beats_prefers_wanted` — `c.wanted = true`, `b.wanted = false`,
+  `0 ≤ c.craft_level`, `0 ≤ b.acquire_steps` implies `_beats c (some b)`. This
+  is the June 2026 guarantee, and under the credit it is now *derived* rather
+  than asserted: crediting `c` to zero steps makes `b`'s cross-product zero, so
+  `c` either wins the rate outright or ties it and wins the `wanted`
+  tie-break — never loses. Proving it is the check that the credit and the
+  tie-break together reproduce the property the old lexicographic pivot gave by
+  fiat.
 
 **Unaffected and must stay green:** `grind_actionable`, `fold_reaches_some`,
 `fold_some_feasible`, `step_preserves_some`, `step_feasible_some`. Every one of
