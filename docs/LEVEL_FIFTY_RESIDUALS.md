@@ -154,18 +154,36 @@ than silently folded into the numbers above:
   (`formal/diff/store_records.py`). `trace_lockstep.py` no longer calls the
   oracle; see its module docstring for the full accounting of what was lost
   and why it could not be faked with defaults.
-* **Max fight hp LOSS is 541 in the full corpus, not 270.** `FIGHT_LOSS_BOUND
-  := 270` (`formal/Formal/Liveness/CycleStepE.lean:79`) was set FROM this
-  section's "B1-measured 270" figure, on a single-character, 5822-pair
-  sample. The fuller corpus (10,883 ok-fights, 5 characters) observes a worse
-  case, nearly 2x that bound. **This is an escalation-worthy finding, not a
-  routine refresh** — it means the E-tower's worst-case fight-loss assumption
-  may already be falsified by observed play (a fight losing more than
-  `FIGHT_LOSS_BOUND` hp is a real trajectory the model's `fightLoss` layer
-  does not represent). `FIGHT_LOSS_BOUND` is left at 270 here rather than
-  bumped to 541 unilaterally — matching how the XP-formula boundary finding
-  just below was handled: reported, not absorbed, pending its own
-  investigation and review.
+* **Max fight hp LOSS is 541 in the full corpus, not 270. RESOLVED
+  2026-08-15 — `FIGHT_LOSS_BOUND := 541`.** `FIGHT_LOSS_BOUND := 270`
+  (`formal/Formal/Liveness/CycleStepE.lean`) was set FROM this section's
+  "B1-measured 270" figure, on a single-character, 5822-pair sample. The
+  fuller corpus (10,883 ok-fights, 5 characters, each loss read from its own
+  `delta_hp`) observes a worse case, nearly 2x that bound — and, decisively,
+  **2,155 fights (19.8%) exceeded 270**, so the old value was not a worst case
+  with a rare tail beyond it but a value one fight in five walked past. Every
+  one of those was a real trajectory the model's `fightLoss` layer could not
+  represent.
+
+  The escalation was raised rather than absorbed, then investigated and
+  discharged on its own terms: the bound is now 541, the ATTAINED corpus
+  maximum (Robby at level 26, `max_hp = 545`, pool 545 → 4 hp; nothing exceeds
+  it), cited in the constant's docstring with the distribution it rests on.
+  Every E-tower theorem was re-proved at the wider bound with no statement
+  weakened and no proof script changed, and the differential
+  (`formal/diff/test_cycle_step_e_diff.py`) moved in lockstep.
+
+  Why the widening cost nothing: `fightLoss` writes only `hp` = EMeasure slot
+  18, while every fight-dispatching rung descends at slot 1 or slot 4
+  (`descendsE_fight` never mentions hp). More states now hit the floor-at-1
+  branch, which RAISES slot 18 — dominated, so the descent is untouched. The
+  practical consequence is the honest one: the model still does not claim the
+  bot survives, only that the measure descends.
+
+  Still not modelled: that the loss is a per-fight CONSTANT. Real losses run
+  0..541 with a mode far below the bound (43.9% exceed 100, 19.8% exceed 270);
+  the model charges the maximum on every fight, which is the pessimistic — and
+  therefore safe — direction.
 
 Regenerated reports: `formal/diff/trace_characterize_report.txt`,
 `formal/diff/trace_lockstep_report.txt`.

@@ -67,16 +67,55 @@ open Formal.Liveness.CycleStepD
     bounds the STEPS; it does not bound the CYCLES those steps take. -/
 def GEAR_CAP : Nat := 11
 
-/-- Worst-case hp loss of one fight (B1 trace measurement: max observed 270).
-    Lemma-agnostic.
+/-- Worst-case hp loss of one fight. Lemma-agnostic.
 
-    FAITHFULNESS NOTE (2026-07-20). This is a trace-measured worst case, NOT the
-    production planner's projection, which is `max(1, max_hp / 5)`
-    (`ai/actions/combat.py:121`). 270 is the larger loss for any `maxHp < 1350`,
-    so the model is PESSIMISTIC here relative to the bot's own projection — the
-    safe direction for a descent argument. The two are not the same quantity and
-    this docstring previously did not say so. -/
-def FIGHT_LOSS_BOUND : Nat := 270
+    THE BOUND IS OBSERVED, NOT ASSUMED. This was `270`, cited as "B1 trace
+    measurement: max observed 270" — measured on a single character's play
+    trace back when the 155 committed traces were the corpus. Replayed against
+    the learning store (`~/.cache/artifactsmmo/learning.db`, every `FightAction`
+    cycle with `outcome = 'ok'`: 10_883 fights, 5 characters, each fight's loss
+    read from its OWN `delta_hp` column rather than differenced from
+    neighbouring snapshots) that "worst case" is not a worst case at all:
+
+        loss > x       fights    share of 10_883
+          0             10_835    99.6%
+        100              4_781    43.9%
+        200              2_227    20.5%
+        270              2_155    19.8%   <-- the OLD bound
+        400              1_937    17.8%
+        500                 75     0.7%
+        541                  0     0.0%   <-- the new bound, attained
+
+    The largest single-fight losses observed: 541 x4, 527 x1, 526 x22, 512 x6,
+    511 x42, 497 x17, 496 x83, 483 x1, 482 x54, 481 x124. The old bound was
+    exceeded by 2_155 fights — 19.8%, one fight in five. That is not a rare
+    tail that a pessimistic constant absorbs; it is the bulk of the upper half
+    of the distribution, and every one of those fights was a real trajectory
+    the model's `fightLoss` layer could not represent.
+
+    541 is the maximum over the whole corpus and it is ATTAINED (4 fights):
+    Robby at level 26, `maxHp = 545`, full pool 545 → 4 hp. Nothing exceeds it.
+    (The remaining 48 of the 10_883 rows carry a non-negative `delta_hp` — the
+    level-up heal — and are not losses; 10_835 are strict losses.)
+
+    NO FIGHT LOSES THE WHOLE POOL. The largest loss as a fraction of `maxHp` is
+    541/545 = 0.9927, and `loss ≥ maxHp` happens ZERO times in 10_883 fights.
+    Production's `max(1, hp - cost)` floor (`ai/actions/combat.py:120-122`),
+    which `fightLoss` mirrors, is therefore not merely a modelling convenience —
+    it is what the corpus shows.
+
+    FAITHFULNESS NOTE (restated 2026-08-15). This is a corpus-measured worst
+    case, NOT the production planner's projection, which is `max(1, max_hp / 5)`
+    (`ai/actions/combat.py:121`). At 541 the model's loss is the larger of the
+    two for any `maxHp < 2705` (at 270 the crossover was 1350), so the model
+    remains PESSIMISTIC relative to the bot's own projection — the safe
+    direction for a descent argument, and now safe by a wider margin. The same
+    corpus says the planner's projection is the one that is optimistic: over
+    these 10_883 fights `max(1, maxHp / 5)` never exceeds 110 (`maxHp` ranges
+    150..550), and 9_302 fights — 85.5% — cost MORE hp than the planner
+    projected. The two are not the same quantity, and only one of them is
+    measured. -/
+def FIGHT_LOSS_BOUND : Nat := 541
 
 /-- **RESIDUAL (G1): the arming observation, at one state.**
 

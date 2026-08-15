@@ -744,17 +744,32 @@ open Formal.Liveness.WitnessAcquirable
 -- geared cycle. perceptionRefreshE credits fight xp ONLY behind adequate gear
 -- (the gap-1 combat-outcome fix the trace phases measured); inadequate states
 -- take gear-progress cycles (finite discharge grounded offline by the EMPTY
--- acquirable frontier, WitnessAcquirable); fights cost FIGHT_LOSS_BOUND hp
--- (B1-measured 270, single-character trace sample) with death→respawn;
+-- acquirable frontier, WitnessAcquirable); fights cost FIGHT_LOSS_BOUND hp,
+-- FLOORED AT 1 (production never dies — ai/actions/combat.py:120-122);
 -- rollovers adversarially reset gear + every chore latch/debt.
 -- ai_reaches_fifty_geared is HYPOTHESIS-FREE: axioms must be std +
 -- xpToNextLevel (LIV-001) ONLY.
 --
--- ESCALATION (2026-08-15, docs/LEVEL_FIFTY_RESIDUALS.md "RE-RUN 2026-08-15"):
--- the fuller learning-store corpus (10,883 ok-fights, 5 characters) observes
--- a max fight hp loss of 541, not 270 — nearly 2x FIGHT_LOSS_BOUND. Left
--- unchanged here pending its own investigation; NOT bumped as a routine
--- citation refresh, since a wider bound is a proof-scope change, not a typo.
+-- ESCALATION RESOLVED (2026-08-15). The escalation stood here: the fuller
+-- learning-store corpus (10,883 ok-fights, 5 characters) observed a max fight
+-- hp loss of 541, not the B1 trace's single-character 270 — and 2,155 fights,
+-- 19.8%, exceeded the old bound, so it was not a worst case at all. It was
+-- held back from a routine citation refresh because a wider bound is a
+-- proof-scope change. It has now been made: FIGHT_LOSS_BOUND := 541, the
+-- attained corpus maximum (see the constant's docstring for the full table),
+-- and every theorem below was re-proved at the wider bound with NO statement
+-- weakened and NO proof script changed.
+--
+-- WHY THE WIDENING WAS FREE, stated so a reader does not mistake it for luck:
+-- fightLoss writes only `hp`, which is EMeasure slot 18, while every rung that
+-- can dispatch a fight descends at slot 1 (levelDeficit, on rollover) or slot 4
+-- (xpDeficit, on accumulation) — see descendsE_fight, whose proof never
+-- mentions hp. A larger loss therefore pushes more states into the floor-at-1
+-- branch without touching the descent: flooring RAISES slot 18, and a raise at
+-- a dominated slot cannot defeat a strict decrease at a dominating one. The
+-- constant is proof-inert by construction; what pins it to reality is the
+-- differential (formal/diff/test_cycle_step_e_diff.py), which fails on BOTH hp
+-- branches if the Lean value and the Python value drift apart.
 open Formal.Liveness.GearedDescent
 #print axioms cycleStepE_descends_below_fifty
 #print axioms ai_reaches_fifty_geared

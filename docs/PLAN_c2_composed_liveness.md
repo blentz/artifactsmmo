@@ -253,9 +253,13 @@ band, and gate the model's xp credit on it.
      = 0)`; gated at band 38 on `eventGearAvailable` (the ONE frontier gate).
      Fight rollover layer re-arms the gear fields (`gearGap := GEAR_CAP`,
      `loadoutAdequate := false`) — new band, new target; dominated by slot 1.
-     `fightLoss` layer: fight cycles drop hp by `FIGHT_LOSS_BOUND := 270`
-     (B1-measured) with death→respawn `hp := maxHp` — raises only hpDeficit
-     (bottom slots), dominated.
+     `fightLoss` layer: fight cycles drop hp by `FIGHT_LOSS_BOUND := 541`
+     (learning-store maximum over 10,883 ok-fights; was 270 from the
+     single-character B1 trace, which 19.8% of fights exceeded), FLOORED AT 1
+     — production never dies and never restores (`ai/actions/combat.py:120-122`;
+     the "death→respawn `hp := maxHp`" this line used to describe was corrected
+     2026-07-20, because respawning priced dying better than winning). Raises
+     only hpDeficit (bottom slots), dominated.
   4. `BlockerDescentE`: D rows re-proved (gearGap equality rides slot 2 —
      chore applies never touch it); NEW rows: gearReview-with-gap descends
      slot 2; adequate-fight descends 1/3.

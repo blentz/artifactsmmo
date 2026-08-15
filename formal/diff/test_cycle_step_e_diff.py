@@ -31,7 +31,16 @@ ORACLE = Path(__file__).resolve().parents[1] / ".lake/build/bin/oracle"
 # `GearedDescent.witness_loadout_le_gear_cap` (bound) and
 # `witness_loadout_attains_gear_cap` (tightness).
 GEAR_CAP = 11
-FIGHT_LOSS_BOUND = 270
+
+# RE-DERIVED 2026-08-15 from the learning store. Was 270, a "B1 trace
+# measurement: max observed 270" taken on ONE character's play trace. Against
+# every ok `FightAction` cycle in `~/.cache/artifactsmmo/learning.db` (10_883
+# fights, 5 characters, each loss read from its own `delta_hp`) the true maximum
+# is 541 -- and 2_155 fights, 19.8%, exceeded the old bound. This constant must
+# move in LOCKSTEP with `CycleStepE.FIGHT_LOSS_BOUND`: the two hp assertions
+# below (subtract branch and floor branch) both disagree with the oracle if the
+# Lean model and this file drift apart.
+FIGHT_LOSS_BOUND = 541
 
 
 def _base_vector() -> list[int]:
@@ -134,13 +143,17 @@ def test_fight_below_bound_floors_at_one_hp() -> None:
     Production never dies and never restores: `FightAction.apply` computes
     `new_hp = max(1, hp - estimated_hp_cost)` (`ai/actions/combat.py:120-122`).
     This test now pins that floor.
+
+    The store agrees that the floor, not death, is the real behaviour: across
+    10_883 ok-fights the largest loss as a fraction of the pool is 541/545 =
+    0.9927, and `loss >= max_hp` never happens once.
     """
     v = _base_vector()
     v[0] = FIGHT_LOSS_BOUND          # hp == bound → below-bound branch
-    v[1] = 300                       # maxHp low enough that hp/maxHp ≥ 3/4
+    v[1] = 600                       # maxHp keeps hp/maxHp ≥ 3/4 at this hp
     v[38] = 1
     (r,) = _run([v])
-    # hp 270 of 300 = 90% → hpCritical quiet; the fight then floors hp at 1.
+    # hp 541 of 600 = 90% → hpCritical quiet; the fight then floors hp at 1.
     assert r["selected"] == "objectiveStep"
     assert r["hp"] == 1
 
