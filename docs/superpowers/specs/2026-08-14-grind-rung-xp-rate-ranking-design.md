@@ -510,11 +510,20 @@ The gate has not run since `ec613f0d`.
   - **Context-free (`is_applicable`'s path):** `skill_grind_target('weaponcrafting', state, game_data)`
     with defaults. Lor (level 8): `sticky_dagger`. HAL (level 9): `water_bow`.
   - **Ctx-threaded (`next_grind_goal`'s path):** ran `player.plan_from_state()`
-    — the exact `plan` CLI codepath — then read back `player._last_ctx` (the
-    identical object `_execute_level_skill` would thread into
-    `next_grind_goal` this cycle) and recomputed `next_grind_goal`'s own
-    rung-selection expression against it, rather than hand-building a
-    `SelectionContext` (which would just be a fixture again). Lor:
+    — the exact `plan` CLI codepath — then read back `player._last_ctx` and
+    recomputed `next_grind_goal`'s own rung-selection expression against it,
+    rather than hand-building a `SelectionContext` (which would just be a
+    fixture again). **Not the identical object `_execute_level_skill` would
+    thread into `next_grind_goal` this cycle** — `self._last_ctx` has exactly
+    two write sites in `player.py`: `:637` (inside `run()`'s `_decide_band`
+    path, reached *after* `run()` calls `_update_coordination` at `:1058`)
+    and `:936` (inside `plan_from_state`, whose only caller in the file is
+    `plan_once`, and which never calls `_update_coordination` at all). So the
+    object read here is the same *class* of object, built by the same
+    `_selection_context()` construction, but on the parallel diagnostic path
+    that provably skips the coordination step the live loop always runs
+    first — identical in every field except the three named below
+    (`supply_target`/`role_skills`/`sibling_bank_claims`). Lor:
     `ctx.near_term_targets` = 11 gear/tool codes (`greater_wooden_staff`,
     `iron_boots`, `iron_helm`, `iron_ring`, `iron_shield`,
     `air_and_water_amulet`, `lich_race_medal`, `mithril_axe`,
@@ -543,6 +552,8 @@ The gate has not run since `ec613f0d`.
   Neither character was observed mid-execution actually crafting the rung
   (that would require running the bot, which this task was told not to do);
   what was verified live is that both the applicability gate's call and the
-  execution-time selection's own call — evaluated against the real ctx object
-  the live per-cycle path builds, not a hand-built stand-in — agree on the
-  same two rungs the brief named, and neither is `apprentice_gloves`.
+  execution-time selection's own call — evaluated against a real,
+  live-computed ctx built by the same `_selection_context()` the live
+  per-cycle path uses (not a hand-built stand-in, though not the identical
+  object either — see above) — agree on the same two rungs the brief named,
+  and neither is `apprentice_gloves`.
