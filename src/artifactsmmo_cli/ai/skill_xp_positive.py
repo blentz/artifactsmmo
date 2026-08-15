@@ -16,34 +16,41 @@ skill grind could pick content that pays nothing and spin on it forever.
 
 THE BOUNDARY IS OBSERVED, NOT ASSUMED. The doc prose "10+ levels below" is
 loose about whether a gap of exactly 10 pays. It does. Replaying every
-`Gather` cycle across the 53 committed play-traces (`formal/diff/
-gather_xp_replay.py`, 760 gathers) resolves it:
+`Gather` cycle across 155 committed play-traces (`formal/diff/
+gather_xp_replay.py`, 3231 gathers, each attributed to its OWN action against
+the pre/post state pair that action actually produced) resolves it:
 
     gap = skill_level - resource_level     pays / zero
-      8                                    182 /  7
-      9                                    180 / 10
-     10                                    148 / 11
-     11                                      0 / 312     <-- band starts here
-     16                                      0 / 140
-     20                                      0 / 134
+      8                                    293 /   0
+      9                                    192 /   0
+     10                                    159 /   0
+     11                                      0 / 310     <-- band starts here
+     16                                      0 / 314
+     20                                      0 / 135
 
-The gap-10 and gap-11 buckets contain the SAME resources (`copper_rocks` lvl 1,
-`ash_tree` lvl 1) at different skill levels, and gap 11 also contains a
-different resource at a different level (`iron_rocks` lvl 10), so the boundary
-is a property of the GAP and not of any resource. The residual zeros below the
-band are the one-cycle snapshot lag that also shows up mid-band, not a signal.
+Every in-band gap bucket (0-10) pays every single time; every out-of-band
+bucket (>= 11) pays zero times, with no exception anywhere in 3231 gathers —
+2210 paying at gap <= 10, 1021 zero at gap >= 11. `formal/diff/
+craft_xp_replay.py`'s independent 450-craft-cycle replay finds the same clean
+boundary for crafting: 214 paying, all at gap <= 10, and 236 zero, all at gap
+>= 11. (An earlier version of this evidence reported a handful of below-band
+payers and explained them as one-cycle attribution lag; that explanation was
+itself wrong — a code-review round found the replay was pairing each action
+against the FOLLOWING cycle's result instead of its own, which manufactured
+those apparent payers out of a neighbouring cycle's real yield. Corrected,
+there is nothing left to explain: the boundary is exact.)
 
 Hence the paying band is `gap <= 10`, i.e. `skill_level < content_level + 11` —
 one wider than combat's. The two constants are deliberately NOT shared: combat's
 `>= 10` is doc-cited AND corroborated 399/399 in `xp_formula_replay.py`, this
-one is corroborated 760/760 here, and nothing in the game ties them together.
+one is corroborated 3231/3231 here, and nothing in the game ties them together.
 """
 
 GREY_SKILL_GAP = 11
 """Skill levels above the content at which gather/craft xp reaches zero.
 
 `skill_level - content_level >= GREY_SKILL_GAP` pays NOTHING. Anchored by
-`formal/diff/gather_xp_replay.py` (760 live gathers, no exception at the
+`formal/diff/gather_xp_replay.py` (3231 live gathers, no exception at the
 boundary) and pinned by the SKILL_XP_POSITIVE mutation group."""
 
 

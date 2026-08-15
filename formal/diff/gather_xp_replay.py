@@ -11,24 +11,33 @@ observed `ok` Gather cycle and reports pays/zero bucketed by
 
     gap = skill_level(at cycle start) - resource_level
 
-A record's `state` is the cycle-start snapshot, so the xp EFFECT of record i's
-action is `state[i+1] - state[i]`; a gather is counted as PAYING when the
-gathered resource's skill gained xp or a level across that pair.
+A record's `state` is the RESULT of that record's OWN action, not a
+before-snapshot: ground-truthed against 19691 `Fight` cycles,
+`state[i] - state[i-1] == fight_xp` holds 19691/19691 (100%), while
+`state[i+1] - state[i] == fight_xp` (the pairing this file used before a
+code-review round caught it) holds only 10777/19691 (55%). So record i's
+action is credited against the PAIR `(records[i-1].state, records[i].state)`
+-- one step BACK is the pre-action snapshot, and the record's own state is
+post.
 
-ATTRIBUTION LAG (why the verdict is majority-based, not all-or-nothing): a
-cycle's xp sometimes lands in the FOLLOWING snapshot, so a paying gather can
-credit its xp to a neighbouring cycle. Every one of the 6 apparent payers at
-gap >= 11 across the 53 traces carries a delta shaped like the NEIGHBOURING
-resource, never like the grey one it is attributed to: 4x +25 and 1x +17 on
-Robby's `ash_tree` cycles, which are exactly the `spruce_tree` yields at
-woodcutting 16 and 15 observed in the same run, plus one +490 alchemy jump on a
-cycle whose neighbour was `Gather(gudgeon_spot)`. A grey resource that actually
-paid would show a small ash-shaped delta; none does. So the outliers are lag,
-and the band itself is clean.
+WHAT THE OLD "ATTRIBUTION LAG" EXPLANATION ACTUALLY WAS: under the wrong
+pairing, a handful of gap >= 11 buckets showed a few apparent payers, and this
+docstring used to explain them as xp landing on a "neighbouring" cycle. It
+does not: those were exactly the off-by-one above, each one crediting a grey
+gather with the NEXT record's real yield (a `spruce_tree` gather's own xp,
+misattributed to the `ash_tree` cycle beside it, etc.). Under the corrected
+pairing there are no such outliers left to explain -- see the VIOLATIONS and
+OUTLIERS lines below, which are computed, not asserted.
 
-Crafting is reported separately and is ADVISORY only: craft results lag by a
-cycle far more often than gathers, so single-cycle attribution is unreliable
-there. The gather buckets are the load-bearing evidence.
+Crafting is reported separately and remains structurally ADVISORY (this
+script's VIOLATION-raising and exit code stay scoped to GATHER, matching the
+plan before this fix): but under the corrected pairing CRAFT is exactly as
+clean as GATHER -- zero mixed buckets, matching the independent replay in
+`formal/diff/craft_xp_replay.py`, which finds zero below-band payers and zero
+above-band non-zero-craft observations across 450 craft cycles. "Craft results
+lag" was never a property of crafting; it was the same bug measured on noisier
+data (crafts are rarer than gathers, so fewer misattributions were needed to
+produce a visible outlier).
 
 What would falsify `GREY_SKILL_GAP = 11`: a gap >= 11 bucket that PREDOMINANTLY
 pays, or an in-band bucket that never pays at all. Both are reported as explicit
@@ -85,13 +94,16 @@ def _replay(traces: list[Path], resources: dict[str, tuple[str, int]],
         if not records or "skills" not in (records[0].get("state") or {}):
             continue
         used += 1
-        for pre_rec, post_rec in zip(records, records[1:], strict=False):
-            if pre_rec.get("outcome") != "ok":
+        # (prev_rec, cur_rec): cur_rec HOLDS the action/outcome under test, and
+        # cur_rec["state"] is that action's RESULT; prev_rec["state"] is the
+        # snapshot from BEFORE it ran. See module docstring.
+        for prev_rec, cur_rec in zip(records, records[1:], strict=False):
+            if cur_rec.get("outcome") != "ok":
                 continue
-            pre, post = pre_rec["state"], post_rec["state"]
-            if "skills" not in post:
+            pre, post = prev_rec.get("state") or {}, cur_rec.get("state") or {}
+            if "skills" not in pre or "skills" not in post:
                 continue
-            action = str(pre_rec.get("action"))
+            action = str(cur_rec.get("action"))
             if action.startswith("Gather("):
                 entry = resources.get(action[len("Gather("):-1])
                 bucket = gathers
@@ -124,7 +136,7 @@ def _render(title: str, buckets: dict[int, list[int]],
         elif not predicted and pays > zero:
             flag = f"  <-- VIOLATION: model says zero, bucket predominantly paid ({pays}/{pays + zero})"
         elif not predicted and pays:
-            flag = f"  <-- outlier: {pays}/{pays + zero} paying (attribution lag)"
+            flag = f"  <-- outlier: {pays}/{pays + zero} paying (unexplained -- investigate before assuming lag)"
             outliers.append(f"gap={gap}: {pays}/{pays + zero}")
         if flag.startswith("  <-- VIOLATION") and not advisory:
             violations.append(f"gap={gap} pays={pays} zero={zero}{flag}")
@@ -157,7 +169,8 @@ def main() -> int:
         f"{sum(sum(v) for v in crafted.values())} cycles)", crafted, advisory=True)
     lines += gather_lines + craft_lines
     lines.append("")
-    lines.append("OUT-OF-BAND OUTLIERS (attribution lag, see module docstring): " + (
+    lines.append("OUT-OF-BAND OUTLIERS (unexplained if any; see module docstring for why "
+                 "'attribution lag' is no longer assumed): " + (
         "; ".join(outliers) if outliers else "none"))
     lines.append("VIOLATIONS: " + (
         "; ".join(violations) if violations

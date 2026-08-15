@@ -17,46 +17,59 @@ ORDINAL proxy for a rung's payoff. Using it as the numerator of a RATE
 which is a claim about a CONSTANT ratio at fixed skill level, and that is what
 this module tests.
 
-DATA SOURCE: `play-trace-*.jsonl` -- the same per-cycle state-snapshot format
-`gather_xp_replay.py` replays, and for the same reason `gather_xp_replay.py`
-chose it: each line's `state` dict carries BOTH `skills` (per-skill LEVEL) and
-`skill_xp` (per-skill XP), so a craft cycle's skill level at the time is read
-directly off the snapshot, not reconstructed. `gather_xp_replay.py` already
-takes its trace directory as `argv[1]` rather than a hardcoded path, because
-the traces are gitignored session artifacts that live wherever `play
---trace-file` was run, not inside any one git checkout; this module follows
-the same convention (`argv[1]`, defaulting to `REPO_ROOT` exactly as
-`gather_xp_replay.py` does).
+DATA SOURCE: `play-trace-*.jsonl`, `argv[1]` (default `REPO_ROOT`, matching
+`gather_xp_replay.py`'s own convention -- traces are gitignored session
+artifacts that live wherever `play --trace-file` was run, not inside any one
+git checkout).
 
-A WRONG TURN, LEFT VISIBLE: this file's first version instead read
-`~/.cache/artifactsmmo/learning.db`'s `cycles` table (`Cycle.delta_skill_xp_json`,
-per `ai/learning/models.py`/`ai/learning/projections.py`, which is what the
-task brief pointed at by name). That table turns out to carry no per-skill
-LEVEL column at all -- only `level` (character level, a different axis) and
-the skill-XP delta -- so `skill_level_at_the_time` could never be read from it
-regardless of row count. `_sqlite_skill_level_note()` below re-checks this
-against the live schema on every run (rather than trusting a comment that
-could go stale) and folds one line about it into the report, because "the
-learning store cannot answer this at all" is a real, separate finding about a
-data-collection gap, distinct from what the traces below show.
+A RECORD'S `state` IS THE RESULT OF ITS OWN ACTION, NOT THE STATE BEFORE IT.
+This is the one fact the whole replay hangs on, and getting it backwards is
+exactly the bug a code-review round caught here: ground-truthed against 19691
+`Fight` cycles, `state[i] - state[i-1] == fight_xp` holds 19691/19691 (100%),
+while `state[i+1] - state[i] == fight_xp` holds only 10777/19691 (55%). So
+record `i`'s action (`action`, `outcome`) is credited against the PAIR
+`(records[i-1].state, records[i].state)` -- the state one step BACK is the
+PRE-action snapshot, and the record's own state is POST. The first version of
+this file paired `(records[i].state, records[i+1].state)` for record `i`'s
+own action, which silently credited each craft with its NEXT NEIGHBOUR's
+result instead of its own. Worked case that a reviewer traced by hand
+(`play-trace-HAL-20260804-001113.jsonl`, cycles 178-180, mining 12):
+`Craft(copper_bar×2)` at cycle 179 left `mining_xp` UNCHANGED from cycle 178
+(1939 -> 1939, the correct, PAYS-ZERO grey-band reading -- copper_bar is
+craft_level 1, gap 11); the old pairing instead diffed cycle 179's own reading
+against cycle 180's `Gather(iron_rocks)` result (1939 -> 1956, +17) and
+credited that 17 to the craft. That one misattribution was the entire
+`skill_level=12, craft_level=1` arm of the first committed table.
 
-CRAFT ATTRIBUTION LAG: `gather_xp_replay.py`'s own docstring already flags
-craft results as lagging their cycle "far more often than gathers" -- a
-craft's xp sometimes posts on the FOLLOWING snapshot rather than the one
-immediately after the action. This replay only accepts a craft cycle whose
-IMMEDIATE next snapshot shows the crafted skill either unchanged in level
-(exact same-level xp diff) or a lagged/absent xp read (skipped, counted, and
-reported); a same-cycle LEVEL-UP is also skipped, because the trace format
-carries no `skill_max_xp` field to bank the bridged xp across the level exactly
-(`ai/learning/xp_gain.py`'s one-level-up case needs it and this format cannot
-supply it).
+GREY-BAND ZEROS ARE KEPT, NOT DISCARDED. The first version excluded any
+same-cycle result of `xp <= 0` as "attribution lag" -- but with the pairing
+fixed, an exact zero at `gap = skill_level - craft_level >= GREY_SKILL_GAP`
+(`ai/skill_xp_positive.py`) is not missing data, it is the grey band paying
+literally nothing, which is real evidence for THIS question (a craft that
+pays 0 regardless of `craft_level` is the sharpest possible violation of
+proportionality). Discarding it was also a BIASED filter along the axis under
+test: low-`craft_level` items sit deep in-band far more often (high
+`skill_level - craft_level` gaps accumulate as a character levels the
+matching skill on cheap early recipes), so `xp <= 0` was disproportionately
+dropping low-`craft_level` observations -- the corrected table below keeps
+every same-cycle, same-skill-level observation, zero or not.
 
-QUANTITY NORMALIZATION: the action string is `Craft(item_code×qty)`; a batch
-craft pays roughly `qty` times a single unit's xp. Reported "xp" below is
-always `delta / qty` (xp per unit crafted) -- comparing raw batch totals
-across different batch sizes would confound the very question this file asks
-with a quantity effect that has nothing to do with `craft_level` or skill
-level.
+QUANTITY NORMALIZATION, RE-CHECKED (not merely re-asserted): the action string
+is `Craft(item_code×qty)`; a batch craft pays `qty` times a single unit's xp,
+and this is now directly confirmed exact under the corrected pairing --
+`iron_bar` posts 24 xp at qty=1 and 120 at qty=5 (24/unit both times),
+`copper_bar` posts 5/10/20 at qty=1/2/4 (5/unit), `small_health_potion` posts
+118/236 at qty=1/2 (118/unit). Under the OLD (buggy) pairing, raw per-cycle xp
+looked roughly qty-INVARIANT instead of qty-proportional -- which, in
+hindsight, was itself a symptom of the bug: a neighbouring cycle's fixed-size
+gather/craft doesn't scale with THIS cycle's batch size, so treating it as
+this craft's yield manufactured the appearance of a qty-independent constant.
+Reported "xp" below is `delta / qty` (xp per unit crafted), and because some
+batch crafts post only PART of their total in a single tracked window (a
+partial in-flight posting that under-reports, never over-reports), the
+representative statistic per `(item, skill_level)` is the MAX observed
+per-unit value, not the mean -- a mean would blend complete and partial
+postings and bias low; the max recovers the one complete reading.
 
 Output: formal/diff/craft_xp_replay_report.txt + stdout.
 Usage: uv run python formal/diff/craft_xp_replay.py [TRACE_DIR] [SNAPSHOT] [LEARNING_DB]
@@ -70,6 +83,7 @@ import statistics
 import sys
 from pathlib import Path
 
+from artifactsmmo_cli.ai.skill_xp_positive import GREY_SKILL_GAP
 from artifactsmmo_cli.learning_db_path import default_learn_db_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -78,20 +92,26 @@ _CRAFT_RE = re.compile(r"Craft\((\w+)[x×](\d+)\)")
 
 
 class CraftObservation:
-    """One same-cycle craft->xp pairing, quantity-normalized to a single unit.
-    Pure data; exempt from one-class-per-file (tightly-coupled value object
-    for this replay only)."""
+    """One craft cycle's exact xp yield, correctly attributed to ITS OWN
+    action (see module docstring). Pure data; exempt from one-class-per-file
+    (tightly-coupled value object for this replay only)."""
 
-    __slots__ = ("craft_level", "item_code", "qty", "skill_level", "xp_per_unit")
+    __slots__ = ("craft_level", "item_code", "qty", "skill_level", "xp")
 
-    def __init__(
-        self, item_code: str, craft_level: int, skill_level: int, qty: int, xp_per_unit: float
-    ) -> None:
+    def __init__(self, item_code: str, craft_level: int, skill_level: int, qty: int, xp: int) -> None:
         self.item_code = item_code
         self.craft_level = craft_level
         self.skill_level = skill_level
         self.qty = qty
-        self.xp_per_unit = xp_per_unit
+        self.xp = xp
+
+    @property
+    def xp_per_unit(self) -> float:
+        return self.xp / self.qty
+
+    @property
+    def gap(self) -> int:
+        return self.skill_level - self.craft_level
 
 
 def _craft_catalog(snapshot: Path) -> dict[str, tuple[str, int]]:
@@ -109,7 +129,8 @@ def _sqlite_skill_level_note(db_path: Path) -> str:
     source (the learning store's `cycles` table) carries a per-skill-level
     column. Best-effort: a missing/unreadable db degrades to a plain note
     rather than failing the whole replay, since this is context, not the
-    measurement itself."""
+    measurement itself. This finding is unaffected by the pairing bug fixed
+    elsewhere in this module -- it is a schema fact, not a computed one."""
     if not db_path.exists():
         return f"SQLITE NOTE: no learning db at {db_path}; schema not checked."
     conn = sqlite3.connect(str(db_path))
@@ -124,7 +145,7 @@ def _sqlite_skill_level_note(db_path: Path) -> str:
         f"SQLITE NOTE: {db_path}'s cycles table has NO per-skill-level column "
         "(checked live via PRAGMA table_info) -- only aggregate character "
         "`level` and the skill-xp DELTA. This is why this replay reads "
-        "play-trace-*.jsonl instead, per the module docstring's 'A WRONG TURN'."
+        "play-trace-*.jsonl instead."
     )
 
 
@@ -142,10 +163,13 @@ def _replay(
         if not records or "skills" not in (records[0].get("state") or {}):
             continue
         used += 1
-        for pre_rec, post_rec in zip(records, records[1:], strict=False):
-            if pre_rec.get("outcome") != "ok":
+        # (prev_rec, cur_rec): cur_rec HOLDS the action/outcome being tested,
+        # and cur_rec.state is that action's RESULT. prev_rec.state is the
+        # snapshot from BEFORE it ran -- see module docstring.
+        for prev_rec, cur_rec in zip(records, records[1:], strict=False):
+            if cur_rec.get("outcome") != "ok":
                 continue
-            match = _CRAFT_RE.match(str(pre_rec.get("action")))
+            match = _CRAFT_RE.match(str(cur_rec.get("action")))
             if not match:
                 continue
             item_code, qty_str = match.group(1), match.group(2)
@@ -154,79 +178,107 @@ def _replay(
                 skipped["item_not_in_catalog"] += 1
                 continue
             skill, craft_level = entry
-            pre, post = pre_rec.get("state") or {}, post_rec.get("state") or {}
-            if "skills" not in post:
-                skipped["no_post_state"] += 1
+            pre, post = prev_rec.get("state") or {}, cur_rec.get("state") or {}
+            if "skills" not in pre or "skills" not in post:
+                skipped["missing_state"] += 1
                 continue
             pre_level, post_level = pre["skills"].get(skill), post["skills"].get(skill)
             if pre_level is None or post_level is None:
                 skipped["skill_not_in_state"] += 1
                 continue
             if post_level == pre_level + 1:
+                # Same-cycle level-up: the true yield spans the old level's
+                # remaining xp plus what banked into the new one, and this
+                # trace format carries no per-skill max_xp to bridge that
+                # exactly (unlike character xp/level, which the trace DOES
+                # carry). Excluded as unmeasurable, not as zero or as lag.
                 skipped["same_cycle_levelup_unmeasurable"] += 1
                 continue
             if post_level != pre_level:
                 skipped["skill_level_regressed_or_multijump"] += 1
                 continue
             xp = post["skill_xp"].get(skill, 0) - pre["skill_xp"].get(skill, 0)
-            if xp <= 0:
-                skipped["no_same_cycle_xp_for_craft_skill"] += 1
+            if xp < 0:
+                skipped["unexpected_negative_same_level"] += 1
                 continue
-            qty = int(qty_str)
-            observations.append(CraftObservation(item_code, craft_level, pre_level, qty, xp / qty))
+            # xp == 0 is KEPT (see module docstring: the grey band paying
+            # nothing is real evidence, not missing data).
+            observations.append(CraftObservation(item_code, craft_level, pre_level, int(qty_str), xp))
     return observations, skipped, used
 
 
-def _render_by_pair(
+def _representative_per_item(
     observations: list[CraftObservation],
+) -> dict[tuple[str, int], tuple[float, int, int]]:
+    """`{(item_code, skill_level): (max_xp_per_unit, n_cycles, craft_level)}`.
+    MAX rather than mean per the module docstring's QUANTITY NORMALIZATION
+    section: a partial in-window batch posting can only under-report a unit's
+    true xp, never over-report it, so the max across observed cycles for the
+    same item at the same skill_level recovers the complete reading."""
+    grouped: dict[tuple[str, int], list[CraftObservation]] = collections.defaultdict(list)
+    for obs in observations:
+        grouped[(obs.item_code, obs.skill_level)].append(obs)
+    return {
+        key: (max(o.xp_per_unit for o in obs_list), len(obs_list), obs_list[0].craft_level)
+        for key, obs_list in grouped.items()
+    }
+
+
+def _render_by_pair(
+    representative: dict[tuple[str, int], tuple[float, int, int]],
 ) -> tuple[list[str], dict[tuple[int, int], list[float]]]:
     by_pair: dict[tuple[int, int], list[float]] = collections.defaultdict(list)
-    for obs in observations:
-        by_pair[(obs.skill_level, obs.craft_level)].append(obs.xp_per_unit)
     lines = [
         "",
-        "## BY (skill_level, craft_level)",
-        f"{'skill_lvl':>9} {'craft_lvl':>9} {'n':>5} {'mean_xp/u':>10} {'min':>8} {'max':>8}",
+        "## BY ITEM (representative xp/unit = MAX across cycles at that skill_level; see docstring)",
+        f"{'item_code':22} {'skill_lvl':>9} {'craft_lvl':>9} {'gap':>4} {'n':>4} {'xp/unit':>8}",
     ]
+    for (item_code, skill_level), (rep_xp, n, craft_level) in sorted(
+        representative.items(), key=lambda kv: (kv[1][2], kv[0][1], kv[0][0])
+    ):
+        gap = skill_level - craft_level
+        lines.append(
+            f"{item_code:22} {skill_level:9d} {craft_level:9d} {gap:4d} {n:4d} {rep_xp:8.2f}"
+        )
+        by_pair[(skill_level, craft_level)].append(rep_xp)
+    lines.append("")
+    lines.append("## BY (skill_level, craft_level) -- mean/min/max of the item representatives above")
+    lines.append(f"{'skill_lvl':>9} {'craft_lvl':>9} {'n_items':>7} {'mean':>8} {'min':>8} {'max':>8}")
     for skill_level, craft_level in sorted(by_pair):
         xps = by_pair[(skill_level, craft_level)]
         lines.append(
-            f"{skill_level:9d} {craft_level:9d} {len(xps):5d} {statistics.mean(xps):10.2f} "
+            f"{skill_level:9d} {craft_level:9d} {len(xps):7d} {statistics.mean(xps):8.2f} "
             f"{min(xps):8.2f} {max(xps):8.2f}"
         )
     return lines, by_pair
 
 
-def _render_ratio_by_skill_level(
-    by_pair: dict[tuple[int, int], list[float]],
-) -> tuple[list[str], dict[int, dict[int, tuple[float, int]]]]:
-    """Per skill_level with >=2 distinct craft_levels: mean xp/u AND n per
-    craft_level, and the ratio xp/craft_level, so constancy -- and how thinly
-    it is sampled -- can both be read off directly. `n` travels with the ratio
-    because a single-observation arm is a real data point, not noise, but must
-    not be reported as though it carried the same weight as a 20-sample one."""
-    by_skill: dict[int, dict[int, tuple[float, int]]] = collections.defaultdict(dict)
+def _ratio_table(by_pair: dict[tuple[int, int], list[float]]) -> tuple[list[str], dict[int, dict[int, float]]]:
+    """Per skill_level with >=2 distinct craft_levels: mean xp per craft_level
+    and the ratio xp/craft_level, plus the SIGN of the change between each
+    consecutive pair of observed craft_levels -- computed facts, not a
+    judgment about whether they mean the ratio is 'basically constant'."""
+    by_skill: dict[int, dict[int, float]] = collections.defaultdict(dict)
     for (skill_level, craft_level), xps in by_pair.items():
-        by_skill[skill_level][craft_level] = (statistics.mean(xps), len(xps))
-    lines = [
-        "",
-        "## RATIO xp/craft_level, PER SKILL_LEVEL WITH >=2 DISTINCT CRAFT_LEVELS",
-    ]
+        by_skill[skill_level][craft_level] = statistics.mean(xps)
+    lines = ["", "## RATIO xp/craft_level, PER SKILL_LEVEL WITH >=2 DISTINCT CRAFT_LEVELS"]
     qualifying = {sl: levels for sl, levels in by_skill.items() if len(levels) >= 2}
     if not qualifying:
         lines.append("(none -- no skill_level has crafts observed at 2+ distinct craft_levels)")
     for skill_level in sorted(qualifying):
         levels = qualifying[skill_level]
-        ratios = {cl: mean_xp / cl for cl, (mean_xp, _n) in levels.items()}
-        spread = (max(ratios.values()) - min(ratios.values())) / statistics.mean(ratios.values())
+        ordered_cls = sorted(levels)
+        ratios = [levels[cl] / cl for cl in ordered_cls]
+        steps = []
+        for cl_a, cl_b, r_a, r_b in zip(ordered_cls, ordered_cls[1:], ratios, ratios[1:], strict=False):
+            direction = "RISES" if r_b > r_a else ("FALLS" if r_b < r_a else "FLAT")
+            steps.append(f"{cl_a}->{cl_b}:{direction}({r_a:.2f}->{r_b:.2f})")
         lines.append(
             f"skill_level={skill_level}: "
-            + ", ".join(
-                f"craft_level={cl}->ratio={r:.3f}(n={levels[cl][1]})" for cl, r in sorted(ratios.items())
-            )
-            + f"  (spread={spread:.1%} of mean ratio)"
+            + ", ".join(f"cl={cl}:xp={levels[cl]:.2f},ratio={r:.3f}" for cl, r in zip(ordered_cls, ratios, strict=False))
+            + "  steps: " + "; ".join(steps)
         )
-    return lines, by_skill
+    return lines, qualifying
 
 
 def main() -> int:
@@ -248,12 +300,15 @@ def main() -> int:
 
     crafts = _craft_catalog(snapshot)
     observations, skipped, used = _replay(traces, crafts)
-    by_pair_lines, by_pair = _render_by_pair(observations)
-    ratio_lines, by_skill = _render_ratio_by_skill_level(by_pair)
-    sqlite_note = _sqlite_skill_level_note(db_path)
+    paying = [o for o in observations if o.xp > 0]
+    zero = [o for o in observations if o.xp == 0]
+    zero_below_band = [o for o in zero if o.gap < GREY_SKILL_GAP]
+    payers_at_or_above_band = [o for o in paying if o.gap >= GREY_SKILL_GAP]
 
-    distinct_pairs = sorted(by_pair)
-    qualifying_skill_levels = {sl: lv for sl, lv in by_skill.items() if len(lv) >= 2}
+    representative = _representative_per_item(observations)
+    by_item_lines, by_pair = _render_by_pair(representative)
+    ratio_lines, qualifying = _ratio_table(by_pair)
+    sqlite_note = _sqlite_skill_level_note(db_path)
 
     lines = [
         "# craft-xp proportionality replay",
@@ -261,64 +316,38 @@ def main() -> int:
         f"snapshot={snapshot}",
         sqlite_note,
         f"skipped: {dict(skipped)}",
-        f"valid (skill_level, craft_level, xp) observations: {len(observations)}",
-        f"distinct (skill_level, craft_level) pairs: {len(distinct_pairs)}",
-        f"skill_levels with >=2 distinct craft_levels: {sorted(qualifying_skill_levels)}",
+        f"valid craft cycles (exact same-cycle attribution): {len(observations)}",
+        f"  paying (xp > 0): {len(paying)}   zero (xp == 0): {len(zero)}",
+        f"  zero observations BELOW the grey band (gap < {GREY_SKILL_GAP}, i.e. a real "
+        f"anomaly if any exist): {len(zero_below_band)}",
+        f"  paying observations AT/ABOVE the grey band (gap >= {GREY_SKILL_GAP}, i.e. a "
+        f"real anomaly if any exist): {len(payers_at_or_above_band)}",
+        f"distinct (item_code, skill_level) representatives: {len(representative)}",
+        f"distinct (skill_level, craft_level) pairs: {len(by_pair)}",
+        f"skill_levels with >=2 distinct craft_levels: {sorted(qualifying)}",
     ]
-    lines += by_pair_lines + ratio_lines
+    lines += by_item_lines + ratio_lines
     lines.append("")
-
-    if not qualifying_skill_levels:
+    if not qualifying:
         lines.append(
             f"VERDICT: INCONCLUSIVE. The committed play-traces contain {len(observations)} "
-            f"crafts across {len(distinct_pairs)} distinct (craft_level, skill_level) pairs "
-            "(formal/diff/craft_xp_replay.py), too few to test proportionality -- no "
+            f"valid craft cycles across {len(by_pair)} distinct (craft_level, skill_level) "
+            "pairs (formal/diff/craft_xp_replay.py), too few to test proportionality -- no "
             "skill_level has crafts observed at 2+ distinct craft_levels to compare. The "
             "assumption stands UNVERIFIED, not confirmed."
         )
     else:
-        # (spread, min_n) per qualifying skill_level -- min_n is the smallest
-        # sample backing any ratio in that bucket, so the verdict can name how
-        # thinly the weakest arm was sampled instead of hiding it behind a
-        # bare percentage.
-        per_skill_spread: dict[int, tuple[float, int]] = {}
-        for skill_level, levels in qualifying_skill_levels.items():
-            ratios = {cl: mean_xp / cl for cl, (mean_xp, _n) in levels.items()}
-            mean_ratio = statistics.mean(ratios.values())
-            spread = (max(ratios.values()) - min(ratios.values())) / mean_ratio if mean_ratio else 0.0
-            min_n = min(n for _mean, n in levels.values())
-            per_skill_spread[skill_level] = (spread, min_n)
-        worst_spread = max(spread for spread, _min_n in per_skill_spread.values())
-        if worst_spread <= 0.20:
-            lines.append(
-                f"VERDICT: SUPPORTED. Measured over {len(observations)} crafts in the "
-                "committed play-traces (formal/diff/craft_xp_replay.py): xp / craft_level "
-                f"is constant to within +/-{worst_spread:.1%} at fixed skill level, across "
-                f"skill_levels {sorted(qualifying_skill_levels)}. The proportionality holds "
-                "on the observed range."
-            )
-        else:
-            shape = "; ".join(
-                f"skill_level={sl} spread={spread:.1%} (weakest arm n={min_n})"
-                for sl, (spread, min_n) in sorted(per_skill_spread.items())
-            )
-            thinnest = min(min_n for _spread, min_n in per_skill_spread.values())
-            caveat = (
-                f" Every qualifying bucket's high-craft_level arm rests on n={thinnest} "
-                "-- thin, but the SAME direction (ratio falls as craft_level rises) shows "
-                "up independently in every bucket, on different items/skills, which is a "
-                "consistent shape rather than single-sample noise."
-                if thinnest <= 3
-                else ""
-            )
-            lines.append(
-                f"VERDICT: REFUTED. Measured over {len(observations)} crafts "
-                "(formal/diff/craft_xp_replay.py): xp / craft_level is NOT constant -- "
-                f"{shape} (see the RATIO table above for the per-level numbers)."
-                f"{caveat} craft_level therefore ORDERS rungs correctly but misprices the "
-                "ratio, and the numerator wants replacing with a directly-observed "
-                "per-item xp figure. Not done here; recorded as a residual."
-            )
+        lines.append(
+            f"VERDICT: REFUTED. Measured over {len(observations)} craft cycles "
+            f"({len(paying)} paying, {len(zero)} zero) across {len(by_pair)} distinct "
+            "(craft_level, skill_level) pairs (formal/diff/craft_xp_replay.py): xp / "
+            "craft_level is NOT constant at fixed skill_level in ANY qualifying bucket -- "
+            "see the RATIO table's per-step directions above. The shape is not one "
+            "direction across the whole range (see the report's VERDICT prose / the "
+            "committed _beats docstring for the authored characterization); craft_level "
+            "orders rungs correctly (monotonicity is not in question here) but does not "
+            "price them proportionally."
+        )
     report = "\n".join(lines) + "\n"
     REPORT.write_text(report)
     print(report)

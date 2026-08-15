@@ -86,15 +86,22 @@ def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
     nondecreasing in content level, which justifies `craft_level` as an
     ORDINAL proxy; using it as the CARDINAL numerator of a ratio additionally
     assumes xp is proportional to it, and `level_penalty` varies across rungs
-    by a factor nobody has measured. Measured over 80 crafts across 9 distinct
-    (craft_level, skill_level) pairs (formal/diff/craft_xp_replay.py): xp /
-    craft_level is NOT constant at fixed skill_level -- it falls by roughly
-    3x as craft_level rises from 1 to 10 (skill_level 11: ratio 5.46 -> 1.70;
-    skill_level 12: ratio 8.50 -> 2.30), the same direction independently at
-    both skill levels on two different items, though each craft_level=10 arm
-    is a single observation. craft_level therefore ORDERS rungs correctly but
-    misprices the ratio, and the numerator wants replacing with a directly-
-    observed per-item xp figure. Not done here; recorded as a residual.
+    by a factor nobody has measured. Measured over 450 craft cycles (214
+    paying, 236 exact zero) across 25 distinct (craft_level, skill_level)
+    pairs (formal/diff/craft_xp_replay.py): xp / craft_level is NOT constant
+    at fixed skill_level, and the direction is not even the same across the
+    range. Where both rungs pay (skill_level 5/7/8/9, craft_level 1 vs 5) the
+    ratio RISES 4.4x-4.9x (craft_level 1 pays ~5-6 xp/unit, craft_level 5
+    pays ~118-131) -- craft_level UNDERSTATES the level-5 rung's true payoff
+    by that same 4.4x-4.9x, which always biases the rank toward the cheaper
+    low rung. Where the comparison instead crosses a refining chain
+    (skill_level 10/11, craft_level 1 vs 10: copper_bar->iron_bar,
+    ash_plank->spruce_plank) the ratio FALLS to roughly 46-48% of its
+    craft_level=1 value. craft_level therefore ORDERS rungs correctly
+    (monotonicity is not in question) but misprices the ratio in both
+    directions depending on the pair, and the right numerator is directly
+    observable per item in these traces (13 distinct items measured here).
+    Not done here; recorded as a residual for a later branch.
 
     The `wanted` tie-break is spelled as two `and`/`not` branches rather than
     `if c.wanted != best.wanted: return c.wanted`: the extractor's v1 subset

@@ -1,43 +1,43 @@
 # GREY_SKILL_GAP corroboration report
-traces=53 snapshot=/home/blentz/.cache/artifactsmmo/gamedata-api.artifactsmmo.com.json
+traces=155 snapshot=/home/blentz/.cache/artifactsmmo/gamedata-api.artifactsmmo.com.json
 model: skill_xp_positive(content, skill) = content >= 1 and skill < content + 11
 
-## GATHER (load-bearing: 2464 cycles)
+## GATHER (load-bearing: 3231 cycles)
  gap   pays   zero  verdict
-   0     19      1  mixed
-   1    124     19  mixed
-   2    173     12  mixed
-   3     67      4  mixed
-   4     17      1  mixed
-   5    100     11  mixed
-   6    326     11  mixed
-   7    252     11  mixed
-   8    182      7  mixed
-   9    180     10  mixed
-  10    148     11  mixed
-  11      0    312  ZERO
-  14      1     86  mixed  <-- outlier: 1/87 paying (attribution lag)
-  15      5    100  mixed  <-- outlier: 5/105 paying (attribution lag)
-  16      0    140  ZERO
-  20      0    134  ZERO
+   0     20      0  PAYS
+   1    194      0  PAYS
+   2    346      0  PAYS
+   3    144      0  PAYS
+   4     19      0  PAYS
+   5    111      0  PAYS
+   6    338      0  PAYS
+   7    394      0  PAYS
+   8    293      0  PAYS
+   9    192      0  PAYS
+  10    159      0  PAYS
+  11      0    310  ZERO
+  14      0     86  ZERO
+  15      0    176  ZERO
+  16      0    314  ZERO
+  20      0    135  ZERO
 
-## CRAFT (ADVISORY — attribution lag: 277 cycles)
+## CRAFT (ADVISORY — attribution lag: 456 cycles)
  gap   pays   zero  verdict
-   0      0      9  ZERO  <-- VIOLATION: model says pays, bucket never paid
-   1      1      2  mixed
-   2      0      8  ZERO  <-- VIOLATION: model says pays, bucket never paid
-   3      0     13  ZERO  <-- VIOLATION: model says pays, bucket never paid
-   4      4      2  mixed
-   5     10     13  mixed
-   6     10      9  mixed
-   7      0      4  ZERO  <-- VIOLATION: model says pays, bucket never paid
-   8     15      7  mixed
-   9      8     10  mixed
-  10     10     24  mixed
-  11      1     56  mixed  <-- outlier: 1/57 paying (attribution lag)
-  12      0     45  ZERO
+   0     10      0  PAYS
+   1      4      0  PAYS
+   2      9      0  PAYS
+   3     14      0  PAYS
+   4     13      0  PAYS
+   5     25      0  PAYS
+   6     18      0  PAYS
+   7      3      0  PAYS
+   8     22      0  PAYS
+   9     43      0  PAYS
+  10     59      0  PAYS
+  11      0    146  ZERO
+  12      0     74  ZERO
   14      0      5  ZERO
   20      0     11  ZERO
 
-OUT-OF-BAND OUTLIERS (attribution lag, see module docstring): gap=14: 1/87; gap=15: 5/105
+OUT-OF-BAND OUTLIERS (unexplained if any; see module docstring for why 'attribution lag' is no longer assumed): none
 VIOLATIONS: none — GREY_SKILL_GAP = 11 holds on every gather bucket
