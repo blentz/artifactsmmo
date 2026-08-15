@@ -507,12 +507,13 @@ The gate has not run since `ec613f0d`.
   **Settled to REFUTED, but only partly on the comparison that matters
   (amended 2026-08-15).** `formal/diff/craft_xp_replay.py` groups observations
   by `(skill_level, craft_level)` with **no skill component**, and ratios
-  across that grouping. Five of the eleven qualifying buckets therefore compare
-  rungs of *different* skills — skill_level 5 (`ash_plank`, woodcutting, vs
+  across that grouping. Five of the eleven qualifying buckets have **no
+  within-skill step at all** — skill_level 5 (`ash_plank`, woodcutting, vs
   gearcrafting/jewelrycrafting/weaponcrafting rungs), 7 (`ash_plank` vs
-  `small_health_potion`, alchemy), 8 and 9 (`copper_bar`, mining, vs that same
-  potion) and 11 (`copper_bar` vs `spruce_plank`, woodcutting) — and the first
-  four are **all four** buckets behind the headline "the ratio rises
+  `small_health_potion`, alchemy), 8 and 9 (mining/woodcutting rungs vs that
+  same potion; at 9 the craft_level-1 side pools `ash_plank` and `copper_bar`,
+  both at 5.00) and 11 (`copper_bar` vs `spruce_plank`, woodcutting) — and the
+  first four are **all four** buckets behind the headline "the ratio rises
   2.36×–4.37×". `XP_base` and `k` are unpublished — free parameters in neither
   the docs nor the API, per the replay module's own docstring — so whether they
   vary by skill is **not observable**, and nothing rules it out; that is all the
@@ -645,8 +646,10 @@ The gate has not run since `ec613f0d`.
     regardless of the grind" — holds for that one; for the other ten the credit
     prices *speculative* work at zero. Combined with the pivot totality
     established above, any one of the 11 that is in-level, obtainable and
-    xp-positive in the ground skill wins the grind unconditionally, at any
-    `acquire_steps`. Narrowing the credit to the committed target (rather than
+    xp-positive in the ground skill beats every *unwanted* rung, at any
+    `acquire_steps`. Not "wins unconditionally" — that cannot hold of two of
+    them at once: where several are wanted they still compete, on `craft_level`
+    and then on raw cost. Narrowing the credit to the committed target (rather than
     the whole near-term set) is the obvious follow-up and is **not** done here;
     it would need its own evidence, and no live run has yet shown the current
     breadth doing harm — or doing anything at all.

@@ -116,13 +116,19 @@ def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
 
     THAT MEASUREMENT IS PARTLY CROSS-SKILL; THIS COMPARISON NEVER IS. The
     replay groups by (skill_level, craft_level) with NO skill component, so a
-    bucket can pit rungs of different skills against each other, and five of
-    the eleven qualifying buckets do: skill_level 5 (ash_plank, woodcutting,
-    against gearcrafting/jewelrycrafting/weaponcrafting rungs), 7 (ash_plank
-    against small_health_potion, alchemy), 8 and 9 (copper_bar, mining,
-    against that same potion) and 11 (copper_bar against spruce_plank,
-    woodcutting). The first four are ALL FOUR buckets behind the RISES figure
-    above. XP_base and k are unpublished -- in neither the docs nor the API
+    bucket can pit rungs of different skills against each other. Five of the
+    eleven qualifying buckets have NO within-skill step at all — skill_level 5
+    (ash_plank, woodcutting, against gearcrafting/jewelrycrafting/
+    weaponcrafting rungs), 7 (ash_plank against small_health_potion, alchemy),
+    8 and 9 (mining/woodcutting rungs against that same potion) and 11
+    (copper_bar against spruce_plank, woodcutting) — and the first four are ALL
+    FOUR buckets behind the RISES figure above. That is the property this list
+    states; it is NOT the count of buckets containing a cross-skill comparison,
+    which is larger: 15's craft_level 1 -> 5 step is also cross-skill
+    (ash_plank, woodcutting, against life_amulet, jewelrycrafting) even though
+    its 5 -> 15 step is not. At skill_level 9 the craft_level-1 side pools TWO
+    items, ash_plank and copper_bar, both at 5.00, so the mean moves either
+    way; the bucket is cross-skill on both readings. XP_base and k are unpublished -- in neither the docs nor the API
     (`formal/diff/craft_xp_replay.py`'s own docstring) -- so whether they vary
     by skill is not observable from here; nothing rules it out, which is all
     the argument needs. A rise measured across skills MAY therefore be a
