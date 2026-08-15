@@ -152,6 +152,16 @@ class LearningStore:
                 conn.exec_driver_sql(
                     "ALTER TABLE cycles ADD COLUMN consumables_expended_json TEXT NOT NULL DEFAULT '{}'"
                 )
+            # Craft-xp numerator migration (2026-08-15): craft_yield gains the
+            # skill level its xp was measured at. NULLABLE with no DEFAULT --
+            # the rows already in the wild were measured at a level nobody
+            # recorded, and back-filling them with 0 or with today's level
+            # would hand a per-skill xp fit a fabricated observation. A
+            # consumer excludes NULL rather than defaulting it.
+            yield_cols = {row[1]
+                          for row in conn.exec_driver_sql("PRAGMA table_info(craft_yield)")}
+            if yield_cols and "skill_level" not in yield_cols:
+                conn.exec_driver_sql("ALTER TABLE craft_yield ADD COLUMN skill_level INTEGER")
 
         # PRAGMAs go on their OWN connection, after the lock is released:
         # SQLite refuses a journal_mode change inside a transaction.
@@ -819,8 +829,21 @@ class LearningStore:
         except SQLAlchemyError:
             return {}
 
-    def record_craft_yield(self, item_code: str, quantity: int, xp: int) -> None:
-        """Upsert observed (quantity, xp) for (character, item_code). Last write wins."""
+    def record_craft_yield(self, item_code: str, quantity: int, xp: int,
+                           skill_level: int | None = None) -> None:
+        """Upsert observed (quantity, xp, skill_level) for (character,
+        item_code). Last write wins, INCLUDING the level.
+
+        `skill_level` is the crafting skill's level at the moment `xp` was
+        paid. It defaults to None so every existing caller keeps working, and
+        None reads back as "unknown" rather than as a level — see
+        `CraftYieldObservation.skill_level`.
+
+        The whole row is overwritten together on purpose. Carrying a stale
+        level past a fresh xp would attribute the new figure to the level the
+        character had the FIRST time it crafted the item, which is worse than
+        having no level at all.
+        """
         try:
             with SqlSession(self._engine) as s:
                 stmt = select(CraftYieldObservation).where(
@@ -831,6 +854,7 @@ class LearningStore:
                 if existing is not None:
                     existing.quantity = quantity
                     existing.xp = xp
+                    existing.skill_level = skill_level
                     s.add(existing)
                 else:
                     s.add(CraftYieldObservation(
@@ -838,10 +862,38 @@ class LearningStore:
                         item_code=item_code,
                         quantity=quantity,
                         xp=xp,
+                        skill_level=skill_level,
                     ))
                 s.commit()
         except SQLAlchemyError as e:
             print(f"[learning] record_craft_yield failed: {e}")
+
+    def observed_craft_xp(self, item_code: str) -> tuple[int, int, int | None] | None:
+        """Observed (xp, quantity, skill_level) for (character, item_code), or
+        None when the item has never been crafted by this character.
+
+        XP FIRST, unlike `observed_craft_yield`'s (quantity, xp): that function
+        exists to ground-truth `CraftSchema.quantity` for the planner, and this
+        one exists to feed a per-skill XP fit. Ordering each tuple by what its
+        caller actually wants keeps a caller from silently reading the wrong
+        member of a same-shaped pair.
+
+        `skill_level` is None for a row recorded before the column existed or
+        by a caller that could not resolve the skill. A fit must EXCLUDE those
+        rows rather than substitute a level for them.
+        """
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = select(CraftYieldObservation).where(
+                    CraftYieldObservation.character == self._character,
+                    CraftYieldObservation.item_code == item_code,
+                )
+                row = s.exec(stmt).first()
+                if row is None:
+                    return None
+                return (row.xp, row.quantity, row.skill_level)
+        except SQLAlchemyError:
+            return None
 
     def observed_craft_yield(self, item_code: str) -> tuple[int, int] | None:
         """Observed (quantity, xp) for (character, item_code), or None."""

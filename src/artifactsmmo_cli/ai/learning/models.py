@@ -293,6 +293,22 @@ class CraftYieldObservation(SQLModel, table=True):
     item_code: str = Field(primary_key=True)
     quantity: int
     xp: int
+    skill_level: int | None = Field(default=None)
+    """The crafting skill's level when `xp` was observed, or None for a row
+    recorded before this column existed (2026-08-15) or by a caller that could
+    not resolve the skill.
+
+    XP FALLS AS THE SKILL RISES — the server's `level_penalty` term — so `xp`
+    alone is "N at some level" and goes stale silently as the character levels
+    past it. This column is what makes a row usable as an input to a per-skill
+    XP fit rather than merely as corroboration; without it the fit's own
+    `skill_level` term has nothing to regress against. See
+    `docs/superpowers/specs/2026-08-15-observed-craft-xp-numerator-design.md`.
+
+    NULLABLE ON PURPOSE. The rows already in the wild cannot acquire a level
+    retroactively, and inventing one — 0, or the character's level today —
+    would feed the fit a fabricated observation. A consumer must exclude
+    None rather than default it."""
 
 
 class LoadoutProfileObservation(SQLModel, table=True):

@@ -27,6 +27,16 @@ class CraftAction(Action):
     quantity: int = 1
     workshop_location: tuple[int, int] | None = field(default=None, repr=False)
     history: LearningStore | None = field(default=None, repr=False)
+    craft_skill: str | None = field(default=None, repr=False, compare=False)
+    """The skill this recipe trains, carried so `execute` can record the level
+    the xp was paid at. `execute` takes no `game_data` and so cannot resolve it
+    itself; `actions/factory` sets it where the recipe is already in hand.
+
+    `repr=False, compare=False` IS LOAD-BEARING, not tidiness. `Action.learning_key`
+    defaults to `repr(self)`, so a field appearing in the repr would orphan every
+    learned cost recorded against the old shape, and one in `compare` would split
+    an action's planner identity in two. Optional for the same reason: an action
+    built without it records no level rather than blocking."""
 
     def effective_quantity(self, state: WorldState, game_data: GameData) -> int:
         """Largest feasible batch to craft NOW: `min(requested, floor(inv / per))`
@@ -117,7 +127,13 @@ class CraftAction(Action):
         if self.history is not None:
             details = result.data.details
             produced = sum(d.quantity for d in details.items if d.code == self.code)
-            self.history.record_craft_yield(self.code, produced, details.xp)
+            # The PRE-craft level: that is the level the server's level_penalty
+            # applied at when it paid this xp. Reading it from the post-craft
+            # character would misattribute every craft that levels the skill.
+            skill_level = (None if self.craft_skill is None
+                           else state.skills.get(self.craft_skill))
+            self.history.record_craft_yield(self.code, produced, details.xp,
+                                            skill_level=skill_level)
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

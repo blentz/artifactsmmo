@@ -1112,6 +1112,69 @@ class TestExecute:
         assert store.observed_craft_yield("copper_dagger") == (1, 10)
         store.close()
 
+    def test_executing_a_craft_records_the_skill_level_it_was_paid_at(self, tmp_path):
+        """The xp a craft pays falls as the skill rises, so the observation is
+        only usable if it carries the level it was measured at. The level taken
+        is the PRE-craft one — that is the level the server's level_penalty
+        applied at when it paid this xp, not the level afterwards.
+
+        `craft_skill` is carried on the action because `execute` has no
+        `game_data` to resolve it from; the factory sets it where the recipe is
+        already in hand.
+        """
+        from artifactsmmo_api_client.models.drop_schema import DropSchema
+        from artifactsmmo_api_client.models.skill_info_schema import SkillInfoSchema
+
+        from artifactsmmo_cli.ai.actions.crafting import CraftAction
+        from artifactsmmo_cli.ai.learning.store import LearningStore
+
+        store = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
+        player = GamePlayer(character="hero", history=store)
+        player.state = make_state(x=3, y=0, skills={"weaponcrafting": 8})
+        player.game_data = make_game_data_mock()
+
+        action = CraftAction(code="copper_dagger", quantity=1,
+                             workshop_location=(3, 0), craft_skill="weaponcrafting")
+        result = MagicMock()
+        result.data = MagicMock()
+        result.data.character = make_char_schema()
+        result.data.details = SkillInfoSchema(
+            xp=53, items=[DropSchema(code="copper_dagger", quantity=1)])
+
+        with patch("artifactsmmo_cli.ai.actions.crafting.action_crafting", return_value=result):
+            player._execute(action, client=MagicMock())
+
+        assert store.observed_craft_xp("copper_dagger") == (53, 1, 8)
+        store.close()
+
+    def test_a_craft_with_no_resolved_skill_records_no_level(self, tmp_path):
+        """`craft_skill` is optional, so an action built without it must record
+        None rather than guessing a level — a fabricated level is an input a
+        later xp fit cannot tell apart from a measured one."""
+        from artifactsmmo_api_client.models.drop_schema import DropSchema
+        from artifactsmmo_api_client.models.skill_info_schema import SkillInfoSchema
+
+        from artifactsmmo_cli.ai.actions.crafting import CraftAction
+        from artifactsmmo_cli.ai.learning.store import LearningStore
+
+        store = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
+        player = GamePlayer(character="hero", history=store)
+        player.state = make_state(x=3, y=0, skills={"weaponcrafting": 8})
+        player.game_data = make_game_data_mock()
+
+        action = CraftAction(code="copper_dagger", quantity=1, workshop_location=(3, 0))
+        result = MagicMock()
+        result.data = MagicMock()
+        result.data.character = make_char_schema()
+        result.data.details = SkillInfoSchema(
+            xp=53, items=[DropSchema(code="copper_dagger", quantity=1)])
+
+        with patch("artifactsmmo_cli.ai.actions.crafting.action_crafting", return_value=result):
+            player._execute(action, client=MagicMock())
+
+        assert store.observed_craft_xp("copper_dagger") == (53, 1, None)
+        store.close()
+
 
 class TestNow:
     def test_returns_time_string(self):

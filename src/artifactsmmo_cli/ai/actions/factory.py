@@ -129,7 +129,8 @@ def build_actions(
         if stats is None:
             continue
         workshop_loc = game_data.workshop_location(stats.crafting_skill) if stats.crafting_skill else None
-        actions.append(CraftAction(code=item_code, quantity=1, workshop_location=workshop_loc))
+        actions.append(CraftAction(code=item_code, quantity=1, workshop_location=workshop_loc,
+                                   craft_skill=stats.crafting_skill))
         if stats.crafting_skill and stats.crafting_level:
             _level_skill_seen.add((stats.crafting_skill, stats.crafting_level))
         for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
@@ -388,7 +389,8 @@ def build_actions(
         workshop = (game_data.workshop_location(stats.crafting_skill)
                     if stats is not None and stats.crafting_skill else None)
         if workshop is not None and k > 1:
-            actions.append(CraftAction(code=task_code, quantity=k, workshop_location=workshop))
+            actions.append(CraftAction(code=task_code, quantity=k, workshop_location=workshop,
+                                       craft_skill=stats.crafting_skill if stats else None))
         actions.append(TaskTradeAction(code=task_code, quantity=k, taskmaster_location=taskmaster))
         if k > 1:
             actions.append(TaskTradeAction(code=task_code, quantity=1, taskmaster_location=taskmaster))

@@ -1075,6 +1075,91 @@ class TestCraftYield:
         assert store.observed_craft_yield("potion") == (3, 20)
         store.close()
 
+    def test_record_craft_yield_stores_the_skill_level_it_was_measured_at(
+            self, tmp_db_path):
+        """The XP a craft pays FALLS as the skill rises (the server's
+        level_penalty term), so a yield row without the level it was measured
+        at is "131 at some level" and goes stale silently. Recording the level
+        is what makes the row usable as a fit input -- see
+        docs/superpowers/specs/2026-08-15-observed-craft-xp-numerator-design.md.
+        """
+        store = LearningStore(db_path=tmp_db_path, character="Robby")
+        store.record_craft_yield("potion", quantity=2, xp=118, skill_level=7)
+        assert store.observed_craft_xp("potion") == (118, 2, 7)
+        store.close()
+
+    def test_a_yield_recorded_without_a_level_reads_back_as_unknown(
+            self, tmp_db_path):
+        """`skill_level` is optional, and the 62 rows already in the wild have
+        none. They must read back as None rather than as a level, so the fit
+        can exclude them instead of treating them as measured at level 0."""
+        store = LearningStore(db_path=tmp_db_path, character="Robby")
+        store.record_craft_yield("potion", quantity=1, xp=53)
+        assert store.observed_craft_xp("potion") == (53, 1, None)
+        store.close()
+
+    def test_relevelling_the_same_item_overwrites_the_level_too(
+            self, tmp_db_path):
+        """Last write wins on the whole row. A stale level surviving a rewrite
+        would be worse than no level: it would attribute a fresh XP figure to
+        the level the character had the FIRST time it crafted the item."""
+        store = LearningStore(db_path=tmp_db_path, character="Robby")
+        store.record_craft_yield("potion", quantity=1, xp=131, skill_level=5)
+        store.record_craft_yield("potion", quantity=1, xp=118, skill_level=9)
+        assert store.observed_craft_xp("potion") == (118, 1, 9)
+        store.close()
+
+    def test_observed_craft_xp_is_none_for_an_item_never_crafted(self, tmp_db_path):
+        """Distinct from "crafted, but at an unknown level": None means no
+        observation exists at all, and a fit must not confuse the two."""
+        store = LearningStore(db_path=tmp_db_path, character="Robby")
+        assert store.observed_craft_xp("never_made") is None
+        store.close()
+
+    def test_observed_craft_xp_degrades_to_none_on_db_error(self, tmp_db_path):
+        """Best-effort contract, same as every other query on this store: a
+        DB-layer fault reads as "no observation", never as an exception."""
+        store = LearningStore(db_path=tmp_db_path, character="Robby")
+        store.record_craft_yield("potion", quantity=1, xp=53, skill_level=5)
+        _break_engine(store)
+        assert store.observed_craft_xp("potion") is None
+        store.close()
+
+    def test_an_old_craft_yield_table_gains_the_level_column_on_open(self, tmp_path):
+        """A pre-2026-08-15 cache has craft_yield WITHOUT skill_level. Opening
+        the store must ALTER it in, preserving the rows already there — the
+        `consumables_expended_json` incident is what this mirrors: a column
+        that shipped in the model without a matching one-shot ALTER made every
+        write fail on pre-existing DBs, and learning went silently dead."""
+        import sqlite3
+        db_path = str(tmp_path / "old_yield.db")
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE craft_yield (
+                character TEXT NOT NULL, item_code TEXT NOT NULL,
+                quantity INTEGER NOT NULL, xp INTEGER NOT NULL,
+                PRIMARY KEY (character, item_code)
+            )
+        """)
+        conn.execute("INSERT INTO craft_yield VALUES ('Robby','life_ring',1,403)")
+        conn.commit()
+        conn.close()
+
+        store = LearningStore(db_path=db_path, character="Robby")
+        # Close this one explicitly: an unclosed sqlite3.Connection is GC'd
+        # later and its unraisable warning is attributed to whatever test is
+        # running THEN, not to this one. That misattribution has cost this
+        # project real debugging time.
+        check = sqlite3.connect(db_path)
+        try:
+            cols = {r[1] for r in check.execute("PRAGMA table_info(craft_yield)")}
+        finally:
+            check.close()
+        assert "skill_level" in cols
+        # The pre-existing row survives and reads back as level-unknown.
+        assert store.observed_craft_xp("life_ring") == (403, 1, None)
+        store.close()
+
     def test_craft_yield_is_per_character(self, tmp_db_path):
         a = LearningStore(db_path=tmp_db_path, character="alice")
         b = LearningStore(db_path=tmp_db_path, character="bob")
