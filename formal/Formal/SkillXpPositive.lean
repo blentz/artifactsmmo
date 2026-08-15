@@ -8,12 +8,22 @@ falls to ZERO once the content sits far enough below the character's SKILL level
 `Formal.XpPositive`, which models the same shape for COMBAT.
 
 The two bands are MEASURED SEPARATELY and come out EQUAL: both are
-`diff >= 11 => 0`. This one is corroborated by `formal/diff/gather_xp_replay.py`
-over 3231 live gather cycles — every bucket at gap ≤ 10 pays every time (gap 10:
-159 pays / 0 zero) and every bucket at gap ≥ 11 pays zero times (gap 11: 0 / 310),
-with no outlier anywhere; an independent 456-craft-cycle replay finds the same
-split. Combat's is corroborated by `formal/diff/xp_formula_replay.py` over the
-learning store's 10_883 ok-fights — diff 10: 372 pays / 0 zero, diff 11: 0 / 51.
+`diff >= 11 => 0`. This one WAS corroborated, on 2026-08-15, by
+`formal/diff/gather_xp_replay.py` over 3231 live gather cycles — every bucket at
+gap ≤ 10 paid every time (gap 10: 159 pays / 0 zero) and every bucket at gap ≥ 11
+paid zero times (gap 11: 0 / 310), with no outlier anywhere; an independent craft
+replay over 450 VALID craft cycles (456 raw, 6 skipped for an unresolvable level)
+split the same way.
+
+THAT GATHER/CRAFT EVIDENCE IS HISTORICAL, NOT RE-RUNNABLE. The
+`play-trace-*.jsonl` corpus both replays read was deleted the same day they were
+run. Both now read the learning store and both report ZERO usable observations
+today — `cycles.skill_levels_json` and `craft_yield.skill_level` landed with the
+deletion and have not yet accumulated rows. Re-running either re-derives
+nothing; what guards this constant in the meantime is the SKILL_XP_POSITIVE
+mutation group, not a live measurement. Combat's band, by contrast, IS
+re-derivable today: `formal/diff/xp_formula_replay.py` reads the learning
+store's 10_883 ok-fights — diff 10: 372 pays / 0 zero, diff 11: 0 / 51.
 
 Neither constant is derived from the other, and no shared mechanism is claimed:
 two independent replays over disjoint evidence landed on the same number. This

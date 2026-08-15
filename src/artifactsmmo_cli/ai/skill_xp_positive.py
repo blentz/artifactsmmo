@@ -17,7 +17,7 @@ skill grind could pick content that pays nothing and spin on it forever.
 THE BOUNDARY WAS OBSERVED, NOT ASSUMED — BUT ITS CORPUS IS GONE, SO IT IS NO
 LONGER RE-RUNNABLE ON DEMAND. The doc prose "10+ levels below" is loose about
 whether a gap of exactly 10 pays. It does not: this was measured on
-2026-08-14, replaying every `Gather` cycle across 155 committed
+2026-08-15, replaying every `Gather` cycle across 155 committed
 `play-trace-*.jsonl` files (`formal/diff/gather_xp_replay.py`, each action
 attributed against the pre/post state pair it actually produced), over 3231
 gathers with zero exceptions anywhere at the gap 10 vs. gap 11 boundary:
@@ -44,7 +44,8 @@ neighbouring cycle's real yield. Corrected, there was nothing left to
 explain: the boundary was exact.)
 
 THAT CORPUS — every `play-trace-*.jsonl` file — was deleted by the user on
-2026-08-15, the day after this measurement, and cannot be regenerated; the
+2026-08-15, later the same day as this measurement, and cannot be
+regenerated; the
 table above is the surviving record of a real, one-time observation, not a
 result this repository can reproduce by re-running a script today.
 `formal/diff/gather_xp_replay.py` now reads the learning store's
@@ -88,9 +89,15 @@ derived from the other.
 GREY_SKILL_GAP = 11
 """Skill levels above the content at which gather/craft xp reaches zero.
 
-`skill_level - content_level >= GREY_SKILL_GAP` pays NOTHING. Anchored by
-`formal/diff/gather_xp_replay.py` (3231 live gathers, no exception at the
-boundary) and pinned by the SKILL_XP_POSITIVE mutation group."""
+`skill_level - content_level >= GREY_SKILL_GAP` pays NOTHING. Anchored by a
+ONE-TIME, NO-LONGER-REPRODUCIBLE measurement: `formal/diff/gather_xp_replay.py`
+over 3231 live gathers on 2026-08-15, no exception at the boundary. That
+harness now reads the learning store and reports ZERO usable observations,
+because the `play-trace-*.jsonl` corpus behind the 3231 was deleted the same
+day and `cycles.skill_levels_json` has not yet accumulated a replacement — so
+re-running it today re-derives nothing. See the module docstring above for the
+full table and the corpus's fate. Pinned by the SKILL_XP_POSITIVE mutation
+group, which is what actually guards the constant today."""
 
 
 def skill_xp_positive(content_level: int, skill_level: int) -> bool:

@@ -196,7 +196,7 @@ def main() -> int:
             "skill_levels_json had not landed (or had not yet been written for a "
             "GatherAction row) when it was recorded. This is EXPECTED immediately "
             "after this migration and must NOT be read as confirming or refuting "
-            "GREY_SKILL_GAP -- there is nothing to test yet. The 2026-08-14 "
+            "GREY_SKILL_GAP -- there is nothing to test yet. The 2026-08-15 "
             "trace-based finding (3231 gathers, no exception at the gap 10/11 "
             "boundary) remains the historical evidence; see skill_xp_positive.py's "
             "docstring. Re-run once GatherAction cycles have been recorded since "

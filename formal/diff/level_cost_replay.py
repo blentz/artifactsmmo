@@ -33,11 +33,19 @@ Comparing the new projection against the old fight-only observable would report 
 clean ~2x error that is not an error at all — the mirror of the mistake above, and
 the reason this doctrine is written down rather than assumed.
 
-WHAT THIS SCRIPT CHECKS. For every character in the corpus that gained at least
-one character level, it reports observed fight-cycles per level. The projection
-is sound in unit if a pure-fighting projection lands within a small factor of
-that. What would falsify it: a projected cycles-per-level an order of magnitude
-away from the observed fight-cycles-per-level.
+WHAT THIS SCRIPT CHECKS — AND WHAT IT LEAVES TO THE READER. For every character
+in the corpus that gained at least one character level, it reports observed
+combat-loop (fight+rest), fight-only and total cycles per level. It prints an
+acceptance band of `[0.1x, 10x]` around the combat-loop figure, and THAT BAND IS
+NEVER EVALUATED AGAINST ANYTHING: this script CALLS NO PROJECTION. It does not
+import `cheapest_path_to_level`, does not compute a projected cycles-per-level,
+and has no second number to compare. The comparison is a human one — run the
+projection yourself, then check it against the printed band. Consequently
+`main()` returns 0 whenever the corpus could be read and the characters gained
+at least one level; the exit code says "the observable was measured", never "the
+projection agreed". What would falsify the unit — a projected cycles-per-level
+an order of magnitude away from the observed combat-loop figure — is a check
+nothing here performs.
 
 HONEST LIMITS, because this is corroboration and not proof:
   * The bot interleaves; observed fight-cycles per level still includes fights
@@ -92,8 +100,17 @@ def _observed(records: list[CycleRecord]) -> dict[str, dict[str, int]]:
     as "first/last chronologically" and would silently understate a level
     span whenever a later session's low cycle_index rows sort ahead of an
     earlier session's high ones. `min`/`max` sidesteps the ordering question
-    entirely: the server never lowers a character's level (see
-    `learning.xp_gain.xp_gained`'s docstring), so whatever order the rows
+    entirely — AS LONG AS the level never falls, which is an OBSERVATION about
+    this corpus and not a law of the server. `learning.xp_gain.xp_gained`'s
+    docstring says "a level going down is not a thing the server does", but
+    `monster_catalog.xp_per_kill`'s own note names a case where it appears to:
+    a character NAME re-created, with the store still recording under it. That
+    would not understate the span, it would OVERSTATE it, reporting two lives
+    as one character's gain. The hazard is real and, today, unrealized:
+    `formal/diff/trace_characterize.py` counts level regressions per character
+    over rows ordered by `ts` and finds ZERO across all 49,263 rows (2026-08-15,
+    5 characters). Re-check that line before trusting these figures — it is the
+    only thing standing under this method. Given it, whatever order the rows
     arrive in, the lowest level seen IS the level held at the start of this
     corpus and the highest IS the level held at the end. That is the same
     shape of fix `xp_formula_replay.py` makes for `delta_xp`: read a value
@@ -173,6 +190,9 @@ def main() -> int:
         "A projection denominated in ACTIONS should land near the combat-loop",
         f"figure; the acceptance band is [{LOW:g}x, {HIGH:g}x] of {loop_per_level:.0f}, i.e. "
         f"[{loop_per_level * LOW:.0f}, {loop_per_level * HIGH:.0f}].",
+        "THE BAND IS PRINTED, NOT EVALUATED: this script computes no projection and",
+        "compares nothing to it. Exit 0 means the observable was measured, not that",
+        "any projection agreed with it — run cheapest_path_to_level yourself and check.",
         "",
         "Pre-fix reference: the projection reported 7698 cycles/level for R2D2,",
         f"which is {7698 / fight_per_level:.0f}x the observed fight-cycles figure — the",

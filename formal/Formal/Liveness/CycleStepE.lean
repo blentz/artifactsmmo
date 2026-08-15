@@ -26,7 +26,7 @@ with the combat-outcome gaps closed:
    latches as in the D-tower.
 4. **Fight hp-loss** (`fightLoss`): every fight dispatch costs
    `FIGHT_LOSS_BOUND` hp, FLOORED AT 1 — production never dies and never
-   restores (`ai/actions/combat.py:120-122`). Raises only `hpDeficit` —
+   restores (`ai/actions/combat.py:130-131`, FightAction.apply). Raises only `hpDeficit` —
    dominated by the fight's slot-1/3 descent; the rest row heals as before.
    (Until 2026-07-20 the below-bound case respawned at FULL hp, which made a
    death descend the measure MORE than a survived fight.)
@@ -100,13 +100,13 @@ def GEAR_CAP : Nat := 11
 
     NO FIGHT LOSES THE WHOLE POOL. The largest loss as a fraction of `maxHp` is
     541/545 = 0.9927, and `loss ≥ maxHp` happens ZERO times in 10_883 fights.
-    Production's `max(1, hp - cost)` floor (`ai/actions/combat.py:120-122`),
+    Production's `max(1, hp - cost)` floor (`ai/actions/combat.py:130-131`, FightAction.apply),
     which `fightLoss` mirrors, is therefore not merely a modelling convenience —
     it is what the corpus shows.
 
     FAITHFULNESS NOTE (restated 2026-08-15). This is a corpus-measured worst
     case, NOT the production planner's projection, which is `max(1, max_hp / 5)`
-    (`ai/actions/combat.py:121`). At 541 the model's loss is the larger of the
+    (`ai/actions/combat.py:130`). At 541 the model's loss is the larger of the
     two for any `maxHp < 2705` (at 270 the crossover was 1350), so the model
     remains PESSIMISTIC relative to the bot's own projection — the safe
     direction for a descent argument, and now safe by a wider margin. The same
@@ -201,7 +201,7 @@ def gearProgress (k : MeansKind) (st : State) : State :=
     every monster still reached 50.
 
     Production never dies and never restores: `FightAction.apply` computes
-    `new_hp = max(1, hp - estimated_hp_cost)` (`ai/actions/combat.py:120-122`).
+    `new_hp = max(1, hp - estimated_hp_cost)` (`ai/actions/combat.py:130-131`, FightAction.apply).
     The floor is now 1, mirroring that. Descent is unaffected — a fight descends
     slot 1 (`levelDeficit`) or slot 4 (`xpDeficit`), both of which lex-dominate
     slot 18 — so the correction costs only the flattering case. -/

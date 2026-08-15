@@ -745,7 +745,7 @@ open Formal.Liveness.WitnessAcquirable
 -- (the gap-1 combat-outcome fix the trace phases measured); inadequate states
 -- take gear-progress cycles (finite discharge grounded offline by the EMPTY
 -- acquirable frontier, WitnessAcquirable); fights cost FIGHT_LOSS_BOUND hp,
--- FLOORED AT 1 (production never dies — ai/actions/combat.py:120-122);
+-- FLOORED AT 1 (production never dies — ai/actions/combat.py:130-131, FightAction.apply);
 -- rollovers adversarially reset gear + every chore latch/debt.
 -- ai_reaches_fifty_geared is HYPOTHESIS-FREE: axioms must be std +
 -- xpToNextLevel (LIV-001) ONLY.
@@ -767,9 +767,19 @@ open Formal.Liveness.WitnessAcquirable
 -- mentions hp. A larger loss therefore pushes more states into the floor-at-1
 -- branch without touching the descent: flooring RAISES slot 18, and a raise at
 -- a dominated slot cannot defeat a strict decrease at a dominating one. The
--- constant is proof-inert by construction; what pins it to reality is the
--- differential (formal/diff/test_cycle_step_e_diff.py), which fails on BOTH hp
--- branches if the Lean value and the Python value drift apart.
+-- constant is proof-inert by construction.
+--
+-- AND NOTHING IN THIS REPOSITORY PINS IT TO REALITY. The differential
+-- (formal/diff/test_cycle_step_e_diff.py) fails on BOTH hp branches if the
+-- Lean value and the Python value drift apart — but that file RESTATES
+-- `FIGHT_LOSS_BOUND = 541` as a Python literal, so what it pins is Lean↔Python
+-- agreement, and it would pass exactly as green with 270 in both, or with
+-- 1,000,000. The only tie to the corpus is the measurement written down in the
+-- constant's docstring, plus formal/diff/trace_characterize.py, which
+-- re-derives the observed maximum from the learning store (541 as of
+-- 2026-08-15) but exits 0 either way and is compared to the Lean value by
+-- nothing but a reader. The kernel cannot keep a modelling constant honest;
+-- this constant is the example, not the exception.
 open Formal.Liveness.GearedDescent
 #print axioms cycleStepE_descends_below_fifty
 #print axioms ai_reaches_fifty_geared

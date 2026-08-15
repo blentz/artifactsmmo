@@ -256,7 +256,7 @@ band, and gate the model's xp credit on it.
      `fightLoss` layer: fight cycles drop hp by `FIGHT_LOSS_BOUND := 541`
      (learning-store maximum over 10,883 ok-fights; was 270 from the
      single-character B1 trace, which 19.8% of fights exceeded), FLOORED AT 1
-     — production never dies and never restores (`ai/actions/combat.py:120-122`;
+     — production never dies and never restores (`ai/actions/combat.py:130-131`, FightAction.apply;
      the "death→respawn `hp := maxHp`" this line used to describe was corrected
      2026-07-20, because respawning priced dying better than winning). Raises
      only hpDeficit (bottom slots), dominated.

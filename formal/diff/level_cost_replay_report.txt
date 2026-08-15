@@ -15,6 +15,9 @@ OBSERVED rests per fight                          : 0.86   (the term `cycles_per
 
 A projection denominated in ACTIONS should land near the combat-loop
 figure; the acceptance band is [0.1x, 10x] of 396, i.e. [40, 3959].
+THE BAND IS PRINTED, NOT EVALUATED: this script computes no projection and
+compares nothing to it. Exit 0 means the observable was measured, not that
+any projection agreed with it — run cheapest_path_to_level yourself and check.
 
 Pre-fix reference: the projection reported 7698 cycles/level for R2D2,
 which is 36x the observed fight-cycles figure — the

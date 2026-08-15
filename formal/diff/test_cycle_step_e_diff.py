@@ -13,7 +13,7 @@ pins the behavior the capstone's descent rows prove:
   xp advances, and the gear fields are untouched (non-rollover);
 * a rollover fight resets gearGap := GEAR_CAP and drops adequacy;
 * a fight costs FIGHT_LOSS_BOUND hp; at or below the bound it FLOORS AT 1
-  (production never dies -- `ai/actions/combat.py:120-122`);
+  (production never dies -- `ai/actions/combat.py:130-131`, FightAction.apply);
 * adequate gear with a NEGATIVE arming observation does NOT select a fight
   (the case the pre-2026-07-20 definitional grant made unrepresentable).
 """
@@ -141,7 +141,7 @@ def test_fight_below_bound_floors_at_one_hp() -> None:
     and a bot that died every fight still reached 50.
 
     Production never dies and never restores: `FightAction.apply` computes
-    `new_hp = max(1, hp - estimated_hp_cost)` (`ai/actions/combat.py:120-122`).
+    `new_hp = max(1, hp - estimated_hp_cost)` (`ai/actions/combat.py:130-131`, FightAction.apply).
     This test now pins that floor.
 
     The store agrees that the floor, not death, is the real behaviour: across

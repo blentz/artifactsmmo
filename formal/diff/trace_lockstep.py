@@ -31,11 +31,14 @@ this is a genuine capability loss, not a scope trim for convenience:
   * The production ladder's SELECTION also reads `bank_accessible`,
     `task_code`/`task_progress`/`task_total`, `gold`, `inventory_used`,
     `inventory_max` and a gear-adequacy flag. All but the gear flag ARE real
-    `cycles` columns, but `CycleRecord` (`store_records.py`) does not expose
-    any of them — only `character, cycle_index, action_repr, action_class,
-    outcome, level, xp, hp, delta_xp, delta_hp, delta_skill_xp,
-    skill_levels`. Zeroing them (the old script's own convention for the
-    handful of opaque chore Bools the trace never recorded) is not an option
+    `cycles` columns, and `CycleRecord` (`store_records.py`) now exposes two
+    of them (`inventory_used`, `inventory_max`) but not `bank_accessible`,
+    the task fields or `gold`. That remaining gap is a FIELD-LIST gap — it
+    could be closed the way `max_hp` was — but closing it would not bring the
+    decision differential back, because `xpNext` above is missing from the
+    STORE, not from the field list. Zeroing them (the old script's own
+    convention for the handful of opaque chore Bools the trace never
+    recorded) is not an option
     here: those specific fields drive the FIGHT/REST branch of the ladder
     itself, not a side branch this tool already excluded as
     `flag-unobserved`, so quieting them would bias the ladder toward
@@ -50,24 +53,40 @@ this finding: whatever the design intended to survive migration was never the
 oracle-backed decision comparison, only the FIGHT/REST invariant checks below,
 which need nothing else.
 
-WHAT SURVIVES, and why it is now sound. The Lean model's fight/rest arms make
-two STATED, checkable claims independent of the ladder that selects them: a
-fight pays flat `+10` xp and leaves hp untouched; a rest fully heals
-(`hp := max_hp`). The first claim is checkable from `delta_xp` alone. The
-second is NOT fully checkable — `max_hp` is not exposed by `CycleRecord`
-either — so the REST section below reports only whether hp moved
-(`delta_hp`), not whether it moved to `max_hp`; see `trace_characterize.py`'s
-module docstring for the identical gap. Both are single-row reads of
-`Cycle.delta_xp` / `Cycle.delta_hp` — the row's OWN attributed deltas, never a
-difference against a neighboring row (see `store_records.py`'s module
-docstring for why that distinction matters).
+WHAT SURVIVES, and why it is sound. The Lean model's fight/rest arms make two
+STATED, checkable claims independent of the ladder that selects them: a fight
+pays flat `+10` xp and leaves hp untouched; a rest fully heals
+(`hp := max_hp`). Both are checkable from a SINGLE ROW. The fight claim reads
+`delta_xp` / `delta_hp` — the row's OWN attributed deltas, never a difference
+against a neighboring row (see `store_records.py`'s module docstring for why
+that distinction matters). The rest claim reads `hp == max_hp` on the Rest row
+itself, which works because `record_cycle` stores POST-ACTION scalars: the row
+written for a Rest already holds the hp the rest produced.
 
-This file therefore now computes materially the same class of FIGHT/REST
+THE REST FULL-HEAL VERDICT WAS BRIEFLY DELETED HERE (2026-08-15, restored the
+same day by the branch's final review). It was dropped at migration with the
+reason "`max_hp` is not exposed by `CycleRecord`" — true as written, and the
+wrong conclusion: `cycles.max_hp` is populated on every row, and `CycleRecord`
+is a dataclass this branch wrote. The check now runs and passes on the whole
+corpus, and `docs/LEVEL_FIFTY_RESIDUALS.md` cites it as a live
+model-faithfulness row, which for one commit it was not.
+
+This file therefore computes materially the same class of FIGHT/REST
 observations as `trace_characterize.py`, reported as an explicit
 agree/diverge verdict against each model claim rather than as a raw
 distribution — the two files are NOT identical output, but they now draw on
 the same corpus and the same fields, which they did not before. That
 convergence is itself a finding to report, not a discrepancy to paper over.
+
+THE EXIT CODE CARRIES NO VERDICT. `main()` returns 0 whenever it could read
+the corpus, INCLUDING when every fight diverges from the model — which is what
+the report says today: FIGHT xp agrees on 2918 of 10883 and FIGHT hp agrees on
+0 of 10883. That is not a regression to fail the build on: the model's flat
+`+10` and untouched-hp are DELIBERATE ABSTRACTIONS — production's own planner
+projection writes `xp=state.xp + 10` in `FightAction.apply`, and the hp the
+model declines to charge is carried instead by the E-tower's
+`FIGHT_LOSS_BOUND` (see `docs/LEVEL_FIFTY_RESIDUALS.md`'s divergence table).
+Exiting 1 would therefore mean permanently red. Read the numbers, not `$?`.
 
 Output: formal/diff/trace_lockstep_report.txt + stdout.
 Usage: uv run python formal/diff/trace_lockstep.py [db_path]
@@ -84,8 +103,11 @@ REPORT = REPO_ROOT / "formal" / "diff" / "trace_lockstep_report.txt"
 DEFAULT_DB = Path.home() / ".cache" / "artifactsmmo" / "learning.db"
 
 MODEL_FIGHT_XP = 10  # Lean applyActionKind .fight projection — restated, not
-# imported: this is a corroboration harness, and a harness that reads the
-# constant under test cannot falsify it (matches xp_formula_replay.py).
+# imported, because neither side names it: the Lean model and production
+# (`FightAction.apply`, `xp=state.xp + 10`) both write the 10 as a literal.
+# It is NOT restated on the theory that a harness reading the constant under
+# test cannot falsify it — that claim is false, and `xp_formula_replay.py`'s
+# comment making it was corrected along with this one.
 
 
 def _is_fight(rec: CycleRecord) -> bool:
@@ -111,8 +133,11 @@ def main() -> int:
     fight_hp_agree = 0    # model claims hp untouched: delta_hp == 0
     fight_hp_diverge = 0
     rest_total = 0
-    rest_healed = 0       # delta_hp > 0 (model claims full heal; this only checks "moved up")
+    rest_healed = 0       # delta_hp > 0: hp moved up at all
     rest_hp: Counter[int] = Counter()
+    rest_full_agree = 0   # model claims hp := max_hp: post-action hp == max_hp
+    rest_full_diverge = 0
+    rest_full_unjudged = 0  # hp or max_hp absent on the row
 
     for rec in records:
         if _is_fight(rec):
@@ -134,11 +159,21 @@ def main() -> int:
                 rest_hp[rec.delta_hp] += 1
                 if rec.delta_hp > 0:
                     rest_healed += 1
+            if rec.hp is None or rec.max_hp is None:
+                rest_full_unjudged += 1
+            elif rec.hp == rec.max_hp:
+                rest_full_agree += 1
+            else:
+                rest_full_diverge += 1
 
     out = []
     out.append(f"db={db_path}  rows={len(records)}")
+    out.append(f"corpus spans {min(r.ts for r in records)} .. {max(r.ts for r in records)}")
     out.append("(oracle-backed decision differential REMOVED this migration — see module")
     out.append(" docstring; this now checks the model's FIGHT/REST invariants directly)")
+    out.append("EXIT CODE CARRIES NO VERDICT: main() returns 0 whenever the corpus could be")
+    out.append("read, divergence or not — the model's flat +10 xp and untouched hp are")
+    out.append("deliberate abstractions, so a diverging count here is expected, not a failure.")
     out.append("")
     out.append(f"== FIGHT xp lockstep (model claim: xp += {MODEL_FIGHT_XP} flat) ==")
     fight_xp_checked = fight_xp_agree + fight_xp_diverge
@@ -151,11 +186,11 @@ def main() -> int:
     out.append(f"checked={fight_hp_checked}  agree={fight_hp_agree}  diverge={fight_hp_diverge}")
     out.append("")
     out.append("== REST hp lockstep (model claim: hp := max_hp) ==")
+    rest_full_checked = rest_full_agree + rest_full_diverge
     out.append(f"rests={rest_total}  hp-increased={rest_healed}")
     out.append(f"hp-delta distribution (top 10): {rest_hp.most_common(10)}")
-    out.append("  FULL-heal verdict UNAVAILABLE — max_hp is not exposed by CycleRecord, so")
-    out.append("  'hp increased' cannot be distinguished from 'hp reached max_hp' (see")
-    out.append("  module docstring).")
+    out.append(f"FULL-heal verdict: checked={rest_full_checked}  agree(hp==max_hp)={rest_full_agree}  "
+               f"diverge={rest_full_diverge}  unjudged(hp or max_hp NULL)={rest_full_unjudged}")
     out.append("")
     out.append("Decision-layer lockstep (production ladder selection vs the Lean model,")
     out.append("previously '709/762 agreement (93%)' per docs/LEVEL_FIFTY_RESIDUALS.md) is")

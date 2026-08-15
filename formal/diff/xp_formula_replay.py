@@ -61,9 +61,16 @@ from store_records import EmptyCorpusError, load_cycles
 
 DEFAULT_DB = Path.home() / ".cache" / "artifactsmmo" / "learning.db"
 
-# Restated here, NOT imported from `monster_catalog`: this script's job is to
-# corroborate production against live data, and a harness that reads the
-# constant under test cannot falsify it.
+# Restated here, NOT imported from `monster_catalog`: this replay measures the
+# boundary the DOCS state against live data, and keeping the literal here is
+# what makes the value under test the doc's rather than whatever production
+# currently holds. That is all it buys. It is NOT the general rule this comment
+# used to state — "a harness that reads the constant under test cannot falsify
+# it" — which is false: the sibling `gather_xp_replay.py` DOES import
+# `GREY_SKILL_GAP` and is still a sound model-vs-data differential, because what
+# decides its verdict is each observation's measured pays/zero outcome, not the
+# constant. Restating also does NOT catch production drifting away from this
+# literal — only the differential and the mutation group do that.
 ZERO_BAND_DIFF = 11
 """char_level - monster_level at which level_penalty reaches 0."""
 PENALTY_DIFF = 5

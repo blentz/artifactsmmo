@@ -11,7 +11,10 @@ half-integer ties): the documented formula
 
     XP = round((ml/cl * 20 + hp * 0.04) * penalty * multiplier * wisdom_bonus)
 
-is evaluated as one rational `num/den` with round-half-even (Python `round`):
+is evaluated as one rational `num/den` with round-half-UP — a tie goes to the
+larger award, matching `monster_catalog.xp_per_kill`. NOT Python's built-in
+`round`, which is half-to-EVEN; that was the pre-2026-08-10 behaviour and it
+was removed on purpose (see `roundHalfUp` below):
 
     num = (2000*ml + 4*hp*cl) * penalty10 * mult10 * (1000 + wisdom)
     den = cl * 10000000
@@ -40,7 +43,7 @@ open Formal.XpPositive
     value. On `Nat` that is the same as half-away-from-zero, which is what the
     published award formula's `Round` is taken to mean.
 
-    This was `roundHalfUp` — Python's built-in `round` — and that was a
+    This was HALF-TO-EVEN — Python's built-in `round` — and that was a
     TOOLCHAIN artifact standing in for a game rule nobody had read. Half-to-even
     makes an award depend on the PARITY of the quotient, so two monsters whose
     exact awards differ by nothing but which side of a half they land on are

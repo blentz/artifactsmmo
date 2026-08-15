@@ -1,13 +1,26 @@
-"""One reader for every verification harness: the learning store, not traces.
+"""One reader for the harnesses that replay `cycles` rows: the learning store,
+not traces.
 
-Each of the six verification harnesses (`craft_xp_replay`, `gather_xp_replay`,
-`level_cost_replay`, `kill_rate_audit`, `server_axiom_replay`, and the fit that
-follows) used to hand-roll its own loader over `play-trace-*.jsonl` files,
+FIVE harnesses import this module — `gather_xp_replay`, `level_cost_replay`,
+`trace_characterize`, `trace_lockstep`, `xp_formula_replay` — and each of the
+five used to hand-roll its own loader over `play-trace-*.jsonl` files,
 producing dicts shaped `{"cycle": n, "state": {...}, "action": ...}` and then
 recovering per-cycle deltas by DIFFERENCING CONSECUTIVE STATE SNAPSHOTS. Those
 files are a debugging artifact the user deletes; they were never the durable
 record. The learning store (`artifactsmmo_cli.ai.learning.store.LearningStore`)
-is, and every harness reads it through this module from now on.
+is.
+
+It is NOT the reader for every harness in `formal/diff`, and three that sit
+next to it deliberately do not import it:
+
+  * `craft_xp_replay` reads the store's `craft_yield` table directly. That
+    table, not `cycles`, is where a craft's xp and quantity are recorded, so
+    this module has nothing it needs.
+  * `kill_rate_audit` never read a trace at all — it statically parses
+    `formal/diff/mutate.py` to enumerate mutation `run_group` calls.
+  * `server_axiom_replay` still reads `REPO_ROOT / "traces.jsonl"` — a
+    different file from the deleted `play-trace-*.jsonl` corpus, and a
+    migration nobody has done.
 
 THE DIFFERENCE IS THE POINT, NOT AN IMPLEMENTATION DETAIL. Differencing
 consecutive snapshots is exactly what produced the off-by-one that made a craft
@@ -63,21 +76,41 @@ class EmptyCorpusError(RuntimeError):
 class CycleRecord:
     """One `cycles` row, decoded into the shape a verification harness reads.
 
-    `delta_xp` / `delta_hp` / `delta_skill_xp` are the row's OWN deltas, as
-    recorded by the same `record_cycle` call that wrote `action_repr` — never
-    a difference a caller computed against a neighboring row. See the module
-    docstring for why that distinction is load-bearing."""
+    `delta_xp` / `delta_hp` / `delta_inv_used` / `delta_skill_xp` are the row's
+    OWN deltas, as recorded by the same `record_cycle` call that wrote
+    `action_repr` — never a difference a caller computed against a neighboring
+    row. See the module docstring for why that distinction is load-bearing.
+
+    THE SCALARS ARE POST-ACTION. `hp`, `max_hp`, `xp`, `level`,
+    `inventory_used` and `inventory_max` are copied from `new_state` — the
+    state AFTER this row's action ran (`player.py`'s `_make_cycle_record`) —
+    while `skill_levels` is copied from `prev_state` and is PRE-action. A check
+    of the form "REST leaves hp at max_hp" therefore reads `hp == max_hp` on
+    the Rest row itself and needs no neighbor.
+
+    WHAT THIS RECORD STILL CANNOT ANSWER: `session_id`. `cycles` carries it;
+    this record does not, so a consumer can order rows by `ts` but cannot tell
+    whether two chronologically adjacent rows belong to the same run. Any
+    measurement of "what happened NEXT within one session" — chore-run lengths,
+    bursts between fights — is therefore still out of reach, not because the
+    store lacks the data but because this field list does. Add `session_id`
+    here if such a measurement is ever wanted."""
 
     character: str
     cycle_index: int
+    ts: str
     action_repr: str | None
     action_class: str | None
     outcome: str | None
     level: int | None
     xp: int | None
     hp: int | None
+    max_hp: int | None
+    inventory_used: int | None
+    inventory_max: int | None
     delta_xp: int | None
     delta_hp: int | None
+    delta_inv_used: int | None
     delta_skill_xp: dict[str, int]
     skill_levels: dict[str, int] | None
 
@@ -119,14 +152,19 @@ def _to_record(row: Cycle) -> CycleRecord:
     return CycleRecord(
         character=row.character,
         cycle_index=row.cycle_index,
+        ts=row.ts,
         action_repr=row.action_repr,
         action_class=row.action_class,
         outcome=row.outcome,
         level=row.level,
         xp=row.xp,
         hp=row.hp,
+        max_hp=row.max_hp,
+        inventory_used=row.inventory_used,
+        inventory_max=row.inventory_max,
         delta_xp=row.delta_xp,
         delta_hp=row.delta_hp,
+        delta_inv_used=row.delta_inv_used,
         delta_skill_xp=_parse_skill_xp(row.delta_skill_xp_json),
         skill_levels=_parse_skill_levels(row.skill_levels_json),
     )

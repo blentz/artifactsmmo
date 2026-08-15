@@ -121,9 +121,9 @@ tools now align `prev.state → cur.action → cur.state`; corrected findings
 | Model abstraction | Measured reality (corrected) | Consequence |
 |---|---|---|
 | fight: `xp += 10` flat | real per-fight xp 3-29 (mode 19-23), 6 rollovers; +10 within range, never exact | projection direction sound in-band; Phase-C gate (adequate + xp-positive target) still the principled fix for OUT-of-band fights the trace does not exercise |
-| fight: hp untouched | every fight LOSES hp (-24…-270); max loss 270 | E-tower bounded hp-loss constant ≥ 270 |
+| fight: hp untouched | every fight LOSES hp (-24…-270); max loss 270 — **SUPERSEDED, see the 541 entry below** | E-tower bounded hp-loss constant ≥ 270 → now 541 |
 | fight loot ≤ `DROP_BOUND = 8` | max fight inventory delta 3 | safe |
-| rest: `hp := max_hp` | **EXACT — 0/357 violations; lockstep post-hp 322/322** | Rest apply is faithful; no partial-heal debt needed |
+| rest: `hp := max_hp` | **EXACT — 0/357 violations; lockstep post-hp 322/322** (2026-07-04 trace; re-derived 2026-08-15, see below) | Rest apply is faithful; no partial-heal debt needed |
 | chores fast-transient | max same-chore run 1; chore bursts short | CONFIRMED; `DEBT_CAP = 8` generous |
 | non-fight bursts | up to 689 cycles (gather/grind phases) | the gap-2 economy the E-tower models as gear means |
 
@@ -149,11 +149,26 @@ than silently folded into the numbers above:
 * **The decision-layer figure (709/762, 93% above) cannot be re-derived from
   the store.** The oracle-backed `cycle_step_d` differential needs `xpNext`
   (the trace's `max_xp`) plus `bank_accessible`, task fields, gold and
-  inventory — `max_xp` is not a `cycles` column at all, and the rest are not
-  exposed by the learning store's `CycleRecord` reader
-  (`formal/diff/store_records.py`). `trace_lockstep.py` no longer calls the
+  inventory. `max_xp` is not a `cycles` column at all — that is the part that
+  cannot be fixed. The others ARE columns; `bank_accessible`, the task fields
+  and `gold` are simply not on the `CycleRecord` reader
+  (`formal/diff/store_records.py`), which is a field list, not a limit of the
+  store. Adding them back would still not restore the figure, because
+  `xpNext` would still be missing. `trace_lockstep.py` no longer calls the
   oracle; see its module docstring for the full accounting of what was lost
   and why it could not be faked with defaults.
+* **The REST full-heal row above WAS re-derived, after briefly being deleted.**
+  For one commit both harnesses printed "UNAVAILABLE" for it and this table
+  still carried "EXACT — 0/357 violations" as a live result, because
+  `CycleRecord` did not expose `max_hp` — a column the store has populated on
+  every row. The field was added and the verdict restored: over the whole
+  corpus, **9308 of 9308 ok-`Rest` rows have `hp == max_hp`, 0 violations, 0
+  unjudged** (`trace_lockstep_report.txt`, `trace_characterize_report.txt`,
+  2026-08-15). The `DROP_BOUND` census came back the same way: **0 of 10,883
+  ok-fights have an inventory delta above 8**, max delta 3, and no fight began
+  with fewer than 11 free slots, so no violation was hidden by a full bag.
+  LEVEL monotonicity was restored too — **0 regressions over 49,263 rows**
+  ordered by `ts` per character.
 * **Max fight hp LOSS is 541 in the full corpus, not 270. RESOLVED
   2026-08-15 — `FIGHT_LOSS_BOUND := 541`.** `FIGHT_LOSS_BOUND := 270`
   (`formal/Formal/Liveness/CycleStepE.lean`) was set FROM this section's
@@ -231,7 +246,10 @@ remains valuable, but is NOT progression-critical.
 
 **E-tower LANDED:** `ai_reaches_fifty_geared` (GearedDescent.lean) — fight xp
 credited only behind adequate gear, gear progress grounded by the empty
-acquirable frontier, fight hp-loss (270, B1-measured) with death→respawn,
+acquirable frontier, fight hp-loss (541, learning-store-measured 2026-08-15 —
+see the RESOLVED entry above; it was 270 from the B1 trace until then) FLOORED
+AT 1, production never dying and never restoring (the 2026-07-20 correction of
+this line's earlier `death→respawn`),
 rollovers adversarially re-arming gear + every chore latch/debt. Axioms:
 std + xpToNextLevel (LIV-001). The combat-outcome gap family (gap 1) is now
 CLOSED in-model; the residual is the opaque-Bool faithfulness of

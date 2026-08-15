@@ -1,8 +1,9 @@
 """Tests for `formal.diff.store_records.load_cycles` — the shared reader the
-six verification harnesses are being migrated onto, replacing the hand-rolled
-loaders over `play-trace-*.jsonl` files that each differenced consecutive
-state snapshots to recover deltas. As of this module, no harness has been
-migrated yet (Tasks 3-6); this file tests the reader in isolation.
+five `cycles`-replaying harnesses (`gather_xp_replay`, `level_cost_replay`,
+`trace_characterize`, `trace_lockstep`, `xp_formula_replay`) were migrated
+onto, replacing the hand-rolled loaders over `play-trace-*.jsonl` files that
+each differenced consecutive state snapshots to recover deltas. This file
+tests the reader in isolation.
 
 `tmp_db_path` is defined locally (not a shared conftest fixture), matching the
 four `tests/test_ai/*` files that already define it this way.
@@ -39,7 +40,8 @@ def _seed(db_path, character="hero"):
     store.record_cycle(Cycle(
         ts="2026-08-15T00:00:00+00:00", cycle_index=0, outcome="ok",
         action_repr="Gather(copper_rocks)", action_class="GatherAction",
-        level=12, xp=340, hp=90, delta_xp=0, delta_hp=-5,
+        level=12, xp=340, hp=90, max_hp=115, delta_xp=0, delta_hp=-5,
+        inventory_used=37, inventory_max=100, delta_inv_used=2,
         delta_skill_xp_json=json.dumps({"mining": 17}),
         skill_levels_json=json.dumps({"mining": 11}),
     ))
@@ -53,6 +55,50 @@ def test_load_cycles_reads_rows_as_records(tmp_db_path):
     assert rec.level == 12
     assert rec.delta_skill_xp == {"mining": 17}
     assert rec.skill_levels == {"mining": 11}
+
+
+def test_the_record_carries_the_fields_the_rest_and_drop_bound_checks_need(tmp_db_path):
+    """Regression test for a check that was DELETED rather than fixed.
+
+    `trace_characterize` and `trace_lockstep` dropped the REST full-heal
+    verdict (`hp == max_hp`) and the `DROP_BOUND` inventory census at
+    migration, on the stated ground that the store could not support them. It
+    could: `max_hp`, `inventory_used`, `inventory_max`, `delta_inv_used` and
+    `ts` are all populated `cycles` columns. It was THIS dataclass that
+    omitted them. If a future edit trims the field list again, this test fails
+    before the two harnesses silently print "UNAVAILABLE" a second time."""
+    _seed(tmp_db_path)
+    [rec] = load_cycles(tmp_db_path)
+    assert rec.ts == "2026-08-15T00:00:00+00:00"
+    assert rec.hp == 90
+    assert rec.max_hp == 115
+    assert rec.inventory_used == 37
+    assert rec.inventory_max == 100
+    assert rec.delta_inv_used == 2
+
+
+def test_a_rest_rows_hp_is_post_action_so_full_heal_needs_no_neighbor(tmp_db_path):
+    """The REST full-heal check reads `hp == max_hp` on the Rest row itself.
+    That is only sound because `record_cycle` stores POST-action scalars
+    (`player.py` passes `new_state`). Seed a healed row and a partly-healed
+    row and confirm the record tells them apart from a single row each — no
+    differencing, which is the failure mode `store_records` exists to prevent."""
+    store = LearningStore(db_path=tmp_db_path, character="hero")
+    store.start_session()
+    store.record_cycle(Cycle(
+        ts="2026-08-15T00:00:00+00:00", cycle_index=0, outcome="ok",
+        action_repr="Rest", action_class="RestAction",
+        hp=115, max_hp=115, delta_hp=25,
+    ))
+    store.record_cycle(Cycle(
+        ts="2026-08-15T00:00:01+00:00", cycle_index=1, outcome="ok",
+        action_repr="Rest", action_class="RestAction",
+        hp=100, max_hp=115, delta_hp=10,
+    ))
+    store.close()
+    healed, partial = load_cycles(tmp_db_path)
+    assert healed.hp == healed.max_hp
+    assert partial.hp != partial.max_hp
 
 
 def test_load_cycles_reads_the_rows_own_delta_not_a_difference(tmp_db_path):
