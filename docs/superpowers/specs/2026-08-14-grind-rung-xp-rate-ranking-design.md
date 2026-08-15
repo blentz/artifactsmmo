@@ -487,3 +487,19 @@ The gate has not run since `ec613f0d`.
   primary key is a different move from those. The history is still the reason
   for the preserved regression guard, the proven ablation, and the live
   before/after.
+- **Live acceptance (2026-08-15).** Probed `skill_grind_target('weaponcrafting',
+  ...)` against live character state fetched through the same
+  `GamePlayer._initialize()` path `uv run artifactsmmo plan <char>` uses (real
+  API call via `ClientManager`, not a fixture — the `plan` CLI's own printed
+  report does not surface the grind rung, since `LevelSkill.__repr__` is
+  skill/target_level only by design, so the rung was read by calling the
+  selection function directly against the identical live `state`/`game_data`).
+  Lor (weaponcrafting level 8): selected `sticky_dagger`. HAL (weaponcrafting
+  level 9): selected `water_bow`. Neither selected `apprentice_gloves`. Both
+  match the spec's expectation exactly, not merely a higher-rate rung than the
+  old pick — the design-time state (Lor/HAL "both at the same moment" in the
+  `_beats` docstring) had already moved, but the same two rungs still won.
+  Both characters' full `plan <char>` command also independently confirmed a
+  `LevelSkill(weaponcrafting->10)` step is live and current for each (not a
+  stale committed goal), so the selection above was exercised by a plan the
+  bot would actually run this cycle, not a hypothetical.
