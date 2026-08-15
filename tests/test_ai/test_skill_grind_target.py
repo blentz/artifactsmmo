@@ -1,6 +1,9 @@
 """Tests for skill_grind_target: the shallow in-skill item to craft now."""
 
+import dataclasses
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     CACHE_MAX_ENTRIES,
     _cache_for,
@@ -192,11 +195,24 @@ def test_the_memo_returns_a_hit_for_an_identical_state():
     """`skill_grind_target` runs inside `LevelSkillAction.is_applicable`, which
     the planner calls PER NODE, and it was unmemoised. Within one search almost
     every node shares the determinants, so the memo turns a rebuild into a
-    lookup — measured on a live-sized holding: 95ms cold, 31us warm."""
+    lookup — measured on a live-sized holding: 95ms cold, 31us warm.
+
+    Restated 2026-08-15: since `wanted` was wired to `ctx`, the RETURNED list is
+    no longer the same object across calls -- `_with_wanted` builds a fresh
+    projected list on every call, including a cache hit, so a caller who DOES
+    pass a context never sees another caller's `wanted` flags written into a
+    shared list. What the memo still guarantees is that the underlying CACHE
+    ENTRY -- the expensive `acquire_steps`/`obtainable` walk -- is computed once
+    and reused; that is the identity this now pins."""
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    first = build_selectable_grind_candidates("weaponcrafting", state, gd)
-    assert build_selectable_grind_candidates("weaponcrafting", state, gd) is first
+    build_selectable_grind_candidates("weaponcrafting", state, gd)
+    cache = _cache_for(gd)
+    assert len(cache) == 1
+    key = next(iter(cache))
+    first_entry = cache[key]
+    build_selectable_grind_candidates("weaponcrafting", state, gd)
+    assert cache[key] is first_entry, "a cache hit must not rebuild the entry"
 
 
 def test_the_memo_key_notices_a_changed_inventory():
@@ -307,3 +323,66 @@ def test_a_HELD_rung_is_not_free_because_the_grind_must_CRAFT_another():
         "a held rung priced at 0 — the grind must CRAFT another, not own one")
     assert cands["copper_dagger"].acquire_steps == baseline["copper_dagger"].acquire_steps, (
         "holding copies changed the cost of crafting another")
+
+
+def test_a_gear_target_rung_is_marked_wanted_and_a_plain_one_is_not():
+    """`wanted` was constructed as the literal False at the sole production
+    producer, so the key added on 2026-06-24 had never been able to fire. This
+    is the wiring that lets it."""
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 3})
+    ctx = dataclasses.replace(NO_PROFILE_CONTEXT,
+                              near_term_targets=frozenset({"copper_dagger"}))
+    cands = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx)
+    by_code = {c.code: c for c in cands}
+    assert by_code["copper_dagger"].wanted is True
+    assert by_code["wooden_staff"].wanted is False
+
+
+def test_a_siblings_supply_target_is_marked_wanted():
+    """Objective 1 of the spec: a rung a sibling has published demand for is a
+    keeper for the fleet even when this character does not want it."""
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 3})
+    ctx = dataclasses.replace(NO_PROFILE_CONTEXT,
+                              supply_target=("copper_dagger", 1, 3))
+    cands = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx)
+    by_code = {c.code: c for c in cands}
+    assert by_code["copper_dagger"].wanted is True
+
+
+def test_the_candidate_cache_is_not_keyed_by_context():
+    """The cache key is (skill, level, equipment, inventory, bank, skills) and
+    must stay that way: folding ctx in would multiply it by objective state and
+    undo the fix that took this producer from 47.0s. `wanted` is applied AFTER
+    the cache read, so the same state under two contexts must return the same
+    codes with different `wanted` flags -- and the cached list must not be
+    mutated by the first read.
+    """
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 3})
+    ctx_a = dataclasses.replace(NO_PROFILE_CONTEXT,
+                                near_term_targets=frozenset({"copper_dagger"}))
+    ctx_b = NO_PROFILE_CONTEXT
+    first = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx_a)
+    second = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx_b)
+    assert [c.code for c in first] == [c.code for c in second]
+    assert any(c.wanted for c in first)
+    assert not any(c.wanted for c in second)
+
+
+def test_context_changes_the_rank_but_never_whether_a_grind_exists():
+    """`LevelSkill.is_applicable` calls this with NO context and asks only
+    `is not None`; `next_grind_goal` calls it WITH context. If a
+    context-dependent term could empty the candidate set the two walks would
+    disagree about whether a grind exists at all -- the
+    selection-says-yes/emission-says-no split behind the wool livelock. `wanted`
+    is a ranking term only, so existence is context-invariant.
+    """
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 3})
+    ctx = dataclasses.replace(NO_PROFILE_CONTEXT,
+                              near_term_targets=frozenset({"copper_dagger"}))
+    with_ctx = skill_grind_target("weaponcrafting", state, gd, ctx=ctx)
+    without = skill_grind_target("weaponcrafting", state, gd)
+    assert (with_ctx is None) == (without is None)

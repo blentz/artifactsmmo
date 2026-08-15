@@ -22,6 +22,7 @@ the committed weaponcrafting objective. The recursive `_obtainable` filter exclu
 such items so the reachable `copper_dagger` wins.
 """
 
+import dataclasses
 import weakref
 from collections import OrderedDict
 
@@ -29,7 +30,7 @@ from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.grind_probe_state import grind_probe_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.skill_grind_selection import (
     GrindCandidate,
@@ -174,8 +175,40 @@ def _cache_key(skill: str, state: WorldState) -> "_CacheKey":
     )
 
 
+def _with_wanted(candidates: list[GrindCandidate],
+                 ctx: SelectionContext) -> list[GrindCandidate]:
+    """`candidates` with `wanted` set from `ctx`, as a NEW list.
+
+    APPLIED AFTER THE CACHE, deliberately. `_cache_key` is a function of the
+    STATE — skill, level, equipment, inventory, bank, skills — and nothing else.
+    Folding the context in would multiply the cache by objective state and undo
+    the hoist that took this producer from 47.0s of a 67.3s search. `wanted` is
+    a projection of the context onto an already-computed list, so it costs one
+    rebuild of ~10 dataclasses per call and leaves the memo intact.
+
+    A NEW LIST, never a mutation: `build_selectable_grind_candidates` returns
+    the cached list BY REFERENCE, so writing `wanted` into it would poison every
+    later reader — including `LevelSkill.is_applicable`, which passes no context
+    at all and must keep seeing `wanted=False`.
+
+    Two sources, both already on the context. `near_term_targets` is the
+    usable-now gear ∪ tool target set — crafting one of those gains the SAME
+    skill xp and yields a keeper instead of a throwaway (2026-06-24: pure
+    cheapest-chain greed made the bot craft a value-10 `apprentice_gloves`
+    while ignoring the committed value-83 `copper_dagger`). `supply_target[0]`
+    is the item code a SIBLING published demand for this cycle, so the fleet's
+    need counts the same as this character's own.
+    """
+    supply = ctx.supply_target[0] if ctx.supply_target is not None else None
+    return [dataclasses.replace(
+        c, wanted=(c.code in ctx.near_term_targets or c.code == supply))
+        for c in candidates]
+
+
 def build_selectable_grind_candidates(skill: str, state: WorldState,
-                                      game_data: GameData) -> list[GrindCandidate]:
+                                      game_data: GameData,
+                                      ctx: SelectionContext = NO_PROFILE_CONTEXT
+                                      ) -> list[GrindCandidate]:
     """`skill_grind_target`'s private producer: every in-skill, IN-LEVEL
     craftable as a `GrindCandidate` (whole-chain `acquire_steps` against
     inventory+bank, recursive obtainability). No reservation filter — the caller
@@ -234,7 +267,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     hit = cache.get(key)
     if hit is not None:
         cache.move_to_end(key)
-        return hit
+        return _with_wanted(hit, ctx)
     candidates: list[GrindCandidate] = []
     # One rebuild for the whole sweep instead of one per candidate's walk. Not a
     # micro-optimisation: routing this loop through the public `is_obtainable`
@@ -271,9 +304,9 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
             craft_level=stats.crafting_level,
             acquire_steps=acquire_steps,
             obtainable=_obtainable(code, state, game_data, frozenset(), gatherable),
-            # No objective context in this standalone path: the live grind goes
-            # through the LevelSkill action (its is_applicable calls
-            # skill_grind_target for the rung); wanted has no bearing there.
+            # The context-free default. `_with_wanted` overwrites this from the
+            # caller's ctx below; the CACHED list keeps False so a later
+            # context-free reader (LevelSkill.is_applicable) is unaffected.
             wanted=False,
             # The server's level_penalty band: a rung more than
             # GREY_SKILL_GAP-1 levels below the current skill pays NO craft xp,
@@ -285,13 +318,14 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     cache[key] = candidates
     if len(cache) > CACHE_MAX_ENTRIES:
         cache.popitem(last=False)
-    return candidates
+    return _with_wanted(candidates, ctx)
 
 
 def skill_grind_target(skill: str, state: WorldState, game_data: GameData,
-                       reserved: frozenset[str] = frozenset()) -> str | None:
+                       reserved: frozenset[str] = frozenset(),
+                       ctx: SelectionContext = NO_PROFILE_CONTEXT) -> str | None:
     candidates = [
-        c for c in build_selectable_grind_candidates(skill, state, game_data)
+        c for c in build_selectable_grind_candidates(skill, state, game_data, ctx)
         if not any(mat in reserved for mat in (game_data.crafting_recipe(c.code) or {}))
     ]
     chosen = skill_grind_selection_pure(skill, state.skills.get(skill, 0), candidates)

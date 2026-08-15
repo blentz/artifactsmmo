@@ -79,8 +79,9 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
     wool livelock. So: prefer a rung that leaves the objective's materials alone,
     and fall back to the unreserved choice when every rung would consume them.
     Liveness is unchanged; only the tie is."""
-    rung = (skill_grind_target(skill, state, game_data, frozenset(ctx.step_profile))
-            or skill_grind_target(skill, state, game_data))
+    rung = (skill_grind_target(skill, state, game_data,
+                               frozenset(ctx.step_profile), ctx)
+            or skill_grind_target(skill, state, game_data, ctx=ctx))
     if rung is not None:
         bank = state.bank_items or {}
         held = state.inventory.get(rung, 0) + bank.get(rung, 0)
