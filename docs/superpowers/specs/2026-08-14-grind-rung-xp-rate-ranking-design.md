@@ -513,9 +513,11 @@ The gate has not run since `ec613f0d`.
   `small_health_potion`, alchemy), 8 and 9 (`copper_bar`, mining, vs that same
   potion) and 11 (`copper_bar` vs `spruce_plank`, woodcutting) — and the first
   four are **all four** buckets behind the headline "the ratio rises
-  2.36×–4.37×". The module's own premise is that `XP_base` and `k` are
-  unpublished **per-skill** parameters, so a rise measured across skills may be
-  a between-skill difference rather than a `craft_level` effect. Within-skill
+  2.36×–4.37×". `XP_base` and `k` are unpublished — free parameters in neither
+  the docs nor the API, per the replay module's own docstring — so whether they
+  vary by skill is **not observable**, and nothing rules it out; that is all the
+  argument needs, and a rise measured across skills **may** therefore be a
+  between-skill difference rather than a `craft_level` effect. Within-skill
   steps exist at skill_level 10/12/13/21 (mining, `copper_bar` → `iron_bar`),
   15 (`life_amulet` → `life_ring`, jewelrycrafting) and 17 (alchemy), of which
   only skill_level 10 and the 5 → 15 step at 15 have both rungs out of the grey

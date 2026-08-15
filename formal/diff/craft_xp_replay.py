@@ -310,10 +310,11 @@ def _ratio_table(
     THE GROUPING HAS NO SKILL COMPONENT, so a bucket can compare rungs of
     DIFFERENT skills -- five of the eleven qualifying buckets do (skill_level 5,
     7, 8, 9, 11), including all four behind the "ratio rises" reading in
-    `skill_grind_selection._beats`. `XP_base` and `k` are per-SKILL parameters
-    (see this module's own docstring), so a cross-skill step is weaker evidence
-    about `craft_level` than a within-skill one, and `_beats` only ever compares
-    rungs within one skill. The REFUTED verdict does not depend on them
+    `skill_grind_selection._beats`. `XP_base` and `k` are free parameters in
+    neither the docs nor the API (this module's own docstring), so whether they
+    vary by skill cannot be observed and nothing rules it out -- which is
+    enough to make a cross-skill step weaker evidence about `craft_level` than
+    a within-skill one, and `_beats` only ever compares rungs within one skill. The REFUTED verdict does not depend on them
     (skill_level 10 is mining against mining and moves 5.000 -> 2.400), but any
     statement about the DIRECTION or SIZE of the mispricing should name which
     buckets it rests on.

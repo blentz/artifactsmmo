@@ -122,9 +122,12 @@ def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
     against small_health_potion, alchemy), 8 and 9 (copper_bar, mining,
     against that same potion) and 11 (copper_bar against spruce_plank,
     woodcutting). The first four are ALL FOUR buckets behind the RISES figure
-    above. Since XP_base and k are per-SKILL parameters, a rise measured
-    across skills can be a difference between skills rather than a craft_level
-    effect. Within-skill steps exist at skill_level 10, 12, 13 and 21 (mining,
+    above. XP_base and k are unpublished -- in neither the docs nor the API
+    (`formal/diff/craft_xp_replay.py`'s own docstring) -- so whether they vary
+    by skill is not observable from here; nothing rules it out, which is all
+    the argument needs. A rise measured across skills MAY therefore be a
+    difference between skills rather than a craft_level effect. Within-skill
+    steps exist at skill_level 10, 12, 13 and 21 (mining,
     copper_bar -> iron_bar; at 12 a cooking rung is pooled into the
     craft_level-1 mean), at 15 (life_amulet -> life_ring, jewelrycrafting) and
     at 17 (alchemy) -- and only two of those have BOTH rungs out of the grey
