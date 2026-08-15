@@ -168,12 +168,20 @@ def main() -> int:
     # LEVEL monotonicity, in WALL-CLOCK order per character — `load_cycles`
     # orders by `cycle_index`, which resets per session, so the level pass
     # re-sorts by `ts` rather than trusting the load order.
+    # `key=` is `(character, ts)` and DELIBERATELY EXCLUDES `level`. Sorting on
+    # the whole `(character, ts, level)` tuple would order any rows sharing a
+    # timestamp level-ASCENDING, making a regression between two such rows
+    # unrepresentable — a check biased toward passing. With an explicit key,
+    # Python's stable sort leaves tied rows in load order instead. There are no
+    # `(character, ts)` ties in the corpus today, so the count is the same
+    # either way; the key is written this way so it stays honest if ties appear.
     level_rows = sorted(
-        (r.character, r.ts, r.level) for r in records if r.level is not None
+        (((r.character, r.ts), r.level) for r in records if r.level is not None),
+        key=lambda row: row[0],
     )
     lvl_regressions = sum(
         1
-        for (prev_char, _, prev_lvl), (cur_char, _, cur_lvl) in zip(level_rows, level_rows[1:])
+        for ((prev_char, _), prev_lvl), ((cur_char, _), cur_lvl) in zip(level_rows, level_rows[1:])
         if prev_char == cur_char and cur_lvl < prev_lvl
     )
     ts_span = (min(r.ts for r in records), max(r.ts for r in records))

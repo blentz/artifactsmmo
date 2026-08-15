@@ -83,7 +83,10 @@ class CycleRecord:
 
     THE SCALARS ARE POST-ACTION. `hp`, `max_hp`, `xp`, `level`,
     `inventory_used` and `inventory_max` are copied from `new_state` — the
-    state AFTER this row's action ran (`player.py`'s `_make_cycle_record`) —
+    state AFTER this row's action ran (`player.py`'s `_record_learning_cycle`,
+    which is the `Cycle(...)` write site; NOT `_make_cycle_record`, an
+    unrelated method that builds the identically-named `recovery.CycleRecord`
+    for the stuck rules and carries no hp at all) —
     while `skill_levels` is copied from `prev_state` and is PRE-action. A check
     of the form "REST leaves hp at max_hp" therefore reads `hp == max_hp` on
     the Rest row itself and needs no neighbor.
