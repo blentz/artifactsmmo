@@ -42,7 +42,8 @@ _ALL_SLOTS: dict[str, str | None] = {
 
 
 def make_state(**overrides: object) -> WorldState:
-    """Self-contained WorldState builder (tests/ai has no shared fixtures pkg)."""
+    """Self-contained WorldState builder (originally written in tests/ai,
+    which had no shared fixtures pkg)."""
     eq = dict(_ALL_SLOTS)
     eq.update(overrides.pop("equipment", {}))  # type: ignore[arg-type]
     defaults: dict[str, object] = dict(

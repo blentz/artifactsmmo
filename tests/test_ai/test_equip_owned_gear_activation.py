@@ -11,9 +11,10 @@ reachable THROUGH THE ARBITER and outranks the grind/step tier — the
 exact criterion the prior gather fix failed (correct-in-unit-test but
 inert at runtime).
 
-`tests/ai/` has no `__init__.py` (unlike `tests/test_ai/`), so this file
-follows the local-helper convention already used by
-`tests/ai/test_equip_owned_arbiter.py` rather than cross-importing
+Originally written in `tests/ai/`, which had no `__init__.py` (unlike
+`tests/test_ai/`); this file follows the local-helper convention already
+used by `tests/test_ai/test_equip_owned_arbiter.py` (formerly
+`tests/ai/test_equip_owned_arbiter.py`) rather than cross-importing
 `tests.test_ai.fixtures` / `tests.test_ai._monster_fixture`.
 """
 

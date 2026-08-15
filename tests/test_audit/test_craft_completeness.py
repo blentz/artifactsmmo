@@ -288,7 +288,7 @@ def test_craft_cell_verdict_rejects_higher_tier_same_skill_craft() -> None:
 # --- classify_gap -----------------------------------------------------------
 #
 # Witness catalogs built as bare GameData() instances with only the fields the
-# classifier reads populated (the tests/ai/test_grey_farm.py idiom: a real
+# classifier reads populated (the tests/test_ai/test_grey_farm.py idiom: a real
 # GameData whose underscore-backed catalogs are set directly). Each witness is
 # minimal and isolates ONE gap class; the precedence tests combine two blocked
 # leaves to pin the cascade order.

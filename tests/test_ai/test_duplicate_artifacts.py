@@ -3,7 +3,7 @@ slot type, so the same artifact code may occupy multiple artifact slots up to
 physical ownership (`min(slot_count, ownership(code))`).
 
 Fixture pattern (`_ALL_SLOTS` / `_make_state`) copied from
-`tests/ai/test_loadout_picker_purpose.py` — intentional test-support
+`tests/test_ai/test_loadout_picker_purpose.py` — intentional test-support
 duplication (each pick_loadout test module owns its minimal WorldState builder).
 """
 

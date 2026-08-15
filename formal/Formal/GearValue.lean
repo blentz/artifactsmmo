@@ -83,7 +83,7 @@ def combatValue (isWeapon : Bool) (item : Item)
 Mirrors `ai/gear_value_core.rank_adversary()`. Every constant is the MEDIAN of
 the pinned live catalog (`formal/sim/game_data_snapshot.json`, 58 monsters / 232
 per-element resistance entries), re-derived from that file by
-`tests/ai/test_gear_value_core.py` so a catalog shift fails the suite. -/
+`tests/test_ai/test_gear_value_core.py` so a catalog shift fails the suite. -/
 
 /-- Median TOTAL per-element attack over the 58 catalog monsters (min 4, max
 1250), spread UNIFORMLY over the 4 elements: `135 / 4 = 33`.

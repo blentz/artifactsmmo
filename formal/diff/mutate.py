@@ -259,7 +259,7 @@ NEXT_CRAFT_SOURCE_MUTATIONS = [
 
 # gear_taxonomy_core mutations -- the proved gear-classification core.
 # The is_combat_bearing disjunct drops + the consumable-family drops are killed
-# by the unit test tests/ai/test_gear_taxonomy_core.py (each field / family
+# by the unit test tests/test_ai/test_gear_taxonomy_core.py (each field / family
 # member tested independently); the combat-minus-consumable set-difference drop
 # is killed by the differential formal/diff/test_gear_taxonomy_diff.py (which
 # binds the live Python core to Formal.GearTaxonomy.combatGearTypes).
@@ -565,7 +565,7 @@ LOADOUT_PROFILES_CORE_MUTATIONS = [
 
 # expand_bank used-floor (Task 4) mutation. The `max(used, profile_cost)` floor
 # in value() — proven additive-only by Lean shouldExpandBank_floor_preserves —
-# is killed by tests/ai/test_expand_bank_profile_floor.py (dropping it lets a
+# is killed by tests/test_ai/test_expand_bank_profile_floor.py (dropping it lets a
 # profile-overflowed bank fall back below the trigger and NOT fire).
 EXPAND_BANK_FLOOR_MUTATIONS = [
     ("expand_bank: drop value() profile used-floor (max -> used)",
@@ -842,7 +842,7 @@ SCORING_MUTATIONS = [
     # Defense then reads 200x too cheap against offense, so a pure-damage piece
     # beats a genuinely defensive one against a hard-hitting monster. Killed by
     # the same byte-equality diffs (and by the rosenblood case in
-    # tests/ai/test_armor_score_offense.py).
+    # tests/test_ai/test_armor_score_offense.py).
     ("equipment_scoring: drop the 200x defense scaling (mixes two units)",
      "    return RULER_SCALE * (200 * defense + offense + 200 * flat_combat)",
      "    return RULER_SCALE * (defense + offense + 200 * flat_combat)"),
@@ -975,7 +975,7 @@ LOADOUT_PICKER_GATHER_MUTATIONS = [
 # empty monster attack) instead of `-gather_score` (= 0). Reverting it drops the
 # fast-path, so under Gather an artifact scores 0 and the empty-slot gate leaves
 # the slot empty. Killed by the OWNED unit test bound to the branch (not merely
-# the traversal diff): tests/ai/test_loadout_picker_purpose.py::
+# the traversal diff): tests/test_ai/test_loadout_picker_purpose.py::
 # test_gather_fills_empty_artifact_slot (novice_guide flat utility 75 > 0).
 LOADOUT_PICKER_ARTIFACT_MUTATIONS = [
     ("loadout_picker: revert artifact utility-fill arm (armor_score -> -gear_value)",
@@ -1019,7 +1019,7 @@ GEAR_VALUE_RANK_MUTATIONS = [
 # moves every armor Rank value and diverges from the oracle's
 # `Formal.GearValue.canonicalAttack` / `canonicalResistance`; the uniformity and
 # symmetry mutants additionally break the two ordering pins in
-# tests/ai/test_gear_value_core.py. OWN run_group (unit-killed mutants need one).
+# tests/test_ai/test_gear_value_core.py. OWN run_group (unit-killed mutants need one).
 RANK_ADVERSARY_MUTATIONS = [
     ("rank_adversary: reference attack off by one (33 -> 32)",
      "RANK_REFERENCE_ATTACK = RANK_MONSTER_TOTAL_ATTACK // len(ELEMENTS)",
@@ -1087,7 +1087,7 @@ STRATEGIC_BOUND_MUTATIONS = [
 # slot_occupancy mutations -- the ONE authority rule for slot occupancy. Every
 # clause is a dominance requirement whose loss lets the acquisition path
 # pre-empt `pick_loadout` on a swap the picker reverses, i.e. re-opens the
-# 2026-08-04 equip loop. Killed by tests/ai/test_equip_loop_closure.py.
+# 2026-08-04 equip loop. Killed by tests/test_ai/test_equip_loop_closure.py.
 SLOT_OCCUPANCY_MUTATIONS = [
     ("slot_occupancy: drop the flat-utility clause",
      "    if _flat_utility(candidate) < _flat_utility(incumbent):",
@@ -2735,7 +2735,7 @@ STRATEGY_DRIVER_MUTATIONS = [
 
 # EquipOwnedGoal (COLLECT band) wiring — Task 3 (spec 2026-07-03 equip-owned-gear).
 # The empty-slot Rank fill computation: each conjunct of the keep-filter is a
-# mutant killed by an OWNED unit-test group (tests/ai/test_empty_slot_fills.py).
+# mutant killed by an OWNED unit-test group (tests/test_ai/test_empty_slot_fills.py).
 EMPTY_SLOT_FILLS_MUTATIONS = [
     # (a) drop the empty-only guard: a filled slot's better owned item would be
     # DISPLACED (a swap into a non-empty slot) — killed by
@@ -2753,7 +2753,7 @@ EMPTY_SLOT_FILLS_MUTATIONS = [
 # (c) band placement: the EquipOwnedGoal candidate must sit in the COLLECT band
 # (above the step/grind tier). Flipping it to DISCRETIONARY sinks it below the
 # step — killed by the arbiter-ordering test's `equip.band == BAND_COLLECT`
-# assertion (tests/ai/test_equip_owned_arbiter.py).
+# assertion (tests/test_ai/test_equip_owned_arbiter.py).
 EQUIP_OWNED_BAND_MUTATIONS = [
     ("strategy_driver: EquipOwnedGoal band COLLECT->DISCRETIONARY (sinks below step)",
      "                                        repr_=repr(eq_goal), band=BAND_COLLECT))",
@@ -2764,7 +2764,7 @@ EQUIP_OWNED_BAND_MUTATIONS = [
 # Withdraw-tools ferry (2026-07-05 bare-handed-mining fix). The banked-tool fill
 # must be strictly better than every OWNED candidate, respect the level/reserved
 # gates, and land in the COLLECT band; each conjunct is killed by a dedicated
-# unit test (tests/ai/test_bank_tool_fills.py / test_withdraw_tools_arbiter.py).
+# unit test (tests/test_ai/test_bank_tool_fills.py / test_withdraw_tools_arbiter.py).
 BANK_TOOL_FILLS_MUTATIONS = [
     ("bank_tool_fills: strict-better -> better-or-equal (withdraw ping-pong)",
      "            if value > best_owned and (best is None or value > best[0]):",
@@ -3271,7 +3271,7 @@ ARMOR_UTILITY_MUTATIONS = [
      "RULER_SCALE = 3"),
 ]
 # The WEAPON slot's two former asymmetries, each with its own mutant. Bound to
-# `tests/ai/test_weapon_ruler_parity.py` rather than to the equipment-scoring
+# `tests/test_ai/test_weapon_ruler_parity.py` rather than to the equipment-scoring
 # differential, which compares the RAW `weapon_score_raw` (no efficiency, no
 # quantum) on the weapon slot and so cannot see either of these.
 WEAPON_RULER_MUTATIONS = [
@@ -5796,7 +5796,7 @@ FIGHT_APPLICABILITY_MUTATIONS = [
         # Widen the drop-farm bypass to swallow the whole gate: every fight
         # (not just recipe-serving drop farms) becomes applicable, flooding
         # xp-grind plans with grey mobs. Killed by
-        # tests/ai/test_grey_farm.py::TestDropFarmMechanism (default False
+        # tests/test_ai/test_grey_farm.py::TestDropFarmMechanism (default False
         # must keep the xp gate) via the grey-farm unit group.
         "fight-is_applicable: drop_farm bypass swallows the xp gate (always True)",
         "        return self.drop_farm or game_data.xp_per_kill(self.monster_code, state.level) > 0",
@@ -6343,7 +6343,7 @@ EQUIP_MUTATIONS = [
 # (only one artifact slot fills). Killed by
 # test_equip_second_copy_into_sibling_slot_applicable,
 # test_pick_loadout_fills_three_artifact_slots_when_three_owned, and
-# test_artifact_is_duplicate_allowed in tests/ai/test_duplicate_artifacts.py.
+# test_artifact_is_duplicate_allowed in tests/test_ai/test_duplicate_artifacts.py.
 # Anchor is the full frozenset literal — unique in equip.py.
 DUPLICATE_ARTIFACT_MUTATIONS = [
     ("equip: drop artifact from DUPLICATE_SLOT_TYPES (reverts to ring-only)",
@@ -6777,7 +6777,7 @@ def _collect_all_groups() -> None:
     run_group(LOADOUT_PROFILES_CORE_SRC, LOADOUT_PROFILES_CORE_MUTATIONS,
               "formal/diff/test_loadout_profiles_diff.py", survivors)
     run_group(EXPAND_BANK_GOAL_SRC, EXPAND_BANK_FLOOR_MUTATIONS,
-              "tests/ai/test_expand_bank_profile_floor.py", survivors)
+              "tests/test_ai/test_expand_bank_profile_floor.py", survivors)
     run_group(DOMINANCE_PARETO_SRC, DOMINANCE_PARETO_MUTATIONS,
               "formal/diff/test_dominance_pareto_diff.py", survivors)
     run_group(COMBAT_SRC, PREDICT_WIN_MUTATIONS,
@@ -6797,7 +6797,7 @@ def _collect_all_groups() -> None:
     run_group(LOADOUT_PICKER_SRC, LOADOUT_PICKER_GATHER_MUTATIONS,
               "formal/diff/test_loadout_picker_diff.py", survivors)
     run_group(LOADOUT_PICKER_SRC, LOADOUT_PICKER_ARTIFACT_MUTATIONS,
-              "tests/ai/test_loadout_picker_purpose.py", survivors)
+              "tests/test_ai/test_loadout_picker_purpose.py", survivors)
     run_group(GEAR_VALUE_SRC, GEAR_VALUE_DISPATCH_MUTATIONS,
               "formal/diff/test_realizable_loadout_diff.py", survivors)
     run_group(GEAR_VALUE_SRC, GEAR_VALUE_RANK_MUTATIONS,
@@ -7006,7 +7006,7 @@ def _collect_all_groups() -> None:
     run_group(EQUIP_SRC, EQUIP_MUTATIONS,
               "formal/diff/test_phase7_invariants_diff.py", survivors)
     run_group(EQUIP_SRC, DUPLICATE_ARTIFACT_MUTATIONS,
-              "tests/ai/test_duplicate_artifacts.py", survivors)
+              "tests/test_ai/test_duplicate_artifacts.py", survivors)
     run_group(STORE_WARMUP_SRC, STORE_WARMUP_MUTATIONS,
               "formal/diff/test_store_warmup_diff.py", survivors)
     run_group(BANK_EXPANSION_SRC, BANK_EXPANSION_MUTATIONS,
@@ -7084,13 +7084,13 @@ def _collect_all_groups() -> None:
     run_group(STRATEGY_DRIVER_SRC, STRATEGY_DRIVER_MUTATIONS,
               "tests/test_ai/test_strategy_driver_tiered.py", survivors)
     run_group(EMPTY_SLOT_FILLS_SRC, EMPTY_SLOT_FILLS_MUTATIONS,
-              "tests/ai/test_empty_slot_fills.py", survivors)
+              "tests/test_ai/test_empty_slot_fills.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, EQUIP_OWNED_BAND_MUTATIONS,
-              "tests/ai/test_equip_owned_arbiter.py", survivors)
+              "tests/test_ai/test_equip_owned_arbiter.py", survivors)
     run_group(BANK_TOOL_FILLS_SRC, BANK_TOOL_FILLS_MUTATIONS,
-              "tests/ai/test_bank_tool_fills.py", survivors)
+              "tests/test_ai/test_bank_tool_fills.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, WITHDRAW_TOOLS_BAND_MUTATIONS,
-              "tests/ai/test_withdraw_tools_arbiter.py", survivors)
+              "tests/test_ai/test_withdraw_tools_arbiter.py", survivors)
     run_group(KIT_SELECTION_SRC, KIT_SELECTION_MUTATIONS,
               "tests/test_ai/test_bank_selection.py", survivors)
     run_group(RECYCLE_SURPLUS_SRC, RECYCLE_SURPLUS_ELIGIBILITY_MUTATIONS,
@@ -7143,9 +7143,9 @@ def _collect_all_groups() -> None:
     run_group(GEAR_VALUE_SRC, GEAR_VALUE_PARTITION_MUTATIONS,
               "formal/diff/test_gear_value_diff.py", survivors)
     run_group(SCORING_SRC, WEAPON_RULER_MUTATIONS,
-              "tests/ai/test_weapon_ruler_parity.py", survivors)
+              "tests/test_ai/test_weapon_ruler_parity.py", survivors)
     run_group(GEAR_VALUE_CORE_SRC, RANK_ADVERSARY_MUTATIONS,
-              "tests/ai/test_gear_value_core.py", survivors)
+              "tests/test_ai/test_gear_value_core.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, RESTORE_FAMILY_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)
     run_group(LOCATION_CATALOG_SRC, EVENT_VISIBILITY_MUTATIONS,
@@ -7167,7 +7167,7 @@ def _collect_all_groups() -> None:
     # Gear taxonomy: field/family drops killed by the unit test; the
     # combat-minus-consumable set difference killed by the differential.
     run_group(GEAR_TAXONOMY_CORE_SRC, GEAR_TAXONOMY_CORE_MUTATIONS,
-              "tests/ai/test_gear_taxonomy_core.py", survivors)
+              "tests/test_ai/test_gear_taxonomy_core.py", survivors)
     run_group(GEAR_TAXONOMY_CORE_SRC, GEAR_TAXONOMY_SETDIFF_MUTATIONS,
               "formal/diff/test_gear_taxonomy_diff.py", survivors)
     # Fight-applicability gear-gate regression (commit 0cd5407b 2026-06-29):
@@ -7198,11 +7198,11 @@ def _collect_all_groups() -> None:
     # Equip-loop closure (2026-08-04): four unit-killed groups, each on its own
     # run_group so a survivor names the exact authority that stopped deferring.
     run_group(SLOT_OCCUPANCY_SRC, SLOT_OCCUPANCY_MUTATIONS,
-              "tests/ai/test_equip_loop_closure.py", survivors)
+              "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(PROGRESSION_TREE_IMPURE_SRC, TREE_OCCUPANCY_MUTATIONS,
-              "tests/ai/test_equip_loop_closure.py", survivors)
+              "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(PROGRESSION_GOAL_SRC, UPGRADE_GOAL_OCCUPANCY_MUTATIONS,
-              "tests/ai/test_equip_loop_closure.py", survivors)
+              "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(PURSUIT_VALUE_SRC, PURSUIT_DOMINANCE_MUTATIONS,
               "tests/test_ai/test_pursuit_value.py", survivors)
     run_group(STRATEGIC_VALUE_SRC, STRATEGIC_BOUND_MUTATIONS,
