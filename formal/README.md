@@ -371,30 +371,36 @@ with `wanted` demoted from a lexicographic pivot to a marginal-cost credit that
 zeroes a wanted rung's effective steps.
 
 So `beats_prefers_cheaper_chain` and `costlier_chain_never_beats` are **false on
-purpose** and are gone. Four roles replace them:
+purpose** and are gone. The ordering is now carried by five roles — two genuinely
+new, and three pre-existing ones restated with domain hypotheses:
 
-- `beats_prefers_higher_rate` — the new first key. Stated for the UNWANTED pair
-  because two wanted candidates tie on rate by construction, so quantifying over
-  equal-`wanted` pairs would be vacuous on half its domain.
-- `beats_prefers_cheaper_at_equal_level` — what survives of the old theorem:
-  cheapness still decides wherever it is the only difference. Holds by three
-  routes (unwanted at positive level via the rate; unwanted at level zero and
-  wanted via the raw-cost tie-break).
-- `beats_prefers_wanted` — the June 2026 keeper guarantee, now DERIVED from the
-  credit plus the tie-break rather than asserted by a lexicographic pivot.
-- `unwanted_not_beats_wanted` — the converse guard, the only Lean pin behind the
-  `_beats invert wanted shield` mutant.
+- `beats_prefers_higher_rate` — NEW, the new first key. Stated for the UNWANTED
+  pair because two wanted candidates tie on rate by construction, so quantifying
+  over equal-`wanted` pairs would be vacuous on half its domain.
+- `beats_prefers_cheaper_at_equal_level` — NEW, and what survives of
+  `beats_prefers_cheaper_chain`: cheapness still decides wherever it is the only
+  difference. Holds by three routes (unwanted at positive level via the rate;
+  unwanted at level zero and wanted via the raw-cost tie-break).
+- `costlier_never_beats_at_equal_level` — RESTATED from
+  `costlier_chain_never_beats`, narrowed to equal levels, which is the part the
+  rate ordering does not falsify.
+- `beats_prefers_wanted` — RESTATED. The June 2026 keeper guarantee, now DERIVED
+  from the credit plus the tie-break rather than asserted by a lexicographic
+  pivot, and carrying nonnegativity hypotheses it did not need before.
+- `unwanted_not_beats_wanted` — RESTATED, likewise with hypotheses. The converse
+  guard, and the only Lean pin behind the `_beats invert wanted shield` mutant.
 
 **`Int` is wider than the Python domain, and the ordering theorems feel it.**
-Three of the four carry `0 ≤` hypotheses on `craft_level` / `acquire_steps`.
+Four of the five carry `0 ≤` hypotheses on `craft_level` / `acquire_steps`.
 These are not slack: cross-multiplication is what turns a rate comparison into an
 integer one, and multiplying by a negative REVERSES it, so at `craft_level = -1`
 `_beats` genuinely prefers the costlier rung. `scripts/extract_lean.py` maps
 Python `int` to `Int`, while API craft levels start at 1 and an action count
 cannot be negative — so the hypotheses exclude nothing the extracted core can
-produce. Each one was added only after a counterexample was checked by
-evaluation, and each theorem's doc comment records that counterexample rather
-than merely asserting the hypothesis is needed.
+produce. Every one of them was added only after a counterexample was checked by
+evaluation, and **each theorem's own doc comment records that counterexample** —
+the doc comment, not just the contract pin, because that is where a reader minded
+to delete a hypothesis will be standing.
 
 ### Intentionally NOT proved (no decision logic) — gear sub-project D (2026-06-29)
 

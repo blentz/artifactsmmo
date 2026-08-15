@@ -642,6 +642,14 @@ example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
     0 ≤ c.craft_level → c.acquire_steps < b.acquire_steps →
     Extracted.SkillGrindSelection._beats c (some b) = true :=
   @Formal.SkillGrindSelection.beats_prefers_cheaper_at_equal_level
+-- costlier_never_beats_at_equal_level: the converse of the above. Pinning the
+-- cost key in one direction only would let the tie-break be inverted without a
+-- theorem noticing -- the same argument unwanted_not_beats_wanted rests on.
+example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
+    c.wanted = b.wanted → c.craft_level = b.craft_level →
+    0 ≤ c.craft_level → b.acquire_steps < c.acquire_steps →
+    Extracted.SkillGrindSelection._beats c (some b) = false :=
+  @Formal.SkillGrindSelection.costlier_never_beats_at_equal_level
 -- unwanted_not_beats_wanted: the converse guard -- an unwanted candidate never
 -- displaces a wanted incumbent. Pinning BOTH directions of the wanted tie-break
 -- is what stops the shield clause being inverted unnoticed; the two directions

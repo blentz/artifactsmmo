@@ -134,6 +134,7 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.SkillGrindSelection.grind_actionable -- feasible non-empty candidate ⇒ non-empty result
 #check @Formal.SkillGrindSelection.beats_prefers_higher_rate -- higher xp-per-action rate wins
 #check @Formal.SkillGrindSelection.beats_prefers_cheaper_at_equal_level -- cheapness decides at equal level
+#check @Formal.SkillGrindSelection.costlier_never_beats_at_equal_level -- and the converse, same level
 #check @Formal.SkillGrindSelection.beats_prefers_wanted   -- wanted candidate beats unwanted incumbent
 #check @Formal.SkillGrindSelection.unwanted_not_beats_wanted -- unwanted never displaces wanted incumbent
 -- MonsterDropApply required roles (Fight.apply drop loop reachability):

@@ -1416,15 +1416,31 @@ SKILL_GRIND_SELECTION_MUTATIONS = [
      "                or not c.obtainable):\n"
      "            continue\n"
      "        if best is not None and best.xp_positive and not c.xp_positive:\n"),
+    # KILLER ATTRIBUTIONS BELOW NAME THE TEST THAT ACTUALLY KILLS THE MUTANT IN
+    # THIS GROUP. run_group binds this list to formal/diff/test_skill_grind_selection_diff.py
+    # (see the call site), NOT to tests/test_ai/test_skill_grind_selection.py --
+    # so a unit test that also fails under a mutant is not what the gate runs,
+    # and sending a future debugger of a survivor to the wrong file wastes the
+    # one clue the failure gives them. Verified by a serial run 2026-08-15:
+    # ten of the eleven mutants here die on the property sweep
+    # (test_python_matches_lean), and exactly one -- "invert wanted shield" --
+    # dies on a deterministic case instead. Where a unit test in
+    # tests/test_ai/test_skill_grind_selection.py pins the same behaviour it is
+    # named SECOND, as documentation of intent rather than as the gate's killer.
+    #
     # THE 2026-08-14 REGRESSION: flip the rate comparison so the WORST
-    # xp-per-action rung wins. Killed by
+    # xp-per-action rung wins. Killed in-group by test_python_matches_lean; the
+    # behaviour is pinned deterministically by test_rate_beats_cheapest_chain_diff
+    # in the same file, and as a unit by
     # test_a_costlier_chain_wins_when_it_pays_proportionally_more_xp.
     ("skill_grind_selection: _beats rate comparison flipped",
      "        return c_rate > best_rate\n",
      "        return c_rate < best_rate\n"),
     # Back to cheapest-chain: drop the numerator so the comparison degenerates
     # to steps alone. This is the pre-2026-08-14 ordering, the one that left
-    # live Lor at weaponcrafting 8 for 757 cycles.
+    # live Lor at weaponcrafting 8 for 757 cycles. Killed in-group by
+    # test_python_matches_lean; test_rate_beats_cheapest_chain_diff is the
+    # deterministic case that pins the same disagreement.
     ("skill_grind_selection: _beats back to cheapest chain",
      "    c_rate = c.craft_level * best_steps\n"
      "    best_rate = best.craft_level * c_steps\n",
@@ -1432,16 +1448,21 @@ SKILL_GRIND_SELECTION_MUTATIONS = [
      "    best_rate = c_steps\n"),
     # Drop the wanted CREDIT on the challenger -- a wanted rung is priced at
     # its full chain again, so a committed keeper loses to any cheaper
-    # throwaway. Killed by
+    # throwaway. Killed in-group by test_python_matches_lean; as a unit by
     # test_a_wanted_rung_wins_on_rate_because_its_chain_is_owed_anyway.
     ("skill_grind_selection: _beats drops the wanted credit",
      "    c_steps = 0 if c.wanted else c.acquire_steps\n",
      "    c_steps = c.acquire_steps\n"),
-    # Drop the final RAW-cost tie-break -- every wanted rung ties every other
-    # on rate (they all credit to zero), so without this the choice among them
-    # falls to insertion order. Killed by
+    # INVERT the final RAW-cost tie-break (`<` becomes `>`), so among rungs that
+    # tie on rate the COSTLIER one wins. Note this inverts rather than drops:
+    # dropping it would leave the choice to insertion order, which is a weaker
+    # and less detectable mutation, so the inversion is deliberate. The
+    # tie-break matters because every wanted rung ties every other wanted rung
+    # on rate -- they all credit to zero effective steps -- so this clause is
+    # the only cost signal left among them. Killed in-group by
+    # test_python_matches_lean; as a unit by
     # test_raw_cost_still_separates_two_rungs_the_objective_both_wants.
-    ("skill_grind_selection: _beats drops the raw-cost tie-break",
+    ("skill_grind_selection: _beats inverts the raw-cost tie-break",
      "    if c.acquire_steps != best.acquire_steps:\n"
      "        return c.acquire_steps < best.acquire_steps\n",
      "    if c.acquire_steps != best.acquire_steps:\n"
@@ -1449,14 +1470,19 @@ SKILL_GRIND_SELECTION_MUTATIONS = [
     # Neuter the wanted TIE-BREAK: a free throwaway ties a wanted keeper at rate
     # zero (both credit to zero effective steps) and then survives on insertion
     # order -- the 2026-06-24 apprentice_gloves-over-copper_dagger inversion,
-    # returning through the back door under the rate ordering. Killed by
+    # returning through the back door under the rate ordering. Killed in-group
+    # by test_python_matches_lean; as a unit by
     # test_a_free_throwaway_does_not_tie_its_way_past_a_wanted_keeper.
     ("skill_grind_selection: _beats drop wanted preference",
      "    if c.wanted and not best.wanted:\n        return True\n",
      "    if c.wanted and not best.wanted:\n        return False\n"),
     # Invert the wanted shield: an UNWANTED candidate displaces a wanted
-    # incumbent on a rate tie. Same tie-break, opposite direction. Killed by the
-    # wanted-first scenarios (the winner flips off the keeper).
+    # incumbent on a rate tie. Same tie-break, opposite direction. THE ONE
+    # MUTANT IN THIS GROUP THE PROPERTY SWEEP DOES NOT CATCH -- killed in-group
+    # by test_unwanted_never_displaces_a_wanted_incumbent_diff, the deterministic
+    # case written for exactly that reason (adding the xp_positive dimension
+    # diluted the sweep until this mutant started surviving). Lean pin:
+    # Formal.SkillGrindSelection.unwanted_not_beats_wanted.
     ("skill_grind_selection: _beats invert wanted shield",
      "    if best.wanted and not c.wanted:\n        return False\n",
      "    if best.wanted and not c.wanted:\n        return True\n"),

@@ -96,6 +96,7 @@ open Formal.PriorityBand
 #print axioms Formal.SkillGrindSelection.grind_actionable
 #print axioms Formal.SkillGrindSelection.beats_prefers_higher_rate
 #print axioms Formal.SkillGrindSelection.beats_prefers_cheaper_at_equal_level
+#print axioms Formal.SkillGrindSelection.costlier_never_beats_at_equal_level
 #print axioms Formal.SkillGrindSelection.beats_prefers_wanted
 #print axioms Formal.SkillGrindSelection.unwanted_not_beats_wanted
 #print axioms Formal.MonsterDropApply.applyDrops_monotone

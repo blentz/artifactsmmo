@@ -345,6 +345,48 @@ theorem beats_prefers_cheaper_at_equal_level (c b : GrindCandidate)
     simp [_beats, hcw, hw ▸ hcw, hlvl, hcost]
     omega
 
+/-- `costlier_never_beats_at_equal_level`: the converse guard — at equal `wanted`
+standing and EQUAL `craft_level`, a strictly COSTLIER chain never displaces the
+incumbent.
+
+STATED BECAUSE THE ARGUMENT FOR `unwanted_not_beats_wanted` APPLIES HERE TOO. A
+one-sided pin lets a clause be inverted without any theorem noticing, and after
+this restatement the cost key was pinned in one direction only. There is no live
+hole today — inverting the raw-cost tie-break is still caught through
+`beats_prefers_cheaper_at_equal_level`'s wanted-pair and level-zero routes,
+which reach that clause — but "currently caught by a neighbouring theorem's
+incidental coverage" is not the same guarantee as "pinned", and it is the kind of
+coverage that evaporates when the neighbour is later narrowed.
+
+This is also what `costlier_chain_never_beats` used to say before 2026-08-14,
+minus the claim it made about UNEQUAL craft levels, which the rate ordering
+falsifies: a costlier chain at a higher level now wins, on purpose. Restricting
+the converse to equal levels is what survives of it, exactly as
+`beats_prefers_cheaper_at_equal_level` is what survives of its twin.
+
+The `0 ≤ c.craft_level` hypothesis is load-bearing for the same reason as in
+`beats_prefers_cheaper_at_equal_level`: at a negative level the
+cross-multiplication reverses and the costlier rung wins. Non-vacuous: equal
+level 4, `acquire_steps` 23 against 9, both unwanted. -/
+theorem costlier_never_beats_at_equal_level (c b : GrindCandidate)
+    (hw : c.wanted = b.wanted) (hlvl : c.craft_level = b.craft_level)
+    (hlvl0 : 0 ≤ c.craft_level)
+    (hcost : b.acquire_steps < c.acquire_steps) :
+    _beats c (some b) = false := by
+  have hb0 : 0 ≤ b.craft_level := hlvl ▸ hlvl0
+  cases hcw : c.wanted
+  case false =>
+    simp [_beats, hcw, hw ▸ hcw, hlvl]
+    by_cases heq : b.craft_level * b.acquire_steps = b.craft_level * c.acquire_steps
+    · -- rates tie (level 0): the raw-cost tie-break refuses the costlier rung
+      rw [if_pos heq]; omega
+    · -- rates differ (level > 0): the costlier chain has the lower rate
+      rw [if_neg heq]
+      exact Int.mul_le_mul_of_nonneg_left (by omega) hb0
+  case true =>
+    simp [_beats, hcw, hw ▸ hcw, hlvl]
+    omega
+
 /-- `beats_prefers_wanted`: a WANTED candidate beats an UNWANTED incumbent.
 
 The June 2026 guarantee — pure cheapest-chain greed had the bot craft a value-10
@@ -355,7 +397,26 @@ rate; it credits `effective_steps` to zero, which zeroes the INCUMBENT's
 cross-product, so the wanted candidate either wins the rate outright or ties it
 at zero and wins the `wanted` tie-break underneath. Proving it is the check that
 the credit and the tie-break together reproduce what the old lexicographic pivot
-gave by fiat. -/
+gave by fiat.
+
+WHY THE TWO `0 ≤` HYPOTHESES ARE HERE, AND WHY THEY ARE NOT SLACK. The credit
+zeroes the CHALLENGER's steps, so its cross product is
+`c.craft_level * b.acquire_steps` while the incumbent's collapses to 0 — and a
+product of two nonnegatives is what makes that "at least zero" rather than
+"below zero". Let either factor go negative and the wanted rung LOSES outright,
+which is the whole guarantee inverted. Both counterexamples are checked by
+evaluation, not assumed:
+
+* `c.craft_level = -1` with `b.acquire_steps = 5`: the challenger's rate is
+  `-1 * 5 = -5` against the incumbent's `0`, so `_beats` returns `false` and the
+  throwaway keeps the slot.
+* `c.craft_level = 3` with `b.acquire_steps = -5`: the rate is `3 * -5 = -15`
+  against `0`, same inversion.
+
+Neither is reachable from the Python core — API craft levels start at 1 and an
+action count cannot be negative — so the hypotheses exclude nothing real. They
+are recorded here rather than only in `Formal/Contracts.lean` because this doc
+comment is where a reader minded to delete a hypothesis will be standing. -/
 theorem beats_prefers_wanted (c b : GrindCandidate)
     (hcw : c.wanted = true) (hbw : b.wanted = false)
     (hlvl : 0 ≤ c.craft_level) (hsteps : 0 ≤ b.acquire_steps) :
