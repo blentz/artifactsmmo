@@ -26,7 +26,7 @@ echo "[pre-commit] ruff bug-finder rules on src/artifactsmmo_cli/ai/..."
 uv run ruff check src/artifactsmmo_cli/ai/ \
   --select B007,SIM110,SIM115,RUF005,RUF059
 
-echo "[pre-commit] pytest (no-cov, fast)..."
-uv run pytest tests/test_ai/ --no-cov -q -x
+echo "[pre-commit] pytest (no-cov, fast, excludes live-API integration tests)..."
+uv run pytest tests/test_ai/ --no-cov -q -x -m "not integration"
 
 echo "[pre-commit] all gates passed."
