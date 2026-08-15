@@ -2,10 +2,19 @@
 
 Among items that are same-skill, in-level, OBTAINABLE (every recipe input
 reachable by gather/craft/winnable-drop) and XP-POSITIVE (the craft is not in the
-server's zero-xp band), prefer the CHEAPEST CHAIN TO BUILD — `acquire_steps`,
-counted in actions over the whole recipe closure — then the highest skill level
-(more XP); a full tie keeps the FIRST-SEEN candidate (insertion order) — there is
-no string/alphabetical tie-break. Returns None when no such in-skill recipe
+server's zero-xp band), prefer the highest XP RATE — `craft_level` per effective
+action, where the effective actions are `acquire_steps` (counted over the whole
+recipe closure) for an ordinary rung and ZERO for a `wanted` one — then `wanted`,
+then the higher `craft_level`, then the fewer RAW `acquire_steps`; a full tie
+keeps the FIRST-SEEN candidate (insertion order) — there is no
+string/alphabetical tie-break. That ordering replaced "cheapest chain, then
+highest level" on 2026-08-14; full rationale, and the measured domain over which
+the `wanted` credit acts as a total pivot, on `skill_grind_selection._beats`.
+`wanted` is not a property of the item: `_with_wanted` sets it per call from the
+caller's `SelectionContext` (`ctx.near_term_targets`, the usable-now gear ∪ tool
+SET, or `ctx.supply_target`, a sibling's published demand), so the same catalog
+ranks differently under a different objective and identically — every `wanted`
+False — under `NO_PROFILE_CONTEXT`. Returns None when no such in-skill recipe
 exists — the caller (the LevelSkill action's is_applicable / grind expansion,
 always same-skill, never cross-skill) then has no craftable rung. Inclusion is a
 recipe-table + reachability fact, free of bank-freshness false positives (only

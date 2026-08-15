@@ -376,8 +376,12 @@ introduced by the 2026-08-14/15 rework, and two pre-existing ones restated with
 domain hypotheses:
 
 - `beats_prefers_higher_rate` — NEW, the new first key. Stated for the UNWANTED
-  pair because two wanted candidates tie on rate by construction, so quantifying
-  over equal-`wanted` pairs would be vacuous on half its domain.
+  pair because generalising it to the wanted pair would be **false, not
+  vacuous**: two wanted candidates both credit to zero effective steps, so their
+  rates tie and `craft_level` decides, while the hypothesis is written on the raw
+  `acquire_steps` that comparison never reads (`c` wanted at level 1 / 0 steps
+  against `b` wanted at level 2 / 7 steps satisfies the hypothesis, and `_beats`
+  returns `false`).
 - `beats_prefers_cheaper_at_equal_level` — NEW, and what survives of
   `beats_prefers_cheaper_chain`: cheapness still decides wherever it is the only
   difference. Holds by three routes (unwanted at positive level via the rate;
@@ -391,6 +395,22 @@ domain hypotheses:
   pivot, and carrying nonnegativity hypotheses it did not need before.
 - `unwanted_not_beats_wanted` — RESTATED, likewise with hypotheses. The converse
   guard, and the only Lean pin behind the `_beats invert wanted shield` mutant.
+
+**Five roles is not five-of-five coverage: the `craft_level` tie-break (level 3
+of the 4) has NO role theorem and no named mutant.** Every one of the five either
+returns before reaching that clause (the rate theorem decides on the rate; both
+`wanted` theorems decide on the credit or the shield) or holds `craft_level`
+equal, so the clause cannot fire (the two equal-level theorems) — and
+`SKILL_GRIND_SELECTION_MUTATIONS` has no entry that touches it. It is pinned by
+tests instead, which was checked by inverting it (`>` to `<`) rather than
+assumed: that inversion fails `test_python_matches_lean` and
+`test_python_matches_lean_unbiased` in the differential group and the unit
+`test_craft_level_breaks_tie_on_equal_missing`, which is the case where two free
+rungs tie at rate zero and only this clause can choose the level-3 one. Worth
+naming because this is also the clause carrying the rework's ONLY behavioural
+difference from the rejected lexicographic form: with `wanted` credited to zero,
+every wanted rung ties every other on rate, so among them it is `craft_level` —
+not raw cost — that decides.
 
 **`Int` is wider than the Python domain, and the ordering theorems feel it.**
 Four of the five carry `0 ≤` hypotheses on `craft_level` / `acquire_steps`.

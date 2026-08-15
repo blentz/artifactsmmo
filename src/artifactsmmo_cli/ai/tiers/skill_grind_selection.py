@@ -94,13 +94,16 @@ def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
     skill_level in 10 of the 11 qualifying buckets (the 11th, skill_level
     21, is trivially flat -- both craft_levels there already sit in the
     zero-xp grey band). Where both rungs pay (skill_level 5/7/8/9,
-    craft_level 1 vs 5) the ratio RISES 2.4x-4.4x (craft_level 1 pays ~5-6
+    craft_level 1 vs 5) the ratio RISES 2.36x-4.37x (craft_level 1 pays ~5-6
     xp/item, craft_level 5 pays ~59-131 depending on the item) --
     craft_level UNDERSTATES the level-5 rung's true payoff by that same
     factor, which always biases the rank toward the cheaper low rung. Where
-    the comparison instead crosses a refining chain (skill_level 10/11,
-    craft_level 1 vs 10: copper_bar->iron_bar, ash_plank->spruce_plank) the
-    ratio FALLS to roughly 46-48% of its craft_level=1 value. The single
+    the comparison instead runs craft_level 1 against craft_level 10
+    (skill_level 10: copper_bar -> iron_bar, a real mining refining chain;
+    skill_level 11: copper_bar against spruce_plank, which is neither a
+    refining chain nor one skill -- ash_plank has no skill_level-11
+    observation at all) the ratio FALLS to 48% and 46% of its craft_level=1
+    value. The single
     exception across the whole table: skill_level 15, craft_level 5 vs 15
     (life_amulet -> life_ring), where the ratio moves only 24.80 -> 26.87
     (+8%) -- the one comparison where craft_level's implied proportionality
@@ -111,27 +114,78 @@ def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
     observable per item in these traces (13 distinct items measured here).
     Not done here; recorded as a residual for a later branch.
 
+    THAT MEASUREMENT IS PARTLY CROSS-SKILL; THIS COMPARISON NEVER IS. The
+    replay groups by (skill_level, craft_level) with NO skill component, so a
+    bucket can pit rungs of different skills against each other, and five of
+    the eleven qualifying buckets do: skill_level 5 (ash_plank, woodcutting,
+    against gearcrafting/jewelrycrafting/weaponcrafting rungs), 7 (ash_plank
+    against small_health_potion, alchemy), 8 and 9 (copper_bar, mining,
+    against that same potion) and 11 (copper_bar against spruce_plank,
+    woodcutting). The first four are ALL FOUR buckets behind the RISES figure
+    above. Since XP_base and k are per-SKILL parameters, a rise measured
+    across skills can be a difference between skills rather than a craft_level
+    effect. Within-skill steps exist at skill_level 10, 12, 13 and 21 (mining,
+    copper_bar -> iron_bar; at 12 a cooking rung is pooled into the
+    craft_level-1 mean), at 15 (life_amulet -> life_ring, jewelrycrafting) and
+    at 17 (alchemy) -- and only two of those have BOTH rungs out of the grey
+    band: skill_level 10 and the 5 -> 15 step at skill_level 15. The REFUTED
+    verdict does not rest on the cross-skill buckets (skill_level 10 alone,
+    mining against mining, moves the ratio 5.000 -> 2.400), but the DIRECTION
+    and SIZE of the mispricing are far less settled than the figures above
+    read, and `_beats` only ever compares rungs WITHIN one skill -- so the
+    cross-skill buckets do not measure the comparison this numerator is used
+    for.
+
     The `wanted` tie-break is spelled as two `and`/`not` branches rather than
     `if c.wanted != best.wanted: return c.wanted`: the extractor's v1 subset
     rejects `!=` on `Bool`, and this is the shape this function already
     extracted for two years. Semantically identical.
 
-    WANTED IS A MARGINAL-COST CREDIT, NOT A PIVOT. A rung the objective
-    already wants is work the character owes regardless of the grind, so the
-    grind's marginal cost for it is zero — hence `effective_steps = 0` rather
-    than a key above the rate. Crafting a wanted item gains the SAME skill xp
-    and yields a keeper instead of a throwaway (2026-06-24: pure cheapest-chain
-    greed made the bot craft a value-10 `apprentice_gloves` while ignoring the
-    committed value-83 `copper_dagger`). Expressing that as a credit rather
-    than a lexicographic pivot is what stops a wanted rung at 500 steps
-    outranking a throwaway at 2 by fiat while still letting it win on merit —
-    and it keeps every term in one currency, which is the argument
+    WANTED IS SPELLED AS A MARGINAL-COST CREDIT AND BEHAVES AS A PIVOT. A rung
+    the objective already wants is work the character owes regardless of the
+    grind, so the grind's marginal cost for it is zero — hence
+    `effective_steps = 0` rather than a key above the rate. Crafting a wanted
+    item gains the SAME skill xp and yields a keeper instead of a throwaway
+    (2026-06-24: pure cheapest-chain greed made the bot craft a value-10
+    `apprentice_gloves` while ignoring the committed value-83 `copper_dagger`).
+    It keeps every term in one currency, which is the argument
     `ai/skill_grind_cost_core` already makes.
+
+    What it does NOT do is make a wanted rung win on merit rather than by
+    fiat — this docstring said so until 2026-08-15 and the design discussion
+    chose the credit over a lexicographic pivot partly on that claim. Swept
+    exhaustively over the domain this core can be handed (`craft_level` 1..11 ×
+    `acquire_steps` 0..11 on BOTH sides, 17424 ordered pairs): a wanted
+    challenger beats an unwanted incumbent in 17424 of 17424, and an unwanted
+    challenger beats a wanted incumbent in 0 of 17424. `_beats(wanted level 1 /
+    500 steps, unwanted level 5 / 2 steps)` is True — the very outcome the
+    pivot was rejected for producing, and
+    `test_a_wanted_rung_wins_on_rate_because_its_chain_is_owed_anyway` pins
+    those literal numbers. The Lean role theorem `beats_prefers_wanted` proves
+    it with NO rate hypothesis at all, only `0 ≤ craft_level` and
+    `0 ≤ acquire_steps`: crediting the challenger to zero makes the incumbent's
+    cross product zero, and a product of two nonnegatives cannot lose to zero.
+    `wanted` is a total pivot here, exactly as the rejected option would have
+    been.
+
+    THE ONE BEHAVIOURAL DIFFERENCE FROM THAT PIVOT IS AMONG WANTED RUNGS.
+    Compared against `wanted` as a lexicographic key above this same rate, over
+    the same 17424-pair domain, the two orderings agree on every
+    unwanted-vs-unwanted, wanted-vs-unwanted and unwanted-vs-wanted pair and
+    differ only on wanted-vs-wanted ones (4136 of 17424): the credit ties every
+    wanted rung's rate at zero, so `craft_level` decides and raw `acquire_steps`
+    only breaks what is left — `_beats(wanted level 5 / 500 steps, wanted level
+    1 / 1 step)` is True — whereas a pivot would have left them ordered by their
+    UNCREDITED rate, `craft_level` over real cost. That, and the single-currency
+    argument above, is the whole case for the credit; the "wins on merit"
+    reading is not part of it.
 
     WHY THERE ARE STILL TWO TIE-BREAKS UNDER THE CREDIT. Crediting to zero
     makes every wanted rung tie every other wanted rung on rate, which destroys
     the cost signal among them — two rungs both owed are not equally near, so
-    RAW `acquire_steps` is the last key. And a free throwaway also credits to
+    RAW `acquire_steps` is the last key. It recovers that signal only at EQUAL
+    `craft_level`, since the level tie-break sits above it: `_beats(wanted level
+    5 / 500 steps, wanted level 1 / 1 step)` is True. And a free throwaway also credits to
     zero, ties a wanted keeper at rate zero, and would survive on insertion
     order — the 2026-06-24 inversion through the back door — so `wanted` is the
     first tie-break under the rate. Neither is decoration; each closes a case

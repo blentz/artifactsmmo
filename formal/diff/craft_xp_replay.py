@@ -82,7 +82,8 @@ looks exactly like a real 1-execution craft.)
 per-item field) is how many output items ONE execution produces, and it is
 not always 1: `small_health_potion`, `earth_boost_potion` and
 `fire_boost_potion` all craft at quantity=2. `Craft(small_health_potion×1)`
-posts 118 xp with `inventory_used` net -1 (-3 sunflower_seed... consumed, +2
+posts 118 xp with `inventory_used` net -1 (-3 `sunflower` consumed -- that is
+the item code; the recipe is `{sunflower: 3}` at quantity 2 -- and +2
 potions) -- ONE execution, TWO items, so the per-ITEM rate is 118/2 = 59, not
 118. Mixing recipes of different `craft.quantity` on a raw "xp per requested
 execution" basis silently compares two different units.
@@ -305,6 +306,17 @@ def _ratio_table(
     and the ratio xp/craft_level, plus the SIGN of the change between each
     consecutive pair of observed craft_levels -- computed facts, not a
     judgment about whether they mean the ratio is 'basically constant'.
+
+    THE GROUPING HAS NO SKILL COMPONENT, so a bucket can compare rungs of
+    DIFFERENT skills -- five of the eleven qualifying buckets do (skill_level 5,
+    7, 8, 9, 11), including all four behind the "ratio rises" reading in
+    `skill_grind_selection._beats`. `XP_base` and `k` are per-SKILL parameters
+    (see this module's own docstring), so a cross-skill step is weaker evidence
+    about `craft_level` than a within-skill one, and `_beats` only ever compares
+    rungs within one skill. The REFUTED verdict does not depend on them
+    (skill_level 10 is mining against mining and moves 5.000 -> 2.400), but any
+    statement about the DIRECTION or SIZE of the mispricing should name which
+    buckets it rests on.
 
     Also returns `all_flat`: the skill_levels where EVERY step is FLAT (ratio
     unchanged craft_level to craft_level), so a caller can state precisely

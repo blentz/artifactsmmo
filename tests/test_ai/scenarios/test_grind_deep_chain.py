@@ -178,7 +178,7 @@ def test_selected_rung_is_the_rate_maximal_feasible_one(game_data: GameData,
     and was passing here only by coincidence (see below).
 
     Feasible candidates in this scenario (weaponcrafting 5, real catalog,
-    `wanted` False for all of them under the default context): the four
+    `wanted` False for all of them under the default context): the five
     level-1 rungs (`copper_axe`, `apprentice_gloves`, `copper_pickaxe`,
     `copper_dagger` at 69 steps, `fishing_net` at 70) and the four level-5
     rungs (`sticky_sword` at 61, `sticky_dagger` at 109, `water_bow` at 136,

@@ -104,11 +104,22 @@ def test_python_matches_lean_unbiased(skill, current_level, candidates):
     assert py == lean["code"], (skill, current_level, candidates, py, lean)
 
 
-def test_cheapest_chain_wins_diff():
-    """The cost ordering, pinned deterministically on BOTH sides. Two equally
-    wanted, equally feasible rungs differing only in chain cost: the cheap one
-    must win, and the higher craft_level must not buy its way past it — that
-    inversion is exactly what let a 51-action rung outrank a 7-action one."""
+def test_the_cheaper_rung_wins_when_it_also_has_the_higher_rate_diff():
+    """The 2026-08-06 regression case, pinned deterministically on BOTH sides:
+    a 51-action level-5 rung against a 7-action level-1 one, and the cheap rung
+    must win.
+
+    RENAMED AND RESTATED 2026-08-15. This was `test_cheapest_chain_wins_diff`
+    and claimed "the higher craft_level must not buy its way past it". Since
+    2026-08-14 a higher craft_level DOES buy its way past a cheaper chain when
+    it pays for it — `test_rate_beats_cheapest_chain_diff` below is exactly that
+    case, and the unit
+    `test_craft_level_buys_its_way_past_a_cheaper_chain_only_by_paying_for_it`
+    names it. What survives, and what this case actually pins, is that it must
+    PAY: here the rates are 1/7 = 0.143 against 5/51 = 0.098, so the cheap rung
+    wins the RATE outright. Cheapness is not what decides; it is what the
+    winning rung happens to also have. The assertion is unchanged and still
+    correct — it was passing for a reason its docstring stated wrongly."""
     cands = [
         ("iron_sword", "weaponcrafting", 5, 51, True, False, True),   # deep chain
         ("copper_dagger", "weaponcrafting", 1, 7, True, False, True),  # shallow
@@ -120,9 +131,21 @@ def test_cheapest_chain_wins_diff():
     assert py == lean["code"]
 
 
-def test_craft_level_breaks_only_exact_cost_ties_diff():
-    """`craft_level` is the tie-break BELOW cost, never above it. Equal cost ->
-    the higher rung wins; unequal cost -> cost decides regardless of level."""
+def test_at_equal_cost_the_higher_rung_wins_on_rate_diff():
+    """At EQUAL chain cost the higher-level rung wins — and it wins on the RATE
+    key, not on a tie-break: the cross products here are 5*7 = 35 against
+    1*7 = 7, so `_beats` returns on the rate comparison and the `craft_level`
+    tie-break underneath is never reached (that clause is reachable only when
+    the rates tie, as in the unit `test_craft_level_breaks_tie_on_equal_missing`).
+
+    RENAMED AND RESTATED 2026-08-15. This was
+    `test_craft_level_breaks_only_exact_cost_ties_diff` and said "`craft_level`
+    is the tie-break BELOW cost, never above it. Equal cost -> the higher rung
+    wins; unequal cost -> cost decides regardless of level." Since 2026-08-14
+    both clauses are false: `craft_level` is the rate's NUMERATOR, above raw
+    cost, and unequal cost does not decide — `test_rate_beats_cheapest_chain_diff`
+    below is the case where the costlier rung wins. The assertion is unchanged;
+    only the property it was said to pin was wrong."""
     tied = [
         ("copper_dagger", "weaponcrafting", 1, 7, True, False, True),
         ("iron_sword", "weaponcrafting", 5, 7, True, False, True),
@@ -136,7 +159,13 @@ def test_craft_level_breaks_only_exact_cost_ties_diff():
 
 def test_wanted_beats_cheaper_throwaway_diff():
     """The reported inversion: a WANTED keeper (more missing materials) must beat
-    a cheaper throwaway. Pins the wanted-first key on both sides."""
+    a cheaper throwaway. Pins the `wanted` TIE-BREAK on both sides: the
+    throwaway is free and the keeper is credited to zero by `wanted`, so both
+    cross products are zero, the rate ties, and the tie-break underneath is what
+    decides. (`wanted` stopped being a key ABOVE the rate on 2026-08-14; it is a
+    credit on the denominator plus this tie-break, which together beat an
+    unwanted incumbent at every level and cost — see
+    `skill_grind_selection._beats`.)"""
     cands = [
         ("apprentice_gloves", "weaponcrafting", 1, 0, True, False, True),
         ("copper_dagger", "weaponcrafting", 1, 2, True, True, True),
@@ -149,7 +178,7 @@ def test_wanted_beats_cheaper_throwaway_diff():
 
 
 def test_unwanted_never_displaces_a_wanted_incumbent_diff():
-    """The OTHER half of the wanted-first key: `_beats`'s shield clause
+    """The OTHER half of the `wanted` tie-break: `_beats`'s shield clause
     (`best.wanted and not c.wanted -> False`). The test above lists the wanted
     candidate SECOND, so it only ever exercises the first clause; this one lists
     it FIRST, so the shield is the only thing keeping the cheaper throwaway from

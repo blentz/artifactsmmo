@@ -208,20 +208,40 @@ order by hand:
   wanted rung on rate, which **destroys the cost signal among wanted rungs**.
   Two rungs both owed are not equally near; the cheaper is reached sooner.
   `acquire_steps` (the *raw* count, not the credited one) as the final
-  tie-break restores it, and is what keeps
-  `test_among_wanted_fewest_missing_still_wins` honest.
+  tie-break restores it **only at equal `craft_level`**, because it sits below
+  the `craft_level` tie-break, not above it: `_beats(wanted lvl5/500 steps,
+  wanted lvl1/1 step)` is `True`. What it keeps honest is therefore
+  `test_among_wanted_fewest_missing_still_wins`, whose two wanted rungs share a
+  level — not the general claim that the cheaper of two owed rungs wins.
 - The credit alone also cannot separate a **free throwaway from a wanted
   keeper**: both reach `effective_steps = 0`, the rate comparison ties at
   zero, and without a `wanted` key the incumbent survives on insertion order.
   That is the June 2026 `apprentice_gloves`-over-`copper_dagger` inversion
   returning through the back door. `wanted` as the *first tie-break under the
-  rate* closes it, and unlike the old lexicographic placement it cannot
-  override a genuinely better rate.
+  rate* closes it.
 
-Where the credit does the work is the case it was chosen for: a wanted rung at
-500 steps against an unwanted rung at 2. The credit zeroes the wanted rung's
-denominator, so the cross-product comparison hands it the win on rate — the
-marginal-cost reading — instead of a pivot doing it by fiat.
+**Corrected 2026-08-15.** That second bullet used to end "and unlike the old
+lexicographic placement it cannot override a genuinely better rate", and the
+paragraph below used to say the credit hands a wanted rung the win "instead of a
+pivot doing it by fiat". Both are false, as an exhaustive sweep of the reachable
+domain shows (`craft_level` 1..11 × `acquire_steps` 0..11 on both sides, 17,424
+ordered pairs): a wanted challenger beats an unwanted incumbent in **17,424 of
+17,424** and an unwanted challenger beats a wanted incumbent in **0**, so the
+credit overrides *any* rate. `_beats(wanted lvl1/500 steps, unwanted lvl5/2
+steps)` is `True` — the exact outcome recorded below as Option B's known cost —
+and `beats_prefers_wanted` proves it with **no rate hypothesis at all**, only
+`0 ≤ craft_level` and `0 ≤ acquire_steps`.
+
+So the case the credit was chosen for — a wanted rung at 500 steps against an
+unwanted rung at 2 — resolves the same way under either option. Over that same
+17,424-pair domain the credit and a `wanted` pivot above the same rate agree on
+every unwanted-vs-unwanted, wanted-vs-unwanted and unwanted-vs-wanted pair; they
+differ **only among wanted rungs** (4,136 pairs), where the credit ties every
+rate at zero so `craft_level` decides and raw cost only breaks what is left,
+while a pivot would have ordered them by their uncredited rate. That difference,
+plus keeping every term in one currency, is the honest case for Option A. "Wins
+on merit rather than by fiat" is not part of it: on this domain a wanted rung
+always wins.
 
 Compared by **cross-multiplication, never float division**:
 
@@ -326,16 +346,26 @@ effective_steps = 0 if wanted else acquire_steps
 
 Principled — it is the marginal-cost reading of "wanted", it introduces no
 tuned weight, and it puts value in the same currency as cost, which is the
-argument `skill_grind_cost_core` already makes. It also removes the extreme
-point: a wanted rung wins on rate rather than by pivot, so among several wanted
-rungs the highest-level one wins rather than the cheapest.
+argument `skill_grind_cost_core` already makes. It **relocates** the extreme
+point rather than removing it (corrected 2026-08-15 — it said "removes"): a
+wanted rung still beats an unwanted one at every level and cost pair in the
+reachable domain, exactly as a pivot would, and what changes is the order
+*among* several wanted rungs, where the highest-level one now wins rather than
+the cheapest.
 
 **Option B (conservative): keep `wanted` as the lexicographic primary key**, as
 it is written today and as approved in the earlier design discussion. Smallest
 diff, keeps `beats_prefers_wanted`-shaped proofs intact, and preserves the
 existing four `wanted` tests verbatim. Its known cost is the extreme-point
 pathology this project has already retired once elsewhere: a wanted rung at 500
-steps outranks a throwaway at 2.
+steps outranks a throwaway at 2. **Corrected 2026-08-15: that cost is not
+peculiar to Option B.** Option A produces the same outcome — `_beats(wanted
+lvl1/500, unwanted lvl5/2)` is `True`, pinned by
+`test_a_wanted_rung_wins_on_rate_because_its_chain_is_owed_anyway` — so this
+line was not a discriminator between the options and should not have been read
+as one. The real discriminator is the order among wanted rungs (`craft_level`
+before raw cost under A; the uncredited rate under B), plus A's single-currency
+framing.
 
 Both options need identical wiring; they differ only inside `_beats`.
 **Recommendation: A.** Whichever is chosen, it is chosen here, in
@@ -358,8 +388,14 @@ RECURRENCES", so it is replaced, not deleted:
   `c.craft_level * b.acquire_steps > b.craft_level * c.acquire_steps`
   implies `_beats c (some b)`. Stated for the unwanted pair because two wanted
   candidates both credit to zero steps and therefore always tie on rate by
-  construction; asserting it over equal-`wanted` pairs generally would be
-  vacuously satisfied on half its domain.
+  construction, so asserting it over equal-`wanted` pairs generally would be
+  **false, not vacuous** (corrected 2026-08-15): the hypothesis reads the *raw*
+  `acquire_steps` that the credited comparison never consults, so `c` wanted at
+  level 1 / 0 steps against `b` wanted at level 2 / 7 steps satisfies
+  `1 * 7 > 2 * 0` while `_beats` returns `false` on the `craft_level`
+  tie-break. Restricting to the unwanted pair is right; "vacuous" was the wrong
+  word for why, and in a repo with a standing zero-vacuousness rule it is a
+  term of art — a hypothesis nothing satisfies — not a synonym for "false".
 - `beats_prefers_cheaper_at_equal_level` — equal `wanted` standing, **equal
   `craft_level`**, strictly fewer `acquire_steps` implies `_beats`. This is the
   old theorem's surviving content: cheapness still wins where it is the only
@@ -468,6 +504,27 @@ The gate has not run since `ec613f0d`.
 - **`craft_level` as a cardinal XP proxy is unverified** (above). The replay
   task is in scope; if it cannot settle the question, the assumption stands
   documented and cited rather than silently assumed.
+  **Settled to REFUTED, but only partly on the comparison that matters
+  (amended 2026-08-15).** `formal/diff/craft_xp_replay.py` groups observations
+  by `(skill_level, craft_level)` with **no skill component**, and ratios
+  across that grouping. Five of the eleven qualifying buckets therefore compare
+  rungs of *different* skills — skill_level 5 (`ash_plank`, woodcutting, vs
+  gearcrafting/jewelrycrafting/weaponcrafting rungs), 7 (`ash_plank` vs
+  `small_health_potion`, alchemy), 8 and 9 (`copper_bar`, mining, vs that same
+  potion) and 11 (`copper_bar` vs `spruce_plank`, woodcutting) — and the first
+  four are **all four** buckets behind the headline "the ratio rises
+  2.36×–4.37×". The module's own premise is that `XP_base` and `k` are
+  unpublished **per-skill** parameters, so a rise measured across skills may be
+  a between-skill difference rather than a `craft_level` effect. Within-skill
+  steps exist at skill_level 10/12/13/21 (mining, `copper_bar` → `iron_bar`),
+  15 (`life_amulet` → `life_ring`, jewelrycrafting) and 17 (alchemy), of which
+  only skill_level 10 and the 5 → 15 step at 15 have both rungs out of the grey
+  band. The REFUTED verdict stands without the cross-skill buckets — skill_level
+  10 alone, mining against mining, moves the ratio 5.000 → 2.400 — but the
+  *direction* and *size* of the mispricing are much less settled than the
+  figures read, and since `_beats` only ever compares rungs within one skill,
+  the cross-skill buckets do not measure the comparison the numerator is used
+  for. A skill-aware grouping is the follow-up.
 - **`craft_yield` is not in the ratio.** A recipe producing Y > 1 items costs
   one craft action and pays one craft's XP, so the numerator is right, but
   `acquire_steps` prices one unit and may over-count for a batching recipe.
@@ -515,7 +572,11 @@ The gate has not run since `ec613f0d`.
     rather than hand-building a `SelectionContext` (which would just be a
     fixture again). **Not the identical object `_execute_level_skill` would
     thread into `next_grind_goal` this cycle** — `self._last_ctx` has exactly
-    two write sites in `player.py`: `:637` (inside `run()`'s `_decide_band`
+    three write sites in `player.py`, one of them the `NO_PROFILE_CONTEXT`
+    initialiser at `:329` (`self._last_ctx: SelectionContext =`, in `__init__`,
+    which an unannotated grep for `self._last_ctx =` misses — corrected
+    2026-08-15) and two that can produce the object read here: `:637` (inside
+    `run()`'s `_decide_band`
     path, reached *after* `run()` calls `_update_coordination` at `:1058`)
     and `:936` (inside `plan_from_state`, whose only caller in the file is
     `plan_once`, and which never calls `_update_coordination` at all). So the
@@ -544,8 +605,14 @@ The gate has not run since `ec613f0d`.
     production: `_selection_context` never sets it, and the one place that
     does (`StrategyArbiter.select`, `ai/strategy_driver.py:1208`) rebinds a
     *local* variable that never flows back to `self._last_ctx` (confirmed:
-    `self._last_ctx =` has exactly two assignment sites in `player.py`, both
-    before that binding) — so this probe's empty `step_profile` is not an
+    `self._last_ctx` has exactly **three** assignment sites in `player.py` —
+    `:329`, the `NO_PROFILE_CONTEXT` initialiser in `__init__`, whose annotated
+    form `self._last_ctx: SelectionContext =` the bare `self._last_ctx =` grep
+    quoted here misses, plus `:637` and `:936` — and none of them is the
+    arbiter's local. Corrected 2026-08-15: the count was two; the argument it
+    supports is unchanged, since the extra site only makes the field *more*
+    plainly never written by `StrategyArbiter.select`) — so this probe's empty
+    `step_profile` is not an
     artifact of the probe, it is what the live object `_execute_level_skill`
     reads actually contains.
 
@@ -557,3 +624,27 @@ The gate has not run since `ec613f0d`.
   per-cycle path uses (not a hand-built stand-in, though not the identical
   object either — see above) — agree on the same two rungs the brief named,
   and neither is `apprentice_gloves`.
+
+- **The `wanted` pivot has ZERO runtime exercise, and the marginal-cost premise
+  covers only part of what it fires on (named 2026-08-15).** Promoted here from
+  a clause inside the probe-fidelity paragraph above, because it is a residual
+  about the change's behaviour and not about the probe. Two parts:
+
+  - *Never exercised.* In the live probe `wanted` was `False` for both
+    characters' selected rungs and, being the context-free default, `False`
+    everywhere the cached candidate list is read without a context. So the one
+    genuinely new live behaviour this branch introduces — the credit — was not
+    observed running. Everything the probe confirmed was the rate key.
+  - *The premise is narrower than the flag.* `_with_wanted` sources `wanted`
+    from `ctx.near_term_targets`, which `ai/selection_context.py` documents as
+    the **set** of usable-now gear ∪ tool targets (11 codes for Lor in the
+    probe), plus `ctx.supply_target`. At most one of those is the target
+    actually being built. The marginal-cost premise — "work the character owes
+    regardless of the grind" — holds for that one; for the other ten the credit
+    prices *speculative* work at zero. Combined with the pivot totality
+    established above, any one of the 11 that is in-level, obtainable and
+    xp-positive in the ground skill wins the grind unconditionally, at any
+    `acquire_steps`. Narrowing the credit to the committed target (rather than
+    the whole near-term set) is the obvious follow-up and is **not** done here;
+    it would need its own evidence, and no live run has yet shown the current
+    breadth doing harm — or doing anything at all.

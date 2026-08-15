@@ -138,7 +138,10 @@ def test_craft_level_buys_its_way_past_a_cheaper_chain_only_by_paying_for_it():
     # 5/20 = 0.250 beats 1/7 = 0.143 -- same level gap, cheaper enough to win.
     wins = [_c("cheap_low", level=1, steps=7), _c("dear_high", level=5, steps=20)]
     assert skill_grind_selection_pure("weaponcrafting", 15, wins) == "dear_high"
-    # equal cost -> the level tie-break, unchanged.
+    # equal cost -> the higher level wins on the RATE itself (5*7 = 35 against
+    # 1*7 = 7), NOT on the craft_level tie-break: that clause is reachable only
+    # when the rates tie, as in test_craft_level_breaks_tie_on_equal_missing
+    # above. Corrected 2026-08-15; the assertion is unchanged.
     tied = [_c("low", level=1, steps=7), _c("high", level=5, steps=7)]
     assert skill_grind_selection_pure("weaponcrafting", 15, tied) == "high"
 

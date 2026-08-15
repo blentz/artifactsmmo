@@ -280,11 +280,18 @@ a 13-action level-1 rung over a 59-action level-5 rung and sat at weaponcrafting
 8 for 757 grind cycles. The surviving content of the old theorem is
 `beats_prefers_cheaper_at_equal_level` below.
 
-STATED FOR THE UNWANTED PAIR, deliberately. Two WANTED candidates both credit to
-zero effective steps and therefore tie on rate by construction, so quantifying
-this over equal-`wanted` pairs generally would be vacuously satisfied on half
-its domain — the shape of hypothesis this project has shipped before while
-proving nothing. -/
+STATED FOR THE UNWANTED PAIR, deliberately — and NOT because the wanted half
+would be vacuous. Two WANTED candidates both credit to zero effective steps, so
+their rates always tie and the decision falls through to `craft_level`, while
+the hypothesis above is written on the RAW `acquire_steps` that credited
+comparison never reads. Generalising this theorem to equal-`wanted` pairs would
+therefore be FALSE, not vacuous: `c` wanted at `craft_level` 1 / 0 steps against
+`b` wanted at `craft_level` 2 / 7 steps satisfies `1 * 7 > 2 * 0` while
+`_beats c (some b)` is `false`, because the `craft_level` tie-break prefers 2
+over 1. Checked by evaluating the core, not assumed. The word matters here: this
+repo's zero-vacuousness rule is about hypotheses NOTHING satisfies, and this
+hypothesis is satisfiable on the wanted pair — it is the conclusion that fails,
+which is a stronger reason to restrict the statement, not a weaker one. -/
 theorem beats_prefers_higher_rate (c b : GrindCandidate)
     (hcw : c.wanted = false) (hbw : b.wanted = false)
     (hrate : c.craft_level * b.acquire_steps > b.craft_level * c.acquire_steps) :
