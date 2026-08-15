@@ -286,7 +286,12 @@ Two constraints on that wiring, both load-bearing:
   read, by rebuilding the returned list with `dataclasses.replace` — never by
   mutating the cached list in place.
 
-### Decision point: where `wanted` enters the comparison — for user review
+### Decision: where `wanted` enters the comparison
+
+**RESOLVED 2026-08-14 — Option A.** The user approved the recommendation at
+spec review. Option B is recorded below as the rejected alternative, not as a
+live choice; an implementer who finds Option A unworkable escalates rather than
+falling back to B.
 
 **Option A (recommended): marginal-cost credit.** A wanted rung's chain is work
 the character owes regardless of the grind, so the grind's *marginal* cost for
