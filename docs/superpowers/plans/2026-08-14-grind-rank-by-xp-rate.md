@@ -83,10 +83,11 @@ def test_a_costlier_chain_wins_when_it_pays_proportionally_more_xp():
 
 def test_a_wanted_rung_wins_on_rate_because_its_chain_is_owed_anyway():
     """A wanted rung's chain is work the objective owes regardless of the
-    grind, so the grind's MARGINAL cost for it is zero -- it wins the rate
-    comparison rather than winning by lexicographic fiat. 500 steps against 2
-    is the shape that would look absurd under raw cost and is correct under
-    marginal cost."""
+    grind, so the grind's MARGINAL cost for it is zero: crediting it to zero
+    steps makes the incumbent's cross product zero, so it wins on the rate
+    key (1*2 = 2 against 5*0 = 0) before any tie-break is reached. 500 steps
+    against 2 is the shape that would look absurd under raw cost and is
+    correct under marginal cost."""
     cands = [_c("throwaway", level=5, steps=2, wanted=False),
              _c("committed_weapon", level=1, steps=500, wanted=True)]
     assert skill_grind_selection_pure("weaponcrafting", 8, cands) == "committed_weapon"
