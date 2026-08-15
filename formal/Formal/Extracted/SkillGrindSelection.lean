@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py (sha256: f507b11eb8595c32a4311ae9d1dcbc04dc0a90d14b537e29406200d06bb2d916) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py (sha256: a458658eee59df12a1901c0a6cf1bc29991adc157a64874bb8d56f3d3d1d5b02) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.SkillGrindSelection
@@ -46,7 +46,7 @@ def _beats (c : GrindCandidate) (best : Option GrindCandidate) :
              else
               false))))))
 
-/-- Extracted from `skill_grind_selection_pure` (line 145). -/
+/-- Extracted from `skill_grind_selection_pure` (line 166). -/
 def skill_grind_selection_pure (skill : String) (current_level : Int) (candidates : List GrindCandidate) :
     String :=
   let best : Option GrindCandidate := none
