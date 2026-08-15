@@ -193,6 +193,16 @@ supports. So:
 - A replay harness in `formal/diff/` predicts each observation from its skill's
   fitted parameters and reports residuals per skill. It prints the table
   whatever the outcome.
+
+  **It reads the learning store, not `play-trace-*.jsonl`.** Traces are a
+  debugging artifact the user deletes at will — 164 of 169 went on 2026-08-15 —
+  and nothing the app or its evidence depends on may be built on them. The
+  observations this harness validates against are `craft_yield` rows, which is
+  where they already live. `formal/diff/craft_xp_replay.py`, written on the
+  trace corpus, is therefore **superseded** by that harness rather than
+  extended: its verdict stands in the record, but a trace-based measurement
+  cannot be re-run on demand and so cannot be the thing a fit is checked
+  against.
 - The spec's acceptance bar: **the fit's median absolute error must be at or
   below the ±5% cross-character spread already observed on identical items.**
   Below that is noise the model cannot beat, because `wisdom_bonus` is
@@ -228,9 +238,22 @@ production path with a real `SelectionContext`, not a fixture.
 - **Increment 1's data takes time to accumulate.** The fit cannot be validated
   the day the column lands. This is why the increments are separable and why
   the column goes first.
-- **164 play-trace files were lost on 2026-08-15**, leaving five. The
-  `craft_yield` table survived and is now the better corpus, but the independent
-  cross-check the traces provided is gone until they rebuild.
+- **The trace corpus is not a dependency and must not become one.** The user
+  deleted 164 of 169 `play-trace-*.jsonl` files on 2026-08-15, and the standing
+  rule is that the app takes its data from the learning store. The app already
+  honours this — nothing under `src/` reads a trace at runtime; every mention
+  is a docstring citation, the writer in `commands/play.py`, or the optional
+  `stats --trace-file` flag. This design keeps to it: the observations, the
+  fit, and the validation all read `craft_yield`.
+
+  What this costs is the *independent* cross-check the traces provided. The
+  fit and the data it is checked against now come from the same table, so an
+  error in how `CraftAction` records a yield would be invisible to the
+  harness. The mitigation is that `craft_yield` is written straight from the
+  API's own `details.xp` with no derivation in between — there is little room
+  between the server's number and the stored one — but it is a weaker
+  arrangement than two independent sources and is named as such rather than
+  glossed.
 
 ---
 
