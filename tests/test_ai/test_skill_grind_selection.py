@@ -124,8 +124,11 @@ def test_deep_chain_loses_to_a_shallow_one_with_more_recipe_entries():
 
 
 def test_craft_level_buys_its_way_past_a_cheaper_chain_only_by_paying_for_it():
-    # A higher craft_level DOES outrank a cheaper chain now -- but only when it
-    # pays proportionally more per action. This test replaced
+    # A higher craft_level DOES outrank a cheaper chain now -- but only when
+    # its rate (craft_level per effective step) is at least as high as the
+    # cheaper chain's, not merely "more": at an exact rate tie the craft_level
+    # tie-break still favors the higher level even if its raw acquire_steps is
+    # larger, which "pays more" would not cover. This test replaced
     # `test_craft_level_is_only_a_tie_break_under_cost` on 2026-08-14: that test
     # passed under both orderings while asserting the opposite of what the code
     # does, which is worse than failing.
@@ -146,11 +149,13 @@ def test_a_costlier_chain_wins_when_it_pays_proportionally_more_xp():
     at craft level 5 (rate 0.085). Cheapest-chain picked the gloves, and the
     grind sat at weaponcrafting 8 for 757 cycles crafting a level-1 rung.
 
-    This is the ONLY test in the file that distinguishes the two orderings.
-    Every other cost-versus-level case here uses a `steps=0` candidate (free
-    wins under both) or an example where the cheaper rung is also the
-    higher-rate one -- including the 2026-08-06 regression guard. Verified by
-    working all 14 through both orderings by hand while planning this change.
+    This test and
+    `test_craft_level_buys_its_way_past_a_cheaper_chain_only_by_paying_for_it`
+    (added by this same change) are the two tests in the file that distinguish
+    the two orderings. All 14 pre-existing tests pass identically under both --
+    this key was silently wrong for months because nothing in the suite could
+    tell the difference. Verified by working all 14 through both orderings by
+    hand while planning this change.
     """
     cands = [_c("apprentice_gloves", level=1, steps=13),
              _c("sticky_dagger", level=5, steps=59)]
