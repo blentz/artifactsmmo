@@ -1377,6 +1377,21 @@ SKILL_GRIND_TARGET_MUTATIONS = [
     # scenario this group binds to, at the prices measured on 2026-08-15.
 ]
 
+# HOW THE "killed in-group by" ATTRIBUTIONS IN THIS LIST ARE MEANT TO READ.
+# run_group binds this list to formal/diff/test_skill_grind_selection_diff.py
+# (see the call site), NOT to tests/test_ai/test_skill_grind_selection.py. A unit
+# test that also fails under a mutant is therefore not what the gate runs, and
+# naming it alone sends a future debugger of a survivor to a file this group
+# never opens -- wasting the one clue the failure gives them. So each entry names
+# its in-group killer first, and a unit test second where one pins the same
+# behaviour, as documentation of intent rather than as the gate's killer.
+#
+# The attributions were derived from a `--runner serial` run on 2026-08-15 rather
+# than by inspection: in that run ten of the eleven mutants died on the property
+# sweep (test_python_matches_lean, which runs first and stops the group under
+# -x), and exactly one -- "invert wanted shield" -- died on a deterministic case
+# instead. A deterministic test named alongside the sweep is the case that PINS
+# the behaviour, not necessarily the assertion that fired.
 SKILL_GRIND_SELECTION_MUTATIONS = [
     # THE LOAD-BEARING ONE: drop the same-skill guard -- selection may return a
     # CROSS-SKILL item, the exact failure grind_same_skill forbids. The diff
@@ -1400,8 +1415,9 @@ SKILL_GRIND_SELECTION_MUTATIONS = [
     # THE 2026-08-05 LIVELOCK: drop the xp-positive guard -- a grey rung whose
     # craft pays NOTHING can win the ranking (it has the fewest missing
     # materials, being the cheapest tier), and the grind spins on it forever.
-    # Violates grind_xp_positive; killed by
-    # test_zero_xp_rung_never_selected_diff.
+    # Violates grind_xp_positive. Killed in-group by test_python_matches_lean;
+    # test_zero_xp_rung_never_selected_diff is the deterministic case that pins
+    # the behaviour.
     ("skill_grind_selection: drop xp-positive guard",
      _GRIND_GUARD,
      "        if (c.craft_skill != skill or c.craft_level > current_level\n"
@@ -1409,25 +1425,15 @@ SKILL_GRIND_SELECTION_MUTATIONS = [
     # DEMOTE the xp-positive guard from a FILTER to a ranking key -- the fix that
     # looks equivalent and is not: a zero-xp rung still wins whenever no
     # xp-positive rung exists, which is exactly Robby's woodcutting-15 state.
-    # Killed by test_all_candidates_grey_selects_nothing_diff.
+    # Killed in-group by test_python_matches_lean;
+    # test_all_candidates_grey_selects_nothing_diff is the deterministic case
+    # that pins the behaviour.
     ("skill_grind_selection: xp-positive as tie-break not filter",
      _GRIND_GUARD,
      "        if (c.craft_skill != skill or c.craft_level > current_level\n"
      "                or not c.obtainable):\n"
      "            continue\n"
      "        if best is not None and best.xp_positive and not c.xp_positive:\n"),
-    # KILLER ATTRIBUTIONS BELOW NAME THE TEST THAT ACTUALLY KILLS THE MUTANT IN
-    # THIS GROUP. run_group binds this list to formal/diff/test_skill_grind_selection_diff.py
-    # (see the call site), NOT to tests/test_ai/test_skill_grind_selection.py --
-    # so a unit test that also fails under a mutant is not what the gate runs,
-    # and sending a future debugger of a survivor to the wrong file wastes the
-    # one clue the failure gives them. Verified by a serial run 2026-08-15:
-    # ten of the eleven mutants here die on the property sweep
-    # (test_python_matches_lean), and exactly one -- "invert wanted shield" --
-    # dies on a deterministic case instead. Where a unit test in
-    # tests/test_ai/test_skill_grind_selection.py pins the same behaviour it is
-    # named SECOND, as documentation of intent rather than as the gate's killer.
-    #
     # THE 2026-08-14 REGRESSION: flip the rate comparison so the WORST
     # xp-per-action rung wins. Killed in-group by test_python_matches_lean; the
     # behaviour is pinned deterministically by test_rate_beats_cheapest_chain_diff

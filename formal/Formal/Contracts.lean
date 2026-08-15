@@ -642,9 +642,12 @@ example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
     0 ≤ c.craft_level → c.acquire_steps < b.acquire_steps →
     Extracted.SkillGrindSelection._beats c (some b) = true :=
   @Formal.SkillGrindSelection.beats_prefers_cheaper_at_equal_level
--- costlier_never_beats_at_equal_level: the converse of the above. Pinning the
--- cost key in one direction only would let the tie-break be inverted without a
--- theorem noticing -- the same argument unwanted_not_beats_wanted rests on.
+-- costlier_never_beats_at_equal_level: the converse of the above. It closes a
+-- gap that is currently covered only INCIDENTALLY -- inverting the raw-cost
+-- tie-break is caught today by beats_prefers_cheaper_at_equal_level, through its
+-- wanted-pair and level-zero routes, so there is no live hole. What this pin
+-- buys is independence from that neighbour: incidental coverage disappears if
+-- the neighbour is later narrowed, and a pin does not.
 example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
     c.wanted = b.wanted → c.craft_level = b.craft_level →
     0 ≤ c.craft_level → b.acquire_steps < c.acquire_steps →

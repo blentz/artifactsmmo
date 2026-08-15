@@ -349,14 +349,15 @@ theorem beats_prefers_cheaper_at_equal_level (c b : GrindCandidate)
 standing and EQUAL `craft_level`, a strictly COSTLIER chain never displaces the
 incumbent.
 
-STATED BECAUSE THE ARGUMENT FOR `unwanted_not_beats_wanted` APPLIES HERE TOO. A
-one-sided pin lets a clause be inverted without any theorem noticing, and after
-this restatement the cost key was pinned in one direction only. There is no live
-hole today — inverting the raw-cost tie-break is still caught through
-`beats_prefers_cheaper_at_equal_level`'s wanted-pair and level-zero routes,
-which reach that clause — but "currently caught by a neighbouring theorem's
-incidental coverage" is not the same guarantee as "pinned", and it is the kind of
-coverage that evaporates when the neighbour is later narrowed.
+STATED TO CONVERT INCIDENTAL COVERAGE INTO A PIN. After the 2026-08-14
+restatement the cost key was pinned in one direction only. That left no live
+hole: inverting the raw-cost tie-break is caught today by
+`beats_prefers_cheaper_at_equal_level`, whose wanted-pair and level-zero routes
+both reach that clause — checked by evaluating the inverted core against its
+hypotheses, which returns `false` where the theorem demands `true` in both
+routes. But being caught by a neighbouring theorem's incidental coverage is not
+the same guarantee as being pinned, and that coverage evaporates if the
+neighbour is ever narrowed. This theorem owes nothing to the neighbour.
 
 This is also what `costlier_chain_never_beats` used to say before 2026-08-14,
 minus the claim it made about UNEQUAL craft levels, which the rate ordering
@@ -364,10 +365,17 @@ falsifies: a costlier chain at a higher level now wins, on purpose. Restricting
 the converse to equal levels is what survives of it, exactly as
 `beats_prefers_cheaper_at_equal_level` is what survives of its twin.
 
-The `0 ≤ c.craft_level` hypothesis is load-bearing for the same reason as in
-`beats_prefers_cheaper_at_equal_level`: at a negative level the
-cross-multiplication reverses and the costlier rung wins. Non-vacuous: equal
-level 4, `acquire_steps` 23 against 9, both unwanted. -/
+WHY `0 ≤ c.craft_level` IS HERE. At a negative level the cross-multiplication
+reverses and the COSTLIER rung wins, which is this theorem's conclusion
+inverted. Checked by evaluation, not assumed: with both candidates unwanted,
+`craft_level = -1` on both, `b.acquire_steps = 3` against `c.acquire_steps = 7`,
+the cross products are `(-1)*3 = -3` against `(-1)*7 = -7`, so `-3 > -7` and
+`_beats c (some b)` returns `true` — the costlier `c` displaces the cheaper
+incumbent. Note this is NOT the counterexample from
+`beats_prefers_cheaper_at_equal_level`, which does not transfer: there `c` is
+the cheaper candidate, here it must be the costlier one, so the roles swap.
+Non-vacuous (a separate witness, not the counterexample): equal level 4,
+`acquire_steps` 23 against 9, both unwanted. -/
 theorem costlier_never_beats_at_equal_level (c b : GrindCandidate)
     (hw : c.wanted = b.wanted) (hlvl : c.craft_level = b.craft_level)
     (hlvl0 : 0 ≤ c.craft_level)
@@ -415,8 +423,9 @@ evaluation, not assumed:
 
 Neither is reachable from the Python core — API craft levels start at 1 and an
 action count cannot be negative — so the hypotheses exclude nothing real. They
-are recorded here rather than only in `Formal/Contracts.lean` because this doc
-comment is where a reader minded to delete a hypothesis will be standing. -/
+are spelled out here, in the doc comment, because this is where a reader minded
+to delete a hypothesis will be standing; `Formal/Contracts.lean` pins the
+hypotheses and says why they exist, but carries no counterexample. -/
 theorem beats_prefers_wanted (c b : GrindCandidate)
     (hcw : c.wanted = true) (hbw : b.wanted = false)
     (hlvl : 0 ≤ c.craft_level) (hsteps : 0 ≤ b.acquire_steps) :

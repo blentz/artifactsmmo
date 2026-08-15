@@ -371,8 +371,9 @@ with `wanted` demoted from a lexicographic pivot to a marginal-cost credit that
 zeroes a wanted rung's effective steps.
 
 So `beats_prefers_cheaper_chain` and `costlier_chain_never_beats` are **false on
-purpose** and are gone. The ordering is now carried by five roles — two genuinely
-new, and three pre-existing ones restated with domain hypotheses:
+purpose** and are gone. The ordering is now carried by five roles — three
+introduced by the 2026-08-14/15 rework, and two pre-existing ones restated with
+domain hypotheses:
 
 - `beats_prefers_higher_rate` — NEW, the new first key. Stated for the UNWANTED
   pair because two wanted candidates tie on rate by construction, so quantifying
@@ -381,9 +382,10 @@ new, and three pre-existing ones restated with domain hypotheses:
   `beats_prefers_cheaper_chain`: cheapness still decides wherever it is the only
   difference. Holds by three routes (unwanted at positive level via the rate;
   unwanted at level zero and wanted via the raw-cost tie-break).
-- `costlier_never_beats_at_equal_level` — RESTATED from
-  `costlier_chain_never_beats`, narrowed to equal levels, which is the part the
-  rate ordering does not falsify.
+- `costlier_never_beats_at_equal_level` — NEW, and the structural twin of the
+  one above: what survives of `costlier_chain_never_beats` once its claim about
+  UNEQUAL levels is dropped, that claim being the half the rate ordering
+  falsifies.
 - `beats_prefers_wanted` — RESTATED. The June 2026 keeper guarantee, now DERIVED
   from the credit plus the tie-break rather than asserted by a lexicographic
   pivot, and carrying nonnegativity hypotheses it did not need before.
@@ -397,10 +399,17 @@ integer one, and multiplying by a negative REVERSES it, so at `craft_level = -1`
 `_beats` genuinely prefers the costlier rung. `scripts/extract_lean.py` maps
 Python `int` to `Int`, while API craft levels start at 1 and an action count
 cannot be negative — so the hypotheses exclude nothing the extracted core can
-produce. Every one of them was added only after a counterexample was checked by
-evaluation, and **each theorem's own doc comment records that counterexample** —
-the doc comment, not just the contract pin, because that is where a reader minded
-to delete a hypothesis will be standing.
+produce.
+
+**The convention for these hypotheses: before deleting one, read the theorem's
+own doc comment.** That is where the counterexample belongs — beside the
+hypothesis, not only in the contract pin — because the doc comment is where a
+reader minded to delete it will be standing. Note the counterexamples do not
+transfer between theorems even when the hypothesis looks identical: in
+`beats_prefers_cheaper_at_equal_level` the challenger is the cheaper candidate
+and in `costlier_never_beats_at_equal_level` it is the costlier one, so the same
+`0 ≤ c.craft_level` needs a different witness in each. Anything found missing
+here is a gap to fill, not a licence to drop the hypothesis.
 
 ### Intentionally NOT proved (no decision logic) — gear sub-project D (2026-06-29)
 
