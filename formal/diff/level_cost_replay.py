@@ -1,4 +1,4 @@
-"""Corroborate `cheapest_path_to_level`'s unit against live trace data.
+"""Corroborate `cheapest_path_to_level`'s unit against the live learning store.
 
 Server-axiom-signoff discipline, the same one `xp_formula_replay.py` applies to
 the combat curve and `gather_xp_replay.py` to the gather band.
@@ -33,7 +33,7 @@ Comparing the new projection against the old fight-only observable would report 
 clean ~2x error that is not an error at all — the mirror of the mistake above, and
 the reason this doctrine is written down rather than assumed.
 
-WHAT THIS SCRIPT CHECKS. For every character in the traces that gained at least
+WHAT THIS SCRIPT CHECKS. For every character in the corpus that gained at least
 one character level, it reports observed fight-cycles per level. The projection
 is sound in unit if a pure-fighting projection lands within a small factor of
 that. What would falsify it: a projected cycles-per-level an order of magnitude
@@ -55,16 +55,18 @@ HONEST LIMITS, because this is corroboration and not proof:
   * A character that gained no level contributes nothing and is listed as such.
 
 Output: formal/diff/level_cost_replay_report.txt + stdout.
-Usage: uv run python formal/diff/level_cost_replay.py [TRACE_DIR]
+Usage: uv run python formal/diff/level_cost_replay.py [db_path]
 """
 
 import collections
-import json
 import sys
 from pathlib import Path
 
+from store_records import CycleRecord, EmptyCorpusError, load_cycles
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPORT = REPO_ROOT / "formal" / "diff" / "level_cost_replay_report.txt"
+DEFAULT_DB = Path.home() / ".cache" / "artifactsmmo" / "learning.db"
 
 # A projected cycles-per-level outside this band of the observed fight-cycles
 # figure is a unit error, not a modelling difference. Wide on purpose: the
@@ -73,44 +75,68 @@ REPORT = REPO_ROOT / "formal" / "diff" / "level_cost_replay_report.txt"
 LOW, HIGH = 0.1, 10.0
 
 
-def _observed(trace_dir: Path) -> tuple[dict[str, dict[str, int]], int]:
+def _observed(records: list[CycleRecord]) -> dict[str, dict[str, int]]:
+    """Aggregate fights/rests/cycles/levels per character from `cycles` rows.
+
+    `records` is ordered by `(character, cycle_index)` (see `load_cycles`), so
+    one character's rows are contiguous and this is a single linear pass, not
+    a lookup. `fights`/`rests`/`cycles` read only the row's own `action_repr`
+    and `outcome` — no pairing needed. `levels` (total level gained) is the
+    SPAN of the row's own `level` column — the MAX observed level minus the
+    MIN observed level, over ALL of that character's rows — never a per-row
+    comparison against a neighboring row's level. `cycle_index` resets every
+    session (one character in the live
+    corpus spans 61 distinct sessions), so `load_cycles`'s `(character,
+    cycle_index)` order interleaves sessions rather than following wall-clock
+    time; "first/last encountered while iterating" is therefore NOT the same
+    as "first/last chronologically" and would silently understate a level
+    span whenever a later session's low cycle_index rows sort ahead of an
+    earlier session's high ones. `min`/`max` sidesteps the ordering question
+    entirely: the server never lowers a character's level (see
+    `learning.xp_gain.xp_gained`'s docstring), so whatever order the rows
+    arrive in, the lowest level seen IS the level held at the start of this
+    corpus and the highest IS the level held at the end. That is the same
+    shape of fix `xp_formula_replay.py` makes for `delta_xp`: read a value
+    the row already has, don't recover it by differencing or by trusting an
+    incidental iteration order to stand in for time."""
     per_char: dict[str, dict[str, int]] = collections.defaultdict(
-        lambda: {"fights": 0, "rests": 0, "levels": 0, "cycles": 0})
-    used = 0
-    for path in sorted(trace_dir.glob("play-trace-*.jsonl")):
-        try:
-            records = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
-        except json.JSONDecodeError:
-            continue
-        if not records or "level" not in (records[0].get("state") or {}):
-            continue
-        used += 1
-        name = path.name.split("play-trace-")[1].split("-2026")[0]
-        d = per_char[name]
-        d["cycles"] += len(records)
-        for prev, cur in zip(records, records[1:], strict=False):
-            if str(prev.get("action", "")).startswith("Fight(") and prev.get("outcome") == "ok":
-                d["fights"] += 1
-            # Rest is the other half of the loop the projection now charges for.
-            # Counted unconditionally rather than only after a fight: a Rest is a
-            # cycle the combat loop spent however it was scheduled, and pairing it
-            # to a preceding Fight would silently drop the ones the HP_CRITICAL
-            # guard interleaves.
-            if prev.get("action") == "Rest" and prev.get("outcome") == "ok":
-                d["rests"] += 1
-            if cur["state"]["level"] > prev["state"]["level"]:
-                d["levels"] += 1
-    return per_char, used
+        lambda: {"fights": 0, "rests": 0, "cycles": 0, "levels": 0})
+    min_level: dict[str, int] = {}
+    max_level: dict[str, int] = {}
+    for rec in records:
+        d = per_char[rec.character]
+        d["cycles"] += 1
+        action = rec.action_repr or ""
+        if action.startswith("Fight(") and rec.outcome == "ok":
+            d["fights"] += 1
+        # Rest is the other half of the loop the projection now charges for.
+        # Counted unconditionally rather than only after a fight: a Rest is a
+        # cycle the combat loop spent however it was scheduled, and pairing it
+        # to a preceding Fight would silently drop the ones the HP_CRITICAL
+        # guard interleaves.
+        if action == "Rest" and rec.outcome == "ok":
+            d["rests"] += 1
+        if rec.level is not None:
+            min_level[rec.character] = min(min_level.get(rec.character, rec.level), rec.level)
+            max_level[rec.character] = max(max_level.get(rec.character, rec.level), rec.level)
+    for name, d in per_char.items():
+        if name in min_level and name in max_level:
+            d["levels"] = max_level[name] - min_level[name]
+    return per_char
 
 
 def main() -> int:
-    trace_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else REPO_ROOT
-    per_char, used = _observed(trace_dir)
-    if not used:
-        print(f"no play-trace-*.jsonl under {trace_dir}", file=sys.stderr)
-        return 2
+    db_path = sys.argv[1] if len(sys.argv) > 1 else str(DEFAULT_DB)
+    try:
+        records = load_cycles(db_path)
+    except EmptyCorpusError as exc:
+        print(f"level_cost_replay: {exc}", file=sys.stderr)
+        return 1
+    per_char = _observed(records)
+    used = len(per_char)
 
-    lines = ["# cheapest_path_to_level unit corroboration", f"traces={used}", ""]
+    lines = ["# cheapest_path_to_level unit corroboration",
+              f"db={db_path} rows={len(records)} characters={used}", ""]
     lines.append(f"{'char':8s} {'cycles':>8s} {'fights':>8s} {'rests':>7s} {'levels':>7s} "
                  f"{'loop/lvl':>9s} {'fight/lvl':>10s} {'total/lvl':>10s}")
     tf = tr = tl = tc = 0
@@ -128,7 +154,7 @@ def main() -> int:
                      f"{d['fights'] / d['levels']:10.0f} {d['cycles'] / d['levels']:10.0f}")
 
     if not tl:
-        lines.append("\nno character gained a level in these traces — nothing to corroborate")
+        lines.append("\nno character gained a level in this corpus — nothing to corroborate")
         REPORT.write_text("\n".join(lines) + "\n")
         print("\n".join(lines))
         return 2

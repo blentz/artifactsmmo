@@ -21,8 +21,9 @@ argmax. Later the same day the divisor became the real combat loop
 change an argmax — and this diff still cannot see it, because exercising
 it would mean handing the Lean model a float where it takes a Nat. So
 the unit and the per-monster ordering are both pinned by
-`tests/test_ai/test_learning_projections.py` and corroborated against
-live traces by `formal/diff/level_cost_replay.py` instead. A structural
+`tests/test_ai/test_learning_projections.py` and corroborated against the
+live learning-store corpus by `formal/diff/level_cost_replay.py` instead.
+A structural
 differential is the wrong instrument for a magnitude, twice over.
 
 OUT-OF-SCOPE for this diff (deliberately): the exact float

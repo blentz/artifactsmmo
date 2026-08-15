@@ -1,21 +1,21 @@
 # cheapest_path_to_level unit corroboration
-traces=83
+db=/home/blentz/.cache/artifactsmmo/learning.db rows=49263 characters=5
 
 char       cycles   fights   rests  levels  loop/lvl  fight/lvl  total/lvl
-C3P0         4292      631     432       5       213        126        858
-HAL          4217      464     345       5       162         93        843
-Lor          4155      592     454      10       105         59        416
-R2D2         4135      748     474       6       204        125        689
-Robby        4117      122      87       1       209        122       4117
+C3P0         9960     3009    2497      11       501        274        905
+HAL          9931     1612    1400       9       335        179       1103
+Lor          9826     1748    1741      14       249        125        702
+R2D2        10566     2246    1442      11       335        204        961
+Robby        8980     2268    2228       6       749        378       1497
 
-OBSERVED combat-loop (fight+rest) cycles per level: 161   <-- the comparable figure
-OBSERVED fight-only cycles per character level    : 95   (the pre-2026-08-07 figure)
-OBSERVED total      cycles per character level    : 775   (includes non-combat work)
-OBSERVED rests per fight                          : 0.70   (the term `cycles_per_kill` adds)
+OBSERVED combat-loop (fight+rest) cycles per level: 396   <-- the comparable figure
+OBSERVED fight-only cycles per character level    : 213   (the pre-2026-08-07 figure)
+OBSERVED total      cycles per character level    : 966   (includes non-combat work)
+OBSERVED rests per fight                          : 0.86   (the term `cycles_per_kill` adds)
 
 A projection denominated in ACTIONS should land near the combat-loop
-figure; the acceptance band is [0.1x, 10x] of 161, i.e. [16, 1611].
+figure; the acceptance band is [0.1x, 10x] of 396, i.e. [40, 3959].
 
 Pre-fix reference: the projection reported 7698 cycles/level for R2D2,
-which is 81x the observed fight-cycles figure — the
+which is 36x the observed fight-cycles figure — the
 seconds-as-cycles error this constant's rename removed.

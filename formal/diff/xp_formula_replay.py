@@ -7,19 +7,21 @@ Server-axiom-signoff discipline (like LIV-001's replay): the formula
     level_penalty: 1.0 (diff <= 4), 0.7 (5 <= diff <= 9), 0.0 (diff >= 10)
 
 (https://docs.artifactsmmo.com/concepts/stats_and_fights/#xp-formula) is
-recomputed for every observed ok-fight in a live trace (trace `state` is the
-POST-action snapshot — pre-state is the previous record's) using the fixture's
-monster level/hp, and compared to the real xp delta.
+recomputed for every observed ok-fight in the learning store (`Cycle.level` is
+the character's own level at that row, `Cycle.delta_xp` the row's own xp
+delta — see `store_records.py`) using the fixture's monster level/hp, and
+compared to the real xp delta.
 
 KNOWN unobservables, reported as classes rather than asserted away:
-* wisdom (gear-derived, not in the trace) — computed with wisdom = 0, so a
+* wisdom (gear-derived, not in the store row) — computed with wisdom = 0, so a
   uniform small POSITIVE real excess is the wisdom bonus signature;
 * monster type (fixture lacks it) — computed with multiplier 1.0; elite/boss
   targets would show ~1.4x/2x excess;
-* rollover fights (level-up resets xp) — skipped for delta comparison.
+* rollover fights (a multi-level jump `delta_xp` can't resolve) — skipped for
+  delta comparison.
 
 Output: formal/diff/xp_formula_replay_report.txt + stdout.
-Usage: python diff/xp_formula_replay.py [trace.jsonl] [snapshot.json]
+Usage: uv run python formal/diff/xp_formula_replay.py [db_path] [snapshot.json]
 """
 
 import json
@@ -27,24 +29,26 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from store_records import EmptyCorpusError, load_cycles
+
+DEFAULT_DB = Path.home() / ".cache" / "artifactsmmo" / "learning.db"
+
 
 def main() -> int:
-    trace = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("../play-trace-Robby.jsonl")
-    snap = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("sim/game_data_snapshot.json")
+    db_path = sys.argv[1] if len(sys.argv) > 1 else str(DEFAULT_DB)
+    snap = (
+        Path(sys.argv[2]) if len(sys.argv) > 2
+        else Path(__file__).resolve().parent.parent / "sim" / "game_data_snapshot.json"
+    )
     data = json.loads(snap.read_text())
     mlevel = data["monster_level"]
     mhp = data["monster_hp"]
 
-    records = []
-    with trace.open() as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                records.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
+    try:
+        records = load_cycles(db_path)
+    except EmptyCorpusError as exc:
+        print(f"xp_formula_replay: {exc}", file=sys.stderr)
+        return 1
 
     exact = 0
     off = Counter()  # (expected, real) mismatches
@@ -53,24 +57,27 @@ def main() -> int:
     zero_band_fights = 0
     checked = 0
 
-    for prev, cur in zip(records, records[1:]):
-        if cur.get("cycle") != prev.get("cycle", -2) + 1:
-            continue
-        if not (prev.get("state") and cur.get("state")):
-            continue
-        action = cur.get("action") or ""
-        if not action.startswith("Fight(") or cur.get("outcome") != "ok":
+    for rec in records:
+        action = rec.action_repr or ""
+        if not action.startswith("Fight(") or rec.outcome != "ok":
             continue
         code = action[len("Fight("):-1]
-        sa, sb = prev["state"], cur["state"]
-        if sb["level"] > sa["level"]:
+        # `rec.delta_xp` is the row's OWN xp delta, already resolved across a
+        # level-up by the store (see store_records.py's module docstring) —
+        # never a difference this script computes against a neighboring row.
+        # It is None only for a multi-level jump in one action (unresolvable;
+        # never observed live) or a row the store could not attribute a level
+        # to. Either way there is nothing to compare, so it joins the same
+        # "rollover" bucket the old snapshot-diffing loader used for exactly
+        # this kind of level-boundary uncertainty.
+        if rec.level is None or rec.delta_xp is None:
             rollover += 1
             continue
         if code not in mlevel or code not in mhp:
             unknown_monster += 1
             continue
         ml, hp = mlevel[code], mhp[code]
-        diff = sa["level"] - ml
+        diff = rec.level - ml
         if diff >= 10:
             penalty = 0.0
             zero_band_fights += 1
@@ -78,8 +85,8 @@ def main() -> int:
             penalty = 0.7
         else:
             penalty = 1.0
-        expected = round((ml / sa["level"] * 20 + hp * 0.04) * penalty)
-        real = sb["xp"] - sa["xp"]
+        expected = round((ml / rec.level * 20 + hp * 0.04) * penalty)
+        real = rec.delta_xp
         checked += 1
         if expected == real:
             exact += 1
@@ -87,7 +94,7 @@ def main() -> int:
             off[(expected, real)] += 1
 
     out = []
-    out.append(f"trace={trace} snapshot={snap} ({data.get('captured_at', '?')})")
+    out.append(f"db={db_path} snapshot={snap} ({data.get('captured_at', '?')})")
     out.append(f"ok-fights checked={checked} rollovers-skipped={rollover} unknown-monster={unknown_monster}")
     out.append(f"EXACT formula matches (wisdom=0, multiplier=1.0): {exact}/{checked}")
     out.append(f"zero-band fights observed (level_penalty = 0): {zero_band_fights}")
