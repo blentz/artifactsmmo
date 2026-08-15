@@ -345,7 +345,9 @@ walk. No memoisation needed.
 **New roles.** `beats_prefers_cheaper_chain` and `costlier_chain_never_beats` pin
 the cost ordering in BOTH directions. Nothing previously stated what the ordering
 key was supposed to MEAN — only that the fold respected whatever `_beats` did —
-which is why a mispriced key could satisfy every existing theorem.
+which is why a mispriced key could satisfy every existing theorem. (SUPERSEDED
+2026-08-14: cheapest-chain was itself the mispriced key — see "Ranking by rate,
+not cost" below.)
 
 **A differential weakness this exposed.** Both new ordering mutants SURVIVED a
 400-example sweep at first. The generator drew every field uniformly, so a
@@ -356,6 +358,32 @@ exercised. The sweep is now feasibility-biased, with the original uniform sweep
 kept alongside it to keep hammering the filters. Uniform sampling is not the same
 as thorough sampling when the property under test lives behind a conjunction of
 filters.
+
+### Ranking by rate, not cost — `_beats` restated (2026-08-14)
+
+The cheapest-chain key above was itself the mispriced one. Cheapness is
+**anti-correlated** with the thing a grind exists to produce: the cheapest
+in-level rung is the LOWEST-level one, which pays the least skill xp per craft.
+Live Lor took a 13-action level-1 rung over a 59-action level-5 rung and sat at
+weaponcrafting 8 across 757 grind cycles. `_beats` now ranks by a
+cross-multiplied xp-per-action **rate** (`craft_level` over effective steps),
+with `wanted` demoted from a lexicographic pivot to a marginal-cost credit that
+zeroes a wanted rung's effective steps.
+
+So `beats_prefers_cheaper_chain` and `costlier_chain_never_beats` are **false on
+purpose** and are gone, replaced by `beats_prefers_higher_rate` (the new first
+key, stated for the UNWANTED pair because two wanted candidates tie on rate by
+construction and quantifying over equal-`wanted` pairs would be vacuous on half
+its domain) and `beats_prefers_wanted` (the June 2026 keeper guarantee, now
+DERIVED from the credit plus the tie-break rather than asserted by a pivot).
+
+A third role — cheapness still decides at EQUAL `craft_level`, the surviving
+content of the old theorem — is **not yet stated**, pending a ruling. Its drafted
+statement is false over `Int`: at a negative `craft_level` the cross-multiplication
+reverses, and `_beats` picks the costlier rung. `craft_level` is nonnegative in
+the Python core but `Int` in the extraction, so the statement needs the same
+`0 ≤ craft_level` domain hypothesis `beats_prefers_wanted` already carries. See
+the note in `Formal/SkillGrindSelection.lean`.
 
 ### Intentionally NOT proved (no decision logic) — gear sub-project D (2026-06-29)
 

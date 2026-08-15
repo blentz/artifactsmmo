@@ -607,28 +607,35 @@ example : ∀ (skill : String) (level : Int)
     (∀ d ∈ cands, d.code ≠ "") →
     Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands ≠ "" :=
   @Formal.SkillGrindSelection.grind_actionable
--- beats_prefers_cheaper_chain / costlier_chain_never_beats: among equally-wanted
--- candidates the CHEAPEST WHOLE-CHAIN cost wins, in both directions. This is the
--- key whose absence let a one-level `mats_missing` proxy misprice deep chains
--- three times over; pinning both directions stops the ordering drifting again.
+-- beats_prefers_higher_rate: between two UNWANTED candidates the higher
+-- xp-per-action RATE wins, cross-multiplied. This replaces the pins for
+-- `beats_prefers_cheaper_chain` / `costlier_chain_never_beats`, which said the
+-- cheapest whole-chain cost wins in both directions. That is false on purpose
+-- as of 2026-08-14: cheapness is anti-correlated with xp, because the cheapest
+-- in-level rung is the lowest-level one, and live Lor sat at weaponcrafting 8
+-- for 757 grind cycles taking a 13-action level-1 rung over a 59-action level-5
+-- one. Pinning the rate here is what stops the ordering drifting back.
 example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
-    c.wanted = b.wanted → c.acquire_steps < b.acquire_steps →
+    c.wanted = false → b.wanted = false →
+    c.craft_level * b.acquire_steps > b.craft_level * c.acquire_steps →
     Extracted.SkillGrindSelection._beats c (some b) = true :=
-  @Formal.SkillGrindSelection.beats_prefers_cheaper_chain
-example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
-    c.wanted = b.wanted → b.acquire_steps < c.acquire_steps →
-    Extracted.SkillGrindSelection._beats c (some b) = false :=
-  @Formal.SkillGrindSelection.costlier_chain_never_beats
--- beats_prefers_wanted: a wanted candidate beats a non-wanted incumbent (wanted-first key).
+  @Formal.SkillGrindSelection.beats_prefers_higher_rate
+-- beats_prefers_wanted: a wanted candidate beats an unwanted incumbent. No
+-- longer a lexicographic pivot -- `wanted` credits effective steps to zero,
+-- which zeroes the incumbent's cross-product, so this is DERIVED from the credit
+-- plus the tie-break underneath it. The `0 ≤` hypotheses are the Python domain
+-- (craft levels and action counts are nonnegative); `Int` admits negatives that
+-- the extracted core cannot produce, and a negative reverses the
+-- cross-multiplication.
 example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
     c.wanted = true → b.wanted = false →
+    0 ≤ c.craft_level → 0 ≤ b.acquire_steps →
     Extracted.SkillGrindSelection._beats c (some b) = true :=
   @Formal.SkillGrindSelection.beats_prefers_wanted
--- unwanted_not_beats_wanted: a non-wanted candidate never displaces a wanted incumbent.
-example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
-    c.wanted = false → b.wanted = true →
-    Extracted.SkillGrindSelection._beats c (some b) = false :=
-  @Formal.SkillGrindSelection.unwanted_not_beats_wanted
+-- The third pin of the 2026-08-14 restatement -- cheapness still decides at
+-- EQUAL craft_level -- is absent pending a ruling; see the note in
+-- Formal/SkillGrindSelection.lean for the kernel-checked counterexample that
+-- blocks its drafted statement.
 
 /-! ### MonsterDropApply reachability contracts.
 

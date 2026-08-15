@@ -132,10 +132,8 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.SkillGrindSelection.grind_obtainable -- selected candidate is obtainable
 #check @Formal.SkillGrindSelection.grind_xp_positive -- selected candidate pays skill xp
 #check @Formal.SkillGrindSelection.grind_actionable -- feasible non-empty candidate ⇒ non-empty result
-#check @Formal.SkillGrindSelection.beats_prefers_cheaper_chain -- cheapest whole-chain cost wins
-#check @Formal.SkillGrindSelection.costlier_chain_never_beats  -- costlier chain never displaces
-#check @Formal.SkillGrindSelection.beats_prefers_wanted   -- wanted candidate beats non-wanted incumbent
-#check @Formal.SkillGrindSelection.unwanted_not_beats_wanted -- non-wanted never displaces wanted incumbent
+#check @Formal.SkillGrindSelection.beats_prefers_higher_rate -- higher xp-per-action rate wins
+#check @Formal.SkillGrindSelection.beats_prefers_wanted   -- wanted candidate beats unwanted incumbent
 -- MonsterDropApply required roles (Fight.apply drop loop reachability):
 #check @Formal.MonsterDropApply.applyDrops_monotone  -- a kill never decreases any item count
 #check @Formal.MonsterDropApply.fight_drop_reachable -- room ⇒ a dropped item's count rises ≥ 1

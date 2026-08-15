@@ -206,3 +206,26 @@ def test_all_candidates_grey_selects_nothing_diff():
     lean = run_oracle("skill_grind_selection", [_args("mining", 15, cands)])[0]
     assert py == ""
     assert py == lean["code"]
+
+
+def test_rate_beats_cheapest_chain_diff():
+    """A case where the pre-2026-08-14 ordering and the current one DISAGREE,
+    pinned against Lean. Live Lor at weaponcrafting 8: the 13-action level-1
+    rung is cheaper, the 59-action level-5 rung pays more per action.
+
+    The randomised sweep above cannot be relied on for this. It draws both
+    orderings' inputs freely but has no case that GUARANTEES the two disagree —
+    the old cheapest-chain key and the new rate key agree whenever the cheaper
+    rung is also the higher-level one (the 2026-08-06 R2D2 case is exactly
+    that), so a sweep can be green while the ordering has silently reverted.
+    Here the two keys point opposite ways: 5/59 = 0.085 beats 1/13 = 0.077,
+    while 13 < 59 says the opposite."""
+    cands = [
+        ("apprentice_gloves", "weaponcrafting", 1, 13, True, False, True),
+        ("sticky_dagger", "weaponcrafting", 5, 59, True, False, True),
+    ]
+    py = skill_grind_selection_pure(
+        "weaponcrafting", 8, [GrindCandidate(*c) for c in cands])
+    lean = run_oracle("skill_grind_selection", [_args("weaponcrafting", 8, cands)])[0]
+    assert py == "sticky_dagger", "the grind reverted to the cheapest chain"
+    assert py == lean["code"]

@@ -1387,31 +1387,47 @@ SKILL_GRIND_SELECTION_MUTATIONS = [
      "                or not c.obtainable):\n"
      "            continue\n"
      "        if best is not None and best.xp_positive and not c.xp_positive:\n"),
-    # flip the cheapest-chain ordering in _beats -- breaks the (-acquire_steps,
-    # craft_level) selection order; killed by the diff's tie/ordering cases.
-    ("skill_grind_selection: _beats cheapest-chain flip",
+    # THE 2026-08-14 REGRESSION: flip the rate comparison so the WORST
+    # xp-per-action rung wins. Killed by
+    # test_a_costlier_chain_wins_when_it_pays_proportionally_more_xp.
+    ("skill_grind_selection: _beats rate comparison flipped",
+     "        return c_rate > best_rate\n",
+     "        return c_rate < best_rate\n"),
+    # Back to cheapest-chain: drop the numerator so the comparison degenerates
+    # to steps alone. This is the pre-2026-08-14 ordering, the one that left
+    # live Lor at weaponcrafting 8 for 757 cycles.
+    ("skill_grind_selection: _beats back to cheapest chain",
+     "    c_rate = c.craft_level * best_steps\n"
+     "    best_rate = best.craft_level * c_steps\n",
+     "    c_rate = best_steps\n"
+     "    best_rate = c_steps\n"),
+    # Drop the wanted CREDIT on the challenger -- a wanted rung is priced at
+    # its full chain again, so a committed keeper loses to any cheaper
+    # throwaway. Killed by
+    # test_a_wanted_rung_wins_on_rate_because_its_chain_is_owed_anyway.
+    ("skill_grind_selection: _beats drops the wanted credit",
+     "    c_steps = 0 if c.wanted else c.acquire_steps\n",
+     "    c_steps = c.acquire_steps\n"),
+    # Drop the final RAW-cost tie-break -- every wanted rung ties every other
+    # on rate (they all credit to zero), so without this the choice among them
+    # falls to insertion order. Killed by
+    # test_raw_cost_still_separates_two_rungs_the_objective_both_wants.
+    ("skill_grind_selection: _beats drops the raw-cost tie-break",
+     "    if c.acquire_steps != best.acquire_steps:\n"
      "        return c.acquire_steps < best.acquire_steps\n",
+     "    if c.acquire_steps != best.acquire_steps:\n"
      "        return c.acquire_steps > best.acquire_steps\n"),
-    # DEMOTE cost below craft_level -- the "prefer the highest rung" instinct.
-    # A 51-action rung would outrank a 7-action one whenever it crafts higher,
-    # which is exactly the mispricing the 2026-08-06 rework removed.
-    ("skill_grind_selection: _beats craft_level outranks chain cost",
-     "    if c.acquire_steps != best.acquire_steps:\n"
-     "        return c.acquire_steps < best.acquire_steps\n"
-     "    if c.craft_level != best.craft_level:\n"
-     "        return c.craft_level > best.craft_level\n",
-     "    if c.craft_level != best.craft_level:\n"
-     "        return c.craft_level > best.craft_level\n"
-     "    if c.acquire_steps != best.acquire_steps:\n"
-     "        return c.acquire_steps < best.acquire_steps\n"),
-    # neuter the wanted-first clause -- a WANTED keeper no longer beats a cheaper
-    # throwaway, reviving the apprentice_gloves-over-copper_dagger inversion.
-    # Killed by test_wanted_beats_cheaper_throwaway_diff.
+    # Neuter the wanted TIE-BREAK: a free throwaway ties a wanted keeper at rate
+    # zero (both credit to zero effective steps) and then survives on insertion
+    # order -- the 2026-06-24 apprentice_gloves-over-copper_dagger inversion,
+    # returning through the back door under the rate ordering. Killed by
+    # test_a_free_throwaway_does_not_tie_its_way_past_a_wanted_keeper.
     ("skill_grind_selection: _beats drop wanted preference",
      "    if c.wanted and not best.wanted:\n        return True\n",
      "    if c.wanted and not best.wanted:\n        return False\n"),
-    # invert the wanted-shield clause -- an UNWANTED candidate displaces a wanted
-    # incumbent. Killed by the wanted-first scenarios (winner flips off the keeper).
+    # Invert the wanted shield: an UNWANTED candidate displaces a wanted
+    # incumbent on a rate tie. Same tie-break, opposite direction. Killed by the
+    # wanted-first scenarios (the winner flips off the keeper).
     ("skill_grind_selection: _beats invert wanted shield",
      "    if best.wanted and not c.wanted:\n        return False\n",
      "    if best.wanted and not c.wanted:\n        return True\n"),
