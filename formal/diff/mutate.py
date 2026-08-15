@@ -1340,16 +1340,41 @@ SKILL_GRIND_TARGET_MUTATIONS = [
      "            code, 1, grind_probe_state(state, code), game_data,\n"
      "            NO_PROFILE_CONTEXT, equip=False)\n",
      "        acquire_steps = 0\n"),
-    # Cap the unobtainable bound: a rung whose materials nothing produces
-    # (wooden_staff <- wooden_stick) stops being priced out and becomes
-    # selectable again -- the 2026-06-13 livelock.
-    ("skill_grind_target: acquire_steps caps the unobtainable bound",
-     "        acquire_steps = acquisition_actions(\n"
-     "            code, 1, grind_probe_state(state, code), game_data,\n"
-     "            NO_PROFILE_CONTEXT, equip=False)\n",
-     "        acquire_steps = min(999, acquisition_actions(\n"
-     "            code, 1, grind_probe_state(state, code), game_data,\n"
-     "            NO_PROFILE_CONTEXT, equip=False))\n"),
+    # DELETED 2026-08-15: "acquire_steps caps the unobtainable bound", which
+    # replaced the hoist with `min(999, acquisition_actions(...))` on the theory
+    # that a rung whose materials nothing produces (wooden_staff <- wooden_stick)
+    # would stop being priced out and become selectable again -- the 2026-06-13
+    # livelock. It had been STALE-ANCHORED since ec613f0d (which moved the priced
+    # state to grind_probe_state) and so had not run at all; once re-armed it
+    # SURVIVED, and the measurement below says it is an equivalent mutant rather
+    # than a missing test.
+    #
+    # WHAT WAS MEASURED. Dumping every candidate the selector builds in the
+    # l12_deep_chain_grind scenario (weaponcrafting 5, real catalog, 10 rungs):
+    # exactly ONE prices above the 999 cap -- wooden_staff at 1000007, which is
+    # acquisition_cost_core.UNOBTAINABLE_PER_UNIT (10**6) plus a 7-action tail --
+    # and it carries obtainable=False, so skill_grind_selection_pure discards it
+    # on the filter clause before _beats ever sees its price. Every other rung
+    # priced 61 to 146, three to four orders of magnitude below the cap. Rungs
+    # the cap would change: 1. Of those, obtainable and xp_positive (i.e. where
+    # the cap could be observed): 0.
+    #
+    # WHERE THE PROPERTY IS ACTUALLY PINNED. The mutant guards a mechanism the
+    # `obtainable` filter replaced -- pricing alone kept unobtainable rungs out
+    # before that filter existed. The live guard is pinned twice, both green:
+    # the "skill_grind_selection: drop obtainable guard" mutant, and the Lean
+    # theorem Formal.SkillGrindSelection.grind_obtainable (pinned in
+    # Formal/Contracts.lean).
+    #
+    # THE LIMIT OF THIS REASONING, WHICH IS SCENARIO-BOUND AND NOT A PROOF. The
+    # equivalence was established by dumping ONE scenario's candidates, not over
+    # every state the selector can reach. The residual risk is a state that
+    # prices an OBTAINABLE rung above the cap, which would make the mutant
+    # observable after all and this deletion wrong. That is re-testable rather
+    # than settled: rebuild the candidate list for the state in question and
+    # check whether any rung with obtainable=True exceeds the cap. Nothing here
+    # rules that out in general -- it says only that no such rung exists in the
+    # scenario this group binds to, at the prices measured on 2026-08-15.
 ]
 
 SKILL_GRIND_SELECTION_MUTATIONS = [
