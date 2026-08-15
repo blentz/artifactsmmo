@@ -5,17 +5,38 @@ Phase C0a (`docs/PLAN_c2_composed_liveness.md`). The server pays combat xp per
 
     XP = round((monster_level/player_level * 20 + monster_hp * 0.04)
                * level_penalty * monster_multiplier * wisdom_bonus)
-    level_penalty: 1.0 (diff ≤ 4), 0.7 (5 ≤ diff ≤ 9), 0.0 (diff ≥ 10)
+    level_penalty: 1.0 (diff ≤ 4), 0.7 (5 ≤ diff ≤ 10), 0.0 (diff ≥ 11)
     where diff = char_level - monster_level
 
 (documented: https://docs.artifactsmmo.com/concepts/stats_and_fights/#xp-formula;
-production mirror `monster_catalog.xp_per_kill`, doc-cited; live corroboration
-399/399 fights — `formal/diff/xp_formula_replay.py`).
+production mirror `monster_catalog.xp_per_kill`).
+
+THE ZERO BOUNDARY IS OBSERVED, NOT ASSUMED. The doc prose is loose about
+whether a gap of exactly 10 pays; it does, at the 0.7 penalty. Replaying every
+ok-`Fight` row in the learning store (49_263 cycles, 5 characters), each read
+with its OWN `delta_xp` (`formal/diff/xp_formula_replay.py`):
+
+    diff    pays / zero
+       8    2213 /   0
+       9    2101 /   0
+      10     372 /   0
+      11       0 /  51     ← band starts here
+      14       0 /   1
+      16       0 /  37
+      20       0 /  18
+
+10_750 paying fights, all at diff ≤ 10; 107 zero-xp fights, all at diff ≥ 11;
+no exception at the boundary. This statement previously said `diff ≥ 10` and
+cited a "399/399" corroboration; that figure came from the same replay back
+when it recovered per-fight xp by DIFFERENCING CONSECUTIVE STATE SNAPSHOTS —
+the attribution bug that credited each craft with the FOLLOWING cycle's xp. It
+observed ZERO zero-band fights, so it never tested the boundary it was cited
+for.
 
 KEY FACT making the DECISION gate float-free: inside the band the formula's
-minimum value is ≈1.4 (worst case player 10 / monster 1 / penalty 0.7), which
-rounds to ≥ 1 under ANY rounding mode; outside the band the penalty factor is
-0. Hence production's targeting gate `xp_per_kill(code, level) > 0`
+minimum value is ≈1.27 (worst case player 11 / monster 1 / penalty 0.7:
+20/11 · 0.7), which rounds to ≥ 1 under ANY rounding mode; outside the band the
+penalty factor is 0. Hence production's targeting gate `xp_per_kill(code, level) > 0`
 (player.py:1574 → combat_picker) is EXACTLY the integer predicate proved here —
 no float, no rounding-mode dependence. The differential
 (`formal/diff/test_xp_positive_diff.py`) pins the real float path's `> 0`
@@ -33,19 +54,21 @@ Core-only (no Mathlib). -/
 namespace Formal.XpPositive
 
 /-- The combat-xp positivity gate: a real monster (level ≥ 1) pays xp iff the
-    character is fewer than 10 levels above it (`level_penalty > 0`). -/
+    character is fewer than 11 levels above it (`level_penalty > 0`) — a gap of
+    exactly 10 still pays, at the 0.7 penalty (see the header's observed
+    table). -/
 def xpPositiveGate (charLevel monsterLevel : Nat) : Bool :=
-  decide (1 ≤ monsterLevel) && decide (charLevel < monsterLevel + 10)
+  decide (1 ≤ monsterLevel) && decide (charLevel < monsterLevel + 11)
 
 /-- Characterization: the gate is the integer band, exactly. -/
 theorem gate_iff (c m : Nat) :
-    xpPositiveGate c m = true ↔ 1 ≤ m ∧ c < m + 10 := by
+    xpPositiveGate c m = true ↔ 1 ≤ m ∧ c < m + 11 := by
   simp [xpPositiveGate]
 
-/-- The `level_penalty = 0` band ("10+ levels above") is EXACTLY the gate's
+/-- The `level_penalty = 0` band ("11+ levels above") is EXACTLY the gate's
     complement for real monsters. -/
 theorem gate_false_iff (c m : Nat) (hm : 1 ≤ m) :
-    xpPositiveGate c m = false ↔ m + 10 ≤ c := by
+    xpPositiveGate c m = false ↔ m + 11 ≤ c := by
   rw [← Bool.not_eq_true, gate_iff]
   omega
 

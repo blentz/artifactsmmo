@@ -423,7 +423,7 @@ def _leaf_status(leaf: str, state: WorldState,
     if winnable:
         # A winnable dropper only makes the leaf reachable if the planner would
         # actually FIGHT it. An xp-positive dropper always qualifies; a GREY
-        # dropper (zero xp-per-kill, ≥10 levels below the character) is fought
+        # dropper (zero xp-per-kill, ≥11 levels below the character) is fought
         # only under `grey_farm_allowed`. When every winnable dropper is grey
         # AND the grey-farm policy declines it (a near next-tier same-family
         # recipe is the better skill-grind), production grinds toward that tier

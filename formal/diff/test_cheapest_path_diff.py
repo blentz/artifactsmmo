@@ -286,16 +286,21 @@ def test_strict_greater_replaces(tmp_path):
 
 def test_zero_xp_per_kill_blocks(tmp_path):
     """When the only beatable monster's xp_per_kill is 0 (char level is at
-    least 10 above monster level → penalty=0.0), the plan MUST block: zero
+    least 11 above monster level → penalty=0.0), the plan MUST block: zero
     xp/cycle means infinite cycles, no progress. Pins the
-    `best_xp_per_cycle <= 0` branch (mutation 3)."""
-    # char L11 vs monster L1 → diff=10 → penalty=0.0 → xp_per_kill = 0.
-    # The monster IS beatable (1 ≤ 1 ≤ 11+1) but yields nothing.
+    `best_xp_per_cycle <= 0` branch (mutation 3).
+
+    The fixture was char L11 (diff exactly 10) until 2026-08-15; the store
+    replay showed diff 10 pays in full, so that state no longer has a zero
+    rate and the test was pinning the off-by-one instead of the block."""
+    # char L12 vs monster L1 → diff=11 → penalty=0.0 → xp_per_kill = 0.
+    # The monster IS beatable (1 ≤ 1 ≤ 12+1) but yields nothing.
     monsters = [("chicken", 1, 60)]
-    state = make_state(level=11, xp=0, max_xp=100)
+    state = make_state(level=12, xp=0, max_xp=100)
     gd = _make_game_data(monsters)
-    # Sanity: confirm xp_per_kill = 0 at char L11.
-    assert gd.xp_per_kill("chicken", 11) == 0
+    # Sanity: confirm the boundary is where we think — L11 still pays, L12 not.
+    assert gd.xp_per_kill("chicken", 11) > 0
+    assert gd.xp_per_kill("chicken", 12) == 0
     store = LearningStore(db_path=str(tmp_path / "p_zero.db"), character="hero")
     # Stub is_winnable to True: the zero-xp block is triggered by xp=0, not
     # the winnable gate. Using a stub avoids monster_attack KeyError from the
@@ -304,7 +309,7 @@ def test_zero_xp_per_kill_blocks(tmp_path):
     orig = projections_module.is_winnable
     projections_module.is_winnable = winnable_stub
     try:
-        plan = cheapest_path_to_level(12, state, store, gd)
+        plan = cheapest_path_to_level(13, state, store, gd)
     finally:
         projections_module.is_winnable = orig
     store.close()
@@ -312,7 +317,7 @@ def test_zero_xp_per_kill_blocks(tmp_path):
     # The Lean greedy with xpPerCycle=0 also blocks (stepLevel_all_zero_blocks).
     code_to_id = {"chicken": 1}
     lean = run_oracle("cheapest_path",
-                      [_encode_args(11, 12, 100, 0, [(1, 1, 0, 1)])])[0]
+                      [_encode_args(12, 13, 100, 0, [(1, 1, 0, 1)])])[0]
     assert lean["blocked"] is True
 
 

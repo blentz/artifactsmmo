@@ -15,15 +15,18 @@ between the character and the monster. From
                * level_penalty * monster_multiplier * wisdom_bonus)
 
 with `level_penalty` a step function of that gap: 100% at or below the monster's
-level, 70% at five or more levels above it, and **0% at ten or more levels above
-it** — the kill awards nothing at all.
+level, 70% at five or more levels above it, and **0% at ELEVEN or more levels
+above it** — the kill awards nothing at all. (The published prose says "ten or
+more"; it is loose at its own edge. A gap of exactly ten pays, at the 70% rate —
+measured over the learning store's 10_857 ok-fights, 372 of them at gap 10 and
+every one paying. See `monster_catalog.xp_per_kill` for the table.)
 
 MEASURED, live, 2026-08-09 (`docs/FINDING_learned_rate_launders_grey_penalty.md`).
 C3P0 held 100 samples of `green_slime` at 7.0 XP per cycle, taken at character
 level 12. `green_slime` is a LEVEL 4 monster: the formula puts its award at 7 XP at
-character level 12 and at **0** from level 14 onward. The walk reused the measured
+character level 12 and at **0** from level 15 onward. The walk reused the measured
 7.0 at every rung from 12 to 49 and so projected reaching level 50 — the terminal
-objective — by farming a monster that would award it nothing for 36 of those 38
+objective — by farming a monster that would award it nothing for 35 of those 38
 levels. A trunk that reaches 50 at acquisition cost zero is unbeatable in `J`, and
 four of five live characters were sitting on exactly that projection.
 

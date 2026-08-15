@@ -1,8 +1,31 @@
-trace=../play-trace-Robby.jsonl snapshot=sim/game_data_snapshot.json (2026-07-02T15:55:54.447690+00:00)
-ok-fights checked=399 rollovers-skipped=6 unknown-monster=0
-EXACT formula matches (wisdom=0, multiplier=1.0): 262/399
-zero-band fights observed (level_penalty = 0): 0
-mismatch classes (expected, real) -> count, top 15: [((20, 21), 78), ((22, 23), 59)]
+db=/home/blentz/.cache/artifactsmmo/learning.db snapshot=/home/blentz/git/artifactsmmo/.claude/worktrees/harness-store/formal/sim/game_data_snapshot.json (2026-07-04T23:41:50.423412+00:00)
+ok-fights checked=10883 rollovers-skipped=0 unknown-monster=0
+EXACT formula matches (wisdom=0, multiplier=1.0): 7024/10883
+zero-band fights observed (level_penalty = 0): 107
+mismatch classes (expected, real) -> count, top 15: [((24, 27), 1036), ((9, 10), 512), ((20, 21), 318), ((25, 39), 312), ((10, 15), 305), ((36, 40), 279), ((23, 26), 267), ((22, 23), 249), ((36, 41), 235), ((4, 6), 119), ((11, 16), 79), ((12, 17), 49), ((18, 20), 28), ((12, 16), 19), ((37, 42), 6)]
+
+## BOUNDARY census (model: level_penalty = 0 at diff >= 11)
+'reset' = own delta_xp < 0, a level-crossing/character-reset row that
+cannot say whether the fight paid; counted, excluded from the verdict.
+ diff    pays    zero   reset  verdict
+   -1      87       0       0  PAYS
+    0     206       0       4  PAYS
+    1     270       0       7  PAYS
+    2     365       0       5  PAYS
+    3     245       0       6  PAYS
+    4     452       0       0  PAYS
+    5     884       0       0  PAYS
+    6    1579       0       3  PAYS
+    7    1976       0       1  PAYS
+    8    2213       0       0  PAYS
+    9    2101       0       0  PAYS
+   10     372       0       0  PAYS
+   11       0      51       0  ZERO
+   14       0       1       0  ZERO
+   16       0      37       0  ZERO
+   20       0      18       0  ZERO
+totals: pays=10750 zero=107 reset=26
+BOUNDARY VIOLATIONS: none — every paying fight is at diff < 11 and every zero-xp fight at diff >= 11
 
 Uniform positive excess = wisdom bonus; ~1.4x/2x = elite/boss multiplier;
 anything else contradicts the documented formula and needs escalation.

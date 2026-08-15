@@ -1166,19 +1166,21 @@ SKILL_XP_CURVE_MUTATIONS = [
 MONSTER_CATALOG_SRC = ROOT / "src/artifactsmmo_cli/ai/monster_catalog.py"
 
 XP_POSITIVE_MUTATIONS = [
-    # widen the zero band boundary -- diff = 10 would still pay xp; the gate
-    # says false, production says positive: diff test kills at the edge.
-    ("xp_positive: zero band >= 10 becomes >= 11",
-     "        if diff >= 10:\n            return 0\n",
-     "        if diff >= 11:\n            return 0\n"),
-    # exclusive edge -- same failure at exactly diff = 10.
-    ("xp_positive: zero band >= 10 becomes > 10",
-     "        if diff >= 10:\n            return 0\n",
-     "        if diff > 10:\n            return 0\n"),
+    # NARROW the zero band -- diff = 10 would stop paying xp; the gate says
+    # true, production says zero: diff test kills at the edge. (This is the
+    # PRODUCTION BUG that was live until 2026-08-15: the band really did start
+    # at 10, contradicting 372 observed paying fights at exactly diff 10.)
+    ("xp_positive: zero band >= 11 becomes >= 10",
+     "        if diff >= 11:\n            return 0\n",
+     "        if diff >= 10:\n            return 0\n"),
+    # exclusive edge -- same failure at exactly diff = 11.
+    ("xp_positive: zero band >= 11 becomes > 11",
+     "        if diff >= 11:\n            return 0\n",
+     "        if diff > 11:\n            return 0\n"),
     # zero band pays anyway -- out-of-band fights yield xp at the 0.7 rate;
     # gate false vs production positive everywhere in the band: killed.
     ("xp_positive: zero-band return 0 becomes 0.7-band fallthrough",
-     "        if diff >= 10:\n            return 0\n        penalty10 = 7 if diff >= 5 else 10\n",
+     "        if diff >= 11:\n            return 0\n        penalty10 = 7 if diff >= 5 else 10\n",
      "        penalty10 = 7 if diff >= 5 else 10\n"),
     # drop the unknown-monster guard -- level-0 monsters with hp pay xp via
     # the hp term; gate requires monster_level >= 1: killed when hp >= 13.
@@ -1188,8 +1190,11 @@ XP_POSITIVE_MUTATIONS = [
 ]
 
 # skill_xp_positive mutations -- anchors the GATHER/CRAFT zero-xp band in
-# ai/skill_xp_positive.py, the twin of the combat gate above. The constant is
-# corroborated by formal/diff/gather_xp_replay.py (2464 live gather cycles) and
+# ai/skill_xp_positive.py, the twin of the combat gate above -- and, since the
+# combat band was corrected on 2026-08-15, the SAME constant, measured
+# separately. The constant is corroborated by formal/diff/gather_xp_replay.py
+# (3231 live gather cycles, 0 outliers -- the older "2464 cycles with 6 lag
+# outliers" figure was pre-attribution-fix) and
 # the model is Formal.SkillXpPositive; killed by
 # formal/diff/test_skill_xp_positive_diff.py, whose boundary sweep is exhaustive
 # precisely so an off-by-a-tier mutant cannot survive.

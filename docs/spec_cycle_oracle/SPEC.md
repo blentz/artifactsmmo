@@ -58,7 +58,7 @@ the specification, not clauses** — the oracle does not get to choose them.
   actually describes.
 - The level penalty is a step function of the gap `g = player_level − monster_level`,
   and the table is TOTAL: `g ≤ 0` → **100%**; `1 ≤ g ≤ 4` → **100%**;
-  `5 ≤ g ≤ 9` → **70%**; `g ≥ 10` → **0%** — the kill awards nothing.
+  `5 ≤ g ≤ 10` → **70%**; `g ≥ 11` → **0%** — the kill awards nothing.
 
   The published prose names only three cases — at or below the monster's level, five
   or more above, ten or more above — and never assigns `1..4`. That is not a corner:
@@ -66,6 +66,14 @@ the specification, not clauses** — the oracle does not get to choose them.
   so the unassigned band is the ORDINARY case, and S-011's argmax has no defined
   reward in it. The bands are read as lower-bounded steps, so the 70% band begins AT
   five and everything below it is still full.
+
+  The prose is loose at its OTHER edge too, and this table used to inherit that
+  looseness as `5 ≤ g ≤ 9` / `g ≥ 10`. Corrected 2026-08-15: a gap of exactly
+  ten pays, at 70%. Measured over the learning store's 10 857 ok-fights
+  (`formal/diff/xp_formula_replay.py`) — 372 fights at gap 10, every one
+  paying, across 4 characters and 5 monster/level pairs, and 107 zero-xp
+  fights, none below gap 11. The awards at gap 10 match the 70% band, never
+  the 100% one.
 - Each level gained grants the character **+5 maximum HP** and **+2 inventory
   slots**.
 - A fight lasts at most **100 turns**; a character that has not won by then loses.
@@ -430,8 +438,10 @@ the caller needs even when it did not finish.
 
 ### S-013 · A rung whose fastest monster earns nothing stops the walk
 
-The published level penalty zeroes the reward for a kill ten or more levels beneath
-the character. A rung at which every admissible monster awards nothing is not
+The published level penalty zeroes the reward for a kill ELEVEN or more levels
+beneath the character (the prose says ten; a gap of exactly ten pays — see the
+level-penalty table above). A rung at which every admissible monster awards
+nothing is not
 crossable by fighting, and the walk stops there under S-012's reporting rule rather
 than dividing by a zero rate or reporting an unbounded cost as though it were a
 number.

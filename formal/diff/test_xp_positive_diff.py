@@ -36,10 +36,16 @@ def test_xp_positive_python_matches_lean(char_level, monster_level, monster_hp, 
 
 
 def test_band_edges_exact():
-    """DETERMINISTIC edge sweep: the gate flips exactly at diff = 10. Random
-    sampling missed the edge once and let a `>= 11` mutant survive — every
+    """DETERMINISTIC edge sweep: the gate flips exactly at diff = 11. Random
+    sampling missed the edge once and let an off-by-one mutant survive — every
     boundary-adjacent diff is enumerated here for a spread of monster levels
-    and hp values (including hp = 0, where only the level term pays)."""
+    and hp values (including hp = 0, where only the level term pays).
+
+    The expected boundary was `diff = 10` until 2026-08-15, when the
+    learning-store replay found 372 ok-fights at diff 10, all paying, and none
+    paying at diff >= 11. This test agreed with production because production
+    had the same off-by-one; the sweep pins the edge, not its direction, so it
+    could not catch it on its own."""
     cases = []
     for monster_level in (1, 4, 11, 27, 40):
         for diff in (-2, 0, 4, 5, 9, 10, 11, 20):
@@ -54,7 +60,7 @@ def test_band_edges_exact():
         catalog = MonsterCatalog(
             levels={"m": monster_level}, hp={"m": hp}, types={"m": "normal"},
         )
-        expected = char_level < monster_level + 10
+        expected = char_level < monster_level + 11
         assert (catalog.xp_per_kill("m", char_level) > 0) == expected, (
             char_level, monster_level, hp)
         assert lean["positive"] == expected, (char_level, monster_level)

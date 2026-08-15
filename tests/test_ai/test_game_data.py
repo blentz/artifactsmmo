@@ -1511,12 +1511,20 @@ def test_xp_per_kill_level_penalty_above_5():
     assert result == 4
 
 
-def test_xp_per_kill_level_penalty_above_10_zero():
+def test_xp_per_kill_level_penalty_above_11_zero():
+    """Both sides of the zero boundary, which is 11 — NOT 10.
+
+    This test asserted `char_level=11 == 0` (diff exactly 10) until
+    2026-08-15. The learning-store replay found 372 ok-fights at diff 10, all
+    paying, and 0 paying at diff >= 11, so the assertion was pinning an
+    off-by-one. Both poles are asserted now so neither edge can drift alone."""
     gd = GameData()
     gd._monster_level = {"chicken": 1}
     gd._monster_hp = {"chicken": 60}
     gd._monster_type = {"chicken": "normal"}
-    assert gd.xp_per_kill("chicken", char_level=11, wisdom=0) == 0
+    # diff 10 — the 0.7 band's last rung: (1/11*20 + 60*0.04) * 0.7 = 2.95 → 3
+    assert gd.xp_per_kill("chicken", char_level=11, wisdom=0) == 3
+    assert gd.xp_per_kill("chicken", char_level=12, wisdom=0) == 0
 
 
 def test_xp_per_kill_elite_multiplier():

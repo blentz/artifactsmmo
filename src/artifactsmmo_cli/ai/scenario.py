@@ -957,7 +957,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     #
     # RE-DERIVED from the investigation's original "L12" framing (2026-07-09
     # Task 1): at L12 the chicken (level 1) reads as a GREY dropper
-    # (xp_per_kill formula zeroes at level-diff >= 10; 12-1=11), which routes
+    # (xp_per_kill formula zeroes at level-diff >= 11; 12-1=11), which routes
     # feather acquisition through `grey_farm_allowed` — and that policy's
     # "nearest consumer" arm picks `apprentice_gloves` (weaponcrafting level
     # 1, the LOWEST-level recipe that consumes feather, not iron_boots) as

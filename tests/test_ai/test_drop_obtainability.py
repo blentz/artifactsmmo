@@ -38,7 +38,7 @@ BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.jso
 def _fighter(**overrides) -> WorldState:
     """A character with real attack, so a low-HP fixture monster is winnable.
 
-    Level 12 so that a level-1 fixture monster is GREY (>= 10 levels below,
+    Level 12 so that a level-1 fixture monster is GREY (>= 11 levels below,
     the xpPositive gate's rule) while a level-9 one is still xp-positive."""
     base = dict(level=12, x=0, y=0, hp=200, max_hp=200,
                 attack={"fire": 40}, dmg=20, initiative=50)

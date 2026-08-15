@@ -955,7 +955,7 @@ class TestLearnedRateIsLevelScoped:
     `docs/FINDING_learned_rate_launders_grey_penalty.md`. The learned branch of
     `cheapest_path_to_level` reused one rate at every rung of a walk that climbs up
     to 38 levels. The game's XP award is a function of the gap between character
-    and monster and goes to ZERO ten or more levels above it, so reusing the rate
+    and monster and goes to ZERO eleven or more levels above it, so reusing the rate
     deleted that rule from every projection that had any observation at all.
 
     C3P0 thereby projected reaching level 50 — the terminal objective — by farming

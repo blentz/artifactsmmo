@@ -254,16 +254,21 @@ def test_slot_scenario_full_stack_liveness(name: str) -> None:
 #: Scenarios that PROVABLY have nothing to try, so the bound is asserted with the
 #: guard FLIPPED (goals_tried must be EMPTY) rather than vacuously satisfied.
 #:
-#: l35_boots_drop_farm (region soundness, 2026-07-26): its only two work sources
-#: are both legitimately closed. Its near_term_gear target is wooden_club, which
-#: the winnability guard correctly suppresses — at L35 fully geared its marginal
-#: winnability is 0, so farming it is a combat no-op (see
-#: test_l35_boots_drop_farm_fights_grey_dropper, which documents ReachCharLevel as
-#: the right arbiter outcome). The AcceptTask work it used to try existed only to
-#: fund jasper_crystal for satchel, and that chain is shut behind tasks_farmer
-#: (0/100). Verified by flipping ONLY that achievement on the same bundle:
-#: goals_tried goes [] -> ['AcceptTask', 'worth_gate_bypassed'].
-_NO_WORK_SCENARIOS = {"l35_boots_drop_farm"}
+#: EMPTIED 2026-08-15. It held l35_boots_drop_farm (region soundness,
+#: 2026-07-26) on the reading that its only two work sources were both
+#: legitimately closed: its near_term_gear target wooden_club, which the
+#: winnability guard correctly suppresses (at L35 fully geared its marginal
+#: winnability is 0 — see test_l35_boots_drop_farm_fights_grey_dropper), and an
+#: AcceptTask chain shut behind tasks_farmer (0/100). That enumeration was
+#: incomplete, and the omission was a PRODUCTION BUG rather than a fact about
+#: the scenario: a THIRD source, GrindCharacterXP(rat), was being suppressed by
+#: `xp_per_kill`'s zero band starting at diff 10. `rat` is level 25 and the
+#: character is level 35 — diff exactly 10, which the learning-store replay
+#: shows pays in full (32 xp/kill here). With the band corrected to 11 the
+#: scenario has bounded work again (GrindCharacterXP(rat) and
+#: MaintainConsumables, 1 node each), so the ordinary bound applies and
+#: asserting emptiness would be re-asserting the bug.
+_NO_WORK_SCENARIOS: set[str] = set()
 
 
 @pytest.mark.parametrize("name", NEW_SCENARIOS)

@@ -283,14 +283,21 @@ recreate the selection-says-yes/emission-says-no split behind the wool livelock.
 
 **Boundary is OBSERVED, not assumed.** The docs say "10+ levels below → 0" for
 both gathering and crafting, but the prose is ambiguous at the edge.
-`diff/gather_xp_replay.py` replays 2464 live gather cycles: gap 10 pays 148/159,
-gap 11 pays **0/312**, with the SAME resources (`copper_rocks`, `ash_tree`) on
-both sides — so the split is a property of the gap, not of any resource. Hence
-`GREY_SKILL_GAP = 11`, one WIDER than combat's doc-cited `>= 10`. The two
-constants are deliberately not shared. The 6 apparent payers at gap ≥ 11 all
-carry a delta shaped like the NEIGHBOURING resource (spruce's +25/+17 on `ash_tree`
-cycles), i.e. one-snapshot attribution lag; they are reported as OUTLIERS rather
-than asserted away.
+`diff/gather_xp_replay.py` replays 3231 live gather cycles: gap 10 pays 159/159,
+gap 11 pays **0/310**, with no outlier anywhere; the independent 456-cycle craft
+replay splits the same way. Hence `GREY_SKILL_GAP = 11`.
+
+COMBAT'S BAND IS THE SAME NUMBER, measured separately (updated 2026-08-15).
+This paragraph used to end "one WIDER than combat's doc-cited `>= 10`. The two
+constants are deliberately not shared", and reported 2464 gather cycles with 6
+apparent gap-≥11 payers explained as one-snapshot attribution lag. Both halves
+are withdrawn. The lag was not an explanation but a BUG — the replay paired
+each action with the FOLLOWING cycle's result — and once the harnesses read the
+learning store instead of differencing snapshots, the same correction moved
+combat's boundary too: `diff/xp_formula_replay.py` over 10 857 ok-fights finds
+372 paying at diff 10 and 0 paying at diff ≥ 11, so `xp_per_kill` zeroes at 11.
+The constants are still not shared in code and no common mechanism is claimed —
+two independent replays over disjoint evidence simply landed on the same number.
 
 **Non-vacuity was verified, not assumed.** The first version of the scenario
 fixture banked 60 spruce_wood, which gave `spruce_plank` `mats_missing = 0` too —

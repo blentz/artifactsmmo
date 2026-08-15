@@ -53,8 +53,32 @@ class MonsterCatalog:
     #              * level_penalty * monster_multiplier * wisdom_bonus)
     #
     # level_penalty: 1.0 when char_level <= monster_level + 4
-    #                0.7 when char_level - monster_level >= 5
-    #                0.0 when char_level - monster_level >= 10
+    #                0.7 when 5 <= char_level - monster_level <= 10
+    #                0.0 when char_level - monster_level >= 11
+    #
+    # THE ZERO BOUNDARY IS OBSERVED, NOT ASSUMED. The doc prose is loose about
+    # whether a gap of exactly 10 pays; it does, at the 0.7 penalty. Every
+    # ok-Fight row in the learning store (49_263 cycles, 5 characters), each
+    # read with its OWN `delta_xp` — see `formal/diff/xp_formula_replay.py`:
+    #
+    #     diff = char_level - monster_level    pays / zero
+    #        8                                 2213 /   0
+    #        9                                 2101 /   0
+    #       10                                  372 /   0
+    #       11                                    0 /  51   <-- band starts here
+    #       14                                    0 /   1
+    #       16                                    0 /  37
+    #       20                                    0 /  18
+    #
+    # 10_750 paying fights, all at diff <= 10; 107 zero-xp fights, all at
+    # diff >= 11; no exception at the boundary. The diff-10 payers are 4
+    # characters over 5 distinct (monster, char_level) pairs, and their awards
+    # match the 0.7 band exactly (342/372 at wisdom=0, the rest a positive
+    # wisdom excess) — never the 1.0 band. The earlier `>= 10` here cited a
+    # "399/399" corroboration produced when that replay recovered per-fight XP
+    # by DIFFERENCING CONSECUTIVE STATE SNAPSHOTS — the same off-by-one
+    # attribution that credited each craft with the FOLLOWING cycle's xp. It
+    # never observed a single zero-band fight, so it never tested the boundary.
     # monster_multiplier: normal=1.0, elite=1.4, boss=2.0
     # wisdom_bonus: 1 + wisdom * 0.001
 
@@ -85,7 +109,7 @@ class MonsterCatalog:
             return 0
         monster_hp = self.hp.get(monster_code, 0)
         diff = char_level - monster_level
-        if diff >= 10:
+        if diff >= 11:
             return 0
         penalty10 = 7 if diff >= 5 else 10
         mtype = self.types.get(monster_code, "normal")

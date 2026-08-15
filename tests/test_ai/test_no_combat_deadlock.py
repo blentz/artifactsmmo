@@ -142,8 +142,13 @@ class TestNoCombatDeadlock:
 
     def test_fallback_requires_positive_xp(self) -> None:
         """A winnable monster whose kill grants zero XP (char out-levels it
-        by 10+) is not a fallback target — fighting it serves no leveling
-        objective and FightAction's xp gate would reject it."""
+        by 11+) is not a fallback target — fighting it serves no leveling
+        objective and FightAction's xp gate would reject it.
+
+        The fixture was level 11 against a level-1 chicken — diff exactly 10,
+        which the store replay shows pays in full (372 observed fights). It
+        was asserting the off-by-one, not the exclusion; level 12 puts it back
+        inside the zero band."""
         gd = GameData()
         gd._monster_level = {"chicken": 1}
         gd._monster_hp = {"chicken": 60}
@@ -154,14 +159,15 @@ class TestNoCombatDeadlock:
         gd._monster_locations = {"chicken": [(0, 1)]}
         base = _trace_state()
         state = make_state(
-            level=11, hp=165, max_hp=165,
+            level=12, hp=165, max_hp=165,
             attack={"air": 5}, dmg=18, initiative=10,
             inventory={}, inventory_max=100,
             equipment=dict(base.equipment),
         )
         player = _player(gd, state)
         assert player._is_winnable("chicken") is True
-        assert gd.xp_per_kill("chicken", 11) == 0
+        assert gd.xp_per_kill("chicken", 11) > 0
+        assert gd.xp_per_kill("chicken", 12) == 0
         assert player._pick_winnable_monster() is None
         # Action-level: a DEFAULT fight (no drop_farm) keeps the xp gate — the
         # drop-farm bypass must never leak into plain xp-grind fights.

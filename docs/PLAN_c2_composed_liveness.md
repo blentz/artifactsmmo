@@ -60,8 +60,12 @@ Server xp formula is DOCUMENTED with a closed form
 
     XP = round((monster_level/player_level * 20 + monster_hp * 0.04)
                * level_penalty * monster_multiplier * wisdom_bonus)
-    level_penalty: 1.0 (diff <= 4), 0.7 (5 <= diff <= 9), 0.0 (diff >= 10)
+    level_penalty: 1.0 (diff <= 4), 0.7 (5 <= diff <= 10), 0.0 (diff >= 11)
     where diff = char_level - monster_level
+
+(The doc prose is loose about whether a gap of exactly 10 pays. It does — the
+zero boundary was corrected from 10 to 11 on 2026-08-15 against the learning
+store; see C0c below.)
 
 Production already implements it verbatim (`monster_catalog.xp_per_kill`,
 doc-cited comment) and gates combat targeting on `xp_per_kill(code, lvl) > 0`
@@ -95,9 +99,18 @@ Closure bricks:
   `xpPerKill_wisdom_mono`. LESSON: omega treats `d*(n/d)` with VARIABLE d as
   opaque nonlinear atoms — align both `Nat.div_add_mod` instances onto ONE
   atom (rw the quotient equality first) before omega.
-* **C0c: trace corroboration. DONE** (`diff/xp_formula_replay.py`): 262/399
-  exact at wisdom=0; all 137 residuals exactly +1 (wisdom signature); 0
-  zero-band fights observed — the picker gate holds in practice.
+* **C0c: live corroboration. DONE** (`diff/xp_formula_replay.py`), REDONE
+  2026-08-15 against the learning store: 7024/10883 ok-fights exact at
+  wisdom=0, residuals a positive wisdom/type excess; 107 zero-band fights
+  observed. The BOUNDARY census is clean at 11: 10750 paying fights all at
+  `diff ≤ 10` (incl. 372 at exactly 10), 107 zero-xp fights all at
+  `diff ≥ 11`. SUPERSEDED FIGURE: this bullet used to read "262/399 exact …
+  0 zero-band fights observed", and that "399/399 corroboration" was cited
+  in three places as proof the band started at 10. It was produced when the
+  replay recovered per-fight xp by DIFFERENCING CONSECUTIVE STATE SNAPSHOTS,
+  and — as the same bullet said — it observed NO zero-band fight, so it never
+  tested the boundary. `monster_catalog.xp_per_kill` and `Formal.XpPositive`
+  moved to `diff ≥ 11 ⇒ 0` on the store evidence.
 * **C0d: liveness closure.** The E-tower fight row (C2b below) credits xp ONLY
   under `loadoutAdequate && xpPositiveGate` — the level_penalty=0 case becomes
   UNREACHABLE in the credited path instead of silently over-credited. The
@@ -107,7 +120,15 @@ Closure bricks:
 
 ## The level-38 wall (C2 pre-design finding, 2026-07-04)
 
-Probes over the acquirable pool (snapshot-pinned):
+Probes over the acquirable pool (snapshot-pinned).
+
+> **Boundary note, 2026-08-15.** The zero band starts at diff 11, not 10, so
+> the arithmetic below is off by one level: death_knight (L28) keeps paying at
+> char 38 and zeroes at 39. The wall this section describes was already RAISED
+> and then DISSOLVED by the multi-drop closure (see LEVEL_FIFTY_RESIDUALS.md),
+> so nothing downstream depends on the number; the section is kept as the
+> record of the finding as it was made, with the correction stated here rather
+> than silently applied to it.
 
 * Bands 34-37's acquirable witness farms death_knight (L28). At char 38 the
   10-band level_penalty ZEROES it (38 ≥ 28+10 — C0a's gate, exactly), and no

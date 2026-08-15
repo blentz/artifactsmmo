@@ -9,7 +9,7 @@ to ZERO once the content sits far enough below the character's SKILL level
                * level_penalty * wisdom_bonus)
 
 This mirrors `ai/xp_positive`'s COMBAT gate (`monster_catalog.xp_per_kill`,
-`char_level - monster_level >= 10 => 0`) for the other two xp sources. Until
+`char_level - monster_level >= 11 => 0`) for the other two xp sources. Until
 now only combat modelled its band: `GatherAction`/`CraftAction` carried an
 UPPER skill bound (`skills[skill] >= required`) and no lower one at all, so a
 skill grind could pick content that pays nothing and spin on it forever.
@@ -40,10 +40,31 @@ against the FOLLOWING cycle's result instead of its own, which manufactured
 those apparent payers out of a neighbouring cycle's real yield. Corrected,
 there is nothing left to explain: the boundary is exact.)
 
-Hence the paying band is `gap <= 10`, i.e. `skill_level < content_level + 11` —
-one wider than combat's. The two constants are deliberately NOT shared: combat's
-`>= 10` is doc-cited AND corroborated 399/399 in `xp_formula_replay.py`, this
-one is corroborated 3231/3231 here, and nothing in the game ties them together.
+Hence the paying band is `gap <= 10`, i.e. `skill_level < content_level + 11`.
+
+COMBAT'S BAND IS THE SAME NUMBER — measured separately, and equal. This
+paragraph used to say the two were deliberately NOT shared, on the grounds that
+combat's was `>= 10`, doc-cited AND "corroborated 399/399" in
+`xp_formula_replay.py`, while this one was `>= 11`, and that nothing in the game
+tied them together. The first half of that has been withdrawn. The 399/399
+figure was produced when that replay recovered per-fight xp by DIFFERENCING
+CONSECUTIVE STATE SNAPSHOTS — the same attribution bug that manufactured this
+file's own retracted below-band payers — and it observed ZERO zero-band fights,
+so it never tested the boundary at all. Re-run against the learning store, with
+each fight read from its OWN `delta_xp`, combat's boundary is 11 too:
+
+    diff = char_level - monster_level     pays / zero
+      9                                   2101 /   0
+     10                                    372 /   0
+     11                                      0 /  51     <-- band starts here
+
+10_750 paying fights, all at diff <= 10; 107 zero-xp fights, all at diff >= 11.
+
+The two constants are still NOT shared in code, and no common mechanism is
+claimed — the game documents two separate curves, and this file's `>= 11` rests
+on 3231 gathers while `monster_catalog`'s rests on 10_857 fights. They are
+equal because both were measured and both came out 11, not because either was
+derived from the other.
 """
 
 GREY_SKILL_GAP = 11

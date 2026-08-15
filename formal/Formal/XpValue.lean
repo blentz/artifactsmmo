@@ -15,7 +15,7 @@ is evaluated as one rational `num/den` with round-half-even (Python `round`):
 
     num = (2000*ml + 4*hp*cl) * penalty10 * mult10 * (1000 + wisdom)
     den = cl * 10000000
-    penalty10 ∈ {10, 7, —}  (diff ≤ 4 / 5..9 / ≥10 returns 0)
+    penalty10 ∈ {10, 7, —}  (diff ≤ 4 / 5..10 / ≥11 returns 0)
     mult10    ∈ {10, 14, 20}  (normal / elite / boss — the type→mult10 map
                                stays a production data lookup; the mirror takes
                                mult10 as an input and the differential derives
@@ -68,7 +68,7 @@ theorem roundHalfUp_le_succ_floor (num den : Nat) :
     ×10 monster-type multiplier (data lookup on the production side). -/
 def xpPerKill (charLevel monsterLevel monsterHp mult10 wisdom : Nat) : Nat :=
   if monsterLevel = 0 ∨ charLevel = 0 then 0
-  else if monsterLevel + 10 ≤ charLevel then 0
+  else if monsterLevel + 11 ≤ charLevel then 0
   else
     let penalty10 := if monsterLevel + 5 ≤ charLevel then 7 else 10
     let num := (2000 * monsterLevel + 4 * monsterHp * charLevel)
@@ -79,8 +79,10 @@ set_option maxRecDepth 4096 in
 /-- **Value ↔ gate**: for any real multiplier (`mult10 ≥ 10`), the xp value is
     positive EXACTLY when the C0a positivity gate holds. The in-band lower
     bound is the KEY FACT from the C0a analysis, now kernel-proved for the
-    value itself: `c ≤ m + 9 ⟹ num ≥ den` (worst case
-    `2000·m·7·10·1000 ≥ c·10^7 ⟺ 14m ≥ c ⟸ c ≤ m + 9 ∧ 1 ≤ m`). -/
+    value itself: `c ≤ m + 10 ⟹ num ≥ den` (worst case
+    `2000·m·7·10·1000 ≥ c·10^7 ⟺ 14m ≥ c ⟸ c ≤ m + 10 ∧ 1 ≤ m`). The band
+    widened from `≤ m + 9` when the zero boundary was corrected to `diff ≥ 11`;
+    the same linear bound still discharges it (`m + 10 ≤ 14m ⟺ 10 ≤ 13m`). -/
 theorem xpPerKill_pos_iff_gate (c m hp mult10 w : Nat)
     (hc : 1 ≤ c) (hmult : 10 ≤ mult10) :
     (0 < xpPerKill c m hp mult10 w ↔ xpPositiveGate c m = true) := by

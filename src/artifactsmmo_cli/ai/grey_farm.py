@@ -1,7 +1,7 @@
 """Grey-mob drop-farming policy: when may the planner fight a zero-xp monster?
 
 FightAction's xpPositive gate (proven, Formal/ActionApplicability.lean) rejects
-monsters >=10 levels below the character — correct for xp grinding, but it also
+monsters >=11 levels below the character — correct for xp grinding, but it also
 made mob-drop GATHERING impossible: live Robby (L12) could not hunt feathers
 from chickens (L1) even though the server still drops loot from grey mobs, so
 GatherMaterials(feather) was only servable from bank stock.

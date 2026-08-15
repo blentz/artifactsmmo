@@ -16,6 +16,14 @@ with `level_penalty` a step function of the gap: at-or-below the monster's level
 **100%**, five or more levels above **70%**, **ten or more levels above 0%** —
 the kill awards nothing at all.
 
+> **Correction, 2026-08-15.** The published prose is loose at that last edge. A
+> gap of exactly ten pays, at the 70% rate; the zero band starts at **eleven**.
+> Measured over the learning store's 10 857 ok-fights: 372 at gap 10, every one
+> paying, and 107 zero-xp fights, none below gap 11. The finding below is
+> unaffected in substance — a rate measured at one level was reused at every
+> rung regardless — only the level at which `green_slime` stops paying moves
+> from 14 to 15.
+
 ## What the projection does
 
 `cheapest_path_to_level` picks a per-rung XP rate from one of two branches:

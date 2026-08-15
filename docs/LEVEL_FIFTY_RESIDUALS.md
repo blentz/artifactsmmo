@@ -139,14 +139,25 @@ bounded, revisit with B3 flags). Level-rollover agreement 383/387.
 
 ## XP formula corroboration (Phase C0c, 2026-07-04 — `formal/diff/xp_formula_replay.py`)
 
-The documented server xp formula (stats_and_fights#xp-formula: level_penalty
-1.0 / 0.7@diff≥5 / 0@diff≥10, type multiplier, wisdom bonus) replayed against
-399 observed ok-fights with fixture monster level/hp: **262/399 exact at
-wisdom = 0, and all 137 remaining deltas are exactly +1 xp** — the wisdom-bonus
-signature (uniform, tips the round). **0 zero-band fights observed**: the
-combat picker's `xp_per_kill > 0` gate keeps the bot off level_penalty = 0
-targets in practice. This is the server-axiom-signoff evidence for the C0a
-`xpPositiveGate` core (`docs/PLAN_c2_composed_liveness.md` §C0).
+**RE-RUN 2026-08-15 against the learning store; the 2026-07-04 figures below
+are superseded.** The documented server xp formula (stats_and_fights#xp-formula:
+level_penalty 1.0 / 0.7@diff≥5 / 0@diff≥11, type multiplier, wisdom bonus)
+replayed against every ok-fight row in the store (10883 fights, 5 characters,
+each read from its OWN `delta_xp`): **7024/10883 exact at wisdom = 0**, the
+residuals a positive wisdom/type excess. **107 zero-band fights observed**, and
+the boundary census has no violation: 10750 paying fights all at `diff ≤ 10`
+(372 of them at exactly 10, across 4 characters and 5 monster/level pairs), 107
+zero-xp fights all at `diff ≥ 11`. This is the server-axiom-signoff evidence for
+the C0a `xpPositiveGate` core (`docs/PLAN_c2_composed_liveness.md` §C0).
+
+SUPERSEDED: this section previously read "399 observed ok-fights … **262/399
+exact at wisdom = 0**, and all 137 remaining deltas are exactly +1 xp … **0
+zero-band fights observed**", and that 399-fight run was cited elsewhere as
+"corroborated 399/399" for a band starting at `diff ≥ 10`. It recovered
+per-fight xp by differencing consecutive state snapshots, and by its own
+account saw no zero-band fight at all — so it was never evidence about where
+the band starts. It does not start at 10; a gap of exactly 10 pays, at the 0.7
+penalty.
 
 ## The level-38 wall — RAISED, then DISSOLVED (2026-07-04)
 
@@ -154,6 +165,10 @@ History: with the PRIMARY-drop closure, acquirable progression hard-capped at
 level 38 (bands 34-37 farm death_knight L28; the 10-band level_penalty zeroes
 it at 38 — `xpPositiveGate` exactly; no L29-40 monster winnable, potions
 included; owlbear L30 needs L39 stats; combat is the only char-xp source).
+(Boundary note 2026-08-15: the zero band actually starts at diff 11, so
+death_knight zeroes at 39, not 38. The wall was DISSOLVED before that
+correction and nothing downstream reads the number; the paragraph is left as
+the record of the finding as made.)
 Root cause (engagement-expansion P1): every sourcing decision consumed the
 primary-drop map while resources MULTI-drop — gem stones at 1/100-1/200 from
 ordinary rocks — walling the jewelry/obsidian/gold recipe families. With the

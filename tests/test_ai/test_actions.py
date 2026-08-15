@@ -242,13 +242,19 @@ class TestFightAction:
         assert action.is_applicable(state, gd) is True
 
     def test_not_applicable_monster_grants_zero_xp(self):
-        """The honest lower bound: the documented XP curve zeroes out at
-        char_level - monster_level >= 10, so a far-below monster serves no
-        leveling objective and is excluded — naturally level-tracking."""
+        """The honest lower bound: the XP curve zeroes out at
+        char_level - monster_level >= 11, so a far-below monster serves no
+        leveling objective and is excluded — naturally level-tracking.
+
+        Was level 11 (diff exactly 10) until 2026-08-15, when the store replay
+        showed 372 observed fights at diff 10 paying in full — this assertion
+        was pinning the off-by-one, not the exclusion. Level 12 puts the
+        fixture back inside the zero band it is here to test."""
         action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
-        state = make_state(x=0, y=0, hp=100, max_hp=100, level=11)
+        state = make_state(x=0, y=0, hp=100, max_hp=100, level=12)
         gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
-        assert gd.xp_per_kill("chicken", 11) == 0
+        assert gd.xp_per_kill("chicken", 11) > 0
+        assert gd.xp_per_kill("chicken", 12) == 0
         assert action.is_applicable(state, gd) is False
 
     def test_not_applicable_monster_too_high_level(self):

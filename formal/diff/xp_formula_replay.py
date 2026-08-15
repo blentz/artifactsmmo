@@ -4,13 +4,23 @@ Server-axiom-signoff discipline (like LIV-001's replay): the formula
 
     XP = round((monster_level/player_level * 20 + monster_hp * 0.04)
                * level_penalty * monster_multiplier * wisdom_bonus)
-    level_penalty: 1.0 (diff <= 4), 0.7 (5 <= diff <= 9), 0.0 (diff >= 10)
+    level_penalty: 1.0 (diff <= 4), 0.7 (5 <= diff <= 10), 0.0 (diff >= 11)
 
 (https://docs.artifactsmmo.com/concepts/stats_and_fights/#xp-formula) is
 recomputed for every observed ok-fight in the learning store (`Cycle.level` is
 the character's own level at that row, `Cycle.delta_xp` the row's own xp
 delta — see `store_records.py`) using the fixture's monster level/hp, and
 compared to the real xp delta.
+
+THE ZERO BOUNDARY IS MEASURED HERE, NOT ASSUMED FROM THE DOC. The doc prose is
+loose about whether a gap of exactly 10 pays. This replay reports the pays/zero
+split per `diff` bucket (`BOUNDARY` section) INDEPENDENTLY of the penalty it
+applies, so the boundary the model uses is falsifiable by the same run that
+uses it: a paying fight at or above `ZERO_BAND_DIFF`, or a zero-xp fight below
+it, shows up as a boundary violation rather than being folded into the
+mismatch classes. When this script recovered per-fight xp by DIFFERENCING
+CONSECUTIVE SNAPSHOTS it observed ZERO zero-band fights out of 399, so the
+"399/399" it was cited for never touched the boundary at all.
 
 KNOWN unobservables, reported as classes rather than asserted away:
 * wisdom (gear-derived, not in the store row) — computed with wisdom = 0, so a
@@ -32,6 +42,14 @@ from pathlib import Path
 from store_records import EmptyCorpusError, load_cycles
 
 DEFAULT_DB = Path.home() / ".cache" / "artifactsmmo" / "learning.db"
+
+# Restated here, NOT imported from `monster_catalog`: this script's job is to
+# corroborate production against live data, and a harness that reads the
+# constant under test cannot falsify it.
+ZERO_BAND_DIFF = 11
+"""char_level - monster_level at which level_penalty reaches 0."""
+PENALTY_DIFF = 5
+"""char_level - monster_level at which level_penalty drops to 0.7."""
 
 
 def main() -> int:
@@ -56,6 +74,9 @@ def main() -> int:
     rollover = 0
     zero_band_fights = 0
     checked = 0
+    pays: Counter[int] = Counter()   # diff -> fights with a POSITIVE own delta_xp
+    zero: Counter[int] = Counter()   # diff -> fights with delta_xp == 0
+    reset: Counter[int] = Counter()  # diff -> fights with delta_xp < 0 (see below)
 
     for rec in records:
         action = rec.action_repr or ""
@@ -78,20 +99,35 @@ def main() -> int:
             continue
         ml, hp = mlevel[code], mhp[code]
         diff = rec.level - ml
-        if diff >= 10:
+        real = rec.delta_xp
+        # BOUNDARY census, taken BEFORE the model is applied so the model
+        # cannot launder it. A NEGATIVE own-delta is a level-reset row (the
+        # character crossed a level, or the name was re-created and the store
+        # kept recording under it); it carries no information about whether
+        # the fight paid, so it is counted and excluded rather than being read
+        # as a zero.
+        if real > 0:
+            pays[diff] += 1
+        elif real == 0:
+            zero[diff] += 1
+        else:
+            reset[diff] += 1
+        if diff >= ZERO_BAND_DIFF:
             penalty = 0.0
             zero_band_fights += 1
-        elif diff >= 5:
+        elif diff >= PENALTY_DIFF:
             penalty = 0.7
         else:
             penalty = 1.0
         expected = round((ml / rec.level * 20 + hp * 0.04) * penalty)
-        real = rec.delta_xp
         checked += 1
         if expected == real:
             exact += 1
         else:
             off[(expected, real)] += 1
+
+    pay_violations = sorted(d for d in pays if d >= ZERO_BAND_DIFF)
+    zero_violations = sorted(d for d in zero if d < ZERO_BAND_DIFF)
 
     out = []
     out.append(f"db={db_path} snapshot={snap} ({data.get('captured_at', '?')})")
@@ -99,6 +135,21 @@ def main() -> int:
     out.append(f"EXACT formula matches (wisdom=0, multiplier=1.0): {exact}/{checked}")
     out.append(f"zero-band fights observed (level_penalty = 0): {zero_band_fights}")
     out.append(f"mismatch classes (expected, real) -> count, top 15: {off.most_common(15)}")
+    out.append("")
+    out.append(f"## BOUNDARY census (model: level_penalty = 0 at diff >= {ZERO_BAND_DIFF})")
+    out.append("'reset' = own delta_xp < 0, a level-crossing/character-reset row that")
+    out.append("cannot say whether the fight paid; counted, excluded from the verdict.")
+    out.append(f"{'diff':>5} {'pays':>7} {'zero':>7} {'reset':>7}  verdict")
+    for d in sorted(set(pays) | set(zero) | set(reset)):
+        verdict = "PAYS" if pays[d] else ("ZERO" if zero[d] else "-")
+        out.append(f"{d:>5} {pays[d]:>7} {zero[d]:>7} {reset[d]:>7}  {verdict}")
+    out.append(f"totals: pays={sum(pays.values())} zero={sum(zero.values())} reset={sum(reset.values())}")
+    if pay_violations or zero_violations:
+        out.append(f"BOUNDARY VIOLATIONS: paying diffs >= {ZERO_BAND_DIFF}: {pay_violations}; "
+                   f"zero diffs < {ZERO_BAND_DIFF}: {zero_violations}")
+    else:
+        out.append(f"BOUNDARY VIOLATIONS: none — every paying fight is at diff < {ZERO_BAND_DIFF} "
+                   f"and every zero-xp fight at diff >= {ZERO_BAND_DIFF}")
     out.append("")
     out.append("Uniform positive excess = wisdom bonus; ~1.4x/2x = elite/boss multiplier;")
     out.append("anything else contradicts the documented formula and needs escalation.")

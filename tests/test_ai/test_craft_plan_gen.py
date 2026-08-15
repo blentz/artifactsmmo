@@ -931,13 +931,18 @@ class TestDropLeafFightLeg:
             "no step may be planned past the stochastic Fight leg", result)
 
     def test_grey_dropper_reuses_drop_farm_variant(self):
-        """At L11 the L1 chicken is GREY (xp_per_kill 0, diff >= 10). The
+        """At L12 the L1 chicken is GREY (xp_per_kill 0, diff >= 11). The
         goal's relevant_actions routes it through grey_farm_allowed (the
         consuming recipe feather_coat has no higher same-family tier →
         allowed) and emits the drop_farm variant — the generator must reuse
-        exactly that emitted fight, drop_farm flag intact."""
+        exactly that emitted fight, drop_farm flag intact.
+
+        Was L11 (diff exactly 10) until 2026-08-15; the store replay showed
+        diff 10 pays in full, so at L11 the chicken is no longer grey and the
+        emitted fight carries no drop_farm flag. L12 restores the grey
+        premise this test is actually about."""
         gd = _gd_drop_leaf()
-        state = _fighter_state(level=11)
+        state = _fighter_state(level=12)
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
 
         result = generate_next_craft_action(goal, state, gd, _drop_leaf_actions(),

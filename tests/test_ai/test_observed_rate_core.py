@@ -2,7 +2,7 @@
 
 The defect these pin, measured live on 2026-08-09: `cheapest_path_to_level` reused
 one learned rate at every rung of a 38-level walk, which deleted the game's
-published grey-mob rule (0 XP ten or more levels above a monster) from every
+published grey-mob rule (0 XP eleven or more levels above a monster) from every
 projection that had any observation at all. C3P0 projected reaching level 50 by
 farming a LEVEL 4 slime at a flat 7.0 XP per cycle from rung 12 to rung 49.
 """
@@ -150,6 +150,9 @@ class TestPublishedPenaltyBand:
 
     The game documents three cases -- at or below the monster's level 100%, five or
     more above 70%, ten or more above 0% -- and never says what a gap of 1..4 does.
+    (The third case's prose is also loose at its own edge: a gap of exactly ten
+    pays, at the 70% rate; the zero band starts at ELEVEN. Measured, not
+    inferred -- see `test_eleven_levels_above_awards_nothing`.)
     That is the ORDINARY case, not a corner: a climbing character out-levels most of
     its candidate pool by one to four, so the argmax that picks a rung's monster had
     no defined reward across most of its own pool.
@@ -177,9 +180,16 @@ class TestPublishedPenaltyBand:
         cliff = self._award(4) - self._award(5)
         assert cliff > drop_inside * 2, (drop_inside, cliff)
 
-    def test_ten_levels_above_awards_nothing(self):
-        assert self._award(10) == 0
-        assert self._award(9) > 0
+    def test_eleven_levels_above_awards_nothing(self):
+        """The zero band starts at ELEVEN, not the ten the prose suggests.
+
+        This asserted `_award(10) == 0` until 2026-08-15. The published prose
+        says "ten or more above 0%", but it is loose about whether a gap of
+        exactly ten pays; the learning-store replay settles it — 372 observed
+        ok-fights at gap 10, every one paying, and 107 zero-xp fights, none
+        below gap 11. So the old assertion was pinning an off-by-one."""
+        assert self._award(11) == 0
+        assert self._award(10) > 0
 
 
 class TestPublishedFormulaFactors:

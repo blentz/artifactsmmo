@@ -74,8 +74,8 @@ class Yield(BaseModel):
     cycles, rounded), or None when no cycle recorded a level.
 
     `char_xp` is a rate that DEPENDS on this level — the game's XP award is a
-    function of the gap between character and monster, and goes to zero ten levels
-    above it. Without this field the rate is uninterpretable away from where it was
+    function of the gap between character and monster, and goes to zero ELEVEN
+    levels above it. Without this field the rate is uninterpretable away from where it was
     measured, and reusing it anyway is exactly the defect
     `observed_rate_core.rescale_observed_xp` exists to undo. Carried on the same
     object, from the same rows, at no extra query."""
@@ -371,7 +371,7 @@ def cheapest_path_to_level(
                 # RESTATED FOR THIS RUNG. The measured rate belongs to the level its
                 # samples were taken at, and this branch used to reuse it unchanged
                 # all the way up the ladder — which silently deleted the published
-                # grey-mob rule (0 XP ten or more levels above a monster) from every
+                # grey-mob rule (0 XP eleven or more levels above a monster) from every
                 # walk that had any observation at all. C3P0 thereby projected
                 # reaching level 50 on a LEVEL 4 slime at a flat 7.0/cycle from rung
                 # 12 to rung 49. The scaling factor is the ratio of the published

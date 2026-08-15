@@ -7,14 +7,22 @@ falls to ZERO once the content sits far enough below the character's SKILL level
 (https://docs.artifactsmmo.com/concepts/skills). This is the GATHER/CRAFT twin of
 `Formal.XpPositive`, which models the same shape for COMBAT.
 
-The two bands are deliberately NOT the same constant. Combat's is doc-cited as
-`diff >= 10 => 0` and corroborated 399/399 in `formal/diff/xp_formula_replay.py`.
-This one is one wider — `diff >= 11 => 0` — and is corroborated by
-`formal/diff/gather_xp_replay.py` over 2464 live gather cycles: the gap-10 bucket
-pays 148/159 while the gap-11 bucket pays 0/312, with the SAME resources
-(`copper_rocks`, `ash_tree`) on both sides of the boundary, so the split is a
-property of the gap and not of any resource. Nothing in the game ties the two
-curves together, so neither constant is derived from the other.
+The two bands are MEASURED SEPARATELY and come out EQUAL: both are
+`diff >= 11 => 0`. This one is corroborated by `formal/diff/gather_xp_replay.py`
+over 3231 live gather cycles — every bucket at gap ≤ 10 pays every time (gap 10:
+159 pays / 0 zero) and every bucket at gap ≥ 11 pays zero times (gap 11: 0 / 310),
+with no outlier anywhere; an independent 456-craft-cycle replay finds the same
+split. Combat's is corroborated by `formal/diff/xp_formula_replay.py` over the
+learning store's 10_857 ok-fights — diff 10: 372 pays / 0 zero, diff 11: 0 / 51.
+
+Neither constant is derived from the other, and no shared mechanism is claimed:
+two independent replays over disjoint evidence landed on the same number. This
+paragraph previously asserted the two bands were deliberately DIFFERENT, citing
+combat at `diff >= 10` with a "399/399" corroboration. That figure predates the
+harness migration: it was produced when the replay recovered per-fight xp by
+DIFFERENCING CONSECUTIVE STATE SNAPSHOTS — the same off-by-one attribution the
+gather replay's own numbers were corrected for — and it observed ZERO zero-band
+fights, so it never tested the boundary it was cited for.
 
 WHY IT IS IN THE DECISION PATH: `skill_grind_selection_pure` filters grind rungs
 on it and `best_gather_resource_drop` filters the gather fallback on it. Without

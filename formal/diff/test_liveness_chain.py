@@ -139,13 +139,18 @@ class TestLivenessChain:
         assert _chain(state, gd, "chicken", level=5)
 
     def test_zero_xp_monster_breaks_applicability_gate(self) -> None:
-        """The honest lower bound: at level 11 a chicken (lvl 1) grants
-        ZERO XP (documented curve zeroes at char-monster >= 10). The Lean
+        """The honest lower bound: at level 12 a chicken (lvl 1) grants
+        ZERO XP (the curve zeroes at char-monster >= 11). The Lean
         theorem fightApplicable_false_of_zero_xp pins this — picker may
-        say winnable, FightAction.is_applicable says no."""
+        say winnable, FightAction.is_applicable says no.
+
+        Was level 11 (diff exactly 10) until 2026-08-15; the store replay
+        showed diff 10 pays in full, so that state is no longer zero-xp and
+        the test was pinning the off-by-one rather than the gate."""
         gd = _stub_gd("chicken", monster_level=1)
-        state = _state(level=11, hp=130, max_hp=130)
-        assert gd.xp_per_kill("chicken", 11) == 0
+        state = _state(level=12, hp=130, max_hp=130)
+        assert gd.xp_per_kill("chicken", 11) > 0
+        assert gd.xp_per_kill("chicken", 12) == 0
         assert not _chain(state, gd, "chicken", level=13)
 
     def test_low_hp_breaks_applicability_at_runtime_only(self) -> None:
