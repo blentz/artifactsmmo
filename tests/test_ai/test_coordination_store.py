@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.learning.coordination_store import (
 from artifactsmmo_cli.ai.learning.models import (
     BankStockClaim,
     GeOrderClaim,
+    HoldingLedger,
     MaterialDemand,
     RoleLease,
 )
@@ -1687,5 +1688,171 @@ def test_the_same_character_cannot_claim_one_order_twice(engine) -> None:
                            claimed_at="t", expires_at="t"))
         s.add(GeOrderClaim(character="HAL", order_id="order-1",
                            claimed_at="t", expires_at="t"))
+        with pytest.raises(IntegrityError):
+            s.commit()
+
+
+# ---------------------------------------------------------------------------
+# Fleet holdings ledger: one character's DUAL-ROLE item holdings (worn plus
+# carried), published so siblings can sum a fleet total. Same replace-wholesale
+# semantics and the same `expires_at` liveness rule as `MaterialDemand`, on
+# purpose — the coordination system still has exactly ONE liveness rule.
+# ---------------------------------------------------------------------------
+
+
+def test_sibling_holdings_sums_other_characters_only(tmp_path):
+    """A character's own row is excluded: the caller adds its own holdings from
+    live state, which is fresher than anything it published."""
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    r2d2 = CoordinationStore(db_path=db, character="R2D2")
+    try:
+        hal.publish_holdings({"lich_race_medal": 1}, now)
+        r2d2.publish_holdings({"lich_race_medal": 2, "novice_guide": 1}, now)
+
+        assert hal.sibling_holdings(now) == {"lich_race_medal": 2, "novice_guide": 1}
+        assert r2d2.sibling_holdings(now) == {"lich_race_medal": 1}
+    finally:
+        hal.close()
+        r2d2.close()
+
+
+def test_expired_holdings_stop_counting(tmp_path):
+    """A dead child's medals must leave the fleet total on the same clock that
+    frees its role — otherwise the turn-in threshold is met by a ghost."""
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    r2d2 = CoordinationStore(db_path=db, character="R2D2")
+    try:
+        r2d2.publish_holdings({"lich_race_medal": 2}, now)
+
+        assert hal.sibling_holdings(now) == {"lich_race_medal": 2}
+        assert hal.sibling_holdings(now + timedelta(seconds=DEMAND_TTL_SECONDS + 1)) == {}
+    finally:
+        hal.close()
+        r2d2.close()
+
+
+def test_publishing_replaces_rather_than_merges(tmp_path):
+    """Holdings are a snapshot. A medal spent must vanish from the fleet total
+    immediately, not linger until its TTL."""
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    other = CoordinationStore(db_path=db, character="R2D2")
+    try:
+        other.publish_holdings({"lich_race_medal": 3}, now)
+        other.publish_holdings({"lich_race_medal": 1}, now)
+
+        assert hal.sibling_holdings(now) == {"lich_race_medal": 1}
+    finally:
+        hal.close()
+        other.close()
+
+
+def test_publish_holdings_skips_non_positive_quantity(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    obs = CoordinationStore(db_path=db, character="observer")
+    try:
+        hal.publish_holdings({"lich_race_medal": 0, "novice_guide": -1}, _T0)
+        assert obs.sibling_holdings(_T0) == {}
+    finally:
+        hal.close()
+        obs.close()
+
+
+def test_publish_holdings_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.publish_holdings({"lich_race_medal": 1}, _NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_publish_holdings_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="offset"):
+            hal.publish_holdings({"lich_race_medal": 1}, _NON_UTC_NOW)
+    finally:
+        hal.close()
+
+
+def test_sibling_holdings_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.sibling_holdings(_NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_sibling_holdings_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="offset"):
+            hal.sibling_holdings(_NON_UTC_NOW)
+    finally:
+        hal.close()
+
+
+def test_publish_holdings_swallows_error(tmp_path: Path, capsys) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    _break_engine(hal)
+    hal.publish_holdings({"lich_race_medal": 1}, _T0)
+    assert "[coordination] publish_holdings failed" in capsys.readouterr().out
+
+
+def test_sibling_holdings_swallows_error_and_returns_empty(
+    tmp_path: Path, capsys
+) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    _break_engine(hal)
+    assert hal.sibling_holdings(_T0) == {}
+    assert "[coordination] sibling_holdings failed" in capsys.readouterr().out
+
+
+def test_holding_ledger_roundtrip(engine) -> None:
+    with SqlSession(engine) as s:
+        s.add(HoldingLedger(character="HAL", item_code="lich_race_medal", quantity=2,
+                            expires_at="2026-08-16T12:10:00+00:00"))
+        s.commit()
+    with SqlSession(engine) as s:
+        row = s.exec(select(HoldingLedger)).one()
+        assert (row.character, row.item_code, row.quantity) == ("HAL", "lich_race_medal", 2)
+
+
+def test_holding_ledger_minimal_construction() -> None:
+    """Direct construction with all required fields, no persistence."""
+    holding = HoldingLedger(
+        character="HAL",
+        item_code="lich_race_medal",
+        quantity=2,
+        expires_at="2026-08-16T12:10:00+00:00",
+    )
+    assert holding.id is None
+    assert holding.character == "HAL"
+    assert holding.item_code == "lich_race_medal"
+    assert holding.quantity == 2
+
+
+def test_the_same_character_cannot_hold_one_item_twice_in_the_ledger(engine) -> None:
+    """The uniqueness that makes a duplicated holding row unrepresentable rather
+    than merely unlikely, matching `MaterialDemand`'s upsert-key discipline."""
+    with SqlSession(engine) as s:
+        s.add(HoldingLedger(character="HAL", item_code="lich_race_medal", quantity=1,
+                            expires_at="t"))
+        s.add(HoldingLedger(character="HAL", item_code="lich_race_medal", quantity=1,
+                            expires_at="t"))
         with pytest.raises(IntegrityError):
             s.commit()

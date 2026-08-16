@@ -31,6 +31,7 @@ from sqlmodel import SQLModel, create_engine, select
 from artifactsmmo_cli.ai.learning.models import (
     BankStockClaim,
     GeOrderClaim,
+    HoldingLedger,
     MaterialDemand,
     RoleLease,
 )
@@ -449,6 +450,73 @@ class CoordinationStore:
                 ).all()
         except SQLAlchemyError as e:
             print(f"[coordination] sibling_demand failed: {e}")
+            return {}
+        for row in rows:
+            totals[row.item_code] = totals.get(row.item_code, 0) + row.quantity
+        return totals
+
+    def _holdings_expiry(self, now: datetime) -> str:
+        return (now + timedelta(seconds=DEMAND_TTL_SECONDS)).isoformat()
+
+    def publish_holdings(self, holdings: Mapping[str, int], now: datetime) -> None:
+        """Replace this character's `HoldingLedger` rows wholesale.
+
+        Modelled line-for-line on `publish_demand`: holdings are a snapshot of
+        what this character wears plus carries RIGHT NOW, so a unit spent
+        (turned in, sold, un-equipped and dropped) must stop counting toward
+        the fleet total immediately. Merging would leave a spent medal on the
+        board until its TTL, and a sibling could reach the turn-in threshold
+        against units that no longer exist.
+
+        Uses `DEMAND_TTL_SECONDS`, the same clock as `MaterialDemand` and
+        `RoleLease`, on purpose: the coordination system has exactly ONE
+        liveness rule, and a second TTL constant here would be a second one."""
+        _require_utc(now)
+        expiry = self._holdings_expiry(now)
+        try:
+            with SqlSession(self._engine) as s:
+                stale = s.exec(
+                    select(HoldingLedger).where(
+                        HoldingLedger.character == self._character
+                    )
+                ).all()
+                for row in stale:
+                    s.delete(row)
+                # Flush the deletes before the inserts: HoldingLedger, unlike
+                # MaterialDemand, is UNIQUE on (character, item_code), so a
+                # same-code republish inserts a row whose key a still-pending
+                # delete has not yet vacated. Unflushed, SQLAlchemy's unit of
+                # work would order that INSERT ahead of the DELETE within one
+                # flush and the UNIQUE constraint would reject it.
+                s.flush()
+                for item_code, quantity in holdings.items():
+                    if quantity > 0:
+                        s.add(HoldingLedger(character=self._character,
+                                            item_code=item_code,
+                                            quantity=quantity,
+                                            expires_at=expiry))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[coordination] publish_holdings failed: {e}")
+
+    def sibling_holdings(self, now: datetime) -> dict[str, int]:
+        """Unexpired holdings summed by item across every OTHER character.
+        Modelled line-for-line on `sibling_demand`: this character's own row
+        is excluded on purpose, because the caller adds its own holdings from
+        live state, which is fresher than anything it published."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        totals: dict[str, int] = {}
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(
+                    select(HoldingLedger).where(
+                        HoldingLedger.expires_at > stamp,
+                        HoldingLedger.character != self._character,
+                    )
+                ).all()
+        except SQLAlchemyError as e:
+            print(f"[coordination] sibling_holdings failed: {e}")
             return {}
         for row in rows:
             totals[row.item_code] = totals.get(row.item_code, 0) + row.quantity

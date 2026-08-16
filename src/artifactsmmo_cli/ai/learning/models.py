@@ -225,6 +225,36 @@ class MaterialDemand(SQLModel, table=True):
     expires_at: str
 
 
+class HoldingLedger(SQLModel, table=True):
+    """One character's holding of one DUAL-ROLE item — worn plus carried.
+
+    Upsert key is (character, item_code), replaced wholesale like
+    `MaterialDemand`, because holdings are a snapshot of right now and a spent
+    unit must stop counting toward a fleet threshold at once.
+
+    Only dual-role codes are published (`ai/dual_role_currency`), so this table
+    stays a handful of rows per character rather than a mirror of five
+    inventories. The bank is NOT published: it is account-shared, so every
+    child would publish the same units and the fleet total would multiply by
+    the number of children.
+
+    Carries the same `expires_at` liveness rule as `RoleLease`,
+    `MaterialDemand`, `BankStockClaim` and `GeOrderClaim` — a row is real if
+    unexpired — so the coordination system still has exactly ONE liveness
+    rule."""
+
+    __tablename__ = "holding_ledger"
+    __table_args__ = (
+        UniqueConstraint("character", "item_code", name="uq_holding_ledger_holder"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    character: str = Field(index=True)
+    item_code: str = Field(index=True)
+    quantity: int
+    expires_at: str
+
+
 class BankStockClaim(SQLModel, table=True):
     """One character's claim on BANK stock it is withdrawing. Upsert key is
     (character, item_code), the same shape as `MaterialDemand`.
