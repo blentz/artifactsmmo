@@ -24,6 +24,7 @@ from artifactsmmo_cli.ai.tiers.means import (
     SUPPLY_DEMAND_MIN,
     MeansKind,
     active_means,
+    means_fires,
 )
 from tests.test_ai.fixtures import make_state
 
@@ -33,6 +34,14 @@ def _ctx(**kw) -> SelectionContext:
                 initial_xp=0, task_exchange_min_coins=1, combat_monster=None)
     base.update(kw)
     return SelectionContext(**base)
+
+
+def _gd() -> GameData:
+    return GameData()
+
+
+def _fires(kind: MeansKind, state, game_data, ctx: SelectionContext) -> bool:
+    return means_fires(kind, state, game_data, None, ctx)
 
 
 def _seed_cycles(store: LearningStore, cycles: list[dict]) -> None:
@@ -244,6 +253,31 @@ def test_supply_bank_reads_unmet_demand_not_the_banked_target():
         state, GameData(), None,
         _ctx(supply_target=("iron_ore", 200, SUPPLY_DEMAND_MIN - 1)))
     assert MeansKind.SUPPLY_BANK not in collect
+
+
+def test_bulk_demand_still_fires_the_supply_rung():
+    ctx = _ctx(supply_target=("copper_ore", 40, 12), asymmetric_demand=frozenset())
+    assert _fires(MeansKind.SUPPLY_BANK, make_state(), _gd(), ctx) is True
+
+
+def test_a_single_unit_request_the_asker_cannot_make_now_fires():
+    """The live case: every published row is quantity 1, so before this the
+    rung never fired at all."""
+    ctx = _ctx(supply_target=("greater_wooden_staff", 1, 1),
+               asymmetric_demand=frozenset({"greater_wooden_staff"}))
+    assert _fires(MeansKind.SUPPLY_BANK, make_state(), _gd(), ctx) is True
+
+
+def test_a_small_request_the_asker_can_make_itself_still_does_not_fire():
+    """The bar's original rationale, preserved: a few units of an ore you can
+    gather yourself is cheaper to self-serve than to route through the bank."""
+    ctx = _ctx(supply_target=("copper_ore", 3, 3), asymmetric_demand=frozenset())
+    assert _fires(MeansKind.SUPPLY_BANK, make_state(), _gd(), ctx) is False
+
+
+def test_no_supply_target_never_fires():
+    ctx = _ctx(supply_target=None, asymmetric_demand=frozenset({"greater_wooden_staff"}))
+    assert _fires(MeansKind.SUPPLY_BANK, make_state(), _gd(), ctx) is False
 
 
 def test_task_exchange_fires_when_enough_coins():

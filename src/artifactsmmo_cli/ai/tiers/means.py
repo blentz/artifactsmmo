@@ -85,6 +85,19 @@ SELL_PRESSURE_FRACTION = PRESSURE_HIGH_FRACTION
 # than to route through the bank. The measured cost of that loss is small — in
 # the traced runs SUPPLY_BANK was selected zero times from the discretionary
 # band, because the objective step outranked it on every cycle a step existed.
+#
+# THE SECOND ARM (ctx.asymmetric_demand, Task 4). The rationale above assumes
+# the asker CAN self-serve — that a sub-threshold request is a handful of
+# gather actions the asker itself could run. That assumption breaks whenever
+# the requested code is skill-gated out of the asker's own reach:
+# `sibling_demand_asymmetric` (Task 2) already did the work of proving the
+# asker cannot make it, at ANY quantity, this side of a level-up. A request
+# like that is never a cheaper self-serve alternative — it is simply blocked —
+# so it is worth a sibling's cycle even at the observed live size of 1. That
+# asymmetry (one role can fill a gap another role structurally cannot) is the
+# whole point of holding a role at all, and it is a SEPARATE gate from bulk
+# size: `ctx.asymmetric_demand` fires regardless of SUPPLY_DEMAND_MIN, it does
+# not raise or lower the bulk threshold above.
 SUPPLY_DEMAND_MIN = 10
 
 
@@ -292,8 +305,17 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # absolute banked target (the second), which already includes stock the
         # bank holds and so would clear any threshold on inventory the fleet
         # already owns.
+        #
+        # ASYMMETRY GATE (Task 4): OR'd with the bulk gate, not a replacement
+        # for it. A request whose item code is in `ctx.asymmetric_demand`
+        # fires at ANY unmet-demand size, because that set (Task 2/3) only
+        # ever holds codes at least one sibling is skill-gated out of making
+        # for itself — see SUPPLY_DEMAND_MIN's comment for why that breaks the
+        # self-serve-is-cheaper assumption the bulk threshold relies on.
         target = ctx.supply_target
-        return target is not None and target[2] >= SUPPLY_DEMAND_MIN
+        if target is None:
+            return False
+        return target[2] >= SUPPLY_DEMAND_MIN or target[0] in ctx.asymmetric_demand
 
     if kind is MeansKind.CURRENCY_TURNIN:
         # Fires for BOTH sides of a resolved election: the buyer and every
