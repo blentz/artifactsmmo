@@ -9,22 +9,32 @@ and the re-equip reservation) were all built to make true, run for real
 through `GamePlayer._resolve_turn_in` and `_decide_band` rather than through
 any one component in isolation.
 
-`lich_race_trophy` is level 20, so only a level-20+ character can ever
-qualify as a candidate buyer (`medal_game_data`'s `lich_race_medal` is level
-10, wearable well below that) — `_resolve_turn_in`'s rule 4 filters out
-anything lower BEFORE it ever consults `claim_turn_in` / `turn_in_holder`, so
-a below-level character never even learns an election exists (pinned by
-`test_player_turn_in.py::test_a_character_below_the_item_level_does_not_
-claim_the_turn_in`). Both Robby and HAL are level-20+ here and so both
-independently qualify; Robby resolves first and wins the exclusive claim,
-HAL loses and is handed the recall instead — the CONTROLLER RULING this
-scenario exercises: a non-buyer surrenders its WHOLE holding, worn and
-carried. HAL's plan must start by unequipping the medal it wears, not merely
-depositing what it carries.
+THE LIVE FLEET IS THE SHAPE THAT MATTERS (fix-round-3): Robby 27, C3P0 17,
+R2D2 16, HAL 15, Lor 15 — every medal-wearer except Robby is BELOW the
+level-20 trophy, and the shared bank starts with NO medals. The earlier
+version of this scenario used two level-27 characters and a bank that already
+held the whole price, so it exercised neither the below-level surrender path
+(the one that makes the feature work at all) nor the account-wide bank, and
+it passed cleanly against a build that livelocked on the live fleet.
+
+`lich_race_trophy` is level 20, so only a level-20+ character can qualify as
+a candidate BUYER (`medal_game_data`'s `lich_race_medal` is level 10,
+wearable well below that): `_resolve_turn_in`'s rule 4 filters the others out
+before the election. They are NOT left out of the turn-in — they reach it
+through `_adopt_sibling_claim`, which stands a below-level holder down to a
+sibling's LIVE claim (that path is why `selection_context.recall`'s "only on
+a candidate buyer" wording was wrong and is now fixed).
+
+The CONTROLLER RULING this scenario exercises: a non-buyer surrenders its
+WHOLE holding, worn and carried, and it is done only when IT holds none —
+never when the SHARED bank happens to hold a quota's worth, which is another
+sibling's deposit and says nothing about this character.
 """
 
+from dataclasses import replace
 from datetime import datetime, timezone
 
+from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.goals.currency_turnin import CurrencyTurnInGoal
 from artifactsmmo_cli.ai.goals.surrender_currency import SurrenderCurrencyGoal
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
@@ -58,74 +68,108 @@ def _bank_gd():
 
 
 def _player(db: str, name: str, state: WorldState) -> GamePlayer:
+    """The state's `character` is forced to match the player's: goal selection
+    keys the buyer role on `ctx.turn_in.buyer == state.character`
+    (strategy_driver.map_means), so a state left on the fixture's default name
+    would make every character look like a non-buyer."""
     player = GamePlayer(character=name)
     player._coordination = CoordinationStore(db_path=db, character=name)
-    player.seed_offline(state, _bank_gd())
+    player.seed_offline(replace(state, character=name), _bank_gd())
     return player
 
 
-def test_five_characters_wearing_ten_medals_reach_the_trophy(tmp_path):
-    """The whole point, end to end: nobody is told to stop wearing medals, and
-    the fleet still converts them.
+WORN_PAIR = {"artifact1_slot": "lich_race_medal", "artifact2_slot": "lich_race_medal"}
+"""Every character in the live fleet wears TWO medals (duplicate artifact
+slots), so five characters hold exactly the price of one trophy and NOTHING
+is in the bank to begin with — the fleet total has to come out of equipment."""
 
-    Robby (level 27, the only character that can wear a level-20 trophy) is
-    elected; HAL and R2D2 each surrender what they wear; the bank already
-    holds the price outright (a snapshot of the shared account bank AFTER
-    earlier surrenders landed — `CurrencyTurnInGoal`'s materialized withdraw
-    is sized to the full price, not a shortfall: `test_currency_turnin_goals
-    .py::test_buyer_plans_withdraw_then_purchase` pins the same precondition,
-    so a bank holding less than the price is a goal with no plan, not a
-    partial one)."""
+
+def _publish(db: str, name: str, worn: int) -> None:
+    CoordinationStore(db_path=db, character=name).publish_holdings(
+        {"lich_race_medal": worn} if worn else {}, NOW)
+
+
+def test_the_live_fleet_of_below_level_medal_wearers_reaches_the_trophy(tmp_path):
+    """The whole point, end to end, on the LIVE fleet: nobody is told to stop
+    wearing medals, only Robby can wear the trophy, the other four are below
+    its level, and the bank starts empty — and the fleet still converts.
+
+    THE BUG THIS TEST EXISTS FOR (fix-round-3, CRITICAL): the second sibling.
+    `state.bank_items` is the ACCOUNT bank shared by all five children, so
+    once C3P0's two medals land, a `SurrenderCurrencyGoal` satisfied by "the
+    bank holds >= units" reports satisfied for R2D2, HAL and Lor as well, the
+    arbiter skips them, and the fleet banks `max_i(own_i)` medals instead of
+    the sum — Robby's `Withdraw(8)` is never applicable, and the claim renews
+    forever. R2D2 below MUST still plan its surrender against a bank that
+    already holds a full quota."""
     db = str(tmp_path / "coord.db")
     gd = _bank_gd()
-    # Five characters, matching this module's docstring: Robby + HAL (each
-    # WEARING one medal, resolved below) plus three more publishing worn
-    # holdings so BOTH Robby's and HAL's own readiness check (rule 2,
-    # `turn_in_ready_pure`) reaches the price from worn/carried holdings
-    # ALONE — deliberately not from the bank, so HAL's own
-    # `SurrenderCurrencyGoal` (satisfied whenever the bank alone already
-    # holds >= its quota, regardless of who put it there) has real work left
-    # to do when HAL resolves.
-    for name, worn in (("R2D2", 3), ("C3P0", 3), ("BB8", 3)):
-        CoordinationStore(db_path=db, character=name).publish_holdings(
-            {"lich_race_medal": worn}, NOW)
+    fleet = (("Robby", 27), ("C3P0", 17), ("R2D2", 16), ("HAL", 15), ("Lor", 15))
+    for name, _level in fleet:
+        _publish(db, name, 2)
 
+    # --- the buyer is elected, and it is the ONLY level-20+ character.
     robby = _player(db, "Robby", make_state(
-        level=27, hp=150, max_hp=150, equipment={"artifact1_slot": "lich_race_medal"},
-        inventory={}, bank_items={"lich_race_medal": 10}))
+        level=27, hp=150, max_hp=150, equipment=dict(WORN_PAIR),
+        inventory={}, bank_items={}))
     robby._resolve_turn_in(robby.state, gd)
-
+    assert robby._turn_in is not None
     assert robby._turn_in.item_code == "lich_race_trophy"
+    assert robby._turn_in.buyer == "Robby"
+    assert robby._recall is None, "the buyer never surrenders to itself"
+
+    # --- a BELOW-level holder stands down to that claim (`_adopt_sibling_claim`)
+    # and plans the surrender: unequip first, since both its medals are worn.
+    c3po = _player(db, "C3P0", make_state(
+        level=17, hp=150, max_hp=150, equipment=dict(WORN_PAIR),
+        inventory={}, bank_items={}))
+    c3po._resolve_turn_in(c3po.state, gd)
+    assert c3po._turn_in is not None and c3po._turn_in.buyer == "Robby"
+    assert c3po._recall == ("lich_race_medal", 2)
+    c3po_goal, c3po_plan, _ = c3po._decide_band(
+        c3po.state, gd, c3po._build_actions(), None)
+    assert isinstance(c3po_goal, SurrenderCurrencyGoal)
+    # Both worn copies come off (the two slots are interchangeable, so the
+    # order between them carries no meaning), and the deposit is sized to the
+    # whole holding.
+    assert sorted(repr(a) for a in c3po_plan if isinstance(a, UnequipAction)) == [
+        "Unequip(artifact1_slot)", "Unequip(artifact2_slot)"]
+    assert repr(c3po_plan[-1]) == "DepositItem(lich_race_medal×2)"
+
+    # --- C3P0's deposit has landed. The bank is ACCOUNT-wide, so R2D2 now
+    # reads two medals in it that are not its own. It must still surrender.
+    _publish(db, "C3P0", 0)
+    r2d2 = _player(db, "R2D2", make_state(
+        level=16, hp=150, max_hp=150, equipment=dict(WORN_PAIR),
+        inventory={}, bank_items={"lich_race_medal": 2}))
+    r2d2._resolve_turn_in(r2d2.state, gd)
+    assert r2d2._recall == ("lich_race_medal", 2)
+    r2d2_goal, r2d2_plan, _ = r2d2._decide_band(
+        r2d2.state, gd, r2d2._build_actions(), None)
+    assert isinstance(r2d2_goal, SurrenderCurrencyGoal), (
+        "a sibling's deposit must not satisfy THIS character's surrender")
+    assert sorted(repr(a) for a in r2d2_plan if isinstance(a, UnequipAction)) == [
+        "Unequip(artifact1_slot)", "Unequip(artifact2_slot)"]
+    assert repr(r2d2_plan[-1]) == "DepositItem(lich_race_medal×2)"
+
+    # --- all four siblings have surrendered: bank 8, Robby still wears 2.
+    for name in ("R2D2", "HAL", "Lor"):
+        _publish(db, name, 0)
+    robby.state = make_state(
+        character="Robby", level=27, hp=150, max_hp=150,
+        equipment=dict(WORN_PAIR), inventory={},
+        bank_items={"lich_race_medal": 8})
+    robby._resolve_turn_in(robby.state, gd)
+    assert robby._turn_in is not None and robby._turn_in.buyer == "Robby"
     goal, plan, _ = robby._decide_band(robby.state, gd, robby._build_actions(), None)
     assert isinstance(goal, CurrencyTurnInGoal)
-    assert plan, "the elected buyer must produce a plan, not just a goal"
-
-    # HAL must ALSO independently qualify as a buyer candidate (level>=20,
-    # `_resolve_turn_in` rules 2-4) before it ever consults `claim_turn_in` /
-    # `turn_in_holder` — a character that fails those checks sees neither
-    # `_turn_in` nor `_recall` change at all (`test_player_turn_in.py::
-    # test_a_character_below_the_item_level_does_not_claim_the_turn_in` pins
-    # this for a level-15 character). HAL here independently reaches the
-    # SAME candidate Robby already claimed (own worn medal 1 + R2D2/C3P0/BB8's
-    # published 9 = 10, no bank needed), loses the race (Robby resolved
-    # first), and is handed the recall instead — the CONTROLLER RULING this
-    # scenario exists to exercise. `bank_items={}` — FETCHED and empty, not
-    # `None` ("never fetched", which `DepositItemAction.is_applicable` reads
-    # via `bank_has_room` as no room at all and the surrender plan would be
-    # unplannable for a different reason) — and specifically holding NONE of
-    # this currency: any amount already banked would read HAL's own surrender
-    # quota (its one worn medal) as satisfied before HAL does anything, and
-    # there would be no plan to assert against.
-    hal = _player(db, "HAL", make_state(
-        level=27, hp=150, max_hp=150,
-        equipment={"artifact1_slot": "lich_race_medal"}, inventory={},
-        bank_items={}))
-    hal._resolve_turn_in(hal.state, gd)
-    assert hal._turn_in is not None and hal._turn_in.buyer == "Robby"
-    hal_goal, hal_plan, _ = hal._decide_band(hal.state, gd, hal._build_actions(), None)
-
-    assert isinstance(hal_goal, SurrenderCurrencyGoal)
-    assert repr(hal_plan[0]) == "Unequip(artifact1_slot)"
+    reprs = [repr(a) for a in plan]
+    # Its own two worn medals fund 2 of the 10, so the bank supplies 8 — not
+    # the full price (`buyer_bank_draw_pure`).
+    assert sorted(r for r in reprs if r.startswith("Unequip")) == [
+        "Unequip(artifact1_slot)", "Unequip(artifact2_slot)"], reprs
+    assert "Withdraw(lich_race_medal×8)" in reprs, reprs
+    assert reprs[-1] == "NpcBuy(lich_race_trophy×1@archaeologist)", reprs
 
 
 def test_the_buyer_snapshot_carries_the_turn_in_block_with_role_buyer(tmp_path):

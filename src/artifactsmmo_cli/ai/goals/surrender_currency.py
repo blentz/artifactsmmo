@@ -39,9 +39,8 @@ class SurrenderCurrencyGoal(Goal):
     """Bank `units` of `currency` — this character's WHOLE holding, per the
     controller ruling recorded in the module docstring above.
 
-    `is_satisfied` is "my units are in the bank", not "I no longer hold any" —
-    a character that already banked its quota stops immediately rather than
-    chasing a turn-in it is not the buyer for."""
+    `is_satisfied` is PER-CHARACTER — "I hold none of it any more", worn plus
+    carried == 0 — and deliberately does NOT read `state.bank_items`."""
 
     def __init__(self, currency: str, units: int) -> None:
         self._currency = currency
@@ -54,10 +53,29 @@ class SurrenderCurrencyGoal(Goal):
         return SURRENDER_PRIORITY
 
     def is_satisfied(self, state: WorldState) -> bool:
-        bank = state.bank_items
-        if bank is None:
-            return False
-        return bank.get(self._currency, 0) >= self._units
+        """This character has surrendered when IT holds none of the currency —
+        worn plus carried == 0. The bank is not consulted at all.
+
+        THE LIVELOCK THIS SHAPE EXISTS TO PREVENT (fix-round-3, CRITICAL): the
+        prior test was `state.bank_items[currency] >= units`, and
+        `state.bank_items` is the ACCOUNT-wide bank every child of a `play
+        --all` run reads the same. So the FIRST sibling's deposit satisfied
+        the goal for ALL of them and the arbiter skipped the rest
+        (`strategy_driver`'s `select_pure` calls `is_satisfied` before it ever
+        tries to plan). Live trace: five characters each wearing 2 medals,
+        bank 0, price 10, Robby elected — C3P0 banks its 2, bank reads 2, and
+        R2D2/HAL/Lor each see `bank(2) >= units(2)` and never unequip. The
+        fleet banks `max_i(own_i)` medals instead of the sum, Robby's
+        `Withdraw(10 - own)` is never applicable against a bank of 2, and the
+        claim renews forever.
+
+        Another character's deposit says NOTHING about whether this one has
+        surrendered, so only this character's own holdings can decide it.
+        `bank_items is None` ("never fetched") is likewise not a reason to
+        keep working: a character wearing and carrying nothing has nothing
+        left to give up, whether or not it has looked at the bank."""
+        worn = sum(1 for code in state.equipment.values() if code == self._currency)
+        return state.inventory.get(self._currency, 0) + worn == 0
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"banked": {self._currency: self._units}}
@@ -67,11 +85,24 @@ class SurrenderCurrencyGoal(Goal):
         """Every currently-worn copy's Unequip, plus one materialized Deposit
         sized to the full holding. Narrow by construction: an Unequip for a
         slot NOT wearing this currency can never contribute, and no other
-        Deposit quantity satisfies `is_satisfied`."""
-        unequips = [a for a in actions
-                   if isinstance(a, UnequipAction)
-                   and state.equipment.get(a.slot) == self._currency]
-        bank_location = game_data.bank_location_or_none or (0, 0)
+        Deposit quantity is what the buyer was told to expect.
+
+        NO BANK TILE ⇒ NO DEPOSIT LEG. The earlier code read
+        `bank_location_or_none or (0, 0)`, INVENTING map tile (0,0) as the
+        bank whenever the catalog had no bank location — a fabricated game
+        fact that CLAUDE.md forbids outright ("use only API data or fail with
+        an error"), and one that would route a real Move to a tile the server
+        never called a bank. Every precedent in this repo treats `None` as
+        "no bank leg" instead (`ai/disposal_route.py`, `ai/bank_drain.py`'s
+        drain goal, `ai/goals/sell_inventory.py`); this goal follows it, and
+        an un-plannable surrender is the honest outcome when the fleet has no
+        bank to surrender into."""
+        unequips: list[Action] = [a for a in actions
+                                  if isinstance(a, UnequipAction)
+                                  and state.equipment.get(a.slot) == self._currency]
+        bank_location = game_data.bank_location_or_none
+        if bank_location is None:
+            return unequips
         deposit = DepositItemAction(code=self._currency, quantity=self._units,
                                     bank_location=bank_location)
         return [*unequips, deposit]

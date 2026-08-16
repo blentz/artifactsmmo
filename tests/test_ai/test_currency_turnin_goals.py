@@ -11,8 +11,10 @@ unconditionally (one NpcBuyAction per (npc, item) pair, one UnequipAction per
 equipment slot)."""
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.currency_turnin import TURN_IN_PRIORITY, CurrencyTurnInGoal
 from artifactsmmo_cli.ai.goals.surrender_currency import SURRENDER_PRIORITY, SurrenderCurrencyGoal
@@ -40,6 +42,7 @@ def test_buyer_plans_withdraw_then_purchase():
     """The last mile already works when the medals are in the bank — this goal
     exists to make the planner be HANDED that goal at all."""
     gd = medal_game_data()
+    gd.world.bank_tile = (4, 1)  # a real bank tile: no tile ⇒ no withdraw leg
     state = make_state(level=27, inventory={}, bank_items={"lich_race_medal": 10})
     goal = CurrencyTurnInGoal(item_code="lich_race_trophy", npc_code="archaeologist",
                               price=10, currency="lich_race_medal")
@@ -67,6 +70,7 @@ def test_buyer_funds_the_price_from_its_own_worn_and_carried_units():
     into inventory, which is where `NpcBuyAction` pays from) and withdraw only
     the REMAINDER the bank has to supply."""
     gd = medal_game_data()
+    gd.world.bank_tile = (4, 1)  # a real bank tile: no tile ⇒ no withdraw leg
     state = make_state(level=27,
                        equipment={"artifact1_slot": "lich_race_medal"},
                        inventory={"lich_race_medal": 1},
@@ -144,6 +148,7 @@ def test_buyer_repr_names_the_item():
 
 def test_holder_plans_unequip_then_deposit():
     gd = medal_game_data()
+    gd.world.bank_tile = (4, 1)  # a real bank tile: no tile ⇒ no deposit leg
     gd._bank_capacity = 50  # DepositItemAction.is_applicable needs room to land in
     state = make_state(equipment={"artifact1_slot": "lich_race_medal"},
                        inventory={}, bank_items={})
@@ -154,33 +159,107 @@ def test_holder_plans_unequip_then_deposit():
                                            "DepositItem(lich_race_medal×1)"]
 
 
-def test_holder_goal_is_satisfied_when_its_units_are_banked():
+def test_holder_goal_is_satisfied_once_it_holds_none_of_the_currency():
+    """The PER-CHARACTER contract: satisfied means "I have surrendered", i.e.
+    I wear none and carry none. The bank is irrelevant — see
+    `test_holder_is_not_satisfied_by_a_siblings_deposit` for the livelock a
+    bank-counting `is_satisfied` caused."""
     state = make_state(inventory={}, equipment={},
                        bank_items={"lich_race_medal": 4})
     goal = SurrenderCurrencyGoal(currency="lich_race_medal", units=1)
     assert goal.is_satisfied(state) is True
 
 
-def test_holder_is_not_satisfied_when_the_bank_has_never_been_fetched():
-    """`bank_items=None` is "the bank has not been read this cycle" — a
-    genuinely reachable state (world_state.py), distinct from "bank read and
-    empty" (`{}`). Neither must be mistaken for satisfied: a character that
-    has not even looked at the bank cannot know its quota is banked."""
-    goal = SurrenderCurrencyGoal(currency="lich_race_medal", units=1)
-    state = make_state(inventory={}, equipment={}, bank_items=None)
+def test_holder_is_not_satisfied_by_a_siblings_deposit():
+    """CRITICAL (fix-round-3): the first sibling's deposit must not stop every
+    other sibling.
+
+    `state.bank_items` is the ACCOUNT-wide bank, shared by all five children.
+    The live shape — five characters each wearing 2 medals, bank 0, price 10,
+    Robby elected — banked exactly `max_i(own_i)` medals and then stalled
+    forever: C3P0 deposits its 2, and R2D2/HAL/Lor each read `bank(2) >=
+    units(2)` as "my surrender is done", never unequip, and Robby's
+    `Withdraw(8)` is never applicable against a bank of 2 while the claim
+    renews every cycle.
+
+    So: a character still WEARING the currency is not satisfied, no matter
+    what the shared bank holds."""
+    goal = SurrenderCurrencyGoal(currency="lich_race_medal", units=2)
+    state = make_state(inventory={},
+                       equipment={"artifact1_slot": "lich_race_medal",
+                                  "artifact2_slot": "lich_race_medal"},
+                       bank_items={"lich_race_medal": 2})
     assert goal.is_satisfied(state) is False
 
 
-def test_holder_value_drops_to_zero_once_its_units_are_banked():
+def test_holder_still_carrying_the_currency_is_not_satisfied():
+    """The carried half of the same rule: worn plus CARRIED must both be zero.
+    A goal that only checked equipment would leave the medals in the bag."""
+    goal = SurrenderCurrencyGoal(currency="lich_race_medal", units=2)
+    state = make_state(inventory={"lich_race_medal": 2}, equipment={},
+                       bank_items={"lich_race_medal": 8})
+    assert goal.is_satisfied(state) is False
+
+
+def test_holder_satisfaction_does_not_depend_on_the_bank_being_fetched():
+    """`bank_items=None` is "the bank has not been read this cycle" — a
+    genuinely reachable state (world_state.py). Under the per-character
+    contract it decides nothing: a character holding none of the currency has
+    surrendered whether or not it has looked at the bank."""
     goal = SurrenderCurrencyGoal(currency="lich_race_medal", units=1)
-    state = make_state(bank_items={"lich_race_medal": 1})
+    assert goal.is_satisfied(
+        make_state(inventory={}, equipment={}, bank_items=None)) is True
+    assert goal.is_satisfied(
+        make_state(inventory={"lich_race_medal": 1}, equipment={},
+                   bank_items=None)) is False
+
+
+def test_holder_value_drops_to_zero_once_it_holds_none_of_the_currency():
+    goal = SurrenderCurrencyGoal(currency="lich_race_medal", units=1)
+    state = make_state(inventory={}, equipment={},
+                       bank_items={"lich_race_medal": 1})
     assert goal.value(state, GameData()) == 0.0
 
 
-def test_holder_value_is_positive_before_its_units_are_banked():
+def test_holder_value_is_positive_while_it_still_holds_the_currency():
     goal = SurrenderCurrencyGoal(currency="lich_race_medal", units=1)
-    state = make_state(bank_items={})
+    state = make_state(inventory={"lich_race_medal": 1}, equipment={},
+                       bank_items={})
     assert goal.value(state, GameData()) == SURRENDER_PRIORITY
+
+
+def test_holder_emits_no_deposit_leg_when_no_bank_tile_is_known():
+    """CLAUDE.md: use only API/game data or fail — never fabricate one. The
+    prior code passed `bank_location_or_none or (0, 0)`, inventing tile (0,0)
+    as the bank whenever the catalog had no bank tile, which routes a real
+    Move to a tile the game never called a bank. Precedent for the honest
+    shape is `disposal_route.py` / `drain_bank_junk.py` / `sell_inventory.py`:
+    no bank location ⇒ no bank leg."""
+    gd = medal_game_data()
+    assert gd.bank_location_or_none is None
+    state = make_state(equipment={"artifact1_slot": "lich_race_medal"},
+                       inventory={}, bank_items={})
+    goal = SurrenderCurrencyGoal(currency="lich_race_medal", units=1)
+
+    relevant = goal.relevant_actions(_turn_in_actions(gd, state), state, gd)
+
+    assert not [a for a in relevant if isinstance(a, DepositItemAction)]
+    assert [repr(a) for a in relevant] == ["Unequip(artifact1_slot)"]
+
+
+def test_buyer_emits_no_withdraw_leg_when_no_bank_tile_is_known():
+    """Buyer side of the same rule — see the holder test above."""
+    gd = medal_game_data()
+    assert gd.bank_location_or_none is None
+    state = make_state(level=27, inventory={}, bank_items={})
+    goal = CurrencyTurnInGoal(item_code="lich_race_trophy", npc_code="archaeologist",
+                              price=10, currency="lich_race_medal")
+
+    relevant = goal.relevant_actions(_turn_in_actions(gd, state), state, gd)
+
+    assert not [a for a in relevant if isinstance(a, WithdrawItemAction)]
+    assert [repr(a) for a in relevant] == [
+        "NpcBuy(lich_race_trophy×1@archaeologist)"]
 
 
 def test_holder_desired_state_targets_the_full_holding_banked():
@@ -200,6 +279,7 @@ def test_holder_surrenders_every_worn_copy_plus_what_it_already_carries():
     ever freed the first worn slot would strand 2 medals in equipment and
     never reach the full quota — this is the case that would catch it."""
     gd = medal_game_data()
+    gd.world.bank_tile = (4, 1)  # a real bank tile: no tile ⇒ no deposit leg
     gd._bank_capacity = 50
     state = make_state(
         equipment={"artifact1_slot": "lich_race_medal",

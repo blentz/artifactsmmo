@@ -2155,6 +2155,36 @@ class GamePlayer:
             return leg.last_fight if isinstance(leg, FightAction) else None
         return None
 
+    def _turn_in_trace(self) -> dict[str, object] | None:
+        """This cycle's resolved fleet-currency turn-in, or None.
+
+        ONE builder shared by both consumer surfaces (`_emit_trace` and
+        `_notify_observer`), for the same reason `_fight_of` above is shared:
+        the JSONL trace and the TUI must never disagree about what the cycle
+        saw. It was NOT shared when the feature shipped, and the field reached
+        the `CycleSnapshot` only — a 75-second live `play Robby --dry-run
+        --trace` produced 7 cycles and zero records carrying `turn_in`, while
+        every test passed because they all asserted on the snapshot. The
+        field's whole stated purpose is that a TRACE reader can tell "no
+        turn-in was possible" from "this child never looked", which the trace
+        could not do at all.
+
+        Same source and lifecycle as `supply_target`/`role`: set by
+        `_resolve_turn_in` (called from `_update_coordination`), None on every
+        single-character run and on every uninvolved character. `role` here is
+        this dict's OWN key (buyer/holder), unrelated to the top-level `role`
+        field on either surface (the specialization role, e.g. "miner")."""
+        if self._turn_in is None:
+            return None
+        return {
+            "item": self._turn_in.item_code,
+            "currency": self._turn_in.currency,
+            "price": self._turn_in.price,
+            "fleet_total": self._turn_in.fleet_total,
+            "buyer": self._turn_in.buyer,
+            "role": "buyer" if self._turn_in.buyer == self.character else "holder",
+        }
+
     def _emit_trace(self, action_name: str, goal_name: str, outcome: str,
                     planner_stats: dict[str, object],
                     recovery: dict[str, object] | None = None,
@@ -2230,6 +2260,10 @@ class GamePlayer:
             "supply_target": (
                 repr(self._supply_target) if self._supply_target is not None else None
             ),
+            # Present-but-null on every cycle, same discipline as `role`
+            # directly above — see `_turn_in_trace` for why this key was
+            # missing from this record entirely and what that cost.
+            "turn_in": self._turn_in_trace(),
         }
         # E-tower observable: production's loadoutAdequate — a winnable,
         # xp-positive band target exists for the CURRENT means (the exact
@@ -2533,22 +2567,6 @@ class GamePlayer:
         # transcript, and gating on the action type keeps a prior fight's record
         # from leaking onto an unrelated cycle. Shared with the trace surface.
         fight_record = self._fight_of(action)
-        # Fleet-currency-turn-in trace (Task 8): same source and lifecycle as
-        # `supply_target`/`role` — set by `_resolve_turn_in` (called from
-        # `_update_coordination`), None on every single-character run and on
-        # every uninvolved character. `role` here is this dict's OWN key
-        # (buyer/holder), unrelated to the snapshot's top-level `role` field
-        # (the specialization role, e.g. "miner").
-        turn_in_trace: dict[str, object] | None = None
-        if self._turn_in is not None:
-            turn_in_trace = {
-                "item": self._turn_in.item_code,
-                "currency": self._turn_in.currency,
-                "price": self._turn_in.price,
-                "fleet_total": self._turn_in.fleet_total,
-                "buyer": self._turn_in.buyer,
-                "role": "buyer" if self._turn_in.buyer == self.character else "holder",
-            }
         snap = CycleSnapshot(
             cycle_index=self._cycle_counter,
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
@@ -2625,7 +2643,7 @@ class GamePlayer:
             role=self._role,
             supply_target=repr(self._supply_target) if self._supply_target is not None else None,
             role_change=self._role_change,
-            turn_in=turn_in_trace,
+            turn_in=self._turn_in_trace(),
         )
         self._cycle_observer(snap)
 

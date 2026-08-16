@@ -296,13 +296,16 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         return target is not None and target[2] >= SUPPLY_DEMAND_MIN
 
     if kind is MeansKind.CURRENCY_TURNIN:
-        # Fires for BOTH sides of a resolved election: the buyer (`ctx.turn_in`
-        # set, this character named as `buyer` or not — map_means threads the
-        # right goal either way, see strategy_driver.py) and a losing candidate
-        # asked to surrender (`ctx.recall` set). Never both, and never either on
-        # an uninvolved character — Task 5's `_resolve_turn_in` sets at most one
-        # per cycle, and only for a character that itself qualified as a
-        # candidate buyer or currently holds the currency.
+        # Fires for BOTH sides of a resolved election: the buyer and every
+        # holder asked to surrender. `ctx.turn_in` is set on both (a loser
+        # carries the SAME turn-in with the winner named as `buyer`, plus its
+        # own `ctx.recall` — the two are not mutually exclusive), so WHICH
+        # side this character is on is decided by identity in
+        # `strategy_driver.map_means` (`turn_in.buyer == state.character`),
+        # never by the presence or absence of a recall. Neither field is set
+        # on an uninvolved character: Task 5's `_resolve_turn_in` writes them
+        # only for a character that itself qualified as a candidate buyer or
+        # currently holds the currency a live claim is waiting on.
         return ctx.turn_in is not None or ctx.recall is not None
 
     if kind is MeansKind.MAINTAIN_CONSUMABLES:

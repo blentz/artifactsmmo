@@ -144,10 +144,18 @@ class SelectionContext:
     # every single-character run and every cycle nothing is affordable.
     turn_in: TurnIn | None = None
     # (currency_code, units this character should surrender to the turn-in
-    # buyer) this cycle, or None. Populated only on a NON-buyer that itself
-    # qualified as a candidate buyer but lost the `claim_turn_in` election —
-    # never on the buyer (nothing to surrender to itself) and never when
-    # `turn_in` is None. Same per-cycle lifecycle as `turn_in`.
+    # buyer) this cycle, or None. Populated on any NON-buyer that HOLDS units
+    # of the currency, by either of `GamePlayer._resolve_turn_in`'s two
+    # routes: a character that itself qualified as a candidate buyer and lost
+    # the `claim_turn_in` election, OR — the case that makes the feature work
+    # on the live fleet at all — a character BELOW the item's level that can
+    # never be a buyer and stands down to a sibling's live claim
+    # (`_adopt_sibling_claim`). Never on the buyer (nothing to surrender to
+    # itself), never when `turn_in` is None, and never when the holding is
+    # zero — so `recall is None` does NOT mean "I am the buyer", and goal
+    # selection keys on `turn_in.buyer == state.character` instead
+    # (strategy_driver.map_means; a second buyer double-spends the fleet's
+    # currency). Same per-cycle lifecycle as `turn_in`.
     recall: tuple[str, int] | None = None
 
 

@@ -405,6 +405,11 @@ class CoordinationStore:
         return {role: frozenset(names) for role, names in holders.items()}
 
     def _demand_expiry(self, now: datetime) -> str:
+        """The ONE liveness clock: `MaterialDemand`, `HoldingLedger` and
+        `TurnInClaim` all expire on `DEMAND_TTL_SECONDS` and shared three
+        byte-identical copies of this line until they were collapsed here.
+        The bank-stock and GE-order claims keep their own methods because
+        they genuinely differ — each carries its own TTL constant."""
         return (now + timedelta(seconds=DEMAND_TTL_SECONDS)).isoformat()
 
     def publish_demand(self, demand: Mapping[str, int], now: datetime) -> None:
@@ -456,9 +461,6 @@ class CoordinationStore:
             totals[row.item_code] = totals.get(row.item_code, 0) + row.quantity
         return totals
 
-    def _holdings_expiry(self, now: datetime) -> str:
-        return (now + timedelta(seconds=DEMAND_TTL_SECONDS)).isoformat()
-
     def publish_holdings(self, holdings: Mapping[str, int], now: datetime) -> None:
         """Replace this character's `HoldingLedger` rows wholesale.
 
@@ -473,7 +475,7 @@ class CoordinationStore:
         `RoleLease`, on purpose: the coordination system has exactly ONE
         liveness rule, and a second TTL constant here would be a second one."""
         _require_utc(now)
-        expiry = self._holdings_expiry(now)
+        expiry = self._demand_expiry(now)
         try:
             with SqlSession(self._engine) as s:
                 stale = s.exec(
@@ -738,9 +740,6 @@ class CoordinationStore:
             return frozenset()
         return frozenset(row.order_id for row in rows)
 
-    def _turn_in_claim_expiry(self, now: datetime) -> str:
-        return (now + timedelta(seconds=DEMAND_TTL_SECONDS)).isoformat()
-
     def claim_turn_in(self, item_code: str, now: datetime) -> bool:
         """Elect THIS character to spend the fleet's currency turning in
         `item_code`, and report whether it holds the claim afterwards.
@@ -782,12 +781,12 @@ class CoordinationStore:
                         return False
                     row.character = self._character
                     row.claimed_at = stamp
-                    row.expires_at = self._turn_in_claim_expiry(now)
+                    row.expires_at = self._demand_expiry(now)
                     s.add(row)
                 else:
                     s.add(TurnInClaim(item_code=item_code, character=self._character,
                                       claimed_at=stamp,
-                                      expires_at=self._turn_in_claim_expiry(now)))
+                                      expires_at=self._demand_expiry(now)))
                 s.commit()
                 return True
         except IntegrityError:

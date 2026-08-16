@@ -102,7 +102,17 @@ class CurrencyTurnInGoal(Goal):
 
         A zero-sized withdraw is omitted entirely: a buyer already carrying
         the whole price needs no bank leg, and `Withdraw(x0)` is a degenerate
-        no-op the planner would have to step over."""
+        no-op the planner would have to step over.
+
+        A withdraw is omitted for a SECOND reason too: no known bank tile. The
+        earlier code read `bank_location_or_none or (0, 0)`, inventing map tile
+        (0,0) as the bank — a fabricated game fact CLAUDE.md forbids ("use only
+        API data or fail with an error") that would route a real Move to a tile
+        the server never called a bank. The precedent for the honest shape is
+        `ai/disposal_route.py` / `ai/bank_drain.py` / `ai/goals/sell_inventory.py`:
+        no bank location, no bank leg — the buyer can still fund itself from
+        its own worn and carried copies, and is simply un-plannable when those
+        do not cover the price."""
         npc_buys = [a for a in actions
                    if isinstance(a, NpcBuyAction)
                    and a.npc_code == self._npc_code
@@ -111,9 +121,9 @@ class CurrencyTurnInGoal(Goal):
                    if isinstance(a, UnequipAction)
                    and state.equipment.get(a.slot) == self._currency]
         draw = buyer_bank_draw_pure(self._price, self._held(state))
-        if draw <= 0:
+        bank_location = game_data.bank_location_or_none
+        if draw <= 0 or bank_location is None:
             return [*unequips, *npc_buys]
-        bank_location = game_data.bank_location_or_none or (0, 0)
         withdraw = WithdrawItemAction(code=self._currency, quantity=draw,
                                       bank_location=bank_location)
         return [*unequips, withdraw, *npc_buys]

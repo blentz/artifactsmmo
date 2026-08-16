@@ -458,19 +458,39 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         item_code, quantity, demand = ctx.supply_target
         return SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand)
     if kind is MeansKind.CURRENCY_TURNIN:
-        # ctx.recall set ⇒ this character LOST the election: surrender its
-        # whole holding to the winner (SurrenderCurrencyGoal — see its module
+        # KEYED ON IDENTITY, never on the absence of a recall (fix-round-3,
+        # CRITICAL — a double-spend). `ctx.turn_in.buyer` is the character the
+        # exclusive `claim_turn_in` election named, and `state.character` is
+        # who this is: exactly one character in the fleet can match, so
+        # exactly one can be handed the buyer goal.
+        #
+        # The bug this replaces read "recall is None" as "I am the buyer".
+        # `_resolve_turn_in` sets `recall` only when the loser actually HOLDS
+        # units (`if surrender > 0`), so a level-20+ character that qualified,
+        # lost the claim and holds ZERO units ends its cycle with `turn_in`
+        # set and `recall` None — indistinguishable from the winner under that
+        # test. It would then withdraw a SECOND full price and buy a SECOND
+        # copy of the item, with the exclusive claim bypassed entirely: the
+        # fleet spends twice for one wanted item. Its own trace even labels it
+        # `role: "holder"` (player.py's `_turn_in_trace`), which is how the
+        # inconsistency was caught. Latent only while one character is above
+        # the item's level; live the moment a second one reaches it.
+        t = ctx.turn_in
+        if t is not None and t.buyer == state.character:
+            return CurrencyTurnInGoal(item_code=t.item_code, npc_code=t.npc_code,
+                                      price=t.price, currency=t.currency)
+        # Everyone else surrenders (SurrenderCurrencyGoal — see its module
         # docstring for why `units` is trusted as-given, not re-derived here).
-        # ctx.recall is None ⇒ this character IS the buyer (_fires guarantees
-        # at least one of the two, and recall is never set on the buyer —
-        # selection_context.py's docstrings for both fields).
         if ctx.recall is not None:
             currency, units = ctx.recall
             return SurrenderCurrencyGoal(currency=currency, units=units)
-        assert ctx.turn_in is not None  # _fires guarantees one of turn_in/recall
-        t = ctx.turn_in
-        return CurrencyTurnInGoal(item_code=t.item_code, npc_code=t.npc_code,
-                                  price=t.price, currency=t.currency)
+        # A non-buyer with nothing to surrender: the means still fires on
+        # `turn_in` alone (tiers/means.py), so it needs a goal, and the honest
+        # one is a surrender of zero units — already satisfied under
+        # `SurrenderCurrencyGoal.is_satisfied`'s per-character test, so the
+        # arbiter skips it and the character gets on with its own objective.
+        assert t is not None  # _fires guarantees one of turn_in/recall
+        return SurrenderCurrencyGoal(currency=t.currency, units=0)
     if kind is MeansKind.WAIT:
         return WaitGoal()
     raise ValueError(f"Unknown MeansKind: {kind!r}")
