@@ -390,6 +390,23 @@ class LocationCatalog:
         ]
         return sorted(results, key=lambda x: x[1])
 
+    def currency_sinks(self, currency_code: str) -> list[tuple[str, str, int]]:
+        """Every purchase payable in `currency_code`, as (item, npc, price),
+        cheapest first.
+
+        The reverse of `npc_purchase_currency`. Built by walking the same
+        `npc_buy_currency` map rather than a second index, so a currency that
+        stops being accepted disappears from both directions at once. The
+        price comes from `npc_stock` (the same buy-price map `npc_purchases`
+        reads) — there is no separate price table."""
+        out: list[tuple[str, str, int]] = []
+        for npc_code, by_item in self.npc_buy_currency.items():
+            for item_code, currency in by_item.items():
+                if currency == currency_code:
+                    out.append((item_code, npc_code,
+                                self.npc_stock.get(npc_code, {}).get(item_code, 0)))
+        return sorted(out, key=lambda row: (row[2], row[0]))
+
     def npc_buys_item(self, npc_code: str, item_code: str) -> int | None:
         """Price npc_code pays for item_code when the player sells it, or None if the NPC doesn't buy it."""
         return self.npc_sell_prices.get(npc_code, {}).get(item_code)

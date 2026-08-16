@@ -1048,6 +1048,11 @@ class GameData:
         first. Currency-aware companion to `npcs_selling_item`."""
         return self.world.npc_purchases(item_code)
 
+    def currency_sinks(self, currency_code: str) -> list[tuple[str, str, int]]:
+        """[(item_code, npc_code, price)] for every purchase payable in
+        currency_code, cheapest first. The reverse of `npc_purchase_currency`."""
+        return self.world.currency_sinks(currency_code)
+
     def npc_buys_item(self, npc_code: str, item_code: str) -> int | None:
         """Price npc_code pays for item_code when the player sells it, or None if the NPC doesn't buy it."""
         return self.world.npc_buys_item(npc_code, item_code)
