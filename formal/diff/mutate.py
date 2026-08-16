@@ -4022,17 +4022,19 @@ CURRENCY_TURNIN_READY_MUTATIONS = [
      "    return fleet_total > price"),
 ]
 
-# currency_turnin.py::recall_shortfall_pure — Task 9. The buyer's own held
-# units AND the shared bank are both reachable without asking a sibling to
-# surrender anything; dropping the bank term would ask siblings to cover units
-# the fleet can already reach on its own. Unit-killed by
-# tests/test_ai/test_currency_turnin.py::
-# test_shortfall_counts_only_what_the_buyer_cannot_reach_alone (price=10,
-# buyer_held=2, bank=3 -> correct shortfall 5, mutant shortfall 8).
+# currency_turnin.py::buyer_bank_draw_pure — Task 9 (its dead shortfall twin,
+# which netted the bank out for a SIBLING quota this repo never uses, was
+# deleted 2026-08-16 — this is the LIVE function `CurrencyTurnInGoal.
+# relevant_actions` calls to size its withdraw). Flipping the subtraction to
+# addition makes the draw grow with what the buyer already holds instead of
+# shrink. Unit-killed by tests/test_ai/test_currency_turnin_goals.py::
+# test_buyer_funds_the_price_from_its_own_worn_and_carried_units (buyer holds
+# 2 of a price of 10 -> correct draw 8 ("Withdraw(lich_race_medal×8)" in the
+# plan); mutant draw is max(0, 10+2)=12, so that repr never appears).
 CURRENCY_TURNIN_SHORTFALL_MUTATIONS = [
-    ("currency turn-in: recall shortfall drops the bank term",
-     "    return max(0, price - buyer_held - bank)",
-     "    return max(0, price - buyer_held)"),
+    ("currency turn-in: buyer bank draw subtraction flipped to addition",
+     "    return max(0, price - buyer_held)",
+     "    return max(0, price + buyer_held)"),
 ]
 
 # dual_role_currency.py::dual_role_holdings — Task 9. A worn dual-role item
@@ -7411,7 +7413,7 @@ def _collect_all_groups() -> None:
     run_group(CURRENCY_TURNIN_SRC, CURRENCY_TURNIN_READY_MUTATIONS,
               "tests/test_ai/test_currency_turnin.py", survivors)
     run_group(CURRENCY_TURNIN_SRC, CURRENCY_TURNIN_SHORTFALL_MUTATIONS,
-              "tests/test_ai/test_currency_turnin.py", survivors)
+              "tests/test_ai/test_currency_turnin_goals.py", survivors)
     run_group(DUAL_ROLE_CURRENCY_SRC, DUAL_ROLE_HOLDINGS_MUTATIONS,
               "tests/test_ai/test_dual_role_currency.py", survivors)
 def _run_all_groups() -> int:

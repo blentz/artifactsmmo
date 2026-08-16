@@ -40,22 +40,17 @@ def turn_in_ready_pure(fleet_total: int, price: int) -> bool:
     return fleet_total >= price
 
 
-def recall_shortfall_pure(price: int, buyer_held: int, bank: int) -> int:
-    """Units the buyer must ask siblings to surrender, never negative.
-
-    The buyer's own worn/carried units and the bank are reachable without any
-    coordination, so only the remainder is a recall."""
-    return max(0, price - buyer_held - bank)
-
-
 def buyer_bank_draw_pure(price: int, buyer_held: int) -> int:
     """Units the buyer must WITHDRAW, given what it already holds itself.
 
-    Not `recall_shortfall_pure` with `bank=0`, and deliberately a separate
-    function: a recall nets the bank OUT (the bank is already reachable
-    without asking a sibling), while a withdraw IS the bank's contribution and
-    must not net it out. Feeding one number to the other job is how
-    `CurrencyTurnInGoal` shipped a withdraw sized to the FULL price.
+    The withdraw IS the bank's contribution, so it must NOT net the bank out
+    the way a recall would: a non-buyer sibling never computes a quota at
+    all — it surrenders its ENTIRE holding of the currency, unconditionally
+    (see `CurrencyTurnInGoal`/`_adopt_sibling_claim` and the
+    `WHY NOT A QUOTA` note in `player.py`). The buyer is the only role that
+    ever sizes a draw against its own holdings, because it is the only role
+    whose contribution is bounded by a specific price rather than "give up
+    everything you have."
 
     THE LIVELOCK THIS PREVENTS (fix-round-2, CRITICAL): the elected buyer
     wears 1 medal, carries 1, and the bank holds 8 of a price of 10. The

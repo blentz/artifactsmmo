@@ -3153,19 +3153,20 @@ class GamePlayer:
         sets `_recall` to its ENTIRE holding of the currency (not a computed
         quota).
 
-        WHY NOT A QUOTA (fix-round-1 finding, CRITICAL): a per-character
-        shortfall computed as `recall_shortfall_pure(price,
-        siblings.get(code), bank.get(code))` — "what's needed beyond what
-        everyone but me can reach" — collapses to `own_i -
+        WHY NOT A QUOTA (fix-round-1 finding, CRITICAL): a non-buyer sibling
+        surrenders its ENTIRE holding of the currency — never a computed
+        share of the shortfall. A per-character quota — "what's needed
+        beyond what everyone but me can reach," i.e. some `price -
+        siblings_reach - bank` split across siblings — collapses to `own_i -
         (fleet_total - price)` for every character i, i.e. every non-buyer
         independently subtracts the SAME fleet-wide surplus from its own
         holdings. Worked case: price 10, buyer wears 1 + banks 3, three
         siblings wear 5/2/1 (fleet_total 12, surplus 2) — quotas of 3/0/0
         leave the buyer stuck on 1+3+3=7 of 10 forever, while the fleet
-        holds two MORE than it needs. `recall_shortfall_pure` (still in
-        `ai/currency_turnin.py`, unchanged) is the right function for a
-        BUYER sizing its own ask against its own holdings — it is the wrong
-        function for a SIBLING sizing its own contribution, because siblings
+        holds two MORE than it needs. A quota is the right shape for the
+        BUYER sizing its own draw against its own holdings (see
+        `buyer_bank_draw_pure` in `ai/currency_turnin.py`) — it is the wrong
+        shape for a SIBLING sizing its own contribution, because siblings
         cannot agree on how to split a shortfall without a deterministic
         ordering, and this repo forbids repr/name ordering as a decision
         tiebreak (see `feedback_no_alphabetical_tiebreak`). Surrendering the
