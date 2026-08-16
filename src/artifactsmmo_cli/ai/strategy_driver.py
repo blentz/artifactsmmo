@@ -1482,8 +1482,17 @@ class StrategyArbiter:
         # reserved set is the active items-task's material reservation
         # (`task_reserved_demand`) — the same pipeline `_suppress_step_for_task`
         # protects — so an owned item still owed to a task is not equipped away.
+        # Wearing a dual-role item (e.g. lich_race_medal) stays allowed in
+        # general — that IS the fleet's storage. The one narrow, temporary
+        # addition: while THIS character has a live `ctx.turn_in`, its
+        # currency code is reserved too, so a medal it just surrendered is
+        # not immediately re-equipped into the empty slot — the
+        # withdraw/re-equip livelock this repo already knows the shape of.
+        turn_in_reserved = (
+            {ctx.turn_in.currency} if ctx.turn_in is not None else frozenset[str]())
         equip_fills = empty_slot_rank_fills(
-            state, game_data, frozenset(task_reserved_demand(state, game_data)))
+            state, game_data,
+            frozenset(task_reserved_demand(state, game_data)) | turn_in_reserved)
         if equip_fills:
             eq_goal = EquipOwnedGoal(fills=equip_fills)
             candidates.append(Candidate(goal=eq_goal, is_means=True,
