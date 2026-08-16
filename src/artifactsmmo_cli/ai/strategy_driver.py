@@ -41,6 +41,7 @@ from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
+from artifactsmmo_cli.ai.goals.currency_turnin import CurrencyTurnInGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
@@ -62,6 +63,7 @@ from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
+from artifactsmmo_cli.ai.goals.surrender_currency import SurrenderCurrencyGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin_total
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
@@ -455,6 +457,20 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         assert ctx.supply_target is not None  # _fires guarantees a target
         item_code, quantity, demand = ctx.supply_target
         return SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand)
+    if kind is MeansKind.CURRENCY_TURNIN:
+        # ctx.recall set ⇒ this character LOST the election: surrender its
+        # whole holding to the winner (SurrenderCurrencyGoal — see its module
+        # docstring for why `units` is trusted as-given, not re-derived here).
+        # ctx.recall is None ⇒ this character IS the buyer (_fires guarantees
+        # at least one of the two, and recall is never set on the buyer —
+        # selection_context.py's docstrings for both fields).
+        if ctx.recall is not None:
+            currency, units = ctx.recall
+            return SurrenderCurrencyGoal(currency=currency, units=units)
+        assert ctx.turn_in is not None  # _fires guarantees one of turn_in/recall
+        t = ctx.turn_in
+        return CurrencyTurnInGoal(item_code=t.item_code, npc_code=t.npc_code,
+                                  price=t.price, currency=t.currency)
     if kind is MeansKind.WAIT:
         return WaitGoal()
     raise ValueError(f"Unknown MeansKind: {kind!r}")

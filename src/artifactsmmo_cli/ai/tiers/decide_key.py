@@ -70,6 +70,11 @@ _MEANS_REPR: dict[MeansKind, str] = {
     MeansKind.DRAIN_BANK_JUNK: "DrainBankJunk",
     MeansKind.GE_BID: "PostBuyBid",
     MeansKind.SUPPLY_BANK: "SupplyBank",
+    # CURRENCY_TURNIN maps to CurrencyTurnInGoal (buyer, `ctx.turn_in`) or
+    # SurrenderCurrencyGoal (holder, `ctx.recall`) depending on state — the
+    # static prefix below satisfies exhaustiveness (uniqueness across enum
+    # variants), same treatment as CRAFT_RELIEF/GEAR_REVIEW above.
+    MeansKind.CURRENCY_TURNIN: "CurrencyTurnIn",
 }
 
 

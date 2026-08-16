@@ -108,6 +108,7 @@ class MeansKind(Enum):
     DRAIN_BANK_JUNK = "drain_bank_junk"  # 2026-06-24: drain over-cap bank junk.
     GE_BID = "ge_bid"  # 2026-07-24: post a discretionary GE buy order for a slow-to-craft item.
     SUPPLY_BANK = "supply_bank"  # 2026-08-01: produce a material a SIBLING needs.
+    CURRENCY_TURNIN = "currency_turnin"  # 2026-08-16: spend/surrender a dual-role currency.
 
 
 COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
@@ -135,6 +136,28 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     # the objective step, which is the entire point) without letting production
     # preempt reward collection or pressure relief.
     MeansKind.SUPPLY_BANK,
+    # 2026-08-16, fleet-currency-turn-in epic (Task 6): a fleet-wide dual-role
+    # holding (an item that is BOTH worn and a vendor's payment currency, e.g.
+    # `lich_race_medal`, currency for `lich_race_trophy` @ archaeologist) has
+    # already been resolved into a per-cycle decision for THIS character by
+    # Task 5's `GamePlayer._resolve_turn_in`: either it is the elected buyer
+    # (`ctx.turn_in.buyer == self`) or it lost the election and owes the
+    # winner its whole holding (`ctx.recall`). Both branches are threaded onto
+    # `SelectionContext` as DATA — this means only asks "is one of them set",
+    # the same seam `SUPPLY_BANK` uses for `ctx.supply_target`.
+    #
+    # POSITION: immediately after SUPPLY_BANK, same reasoning as SUPPLY_BANK's
+    # own position comment directly above — ABOVE the objective step (so a
+    # completed election is not left to rot behind whatever gear `J` is
+    # chasing, which per the Evidence section it never resolves to a turn-in
+    # purchase on its own) and LAST among the one-or-few-action collect-reward
+    # rungs (so a pending reward claim or a >=85%-full bag is never parked
+    # behind it). Unlike SUPPLY_BANK this means carries NO demand-size gate:
+    # `turn_in_ready_pure` (ai/currency_turnin.py) already requires the FULL
+    # vendor price be reachable before Task 5 ever sets `ctx.turn_in`, so
+    # every firing cycle is one the fleet can actually complete — there is no
+    # sub-threshold case to filter the way SUPPLY_DEMAND_MIN filters SUPPLY_BANK.
+    MeansKind.CURRENCY_TURNIN,
 )
 DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.PURSUE_TASK,
@@ -271,6 +294,16 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # already owns.
         target = ctx.supply_target
         return target is not None and target[2] >= SUPPLY_DEMAND_MIN
+
+    if kind is MeansKind.CURRENCY_TURNIN:
+        # Fires for BOTH sides of a resolved election: the buyer (`ctx.turn_in`
+        # set, this character named as `buyer` or not — map_means threads the
+        # right goal either way, see strategy_driver.py) and a losing candidate
+        # asked to surrender (`ctx.recall` set). Never both, and never either on
+        # an uninvolved character — Task 5's `_resolve_turn_in` sets at most one
+        # per cycle, and only for a character that itself qualified as a
+        # candidate buyer or currently holds the currency.
+        return ctx.turn_in is not None or ctx.recall is not None
 
     if kind is MeansKind.MAINTAIN_CONSUMABLES:
         # Only when combat is the active means (a target is selected): keep a
