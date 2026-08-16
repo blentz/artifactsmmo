@@ -146,6 +146,40 @@ def test_a_losing_candidate_recalls_its_own_holdings_toward_the_winner(tmp_path)
     assert hal._recall == ("lich_race_medal", 3)
 
 
+def test_recall_surrenders_the_whole_holding_when_the_fleet_holds_a_surplus(tmp_path):
+    """price=10, buyer wears 1 + banks 3, siblings wear 5/2/1 (fleet_total=12,
+    surplus=2). A per-character shortfall quota (own - fleet-wide surplus)
+    would let S2 and S3 surrender 0 — leaving the buyer stuck on 1+3+3=7 of
+    10 forever while the fleet holds two MORE than it needs. Every losing
+    candidate must instead surrender its FULL holding."""
+    db_path = str(tmp_path / "coord.db")
+    for character, worn in (("Robby", 1), ("S1", 5), ("S2", 2), ("S3", 1)):
+        CoordinationStore(db_path=db_path, character=character).publish_holdings(
+            {"lich_race_medal": worn}, NOW)
+
+    robby, _ = _player_with(tmp_path, "Robby")
+    robby_state = make_state(level=27, inventory={}, bank_items={"lich_race_medal": 3},
+                             equipment={"artifact1_slot": "lich_race_medal"})
+    robby._resolve_turn_in(robby_state, robby.game_data)
+    assert robby._turn_in is not None
+    assert robby._turn_in.buyer == "Robby"
+    assert robby._turn_in.fleet_total == 12
+
+    recalls: dict[str, int] = {}
+    for sibling, worn in (("S1", 5), ("S2", 2), ("S3", 1)):
+        player, _ = _player_with(tmp_path, sibling)
+        state = make_state(level=27, inventory={"lich_race_medal": worn},
+                           bank_items={"lich_race_medal": 3})
+        player._resolve_turn_in(state, player.game_data)
+        assert player._turn_in is not None
+        assert player._turn_in.buyer == "Robby"
+        assert player._recall == ("lich_race_medal", worn)
+        recalls[sibling] = player._recall[1]
+
+    assembled = 1 + 3 + sum(recalls.values())  # buyer's own worn + bank + every recall
+    assert assembled >= 10
+
+
 def test_a_failed_claim_without_a_live_holder_reports_no_turn_in(tmp_path):
     player, _ = _player_with(tmp_path, "Robby")
     player._coordination = _NoHolderStore()

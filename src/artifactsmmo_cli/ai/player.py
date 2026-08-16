@@ -53,7 +53,7 @@ from artifactsmmo_cli.ai.constants import (
     STUCK_DETECTOR_WINDOW,
 )
 from artifactsmmo_cli.ai.consumable_supply import consumable_craft_quantity
-from artifactsmmo_cli.ai.currency_turnin import TurnIn, fleet_total_pure, recall_shortfall_pure, turn_in_ready_pure
+from artifactsmmo_cli.ai.currency_turnin import TurnIn, fleet_total_pure, turn_in_ready_pure
 from artifactsmmo_cli.ai.cycle_snapshot import (
     CycleSnapshot,
     GoalAttempt,
@@ -3122,21 +3122,32 @@ class GamePlayer:
         `_turn_in` with itself as buyer and no recall. Every OTHER character
         that independently qualified for the SAME candidate sets `_turn_in`
         with the incumbent as buyer, and — since it is not the buyer —
-        computes `_recall`: how much of the currency IT must surrender.
+        sets `_recall` to its ENTIRE holding of the currency (not a computed
+        quota).
 
-        `_recall`'s shortfall is computed from what the buyer can reach
-        WITHOUT this character's help (`siblings` — which, from this
-        character's own vantage point, includes the buyer — plus the bank),
-        not from this character's own holdings; `recall_shortfall_pure`'s
-        `buyer_held` parameter is generic ("holdings reachable without
-        coordination") and reusing it this way is what makes the two callers
-        (a real buyer sizing its own ask, and a sibling sizing its own
-        contribution) the SAME function. Capping the result at this
-        character's own holdings (`min`) is required algebra, not a
-        coincidence: fleet-total readiness (rule 2) guarantees this
-        character's own holdings are never less than what closes the gap the
-        rest of the fleet leaves open, so the cap is a defensive invariant,
-        never the binding term, whenever the fleet is actually ready."""
+        WHY NOT A QUOTA (fix-round-1 finding, CRITICAL): a per-character
+        shortfall computed as `recall_shortfall_pure(price,
+        siblings.get(code), bank.get(code))` — "what's needed beyond what
+        everyone but me can reach" — collapses to `own_i -
+        (fleet_total - price)` for every character i, i.e. every non-buyer
+        independently subtracts the SAME fleet-wide surplus from its own
+        holdings. Worked case: price 10, buyer wears 1 + banks 3, three
+        siblings wear 5/2/1 (fleet_total 12, surplus 2) — quotas of 3/0/0
+        leave the buyer stuck on 1+3+3=7 of 10 forever, while the fleet
+        holds two MORE than it needs. `recall_shortfall_pure` (still in
+        `ai/currency_turnin.py`, unchanged) is the right function for a
+        BUYER sizing its own ask against its own holdings — it is the wrong
+        function for a SIBLING sizing its own contribution, because siblings
+        cannot agree on how to split a shortfall without a deterministic
+        ordering, and this repo forbids repr/name ordering as a decision
+        tiebreak (see `feedback_no_alphabetical_tiebreak`). Surrendering the
+        whole holding needs no such agreement: it is monotone, always
+        sufficient once the fleet is ready (rule 2 already proved
+        `fleet_total >= price`), and the over-surrender is bounded and
+        temporary — surplus units land in the BANK, still fleet currency,
+        still counted by `fleet_total_pure`, and re-equippable the moment the
+        claim clears (a later task's reservation only holds while a turn-in
+        is live)."""
         self._turn_in = None
         self._recall = None
         if self._coordination is None:
@@ -3181,9 +3192,7 @@ class GamePlayer:
             # cycle and nothing to recall toward.
             return
         self._turn_in = replace(chosen, buyer=holder)
-        shortfall = recall_shortfall_pure(
-            chosen.price, siblings.get(chosen.currency, 0), bank.get(chosen.currency, 0))
-        surrender = min(own.get(chosen.currency, 0), shortfall)
+        surrender = own.get(chosen.currency, 0)
         if surrender > 0:
             self._recall = (chosen.currency, surrender)
 
