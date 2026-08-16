@@ -243,8 +243,17 @@ structure State where
       target with zero unmet demand"; that conflation is sound and not a
       simplification, because `SUPPLY_DEMAND_MIN > 0` (proved:
       `ProductionLadder.SUPPLY_DEMAND_MIN_pos`) makes the rung quiet in either
-      case, and production never produces a target with demand 0 anyway
-      (`_pick_supply_target` requires `qty > best_demand` starting from 0).
+      case, and production never produces a target with demand 0 anyway.
+      CORRECTION (2026-08-16, role-driven-supply epic Task 4 review): this
+      guarantee does NOT live in `_pick_supply_target` — `player.py`'s
+      `best_code is None or (asymmetric, qty) > (best_asymmetric,
+      best_demand)` selects the first candidate at ANY qty, including 0. It
+      lives three modules away, on the WRITE side: `publish_demand`'s sole
+      `MaterialDemand` insert, `coordination_store.py:483`, is gated
+      `if quantity > 0`, so no zero-quantity row is ever written for
+      `sibling_demand`/`_pick_supply_target` to read back. A stale citation
+      of the read-side function here previously hid that the guarantee is
+      enforced elsewhere; do not let it drift again.
 
       Default 0 — a single-character run never has a supply target, so every
       pre-existing witness keeps its semantics unchanged. The Lean model does

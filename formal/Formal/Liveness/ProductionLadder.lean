@@ -362,9 +362,12 @@ theorem SUPPLY_DEMAND_MIN_pos : SUPPLY_DEMAND_MIN > 0 := by decide
 
     The asymmetry arm carries an extra `s.supplyDemand > 0` conjunct that
     `_fires`'s Python `target[0] in ctx.asymmetric_demand` does not: NOT a
-    behavioural deviation — production's own `_pick_supply_target` never
-    yields a target with demand 0 (`supplyDemand`'s doc comment on `State`),
-    so `ctx.asymmetric_demand` membership only ever coincides with
+    behavioural deviation — production's own data never yields a target with
+    demand 0 (`supplyDemand`'s doc comment on `State`; the guarantee is
+    enforced on the WRITE side, `coordination_store.py::publish_demand`'s
+    `if quantity > 0` guard on its sole `MaterialDemand` insert — NOT inside
+    `_pick_supply_target`, which merely reads back rows that guard already
+    filtered), so `ctx.asymmetric_demand` membership only ever coincides with
     `target[2] ≥ 1` in every REAL state, the same way `SUPPLY_DEMAND_MIN_pos`
     already makes the bulk arm's `supplyDemand > 0` derivation sound. Unlike
     that Nat-valued field, `supplyAsymmetric` is a free `Bool` with no

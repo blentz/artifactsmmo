@@ -154,13 +154,27 @@ example :
 
 /-- …and it is genuinely gated: at that SAME `supplyDemand = 1` — one below the
     threshold, so the bulk arm is quiet — `supplyAsymmetric := false` leaves
-    the rung quiet too. This is the pair that pins the asymmetry arm itself in
-    lockstep: drop the `|| s.supplyAsymmetric` disjunct on either side alone
-    and one of these two witnesses disagrees. -/
+    the rung quiet too. This pins the asymmetry arm's SENSITIVITY: drop the
+    `|| (s.supplyAsymmetric && …)` disjunct entirely and the witness ABOVE
+    (`supplyAsymmetric := true`) disagrees (`false ≠ true`) — this one alone
+    is insensitive to that deletion, since `supplyAsymmetric := false` already
+    makes the disjunct's left conjunct `false` either way. -/
 example :
     Formal.Liveness.ProductionLadder.supplyBankFires
       { inertLadderState with supplyDemand := 1, supplyAsymmetric := false }
       = false := rfl
+
+/-- …and the `&& s.supplyDemand > 0` conjunct on the asymmetry arm (added over
+    the brief's literal `|| s.supplyAsymmetric` — see `supplyBankFires`'s doc
+    comment) is EXCLUDED at the point of definition, not merely load-bearing
+    three modules away in `BlockerDescent.descends_supplyBank`: at
+    `inertLadderState`'s default `supplyDemand := 0`, `supplyAsymmetric :=
+    true` alone does NOT fire the rung. Delete the conjunct and this witness
+    flips to `true`, disagreeing — the pair with the `supplyDemand := 1`
+    witness above pins the conjunct in both directions right here. -/
+example :
+    Formal.Liveness.ProductionLadder.supplyBankFires
+      { inertLadderState with supplyAsymmetric := true } = false := rfl
 
 /-- The promotion is REAL in the model, not just in a list literal: with every
     guard and collect-reward rung quiet, an at-threshold supply demand is

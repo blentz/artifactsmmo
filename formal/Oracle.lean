@@ -2463,6 +2463,17 @@ ARG LAYOUT (flat ints; index → field):
                                         CURRENCY_TURNIN means, 2026-08-16
                                         fleet-currency-turn-in epic Task 6.
                                         Appended, layout undisturbed.)
+* `[38]` supplyAsymmetric             (Bool 0/1 — `ctx.supply_target is not
+                                        None and ctx.supply_target[0] in
+                                        ctx.asymmetric_demand`, the SECOND arm
+                                        of SUPPLY_BANK, role-driven-supply
+                                        epic Task 4, 2026-08-16. Appended,
+                                        layout undisturbed. Review fix: this
+                                        slot was originally omitted, which
+                                        hard-wired the Lean side to `false`
+                                        for every differential scenario and
+                                        left the new arm uncompared against
+                                        production.)
 
 Emits a JSON object: one Bool field per MeansKind keyed by `meansKindName`
 (one per `allInLadderOrder` rung), plus `"selected"`: the name of
@@ -2494,7 +2505,7 @@ def runLadder (args : Array Json) : Json :=
     bankJunkNonempty := b 31, craftPotionsFires := b 32,
     goldReserve := n 33, geBidCandidateNonempty := b 34,
     geCancelTargetsNonempty := b 35, supplyDemand := n 36,
-    currencyTurnInActive := b 37 }
+    currencyTurnInActive := b 37, supplyAsymmetric := b 38 }
   let firesFields : List (String × Json) :=
     allInLadderOrder.map (fun k => (meansKindName k, Json.bool (fires k s)))
   let selected : Json := match productionLadder s with
