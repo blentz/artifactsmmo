@@ -2874,10 +2874,19 @@ class GamePlayer:
         self, item_demand: dict[str, int], skill_of_item: dict[str, str | None],
         state: "WorldState", level_of_item: Mapping[str, int],
     ) -> "tuple[str, int, int] | None":
-        """The highest-demand item this character's HELD role can produce, as
+        """The item this character's HELD role should supply next, as
         (item_code, target banked quantity, unmet demand) — or None when no
         role is held, nothing the role's owned skills produce is in demand,
         or the bank has never been visited this session (see below).
+
+        Ranks candidates by (asymmetric, demand): a request in
+        `self._asymmetric_demand` — one no sibling of a DIFFERENT role could
+        fill either, per `_update_coordination` (Task 3) — outranks every
+        symmetric request regardless of size, since a symmetric request has
+        other producers to fall back on and an asymmetric one does not.
+        Demand only breaks ties within a group; ties on (asymmetric, demand)
+        keep whichever candidate `item_demand` iteration reaches first, same
+        as the plain highest-demand pick this replaces.
 
         CAN PRODUCE, at this character's current levels — `serves_item` is the
         same gate `demand_by_role` applies when it decides whether the demand
@@ -2911,6 +2920,7 @@ class GamePlayer:
         owned_skills = role_skills(role)
         best_code: str | None = None
         best_demand = 0
+        best_asymmetric = False
         for code, qty in item_demand.items():
             skill = skill_of_item.get(code)
             # Three separate tests, in `demand_by_role`'s own order and idiom:
@@ -2923,8 +2933,15 @@ class GamePlayer:
                 continue
             if not serves_item(code, skill, level_of_item, state.skills):
                 continue
-            if qty > best_demand:
-                best_code, best_demand = code, qty
+            # Asymmetric requests (nobody else can fill them, per
+            # `_asymmetric_demand` from `_update_coordination`) outrank
+            # symmetric ones outright; demand only breaks ties within a
+            # group. `bool` orders False < True, so this tuple comparison
+            # is exactly "asymmetric first, then by size" without a second
+            # explicit branch.
+            asymmetric = code in self._asymmetric_demand
+            if best_code is None or (asymmetric, qty) > (best_asymmetric, best_demand):
+                best_code, best_demand, best_asymmetric = code, qty, asymmetric
         if best_code is None:
             return None
         if state.bank_items is None:

@@ -1829,3 +1829,40 @@ def test_no_coordination_store_leaves_the_asymmetric_set_empty():
     player._asymmetric_demand = frozenset({"stale_code"})  # prove it gets CLEARED
     player._update_coordination(player.state, player.game_data)
     assert player._asymmetric_demand == frozenset()
+
+
+# ---------------------------------------------------------------------------
+# GamePlayer._pick_supply_target — ranking by asymmetry (Task 5 of the
+# role_driven_supply spec). Both items below share ONE role's owned skills
+# (`miner` owns {mining, weaponcrafting}) so they are genuine rivals under the
+# `serves_item`/owned-skill gate, not one excluded by role before ranking
+# ever runs — a cross-skill pairing would let `mystic_ward` win by default
+# regardless of the fix, pinning nothing.
+# ---------------------------------------------------------------------------
+
+def test_a_request_only_i_can_fill_outranks_a_bigger_one_anyone_could(tmp_path):
+    player, _ = _player_with_coordination(tmp_path, "R2D2")
+    player._role = "miner"  # owns {mining, weaponcrafting}
+    player._asymmetric_demand = frozenset({"mystic_ward"})
+    item_demand = {"copper_ore": 30, "mystic_ward": 1}
+
+    target = player._pick_supply_target(
+        item_demand, {"copper_ore": "mining", "mystic_ward": "weaponcrafting"},
+        make_state(bank_items={}, skills={"mining": 20, "weaponcrafting": 20}),
+        {"copper_ore": 1, "mystic_ward": 10})
+
+    assert target is not None and target[0] == "mystic_ward"
+
+
+def test_among_equals_the_bigger_request_still_wins(tmp_path):
+    player, _ = _player_with_coordination(tmp_path, "R2D2")
+    player._role = "miner"
+    player._asymmetric_demand = frozenset()
+    item_demand = {"copper_ore": 30, "mystic_ward": 5}
+
+    target = player._pick_supply_target(
+        item_demand, {"copper_ore": "mining", "mystic_ward": "weaponcrafting"},
+        make_state(bank_items={}, skills={"mining": 20, "weaponcrafting": 20}),
+        {"copper_ore": 1, "mystic_ward": 1})
+
+    assert target is not None and target[0] == "copper_ore"
