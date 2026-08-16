@@ -330,12 +330,44 @@ def test_an_unknown_incumbent_is_not_gated() -> None:
 
 def test_a_banked_copy_counts_as_owned() -> None:
     """Ownership for this gate is bag OR bank: a banked copy is one Withdraw
-    from the same contested equip, so it must be gated the same way."""
+    from the same contested equip, so it must be gated the same way.
+
+    RE-DERIVED 2026-08-15, from the mutation survivor `progression_tree:
+    ownership ignores the bank`. The two items were the other way round — a
+    BANKED `piggy_armor` against a worn `mushmush_jacket` — which the
+    pursuit_value unification turned into a gain of -82_799_980. The `gain > 0`
+    check then dropped the candidate before ownership was ever consulted, so
+    `== []` held with the bank clause deleted and the test proved nothing about
+    the bank. Same role swap `test_the_tree_leg_of_the_loop_closes_on_a_positive_
+    gain_swap` documents, arriving here late.
+
+    Now the pair is the positive-gain one that sibling rides, with the owned
+    copy moved from the bag to the BANK: every other filter passes the
+    candidate, so the empty result can only come from the ownership gate seeing
+    the bank."""
     gd = _gd(_MUSHMUSH_JACKET, _PIGGY_ARMOR)
-    state = _state(25, {}, {_BODY: "mushmush_jacket"}, _FOREST_WHIP_ATTACK)
-    state = replace(state, bank_items={"piggy_armor": 1})
-    objective = _Objective({_BODY: "piggy_armor"})
-    assert _structural_candidates(state, gd, objective) == []
+    state = _state(25, {}, {_BODY: "piggy_armor"}, _FOREST_WHIP_ATTACK)
+    banked = replace(state, bank_items={"mushmush_jacket": 1})
+    objective = _Objective({_BODY: "mushmush_jacket"})
+
+    # Vacuity guards: the candidate has to survive every OTHER filter, or the
+    # assertion at the end holds for a reason that is not the bank.
+    assert pursuit_value(_MUSHMUSH_JACKET) > pursuit_value(_PIGGY_ARMOR), (
+        "fixture drift: a non-positive gain drops the candidate before "
+        "ownership is consulted"
+    )
+    assert not may_displace(_MUSHMUSH_JACKET, _PIGGY_ARMOR), (
+        "fixture drift: a dominating candidate is admitted by design, so the "
+        "occupancy gate could not drop it however ownership reads"
+    )
+    # The SAME board with the copy held nowhere: the candidate IS proposed.
+    # This is the state the gate sees when ownership misses the bank, so it
+    # pins the difference below to the bank lookup and nothing else.
+    assert [(c.slot, c.code)
+            for c in _structural_candidates(state, gd, objective)] == [
+        (_BODY, "mushmush_jacket")]
+
+    assert _structural_candidates(banked, gd, objective) == []
 
 
 def test_the_tree_leg_of_the_loop_closes_on_a_positive_gain_swap() -> None:

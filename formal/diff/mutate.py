@@ -1121,6 +1121,14 @@ TREE_OCCUPANCY_MUTATIONS = [
     ("progression_tree: drop the occupancy deferral",
      "            if incumbent_stats is not None and not may_displace(stats, incumbent_stats):",
      "            if False:"),
+    # SURVIVED every run from c7f35044 until 2026-08-15, with a test named for
+    # the exact property sitting in the bound file the whole time:
+    # test_a_banked_copy_counts_as_owned. It was VACUOUS. The board banked a
+    # `piggy_armor` against a worn `mushmush_jacket`, and the pursuit_value
+    # unification had since inverted that pair — gain -82_799_980 — so the
+    # `gain > 0` check dropped the candidate before ownership was consulted and
+    # `== []` held with the bank clause deleted. The pair is now the
+    # positive-gain one, with vacuity guards on both the gain and may_displace.
     ("progression_tree: ownership ignores the bank",
      "    return (state.inventory.get(code, 0) > 0\n"
      "            or (state.bank_items or {}).get(code, 0) > 0)",
