@@ -3550,15 +3550,6 @@ FALLBACK_ORDER_MUTATIONS = [
      "        fallback_steps = [*extra_steps, trunk, *demoted_steps]",
      "        fallback_roots = [*extra_roots, *demoted_roots]\n"
      "        fallback_steps = [*extra_steps, *demoted_steps]"),
-    # The objective-demoted candidates jump AHEAD of the trunk: a root `J` has
-    # shown buys no progression gets tried before simply grinding, which is the
-    # 2026-08-07 R2D2 defect re-entering through the fallback walk rather than
-    # through the pick.
-    ("tree: objective-demoted candidates promoted ahead of the trunk",
-     "        fallback_roots = [*extra_roots, trunk, *demoted_roots]\n"
-     "        fallback_steps = [*extra_steps, trunk, *demoted_steps]",
-     "        fallback_roots = [*extra_roots, *demoted_roots, trunk]\n"
-     "        fallback_steps = [*extra_steps, *demoted_steps, trunk]"),
 ]
 
 # The unified objective's grip on ROOT selection (2026-08-07). Its own run_group
@@ -3580,12 +3571,83 @@ BRANCH_OBJECTIVE_ROOT_MUTATIONS = [
      "    eligible = [c for c in candidates if candidate_identity(c) in justifying]"
      " or candidates",
      "    eligible = [c for c in candidates if candidate_identity(c) in justifying]"),
-    # The filter leaks onto the XP branch, where no gear root is being pursued and
-    # the candidates are fallbacks: it would prune the arbiter's alternatives on
-    # exactly the cycles that have no gear pick to justify.
-    ("tree: justifying filter applied on the xp branch too",
-     "                  if j_ranking is not None and branch is Branch.GEAR else frozenset())",
-     "                  if j_ranking is not None else frozenset())"),
+    # The objective-demoted candidates jump AHEAD of the trunk: a root `J` has
+    # shown buys no progression gets tried before simply grinding, which is the
+    # 2026-08-07 R2D2 defect re-entering through the fallback walk rather than
+    # through the pick.
+    #
+    # REBOUND 2026-08-15 from FALLBACK_ORDER_MUTATIONS, where it had SURVIVED
+    # every run since 25ef1695 introduced it. Not a missing test: the killing
+    # assertion already existed as test_branch_objective.py::test_demoted_
+    # candidates_stay_reachable_behind_the_trunk (`min(demoted_positions) >
+    # trunk_at`, which fails 0 > 6 under this mutant). It was simply in a
+    # different file from the group's test_path, and a run_group only runs the
+    # one file it is bound to. Its former group binds test_progression_tree.py,
+    # which knows nothing about the objective's demotion; the property is the
+    # objective's, so the mutant belongs here with the rest of `J`'s grip on
+    # root selection.
+    ("tree: objective-demoted candidates promoted ahead of the trunk",
+     "        fallback_roots = [*extra_roots, trunk, *demoted_roots]\n"
+     "        fallback_steps = [*extra_steps, trunk, *demoted_steps]",
+     "        fallback_roots = [*extra_roots, *demoted_roots, trunk]\n"
+     "        fallback_steps = [*extra_steps, *demoted_steps, trunk]"),
+    # DELETED 2026-08-15: "tree: justifying filter applied on the xp branch too",
+    # which dropped the `and branch is Branch.GEAR` clause on the theory that the
+    # filter would then leak onto the XP branch and prune the arbiter's fallback
+    # alternatives on cycles with no gear pick to justify. It had SURVIVED every
+    # run since 25ef1695 introduced it, and the measurement says it is an
+    # equivalent mutant rather than a missing test.
+    #
+    # WHY IT CANNOT BITE. On the XP branch the justifying set is necessarily
+    # EMPTY, so the deleted clause never changes what `justifying` evaluates to.
+    # `branch_ranking` returns a SORTED list; `branch_from_ranking` reads XP iff
+    # `ranking[0]` is the trunk; and `justifying_identities` selects on a STRICT
+    # `sort_key(c) < trunk_key` over that same sorted list. Trunk at index 0
+    # therefore means no candidate's key is below it — an exact tie breaks toward
+    # gear (the trunk goes last into `rank_candidates`, pinned by
+    # test_exact_tie_breaks_toward_gear), so a trunk that is first is strictly
+    # first. Mutated, `justifying` is the empty frozenset the unmutated guard
+    # already produced; `eligible` is then `[] or candidates`, the same list
+    # object either way.
+    #
+    # WHAT WAS MEASURED. Every committed scenario, ranking built against a real
+    # store: 22 land on the XP branch, 17 of those carry gear candidates (up to
+    # 10 of them, l21_grey_material_grind and l22_grey_rung_grind), and ALL 22
+    # have |justifying| = 0. The 6 GEAR-branch scenarios each have |justifying|
+    # = 1, so the probe is not blind to a non-empty set.
+    #
+    # The production clause stays: progression_tree.py's own comment already
+    # calls it defensive ("`eligible` is the whole list whenever the filter
+    # cannot apply"), and a guard that documents an invariant is worth keeping
+    # even when the invariant makes it unreachable. What it is NOT is a mutation
+    # point — there is no observable behaviour to bind a test to.
+    #
+    # The aged_pick mirror scans the FULL candidate list while focus_aging_pick
+    # sees only the objective-eligible one. A stale or synergy-carrying entry that
+    # `J` excluded from the pick then declares the decision aged, and the player
+    # consumes a d'Hondt seat for an interleave that never ran — the same
+    # list-mismatch drift the role clause guards, arriving by the filter's route.
+    #
+    # REBOUND 2026-08-15 from ROLE_MAP_MUTATIONS, where it had SURVIVED every run
+    # since 25ef1695 introduced it. The clause it edits belongs to the OBJECTIVE'S
+    # filter (`eligible` vs `candidates`), not to the role signal, so it sits with
+    # `J`'s other holds on root selection; its role-clause sibling stays behind in
+    # ROLE_MAP_MUTATIONS. Killed by test_branch_objective.py::test_aged_verdict_
+    # ignores_a_candidate_the_objective_demoted, which had to be written: no test
+    # existed, and the whole 5390-test suite passed under this mutant.
+    #
+    # WHY NO STOCK SCENARIO COULD KILL IT. `aged_pick` negates a four-clause AND,
+    # and on every committed GEAR scenario the ACHIEVABILITY clause is already
+    # non-inert over `eligible` (l1_fresh 905/1534, l15_midband 853/1602,
+    # l10_weapon_upgrade 295/498), so the chain is False before the focus clause
+    # is reached and the verdict reads True whichever list that clause scans. The
+    # new test stocks utility1_slot to drop the potion — the only candidate
+    # cheaper than the justifying weapon, and the reason every structural
+    # candidate scored below weight 1 — which leaves the justifying `copper_dagger`
+    # tied for cheapest at weight 1 and the focus clause finally observable.
+    ("tree: aged_pick guard scans the unfiltered candidate list",
+     "        all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in eligible)",
+     "        all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)"),
 ]
 
 SYNERGY_ASSEMBLY_MUTATIONS = [
@@ -3814,14 +3876,6 @@ ROLE_MAP_MUTATIONS = [
      "        and all(role.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n"
      "                for c in eligible))",
      "        )"),
-    # The aged_pick mirror scans the FULL candidate list while focus_aging_pick
-    # sees only the objective-eligible one. A stale or synergy-carrying entry that
-    # `J` excluded from the pick then declares the decision aged, and the player
-    # consumes a d'Hondt seat for an interleave that never ran — the same
-    # list-mismatch drift the role clause guards, arriving by the filter's route.
-    ("tree: aged_pick guard scans the unfiltered candidate list",
-     "        all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in eligible)",
-     "        all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)"),
 ]
 
 # GamePlayer._role_owned_skills (player.py) — resolves the held role NAME

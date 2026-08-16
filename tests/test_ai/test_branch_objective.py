@@ -32,6 +32,7 @@ from artifactsmmo_cli.ai.tiers.progression_choice import (
     rank_candidates,
 )
 from artifactsmmo_cli.ai.tiers.progression_tree import (
+    _achievability_map,
     _j_by_identity,
     _structural_candidates,
     _utility_candidates,
@@ -458,3 +459,85 @@ def test_display_ranking_keeps_the_demoted_candidates(game_data, store):
         decision = decide_tree(state, game_data, objective,
                                band_adequate=False, store=store)
     assert len(decision.ranking) == len(gear) + 1  # + the trunk row
+
+
+def test_aged_verdict_ignores_a_candidate_the_objective_demoted(game_data, store):
+    """`decide_tree`'s `aged_pick` mirror must scan the SAME list
+    `focus_aging_pick` picks from — `eligible`, not `candidates`.
+
+    `aged_pick` is the player's gate for bumping a d'Hondt seat: True means the
+    pick went through the focus-aging interleave, so the schedule and the seat
+    ledger stay in step. Once the unified objective began filtering the
+    candidates handed to `focus_aging_pick`, a mirror still scanning the full
+    `candidates` would let a stale entry the objective EXCLUDED from the pick
+    declare the decision aged, and the player would consume a seat for an
+    interleave that never ran.
+
+    THE BOARD, and why it needs surgery. On every stock GEAR scenario the
+    achievability clause is already non-inert over `eligible` (l1_fresh:
+    905/1534), so the `and` chain is False before the focus clause is reached
+    and `aged_pick` reads True whichever list the focus clause scans — the
+    clause is MASKED and a test riding a stock scenario proves nothing. The one
+    candidate cheaper than the justifying weapon is the utility potion, which
+    takes achievability weight 1 and pushes every structural candidate below it.
+    Stocking `utility1_slot` drops the potion from the candidate list (the tree
+    skips a slot that is itself stocked), which leaves `copper_dagger` — the
+    JUSTIFYING candidate — tied for cheapest at weight 1. Synergy is off by
+    default and no role is wired, so with the achievability clause inert the
+    focus clause is the only one left that can move the verdict, which is
+    exactly the condition under which the mutant is observable.
+    """
+    base = scenario_state(SCENARIOS["l1_fresh"], game_data)
+    state = replace(base, utility1_slot_quantity=50)
+    objective = CharacterObjective.from_game_data(game_data)
+    candidates = (_structural_candidates(state, game_data, objective)
+                  + _utility_candidates(state, game_data, objective))
+
+    with store.search_cache():
+        ranking = branch_ranking(state, game_data, candidates, store)
+        justifying = justifying_identities(ranking)
+        eligible = [c for c in candidates
+                    if candidate_identity(c) in justifying]
+        demoted = [c for c in candidates if c not in eligible]
+
+        # Vacuity guards: each of these failing means the board stopped
+        # exhibiting the split and the assertions below would hold trivially.
+        assert branch_from_ranking(ranking) is Branch.GEAR, (
+            "fixture drift: the XP branch short-circuits aged_pick to False"
+        )
+        assert eligible and demoted, (
+            "fixture drift: with nothing demoted, `eligible` and `candidates` "
+            "are the same list and this test cannot tell them apart"
+        )
+        achievability = _achievability_map(candidates, state, game_data)
+        assert all(achievability.get((c.slot, c.code), Fraction(1)) == Fraction(1)
+                   for c in eligible), (
+            "fixture drift: the achievability clause is non-inert over "
+            "`eligible`, so the `and` chain never reaches the focus clause and "
+            "aged_pick reads True no matter which list that clause scans"
+        )
+
+        def aged(focus):
+            return decide_tree(state, game_data, objective, band_adequate=False,
+                               store=store, focus=focus).aged_pick
+
+        stale = FOCUS_FLAT + FOCUS_SPAN
+        assert aged({}) is False, (
+            "fixture drift: some other clause is already firing, which would "
+            "mask the focus clause this test is about"
+        )
+        # THE ASSERTION: every DEMOTED candidate stale, every eligible one
+        # fresh. The pick cannot have aged, because the objective already ruled
+        # these roots out of it.
+        assert aged({(c.slot, c.code): stale for c in demoted}) is False, (
+            "a root the objective demoted out of the pick declared the "
+            "decision aged; the player would bump a d'Hondt seat for an "
+            "interleave that never ran"
+        )
+        # Positive control: the same spike on the ELIGIBLE candidate DOES age
+        # the verdict, so the mechanism works and the assertion above is a
+        # statement about which list is scanned, not about a dead code path.
+        assert aged({(c.slot, c.code): stale for c in eligible}) is True, (
+            "staleness on the candidate actually being picked must still age "
+            "the verdict"
+        )
