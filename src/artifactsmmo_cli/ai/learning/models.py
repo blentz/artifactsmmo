@@ -214,7 +214,22 @@ class MaterialDemand(SQLModel, table=True):
     """One character's declared unmet need for one item. Upsert key is
     (character, item_code). Carries the same `expires_at` liveness rule as
     RoleLease so a dead character's demand stops being served on the same
-    clock that frees its role."""
+    clock that frees its role.
+
+    `self_servable` records whether the REQUESTER could produce this item
+    itself — a property of the requester, not of the quantity, so it rides
+    on every row published in the same `publish_demand` call rather than
+    living in a parallel mapping that could fall out of step with the demand
+    keys. It is the fact the "serve a sibling's request" rung was missing:
+    without it, that rung cannot distinguish "nobody nearby can make this"
+    from "the requester could make this itself but asked anyway", so it has
+    to stay conservative and never fires below a 10-unit threshold — and
+    every real request is quantity 1.
+
+    Defaults `True` so a row written by an un-migrated column, or read
+    before this code shipped, reads as "the requester can handle this
+    itself" — today's behaviour — rather than suddenly flooding the fleet
+    with requests nobody asked for."""
 
     __tablename__ = "material_demand"
 
@@ -223,6 +238,7 @@ class MaterialDemand(SQLModel, table=True):
     item_code: str = Field(index=True)
     quantity: int
     expires_at: str
+    self_servable: bool = Field(default=True)
 
 
 class HoldingLedger(SQLModel, table=True):

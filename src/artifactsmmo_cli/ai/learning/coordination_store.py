@@ -148,6 +148,42 @@ def _migrate_role_lease_unique_index(conn: Connection) -> None:
     conn.exec_driver_sql("CREATE UNIQUE INDEX uq_role_lease_holder ON role_leases (role, character)")
 
 
+def _migrate_material_demand_self_servable(conn: Connection) -> None:
+    """One-shot fix-up for `material_demand` on a pre-existing learning DB
+    (2026-08-16). Follows `_migrate_role_lease_unique_index`'s shape exactly:
+    detect with `PRAGMA`, alter in place, preserve every row, no-op on a
+    fresh DB.
+
+    `MaterialDemand` grew a `self_servable` column so the "serve a sibling's
+    request" rung can finally tell "nobody nearby can make this" apart from
+    "the requester could make this itself but asked anyway" — see the
+    column's docstring in `models.py`. `SQLModel.metadata.create_all` only
+    creates tables that do not exist; it never alters an existing table's
+    columns. So every `learning.db` that predates this change still has a
+    `material_demand` table with no `self_servable` column. Without this
+    migration the first `publish_demand` call raises `OperationalError:
+    table material_demand has no column named self_servable`, the
+    surrounding `except SQLAlchemyError` swallows it, and the demand board
+    silently stops updating — the exact "old cache, dead feature" failure
+    `_migrate_role_lease_unique_index` exists to prevent, now recurring on a
+    different table.
+
+    Detects the missing column via `PRAGMA table_info` rather than assuming
+    it is absent: a database created fresh under the current model already
+    has the column, so the search below finds it and this is a no-op.
+    Migrating in place — `ALTER TABLE ... ADD COLUMN self_servable BOOLEAN
+    NOT NULL DEFAULT 1` — preserves every existing row and backfills them
+    with the same safe default the model declares (`True`, i.e. SQLite `1`),
+    so a legacy row reads as "the requester can handle this itself" rather
+    than suddenly flooding the fleet with requests nobody asked for."""
+    columns = [row[1] for row in conn.exec_driver_sql("PRAGMA table_info(material_demand)")]
+    if "self_servable" in columns:
+        return
+    conn.exec_driver_sql(
+        "ALTER TABLE material_demand ADD COLUMN self_servable BOOLEAN NOT NULL DEFAULT 1"
+    )
+
+
 def _require_utc(now: datetime) -> None:
     """Guard the ONE invariant the whole TTL/liveness design rests on.
 
@@ -219,6 +255,7 @@ class CoordinationStore:
         with exclusive_schema_lock(self._engine) as conn:
             SQLModel.metadata.create_all(conn)
             _migrate_role_lease_unique_index(conn)
+            _migrate_material_demand_self_servable(conn)
         with self._engine.connect() as conn:
             conn.execute(text("PRAGMA journal_mode=WAL"))
             conn.execute(text("PRAGMA synchronous=NORMAL"))
@@ -412,13 +449,25 @@ class CoordinationStore:
         they genuinely differ — each carries its own TTL constant."""
         return (now + timedelta(seconds=DEMAND_TTL_SECONDS)).isoformat()
 
-    def publish_demand(self, demand: Mapping[str, int], now: datetime) -> None:
+    def publish_demand(self, demand: Mapping[str, int], self_servable: frozenset[str],
+                       now: datetime) -> None:
         """Replace this character's demand rows wholesale.
 
         Replace rather than merge: demand is a snapshot of what is unmet RIGHT
         NOW, so an item that dropped off the closure must stop being served
         immediately. Merging would leave satisfied demand on the board until
-        its TTL, and siblings would keep producing into a bank nobody drains."""
+        its TTL, and siblings would keep producing into a bank nobody drains.
+
+        `self_servable` is the set of item codes THIS character — the
+        requester — could produce itself, stamped onto every row this call
+        writes. A frozenset rather than a parallel `Mapping[str, bool]`
+        because the flag is a property of the requester as a whole, not of
+        any one item's quantity, and a set keyed the same way as `demand`
+        cannot fall out of step with `demand`'s own keys the way a second
+        dict could. A code in `demand` but absent from `self_servable` is
+        stored `self_servable=False` — the requester genuinely cannot make
+        it, which is the case the "serve a sibling's request" rung needs to
+        finally distinguish from "could make it but asked anyway"."""
         _require_utc(now)
         expiry = self._demand_expiry(now)
         try:
@@ -435,7 +484,8 @@ class CoordinationStore:
                         s.add(MaterialDemand(character=self._character,
                                              item_code=item_code,
                                              quantity=quantity,
-                                             expires_at=expiry))
+                                             expires_at=expiry,
+                                             self_servable=item_code in self_servable))
                 s.commit()
         except SQLAlchemyError as e:
             print(f"[coordination] publish_demand failed: {e}")

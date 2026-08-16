@@ -8,6 +8,7 @@ unexpired), and all four cross-character reads (`live_leases`,
 one file."""
 
 import multiprocessing
+import sqlite3
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -681,7 +682,7 @@ class TestDegradationOnDbError:
         db = str(tmp_path / "coord.db")
         hal = CoordinationStore(db_path=db, character="HAL")
         _break_engine(hal)
-        hal.publish_demand({"copper_bar": 6}, _T0)
+        hal.publish_demand({"copper_bar": 6}, frozenset(), _T0)
         assert "[coordination] publish_demand failed" in capsys.readouterr().out
 
     def test_sibling_demand_swallows_error_and_returns_empty(self, tmp_path: Path, capsys) -> None:
@@ -1060,8 +1061,8 @@ def test_sibling_demand_sums_across_characters_and_excludes_self(tmp_path: Path)
     hal = CoordinationStore(db_path=db, character="HAL")
     c3po = CoordinationStore(db_path=db, character="C3P0")
     try:
-        hal.publish_demand({"copper_bar": 6, "ash_plank": 2}, _T0)
-        c3po.publish_demand({"copper_bar": 4}, _T0)
+        hal.publish_demand({"copper_bar": 6, "ash_plank": 2}, frozenset(), _T0)
+        c3po.publish_demand({"copper_bar": 4}, frozenset(), _T0)
         assert hal.sibling_demand(_T0) == {"copper_bar": 4}
         assert c3po.sibling_demand(_T0) == {"copper_bar": 6, "ash_plank": 2}
     finally:
@@ -1074,8 +1075,8 @@ def test_publish_demand_replaces_prior_rows(tmp_path: Path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     obs = CoordinationStore(db_path=db, character="observer")
     try:
-        hal.publish_demand({"copper_bar": 6, "ash_plank": 2}, _T0)
-        hal.publish_demand({"copper_bar": 1}, _T0)
+        hal.publish_demand({"copper_bar": 6, "ash_plank": 2}, frozenset(), _T0)
+        hal.publish_demand({"copper_bar": 1}, frozenset(), _T0)
         assert obs.sibling_demand(_T0) == {"copper_bar": 1}
     finally:
         hal.close()
@@ -1088,7 +1089,7 @@ def test_expired_demand_is_not_served(tmp_path: Path) -> None:
     obs = CoordinationStore(db_path=db, character="observer")
     later = _T0 + timedelta(seconds=DEMAND_TTL_SECONDS + 1)
     try:
-        hal.publish_demand({"copper_bar": 6}, _T0)
+        hal.publish_demand({"copper_bar": 6}, frozenset(), _T0)
         assert obs.sibling_demand(later) == {}
     finally:
         hal.close()
@@ -1100,8 +1101,8 @@ def test_empty_demand_clears_the_board(tmp_path: Path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     obs = CoordinationStore(db_path=db, character="observer")
     try:
-        hal.publish_demand({"copper_bar": 6}, _T0)
-        hal.publish_demand({}, _T0)
+        hal.publish_demand({"copper_bar": 6}, frozenset(), _T0)
+        hal.publish_demand({}, frozenset(), _T0)
         assert obs.sibling_demand(_T0) == {}
     finally:
         hal.close()
@@ -1116,7 +1117,7 @@ def test_publish_demand_skips_zero_quantity(tmp_path: Path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     obs = CoordinationStore(db_path=db, character="observer")
     try:
-        hal.publish_demand({"copper_bar": 0}, _T0)
+        hal.publish_demand({"copper_bar": 0}, frozenset(), _T0)
         assert obs.sibling_demand(_T0) == {}
     finally:
         hal.close()
@@ -1128,7 +1129,7 @@ def test_publish_demand_skips_negative_quantity(tmp_path: Path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     obs = CoordinationStore(db_path=db, character="observer")
     try:
-        hal.publish_demand({"copper_bar": -3}, _T0)
+        hal.publish_demand({"copper_bar": -3}, frozenset(), _T0)
         assert obs.sibling_demand(_T0) == {}
     finally:
         hal.close()
@@ -1140,7 +1141,7 @@ def test_publish_demand_mixed_mapping_publishes_only_positive_entries(tmp_path: 
     hal = CoordinationStore(db_path=db, character="HAL")
     obs = CoordinationStore(db_path=db, character="observer")
     try:
-        hal.publish_demand({"copper_bar": 6, "ash_plank": 0}, _T0)
+        hal.publish_demand({"copper_bar": 6, "ash_plank": 0}, frozenset(), _T0)
         assert obs.sibling_demand(_T0) == {"copper_bar": 6}
     finally:
         hal.close()
@@ -1152,7 +1153,7 @@ def test_publish_demand_rejects_naive_now(tmp_path: Path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     try:
         with pytest.raises(ValueError, match="naive"):
-            hal.publish_demand({"copper_bar": 6}, _NAIVE_NOW)
+            hal.publish_demand({"copper_bar": 6}, frozenset(), _NAIVE_NOW)
     finally:
         hal.close()
 
@@ -1162,9 +1163,51 @@ def test_publish_demand_rejects_non_utc_offset_now(tmp_path: Path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     try:
         with pytest.raises(ValueError, match="offset"):
-            hal.publish_demand({"copper_bar": 6}, _NON_UTC_NOW)
+            hal.publish_demand({"copper_bar": 6}, frozenset(), _NON_UTC_NOW)
     finally:
         hal.close()
+
+
+def test_self_servable_defaults_true_so_legacy_rows_keep_todays_behaviour(tmp_path):
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="HAL")
+    store.publish_demand({"copper_ore": 12}, frozenset({"copper_ore"}), now)
+    with SqlSession(store._engine) as s:
+        row = s.exec(select(MaterialDemand)).one()
+    assert row.self_servable is True
+
+
+def test_a_request_the_requester_cannot_make_is_stored_as_not_self_servable(tmp_path):
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Lor")
+    store.publish_demand({"greater_wooden_staff": 1}, frozenset(), now)
+    with SqlSession(store._engine) as s:
+        row = s.exec(select(MaterialDemand)).one()
+    assert row.self_servable is False
+
+
+def test_a_pre_existing_database_without_the_column_is_migrated_in_place(tmp_path):
+    """The failure this guards is silent: without the migration the first
+    publish raises OperationalError, `except SQLAlchemyError` swallows it, and
+    the demand board stops updating with no error anywhere."""
+    db = str(tmp_path / "legacy.db")
+    raw = sqlite3.connect(db)
+    raw.execute(
+        "CREATE TABLE material_demand (id INTEGER PRIMARY KEY, character TEXT, "
+        "item_code TEXT, quantity INTEGER, expires_at TEXT)")
+    raw.execute("INSERT INTO material_demand (character, item_code, quantity, expires_at) "
+                "VALUES ('Robby', 'copper_ore', 5, '2099-01-01T00:00:00+00:00')")
+    raw.commit()
+    raw.close()
+
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    store = CoordinationStore(db_path=db, character="HAL")
+    store.publish_demand({"iron_ore": 4}, frozenset({"iron_ore"}), now)
+
+    with SqlSession(store._engine) as s:
+        rows = {r.item_code: r for r in s.exec(select(MaterialDemand)).all()}
+    assert set(rows) == {"copper_ore", "iron_ore"}      # the legacy row survived
+    assert rows["copper_ore"].self_servable is True     # back-filled with the safe default
 
 
 def test_sibling_demand_rejects_naive_now(tmp_path: Path) -> None:

@@ -3025,7 +3025,13 @@ class GamePlayer:
         self._sibling_order_claims = self._coordination.sibling_order_claims(now)
         if self._role is not None:
             self._coordination.renew(self._role, now)
-        self._coordination.publish_demand(self._own_unmet_demand(state, game_data), now)
+        # frozenset() is a placeholder: Task 3 (role_driven_supply) computes the
+        # real set of codes this character can produce itself. Until then every
+        # row this call writes is stored as NOT self-servable, matching the
+        # migration default's read-as-servable stance only for legacy rows,
+        # not for rows this character republishes going forward.
+        self._coordination.publish_demand(
+            self._own_unmet_demand(state, game_data), frozenset(), now)
 
         item_demand = self._coordination.sibling_demand(now)
         # ONE lookup per item, split into the two shapes the pure module takes.

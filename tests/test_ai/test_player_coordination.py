@@ -76,8 +76,8 @@ def test_two_stores_converge_on_distinct_roles(tmp_path) -> None:
     hal = CoordinationStore(db_path=db, character="HAL")
     c3po = CoordinationStore(db_path=db, character="C3P0")
     try:
-        hal.publish_demand({"copper_bar": 10}, _T0)
-        c3po.publish_demand({"ash_plank": 4}, _T0)
+        hal.publish_demand({"copper_bar": 10}, frozenset(), _T0)
+        c3po.publish_demand({"ash_plank": 4}, frozenset(), _T0)
         skills = {"copper_bar": "mining", "ash_plank": "woodcutting"}
 
         held: dict[str, str] = {}
@@ -533,7 +533,7 @@ def test_update_coordination_releases_an_idle_role_after_min_hold(tmp_path):
     now = datetime.now(tz=timezone.utc)
     try:
         # Somewhere to go: `logger` wants work, `miner` (hero's role) does not.
-        sibling.publish_demand({"ash_wood": 5}, now)
+        sibling.publish_demand({"ash_wood": 5}, frozenset(), now)
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES  # eligible; own demand is 0
@@ -599,7 +599,7 @@ def test_update_coordination_idle_release_does_not_immediately_reclaim(tmp_path)
     now = datetime.now(tz=timezone.utc)
     try:
         # `logger` wants work, which is what makes the idle release fire at all.
-        sibling.publish_demand({"ash_wood": 5}, now)
+        sibling.publish_demand({"ash_wood": 5}, frozenset(), now)
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
@@ -679,7 +679,7 @@ def test_update_coordination_breaks_the_zero_demand_run_on_real_demand(tmp_path)
         store.claim("miner", now)
         p._role = "miner"
         p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES - 2
-        sibling.publish_demand({"copper_ore": 5}, now)
+        sibling.publish_demand({"copper_ore": 5}, frozenset(), now)
         p._update_coordination(p.state, p.game_data)
         assert p._role_zero_demand_cycles == 0
     finally:
@@ -719,7 +719,7 @@ def test_update_coordination_computes_the_supply_target_from_sibling_demand(tmp_
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_demand({"copper_ore": 5}, now)
+        sibling.publish_demand({"copper_ore": 5}, frozenset(), now)
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = 3  # below ROLE_MIN_HOLD_CYCLES: stays "miner" (keep)
@@ -749,7 +749,7 @@ def test_update_coordination_supply_target_none_without_a_matching_role(tmp_path
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_demand({"copper_ore": 5}, now)
+        sibling.publish_demand({"copper_ore": 5}, frozenset(), now)
         # hero holds "jeweler" (jewelrycrafting only) — cannot serve mining
         # demand, so no supply target even though sibling demand exists.
         store.claim("jeweler", now)
@@ -836,7 +836,7 @@ def _held_miner(tmp_path, skills=None):
     sibling = CoordinationStore(db_path=db, character="rival")
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
-    sibling.publish_demand({"copper_ore": 5}, now)
+    sibling.publish_demand({"copper_ore": 5}, frozenset(), now)
     store.claim("miner", now)
     p._role = "miner"
     p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
@@ -887,7 +887,7 @@ def test_update_coordination_does_not_block_an_idle_release(tmp_path):
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_demand({"ash_wood": 5}, now)
+        sibling.publish_demand({"ash_wood": 5}, frozenset(), now)
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
@@ -991,7 +991,7 @@ def _decide_with_skills(tmp_path, name, skills) -> str | None:
     sibling = CoordinationStore(db_path=db, character="rival")
     p.set_coordination_store(store)
     try:
-        sibling.publish_demand({"iron_ore": 30, "ash_wood": 6},
+        sibling.publish_demand({"iron_ore": 30, "ash_wood": 6}, frozenset(),
                                datetime.now(tz=timezone.utc))
         p._update_coordination(p.state, p.game_data)
         return p._role
@@ -1035,7 +1035,7 @@ def test_update_coordination_supply_target_respects_the_same_gate(tmp_path):
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_demand({"iron_ore": 30, "copper_ore": 4}, now)
+        sibling.publish_demand({"iron_ore": 30, "copper_ore": 4}, frozenset(), now)
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = 3  # below ROLE_MIN_HOLD_CYCLES: stays "miner"
@@ -1196,7 +1196,7 @@ def test_a_coordinated_supply_target_reaches_a_real_supply_bank_goal(tmp_path):
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_demand({"copper_ore": SUPPLY_DEMAND_MIN + 2}, now)
+        sibling.publish_demand({"copper_ore": SUPPLY_DEMAND_MIN + 2}, frozenset(), now)
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = 3  # below ROLE_MIN_HOLD_CYCLES: stays "miner"
@@ -1239,7 +1239,7 @@ def test_a_sub_threshold_coordinated_demand_is_targeted_but_never_fires(tmp_path
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_demand({"copper_ore": SUPPLY_DEMAND_MIN - 1}, now)
+        sibling.publish_demand({"copper_ore": SUPPLY_DEMAND_MIN - 1}, frozenset(), now)
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = 3
