@@ -335,6 +335,45 @@ class GeOrderClaim(SQLModel, table=True):
     expires_at: str
 
 
+class TurnInClaim(SQLModel, table=True):
+    """The election of exactly ONE character to spend a fleet-shared currency
+    on one turn-in item.
+
+    `HoldingLedger` lets every character SEE the fleet's total holding of a
+    dual-role item, but seeing the same total is exactly what makes it
+    dangerous: once the total crosses a turn-in threshold, all five children
+    read the same fact on the same cycle and each would recall the same
+    units unless exactly one of them acts. This table is that one-of-five
+    lock.
+
+    Modelled on `RoleLease.claim`'s ORIGINAL pre-2026-08-03 shape (see
+    `coordination_store.py` git history at `fd71410c`), not on its current
+    non-exclusive one: `role_leases` stopped contending when its key widened
+    to `(role, character)`, but a turn-in has the opposite requirement — it
+    MUST contend, so exactly one winner exists. The key here is UNIQUE on
+    `item_code` ALONE, not `(character, item_code)`, and that is the entire
+    mechanism: two characters claiming the same item write to the SAME row,
+    so the second write either loses to a live incumbent or, if the
+    incumbent already expired, takes the row over. Keying on `(character,
+    item_code)` instead — the shape every OTHER claim table in this module
+    uses — would let every character hold its own row for the same item and
+    all five would "win" silently.
+
+    Carries the same `expires_at` liveness rule as `RoleLease`,
+    `MaterialDemand`, `HoldingLedger`, `BankStockClaim` and `GeOrderClaim` —
+    a row is real if unexpired — so a character that crashes mid-turn-in does
+    not hold the trophy hostage for longer than one liveness window."""
+
+    __tablename__ = "turn_in_claims"
+    __table_args__ = (UniqueConstraint("item_code", name="uq_turn_in_claim_item"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    item_code: str = Field(index=True)
+    character: str = Field(index=True)
+    claimed_at: str
+    expires_at: str
+
+
 class PlanBodyLogBase(SQLModel):
     """One computed plan body, logged at re-plan time. Counted by the Phase-2
     macro detector."""

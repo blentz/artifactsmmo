@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import Connection, text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, create_engine, select
 
@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.learning.models import (
     HoldingLedger,
     MaterialDemand,
     RoleLease,
+    TurnInClaim,
 )
 from artifactsmmo_cli.ai.learning.schema_init import exclusive_schema_lock
 
@@ -736,6 +737,106 @@ class CoordinationStore:
             print(f"[coordination] sibling_order_claims failed: {e}")
             return frozenset()
         return frozenset(row.order_id for row in rows)
+
+    def _turn_in_claim_expiry(self, now: datetime) -> str:
+        return (now + timedelta(seconds=DEMAND_TTL_SECONDS)).isoformat()
+
+    def claim_turn_in(self, item_code: str, now: datetime) -> bool:
+        """Elect THIS character to spend the fleet's currency turning in
+        `item_code`, and report whether it holds the claim afterwards.
+
+        This is the mechanism that stops five children from each recalling
+        the same medals: `HoldingLedger`/`sibling_holdings` let every
+        character see the SAME fleet total cross a turn-in threshold on the
+        SAME cycle, so seeing it is not enough — exactly one of them must
+        also win this claim before acting on it.
+
+        Modelled on `RoleLease.claim`'s PRE-2026-08-03 shape (see this
+        file's git history at `fd71410c`), NOT on the CURRENT `claim` above:
+        `role_leases` stopped contending when its key widened to `(role,
+        character)`, but a turn-in needs the opposite — `TurnInClaim` is
+        UNIQUE on `item_code` ALONE (see its docstring), so there is at most
+        one row per item and taking that row over IS the election.
+
+        A live incumbent that is a DIFFERENT character blocks the claim
+        (`False`). An incumbent that has EXPIRED, or is this character's OWN
+        prior claim, is taken over / renewed in place — the renewal case is
+        what lets a multi-cycle turn-in keep its claim across actions
+        without losing it to its own next call.
+
+        IntegrityError IS still reachable here, unlike in `claim` above:
+        two characters can simultaneously read "no row for this item_code"
+        and both attempt to insert. `TurnInClaim`'s key is genuinely
+        exclusive, so the loser's insert collides for real and must report
+        `False` rather than propagate — the loser simply did not win the
+        election and tries again, or stands down, next cycle."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(TurnInClaim).where(TurnInClaim.item_code == item_code)
+                ).first()
+                if row is not None:
+                    if row.character != self._character and row.expires_at > stamp:
+                        return False
+                    row.character = self._character
+                    row.claimed_at = stamp
+                    row.expires_at = self._turn_in_claim_expiry(now)
+                    s.add(row)
+                else:
+                    s.add(TurnInClaim(item_code=item_code, character=self._character,
+                                      claimed_at=stamp,
+                                      expires_at=self._turn_in_claim_expiry(now)))
+                s.commit()
+                return True
+        except IntegrityError:
+            return False
+        except SQLAlchemyError as e:
+            print(f"[coordination] claim_turn_in failed: {e}")
+            return False
+
+    def turn_in_holder(self, item_code: str, now: datetime) -> str | None:
+        """The character currently holding a LIVE claim on `item_code`, or
+        `None` if nobody does. Unlike `claim_turn_in`, this never writes: a
+        caller checking whether a SIBLING already holds the election (so it
+        can stand down) must not itself take the claim over just by
+        asking."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(TurnInClaim).where(
+                        TurnInClaim.item_code == item_code,
+                        TurnInClaim.expires_at > stamp,
+                    )
+                ).first()
+        except SQLAlchemyError as e:
+            print(f"[coordination] turn_in_holder failed: {e}")
+            return None
+        return row.character if row is not None else None
+
+    def release_turn_in(self, item_code: str) -> None:
+        """Drop this character's claim on `item_code`. No-op if it holds
+        none — including when a SIBLING holds it: this only ever touches
+        this character's own row, matching `release`'s and
+        `release_bank_stock`'s own-row-only discipline, so a stale or
+        mistaken release can never evict a sibling's live election."""
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(TurnInClaim).where(
+                        TurnInClaim.item_code == item_code,
+                        TurnInClaim.character == self._character,
+                    )
+                ).first()
+                if row is None:
+                    return
+                s.delete(row)
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[coordination] release_turn_in failed: {e}")
 
     def close(self) -> None:
         self._engine.dispose()

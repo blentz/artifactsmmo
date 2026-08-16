@@ -32,6 +32,7 @@ from artifactsmmo_cli.ai.learning.models import (
     HoldingLedger,
     MaterialDemand,
     RoleLease,
+    TurnInClaim,
 )
 
 
@@ -746,6 +747,33 @@ class TestDegradationOnDbError:
         _break_engine(hal)
         assert hal.sibling_order_claims(_T0) == frozenset()
         assert "[coordination] sibling_order_claims failed" in capsys.readouterr().out
+
+    def test_claim_turn_in_swallows_error_and_returns_false(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        _break_engine(hal)
+        assert hal.claim_turn_in("lich_race_trophy", _T0) is False
+        assert "[coordination] claim_turn_in failed" in capsys.readouterr().out
+
+    def test_turn_in_holder_swallows_error_and_returns_none(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        hal.claim_turn_in("lich_race_trophy", _T0)
+        _break_engine(hal)
+        assert hal.turn_in_holder("lich_race_trophy", _T0) is None
+        assert "[coordination] turn_in_holder failed" in capsys.readouterr().out
+
+    def test_release_turn_in_swallows_error(self, tmp_path: Path, capsys) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        hal.claim_turn_in("lich_race_trophy", _T0)
+        _break_engine(hal)
+        hal.release_turn_in("lich_race_trophy")
+        assert "[coordination] release_turn_in failed" in capsys.readouterr().out
 
 
 def test_a_rival_taking_the_role_mid_claim_does_not_fail_the_claim(tmp_path: Path) -> None:
@@ -1871,5 +1899,201 @@ def test_the_same_character_cannot_hold_one_item_twice_in_the_ledger(engine) -> 
                             expires_at="t"))
         s.add(HoldingLedger(character="HAL", item_code="lich_race_medal", quantity=1,
                             expires_at="t"))
+        with pytest.raises(IntegrityError):
+            s.commit()
+
+
+def test_only_one_character_wins_the_turn_in_claim(tmp_path):
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    r2d2 = CoordinationStore(db_path=db, character="R2D2")
+
+    assert hal.claim_turn_in("lich_race_trophy", now) is True
+    assert r2d2.claim_turn_in("lich_race_trophy", now) is False
+    assert hal.turn_in_holder("lich_race_trophy", now) == "HAL"
+    assert r2d2.turn_in_holder("lich_race_trophy", now) == "HAL"
+
+
+def test_a_released_claim_can_be_taken_by_a_sibling(tmp_path):
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    r2d2 = CoordinationStore(db_path=db, character="R2D2")
+    hal.claim_turn_in("lich_race_trophy", now)
+    hal.release_turn_in("lich_race_trophy")
+
+    assert r2d2.claim_turn_in("lich_race_trophy", now) is True
+
+
+def test_an_expired_claim_does_not_strand_the_turn_in(tmp_path):
+    """A child that dies mid-turn-in must not hold the trophy hostage."""
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    CoordinationStore(db_path=db, character="HAL").claim_turn_in("lich_race_trophy", now)
+    later = now + timedelta(seconds=DEMAND_TTL_SECONDS + 1)
+
+    assert CoordinationStore(db_path=db, character="R2D2").claim_turn_in(
+        "lich_race_trophy", later) is True
+
+
+def test_claim_turn_in_renews_in_place_for_the_same_character(tmp_path: Path) -> None:
+    """A multi-cycle turn-in (claim, work an action, claim again next cycle)
+    must not lose its own claim — the renewal is the SAME row with a pushed-
+    out `expires_at`, not a fresh insert that would collide with itself."""
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    assert hal.claim_turn_in("lich_race_trophy", now) is True
+    later = now + timedelta(seconds=1)
+    assert hal.claim_turn_in("lich_race_trophy", later) is True
+    assert hal.turn_in_holder("lich_race_trophy", later) == "HAL"
+
+    engine = create_engine(f"sqlite:///{db}")
+    try:
+        with SqlSession(engine) as s:
+            rows = s.exec(select(TurnInClaim)).all()
+            assert len(rows) == 1
+            assert rows[0].expires_at == (
+                later + timedelta(seconds=DEMAND_TTL_SECONDS)
+            ).isoformat()
+    finally:
+        engine.dispose()
+
+
+def test_release_turn_in_is_a_noop_when_nothing_is_claimed(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    hal.release_turn_in("lich_race_trophy")  # must not raise
+
+
+def test_release_turn_in_only_drops_the_releasing_characters_row(tmp_path: Path) -> None:
+    """`release_turn_in` never blind-deletes a sibling's live claim, matching
+    `release`'s and `release_bank_stock`'s own-row-only discipline."""
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    r2d2 = CoordinationStore(db_path=db, character="R2D2")
+    hal.claim_turn_in("lich_race_trophy", now)
+
+    r2d2.release_turn_in("lich_race_trophy")
+
+    assert hal.turn_in_holder("lich_race_trophy", now) == "HAL"
+
+
+def test_turn_in_holder_returns_none_when_nothing_is_claimed(tmp_path: Path) -> None:
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    assert hal.turn_in_holder("lich_race_trophy", now) is None
+
+
+def test_a_rival_winning_the_turn_in_claim_mid_insert_is_recorded_as_a_loss(
+    tmp_path: Path,
+) -> None:
+    """The race TurnInClaim's exclusive key exists FOR: HAL reads "no row for
+    `lich_race_trophy`" and decides to insert; before HAL's own flush lands,
+    R2D2 concretely inserts first (a second, real engine/session on the same
+    file). UNIQUE(item_code) makes that collision genuine — unlike
+    `RoleLease`'s now-widened key, there is nowhere for both writes to land —
+    so HAL's commit takes an IntegrityError and `claim_turn_in` must report
+    False rather than let it propagate."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    rival_engine = create_engine(f"sqlite:///{db}")
+
+    def _rival_claims_first(session, flush_context, instances) -> None:
+        with SqlSession(rival_engine) as rival_session:
+            rival_session.add(TurnInClaim(
+                item_code="lich_race_trophy", character="R2D2",
+                claimed_at=_T0.isoformat(),
+                expires_at=(_T0 + timedelta(seconds=DEMAND_TTL_SECONDS)).isoformat(),
+            ))
+            rival_session.commit()
+
+    event.listen(SqlSession, "before_flush", _rival_claims_first, once=True)
+    try:
+        assert hal.claim_turn_in("lich_race_trophy", _T0) is False
+        assert hal.turn_in_holder("lich_race_trophy", _T0) == "R2D2"
+    finally:
+        if event.contains(SqlSession, "before_flush", _rival_claims_first):
+            event.remove(SqlSession, "before_flush", _rival_claims_first)
+        rival_engine.dispose()
+        hal.close()
+
+
+def test_claim_turn_in_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.claim_turn_in("lich_race_trophy", _NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_claim_turn_in_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="offset"):
+            hal.claim_turn_in("lich_race_trophy", _NON_UTC_NOW)
+    finally:
+        hal.close()
+
+
+def test_turn_in_holder_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.turn_in_holder("lich_race_trophy", _NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_turn_in_holder_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="offset"):
+            hal.turn_in_holder("lich_race_trophy", _NON_UTC_NOW)
+    finally:
+        hal.close()
+
+
+def test_turn_in_claim_roundtrip(engine) -> None:
+    with SqlSession(engine) as s:
+        s.add(TurnInClaim(item_code="lich_race_trophy", character="HAL",
+                          claimed_at="2026-08-16T12:00:00+00:00",
+                          expires_at="2026-08-16T12:10:00+00:00"))
+        s.commit()
+    with SqlSession(engine) as s:
+        row = s.exec(select(TurnInClaim)).one()
+        assert (row.item_code, row.character) == ("lich_race_trophy", "HAL")
+
+
+def test_turn_in_claim_minimal_construction() -> None:
+    """Direct construction with all required fields, no persistence."""
+    claim = TurnInClaim(
+        item_code="lich_race_trophy",
+        character="HAL",
+        claimed_at="2026-08-16T12:00:00+00:00",
+        expires_at="2026-08-16T12:10:00+00:00",
+    )
+    assert claim.id is None
+    assert claim.item_code == "lich_race_trophy"
+    assert claim.character == "HAL"
+
+
+def test_the_same_item_cannot_be_claimed_by_two_characters(engine) -> None:
+    """The uniqueness is on `item_code` ALONE, not `(character, item_code)` —
+    that is what makes the claim exclusive ACROSS characters rather than
+    merely deduplicating one character's own rows."""
+    with SqlSession(engine) as s:
+        s.add(TurnInClaim(item_code="lich_race_trophy", character="HAL",
+                          claimed_at="t", expires_at="t"))
+        s.add(TurnInClaim(item_code="lich_race_trophy", character="R2D2",
+                          claimed_at="t", expires_at="t"))
         with pytest.raises(IntegrityError):
             s.commit()
