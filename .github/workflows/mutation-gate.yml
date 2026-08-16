@@ -25,7 +25,13 @@ on:
 jobs:
   mutate:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Raised from 60 when the oracle build landed above. The old runs finished in
+    # ~40 min while 127 of the 221 groups were failing instantly on a missing
+    # oracle; now those groups actually execute their diff tests once per mutant,
+    # and a cold Lean cache adds a build on top. A local full sweep of all 221
+    # groups (6 workers) is the calibration point, and 60 min no longer has the
+    # headroom.
+    timeout-minutes: 120
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       # mutate.py runs die to runner OOM (peak ~22GB locally vs 16GB runner);
@@ -34,6 +40,26 @@ jobs:
       PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v6
+      # THE ORACLE MUST BE BUILT HERE. 127 of the 221 run_groups bind a
+      # formal/diff/test_*_diff.py, and without the oracle binary every one of
+      # those files fails at import-time-ish with `RuntimeError: oracle not
+      # built` -- for the unmutated code and for every mutant alike. A test file
+      # that fails unconditionally KILLS every mutant bound to it, so more than
+      # half the gate was reporting vacuous kills and enforcing nothing. Found
+      # 2026-08-15: `cheapest_path: freeze the rung body` survived a local sweep
+      # while CI, three runs in a row, reported a survivor set that did not
+      # include it. Same elan + cache + build sequence formal-gate.yml uses.
+      - name: Install elan (Lean)
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Cache Lean .lake
+        uses: actions/cache@v5
+        with:
+          path: formal/.lake
+          key: lake-${{ runner.os }}-${{ hashFiles('formal/lakefile.toml', 'formal/lean-toolchain', 'formal/lake-manifest.json') }}
+          restore-keys: |
+            lake-${{ runner.os }}-
       - name: Install uv
         uses: astral-sh/setup-uv@v8.2.0
       - name: Generate artifactsmmo-api-client
@@ -43,6 +69,17 @@ jobs:
           bash generate_openapi_client.sh
       - name: Sync deps
         run: uv sync --dev
+      - name: Mathlib cache prefetch
+        run: cd formal && lake exe cache get 2>&1 | tail -3 || echo "cache get skipped"
+      - name: Build the differential oracle
+        run: cd formal && lake build oracle
+      # Fail fast and LOUDLY if the oracle is still missing: a silent absence is
+      # what produced ten days of vacuous kills, so never let the sweep start
+      # without it again.
+      - name: Oracle must exist before the sweep
+        run: |
+          test -x formal/.lake/build/bin/oracle \
+            || { echo "::error::oracle binary missing — every diff-bound group would report a vacuous kill"; exit 1; }
       - name: Snapshot src/ baseline
         run: |
           git diff --quiet src/ || (echo "src/ dirty before mutation run — aborting" && exit 1)
