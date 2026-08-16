@@ -20,6 +20,7 @@ Clearing both here makes the suite env-independent, so the runner and a direct
 pytest invocation agree.
 """
 
+import asyncio
 import os
 import tempfile
 from pathlib import Path
@@ -34,6 +35,51 @@ import pytest
 # because Rich treats an empty-but-present FORCE_COLOR as still set.
 for _colour_var in ("FORCE_COLOR", "NO_COLOR"):
     os.environ.pop(_colour_var, None)
+
+
+_SESSION_LOOP = asyncio.new_event_loop()
+asyncio.set_event_loop(_SESSION_LOOP)
+"""THE CURRENT EVENT LOOP, owned by the suite so nothing else has to invent one.
+
+Without this the run fails INTERMITTENTLY, and never on the test at fault:
+
+    ResourceWarning: unclosed event loop <_UnixSelectorEventLoop running=False
+                                          closed=False debug=False>
+    ResourceWarning: unclosed <socket.socket fd=14, family=1, type=1, proto=0>
+
+`pytest-asyncio` wraps async fixture setup in `_temporary_event_loop_policy`,
+which first records the loop to restore afterwards:
+
+    plugin.py:623   old_loop = _get_event_loop_no_warn()
+    plugin.py:654   return asyncio.get_event_loop()
+    events.py:713   self.set_event_loop(self.new_event_loop())   # <-- creates one
+
+With no current loop set, `get_event_loop()` CREATES a loop merely to answer the
+question. That loop is never run and never closed; it and its AF_UNIX self-pipe
+pair (the two sockets above -- one loop, three warnings) are collected at an
+arbitrary later moment. `-W error` (pyproject.toml addopts) turns the collection
+into `PytestUnraisableExceptionWarning`, which pytest attributes to WHICHEVER
+TEST IS RUNNING when the collector fires. Observed victims include
+test_multi_run, test_verify_collusion, test_tui/test_app, test_learning_store and
+test_app_modal_rebind -- five unrelated modules, one cause, and the named test is
+never the culprit.
+
+Installing a loop here means `get_event_loop()` returns THIS one instead of
+minting a throwaway; `_temporary_event_loop_policy` restores it on exit, and
+`pytest_sessionfinish` closes it. Created at import time rather than in a fixture
+because the first async fixture setup can precede any autouse fixture of ours.
+"""
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Close the suite-owned loop, so it is not itself an unclosed-loop warning.
+
+    Runs once per process, which under `scripts/run_tests.sh` lane 1 means once
+    per xdist worker -- each worker imports this conftest and owns its own loop.
+    """
+    asyncio.set_event_loop(None)
+    if not _SESSION_LOOP.is_closed():
+        _SESSION_LOOP.close()
 
 
 @pytest.fixture(autouse=True, scope="session")
