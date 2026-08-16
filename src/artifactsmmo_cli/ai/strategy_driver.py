@@ -3,6 +3,7 @@ existing goal.
 
 Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle."""
 
+import time
 from dataclasses import replace
 from datetime import datetime, timezone
 
@@ -69,7 +70,7 @@ from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.obtain_sources import Source, obtain_source_map
-from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.raid_participation import raid_survivable_pure
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
@@ -992,10 +993,40 @@ class StrategyArbiter:
         # nothing branches on this flag any more — it rides `goals_tried` into
         # the trace so a reader can tell a dead end from a search blow-up.
         self._last_timed_out: bool = False
+        # Monotonic instant this cycle's cooldown expires — the window the whole
+        # walk may search inside, set by the player once per cycle. None on any
+        # cycle with no cooldown to spend (first cycle, an error cycle), which
+        # falls back to the planner's own default budget.
+        self._planning_deadline: float | None = None
 
     def set_cycle(self, cycle: int) -> None:
         """Player calls this each cycle so the memo's re-probe window advances."""
         self._cycle = cycle
+
+    def set_planning_deadline(self, deadline_monotonic: float | None) -> None:
+        """Player calls this each cycle with the cooldown's expiry instant.
+
+        The search now runs DURING the cooldown instead of after it, so the
+        cooldown is the cycle's free planning window: spending it costs the bot
+        nothing it was not already going to idle away."""
+        self._planning_deadline = deadline_monotonic
+
+    def _cycle_budget_seconds(self) -> float | None:
+        """The budget for one candidate's search: whatever is left of this
+        cycle's cooldown window, FLOORED at the planner's default budget.
+
+        A per-cycle deadline (rather than a per-call budget) is what keeps the
+        walk from overrunning the cooldown N times over for N candidates. The
+        floor is not a convenience: `_record_attempt` marks ANY no-plan doomed,
+        so an attempt squeezed into the tail of a 3s cooldown would shelve a
+        goal for a whole re-probe window on evidence no weaker search ever had
+        to produce before. Flooring at the default means no candidate is ever
+        judged on less search than it used to get.
+
+        None (no deadline) leaves `planner.plan` on its own default."""
+        if self._planning_deadline is None:
+            return None
+        return max(_SEARCH_BUDGET_SECONDS, self._planning_deadline - time.monotonic())
 
     def _plans(
         self,
@@ -1678,8 +1709,11 @@ class StrategyArbiter:
         def try_plan(goal: Goal) -> list[Action]:
             if _skip(goal):
                 return []
-            # None = the one budget (`planner._SEARCH_BUDGET_SECONDS`).
-            plan = self._plans(goal, state, game_data, actions, ctx, None)
+            # The cooldown window, floored at the one budget
+            # (`planner._SEARCH_BUDGET_SECONDS`) — None when there is no
+            # cooldown to spend. See `_cycle_budget_seconds`.
+            plan = self._plans(goal, state, game_data, actions, ctx,
+                               self._cycle_budget_seconds())
             return self._record_attempt(goal, plan, self._last_timed_out, state,
                                         memo_bypass)
 

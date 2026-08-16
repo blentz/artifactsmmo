@@ -238,9 +238,13 @@ class TestPlayerRun:
         player._suppressed_goals["Wait"] = 999
         client = MagicMock()
 
+        # The loop is stopped from the TOP-of-iteration hook, not from
+        # _wait_for_cooldown: a no-plan cycle never reaches the wait (planning
+        # now runs inside the cooldown, and the no-plan branch `continue`s
+        # before the sleep).
         call_count = [0]
 
-        def fake_wait():
+        def fake_tick(client):
             call_count[0] += 1
             if call_count[0] > 1:
                 raise KeyboardInterrupt
@@ -252,8 +256,9 @@ class TestPlayerRun:
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
-                        with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                            with patch.object(player, "_maybe_periodic_refresh"), \
+                        with patch.object(player, "_wait_for_cooldown"):
+                            with patch.object(player, "_maybe_periodic_refresh",
+                                              side_effect=fake_tick), \
                                     patch.object(player, "_reconcile_open_orders"):
                                 with patch.object(player, "_build_actions", return_value=[]):
                                     with patch("artifactsmmo_cli.ai.player.time.sleep") as mock_sleep:
@@ -270,9 +275,11 @@ class TestPlayerRun:
         player._suppressed_goals["Wait"] = 999
         client = MagicMock()
 
+        # Stopped from the top-of-iteration hook — a no-plan cycle never
+        # reaches _wait_for_cooldown.
         call_count = [0]
 
-        def fake_wait():
+        def fake_tick(client):
             call_count[0] += 1
             if call_count[0] > 1:
                 raise KeyboardInterrupt
@@ -283,8 +290,9 @@ class TestPlayerRun:
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
                 with _patch_game_data_load():
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
-                        with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                            with patch.object(player, "_maybe_periodic_refresh"), \
+                        with patch.object(player, "_wait_for_cooldown"):
+                            with patch.object(player, "_maybe_periodic_refresh",
+                                              side_effect=fake_tick), \
                                     patch.object(player, "_reconcile_open_orders"):
                                 with patch.object(player, "_build_actions", return_value=[]):
                                     with patch("artifactsmmo_cli.ai.player.time.sleep"):
@@ -433,9 +441,11 @@ def test_run_calls_handle_stuck_in_no_plan_path():
             succeeded=False,
         ))
 
+    # Stopped from the top-of-iteration hook — a no-plan cycle never reaches
+    # _wait_for_cooldown.
     call_count = [0]
 
-    def fake_wait():
+    def fake_tick(client):
         call_count[0] += 1
         if call_count[0] > 1:
             raise KeyboardInterrupt
@@ -445,8 +455,9 @@ def test_run_calls_handle_stuck_in_no_plan_path():
         with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=initial_state):
-                    with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                        with patch.object(player, "_maybe_periodic_refresh"), \
+                    with patch.object(player, "_wait_for_cooldown"):
+                        with patch.object(player, "_maybe_periodic_refresh",
+                                          side_effect=fake_tick), \
                                 patch.object(player, "_reconcile_open_orders"):
                             # Empty action list → no plan possible → no-plan path
                             with patch.object(player, "_build_actions", return_value=[]):
@@ -946,7 +957,7 @@ def test_run_holds_plan_cursor_through_a_batched_gather():
     snapshots: list[tuple[int | None, int | None]] = []
     call_count = [0]
 
-    def fake_wait():
+    def fake_tick(client):
         call_count[0] += 1
         cache = player._plan_cache
         snapshots.append((cache.cursor if cache else None,
@@ -958,8 +969,9 @@ def test_run_holds_plan_cursor_through_a_batched_gather():
         with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
             with _patch_game_data_load():
                 with patch.object(player, "_fetch_world_state", return_value=initial_state):
-                    with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                        with patch.object(player, "_maybe_periodic_refresh"), \
+                    with patch.object(player, "_wait_for_cooldown"):
+                        with patch.object(player, "_maybe_periodic_refresh",
+                                          side_effect=fake_tick), \
                                 patch.object(player, "_reconcile_open_orders"):
                             with patch.object(player, "_build_actions", return_value=[gather]):
                                 with patch.object(player, "_winnable_farm_target", return_value=None):

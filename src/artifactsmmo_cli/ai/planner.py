@@ -12,7 +12,16 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _SEARCH_BUDGET_SECONDS = 15.0
-"""A* wall-clock budget — ONE budget for every goal.
+"""A* wall-clock budget — the FLOOR under every goal's search.
+
+The live loop now plans DURING the cooldown rather than after it
+(`player.run` → `StrategyArbiter.set_planning_deadline` →
+`_cycle_budget_seconds`), so a cycle's real budget is the cooldown window and
+this constant is what that window is floored at: a 40s craft cooldown funds a
+40s search the bot would have idled through anyway, while a 3s cooldown still
+gets the full 15s here. It remains the outright budget wherever no deadline is
+set — offline harnesses, audits, the LevelSkill sub-plan, and any live cycle
+with no cooldown left to spend.
 
 Was 300s behind a 10s "cheap" first pass. That two-pass scheme is deleted: its
 escalation ran only when NOTHING planned, and a fallback combat grind always
@@ -163,8 +172,9 @@ class GOAPPlanner:
         """Return the lowest-cost action plan to satisfy `goal` from `state`, or [] if none found.
 
         ``budget_seconds`` overrides the module-level ``_SEARCH_BUDGET_SECONDS`` for this
-        call only.  Pass ``None`` (the default) to use the one 15s budget — which is
-        what the arbiter passes for every candidate, guards included.
+        call only.  The arbiter passes the remaining cooldown window floored at that
+        constant for every candidate, guards included; ``None`` (the default) falls
+        back to the constant outright.
         ``max_nodes`` likewise overrides ``_MAX_SEARCH_NODES`` (the memory bound).
         """
         max_depth = goal.max_depth

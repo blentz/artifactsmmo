@@ -1035,7 +1035,6 @@ class GamePlayer:
                 # always sees the authoritative fill/aging state.
                 self._reconcile_open_orders(client)
                 actions = self._build_actions()
-                self._wait_for_cooldown()
 
                 assert self.state is not None
                 assert self.game_data is not None
@@ -1057,6 +1056,9 @@ class GamePlayer:
                 # per-IP rate budget that actually binds this bot.
                 self._update_coordination(state, game_data)
                 self._arbiter.set_cycle(self._cycle_counter)
+                # The cooldown is not yet slept out at this point — it is the
+                # window the search below runs inside.
+                self._arbiter.set_planning_deadline(self._planning_deadline())
 
                 assert self._strategy is not None
                 combat_monster = self._winnable_farm_target()
@@ -1154,6 +1156,12 @@ class GamePlayer:
 
                 action = plan[0]
                 self._log_action(action, selected_goal, plan)
+
+                # Sleep out whatever the search did not already spend of the
+                # cooldown. This used to run before planning, which made every
+                # replan cycle cost `cooldown + search` and left the cooldown
+                # pure idle time.
+                self._wait_for_cooldown()
 
                 prev_state_for_learning = self.state
                 if self.dry_run:
@@ -1963,8 +1971,28 @@ class GamePlayer:
         self._open_orders = result.open_orders
         self.state = replace(self.state, open_orders=result.open_orders)
 
+    def _planning_deadline(self) -> float | None:
+        """The monotonic instant this cycle's cooldown expires, or None when
+        there is no cooldown left to plan inside.
+
+        The loop searches BEFORE it sleeps (see `run`), so the cooldown is a
+        free planning window: a 40s craft cooldown funds a 40s search that the
+        bot would otherwise have idled through. None on a cycle with no
+        cooldown (the first cycle, an error cycle, an already-expired one),
+        which leaves the arbiter on the planner's default budget."""
+        if self.state is None or self.state.cooldown_expires is None:
+            return None
+        remaining = (self.state.cooldown_expires
+                     - datetime.now(tz=timezone.utc)).total_seconds()
+        if remaining <= 0:
+            return None
+        return time.monotonic() + remaining
+
     def _wait_for_cooldown(self) -> None:
-        """Sleep until the character's cooldown expires."""
+        """Sleep until the character's cooldown expires.
+
+        Called AFTER planning, so what it sleeps out is only the part of the
+        cooldown the search did not already spend."""
         if self.state is None or self.state.cooldown_expires is None:
             return
         now = datetime.now(tz=timezone.utc)

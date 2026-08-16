@@ -99,7 +99,10 @@ def test_advance_with_history_persists_cursor(tmp_path):
     initial_state = make_state(hp=20, max_hp=150)
     call_count = [0]
 
-    def fake_wait():
+    def fake_tick(client):
+        # Top-of-iteration hook: the loop now plans INSIDE the cooldown, so
+        # _wait_for_cooldown lands between planning and execution and is no
+        # longer a per-cycle boundary.
         call_count[0] += 1
         if call_count[0] > 1:
             raise KeyboardInterrupt
@@ -134,8 +137,8 @@ def test_advance_with_history_persists_cursor(tmp_path):
         patch("artifactsmmo_cli.ai.game_data.get_account_details", return_value=None),
         patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache),
         patch.object(player, "_fetch_world_state", return_value=initial_state),
-        patch.object(player, "_wait_for_cooldown", side_effect=fake_wait),
-        patch.object(player, "_maybe_periodic_refresh"),
+        patch.object(player, "_wait_for_cooldown"),
+        patch.object(player, "_maybe_periodic_refresh", side_effect=fake_tick),
         patch.object(player, "_reconcile_open_orders"),
         patch.object(player, "_build_actions", return_value=[rest]),
         pytest.raises(KeyboardInterrupt),
