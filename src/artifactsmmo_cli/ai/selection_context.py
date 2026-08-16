@@ -9,10 +9,14 @@ guards` a cycle the moment deposit started asking the keep authority how many
 copies it may bank. `tiers.guards` re-exports the name, so every existing
 `from artifactsmmo_cli.ai.tiers.guards import SelectionContext` still resolves.
 
-Pure data: no behavior, so this module imports nothing from the package.
+Pure data: no behavior, so this module imports nothing else from the package —
+the one exception is `TurnIn` below, a leaf pure-data class (`ai.currency_turnin`
+imports only stdlib) that carries no cycle risk of its own.
 """
 
 from dataclasses import dataclass, field
+
+from artifactsmmo_cli.ai.currency_turnin import TurnIn
 
 
 @dataclass(frozen=True)
@@ -127,6 +131,24 @@ class SelectionContext:
     # A SET, not a mapping: the only question asked of it is membership. There
     # is no quantity to net out — a cancel either happens or it does not.
     sibling_order_claims: frozenset[str] = field(default_factory=frozenset)
+    # This cycle's resolved fleet dual-role-currency purchase, or None —
+    # `CoordinationStore.publish_holdings`/`sibling_holdings` (Task 2) let
+    # every character see the SAME fleet total cross a vendor's price on the
+    # SAME cycle, `GamePlayer._resolve_turn_in` (Task 5) is what decides
+    # whether that crossing is real for THIS character (its own loadout and
+    # level, `ai.currency_turnin`'s pure rules) and which one character wins
+    # the exclusive `claim_turn_in` election. Set on every character that
+    # independently qualifies as a candidate buyer — the winner (`buyer ==
+    # self.character`) and any loser (`buyer` names the incumbent) alike;
+    # None for a character with no qualifying candidate of its own, which is
+    # every single-character run and every cycle nothing is affordable.
+    turn_in: TurnIn | None = None
+    # (currency_code, units this character should surrender to the turn-in
+    # buyer) this cycle, or None. Populated only on a NON-buyer that itself
+    # qualified as a candidate buyer but lost the `claim_turn_in` election —
+    # never on the buyer (nothing to surrender to itself) and never when
+    # `turn_in` is None. Same per-cycle lifecycle as `turn_in`.
+    recall: tuple[str, int] | None = None
 
 
 NO_PROFILE_CONTEXT = SelectionContext(

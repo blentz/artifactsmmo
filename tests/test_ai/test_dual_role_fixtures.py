@@ -12,7 +12,14 @@ def medal_game_data() -> GameData:
     gd = GameData()
     gd._item_stats = {
         "lich_race_medal": ItemStats(code="lich_race_medal", level=10, type_="artifact"),
-        "lich_race_trophy": ItemStats(code="lich_race_trophy", level=20, type_="artifact"),
+        # hp_bonus=1 (not 0): Task 5's upgrade gate (`_resolve_turn_in` rule
+        # 3) checks pick_loadout would actually WEAR the item — an
+        # all-zero-stat artifact scores 0 benefit and the picker never fills
+        # an empty slot with a zero-benefit candidate (`loadout_picker`'s
+        # empty-slot gate), so a real reward artifact needs a genuine,
+        # if minimal, stat to be a legitimate upgrade candidate in tests.
+        "lich_race_trophy": ItemStats(code="lich_race_trophy", level=20, type_="artifact",
+                                      hp_bonus=1),
         "novice_guide": ItemStats(code="novice_guide", level=10, type_="artifact"),
         "event_ticket": ItemStats(code="event_ticket", level=1, type_="currency"),
     }

@@ -53,6 +53,7 @@ from artifactsmmo_cli.ai.constants import (
     STUCK_DETECTOR_WINDOW,
 )
 from artifactsmmo_cli.ai.consumable_supply import consumable_craft_quantity
+from artifactsmmo_cli.ai.currency_turnin import TurnIn, fleet_total_pure, recall_shortfall_pure, turn_in_ready_pure
 from artifactsmmo_cli.ai.cycle_snapshot import (
     CycleSnapshot,
     GoalAttempt,
@@ -62,12 +63,13 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
     RoleChange,
     RootScoreView,
 )
+from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_latch import GearLatch
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
+from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
 from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -415,6 +417,23 @@ class GamePlayer:
         # field's docstring for why the log pane is told about the transition
         # instead of diffing consecutive snapshots itself.
         self._role_change: RoleChange | None = None
+        # This cycle's resolved fleet dual-role-currency turn-in, or None —
+        # threaded into `_selection_context`'s `turn_in` field. Set by
+        # `_resolve_turn_in` (called from `_update_coordination`) whenever
+        # THIS character independently qualifies as a candidate buyer (rules
+        # 3 & 4) for the fleet's highest-price affordable purchase, whether it
+        # wins the exclusive claim (buyer=self.character) or a sibling already
+        # holds it (buyer=that sibling). None without a coordination store
+        # (every single-character run) and for any character that never finds
+        # a qualifying candidate of its own.
+        self._turn_in: TurnIn | None = None
+        # (currency_code, units this character should surrender to the turn-in
+        # buyer) this cycle, or None — threaded into `_selection_context`'s
+        # `recall` field. Only ever set on a NON-buyer that itself qualified as
+        # a candidate buyer but lost the claim race; None for the buyer
+        # (nothing to surrender to itself) and for every character `_turn_in`
+        # leaves at None. Same per-cycle lifecycle as `_turn_in`.
+        self._recall: tuple[str, int] | None = None
 
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
@@ -2948,9 +2967,17 @@ class GamePlayer:
             self._sibling_bank_claims = {}
             self._sibling_order_claims = frozenset()
             self._role_change = None
+            self._turn_in = None
+            self._recall = None
             return
         role_before = self._role
         now = datetime.now(tz=timezone.utc)
+        # Snapshot of what this character wears + carries in dual-role codes
+        # (worn artifact slots double as currency, see `dual_role_currency`),
+        # so every sibling's `sibling_holdings` read sees THIS cycle's total
+        # rather than a stale one. Costs nothing extra: same local SQLite
+        # write path as `publish_demand` just above/below.
+        self._coordination.publish_holdings(dual_role_holdings(state, game_data), now)
         # Bank stock a sibling has already committed to withdrawing. Read here
         # with the rest of the coordination block (one SQLite query, no API
         # call) so the shed licence this cycle derives is netted against it —
@@ -3058,6 +3085,107 @@ class GamePlayer:
 
         self._supply_target = self._pick_supply_target(item_demand, skill_of_item, state,
                                                        level_of_item)
+        self._resolve_turn_in(state, game_data)
+
+    def _resolve_turn_in(self, state: "WorldState", game_data: GameData) -> None:
+        """Resolve, once per cycle, whether the fleet's dual-role currency can
+        afford a turn-in purchase, and elect exactly one buyer.
+
+        No-op (both fields None) without a coordination store — the
+        single-character path this whole mechanism must stay free on (see
+        `set_coordination_store`'s docstring). Also self-contained: unlike
+        `_update_coordination`, this does not depend on the publish-holdings
+        line running first — it recomputes this character's own holdings
+        straight from `state`, which is what lets the test suite call it in
+        isolation.
+
+        RULES (task-5-brief.md, checkable in order):
+        1. For each dual-role code the fleet holds (this character's or a
+           sibling's), every `currency_sinks(code)` row is a candidate.
+        2. Ready iff `turn_in_ready_pure(fleet_total, price)` — the fleet can
+           pay the vendor's price outright.
+        3. Buying must be an upgrade for THIS character:
+           `pick_loadout_cached(Rank(), state_holding_the_item, game_data)`
+           must place the candidate's `item_code` in a slot. A character whose
+           loadout would not wear it never nominates itself as buyer for it —
+           this is also why a character that fails this (or rule 4) sees
+           neither `_turn_in` nor `_recall` change: it has no candidate of its
+           own to check `claim_turn_in`/`turn_in_holder` against.
+        4. The buyer must satisfy `item_stats(item_code).level <= state.level`
+           — a character that cannot wear the item must not win the claim.
+        5. Exactly one candidate is pursued: the highest `price`, since a
+           bigger sink consumes stock a smaller one would only fragment.
+
+        Once this character has a qualifying candidate, `claim_turn_in`
+        resolves who actually buys it — a live incumbent (this cycle or a
+        prior one, TTL-renewed) blocks every other claimant. The winner sets
+        `_turn_in` with itself as buyer and no recall. Every OTHER character
+        that independently qualified for the SAME candidate sets `_turn_in`
+        with the incumbent as buyer, and — since it is not the buyer —
+        computes `_recall`: how much of the currency IT must surrender.
+
+        `_recall`'s shortfall is computed from what the buyer can reach
+        WITHOUT this character's help (`siblings` — which, from this
+        character's own vantage point, includes the buyer — plus the bank),
+        not from this character's own holdings; `recall_shortfall_pure`'s
+        `buyer_held` parameter is generic ("holdings reachable without
+        coordination") and reusing it this way is what makes the two callers
+        (a real buyer sizing its own ask, and a sibling sizing its own
+        contribution) the SAME function. Capping the result at this
+        character's own holdings (`min`) is required algebra, not a
+        coincidence: fleet-total readiness (rule 2) guarantees this
+        character's own holdings are never less than what closes the gap the
+        rest of the fleet leaves open, so the cap is a defensive invariant,
+        never the binding term, whenever the fleet is actually ready."""
+        self._turn_in = None
+        self._recall = None
+        if self._coordination is None:
+            return
+        now = datetime.now(tz=timezone.utc)
+        own = dual_role_holdings(state, game_data)
+        siblings = self._coordination.sibling_holdings(now)
+        bank = state.bank_items or {}
+        codes = sorted(set(own) | set(siblings))
+        candidates: list[TurnIn] = []
+        for code in codes:
+            fleet_total = fleet_total_pure(own, siblings, bank, code)
+            for item_code, npc_code, price in game_data.currency_sinks(code):
+                if not turn_in_ready_pure(fleet_total, price):  # rule 2
+                    continue
+                stats = game_data.item_stats(item_code)
+                if stats is None or stats.level > state.level:  # rule 4
+                    continue
+                state_holding_the_item = replace(
+                    state,
+                    inventory={**state.inventory,
+                              item_code: state.inventory.get(item_code, 0) + 1},
+                )
+                loadout = pick_loadout_cached(Rank(), state_holding_the_item, game_data)
+                if item_code not in loadout.values():  # rule 3
+                    continue
+                candidates.append(TurnIn(item_code=item_code, npc_code=npc_code,
+                                         price=price, currency=code,
+                                         buyer=self.character, fleet_total=fleet_total))
+        if not candidates:
+            return
+        chosen = max(candidates, key=lambda c: c.price)  # rule 5
+        if self._coordination.claim_turn_in(chosen.item_code, now):
+            self._turn_in = chosen
+            return
+        holder = self._coordination.turn_in_holder(chosen.item_code, now)
+        if holder is None:
+            # The claim attempt failed for a reason OTHER than a live
+            # incumbent (see `claim_turn_in`'s docstring: an IntegrityError
+            # race, or a swallowed SQLAlchemyError) — nobody actually holds
+            # the election, so there is nothing to report as a turn-in this
+            # cycle and nothing to recall toward.
+            return
+        self._turn_in = replace(chosen, buyer=holder)
+        shortfall = recall_shortfall_pure(
+            chosen.price, siblings.get(chosen.currency, 0), bank.get(chosen.currency, 0))
+        surrender = min(own.get(chosen.currency, 0), shortfall)
+        if surrender > 0:
+            self._recall = (chosen.currency, surrender)
 
     def _selection_context(self, combat_monster: str | None = None) -> SelectionContext:
         assert self.state is not None
@@ -3117,6 +3245,12 @@ class GamePlayer:
             # available quantity so five children stop racing for one pile.
             sibling_bank_claims=self._sibling_bank_claims,
             sibling_order_claims=self._sibling_order_claims,
+            # This cycle's resolved fleet turn-in / recall ask, same source
+            # and lifecycle as `supply_target`: set by `_resolve_turn_in`
+            # (called from `_update_coordination`), None on every
+            # single-character run.
+            turn_in=self._turn_in,
+            recall=self._recall,
         )
 
     def _role_owned_skills(self) -> frozenset[str]:
