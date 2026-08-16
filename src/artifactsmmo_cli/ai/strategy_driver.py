@@ -1051,6 +1051,18 @@ class StrategyArbiter:
         # downstream cannot recover it. The trace's `goal_rank` used to emit a
         # hardcoded 0.0 here, and both TUI consumers filter on `priority > 0`,
         # so that panel rendered empty on every cycle ever traced.
+        # Wall clock for THIS attempt, reported as `elapsed_ms` on every
+        # `goals_tried` entry. Nodes alone cannot answer how much of the budget
+        # a search actually spent — per-node cost swings ~25x with holdings
+        # (see `planner._SEARCH_BUDGET_SECONDS`), so a node count converts to no
+        # particular number of seconds. Started before the gates and the source
+        # map, not just around `planner.plan`, because the budget the arbiter
+        # hands out covers the whole attempt.
+        started = time.monotonic()
+
+        def _elapsed_ms() -> float:
+            return round((time.monotonic() - started) * 1000, 1)
+
         priority = goal.priority(state, game_data, self._history)
         if isinstance(goal, WaitGoal):
             wait_plan: list[Action] = [WaitAction()]
@@ -1062,6 +1074,7 @@ class StrategyArbiter:
                 "timed_out": False,
                 "plan_len": 1,
                 "priority": priority,
+                "elapsed_ms": _elapsed_ms(),
             })
             return wait_plan
         # Pre-plan reachability gate: a goal whose minimum plan is longer than
@@ -1100,6 +1113,7 @@ class StrategyArbiter:
                 "timed_out": False,
                 "plan_len": 0,
                 "priority": priority,
+                "elapsed_ms": _elapsed_ms(),
             })
             return []
         # Fast-path: for a deterministic gather-craft closure (all leaves are
@@ -1126,6 +1140,7 @@ class StrategyArbiter:
                 "timed_out": False,
                 "plan_len": len(gen),
                 "priority": priority,
+                "elapsed_ms": _elapsed_ms(),
             })
             return gen
         plan = self._planner.plan(state, goal, actions, game_data, self._history,
@@ -1149,6 +1164,7 @@ class StrategyArbiter:
             "node_capped": stats.node_capped,
             "plan_len": len(plan),
             "priority": priority,
+            "elapsed_ms": _elapsed_ms(),
         })
         return plan
 
@@ -1735,9 +1751,13 @@ class StrategyArbiter:
                 try_plan=try_plan, is_satisfied=satisfied,
                 is_suppressed=_is_suppressed_base)
             if chosen is not None:
+                # A MARKER, not an attempt — the plan it reports was produced by
+                # the re-run walk's own entries. `elapsed_ms` is 0.0 so summing
+                # the column over a cycle still yields the search time and
+                # nothing else.
                 self.goals_tried.append({"goal": "worth_gate_bypassed", "nodes": 0,
                                          "depth": 0, "timed_out": False,
-                                         "plan_len": len(plan)})
+                                         "plan_len": len(plan), "elapsed_ms": 0.0})
         if chosen is None:
             # Last resort: Wait (special-cased to a single WaitAction).
             wait = next((c for c in candidates if isinstance(c.goal, WaitGoal)), None)

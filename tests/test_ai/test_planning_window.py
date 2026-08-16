@@ -67,6 +67,49 @@ class TestCycleBudget:
         assert _budgets_for(time.monotonic() - 5.0) == [_SEARCH_BUDGET_SECONDS]
 
 
+class TestAttemptElapsed:
+    """Every `goals_tried` entry carries the wall clock its attempt spent.
+
+    Without it the trace shows how many NODES a search reached but never how
+    long it ran, so budget CONSUMPTION is unobservable: a 6h five-character
+    trace could not answer whether the extended cooldown window was being spent
+    or whether every search still finished inside the old 15s."""
+
+    def _walk(self, planner):
+        arbiter = _arbiter_with(planner)
+        arbiter.select(_FakeDecision(chosen_step=None),
+                       make_state(task_code=None, task_total=0),
+                       _make_planner_gd(),
+                       [AcceptTaskAction(taskmaster_location=(2, 1))],
+                       _ctx(combat_monster="chicken"))
+        return arbiter.goals_tried
+
+    def test_every_attempt_records_its_elapsed_time(self):
+        tried = self._walk(_ScriptedPlanner(plannable={"AcceptTask"}))
+        assert tried
+        for entry in tried:
+            assert "elapsed_ms" in entry, entry
+            assert isinstance(entry["elapsed_ms"], float)
+            assert entry["elapsed_ms"] >= 0.0
+
+    def test_a_slow_search_is_visible_in_its_own_entry(self):
+        """The number must track the attempt that produced it, not the cycle:
+        a 60ms search reads as ~60ms, while the attempts around it stay small."""
+        class _SlowPlanner(_ScriptedPlanner):
+            def plan(self, state, goal, actions, game_data, history=None, *,
+                     budget_seconds=None):
+                if repr(goal) == "AcceptTask":
+                    time.sleep(0.06)
+                return super().plan(state, goal, actions, game_data, history,
+                                    budget_seconds=budget_seconds)
+
+        tried = self._walk(_SlowPlanner(plannable={"AcceptTask"}))
+        slow = [e for e in tried if e["goal"] == "AcceptTask"]
+        assert slow, tried
+        assert all(e["elapsed_ms"] >= 60.0 for e in slow), slow
+        assert all(e["elapsed_ms"] < 60.0 for e in tried if e["goal"] != "AcceptTask")
+
+
 class TestPlanningDeadline:
     def test_none_when_no_cooldown_is_recorded(self):
         player = GamePlayer(character="hero")
