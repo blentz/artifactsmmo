@@ -1227,7 +1227,12 @@ def test_a_sub_threshold_coordinated_demand_is_targeted_but_never_fires(tmp_path
     """End-to-end read-back of the 2026-08-01 gate: coordination still computes
     a supply target for a small sibling request (the board is unchanged), but
     `_fires` declines it, so the character keeps working its own objective
-    instead of pausing for a handful of units the sibling can gather itself."""
+    instead of pausing for a handful of units the sibling can gather itself.
+
+    `self_servable={"copper_ore"}` on the publish is the point of this fixture
+    (Task 4): the sibling CAN mine copper_ore itself, so this demand is
+    symmetric and must NOT trip the asymmetry arm `_fires` added — only the
+    bulk-threshold arm applies here, and it declines a sub-threshold request."""
     db = str(tmp_path / "coord.db")
     gd = _make_planner_gd()
     gd._item_stats = {}
@@ -1242,7 +1247,8 @@ def test_a_sub_threshold_coordinated_demand_is_targeted_but_never_fires(tmp_path
     p.set_coordination_store(store)
     now = datetime.now(tz=timezone.utc)
     try:
-        sibling.publish_demand({"copper_ore": SUPPLY_DEMAND_MIN - 1}, frozenset(), now)
+        sibling.publish_demand({"copper_ore": SUPPLY_DEMAND_MIN - 1},
+                               frozenset({"copper_ore"}), now)
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = 3
@@ -1773,6 +1779,33 @@ def test_a_character_that_can_make_its_own_material_says_so(tmp_path):
     assert rows["copper_ore"] is True
 
 
+def test_a_material_with_no_producing_skill_at_all_is_not_self_servable(tmp_path):
+    """A vendor-only good like `lich_race_trophy` has NO producing skill —
+    `game_data.producing_requirement` returns None — so `serves_item`'s
+    permissive "unknown requirement defaults to servable" rule never even
+    gets asked: there is no skill here to ask it of. Catches deleting the
+    `skill is not None` guard in `_update_coordination` (falling straight
+    through to `serves_item(code, None, ...)`, which would need its own
+    None-skill handling and, absent that, mis-defaults to True via the same
+    permissive rule)."""
+    player, store = _player_with_coordination(tmp_path, "Lor")
+    gd = player.game_data
+    gd._item_stats = {**gd._item_stats,
+                      "mystic_ward": ItemStats(code="mystic_ward", level=1,
+                                               type_="weapon",
+                                               crafting_skill="weaponcrafting",
+                                               crafting_level=1)}
+    gd._crafting_recipes = {"mystic_ward": {"unobtainium": 1}}
+    player.state = make_state(skills={"weaponcrafting": 1})
+    player._last_decide_crafting_target = "mystic_ward"
+
+    player._update_coordination(player.state, player.game_data)
+
+    with SqlSession(store._engine) as s:
+        rows = {r.item_code: r.self_servable for r in s.exec(select(MaterialDemand)).all()}
+    assert rows["unobtainium"] is False
+
+
 def test_the_asymmetric_set_reaches_the_selection_context(tmp_path):
     player, _ = _player_with_coordination(tmp_path, "R2D2")
     _publish_sibling_request(tmp_path, "Lor", {"greater_wooden_staff": 1}, self_servable=frozenset())
@@ -1784,7 +1817,15 @@ def test_the_asymmetric_set_reaches_the_selection_context(tmp_path):
 
 
 def test_no_coordination_store_leaves_the_asymmetric_set_empty():
+    """The single-character path: a stale set from a store that has since
+    been detached must not survive — the same "prove it gets CLEARED, not
+    left stale" pattern `test_update_coordination_clears_sibling_bank_claims_
+    without_a_store` uses for `_sibling_bank_claims`. Pre-seeding a non-empty
+    value is what makes this pin the reset at the top of `_update_coordination`
+    rather than merely restate the `__init__` default, which would pass
+    whether or not that reset exists."""
     player = GamePlayer(character="solo")
     player.state = make_state()
+    player._asymmetric_demand = frozenset({"stale_code"})  # prove it gets CLEARED
     player._update_coordination(player.state, player.game_data)
     assert player._asymmetric_demand == frozenset()
