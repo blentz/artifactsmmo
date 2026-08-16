@@ -10,10 +10,15 @@
                                                      DEPOSIT_FULL; GEAR_REVIEW
                                                      then CRAFT_POTIONS last
                                                      (lowest-priority guards)
-    ++ COLLECT_REWARD_ORDER (from `tiers/means.py`) -- SUPPLY_BANK LAST in this
-                                                     group (2026-08-01 ruling:
-                                                     promoted above the objective
-                                                     step, gated on demand)
+    ++ COLLECT_REWARD_ORDER (from `tiers/means.py`) -- SUPPLY_BANK then
+                                                     CURRENCY_TURNIN LAST in this
+                                                     group (2026-08-01 ruling
+                                                     promoted SUPPLY_BANK above the
+                                                     objective step, gated on
+                                                     demand; 2026-08-16 fleet-
+                                                     currency-turn-in epic added
+                                                     CURRENCY_TURNIN directly below
+                                                     it, no demand gate)
     ++ [OBJECTIVE_STEP]
     ++ DISCRETIONARY_ORDER (from `tiers/means.py`) -- incl MAINTAIN_CONSUMABLES
                                                      and WAIT
@@ -111,6 +116,28 @@ inductive MeansKind where
                         --                     (ProductionLadder) — the gate is what
                         --                     stops a fleet of siblings serving each
                         --                     other instead of levelling.
+  | currencyTurnIn      -- CURRENCY_TURNIN,    means.py (2026-08-16, fleet-currency-
+                        --                     turn-in epic Task 6): spend/surrender a
+                        --                     fleet-wide dual-role holding (worn AND
+                        --                     a vendor's payment currency, e.g.
+                        --                     `lich_race_medal`). Fires for BOTH the
+                        --                     elected buyer (`ctx.turn_in` set) and a
+                        --                     losing candidate asked to surrender
+                        --                     (`ctx.recall` set); `_resolve_turn_in`
+                        --                     sets at most one per cycle, and only for
+                        --                     a character that itself qualified.
+                        --                     LAST in COLLECT_REWARD_ORDER, directly
+                        --                     below `supplyBank`: same "above the
+                        --                     objective step" reasoning (a resolved
+                        --                     election must not rot behind whatever
+                        --                     gear `J` is chasing), placed after
+                        --                     supplyBank because both are open-ended
+                        --                     collect rungs and this one is the
+                        --                     NEWEST addition to the group. Unlike
+                        --                     supplyBank there is no demand-size gate
+                        --                     — `turn_in_ready_pure` already requires
+                        --                     the full vendor price be reachable
+                        --                     before `ctx.turn_in` is ever set.
   -- Objective step (StrategyArbiter inserts a single objective StepGoal here)
   | objectiveStep       -- OBJECTIVE_STEP
   -- Discretionary (DISCRETIONARY_ORDER, means.py:42)
@@ -144,12 +171,13 @@ def allInLadderOrder : List MeansKind :=
    .craftPotions,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
    .supplyBank,
+   .currencyTurnIn,
    .objectiveStep,
    .pursueTask, .acceptTask, .taskExchange, .maintainConsumables,
    .sellIdle, .recycleSurplus, .bankExpand, .geBid, .drainBankJunk,
    .wait]
 
-/-- Sanity: 30 rungs (one per constructor). -/
-example : allInLadderOrder.length = 30 := by decide
+/-- Sanity: 31 rungs (one per constructor). -/
+example : allInLadderOrder.length = 31 := by decide
 
 end Formal.Liveness.MeansKind

@@ -19,7 +19,7 @@
 
   ## Honest disclosure
 
-  Four `_fires` predicates depend on goal-internal or out-of-model logic the
+  Five `_fires` predicates depend on goal-internal or out-of-model logic the
   Lean model does not reproduce literally:
     - `objectiveStep`  (the StrategyArbiter's objective candidate)
     - `supplyBank`     (`ctx.supply_target`, computed from the cross-character
@@ -28,6 +28,12 @@
                        Bool, because since 2026-08-01 the rung is gated on that
                        demand clearing `SUPPLY_DEMAND_MIN`, not merely on a
                        target existing)
+    - `currencyTurnIn` (`ctx.turn_in`/`ctx.recall`, computed from the fleet
+                       coordination DB and the per-cycle election in
+                       `GamePlayer._resolve_turn_in` — outside this
+                       single-character model. Carried as the opaque Bool
+                       `currencyTurnInActive`; no threshold, since
+                       `turn_in_ready_pure` already gates `ctx.turn_in` itself)
     - `selectBankDepositsNonempty` used by `depositFull` (guards.py:85)
     - `sellableInventoryNonempty` used by `sellPressured`/`sellIdle`
       (means.py:54-58)
@@ -348,6 +354,17 @@ theorem SUPPLY_DEMAND_MIN_pos : SUPPLY_DEMAND_MIN > 0 := by decide
     honest-disclosure treatment `objectiveStep` gets. -/
 def supplyBankFires (s : State) : Bool := decide (s.supplyDemand ≥ SUPPLY_DEMAND_MIN)
 
+/-- CURRENCY_TURNIN (2026-08-16, fleet-currency-turn-in epic Task 6). Mirrors
+    `means.py::_fires(CURRENCY_TURNIN, …)` = `ctx.turn_in is not None or
+    ctx.recall is not None`: fires for BOTH sides of a resolved fleet election
+    — the elected buyer or a losing candidate asked to surrender. No demand
+    threshold (unlike `supplyBankFires`): `turn_in_ready_pure` already requires
+    the full vendor price be reachable before `ctx.turn_in` is ever set. The
+    flag is an opaque `State` field because it is computed from the
+    coordination DB / election logic this model does not reproduce — the same
+    honest-disclosure treatment `objectiveStep`/`supplyBank` get. -/
+def currencyTurnInFires (s : State) : Bool := s.currencyTurnInActive
+
 /-- WAIT. Mirrors `means.py:115-119`: the last-resort fallback fires
     unconditionally. Position-last in `allInLadderOrder` ensures every
     other means is tried first. -/
@@ -423,6 +440,7 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .taskExchange     => taskExchangeFires s
   | .maintainConsumables => maintainConsumablesFires s
   | .supplyBank       => supplyBankFires s
+  | .currencyTurnIn   => currencyTurnInFires s
   | .sellIdle         => sellIdleFires s
   | .recycleSurplus   => recycleSurplusFires s
   | .drainBankJunk    => drainBankJunkFires s

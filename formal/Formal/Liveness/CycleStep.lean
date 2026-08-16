@@ -155,6 +155,15 @@ noncomputable def planFor : MeansKind → State → Plan
   -- rather than a starvation hole above the objective step (FMeasure slot 15,
   -- `BlockerDescent.descends_supplyBank`).
   | .supplyBank       , _ => [.gather]
+  -- CURRENCY_TURNIN (2026-08-16): both branches — the elected buyer's
+  -- NpcBuy and a losing candidate's unequip+deposit surrender — collapse to
+  -- the single `.npcBuy` witness. This is a HONEST OVER-approximation, same
+  -- shape as the other fire-and-lose chores (`.deleteItem` clears the whole
+  -- overstock latch, `.geCancelOrder` the whole cancel latch): `.npcBuy`
+  -- clears `currencyTurnInActive` (Plan.lean), so the rung self-quiets in one
+  -- cycle on both real branches even though only the buyer branch literally
+  -- performs an NpcBuy in production.
+  | .currencyTurnIn   , _ => [.npcBuy]
   | .sellIdle         , _ => [.npcSell]
   | .recycleSurplus   , _ => [.recycle]
   | .drainBankJunk    , _ => [.withdrawItem]
@@ -421,6 +430,22 @@ theorem cycleStep_progress_or_waits
     have hpre' : s.trackedSkillLevel = s.trackedSkillLevel + 1 := by
       rw [heq] at hpost; exact hpost
     exact Nat.succ_ne_self _ hpre'.symm
+  | currencyTurnIn =>
+    -- CURRENCY_TURNIN (2026-08-16) plans `.npcBuy`, which clears
+    -- `currencyTurnInActive`. Fire-and-lose, like geCancel/discardCritical:
+    -- the post-state (false) differs from the pre-state (true).
+    left
+    have hcs : cycleStep s = applyActionKind .npcBuy s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    simp only [fires, currencyTurnInFires] at hfires
+    intro heq
+    have hpost : ({s with currencyTurnInActive := false} : State).currencyTurnInActive
+                  = false := rfl
+    have hpre' : s.currencyTurnInActive = false := by
+      have : (applyActionKind .npcBuy s).currencyTurnInActive = false := hpost
+      rw [heq] at this; exact this
+    rw [hfires] at hpre'; cases hpre'
   | depositFull =>
     left
     have hcs : cycleStep s = applyActionKind .depositAll s := by

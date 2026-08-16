@@ -78,6 +78,7 @@ def inertLadderState : State where
   gearReviewFires := false
   maintainConsumablesFires := false
   supplyDemand := 0
+  currencyTurnInActive := false
   bankItemsKnown := false
   bankItemsCount := 0
   bankCapacity := 0
@@ -165,6 +166,49 @@ example :
       { inertLadderState with supplyDemand := 120, hp := 1, maxHp := 100 }
       = some MeansKind.hpCritical := rfl
 
+/-- Non-vacuity witness for the CURRENCY_TURNIN rung (2026-08-16, fleet-
+    currency-turn-in epic Task 6): its firing predicate is SATISFIABLE — the
+    inert state with `currencyTurnInActive := true` fires it. This is the same
+    shape as `supplyBankFires`'s witness above: `ctx.turn_in`/`ctx.recall` are
+    both `None` (hence `currencyTurnInActive = false`) on EVERY single-character
+    run, but `GamePlayer._resolve_turn_in` sets one of them the cycle a `play
+    --all` fleet's pooled holdings cross a vendor's price — a real, reachable
+    state, not a hypothesis nothing can satisfy. -/
+example :
+    Formal.Liveness.ProductionLadder.currencyTurnInFires
+      { inertLadderState with currencyTurnInActive := true } = true := rfl
+
+/-- …and it is genuinely gated: the inert state (no election result at all)
+    does NOT fire it — the same "inert without `--all`" shape `supplyBank` has. -/
+example :
+    Formal.Liveness.ProductionLadder.currencyTurnInFires inertLadderState = false := rfl
+
+/-- The promotion is real in the model: with every guard and collect-reward
+    rung quiet, a resolved election is SELECTED even though the objective step
+    is armed — mirroring `supplyBank`'s selection witness above, one rung
+    later in COLLECT_REWARD_ORDER. -/
+example :
+    Formal.Liveness.ProductionLadder.productionLadder
+      { inertLadderState with
+        currencyTurnInActive := true, objectiveStepFires := true }
+      = some MeansKind.currencyTurnIn := rfl
+
+/-- …and `supplyBank` still outranks it when BOTH are live (its position is
+    directly above `currencyTurnIn` in COLLECT_REWARD_ORDER). -/
+example :
+    Formal.Liveness.ProductionLadder.productionLadder
+      { inertLadderState with
+        supplyDemand := Formal.Liveness.ProductionLadder.SUPPLY_DEMAND_MIN,
+        currencyTurnInActive := true, objectiveStepFires := true }
+      = some MeansKind.supplyBank := rfl
+
+/-- …and guards still outrank it, at any resolved election: an hp-critical
+    state with a live turn-in rests rather than transacting. -/
+example :
+    Formal.Liveness.ProductionLadder.productionLadder
+      { inertLadderState with currencyTurnInActive := true, hp := 1, maxHp := 100 }
+      = some MeansKind.hpCritical := rfl
+
 /-- Stable name for each `MeansKind`, matching its Lean constructor (camelCase).
     The Oracle emits one Bool field per kind under this name, plus a
     `"selected"` field carrying this name for `productionLadder`'s result. -/
@@ -193,6 +237,7 @@ def meansKindName : MeansKind → String
   | .taskExchange        => "taskExchange"
   | .maintainConsumables => "maintainConsumables"
   | .supplyBank          => "supplyBank"
+  | .currencyTurnIn      => "currencyTurnIn"
   | .sellIdle            => "sellIdle"
   | .recycleSurplus      => "recycleSurplus"
   | .drainBankJunk       => "drainBankJunk"

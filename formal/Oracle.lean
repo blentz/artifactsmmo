@@ -1208,7 +1208,8 @@ def runDecideKey (args : Array Json) : Json :=
       | 12 => .maintainConsumables
       | 13 => .drainBankJunk
       | 14 => .geBid
-      | _ => .supplyBank  -- index 15
+      | 15 => .supplyBank
+      | _ => .currencyTurnIn  -- index 16
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfMeans k))]
 
 /-- progression_reserve: args layout (all Nat ≥ 0):
@@ -2457,6 +2458,11 @@ ARG LAYOUT (flat ints; index → field):
                                         layout undisturbed. Was a Bool
                                         presence flag before the 2026-08-01
                                         promotion added the threshold.)
+* `[37]` currencyTurnInActive         (Bool 0/1 — `ctx.turn_in is not None or
+                                        ctx.recall is not None`, the
+                                        CURRENCY_TURNIN means, 2026-08-16
+                                        fleet-currency-turn-in epic Task 6.
+                                        Appended, layout undisturbed.)
 
 Emits a JSON object: one Bool field per MeansKind keyed by `meansKindName`
 (one per `allInLadderOrder` rung), plus `"selected"`: the name of
@@ -2487,7 +2493,8 @@ def runLadder (args : Array Json) : Json :=
     maintainConsumablesFires := b 29, bankItemsKnown := b 30,
     bankJunkNonempty := b 31, craftPotionsFires := b 32,
     goldReserve := n 33, geBidCandidateNonempty := b 34,
-    geCancelTargetsNonempty := b 35, supplyDemand := n 36 }
+    geCancelTargetsNonempty := b 35, supplyDemand := n 36,
+    currencyTurnInActive := b 37 }
   let firesFields : List (String × Json) :=
     allInLadderOrder.map (fun k => (meansKindName k, Json.bool (fires k s)))
   let selected : Json := match productionLadder s with

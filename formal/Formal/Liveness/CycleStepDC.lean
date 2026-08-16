@@ -384,6 +384,10 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
   -- order removes it from the cancel-target set next cycle. Clears the geCancel
   -- target signal — mirrors `applyActionKind .geCancelOrder`. Fire-and-lose.
   | .geCancelOrder, s => { s with geCancelTargetsNonempty := false }
+  -- NpcBuyAction (npc_buy.py) used by CURRENCY_TURNIN (2026-08-16): resolves
+  -- the fleet election. Clears the currencyTurnIn signal — mirrors
+  -- `applyActionKind .npcBuy`. Fire-and-lose.
+  | .npcBuy, s => { s with currencyTurnInActive := false }
   -- All other kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s
@@ -427,6 +431,7 @@ def planForC : MeansKind → State → Plan
   | .taskExchange     , _ => [.taskExchange]
   | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
   | .supplyBank       , _ => [.gather]  -- 2026-08-01: produce for a sibling
+  | .currencyTurnIn   , _ => [.npcBuy]  -- 2026-08-16: fleet-currency turn-in
   | .sellIdle         , _ => [.npcSell]
   | .recycleSurplus   , _ => [.recycle]
   | .drainBankJunk    , _ => [.withdrawItem]

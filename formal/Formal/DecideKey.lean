@@ -83,6 +83,18 @@ inductive MeansKind where
                 -- (between MAINTAIN_CONSUMABLES and SELL_IDLE) is independent of
                 -- this constructor position and lives in
                 -- `Formal.Liveness.MeansKind.allInLadderOrder`.
+  | currencyTurnIn  -- 2026-08-16, fleet-currency-turn-in epic Task 6: spend or
+                    -- surrender a fleet-wide dual-role currency holding.
+                    -- Appended LAST (oracle index 16) to keep earlier dispatch
+                    -- stable; its COLLECT_REWARD_ORDER priority slot (directly
+                    -- below SUPPLY_BANK) is independent of this constructor
+                    -- position and lives in
+                    -- `Formal.Liveness.MeansKind.allInLadderOrder`. Dispatches
+                    -- to ONE of two production Goal classes depending on
+                    -- `ctx.recall`/`ctx.turn_in` (`strategy_driver.py::map_means`)
+                    -- — `goalReprOfMeans` mirrors `decide_key.py`'s single
+                    -- short-name table entry ("CurrencyTurnIn"), not either
+                    -- Goal's raw `__repr__`; see that module's `_MEANS_REPR`.
 deriving Repr, DecidableEq
 
 /-- TOTAL `match`: every `GuardKind` variant maps to a non-empty repr string.
@@ -122,6 +134,7 @@ def goalReprOfMeans : MeansKind → String
   | .drainBankJunk   => "DrainBankJunk"
   | .geBid           => "PostBuyBid"
   | .supplyBank      => "SupplyBank"
+  | .currencyTurnIn  => "CurrencyTurnIn"
 
 /-! ### Exhaustiveness intent theorems (totality witnesses). -/
 
@@ -148,5 +161,6 @@ example : goalReprOfGuard .depositFull = "DepositInventory" := rfl
 example : goalReprOfMeans .pursueTask = "PursueTask" := rfl
 example : goalReprOfMeans .sellIdle = "SellInventory" := rfl
 example : goalReprOfMeans .supplyBank = "SupplyBank" := rfl
+example : goalReprOfMeans .currencyTurnIn = "CurrencyTurnIn" := rfl
 
 end Formal.DecideKey

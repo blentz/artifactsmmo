@@ -498,6 +498,14 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- longer reports it). Clears the geCancel target signal — single-action
   -- semantics, like .gePostBuyOrder clears the geBid candidate. Fire-and-lose.
   | .geCancelOrder, s => { s with geCancelTargetsNonempty := false }
+  -- NpcBuyAction (npc_buy.py) used by CURRENCY_TURNIN (2026-08-16): the
+  -- elected buyer purchases the vendor item with the fleet's pooled currency,
+  -- resolving the election. Clears the currencyTurnIn signal — single-action
+  -- semantics, like .geCancelOrder clears the geCancel target. Fire-and-lose;
+  -- the model collapses the recall (surrender) branch into the SAME clear
+  -- (see `CycleStep.planFor`'s `.currencyTurnIn` case for the honest
+  -- disclosure of that over-approximation).
+  | .npcBuy, s => { s with currencyTurnInActive := false }
   -- All other kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s

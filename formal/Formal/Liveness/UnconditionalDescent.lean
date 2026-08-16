@@ -56,7 +56,8 @@ def blockerPrefix : List MeansKind :=
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
    .discardHigh, .gearReview, .craftPotions, .claimPending, .completeTask,
-   .sellPressured, .lowYieldCancel, .taskCancel, .supplyBank, .objectiveStep]
+   .sellPressured, .lowYieldCancel, .taskCancel, .supplyBank, .currencyTurnIn,
+   .objectiveStep]
 
 /-- The discretionary tail — everything after `.objectiveStep`. -/
 def discretionaryTail : List MeansKind :=
@@ -146,6 +147,7 @@ theorem cycleStepF_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | lowYieldCancel  => exact descends_lowYieldCancel s hk
     | taskCancel      => exact descends_taskCancel s hk
     | supplyBank      => exact descends_supplyBank s hk
+    | currencyTurnIn  => exact descends_currencyTurnIn s hk
     | objectiveStep   =>
         exact descends_fight s hlvl (Or.inr (Or.inr
           ⟨hk, perceptionRefresh_objectiveStepIsFight s hlvl⟩))

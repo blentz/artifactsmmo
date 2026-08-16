@@ -252,6 +252,29 @@ structure State where
       honest-disclosure treatment `objectiveStepFires` gets. The ladder
       differential asserts agreement with the real value. -/
   supplyDemand : Nat := 0
+  /-- OPAQUE: production's CURRENCY_TURNIN means firing predicate (2026-08-16,
+      fleet-currency-turn-in epic Task 6). Mirrors
+      `tiers/means.py::_fires(CURRENCY_TURNIN, …)` = `ctx.turn_in is not None or
+      ctx.recall is not None`: THIS character's per-cycle resolved role in a
+      fleet-wide dual-role-currency election — either the elected buyer
+      (`ctx.turn_in`) or a losing candidate owing the winner its holding
+      (`ctx.recall`). Both are threaded onto `SelectionContext` as DATA by
+      `GamePlayer._resolve_turn_in` (Task 5); this means only asks "is one of
+      them set", the same seam `supplyDemand`/`State.supplyDemand` uses for
+      `ctx.supply_target`.
+
+      Bool, not Nat: unlike SUPPLY_BANK's promotion this rung carries no
+      demand-size threshold — `turn_in_ready_pure` (ai/currency_turnin.py)
+      already requires the full vendor price be reachable before `ctx.turn_in`
+      is ever set, so a bare presence test is faithful.
+
+      Default false — a single-character run never has a turn-in OR a recall
+      (both `SelectionContext` fields default to `None`), so every pre-existing
+      witness keeps its semantics unchanged. The Lean model does not reproduce
+      the coordination DB / election logic the flag is computed from — the
+      same honest-disclosure treatment `objectiveStepFires`/`supplyDemand` get.
+      The ladder differential asserts agreement with the real value. -/
+  currencyTurnInActive : Bool := false
   /-- `state.bank_items is not None` (means.py:104). -/
   bankItemsKnown : Bool
   /-- `len(state.bank_items)` when known, else `0` (means.py:108). -/

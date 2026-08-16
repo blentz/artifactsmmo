@@ -173,6 +173,9 @@ TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "ta
 EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
 INVENTORY_ROOM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_room.py"
 INVENTORY_KEEP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_keep.py"
+# Task 9 (formal/mutation debt for the fleet-currency-turn-in epic).
+CURRENCY_TURNIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_turnin.py"
+DUAL_ROLE_CURRENCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "dual_role_currency.py"
 
 # craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
 # model is the soundness-critical part; killed by
@@ -4006,6 +4009,48 @@ EQUIPMENT_PROFILE_MUTATIONS = [
      "    return ProfileKind.UTILITY"),
 ]
 
+# currency_turnin.py::turn_in_ready_pure — Task 9 (fleet-currency-turn-in epic
+# formal/mutation debt). The threshold is the vendor's PRICE, not a margin: at
+# fleet_total == price the fleet can pay exactly. Weakening `>=` to `>` would
+# strand a fleet sitting on exactly enough currency, one cycle before the
+# turn-in ever fires. Unit-killed by
+# tests/test_ai/test_currency_turnin.py::test_readiness_is_at_or_above_the_price
+# (the (10, True) boundary case flips to False under the mutant).
+CURRENCY_TURNIN_READY_MUTATIONS = [
+    ("currency turn-in: readiness threshold weakened (>= -> >)",
+     "    return fleet_total >= price",
+     "    return fleet_total > price"),
+]
+
+# currency_turnin.py::recall_shortfall_pure — Task 9. The buyer's own held
+# units AND the shared bank are both reachable without asking a sibling to
+# surrender anything; dropping the bank term would ask siblings to cover units
+# the fleet can already reach on its own. Unit-killed by
+# tests/test_ai/test_currency_turnin.py::
+# test_shortfall_counts_only_what_the_buyer_cannot_reach_alone (price=10,
+# buyer_held=2, bank=3 -> correct shortfall 5, mutant shortfall 8).
+CURRENCY_TURNIN_SHORTFALL_MUTATIONS = [
+    ("currency turn-in: recall shortfall drops the bank term",
+     "    return max(0, price - buyer_held - bank)",
+     "    return max(0, price - buyer_held)"),
+]
+
+# dual_role_currency.py::dual_role_holdings — Task 9. A worn dual-role item
+# (e.g. a `lich_race_medal` in an artifact slot) is still fleet currency — it
+# is recoverable in one UnequipAction — so the fleet ledger must count worn
+# AND carried units together. Dropping the worn-units loop would undercount
+# every character's holdings by whatever it has equipped. Unit-killed by
+# tests/test_ai/test_dual_role_currency.py::
+# test_holdings_count_worn_and_carried_together (2 carried + 1 worn -> correct
+# total 3, mutant total 2).
+DUAL_ROLE_HOLDINGS_MUTATIONS = [
+    ("dual-role holdings: worn units dropped (inventory only)",
+     "    for worn_code in state.equipment.values():\n"
+     "        if worn_code and is_dual_role(worn_code, game_data):\n"
+     "            held[worn_code] = held.get(worn_code, 0) + 1\n",
+     ""),
+]
+
 
 def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
               survivors: list[str]) -> None:
@@ -4087,6 +4132,8 @@ _ALL_SRCS = [
     COMPLETE_TASK_CORE_SRC,
     # C3 — funding_cycles_pure: cycles to reach a currency target.
     FUNDING_CORE_SRC,
+    # Task 9 — fleet-currency-turn-in epic formal/mutation debt.
+    CURRENCY_TURNIN_SRC, DUAL_ROLE_CURRENCY_SRC,
     # C4 — currency_afford_plannable_pure: fast-fail for unaffordable currency-buy leaves.
     CURRENCY_AFFORD_CORE_SRC,
     # C5 — next_craft_target_pure: churn fix (replaces 52K-node A* re-run).
@@ -7359,6 +7406,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_craft_vs_buy_wiring.py", survivors)
     run_group(EQUIPMENT_PROFILE_SRC, EQUIPMENT_PROFILE_MUTATIONS,
               "formal/diff/test_equipment_profile_diff.py", survivors)
+    # Task 9 — fleet-currency-turn-in epic formal/mutation debt. Each in its
+    # own group, each killed by a NAMED existing test (no new tests written).
+    run_group(CURRENCY_TURNIN_SRC, CURRENCY_TURNIN_READY_MUTATIONS,
+              "tests/test_ai/test_currency_turnin.py", survivors)
+    run_group(CURRENCY_TURNIN_SRC, CURRENCY_TURNIN_SHORTFALL_MUTATIONS,
+              "tests/test_ai/test_currency_turnin.py", survivors)
+    run_group(DUAL_ROLE_CURRENCY_SRC, DUAL_ROLE_HOLDINGS_MUTATIONS,
+              "tests/test_ai/test_dual_role_currency.py", survivors)
 def _run_all_groups() -> int:
     survivors: list[str] = []
     _UNITS.clear()

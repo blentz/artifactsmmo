@@ -226,6 +226,7 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.TASK_EXCHANGE: "taskExchange",
     LadderMeans.MAINTAIN_CONSUMABLES: "maintainConsumables",
     LadderMeans.SUPPLY_BANK: "supplyBank",
+    LadderMeans.CURRENCY_TURNIN: "currencyTurnIn",
     LadderMeans.SELL_IDLE: "sellIdle",
     LadderMeans.RECYCLE_SURPLUS: "recycleSurplus",
     LadderMeans.DRAIN_BANK_JUNK: "drainBankJunk",
@@ -476,6 +477,13 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         # `None` maps to 0, which is quiet on both sides since the threshold is
         # positive.
         _supply_demand(_make_ctx(scn)),
+        # 37 currencyTurnInActive: `_make_ctx` leaves `turn_in`/`recall` at their
+        # None defaults (the Scenario models no fleet coordination), which is
+        # exactly what production's `_fires(CURRENCY_TURNIN, …)` reads — so
+        # CURRENCY_TURNIN is False on BOTH sides of the poor path. Read off the
+        # SAME ctx production reads rather than hard-coded, so a Scenario that
+        # ever grows a turn-in/recall drives both sides together.
+        _currency_turn_in_active(_make_ctx(scn)),
     ]
 
 
@@ -489,6 +497,16 @@ def _supply_demand(ctx: SelectionContext) -> int:
     if ctx.supply_target is None:
         return 0
     return ctx.supply_target[2]
+
+
+def _currency_turn_in_active(ctx: SelectionContext) -> int:
+    """The Lean `State.currencyTurnInActive` slot read off production's own
+    ctx: `ctx.turn_in is not None or ctx.recall is not None`.
+
+    One value, two sides — the SAME condition
+    `tiers/means.py::_fires(CURRENCY_TURNIN, …)` tests, so the two flags cannot
+    drift between the oracle and production."""
+    return 1 if (ctx.turn_in is not None or ctx.recall is not None) else 0
 
 
 def _bank_junk_nonempty(scn: Scenario) -> bool:
@@ -884,6 +902,11 @@ def _rich_oracle_args(
         # `SUPPLY_DEMAND_MIN`, so thread that number itself — one value, two
         # sides, exact lockstep (like gearReview at 26).
         _supply_demand(ctx),  # 36 supplyDemand
+        # 37 currencyTurnInActive: production's `_fires(CURRENCY_TURNIN, …)` is
+        # exactly `ctx.turn_in is not None or ctx.recall is not None`, so thread
+        # that condition itself — one value, two sides, exact lockstep (like
+        # supplyDemand at 36).
+        _currency_turn_in_active(ctx),  # 37 currencyTurnInActive
     ]
 
 

@@ -158,6 +158,7 @@ theorem cycleStepD_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | taskExchange    => exact absurd hmem (by decide)
     | maintainConsumables => exact absurd hmem (by decide)
     | supplyBank      => exact descendsD_supplyBank s hk
+    | currencyTurnIn  => exact descendsD_currencyTurnIn s hk
     | sellIdle        => exact absurd hmem (by decide)
     | recycleSurplus  => exact absurd hmem (by decide)
     | bankExpand      => exact absurd hmem (by decide)

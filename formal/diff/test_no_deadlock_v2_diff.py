@@ -452,9 +452,12 @@ def test_ladder_entry_count_matches_lean() -> None:
     + GE_BID (discretionary reactive buy-post, above DRAIN_BANK_JUNK)
     + SUPPLY_BANK (2026-08-01 human ruling, produce for a sibling; PROMOTED out
     of DISCRETIONARY_ORDER into COLLECT_REWARD_ORDER, so it sits LAST in the
-    collect group — after TASK_CANCEL, above OBJECTIVE_STEP).
+    collect group — after TASK_CANCEL, above OBJECTIVE_STEP)
+    + CURRENCY_TURNIN (2026-08-16, fleet-currency-turn-in epic Task 6; sits
+    directly below SUPPLY_BANK in COLLECT_REWARD_ORDER, still above
+    OBJECTIVE_STEP).
     Lean side mirrors via MeansKind.allInLadderOrder."""
-    assert len(ALL_IN_LADDER_ORDER) == 30
+    assert len(ALL_IN_LADDER_ORDER) == 31
 
 
 def test_no_task_state_acceptTask_fires() -> None:

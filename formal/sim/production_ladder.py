@@ -59,6 +59,7 @@ class LadderMeans(Enum):
     LOW_YIELD_CANCEL = "low_yield_cancel"
     TASK_CANCEL = "task_cancel"
     SUPPLY_BANK = "supply_bank"
+    CURRENCY_TURNIN = "currency_turnin"
     OBJECTIVE_STEP = "objective_step"
     PURSUE_TASK = "pursue_task"
     ACCEPT_TASK = "accept_task"
@@ -92,6 +93,7 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.LOW_YIELD_CANCEL,
     LadderMeans.TASK_CANCEL,
     LadderMeans.SUPPLY_BANK,
+    LadderMeans.CURRENCY_TURNIN,
     LadderMeans.OBJECTIVE_STEP,
     LadderMeans.PURSUE_TASK,
     LadderMeans.ACCEPT_TASK,
@@ -133,6 +135,7 @@ _MEANS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.TASK_EXCHANGE: MeansKind.TASK_EXCHANGE,
     LadderMeans.MAINTAIN_CONSUMABLES: MeansKind.MAINTAIN_CONSUMABLES,
     LadderMeans.SUPPLY_BANK: MeansKind.SUPPLY_BANK,
+    LadderMeans.CURRENCY_TURNIN: MeansKind.CURRENCY_TURNIN,
     LadderMeans.SELL_IDLE: MeansKind.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS: MeansKind.RECYCLE_SURPLUS,
     LadderMeans.DRAIN_BANK_JUNK: MeansKind.DRAIN_BANK_JUNK,
@@ -166,6 +169,7 @@ assert COLLECT_REWARD_ORDER == (
     MeansKind.LOW_YIELD_CANCEL,
     MeansKind.TASK_CANCEL,
     MeansKind.SUPPLY_BANK,
+    MeansKind.CURRENCY_TURNIN,
 ), "COLLECT_REWARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 assert DISCRETIONARY_ORDER == (

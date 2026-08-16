@@ -634,6 +634,9 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | supplyBank =>
       show (applyActionKind .gather s).level ≥ s.level
       simp [applyActionKind]
+    | currencyTurnIn =>
+      show (applyActionKind .npcBuy s).level ≥ s.level
+      simp [applyActionKind]
     | depositFull =>
       show (applyActionKind .depositAll s).level ≥ s.level
       simp [applyActionKind]
@@ -1125,6 +1128,11 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   -- measure-decrease commitment is made for it here. Its per-cycle progress
   -- is carried by `CycleStep.cycleStep_progress_or_waits`.
   | supplyBank      => exfalso; revert hmem; unfold progressMeans; decide
+  -- CURRENCY_TURNIN (2026-08-16) is likewise OUT of `progressMeans` scope:
+  -- its `.npcBuy` step clears `currencyTurnInActive`, which is not an
+  -- `ExtMeasure` slot. Per-cycle progress is carried by
+  -- `CycleStep.cycleStep_progress_or_waits`.
+  | currencyTurnIn  => exfalso; revert hmem; unfold progressMeans; decide
   | lowYieldCancel  => exfalso; revert hmem; unfold progressMeans; decide
   | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide
   | pursueTask      => exfalso; revert hmem; unfold progressMeans; decide

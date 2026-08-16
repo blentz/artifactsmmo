@@ -68,6 +68,10 @@ def pursueSelectionConditions (s : State) : Prop :=
   -- claim. `pursueTask` is selected only when every rung above it is quiet, and
   -- there is now one more of them.
   ∧ supplyBankFires s = false
+  -- 2026-08-16, fleet-currency-turn-in epic Task 6: CURRENCY_TURNIN sits
+  -- directly below `supplyBank` in COLLECT_REWARD_ORDER — same reasoning as
+  -- the SUPPLY_BANK comment directly above.
+  ∧ currencyTurnInFires s = false
   ∧ objectiveStepFires s = false
 
 /-- Item 3b: under `pursueSelectionConditions` plus `pursueTaskFires`,
@@ -87,10 +91,10 @@ theorem productionLadder_eq_pursueTask
         (fun k => if fires k s then some k else none)
       = some .pursueTask
   obtain ⟨h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, h11, hcp, h12, h13, h14, h15, h16,
-          hsb, h17⟩ := hConds
+          hsb, hct, h17⟩ := hConds
   simp only [MeansKind.allInLadderOrder, List.findSome?,
              fires, h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, h11, hcp, h12, h13,
-             h14, h15, h16, hsb, h17, hPursue, if_true]
+             h14, h15, h16, hsb, hct, h17, hPursue, if_true]
   rfl
 
 /-- Item 3 corollary: under the conditions, `cycleStep` applies

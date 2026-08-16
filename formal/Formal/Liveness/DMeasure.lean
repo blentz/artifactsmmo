@@ -79,6 +79,13 @@ structure DMeasure where
   -- touches no higher slot; placed (like `geCancelFlag`) ABOVE
   -- `objectiveStepFlag`, which `perceptionRefreshD` can RAISE.
   supplyDemandSlot       : Nat
+  -- currencyTurnIn fire-and-lose slot (2026-08-16, fleet-currency-turn-in epic
+  -- Task 6): the rung sits directly below `supplyBank` in COLLECT_REWARD_ORDER
+  -- — also ABOVE `.objectiveStep`, so selectable below the cap here too. Its
+  -- `.npcBuy` apply clears only `currencyTurnInActive`, touching no higher
+  -- slot; placed (like `supplyDemandSlot`) ABOVE `objectiveStepFlag`, which
+  -- `perceptionRefreshD` can RAISE.
+  currencyTurnInFlag     : Nat
   objectiveStepFlag      : Nat
   deriving DecidableEq, Repr
 
@@ -103,14 +110,15 @@ noncomputable def dMeasure (s : State) : DMeasure :=
     hpDeficit              := s.maxHp - s.hp
     geCancelFlag           := b2n s.geCancelTargetsNonempty
     supplyDemandSlot       := s.supplyDemand
+    currencyTurnInFlag     := b2n s.currencyTurnInActive
     objectiveStepFlag      := b2n s.objectiveStepFires }
 
-/-- Right-associated 20-tuple of `Nat`. -/
+/-- Right-associated 21-tuple of `Nat`. -/
 abbrev LexNineteenD :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
-    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
+    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
-/-- Embed a `DMeasure` into the right-associated lex 20-tuple. -/
+/-- Embed a `DMeasure` into the right-associated lex 21-tuple. -/
 def toLexD (m : DMeasure) : LexNineteenD :=
   toLex (m.levelDeficit,
       toLex (m.xpDeficit,
@@ -130,7 +138,8 @@ def toLexD (m : DMeasure) : LexNineteenD :=
       toLex (m.bankPressure,
       toLex (m.hpDeficit,
       toLex (m.geCancelFlag,
-      toLex (m.supplyDemandSlot, m.objectiveStepFlag)))))))))))))))))))
+      toLex (m.supplyDemandSlot,
+      toLex (m.currencyTurnInFlag, m.objectiveStepFlag))))))))))))))))))))
 
 /-- Strict lex order on `DMeasure` — via the Mathlib lex embedding. -/
 def dMeasureLt (m₁ m₂ : DMeasure) : Prop :=
@@ -384,10 +393,11 @@ theorem dLt_of_objectiveStepFlag_dec {m₁ m₂ : DMeasure}
     (h17 : m₁.hpDeficit = m₂.hpDeficit)
     (h18 : m₁.geCancelFlag = m₂.geCancelFlag)
     (h19 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
+    (h20 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
     (h : m₁.objectiveStepFlag < m₂.objectiveStepFlag) : dMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem dLt_of_geCancel_dec {m₁ m₂ : DMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
@@ -439,6 +449,36 @@ theorem dLt_of_supplyDemand_dec {m₁ m₂ : DMeasure}
   apply lex_intro
   simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
   exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+
+/-- Slot 20 (`currencyTurnInFlag`, 2026-08-16) decrease with slots 1-19 equal.
+    The CURRENCY_TURNIN rung's `.npcBuy` apply touches no higher slot;
+    unlike `supplyDemandSlot`, no threshold is needed — `.npcBuy` clears
+    `currencyTurnInActive` unconditionally, so the Bool flip `true → false` is
+    itself the strict decrease. -/
+theorem dLt_of_currencyTurnIn_dec {m₁ m₂ : DMeasure}
+    (h1 : m₁.levelDeficit = m₂.levelDeficit)
+    (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (h3 : m₁.phasePresent = m₂.phasePresent)
+    (h4 : m₁.taskCycles = m₂.taskCycles)
+    (h5 : m₁.pendingFlag = m₂.pendingFlag)
+    (h6 : m₁.overstockDebt = m₂.overstockDebt)
+    (h7 : m₁.overstockFlag = m₂.overstockFlag)
+    (h8 : m₁.depositDebt = m₂.depositDebt)
+    (h9 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
+    (h10 : m₁.sellDebt = m₂.sellDebt)
+    (h11 : m₁.sellableFlag = m₂.sellableFlag)
+    (h12 : m₁.recyclableFlag = m₂.recyclableFlag)
+    (h13 : m₁.craftReliefFlag = m₂.craftReliefFlag)
+    (h14 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
+    (h15 : m₁.gearReviewFlag = m₂.gearReviewFlag)
+    (h16 : m₁.bankPressure = m₂.bankPressure)
+    (h17 : m₁.hpDeficit = m₂.hpDeficit)
+    (h18 : m₁.geCancelFlag = m₂.geCancelFlag)
+    (h19 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
+    (h : m₁.currencyTurnInFlag < m₂.currencyTurnInFlag) : dMeasureLt m₁ m₂ := by
+  apply lex_intro
+  simp only [toLexD, Prod.Lex.lt_iff, ofLex_toLex]
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-! ## The engine — reach 50 from per-cycle DMeasure descent. -/
 

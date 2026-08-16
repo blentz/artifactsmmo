@@ -109,6 +109,10 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     # HEAD produce step (the demand board routes each item to the role that
     # produces it). Mirrors Lean `planFor .supplyBank = [.gather]`.
     LadderMeans.SUPPLY_BANK:        "gather",
+    # 2026-08-16 (fleet-currency-turn-in epic Task 6): both branches — the
+    # elected buyer's NpcBuy and a losing candidate's surrender — collapse to
+    # the single witness. Mirrors Lean `planFor .currencyTurnIn = [.npcBuy]`.
+    LadderMeans.CURRENCY_TURNIN:    "npcBuy",
     LadderMeans.SELL_IDLE:          "npcSell",
     LadderMeans.RECYCLE_SURPLUS:    "recycle",
     LadderMeans.DRAIN_BANK_JUNK:    "withdrawItem",

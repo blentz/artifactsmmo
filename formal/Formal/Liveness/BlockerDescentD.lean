@@ -83,6 +83,9 @@ private theorem refreshD_geCancel (s : State) :
 private theorem refreshD_supplyDemand (s : State) :
     (perceptionRefreshD s).supplyDemand = s.supplyDemand := by
   unfold perceptionRefreshD; split <;> rfl
+private theorem refreshD_currencyTurnIn (s : State) :
+    (perceptionRefreshD s).currencyTurnInActive = s.currencyTurnInActive := by
+  unfold perceptionRefreshD; split <;> rfl
 private theorem refreshD_craftRelief (s : State) :
     (perceptionRefreshD s).craftReliefFires = s.craftReliefFires := by
   unfold perceptionRefreshD; split <;> rfl
@@ -307,6 +310,33 @@ theorem descendsD_supplyBank (s : State)
       refreshD_geCancel, refreshD_supplyDemand,
       perceptionRefreshD_level, perceptionRefreshD_xp] <;>
     omega
+
+/-- `currencyTurnIn` (→ `.npcBuy`) strictly descends at `currencyTurnInFlag`
+    (2026-08-16), the fire-and-lose CURRENCY_TURNIN rung directly below
+    `supplyBank`. `.npcBuy` clears only `currencyTurnInActive`; the slot sits
+    ABOVE `objectiveStepFlag`, so no perception-raised slot is below the
+    strict decrease. -/
+theorem descendsD_currencyTurnIn (s : State)
+    (hk : productionLadder (perceptionRefreshD s) = some .currencyTurnIn) :
+    dMeasureLt (dMeasure (cycleStepD s)) (dMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, currencyTurnInFires, refreshD_currencyTurnIn] at hfire
+  rw [cycleStepD_some s hk]
+  have hcs : cycleStep (perceptionRefreshD s) =
+      applyActionKind .npcBuy (perceptionRefreshD s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  apply dLt_of_currencyTurnIn_dec <;>
+    simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
+      applyActionKind, hfire,
+      refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
+      refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
+      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
+      refreshD_hp, refreshD_maxHp,
+      refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
+      refreshD_geCancel, refreshD_supplyDemand, refreshD_currencyTurnIn,
+      perceptionRefreshD_level, perceptionRefreshD_xp]
 
 /-- `depositFull` (→ `.depositAll`) strictly descends. -/
 theorem descendsD_depositFull (s : State)

@@ -5,7 +5,7 @@ import Mathlib.Data.Prod.Lex
 
 /-! # FMeasure — the cycleStepF-tailored lex measure (unconditional-descent engine)
 
-Phase U (see `docs/PLAN_l50_unconditional_descent.md`): the 15-slot lexicographic
+Phase U (see `docs/PLAN_l50_unconditional_descent.md`): the 16-slot lexicographic
 measure under which EVERY below-50 `cycleStepF` cycle strictly descends — whatever
 means the ladder selects. This is the measure that discharges the capstone's
 `hquiet` (blockers-quiet) residual: instead of assuming every below-50 cycle
@@ -32,6 +32,7 @@ and every means that RAISES a slot strictly descends an earlier one:
 | 13 | `hpDeficit`    | hpCritical / restForCombat (`hp := maxHp`, fires imply `hp < maxHp`) | nothing in-model |
 | 14 | `geCancelFlag` | geCancel (fire-and-lose; clears only its own flag) | nothing in-model |
 | 15 | `supplyDemandSlot` (2026-08-01) | supplyBank (`.gather` discharges one unit; fires require `supplyDemand ≥ SUPPLY_DEMAND_MIN > 0`) | nothing in-model |
+| 16 | `currencyTurnInFlag` (2026-08-16) | currencyTurnIn (`.npcBuy` clears the flag; fire-and-lose, no threshold) | nothing in-model |
 
 Deliberately NOT in the tuple: `objectiveStepFires`/`objectiveStepIsFight` (the ONLY
 fields `perceptionRefresh` mutates — so the refresh is FMeasure-invariant by
@@ -64,7 +65,7 @@ open Formal.Liveness.CumulativeProgress (b2n)
 open Formal.Liveness.CycleStepF
 open Formal.Liveness.CycleStepFIteration
 
-/-- The 15-slot lex measure for the faithful cycle. See module docstring for the
+/-- The 16-slot lex measure for the faithful cycle. See module docstring for the
     slot-by-slot design table. -/
 structure FMeasure where
   levelDeficit           : Nat
@@ -96,6 +97,15 @@ structure FMeasure where
   -- threshold does real proof work — without it, a demand of 0 could fire the
   -- rung and the supply excursion would not terminate.
   supplyDemandSlot       : Nat
+  -- Slot 16 (2026-08-16, fleet-currency-turn-in epic Task 6). CURRENCY_TURNIN
+  -- sits directly below `supplyBank` in COLLECT_REWARD_ORDER — also ABOVE
+  -- `.objectiveStep`, so it too is selectable below the cap and owes a
+  -- descent. Its `.npcBuy` apply touches NO higher slot (it clears only
+  -- `currencyTurnInActive`) and is fire-and-lose (unlike supplyBank, no
+  -- threshold — the flag goes straight to false), so like `geCancelFlag` this
+  -- flag sits at the bottom of the cascade, one below `supplyDemandSlot`
+  -- since it is the newer of the two collect rungs.
+  currencyTurnInFlag     : Nat
   deriving DecidableEq, Repr
 
 /-- Extract the FMeasure from a `State`. Slot 3 is "a task is present"
@@ -119,7 +129,8 @@ noncomputable def fMeasure (s : State) : FMeasure :=
     bankPressure           := s.inventoryUsed
     hpDeficit              := s.maxHp - s.hp
     geCancelFlag           := b2n s.geCancelTargetsNonempty
-    supplyDemandSlot       := s.supplyDemand }
+    supplyDemandSlot       := s.supplyDemand
+    currencyTurnInFlag     := b2n s.currencyTurnInActive }
 
 /-! ## Strict lex order — hand-rolled 15-way disjunction (the
 `CumulativeProgress.extMeasureLt` pattern). -/
@@ -233,16 +244,31 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.hpDeficit = m₂.hpDeficit
      ∧ m₁.geCancelFlag = m₂.geCancelFlag
      ∧ m₁.supplyDemandSlot < m₂.supplyDemandSlot)
+  ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.phasePresent = m₂.phasePresent
+     ∧ m₁.overstockFlag = m₂.overstockFlag
+     ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
+     ∧ m₁.sellableFlag = m₂.sellableFlag
+     ∧ m₁.recyclableFlag = m₂.recyclableFlag
+     ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
+     ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
+     ∧ m₁.gearReviewFlag = m₂.gearReviewFlag
+     ∧ m₁.pendingFlag = m₂.pendingFlag
+     ∧ m₁.bankPressure = m₂.bankPressure
+     ∧ m₁.hpDeficit = m₂.hpDeficit
+     ∧ m₁.geCancelFlag = m₂.geCancelFlag
+     ∧ m₁.supplyDemandSlot = m₂.supplyDemandSlot
+     ∧ m₁.currencyTurnInFlag < m₂.currencyTurnInFlag)
 
 /-! ### Well-foundedness via embedding into Mathlib lex. -/
 
-/-- Right-associated 15-tuple of `Nat`. -/
-abbrev LexFifteen :=
+/-- Right-associated 16-tuple of `Nat`. -/
+abbrev LexSixteen :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
-    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
+    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
-/-- Embed an `FMeasure` into the right-associated lex 15-tuple. -/
-def toLex13 (m : FMeasure) : LexFifteen :=
+/-- Embed an `FMeasure` into the right-associated lex 16-tuple. -/
+def toLex13 (m : FMeasure) : LexSixteen :=
   toLex (m.levelDeficit,
     toLex (m.xpDeficit,
       toLex (m.phasePresent,
@@ -256,14 +282,15 @@ def toLex13 (m : FMeasure) : LexFifteen :=
                       toLex (m.pendingFlag,
                         toLex (m.bankPressure,
                           toLex (m.hpDeficit,
-                            toLex (m.geCancelFlag, m.supplyDemandSlot))))))))))))))
+                            toLex (m.geCancelFlag,
+                              toLex (m.supplyDemandSlot, m.currencyTurnInFlag)))))))))))))))
 
 /-- `fMeasureLt` implies the embedded `<` on `LexFifteen`. -/
 theorem toLex13_lt_of_fMeasureLt
     {m₁ m₂ : FMeasure} (h : fMeasureLt m₁ m₂) :
     toLex13 m₁ < toLex13 m₂ := by
   simp only [toLex13, Prod.Lex.lt_iff, ofLex_toLex]
-  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h | h
+  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h
   · exact Or.inl h
   · obtain ⟨h1, h⟩ := h
     exact Or.inr ⟨h1, Or.inl h⟩
@@ -310,13 +337,18 @@ theorem toLex13_lt_of_fMeasureLt
     exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
             Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
               Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
-                Or.inr ⟨h13, Or.inr ⟨h14, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+                Or.inr ⟨h13, Or.inr ⟨h14, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
+            Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
+              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
+                Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Well-foundedness of `fMeasureLt`, by `InvImage` reduction to Mathlib's
-    standard well-founded order on `LexFifteen`. -/
+    standard well-founded order on `LexSixteen`. -/
 theorem fMeasureLt_wellFounded : WellFounded fMeasureLt := by
-  have hwf : WellFounded (fun a b : LexFifteen => a < b) :=
-    (inferInstance : WellFoundedRelation LexFifteen).wf
+  have hwf : WellFounded (fun a b : LexSixteen => a < b) :=
+    (inferInstance : WellFoundedRelation LexSixteen).wf
   exact Subrelation.wf
     (h₁ := fun {a b} h => toLex13_lt_of_fMeasureLt h)
     (InvImage.wf toLex13 hwf)
@@ -502,8 +534,36 @@ theorem fLt_of_supplyDemand_dec {m₁ m₂ : FMeasure}
     (h14 : m₁.geCancelFlag = m₂.geCancelFlag)
     (h : m₁.supplyDemandSlot < m₂.supplyDemandSlot) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10,
-      h11, h12, h13, h14, h⟩)))))))))))))
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10,
+      h11, h12, h13, h14, h⟩))))))))))))))
+
+/-- Slot 16 (`currencyTurnInFlag`) decrease with slots 1-15 equal
+    (2026-08-16). The CURRENCY_TURNIN rung's `.npcBuy` apply touches no other
+    slot, so — exactly like `supplyDemandSlot` one rung above it — the whole
+    cascade above is equal and the bottom slot carries the descent. Unlike
+    `supplyDemandSlot`, no threshold is needed: `.npcBuy` clears
+    `currencyTurnInActive` unconditionally, so the fire-and-lose Bool flip
+    `true → false` is itself the strict decrease. -/
+theorem fLt_of_currencyTurnIn_dec {m₁ m₂ : FMeasure}
+    (h1 : m₁.levelDeficit = m₂.levelDeficit)
+    (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (h3 : m₁.phasePresent = m₂.phasePresent)
+    (h4 : m₁.overstockFlag = m₂.overstockFlag)
+    (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
+    (h6 : m₁.sellableFlag = m₂.sellableFlag)
+    (h7 : m₁.recyclableFlag = m₂.recyclableFlag)
+    (h8 : m₁.craftReliefFlag = m₂.craftReliefFlag)
+    (h9 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
+    (h10 : m₁.gearReviewFlag = m₂.gearReviewFlag)
+    (h11 : m₁.pendingFlag = m₂.pendingFlag)
+    (h12 : m₁.bankPressure = m₂.bankPressure)
+    (h13 : m₁.hpDeficit = m₂.hpDeficit)
+    (h14 : m₁.geCancelFlag = m₂.geCancelFlag)
+    (h15 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
+    (h : m₁.currencyTurnInFlag < m₂.currencyTurnInFlag) : fMeasureLt m₁ m₂ :=
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10,
+      h11, h12, h13, h14, h15, h⟩))))))))))))))
 
 /-! ## The engine — reach 50 from per-cycle FMeasure descent (the
 `MeasureDescent.exists_level_ge_of_descent` shape over the richer tuple). -/

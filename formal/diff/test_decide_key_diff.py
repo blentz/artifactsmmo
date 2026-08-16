@@ -60,6 +60,11 @@ _MEANS_INDEX = {
     # last, like every variant since `wait`), which is what the oracle's index
     # dispatch reads — NOT the Python enum's declaration ordinal.
     MeansKind.SUPPLY_BANK: 15,
+    # 2026-08-16 (fleet-currency-turn-in epic Task 6): 16 is the position of
+    # `currencyTurnIn` in the LEAN `Formal.DecideKey.MeansKind` inductive
+    # (appended last, like `supplyBank` above it) — the oracle's index dispatch
+    # reads this, NOT the Python enum's declaration ordinal.
+    MeansKind.CURRENCY_TURNIN: 16,
 }
 
 

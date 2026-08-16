@@ -158,6 +158,13 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (applyActionKind .gather s).level = s.level
             ∧ (applyActionKind .gather s).xp = s.xp
       exact ⟨rfl, rfl⟩
+    | currencyTurnIn =>
+      -- 2026-08-16: planFor .currencyTurnIn = [.npcBuy]; applyActionKind
+      -- .npcBuy preserves character level and xp (it clears
+      -- currencyTurnInActive only).
+      show (applyActionKind .npcBuy s).level = s.level
+            ∧ (applyActionKind .npcBuy s).xp = s.xp
+      exact ⟨rfl, rfl⟩
     | depositFull =>
       show (applyActionKind .depositAll s).level = s.level
             ∧ (applyActionKind .depositAll s).xp = s.xp

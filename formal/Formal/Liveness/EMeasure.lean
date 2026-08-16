@@ -58,6 +58,12 @@ structure EMeasure where
   -- Placed (like `geCancelFlag`) ABOVE the two slots `perceptionRefreshE` can
   -- RAISE, `gearReviewFlag` and `objectiveStepFlag`.
   supplyDemandSlot       : Nat
+  -- currencyTurnIn slot (2026-08-16, fleet-currency-turn-in epic Task 6): the
+  -- promoted rung's `.npcBuy` apply clears only `currencyTurnInActive` and
+  -- touches no higher slot. Placed (like `supplyDemandSlot`) ABOVE the two
+  -- slots `perceptionRefreshE` can RAISE, `gearReviewFlag` and
+  -- `objectiveStepFlag`.
+  currencyTurnInFlag     : Nat
   gearReviewFlag         : Nat
   objectiveStepFlag      : Nat
   deriving DecidableEq, Repr
@@ -84,16 +90,17 @@ noncomputable def eMeasure (s : State) : EMeasure :=
     hpDeficit              := s.maxHp - s.hp
     geCancelFlag           := b2n s.geCancelTargetsNonempty
     supplyDemandSlot       := s.supplyDemand
+    currencyTurnInFlag     := b2n s.currencyTurnInActive
     gearReviewFlag         := b2n s.gearReviewFires
     objectiveStepFlag      := b2n s.objectiveStepFires }
 
-/-- Right-associated 22-tuple of `Nat`. -/
+/-- Right-associated 23-tuple of `Nat`. -/
 abbrev LexE :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
-    Nat ×ₗ Nat
+    Nat ×ₗ Nat ×ₗ Nat
 
-/-- Embed an `EMeasure` into the lex 22-tuple. -/
+/-- Embed an `EMeasure` into the lex 23-tuple. -/
 def toLexE (m : EMeasure) : LexE :=
   toLex (m.levelDeficit,
       toLex (m.gearGap,
@@ -115,7 +122,8 @@ def toLexE (m : EMeasure) : LexE :=
       toLex (m.hpDeficit,
       toLex (m.geCancelFlag,
       toLex (m.supplyDemandSlot,
-      toLex (m.gearReviewFlag, m.objectiveStepFlag)))))))))))))))))))))
+      toLex (m.currencyTurnInFlag,
+      toLex (m.gearReviewFlag, m.objectiveStepFlag))))))))))))))))))))))
 
 /-- Strict lex order via the Mathlib embedding. -/
 def eMeasureLt (m₁ m₂ : EMeasure) : Prop :=
@@ -392,10 +400,11 @@ theorem eLt_of_gearReview_dec {m₁ m₂ : EMeasure}
     (h18 : m₁.hpDeficit = m₂.hpDeficit)
     (h19 : m₁.geCancelFlag = m₂.geCancelFlag)
     (h20 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
+    (h21 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
     (h : m₁.gearReviewFlag < m₂.gearReviewFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_objectiveStepFlag_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
@@ -418,11 +427,12 @@ theorem eLt_of_objectiveStepFlag_dec {m₁ m₂ : EMeasure}
     (h18 : m₁.hpDeficit = m₂.hpDeficit)
     (h19 : m₁.geCancelFlag = m₂.geCancelFlag)
     (h20 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
-    (h21 : m₁.gearReviewFlag = m₂.gearReviewFlag)
+    (h21 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
+    (h22 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h : m₁.objectiveStepFlag < m₂.objectiveStepFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inr ⟨h22, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_geCancel_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
@@ -473,6 +483,35 @@ theorem eLt_of_supplyDemand_dec {m₁ m₂ : EMeasure}
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
   exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+
+/-- Slot 21 (`currencyTurnInFlag`, 2026-08-16) decrease with slots 1-20 equal.
+    No threshold needed (unlike `supplyDemandSlot`): `.npcBuy` clears
+    `currencyTurnInActive` unconditionally. -/
+theorem eLt_of_currencyTurnIn_dec {m₁ m₂ : EMeasure}
+    (h1 : m₁.levelDeficit = m₂.levelDeficit)
+    (h2 : m₁.gearGap = m₂.gearGap)
+    (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
+    (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (h5 : m₁.phasePresent = m₂.phasePresent)
+    (h6 : m₁.taskCycles = m₂.taskCycles)
+    (h7 : m₁.pendingFlag = m₂.pendingFlag)
+    (h8 : m₁.overstockDebt = m₂.overstockDebt)
+    (h9 : m₁.overstockFlag = m₂.overstockFlag)
+    (h10 : m₁.depositDebt = m₂.depositDebt)
+    (h11 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
+    (h12 : m₁.sellDebt = m₂.sellDebt)
+    (h13 : m₁.sellableFlag = m₂.sellableFlag)
+    (h14 : m₁.recyclableFlag = m₂.recyclableFlag)
+    (h15 : m₁.craftReliefFlag = m₂.craftReliefFlag)
+    (h16 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
+    (h17 : m₁.bankPressure = m₂.bankPressure)
+    (h18 : m₁.hpDeficit = m₂.hpDeficit)
+    (h19 : m₁.geCancelFlag = m₂.geCancelFlag)
+    (h20 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
+    (h : m₁.currencyTurnInFlag < m₂.currencyTurnInFlag) : eMeasureLt m₁ m₂ := by
+  apply lex_intro
+  simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-! ## The engine. -/
 

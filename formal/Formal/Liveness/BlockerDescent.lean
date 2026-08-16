@@ -254,6 +254,23 @@ theorem descends_supplyBank (s : State)
       | rfl
       | omega
 
+/-- `currencyTurnIn` (→ `.npcBuy`) strictly descends at `currencyTurnInFlag`
+    (2026-08-16). Fire-and-lose, like `geCancel`: `.npcBuy` clears only
+    `currencyTurnInActive`, so every higher slot is unchanged and the bottom
+    slot strictly drops. -/
+theorem descends_currencyTurnIn (s : State)
+    (hk : productionLadder (perceptionRefresh s) = some .currencyTurnIn) :
+    fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, currencyTurnInFires] at hfire
+  rw [cycleStepF_some s hk, ← fMeasure_perceptionRefresh s]
+  have hcs : cycleStep (perceptionRefresh s) =
+      applyActionKind .npcBuy (perceptionRefresh s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  apply fLt_of_currencyTurnIn_dec <;>
+    simp [fMeasure, pressureDelta, applyActionKind, hfire]
+
 /-- `craftRelief` (→ `.craft`) strictly descends at `craftReliefFlag`. -/
 theorem descends_craftRelief (s : State)
     (hk : productionLadder (perceptionRefresh s) = some .craftRelief) :
