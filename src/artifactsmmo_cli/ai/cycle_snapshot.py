@@ -207,3 +207,12 @@ class CycleSnapshot(BaseModel):
     overwhelming majority of cycles where the role did not change (and on every
     single-character run). See `RoleChange` for why the transition is detected
     at the source instead of being diffed by the log widget."""
+
+    turn_in: dict[str, object] | None = None
+    """The fleet currency turn-in this character is party to, or None.
+
+    Keys: `item`, `currency`, `price`, `fleet_total`, `buyer`, `role`
+    (`"buyer"` / `"holder"` / None). Emitted on EVERY character, including the
+    uninvolved ones (as None), so a trace reader can tell "no turn-in was
+    possible" apart from "this child never looked" — the distinction that cost
+    the lich-medal investigation its first two hours."""

@@ -2533,6 +2533,22 @@ class GamePlayer:
         # transcript, and gating on the action type keeps a prior fight's record
         # from leaking onto an unrelated cycle. Shared with the trace surface.
         fight_record = self._fight_of(action)
+        # Fleet-currency-turn-in trace (Task 8): same source and lifecycle as
+        # `supply_target`/`role` — set by `_resolve_turn_in` (called from
+        # `_update_coordination`), None on every single-character run and on
+        # every uninvolved character. `role` here is this dict's OWN key
+        # (buyer/holder), unrelated to the snapshot's top-level `role` field
+        # (the specialization role, e.g. "miner").
+        turn_in_trace: dict[str, object] | None = None
+        if self._turn_in is not None:
+            turn_in_trace = {
+                "item": self._turn_in.item_code,
+                "currency": self._turn_in.currency,
+                "price": self._turn_in.price,
+                "fleet_total": self._turn_in.fleet_total,
+                "buyer": self._turn_in.buyer,
+                "role": "buyer" if self._turn_in.buyer == self.character else "holder",
+            }
         snap = CycleSnapshot(
             cycle_index=self._cycle_counter,
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
@@ -2609,6 +2625,7 @@ class GamePlayer:
             role=self._role,
             supply_target=repr(self._supply_target) if self._supply_target is not None else None,
             role_change=self._role_change,
+            turn_in=turn_in_trace,
         )
         self._cycle_observer(snap)
 
