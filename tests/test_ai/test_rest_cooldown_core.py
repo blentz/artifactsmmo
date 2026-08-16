@@ -42,10 +42,11 @@ def test_no_deficit_still_pays_the_floor():
     assert rest_cooldown_seconds(-5, 100) == REST_MINIMUM_SECONDS
 
 
-def test_the_planner_edge_cost_is_this_formula_in_its_own_unit():
-    """`rest_cost_pure` must not restate the rule — it divides this by its own
-    declared ten-second unit and nothing else. Two implementations of one server
-    rule is how the projection came to ignore it entirely."""
+def test_the_planner_edge_cost_is_this_formula_unscaled():
+    """`rest_cost_pure` must not restate the rule and must not rescale it: the
+    planner's edge cost IS this cooldown in seconds. It used to divide by a
+    self-declared ten-second unit no other action used, which is how a 100-second
+    recovery came to be priced below a single fight."""
     for hp, max_hp in ((0, 100), (50, 100), (99, 100), (137, 280), (280, 280)):
-        assert rest_cost_pure(hp, max_hp) == rest_cooldown_seconds(
-            max_hp - hp, max_hp) / 10.0
+        assert rest_cost_pure(hp, max_hp) == float(
+            rest_cooldown_seconds(max_hp - hp, max_hp))

@@ -9,9 +9,11 @@ result applies absolutely. Proved in `Formal.PlannerAdmissibility`:
 `RHP_first_satisfied_is_optimal` (7 ≤ 9) via the general
 `firstSatisfied_least_cost_of_admissible` applied with the admissible `h ≡ 0`.
 
-Rest cost is DYNAMIC (rest_cost_pure = max(3, ceil(missing%))/10); the instance
-is re-anchored to HP 10/100 (missing 90%) so Rest = 9.0 stays the expensive
-single-step and the multi-step optimum (7) is preserved.
+Rest cost is DYNAMIC and denominated in SECONDS (rest_cost_pure =
+max(3, ceil(missing%))); the instance is anchored at HP 364/400 (missing 9%) so
+Rest = 9.0 stays the expensive single-step and the multi-step optimum (8) is
+preserved. It was HP 10/100 while Rest carried a phantom /10 — at true seconds
+that shape costs 90.0 and no longer contests anything.
 
 This test runs the real Python planner on the SAME instance the Lean module
 models and asserts:
@@ -34,7 +36,8 @@ from tests.test_ai.fixtures import make_state
 @dataclass
 class _EatAtTileAction(UseConsumableAction):
     """UseConsumable gated to a specific tile (models 'eat at the cooking tile').
-    Cost 2.0 — a fitting heal that beats Rest, mirroring consumable.py:93."""
+    Cost 3.0 — the published flat consumable cooldown, mirroring
+    `cost_core.CONSUMABLE_COOLDOWN_SECONDS` as consumable.py returns it."""
 
     tile_x: int = 1
     tile_y: int = 0
@@ -45,7 +48,7 @@ class _EatAtTileAction(UseConsumableAction):
         return super().is_applicable(state, game_data)
 
     def cost(self, state, game_data, history=None) -> float:
-        return 2.0
+        return 3.0
 
     def __repr__(self) -> str:
         return f"EatAtTile({self.tile_x},{self.tile_y})"
@@ -106,11 +109,13 @@ def _instance():
             code="cooked_chicken", level=1, type_="consumable", hp_restore=30
         )
     }
-    # HP 10/100 (missing 90%) re-anchors the demo for the DYNAMIC Rest cost
-    # (rest_cost_pure = max(3, ceil(missing%))/10 = 9.0 here), keeping Rest the
-    # expensive single-step. cooked_chicken restores 30 ≤ 90 deficit, so EatAtTile
-    # FITS (cost 2.0, not the 100.0 overheal sentinel) and full-heals in-model.
-    state = make_state(hp=10, max_hp=100, inventory={"cooked_chicken": 1}, x=0, y=0)
+    # HP 364/400 (missing 36 = 9%) anchors the demo for the DYNAMIC Rest cost
+    # (rest_cost_pure = max(3, ceil(missing%)) = 9.0 seconds here), keeping Rest
+    # the expensive single-step. cooked_chicken restores 30 ≤ 36 deficit, so
+    # EatAtTile FITS (cost 3.0, not the 200.0 overheal sentinel) and full-heals
+    # in-model. A big bar is what buys both properties at once: a 9% deficit that
+    # still exceeds one chicken.
+    state = make_state(hp=364, max_hp=400, inventory={"cooked_chicken": 1}, x=0, y=0)
     goal = RestoreHPGoal()
     actions = [
         RestAction(),
@@ -122,9 +127,9 @@ def _instance():
 
 def test_planner_returns_optimal_plan_after_fix():
     """With h ≡ 0 the search is Dijkstra over non-negative `action.cost`. On the
-    RestoreHP instance (HP 10/100) the Move-prefix node (f = g = 5) pops before
+    RestoreHP instance (HP 364/400) the Move-prefix node (f = g = 5) pops before
     the Rest-node (f = g = 9); the planner expands UseConsumable from there and
-    returns the optimal `[Move, EatAtTile]` plan (cost 5 + 2 = 7), strictly
+    returns the optimal `[Move, EatAtTile]` plan (cost 5 + 3 = 8), strictly
     cheaper than the `[Rest]` plan (cost 9). Mirrors Lean
     `RHP_first_satisfied_is_optimal`."""
     gd, state, goal, actions = _instance()
@@ -136,33 +141,33 @@ def test_planner_returns_optimal_plan_after_fix():
     bf = _brute_force_min_cost(state, goal, actions, gd, max_depth=goal.max_depth)
 
     # Ground-truth optimum from brute force.
-    assert bf["cost"] == 7.0
+    assert bf["cost"] == 8.0
     assert [repr(a) for a in bf["plan"]] == ["Move(1,0)", "EatAtTile(1,0)"]
 
     # The planner returns the brute-force optimum (the previously-buggy
     # `[Rest]` cost-9 plan is no longer chosen).
     assert [repr(a) for a in plan] == ["Move(1,0)", "EatAtTile(1,0)"]
-    assert returned_cost == bf["cost"] == 7.0
+    assert returned_cost == bf["cost"] == 8.0
 
 
 def test_zero_heuristic_is_admissible_and_planner_is_dijkstra():
     """h ≡ 0 is admissible w.r.t. ANY true-remaining function, so the planner
     is uniform-cost. Behavioural witness: a cheap-prefix multi-step plan
-    (Move 5 + Eat 2 = 7) beats an expensive single-step plan (Rest 9), even
+    (Move 5 + Eat 3 = 8) beats an expensive single-step plan (Rest 9), even
     though the multi-step plan is longer. Under the old urgency heuristic (at
-    HP 10/100, urgency = (1 − 0.1)·100 = 90) the single-step satisfied node was
-    popped first (f = 9 + 0 = 9) before the Move-prefix node (f = 5 + 90 = 95),
+    HP 364/400, urgency = (1 − 0.91)·100 = 9) the single-step satisfied node was
+    popped first (f = 9 + 0 = 9) before the Move-prefix node (f = 5 + 9 = 14),
     and the planner returned [Rest]. With h = 0 the Move node (f = 5) pops first
     and the optimal plan wins."""
     gd, state, goal, actions = _instance()
 
     # Brute-force confirms the multi-step prefix is genuinely the cheaper route.
     bf = _brute_force_min_cost(state, goal, actions, gd, max_depth=goal.max_depth)
-    assert bf["cost"] == 7.0
+    assert bf["cost"] == 8.0
     assert len(bf["plan"]) == 2  # multi-step
 
-    # Rest alone is shorter (1 step) but strictly costlier (9 > 7). At HP 10/100
-    # the dynamic rest cost is max(3, ceil(90%))/10 = 9.0.
+    # Rest alone is shorter (1 step) but strictly costlier (9 > 8). At HP 364/400
+    # the dynamic rest cost is max(3, ceil(9%)) = 9.0 seconds.
     rest_only = [RestAction()]
     rest_cost = _plan_cost(state, rest_only, gd)
     assert rest_cost == 9.0
@@ -185,7 +190,7 @@ def _plan_under_floor(floor: float | None) -> list[str]:
 def test_request_budget_floor_flips_this_instance_to_the_single_step_plan():
     """The SAME instance, priced in REQUESTS instead of seconds.
 
-    `[Move, EatAtTile]` costs 7 seconds across TWO requests; `[Rest]` costs 9
+    `[Move, EatAtTile]` costs 8 seconds across TWO requests; `[Rest]` costs 9
     seconds in ONE. Seconds say the two-step plan wins, and above
     (`test_planner_returns_optimal_plan_after_fix`) it does. But on a
     `play --all` fleet seconds are not what the bot waits on: rate limits are
@@ -193,7 +198,7 @@ def test_request_budget_floor_flips_this_instance_to_the_single_step_plan():
     2026-08-10 five-character run measured every child pinned at ~52
     actions/hour — a mean 69s between actions against a mean 11.5s cooldown,
     with 29-49% of the wall clock spent blocked in `RateGovernor.acquire`. At
-    that pace the two-step plan does not take 7 seconds, it takes two slots out
+    that pace the two-step plan does not take 8 seconds, it takes two slots out
     of a fixed hourly supply, and `[Rest]` buys the same full-HP state for one.
 
     At a 5s floor: 5 + 5 = 10 against max(9, 5) = 9, so `[Rest]` wins.
@@ -210,7 +215,7 @@ def test_request_budget_floor_is_a_lower_bound_not_a_flat_rate():
 
     Under a flat per-action rate the one-action plan would win for EVERY
     positive floor, since it is always one action against two. It does not: at
-    a 3s floor the two-step plan costs max(5,3) + max(2,3) = 8, still under
+    a 3s floor the two-step plan costs max(5,3) + max(3,3) = 8, still under
     `[Rest]`'s max(9,3) = 9, and the multi-step plan is still returned. Only at
     5s — where the floor genuinely binds on both steps — does the choice flip.
     Rest keeps its own 9 throughout rather than being flattened to the floor."""

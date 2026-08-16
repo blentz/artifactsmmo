@@ -11,11 +11,6 @@ close before the character can walk to the merchant."""
 EVENT_ARRIVAL_MARGIN_SECONDS = 10.0
 """Safety margin added to estimated travel time before committing to the trip."""
 
-PLAN_SECONDS_PER_COST_UNIT = 10.0
-"""The planner's cost unit in seconds. Established by `rest_cost_pure`: a full-HP
-rest is 100 real seconds and costs 10.0, so one cost unit is 10s. That conversion
-is what lets an event window be compared against a PLAN, not just against travel."""
-
 
 def event_window_sufficient_pure(remaining_seconds: float, distance: int,
                                  plan_cost: float) -> bool:
@@ -24,15 +19,24 @@ def event_window_sufficient_pure(remaining_seconds: float, distance: int,
 
     Travel alone was the original question (`event_npc_tradeable`), and it is
     only half: reaching the spawn tile is worthless if the window shuts partway
-    through the ten actions planned for it. `plan_cost` is in planner cost units;
-    a non-positive value degrades this to the pure travel question, which is the
-    pre-P2 behaviour and the right answer for a caller that has no plan yet.
+    through the ten actions planned for it.
+
+    `plan_cost` is added UNSCALED because planner cost is already denominated in
+    seconds: every learned edge is a median `actual_cooldown_seconds`. This used
+    to multiply by a `PLAN_SECONDS_PER_COST_UNIT = 10.0`, on the strength of
+    `rest_cost_pure`'s bogus tenfold divisor — the one action that carried it —
+    so a Fight-heavy plan was charged ten times its real duration and windows
+    that comfortably fit were refused. The constant is gone rather than set to
+    1.0: a conversion factor is the thing that drifted.
+
+    A non-positive `plan_cost` degrades this to the pure travel question, which
+    is the pre-P2 behaviour and the right answer for a caller with no plan yet.
     """
     if remaining_seconds <= 0:
         return False
     needed = distance * EVENT_TRAVEL_SECONDS_PER_TILE + EVENT_ARRIVAL_MARGIN_SECONDS
     if plan_cost > 0:
-        needed += plan_cost * PLAN_SECONDS_PER_COST_UNIT
+        needed += plan_cost
     return remaining_seconds > needed
 
 

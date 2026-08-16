@@ -10,7 +10,10 @@ from artifactsmmo_api_client.api.my_characters.action_use_item_my_name_action_us
 from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.cost_core import OVERHEAL_CONSUMABLE_COST
+from artifactsmmo_cli.ai.actions.cost_core import (
+    CONSUMABLE_COOLDOWN_SECONDS,
+    OVERHEAL_CONSUMABLE_COST,
+)
 from artifactsmmo_cli.ai.consumable_selection import select_consumable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -90,10 +93,16 @@ class UseConsumableAction(Action):
         deficit = state.max_hp - state.hp
         best = select_consumable(state.inventory, self._item_stats, deficit)
         if best is None:
-            return 2.0                        # not applicable anyway; cheap default
+            return CONSUMABLE_COOLDOWN_SECONDS  # not applicable anyway; the flat cost
         _, restore = best
         if restore <= deficit:
-            return 2.0                        # fits the deficit -> beats Rest (<= REST_COST_MAX)
+            # Fits the deficit. The published consumable cooldown is a flat 3s
+            # whatever the quantity, so this is the honest seconds price — and
+            # it beats every Rest above the 3s floor, which is TRUE: closing a
+            # real deficit by resting costs 38.9s at the live median. At the
+            # floor itself the two tie, and a tie is the right answer for a
+            # deficit so shallow that resting is already free.
+            return CONSUMABLE_COOLDOWN_SECONDS
         # Overheal: prefer Rest over wasting the item. OVERHEAL_CONSUMABLE_COST is
         # derived from REST_COST_MAX (cost_core.py), so it stays dominant if the
         # Rest cost unit is ever rescaled.

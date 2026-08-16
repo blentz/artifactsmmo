@@ -5279,14 +5279,14 @@ EVENT_PLAN_WINDOW_MUTATIONS = [
     # question, so a 40-step chain through a 90-second window passes again --
     # exactly the defect P2 exists to prevent.
     ("event_window: drop plan cost (plan term -> 0)",
-     "        needed += plan_cost * PLAN_SECONDS_PER_COST_UNIT",
+     "        needed += plan_cost",
      "        needed += plan_cost * 0"),
-    # Mis-scale the cost unit. Costs are seconds/10 (rest_cost_pure), so treating
-    # a cost unit as one second under-counts a plan tenfold and lets plans that
-    # cannot finish through.
-    ("event_window: cost unit 10s -> 1s (tenfold under-count)",
-     "PLAN_SECONDS_PER_COST_UNIT = 10.0",
-     "PLAN_SECONDS_PER_COST_UNIT = 1.0"),
+    # Re-introduce a conversion factor. Planner cost IS seconds, so scaling it
+    # over-counts a plan tenfold and refuses windows that comfortably fit -- the
+    # defect that shipped while `rest_cost_pure` carried a bogus /10.
+    ("event_window: re-scale plan cost by a 10s cost unit (tenfold over-count)",
+     "        needed += plan_cost",
+     "        needed += plan_cost * 10.0"),
 ]
 
 
@@ -6152,21 +6152,28 @@ FIGHT_LOOP_COST_MUTATIONS = [
 # be WRONG instead.
 COST_CORE_SENTINEL_MUTATIONS = [
     # REST_COST_MAX: evaluate the Rest cost at the wrong extreme (full HP instead
-    # of a full deficit) -> 0.3, which is a LOWER bound, not the supremum. Killed
-    # by `test_rest_cost_max_is_the_supremum_of_rest_cost_pure` (both the == 10.0
+    # of a full deficit) -> 3.0, which is a LOWER bound, not the supremum. Killed
+    # by `test_rest_cost_max_is_the_supremum_of_rest_cost_pure` (both the == 100.0
     # pin and the sweep, where deep-deficit costs exceed the mutated "max").
     ("cost_core: REST_COST_MAX taken at full HP instead of full deficit",
      "REST_COST_MAX = rest_cost_pure(0, 1)",
      "REST_COST_MAX = rest_cost_pure(1, 1)"),
     # Overheal sentinel: collapse the dominance margin to 1x, so the sentinel
-    # merely TIES the dearest Rest (10.0) instead of strictly exceeding it — the
+    # merely TIES the dearest Rest (100.0) instead of strictly exceeding it — the
     # planner would no longer reliably prefer Rest over wasting an overhealing
     # consumable. Killed by
     # `test_overheal_sentinel_strictly_dominates_every_rest_cost` (strict >, which
     # fails at hp=0) and by the derivation pin.
-    ("cost_core: overheal sentinel margin 10x -> 1x (ties, not dominates)",
-     "OVERHEAL_REST_MULTIPLE = 10",
+    ("cost_core: overheal sentinel margin 2x -> 1x (ties, not dominates)",
+     "OVERHEAL_REST_MULTIPLE = 2",
      "OVERHEAL_REST_MULTIPLE = 1"),
+    # The unit bug itself, resurrected: divide the Rest cost by ten again, so a
+    # 100-second recovery is priced at 10 against learned Fight/Gather edges that
+    # are already in seconds. Killed by the formula pins in
+    # `tests/test_ai/test_cost_core.py` and by the Lean-mirror differential.
+    ("cost_core: rest_cost_pure re-divided by the phantom 10s cost unit",
+     "    return float(rest_cooldown_seconds(max_hp - hp, max_hp))",
+     "    return rest_cooldown_seconds(max_hp - hp, max_hp) / 10.0"),
 ]
 
 

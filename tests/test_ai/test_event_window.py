@@ -19,7 +19,6 @@ import pytest
 from artifactsmmo_cli.ai.event_availability import (
     EVENT_ARRIVAL_MARGIN_SECONDS,
     EVENT_TRAVEL_SECONDS_PER_TILE,
-    PLAN_SECONDS_PER_COST_UNIT,
     event_window_sufficient_pure,
 )
 
@@ -37,19 +36,19 @@ def test_window_shorter_than_travel_is_insufficient():
 
 def test_window_that_covers_travel_but_not_the_plan_is_insufficient():
     """THE P2 CASE. 5 tiles is 25s of travel and the window has 90s, so the old
-    travel-only gate would say yes -- but the plan needs 40 cost units = 400s."""
+    travel-only gate would say yes -- but the plan itself needs 400 seconds."""
     assert event_window_sufficient_pure(remaining_seconds=90, distance=5,
-                                        plan_cost=40.0) is False
+                                        plan_cost=400.0) is False
     # ...and the same trip with a short plan is fine.
     assert event_window_sufficient_pure(remaining_seconds=90, distance=5,
-                                        plan_cost=2.0) is True
+                                        plan_cost=20.0) is True
 
 
 def test_margin_is_required_on_top():
     """A window that covers travel+plan EXACTLY still refuses: arriving as the
     event closes wastes the trip."""
-    distance, plan_cost = 4, 1.0
-    exact = distance * EVENT_TRAVEL_SECONDS_PER_TILE + plan_cost * PLAN_SECONDS_PER_COST_UNIT
+    distance, plan_cost = 4, 10.0
+    exact = distance * EVENT_TRAVEL_SECONDS_PER_TILE + plan_cost
     assert event_window_sufficient_pure(remaining_seconds=exact,
                                         distance=distance, plan_cost=plan_cost) is False
     assert event_window_sufficient_pure(
@@ -64,11 +63,16 @@ def test_expired_window_is_insufficient():
                                         plan_cost=0.0) is False
 
 
-def test_cost_unit_is_ten_seconds():
-    """Pinned because the conversion is the whole basis of the plan-length half:
-    the planner's cost unit is 10s (rest_cost_pure: a full-HP rest is 100s =
-    10.0). If that ever changes, this gate silently mis-scales."""
-    assert PLAN_SECONDS_PER_COST_UNIT == 10.0
+def test_plan_cost_is_consumed_as_seconds_with_no_conversion():
+    """Pinned because a conversion factor is exactly what used to be wrong here:
+    planner cost IS seconds (every learned edge is a median cooldown), so the gate
+    must add `plan_cost` unscaled. A re-introduced 10x factor would make this
+    otherwise-sufficient window read as insufficient."""
+    needed = 1 * EVENT_TRAVEL_SECONDS_PER_TILE + 30.0 + EVENT_ARRIVAL_MARGIN_SECONDS
+    assert event_window_sufficient_pure(remaining_seconds=needed + 1,
+                                        distance=1, plan_cost=30.0) is True
+    assert event_window_sufficient_pure(remaining_seconds=needed - 1,
+                                        distance=1, plan_cost=30.0) is False
 
 
 @pytest.mark.parametrize("plan_cost", [0.0, -1.0])

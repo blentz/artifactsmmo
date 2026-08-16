@@ -9,24 +9,28 @@ https://docs.artifactsmmo.com/concepts/resting_and_using_items/
 
 That rule was implemented twice, in two units, for two consumers:
 
-* `ai/actions/cost_core.rest_cost_pure` used it correctly, as planner edge cost,
-  denominated in a ten-second unit.
+* `ai/actions/cost_core.rest_cost_pure` used it as planner edge cost, but
+  denominated in a ten-second unit no other action used — corrected to seconds
+  once the live data showed Fight and Gather priced at exactly 1.00x their
+  observed cooldown and Rest at 0.10x.
 * `ai/learning/fight_loop_cost` did NOT use it at all. It charged a flat one
   action per Rest and capped the per-fight figure at one, so a ninety-second
   recovery and a three-second one cost the projection exactly the same.
 
-Both consumers now derive from this function, each dividing by its own declared
-seconds-per-unit. Neither restates the formula, so a server rule change is one
-edit here rather than a hunt.
+Both consumers now derive from this function. Neither restates the formula, so a
+server rule change is one edit here rather than a hunt, and neither rescales it:
+the planner's edge cost and the projection's loop model are both in seconds.
 """
 
 REST_MINIMUM_SECONDS = 3
 """Floor the server applies to every Rest, however small the deficit.
 
-Consumables are a flat three seconds regardless of quantity, so this floor is
-also the point below which resting stops being the cheaper way to close a
-deficit — which is why `rest_cost_pure` had to become deficit-sensitive before
-the planner would stop churning potions."""
+Consumables are a flat three seconds regardless of quantity
+(`cost_core.CONSUMABLE_COOLDOWN_SECONDS`), so this floor is also the point below
+which resting stops being the cheaper way to close a deficit. Above it the
+consumable is genuinely faster, which is why `rest_cost_pure` had to become
+deficit-sensitive — the fix for potion churn was the deficit sensitivity, not
+the tenfold divisor that shipped alongside it."""
 
 
 def rest_cooldown_seconds(missing_hp: int, max_hp: int) -> int:

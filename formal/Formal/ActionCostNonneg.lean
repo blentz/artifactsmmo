@@ -156,19 +156,20 @@ theorem learnedCost_nonneg
 /-! ## Per-action wrapper theorems. -/
 
 -- Bucket 1b: HP-deficit-dependent cost (`Rat`) — Rest. Real server cooldown
--- `max(3, ⌈missing_HP%⌉)` seconds scaled to the 10s cost unit. `missing` is the
--- Nat truncated sub `maxHp - hp` (0 when hp ≥ maxHp); the Nat ceil
--- `(missing*100 + maxHp - 1)/maxHp` agrees with the Python
--- `-(-(missing*100)//max_hp)` for all inputs (incl. missing=0 → 0). The `max 3`
--- floor makes `restCost ≥ 3/10 > 0`, so non-negativity is trivial.
+-- `max(3, ⌈missing_HP%⌉)` SECONDS, undivided: this used to be scaled by a 10s
+-- "cost unit" that no other action used, which priced a Rest at a tenth of its
+-- true duration against the learned Fight/Gather edges (both exactly 1.00x their
+-- observed cooldown over 40k live cycles). `missing` is the Nat truncated sub
+-- `maxHp - hp` (0 when hp ≥ maxHp); the Nat ceil `(missing*100 + maxHp - 1)/maxHp`
+-- agrees with the Python `-(-(missing*100)//max_hp)` for all inputs (incl.
+-- missing=0 → 0). The `max 3` floor makes `restCost ≥ 3 > 0`, so non-negativity
+-- is trivial.
 def restCost (hp maxHp : Nat) : Rat :=
-  ((max 3 (((maxHp - hp) * 100 + maxHp - 1) / maxHp) : Nat) : Rat) / 10
+  ((max 3 (((maxHp - hp) * 100 + maxHp - 1) / maxHp) : Nat) : Rat)
 
 theorem restCost_nonneg (hp maxHp : Nat) : 0 ≤ restCost hp maxHp := by
   unfold restCost
-  rw [Rat.div_def]
-  exact Rat.mul_nonneg (by exact_mod_cast Nat.zero_le _)
-    (Rat.le_of_lt (Rat.inv_pos.mpr (by decide)))
+  exact_mod_cast Nat.zero_le _
 
 -- Bucket 1: constants. Production values, all in `Nat`.
 def equipCost : Nat := 1
@@ -176,18 +177,22 @@ def unequipCost : Nat := 1
 def transitionCost : Nat := 3
 def moveSemanticCost : Nat := 1
 def claimCost : Nat := 1
-def consumableCostFit : Nat := 2
+/-- A fitting consumable costs its published flat cooldown, three seconds
+(`cost_core.CONSUMABLE_COOLDOWN_SECONDS`). Was 2 while Rest was priced in tenths
+of its real duration and had to be undercut. -/
+def consumableCostFit : Nat := 3
 
-/-- The dearest possible Rest, as a Nat in the same 10s cost unit `restCost` uses.
-`restCost_le_restCostMax` below proves this really is the bound. -/
-def restCostMax : Nat := 10
+/-- The dearest possible Rest, as a Nat in the same SECONDS `restCost` uses: a
+full-bar recovery is 100 real seconds. `restCost_le_restCostMax` below proves
+this really is the bound. -/
+def restCostMax : Nat := 100
 
 /-- The overheal sentinel, DERIVED rather than hand-mirrored: the multiplier comes
 from `Extracted.CostCore`, generated out of the Python `OVERHEAL_REST_MULTIPLE` by
 `scripts/extract_lean.py`, and Python computes the same product as
 `OVERHEAL_REST_MULTIPLE * REST_COST_MAX`. A Python edit regenerates this side (the
 `--check` drift gate fails otherwise); a Lean edit is caught by the Oracle-backed
-differential. Value is 10 * 10 = 100. -/
+differential. Value is 2 * 100 = 200. -/
 def consumableCostOverheal : Nat := Extracted.CostCore.OVERHEAL_REST_MULTIPLE.toNat * restCostMax
 def teleportCost : Nat := 20  -- PLAN #6b: flat warp cost (distance-independent); `TeleportAction.cost`
 
@@ -231,17 +236,13 @@ theorem restCost_le_restCostMax (hp maxHp : Nat) :
     restCost hp maxHp ≤ (restCostMax : Rat) := by
   have hq : max 3 (((maxHp - hp) * 100 + maxHp - 1) / maxHp) ≤ 100 :=
     Nat.max_le.mpr ⟨by omega, restCost_ceil_le_100 hp maxHp⟩
-  rw [← Rat.not_lt]
   unfold restCost restCostMax
-  rw [Rat.lt_div_iff (by decide)]
-  intro hlt
-  have : (100 : Nat) < max 3 (((maxHp - hp) * 100 + maxHp - 1) / maxHp) := by exact_mod_cast hlt
-  omega
+  exact_mod_cast hq
 
 /-- Rest is always strictly cheaper than the overheal sentinel, so a plan that
 overheals is never preferred to one that rests. Unconditional — it needs no
 `0 < maxHp` hypothesis, because the degenerate `maxHp = 0` state bottoms out at
-the `max 3` floor (cost `3/10`) rather than dividing by zero in `Rat`. -/
+the `max 3` floor (cost `3`) rather than dividing by zero in `Nat`. -/
 theorem restCost_lt_consumableCostOverheal (hp maxHp : Nat) :
     restCost hp maxHp < (consumableCostOverheal : Rat) := by
   -- Deliberately routed through `restCost_le_restCostMax` and a `decide` on the

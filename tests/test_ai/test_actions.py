@@ -16,7 +16,11 @@ from artifactsmmo_cli.ai.actions.complete_task import (
     CompleteTaskAction,
 )
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
-from artifactsmmo_cli.ai.actions.cost_core import OVERHEAL_CONSUMABLE_COST, REST_COST_MAX
+from artifactsmmo_cli.ai.actions.cost_core import (
+    CONSUMABLE_COOLDOWN_SECONDS,
+    OVERHEAL_CONSUMABLE_COST,
+    REST_COST_MAX,
+)
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
@@ -185,12 +189,12 @@ class TestRestAction:
     def test_cost_delegates_to_rest_cost_pure(self):
         # The action holds no constant of its own: it is rest_cost_pure(hp, max_hp).
         # make_state defaults are hp=100/max_hp=150 -> missing 50 -> ceil(5000/150)
-        # = 34% -> max(3, 34)/10 = 3.4. The regimes themselves (min-3s floor, ceil,
-        # full deficit) are pinned in tests/test_ai/test_cost_core.py.
+        # = 34% -> max(3, 34) = 34.0 seconds. The regimes themselves (min-3s floor,
+        # ceil, full deficit) are pinned in tests/test_ai/test_cost_core.py.
         action = RestAction()
         state = make_state()
         gd = make_game_data()
-        assert action.cost(state, gd) == pytest.approx(3.4)
+        assert action.cost(state, gd) == pytest.approx(34.0)
 
     def test_cost_exceeds_consumable_only_at_deep_deficit(self):
         # Rest always refills to full; its cooldown is the only price, and it
@@ -203,11 +207,15 @@ class TestRestAction:
         use = UseConsumableAction(_item_stats=stats)
         gd = make_game_data()
 
-        deep = make_state(hp=10, max_hp=150)      # 94% missing -> 9.4
+        deep = make_state(hp=10, max_hp=150)      # 94% missing -> 94.0s
         assert rest.cost(deep, gd) > use.cost(deep, gd)
 
-        shallow = make_state(hp=149, max_hp=150)  # 1% missing -> min-3s floor -> 0.3
-        assert rest.cost(shallow, gd) < use.cost(shallow, gd)
+        # A shallow deficit bottoms out at the same 3s floor the consumable
+        # costs, so resting is no longer STRICTLY cheaper — it ties. Below the
+        # floor there is nothing left to win: both close the deficit in one
+        # 3-second action, and the tie is the honest answer.
+        shallow = make_state(hp=149, max_hp=150)  # 1% missing -> min-3s floor -> 3.0
+        assert rest.cost(shallow, gd) == use.cost(shallow, gd)
 
 
 class TestFightAction:
@@ -995,20 +1003,23 @@ class TestUseConsumableAction:
         assert "cooked_beef" not in new_state.inventory
         assert new_state.inventory["apple"] == 3
 
-    def test_cost_is_2(self):
+    def test_cost_is_the_published_flat_three_seconds(self):
         action = UseConsumableAction(_item_stats=_consumable_stats())
         state = make_state()
-        assert action.cost(state, make_game_data()) == 2.0
+        assert action.cost(state, make_game_data()) == CONSUMABLE_COOLDOWN_SECONDS == 3.0
 
     def test_repr(self):
         assert repr(UseConsumableAction(_item_stats={})) == "UseConsumable"
 
     def test_consumable_cheap_when_deficit_justifies_it(self):
-        # deficit 60 >= potion restore 50 -> cheap (2.0, beats Rest 10.0)
+        # deficit 60 >= potion restore 50 -> the flat 3.0, which beats the 60.0
+        # this deficit would cost to rest off.
         item_stats = {"potion": ItemStats(code="potion", level=1, type_="consumable", hp_restore=50)}
         action = UseConsumableAction(_item_stats=item_stats)
         state = make_state(hp=40, max_hp=100, inventory={"potion": 3})
-        assert action.cost(state, make_game_data()) == 2.0
+        assert action.cost(state, make_game_data()) == 3.0
+        assert action.cost(state, make_game_data()) < RestAction().cost(
+            state, make_game_data())
 
     def test_consumable_expensive_when_overheal(self):
         # deficit 10 < potion restore 50 -> overheal -> the Rest-forcing sentinel,

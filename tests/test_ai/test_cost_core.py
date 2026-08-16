@@ -44,41 +44,41 @@ def test_learned_cost_pure_low_confidence_scales_by_rate_floor():
     assert learned_cost_pure(10.0, 3.0, 0.05, has_history=True) == 30.0
 
 
-def test_rest_cost_pure_full_deficit_is_ten():
-    # hp=0 → missing 100% → max(3, 100)/10 = 10.0 (matches the prior flat constant).
-    assert rest_cost_pure(0, 100) == 10.0
+def test_rest_cost_pure_full_deficit_is_the_published_hundred_seconds():
+    # hp=0 → missing 100% → max(3, 100) = 100.0 seconds, the real server cooldown.
+    assert rest_cost_pure(0, 100) == 100.0
 
 
 def test_rest_cost_pure_full_hp_hits_min_floor():
-    # hp==max_hp → missing 0% → max(3, 0)/10 = 0.3 (the 3s minimum cooldown).
-    assert rest_cost_pure(100, 100) == 0.3
+    # hp==max_hp → missing 0% → max(3, 0) = 3.0 (the 3s minimum cooldown).
+    assert rest_cost_pure(100, 100) == 3.0
 
 
-def test_rest_cost_pure_ten_percent_missing_is_one():
-    # hp=90/100 → missing 10% → max(3, 10)/10 = 1.0.
-    assert rest_cost_pure(90, 100) == 1.0
+def test_rest_cost_pure_ten_percent_missing_is_ten_seconds():
+    # hp=90/100 → missing 10% → max(3, 10) = 10.0.
+    assert rest_cost_pure(90, 100) == 10.0
 
 
 def test_rest_cost_pure_small_deficit_hits_min_floor():
-    # hp=99/100 → missing 1% → max(3, 1)/10 = 0.3 (min-3s floor bites).
-    assert rest_cost_pure(99, 100) == 0.3
+    # hp=99/100 → missing 1% → max(3, 1) = 3.0 (min-3s floor bites).
+    assert rest_cost_pure(99, 100) == 3.0
 
 
 def test_rest_cost_pure_ceils_partial_percent():
-    # hp=95/200 → missing 105/200 = 52.5% → ceil = 53 → max(3, 53)/10 = 5.3.
-    assert rest_cost_pure(95, 200) == 5.3
+    # hp=95/200 → missing 105/200 = 52.5% → ceil = 53 → max(3, 53) = 53.0.
+    assert rest_cost_pure(95, 200) == 53.0
 
 
 def test_rest_cost_pure_nonneg_and_deep_deficit():
-    # hp=10/100 → missing 90% → max(3, 90)/10 = 9.0 (the re-anchored demo point).
-    assert rest_cost_pure(10, 100) == 9.0
+    # hp=10/100 → missing 90% → max(3, 90) = 90.0 (the re-anchored demo point).
+    assert rest_cost_pure(10, 100) == 90.0
     assert rest_cost_pure(10, 100) >= 0.0
 
 
 def test_rest_action_cost_delegates_to_rest_cost_pure():
     # RestAction.cost must return rest_cost_pure(state.hp, state.max_hp).
     state = make_state(hp=10, max_hp=100)
-    assert RestAction().cost(state, None, None) == rest_cost_pure(10, 100) == 9.0
+    assert RestAction().cost(state, None, None) == rest_cost_pure(10, 100) == 90.0
 
 
 # ─── the overheal sentinel's domination invariant ────────────────────────────
@@ -89,9 +89,9 @@ def test_rest_action_cost_delegates_to_rest_cost_pure():
 # from the formula it constrained; these tests make it executable.
 
 def test_rest_cost_max_is_the_supremum_of_rest_cost_pure():
-    # missing <= max_hp, so pct_ceil <= 100 and the cost peaks at max(3,100)/10.
+    # missing <= max_hp, so pct_ceil <= 100 and the cost peaks at max(3,100).
     # The peak is independent of max_hp, which is why a single constant suffices.
-    assert REST_COST_MAX == 10.0
+    assert REST_COST_MAX == 100.0
     for max_hp in (1, 2, 3, 7, 99, 100, 150, 1000):
         for hp in range(max_hp + 1):
             assert rest_cost_pure(hp, max_hp) <= REST_COST_MAX
@@ -107,6 +107,6 @@ def test_overheal_sentinel_strictly_dominates_every_rest_cost():
 def test_overheal_sentinel_is_derived_not_hardcoded():
     # Pins the derivation itself: the sentinel is a multiple of the Rest maximum,
     # so rescaling the Rest cost unit carries the sentinel with it. The value must
-    # stay 100.0 to keep the Lean mirror (ActionCostNonneg.consumableCostOverheal)
+    # stay 200.0 to keep the Lean mirror (ActionCostNonneg.consumableCostOverheal)
     # in lockstep.
-    assert OVERHEAL_CONSUMABLE_COST == 10.0 * REST_COST_MAX == 100.0
+    assert OVERHEAL_CONSUMABLE_COST == 2.0 * REST_COST_MAX == 200.0

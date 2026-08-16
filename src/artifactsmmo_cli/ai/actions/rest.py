@@ -26,10 +26,9 @@ class RestAction(Action):
 
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
-        # Dynamic: real cooldown = max(3, ceil(missing_HP%)) seconds, scaled to
-        # the 10s cost unit (see rest_cost_pure). A full-HP rest stays 10.0, but
-        # small deficits become cheap so the planner rests instead of churning a
-        # fitting consumable (2.0) for shallow deficits.
+        # The real cooldown in seconds: max(3, ceil(missing_HP%)). Same unit as
+        # every learned edge (see rest_cost_pure) — this used to be divided by
+        # ten, which made a 100s recovery look cheaper than a single fight.
         return rest_cost_pure(state.hp, state.max_hp)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:

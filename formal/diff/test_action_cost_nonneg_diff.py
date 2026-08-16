@@ -151,24 +151,24 @@ def test_learned_cost_pure_nonneg(static, learned, rate, has_history):
 def test_rest_cost_pure_nonneg(max_hp, frac):
     """rest_cost_pure(hp, max_hp) >= 0 for every reachable HP shape
     (0 <= hp <= max_hp, max_hp >= 1). This is the Python-side mirror of the Lean
-    theorem `restCost_nonneg`: the `max(3, …)` floor keeps the cost >= 0.3 > 0.
+    theorem `restCost_nonneg`: the `max(3, …)` floor keeps the cost >= 3.0 > 0.
 
-    Also spot-checks the formula: a full deficit (hp=0) is 10.0 (matching the
-    prior flat constant), a full-HP rest is 0.3 (the 3s minimum), and a
-    10%-missing deficit is 1.0."""
+    Also spot-checks the formula, which is denominated in REAL SECONDS: a full
+    deficit (hp=0) is 100.0, a full-HP rest is 3.0 (the 3s minimum), and a
+    10%-missing deficit is 10.0."""
     hp = int(round((1.0 - frac) * max_hp))
     hp = max(0, min(hp, max_hp))
     out = rest_cost_pure(hp, max_hp)
     assert out >= 0.0
-    assert out >= 0.3  # max(3, …)/10 floor
+    assert out >= 3.0  # max(3, …) floor
 
     # Formula spot-checks (deterministic, independent of the drawn shape).
-    assert rest_cost_pure(0, 100) == 10.0      # full deficit → 100% → 10.0
-    assert rest_cost_pure(100, 100) == 0.3     # no deficit → min-3s floor
-    assert rest_cost_pure(90, 100) == 1.0      # 10% missing → 1.0
+    assert rest_cost_pure(0, 100) == 100.0     # full deficit → 100% → 100s
+    assert rest_cost_pure(100, 100) == 3.0     # no deficit → min-3s floor
+    assert rest_cost_pure(90, 100) == 10.0     # 10% missing → 10s
     # Partial-percent deficit pins the CEIL (not floor): 95/200 → missing 105 →
-    # ceil(105·100/200) = ceil(52.5) = 53 → 5.3 (a floor would give 5.2).
-    assert rest_cost_pure(95, 200) == 5.3
+    # ceil(105·100/200) = ceil(52.5) = 53 → 53.0 (a floor would give 52.0).
+    assert rest_cost_pure(95, 200) == 53.0
 
 
 # ─── the overheal sentinel dominates Rest (mirror of ──────────────────────────
@@ -193,7 +193,7 @@ def test_overheal_sentinel_dominates_rest_cost(max_hp, frac):
     hp = int(round((1.0 - frac) * max_hp))
     hp = max(0, min(hp, max_hp))
     assert rest_cost_pure(hp, max_hp) < OVERHEAL_CONSUMABLE_COST
-    # The bound is tight at a full deficit: 10.0 < 100.0, with REST_COST_MAX the
+    # The bound is tight at a full deficit: 100.0 < 200.0, with REST_COST_MAX the
     # supremum the Lean ceil-lemma (restCost_ceil_le_100) establishes.
     assert rest_cost_pure(0, max_hp) == REST_COST_MAX
     assert REST_COST_MAX < OVERHEAL_CONSUMABLE_COST
