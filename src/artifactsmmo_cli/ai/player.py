@@ -35,6 +35,7 @@ from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.ge_cancel_order import GeCancelOrderAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
@@ -402,6 +403,11 @@ class GamePlayer:
         # pre-coordination behaviour. Same per-cycle lifecycle as
         # `_supply_target`.
         self._sibling_bank_claims: dict[str, int] = {}
+        # GE order ids a SIBLING is already cancelling, refreshed by
+        # `_update_coordination` and threaded into `_selection_context`'s
+        # `sibling_order_claims`. Empty without a coordination store, which is
+        # every single-character run.
+        self._sibling_order_claims: frozenset[str] = frozenset()
         # The role transition that happened on THIS cycle, or None — the same
         # per-cycle lifecycle as `_supply_target` (recomputed at the end of
         # every `_update_coordination`, cleared when there is no store). Read
@@ -424,10 +430,20 @@ class GamePlayer:
         three buckets the bot actually calls. Called only by `play --all`
         children; a lone `play <character>` never calls this, so
         `_acquire_data`/`_acquire_action`/`_acquire_account` stay no-ops for
-        it."""
+        it.
+
+        ALSO PRICES THE PLANNER'S ACTIONS. Wiring a governor is precisely the
+        statement "this process does not get to act whenever a cooldown ends —
+        it gets one action per `sustainable_interval()` seconds", so it is also
+        the moment the planner must stop pricing actions at their cooldown
+        alone. The action bucket is the one that binds: every planner action is
+        a `/my/{name}/action/*` call. See `GOAPPlanner.action_floor_seconds`;
+        a lone `play <character>` never calls this, so its planner keeps the
+        floor at 0.0 and behaves exactly as before."""
         self._data_governor = data
         self._action_governor = action
         self._account_governor = account
+        self.planner.set_action_floor(action.sustainable_interval())
 
     def set_coordination_store(self, store: "CoordinationStore | None") -> None:
         """Attach the cross-character coordination store. None (the default)
@@ -1470,6 +1486,22 @@ class GamePlayer:
         if self._coordination is not None and isinstance(action, WithdrawItemAction):
             self._coordination.release_bank_stock()
 
+    def _claim_ge_order(self, action: GeCancelOrderAction) -> None:
+        """Announce to siblings that this character is cancelling
+        `action.order_id`, so they drop it from their own cancel targets instead
+        of racing us to it for an HTTP 404. No-op without a coordination store,
+        which is every single-character run."""
+        if self._coordination is not None:
+            self._coordination.claim_ge_order(
+                action.order_id, datetime.now(tz=timezone.utc))
+
+    def _release_ge_orders(self, action: Action) -> None:
+        """Drop this character's GE order claims after a cancel that provably
+        did not happen. No-op for a non-cancel action and without a coordination
+        store."""
+        if self._coordination is not None and isinstance(action, GeCancelOrderAction):
+            self._coordination.release_ge_orders()
+
     def _execute(self, action: Action, client: AuthenticatedClient) -> tuple[WorldState, str]:
         """Execute an action. Returns (new_state, outcome_str).
 
@@ -1511,6 +1543,12 @@ class GamePlayer:
             # coordination store.
             if isinstance(action, WithdrawItemAction):
                 self._claim_bank_stock(action)
+            # Same seam, same reason, for the ACCOUNT-shared Grand Exchange:
+            # publish the cancel BEFORE the request so a sibling deriving its
+            # own cancel targets in the meantime drops this id instead of
+            # racing us to it (`cancel_selection.cancel_targets`).
+            if isinstance(action, GeCancelOrderAction):
+                self._claim_ge_order(action)
             self._acquire_action()
             new_state = action.execute(self.state, client)
             # Re-sync bank state after visiting bank
@@ -1539,6 +1577,10 @@ class GamePlayer:
             # bank stock from every sibling for the rest of its TTL — the one
             # case `release_bank_stock` exists for.
             self._release_bank_stock(action)
+            # The cancel was rejected before it reached game logic, so the order
+            # is still open — a surviving claim would hide a live order, and the
+            # capital it locks, from every sibling for the rest of its TTL.
+            self._release_ge_orders(action)
             delay = retry_after_seconds(e.headers, self._rate_limit_attempts)
             self._rate_limit_attempts += 1
             print(f"[{self._now()}] Rate limited (HTTP 429) — waiting {delay:.0f}s")
@@ -1554,6 +1596,14 @@ class GamePlayer:
             # a transport failure: there the request may well have LANDED, and
             # a claim on units that really are gone must stand until its TTL.
             self._release_bank_stock(action)
+            # A STRUCTURED server rejection means the cancel did not happen, and
+            # both of its shapes want the claim gone: on HTTP 404 the order is
+            # already gone so the claim hides nothing real, and on anything else
+            # the order is still open and the claim would hide it. Not done in
+            # the `httpx.HTTPError` branch below, which is a transport failure
+            # where the request may well have LANDED — there a claim on an order
+            # that really is cancelled must stand until its TTL.
+            self._release_ge_orders(action)
             if e.code == ERROR_CODE_COOLDOWN:
                 print(f"[{self._now()}] Server cooldown (HTTP 499) — refreshing state")
                 outcome = "error:cooldown"
@@ -2896,6 +2946,7 @@ class GamePlayer:
         if self._coordination is None:
             self._supply_target = None
             self._sibling_bank_claims = {}
+            self._sibling_order_claims = frozenset()
             self._role_change = None
             return
         role_before = self._role
@@ -2905,6 +2956,11 @@ class GamePlayer:
         # call) so the shed licence this cycle derives is netted against it —
         # see `ai/bank_drain`'s module docstring for the contention it fixes.
         self._sibling_bank_claims = self._coordination.sibling_bank_claims(now)
+        # GE order ids a sibling has already committed to cancelling. Same read
+        # cadence, same seam, same reason: Grand Exchange orders are ACCOUNT-scoped,
+        # so without this every child plans the same cancel and all but one pay
+        # HTTP 404 "Order not found" out of the per-IP action budget.
+        self._sibling_order_claims = self._coordination.sibling_order_claims(now)
         if self._role is not None:
             self._coordination.renew(self._role, now)
         self._coordination.publish_demand(self._own_unmet_demand(state, game_data), now)
@@ -3060,6 +3116,7 @@ class GamePlayer:
             # `bank_drain.bank_drain_excess` subtracts it from the bank's
             # available quantity so five children stop racing for one pile.
             sibling_bank_claims=self._sibling_bank_claims,
+            sibling_order_claims=self._sibling_order_claims,
         )
 
     def _role_owned_skills(self) -> frozenset[str]:

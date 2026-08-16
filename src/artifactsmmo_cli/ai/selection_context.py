@@ -110,6 +110,23 @@ class SelectionContext:
     # keep authority's ownership cap is account-wide and unaffected) — it
     # changes only how many copies are still there to take.
     sibling_bank_claims: dict[str, int] = field(default_factory=dict)
+    # Grand Exchange order ids a SIBLING has already committed to cancelling —
+    # `CoordinationStore.sibling_order_claims`, read once per cycle by the
+    # player's coordination block and threaded here as DATA, the same seam as
+    # `sibling_bank_claims` directly above. Empty (the default) on every
+    # single-character run and whenever no coordination store is attached,
+    # which makes `cancel_selection.cancel_targets` byte-identical to its
+    # pre-coordination behaviour.
+    #
+    # GE orders are ACCOUNT-scoped: `/my/grandexchange/orders` returns the same
+    # list to all five children, so each ages the same order past TTL_CYCLES and
+    # each plans the same cancel. The losers pay HTTP 404 "Order not found" out
+    # of the per-IP request budget (6 of 20 distinct ids contested, 8 wasted
+    # requests, 2026-08-10 five-character run).
+    #
+    # A SET, not a mapping: the only question asked of it is membership. There
+    # is no quantity to net out — a cancel either happens or it does not.
+    sibling_order_claims: frozenset[str] = field(default_factory=frozenset)
 
 
 NO_PROFILE_CONTEXT = SelectionContext(

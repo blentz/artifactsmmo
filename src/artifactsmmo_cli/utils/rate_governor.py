@@ -23,11 +23,26 @@ class RateGovernor:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
+        self._budget = budget
         self._windows = budget.as_windows()
         self._clock = clock
         self._sleep = sleep
         self._history: deque[float] = deque()
         self._longest = max(self._windows, default=0.0)
+
+    def sustainable_interval(self) -> float:
+        """Seconds per request this bucket can sustain indefinitely.
+
+        Delegates to `WindowBudget.sustainable_interval` rather than recomputing
+        it from `self._windows`: the formula (`max(span / limit)`, and why the
+        LONGEST spacing is the binding one) is documented and tested in exactly
+        one place, and two copies could drift.
+
+        Exposed because the governor is what the bot already holds at runtime,
+        while the budget it was built from is not kept anywhere else — and the
+        planner needs this number to price an action at what a request actually
+        costs (see `GOAPPlanner.action_floor_seconds`)."""
+        return self._budget.sustainable_interval()
 
     def acquire(self) -> None:
         """Block until one request may be sent, then record it."""

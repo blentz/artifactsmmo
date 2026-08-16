@@ -28,7 +28,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, create_engine, select
 
-from artifactsmmo_cli.ai.learning.models import BankStockClaim, MaterialDemand, RoleLease
+from artifactsmmo_cli.ai.learning.models import (
+    BankStockClaim,
+    GeOrderClaim,
+    MaterialDemand,
+    RoleLease,
+)
 from artifactsmmo_cli.ai.learning.schema_init import exclusive_schema_lock
 
 LEASE_TTL_SECONDS = 600
@@ -72,6 +77,30 @@ the ones that were already starved (`DrainBankJunkGoal`).
 60s = two cycles at the upper end of that observed 15-25s cadence, which is
 "the withdraw plus a whole cycle of slack" — the smallest value that covers the
 lower bound twice over while staying an order of magnitude under the lease."""
+
+GE_ORDER_CLAIM_TTL_SECONDS = 60
+"""Seconds a GE order-cancel claim survives. Written once immediately before one
+cancel request and never renewed — the same shape as BANK_CLAIM_TTL_SECONDS, and
+sized against the same settlement window, so the two deliberately share a value
+rather than each inventing one.
+
+LOWER BOUND (must outlive the cancel's settlement). Between the claim and a
+sibling being able to see the truth for itself, this character does
+`_acquire_action()` (which may block on its share of the per-IP action budget),
+then the cancel request. The sibling learns the order is gone from its OWN next
+`_reconcile_open_orders`, which re-reads `/my/grandexchange/orders` every cycle —
+so the window to cover is one cycle, and a cycle is 15-25s when cooldown-bound.
+
+UPPER BOUND (a crashed character must not hide a live order). A claim outlives
+its writer only on a crash, and until it expires that order is invisible to
+every sibling's `cancel_targets` — capital nobody frees. The TTL is therefore
+what bounds the escape hatch that `CancelOrdersGoal`'s liveness argument rests
+on: no posted order's capital can be locked for longer than one claim's TTL past
+the cycle it ages out on.
+
+60s is two cycles at the upper end of that cadence: it covers the settlement
+window twice over while costing at most one extra minute of locked capital
+against sessions that run for hours."""
 
 
 def _migrate_role_lease_unique_index(conn: Connection) -> None:
@@ -534,6 +563,104 @@ class CoordinationStore:
         for row in rows:
             totals[row.item_code] = totals.get(row.item_code, 0) + row.quantity
         return totals
+
+    def _ge_order_claim_expiry(self, now: datetime) -> str:
+        return (now + timedelta(seconds=GE_ORDER_CLAIM_TTL_SECONDS)).isoformat()
+
+    def claim_ge_order(self, order_id: str, now: datetime) -> None:
+        """Record that THIS character is cancelling the account's GE order
+        `order_id`, so siblings drop it from their own cancel targets instead of
+        racing us to it for an HTTP 404.
+
+        ACCUMULATES rather than replacing (see `GeOrderClaim`): `cancel_targets`
+        can report several ids at once and they are worked one per cycle, so an
+        earlier claim must survive the next one.
+
+        Re-claiming an id this character already holds UPDATES that row's expiry
+        rather than inserting a second one — the unique key makes a duplicate
+        unrepresentable, and a re-claim is a fresh intent whose TTL should run
+        from now.
+
+        Also SWEEPS EXPIRED ROWS of every character, in the same transaction and
+        for the same reason `claim` and `claim_bank_stock` do: this is the only
+        place a row is ever ADDED, so the sweep runs at exactly the cadence the
+        table grows, and `sibling_order_claims` already excludes every row it
+        deletes."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(GeOrderClaim).where(
+                        GeOrderClaim.character == self._character,
+                        GeOrderClaim.order_id == order_id,
+                    )
+                ).first()
+                if row is not None:
+                    row.claimed_at = stamp
+                    row.expires_at = self._ge_order_claim_expiry(now)
+                    s.add(row)
+                else:
+                    s.add(GeOrderClaim(character=self._character, order_id=order_id,
+                                       claimed_at=stamp,
+                                       expires_at=self._ge_order_claim_expiry(now)))
+                # AFTER the write, so re-claiming our own LAPSED row updates it
+                # rather than being swept away and re-inserted — same ordering,
+                # and same reason, as `claim`'s sweep.
+                for dead in s.exec(
+                    select(GeOrderClaim).where(GeOrderClaim.expires_at <= stamp)
+                ).all():
+                    s.delete(dead)
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[coordination] claim_ge_order failed: {e}")
+
+    def release_ge_orders(self) -> None:
+        """Drop every GE order-cancel claim this character holds. No-op if it
+        holds none.
+
+        Called when a cancel provably did not happen: the order is still open,
+        so a surviving claim hides a live order — and the capital it locks —
+        from every sibling for the rest of its TTL. All of them rather than one
+        id because a character executes ONE action at a time, so at most one
+        claim can be in flight and any others are already settled or expiring."""
+        try:
+            with SqlSession(self._engine) as s:
+                for row in s.exec(
+                    select(GeOrderClaim).where(
+                        GeOrderClaim.character == self._character
+                    )
+                ).all():
+                    s.delete(row)
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[coordination] release_ge_orders failed: {e}")
+
+    def sibling_order_claims(self, now: datetime) -> frozenset[str]:
+        """Unexpired GE order ids claimed by every OTHER character. The FOURTH
+        deliberately unfiltered read.
+
+        A frozenset, not a mapping: the only question a caller asks is
+        membership ("is a sibling already cancelling this id?"). There is no
+        quantity to sum and no order to impose.
+
+        Own claims are excluded for the same reason `sibling_bank_claims`
+        excludes them: subtracting its own in-flight cancel would make a
+        character stop planning the very cancel it is executing."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(
+                    select(GeOrderClaim).where(
+                        GeOrderClaim.expires_at > stamp,
+                        GeOrderClaim.character != self._character,
+                    )
+                ).all()
+        except SQLAlchemyError as e:
+            print(f"[coordination] sibling_order_claims failed: {e}")
+            return frozenset()
+        return frozenset(row.order_id for row in rows)
 
     def close(self) -> None:
         self._engine.dispose()

@@ -66,6 +66,32 @@ class _ShallowGoal(RestoreHPGoal):
         return 1
 
 
+class TestRequestBudgetFloor:
+    """The planner's edge cost is in SECONDS, but on a `play --all` fleet the
+    binding constraint is REQUESTS: the 2026-08-10 five-character run shows
+    every child pinned at ~52 actions/hour with a mean 69s between actions
+    against a mean 11.5s cooldown, so 29-49% of the wall clock was spent blocked
+    in `RateGovernor.acquire`. An action cheaper than the budget's pace does not
+    actually get to happen any sooner, and pricing it at its cooldown made the
+    planner prefer many cheap actions over few dear ones."""
+
+    # The SEARCH-LEVEL proof — that a binding floor flips the planner from a
+    # cheap-but-many plan to a dear-but-few one — lives in
+    # `formal/diff/test_planner_admissibility_diff.py`, on the same
+    # Move+Eat (7, two actions) versus Rest (9, one action) instance the Lean
+    # model already carries. It is not duplicated here: an instance built from
+    # `MoveAction` alone CANNOT express it, because Manhattan distance is
+    # additive along any monotone path, so a staged route always costs exactly
+    # what the direct hop costs and the `_Node` ordering breaks that tie toward
+    # lower depth. A first version of this class asserted the flip on such an
+    # instance and passed identically with and without the floor.
+
+    def test_the_default_floor_is_zero(self):
+        """Every single-character run, and every caller that never wires a rate
+        governor, must see the pre-change planner exactly."""
+        assert GOAPPlanner().action_floor_seconds == 0.0
+
+
 class TestGOAPPlanner:
     def test_rest_plan_when_hp_low(self):
         planner = GOAPPlanner()

@@ -293,8 +293,12 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
         # `need_gold=0`: the arbiter exposes no per-step required-spend, so the gold
         # on-need trigger is dormant here and the guard fires on item-need + TTL only
         # (a required-spend source is a future wiring extension — see cancel_targets).
+        # `ctx.sibling_order_claims` drops ids a sibling is already cancelling, so
+        # this guard does not fire for a target only another character can take —
+        # the firing signal and the goal that serves it read the SAME filtered set.
         return bool(cancel_targets(
-            state, game_data, 0, frozenset(step_profile or ())))
+            state, game_data, 0, frozenset(step_profile or ()),
+            ctx.sibling_order_claims))
     return False
 
 
