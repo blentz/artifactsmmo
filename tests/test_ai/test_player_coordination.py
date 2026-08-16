@@ -20,6 +20,8 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlmodel import Session as SqlSession
+from sqlmodel import select
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.ge_cancel_order import GeCancelOrderAction
@@ -33,6 +35,7 @@ from artifactsmmo_cli.ai.learning.coordination_store import (
     GE_ORDER_CLAIM_TTL_SECONDS,
     CoordinationStore,
 )
+from artifactsmmo_cli.ai.learning.models import MaterialDemand
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG
 from artifactsmmo_cli.ai.role_selection import (
@@ -1693,3 +1696,95 @@ def test_execute_keeps_the_order_claim_when_the_cancel_succeeds(tmp_path):
     finally:
         p._coordination.close()
         observer.close()
+
+
+# ---------------------------------------------------------------------------
+# GamePlayer._update_coordination — the real self_servable set (Task 3 of the
+# role_driven_supply spec). Replaces the frozenset() placeholder that used to
+# be passed to `publish_demand`, so every published row is no longer
+# unconditionally read back as "the requester cannot make this". Also threads
+# `sibling_demand_asymmetric` onto `SelectionContext.asymmetric_demand`, the
+# signal Task 4's supply rung gates on.
+# ---------------------------------------------------------------------------
+
+def _self_servable_gd() -> GameData:
+    """`greater_wooden_staff` gates at woodcutting 20 — a REAL requirement a
+    low-level character genuinely cannot clear, not an absent one.
+    `copper_ore` gathers at mining 1 — a gate any miner clears."""
+    gd = GameData()
+    gd._item_stats = {
+        "greater_wooden_staff": ItemStats(code="greater_wooden_staff", level=20,
+                                          type_="weapon", crafting_skill="woodcutting",
+                                          crafting_level=20),
+    }
+    gd._crafting_recipes = {}
+    gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
+    return gd
+
+
+def _player_with_coordination(tmp_path, name: str) -> tuple[GamePlayer, CoordinationStore]:
+    """A character wired to a real coordination store over `_self_servable_gd`,
+    following the construction style `_held_miner` above already uses."""
+    db = str(tmp_path / "coord.db")
+    p = GamePlayer(character=name)
+    p.state = make_state()
+    p.game_data = _self_servable_gd()
+    store = CoordinationStore(db_path=db, character=name)
+    p.set_coordination_store(store)
+    return p, store
+
+
+def _publish_sibling_request(tmp_path, name: str, demand: dict[str, int],
+                             self_servable: frozenset[str]) -> None:
+    """Publish `demand` from a sibling character through a second store handle
+    onto the SAME db `_player_with_coordination` uses."""
+    db = str(tmp_path / "coord.db")
+    sibling = CoordinationStore(db_path=db, character=name)
+    try:
+        sibling.publish_demand(demand, self_servable, datetime.now(tz=timezone.utc))
+    finally:
+        sibling.close()
+
+
+def test_a_character_publishes_its_own_inability_to_make_what_it_wants(tmp_path):
+    """Lor is a miner at woodcutting 1; a greater_wooden_staff gates far above
+    that, so its request must go out marked for a sibling."""
+    player, store = _player_with_coordination(tmp_path, "Lor")
+    player.state = make_state(skills={"woodcutting": 1, "mining": 8})
+    player._last_decide_crafting_target = "greater_wooden_staff"
+
+    player._update_coordination(player.state, player.game_data)
+
+    with SqlSession(store._engine) as s:
+        rows = {r.item_code: r.self_servable for r in s.exec(select(MaterialDemand)).all()}
+    assert rows["greater_wooden_staff"] is False
+
+
+def test_a_character_that_can_make_its_own_material_says_so(tmp_path):
+    player, store = _player_with_coordination(tmp_path, "Lor")
+    player.state = make_state(skills={"mining": 20})
+    player._last_decide_crafting_target = "copper_ore"
+
+    player._update_coordination(player.state, player.game_data)
+
+    with SqlSession(store._engine) as s:
+        rows = {r.item_code: r.self_servable for r in s.exec(select(MaterialDemand)).all()}
+    assert rows["copper_ore"] is True
+
+
+def test_the_asymmetric_set_reaches_the_selection_context(tmp_path):
+    player, _ = _player_with_coordination(tmp_path, "R2D2")
+    _publish_sibling_request(tmp_path, "Lor", {"greater_wooden_staff": 1}, self_servable=frozenset())
+
+    player._update_coordination(player.state, player.game_data)
+    ctx = player._selection_context(combat_monster=None)
+
+    assert "greater_wooden_staff" in ctx.asymmetric_demand
+
+
+def test_no_coordination_store_leaves_the_asymmetric_set_empty():
+    player = GamePlayer(character="solo")
+    player.state = make_state()
+    player._update_coordination(player.state, player.game_data)
+    assert player._asymmetric_demand == frozenset()

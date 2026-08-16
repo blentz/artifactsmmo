@@ -434,6 +434,13 @@ class GamePlayer:
         # (nothing to surrender to itself) and for every character `_turn_in`
         # leaves at None. Same per-cycle lifecycle as `_turn_in`.
         self._recall: tuple[str, int] | None = None
+        # Codes SOME sibling wants but marked NOT self-servable for itself
+        # (`CoordinationStore.sibling_demand_asymmetric`), refreshed by
+        # `_update_coordination` and threaded into `_selection_context`'s
+        # `asymmetric_demand`. Empty without a coordination store, which is
+        # every single-character run — the supply rung (Task 4) that reads it
+        # stays inert there, exactly like every other coordination field.
+        self._asymmetric_demand: frozenset[str] = frozenset()
 
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
@@ -3004,6 +3011,7 @@ class GamePlayer:
             self._role_change = None
             self._turn_in = None
             self._recall = None
+            self._asymmetric_demand = frozenset()
             return
         role_before = self._role
         now = datetime.now(tz=timezone.utc)
@@ -3025,13 +3033,33 @@ class GamePlayer:
         self._sibling_order_claims = self._coordination.sibling_order_claims(now)
         if self._role is not None:
             self._coordination.renew(self._role, now)
-        # frozenset() is a placeholder: Task 3 (role_driven_supply) computes the
-        # real set of codes this character can produce itself. Until then every
-        # row this call writes is stored as NOT self-servable, matching the
-        # migration default's read-as-servable stance only for legacy rows,
-        # not for rows this character republishes going forward.
-        self._coordination.publish_demand(
-            self._own_unmet_demand(state, game_data), frozenset(), now)
+        # The real self_servable set (Task 3, role_driven_supply): the codes
+        # in THIS character's own unmet demand it can produce itself, at its
+        # OWN current skill levels — the same producing-skill/level split and
+        # the same `serves_item` gate the sibling-demand block below applies,
+        # so a requester and its servers never disagree about what "can
+        # produce" means.
+        own_demand = self._own_unmet_demand(state, game_data)
+        own_producing = {code: game_data.producing_requirement(code) for code in own_demand}
+        own_skill_of_item = {code: req[0] if req is not None else None
+                             for code, req in own_producing.items()}
+        own_level_of_item = {code: req[1] for code, req in own_producing.items()
+                             if req is not None}
+        # A code with NO producing skill at all (own_skill_of_item[code] is
+        # None) is never self-servable: nothing this character can do
+        # produces it, which is exactly a request only a sibling or a vendor
+        # can fill — `serves_item` would default an unknown REQUIREMENT to
+        # servable, but there is no skill here to even ask the question of.
+        self_servable = frozenset(
+            code for code, skill in own_skill_of_item.items()
+            if skill is not None and serves_item(code, skill, own_level_of_item, state.skills))
+        self._coordination.publish_demand(own_demand, self_servable, now)
+        # This character's read of the shared board's asymmetric demand: codes
+        # SOME sibling wants but marked NOT self-servable for itself — the
+        # signal the supply rung (Task 4) gates on. Same per-cycle lifecycle
+        # as `_supply_target`, cleared to empty above whenever no coordination
+        # store is attached.
+        self._asymmetric_demand = self._coordination.sibling_demand_asymmetric(now)
 
         item_demand = self._coordination.sibling_demand(now)
         # ONE lookup per item, split into the two shapes the pure module takes.
@@ -3382,6 +3410,10 @@ class GamePlayer:
             # single-character run.
             turn_in=self._turn_in,
             recall=self._recall,
+            # Codes some sibling wants but cannot make itself, same source and
+            # lifecycle as `supply_target`: set by `_update_coordination`,
+            # empty on every single-character run.
+            asymmetric_demand=self._asymmetric_demand,
         )
 
     def _role_owned_skills(self) -> frozenset[str]:

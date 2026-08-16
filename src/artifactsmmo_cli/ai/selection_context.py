@@ -157,6 +157,18 @@ class SelectionContext:
     # (strategy_driver.map_means; a second buyer double-spends the fleet's
     # currency). Same per-cycle lifecycle as `turn_in`.
     recall: tuple[str, int] | None = None
+    # {item_code} some SIBLING wants but marked NOT self-servable for itself —
+    # `CoordinationStore.sibling_demand_asymmetric`, read once per cycle by the
+    # player's coordination block and threaded here as DATA, the same seam as
+    # `supply_target` and `role_skills`. Empty (the default) on every
+    # single-character run and whenever no coordination store is attached.
+    #
+    # This is the signal that distinguishes "a sibling asked but could gather
+    # it itself" (not worth pausing for) from "nobody nearby can make this"
+    # (the request the SUPPLY rung exists to serve) — see
+    # `MaterialDemand.self_servable`'s docstring for why the requester's own
+    # ability, not just the quantity, has to ride on the row.
+    asymmetric_demand: frozenset[str] = field(default_factory=frozenset)
 
 
 NO_PROFILE_CONTEXT = SelectionContext(
