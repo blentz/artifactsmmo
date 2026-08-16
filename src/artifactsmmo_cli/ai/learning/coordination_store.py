@@ -570,6 +570,13 @@ class CoordinationStore:
                     )
                 ).all():
                     s.delete(stale)
+                # Flush the deletes before the inserts: BankStockClaim, like
+                # HoldingLedger, is UNIQUE on (character, item_code), so a
+                # same-code reclaim inserts a row whose key a still-pending
+                # delete has not yet vacated. Unflushed, SQLAlchemy's unit of
+                # work would order that INSERT ahead of the DELETE within one
+                # flush and the UNIQUE constraint would reject it.
+                s.flush()
                 for item_code, quantity in claims.items():
                     if quantity > 0:
                         s.add(BankStockClaim(character=self._character,

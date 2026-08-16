@@ -1295,6 +1295,23 @@ def test_claiming_bank_stock_replaces_this_characters_previous_claim(tmp_path: P
         c3po.close()
 
 
+def test_reclaiming_the_same_item_code_replaces_the_quantity(tmp_path: Path) -> None:
+    """Re-claiming the same item code this character already holds must replace
+    the quantity, not keep the stale old quantity. The fix requires flushing the
+    delete before the insert to avoid a UNIQUE constraint violation on the
+    in-flight inserts."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    c3po = CoordinationStore(db_path=db, character="C3P0")
+    try:
+        hal.claim_bank_stock({"egg": 17}, _T0)
+        hal.claim_bank_stock({"egg": 3}, _T0)
+        assert c3po.sibling_bank_claims(_T0) == {"egg": 3}
+    finally:
+        hal.close()
+        c3po.close()
+
+
 def test_a_non_positive_bank_claim_is_not_stored(tmp_path: Path) -> None:
     """A claim on zero units is not a claim; storing it would put rows in
     `sibling_bank_claims` that can never subtract anything."""
