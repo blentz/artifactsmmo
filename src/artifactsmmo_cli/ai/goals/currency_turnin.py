@@ -2,6 +2,19 @@
 for, once `ai.currency_turnin.turn_in_ready_pure` and the per-cycle election
 (Task 5, `GamePlayer._resolve_turn_in`) have named this character the buyer.
 
+THE BUYER FUNDS ITSELF FIRST (fix-round-2, CRITICAL). `NpcBuyAction` pays the
+currency out of INVENTORY, not the bank, and the buyer's own worn copies are
+one `UnequipAction` away from inventory. So the chain is: unequip each worn
+copy → withdraw only the REMAINDER the bank must supply → buy. The earlier
+shape — always `Withdraw(currency x price)`, no unequip leg — livelocked the
+buyer permanently whenever its own holdings were part of what made the fleet
+ready: buyer wears 1, carries 1, bank holds 8, price 10 ⇒ `fleet_total` is 10
+so this character WINS the election, then plans nothing forever because
+`WithdrawItemAction.is_applicable` wants 10 in a bank that holds 8. That is
+the most likely winner, not an edge case: the election's upgrade gate
+(`GamePlayer._resolve_turn_in` rule 3) favours a character the item is an
+upgrade for, and a medal-wearer is a natural winner.
+
 `relevant_actions` MATERIALIZES its own `WithdrawItemAction` rather than
 filtering one out of the ambient action pool: `build_actions` (factory.py)
 only emits a Withdraw sized to the OBJECTIVE step's own crafting-closure
@@ -17,7 +30,9 @@ decision the factory cannot anticipate."""
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.currency_turnin import buyer_bank_draw_pure
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -61,21 +76,47 @@ class CurrencyTurnInGoal(Goal):
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"inventory": {self._item_code: 1}}
 
+    def _held(self, state: WorldState) -> int:
+        """The buyer's OWN spendable units: carried plus worn. A worn copy
+        counts because one `UnequipAction` moves it into inventory, which is
+        where `NpcBuyAction` takes payment from — the same reason
+        `dual_role_holdings` counts worn units as fleet currency."""
+        return state.inventory.get(self._currency, 0) + len(self._worn_slots(state))
+
+    def _worn_slots(self, state: WorldState) -> list[str]:
+        return [slot for slot, code in state.equipment.items() if code == self._currency]
+
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:
-        """Narrow to exactly the two-action chain this goal can ever need: the
-        materialized currency withdraw and the one matching NpcBuy leaf. A
-        wide pool is what makes this search expensive elsewhere in this repo
-        (see the module docstrings this brief points at); this goal has no
-        need of it."""
+        """Narrow to exactly the chain this goal can ever need: an Unequip for
+        each of the buyer's own worn copies, the materialized bank withdraw
+        sized to what those copies do NOT cover, and the one matching NpcBuy
+        leaf. A wide pool is what makes this search expensive elsewhere in
+        this repo (see the module docstrings this brief points at); this goal
+        has no need of it.
+
+        The Unequip legs are what make the plan REACHABLE rather than merely
+        expressible: `UnequipAction.is_applicable` needs `inventory_free >= 1`,
+        so the planner is free to order them before the withdraw fills the
+        bag — and it must be handed both legs to have that choice at all.
+
+        A zero-sized withdraw is omitted entirely: a buyer already carrying
+        the whole price needs no bank leg, and `Withdraw(x0)` is a degenerate
+        no-op the planner would have to step over."""
         npc_buys = [a for a in actions
                    if isinstance(a, NpcBuyAction)
                    and a.npc_code == self._npc_code
                    and a.item_code == self._item_code]
+        unequips = [a for a in actions
+                   if isinstance(a, UnequipAction)
+                   and state.equipment.get(a.slot) == self._currency]
+        draw = buyer_bank_draw_pure(self._price, self._held(state))
+        if draw <= 0:
+            return [*unequips, *npc_buys]
         bank_location = game_data.bank_location_or_none or (0, 0)
-        withdraw = WithdrawItemAction(code=self._currency, quantity=self._price,
+        withdraw = WithdrawItemAction(code=self._currency, quantity=draw,
                                       bank_location=bank_location)
-        return [withdraw, *npc_buys]
+        return [*unequips, withdraw, *npc_buys]
 
     def __repr__(self) -> str:
         return f"CurrencyTurnIn({self._item_code})"

@@ -125,7 +125,7 @@ def test_five_characters_wearing_ten_medals_reach_the_trophy(tmp_path):
     hal_goal, hal_plan, _ = hal._decide_band(hal.state, gd, hal._build_actions(), None)
 
     assert isinstance(hal_goal, SurrenderCurrencyGoal)
-    assert [repr(a) for a in hal_plan][0] == "Unequip(artifact1_slot)"
+    assert repr(hal_plan[0]) == "Unequip(artifact1_slot)"
 
 
 def test_the_buyer_snapshot_carries_the_turn_in_block_with_role_buyer(tmp_path):

@@ -51,6 +51,61 @@ def test_buyer_plans_withdraw_then_purchase():
     ]
 
 
+def test_buyer_funds_the_price_from_its_own_worn_and_carried_units():
+    """CRITICAL (fix-round-2): the buyer must fund the purchase from what IT
+    already holds, not from the bank alone.
+
+    Live shape: the elected buyer wears 1 medal, carries 1, and the shared
+    bank holds 8 — `fleet_total` is 10, so this character WINS the election,
+    and a goal that always materializes `Withdraw(currency x price)` can then
+    never plan (`WithdrawItemAction.is_applicable` needs `bank >= 10` and the
+    bank has 8). That is a permanent livelock for exactly the character most
+    likely to be elected: the upgrade gate favours a character the item is an
+    upgrade for, and a medal-wearer is a natural winner.
+
+    So the plan must unequip the buyer's own worn copies (each moves one unit
+    into inventory, which is where `NpcBuyAction` pays from) and withdraw only
+    the REMAINDER the bank has to supply."""
+    gd = medal_game_data()
+    state = make_state(level=27,
+                       equipment={"artifact1_slot": "lich_race_medal"},
+                       inventory={"lich_race_medal": 1},
+                       bank_items={"lich_race_medal": 8})
+    goal = CurrencyTurnInGoal(item_code="lich_race_trophy", npc_code="archaeologist",
+                              price=10, currency="lich_race_medal")
+
+    plan = GOAPPlanner().plan(state, goal, _turn_in_actions(gd, state), gd)
+
+    reprs = [repr(a) for a in plan]
+    assert len(plan) == 3, reprs
+    assert reprs.count("Unequip(artifact1_slot)") == 1, reprs
+    assert "Withdraw(lich_race_medal×8)" in reprs, reprs
+    assert "Withdraw(lich_race_medal×10)" not in reprs, reprs
+    assert reprs[-1] == "NpcBuy(lich_race_trophy×1@archaeologist)", reprs
+
+    # Replay it: `apply` asserts each action's own precondition, so a plan
+    # ordered unequip-after-a-bag-filling-withdraw would crash here rather
+    # than pass silently (UnequipAction needs `inventory_free >= 1`).
+    end_state = state
+    for action in plan:
+        end_state = action.apply(end_state, gd)
+    assert goal.is_satisfied(end_state) is True
+
+
+def test_buyer_withdraws_nothing_when_it_already_holds_the_whole_price():
+    """The degenerate end of the same sizing rule: a buyer already carrying
+    the full price must NOT be handed a `Withdraw(...x0)` no-op leg — the
+    remainder is zero, so there is no bank leg at all."""
+    gd = medal_game_data()
+    state = make_state(level=27, inventory={"lich_race_medal": 10}, bank_items={})
+    goal = CurrencyTurnInGoal(item_code="lich_race_trophy", npc_code="archaeologist",
+                              price=10, currency="lich_race_medal")
+
+    plan = GOAPPlanner().plan(state, goal, _turn_in_actions(gd, state), gd)
+
+    assert [repr(a) for a in plan] == ["NpcBuy(lich_race_trophy×1@archaeologist)"]
+
+
 def test_buyer_goal_is_satisfied_once_the_item_is_owned():
     state = make_state(inventory={"lich_race_trophy": 1})
     goal = CurrencyTurnInGoal(item_code="lich_race_trophy", npc_code="archaeologist",

@@ -3124,14 +3124,25 @@ class GamePlayer:
         3. Buying must be an upgrade for THIS character:
            `pick_loadout_cached(Rank(), state_holding_the_item, game_data)`
            must place the candidate's `item_code` in a slot. A character whose
-           loadout would not wear it never nominates itself as buyer for it —
-           this is also why a character that fails this (or rule 4) sees
-           neither `_turn_in` nor `_recall` change: it has no candidate of its
-           own to check `claim_turn_in`/`turn_in_holder` against.
+           loadout would not wear it never nominates itself as buyer for it.
         4. The buyer must satisfy `item_stats(item_code).level <= state.level`
            — a character that cannot wear the item must not win the claim.
         5. Exactly one candidate is pursued: the highest `price`, since a
            bigger sink consumes stock a smaller one would only fragment.
+
+        RULES 3 AND 4 GATE THE ELECTION ONLY (fix-round-2, CRITICAL). They
+        used to gate candidate-building itself, so a character that could not
+        wear the item built no candidate, never consulted
+        `claim_turn_in`/`turn_in_holder`, and got BOTH `_turn_in = None` and
+        `_recall = None` — it never surrendered, even while a sibling held a
+        live claim on the very item its medals pay for. On the live fleet that
+        was fatal, not theoretical: `lich_race_trophy` is level 20 and only
+        Robby (27) can wear it, but the two `lich_race_medal`s that exist are
+        WORN by R2D2 (16) and HAL (15). Neither ever handed one over, Robby
+        waited forever, and the whole feature was inert. So a character that
+        fails rule 3 or rule 4 still takes the RECALL path
+        (`_adopt_sibling_claim`): holding units of a currency obliges it to
+        surrender them to a sibling's live claim whatever its own level.
 
         Once this character has a qualifying candidate, `claim_turn_in`
         resolves who actually buys it — a live incumbent (this cycle or a
@@ -3180,21 +3191,17 @@ class GamePlayer:
             for item_code, npc_code, price in game_data.currency_sinks(code):
                 if not turn_in_ready_pure(fleet_total, price):  # rule 2
                     continue
-                stats = game_data.item_stats(item_code)
-                if stats is None or stats.level > state.level:  # rule 4
-                    continue
-                state_holding_the_item = replace(
-                    state,
-                    inventory={**state.inventory,
-                              item_code: state.inventory.get(item_code, 0) + 1},
-                )
-                loadout = pick_loadout_cached(Rank(), state_holding_the_item, game_data)
-                if item_code not in loadout.values():  # rule 3
+                if not self._may_be_buyer(item_code, state, game_data):  # rules 3-4
                     continue
                 candidates.append(TurnIn(item_code=item_code, npc_code=npc_code,
                                          price=price, currency=code,
                                          buyer=self.character, fleet_total=fleet_total))
         if not candidates:
+            # Not electable for anything (or holding nothing the fleet can
+            # spend) — but a sibling may still be waiting on the medals this
+            # character is wearing. See the RULES 3 AND 4 note above.
+            self._adopt_sibling_claim(self._coordination, own, siblings, bank,
+                                      now, game_data)
             return
         chosen = max(candidates, key=lambda c: c.price)  # rule 5
         if self._coordination.claim_turn_in(chosen.item_code, now):
@@ -3212,6 +3219,66 @@ class GamePlayer:
         surrender = own.get(chosen.currency, 0)
         if surrender > 0:
             self._recall = (chosen.currency, surrender)
+
+    def _may_be_buyer(self, item_code: str, state: "WorldState",
+                      game_data: GameData) -> bool:
+        """Rules 3 and 4 of `_resolve_turn_in`, together: may THIS character
+        nominate itself as the buyer of `item_code`?
+
+        Extracted so the two gates have exactly one home and are visibly
+        applied to the ELECTION alone. Wiring them into candidate-building
+        instead is what made the whole turn-in inert on the live fleet — the
+        only two medal-wearers were both below the trophy's level, so neither
+        ever reached the recall path (full story in `_resolve_turn_in`)."""
+        stats = game_data.item_stats(item_code)
+        if stats is None or stats.level > state.level:  # rule 4
+            return False
+        state_holding_the_item = replace(
+            state,
+            inventory={**state.inventory,
+                      item_code: state.inventory.get(item_code, 0) + 1},
+        )
+        loadout = pick_loadout_cached(Rank(), state_holding_the_item, game_data)
+        return item_code in loadout.values()  # rule 3
+
+    def _adopt_sibling_claim(self, coordination: CoordinationStore,
+                             own: dict[str, int], siblings: dict[str, int],
+                             bank: dict[str, int], now: datetime,
+                             game_data: GameData) -> None:
+        """Surrender this character's whole holding to a sibling's LIVE claim,
+        for a character that could never be the buyer itself.
+
+        Reached only when the election produced no candidate of this
+        character's own — the below-level / not-an-upgrade case. The trigger
+        is the CLAIM, never a locally recomputed readiness: `turn_in_ready_pure`
+        would have this character bank its medals the moment the fleet merely
+        LOOKED affordable, before anyone was elected to spend them, and
+        wearing a dual-role item IS the fleet's storage
+        (`ai/dual_role_currency.py`). `turn_in_holder` never writes, so asking
+        does not take the claim over — a below-level character must never end
+        up holding the election it is standing down from.
+
+        Same controller ruling as the losing-candidate branch above: the whole
+        holding, worn and carried, no quota. Highest price wins when a
+        currency feeds several claimed sinks, matching rule 5."""
+        claimed: list[TurnIn] = []
+        # Every key of `own` is a POSITIVE holding by construction
+        # (`dual_role_holdings` only records `qty > 0` and worn copies), so
+        # there is no zero-holding case to screen out here.
+        for code in sorted(own):
+            fleet_total = fleet_total_pure(own, siblings, bank, code)
+            for item_code, npc_code, price in game_data.currency_sinks(code):
+                holder = coordination.turn_in_holder(item_code, now)
+                if holder is None or holder == self.character:
+                    continue
+                claimed.append(TurnIn(item_code=item_code, npc_code=npc_code,
+                                      price=price, currency=code, buyer=holder,
+                                      fleet_total=fleet_total))
+        if not claimed:
+            return
+        chosen = max(claimed, key=lambda c: c.price)
+        self._turn_in = chosen
+        self._recall = (chosen.currency, own[chosen.currency])
 
     def _selection_context(self, combat_monster: str | None = None) -> SelectionContext:
         assert self.state is not None
