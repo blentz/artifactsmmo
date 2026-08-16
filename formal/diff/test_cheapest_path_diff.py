@@ -342,3 +342,56 @@ def test_winnable_false_skips_to_winnable(tmp_path):
     assert lean["blocked"] is False, f"Lean should not block: {lean}"
     assert py["monster_codes"] == ["easy"], f"Python should pick easy: {py}"
     assert lean["monster_codes"] == ["easy"], f"Lean should pick easy: {lean}"
+
+
+def test_the_rung_body_grows_so_a_later_rung_can_beat_more(tmp_path):
+    """S-015: the body the walk consults GROWS as it climbs, so `is_winnable` is
+    asked about each rung's projected character rather than about today's.
+
+    PYTHON-ONLY, and necessarily so. Every differential above is restricted to
+    SINGLE-STEP plans (`_run_lean` asserts `target == current + 1`) because
+    xp_per_kill scales with level and the Lean model takes one value per monster.
+    At a single rung `sim_level` IS `state.level`, so the growth `replace` reduces
+    to the identity and no single-step case can observe it — which is exactly how
+    the mutant `cheapest_path: freeze the rung body (revert S-015 growth)`
+    survived every run of this file. Observing the growth needs a walk of at
+    least TWO levels, so it cannot ride the Lean diff.
+
+    Setup: char L1 climbing to L4, so the walk simulates rungs at levels 1, 2, 3.
+      - 'cub'  (L1): winnable at every rung.
+      - 'wolf' (L2): level-OK at every rung (the +1 margin covers L2 from
+        sim_level 1 upward), but `is_winnable` returns True only once the body
+        being asked about has reached level 3.
+    Wolf carries the higher xp_per_kill, so the greedy takes it the moment it
+    becomes winnable. With the body growing, the last rung beats the wolf. With
+    the body frozen at L1 the predicate is asked about today's character forever,
+    the wolf is never winnable, and the walk under-reports what it can climb —
+    the error's stated direction.
+    """
+    monsters = [("cub", 1, 10), ("wolf", 2, 10)]
+    # Gate on the LEVEL OF THE BODY HANDED TO THE PREDICATE. That body is the
+    # only thing the mutation changes: the walk's own level filter reads
+    # `sim_level` directly, not the rung, so it stays put either way.
+    winnable_stub = (  # noqa: E731
+        lambda state, gd, code, store: code == "cub" or state.level >= 3)
+
+    gd = _make_game_data(monsters)
+    # Vacuity guards. Without the first, the greedy would have no reason to
+    # switch and the codes would match whatever the predicate said; without the
+    # second, the wolf would be excluded by the level filter rather than by
+    # winnability and the growth would not be what this test turns on.
+    assert (_expected_xp_per_kill(gd, "wolf", 3)
+            > _expected_xp_per_kill(gd, "cub", 3)), (
+        "fixture drift: the wolf must out-yield the cub or the greedy would "
+        "keep the cub even once the wolf is winnable"
+    )
+    assert all(2 <= sim_level + 1 for sim_level in (1, 2, 3)), (
+        "the wolf (L2) must clear the walk's `lvl <= sim_level + 1` filter at "
+        "every rung, so winnability is the only thing gating it"
+    )
+
+    py = _run_python(1, 4, monsters, tmp_path, winnable_stub=winnable_stub)
+    assert py["blocked"] is False, f"the walk must complete: {py}"
+    assert py["monster_codes"] == ["cub", "cub", "wolf"], (
+        f"the grown body must beat the wolf on the L3 rung: {py}"
+    )
