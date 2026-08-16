@@ -230,19 +230,24 @@ theorem descends_geCancel (s : State)
     higher slot is unchanged and the bottom slot strictly drops.
 
     The strictness is exactly where the human ruling's demand threshold earns
-    its keep: `supplyBankFires` requires `supplyDemand ≥ SUPPLY_DEMAND_MIN`, and
-    `SUPPLY_DEMAND_MIN_pos` turns that into `supplyDemand > 0`, which is what
-    makes the saturating `Nat` decrement a real decrease. Without the gate a
-    zero-demand target could select this rung forever and the cycle would not
-    descend at all. -/
+    its keep: `supplyBankFires`'s bulk arm requires `supplyDemand ≥
+    SUPPLY_DEMAND_MIN`, and `SUPPLY_DEMAND_MIN_pos` turns that into
+    `supplyDemand > 0`, which is what makes the saturating `Nat` decrement a
+    real decrease. Without the gate a zero-demand target could select this
+    rung forever and the cycle would not descend at all. The asymmetry arm
+    (2026-08-16) carries its own `supplyDemand > 0` conjunct for the same
+    reason — see `supplyBankFires`'s doc comment — so `hpos` follows in
+    EITHER firing branch, not just the bulk one. -/
 theorem descends_supplyBank (s : State)
     (hk : productionLadder (perceptionRefresh s) = some .supplyBank) :
     fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
   have hfire := fires_of_ladder hk
-  simp only [fires, supplyBankFires, decide_eq_true_eq] at hfire
+  simp only [fires, supplyBankFires, Bool.or_eq_true, Bool.and_eq_true,
+    decide_eq_true_eq] at hfire
   have hpos : (perceptionRefresh s).supplyDemand > 0 := by
-    have := SUPPLY_DEMAND_MIN_pos
-    omega
+    rcases hfire with hbulk | ⟨_, hasym⟩
+    · have := SUPPLY_DEMAND_MIN_pos; omega
+    · exact hasym
   rw [cycleStepF_some s hk, ← fMeasure_perceptionRefresh s]
   have hcs : cycleStep (perceptionRefresh s) =
       applyActionKind .gather (perceptionRefresh s) := by

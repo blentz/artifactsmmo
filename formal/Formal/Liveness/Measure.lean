@@ -252,6 +252,25 @@ structure State where
       honest-disclosure treatment `objectiveStepFires` gets. The ladder
       differential asserts agreement with the real value. -/
   supplyDemand : Nat := 0
+  /-- OPAQUE: production's SUPPLY_BANK asymmetry flag (2026-08-16, role-driven-
+      supply epic Task 4). Mirrors the SECOND arm of
+      `tiers/means.py::_fires(SUPPLY_BANK, …)` =
+      `target[2] >= SUPPLY_DEMAND_MIN or target[0] in ctx.asymmetric_demand`:
+      `target[0] in ctx.asymmetric_demand` — whether the requested item code is
+      one at least one sibling that asked for it is skill-gated out of
+      producing for itself. `ctx.asymmetric_demand` is populated by
+      `Coordination.sibling_demand_asymmetric` from the cross-character
+      coordination DB, which this model does not reproduce — the same
+      honest-disclosure treatment `supplyDemand` gets. OR'd with the bulk-
+      demand gate, not a replacement for it: a bare `Bool` is faithful here
+      (unlike `supplyDemand`) because the asymmetric arm carries no size
+      threshold of its own — presence in the set is the whole test.
+
+      Default false — a single-character run's `asymmetric_demand` is always
+      the empty frozenset (no coordination store), so every pre-existing
+      witness keeps its semantics unchanged. The ladder differential asserts
+      agreement with the real value. -/
+  supplyAsymmetric : Bool := false
   /-- OPAQUE: production's CURRENCY_TURNIN means firing predicate (2026-08-16,
       fleet-currency-turn-in epic Task 6). Mirrors
       `tiers/means.py::_fires(CURRENCY_TURNIN, …)` = `ctx.turn_in is not None or

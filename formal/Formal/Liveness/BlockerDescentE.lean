@@ -111,6 +111,12 @@ private theorem refreshE_supplyDemand (s : State) :
   split
   · split <;> rfl
   · rfl
+private theorem refreshE_supplyAsymmetric (s : State) :
+    (perceptionRefreshE s).supplyAsymmetric = s.supplyAsymmetric := by
+  unfold perceptionRefreshE
+  split
+  · split <;> rfl
+  · rfl
 private theorem refreshE_currencyTurnIn (s : State) :
     (perceptionRefreshE s).currencyTurnInActive = s.currencyTurnInActive := by
   unfold perceptionRefreshE
@@ -426,15 +432,20 @@ theorem descendsE_geCancel (s : State)
 /-- `supplyBank` (→ `.gather`) strictly descends at `supplyDemandSlot`
     (2026-08-01) — the promoted rung, above `gearReviewFlag`/`objectiveStepFlag`
     (the two slots the refresh can raise). Strictness comes from the firing gate
-    `supplyDemand ≥ SUPPLY_DEMAND_MIN` plus `SUPPLY_DEMAND_MIN_pos`. -/
+    `supplyDemand ≥ SUPPLY_DEMAND_MIN` plus `SUPPLY_DEMAND_MIN_pos`; the
+    asymmetry arm (2026-08-16) carries its own `supplyDemand > 0` conjunct for
+    the same reason (see `supplyBankFires`'s doc comment), so `hpos` follows in
+    either firing branch. -/
 theorem descendsE_supplyBank (s : State)
     (hk : productionLadder (perceptionRefreshE s) = some .supplyBank) :
     eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
   have hfire := fires_of_ladder hk
-  simp only [fires, supplyBankFires, decide_eq_true_eq, refreshE_supplyDemand] at hfire
+  simp only [fires, supplyBankFires, Bool.or_eq_true, Bool.and_eq_true,
+    decide_eq_true_eq, refreshE_supplyDemand, refreshE_supplyAsymmetric] at hfire
   have hpos : s.supplyDemand > 0 := by
-    have := SUPPLY_DEMAND_MIN_pos
-    omega
+    rcases hfire with hbulk | ⟨_, hasym⟩
+    · have := SUPPLY_DEMAND_MIN_pos; omega
+    · exact hasym
   rw [cycleStepE_some s hk]
   have hcs : cycleStep (perceptionRefreshE s) =
       applyActionKind .gather (perceptionRefreshE s) := by

@@ -22,12 +22,14 @@
   Five `_fires` predicates depend on goal-internal or out-of-model logic the
   Lean model does not reproduce literally:
     - `objectiveStep`  (the StrategyArbiter's objective candidate)
-    - `supplyBank`     (`ctx.supply_target`, computed from the cross-character
-                       coordination DB — outside this single-character model.
-                       Carried as the opaque Nat `supplyDemand` rather than a
-                       Bool, because since 2026-08-01 the rung is gated on that
-                       demand clearing `SUPPLY_DEMAND_MIN`, not merely on a
-                       target existing)
+    - `supplyBank`     (`ctx.supply_target`/`ctx.asymmetric_demand`, computed
+                       from the cross-character coordination DB — outside this
+                       single-character model. Carried as the opaque Nat
+                       `supplyDemand` plus the opaque Bool `supplyAsymmetric`
+                       rather than a single Bool, because since 2026-08-01 the
+                       rung is gated on that demand clearing
+                       `SUPPLY_DEMAND_MIN` OR (since 2026-08-16) the requested
+                       item being asymmetric — not merely on a target existing)
     - `currencyTurnIn` (`ctx.turn_in`/`ctx.recall`, computed from the fleet
                        coordination DB and the per-cycle election in
                        `GamePlayer._resolve_turn_in` — outside this
@@ -344,15 +346,40 @@ def SUPPLY_DEMAND_MIN : Nat := 10
     because the threshold exceeds 0. See `State.supplyDemand`. -/
 theorem SUPPLY_DEMAND_MIN_pos : SUPPLY_DEMAND_MIN > 0 := by decide
 
-/-- SUPPLY_BANK (2026-08-01). Mirrors `means.py::_fires(SUPPLY_BANK, …)` =
-    `ctx.supply_target is not None and ctx.supply_target[2] >=
-    SUPPLY_DEMAND_MIN`: fires exactly when some unexpired sibling demand is
-    servable by this character's role AND that demand is substantial enough to
-    justify pausing this character's own objective step for a production run.
-    The demand itself is an opaque `State` field because it is computed from the
-    coordination DB, which this model does not reproduce — the same
-    honest-disclosure treatment `objectiveStep` gets. -/
-def supplyBankFires (s : State) : Bool := decide (s.supplyDemand ≥ SUPPLY_DEMAND_MIN)
+/-- SUPPLY_BANK (2026-08-01, asymmetry arm added 2026-08-16 role-driven-supply
+    epic Task 4). Mirrors `means.py::_fires(SUPPLY_BANK, …)` =
+    `ctx.supply_target is not None and (ctx.supply_target[2] >=
+    SUPPLY_DEMAND_MIN or ctx.supply_target[0] in ctx.asymmetric_demand)`: fires
+    when some unexpired sibling demand is servable by this character's role AND
+    EITHER that demand is substantial enough to justify pausing this
+    character's own objective step for a production run, OR the requested item
+    is asymmetric — at least one sibling that asked for it is skill-gated out
+    of producing it itself, the case that makes holding a role worth anything
+    regardless of request size. The demand and the asymmetry flag are both
+    opaque `State` fields because they are computed from the coordination DB,
+    which this model does not reproduce — the same honest-disclosure treatment
+    `objectiveStep` gets.
+
+    The asymmetry arm carries an extra `s.supplyDemand > 0` conjunct that
+    `_fires`'s Python `target[0] in ctx.asymmetric_demand` does not: NOT a
+    behavioural deviation — production's own `_pick_supply_target` never
+    yields a target with demand 0 (`supplyDemand`'s doc comment on `State`),
+    so `ctx.asymmetric_demand` membership only ever coincides with
+    `target[2] ≥ 1` in every REAL state, the same way `SUPPLY_DEMAND_MIN_pos`
+    already makes the bulk arm's `supplyDemand > 0` derivation sound. Unlike
+    that Nat-valued field, `supplyAsymmetric` is a free `Bool` with no
+    structural link back to `supplyDemand`, so the Lean model — which must
+    stay total over EVERY `State`, not just production-reachable ones —
+    can otherwise construct a "junk" state (`supplyAsymmetric := true`,
+    `supplyDemand := 0`) production never emits. Without the conjunct that
+    junk state would fire the rung while `.gather`'s saturating
+    `supplyDemand - 1` apply (`Plan.lean`) makes zero progress, falsifying
+    `BlockerDescent.descends_supplyBank`'s hypothesis-free descent over ALL
+    states. The conjunct closes that Lean-only gap without touching any
+    observable behaviour on a real trace. -/
+def supplyBankFires (s : State) : Bool :=
+  decide (s.supplyDemand ≥ SUPPLY_DEMAND_MIN) ||
+    (s.supplyAsymmetric && decide (s.supplyDemand > 0))
 
 /-- CURRENCY_TURNIN (2026-08-16, fleet-currency-turn-in epic Task 6). Mirrors
     `means.py::_fires(CURRENCY_TURNIN, …)` = `ctx.turn_in is not None or

@@ -83,6 +83,9 @@ private theorem refreshD_geCancel (s : State) :
 private theorem refreshD_supplyDemand (s : State) :
     (perceptionRefreshD s).supplyDemand = s.supplyDemand := by
   unfold perceptionRefreshD; split <;> rfl
+private theorem refreshD_supplyAsymmetric (s : State) :
+    (perceptionRefreshD s).supplyAsymmetric = s.supplyAsymmetric := by
+  unfold perceptionRefreshD; split <;> rfl
 private theorem refreshD_currencyTurnIn (s : State) :
     (perceptionRefreshD s).currencyTurnInActive = s.currencyTurnInActive := by
   unfold perceptionRefreshD; split <;> rfl
@@ -284,15 +287,20 @@ theorem descendsD_geCancel (s : State)
     (2026-08-01). The promoted rung is selectable below the cap here too; its
     `.gather` apply discharges one unit of the outstanding sibling request and
     touches no higher slot. Strictness comes from the firing gate
-    `supplyDemand ≥ SUPPLY_DEMAND_MIN` together with `SUPPLY_DEMAND_MIN_pos`. -/
+    `supplyDemand ≥ SUPPLY_DEMAND_MIN` together with `SUPPLY_DEMAND_MIN_pos`;
+    the asymmetry arm (2026-08-16) carries its own `supplyDemand > 0` conjunct
+    for the same reason (see `supplyBankFires`'s doc comment), so `hpos`
+    follows in either firing branch. -/
 theorem descendsD_supplyBank (s : State)
     (hk : productionLadder (perceptionRefreshD s) = some .supplyBank) :
     dMeasureLt (dMeasure (cycleStepD s)) (dMeasure s) := by
   have hfire := fires_of_ladder hk
-  simp only [fires, supplyBankFires, decide_eq_true_eq, refreshD_supplyDemand] at hfire
+  simp only [fires, supplyBankFires, Bool.or_eq_true, Bool.and_eq_true,
+    decide_eq_true_eq, refreshD_supplyDemand, refreshD_supplyAsymmetric] at hfire
   have hpos : s.supplyDemand > 0 := by
-    have := SUPPLY_DEMAND_MIN_pos
-    omega
+    rcases hfire with hbulk | ⟨_, hasym⟩
+    · have := SUPPLY_DEMAND_MIN_pos; omega
+    · exact hasym
   rw [cycleStepD_some s hk]
   have hcs : cycleStep (perceptionRefreshD s) =
       applyActionKind .gather (perceptionRefreshD s) := by

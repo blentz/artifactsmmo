@@ -78,6 +78,7 @@ def inertLadderState : State where
   gearReviewFires := false
   maintainConsumablesFires := false
   supplyDemand := 0
+  supplyAsymmetric := false
   currencyTurnInActive := false
   bankItemsKnown := false
   bankItemsCount := 0
@@ -137,6 +138,29 @@ example :
 example :
     Formal.Liveness.ProductionLadder.supplyBankFires
       { inertLadderState with supplyDemand := 80 } = true := rfl
+
+/-- Non-vacuity witness for the ASYMMETRY arm (2026-08-16, role-driven-supply
+    epic Task 4): its firing predicate is satisfiable at the SMALLEST possible
+    demand — `supplyDemand = 1`, the live case, since every published request
+    is quantity 1 and the bulk gate (`SUPPLY_DEMAND_MIN = 10`) had therefore
+    never fired before this arm existed. `supplyAsymmetric := true` fires the
+    rung on its own, with no help from the demand size. Same shape as
+    `currencyTurnInFires`'s witness above — an opaque Bool this model cannot
+    reconstruct, but state-carried as a real, reachable observation. -/
+example :
+    Formal.Liveness.ProductionLadder.supplyBankFires
+      { inertLadderState with supplyDemand := 1, supplyAsymmetric := true }
+      = true := rfl
+
+/-- …and it is genuinely gated: at that SAME `supplyDemand = 1` — one below the
+    threshold, so the bulk arm is quiet — `supplyAsymmetric := false` leaves
+    the rung quiet too. This is the pair that pins the asymmetry arm itself in
+    lockstep: drop the `|| s.supplyAsymmetric` disjunct on either side alone
+    and one of these two witnesses disagrees. -/
+example :
+    Formal.Liveness.ProductionLadder.supplyBankFires
+      { inertLadderState with supplyDemand := 1, supplyAsymmetric := false }
+      = false := rfl
 
 /-- The promotion is REAL in the model, not just in a list literal: with every
     guard and collect-reward rung quiet, an at-threshold supply demand is

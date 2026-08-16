@@ -115,7 +115,12 @@ inductive MeansKind where
                         --                     `supplyDemand >= SUPPLY_DEMAND_MIN`
                         --                     (ProductionLadder) — the gate is what
                         --                     stops a fleet of siblings serving each
-                        --                     other instead of levelling.
+                        --                     other instead of levelling. OR'd
+                        --                     (2026-08-16, role-driven-supply epic
+                        --                     Task 4) with `supplyAsymmetric` --
+                        --                     fires at ANY demand when at least one
+                        --                     sibling asking for the item is
+                        --                     skill-gated out of making it itself.
   | currencyTurnIn      -- CURRENCY_TURNIN,    means.py (2026-08-16, fleet-currency-
                         --                     turn-in epic Task 6): spend/surrender a
                         --                     fleet-wide dual-role holding (worn AND
