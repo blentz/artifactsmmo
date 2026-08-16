@@ -52,8 +52,7 @@ Measured with the real planner against live state, not inferred:
 | `src/artifactsmmo_cli/ai/tiers/means.py` (modify) | `MeansKind.CURRENCY_TURNIN` + its `_fires` predicate + `COLLECT_REWARD_ORDER` slot. |
 | `src/artifactsmmo_cli/ai/goals/currency_turnin.py` (new) | Buyer side: withdraw the currency, buy the upgrade. |
 | `src/artifactsmmo_cli/ai/goals/surrender_currency.py` (new) | Holder side: unequip and deposit the recalled units. |
-| `src/artifactsmmo_cli/ai/strategy_driver.py` (modify) | Map the new means to whichever of those two goals this character is. |
-| `src/artifactsmmo_cli/ai/inventory_keep.py` (modify) | Keep-reason for recalled units so they are not deposited-then-re-equipped. |
+| `src/artifactsmmo_cli/ai/strategy_driver.py` (modify) | Map the new means to whichever of those two goals this character is; also reserves `ctx.turn_in`'s currency code at the `empty_slot_rank_fills` call site so a surrendered unit is not immediately re-equipped (as built — see Task 7). |
 | `src/artifactsmmo_cli/ai/cycle_snapshot.py` (modify) | Trace fields: fleet total, threshold, elected buyer. |
 | `formal/Formal/Liveness/MeansFiring.lean` (modify) | The rung the new means owes the ladder. |
 
@@ -788,9 +787,9 @@ git commit -m "feat(tiers): turn fleet currency in for the upgrade it pays for"
 
 ### Task 7: Do not re-wear what is mid-flight
 
-**Files:**
-- Modify: `src/artifactsmmo_cli/ai/inventory_keep.py`
+**Files (as built — see note after Step 3):**
 - Modify: `src/artifactsmmo_cli/ai/equipment/empty_slot_fills.py`
+- Modify: `src/artifactsmmo_cli/ai/strategy_driver.py`
 - Test: `tests/test_ai/test_turn_in_no_livelock.py`
 
 **Interfaces:**
@@ -829,7 +828,7 @@ Expected: FAIL — the first test returns the fill, since nothing consults `ctx.
 
 - [ ] **Step 3: Implement the exclusion**
 
-One condition in the fill predicate: skip a code equal to `ctx.turn_in.currency` when `ctx.turn_in` is not None. Mirror it in the keep economy so the recalled units are not treated as junk and deposited by a different path mid-turn-in.
+`empty_slot_rank_fills` already took a `reserved: frozenset[str]` parameter for the task-reservation pipeline, so no `ctx`-consuming branch was added inside it. Instead, its one call site — `strategy_driver.py`'s `map_means`/candidate-building, where `EquipOwnedGoal.fills` is computed — folds `{ctx.turn_in.currency}` into that same `reserved` set whenever `ctx.turn_in is not None`, alongside the existing `task_reserved_demand(state, game_data)`. A recalled unit is excluded from the fill exactly like a task-reserved item is, through the mechanism that already existed for that purpose — no second reservation channel, and no change to `inventory_keep.py`: the deposit/keep economy was never in this exclusion's path, only the equip-fill one.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -839,7 +838,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/artifactsmmo_cli/ai/inventory_keep.py \
+git add src/artifactsmmo_cli/ai/strategy_driver.py \
         src/artifactsmmo_cli/ai/equipment/empty_slot_fills.py \
         tests/test_ai/test_turn_in_no_livelock.py
 git commit -m "fix(ai): hold recalled currency out of slot fills while a turn-in is live"

@@ -3215,29 +3215,42 @@ class GamePlayer:
                 candidates.append(TurnIn(item_code=item_code, npc_code=npc_code,
                                          price=price, currency=code,
                                          buyer=self.character, fleet_total=fleet_total))
-        if not candidates:
-            # Not electable for anything (or holding nothing the fleet can
-            # spend) — but a sibling may still be waiting on the medals this
-            # character is wearing. See the RULES 3 AND 4 note above.
-            self._adopt_sibling_claim(self._coordination, own, siblings, bank,
-                                      now, game_data)
-            return
-        chosen = max(candidates, key=lambda c: c.price)  # rule 5
-        if self._coordination.claim_turn_in(chosen.item_code, now):
-            self._turn_in = chosen
-            return
-        holder = self._coordination.turn_in_holder(chosen.item_code, now)
-        if holder is None:
-            # The claim attempt failed for a reason OTHER than a live
-            # incumbent (see `claim_turn_in`'s docstring: an IntegrityError
-            # race, or a swallowed SQLAlchemyError) — nobody actually holds
-            # the election, so there is nothing to report as a turn-in this
-            # cycle and nothing to recall toward.
-            return
-        self._turn_in = replace(chosen, buyer=holder)
-        surrender = own.get(chosen.currency, 0)
-        if surrender > 0:
-            self._recall = (chosen.currency, surrender)
+        # rule 5: exactly one candidate is pursued this cycle, so only ITS
+        # currency counts as "contested" below.
+        elected_code: str | None = None
+        if candidates:
+            chosen = max(candidates, key=lambda c: c.price)
+            elected_code = chosen.currency
+            if self._coordination.claim_turn_in(chosen.item_code, now):
+                self._turn_in = chosen
+            else:
+                holder = self._coordination.turn_in_holder(chosen.item_code, now)
+                if holder is not None:
+                    # `holder is None` means the claim attempt failed for a
+                    # reason OTHER than a live incumbent (see
+                    # `claim_turn_in`'s docstring: an IntegrityError race, or
+                    # a swallowed SQLAlchemyError) — nobody actually holds
+                    # the election, so there is nothing to report as a
+                    # turn-in for THIS currency and nothing to recall toward
+                    # it. `_turn_in`/`_recall` stay at their initial None
+                    # (the second pass below may still fill them in for a
+                    # DIFFERENT currency).
+                    self._turn_in = replace(chosen, buyer=holder)
+                    surrender = own.get(chosen.currency, 0)
+                    if surrender > 0:
+                        self._recall = (chosen.currency, surrender)
+        # SECOND PASS (fix-round-3, residual 2): a character that just won
+        # or contested an election for ONE dual-role currency may still hold
+        # units of ANOTHER one it never became a candidate for (failed rules
+        # 3/4) — that currency needs the exact same "surrender to a live
+        # sibling claim" check the `if not candidates` branch used to gate
+        # this behind entirely. Restricting `own` to the non-elected codes
+        # keeps the single-currency case byte-identical: with one dual-role
+        # currency, `remaining_own` is always empty and this is a no-op.
+        remaining_own = {code: qty for code, qty in own.items() if code != elected_code}
+        if remaining_own:
+            self._adopt_sibling_claim(self._coordination, remaining_own, siblings,
+                                      bank, now, game_data)
 
     def _may_be_buyer(self, item_code: str, state: "WorldState",
                       game_data: GameData) -> bool:

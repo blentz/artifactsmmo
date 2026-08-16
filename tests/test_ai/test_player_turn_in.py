@@ -22,6 +22,32 @@ def _player_with(tmp_path, name):
     return player, store
 
 
+def _player_with_gd(tmp_path, name, game_data):
+    """Like `_player_with`, but with a caller-supplied `game_data` — used by
+    the second-dual-role-currency test, which needs a currency chain the
+    shared `medal_game_data` fixture doesn't carry."""
+    store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character=name)
+    player = GamePlayer(character=name)
+    player._coordination = store
+    player.game_data = game_data
+    return player, store
+
+
+def _two_dual_role_currency_game_data():
+    """`medal_game_data` plus a SECOND, independent dual-role currency chain
+    (second_medal -> second_trophy, price 5, curator NPC) — residual 2's
+    second-pass sibling-claim adoption needs two live dual-role currencies
+    to be exercised at all."""
+    gd = medal_game_data()
+    gd._item_stats["second_medal"] = ItemStats(
+        code="second_medal", level=5, type_="artifact")
+    gd._item_stats["second_trophy"] = ItemStats(
+        code="second_trophy", level=30, type_="artifact", hp_bonus=1)
+    gd.world.npc_buy_currency["curator"] = {"second_trophy": "second_medal"}
+    gd.world.npc_stock["curator"] = {"second_trophy": 5}
+    return gd
+
+
 class _NoHolderStore:
     """A coordination stub whose `claim_turn_in` fails for a reason OTHER
     than a live incumbent (an IntegrityError race or a swallowed
@@ -265,6 +291,49 @@ def test_recall_surrenders_the_whole_holding_when_the_fleet_holds_a_surplus(tmp_
 
     assembled = 1 + 3 + sum(recalls.values())  # buyer's own worn + bank + every recall
     assert assembled >= 10
+
+
+def test_a_second_dual_role_currency_still_recalls_behind_a_won_election(tmp_path):
+    """RESIDUAL 2 (fix-round-3): `_adopt_sibling_claim` must run as a SECOND
+    PASS for every currency this character did not just contest an election
+    for — not only when the election phase produced no candidate at all.
+
+    Robby wins the election for currency A (lich_race_medal) exactly as in
+    `test_turn_in_resolves_when_the_fleet_wears_enough`. It ALSO holds 2
+    units of a second, independent dual-role currency (second_medal) but is
+    below `second_trophy`'s level-30 gate, so it never becomes a candidate
+    for currency B — HAL (level 32) already won that election. Before the
+    fix, `_adopt_sibling_claim` sat behind `if not candidates:`, and since
+    Robby's currency-A candidacy made `candidates` non-empty, it never
+    checked whether a sibling held a live claim on currency B — Robby would
+    have kept wearing/carrying the second_medal units forever."""
+    db_path = str(tmp_path / "coord.db")
+    gd = _two_dual_role_currency_game_data()
+
+    # Currency A ready for Robby, same shape as the single-currency test.
+    for sibling, worn in (("HAL", 3), ("R2D2", 3), ("C3P0", 2)):
+        CoordinationStore(db_path=db_path, character=sibling).publish_holdings(
+            {"lich_race_medal": worn}, NOW)
+
+    # Currency B: HAL (above the trophy's level gate) wins its election
+    # first, funded by a third character's published units.
+    CoordinationStore(db_path=db_path, character="Chewie").publish_holdings(
+        {"second_medal": 5}, NOW)
+    hal, _ = _player_with_gd(tmp_path, "HAL", gd)
+    hal._resolve_turn_in(make_state(level=32, inventory={}, bank_items={}), gd)
+    assert hal._turn_in is not None and hal._turn_in.buyer == "HAL"
+
+    robby, _ = _player_with_gd(tmp_path, "Robby", gd)
+    robby_state = make_state(
+        level=27, inventory={"second_medal": 2}, bank_items={"lich_race_medal": 1},
+        equipment={"artifact1_slot": "lich_race_medal"})
+
+    robby._resolve_turn_in(robby_state, gd)
+
+    assert robby._turn_in is not None
+    assert robby._turn_in.item_code == "second_trophy"
+    assert robby._turn_in.buyer == "HAL"
+    assert robby._recall == ("second_medal", 2)
 
 
 def test_a_failed_claim_without_a_live_holder_reports_no_turn_in(tmp_path):

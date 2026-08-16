@@ -3,6 +3,8 @@
 from dataclasses import dataclass, field
 from typing import ClassVar
 
+from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
+
 
 @dataclass
 class LocationCatalog:
@@ -398,13 +400,27 @@ class LocationCatalog:
         `npc_buy_currency` map rather than a second index, so a currency that
         stops being accepted disappears from both directions at once. The
         price comes from `npc_stock` (the same buy-price map `npc_purchases`
-        reads) — there is no separate price table."""
+        reads) — there is no separate price table.
+
+        `npc_buy_currency` and `npc_stock` are populated together, entry by
+        entry, from the same NPC-item payload (`GameData._build_npcs`), so an
+        `npc_code`/`item_code` pair present here but absent from `npc_stock`
+        means that invariant broke upstream. Raising rather than defaulting
+        the price to 0 keeps that failure loud (CLAUDE.md: "Use only API data
+        or fail with an error") instead of quietly mispricing a turn-in sink."""
         out: list[tuple[str, str, int]] = []
         for npc_code, by_item in self.npc_buy_currency.items():
             for item_code, currency in by_item.items():
-                if currency == currency_code:
-                    out.append((item_code, npc_code,
-                                self.npc_stock.get(npc_code, {}).get(item_code, 0)))
+                if currency != currency_code:
+                    continue
+                stock = self.npc_stock.get(npc_code)
+                if stock is None or item_code not in stock:
+                    raise GameDataCoverageError(
+                        f"NPC {npc_code!r} accepts {currency_code!r} for "
+                        f"{item_code!r} but carries no npc_stock price for it: "
+                        "npc_buy_currency and npc_stock should be populated "
+                        "together from the same NPC-item payload")
+                out.append((item_code, npc_code, stock[item_code]))
         return sorted(out, key=lambda row: (row[2], row[0]))
 
     def npc_buys_item(self, npc_code: str, item_code: str) -> int | None:
