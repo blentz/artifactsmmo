@@ -26,7 +26,7 @@ from pathlib import Path
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session as SqlSession
-from sqlmodel import SQLModel, create_engine, select
+from sqlmodel import SQLModel, col, create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import (
     BankStockClaim,
@@ -510,6 +510,47 @@ class CoordinationStore:
         for row in rows:
             totals[row.item_code] = totals.get(row.item_code, 0) + row.quantity
         return totals
+
+    def sibling_demand_asymmetric(self, now: datetime) -> frozenset[str]:
+        """Item codes for which at least one UNEXPIRED, OTHER-character demand
+        row is `self_servable=False` — the codes worth a sibling's cycle,
+        because someone who asked for them genuinely cannot make them.
+
+        The aggregation across rows for the same code is OR, not AND, and
+        that is the entire point of the column: if ANY live asker cannot make
+        an item, that item is worth producing for the fleet. A second asker
+        who happens to be able to make it does not cancel the first one's
+        need — it is a DIFFERENT character's row, describing a DIFFERENT
+        character's situation, and the first one's request is still sitting
+        there unfilled. Reducing with AND instead would let one
+        self-servable asker mask every genuinely-stuck asker for the same
+        code, which is exactly the case `self_servable` was added to stop
+        being invisible (see `MaterialDemand.self_servable`'s docstring).
+
+        Modelled on `sibling_demand`'s shape exactly — same "other characters
+        only" filter, same unexpired predicate, one query — because the
+        liveness and ownership rules are identical; only the aggregation
+        (OR over booleans vs. sum over quantities) and the return shape
+        (frozenset of codes vs. quantity dict) differ. A frozenset, not a
+        dict: the caller's only question is membership ("is this code
+        asymmetric?"), and there is no quantity to attach to the answer —
+        `sibling_demand` already reports how much is wanted; this reports
+        which of those wants nobody who asked for it can fill themselves."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(
+                    select(MaterialDemand).where(
+                        MaterialDemand.expires_at > stamp,
+                        MaterialDemand.character != self._character,
+                        col(MaterialDemand.self_servable).is_(False),
+                    )
+                ).all()
+        except SQLAlchemyError as e:
+            print(f"[coordination] sibling_demand_asymmetric failed: {e}")
+            return frozenset()
+        return frozenset(row.item_code for row in rows)
 
     def publish_holdings(self, holdings: Mapping[str, int], now: datetime) -> None:
         """Replace this character's `HoldingLedger` rows wholesale.

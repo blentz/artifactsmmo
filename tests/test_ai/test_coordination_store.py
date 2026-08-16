@@ -692,6 +692,15 @@ class TestDegradationOnDbError:
         assert hal.sibling_demand(_T0) == {}
         assert "[coordination] sibling_demand failed" in capsys.readouterr().out
 
+    def test_sibling_demand_asymmetric_swallows_error_and_returns_empty(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        db = str(tmp_path / "coord.db")
+        hal = CoordinationStore(db_path=db, character="HAL")
+        _break_engine(hal)
+        assert hal.sibling_demand_asymmetric(_T0) == frozenset()
+        assert "[coordination] sibling_demand_asymmetric failed" in capsys.readouterr().out
+
     def test_claim_bank_stock_swallows_error(self, tmp_path: Path, capsys) -> None:
         db = str(tmp_path / "coord.db")
         hal = CoordinationStore(db_path=db, character="HAL")
@@ -1226,6 +1235,67 @@ def test_sibling_demand_rejects_non_utc_offset_now(tmp_path: Path) -> None:
     try:
         with pytest.raises(ValueError, match="offset"):
             hal.sibling_demand(_NON_UTC_NOW)
+    finally:
+        hal.close()
+
+
+def test_a_code_is_asymmetric_when_any_asker_cannot_make_it(tmp_path):
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    CoordinationStore(db_path=db, character="Lor").publish_demand(
+        {"greater_wooden_staff": 1}, frozenset(), now)             # cannot make it
+    CoordinationStore(db_path=db, character="C3P0").publish_demand(
+        {"greater_wooden_staff": 1}, frozenset({"greater_wooden_staff"}), now)  # can
+
+    assert CoordinationStore(db_path=db, character="R2D2").sibling_demand_asymmetric(now) == \
+        frozenset({"greater_wooden_staff"})
+
+
+def test_a_code_every_asker_can_make_is_not_asymmetric(tmp_path):
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    CoordinationStore(db_path=db, character="Lor").publish_demand(
+        {"copper_ore": 30}, frozenset({"copper_ore"}), now)
+
+    assert CoordinationStore(db_path=db, character="R2D2").sibling_demand_asymmetric(now) == frozenset()
+
+
+def test_my_own_row_never_makes_a_code_asymmetric_for_me(tmp_path):
+    """Otherwise a character serves itself through the bank, forever."""
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    lor = CoordinationStore(db_path=db, character="Lor")
+    lor.publish_demand({"greater_wooden_staff": 1}, frozenset(), now)
+
+    assert lor.sibling_demand_asymmetric(now) == frozenset()
+
+
+def test_an_expired_row_stops_making_a_code_asymmetric(tmp_path):
+    now = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    CoordinationStore(db_path=db, character="Lor").publish_demand(
+        {"greater_wooden_staff": 1}, frozenset(), now)
+    later = now + timedelta(seconds=DEMAND_TTL_SECONDS + 1)
+
+    assert CoordinationStore(db_path=db, character="R2D2").sibling_demand_asymmetric(later) == frozenset()
+
+
+def test_sibling_demand_asymmetric_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.sibling_demand_asymmetric(_NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_sibling_demand_asymmetric_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="offset"):
+            hal.sibling_demand_asymmetric(_NON_UTC_NOW)
     finally:
         hal.close()
 
