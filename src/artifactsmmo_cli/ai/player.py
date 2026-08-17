@@ -2987,7 +2987,9 @@ class GamePlayer:
         search.
 
         A cycle where the goal was NOT attempted (a guard preempted selection,
-        the cached plan was reused, the demand is below `SUPPLY_DEMAND_MIN`)
+        the cached plan was reused, or the demand is BOTH below
+        `SUPPLY_DEMAND_MIN` and not asymmetric -- either one alone still fires
+        the rung, since an asymmetric request is served at any size)
         leaves the run untouched: it is absence of evidence, and neither
         extending nor clearing the run would be honest. The run IS cleared when
         there is no supply target at all, which is the same "this run is about a
@@ -3011,6 +3013,33 @@ class GamePlayer:
             self._role_unservable_cycles = 0
         else:
             self._role_unservable_cycles += 1
+
+    @staticmethod
+    def _producing_split(
+        item_demand: Mapping[str, int], game_data: GameData,
+    ) -> "tuple[dict[str, str | None], dict[str, int]]":
+        """Split the producing requirement of every code in `item_demand` into
+        the two item-keyed shapes the pure `role_selection` module takes:
+        (skill-or-None per code, level per code that HAS a requirement).
+
+        ONE lookup per item, split here rather than asking `GameData` twice, so
+        the skill and the level always describe the SAME production route (see
+        `producing_requirement`, where craft beats gather for an item that is
+        both). An item with no producing skill at all contributes a None to the
+        first map and NOTHING to the second — `demand_by_role` and
+        `_pick_supply_target` both drop it, and `serves_item`'s permissive
+        "no recorded requirement means servable" rule is what reads the gap.
+
+        Called twice per cycle by `_update_coordination`, over two different
+        demand dicts (this character's own unmet demand, and the siblings'
+        board). Written twice it was the same three lines in one function, and
+        two copies of three lines drift — the lesson `serves_item`'s own
+        docstring records about `_claimable`."""
+        producing = {code: game_data.producing_requirement(code) for code in item_demand}
+        skill_of_item = {code: req[0] if req is not None else None
+                         for code, req in producing.items()}
+        level_of_item = {code: req[1] for code, req in producing.items() if req is not None}
+        return skill_of_item, level_of_item
 
     def _update_coordination(self, state: "WorldState", game_data: GameData) -> None:
         """Renew, publish, and re-decide this character's role for one cycle,
@@ -3057,19 +3086,24 @@ class GamePlayer:
         # so a requester and its servers never disagree about what "can
         # produce" means.
         own_demand = self._own_unmet_demand(state, game_data)
-        own_producing = {code: game_data.producing_requirement(code) for code in own_demand}
-        own_skill_of_item = {code: req[0] if req is not None else None
-                             for code, req in own_producing.items()}
-        own_level_of_item = {code: req[1] for code, req in own_producing.items()
-                             if req is not None}
-        # A code with NO producing skill at all (own_skill_of_item[code] is
-        # None) is never self-servable: nothing this character can do
-        # produces it, which is exactly a request only a sibling or a vendor
-        # can fill — `serves_item` would default an unknown REQUIREMENT to
-        # servable, but there is no skill here to even ask the question of.
+        own_skill_of_item, own_level_of_item = self._producing_split(own_demand, game_data)
+        # A code with NO producing skill at all IS self-servable. `self_servable`
+        # means "the asker can obtain this without help", and for a vendor-only
+        # good the asker can buy it exactly as well as any sibling can — there
+        # is no skill asymmetry for a sibling to exploit. ASYMMETRY IS STRICTLY
+        # ABOUT SKILL GATES.
+        #
+        # The consumer side is what settles it: `_pick_supply_target` SKIPS
+        # every code whose producing skill is None (no role owns a skill for
+        # it), so no character can ever be selected to serve one. Publishing
+        # such a code as asymmetric advertises help nobody can give, and the
+        # rung stays inert for the whole class — which on the live board was
+        # 100% of the demand (`lich_race_medal`, `lich_race_trophy`, both
+        # vendor purchases). A publisher that disagrees with its only consumer
+        # is worse than silent.
         self_servable = frozenset(
             code for code, skill in own_skill_of_item.items()
-            if skill is not None and serves_item(code, skill, own_level_of_item, state.skills))
+            if skill is None or serves_item(code, skill, own_level_of_item, state.skills))
         self._coordination.publish_demand(own_demand, self_servable, now)
         # This character's read of the shared board's asymmetric demand: codes
         # SOME sibling wants but marked NOT self-servable for itself — the
@@ -3079,15 +3113,7 @@ class GamePlayer:
         self._asymmetric_demand = self._coordination.sibling_demand_asymmetric(now)
 
         item_demand = self._coordination.sibling_demand(now)
-        # ONE lookup per item, split into the two shapes the pure module takes.
-        # Splitting here rather than asking `GameData` twice keeps the skill and
-        # the level describing the SAME production route (see
-        # `producing_requirement`); an item with no producing skill at all
-        # contributes to neither map, and `demand_by_role` drops it.
-        producing = {code: game_data.producing_requirement(code) for code in item_demand}
-        skill_of_item = {code: req[0] if req is not None else None
-                         for code, req in producing.items()}
-        level_of_item = {code: req[1] for code, req in producing.items() if req is not None}
+        skill_of_item, level_of_item = self._producing_split(item_demand, game_data)
         # PER-CHARACTER demand: `state.skills` gates out every item this
         # character's levels cannot produce, so it is never recruited to a role
         # by demand it provably cannot serve (live 2026-08-03: `Lor` at mining 8

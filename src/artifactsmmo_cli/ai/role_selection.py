@@ -556,12 +556,16 @@ def serves_item(item_code: str, skill: str,
     """Whether a character at `skill_levels` can produce `item_code` at all,
     given that `skill` is what produces it.
 
-    THE one level gate, with two readers -- `demand_by_role` here and
-    `GamePlayer._pick_supply_target`. They must agree: role demand says WHICH
-    role to serve and the supply target says WHICH ITEM to make for it, so a
+    THE one level gate, with three readers -- `demand_by_role` here,
+    `GamePlayer._pick_supply_target`, and the self-servable computation in
+    `GamePlayer._update_coordination`. They must agree: role demand says WHICH
+    role to serve, the supply target says WHICH ITEM to make for it, and the
+    self-servable flag says whether the ASKER could have made it itself, so a
     role recruited on servable demand that then targets an unservable item is
-    the same stall by a longer route. `_claimable`'s lesson, applied to a
-    second pair of readers: two copies of three lines drift, and did.
+    the same stall by a longer route -- and a request published as asymmetric
+    that no consumer can select is the same stall with nobody even trying.
+    `_claimable`'s lesson, applied to a third reader: two copies of three lines
+    drift, and did.
 
     Both unknowns default to SERVABLE, and neither default is a guess:
 

@@ -216,8 +216,8 @@ class MaterialDemand(SQLModel, table=True):
     RoleLease so a dead character's demand stops being served on the same
     clock that frees its role.
 
-    `self_servable` records whether the REQUESTER could produce this item
-    itself — a property of the requester, not of the quantity, so it rides
+    `self_servable` records whether the REQUESTER can obtain this item
+    without help — a property of the requester, not of the quantity, so it rides
     on every row published in the same `publish_demand` call rather than
     living in a parallel mapping that could fall out of step with the demand
     keys. It is the fact the "serve a sibling's request" rung was missing:
@@ -225,6 +225,13 @@ class MaterialDemand(SQLModel, table=True):
     from "the requester could make this itself but asked anyway", so it has
     to stay conservative and never fires below a 10-unit threshold — and
     every real request is quantity 1.
+
+    ASYMMETRY IS STRICTLY ABOUT SKILL GATES. An item with NO producing skill
+    at all (a vendor purchase) publishes `True`: the requester can buy it
+    exactly as well as any sibling, and the consumer side
+    (`GamePlayer._pick_supply_target`) cannot select such a code at all,
+    since no role owns a skill for it. Publishing it `False` would advertise
+    help nobody can give.
 
     Defaults `True` so a row written by an un-migrated column, or read
     before this code shipped, reads as "the requester can handle this

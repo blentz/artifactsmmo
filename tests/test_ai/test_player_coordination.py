@@ -1714,14 +1714,19 @@ def test_execute_keeps_the_order_claim_when_the_cancel_succeeds(tmp_path):
 # ---------------------------------------------------------------------------
 
 def _self_servable_gd() -> GameData:
-    """`greater_wooden_staff` gates at woodcutting 20 — a REAL requirement a
-    low-level character genuinely cannot clear, not an absent one.
+    """`greater_wooden_staff` gates at WEAPONCRAFTING 10 — the real API
+    requirement (`items.greater_wooden_staff.craft` in the committed
+    `gamedata_bundle.json`), a gate a low-level character genuinely cannot
+    clear, not an absent one. It was written here as woodcutting 20, which
+    is a fact the game does not contain: weaponcrafting is owned by `miner`
+    and NOT by `logger`, so a fixture claiming woodcutting silently pointed
+    the whole asymmetry story at the wrong role.
     `copper_ore` gathers at mining 1 — a gate any miner clears."""
     gd = GameData()
     gd._item_stats = {
-        "greater_wooden_staff": ItemStats(code="greater_wooden_staff", level=20,
-                                          type_="weapon", crafting_skill="woodcutting",
-                                          crafting_level=20),
+        "greater_wooden_staff": ItemStats(code="greater_wooden_staff", level=10,
+                                          type_="weapon", crafting_skill="weaponcrafting",
+                                          crafting_level=10),
     }
     gd._crafting_recipes = {}
     gd._resource_drops = {"copper_rocks": "copper_ore"}
@@ -1754,10 +1759,10 @@ def _publish_sibling_request(tmp_path, name: str, demand: dict[str, int],
 
 
 def test_a_character_publishes_its_own_inability_to_make_what_it_wants(tmp_path):
-    """Lor is a miner at woodcutting 1; a greater_wooden_staff gates far above
-    that, so its request must go out marked for a sibling."""
+    """Lor is at weaponcrafting 1; a greater_wooden_staff gates at
+    weaponcrafting 10, so its request must go out marked for a sibling."""
     player, store = _player_with_coordination(tmp_path, "Lor")
-    player.state = make_state(skills={"woodcutting": 1, "mining": 8})
+    player.state = make_state(skills={"weaponcrafting": 1, "mining": 8})
     player._last_decide_crafting_target = "greater_wooden_staff"
 
     player._update_coordination(player.state, player.game_data)
@@ -1779,15 +1784,23 @@ def test_a_character_that_can_make_its_own_material_says_so(tmp_path):
     assert rows["copper_ore"] is True
 
 
-def test_a_material_with_no_producing_skill_at_all_is_not_self_servable(tmp_path):
+def test_a_material_with_no_producing_skill_at_all_is_self_servable(tmp_path):
     """A vendor-only good like `lich_race_trophy` has NO producing skill —
-    `game_data.producing_requirement` returns None — so `serves_item`'s
-    permissive "unknown requirement defaults to servable" rule never even
-    gets asked: there is no skill here to ask it of. Catches deleting the
-    `skill is not None` guard in `_update_coordination` (falling straight
-    through to `serves_item(code, None, ...)`, which would need its own
-    None-skill handling and, absent that, mis-defaults to True via the same
-    permissive rule)."""
+    `game_data.producing_requirement` returns None — and must publish as
+    SELF-SERVABLE, i.e. never advertised as asymmetric.
+
+    THIS TEST WAS THE OPPOSITE, and the opposite made the whole supply rung
+    inert: the consumer side, `_pick_supply_target`, SKIPS every code whose
+    producing skill is None (no role owns a skill for it), so no character
+    can ever be selected to serve one. Publishing such a code as asymmetric
+    advertises help nobody can give — and on the live board that class was
+    100% of the demand (`lich_race_medal`, `lich_race_trophy`: vendor
+    purchases with no producing skill at all).
+
+    `self_servable` means "the asker can obtain this without help". For a
+    vendor-only item the asker can buy it exactly as well as any sibling, so
+    there is no asymmetry for a sibling to exploit. ASYMMETRY IS STRICTLY
+    ABOUT SKILL GATES."""
     player, store = _player_with_coordination(tmp_path, "Lor")
     gd = player.game_data
     gd._item_stats = {**gd._item_stats,
@@ -1803,7 +1816,38 @@ def test_a_material_with_no_producing_skill_at_all_is_not_self_servable(tmp_path
 
     with SqlSession(store._engine) as s:
         rows = {r.item_code: r.self_servable for r in s.exec(select(MaterialDemand)).all()}
-    assert rows["unobtainium"] is False
+    assert rows["unobtainium"] is True
+
+
+def test_a_skill_gated_request_reaches_a_capable_sibling_as_asymmetric(tmp_path):
+    """THE asymmetry the feature exists for, end to end over one shared DB:
+    the asker HAS the producing skill but is below the level the item gates
+    at, so it publishes `self_servable=False`; a sibling that HAS the level
+    reads the same row back as asymmetric and picks it as its supply target.
+
+    Both halves in one test on purpose — publishing the flag and reading it
+    were each covered alone, so a publisher/consumer DISAGREEMENT (exactly
+    the defect that made this rung inert for skill-less codes) could not
+    fail anything. Lor at weaponcrafting 1 cannot craft a greater_wooden_staff
+    (weaponcrafting 10); R2D2 at weaponcrafting 10 can, and `miner` is the
+    role that owns weaponcrafting."""
+    asker, store = _player_with_coordination(tmp_path, "Lor")
+    asker.state = make_state(skills={"weaponcrafting": 1, "mining": 8})
+    asker._last_decide_crafting_target = "greater_wooden_staff"
+    asker._update_coordination(asker.state, asker.game_data)
+
+    with SqlSession(store._engine) as s:
+        rows = {r.item_code: r.self_servable for r in s.exec(select(MaterialDemand)).all()}
+    assert rows["greater_wooden_staff"] is False
+
+    server, _ = _player_with_coordination(tmp_path, "R2D2")
+    server.state = make_state(bank_items={}, skills={"weaponcrafting": 10, "mining": 10})
+    server._role = "miner"
+    server._update_coordination(server.state, server.game_data)
+
+    assert "greater_wooden_staff" in server._asymmetric_demand
+    assert server._supply_target is not None
+    assert server._supply_target[0] == "greater_wooden_staff"
 
 
 def test_the_asymmetric_set_reaches_the_selection_context(tmp_path):

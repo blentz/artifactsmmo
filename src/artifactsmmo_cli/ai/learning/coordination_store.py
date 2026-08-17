@@ -459,15 +459,17 @@ class CoordinationStore:
         its TTL, and siblings would keep producing into a bank nobody drains.
 
         `self_servable` is the set of item codes THIS character — the
-        requester — could produce itself, stamped onto every row this call
+        requester — can obtain without help, stamped onto every row this call
         writes. A frozenset rather than a parallel `Mapping[str, bool]`
         because the flag is a property of the requester as a whole, not of
         any one item's quantity, and a set keyed the same way as `demand`
         cannot fall out of step with `demand`'s own keys the way a second
         dict could. A code in `demand` but absent from `self_servable` is
-        stored `self_servable=False` — the requester genuinely cannot make
-        it, which is the case the "serve a sibling's request" rung needs to
-        finally distinguish from "could make it but asked anyway"."""
+        stored `self_servable=False` — the requester is SKILL-GATED out of
+        making it, which is the case the "serve a sibling's request" rung
+        needs to finally distinguish from "could make it but asked anyway"
+        (see `MaterialDemand.self_servable` for why a vendor-only code with
+        no producing skill belongs on the servable side, not this one)."""
         _require_utc(now)
         expiry = self._demand_expiry(now)
         try:
