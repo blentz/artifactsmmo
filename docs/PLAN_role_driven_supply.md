@@ -20,7 +20,7 @@ Measured live on 2026-08-16 against the running `play --all` fleet:
   C3P0  lich_race_medal       1      Lor   greater_wooden_staff  1
   R2D2  lich_race_medal       1      rows at or above 10: 0
   ```
-- `supply_target` was computed in 59 of 384 traced cycles, but the `collect` band fired in **1.3%** — the target exists and is never actioned.
+- `supply_target` was computed in 59 of 384 observed cycles, but the `collect` band fired in **1.3%** — the target exists and is never actioned. (Measured from a live run; re-derive from `learning.db`'s `cycles` table, not from trace files, which are transient.)
 - Four of five characters hold the role `miner` and **none of them mine**: C3P0 and HAL grind slimes, Lor crafts a staff. Roles are currently decorative.
 - Lor (miner) spent 95 cycles and R2D2 (logger) 97 cycles pursuing **the same** `greater_wooden_staff`. Dividing that work is what the coordination layer exists for.
 
@@ -520,14 +520,29 @@ for r in c.execute('select character,item_code,quantity,self_servable from mater
 "
 ```
 
-Expect rows carrying `self_servable = 0` for items their asker is gated out of making. Then watch a trace for a `SupplyBank(...)` goal actually being selected — that is the outcome this whole plan exists for, and its absence means the feature is inert however green the suite is.
+Expect rows carrying `self_servable = 0` for items their asker is gated out of making. Then look for the outcome this whole plan exists for — a `SupplyBank(...)` goal actually selected:
+
+```bash
+uv run python -c "
+import sqlite3
+c = sqlite3.connect('file:/home/blentz/.cache/artifactsmmo/learning.db?mode=ro', uri=True)
+print(c.execute(\"select count(*) from cycles where selected_goal like '%SupplyBank%'\").fetchone())
+"
+```
+
+Its absence means the feature is inert however green the suite is.
+
+**Query the learning DB, never a trace file.** `play-trace-*.jsonl` are deleted
+periodically and are not a reliable source; anything a plan, a test, or a durable
+claim rests on must come from `~/.cache/artifactsmmo/learning.db`, whose `cycles`
+table carries the same per-cycle goal/action/outcome facts.
 
 ## Verification before calling this done
 
 - [ ] `bash formal/gate.sh` exits 0 with `ALL GATE PARTS PASSED` and 100.00% coverage.
 - [ ] `uv run pytest tests/test_multi tests/test_utils -q` passes (pre-commit does not cover these).
 - [ ] `material_demand` on the live DB shows at least one `self_servable = 0` row.
-- [ ] A live trace shows `SupplyBank(...)` selected at least once.
+- [ ] The learning DB's `cycles` table shows `SupplyBank(...)` selected at least once.
 
 ## Known limits this plan does NOT remove
 

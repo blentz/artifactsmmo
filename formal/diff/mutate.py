@@ -130,6 +130,7 @@ WINNABLE_CASCADE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "winnable_casc
 COMBAT_PICKER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_picker.py"
 TASK_RESERVATION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_reservation.py"
 PROJECTIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "projections.py"
+COORDINATION_STORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "coordination_store.py"
 # Phase-18 — additional Goal sources.
 ACCEPT_TASK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "accept_task_goal.py"
 CLAIM_PENDING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "claim_pending.py"
@@ -4146,6 +4147,8 @@ _ALL_SRCS = [
     PROGRESSION_TREE_SRC,
     # Equipment-profile selector (2026-07-08): differential-killed group.
     EQUIPMENT_PROFILE_SRC,
+    # Task 7 (role-driven supply): coordination-store asymmetric-demand reader.
+    COORDINATION_STORE_SRC,
 ]
 
 
@@ -5822,6 +5825,63 @@ LADDER_MEANS_FIRES_MUTATIONS = [
 ]
 
 
+# Task 7 (role-driven supply, mutation coverage): the asymmetric arm added to
+# SUPPLY_BANK's fire predicate — a request its own asker cannot fill itself
+# now fires the rung regardless of size (real published demand is always
+# quantity 1, so without this arm the rung never fired live). OWN run_group:
+# unit-killed by test_a_single_unit_request_the_asker_cannot_make_now_fires
+# (tests/test_ai/test_tiers_means.py), which sets a quantity-1 target with
+# the code present in `ctx.asymmetric_demand` and asserts `_fires` is True —
+# deleting this arm makes it False and the mutant survives undetected by
+# every OTHER SUPPLY_BANK test (they all use symmetric demand).
+SUPPLY_BANK_ASYMMETRIC_FIRES_MUTATIONS = [
+    (
+        "means/_fires: SUPPLY_BANK asymmetric-request arm deleted",
+        "        return target[2] >= SUPPLY_DEMAND_MIN or target[0] in ctx.asymmetric_demand",
+        "        return target[2] >= SUPPLY_DEMAND_MIN",
+    ),
+]
+
+
+# Task 7 (role-driven supply, mutation coverage): `sibling_demand_asymmetric`'s
+# own-character filter. Without `MaterialDemand.character != self._character`
+# a character's OWN unservable request would make its own code "asymmetric"
+# and route it to serve itself through the bank forever. OWN run_group:
+# unit-killed by test_my_own_row_never_makes_a_code_asymmetric_for_me
+# (tests/test_ai/test_coordination_store.py), which publishes a self_servable
+# =False demand FROM Lor and asserts Lor's own `sibling_demand_asymmetric`
+# read comes back empty.
+SIBLING_DEMAND_ASYMMETRIC_OWN_FILTER_MUTATIONS = [
+    (
+        "coordination_store: sibling_demand_asymmetric own-character filter dropped",
+        "                        MaterialDemand.expires_at > stamp,\n"
+        "                        MaterialDemand.character != self._character,\n"
+        "                        col(MaterialDemand.self_servable).is_(False),",
+        "                        MaterialDemand.expires_at > stamp,\n"
+        "                        col(MaterialDemand.self_servable).is_(False),",
+    ),
+]
+
+
+# Task 7 (role-driven supply, mutation coverage): `_pick_supply_target`'s
+# asymmetric-first ranking. Swapping the tuple order makes demand size the
+# PRIMARY key and asymmetric-ness only a tiebreak, so a big symmetric request
+# (other producers exist) again outranks a small asymmetric one (nobody else
+# can fill it) — exactly the pre-fix behaviour this task exists to kill. OWN
+# run_group: unit-killed by
+# test_a_request_only_i_can_fill_outranks_a_bigger_one_anyone_could
+# (tests/test_ai/test_player_coordination.py), which gives a `miner` a
+# 30-unit symmetric request and a 1-unit asymmetric one and asserts the
+# 1-unit asymmetric request wins.
+PICK_SUPPLY_TARGET_ASYMMETRIC_ORDER_MUTATIONS = [
+    (
+        "player._pick_supply_target: asymmetric-first ordering inverted",
+        "            if best_code is None or (asymmetric, qty) > (best_asymmetric, best_demand):",
+        "            if best_code is None or (qty, asymmetric) > (best_demand, best_asymmetric):",
+    ),
+]
+
+
 # The BANK-DRAIN's keep composition (item-protection-authority epic, Task 9 — the
 # LAST code-set consumer). A drain WITHDRAWS bank copies so the discard ladder can
 # destroy them, so it is bounded by the keep authority's OWNERSHIP cap ALONE:
@@ -7158,6 +7218,13 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_raid_participation.py", survivors)
     run_group(MEANS_SRC, LADDER_MEANS_FIRES_MUTATIONS,
               "formal/diff/test_ladder_fires_diff.py", survivors)
+    # Task 7 (role-driven supply): own run_group, unit-killed.
+    run_group(MEANS_SRC, SUPPLY_BANK_ASYMMETRIC_FIRES_MUTATIONS,
+              "tests/test_ai/test_tiers_means.py", survivors)
+    run_group(COORDINATION_STORE_SRC, SIBLING_DEMAND_ASYMMETRIC_OWN_FILTER_MUTATIONS,
+              "tests/test_ai/test_coordination_store.py", survivors)
+    run_group(PLAYER_SRC, PICK_SUPPLY_TARGET_ASYMMETRIC_ORDER_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
     run_group(WITHDRAW_ITEM_SRC, WITHDRAW_ITEM_MUTATIONS,
               "formal/diff/test_inventory_chain_safe_diff.py", survivors)
     # SLOT term isn't mutation-gated by the diff test above (its fixtures all
