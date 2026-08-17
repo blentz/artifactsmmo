@@ -122,6 +122,7 @@ from artifactsmmo_cli.ai.strategy_driver import (
     monster_drop_inputs,
     objective_step_goal,
 )
+from artifactsmmo_cli.ai.supply_batch_target import supply_batch_target_pure
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers import (
     CharacterObjective,
@@ -2877,7 +2878,8 @@ class GamePlayer:
         """The item this character's HELD role should supply next, as
         (item_code, target banked quantity, unmet demand) — or None when no
         role is held, nothing the role's owned skills produce is in demand,
-        or the bank has never been visited this session (see below).
+        every servable candidate is already claimed by a SIBLING, or the bank
+        has never been visited this session (see below).
 
         Ranks candidates by (asymmetric, demand): a request in
         `self._asymmetric_demand` — one no sibling of a DIFFERENT role could
@@ -2896,12 +2898,45 @@ class GamePlayer:
         every cycle until release-on-unservable gave the role away — a stall
         the level requirement predicted before the first search.
 
-        Target banked quantity is current bank holding + demand: enough that
-        producing exactly the still-unmet amount satisfies `SupplyBankGoal`,
-        which targets an absolute banked count (not an increment) and is
-        rebuilt fresh every cycle (`memo_exempt`), so recomputing the target
-        from the live bank each cycle is the correct, not merely convenient,
-        choice.
+        ONE PRODUCER PER REQUEST (`ai/supply_claim_and_batch`, Task 3): measured
+        live, one sibling request — `SupplyBank(spruce_wood x60)` — was served
+        SIMULTANEOUSLY by R2D2 (225 gathers) and Robby (231 gathers), 456 units
+        against a 60-unit ask. `CoordinationStore.claim_supply` is the election
+        that stops it:
+
+          * RANKING skips any candidate a DIFFERENT character already holds
+            the live claim on (`supply_claim_holder`) — this character's OWN
+            claim never excludes itself, which is what lets a multi-cycle
+            production run keep re-picking the same item.
+          * Having chosen, this character CLAIMS it. A lost claim (a sibling
+            won the same item the same cycle) is ordinary contention, not an
+            error — the losing candidate is excluded and ranking runs again
+            over what remains, rather than committing to produce into a race.
+          * RENEWAL needs no second path: `claim_supply` renews in place for
+            the current holder, so re-claiming the same item every cycle IS
+            the renewal.
+          * RELEASE happens when this character stops serving an item it
+            previously held a claim for — a different item wins this cycle,
+            or nothing does. `self._supply_target` (set by the caller,
+            `_update_coordination`, at the END of the PREVIOUS cycle) is read
+            here, before this cycle's pick replaces it, as "what I was
+            serving" — a claim left behind otherwise blocks the fleet for up
+            to `DEMAND_TTL_SECONDS`.
+
+        `self._coordination is None` (every single-character run) keeps every
+        candidate visible (no sibling to contend with) and skips all claim
+        traffic — bit-identical to the pre-Task-3 ranking below.
+
+        Target banked quantity is `supply_batch_target_pure(banked, demand)`
+        (Task 2) rather than the bare `banked + demand` this replaces: the
+        bare sum recomputes a NEW absolute target every cycle against a
+        moving bank count, so `SupplyBankGoal`'s repr — its identity for
+        sticky-commit keying — churned on every acquisition
+        (`x50 -> x60 -> x81 -> ...` on the traced request). The batch target
+        holds at a fixed milestone until the bank actually crosses it. The
+        THIRD tuple element (unmet demand) is reported UNCHANGED — the means
+        gate and the goal's own priority both read it, and shrinking it would
+        silently change when the rung fires.
 
         `state.bank_items is None` means "never visited this session" (see
         its field docstring in `world_state.py`), NOT "empty" — the same
@@ -2911,43 +2946,72 @@ class GamePlayer:
         real contents are known. Rather than guess, this returns None until
         the bank has actually been visited at least once — self-correcting
         within a cycle or two of session start, same as every other
-        bank-dependent decision in this file."""
+        bank-dependent decision in this file. Note that a claim can still be
+        WON before this point (the election does not depend on the bank), so
+        a first-cycle claim outlives the `None` this returns until the bank
+        is read."""
         if self._role is None:
             return None
         role = ROLES_BY_NAME.get(self._role)
         if role is None:
             return None
         owned_skills = role_skills(role)
-        best_code: str | None = None
-        best_demand = 0
-        best_asymmetric = False
-        for code, qty in item_demand.items():
-            skill = skill_of_item.get(code)
-            # Three separate tests, in `demand_by_role`'s own order and idiom:
-            # no producing skill at all, then not this role's, then not within
-            # this character's reach. Keeping them apart is what lets each be
-            # mutated and killed on its own.
-            if skill is None:
-                continue
-            if skill not in owned_skills:
-                continue
-            if not serves_item(code, skill, level_of_item, state.skills):
-                continue
-            # Asymmetric requests (nobody else can fill them, per
-            # `_asymmetric_demand` from `_update_coordination`) outrank
-            # symmetric ones outright; demand only breaks ties within a
-            # group. `bool` orders False < True, so this tuple comparison
-            # is exactly "asymmetric first, then by size" without a second
-            # explicit branch.
-            asymmetric = code in self._asymmetric_demand
-            if best_code is None or (asymmetric, qty) > (best_asymmetric, best_demand):
-                best_code, best_demand, best_asymmetric = code, qty, asymmetric
-        if best_code is None:
+        now = datetime.now(tz=timezone.utc)
+        excluded: set[str] = set()
+        chosen_code: str | None = None
+        chosen_demand = 0
+        while True:
+            best_code: str | None = None
+            best_demand = 0
+            best_asymmetric = False
+            for code, qty in item_demand.items():
+                if code in excluded:
+                    continue
+                skill = skill_of_item.get(code)
+                # Three separate tests, in `demand_by_role`'s own order and idiom:
+                # no producing skill at all, then not this role's, then not within
+                # this character's reach. Keeping them apart is what lets each be
+                # mutated and killed on its own.
+                if skill is None:
+                    continue
+                if skill not in owned_skills:
+                    continue
+                if not serves_item(code, skill, level_of_item, state.skills):
+                    continue
+                if (self._coordination is not None
+                        and self._coordination.supply_claim_holder(code, now)
+                        not in (None, self._coordination.character)):
+                    continue
+                # Asymmetric requests (nobody else can fill them, per
+                # `_asymmetric_demand` from `_update_coordination`) outrank
+                # symmetric ones outright; demand only breaks ties within a
+                # group. `bool` orders False < True, so this tuple comparison
+                # is exactly "asymmetric first, then by size" without a second
+                # explicit branch.
+                asymmetric = code in self._asymmetric_demand
+                if best_code is None or (asymmetric, qty) > (best_asymmetric, best_demand):
+                    best_code, best_demand, best_asymmetric = code, qty, asymmetric
+            if best_code is None or self._coordination is None:
+                chosen_code, chosen_demand = best_code, best_demand
+                break
+            if self._coordination.claim_supply(best_code, now):
+                chosen_code, chosen_demand = best_code, best_demand
+                break
+            # Lost the election to a sibling this same cycle: not an error,
+            # just contention. Exclude it and rank again over what remains.
+            excluded.add(best_code)
+
+        if self._coordination is not None:
+            previous = self._supply_target[0] if self._supply_target is not None else None
+            if previous is not None and previous != chosen_code:
+                self._coordination.release_supply(previous)
+
+        if chosen_code is None:
             return None
         if state.bank_items is None:
             return None
-        banked = state.bank_items.get(best_code, 0)
-        return (best_code, banked + best_demand, best_demand)
+        banked = state.bank_items.get(chosen_code, 0)
+        return (chosen_code, supply_batch_target_pure(banked, chosen_demand), chosen_demand)
 
     def _note_supply_servability(self, goals_tried: "list[Any]") -> None:
         """Extend or break the run of cycles this character's held role has

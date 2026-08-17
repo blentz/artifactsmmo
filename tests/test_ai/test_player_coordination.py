@@ -46,6 +46,8 @@ from artifactsmmo_cli.ai.role_selection import (
     demand_by_role,
 )
 from artifactsmmo_cli.ai.strategy_driver import map_means
+from artifactsmmo_cli.ai.supply_batch_target import supply_batch_target_pure
+from artifactsmmo_cli.ai.thresholds import SUPPLY_BATCH
 from artifactsmmo_cli.ai.tiers.means import SUPPLY_DEMAND_MIN, MeansKind, _fires
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
 from tests.test_ai.fixtures import make_state
@@ -58,6 +60,12 @@ from tests.test_ai.test_role_selection import _LOR_SKILLS, _ROBBY_SKILLS
 from tests.test_ai.test_strategy_driver import _make_planner_gd
 
 _T0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
+NOW = datetime.now(tz=timezone.utc)
+"""Module-scope UTC instant for the supply-claim tests (`ai/supply_claim_and_batch`
+Task 3) below — `CoordinationStore` rejects naive datetimes. Real wall-clock
+time, not a fixed literal: `_pick_supply_target` stamps its OWN claim reads
+and writes with `datetime.now(tz=timezone.utc)`, so a fixed past/future `NOW`
+would read as already-expired against `DEMAND_TTL_SECONDS` (600s)."""
 
 
 # ---------------------------------------------------------------------------
@@ -1206,7 +1214,12 @@ def test_a_coordinated_supply_target_reaches_a_real_supply_bank_goal(tmp_path):
 
         p._update_coordination(p.state, p.game_data)
         ctx = p._selection_context(combat_monster=None)
-        assert ctx.supply_target == ("copper_ore", SUPPLY_DEMAND_MIN + 4,
+        # The quantity is now the Task 2 batch milestone (`SUPPLY_BATCH`), not
+        # `banked + demand`: banked(2) + demand(SUPPLY_DEMAND_MIN + 2) crosses
+        # the first batch boundary. The demand element is still reported
+        # unchanged.
+        assert ctx.supply_target == ("copper_ore",
+                                     supply_batch_target_pure(2, SUPPLY_DEMAND_MIN + 2),
                                      SUPPLY_DEMAND_MIN + 2)
 
         # The last two links: _fires (the means predicate) and map_means (the
@@ -1215,9 +1228,9 @@ def test_a_coordinated_supply_target_reaches_a_real_supply_bank_goal(tmp_path):
         goal = map_means(MeansKind.SUPPLY_BANK, gd, ctx, p.state)
         assert isinstance(goal, SupplyBankGoal)
         assert goal._item_code == "copper_ore"
-        assert goal._quantity == SUPPLY_DEMAND_MIN + 4
+        assert goal._quantity == supply_batch_target_pure(2, SUPPLY_DEMAND_MIN + 2)
         assert goal._demand == SUPPLY_DEMAND_MIN + 2
-        assert repr(goal) == f"SupplyBank(copper_orex{SUPPLY_DEMAND_MIN + 4})"
+        assert repr(goal) == f"SupplyBank(copper_orex{supply_batch_target_pure(2, SUPPLY_DEMAND_MIN + 2)})"
     finally:
         store.close()
         sibling.close()
@@ -1255,7 +1268,9 @@ def test_a_sub_threshold_coordinated_demand_is_targeted_but_never_fires(tmp_path
 
         p._update_coordination(p.state, p.game_data)
         ctx = p._selection_context(combat_monster=None)
-        assert ctx.supply_target == ("copper_ore", SUPPLY_DEMAND_MIN + 1,
+        # Same Task 2 batch-target substitution as the test above.
+        assert ctx.supply_target == ("copper_ore",
+                                     supply_batch_target_pure(2, SUPPLY_DEMAND_MIN - 1),
                                      SUPPLY_DEMAND_MIN - 1)
         assert _fires(MeansKind.SUPPLY_BANK, p.state, gd, None, ctx) is False
     finally:
@@ -1734,14 +1749,27 @@ def _self_servable_gd() -> GameData:
     return gd
 
 
-def _player_with_coordination(tmp_path, name: str) -> tuple[GamePlayer, CoordinationStore]:
+def _player_with_coordination(
+    tmp_path, name: str, db: str | None = None,
+) -> tuple[GamePlayer, CoordinationStore]:
     """A character wired to a real coordination store over `_self_servable_gd`,
-    following the construction style `_held_miner` above already uses."""
-    db = str(tmp_path / "coord.db")
+    following the construction style `_held_miner` above already uses. Holds
+    `logger` (owns woodcutting) by default so a bare `_pick_supply_target`
+    call has a role to rank against without a prior `_update_coordination`
+    cold start — callers needing a different role override `p._role`
+    afterward, same as `_held_miner`'s callers already do.
+
+    `db` lets two characters share ONE on-disk store explicitly (the
+    supply-claim tests below, `ai/supply_claim_and_batch` Task 3), rather than
+    inventing a second construction style — every OTHER caller already gets
+    the same path for free since `tmp_path` is one fixture instance per
+    test."""
+    resolved_db = db if db is not None else str(tmp_path / "coord.db")
     p = GamePlayer(character=name)
     p.state = make_state()
     p.game_data = _self_servable_gd()
-    store = CoordinationStore(db_path=db, character=name)
+    p._role = "logger"
+    store = CoordinationStore(db_path=resolved_db, character=name)
     p.set_coordination_store(store)
     return p, store
 
@@ -1910,3 +1938,111 @@ def test_among_equals_the_bigger_request_still_wins(tmp_path):
         {"copper_ore": 1, "mystic_ward": 1})
 
     assert target is not None and target[0] == "copper_ore"
+
+
+# ---------------------------------------------------------------------------
+# GamePlayer._pick_supply_target — one producer, one batch, per sibling
+# request (`ai/supply_claim_and_batch` Task 3). Measured live: one request,
+# `SupplyBank(spruce_wood x60)`, was served SIMULTANEOUSLY by R2D2 (225
+# gathers) and Robby (231 gathers) — 456 units against a 60-unit ask — while
+# the target's identity churned `x50 -> x60 -> x81 -> x116 -> x129` on every
+# cycle. Task 1's `claim_supply`/`supply_claim_holder`/`release_supply` and
+# Task 2's `supply_batch_target_pure` are wired in here.
+# ---------------------------------------------------------------------------
+
+def test_an_item_a_sibling_is_already_producing_is_skipped(tmp_path):
+    """The measured bug: R2D2 and Robby each spent ~230 gathers on the same
+    60-unit spruce_wood request."""
+    db = str(tmp_path / "coord.db")
+    CoordinationStore(db_path=db, character="R2D2").claim_supply("spruce_wood", NOW)
+    player, _ = _player_with_coordination(tmp_path, "Robby", db=db)
+
+    target = player._pick_supply_target(
+        {"spruce_wood": 60}, {"spruce_wood": "woodcutting"},
+        make_state(skills={"woodcutting": 20}), {"spruce_wood": 1})
+
+    assert target is None
+
+
+def test_my_own_claim_does_not_block_me_from_continuing(tmp_path):
+    db = str(tmp_path / "coord.db")
+    player, store = _player_with_coordination(tmp_path, "R2D2", db=db)
+    store.claim_supply("spruce_wood", NOW)
+
+    # `bank_items={}` (visited, empty) rather than the `make_state()` default
+    # of "never visited" — see `test_pick_supply_target_none_when_the_bank_
+    # has_never_been_visited` above for why an unvisited bank returns None
+    # regardless of the claim outcome this test pins.
+    target = player._pick_supply_target(
+        {"spruce_wood": 60}, {"spruce_wood": "woodcutting"},
+        make_state(skills={"woodcutting": 20}, bank_items={}), {"spruce_wood": 1})
+
+    assert target is not None and target[0] == "spruce_wood"
+
+
+def test_choosing_an_item_claims_it_for_this_character(tmp_path):
+    db = str(tmp_path / "coord.db")
+    player, store = _player_with_coordination(tmp_path, "Robby", db=db)
+
+    player._pick_supply_target(
+        {"spruce_wood": 60}, {"spruce_wood": "woodcutting"},
+        make_state(skills={"woodcutting": 20}), {"spruce_wood": 1})
+
+    assert store.supply_claim_holder("spruce_wood", NOW) == "Robby"
+
+
+def test_the_target_is_one_batch_not_the_whole_demand(tmp_path):
+    """456 units were produced against a 60-unit ask because the commitment was
+    the whole demand against a moving bank count."""
+    db = str(tmp_path / "coord.db")
+    player, _ = _player_with_coordination(tmp_path, "Robby", db=db)
+
+    target = player._pick_supply_target(
+        {"spruce_wood": 60}, {"spruce_wood": "woodcutting"},
+        make_state(skills={"woodcutting": 20}, bank_items={"spruce_wood": 0}),
+        {"spruce_wood": 1})
+
+    assert target is not None
+    assert target[1] == SUPPLY_BATCH      # not 60
+    assert target[2] == 60                # the unmet demand is reported unchanged
+
+
+def test_switching_items_releases_the_previous_claim(tmp_path):
+    db = str(tmp_path / "coord.db")
+    player, store = _player_with_coordination(tmp_path, "Robby", db=db)
+    store.claim_supply("spruce_wood", NOW)
+    # What Robby was serving as of the END of the previous cycle — the field
+    # `_update_coordination` assigns `_pick_supply_target`'s return value into,
+    # and the ONLY record (this character keeps no second one) of "stop
+    # serving THIS item" that a switch reads.
+    player._supply_target = ("spruce_wood", 60, 60)
+
+    player._pick_supply_target(
+        {"iron_ore": 80}, {"iron_ore": "mining"},
+        make_state(skills={"mining": 20}), {"iron_ore": 1})
+
+    assert store.supply_claim_holder("spruce_wood", NOW) is None
+
+
+def test_a_lost_supply_claim_falls_through_to_the_next_candidate(tmp_path, monkeypatch):
+    """A sibling can win the SAME item's election in the gap between this
+    character's skip-check and its own claim attempt, in the same cycle.
+    `claim_supply` returning False for that is ordinary contention (see its
+    own docstring), not an error: the character must fall through to its
+    next-best candidate rather than commit to producing into a race it just
+    lost."""
+    db = str(tmp_path / "coord.db")
+    player, store = _player_with_coordination(tmp_path, "Robby", db=db)
+    real_claim_supply = store.claim_supply
+    monkeypatch.setattr(
+        store, "claim_supply",
+        lambda code, now: False if code == "spruce_wood" else real_claim_supply(code, now))
+
+    target = player._pick_supply_target(
+        {"spruce_wood": 60, "ash_wood": 5},
+        {"spruce_wood": "woodcutting", "ash_wood": "woodcutting"},
+        make_state(skills={"woodcutting": 20}, bank_items={}),
+        {"spruce_wood": 1, "ash_wood": 1})
+
+    assert target is not None and target[0] == "ash_wood"
+    assert store.supply_claim_holder("ash_wood", NOW) == "Robby"
