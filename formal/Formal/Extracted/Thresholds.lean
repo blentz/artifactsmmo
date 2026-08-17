@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/thresholds.py (sha256: 7a5f06ac0ccfde10a19807d191b00fe95bb39f95d39930e964e3cc7ec7ca7155) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/thresholds.py (sha256: b0561d7943adc78839addcf080a96e441fc1ebb7cc26e9bc5f3879115c2a9ffb) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.Thresholds

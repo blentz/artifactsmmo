@@ -131,6 +131,7 @@ COMBAT_PICKER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_picker.py
 TASK_RESERVATION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_reservation.py"
 PROJECTIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "projections.py"
 COORDINATION_STORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "coordination_store.py"
+SUPPLY_BATCH_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "supply_batch_target.py"
 # Phase-18 — additional Goal sources.
 ACCEPT_TASK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "accept_task_goal.py"
 CLAIM_PENDING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "claim_pending.py"
@@ -4149,6 +4150,8 @@ _ALL_SRCS = [
     EQUIPMENT_PROFILE_SRC,
     # Task 7 (role-driven supply): coordination-store asymmetric-demand reader.
     COORDINATION_STORE_SRC,
+    # ai/supply_claim_and_batch Task 4: the batch-milestone commitment target.
+    SUPPLY_BATCH_TARGET_SRC,
 ]
 
 
@@ -5882,6 +5885,82 @@ PICK_SUPPLY_TARGET_ASYMMETRIC_ORDER_MUTATIONS = [
 ]
 
 
+# ai/supply_claim_and_batch Task 4 (mutation coverage): `_pick_supply_target`'s
+# sibling-claim SKIP, deleted. NOT unit-killed by the test its own brief named
+# (`test_an_item_a_sibling_is_already_producing_is_skipped`, tests/test_ai/
+# test_player_coordination.py) — checked by actually running the mutant
+# against it: it SURVIVES. With only ONE candidate in `item_demand`, the
+# exclude-on-loss retry loop a few lines below reaches the exact same `None`
+# either way, because `claim_supply` refuses a live sibling-held item just as
+# reliably as this upfront skip does; the skip's only observable effect is
+# that it stops a sibling-held candidate from ever being OFFERED to
+# `claim_supply` in the first place. OWN run_group: unit-killed by
+# test_a_sibling_held_item_is_never_offered_to_the_claim_election (same
+# file), which spies on `claim_supply` with two candidates — one sibling-held,
+# one free — and asserts the sibling-held code is never passed to it, even
+# though the free code still wins either way.
+PICK_SUPPLY_TARGET_SIBLING_SKIP_MUTATIONS = [
+    (
+        "player._pick_supply_target: sibling-claim skip removed",
+        "                if (self._coordination is not None\n"
+        "                        and self._coordination.supply_claim_holder(code, now)\n"
+        "                        not in (None, self._coordination.character)):\n"
+        "                    continue\n",
+        "",
+    ),
+]
+
+
+# ai/supply_claim_and_batch Task 4 (mutation coverage): `claim_supply`'s
+# exclusivity defeated — the live-sibling-blocks branch made to report the
+# claim WON (`True`) instead of refused. `SupplyClaim` cannot express a
+# `(character, item_code)`-widened key as a source mutation (its uniqueness is
+# structural, on `item_code` alone — see the table definition), so per the
+# brief this targets `claim_supply` directly instead. Anchored on the
+# `SupplyClaim`-select line above it for uniqueness: `claim_turn_in`
+# (TurnInClaim) has the identical `row.character != self._character and
+# row.expires_at > stamp: return False` text a few lines up. OWN run_group:
+# unit-killed by test_only_one_character_can_hold_a_supply_claim
+# (tests/test_ai/test_coordination_store.py), which has R2D2 claim
+# spruce_wood and asserts Robby's own `claim_supply` on the same item then
+# reports False.
+CLAIM_SUPPLY_EXCLUSIVITY_MUTATIONS = [
+    (
+        "coordination_store: claim_supply exclusivity defeated (blocked branch returns True)",
+        "                    select(SupplyClaim).where(SupplyClaim.item_code == item_code)\n"
+        "                ).first()\n"
+        "                if row is not None:\n"
+        "                    if row.character != self._character and row.expires_at > stamp:\n"
+        "                        return False\n",
+        "                    select(SupplyClaim).where(SupplyClaim.item_code == item_code)\n"
+        "                ).first()\n"
+        "                if row is not None:\n"
+        "                    if row.character != self._character and row.expires_at > stamp:\n"
+        "                        return True\n",
+    ),
+]
+
+
+# ai/supply_claim_and_batch Task 4 (mutation coverage): `supply_batch_target_
+# pure` reverted to the pre-fix `banked + demand` receding behaviour — the
+# whole point Task 2 replaced. OWN run_group: unit-killed by
+# test_the_target_is_one_batch_not_the_whole_demand
+# (tests/test_ai/test_player_coordination.py), which drives the pure function
+# through `_pick_supply_target` with banked=0, demand=60 and asserts the
+# target is `SUPPLY_BATCH` (10), not the whole 60-unit demand.
+SUPPLY_BATCH_TARGET_RECEDING_MUTATIONS = [
+    (
+        "supply_batch_target_pure: reverted to banked + demand",
+        "    if demand <= 0:\n"
+        "        return banked\n"
+        "    # Next multiple of the batch strictly above `banked`: ceil((banked + 1) / batch).\n"
+        "    batches = -(-(banked + 1) // SUPPLY_BATCH)\n"
+        "    return min(banked + demand, batches * SUPPLY_BATCH)\n",
+        "    return banked + demand\n",
+    ),
+]
+
+
 # The BANK-DRAIN's keep composition (item-protection-authority epic, Task 9 — the
 # LAST code-set consumer). A drain WITHDRAWS bank copies so the discard ladder can
 # destroy them, so it is bounded by the keep authority's OWNERSHIP cap ALONE:
@@ -7224,6 +7303,13 @@ def _collect_all_groups() -> None:
     run_group(COORDINATION_STORE_SRC, SIBLING_DEMAND_ASYMMETRIC_OWN_FILTER_MUTATIONS,
               "tests/test_ai/test_coordination_store.py", survivors)
     run_group(PLAYER_SRC, PICK_SUPPLY_TARGET_ASYMMETRIC_ORDER_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
+    # ai/supply_claim_and_batch Task 4: own run_group each, unit-killed.
+    run_group(PLAYER_SRC, PICK_SUPPLY_TARGET_SIBLING_SKIP_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
+    run_group(COORDINATION_STORE_SRC, CLAIM_SUPPLY_EXCLUSIVITY_MUTATIONS,
+              "tests/test_ai/test_coordination_store.py", survivors)
+    run_group(SUPPLY_BATCH_TARGET_SRC, SUPPLY_BATCH_TARGET_RECEDING_MUTATIONS,
               "tests/test_ai/test_player_coordination.py", survivors)
     run_group(WITHDRAW_ITEM_SRC, WITHDRAW_ITEM_MUTATIONS,
               "formal/diff/test_inventory_chain_safe_diff.py", survivors)

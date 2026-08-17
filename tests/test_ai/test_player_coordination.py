@@ -1964,6 +1964,37 @@ def test_an_item_a_sibling_is_already_producing_is_skipped(tmp_path):
     assert target is None
 
 
+def test_a_sibling_held_item_is_never_offered_to_the_claim_election(tmp_path, monkeypatch):
+    """The single-candidate return value above (`target is None`) cannot tell
+    the skip apart from removing it: with only one candidate, the excluded-
+    on-loss retry loop at the bottom of `_pick_supply_target` reaches the
+    SAME `None` either way, because `claim_supply` itself refuses a
+    sibling-held item just as reliably as the ranking skip does — proven by
+    running the actual mutant (deleting the skip block) against the test
+    above and watching it PASS. What only the ranking skip prevents is ever
+    OFFERING a sibling-held candidate to `claim_supply` in the first place:
+    with two candidates, one sibling-held and one free, the skip must keep
+    `claim_supply` from ever being called with the sibling-held code, even
+    though the free code still wins in the end regardless."""
+    db = str(tmp_path / "coord.db")
+    CoordinationStore(db_path=db, character="R2D2").claim_supply("spruce_wood", NOW)
+    player, store = _player_with_coordination(tmp_path, "Robby", db=db)
+    attempted: list[str] = []
+    real_claim_supply = store.claim_supply
+    monkeypatch.setattr(
+        store, "claim_supply",
+        lambda code, now: (attempted.append(code), real_claim_supply(code, now))[1])
+
+    target = player._pick_supply_target(
+        {"spruce_wood": 60, "ash_wood": 5},
+        {"spruce_wood": "woodcutting", "ash_wood": "woodcutting"},
+        make_state(skills={"woodcutting": 20}, bank_items={}),
+        {"spruce_wood": 1, "ash_wood": 1})
+
+    assert target is not None and target[0] == "ash_wood"
+    assert "spruce_wood" not in attempted
+
+
 def test_my_own_claim_does_not_block_me_from_continuing(tmp_path):
     db = str(tmp_path / "coord.db")
     player, store = _player_with_coordination(tmp_path, "R2D2", db=db)
