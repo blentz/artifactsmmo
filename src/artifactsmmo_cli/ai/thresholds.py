@@ -80,6 +80,15 @@ MARGINAL_FIGHT_HP_DEN = 10
 # `held + 1`. Consumed by currency_grind_target.currency_grind_target_pure.
 CURRENCY_GRIND_BATCH = 5
 
+# Batch size for a supply commitment to a sibling. The supply target is the next
+# ABSOLUTE multiple of this above what is banked, so it stays put while the
+# character works through a batch (the goal's target is part of its identity, and
+# a target that moved every acquisition churned sticky-commit keying). Equals
+# SUPPLY_DEMAND_MIN (10 units) so a qualifying request is never split into a
+# stutter of tiny commitments. Consumed by
+# supply_batch_target.supply_batch_target_pure.
+SUPPLY_BATCH = 10
+
 # Damage dealt to a raid boss per event ticket awarded. Upstream changelog 8.2.0
 # (07/19/26): raids drop tickets at a GUARANTEED rate of 1 per 20,000 damage --
 # unlike the 1%-per-kill / 0.5%-per-gather rolls, this yield is deterministic and
