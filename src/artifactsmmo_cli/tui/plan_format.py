@@ -41,30 +41,38 @@ def parse_supply_target(target_repr: str) -> tuple[str, int, int] | None:
     return m.group(1), int(m.group(2)), int(m.group(3))
 
 
-def supply_banked(quantity: int, demand: int) -> int:
-    """Units of the target ALREADY in the bank, recovered exactly.
-
-    Not an estimate and not a second source: `GamePlayer._pick_supply_target`
-    builds the pair as `(banked + demand, demand)` from ONE reading of
-    `state.bank_items`, so the difference is that reading and nothing else.
-    Named here, once, so both panes ask the same question of the same two
-    fields — and so this comment sits next to the arithmetic if the triple's
-    construction ever changes."""
-    return quantity - demand
-
-
 def supply_progress(item_code: str, quantity: int, demand: int) -> str:
-    """`ash_wood 12/62` — banked over the banked-count the goal targets."""
-    return f"{item_code} {supply_banked(quantity, demand)}/{quantity}"
+    """`ash_wood →62 banked, 50 unmet` — the banked count this character's
+    supply goal is producing TOWARD, and the sibling demand still unmet.
+
+    BOTH NUMBERS ARE THE PAIR ITSELF; nothing is derived. This used to render
+    `banked/target` off `quantity - demand`, which was exact while
+    `GamePlayer._pick_supply_target` built the pair as `(banked + demand,
+    demand)` from one reading of `state.bank_items`. It now builds `quantity`
+    as `supply_batch_target_pure(banked, demand)` — the next BATCH milestone
+    above the bank, clamped to `banked + demand` — so the subtraction stopped
+    being the bank reading and started printing nonsense: banked=0 with
+    demand=60 gives the pair (10, 60) and rendered `spruce_wood -50/10`.
+
+    The banked count is not recoverable from the pair at all any more (many
+    different bank readings map to one milestone), and inventing an estimate
+    of it would be worse than not showing it, so both panes report the two
+    figures the pair still carries and only those. `supply_detail` below says
+    the same thing in the plan tree's idiom — same two fields, same order, no
+    third number — which is the property this pair of formatters exists to
+    keep: a reader switching panes sees ONE account of the commitment."""
+    return f"{item_code} →{quantity} banked, {demand} unmet"
 
 
 def supply_detail(quantity: int, demand: int) -> str:
-    """`banked 12 / 62   demand 50` — the plan tree's supply-node detail.
+    """`target 62 banked   demand 50` — the plan tree's supply-node detail, the
+    same two fields `supply_progress` renders for the log pane and nothing
+    derived from them (see there for why the old banked figure is gone).
 
     The item code is deliberately absent: this hangs off a node whose label
     already names it, and the plan pane's other details (`gear · 2.31`) are
     likewise about the node they sit on rather than repeating it."""
-    return f"banked {supply_banked(quantity, demand)} / {quantity}   demand {demand}"
+    return f"target {quantity} banked   demand {demand}"
 
 
 def short_root(root_repr: str) -> str:

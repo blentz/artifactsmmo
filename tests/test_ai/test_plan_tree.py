@@ -254,7 +254,7 @@ def test_the_role_annotates_a_root_that_is_absent_from_the_ranking():
 def test_the_supply_target_becomes_a_child_of_the_chosen_root():
     root = _supplying_tree(supply_target=("ash_wood", 62, 50))[0]
     supply = next(c for c in root.children if c.label == "supplying ash_wood")
-    assert supply.detail == "banked 12 / 62   demand 50"
+    assert supply.detail == "target 62 banked   demand 50"
     assert supply.children == ()
 
 

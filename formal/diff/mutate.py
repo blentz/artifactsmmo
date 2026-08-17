@@ -5961,6 +5961,37 @@ SUPPLY_BATCH_TARGET_RECEDING_MUTATIONS = [
 ]
 
 
+# ai/supply_claim_and_batch final fix (mutation coverage): the supply claim's
+# RENEWAL gate. The claim is taken on ranking, but ranking runs every cycle
+# whether or not the character then wins selection, so renewing it
+# unconditionally let a non-producing holder keep an item away from the whole
+# fleet forever — the TTL can only reap a claim nobody keeps extending.
+#   * mutant 1 restores exactly that: the gate never fires, so the re-claim of
+#     an item this character was already serving happens regardless of whether
+#     it produced. Unit-killed by
+#     test_a_holder_that_did_not_produce_last_cycle_stops_renewing
+#     (tests/test_ai/test_player_coordination.py), which spies on
+#     `claim_supply` for a holder whose last goal was a guard.
+#   * mutant 2 narrows the "did I produce this?" signal from an ITEM match to
+#     an exact-string match, which is what a whole-repr comparison amounts to:
+#     the batch quantity in `SupplyBankGoal`'s repr moves by design, so the
+#     signal would read "did not produce" for a character producing hard.
+#     Unit-killed by test_a_holder_that_produced_last_cycle_renews (same file).
+# OWN run_group: both are unit-killed, and both verified by running the mutants.
+SUPPLY_CLAIM_RENEWAL_GATE_MUTATIONS = [
+    (
+        "player._pick_supply_target: claim renewed without producing",
+        "            if best_code == previous_code and not self._served_supply_last_cycle(best_code):",
+        "            if best_code == previous_code and False:",
+    ),
+    (
+        "player._served_supply_last_cycle: item match narrowed to exact repr match",
+        '                and self._last_goal_name.startswith(f"SupplyBank({item_code}x"))',
+        '                and self._last_goal_name == f"SupplyBank({item_code}x")',
+    ),
+]
+
+
 # The BANK-DRAIN's keep composition (item-protection-authority epic, Task 9 — the
 # LAST code-set consumer). A drain WITHDRAWS bank copies so the discard ladder can
 # destroy them, so it is bounded by the keep authority's OWNERSHIP cap ALONE:
@@ -7310,6 +7341,9 @@ def _collect_all_groups() -> None:
     run_group(COORDINATION_STORE_SRC, CLAIM_SUPPLY_EXCLUSIVITY_MUTATIONS,
               "tests/test_ai/test_coordination_store.py", survivors)
     run_group(SUPPLY_BATCH_TARGET_SRC, SUPPLY_BATCH_TARGET_RECEDING_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
+    # ai/supply_claim_and_batch final fix: renewal gated on producing.
+    run_group(PLAYER_SRC, SUPPLY_CLAIM_RENEWAL_GATE_MUTATIONS,
               "tests/test_ai/test_player_coordination.py", survivors)
     run_group(WITHDRAW_ITEM_SRC, WITHDRAW_ITEM_MUTATIONS,
               "formal/diff/test_inventory_chain_safe_diff.py", survivors)

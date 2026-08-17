@@ -2055,6 +2055,140 @@ def test_switching_items_releases_the_previous_claim(tmp_path):
     assert store.supply_claim_holder("spruce_wood", NOW) is None
 
 
+def _spy_on_claims(monkeypatch, store) -> list[str]:
+    """Record every item code offered to `claim_supply`, real behaviour intact.
+
+    A claim is RENEWED by re-claiming it (`claim_supply` extends the current
+    holder's row in place), so "did this character renew?" is exactly "was the
+    code passed to `claim_supply`?" — and the TTL is 600s of wall clock, which
+    no test can watch expire. The same spy idiom
+    `test_a_sibling_held_item_is_never_offered_to_the_claim_election` above
+    already uses, hoisted so the renewal tests share one construction."""
+    attempted: list[str] = []
+    real_claim_supply = store.claim_supply
+    monkeypatch.setattr(
+        store, "claim_supply",
+        lambda code, now: (attempted.append(code), real_claim_supply(code, now))[1])
+    return attempted
+
+
+def test_a_holder_that_did_not_produce_last_cycle_stops_renewing(tmp_path, monkeypatch):
+    """The claim must be held while PRODUCING, not merely while wanting to.
+
+    A character whose SUPPLY_BANK rung fires but which loses selection every
+    cycle — to a guard, or to a higher-value goal — used to renew its claim
+    unconditionally, holding the item against the whole fleet forever: renewal
+    was wired to RANKING, and ranking runs on every cycle regardless of what
+    the arbiter then chose. Not renewing lets `DEMAND_TTL_SECONDS` reap it,
+    which is the whole reason the claim has an expiry."""
+    db = str(tmp_path / "coord.db")
+    player, store = _player_with_coordination(tmp_path, "Robby", db=db)
+    store.claim_supply("spruce_wood", NOW)
+    player._supply_target = ("spruce_wood", SUPPLY_BATCH, 60)
+    player._last_goal_name = "RestoreHP()"       # a guard won selection instead
+    attempted = _spy_on_claims(monkeypatch, store)
+
+    target = player._pick_supply_target(
+        {"spruce_wood": 60}, {"spruce_wood": "woodcutting"},
+        make_state(skills={"woodcutting": 20}, bank_items={}), {"spruce_wood": 1})
+
+    assert attempted == []
+    # It keeps TARGETING the item: the claim lapsing is what hands the item
+    # back, and a character that wins selection again before the TTL runs out
+    # resumes producing (and renewing) without a detour.
+    assert target is not None and target[0] == "spruce_wood"
+
+
+def test_a_holder_that_produced_last_cycle_renews(tmp_path, monkeypatch):
+    """The other half: a character actually running SupplyBank for the item
+    must keep its claim, or a production run longer than the TTL would lose the
+    item to a sibling mid-batch."""
+    db = str(tmp_path / "coord.db")
+    player, store = _player_with_coordination(tmp_path, "Robby", db=db)
+    store.claim_supply("spruce_wood", NOW)
+    player._supply_target = ("spruce_wood", SUPPLY_BATCH, 60)
+    player._last_goal_name = f"SupplyBank(spruce_woodx{SUPPLY_BATCH})"
+    attempted = _spy_on_claims(monkeypatch, store)
+
+    player._pick_supply_target(
+        {"spruce_wood": 60}, {"spruce_wood": "woodcutting"},
+        make_state(skills={"woodcutting": 20}, bank_items={}), {"spruce_wood": 1})
+
+    assert attempted == ["spruce_wood"]
+    assert store.supply_claim_holder("spruce_wood", NOW) == "Robby"
+
+
+def test_renewal_matches_the_item_not_the_batch_quantity(tmp_path, monkeypatch):
+    """The quantity in `SupplyBankGoal`'s repr moves from batch to batch BY
+    DESIGN (`supply_batch_target_pure`), so a whole-repr match would read "did
+    not produce" on exactly the cycles where the character just finished a
+    batch — reaping the claim of the hardest-working producer. Last cycle
+    served the x10 batch; this cycle's target is the x20 one."""
+    db = str(tmp_path / "coord.db")
+    player, store = _player_with_coordination(tmp_path, "Robby", db=db)
+    store.claim_supply("spruce_wood", NOW)
+    player._supply_target = ("spruce_wood", SUPPLY_BATCH, 60)
+    player._last_goal_name = f"SupplyBank(spruce_woodx{SUPPLY_BATCH})"
+    attempted = _spy_on_claims(monkeypatch, store)
+
+    target = player._pick_supply_target(
+        {"spruce_wood": 50}, {"spruce_wood": "woodcutting"},
+        make_state(skills={"woodcutting": 20}, bank_items={"spruce_wood": SUPPLY_BATCH}),
+        {"spruce_wood": 1})
+
+    assert target is not None and target[1] == 2 * SUPPLY_BATCH   # a NEW batch
+    assert attempted == ["spruce_wood"]
+
+
+def test_a_first_pick_claims_without_having_produced_anything_yet(tmp_path, monkeypatch):
+    """Acquisition is not renewal: a character that was serving something else
+    (or nothing) has by definition not produced this item yet, and gating the
+    FIRST claim on production would mean no character could ever take one."""
+    db = str(tmp_path / "coord.db")
+    player, store = _player_with_coordination(tmp_path, "Robby", db=db)
+    player._supply_target = ("ash_wood", SUPPLY_BATCH, 5)
+    player._last_goal_name = "SupplyBank(ash_woodx10)"
+    attempted = _spy_on_claims(monkeypatch, store)
+
+    player._pick_supply_target(
+        {"spruce_wood": 60}, {"spruce_wood": "woodcutting"},
+        make_state(skills={"woodcutting": 20}, bank_items={}), {"spruce_wood": 1})
+
+    assert attempted == ["spruce_wood"]
+    assert store.supply_claim_holder("spruce_wood", NOW) == "Robby"
+
+
+def test_losing_the_role_hands_the_claim_back(tmp_path):
+    """A character with no role produces nothing, so it must not sit on a
+    claim for the rest of the TTL: the no-role exit is a stop-serving event
+    exactly like switching items is."""
+    db = str(tmp_path / "coord.db")
+    player, store = _player_with_coordination(tmp_path, "Robby", db=db)
+    store.claim_supply("spruce_wood", NOW)
+    player._supply_target = ("spruce_wood", SUPPLY_BATCH, 60)
+    player._role = None
+
+    assert player._pick_supply_target(
+        {"spruce_wood": 60}, {"spruce_wood": "woodcutting"},
+        make_state(skills={"woodcutting": 20}, bank_items={}), {"spruce_wood": 1}) is None
+    assert store.supply_claim_holder("spruce_wood", NOW) is None
+
+
+def test_an_unknown_role_hands_the_claim_back(tmp_path):
+    """Same for a held role name the catalog no longer knows — the other exit
+    that leaves this character with no owned skills to produce with."""
+    db = str(tmp_path / "coord.db")
+    player, store = _player_with_coordination(tmp_path, "Robby", db=db)
+    store.claim_supply("spruce_wood", NOW)
+    player._supply_target = ("spruce_wood", SUPPLY_BATCH, 60)
+    player._role = "no_such_role"
+
+    assert player._pick_supply_target(
+        {"spruce_wood": 60}, {"spruce_wood": "woodcutting"},
+        make_state(skills={"woodcutting": 20}, bank_items={}), {"spruce_wood": 1}) is None
+    assert store.supply_claim_holder("spruce_wood", NOW) is None
+
+
 def test_a_lost_supply_claim_falls_through_to_the_next_candidate(tmp_path, monkeypatch):
     """A sibling can win the SAME item's election in the gap between this
     character's skip-check and its own claim attempt, in the same cycle.

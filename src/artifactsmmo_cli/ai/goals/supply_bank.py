@@ -94,9 +94,12 @@ class SupplyBankGoal(Goal):
         have planned.
 
         `_demand`, not `_quantity`, is the production scale: `_pick_supply_target`
-        builds the goal as `quantity = banked + demand`, so a bank already
-        holding 500 of the item would inflate `_quantity` (and hence the search
-        space) without a single extra action to plan. The multiplier and the
+        builds `quantity` as `supply_batch_target_pure(banked, demand)` — the
+        next BATCH milestone above what is banked, clamped to `banked + demand`
+        — so it stays an ABSOLUTE banked target that already counts stock
+        nobody has to produce (a bank holding 500 still yields a `_quantity`
+        past 500 with no extra action to plan), while `_demand` is the work
+        actually left. The multiplier and the
         `max(100, ...)` floor are `GatherMaterialsGoal.max_depth`'s construction
         unchanged — the same "obtain N units of X" question, where a deep chain
         costs many actions per unit and the planner's time/node budget is meant

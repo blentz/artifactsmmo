@@ -2912,12 +2912,24 @@ class GamePlayer:
             won the same item the same cycle) is ordinary contention, not an
             error — the losing candidate is excluded and ranking runs again
             over what remains, rather than committing to produce into a race.
-          * RENEWAL needs no second path: `claim_supply` renews in place for
-            the current holder, so re-claiming the same item every cycle IS
-            the renewal.
+          * RENEWAL IS CONDITIONAL ON PRODUCING. `claim_supply` renews in
+            place for the current holder, so re-claiming the same item IS the
+            renewal — but this method runs on every cycle from RANKING, and
+            ranking is not producing. Renewing unconditionally therefore let a
+            character whose SUPPLY_BANK rung fires but which loses selection
+            every cycle (to a guard, or to a higher-value goal) hold the item
+            against the entire fleet forever, since the TTL can only reap a
+            claim nobody keeps extending. So the re-claim of an item this
+            character was ALREADY serving is skipped unless
+            `_served_supply_last_cycle` says it really ran the supply goal for
+            it. A non-producing holder simply stops renewing and
+            `DEMAND_TTL_SECONDS` does the rest — no new constant, no new
+            counter, and the target itself is kept so production (and renewal)
+            resume the moment it wins selection again.
           * RELEASE happens when this character stops serving an item it
             previously held a claim for — a different item wins this cycle,
-            or nothing does. `self._supply_target` (set by the caller,
+            nothing does, or the role went away entirely (both early exits
+            above). `self._supply_target` (set by the caller,
             `_update_coordination`, at the END of the PREVIOUS cycle) is read
             here, before this cycle's pick replaces it, as "what I was
             serving" — a claim left behind otherwise blocks the fleet for up
@@ -2950,10 +2962,19 @@ class GamePlayer:
         WON before this point (the election does not depend on the bank), so
         a first-cycle claim outlives the `None` this returns until the bank
         is read."""
+        # What this character was serving as of the END of the previous cycle,
+        # read BEFORE any exit below can return: every path out of this method
+        # that stops serving `previous_code` — no role, an unknown role, a
+        # different item, or nothing at all — is a stop-serving event and must
+        # hand the claim back. Reading it once, here, is what stops the two
+        # early exits from leaking a claim for a whole `DEMAND_TTL_SECONDS`.
+        previous_code = self._supply_target[0] if self._supply_target is not None else None
         if self._role is None:
+            self._release_supply_claim(previous_code)
             return None
         role = ROLES_BY_NAME.get(self._role)
         if role is None:
+            self._release_supply_claim(previous_code)
             return None
         owned_skills = role_skills(role)
         now = datetime.now(tz=timezone.utc)
@@ -2994,6 +3015,21 @@ class GamePlayer:
             if best_code is None or self._coordination is None:
                 chosen_code, chosen_demand = best_code, best_demand
                 break
+            if best_code == previous_code and not self._served_supply_last_cycle(best_code):
+                # A CLAIM IS HELD WHILE PRODUCING, and a holder that stops
+                # producing must let the fleet have the item back. This is the
+                # renewal case (we were already serving this item), and the
+                # character did NOT actually run SupplyBank for it last cycle
+                # — a guard or a higher-value goal won selection — so the
+                # claim is deliberately NOT extended and `DEMAND_TTL_SECONDS`
+                # reaps it. Renewal was previously unconditional and ranking
+                # runs every cycle, so a character that never won selection
+                # held the item against the whole fleet indefinitely.
+                # It still TARGETS the item: winning selection again before
+                # the TTL runs out resumes production, and the very next pass
+                # then renews the claim.
+                chosen_code, chosen_demand = best_code, best_demand
+                break
             if self._coordination.claim_supply(best_code, now):
                 chosen_code, chosen_demand = best_code, best_demand
                 break
@@ -3001,10 +3037,8 @@ class GamePlayer:
             # just contention. Exclude it and rank again over what remains.
             excluded.add(best_code)
 
-        if self._coordination is not None:
-            previous = self._supply_target[0] if self._supply_target is not None else None
-            if previous is not None and previous != chosen_code:
-                self._coordination.release_supply(previous)
+        if previous_code != chosen_code:
+            self._release_supply_claim(previous_code)
 
         if chosen_code is None:
             return None
@@ -3012,6 +3046,40 @@ class GamePlayer:
             return None
         banked = state.bank_items.get(chosen_code, 0)
         return (chosen_code, supply_batch_target_pure(banked, chosen_demand), chosen_demand)
+
+    def _release_supply_claim(self, item_code: str | None) -> None:
+        """Hand `item_code`'s supply claim back to the fleet — the ONE place
+        `_pick_supply_target`'s several stop-serving exits release through, so
+        no new exit can be added that silently keeps the claim.
+
+        `None` (nothing was being served) and "no coordination store at all"
+        (every single-character run) are both no-ops rather than errors: they
+        are the ordinary shapes of "there is no claim to give back", not
+        failures. `release_supply` itself only ever deletes THIS character's
+        own row, so a release for an item a sibling has since claimed cannot
+        evict them."""
+        if item_code is not None and self._coordination is not None:
+            self._coordination.release_supply(item_code)
+
+    def _served_supply_last_cycle(self, item_code: str) -> bool:
+        """Did this character actually RUN its supply goal for `item_code` on
+        the previous cycle? The condition a claim RENEWAL is gated on.
+
+        `_last_goal_name` is `repr(selected_goal)` for the goal the arbiter
+        actually selected — which is the point: a rung that merely FIRED, or a
+        target that was merely ranked, says nothing about whether this
+        character produced anything. `_update_coordination` (this method's only
+        caller's caller) runs BEFORE this cycle's selection, so the field still
+        describes the previous cycle when read here.
+
+        Matched on the ITEM ALONE, not the whole repr. `SupplyBankGoal`'s repr
+        is `SupplyBank(<code>x<quantity>)` and that quantity moves from batch
+        to batch BY DESIGN (`supply_batch_target_pure`), so a whole-repr
+        comparison would report "did not produce" on precisely the cycles
+        following a completed batch — reaping the claim of the character
+        working hardest on it."""
+        return (self._last_goal_name is not None
+                and self._last_goal_name.startswith(f"SupplyBank({item_code}x"))
 
     def _note_supply_servability(self, goals_tried: "list[Any]") -> None:
         """Extend or break the run of cycles this character's held role has

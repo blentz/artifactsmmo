@@ -1,11 +1,12 @@
 """short_root: collapse ObtainItem(...) reprs to a scannable short form."""
 
+import re
+
 from artifactsmmo_cli.ai.cycle_snapshot import PlanTreeNode
 from artifactsmmo_cli.tui.plan_format import (
     grind_chain_lines,
     parse_supply_target,
     short_root,
-    supply_banked,
     supply_detail,
     supply_progress,
 )
@@ -63,19 +64,36 @@ def test_parse_supply_target_none_for_another_shape():
     assert parse_supply_target("ObtainItem(code='ash_wood', quantity=1)") is None
 
 
-def test_supply_banked_recovers_the_bank_reading():
-    """`_pick_supply_target` builds quantity as banked + demand, so the
-    difference IS the bank reading it was built from — not an estimate."""
-    assert supply_banked(62, 50) == 12
+def test_supply_progress_reports_the_batch_target_and_the_unmet_demand():
+    """Both numbers come straight out of the pair, undisturbed: `quantity` is
+    the banked count the goal is producing TOWARD, `demand` the units still
+    unmet."""
+    assert supply_progress("ash_wood", 62, 50) == "ash_wood →62 banked, 50 unmet"
 
 
-def test_supply_banked_is_zero_for_an_empty_bank():
-    assert supply_banked(50, 50) == 0
+def test_supply_progress_does_not_subtract_the_demand_from_the_target():
+    """The measured breakage, and the test that fails if `quantity - demand`
+    ever comes back: `_pick_supply_target` now builds `quantity` as a BATCH
+    milestone, so banked=0 with demand=60 gives the pair (10, 60) and the old
+    subtraction rendered `spruce_wood -50/10` — a negative bank count on
+    screen. The bank reading is simply not in the pair any more."""
+    rendered = supply_progress("spruce_wood", 10, 60)
+    assert rendered == "spruce_wood →10 banked, 60 unmet"
+    assert "-50" not in rendered
 
 
-def test_supply_progress_reads_banked_over_target():
-    assert supply_progress("ash_wood", 62, 50) == "ash_wood 12/62"
+def test_supply_detail_names_both_the_target_and_the_demand():
+    assert supply_detail(62, 50) == "target 62 banked   demand 50"
 
 
-def test_supply_detail_names_both_the_progress_and_the_demand():
-    assert supply_detail(62, 50) == "banked 12 / 62   demand 50"
+def test_both_panes_report_the_same_two_numbers():
+    """The property the formatters exist to protect: the log line and the plan
+    tree's supply detail ask the SAME question of the SAME fields, so a reader
+    switching panes never sees two different accounts of one commitment. A pane
+    that derived a third figure from the pair — the retired `quantity - demand`
+    — would show a number the other one does not."""
+    for pair in ((62, 50), (10, 60)):
+        assert re.findall(r"-?\d+", supply_progress("ash_wood", *pair)) == [
+            str(pair[0]), str(pair[1])]
+        assert re.findall(r"-?\d+", supply_detail(*pair)) == [
+            str(pair[0]), str(pair[1])]

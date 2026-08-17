@@ -266,7 +266,7 @@ class TestSupplyContinuationLine:
         lines = build_log_lines(_snap(role="logger", supply_target=_SUPPLY))
         assert len(lines) == 2
         assert "role: logger" in lines[1]
-        assert "supplying ash_wood 12/62" in lines[1]
+        assert "supplying ash_wood →62 banked, 50 unmet" in lines[1]
 
     def test_the_continuation_line_is_dim(self):
         """Same dim-continuation treatment as the `why` line above it."""
