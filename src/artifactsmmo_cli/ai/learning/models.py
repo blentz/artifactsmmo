@@ -397,6 +397,49 @@ class TurnInClaim(SQLModel, table=True):
     expires_at: str
 
 
+class SupplyClaim(SQLModel, table=True):
+    """The election of exactly ONE character to PRODUCE toward one sibling's
+    published `MaterialDemand` request for `item_code`.
+
+    Nothing previously stopped every eligible sibling from serving the same
+    request: measured live, one request — `SupplyBank(spruce_wood x60)` — was
+    served SIMULTANEOUSLY by R2D2 (225 gathers) and Robby (231 gathers), 456
+    units produced against an ask of 60. `MaterialDemand`/`sibling_demand`
+    let every character SEE the same unmet request, but seeing it is exactly
+    what makes it dangerous without a lock: five children reading the same
+    board on the same cycle each independently decide to fill it.
+
+    Modelled on `TurnInClaim` exactly, not on `RoleLease`: `RoleLease` is
+    deliberately NON-exclusive (`UNIQUE(role, character)`) because roles
+    stopped being scarce (see its own docstring) — the opposite of what a
+    supply request needs, which MUST contend so exactly one producer exists.
+    The key here is UNIQUE on `item_code` ALONE, not `(character, item_code)`:
+    two characters claiming the same item write to the SAME row, so the
+    second write either loses to a live incumbent or, if the incumbent
+    already expired, takes the row over. Keying on `(character, item_code)`
+    instead — the shape every OTHER claim table in this module uses — would
+    let every character hold its own row for the same item and all five
+    would "win" silently, exactly reproducing the measured duplication.
+
+    Carries the same `expires_at` liveness rule as `RoleLease`,
+    `MaterialDemand`, `HoldingLedger`, `BankStockClaim`, `GeOrderClaim` and
+    `TurnInClaim` — a row is real if unexpired — on `DEMAND_TTL_SECONDS`
+    specifically (not the two shorter single-action TTLs): a production run
+    spans hundreds of cycles and the holder renews every one, so the claim
+    only has to outlive the longest legitimate gap BETWEEN cycles, exactly
+    like `RoleLease` and `TurnInClaim`, not a one-shot settlement window like
+    `BankStockClaim`/`GeOrderClaim`."""
+
+    __tablename__ = "supply_claims"
+    __table_args__ = (UniqueConstraint("item_code", name="uq_supply_claim_item"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    item_code: str = Field(index=True)
+    character: str = Field(index=True)
+    claimed_at: str
+    expires_at: str
+
+
 class PlanBodyLogBase(SQLModel):
     """One computed plan body, logged at re-plan time. Counted by the Phase-2
     macro detector."""

@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.learning.models import (
     HoldingLedger,
     MaterialDemand,
     RoleLease,
+    SupplyClaim,
     TurnInClaim,
 )
 from artifactsmmo_cli.ai.learning.schema_init import exclusive_schema_lock
@@ -929,6 +930,106 @@ class CoordinationStore:
                 s.commit()
         except SQLAlchemyError as e:
             print(f"[coordination] release_turn_in failed: {e}")
+
+    def claim_supply(self, item_code: str, now: datetime) -> bool:
+        """Elect THIS character to PRODUCE toward a sibling's request for
+        `item_code`, and report whether it holds the claim afterwards.
+
+        This is the mechanism that stops five children from each producing
+        the same demand: `MaterialDemand`/`sibling_demand` let every
+        character SEE the same unmet request, so seeing it is not enough —
+        exactly one of them must also win this claim before acting on it.
+        Measured live without it: `SupplyBank(spruce_wood x60)` was served by
+        R2D2 (225 gathers) AND Robby (231 gathers) at once — 456 units against
+        an ask of 60.
+
+        Modelled on `claim_turn_in` exactly, not on `RoleLease.claim`:
+        `role_leases` is non-exclusive on purpose (`UNIQUE(role, character)`),
+        but a supply claim has the opposite requirement — it MUST contend, so
+        exactly one winner exists. `SupplyClaim` is UNIQUE on `item_code`
+        ALONE (see its docstring), so there is at most one row per item and
+        taking that row over IS the election.
+
+        A live incumbent that is a DIFFERENT character blocks the claim
+        (`False`). An incumbent that has EXPIRED, or is this character's OWN
+        prior claim, is taken over / renewed in place — the renewal case is
+        what lets a multi-cycle production run (hundreds of cycles, TTL
+        `DEMAND_TTL_SECONDS`) keep its claim across cycles without losing it
+        to its own next call.
+
+        IntegrityError IS reachable here, exactly as in `claim_turn_in`: two
+        characters can simultaneously read "no row for this item_code" and
+        both attempt to insert. `SupplyClaim`'s key is genuinely exclusive, so
+        the loser's insert collides for real and must report `False` rather
+        than propagate — the loser simply did not win the election and stands
+        down this cycle."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(SupplyClaim).where(SupplyClaim.item_code == item_code)
+                ).first()
+                if row is not None:
+                    if row.character != self._character and row.expires_at > stamp:
+                        return False
+                    row.character = self._character
+                    row.claimed_at = stamp
+                    row.expires_at = self._demand_expiry(now)
+                    s.add(row)
+                else:
+                    s.add(SupplyClaim(item_code=item_code, character=self._character,
+                                      claimed_at=stamp,
+                                      expires_at=self._demand_expiry(now)))
+                s.commit()
+                return True
+        except IntegrityError:
+            return False
+        except SQLAlchemyError as e:
+            print(f"[coordination] claim_supply failed: {e}")
+            return False
+
+    def supply_claim_holder(self, item_code: str, now: datetime) -> str | None:
+        """The character currently holding a LIVE supply claim on
+        `item_code`, or `None` if nobody does. Unlike `claim_supply`, this
+        never writes: a caller checking whether a SIBLING already holds the
+        election (so it can stand down) must not itself take the claim over
+        just by asking."""
+        _require_utc(now)
+        stamp = now.isoformat()
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(SupplyClaim).where(
+                        SupplyClaim.item_code == item_code,
+                        SupplyClaim.expires_at > stamp,
+                    )
+                ).first()
+        except SQLAlchemyError as e:
+            print(f"[coordination] supply_claim_holder failed: {e}")
+            return None
+        return row.character if row is not None else None
+
+    def release_supply(self, item_code: str) -> None:
+        """Drop this character's supply claim on `item_code`. No-op if it
+        holds none — including when a SIBLING holds it: this only ever
+        touches this character's own row, matching `release_turn_in`'s
+        own-row-only discipline, so a stale or mistaken release can never
+        evict a sibling's live election."""
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(SupplyClaim).where(
+                        SupplyClaim.item_code == item_code,
+                        SupplyClaim.character == self._character,
+                    )
+                ).first()
+                if row is None:
+                    return
+                s.delete(row)
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[coordination] release_supply failed: {e}")
 
     def close(self) -> None:
         self._engine.dispose()

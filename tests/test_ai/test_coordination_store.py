@@ -33,6 +33,7 @@ from artifactsmmo_cli.ai.learning.models import (
     HoldingLedger,
     MaterialDemand,
     RoleLease,
+    SupplyClaim,
     TurnInClaim,
 )
 
@@ -2210,3 +2211,302 @@ def test_the_same_item_cannot_be_claimed_by_two_characters(engine) -> None:
                           claimed_at="t", expires_at="t"))
         with pytest.raises(IntegrityError):
             s.commit()
+
+
+# ---------------------------------------------------------------------------
+# Supply claims: the election of exactly ONE character to PRODUCE toward one
+# sibling request. Modelled on TurnInClaim exactly — UNIQUE on `item_code`
+# ALONE, not `(character, item_code)` — because the fix is the exclusivity
+# itself.
+#
+# Measured live: one request, SupplyBank(spruce_wood x60), was served
+# simultaneously by R2D2 (225 gathers) and Robby (231 gathers) — 456 units
+# produced against an ask of 60 — because nothing stopped every eligible
+# sibling from serving the same request. This table is the exclusive claim
+# that stops that.
+# ---------------------------------------------------------------------------
+
+
+def _iso(dt: datetime) -> str:
+    """Format a datetime the same way every `expires_at` in this module is
+    stored: `.isoformat()`, compared lexicographically against other
+    `.isoformat()` strings produced from UTC-aware datetimes."""
+    return dt.isoformat()
+
+
+def test_only_one_character_can_hold_a_supply_claim(tmp_path):
+    now = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    r2d2 = CoordinationStore(db_path=db, character="R2D2")
+    robby = CoordinationStore(db_path=db, character="Robby")
+
+    assert r2d2.claim_supply("spruce_wood", now) is True
+    assert robby.claim_supply("spruce_wood", now) is False
+    assert robby.supply_claim_holder("spruce_wood", now) == "R2D2"
+
+
+def test_the_holder_can_renew_without_locking_itself_out(tmp_path):
+    """A production run spans hundreds of cycles; the holder re-claims every one."""
+    now = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    r2d2 = CoordinationStore(db_path=db, character="R2D2")
+
+    assert r2d2.claim_supply("spruce_wood", now) is True
+    later = now + timedelta(seconds=120)
+    assert r2d2.claim_supply("spruce_wood", later) is True
+    with SqlSession(r2d2._engine) as s:
+        rows = s.exec(select(SupplyClaim)).all()
+    assert len(rows) == 1
+    assert rows[0].expires_at > _iso(now)
+
+
+def test_an_expired_claim_frees_the_item_for_a_sibling(tmp_path):
+    """A character that dies mid-run must not hold the request hostage."""
+    now = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    CoordinationStore(db_path=db, character="R2D2").claim_supply("spruce_wood", now)
+    later = now + timedelta(seconds=DEMAND_TTL_SECONDS + 1)
+
+    assert CoordinationStore(db_path=db, character="Robby").claim_supply(
+        "spruce_wood", later) is True
+
+
+def test_releasing_frees_the_item_immediately(tmp_path):
+    now = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    r2d2 = CoordinationStore(db_path=db, character="R2D2")
+    r2d2.claim_supply("spruce_wood", now)
+    r2d2.release_supply("spruce_wood")
+
+    assert CoordinationStore(db_path=db, character="Robby").claim_supply(
+        "spruce_wood", now) is True
+
+
+def test_releasing_an_item_another_character_holds_is_a_no_op(tmp_path):
+    """Release must be scoped to this character's own row, or a loser could
+    evict the winner and both would produce again — the bug this fixes."""
+    now = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    CoordinationStore(db_path=db, character="R2D2").claim_supply("spruce_wood", now)
+    CoordinationStore(db_path=db, character="Robby").release_supply("spruce_wood")
+
+    assert CoordinationStore(db_path=db, character="Robby").supply_claim_holder(
+        "spruce_wood", now) == "R2D2"
+
+
+def test_supply_claim_holder_returns_none_when_nothing_is_claimed(tmp_path: Path) -> None:
+    now = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    assert hal.supply_claim_holder("spruce_wood", now) is None
+
+
+def test_supply_claim_holder_never_writes(tmp_path: Path) -> None:
+    """Unlike `claim_supply`, checking the holder must not itself take over
+    the claim just by asking — matching `turn_in_holder`'s discipline."""
+    now = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    hal.claim_supply("spruce_wood", now)
+    robby = CoordinationStore(db_path=db, character="Robby")
+
+    assert robby.supply_claim_holder("spruce_wood", now) == "HAL"
+    # A second read changes nothing.
+    assert robby.supply_claim_holder("spruce_wood", now) == "HAL"
+    assert robby.claim_supply("spruce_wood", now) is False
+
+
+def test_release_supply_is_a_noop_when_nothing_is_claimed(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    hal.release_supply("spruce_wood")  # must not raise
+
+
+def test_two_different_items_may_be_claimed_by_different_characters(tmp_path: Path) -> None:
+    """Distinct item codes never contend — only the SAME code is exclusive."""
+    now = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+    db = str(tmp_path / "coord.db")
+    r2d2 = CoordinationStore(db_path=db, character="R2D2")
+    robby = CoordinationStore(db_path=db, character="Robby")
+    try:
+        assert r2d2.claim_supply("spruce_wood", now) is True
+        assert robby.claim_supply("ash_wood", now) is True
+        assert r2d2.supply_claim_holder("ash_wood", now) == "Robby"
+        assert robby.supply_claim_holder("spruce_wood", now) == "R2D2"
+    finally:
+        r2d2.close()
+        robby.close()
+
+
+def test_claim_supply_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.claim_supply("spruce_wood", _NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_claim_supply_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="offset"):
+            hal.claim_supply("spruce_wood", _NON_UTC_NOW)
+    finally:
+        hal.close()
+
+
+def test_supply_claim_holder_rejects_naive_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="naive"):
+            hal.supply_claim_holder("spruce_wood", _NAIVE_NOW)
+    finally:
+        hal.close()
+
+
+def test_supply_claim_holder_rejects_non_utc_offset_now(tmp_path: Path) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    try:
+        with pytest.raises(ValueError, match="offset"):
+            hal.supply_claim_holder("spruce_wood", _NON_UTC_NOW)
+    finally:
+        hal.close()
+
+
+def test_claim_supply_swallows_error_and_returns_false(tmp_path: Path, capsys) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    _break_engine(hal)
+    assert hal.claim_supply("spruce_wood", _T0) is False
+    assert "[coordination] claim_supply failed" in capsys.readouterr().out
+
+
+def test_supply_claim_holder_swallows_error_and_returns_none(tmp_path: Path, capsys) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    hal.claim_supply("spruce_wood", _T0)
+    _break_engine(hal)
+    assert hal.supply_claim_holder("spruce_wood", _T0) is None
+    assert "[coordination] supply_claim_holder failed" in capsys.readouterr().out
+
+
+def test_release_supply_swallows_error(tmp_path: Path, capsys) -> None:
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    hal.claim_supply("spruce_wood", _T0)
+    _break_engine(hal)
+    hal.release_supply("spruce_wood")
+    assert "[coordination] release_supply failed" in capsys.readouterr().out
+
+
+def test_a_rival_winning_the_supply_claim_mid_insert_is_recorded_as_a_loss(
+    tmp_path: Path,
+) -> None:
+    """The race SupplyClaim's exclusive key exists FOR, mirroring
+    `test_a_rival_winning_the_turn_in_claim_mid_insert_is_recorded_as_a_loss`
+    exactly: R2D2 reads "no row for `spruce_wood`" and decides to insert;
+    before R2D2's own flush lands, Robby concretely inserts first (a second,
+    real engine/session on the same file). UNIQUE(item_code) makes that
+    collision genuine, so R2D2's commit takes an IntegrityError and
+    `claim_supply` must report False rather than let it propagate."""
+    db = str(tmp_path / "coord.db")
+    r2d2 = CoordinationStore(db_path=db, character="R2D2")
+    rival_engine = create_engine(f"sqlite:///{db}")
+
+    def _rival_claims_first(session, flush_context, instances) -> None:
+        with SqlSession(rival_engine) as rival_session:
+            rival_session.add(SupplyClaim(
+                item_code="spruce_wood", character="Robby",
+                claimed_at=_T0.isoformat(),
+                expires_at=(_T0 + timedelta(seconds=DEMAND_TTL_SECONDS)).isoformat(),
+            ))
+            rival_session.commit()
+
+    event.listen(SqlSession, "before_flush", _rival_claims_first, once=True)
+    try:
+        assert r2d2.claim_supply("spruce_wood", _T0) is False
+        assert r2d2.supply_claim_holder("spruce_wood", _T0) == "Robby"
+    finally:
+        if event.contains(SqlSession, "before_flush", _rival_claims_first):
+            event.remove(SqlSession, "before_flush", _rival_claims_first)
+        rival_engine.dispose()
+        r2d2.close()
+
+
+def test_supply_claim_roundtrip(engine) -> None:
+    with SqlSession(engine) as s:
+        s.add(SupplyClaim(item_code="spruce_wood", character="R2D2",
+                          claimed_at="2026-08-17T12:00:00+00:00",
+                          expires_at="2026-08-17T12:10:00+00:00"))
+        s.commit()
+    with SqlSession(engine) as s:
+        row = s.exec(select(SupplyClaim)).one()
+        assert (row.item_code, row.character) == ("spruce_wood", "R2D2")
+
+
+def test_supply_claim_minimal_construction() -> None:
+    """Direct construction with all required fields, no persistence."""
+    claim = SupplyClaim(
+        item_code="spruce_wood",
+        character="R2D2",
+        claimed_at="2026-08-17T12:00:00+00:00",
+        expires_at="2026-08-17T12:10:00+00:00",
+    )
+    assert claim.id is None
+    assert claim.item_code == "spruce_wood"
+    assert claim.character == "R2D2"
+
+
+def test_the_same_supply_item_cannot_be_claimed_by_two_characters(engine) -> None:
+    """THE UNIQUENESS IS ON THE ITEM, NOT ON `(character, item_code)`. Keying
+    on `(character, item_code)` — the shape every OTHER claim table in this
+    module uses — would let every character hold its own row for the same
+    item and all five would "win" silently, exactly reproducing the measured
+    duplication (R2D2 225 gathers + Robby 231 gathers against a 60-unit ask)
+    this table exists to stop."""
+    with SqlSession(engine) as s:
+        s.add(SupplyClaim(item_code="spruce_wood", character="R2D2",
+                          claimed_at="t", expires_at="t"))
+        s.add(SupplyClaim(item_code="spruce_wood", character="Robby",
+                          claimed_at="t", expires_at="t"))
+        with pytest.raises(IntegrityError):
+            s.commit()
+
+
+def test_create_all_adds_the_supply_claims_table_to_a_pre_existing_database(
+    tmp_path: Path,
+) -> None:
+    """`SupplyClaim` is a brand-new TABLE, not a column added to an existing
+    one — unlike `_migrate_material_demand_self_servable`'s case, no migration
+    is needed because `SQLModel.metadata.create_all` only creates tables that
+    do not yet exist and leaves every other table alone. Proven here by
+    building a database that already has every OTHER coordination table but
+    not `supply_claims`, then confirming a fresh `CoordinationStore` open adds
+    it and a claim succeeds."""
+    db_path = tmp_path / "legacy.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    tables_without_supply_claims = [
+        table for name, table in SQLModel.metadata.tables.items() if name != "supply_claims"
+    ]
+    SQLModel.metadata.create_all(engine, tables=tables_without_supply_claims)
+    engine.dispose()
+
+    raw = sqlite3.connect(str(db_path))
+    try:
+        existing = {row[0] for row in raw.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+    finally:
+        raw.close()
+    assert "supply_claims" not in existing
+    assert "role_leases" in existing  # sanity: the other tables really are there
+
+    store = CoordinationStore(db_path=str(db_path), character="R2D2")
+    try:
+        assert store.claim_supply("spruce_wood", _T0) is True
+    finally:
+        store.close()
