@@ -413,6 +413,91 @@ What IS measurable today is venue sharing: on the same scenario with the gates
 MET, bundling the iron set saves 10 actions of 221 (5%) across five shared venues.
 Real, and two orders of magnitude smaller than the unlock.
 
+## E4 RESULT — 2026-08-18: C is ~4x CHEAPER than what ships, not dearer
+
+Per-call timing added to `--bundle-price`, because that is the only place the
+pricer runs in isolation. Live, two characters:
+
+| char | candidates C | rungs R | per-rung | `acquisition_actions` |
+|---|---|---|---|---|
+| Lor L17 | 12 | 9 | 366 ms | 47.1 ms (routable) / 0.3–0.6 ms (walled) |
+| R2D2 L20 | 10 | 6 | 451 ms | 67.6 ms (routable) / 0.4–0.7 ms (walled) |
+
+**The walled figure is not the one to use.** A candidate with no route
+short-circuits before walking anything, which is why eight of Lor's nine priced in
+under a millisecond while the single routable one took 47 ms. Once the pricing
+wall is fixed most candidates become routable, so the honest term is the routable
+one and every estimate below uses it.
+
+### The two shapes, and the arithmetic
+
+Today, `branch_ranking` pays one `acquisition_actions` per candidate and one full
+R-rung walk per candidate:
+
+    today  =  C·acq + C·R·rung
+
+Option C walks once and evaluates C upgrades at each rung:
+
+    C      =  R·rung + R·C·acq
+
+| char | today, modelled | today, measured | option C, modelled | speedup |
+|---|---|---|---|---|
+| Lor | 40,092 ms | **39,566 ms** | **8,370 ms** | 4.7x |
+| R2D2 | 27,740 ms | **27,031 ms** | **6,786 ms** | 4.0x |
+
+The model reproduces the measurement to within 2%, which is what makes the
+estimate worth anything.
+
+**Break-even is `acq` against `rung`.** For any non-trivial C and R the dominant
+terms are `R·C·acq` against `C·R·rung`, so C is cheaper exactly when
+`acq < rung`. Measured: 47 ms against 366 ms, and 68 ms against 451 ms — a margin
+of **6.6x to 7.8x**. `acq` would have to grow nearly an order of magnitude before
+C became the expensive option.
+
+**With banding as well** (Lor at target 20, three rungs): today 13,264 ms
+measured; C modelled at 3·366 + 3·12·47 = **2,790 ms**. Against a ~30 s cooldown
+and a 15 s planning floor, that is the difference between an objective that fits
+in its budget and one that does not.
+
+### Verdict on the kill criterion
+
+E4 killed C if the estimate exceeded ~5 s per decision or grew superlinearly in
+rungs. It is linear in rungs by construction, and at the banded target it is
+~2.8 s. At the shipped target of 50 it is 6.8–8.4 s, which does exceed 5 s — but
+target 50 is precisely what the epic removes. **Not killed.**
+
+### Residual, and it is the one with history
+
+`adventurer_vest` — the candidate whose recipe fan-out once ran 10.1M recursive
+calls in 20 s at this exact seam — is currently WALLED, so it priced in 0.5 ms
+here and this measurement says nothing about it. Every figure above must be
+re-taken after the pricing wall is fixed, when the deep-closure candidates start
+walking for real. The memo that fixed that blow-up is still in place and the walk
+is linear in the closure, so the expectation is that `acq` rises toward the 47–68 ms
+band rather than exploding — but expectation is not measurement, and this seam has
+surprised the project once already.
+
+---
+
+## SPIKE VERDICT — 2026-08-18: **build C**
+
+All four kill criteria cleared:
+
+| | criterion | result |
+|---|---|---|
+| E1 | scenarios show a real trade-off ⇒ diagnosis wrong | 0 finite `J` live and offline; **not killed** |
+| E2 | spread ~0 at every horizon ⇒ benefit unimplementable | 1,086–1,128 cycles at the milestone; **not killed** |
+| E3 | bundle ≈ sum ⇒ fall back to B | 74% amortised, `skill:gearcrafting:10` the shared key; **not killed** |
+| E4 | >5 s per decision or superlinear ⇒ fall back to B | ~2.8 s banded, linear in rungs, 4x cheaper than today; **not killed** |
+
+C is recommended, and the ordering constraint E3 exposed is now a hard
+dependency rather than a preference: **increment 2 (the pricing wall) must land
+before increment 3 (the acquisition edge)**, because the largest shared cost in
+the model — the skill unlock — exists only where a grind rate does, and every
+candidate carrying one is currently walled. Building C first would produce a walk
+that can buy nothing worth buying, and it would look inert for a reason that has
+nothing to do with C.
+
 ## Order of work
 
 1. ~~Tool 1 without `--target`~~ — **DONE 2026-08-18**, E1 recorded above.
@@ -440,8 +525,9 @@ Real, and two orders of magnitude smaller than the unlock.
 4. ~~Tool 2, then E3.~~ **DONE 2026-08-18**, see the result above. Note the
    dependency it exposed: the unlock key — the large shared cost — exists only
    where a grind rate does, so E3's live confirmation waits on increment 2.
-5. E4, re-framed by E1: measure the `acquisition_actions` term against the ~300 ms
-   per-rung term, and decide whether C is cheaper or dearer than what ships.
+5. ~~E4~~ **DONE 2026-08-18**: `acq` 47–68 ms against a 366–451 ms per-rung term,
+   so C is ~4x cheaper than what ships. See the result above and the spike
+   verdict.
 6. Tool 4, independent of the rest, any time.
 7. File the 33.9 s ranking as its own defect — it is not contingent on the epic.
 

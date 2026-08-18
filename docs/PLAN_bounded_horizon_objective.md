@@ -218,11 +218,21 @@ today, but reached because nothing repays rather than because doing nothing cost
 zero. Level 16 against target 50: no unreachable band, because the walk buys what
 unblocks it.
 
-**Recommendation: C.** It is the only option where cost and benefit are the same
-quantity by construction rather than by unit-matching, the only one that amortises
-a shared prerequisite, and the only one that deletes more than it adds. B stays
-available as a fallback if C's spike (below) says the walk is too expensive; A is a
-stopgap only.
+**Recommendation: C — and the spike has now measured all four of its risks.**
+`docs/PLAN_objective_spike.md` carries the numbers; every kill criterion cleared.
+C is the only option where cost and benefit are the same quantity by construction
+rather than by unit-matching, the only one that amortises a shared prerequisite
+(**74%** on the live iron set), and the only one that deletes more than it adds.
+It is also, measured, **~4x cheaper than what ships** — the pre-spike worry that
+C would be too slow had the baseline wrong by two orders of magnitude. B is no
+longer the fallback the spike was hedging toward; A remains a stopgap only.
+
+**One ordering constraint is now hard.** Increment 2 (the pricing wall) must land
+BEFORE increment 3 (the acquisition edge). The largest shared cost in the model is
+the skill unlock, it exists only where a grind rate does, and live that rate is
+0.0 for every character and every crafting skill — so every candidate carrying one
+is walled today. Building C first yields a walk that can buy nothing worth buying,
+and it would read as inert for a reason that has nothing to do with C.
 
 All three subsume the machinery already built rather than competing with it.
 `skill_grind_selection`'s xp-rate ranking (1bef7388 — ranked by rate, not cheapest

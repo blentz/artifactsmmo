@@ -200,17 +200,21 @@ def _print_bundle(player: GamePlayer, store: LearningStore, codes: list[str]) ->
     state, game_data = player.state, player.game_data
     assert state is not None and game_data is not None
     ctx = player._selection_context()
+    singly: dict[str, int] = {}
+    timings: dict[str, float] = {}
     with store.search_cache():
-        singly = {c: acquisition_actions(c, 1, state, game_data, ctx,
-                                         equip=True, store=store)
-                  for c in codes}
+        for code in codes:
+            start = time.perf_counter()
+            singly[code] = acquisition_actions(code, 1, state, game_data, ctx,
+                                               equip=True, store=store)
+            timings[code] = (time.perf_counter() - start) * 1000.0
         roots = [(c, 1) for c in codes]
         total, paid = bundle_acquisition_actions(roots, state, game_data, ctx,
                                                  equip=True, store=store)
     print("-" * 78)
     print("BUNDLE PRICING (analysis only — no decision path calls this)")
     for code, cost in singly.items():
-        print(f"  individually  {code:<28} {cost:>10}")
+        print(f"  individually  {code:<28} {cost:>10}  {timings[code]:>8.1f}ms")
     total_singly = sum(singly.values())
     print(f"  {'sum of the parts':<42} {total_singly:>10}")
     print(f"  {'as ONE plan':<42} {total:>10}")
@@ -223,6 +227,13 @@ def _print_bundle(player: GamePlayer, store: LearningStore, codes: list[str]) ->
         print(f"    {key:<40} {price:>10}")
     if not shared:
         print("    <none> — nothing was shared, so bundling buys nothing here")
+    # E4's second term. Option C moves `acquisition_actions` from once per
+    # CANDIDATE to once per candidate per RUNG, so whether it is cheaper than
+    # today turns on this figure against the walk's ~per-rung cost. Printed here
+    # because this is the only place the pricer is called in isolation.
+    mean_ms = sum(timings.values()) / len(timings) if timings else 0.0
+    print(f"  acquisition_actions: {len(timings)} calls, "
+          f"{sum(timings.values()):.0f}ms total, {mean_ms:.1f}ms mean")
 
 
 def _rank(player: GamePlayer, store: LearningStore,
