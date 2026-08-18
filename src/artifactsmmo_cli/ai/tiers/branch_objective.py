@@ -99,9 +99,25 @@ it competes on the same scalar as every gear root, at zero acquisition cost."""
 
 
 def _outcome(projected: WorldState, store: LearningStore,
-             game_data: GameData) -> tuple[int, int]:
-    """`(reachable_level, cycles_to_fifty)` for a state, from one
+             game_data: GameData, target: int = TARGET_LEVEL) -> tuple[int, int]:
+    """`(reachable_level, cycles_to_target)` for a state, from one
     `cheapest_path_to_level` walk.
+
+    `target` DEFAULTS TO `TARGET_LEVEL`, and every production caller takes the
+    default — this parameter exists so `commands/objective --target` can sweep
+    the horizon without monkey-patching a module constant, which is how the
+    measurements in `docs/PLAN_bounded_horizon_objective.md` were taken and is
+    not a thing a diagnostic should have to do.
+
+    IT DOES NOT PARAMETERISE THE BANDING, DELIBERATELY. `progression_choice`
+    still classifies against its own `TARGET_LEVEL`, and that constant is
+    mirrored in `Formal.ProgressionChoice` and pinned pointwise by
+    `formal/diff/test_progression_choice_diff.py`, so threading a target through
+    the proved core means changing five theorems and the oracle's wire format.
+    Under option C of the bounded-horizon scope the whole banding apparatus is
+    DELETED rather than parameterised, so paying that proof cost now would be
+    paying it to remove it later. A caller passing a non-default target gets an
+    honest `(reachable_level, cycles)` pair and must not read the band off it.
 
     `PathPlan.segments` holds exactly one segment per level actually crossed, so
     `state.level + len(segments)` is the highest level the walk reached whether or
@@ -117,20 +133,21 @@ def _outcome(projected: WorldState, store: LearningStore,
 
     Rounded UP: a fractional cycle is still an action the character has to spend,
     and `J` is an integer objective (S-013 — exact, no floats, no thresholds)."""
-    plan = cheapest_path_to_level(TARGET_LEVEL, projected, store, game_data)
+    plan = cheapest_path_to_level(target, projected, store, game_data)
     reachable_level = projected.level + len(plan.segments)
     cycles = 0 if plan.blocked else ceil(plan.total_cycles)
     return reachable_level, cycles
 
 
 def trunk_candidate(state: WorldState, store: LearningStore,
-                    game_data: GameData) -> ProgressionCandidate:
+                    game_data: GameData,
+                    target: int = TARGET_LEVEL) -> ProgressionCandidate:
     """The XP arm: grind the character to 50 with the gear already worn.
 
     Acquisition cost is 0 — there is nothing to obtain — which is what makes the
     trunk the baseline every gear candidate must beat by saving more cycles than
     it costs to acquire."""
-    reachable_level, cycles = _outcome(state, store, game_data)
+    reachable_level, cycles = _outcome(state, store, game_data, target)
     return ProgressionCandidate(
         identity=TRUNK_IDENTITY,
         acquire_cost=0,
@@ -142,8 +159,8 @@ def trunk_candidate(state: WorldState, store: LearningStore,
 
 def gear_candidate(c: GearCandidate, state: WorldState, store: LearningStore,
                    game_data: GameData,
-                   ctx: SelectionContext = NO_PROFILE_CONTEXT
-                   ) -> ProgressionCandidate:
+                   ctx: SelectionContext = NO_PROFILE_CONTEXT,
+                   target: int = TARGET_LEVEL) -> ProgressionCandidate:
     """One gear root: obtain and wear `c.code`, then grind to 50.
 
     The projected state is the current one HOLDING one `c.code` in inventory, and
@@ -187,7 +204,7 @@ def gear_candidate(c: GearCandidate, state: WorldState, store: LearningStore,
     # 10ms. Two benchmarks over HOLDING SIZE now guard the axis that had no test.
     acquire_cost = acquisition_actions(
         c.code, 1, state, game_data, ctx, equip=True, store=store)
-    reachable_level, cycles = _outcome(projected, store, game_data)
+    reachable_level, cycles = _outcome(projected, store, game_data, target)
     return ProgressionCandidate(
         identity=candidate_identity(c),
         acquire_cost=acquire_cost,
@@ -200,8 +217,8 @@ def gear_candidate(c: GearCandidate, state: WorldState, store: LearningStore,
 def branch_ranking(state: WorldState, game_data: GameData,
                    candidates: list[GearCandidate],
                    store: LearningStore,
-                   ctx: SelectionContext = NO_PROFILE_CONTEXT
-                   ) -> list[ProgressionCandidate]:
+                   ctx: SelectionContext = NO_PROFILE_CONTEXT,
+                   target: int = TARGET_LEVEL) -> list[ProgressionCandidate]:
     """Every gear root plus the trunk, in `J` order.
 
     The trunk goes LAST into `rank_candidates`, so `sorted`'s stability breaks an
@@ -216,8 +233,8 @@ def branch_ranking(state: WorldState, game_data: GameData,
     The caller opens that cache; without one this is ~14x slower — see
     `LearningStore.win_count`."""
     return rank_candidates(
-        [gear_candidate(c, state, store, game_data, ctx) for c in candidates]
-        + [trunk_candidate(state, store, game_data)]
+        [gear_candidate(c, state, store, game_data, ctx, target) for c in candidates]
+        + [trunk_candidate(state, store, game_data, target)]
     )
 
 

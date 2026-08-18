@@ -97,6 +97,67 @@ class TestDecidedBy:
         assert "2/2" in verdict
 
 
+class TestSweptTarget:
+    """`--target` moves the PROJECTION only. The proved core still bands against
+    its own `TARGET_LEVEL`, so anything derived from the band must abstain rather
+    than either re-deriving it here (a second banding implementation) or
+    reporting the shipped band under a target it was not computed for (a lie)."""
+
+    def test_the_band_column_abstains(self):
+        assert objective_cmd.band_name(_candidate("x", 0, 20), target=20) == "n/a"
+
+    def test_the_band_column_is_unchanged_at_the_shipped_target(self):
+        assert objective_cmd.band_name(
+            _candidate("x", 0, TARGET_LEVEL), target=TARGET_LEVEL) == "FINITE"
+
+    def test_the_deciding_clause_abstains_and_points_at_the_spread(self):
+        verdict = objective_cmd.decided_by([_candidate("a", 0, 20)], target=20)
+        assert verdict.startswith("n/a")
+        assert "spread" in verdict
+
+    def test_j_is_withheld_under_a_swept_target(self):
+        """`finite_j` reads the shipped band, so its answer is meaningless for a
+        target it did not classify against."""
+        rows = objective_cmd._rows([_candidate("a", 0, TARGET_LEVEL, cycles=10)],
+                                   target=20)
+        assert rows[0]["j"] is None
+
+    def test_cycles_are_reported_for_a_walk_that_reached_the_swept_target(self):
+        rows = objective_cmd._rows([_candidate("a", 0, 25, cycles=300)], target=20)
+        assert rows[0]["cycles_to_target"] == 300
+
+
+class TestReachedSpread:
+    def test_it_is_the_gap_between_the_dearest_and_cheapest_reacher(self):
+        ranked = [_candidate("trunk", 0, 20, cycles=2517),
+                  _candidate("boots", 500, 20, cycles=2288)]
+        assert objective_cmd.reached_spread(ranked, 20) == 229
+
+    def test_a_flat_benefit_column_spreads_zero(self):
+        """R2D2 one level from its milestone: every candidate 212 cycles. The
+        horizon's near-degenerate end, and it must read as 0 rather than as
+        missing — 0 is the finding."""
+        ranked = [_candidate("a", 0, 20, cycles=212),
+                  _candidate("b", 98, 20, cycles=212)]
+        assert objective_cmd.reached_spread(ranked, 20) == 0
+
+    def test_a_walk_that_stopped_short_is_excluded_not_counted_as_zero(self):
+        """`_outcome` fills 0 cycles for a blocked walk. Folding that filler into
+        the spread would report a discrimination that does not exist — here, a
+        spread of 2517 against a field where only one candidate arrived."""
+        ranked = [_candidate("reached", 0, 20, cycles=2517),
+                  _candidate("blocked", 0, 15, cycles=0)]
+        assert objective_cmd.reached_spread(ranked, 20) is None
+
+    def test_a_failed_candidate_is_excluded(self):
+        ranked = [_candidate("a", 0, 20, cycles=100),
+                  _candidate("bad", 0, 99, cycles=0, failed=True)]
+        assert objective_cmd.reached_spread(ranked, 20) is None
+
+    def test_one_reacher_cannot_spread(self):
+        assert objective_cmd.reached_spread([_candidate("a", 0, 20, cycles=1)], 20) is None
+
+
 class TestRows:
     def test_cycles_are_reported_only_where_the_spec_says_they_mean_something(self):
         """S-014 declares cycles-to-target void outside the finite band. Printing
@@ -148,6 +209,15 @@ class TestCommand:
         assert "ephemeral :memory: (cold)" in out
         assert "timing:" in out
 
+    def test_a_swept_target_reaches_the_projection_and_says_so(self, capsys):
+        with patch.object(objective_cmd, "check_mutation_lock",
+                          return_value=MagicMock(state="clear")):
+            objective_cmd.objective(character=None, scenario="l1_fresh", target=5)
+        out = capsys.readouterr().out
+        assert "target=5" in out
+        assert "SPREAD:" in out
+        assert "only the projection was swept to L5" in out
+
     def test_a_scenario_emits_machine_readable_json(self, capsys):
         with patch.object(objective_cmd, "check_mutation_lock",
                           return_value=MagicMock(state="clear")):
@@ -158,6 +228,7 @@ class TestCommand:
         assert payload["milestone"] == 10
         assert payload["target"] == TARGET_LEVEL
         assert "decided_by" in payload
+        assert "spread" in payload
         assert isinstance(payload["candidates"], list)
 
     def test_a_scenario_accepts_an_explicit_bundle(self, capsys):

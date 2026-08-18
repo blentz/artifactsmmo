@@ -234,13 +234,92 @@ That widens Tool 3 beyond band-edge coverage: a scenario carrying a **skill-gate
 walled** candidate set is needed, or the suite will keep reporting green on a model
 the live fleet cannot use.
 
+## E2 RESULT — 2026-08-18: kill criterion does NOT fire; the epic survives
+
+`--target` shipped as increment 1a (see below). Live sweep, `--learn`, production's
+own candidate set:
+
+| char | L | headroom | target | reachers | **spread** | max reach | ms |
+|---|---|---|---|---|---|---|---|
+| HAL | 17 | 3 | **20** | 11/11 | **1128** | 20 | 9,686 |
+| Lor | 16 | 4 | **20** | 12/12 | **1086** | 20 | 13,264 |
+| R2D2 | 19 | 1 | **20** | 9/9 | **0** | 20 | 3,421 |
+| C3P0 | 18 | 2 | **20** | 0/13 | — | 19 | 7,782 |
+| HAL | 17 | — | 30 | 0/11 | — | 26 | 34,857 |
+| Lor | 16 | — | 30 | 0/12 | — | 26 | 41,096 |
+| Lor | 16 | — | 50 | 0/12 | — | 26 | 43,550 |
+| R2D2 | 19 | — | 30 | 0/9 | — | 26 | 26,314 |
+| R2D2 | 19 | — | 50 | 0/9 | — | 26 | 28,050 |
+| C3P0 | 18 | — | 30/50 | 0/13 | — | 19 | ~7,400 |
+
+*`spread` = max−min cycles among candidates that reached the target. Candidates
+whose walk stopped short are excluded rather than counted as zero.*
+
+**The benefit term discriminates, strongly, at the milestone horizon.** 1,086 and
+1,128 cycles of spread on HAL and Lor across 11–12 candidates each. E2's kill
+criterion — spread ~0 at every horizon and every band position — did not fire.
+
+**The near-degenerate end is confirmed and quantified.** R2D2, one level from its
+milestone: 9/9 reach, spread exactly **0**. A horizon measured in levels really
+does go flat at a band edge, and the number is 0, not "small".
+
+**New: the far end is not the only unreachable one.** C3P0 is blocked at L19
+against its *own* milestone of 20 — 0/13 reach even the nearest horizon. So a
+banded design cannot assume the milestone is reachable; it inherits the same
+unreachable case it was meant to remove, just less often.
+
+**A shorter horizon is also 3–4x cheaper.** Target 20 costs 3.4–13.3 s against
+26–44 s at target 30/50, because cost is per-rung and a nearer target walks fewer
+rungs. That is an independent argument for banding and it strengthens C's
+performance story: C's rung loop pays the expensive per-rung term once per rung
+rather than once per rung per candidate, on a walk that is already shorter.
+
+### Correction to an earlier figure
+
+`PLAN_bounded_horizon_objective.md` §4 records Lor's spread at target 20 as **229**
+cycles, from the pre-tool scratchpad probe. The measured figure through production's
+candidate set is **1,086**. The probe assembled its candidates by hand from
+`_structural_candidates` alone and dropped `_utility_candidates` — the second
+producer this spike's `objective_candidates` extraction exists to prevent, caught
+by its own tooling. Live state has also moved since. The 1,086 supersedes; the
+qualitative reading (the benefit term discriminates at four levels of headroom)
+was right for the wrong arithmetic.
+
+### The committed scenarios cannot carry this measurement at all
+
+Same sweep offline over six scenarios × four targets: **spread is `None` in all 24
+cells** — at most one candidate ever reaches any target. Worse, in
+`l10_copper_adequate`, `l20_band_entry` and `l30_band_entry` the maximum reachable
+level equals the character's own level: the projection says **no candidate,
+including the trunk, can gain a single level**, at any horizon.
+
+Live, the same walk gains 1–10 levels. So the fixtures are blocked where live is
+not, and Tool 3 is now a prerequisite for any scenario-based verification of this
+epic — not a nice-to-have. Combined with E1's finding (zero walled candidates, 6–24 ms
+vs 479–2,828 ms), the committed suite is unrepresentative on three axes: the
+pricing wall, the cost of the walk, and whether the walk moves at all.
+
 ## Order of work
 
 1. ~~Tool 1 without `--target`~~ — **DONE 2026-08-18**, E1 recorded above.
-2. Increment 1 — the parameterisation refactor — then `--target`, then E2.
-3. Tool 3 scenarios: band edges (`l19_band_edge`, `l11_band_floor`) **and** a
-   skill-gated/walled candidate set, per E1's finding that no committed fixture
-   carries one.
+2. ~~Increment 1 — the parameterisation refactor — then `--target`, then E2.~~
+   **DONE 2026-08-18** as increment **1a** only: `branch_objective._outcome`,
+   `trunk_candidate`, `gear_candidate` and `branch_ranking` take a `target`
+   keyword defaulting to `TARGET_LEVEL`, so every production caller is unchanged.
+   The proved core is deliberately NOT parameterised — `progression_choice`'s
+   `TARGET_LEVEL` is mirrored in `Formal.ProgressionChoice` and pinned pointwise
+   by `formal/diff/test_progression_choice_diff.py`, so threading a target
+   through it means five theorems and the oracle's wire format. Under option C
+   that banding apparatus is DELETED rather than parameterised, so the proof cost
+   would be paid only to remove it. Increment **1b** (parameterise the core) is
+   therefore deferred and happens only if A or B wins. Under a swept `--target`
+   the command's band and `DECIDED BY` columns abstain rather than re-deriving a
+   second banding.
+3. Tool 3 scenarios — now a PREREQUISITE, not a nice-to-have (E2): band edges
+   (`l19_band_edge`, `l11_band_floor`), a skill-gated/walled candidate set, and
+   fixtures whose projection is not blocked at zero levels of progress. Three of
+   the six existing scenarios cannot gain a level at any horizon, so no scenario
+   can currently carry E2, E3 or E4.
 4. Tool 2, then E3.
 5. E4, re-framed by E1: measure the `acquisition_actions` term against the ~300 ms
    per-rung term, and decide whether C is cheaper or dearer than what ships.

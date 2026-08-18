@@ -61,8 +61,19 @@ def _default_learn_db_path() -> str:
     return str(Path.home() / ".cache" / "artifactsmmo" / "learning.db")
 
 
-def band_name(candidate: ProgressionCandidate) -> str:
-    """The precedence band as the spec names it (S-006, S-012, S-014)."""
+def band_name(candidate: ProgressionCandidate, target: int = TARGET_LEVEL) -> str:
+    """The precedence band as the spec names it (S-006, S-012, S-014).
+
+    `n/a` under a swept `--target`. `progression_choice.candidate_band` classifies
+    against its own `TARGET_LEVEL`, mirrored in `Formal.ProgressionChoice`, and
+    this command does not parameterise the proved core — see
+    `branch_objective._outcome`. Re-deriving the band here against the swept
+    target would be a SECOND banding implementation, which is the trap this repo
+    keeps falling into; reporting the shipped band under a target it was not
+    computed for would be a lie. So the column abstains, and the raw terms plus
+    the spread carry the measurement instead."""
+    if target != TARGET_LEVEL:
+        return "n/a"
     if candidate.failed:
         return "FAILED"
     if candidate_band(candidate) == _FINITE_BAND:
@@ -70,7 +81,8 @@ def band_name(candidate: ProgressionCandidate) -> str:
     return "UNREACHABLE"
 
 
-def decided_by(ranked: list[ProgressionCandidate]) -> str:
+def decided_by(ranked: list[ProgressionCandidate],
+               target: int = TARGET_LEVEL) -> str:
     """Which clause actually separated the winner from the field.
 
     THE POINT OF THIS COMMAND. The ranking is a lexicographic triple (band, then
@@ -86,6 +98,9 @@ def decided_by(ranked: list[ProgressionCandidate]) -> str:
     """
     if not ranked:
         return "nothing to decide — no candidates"
+    if target != TARGET_LEVEL:
+        return (f"n/a — ranking order is the SHIPPED banding against L{TARGET_LEVEL}; "
+                f"only the projection was swept to L{target}. Read `spread`.")
     winner = ranked[0]
     if winner.failed:
         return f"every candidate FAILED ({len(ranked)}/{len(ranked)}) — no projection ran"
@@ -101,7 +116,28 @@ def decided_by(ranked: list[ProgressionCandidate]) -> str:
             f"for {len(tied)}/{len(live)}; J never ran")
 
 
-def _rows(ranked: list[ProgressionCandidate]) -> list[dict[str, object]]:
+def reached_spread(ranked: list[ProgressionCandidate], target: int) -> int | None:
+    """`max(cycles) - min(cycles)` over candidates whose walk actually REACHED
+    `target`, or None when fewer than two did.
+
+    E2's recorded quantity, and the one C needs to be non-zero: it is how much the
+    benefit term can discriminate at this horizon. Measured live 2026-08-18 —
+    Lor L16 to milestone 20 spread 229 cycles, R2D2 L19 to milestone 20 spread 0
+    — which is why the horizon has two degenerate ends and not one.
+
+    Candidates whose walk stopped short are excluded, not counted as zero: their
+    cycles figure is a filler (`_outcome` returns 0 on a blocked walk), and
+    folding a filler into a spread would report a discrimination that does not
+    exist."""
+    reached = [c.cycles_to_fifty for c in ranked
+               if not c.failed and c.reachable_level >= target]
+    if len(reached) < 2:
+        return None
+    return max(reached) - min(reached)
+
+
+def _rows(ranked: list[ProgressionCandidate],
+          target: int = TARGET_LEVEL) -> list[dict[str, object]]:
     """One JSON-able row per candidate, in rank order."""
     return [
         {
@@ -109,9 +145,11 @@ def _rows(ranked: list[ProgressionCandidate]) -> list[dict[str, object]]:
             "identity": c.identity,
             "acquire_cost": c.acquire_cost,
             "reachable_level": c.reachable_level,
-            "cycles_to_target": None if band_name(c) != "FINITE" else c.cycles_to_fifty,
-            "j": finite_j(c),
-            "band": band_name(c),
+            "cycles_to_target": (c.cycles_to_fifty
+                                 if c.reachable_level >= target and not c.failed
+                                 else None),
+            "j": finite_j(c) if target == TARGET_LEVEL else None,
+            "band": band_name(c, target),
         }
         for i, c in enumerate(ranked)
     ]
@@ -119,7 +157,7 @@ def _rows(ranked: list[ProgressionCandidate]) -> list[dict[str, object]]:
 
 def _print_report(header: dict[str, object],
                   ranked: list[ProgressionCandidate],
-                  elapsed_ms: float) -> None:
+                  elapsed_ms: float, target: int) -> None:
     print("=" * 78)
     print(f"=== {header['subject']}  level={header['level']}  "
           f"milestone={header['milestone']}  target={header['target']}  "
@@ -128,13 +166,16 @@ def _print_report(header: dict[str, object],
     print("-" * 78)
     print(f"{'identity':<44}{'cost':>10}{'reach':>7}{'cycles':>8}"
           f"{'J':>9}  band")
-    for row in _rows(ranked):
+    for row in _rows(ranked, target):
         cycles = "-" if row["cycles_to_target"] is None else row["cycles_to_target"]
         j = "-" if row["j"] is None else row["j"]
         print(f"{row['identity']!s:<44}{row['acquire_cost']:>10}"
               f"{row['reachable_level']:>7}{cycles:>8}{j:>9}  {row['band']}")
     print("-" * 78)
-    print(f"DECIDED BY: {decided_by(ranked)}")
+    spread = reached_spread(ranked, target)
+    print(f"SPREAD: {'n/a (<2 candidates reached the target)' if spread is None else spread}"
+          f"  (max-min cycles among candidates that reached L{target})")
+    print(f"DECIDED BY: {decided_by(ranked, target)}")
     print(f"WINNER: {ranked[0].identity if ranked else '<none>'}")
     walks = len(ranked)
     mean = elapsed_ms / walks if walks else 0.0
@@ -142,7 +183,8 @@ def _print_report(header: dict[str, object],
     print("=" * 78)
 
 
-def _rank(player: GamePlayer, store: LearningStore) -> tuple[list[ProgressionCandidate], float]:
+def _rank(player: GamePlayer, store: LearningStore,
+          target: int) -> tuple[list[ProgressionCandidate], float]:
     """One `branch_ranking` over the production candidate set, timed.
 
     The search cache is opened here exactly as `GamePlayer._decide_band` opens it
@@ -155,7 +197,7 @@ def _rank(player: GamePlayer, store: LearningStore) -> tuple[list[ProgressionCan
     candidates = objective_candidates(state, game_data, player._objective)
     with store.search_cache():
         start = time.perf_counter()
-        ranked = branch_ranking(state, game_data, candidates, store, ctx)
+        ranked = branch_ranking(state, game_data, candidates, store, ctx, target)
         elapsed_ms = (time.perf_counter() - start) * 1000.0
     return ranked, elapsed_ms
 
@@ -175,6 +217,11 @@ def objective(
         help="Use the persistent learning DB (match a --learn bot's ranking) "
              "instead of an ephemeral in-memory store"),
     learn_db: str | None = typer.Option(None, "--learn-db", help="Learning DB path"),
+    target: int | None = typer.Option(
+        None, "--target",
+        help="Sweep the PROJECTION's target level (default: the shipped 50). "
+             "Ranking order and the band column still come from the shipped "
+             "banding — only the projection moves. Read SPREAD."),
     json_out: bool = typer.Option(
         False, "--json", help="Emit the ranking as JSON instead of a table"),
 ) -> None:
@@ -193,6 +240,7 @@ def objective(
     use_learn = learn if isinstance(learn, bool) else False
     learn_db_arg = learn_db if isinstance(learn_db, str) else None
     as_json = json_out if isinstance(json_out, bool) else False
+    target_level = target if isinstance(target, int) else TARGET_LEVEL
     subject = scenario_name or (character if isinstance(character, str) else None)
     if subject is None:
         print("give a CHARACTER name or --scenario NAME")
@@ -229,27 +277,28 @@ def objective(
                 player = GamePlayer(character=subject, history=store,
                                     game_data_ttl_minutes=config.game_data_ttl_minutes)
                 player._initialize(ClientManager().client)
-            ranked, elapsed_ms = _rank(player, store)
+            ranked, elapsed_ms = _rank(player, store, target_level)
         state = player.state
         assert state is not None
         header: dict[str, object] = {
             "subject": subject,
             "level": state.level,
             "milestone": milestone_pure(state.level),
-            "target": TARGET_LEVEL,
+            "target": target_level,
             "store": ("persistent " + db_path if use_learn
                       else "ephemeral :memory: (cold)"),
         }
         if as_json:
             print(json.dumps({
                 **header,
-                "decided_by": decided_by(ranked),
+                "decided_by": decided_by(ranked, target_level),
+                "spread": reached_spread(ranked, target_level),
                 "winner": ranked[0].identity if ranked else None,
                 "elapsed_ms": round(elapsed_ms, 1),
-                "candidates": _rows(ranked),
+                "candidates": _rows(ranked, target_level),
             }, indent=2))
         else:
-            _print_report(header, ranked, elapsed_ms)
+            _print_report(header, ranked, elapsed_ms, target_level)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
