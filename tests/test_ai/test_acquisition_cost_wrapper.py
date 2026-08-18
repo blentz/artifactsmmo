@@ -32,6 +32,7 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     _workshop_venue,
     acquisition_actions,
     acquisition_options,
+    bundle_acquisition_actions,
     route_options,
 )
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
@@ -742,3 +743,102 @@ def test_recipe_FAN_OUT_does_not_explode(state, game_data) -> None:
     assert elapsed < 1.0, (
         f"{widest} ({len(game_data.crafting_recipe(widest))} inputs) took "
         f"{elapsed:.1f}s — fan-out is superlinear again")
+
+
+_IRON_SET = ["iron_boots", "iron_helm", "iron_shield", "iron_armor",
+             "iron_legs_armor"]
+
+
+@pytest.fixture(scope="module")
+def unlock_state(game_data):  # type: ignore[no-untyped-def]
+    """A character whose iron-set INPUTS are all obtainable and whose
+    gearcrafting gate is not yet met.
+
+    `gated_state` cannot carry this measurement: its fixture leaves cowhide and
+    wool without a route, so five `UNOBTAINABLE_PER_UNIT` sentinels dominate the
+    total and swamp the very term under test. That is not an artefact of the
+    fixture — it is the live interaction recorded in
+    `docs/PLAN_bounded_horizon_objective.md`, where the pricing wall and the
+    objective each hide the other's defects. Here the wall is deliberately
+    removed so the unlock is the only large shared cost left.
+
+    `l21_grey_material_grind` beats every dropper it needs; dropping gearcrafting
+    to 5 puts the five iron pieces behind one five-level grind."""
+    base = scenario_state(SCENARIOS["l21_grey_material_grind"], game_data)
+    return replace(base,
+                   skills={**base.skills, "gearcrafting": 5},
+                   skill_xp={s: 0 for s in base.skills},
+                   skill_max_xp={s: 500 for s in base.skills})
+
+
+def test_a_shared_skill_unlock_is_what_makes_the_iron_set_affordable(
+        unlock_state, game_data) -> None:
+    """E3 OF THE BOUNDED-HORIZON SPIKE, on real game data.
+
+    The five gearcrafting-10 iron pieces sit behind ONE grind. `J` prices every
+    candidate independently, so each is billed the whole grind and all five are
+    rejected for a cost they would have shared. Priced as one plan the grind is
+    charged once — the amortisation option C claims and option B cannot express.
+
+    Measured here rather than asserted at a magnitude: the numbers move with the
+    fixture, the ORDER does not."""
+    store = _store_with_rate("gearcrafting", 5, cycles=5)
+    try:
+        singly = {c: acquisition_actions(c, 1, unlock_state, game_data,
+                                         NO_PROFILE_CONTEXT, equip=True, store=store)
+                  for c in _IRON_SET}
+        together, paid = bundle_acquisition_actions(
+            [(c, 1) for c in _IRON_SET], unlock_state, game_data,
+            NO_PROFILE_CONTEXT, equip=True, store=store)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+    apart = sum(singly.values())
+    unlock = "skill:gearcrafting:10"
+    assert unlock in paid, "the gated craft did not fire — this measures nothing"
+    assert paid[unlock] > 0
+    # The unlock alone is charged four extra times when the five are priced apart.
+    assert apart - together >= paid[unlock] * 4
+    # And it dominates: nothing here is walled, so the whole set as one plan
+    # costs a small fraction of the five priced apart.
+    assert apart < UNOBTAINABLE_PER_UNIT, "a walled input would swamp the term under test"
+    assert together < apart // 3
+
+
+def test_bundling_saves_nothing_when_there_is_nothing_to_share(
+        unlock_state, game_data) -> None:
+    """The honest negative. Two roots with no common venue and no common gate
+    cost the same together as apart — so a non-zero saving elsewhere is
+    attributable to a shared key rather than to bundling as such."""
+    store = _store_with_rate("gearcrafting", 5, cycles=5)
+    try:
+        codes = ["iron_boots"]
+        singly = sum(acquisition_actions(c, 1, unlock_state, game_data,
+                                         NO_PROFILE_CONTEXT, equip=True, store=store)
+                     for c in codes)
+        together, _paid = bundle_acquisition_actions(
+            [(c, 1) for c in codes], unlock_state, game_data,
+            NO_PROFILE_CONTEXT, equip=True, store=store)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+    assert together == singly
+
+
+def test_the_bundle_charges_one_equip_per_root(unlock_state, game_data) -> None:
+    """Every piece has to be put on, so `equip` is per ROOT — unlike a venue or a
+    gate, which are per plan. Folding it into the pay-once ledger would make a
+    five-piece set look one action from wearable."""
+    store = _store_with_rate("gearcrafting", 5, cycles=5)
+    try:
+        roots = [(c, 1) for c in _IRON_SET]
+        bare, _ = bundle_acquisition_actions(roots, unlock_state, game_data,
+                                             NO_PROFILE_CONTEXT, equip=False,
+                                             store=store)
+        worn, _ = bundle_acquisition_actions(roots, unlock_state, game_data,
+                                             NO_PROFILE_CONTEXT, equip=True,
+                                             store=store)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+    assert worn - bare == len(_IRON_SET)

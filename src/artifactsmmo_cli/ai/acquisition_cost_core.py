@@ -54,7 +54,7 @@ tests BEFORE any consumer switches to it, and the switch is a separate commit
 with its own live-trace check.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 UNOBTAINABLE_PER_UNIT = 10**6
@@ -264,3 +264,48 @@ def acquisition_cost(
     _accumulate(item, qty, options, {}, dict(owned), paid, actions,
                 len(options) + 1)
     return actions[0] + sum(paid.values())
+
+
+def bundle_acquisition_cost(
+    roots: Sequence[tuple[str, int]],
+    options: Mapping[str, list[RouteOption]],
+    owned: Mapping[str, int],
+) -> tuple[int, dict[str, int]]:
+    """Lower bound on planner actions to obtain EVERY root in `roots`, as ONE
+    plan, plus the pay-once keys that plan touched.
+
+    NOT A SECOND COST MODEL. This is `acquisition_cost`'s own walk with one
+    shared ledger instead of a fresh one per call: the same `_accumulate`, the
+    same fuel bound, the same route memo. The only difference is that `owned`,
+    `paid` and the action counter survive from one root to the next, which is
+    what a plan that obtains all of them would actually experience.
+
+    WHY THE DIFFERENCE IS THE WHOLE POINT. `paid` charges a venue hop or a skill
+    unlock ONCE however many routes need it. Priced one root at a time, a
+    prerequisite shared by five items is charged five times — five candidates each
+    independently rejected for a cost they would have shared. Measured on the live
+    fleet: an iron armour set is five `gearcrafting 10` recipes behind one grind of
+    a few hundred cycles, and the objective rejects all five because each is billed
+    the whole grind. Priced as a bundle the grind is charged once.
+
+    `owned` is likewise consumed ACROSS roots, so two items needing the same
+    material do not both spend the single copy in the bag. That direction makes
+    the bundle DEARER, not cheaper, and it is equally part of what one plan costs.
+
+    Returns `(total, paid)` rather than just the total so a caller can name WHICH
+    keys were shared — a bundle that is cheaper for reasons nobody can point at is
+    not a measurement.
+
+    Order matters and is the caller's: holdings are credited to whichever root
+    consumes them first. `acquisition_cost` has the same property within a single
+    root's closure (`_accumulate` sorts its recursion, holdings deplete as it
+    goes), so this adds no nondeterminism the model did not already have — but a
+    caller comparing two bundles must pass them in the same order."""
+    actions = [0]
+    paid: dict[str, int] = {}
+    memo: dict[str, tuple[int, RouteOption | None]] = {}
+    holdings = dict(owned)
+    fuel = len(options) + 1
+    for item, qty in roots:
+        _accumulate(item, qty, options, memo, holdings, paid, actions, fuel)
+    return actions[0] + sum(paid.values()), paid

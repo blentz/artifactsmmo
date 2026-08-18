@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
     UNOBTAINABLE_PER_UNIT,
     RouteOption,
     acquisition_cost,
+    bundle_acquisition_cost,
 )
 
 UNBOUNDED = 10**9
@@ -330,3 +331,104 @@ def test_needing_nothing_costs_nothing() -> None:
     # ...and via a recipe whose every input is already held.
     deep = {"blade": [craft("smithy", {"ore": 2})], "ore": [gather("pit")]}
     assert acquisition_cost("blade", 1, deep, {"ore": 2}) == 1 + 1  # smithy + craft
+
+
+class TestBundleAcquisitionCost:
+    """`bundle_acquisition_cost` — the same walk with one shared ledger.
+
+    It must stay a SEEDING difference and nothing else, so the first test pins
+    parity with `acquisition_cost` on a single root. Without that pin this is a
+    second cost model, which is the failure this repo has shipped twice."""
+
+    @staticmethod
+    def _opts(**routes):  # type: ignore[no-untyped-def]
+        return dict(routes)
+
+    def test_one_root_prices_exactly_as_acquisition_cost_does(self):
+        """THE PARITY PIN. A bundle of one is a plan for one, so the two must
+        agree pointwise — otherwise the shared ledger has changed the model
+        rather than merely the seeding."""
+        options = {
+            "bar": [RouteOption(kind="craft", venue="workshop:mining",
+                                actions_per_application=1, yield_per=1,
+                                capacity=UNBOUNDED, inputs={"ore": 2})],
+            "ore": [RouteOption(kind="gather", venue="rocks",
+                                actions_per_application=1, yield_per=1,
+                                capacity=UNBOUNDED)],
+        }
+        single = acquisition_cost("bar", 3, options, {})
+        total, _paid = bundle_acquisition_cost([("bar", 3)], options, {})
+        assert total == single
+
+    def test_a_shared_venue_is_charged_once_for_the_whole_bundle(self):
+        """Two crafts on the same bench walk to it once. Priced separately they
+        each pay the hop."""
+        options = {
+            "a": [RouteOption(kind="craft", venue="workshop:gear",
+                              actions_per_application=1, yield_per=1,
+                              capacity=UNBOUNDED)],
+            "b": [RouteOption(kind="craft", venue="workshop:gear",
+                              actions_per_application=1, yield_per=1,
+                              capacity=UNBOUNDED)],
+        }
+        apart = acquisition_cost("a", 1, options, {}) + acquisition_cost("b", 1, options, {})
+        together, paid = bundle_acquisition_cost([("a", 1), ("b", 1)], options, {})
+        assert paid == {"workshop:gear": 1}
+        assert together == apart - 1
+
+    def test_a_shared_skill_unlock_is_charged_once_and_it_dominates(self):
+        """THE MEASUREMENT OPTION C RESTS ON. A gate behind several recipes is one
+        grind, not one grind per recipe. Priced apart, five pieces each carry the
+        whole unlock and each is rejected for a cost they would have shared."""
+        gate = 500
+        options = {
+            code: [RouteOption(kind="craft", venue="workshop:gear",
+                               actions_per_application=1, yield_per=1,
+                               capacity=UNBOUNDED,
+                               unlock="skill:gear:10", unlock_actions=gate)]
+            for code in ("a", "b", "c", "d", "e")
+        }
+        roots = [(c, 1) for c in options]
+        apart = sum(acquisition_cost(c, 1, options, {}) for c in options)
+        together, paid = bundle_acquisition_cost(roots, options, {})
+        # Exact, so the arithmetic is readable rather than asserted at a
+        # distance: apart, each of the five pays one craft + the whole gate + the
+        # bench hop; together, five crafts share one gate and one hop.
+        assert paid == {"skill:gear:10": gate, "workshop:gear": 1}
+        assert apart == 5 * (1 + gate + 1)
+        assert together == 5 * 1 + gate + 1
+        assert together < apart // 4
+
+    def test_holdings_are_consumed_across_roots_not_re_credited(self):
+        """The direction that makes a bundle DEARER, and equally part of what one
+        plan costs: two roots needing the same material cannot both spend the
+        single copy in the bag."""
+        options = {
+            "a": [RouteOption(kind="craft", venue="", actions_per_application=1,
+                              yield_per=1, capacity=UNBOUNDED, inputs={"mat": 1})],
+            "b": [RouteOption(kind="craft", venue="", actions_per_application=1,
+                              yield_per=1, capacity=UNBOUNDED, inputs={"mat": 1})],
+            "mat": [RouteOption(kind="gather", venue="", actions_per_application=1,
+                                yield_per=1, capacity=UNBOUNDED)],
+        }
+        # One `mat` held: priced apart BOTH roots claim it, so the pair looks free
+        # of gathering; as one plan exactly one of them must gather.
+        apart = (acquisition_cost("a", 1, options, {"mat": 1})
+                 + acquisition_cost("b", 1, options, {"mat": 1}))
+        together, _paid = bundle_acquisition_cost([("a", 1), ("b", 1)], options,
+                                                  {"mat": 1})
+        assert together == apart + 1
+
+    def test_an_empty_bundle_costs_nothing(self):
+        total, paid = bundle_acquisition_cost([], {}, {})
+        assert total == 0
+        assert paid == {}
+
+    def test_an_unobtainable_root_still_dominates_the_bundle(self):
+        """A bundle must not launder a walled item: nothing is shared with a root
+        that has no route, so the sentinel survives."""
+        options = {"ok": [RouteOption(kind="gather", venue="",
+                                      actions_per_application=1, yield_per=1,
+                                      capacity=UNBOUNDED)]}
+        total, _paid = bundle_acquisition_cost([("ok", 1), ("nope", 1)], options, {})
+        assert total >= UNOBTAINABLE_PER_UNIT

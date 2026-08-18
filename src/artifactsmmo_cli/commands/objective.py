@@ -29,6 +29,10 @@ from pathlib import Path
 
 import typer
 
+from artifactsmmo_cli.ai.acquisition_cost import (
+    acquisition_actions,
+    bundle_acquisition_actions,
+)
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
@@ -183,6 +187,44 @@ def _print_report(header: dict[str, object],
     print("=" * 78)
 
 
+def _print_bundle(player: GamePlayer, store: LearningStore, codes: list[str]) -> None:
+    """Price `codes` one at a time, then as one plan, and name the shared keys.
+
+    THE MEASUREMENT THAT SEPARATES OPTION C FROM OPTION B. `J` prices every
+    candidate independently today, so a prerequisite behind five gear pieces is
+    charged five times and all five are rejected for a cost they would have
+    shared. `acquisition_cost_core`'s `paid` ledger already charges a pay-once key
+    once per PLAN; this asks what that is worth when the plan is the whole set.
+
+    Read-only, and wired into no decision."""
+    state, game_data = player.state, player.game_data
+    assert state is not None and game_data is not None
+    ctx = player._selection_context()
+    with store.search_cache():
+        singly = {c: acquisition_actions(c, 1, state, game_data, ctx,
+                                         equip=True, store=store)
+                  for c in codes}
+        roots = [(c, 1) for c in codes]
+        total, paid = bundle_acquisition_actions(roots, state, game_data, ctx,
+                                                 equip=True, store=store)
+    print("-" * 78)
+    print("BUNDLE PRICING (analysis only — no decision path calls this)")
+    for code, cost in singly.items():
+        print(f"  individually  {code:<28} {cost:>10}")
+    total_singly = sum(singly.values())
+    print(f"  {'sum of the parts':<42} {total_singly:>10}")
+    print(f"  {'as ONE plan':<42} {total:>10}")
+    saved = total_singly - total
+    pct = (100.0 * saved / total_singly) if total_singly else 0.0
+    print(f"  {'amortised':<42} {saved:>10}  ({pct:.0f}%)")
+    shared = {k: v for k, v in sorted(paid.items()) if v > 0}
+    print(f"  pay-once keys the one plan touched ({len(shared)}):")
+    for key, price in shared.items():
+        print(f"    {key:<40} {price:>10}")
+    if not shared:
+        print("    <none> — nothing was shared, so bundling buys nothing here")
+
+
 def _rank(player: GamePlayer, store: LearningStore,
           target: int) -> tuple[list[ProgressionCandidate], float]:
     """One `branch_ranking` over the production candidate set, timed.
@@ -222,6 +264,10 @@ def objective(
         help="Sweep the PROJECTION's target level (default: the shipped 50). "
              "Ranking order and the band column still come from the shipped "
              "banding — only the projection moves. Read SPREAD."),
+    bundle_price: str | None = typer.Option(
+        None, "--bundle-price",
+        help="Comma-separated item codes: price them individually and then as "
+             "ONE plan, and name the pay-once keys they share. Analysis only."),
     json_out: bool = typer.Option(
         False, "--json", help="Emit the ranking as JSON instead of a table"),
 ) -> None:
@@ -241,6 +287,8 @@ def objective(
     learn_db_arg = learn_db if isinstance(learn_db, str) else None
     as_json = json_out if isinstance(json_out, bool) else False
     target_level = target if isinstance(target, int) else TARGET_LEVEL
+    bundle_codes = ([c.strip() for c in bundle_price.split(",") if c.strip()]
+                    if isinstance(bundle_price, str) else [])
     subject = scenario_name or (character if isinstance(character, str) else None)
     if subject is None:
         print("give a CHARACTER name or --scenario NAME")
@@ -299,6 +347,8 @@ def objective(
             }, indent=2))
         else:
             _print_report(header, ranked, elapsed_ms, target_level)
+            if bundle_codes:
+                _print_bundle(player, store, bundle_codes)
     finally:
         store.end_session(exit_reason="normal")
         store.close()

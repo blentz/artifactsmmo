@@ -356,6 +356,63 @@ non-vacuity guard on `state.attack`. Verified by mutation: removing
 `derive_combat_stats=True` from `l19_band_edge` fails three of the six tests,
 including the guard.
 
+## E3 RESULT — 2026-08-18: bundle ≈ sum does NOT hold; C's advantage is real
+
+Tool 2 shipped as `objective --bundle-price a,b,c` plus
+`acquisition_cost_core.bundle_acquisition_cost` and its impure wrapper. It is
+`acquisition_cost`'s own walk with one shared ledger instead of a fresh one per
+call — same `_accumulate`, same fuel bound, same route memo — and a parity test
+pins a bundle of one against `acquisition_cost` pointwise so it cannot drift into
+a second cost model.
+
+**The decisive measurement**, on `l21_grey_material_grind` with gearcrafting
+dropped to 5 so the five iron pieces sit behind one five-level grind, and a store
+carrying a 5 xp/cycle observed rate:
+
+```
+  individually iron_boots            537
+  individually iron_helm             546
+  individually iron_shield           546
+  individually iron_armor            546
+  individually iron_legs_armor       546
+  sum of the parts                  2721
+  as ONE plan                        711
+  amortised                         2010   (74%)
+  pay-once keys: bank 1, chicken 1, cow 1, sheep 1,
+                 skill:gearcrafting:10 500, workshop:gearcrafting 1
+```
+
+E3's kill criterion — bundle ≈ sum, collapsing C's edge and making B the
+recommendation — **does not fire**. It is the opposite, decisively: **74%** of the
+cost of the five priced apart is the same grind charged five times.
+
+Read against E2: Lor's live benefit spread at the milestone is 1,086 cycles. A
+five-piece set at 711 total is inside that; five pieces at 546 each are not. This
+is the first time those two numbers have been comparable at all, and the trade is
+the one C exists to evaluate.
+
+### Two dependencies the measurement exposed
+
+**The wall hides the amortisation.** Priced on `l12_deep_chain_grind` the same
+bundle returns 6,000,709 against 6,001,522 — a 0.01% saving, because five
+`UNOBTAINABLE_PER_UNIT` sentinels for unroutable cowhide and wool swamp the term
+under test. Not a fixture artefact: it is the live interaction this scope already
+records, where the pricing wall and the objective each hide the other's defects.
+The test fixture removes the wall deliberately, and says so.
+
+**The unlock key only exists where the grind rate does.** `_gated_craft_option`
+declines the route on a non-positive rate, so with a cold `:memory:` store — every
+scenario — the gate produces no route and therefore no shared key. Measured live
+the rate is 0.0 for every character and every crafting skill (D1 of
+`PLAN_iron_gear_acquisition.md`), so the largest shared cost in the model is
+currently unreachable in production. **E3's number is therefore a counterfactual
+until increment 2 lands**, and the amortisation C depends on cannot be observed
+live before it.
+
+What IS measurable today is venue sharing: on the same scenario with the gates
+MET, bundling the iron set saves 10 actions of 221 (5%) across five shared venues.
+Real, and two orders of magnitude smaller than the unlock.
+
 ## Order of work
 
 1. ~~Tool 1 without `--target`~~ — **DONE 2026-08-18**, E1 recorded above.
@@ -380,7 +437,9 @@ including the guard.
    `derive_combat_stats=True` or they inherit the zero-attack state and block.
    E4 still cannot be measured offline at all — scenarios run 6–37x faster than
    live because a cold store never touches the 48 MB learning DB.
-4. Tool 2, then E3.
+4. ~~Tool 2, then E3.~~ **DONE 2026-08-18**, see the result above. Note the
+   dependency it exposed: the unlock key — the large shared cost — exists only
+   where a grind rate does, so E3's live confirmation waits on increment 2.
 5. E4, re-framed by E1: measure the `acquisition_actions` term against the ~300 ms
    per-rung term, and decide whether C is cheaper or dearer than what ships.
 6. Tool 4, independent of the rest, any time.

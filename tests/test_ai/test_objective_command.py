@@ -238,6 +238,53 @@ class TestCommand:
                                     bundle=str(objective_cmd._DEFAULT_BUNDLE))
         assert "DECIDED BY:" in capsys.readouterr().out
 
+    def test_bundle_price_prints_the_parts_the_plan_and_the_shared_keys(self, capsys):
+        """The measurement that separates option C from option B must name WHICH
+        keys were shared — a bundle that is cheaper for reasons nobody can point
+        at is not a measurement."""
+        with patch.object(objective_cmd, "check_mutation_lock",
+                          return_value=MagicMock(state="clear")):
+            objective_cmd.objective(character=None, scenario="l21_grey_material_grind",
+                                    bundle_price="iron_boots,iron_helm")
+        out = capsys.readouterr().out
+        assert "BUNDLE PRICING" in out
+        assert "individually" in out
+        assert "as ONE plan" in out
+        assert "amortised" in out
+        assert "pay-once keys" in out
+
+    def test_bundle_price_tolerates_spacing_and_empty_entries(self, capsys):
+        with patch.object(objective_cmd, "check_mutation_lock",
+                          return_value=MagicMock(state="clear")):
+            objective_cmd.objective(character=None, scenario="l21_grey_material_grind",
+                                    bundle_price=" iron_boots , , iron_helm ")
+        out = capsys.readouterr().out
+        assert "iron_boots" in out and "iron_helm" in out
+
+    def test_a_fully_walled_bundle_shares_nothing_and_says_so(self, capsys):
+        """THE WALL SWAMPING THE AMORTISATION, pinned at the CLI.
+
+        On `l12_deep_chain_grind` every iron piece prices at
+        `UNOBTAINABLE_PER_UNIT` because its cowhide and wool have no route. An
+        item with no route contributes no pay-once key, so bundling saves
+        essentially nothing — 0.01% — and the report must say plainly that
+        nothing was shared rather than presenting a rounding artefact as a
+        saving. This is the live interaction where the pricing wall and the
+        objective hide each other, reproduced offline."""
+        with patch.object(objective_cmd, "check_mutation_lock",
+                          return_value=MagicMock(state="clear")):
+            objective_cmd.objective(character=None, scenario="l12_deep_chain_grind",
+                                    bundle_price="iron_boots,iron_helm")
+        out = capsys.readouterr().out
+        assert "nothing was shared" in out
+        assert "pay-once keys the one plan touched (0)" in out
+
+    def test_no_bundle_flag_prints_no_bundle_section(self, capsys):
+        with patch.object(objective_cmd, "check_mutation_lock",
+                          return_value=MagicMock(state="clear")):
+            objective_cmd.objective(character=None, scenario="l1_fresh")
+        assert "BUNDLE PRICING" not in capsys.readouterr().out
+
     def test_learn_reads_the_persistent_db_path(self):
         """`--learn` must open the real learning DB, not an in-memory one — a
         ranking against a cold store is a different ranking, and the header says

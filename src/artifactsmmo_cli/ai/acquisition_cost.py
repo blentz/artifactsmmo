@@ -22,11 +22,15 @@ yields, their capacities, whether the executor can actually serve them — is
 the divergence the epic exists to remove.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from fractions import Fraction
 from math import ceil
 
-from artifactsmmo_cli.ai.acquisition_cost_core import RouteOption, acquisition_cost
+from artifactsmmo_cli.ai.acquisition_cost_core import (
+    RouteOption,
+    acquisition_cost,
+    bundle_acquisition_cost,
+)
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
@@ -352,3 +356,30 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
         item, state, game_data, ctx, store)
     return acquisition_cost(item, qty, options, owned) + (
         EQUIP_ACTIONS if equip else 0)
+
+
+def bundle_acquisition_actions(
+        roots: Sequence[tuple[str, int]], state: WorldState, game_data: GameData,
+        ctx: SelectionContext, equip: bool,
+        store: LearningStore | None = None) -> tuple[int, dict[str, int]]:
+    """`acquisition_actions` over SEVERAL roots as one plan: `(total, paid)`.
+
+    The routes are the union of each root's closure. Merging is a plain update
+    because `route_options` is a function of the ITEM and the state, so two roots
+    that reach the same code reach the same routes for it — the union cannot
+    disagree with either part.
+
+    ANALYSIS ONLY. Nothing in the decision path calls this; it exists so
+    `objective --bundle-price` can measure what a shared prerequisite is worth,
+    which is the question that separates option C from option B in
+    `docs/PLAN_bounded_horizon_objective.md`. Keeping it out of the pricer's
+    hot path is deliberate — `J` compares candidates one at a time today, and
+    making it compare bundles is the epic, not a diagnostic.
+
+    `equip` is charged PER ROOT, not once: every piece has to be put on."""
+    owned: dict[str, int] = dict(state.inventory)
+    options: dict[str, list[RouteOption]] = {}
+    for item, _qty in roots:
+        options.update(acquisition_options(item, state, game_data, ctx, store))
+    total, paid = bundle_acquisition_cost(roots, options, owned)
+    return total + (EQUIP_ACTIONS * len(roots) if equip else 0), paid
