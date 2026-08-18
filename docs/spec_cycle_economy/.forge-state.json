@@ -5,7 +5,7 @@
  "seen": [],
  "contradiction_clean_runs": 0,
  "contradiction_void_runs": 0,
- "blind_rounds": 2,
+ "blind_rounds": 3,
  "blindness_failures": 0,
  "pending_verification": [],
  "phases_run": [
