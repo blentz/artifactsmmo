@@ -178,3 +178,90 @@ into it. Two honest options:
   ARE from `learning.db`.
 * `CURRENCY_TURNIN`'s zero, sitting above the step where the ladder cannot be
   blamed, is unexplained and is the next thing to measure.
+
+---
+
+# Disposition of the 21 unreachable rows (2026-08-18)
+
+`unreachable:` is now 21 of 70 classes. They are NOT one fix. Grouped by what
+would actually make each reachable, because the answer differs and three of the
+four groups need a product decision rather than a code change.
+
+## The mechanism, stated once
+
+`strategy_driver._build_candidates` assigns every candidate a band:
+
+```
+BAND_GUARD 0  <  BAND_COLLECT 1  <  BAND_STEP 2  <  BAND_FALLBACK_STEP 3  <  BAND_DISCRETIONARY 4
+```
+
+A step is present in 14,064 of 14,064 traced cycles, so band 4 is unreachable.
+The repo's existing answer is the **urgency hoist**: materialise the goal in
+BAND_COLLECT when a stated threshold is crossed. It has been applied four times,
+each with its own bespoke threshold and no shared concept:
+
+| rung | hoist condition | constant |
+|---|---|---|
+| `RECYCLE_SURPLUS` | `shed_urgency(surplus) >= …` | `RECYCLE_HOIST_URGENCY` |
+| `SELL_IDLE` | `shed_urgency(bag) >= …` or `bank_shed_hoist(…)` | `SHED_HOIST_URGENCY` |
+| `DRAIN_BANK_JUNK` | `bank_shed_hoist(excess, inventory_max)` | — |
+| `SUPPLY_BANK` | moved out of the band entirely | `SUPPLY_DEMAND_MIN = 10` |
+
+Those four work, and they are why `RecycleSurplus`/`SellInventory`/`DrainBankJunk`
+fire at all. All four measure **inventory or demand pressure** — a local,
+observable quantity. That is why the pattern was available to them, and it is
+exactly what the remaining rungs do not have.
+
+## Group A — the task economy (8 classes). Needs a value comparison.
+
+`AcceptTaskGoal`, `AcceptTaskAction`, `PursueTaskGoal`, `CompleteTaskGoal`,
+`CompleteTaskAction`, `TaskCancelGoal`, `TaskCancelAction`, `LowYieldCancelGoal`,
+`TaskExchangeGoal`, `TaskExchangeAction`, `TaskTradeAction`, `ReachSkillGoal`,
+`ReachCurrencyGoal` — all downstream of `accept_task`.
+
+There is no urgency analogue here. "Should I accept a task instead of advancing
+my objective step" is a genuine comparison of two productive uses of a cycle, and
+it is the same question option C asks about gear-versus-XP. An urgency hoist would
+be an invented threshold — precisely the epicycle this document is about.
+
+**Decision required:** activate (which means the means ladder gets the same
+one-currency treatment as the objective, i.e. a second epic) or delete (which
+retires the whole `tasks_coin` funding path, including the C4 epic built on it,
+and closes the only route to vendor-only items).
+
+## Group B — raids (1 class). A design contradiction, and it has an urgency.
+
+`ParticipateRaidGoal` is appended at BAND_DISCRETIONARY, and its docstring calls
+that "the right priority for a timed bonus". A timed bonus that yields to a
+permanent step expires unused, so the stated rationale defeats itself.
+
+Unlike group A this one DOES have a principled urgency: the raid window is
+closing, which is local and observable, and the existing hoist pattern applies
+directly. **This is the one rung where the repo's own established mechanism is
+both available and clearly correct.** Not implemented here because no raid has
+been open while the fleet ran, so the change could not be verified live — and
+shipping an unobservable behaviour change into the selector is how this codebase
+acquired several of the defects above.
+
+## Group C — real features with no pressure signal (4 classes)
+
+`MaintainConsumablesGoal`, `ExpandBankGoal`, `BuyBankExpansionAction`,
+`PostBuyBidGoal`, `GePostBuyOrderAction`. Each is a genuine capability behind the
+closed band. `MAINTAIN_CONSUMABLES` arguably has an urgency (about to fight
+without heals) and is the best candidate for the existing pattern; `BANK_EXPAND`
+and `GE_BID` are value comparisons like group A.
+
+## Group D — probably delete (2 classes)
+
+`WaitGoal`, `WaitAction`. Last in the discretionary order, and a bot with a step
+to take never wants to wait. Nothing is lost by removing them, and their presence
+in the ladder implies a fallback that does not exist.
+
+## What this document is NOT proposing
+
+A fifth bespoke hoist. Adding one for `accept_task` would move that rung and
+leave the pattern intact for the next one, which is what happened after
+`SUPPLY_BANK`, `RECYCLE_SURPLUS`, `SELL_IDLE` and `DRAIN_BANK_JUNK`. The
+generalisation worth making — one `hoist(means) -> urgency` rule replacing four
+ad-hoc booleans — is a refactor with no behaviour change and should ride along
+with whichever group is activated first, not before.

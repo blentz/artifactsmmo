@@ -75,8 +75,16 @@ DORMANT: dict[str, str] = {
     "GePostBuyOrderAction": "unreachable: emitted only by PostBuyBidGoal",
     "WaitGoal": "unreachable: MeansKind.WAIT is last in the discretionary band",
     "WaitAction": "unreachable: emitted only by WaitGoal",
+    # --- Raids. RECLASSIFIED 2026-08-18: `conditional:` was wrong. No raid has
+    # been open while the fleet ran, but that is not what stops it — every raid
+    # goal is appended at BAND_DISCRETIONARY (`_raid_candidates`' call site), and
+    # its own docstring calls that "the right priority for a timed bonus". A
+    # timed bonus that yields to a step present in 14,064 of 14,064 cycles is one
+    # that expires unused, so the rationale defeats itself. Even with an open
+    # window, a known tile and a survivable boss it could not be selected.
+    "ParticipateRaidGoal": "unreachable: appended at BAND_DISCRETIONARY, below "
+                           "the objective step, so a raid window closes unused",
     # --- Genuinely conditional on world state the fleet has not met.
-    "ParticipateRaidGoal": "conditional: needs a live raid; none has been open while the fleet ran",
     "MapTransitionAction": "conditional: needs a layer transition (raid/underground areas)",
     "TeleportAction": "conditional: needs an unlocked teleport destination",
     # --- Conditional on a character state the fleet has not reached.
