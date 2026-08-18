@@ -98,7 +98,7 @@ consumer exists.
 """
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.combat import is_winnable
@@ -299,17 +299,24 @@ def _drop_sources(item: str, state: WorldState, game_data: GameData) -> list[Sou
     """Winnable monsters that drop `item` AND are currently reachable.
 
     `is_winnable` is a pure combat-stat prediction and says nothing about
-    reachability. `FightAction` is only CONSTRUCTED by `factory.py` from
+    reachability, and it is asked here at RESTORABLE hp rather than at current
+    hp. `FightAction` is only CONSTRUCTED by `factory.py` from
     `game_data.all_monster_locations`, which merges an event monster's tiles
     ONLY while its event is active — `monsters_dropping` reads a static
     content-drop catalog that is independent of event liveness. Gating on
     the same mapping factory.py builds from (rather than re-deriving
     event-liveness via `is_event_monster`) keeps this in lockstep with what
     the executor can actually serve."""
+    # AT RESTORABLE HP, in lockstep with `drop_obtainability.fightable_droppers`
+    # — see its COMBAT bullet for the measurement and for which call sites still
+    # read current hp. Route EXISTENCE is not an hp question: a closed bank or a
+    # sleeping event are honest reasons for a route to be absent, being at 20% hp
+    # is a reason to REST, and Rest is an action the planner has.
+    rested = replace(state, hp=state.max_hp)
     out: list[Source] = []
     for monster_code, _rate, _min_q, _max_q in game_data.monsters_dropping(item):
         if not game_data.all_monster_locations.get(monster_code):
             continue  # no live tiles (e.g. event monster, event inactive)
-        if is_winnable(state, game_data, monster_code):
+        if is_winnable(rested, game_data, monster_code):
             out.append(Source(SourceKind.DROP, monster_code, 1, UNBOUNDED_CAPACITY))
     return out

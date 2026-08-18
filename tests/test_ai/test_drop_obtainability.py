@@ -240,3 +240,61 @@ def test_boolean_face_matches_the_row_list(scenario: str, game_data: GameData,
             assert drop_obtainable(item, state, game_data,
                                    allow_grey=allow_grey) is bool(
                 fightable_droppers(item, state, game_data, allow_grey=allow_grey))
+
+
+# --------------------------------------------------------------------------
+# Route EXISTENCE is asked at restorable hp, not at current hp.
+# --------------------------------------------------------------------------
+
+def test_a_damaged_character_has_the_same_droppers_as_a_healthy_one() -> None:
+    """THE LIVE DEFECT, pinned.
+
+    `combat.predict_win` reads CURRENT hp by design — a damaged character really
+    does lose fights a healthy one wins, and the runtime target picker must see
+    that. But this oracle answers a route-EXISTENCE question, and Rest is an
+    action the planner has. Asking it at current hp made the answer swing on how
+    beaten up the character happened to be when `J` ran.
+
+    Measured live 2026-08-17: C3P0 at 63/315 hp reported sheep, cow and
+    blue_slime all unwinnable, so `wool` had no route and `iron_shield` priced at
+    3,000,926; the same character at 315/315 priced it at 926. A factor of ~7,000
+    in a RANKING key, driven by combat noise."""
+    gd = _gd(bruiser=9)
+    gd._monster_drops = {"bruiser": [("hide", 8, 1, 1)]}
+    # Tuned so CURRENT hp is what decides: 200 monster hp takes several turns,
+    # and 30 damage a turn kills a near-dead character long before it kills a
+    # healthy one. A harmless fixture monster would make this test pass without
+    # the fix and prove nothing.
+    gd._monster_hp["bruiser"] = 200
+    gd._monster_attack["bruiser"] = {"fire": 30}
+    healthy = _fighter(hp=200, max_hp=200)
+    hurt = _fighter(hp=1, max_hp=200)
+    assert fightable_droppers("hide", healthy, gd, allow_grey=True) != [], \
+        "fixture is not winnable even when healthy — it can prove nothing"
+    assert fightable_droppers("hide", hurt, gd, allow_grey=True) == \
+        fightable_droppers("hide", healthy, gd, allow_grey=True)
+    assert drop_obtainable("hide", hurt, gd, allow_grey=True) is True
+
+
+def test_the_gate_is_moved_not_removed() -> None:
+    """A monster the character loses to even at FULL hp is still not a route.
+    Without this the change would hand the planner a fight it can never take,
+    which is the livelock the winnability gate exists to prevent."""
+    gd = _gd(dragon=9)
+    gd._monster_drops = {"dragon": [("scale", 8, 1, 1)]}
+    gd._monster_hp["dragon"] = 10_000
+    gd._monster_attack["dragon"] = {"fire": 5_000}
+    hopeless = _fighter(hp=200, max_hp=200)
+    assert fightable_droppers("scale", hopeless, gd, allow_grey=True) == []
+
+
+def test_the_level_gates_still_read_the_real_level_not_a_rested_one() -> None:
+    """Resting restores hp and NOTHING else. The grey gate reads `state.level`,
+    which a rested copy shares, so moving the hp basis must not silently move
+    the xp verdict with it — a level-1 dropper stays grey for a level-12
+    character however healthy it is."""
+    gd = _gd(chick=1)
+    gd._monster_drops = {"chick": [("down", 8, 1, 1)]}
+    hurt = _fighter(hp=1, max_hp=200)
+    assert fightable_droppers("down", hurt, gd, allow_grey=True) != []
+    assert fightable_droppers("down", hurt, gd, allow_grey=False) == []

@@ -199,8 +199,9 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
         state.inventory.get(currency, 0) + bank.get(currency, 0) >= price
         or _currency_producible(currency)
         for price, currency in _permanent_vendor_purchases(code, game_data))
-    # Fightable drop: the shared oracle, state-aware (preserves the winnability
-    # and spawn gates this docstring calls load-bearing).
+    # Fightable drop: the shared oracle, state-aware (spawn gate plus winnability
+    # AT RESTORABLE HP — `fightable_droppers` decides the hp basis for every
+    # caller so they cannot disagree about what counts as a route).
     winnable_drop = drop_obtainable(code, state, game_data,
                                     allow_grey=ATTAINABILITY_ALLOWS_GREY)
     return leaf_attainable_pure(

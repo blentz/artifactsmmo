@@ -8,8 +8,10 @@ from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     CACHE_MAX_ENTRIES,
     _cache_for,
     build_selectable_grind_candidates,
+    is_obtainable,
     skill_grind_target,
 )
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 
@@ -386,3 +388,46 @@ def test_context_changes_the_rank_but_never_whether_a_grind_exists():
     with_ctx = skill_grind_target("weaponcrafting", state, gd, ctx=ctx)
     without = skill_grind_target("weaponcrafting", state, gd)
     assert (with_ctx is None) == (without is None)
+
+
+def test_the_memo_key_may_omit_hp_because_obtainable_no_longer_reads_it():
+    """The memo key's recorded KNOWN GAP, closed and pinned.
+
+    `_cache_key` omits `state.hp`, and the `obtainable` field it guards used to
+    read it: `_obtainable` -> `drop_obtainable` -> `fightable_droppers` ->
+    `is_winnable` -> `predict_win`, which reads CURRENT hp. Two states differing
+    only in hp could therefore share a candidate list whose verdicts differed —
+    the too-coarse-key failure `test_the_memo_key_notices_a_changed_inventory`
+    calls "worse than no memo". `fightable_droppers` now asks at restorable hp,
+    so the chain no longer reads `state.hp` and the key is complete as written.
+
+    The rung's only material is a MOB DROP, so `obtainable` genuinely depends on
+    a winnability verdict — with a gatherable leaf this would pass without ever
+    reaching the predicate under test."""
+    gd = GameData()
+    gd._item_stats = {"hide_vest": ItemStats(code="hide_vest", level=1,
+                                             type_="body_armor",
+                                             crafting_skill="gearcrafting",
+                                             crafting_level=1)}
+    gd._crafting_recipes = {"hide_vest": {"hide": 2}}
+    gd.world.workshop_locations = {"gearcrafting": (0, 0)}
+    gd._monster_level = {"bruiser": 1}
+    gd._monster_locations = {"bruiser": [(1, 1)]}
+    fill_monster_stat_defaults(gd)
+    # Tuned so CURRENT hp decides the fight: several turns to kill, and enough
+    # damage per turn to finish a near-dead character but not a healthy one.
+    gd._monster_hp["bruiser"] = 200
+    gd._monster_attack["bruiser"] = {"fire": 30}
+    gd._monster_drops = {"bruiser": [("hide", 2, 1, 1)]}
+    healthy = make_state(skills={"gearcrafting": 3}, hp=200, max_hp=200,
+                         attack={"fire": 40}, dmg=20)
+    hurt = dataclasses.replace(healthy, hp=1)
+    # ASSERTED ON `is_obtainable`, NOT on the memoised candidate list. The memo
+    # is keyed WITHOUT hp, so a second `build_selectable_grind_candidates` call
+    # returns the cached list and would compare equal however `predict_win`
+    # answered — the test would pass while measuring the cache instead of the
+    # property that justifies it. Verified: with `fightable_droppers` reverted to
+    # current hp, the list comparison still passed and this one does not.
+    assert is_obtainable("hide_vest", healthy, gd, frozenset()), \
+        "not obtainable even when healthy — this cannot reach the predicate"
+    assert is_obtainable("hide_vest", hurt, gd, frozenset())

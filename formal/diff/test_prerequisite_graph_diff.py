@@ -39,19 +39,37 @@ _monster_level)`. We monkeypatch `predict_win` to a controlled per-monster bool
 and compare the `any()` result against the Lean oracle's `combatCapable` fold.
 """
 import random
-from types import SimpleNamespace
 
 import artifactsmmo_cli.ai.tiers.prerequisite_graph as pg_mod
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import combat_capable, prerequisites
+from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import make_state
+
+_EQUIPMENT_SLOTS = (
+    "weapon_slot", "shield_slot", "helmet_slot", "body_armor_slot",
+    "leg_armor_slot", "boots_slot", "ring1_slot", "ring2_slot", "amulet_slot",
+    "artifact1_slot", "artifact2_slot", "artifact3_slot",
+    "utility1_slot", "utility2_slot", "bag_slot", "rune_slot",
+)
 from formal.diff.oracle_client import run_oracle
 
 
-def _unsatisfied_state() -> SimpleNamespace:
-    """A WorldState stand-in where every ObtainItem is unsatisfied (owned 0)."""
-    return SimpleNamespace(inventory={}, bank_items=None, equipment={})
+def _unsatisfied_state() -> WorldState:
+    """A state where every ObtainItem is unsatisfied (owned 0).
+
+    A REAL `WorldState`, via the same `make_state` three other harnesses in this
+    directory already use. It was a bare `SimpleNamespace` carrying only
+    inventory/bank/equipment until 2026-08-18, when `drop_obtainability` began
+    asking winnability at restorable hp and therefore needed `max_hp` and a
+    `dataclasses.replace`. A stand-in that models fewer fields than the thing it
+    stands in for cannot be extended safely — it fails on the first consumer that
+    reads one of the missing ones, which is what happened here, and it was the
+    only such stub left in this directory."""
+    return make_state(inventory={}, bank_items=None,
+                      equipment=dict.fromkeys(_EQUIPMENT_SLOTS))
 
 
 def _normalize_py(edges) -> list[tuple]:

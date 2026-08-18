@@ -94,6 +94,8 @@ SITES THAT ASK A NEARBY BUT DIFFERENT QUESTION, and why they stay separate:
     all", a source-KIND classification with no character in it.
 """
 
+from dataclasses import replace
+
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -110,7 +112,23 @@ def fightable_droppers(item: str, state: WorldState, game_data: GameData,
       model can actually route to. A catalog monster with no routable spawn (a
       raid boss with no map tile, content behind an unmodeled transition edge)
       is not a source, however winnable it looks on paper.
-    * COMBAT — `is_winnable`: never offer a fight the character loses.
+    * COMBAT — `is_winnable` AT RESTORABLE HP: never offer a fight the character
+    loses when healthy. Evaluated at `max_hp`, not at current hp, because this
+    answers "is there a ROUTE" and Rest is an action the planner has.
+    `combat.predict_win` reads CURRENT hp deliberately (see its docstring — a
+    damaged character really does lose fights a healthy one wins), and that is
+    the right basis for the runtime question "take this fight NOW", still asked
+    at `player.py:1047`, `player.py:3742`, `combat_targets.py:88` and
+    `tiers/guards.py:215`. Asking it HERE made route existence swing on combat
+    noise: measured live 2026-08-17, C3P0 at 63/315 hp had no route to `wool`
+    and priced `iron_shield` at 3,000,926; the same character at 315/315 priced
+    it at 926 — a factor of ~7,000 in a RANKING key.
+
+    The downstream gates are untouched, which is what makes planning through a
+    rest safe: `FightAction._structurally_applicable` still refuses below
+    `_MIN_FIGHT_HP_FRACTION`, and `GuardKind.RESTORE_HP` exists precisely to
+    rest for a fight that is winnable rested and not winnable now. The planner
+    may plan through a rest; the executor may not walk into a losing fight.
     * GREY — a zero-xp dropper is offered only when `allow_grey`. Dropping it
       from the CANDIDATE SET rather than vetoing the item after the argmin is
       deliberate: a nearby grey dropper must not mask a fightable xp-positive
@@ -118,11 +136,16 @@ def fightable_droppers(item: str, state: WorldState, game_data: GameData,
 
     Empty list = no route from here. Order is the drop table's, so the caller's
     argmin sees the same candidates in the same order every cycle."""
+    # Resting restores hp and NOTHING else, so `xp_per_kill` below keeps reading
+    # the ORIGINAL state: the grey gate is about the character's LEVEL, which a
+    # rested copy shares, and threading the copy there too would blur two gates
+    # that must stay readable as separate things.
+    rested = replace(state, hp=state.max_hp)
     return [
         (monster_code, rate, mn, mx)
         for monster_code, rate, mn, mx in game_data.monsters_dropping(item)
         if game_data.monster_spawn_known(monster_code)
-        and is_winnable(state, game_data, monster_code)
+        and is_winnable(rested, game_data, monster_code)
         and (allow_grey or game_data.xp_per_kill(monster_code, state.level) > 0)
     ]
 

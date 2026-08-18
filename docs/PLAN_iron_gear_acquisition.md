@@ -219,7 +219,7 @@ Acceptance: on the live DB, `_gated_craft_option` returns a route for
 returns a finite number in the low hundreds rather than 1,000,000. Verified by
 re-running the probe, not by a unit test alone.
 
-### Increment 2 — route existence asks at restorable HP, not current HP
+### Increment 2 — route existence asks at restorable HP, not current HP  ✅ DONE 2026-08-18
 
 Four call sites ask a route-existence question while passing the character's
 current, possibly-damaged state:
@@ -269,6 +269,26 @@ Acceptance: `acquisition_actions` for `iron_armor` and `iron_shield` returns the
 same number for a character at 20% HP and at 100% HP. The 7,000x swing
 disappears. Verified by re-running the probe at both HP levels on the same
 character, and by the obtain-parity census staying green.
+
+**DONE 2026-08-18.** `fightable_droppers` and `_drop_sources` now evaluate
+winnability at `max_hp`; `tiers/objective` dropped its own redundant `rested` so
+one function decides the basis; `tiers/strategy`'s comment and
+`skill_grind_target`'s KNOWN-GAP docstring were corrected in the same commit.
+
+Verified live, Lor at 162/310 hp: `obtain_sources` returns identical routes for
+`wool`, `cowhide`, `feather` and `blue_slimeball` at current hp and at hp=1 —
+before the fix hp=1 returned `[]` for all four. Gate green including the
+obtain-parity census (`obtain_parity_bug 0`).
+
+Two things the work turned up. The memo-key test written for this was VACUOUS on
+first draft: `_cache_key` omits hp, so comparing two
+`build_selectable_grind_candidates` calls compared the cache with itself and
+passed with the fix reverted. It now asserts on `is_obtainable`, which has no
+memo, and fails under the revert. And `formal/diff/test_prerequisite_graph_diff`
+carried the last `SimpleNamespace` state stub in that directory; it modelled
+fewer fields than `WorldState` and broke on the first consumer to read one of the
+missing ones, so it is now the real `make_state` three sibling harnesses already
+use.
 
 ### Increment 3 — verify the grind now completes, then decide whether it needs a latch
 

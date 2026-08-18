@@ -479,3 +479,20 @@ def test_priority_order_pins_the_full_six_source_tail():
         SourceKind.WITHDRAW, SourceKind.RECYCLE, SourceKind.CRAFT,
         SourceKind.GATHER, SourceKind.BUY, SourceKind.DROP,
     ]
+
+
+def test_the_DROP_source_does_not_depend_on_current_hp(game_data, ctx) -> None:
+    """Route EXISTENCE at the seam `acquisition_cost` reads.
+
+    `obtain_sources` answers "how may I obtain this RIGHT NOW", and a closed bank
+    or a sleeping event are honest reasons for a route to be absent. Being at 20%
+    hp is not one of them — it is a reason to rest, and Rest is an action the
+    planner has. Kept in lockstep with `drop_obtainability.fightable_droppers`,
+    which decides the hp basis for every caller so the two cannot disagree."""
+    healthy = _fighter_state(hp=165, max_hp=165)
+    hurt = _fighter_state(hp=1, max_hp=165)
+    live = [s for s in obtain_sources("slime_ball", healthy, game_data, ctx)
+            if s.kind is SourceKind.DROP]
+    assert live, "the fixture slime is not winnable when healthy — proves nothing"
+    assert (obtain_sources("slime_ball", hurt, game_data, ctx)
+            == obtain_sources("slime_ball", healthy, game_data, ctx))

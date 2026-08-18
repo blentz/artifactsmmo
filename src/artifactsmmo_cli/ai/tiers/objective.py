@@ -9,7 +9,7 @@ its kernel proofs therefore guarded dead code. Gear priority is decided by the
 progression tree's `gain` on the `pursuit_value` ruler, not by a gap scalar."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
@@ -221,7 +221,6 @@ def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool
     that as no credit, same as `_producible`. Boolean only: partial stock
     (holding 1 of a 5-needed material) still credits attainable — quantity
     accounting stays the planner's job, not this gate's."""
-    rested = replace(state, hp=state.max_hp)
     bank = state.bank_items or {}
 
     def stock_ok(node: str) -> bool:
@@ -230,7 +229,10 @@ def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool
     def leaf_ok(leaf: str, path: frozenset[str]) -> bool:
         if _gatherable(leaf, game_data):
             return True
-        if drop_obtainable(leaf, rested, game_data,
+        # `state`, not a rested copy: `fightable_droppers` now decides the hp
+        # basis for every caller (2026-08-18), so building one here too would be
+        # a second place that decision is made and the two could drift.
+        if drop_obtainable(leaf, state, game_data,
                            allow_grey=ATTAINABILITY_ALLOWS_GREY):
             return True
         if game_data.is_task_earnable(leaf):
