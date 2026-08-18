@@ -1,32 +1,159 @@
-# Ontology grid — <project>
+# Ontology grid
 
-**Class:** <declared at run time>
-**Subjects:** <extracted by workflows/ontology.js — do not hand-write>
-**Stimuli:** <extracted by workflows/ontology.js — do not hand-write>
+**Subjects:** F1 · unit normalization: converting a quantity into cycles before comparison (S-001), F2 · marginal cost of an option against already-committed work (S-002), F3 · the projection walk that produces J for one candidate course (S-003), F4 · the in-walk acquire-and-equip decision (S-004), F5 · pricing a course the current state makes incompletable (S-005), F6 · comparing an available means against the objective step (S-006), F7 · guard precedence: survival constraint short-circuits the priced comparison (S-007), F8 · task marginal cost and task value (S-008), F9 · accepting a task whose demanded work overlaps nothing (S-009), F10 · pricing task-completion as a source of a task currency (S-010), F11 · determining the single horizon every comparison is evaluated against (S-011, S-012), F12 · selecting the totality witness / last-resort means (S-013), F13 · enumerating the route set by which an item may be obtained (named as under test in the header; no clause defines it), F14 · final selection among priced candidates — which course the core actually returns
+**Stimuli:** normal — well-formed input in the ordinary range, boundary — at a threshold, an exact tie, zero, or an extreme of the range, degenerate — empty, trivial, or self-referential input, conflicting — two inputs that cannot both be honoured, absent — a required input is missing or unknowable, stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment), retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state, dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors, concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision
+**Stimulus-waivers:** No stimulus category is waived. The artifact is declared a pure decision core with no I/O, which would ordinarily waive clock, dependency and concurrency stimuli — but that waiver does not hold here on the spec's own terms. (a) TIME: the quantities the core consumes are learned observations and committed-work records that age, and S-011/S-012 make the core's answer depend on a horizon whose bounding quantity moves as the character progresses; the Evidence row 'Σ dim 8' and the first Residual both concede a wall-clock budget the clauses never mention. (b) DEPENDENCY FAILURE: the header states the planner, loadout picker, combat model, coordination protocol, executor and server 'supply inputs' — a pure function of failing suppliers still has to define its answer when a supplier supplies nothing (S-010's Evidence row is exactly this case: is_task_earnable true while route_options empty). (c) RETRY/REPLAY: purity would give determinism for free only if the core were also stateless in its inputs; 'committed work' (S-002, S-008) is carried state, so recomputing on the same nominal state is a live question. (d) CONCURRENCY: the fleet runs several characters against one bank, one demand ledger and one per-IP rate budget, so 'the current state' is shared and mutable between two characters' decisions. Every category is therefore on the axis and scored.
 
-<!--
-Both axes are extracted from the draft spec, then CHALLENGED. The most common gap
-in any specification is an entity the author never thought to name — it does not
-show up as a MISSING cell, it shows up as no cell at all.
-
-Time, failure, retry and concurrency are stimuli. Almost every draft spec omits
-all four. The lint requires them on the axis, or an explicit waiver below.
-
-To waive a required stimulus category, state why:
-**Stimulus-waivers:** concurrency — single-writer by construction, enforced by the queue.
+<!-- ABSENT FROM THE SPEC ENTIRELY — the domain has these and the spec never names them,
+     so they have no cell at all, not even a MISSING one. Decide whether they belong:
+       - Wall-clock time and per-action cooldown. The spec's sole currency is 'executed planner actions' (S-001), but actions have unequal real durations (a fight, a craft, a rest, a move are not one unit of anything in common). Nothing in any clause names seconds, cooldown, or the planning window — they appear only in Evidence 'Σ dim 8' and the first Residual. A currency that hides a variable seconds-per-action is the exact defect S-001's own Evidence row describes.
+       - The character, and the fact that there is more than one. No clause names the agent whose cycles are being counted, nor says whether J is per-character or fleet-wide, nor what happens when two characters price the same acquisition against the same bank stock or the same shared per-IP rate budget.
+       - The commitment ledger. S-002 and S-008 both rest on 'work already committed', but no clause names the entity that holds commitments, when a commitment is created, when it is discharged or released, or whose commitments count.
+       - Inventory slots and bank capacity. S-004 acquires and holds items across the remainder of the walk with no notion that holding costs a finite slot, that slots run out, or that eviction has a cycle price.
+       - Equipment slots and slot exclusivity. S-004 'equips' an item; the spec never names that two items can contend for one slot, so 'acquire A then acquire B' can be priced as additive savings that the game cannot deliver.
+       - Gold, vendor prices, and the market. A route with a monetary price exists in this domain; no clause names gold, nor gives any conversion from gold to cycles even though S-001 demands one before comparison.
+       - Stochasticity. Drop rates, fight-loss probability and craft failure make a route's cycle cost a distribution, not a number. No clause distinguishes expected cost from realised cost, nor names variance, ruin, or the cost of a failed attempt.
+       - Consumables. An acquired item that is spent rather than held (potions, food) breaks S-004's 'subsequent levels are projected with that item held'. The category is never named.
+       - Recycling / disposal — the reverse route, item back to materials — as a way an item may be 'obtained'. The header puts the route set under test; this direction is unnamed.
+       - Skill levels and skill gates. They appear only in an Evidence row (S-005) as the thing priced at 10^6; no clause names a gate, a skill, or the cost of clearing one.
+       - Movement and location. Bank, workshop, resource node and monster are at different map coordinates; travel is executed actions, and no clause names it or says whether route pricing includes it.
+       - Task lifecycle events: task expiry, task cancellation/abandonment and its penalty, and the fact that a character holds at most one task at a time. S-008/S-009/S-010 all price tasks with no lifecycle at all.
+       - Time-limited world content — events and raids that exist only inside a window, so a route's availability itself expires.
+       - The XP curve and level-up. S-004 speaks of 'each level the walk crosses' and S-012 of a bounding quantity, but the thing that is levelling and the cost of a level are never named.
+       - Observation quality: how many samples back a learned cycle cost, how old they are, and what the core does with an unobserved quantity versus a well-observed one.
+       - The decision's own compute cost. Evidence prices a candidate evaluation at ~235 ms against a floored 15 s window, but no clause makes the core's own cost a priced quantity or names a budget it must respect.
+       - A wait / no-op action. When nothing is worth doing, or the character is mid-cooldown, the core must still return something; the spec names only means, guards and the totality witness.
+       - Death and HP loss. Guards are named abstractly (S-007) but the event they exist to prevent, and its cycle price, are not.
+       - Currencies in the plural. S-010 generalises from one named example ('a currency obtainable by completing tasks'), but the spec never says whether several such currencies exist, whether they are interchangeable, or how a route priced in one compares with a route priced in another.
 -->
 
 ## Grid
 
-Every cell of the cross-product gets exactly one verdict. No blanks — a blank is
-not "no behavior," it is an unasked question.
-
-| Verdict   | Meaning                                          | Requires             |
-|-----------|--------------------------------------------------|----------------------|
-| `DEFINED` | The spec states the behavior.                    | ≥1 clause citation   |
-| `THIN`    | The spec gestures at it; a real decision is open. | ≥1 clause citation  |
-| `MISSING` | The spec says nothing.                           | nothing — it *is* the finding |
-| `IGNORE`  | Deliberately out of scope.                       | a written justification |
-
 | Subject | Stimulus | Verdict | Clauses | Justification |
 |---|---|---|---|---|
+| F1 · unit normalization: converting a quantity into cycles before comparison (S-001) | normal — well-formed input in the ordinary range | DEFINED | S-001 |  |
+| F1 · unit normalization: converting a quantity into cycles before comparison (S-001) | boundary — at a threshold, an exact tie, zero, or an extreme of the range | MISSING |  |  |
+| F1 · unit normalization: converting a quantity into cycles before comparison (S-001) | degenerate — empty, trivial, or self-referential input | THIN | S-001 |  |
+| F1 · unit normalization: converting a quantity into cycles before comparison (S-001) | conflicting — two inputs that cannot both be honoured | MISSING |  |  |
+| F1 · unit normalization: converting a quantity into cycles before comparison (S-001) | absent — a required input is missing or unknowable | MISSING |  |  |
+| F1 · unit normalization: converting a quantity into cycles before comparison (S-001) | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F1 · unit normalization: converting a quantity into cycles before comparison (S-001) | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F1 · unit normalization: converting a quantity into cycles before comparison (S-001) | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F1 · unit normalization: converting a quantity into cycles before comparison (S-001) | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
+| F2 · marginal cost of an option against already-committed work (S-002) | normal — well-formed input in the ordinary range | DEFINED | S-002 |  |
+| F2 · marginal cost of an option against already-committed work (S-002) | boundary — at a threshold, an exact tie, zero, or an extreme of the range | THIN | S-002 |  |
+| F2 · marginal cost of an option against already-committed work (S-002) | degenerate — empty, trivial, or self-referential input | THIN | S-002 |  |
+| F2 · marginal cost of an option against already-committed work (S-002) | conflicting — two inputs that cannot both be honoured | MISSING |  |  |
+| F2 · marginal cost of an option against already-committed work (S-002) | absent — a required input is missing or unknowable | MISSING |  |  |
+| F2 · marginal cost of an option against already-committed work (S-002) | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F2 · marginal cost of an option against already-committed work (S-002) | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F2 · marginal cost of an option against already-committed work (S-002) | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F2 · marginal cost of an option against already-committed work (S-002) | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
+| F3 · the projection walk that produces J for one candidate course (S-003) | normal — well-formed input in the ordinary range | DEFINED | S-003 |  |
+| F3 · the projection walk that produces J for one candidate course (S-003) | boundary — at a threshold, an exact tie, zero, or an extreme of the range | MISSING |  |  |
+| F3 · the projection walk that produces J for one candidate course (S-003) | degenerate — empty, trivial, or self-referential input | THIN | S-003, S-005 |  |
+| F3 · the projection walk that produces J for one candidate course (S-003) | conflicting — two inputs that cannot both be honoured | MISSING |  |  |
+| F3 · the projection walk that produces J for one candidate course (S-003) | absent — a required input is missing or unknowable | MISSING |  |  |
+| F3 · the projection walk that produces J for one candidate course (S-003) | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F3 · the projection walk that produces J for one candidate course (S-003) | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F3 · the projection walk that produces J for one candidate course (S-003) | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F3 · the projection walk that produces J for one candidate course (S-003) | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
+| F4 · the in-walk acquire-and-equip decision (S-004) | normal — well-formed input in the ordinary range | DEFINED | S-004 |  |
+| F4 · the in-walk acquire-and-equip decision (S-004) | boundary — at a threshold, an exact tie, zero, or an extreme of the range | THIN | S-004 |  |
+| F4 · the in-walk acquire-and-equip decision (S-004) | degenerate — empty, trivial, or self-referential input | THIN | S-004 |  |
+| F4 · the in-walk acquire-and-equip decision (S-004) | conflicting — two inputs that cannot both be honoured | MISSING |  |  |
+| F4 · the in-walk acquire-and-equip decision (S-004) | absent — a required input is missing or unknowable | IGNORE |  | The specific absent-input case here — the walk wants an item the game data contains no route to at all — is a written carve-out: S-005's note says the clause 'does not decide what is reported for content the game data contains no route to at all', and the final Residual repeats it. Scored IGNORE only for that exact case. Note the carve-out is load-bearing and dangerous: S-004 is the clause that consumes route costs, so the routeless item is precisely the input S-004 must handle at runtime, and the author has deferred it. It must be closed before implementation, not left as a permanent exclusion. |
+| F4 · the in-walk acquire-and-equip decision (S-004) | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F4 · the in-walk acquire-and-equip decision (S-004) | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F4 · the in-walk acquire-and-equip decision (S-004) | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F4 · the in-walk acquire-and-equip decision (S-004) | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
+| F5 · pricing a course the current state makes incompletable (S-005) | normal — well-formed input in the ordinary range | DEFINED | S-005 |  |
+| F5 · pricing a course the current state makes incompletable (S-005) | boundary — at a threshold, an exact tie, zero, or an extreme of the range | MISSING |  |  |
+| F5 · pricing a course the current state makes incompletable (S-005) | degenerate — empty, trivial, or self-referential input | MISSING |  |  |
+| F5 · pricing a course the current state makes incompletable (S-005) | conflicting — two inputs that cannot both be honoured | THIN | S-005 |  |
+| F5 · pricing a course the current state makes incompletable (S-005) | absent — a required input is missing or unknowable | IGNORE |  | S-005's own note explicitly withholds this cell: 'It does not decide what is reported for content the game data contains no route to at all.' The final Residual restates the deferral. Recorded as a deliberate, written carve-out rather than a silence — but it is the largest single hole in the document, because S-005's whole purpose is to abolish the sentinel price, and the one input class that most tempts a sentinel is the one it declines to govern. |
+| F5 · pricing a course the current state makes incompletable (S-005) | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F5 · pricing a course the current state makes incompletable (S-005) | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F5 · pricing a course the current state makes incompletable (S-005) | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F5 · pricing a course the current state makes incompletable (S-005) | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
+| F6 · comparing an available means against the objective step (S-006) | normal — well-formed input in the ordinary range | THIN | S-006, S-001 |  |
+| F6 · comparing an available means against the objective step (S-006) | boundary — at a threshold, an exact tie, zero, or an extreme of the range | MISSING |  |  |
+| F6 · comparing an available means against the objective step (S-006) | degenerate — empty, trivial, or self-referential input | MISSING |  |  |
+| F6 · comparing an available means against the objective step (S-006) | conflicting — two inputs that cannot both be honoured | MISSING |  |  |
+| F6 · comparing an available means against the objective step (S-006) | absent — a required input is missing or unknowable | DEFINED | S-013 |  |
+| F6 · comparing an available means against the objective step (S-006) | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F6 · comparing an available means against the objective step (S-006) | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F6 · comparing an available means against the objective step (S-006) | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F6 · comparing an available means against the objective step (S-006) | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
+| F7 · guard precedence: survival constraint short-circuits the priced comparison (S-007) | normal — well-formed input in the ordinary range | DEFINED | S-007 |  |
+| F7 · guard precedence: survival constraint short-circuits the priced comparison (S-007) | boundary — at a threshold, an exact tie, zero, or an extreme of the range | MISSING |  |  |
+| F7 · guard precedence: survival constraint short-circuits the priced comparison (S-007) | degenerate — empty, trivial, or self-referential input | MISSING |  |  |
+| F7 · guard precedence: survival constraint short-circuits the priced comparison (S-007) | conflicting — two inputs that cannot both be honoured | MISSING |  |  |
+| F7 · guard precedence: survival constraint short-circuits the priced comparison (S-007) | absent — a required input is missing or unknowable | DEFINED | S-007 |  |
+| F7 · guard precedence: survival constraint short-circuits the priced comparison (S-007) | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F7 · guard precedence: survival constraint short-circuits the priced comparison (S-007) | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F7 · guard precedence: survival constraint short-circuits the priced comparison (S-007) | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F7 · guard precedence: survival constraint short-circuits the priced comparison (S-007) | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
+| F8 · task marginal cost and task value (S-008) | normal — well-formed input in the ordinary range | DEFINED | S-008, S-002 |  |
+| F8 · task marginal cost and task value (S-008) | boundary — at a threshold, an exact tie, zero, or an extreme of the range | DEFINED | S-008, S-009 |  |
+| F8 · task marginal cost and task value (S-008) | degenerate — empty, trivial, or self-referential input | THIN | S-008 |  |
+| F8 · task marginal cost and task value (S-008) | conflicting — two inputs that cannot both be honoured | MISSING |  |  |
+| F8 · task marginal cost and task value (S-008) | absent — a required input is missing or unknowable | MISSING |  |  |
+| F8 · task marginal cost and task value (S-008) | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F8 · task marginal cost and task value (S-008) | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F8 · task marginal cost and task value (S-008) | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F8 · task marginal cost and task value (S-008) | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
+| F9 · accepting a task whose demanded work overlaps nothing (S-009) | normal — well-formed input in the ordinary range | DEFINED | S-009 |  |
+| F9 · accepting a task whose demanded work overlaps nothing (S-009) | boundary — at a threshold, an exact tie, zero, or an extreme of the range | THIN | S-009 |  |
+| F9 · accepting a task whose demanded work overlaps nothing (S-009) | degenerate — empty, trivial, or self-referential input | MISSING |  |  |
+| F9 · accepting a task whose demanded work overlaps nothing (S-009) | conflicting — two inputs that cannot both be honoured | MISSING |  |  |
+| F9 · accepting a task whose demanded work overlaps nothing (S-009) | absent — a required input is missing or unknowable | MISSING |  |  |
+| F9 · accepting a task whose demanded work overlaps nothing (S-009) | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F9 · accepting a task whose demanded work overlaps nothing (S-009) | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F9 · accepting a task whose demanded work overlaps nothing (S-009) | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F9 · accepting a task whose demanded work overlaps nothing (S-009) | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
+| F10 · pricing task-completion as a source of a task currency (S-010) | normal — well-formed input in the ordinary range | DEFINED | S-010 |  |
+| F10 · pricing task-completion as a source of a task currency (S-010) | boundary — at a threshold, an exact tie, zero, or an extreme of the range | THIN | S-010, S-008 |  |
+| F10 · pricing task-completion as a source of a task currency (S-010) | degenerate — empty, trivial, or self-referential input | MISSING |  |  |
+| F10 · pricing task-completion as a source of a task currency (S-010) | conflicting — two inputs that cannot both be honoured | THIN | S-010 |  |
+| F10 · pricing task-completion as a source of a task currency (S-010) | absent — a required input is missing or unknowable | MISSING |  |  |
+| F10 · pricing task-completion as a source of a task currency (S-010) | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F10 · pricing task-completion as a source of a task currency (S-010) | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F10 · pricing task-completion as a source of a task currency (S-010) | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F10 · pricing task-completion as a source of a task currency (S-010) | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
+| F11 · determining the single horizon every comparison is evaluated against (S-011, S-012) | normal — well-formed input in the ordinary range | THIN | S-011, S-012 |  |
+| F11 · determining the single horizon every comparison is evaluated against (S-011, S-012) | boundary — at a threshold, an exact tie, zero, or an extreme of the range | THIN | S-012 |  |
+| F11 · determining the single horizon every comparison is evaluated against (S-011, S-012) | degenerate — empty, trivial, or self-referential input | MISSING |  |  |
+| F11 · determining the single horizon every comparison is evaluated against (S-011, S-012) | conflicting — two inputs that cannot both be honoured | DEFINED | S-011 |  |
+| F11 · determining the single horizon every comparison is evaluated against (S-011, S-012) | absent — a required input is missing or unknowable | MISSING |  |  |
+| F11 · determining the single horizon every comparison is evaluated against (S-011, S-012) | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F11 · determining the single horizon every comparison is evaluated against (S-011, S-012) | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F11 · determining the single horizon every comparison is evaluated against (S-011, S-012) | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F11 · determining the single horizon every comparison is evaluated against (S-011, S-012) | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
+| F12 · selecting the totality witness / last-resort means (S-013) | normal — well-formed input in the ordinary range | DEFINED | S-013 |  |
+| F12 · selecting the totality witness / last-resort means (S-013) | boundary — at a threshold, an exact tie, zero, or an extreme of the range | DEFINED | S-013 |  |
+| F12 · selecting the totality witness / last-resort means (S-013) | degenerate — empty, trivial, or self-referential input | MISSING |  |  |
+| F12 · selecting the totality witness / last-resort means (S-013) | conflicting — two inputs that cannot both be honoured | MISSING |  |  |
+| F12 · selecting the totality witness / last-resort means (S-013) | absent — a required input is missing or unknowable | MISSING |  |  |
+| F12 · selecting the totality witness / last-resort means (S-013) | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F12 · selecting the totality witness / last-resort means (S-013) | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F12 · selecting the totality witness / last-resort means (S-013) | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F12 · selecting the totality witness / last-resort means (S-013) | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
+| F13 · enumerating the route set by which an item may be obtained (named as under test in the header; no clause defines it) | normal — well-formed input in the ordinary range | THIN | S-010, S-004 |  |
+| F13 · enumerating the route set by which an item may be obtained (named as under test in the header; no clause defines it) | boundary — at a threshold, an exact tie, zero, or an extreme of the range | MISSING |  |  |
+| F13 · enumerating the route set by which an item may be obtained (named as under test in the header; no clause defines it) | degenerate — empty, trivial, or self-referential input | MISSING |  |  |
+| F13 · enumerating the route set by which an item may be obtained (named as under test in the header; no clause defines it) | conflicting — two inputs that cannot both be honoured | THIN | S-010 |  |
+| F13 · enumerating the route set by which an item may be obtained (named as under test in the header; no clause defines it) | absent — a required input is missing or unknowable | IGNORE |  | Same written carve-out as F4/F5: S-005's note and the closing Residual both decline to decide what is reported for an item the game data contains no route to. Scored IGNORE because the exclusion is on the record, not silent. It should be reopened before build: the Evidence row for S-010 shows this exact configuration already occurring live (is_task_earnable true while route_options empty), so the excluded case is not hypothetical. |
+| F13 · enumerating the route set by which an item may be obtained (named as under test in the header; no clause defines it) | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F13 · enumerating the route set by which an item may be obtained (named as under test in the header; no clause defines it) | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F13 · enumerating the route set by which an item may be obtained (named as under test in the header; no clause defines it) | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F13 · enumerating the route set by which an item may be obtained (named as under test in the header; no clause defines it) | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
+| F14 · final selection among priced candidates — which course the core actually returns | normal — well-formed input in the ordinary range | THIN | S-003, S-005 |  |
+| F14 · final selection among priced candidates — which course the core actually returns | boundary — at a threshold, an exact tie, zero, or an extreme of the range | MISSING |  |  |
+| F14 · final selection among priced candidates — which course the core actually returns | degenerate — empty, trivial, or self-referential input | MISSING |  |  |
+| F14 · final selection among priced candidates — which course the core actually returns | conflicting — two inputs that cannot both be honoured | DEFINED | S-007 |  |
+| F14 · final selection among priced candidates — which course the core actually returns | absent — a required input is missing or unknowable | THIN | S-013 |  |
+| F14 · final selection among priced candidates — which course the core actually returns | stale / expiry / TTL — the input or a derived quantity has aged (obsolete observation, elapsed cooldown, superseded commitment) | MISSING |  |  |
+| F14 · final selection among priced candidates — which course the core actually returns | retry / duplicate / replay — the same stimulus arrives twice, or the same decision is recomputed on the same state | MISSING |  |  |
+| F14 · final selection among priced candidates — which course the core actually returns | dependency failure — an underlying supplier (game data, learned store, planner, loadout picker, executor) yields nothing or errors | MISSING |  |  |
+| F14 · final selection among priced candidates — which course the core actually returns | concurrent — two stimuli arrive at once, or shared state (bank, fleet demand, learned store) changes mid-decision | MISSING |  |  |
