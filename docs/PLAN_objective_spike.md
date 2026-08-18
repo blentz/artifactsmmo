@@ -413,7 +413,60 @@ What IS measurable today is venue sharing: on the same scenario with the gates
 MET, bundling the iron set saves 10 actions of 221 (5%) across five shared venues.
 Real, and two orders of magnitude smaller than the unlock.
 
-## E4 RESULT — 2026-08-18: C is ~4x CHEAPER than what ships, not dearer
+## E4 CORRECTION — 2026-08-18 (later): C is roughly COST-NEUTRAL, not 4x cheaper
+
+**The model below is wrong, and this section supersedes its conclusion.** It
+assumed that evaluating one candidate at one rung costs `acq` — the
+`acquisition_actions` call, 47–68 ms. It does not. Deciding whether an upgrade
+helps requires recomputing that rung's best xp-per-cycle WITH the upgrade held,
+which is the rung's monster loop: `is_winnable` plus `expected_damage_per_fight`
+plus `cycles_per_kill` over every monster in range.
+
+Measured live on Lor, inside a warm search cache:
+
+```
+  1 rung, nothing new held           244 / 261 / 221 ms
+  1 rung, one NEW item held          235 ms
+  3 rungs                            799 ms  (~266 ms/rung)
+```
+
+A candidate evaluation costs **~235 ms — the same order as a whole rung**, not
+47 ms. So the corrected shapes are:
+
+    today  =  C·acq + C·R·rung
+    C      =  R·rung + R·C·rung_eval + R·C·acq        with rung_eval ≈ rung
+
+which makes C ≈ `R·C·rung`, i.e. **the same order as what ships**, plus an extra
+`R·C·acq` where today pays `C·acq`. For Lor at 9 rungs and 12 candidates that is
+~28.7 s against a measured 39.6 s today — comparable, not transformative. Banded
+to three rungs: ~9.6 s against 13.3 s.
+
+**What this does and does not change.**
+
+* E1, E2 and E3 are untouched. They are correctness results — J never runs, the
+  benefit term discriminates at the milestone, a shared prerequisite is 68% of the
+  cost. None of them depended on E4.
+* The VERDICT stands, but its justification changes. C is worth building for
+  coherence and for the amortisation, **not** because it is faster. Any claim that
+  the epic pays for itself in cycle time is withdrawn.
+* E4's stated kill criterion — ">5 s per decision" — is now MARGINAL rather than
+  cleared: banded C is ~9.6 s on Lor. It is not killed only because the shipped
+  objective is 39.6 s and blows the same budget worse.
+* A new design obligation falls out: **C needs an incremental candidate
+  evaluation.** Re-running a rung's full monster loop per candidate is the naive
+  shape and it is what makes C cost-neutral instead of cheap. Whether a candidate's
+  effect on the argmax can be computed without the full loop — most candidates
+  cannot change which monster wins — is an open question and now the first
+  question increment 3 has to answer.
+
+The original (wrong) analysis is kept below, unedited, because the error is
+instructive: it is the same shape as every other defect this session — an
+estimate built from the term that was easy to measure rather than the term that
+dominates.
+
+---
+
+## E4 RESULT (SUPERSEDED — see the correction above)
 
 Per-call timing added to `--bundle-price`, because that is the only place the
 pricer runs in isolation. Live, two characters:

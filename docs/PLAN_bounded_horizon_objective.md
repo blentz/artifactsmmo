@@ -223,9 +223,14 @@ unblocks it.
 C is the only option where cost and benefit are the same quantity by construction
 rather than by unit-matching, the only one that amortises a shared prerequisite
 (**74%** on the live iron set), and the only one that deletes more than it adds.
-It is also, measured, **~4x cheaper than what ships** — the pre-spike worry that
-C would be too slow had the baseline wrong by two orders of magnitude. B is no
-longer the fallback the spike was hedging toward; A remains a stopgap only.
+On COST it is roughly **neutral**, not cheaper: E4's first estimate said 4x
+cheaper and was corrected on 2026-08-18 — it priced a per-rung candidate
+evaluation at the `acquisition_actions` call (47–68 ms) when it actually costs a
+rung's whole monster loop (~235 ms measured). C is therefore worth building for
+coherence and for the amortisation, NOT for speed, and it carries a design
+obligation: an incremental candidate evaluation, because the naive
+re-run-the-rung shape is what makes it cost-neutral. B remains the fallback if
+that cannot be found; A remains a stopgap only.
 
 **One ordering constraint is now hard.** Increment 2 (the pricing wall) must land
 BEFORE increment 3 (the acquisition edge). The largest shared cost in the model is
