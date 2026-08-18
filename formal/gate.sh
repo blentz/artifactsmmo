@@ -74,9 +74,17 @@ echo "== (c'') openapi conformance (strict) =="; ( cd "$ROOT" && uv run python f
 # needed, so they can fail before differential pays for `lake build oracle`.
 # shed-reachability added 2026-08-05 (disposal-unification part 2), measured
 # standalone at 2s: four `StrategyArbiter.select` drives plus one pure catalog
-# sweep. Placed FIRST because it is the cheapest of the six.
-echo "== (c''') census (--check x6) =="
+# sweep.
+# liveness added 2026-08-18 and placed FIRST because it is the cheapest of
+# the seven (<1s: one source scan plus, where a learning DB exists, two GROUP
+# BYs). It is the only census that asks whether the planner ever DID a thing
+# rather than whether it CAN -- the gap that hid 18 dead goals, 17 dead
+# actions, a task subsystem that never once ran, and the unified objective `J`
+# itself. It needs NO learning DB: the roster comes from the source, so CI
+# still fails on a Goal or Action added without a liveness decision.
+echo "== (c''') census (--check x7) =="
 ( cd "$ROOT" \
+  && uv run python scripts/gen_liveness.py --check \
   && uv run python scripts/gen_shed_reachability.py --check \
   && uv run python scripts/gen_inventory_completeness.py --check \
   && uv run python scripts/gen_recycle_source_completeness.py --check \
@@ -92,7 +100,14 @@ echo "== (c''') census (--check x6) =="
 # This line is deliberately AFTER the &&-chain: under `set -euo pipefail` a real
 # PLANNER_BUG failure aborts before it, leaving the regenerated docs on disk for
 # diagnosis exactly as that script's docstring intends.
-( cd "$ROOT" && git checkout -- docs/craft_completeness/MATRIX.md docs/craft_completeness/BACKLOG.md )
+# LIVENESS_MATRIX.md is restored for a DIFFERENT reason: its `observed` column
+# is environment-dependent BY DESIGN. A developer with a learning DB gets live
+# counts; CI and a fresh clone get "unknown". The COMMITTED copy is the no-DB
+# one, so the file in git is reproducible anywhere; a local run overwrites it
+# with the richer view and this restores it. The gate VERDICT is identical
+# either way -- the undeclared/orphan arms read the source, not the store.
+( cd "$ROOT" && git checkout -- docs/craft_completeness/MATRIX.md docs/craft_completeness/BACKLOG.md \
+                                docs/behavioral_completeness/LIVENESS_MATRIX.md )
 echo "== (d) differential =="; ( cd "$HERE" && lake build oracle ); ( cd "$ROOT" && uv run pytest formal/diff/ -q --no-cov -n auto --ignore=formal/diff/test_game_data_fixture_diff.py )
 # Full mutation EXECUTION is deliberately not here. It runs nightly in
 # mutation-gate.yml, where CI moved it: ~36 min, peaks ~22GB, and it was the
