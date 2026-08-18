@@ -1140,4 +1140,55 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "(sticky_sword, 5 recipe entries) is really ~51 actions of "
                      "zero-xp copper_ore gathering, against apprentice_gloves at "
                      "7. Live R2D2: 129 grind cycles, weaponcrafting never moved."),
+    # --- Band-EDGE fixtures (bounded-horizon spike, Tool 3, 2026-08-18).
+    # Every other scenario sits mid-band or at a band ENTRY, so the suite has
+    # never covered the two positions where a level-denominated horizon
+    # degenerates. Measured live: a character one level from its milestone
+    # projects the SAME cycles-to-milestone for every candidate (R2D2 L19,
+    # spread 0 over 9 candidates), while one four levels out spreads 1,086 over
+    # 12. The horizon is measured in LEVELS and the quantity compared is
+    # measured in CYCLES, and the distance between them swings by an order of
+    # magnitude purely with band position — which is invisible without these two.
+    #
+    # `derive_combat_stats=True` is LOAD-BEARING here, not decoration. Without
+    # it the character carries zero attack, `is_winnable` is False against every
+    # monster (see the flag's own docstring), and `cheapest_path_to_level` blocks
+    # at rung one — so the scenario would report a flat benefit column for a
+    # reason that has nothing to do with the band position it exists to isolate.
+    # Both are modelled on `l21_grey_material_grind`'s gear and skill shape so
+    # the pair differs from it, and from each other, in LEVEL and nothing else.
+    "l19_band_edge": ScenarioCharacter(
+        name="l19_band_edge", level=19, gold=500,
+        derive_combat_stats=True,
+        skills={"alchemy": 16, "cooking": 12, "fishing": 5, "gearcrafting": 15,
+                "jewelrycrafting": 14, "mining": 21, "weaponcrafting": 10,
+                "woodcutting": 15},
+        equipment={
+            "weapon_slot": "highwayman_dagger", "helmet_slot": "lucky_wizard_hat",
+            "body_armor_slot": "mushmush_jacket", "leg_armor_slot": "adventurer_pants",
+            "boots_slot": "adventurer_boots", "ring1_slot": "air_ring",
+            "amulet_slot": "wisdom_amulet",
+        },
+        bank={"iron_bar": 6},
+        inventory_max=140,
+        description="ONE level below the L20 milestone: the horizon's flat end, "
+                     "where every candidate projects the same cycles to the "
+                     "milestone and the objective cannot discriminate."),
+    "l11_band_floor": ScenarioCharacter(
+        name="l11_band_floor", level=11, gold=500,
+        derive_combat_stats=True,
+        skills={"alchemy": 16, "cooking": 12, "fishing": 5, "gearcrafting": 15,
+                "jewelrycrafting": 14, "mining": 21, "weaponcrafting": 10,
+                "woodcutting": 15},
+        equipment={
+            "weapon_slot": "highwayman_dagger", "helmet_slot": "lucky_wizard_hat",
+            "body_armor_slot": "mushmush_jacket", "leg_armor_slot": "adventurer_pants",
+            "boots_slot": "adventurer_boots", "ring1_slot": "air_ring",
+            "amulet_slot": "wisdom_amulet",
+        },
+        bank={"iron_bar": 6},
+        inventory_max=140,
+        description="NINE levels below the L20 milestone: the horizon's long "
+                     "end, where a banded projection walks the most rungs and "
+                     "an acquisition has the most room to repay itself."),
 }

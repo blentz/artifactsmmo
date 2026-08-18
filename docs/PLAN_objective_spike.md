@@ -222,17 +222,20 @@ paying the expensive per-rung term once instead of once per candidate. If
 Lor would be ~10 × (283 ms + 12 × acq) against today's 34 s. E4 must measure the
 `acq` term rather than assuming C is the expensive option.
 
-### The committed scenarios cannot see either defect
+### The scenarios are far cheaper than live
 
-Zero walled candidates in every scenario against 6–9 of 9–13 live, and 6–24 ms per
-walk against 479–2,828 ms live. The fixtures are systematically unrepresentative on
-exactly the two axes this epic is about — the pricing wall and the cost of the
-walk — because a cold `:memory:` store never consults the 48 MB learning DB per
-monster per rung, and the fixture bundle prices nothing at 10^6.
+6–24 ms per walk offline against 479–2,828 ms live. A cold `:memory:` store never
+consults the 48 MB learning DB per monster per rung, so no scenario can carry the
+timing measurement E4 needs. That gap is real and holds regardless of how a
+scenario is built.
 
-That widens Tool 3 beyond band-edge coverage: a scenario carrying a **skill-gated,
-walled** candidate set is needed, or the suite will keep reporting green on a model
-the live fleet cannot use.
+> **CORRECTED 2026-08-18.** This section first also claimed "zero walled candidates
+> in every scenario". That was measured over six scenarios that all happen to be in
+> the half of the suite with `derive_combat_stats=False`. Re-measured over the
+> deriving half, walled candidates are common: `l12_deep_chain_grind` prices 7 of 8
+> at `UNOBTAINABLE_PER_UNIT`, `l10_gearcrafting_gap` 2 of 3. The pricing-wall axis
+> is covered by the existing suite after all; only the timing axis is not. See the
+> E2 correction below for the same sampling error and its consequences.
 
 ## E2 RESULT — 2026-08-18: kill criterion does NOT fire; the epic survives
 
@@ -285,19 +288,73 @@ by its own tooling. Live state has also moved since. The 1,086 supersedes; the
 qualitative reading (the benefit term discriminates at four levels of headroom)
 was right for the wrong arithmetic.
 
-### The committed scenarios cannot carry this measurement at all
+### The scenarios CAN carry this measurement — but only half of them, and thinly
 
-Same sweep offline over six scenarios × four targets: **spread is `None` in all 24
-cells** — at most one candidate ever reaches any target. Worse, in
-`l10_copper_adequate`, `l20_band_entry` and `l30_band_entry` the maximum reachable
-level equals the character's own level: the projection says **no candidate,
-including the trunk, can gain a single level**, at any horizon.
+A first sweep over six scenarios returned `spread = None` in all 24 cells, with the
+maximum reachable level equal to the character's own level. That was a **sampling
+error, corrected here**: all six were in the half of the suite with
+`derive_combat_stats=False`, whose characters carry zero attack by design.
+`scenario.py` documents it exactly — *"the pre-existing scenarios were all
+empirically pinned … under the harness's original zero-stat states, where
+`is_winnable` is False against EVERY monster (predict_win sees 0 attack)"*. A
+blocked walk there is the correct consequence of a deliberate fixture choice, not
+a defect, and 14 of the 28 scenarios opt in to real combat stats.
 
-Live, the same walk gains 1–10 levels. So the fixtures are blocked where live is
-not, and Tool 3 is now a prerequisite for any scenario-based verification of this
-epic — not a nice-to-have. Combined with E1's finding (zero walled candidates, 6–24 ms
-vs 479–2,828 ms), the committed suite is unrepresentative on three axes: the
-pricing wall, the cost of the walk, and whether the walk moves at all.
+Re-measured over the deriving half:
+
+| scenario | L | target | reachers | spread | ms |
+|---|---|---|---|---|---|
+| `l10_gearcrafting_gap` | 10 | 20 | 3/3 | 7 | 162 |
+| `l12_gearcrafting_gap` | 12 | 20 | 3/3 | 7 | 151 |
+| `l21_grey_material_grind` | 21 | 30 | 11/11 | 16 | 830 |
+| `l20_dual_utility` | 20 | 30 | 3/3 | 0 | 290 |
+| `l12_deep_chain_grind` | 12 | 20 | 0/8 | — | 276 |
+| `l30_rune_fill` | 30 | 40 | 0/2 | — | 154 |
+| any of the above | | 50 | 0 | — | |
+
+So a scenario CAN reach a banded target and CAN produce a spread. What it cannot
+do is produce a representative one: spreads of 0–16 against 1,086–1,128 live, over
+1–11 candidates against 9–13. Scenario measurements in this epic will be
+qualitatively right and quantitatively unrepresentative, and any acceptance
+threshold written against a scenario number will be meaningless.
+
+**Tool 3's remaining gap is therefore narrower than first stated.** Walled
+candidates and non-blocked projections both exist in the suite already. What is
+missing is a character at a band EDGE — the nearest deriving scenarios are
+`l21_grey_material_grind` (9 levels of headroom) and `l20_dual_utility` (10) —
+which is the one position where the horizon goes provably flat.
+
+## TOOL 3 RESULT — 2026-08-18: the band edges are covered, and the flat pole reproduces
+
+`l19_band_edge` (L19, one level from the L20 milestone) and `l11_band_floor`
+(L11, nine levels) added to `ai/scenario.py`. Same gear, skills and bank as
+`l21_grey_material_grind`; they differ from it and from each other in LEVEL
+alone, so band position is the only variable. Both set
+`derive_combat_stats=True`, which is load-bearing rather than decorative — the
+flag's own docstring records that without it `is_winnable` is False against every
+monster, and the walk would then block at rung one and report a flat benefit
+column for a reason unrelated to the band position the fixture exists to isolate.
+
+| scenario | L | headroom | target | reachers | spread | ms |
+|---|---|---|---|---|---|---|
+| `l19_band_edge` | 19 | 1 | 20 | 7/7 | **1** | 61 |
+| `l19_band_edge` | 19 | 11 | 30 | 7/7 | 13 | 688 |
+| `l11_band_floor` | 11 | 9 | 20 | 7/7 | 6 | 357 |
+| `l11_band_floor` | 11 | 19 | 30 | 7/7 | 19 | 933 |
+| either | | — | 50 | 0/7 | — | ~1,000 |
+
+Discrimination is monotone in how far the walk runs, and it collapses to ~0 at
+one level of headroom — the same shape as live (R2D2 spread 0 at L19, Lor 1,086
+at L16), at a fraction of the magnitude, which is what a cold `:memory:` store
+falling back to the documented XP formula produces.
+
+`tests/test_ai/scenarios/test_band_edge_horizon.py` pins the property as an ORDER
+over three horizons, never as a magnitude: a threshold copied from a cold-store
+scenario would be meaningless against the live fleet. It also pins the design
+invariant (same milestone, same gear, levels 1 and 9 out) and carries an explicit
+non-vacuity guard on `state.attack`. Verified by mutation: removing
+`derive_combat_stats=True` from `l19_band_edge` fails three of the six tests,
+including the guard.
 
 ## Order of work
 
@@ -315,11 +372,14 @@ pricing wall, the cost of the walk, and whether the walk moves at all.
    therefore deferred and happens only if A or B wins. Under a swept `--target`
    the command's band and `DECIDED BY` columns abstain rather than re-deriving a
    second banding.
-3. Tool 3 scenarios — now a PREREQUISITE, not a nice-to-have (E2): band edges
-   (`l19_band_edge`, `l11_band_floor`), a skill-gated/walled candidate set, and
-   fixtures whose projection is not blocked at zero levels of progress. Three of
-   the six existing scenarios cannot gain a level at any horizon, so no scenario
-   can currently carry E2, E3 or E4.
+3. ~~Tool 3 scenarios~~ — **DONE 2026-08-18**, see the result above. Walled candidates and
+   non-blocked projections already exist in the `derive_combat_stats=True` half
+   of the suite, so E3 has fixtures. What is missing is a character at a band
+   EDGE: `l19_band_edge` (one level of headroom, the provably flat case) and
+   `l11_band_floor` (nine levels, the long-walk case). Both must set
+   `derive_combat_stats=True` or they inherit the zero-attack state and block.
+   E4 still cannot be measured offline at all — scenarios run 6–37x faster than
+   live because a cold store never touches the 48 MB learning DB.
 4. Tool 2, then E3.
 5. E4, re-framed by E1: measure the `acquisition_actions` term against the ~300 ms
    per-rung term, and decide whether C is cheaper or dearer than what ships.
