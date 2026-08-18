@@ -151,12 +151,27 @@ class TestTheRoster:
 
 
 class TestReport:
-    def test_the_matrix_puts_the_rows_needing_a_decision_first(self):
-        rows = [_row("LiveGoal", 9), _row("DeadGoal", 0),
-                _row("KnownGoal", 0, "conditional: x")]
+    def test_the_matrix_orders_every_tier_by_how_much_it_needs_a_decision(self):
+        """All five tiers, in one assertion, because the ORDER is the report's
+        only affordance: a reader scans the top of a diff, so anything needing a
+        decision has to be there. Undeclared first (the gate failure), then stale
+        (a declaration the store contradicts), then unclassified (dormant, reason
+        unknown), then tracked-unreachable (dormant, reason known and a defect),
+        then benign dormancy, then live."""
+        rows = [
+            _row("LiveGoal", 9),
+            _row("BenignGoal", 0, "conditional: needs a raid"),
+            _row("TrackedGoal", 0, "unreachable: the band is closed"),
+            _row("UnknownGoal", 0, "UNCLASSIFIED: not yet established"),
+            _row("StaleGoal", 5, "conditional: never happens"),
+            _row("DeadGoal", 0),
+        ]
         body = render_matrix(rows)
-        assert body.index("DeadGoal") < body.index("KnownGoal") < body.index("LiveGoal")
+        order = [body.index(n) for n in ("DeadGoal", "StaleGoal", "UnknownGoal",
+                                         "TrackedGoal", "BenignGoal", "LiveGoal")]
+        assert order == sorted(order), body
         assert "**UNDECLARED**" in body
+        assert "**STALE**" in body
 
     def test_the_summary_separates_tracked_defects_from_benign_dormancy(self):
         """`unreachable:` rows are a defect being tracked; `conditional:` rows are
