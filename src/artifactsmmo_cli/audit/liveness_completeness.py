@@ -10,7 +10,9 @@ cycles, that gap was hiding a lot:
     cycles, over 16 days and five characters), which silently killed six goals in
     a chain and the whole `tasks_coin` funding epic built on them.
   * The unified objective `J` had never executed (`docs/PLAN_bounded_horizon_objective.md`).
-  * `MeansKind.CURRENCY_TURNIN`, shipped 2026-08-16, has never been selected.
+  * `MeansKind.CURRENCY_TURNIN`, shipped 2026-08-16, has never been selected —
+    and the reason turned out to be two reasons, one of them a scope limit
+    nobody had stated (see `CurrencyTurnInGoal` below).
 
 Every one of those was found by hand, late, after the code had been green for
 weeks. A green test suite says the code is CORRECT; it says nothing about whether
@@ -89,14 +91,43 @@ DORMANT: dict[str, str] = {
     "MoveTo": "subsumed: superseded by the venue model in obtain_sources",
     "UnequipAction": "subsumed: OptimizeLoadoutAction performs swaps atomically",
     "GeFillSellOrderAction": "subsumed: the fleet posts sell orders and fills buys",
-    # --- Unclassified: never observed, reason not yet established. These are the
-    # honest residual, and they are what the next liveness investigation reads.
-    "ReachCurrencyGoal": "UNCLASSIFIED: never observed; reason not yet established",
-    "ReachSkillGoal": "UNCLASSIFIED: never observed; reason not yet established",
-    "CurrencyTurnInGoal": "UNCLASSIFIED: MeansKind.CURRENCY_TURNIN is ABOVE the "
-                          "step, so the priority ladder is not the cause",
-    "SurrenderCurrencyGoal": "UNCLASSIFIED: never observed; reason not yet established",
-    "ProvisionMarginalFightGoal": "UNCLASSIFIED: never observed; reason not yet established",
+    # --- Two more downstream of the dead task subsystem, established 2026-08-18.
+    "ReachCurrencyGoal": "unreachable: routed only from a currency-blocked leaf, "
+                         "and it mints only tasks_coin, which requires tasks",
+    "ReachSkillGoal": "unreachable: constructed only under MeansKind.PURSUE_TASK, "
+                      "which requires a held task",
+    # --- Currency turn-in. Investigated 2026-08-18 with the fleet stopped; the
+    # answer is TWO independent reasons, and only one of them is conditional.
+    #
+    # Measured fleet holdings against every sink's price:
+    #   cowhide      33 >= hard_leather@3   READY
+    #   snake_hide    4 >= snakeskin@4      READY
+    #   wool          3 >= cloth@3          READY
+    #   lich_race_medal 4 <  trophy@10      short 6
+    #   event_ticket   34 <  medal@100      short 66
+    #
+    # The three READY ones are blocked by RULE 3 of `_resolve_turn_in` — the
+    # buyer's `pick_loadout_cached` must place the bought item in a SLOT. All
+    # three are `type=resource` (cloth, hard_leather, snakeskin), so no loadout
+    # can ever hold one and rule 3 can never pass. The mechanism is named
+    # "currency turn-in" but can only ever buy EQUIPMENT.
+    #
+    # The one equippable sink IS correctly gated: R2D2 at L20 passes rules 3 and
+    # 4 for `lich_race_trophy` (wears it, level-qualified) and waits only on
+    # stock. So this rung is genuinely conditional AND carries a scope limit.
+    "CurrencyTurnInGoal": "conditional: the only sink whose item a loadout can "
+                          "wear (lich_race_trophy) needs 10 medals and the fleet "
+                          "holds 4; every READY sink buys a resource, which "
+                          "_resolve_turn_in rule 3 can never accept",
+    "SurrenderCurrencyGoal": "conditional: the holder side of the same election, "
+                             "so it waits on the same turn-in being resolved",
+    # --- Provision-marginal-fight. Its gate needs a utility-slot heal already in
+    # the bag; measured live, `best_held_heal` is None and both utility slots are
+    # empty on all five characters. `UseConsumableAction` fires 1,621 times, so
+    # the fleet does eat — just never a utility-slot heal it is holding for a
+    # fight. Adjacent to the objective never ranking a utility candidate.
+    "ProvisionMarginalFightGoal": "conditional: needs a held utility-slot heal; "
+                                  "best_held_heal is None on every character",
 }
 
 

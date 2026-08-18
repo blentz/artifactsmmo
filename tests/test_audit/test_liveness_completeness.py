@@ -195,6 +195,16 @@ def test_the_committed_census_is_clean():
     assert orphan_declarations(rows) == []
 
 
+def test_no_reason_is_left_unclassified():
+    """UNCLASSIFIED is a TODO, not a resting state. It was five entries on
+    2026-08-18 and is zero after the investigation
+    (`docs/PLAN_priority_ladder_unification.md`); this keeps it from silently
+    refilling, since an unexamined dormant class is exactly what this census
+    exists to surface."""
+    todo = sorted(n for n, r in DORMANT.items() if r.startswith("UNCLASSIFIED:"))
+    assert todo == [], f"still unclassified: {todo}"
+
+
 @pytest.mark.parametrize("reason", sorted(set(DORMANT.values())))
 def test_every_reason_is_classified(reason):
     """Each reason declares which KIND of dormancy it is, so the matrix can sort
