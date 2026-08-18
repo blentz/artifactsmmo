@@ -464,6 +464,57 @@ instructive: it is the same shape as every other defect this session — an
 estimate built from the term that was easy to measure rather than the term that
 dominates.
 
+### E5 — can a candidate be evaluated incrementally? Measured 2026-08-18: mostly NO
+
+The correction above left one question, and it is the one increment 3 has to
+answer first: C re-runs a rung's monster loop per candidate, so is there a cheap
+exact test for "this candidate cannot change this rung"?
+
+88 (rung, candidate) pairs, four rungs each, over three `derive_combat_stats`
+scenarios. Offline against the committed bundle — the question is structural, and
+the only store-dependent inputs (`is_winnable`'s learned arms, the observed-rate
+branch) are excluded from the comparison.
+
+```
+                          l11   l19   l21   total
+pairs                      24    24    40      88
+argmax unchanged           19    24    38   81  (92%)
+argmax changed              5     0     2    7  ( 8%)
+winnable-set changed        0     0     4    4  ( 5%)
+no effect at all            8    12    27   47  (53%)
+picker declines candidate   0     0     0    0  ( 0%)
+best-rate ratio: median 1.0000 everywhere; range 0.9189 - 1.2361
+```
+
+**The headline is encouraging and the mechanism is not.** 92% of pairs leave the
+argmax alone and 53% change nothing — but there is no cheap way to tell WHICH.
+The effect reaches the rate through `expected_damage_per_fight`, which picks a
+combat loadout **per monster**, so deciding whether a candidate matters is the
+same work as running the loop.
+
+The skip that looked most promising is worthless: gating on whether
+`pick_loadout_cached` still returns the incumbent fired **0 times in 88 pairs**.
+It is also the wrong loadout — the `Rank()` pick drives WISDOM only, and none of
+these candidate sets contains a wisdom item, which is why 53% register no effect
+while the picker never declines.
+
+**One sound cheap predicate does exist, and it is small.** A candidate
+contributing nothing to attack, dmg, dmg_elements, resistance, hp_bonus or wisdom
+cannot change `expected_damage_per_fight` or `xp_per_kill`, so it cannot change
+the rung. It was exactly right on 24 of 24 such pairs — but that is 27% of the
+population and it is precisely the low-value candidates: prospecting artifacts
+(`perfect_pearl`) and `small_health_potion`.
+
+**Conclusion: incremental evaluation buys roughly a quarter, not nine tenths.**
+C stays cost-neutral with what ships. The 2x hope is not supported by this
+measurement.
+
+*Limits, stated: offline and cold-store, so `is_winnable`'s learned arms are
+absent; candidate sets of 6-10 against 9-13 live; no wisdom-bearing candidate in
+any set, so the one channel that WOULD be a uniform O(1) rescale was never
+exercised; and 4-7 ms per pair here against ~235 ms live, so only the structure
+transfers, not the timing.*
+
 ---
 
 ## E4 RESULT (SUPERSEDED — see the correction above)
