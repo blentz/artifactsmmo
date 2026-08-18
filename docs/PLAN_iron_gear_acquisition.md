@@ -189,7 +189,7 @@ Each increment lands green and is verified against `learning.db`, never against
 `play-trace-*.jsonl` (traces are deleted periodically and are not a durable
 record).
 
-### Increment 1 — a grind-rate estimator that does not decay to zero
+### Increment 1 — a grind-rate estimator that does not decay to zero  ✅ DONE 2026-08-18
 
 Add a rate estimator scoped to cycles where the character was actually grinding
 the skill in question — rows whose `action_repr` matches
@@ -218,6 +218,41 @@ Acceptance: on the live DB, `_gated_craft_option` returns a route for
 `gearcrafting` on all four characters, and `acquisition_actions('iron_boots', ...)`
 returns a finite number in the low hundreds rather than 1,000,000. Verified by
 re-running the probe, not by a unit test alone.
+
+**DONE 2026-08-18, and the acceptance is met.** `LearningStore.skill_grind_rate`
+and `fleet_skill_grind_rate` limit to cycles whose `action_repr` is this skill's
+`LevelSkill`; `_gated_craft_option` reads them, own evidence first and the fleet
+only in its ABSENCE (`is None`, never falsiness — a real `0.0` is evidence a
+sibling must not override).
+
+Live, on the same database that read 0.0 everywhere:
+
+| char | gearcrafting | weaponcrafting | jewelrycrafting | OLD estimator |
+|---|---|---|---|---|
+| C3P0 | 13.00 | 2.43 | 0.54 | 8.26 / 0.0 / 0.0 |
+| R2D2 | 1.59 | 2.34 | 0.00 | 0.0 / 0.0 / 0.0 |
+| Lor | 4.92 | 2.36 | 1.14 | 0.0 / 0.0 / 0.0 |
+| HAL | 2.28 | 4.07 | 9.84 | 0.0 / 0.0 / 0.0 |
+
+Eleven of twelve cells were 0.0 under the retired estimator; eleven of twelve are
+positive under the new one. R2D2's jewelrycrafting 0.0 is genuine evidence, not a
+window artefact, and is correctly declined.
+
+**And the wall is gone live.** Lor's iron set now prices at 556–623 per piece
+instead of 1,000,001, and E3's amortisation is no longer a counterfactual — it is
+a live measurement: the five pieces cost 2,933 apart and **936 as one plan (68%
+amortised)**, with `skill:gearcrafting:10 = 496` as the shared key.
+
+Read against Lor's benefit spread at the milestone (1,182 cycles), the trade is
+computable for the first time: one piece at 575 saving 212 is an honest loss; the
+whole set at 936 is a different proposition. That comparison is what option C
+exists to evaluate.
+
+The safety pin the increment demanded is in place and was verified by mutation:
+rewriting the call site as `rate or fleet` — the falsy form — fails
+`test_own_zero_evidence_is_not_overridden_by_the_fleet` and nothing else. That
+test needed a SHARED FILE DB to bite; on `:memory:` each store gets its own
+database, the fleet rate is None either way, and the mutant survived.
 
 ### Increment 2 — route existence asks at restorable HP, not current HP  ✅ DONE 2026-08-18
 

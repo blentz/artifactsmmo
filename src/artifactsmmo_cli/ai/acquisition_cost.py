@@ -252,11 +252,22 @@ def _gated_craft_option(item: str, state: WorldState, game_data: GameData,
     same. A free-looking grind does not merely fail to prune — it captures the
     bot.
 
-    So: no observations, a non-positive observed rate, or no `<skill>_max_xp`
-    from the API all decline the route. A non-positive rate is EVIDENCE the grind
-    is not progressing, which is a stronger reason to decline than ignorance is.
-    Declining costs the character that one route, not its progress — every other
-    root still competes."""
+    So: no observations anywhere in the fleet, a non-positive observed rate, or
+    no `<skill>_max_xp` from the API all decline the route. A non-positive rate is
+    EVIDENCE the grind is not progressing, which is a stronger reason to decline
+    than ignorance is. Declining costs the character that one route, not its
+    progress — every other root still competes.
+
+    THE RATE COMES FROM THE GRIND'S OWN CYCLES (2026-08-18). It used to come from
+    `skill_xp_per_cycle_all`, which averages over the last 100 cycles of ANY
+    activity — so a character spending its recent cycles fighting read 0.0 and
+    this route was declined for every skill-gated craft it could ever want.
+    Measured live: all five characters, all four crafting skills, exactly 0.0, and
+    every iron-tier item consequently priced at `UNOBTAINABLE_PER_UNIT` while the
+    gearcrafting grind that would open it was itself unrankable. Those are the
+    same fact — the price forbade the grind and the absent grind kept the price.
+    `skill_grind_rate` limits to cycles whose `action_repr` is this skill's
+    `LevelSkill`, so a grind in progress feeds the estimate that prices it."""
     recipe = game_data.crafting_recipe(item)
     stats = game_data.item_stats(item)
     if recipe is None or stats is None or not stats.crafting_skill:
@@ -266,7 +277,15 @@ def _gated_craft_option(item: str, state: WorldState, game_data: GameData,
         return None
     if game_data.workshop_location(skill) is None:
         return None
-    rate = store.skill_xp_per_cycle_all(skill)
+    # OWN evidence first, the fleet's only in its ABSENCE. `None` means this
+    # character has never ground this skill; `0.0` means it ground it and gained
+    # nothing, which is a fact about ITS gear and level that a sibling's number
+    # must not paper over. The `is None` test is therefore load-bearing and must
+    # not become a falsy test — `rate or fleet` would silently make a stuck
+    # character borrow a healthy one's rate.
+    rate = store.skill_grind_rate(skill)
+    if rate is None:
+        rate = store.fleet_skill_grind_rate(skill)
     max_xp = state.skill_max_xp.get(skill, 0)
     if not rate or rate <= 0 or max_xp <= 0:
         return None

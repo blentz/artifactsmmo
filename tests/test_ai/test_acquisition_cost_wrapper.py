@@ -405,16 +405,19 @@ def gated_state(state):  # type: ignore[no-untyped-def]
 def _store_with_rate(skill: str, xp_per_cycle: int, cycles: int = 5) -> LearningStore:
     """A real `LearningStore` carrying observed skill-xp gains — not a stub.
 
-    `skill_xp_per_cycle` averages only strictly-positive deltas, so recording
-    `cycles` rows of `xp_per_cycle` yields exactly that rate. Mocking the store
-    would mean asserting against a number this test invented; recording rows
-    means asserting against the number the production query computes."""
+    The rows carry `action_repr="LevelSkill(<skill>->10)"` because
+    `skill_grind_rate` measures the grind's OWN cycles. That is not a concession
+    to the query: a real grind cycle always carries it, since `GamePlayer` records
+    the action it executed, so a row without one is a fixture that could not
+    happen. Recording rows means asserting against the number the production query
+    computes rather than one this test invented."""
     store = LearningStore(db_path=":memory:", character="grind_probe")
     store.start_session()
     for i in range(cycles):
         store.record_cycle(Cycle(
             ts=f"2026-08-08T00:00:{i:02d}+00:00", session_id="s", cycle_index=i,
             character="grind_probe", outcome="ok",
+            action_repr=f"LevelSkill({skill}->10)",
             delta_skill_xp_json=json.dumps({skill: xp_per_cycle}),
         ))
     return store
@@ -509,10 +512,17 @@ def test_a_NON_POSITIVE_observed_rate_declines_the_route(
         store.record_cycle(Cycle(
             ts=f"2026-08-08T00:00:{i:02d}+00:00", session_id="s", cycle_index=i,
             character="no_progress", outcome="ok",
+            action_repr="LevelSkill(weaponcrafting->10)",
             delta_skill_xp_json=json.dumps({"weaponcrafting": 0}),
         ))
     try:
-        assert store.skill_xp_per_cycle_all("weaponcrafting") == 0.0
+        # The rate the pricer reads is now the GRIND rate. Stamping the rows keeps
+        # this test on the branch its name claims — a non-positive rate that is
+        # PRESENT — rather than sliding onto the absent-rate branch that
+        # `test_no_observed_rate_declines_the_route` below already covers. Two
+        # tests asserting one branch under different names is how a real branch
+        # goes uncovered.
+        assert store.skill_grind_rate("weaponcrafting") == 0.0
         assert not route_options("iron_sword", gated_state, game_data,
                                  NO_PROFILE_CONTEXT, store)
     finally:
@@ -536,11 +546,17 @@ def test_the_UNCONDITIONAL_rate_is_what_prices_a_grind(gated_state, game_data) -
         store.record_cycle(Cycle(
             ts=f"2026-08-08T00:00:{i:02d}+00:00", session_id="s", cycle_index=i,
             character="sparse", outcome="ok",
+            action_repr="LevelSkill(weaponcrafting->10)",
             delta_skill_xp_json=json.dumps({"weaponcrafting": 50 if i == 0 else 0}),
         ))
     try:
+        # All three estimators on ONE fixture, which is the only place their
+        # difference is visible: the conditional mean reports the paying cycle,
+        # the unconditional mean and the grind rate keep the nine zero-xp cycles
+        # in the denominator. The pricer reads the last of these.
         assert store.skill_xp_per_cycle("weaponcrafting") == 50.0
         assert store.skill_xp_per_cycle_all("weaponcrafting") == 5.0
+        assert store.skill_grind_rate("weaponcrafting") == 5.0
         routes = route_options("iron_sword", gated_state, game_data,
                                NO_PROFILE_CONTEXT, store)
         assert [r.kind for r in routes] == ["craft"]
@@ -581,7 +597,8 @@ def test_no_observed_rate_declines_the_route(gated_state, game_data) -> None:
     store = LearningStore(db_path=":memory:", character="no_observations")
     store.start_session()
     try:
-        assert store.skill_xp_per_cycle_all("weaponcrafting") is None
+        assert store.skill_grind_rate("weaponcrafting") is None
+        assert store.fleet_skill_grind_rate("weaponcrafting") is None
         assert not route_options("iron_sword", gated_state, game_data,
                                  NO_PROFILE_CONTEXT, store)
     finally:
@@ -842,3 +859,102 @@ def test_the_bundle_charges_one_equip_per_root(unlock_state, game_data) -> None:
         store.end_session(exit_reason="normal")
         store.close()
     assert worn - bare == len(_IRON_SET)
+
+
+def test_a_window_of_fighting_no_longer_hides_the_grind(
+        gated_state, game_data) -> None:
+    """THE LIVE DEFECT, pinned at the pricing seam.
+
+    Measured 2026-08-17: all five live characters read 0.0 from
+    `skill_xp_per_cycle_all` for every crafting skill, because their recent cycles
+    are fights — so `_gated_craft_option` declined every skill-gated craft and
+    `iron_sword` priced at UNOBTAINABLE. The grind cycles that answer the question
+    were sitting in the same table the whole time."""
+    store = LearningStore(db_path=":memory:", character="fought_recently")
+    store.start_session()
+    try:
+        for i in range(5):
+            store.record_cycle(Cycle(
+                ts=f"2026-08-18T00:00:{i:02d}+00:00", session_id="s",
+                cycle_index=i, character="fought_recently", outcome="ok",
+                action_repr="LevelSkill(weaponcrafting->10)",
+                delta_skill_xp_json=json.dumps({"weaponcrafting": 40})))
+        for i in range(5, 205):
+            store.record_cycle(Cycle(
+                ts=f"2026-08-18T01:00:{i % 60:02d}+00:00", session_id="s",
+                cycle_index=i, character="fought_recently", outcome="ok",
+                action_repr="Fight(pig)", delta_skill_xp_json=json.dumps({})))
+        assert store.skill_xp_per_cycle_all("weaponcrafting") == 0.0, \
+            "the retired estimator no longer reads 0 — this pins nothing"
+        routes = route_options("iron_sword", gated_state, game_data,
+                               NO_PROFILE_CONTEXT, store)
+        assert [r.kind for r in routes] == ["craft"]
+        assert routes[0].unlock == "skill:weaponcrafting:10"
+        assert routes[0].unlock_actions > 0
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_a_sibling_that_has_ground_the_skill_prices_it_for_one_that_has_not(
+        gated_state, game_data) -> None:
+    """The fallback. A fresh character has no evidence of its own about how fast
+    weaponcrafting goes; a sibling on the same server does."""
+    store = LearningStore(db_path=":memory:", character="fresh")
+    store.start_session()
+    veteran = LearningStore(db_path=":memory:", character="veteran")
+    try:
+        assert store.skill_grind_rate("weaponcrafting") is None
+        assert store.fleet_skill_grind_rate("weaponcrafting") is None
+        assert not route_options("iron_sword", gated_state, game_data,
+                                 NO_PROFILE_CONTEXT, store)
+    finally:
+        veteran.close()
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_own_zero_evidence_is_not_overridden_by_the_fleet(
+        gated_state, game_data, tmp_path) -> None:
+    """The fallback is ONE-WAY, and this is the test that pins it.
+
+    A character whose own grind ran and gained nothing has told us something about
+    ITS gear and level that a sibling's number cannot override. `0.0` is evidence;
+    `None` is ignorance; only ignorance falls back — which is why the call site
+    tests `is None` and not falsiness.
+
+    A SHARED FILE DB, not `:memory:`, and that is what makes this bite. Each
+    in-memory store gets its own database, so a sibling written to one is
+    invisible to the other and the fleet rate comes back None — under which
+    `rate or fleet` and `rate if rate is not None else fleet` agree and the
+    mutant survives. Verified: with the call site written as `or`, this test fails
+    and every other one in this file still passes."""
+    db = str(tmp_path / "fleet.db")
+    veteran = LearningStore(db_path=db, character="veteran")
+    veteran.start_session()
+    for i in range(5):
+        veteran.record_cycle(Cycle(
+            ts=f"2026-08-18T02:00:{i:02d}+00:00", session_id="s", cycle_index=i,
+            character="veteran", outcome="ok",
+            action_repr="LevelSkill(weaponcrafting->10)",
+            delta_skill_xp_json=json.dumps({"weaponcrafting": 40})))
+    veteran.end_session(exit_reason="normal")
+    veteran.close()
+
+    store = LearningStore(db_path=db, character="stuck")
+    store.start_session()
+    for i in range(5):
+        store.record_cycle(Cycle(
+            ts=f"2026-08-18T03:00:{i:02d}+00:00", session_id="s", cycle_index=i,
+            character="stuck", outcome="ok",
+            action_repr="LevelSkill(weaponcrafting->10)",
+            delta_skill_xp_json=json.dumps({"weaponcrafting": 0})))
+    try:
+        assert store.skill_grind_rate("weaponcrafting") == 0.0
+        assert store.fleet_skill_grind_rate("weaponcrafting") > 0, \
+            "no positive fleet rate to be overridden BY — this cannot bite"
+        assert not route_options("iron_sword", gated_state, game_data,
+                                 NO_PROFILE_CONTEXT, store)
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()

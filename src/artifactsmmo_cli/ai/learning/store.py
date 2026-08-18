@@ -58,6 +58,17 @@ class CombatLoadoutOutcomeRow:
     actual_win: bool
 
 
+def grind_action_prefix(skill: str) -> str:
+    """The `action_repr` prefix every `LevelSkill` cycle for `skill` carries.
+
+    `LevelSkill.__repr__` renders `LevelSkill({skill}->{target_level})`, so the
+    TARGET is the only part that varies. Matching on the prefix therefore counts a
+    `->5` grind and a `->10` grind as the same evidence about how fast this
+    character gains xp in this skill, which is what they are; matching the exact
+    string would silently drop half the observations."""
+    return f"LevelSkill({skill}->"
+
+
 def _parse_skill_xp_value(raw: str | None, skill: str) -> int:
     """Extract one skill's per-cycle xp delta from a stored JSON row.
 
@@ -652,6 +663,75 @@ class LearningStore:
                     .order_by(col(Cycle.id).desc())
                     .limit(window)
                 )
+                rows = list(s.exec(stmt))
+            if not rows:
+                return None
+            total = sum(max(0, _parse_skill_xp_value(raw, skill)) for raw in rows)
+            return float(total) / len(rows)
+        except SQLAlchemyError:
+            return None
+
+    def skill_grind_rate(self, skill: str,
+                         window: int = WINDOW_RECENT) -> float | None:
+        """Mean per-cycle XP gain for `skill` over the most recent `window` cycles
+        THIS CHARACTER SPENT GRINDING IT.
+
+        The difference from `skill_xp_per_cycle_all` is WHERE THE LIMIT FALLS.
+        That method limits to the last `window` cycles and then measures one skill
+        inside them, so a character doing anything else reads 0.0 — measured
+        2026-08-17 on the live DB, all five characters read exactly 0.0 for all
+        four crafting skills, which made `acquisition_cost._gated_craft_option`
+        decline every skill-gated craft and price every iron-tier item at
+        `UNOBTAINABLE_PER_UNIT`. That is an absorbing state: the price forbids the
+        grind and the absent grind keeps the price. Here the limit falls on rows
+        that already matched the grind's `action_repr`, so the sample IS the
+        grind's own cycles and a grind in progress feeds the estimate that prices
+        it.
+
+        THE ZERO-XP CYCLES INSIDE THE GRIND STAY IN THE DENOMINATOR, and that is
+        the safety property. A grind is mostly gathering: over 3,658 live
+        `LevelSkill(gearcrafting->10)` cycles, 136 were a craft paying 53-131 xp
+        and 3,112 were 30-second gathers paying nothing. `skill_xp_per_cycle`
+        above drops those gathers and so reported 54.0 against a true 1.08 — the
+        50x under-pricing that committed R2D2 to 207 `LevelSkill` actions over 4.5
+        hours for +270 skill xp and zero character xp (2026-08-08). This estimator
+        reports 1.59-4.92 on the same live data.
+        `TestSkillGrindRate.test_the_conditional_mean_and_the_grind_rate_must_differ`
+        pins the two apart on one fixture.
+
+        Returns None when this character has no recorded grind cycles for the
+        skill — IGNORANCE, on which the caller may fall back to
+        `fleet_skill_grind_rate`. Returns 0.0 when the grind ran and gained
+        nothing — EVIDENCE, on which the caller must decline. Those are different
+        answers and a caller must not conflate them.
+        """
+        return self._grind_rate(skill, window, character=self._character)
+
+    def fleet_skill_grind_rate(self, skill: str,
+                               window: int = WINDOW_RECENT) -> float | None:
+        """`skill_grind_rate` pooled over EVERY character in the store.
+
+        A character that has never ground a skill has no evidence of its own, but
+        a sibling that has is evidence about the same server, the same recipes and
+        the same workshops. The fallback is deliberately ONE-WAY: a character with
+        its own observations always uses them, however unflattering, because its
+        gear and level are baked into them.
+        """
+        return self._grind_rate(skill, window, character=None)
+
+    def _grind_rate(self, skill: str, window: int,
+                    character: str | None) -> float | None:
+        """Shared body of the two grind-rate estimators — ONE query, so the
+        per-character and fleet answers cannot drift into disagreeing about what a
+        grind cycle is."""
+        prefix = grind_action_prefix(skill)
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = select(Cycle.delta_skill_xp_json).where(
+                    col(Cycle.action_repr).startswith(prefix, autoescape=True))
+                if character is not None:
+                    stmt = stmt.where(col(Cycle.character) == character)
+                stmt = stmt.order_by(col(Cycle.id).desc()).limit(window)
                 rows = list(s.exec(stmt))
             if not rows:
                 return None

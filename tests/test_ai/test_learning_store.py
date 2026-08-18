@@ -11,8 +11,14 @@ from sqlalchemy import text
 from sqlmodel import Session as SqlSession
 from sqlmodel import create_engine, select
 
+from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.learning.models import Cycle, Session
-from artifactsmmo_cli.ai.learning.store import MIN_DROP_KILLS, LearningStore, _parse_skill_xp_value
+from artifactsmmo_cli.ai.learning.store import (
+    MIN_DROP_KILLS,
+    LearningStore,
+    _parse_skill_xp_value,
+    grind_action_prefix,
+)
 
 
 @pytest.fixture
@@ -1023,6 +1029,15 @@ class TestDegradationOnDbError:
         _break_engine(store)
         assert store.skill_xp_per_cycle_all("alchemy") is None
 
+    def test_skill_grind_rate_returns_none(self, tmp_db_path):
+        """Same contract for the estimator that replaced it at the pricing seam.
+        Distinct from `0.0`: a DB fault is IGNORANCE, and the caller may fall
+        back to the fleet on it, where a real `0.0` is evidence it must not."""
+        store = LearningStore(db_path=tmp_db_path, character="x")
+        _break_engine(store)
+        assert store.skill_grind_rate("gearcrafting") is None
+        assert store.fleet_skill_grind_rate("gearcrafting") is None
+
     def test_skill_xp_per_cycle_returns_none(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="hero")
         _break_engine(store)
@@ -1466,3 +1481,251 @@ class TestForcedRecoveryAttribution:
         rows = store.recent_goal_cycles("RestoreHP", window=100)
         store.close()
         assert [r.selected_goal for r in rows] == ["RestoreHP"]
+
+
+class TestSkillGrindRate:
+    """The rate that prices a skill-gated craft, measured over the grind's OWN
+    cycles rather than over the last 100 cycles of whatever the character
+    happened to be doing."""
+
+    @staticmethod
+    def _grind_cycle(i: int, char: str, skill: str, xp: int) -> Cycle:
+        return Cycle(
+            ts=f"2026-08-18T00:00:{i:02d}+00:00", session_id="s", cycle_index=i,
+            character=char, outcome="ok",
+            action_repr=f"LevelSkill({skill}->10)",
+            delta_skill_xp_json=json.dumps({skill: xp}),
+        )
+
+    @staticmethod
+    def _other_cycle(i: int, char: str) -> Cycle:
+        return Cycle(
+            ts=f"2026-08-18T01:00:{i % 60:02d}+00:00", session_id="s",
+            cycle_index=i, character=char, outcome="ok",
+            action_repr="Fight(pig)", delta_skill_xp_json=json.dumps({}),
+        )
+
+    def test_an_empty_store_has_no_rate_under_either_estimator(self, tmp_db_path):
+        """No cycles at all is IGNORANCE, not a rate of zero — under both the
+        retired estimator and its replacement. `_gated_craft_option` reads the
+        difference: None may fall back to the fleet, 0.0 may not."""
+        store = LearningStore(db_path=tmp_db_path, character="c")
+        store.start_session()
+        try:
+            assert store.skill_xp_per_cycle_all("gearcrafting") is None
+            assert store.skill_grind_rate("gearcrafting") is None
+        finally:
+            store.end_session(exit_reason="normal")
+            store.close()
+
+    def test_a_window_of_other_work_does_not_dilute_the_rate(self, tmp_db_path):
+        """THE LIVE BUG, pinned. Every character in the live DB reads 0.0 from
+        `skill_xp_per_cycle_all` for every crafting skill, because their last 100
+        cycles are all fights. The grind's own cycles still say 5.0, and they were
+        in the same table the whole time."""
+        store = LearningStore(db_path=tmp_db_path, character="c")
+        store.start_session()
+        try:
+            for i in range(10):
+                store.record_cycle(self._grind_cycle(i, "c", "gearcrafting",
+                                                     50 if i == 0 else 0))
+            for i in range(10, 210):
+                store.record_cycle(self._other_cycle(i, "c"))
+            assert store.skill_xp_per_cycle_all("gearcrafting") == 0.0
+            assert store.skill_grind_rate("gearcrafting") == 5.0
+        finally:
+            store.end_session(exit_reason="normal")
+            store.close()
+
+    def test_the_conditional_mean_and_the_grind_rate_must_differ(self, tmp_db_path):
+        """THE 41x TRAP, pinned on one fixture.
+
+        `skill_xp_per_cycle` drops the zero-xp gathering cycles a grind is mostly
+        made of and reports the paying cycle's figure as if it were the rate — 54.0
+        against a true 1.08 on R2D2, the 50x under-pricing that committed the bot
+        to 207 LevelSkill actions over 4.5 hours for +270 skill xp and ZERO
+        character xp (2026-08-08). The grind rate keeps those cycles in the
+        denominator. If these two ever agree, this fix has become the bug it was
+        written next to."""
+        store = LearningStore(db_path=tmp_db_path, character="c")
+        store.start_session()
+        try:
+            for i in range(10):
+                store.record_cycle(self._grind_cycle(i, "c", "gearcrafting",
+                                                     50 if i == 0 else 0))
+            assert store.skill_xp_per_cycle("gearcrafting") == 50.0
+            assert store.skill_grind_rate("gearcrafting") == 5.0
+        finally:
+            store.end_session(exit_reason="normal")
+            store.close()
+
+    def test_a_grind_that_gained_nothing_reports_zero_not_none(self, tmp_db_path):
+        """EVIDENCE, and it must be distinguishable from ignorance: the caller
+        declines on 0.0 and may fall back to the fleet on None."""
+        store = LearningStore(db_path=tmp_db_path, character="c")
+        store.start_session()
+        try:
+            for i in range(5):
+                store.record_cycle(self._grind_cycle(i, "c", "gearcrafting", 0))
+            assert store.skill_grind_rate("gearcrafting") == 0.0
+        finally:
+            store.end_session(exit_reason="normal")
+            store.close()
+
+    def test_a_skill_never_ground_reports_none(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="c")
+        store.start_session()
+        try:
+            for i in range(5):
+                store.record_cycle(self._grind_cycle(i, "c", "mining", 40))
+            assert store.skill_grind_rate("gearcrafting") is None
+        finally:
+            store.end_session(exit_reason="normal")
+            store.close()
+
+    def test_a_different_skills_grind_is_not_evidence_about_this_one(self, tmp_db_path):
+        """A mining grind gains woodcutting xp as a side effect — measured live,
+        1,491 woodcutting xp inside the gearcrafting grind. Those cycles say
+        nothing about how fast a WOODCUTTING grind goes."""
+        store = LearningStore(db_path=tmp_db_path, character="c")
+        store.start_session()
+        try:
+            for i in range(5):
+                store.record_cycle(Cycle(
+                    ts=f"2026-08-18T00:00:{i:02d}+00:00", session_id="s",
+                    cycle_index=i, character="c", outcome="ok",
+                    action_repr="LevelSkill(mining->10)",
+                    delta_skill_xp_json=json.dumps({"woodcutting": 60})))
+            assert store.skill_grind_rate("woodcutting") is None
+            assert store.skill_grind_rate("mining") == 0.0
+        finally:
+            store.end_session(exit_reason="normal")
+            store.close()
+
+    def test_the_window_counts_grind_cycles_not_all_cycles(self, tmp_db_path):
+        """THE ENTIRE DIFFERENCE from `skill_xp_per_cycle_all`: the LIMIT falls on
+        rows that already matched the grind, so a grind in progress feeds the
+        estimate that prices it and cannot be emptied by other work."""
+        store = LearningStore(db_path=tmp_db_path, character="c")
+        store.start_session()
+        try:
+            for i in range(2):
+                store.record_cycle(self._grind_cycle(i, "c", "gearcrafting", 100))
+            for i in range(2, 12):
+                store.record_cycle(self._grind_cycle(i, "c", "gearcrafting", 10))
+            assert store.skill_grind_rate("gearcrafting", window=10) == 10.0
+        finally:
+            store.end_session(exit_reason="normal")
+            store.close()
+
+    def test_a_target_level_other_than_ten_is_the_same_evidence(self, tmp_db_path):
+        """`LevelSkill.__repr__` renders `LevelSkill(<skill>-><target>)`, so only
+        the target varies. A `->5` grind and a `->10` grind are the same evidence
+        about how fast this character gains xp in this skill, and matching the
+        exact string would silently drop half of it."""
+        store = LearningStore(db_path=tmp_db_path, character="c")
+        store.start_session()
+        try:
+            for i, target in enumerate((5, 10, 15, 20)):
+                store.record_cycle(Cycle(
+                    ts=f"2026-08-18T00:00:{i:02d}+00:00", session_id="s",
+                    cycle_index=i, character="c", outcome="ok",
+                    action_repr=f"LevelSkill(gearcrafting->{target})",
+                    delta_skill_xp_json=json.dumps({"gearcrafting": 8})))
+            assert store.skill_grind_rate("gearcrafting") == 8.0
+        finally:
+            store.end_session(exit_reason="normal")
+            store.close()
+
+    @staticmethod
+    def _seed_sibling(db_path: str, skill: str, xp: int, n: int = 5) -> None:
+        """Write a sibling's grind cycles through the sibling's OWN store.
+
+        `record_cycle` stamps `cycle.character` with the store's character, so a
+        row cannot be attributed to another name through this store — which is
+        the invariant that makes the per-character scoping below meaningful."""
+        other = LearningStore(db_path=db_path, character="other")
+        other.start_session()
+        try:
+            for i in range(n):
+                other.record_cycle(Cycle(
+                    ts=f"2026-08-18T02:00:{i:02d}+00:00", session_id="s",
+                    cycle_index=i, character="other", outcome="ok",
+                    action_repr=f"LevelSkill({skill}->10)",
+                    delta_skill_xp_json=json.dumps({skill: xp})))
+        finally:
+            other.end_session(exit_reason="normal")
+            other.close()
+
+    def test_the_rate_is_scoped_to_this_character(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="mine")
+        store.start_session()
+        try:
+            self._seed_sibling(tmp_db_path, "gearcrafting", 80)
+            assert store.skill_grind_rate("gearcrafting") is None
+        finally:
+            store.end_session(exit_reason="normal")
+            store.close()
+
+    def test_the_fleet_rate_pools_every_character(self, tmp_db_path):
+        """A character that has never ground a skill can still be told what the
+        grind costs, by the siblings who have — same server, same recipes, same
+        workshops."""
+        store = LearningStore(db_path=tmp_db_path, character="mine")
+        store.start_session()
+        try:
+            self._seed_sibling(tmp_db_path, "gearcrafting", 80)
+            assert store.skill_grind_rate("gearcrafting") is None
+            assert store.fleet_skill_grind_rate("gearcrafting") == 80.0
+        finally:
+            store.end_session(exit_reason="normal")
+            store.close()
+
+    def test_the_fleet_rate_is_none_when_nobody_has_ground_it(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="mine")
+        store.start_session()
+        try:
+            assert store.fleet_skill_grind_rate("gearcrafting") is None
+        finally:
+            store.end_session(exit_reason="normal")
+            store.close()
+
+    def test_a_malformed_delta_row_counts_as_zero_not_as_absent(self, tmp_db_path):
+        """One bad row must never crash the average, and it stays in the
+        DENOMINATOR — that is precisely the population the conditional mean
+        drops."""
+        store = LearningStore(db_path=tmp_db_path, character="c")
+        store.start_session()
+        try:
+            store.record_cycle(Cycle(
+                ts="2026-08-18T00:00:00+00:00", session_id="s", cycle_index=0,
+                character="c", outcome="ok",
+                action_repr="LevelSkill(gearcrafting->10)",
+                delta_skill_xp_json="not json"))
+            store.record_cycle(self._grind_cycle(1, "c", "gearcrafting", 10))
+            assert store.skill_grind_rate("gearcrafting") == 5.0
+        finally:
+            store.end_session(exit_reason="normal")
+            store.close()
+
+    def test_a_negative_delta_does_not_credit_the_rate(self, tmp_db_path):
+        """A level reset writes a negative delta — measured live, -2,185 mining xp
+        inside the gearcrafting grind. Clamped to 0, matching
+        `skill_xp_per_cycle_all`."""
+        store = LearningStore(db_path=tmp_db_path, character="c")
+        store.start_session()
+        try:
+            store.record_cycle(self._grind_cycle(0, "c", "gearcrafting", -100))
+            store.record_cycle(self._grind_cycle(1, "c", "gearcrafting", 10))
+            assert store.skill_grind_rate("gearcrafting") == 5.0
+        finally:
+            store.end_session(exit_reason="normal")
+            store.close()
+
+
+def test_grind_action_prefix_is_the_repr_LevelSkill_writes():
+    """Matching on the prefix is only sound if it is the prefix the action
+    actually renders. `LevelSkill.__repr__` is `LevelSkill({skill}->{target})`."""
+    assert grind_action_prefix("gearcrafting") == "LevelSkill(gearcrafting->"
+    assert repr(LevelSkill(skill="gearcrafting", target_level=10)).startswith(
+        grind_action_prefix("gearcrafting"))
