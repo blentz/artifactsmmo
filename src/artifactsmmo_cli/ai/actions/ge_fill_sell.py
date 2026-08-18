@@ -20,6 +20,7 @@ from artifactsmmo_api_client.api.my_characters.action_ge_buy_item_my_name_action
 from artifactsmmo_api_client.models.ge_buy_order_schema import GEBuyOrderSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -86,7 +87,10 @@ class GeFillSellOrderAction(Action):
         dest = self.ge_location or (state.x, state.y)
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
         # Gold cost scaled to action cost (mirrors NpcBuyAction): 1 unit per 10 gold.
-        return 2.0 + dist + self.price * self.quantity / 10.0
+        # Seconds. The order's gold value is NOT added: `is_applicable`
+        # already refuses to break the gold reserve, so no shortfall
+        # remains to price at this edge.
+        return distance_cost_pure(2.0, dist)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         if self.ge_location and (state.x, state.y) != self.ge_location:

@@ -10,6 +10,7 @@ from artifactsmmo_api_client.api.my_characters.action_buy_bank_expansion_my_name
 )
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -57,8 +58,15 @@ class BuyBankExpansionAction(Action):
              history: LearningStore | None = None) -> float:
         dest = self.bank_location or (state.x, state.y)
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
-        # 1 gold per 100 cost units — expensive because expansions are infrequent
-        return 5.0 + dist + game_data.next_expansion_cost / 100.0
+        # Seconds, like every other edge. The gold price is NOT added here: an
+        # edge cost is time, and buying an expansion takes the same time whether
+        # it costs 3,500 gold or 448,000. The old `+ cost / 100` put gold into a
+        # seconds sum (+4,480s at the price cap) as a second, redundant
+        # deterrent — `should_expand_bank` already refuses to buy below the
+        # 95% fill threshold or below the gold reserve, and `is_applicable`
+        # already refuses without the gold in hand, so there is never a
+        # shortfall to price at this edge.
+        return distance_cost_pure(5.0, dist)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         if self.bank_location and (state.x, state.y) != self.bank_location:

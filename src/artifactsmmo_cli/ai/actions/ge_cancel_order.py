@@ -19,6 +19,7 @@ from artifactsmmo_api_client.api.my_characters.action_ge_cancel_order_my_name_ac
 from artifactsmmo_api_client.models.ge_cancel_order_schema import GECancelOrderSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -70,7 +71,7 @@ class GeCancelOrderAction(Action):
              history: LearningStore | None = None) -> float:
         dest = self.ge_location or (state.x, state.y)
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
-        return 1.0 + dist
+        return distance_cost_pure(1.0, dist)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         if self.ge_location and (state.x, state.y) != self.ge_location:

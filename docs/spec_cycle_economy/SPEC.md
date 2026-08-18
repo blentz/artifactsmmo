@@ -760,6 +760,18 @@ rather than weakened to describe it: the abandon rule ranks character-XP per cyc
 against a held task while the choice to take that task was made on cost and cycles
 to the horizon. Reconciling them is implementation work, not a further decision.*
 
+### S-045 · Gold is protected by refusal, not by penalty
+
+Gold is protected by refusing a purchase that would leave the account below a
+reserve, and not by adding the price to the option's cost. One reserve governs, and
+it is a property of the ACCOUNT, which holds gold in more than one place.
+
+*This is the mechanism S-027 leaves room for, and it has to be a refusal. An edge is
+priced in time (S-001) and a purchase takes the same time at any price, so nothing
+in the ranking can distinguish an expensive purchase from a cheap one. Three of the
+four gold sinks refuse on a reserve today; the fourth does not, and all four read
+only the gold in the character's pocket. Both gaps are recorded below.*
+
 ---
 
 ## Evidence
@@ -891,12 +903,22 @@ acceptance criteria for the build:
   held task, with its own margin and confidence gates, while the choice to take that
   task was made on cost and cycles to the horizon. Two objectives, and the one that
   drops work is not the one that chose it.
-* **S-027 is violated by the capacity edge.** Every action edge is denominated in
-  SECONDS — settled by the median `predicted_cost / actual_cooldown_seconds` at 1.00
-  over 40k cycles, which is what killed the earlier divide-by-ten. The expansion edge
-  adds `gold / 100` to that sum: +35 seconds at the first expansion, **+4,480 seconds
-  at the published 448,000-gold cap.** S-027 says price the gold by what obtaining it
-  costs. Fourth instance of the wrong-denomination family in this codebase.
+* ~~**S-027 is violated by the capacity edge.**~~ FIXED. Four sites, not one, added
+  gold to a seconds sum: bank expansion (`+ cost / 100`, **+4,480 seconds** at the
+  published 448,000-gold cap), NPC buy and both GE order edges (`+ price * qty / 10`).
+  All four now price only time, and S-045 records that gold is protected by refusal
+  instead. Removing the term is behaviourally live: a purchase now competes on
+  travel time alone, which is the intended direction — buying IS faster than
+  gathering, and affordability is already checked upstream where a route is
+  chosen.
+* **S-045 is not satisfied.** `NpcBuyAction` admits any buy it can afford
+  outright, so it can spend a pocket to zero, while the two GE edges and the
+  expansion refuse below `reserve_floor`. Worse, all four read `state.gold` alone
+  when the reserve is an ACCOUNT quantity: measured on `l30_rune_fill`, a character
+  holding 25,000 in pocket and 50,000 in bank is refused a 20,000 upgrade because
+  50,000 is reserved for a different one. Wiring the existing guard into the fourth
+  sink as-is therefore makes things worse, not better — the pocket/account fix comes
+  first. Attempted in this increment and reverted for exactly that reason.
 * **Twenty-one rungs are unreachable**, all below an objective step present in
   14,064 of 14,064 cycles. Every clause about tasks, capacity and consumables is
   written against code that cannot currently be selected, so the band is the first

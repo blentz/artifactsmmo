@@ -330,8 +330,21 @@ class TestNpcBuyAction:
     def test_applicable_when_enough_gold(self):
         action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1))
         gd = make_gd(npc_stock={"cook": {"cooked_chicken": 10}})
-        state = make_state(gold=100)
+        state = make_state(gold=10_000)
         assert action.is_applicable(state, gd) is True
+
+    def test_applicable_spending_the_pocket_to_zero(self):
+        """PINS A KNOWN GAP, not a desired behaviour. NpcBuy's only gold gate
+        is `gold >= price * quantity`, so an exactly-affordable buy is admitted
+        even though it leaves nothing. Every other gold sink (GePostBuyOrder,
+        GeFillSellOrder, the expansion) refuses below `reserve_floor`. Adding
+        that guard here is its own increment: `reserve_floor` reads POCKET gold
+        while the reserve is an ACCOUNT quantity, so wiring it in as-is refuses
+        a targeted upgrade the account can plainly afford."""
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1))
+        gd = make_gd(npc_stock={"cook": {"cooked_chicken": 10}})
+        assert action.is_applicable(make_state(gold=10), gd) is True
+        assert action.is_applicable(make_state(gold=9), gd) is False
 
     def test_apply_deducts_gold_and_adds_item(self):
         action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=2, npc_location=(2, 1))
@@ -420,12 +433,16 @@ class TestNpcBuyAction:
         with pytest.raises(AssertionError, match="is_applicable invariant violated"):
             action.apply(state, gd)
 
-    def test_cost_includes_distance_and_gold(self):
-        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(4, 0))
-        gd = make_gd(npc_stock={"cook": {"cooked_chicken": 100}})
+    def test_cost_is_distance_only_and_ignores_the_purchase_price(self):
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1,
+                              npc_location=(4, 0))
         state = make_state(x=0, y=0)
-        # 2 + dist(4) + 100*1/10 = 2 + 4 + 10 = 16
-        assert action.cost(state, gd) == pytest.approx(16.0)
+        cheap = action.cost(state, make_gd(npc_stock={"cook": {"cooked_chicken": 100}}))
+        # 2 + dist(4), in SECONDS — the buy takes the same time at any price.
+        assert cheap == pytest.approx(6.0)
+        assert action.cost(
+            state, make_gd(npc_stock={"cook": {"cooked_chicken": 100_000}})
+        ) == pytest.approx(cheap)
 
     def test_execute_moves_and_calls_api(self):
         action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1))

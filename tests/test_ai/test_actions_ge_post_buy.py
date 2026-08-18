@@ -84,10 +84,18 @@ class TestExecute:
 
 
 class TestCost:
-    def test_cost_scales_with_distance_and_price(self):
-        a = GePostBuyOrderAction(item_code="iron_ore", quantity=3, price=9, ge_location=(5, 1))
+    def test_cost_is_distance_only_and_ignores_the_order_value(self):
         state = make_state(x=0, y=0, gold=100)
-        assert a.cost(state, make_gd()) == pytest.approx(2.0 + 6 + 27 / 10.0)
+        gd = make_gd()
+        cheap = GePostBuyOrderAction(item_code="iron_ore", quantity=3, price=9,
+                                     ge_location=(5, 1))
+        dear = GePostBuyOrderAction(item_code="iron_ore", quantity=3, price=9_000,
+                                    ge_location=(5, 1))
+        # 2.0 + dist(6), in SECONDS. Posting the order takes the same time at
+        # any price, and is_applicable already refuses to break the reserve, so
+        # no shortfall remains to price at this edge.
+        assert cheap.cost(state, gd) == pytest.approx(8.0)
+        assert dear.cost(state, gd) == pytest.approx(cheap.cost(state, gd))
 
 
 class TestRepr:

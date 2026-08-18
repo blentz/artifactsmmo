@@ -141,13 +141,17 @@ class TestGeFillSellOrderAction:
         with pytest.raises(AssertionError):
             a.apply(state, gd)
 
-    def test_cost_includes_distance_and_gold(self):
-        a = GeFillSellOrderAction(order_id="ord-1", item_code="iron_ore", price=10, quantity=2,
-                                  ge_location=(4, 0))
-        gd = make_gd(ge_sell_orders={"iron_ore": ("ord-1", 10, 10)})
+    def test_cost_is_distance_only_and_ignores_the_order_value(self):
         state = make_state(x=0, y=0)
-        # 2.0 + dist(4) + 10*2/10 = 8.0
-        assert a.cost(state, gd) == pytest.approx(8.0)
+        gd = make_gd(ge_sell_orders={"iron_ore": ("ord-1", 10, 10)})
+        cheap = GeFillSellOrderAction(order_id="ord-1", item_code="iron_ore",
+                                      price=10, quantity=2, ge_location=(4, 0))
+        dear = GeFillSellOrderAction(order_id="ord-1", item_code="iron_ore",
+                                     price=10_000, quantity=2, ge_location=(4, 0))
+        # 2.0 + dist(4), in SECONDS — filling the order takes the same time at
+        # any price.
+        assert cheap.cost(state, gd) == pytest.approx(6.0)
+        assert dear.cost(state, gd) == pytest.approx(cheap.cost(state, gd))
 
     def test_execute_moves_then_calls_ge_buy_api(self):
         a = GeFillSellOrderAction(order_id="ord-1", item_code="iron_ore", price=2, quantity=2,

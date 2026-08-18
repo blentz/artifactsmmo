@@ -12,6 +12,7 @@ from artifactsmmo_api_client.api.my_characters.action_npc_sell_item_my_name_acti
 from artifactsmmo_api_client.models.npc_merchant_buy_schema import NpcMerchantBuySchema
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
@@ -67,7 +68,7 @@ class NpcSellAction(Action):
              history: LearningStore | None = None) -> float:
         dest = self.npc_location or (state.x, state.y)
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
-        return 1.5 + dist
+        return distance_cost_pure(1.5, dist)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         if self.npc_location and (state.x, state.y) != self.npc_location:

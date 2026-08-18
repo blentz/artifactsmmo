@@ -1506,7 +1506,7 @@ class TestTheActivationNpcBuy:
     def test_npc_buy_no_longer_declines_to_a_star(self):
         gd = _gd_widget_buy()
         state = make_state(inventory={}, bank_items={},
-                           skills={"gearcrafting": 5})
+                           gold=10_000, skills={"gearcrafting": 5})
         goal = GatherMaterialsGoal("widget", {"widget": 1})
         pool = [
             CraftAction(code="widget", workshop_location=(2, 2)),

@@ -11,6 +11,7 @@ from artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_cr
 from artifactsmmo_api_client.models.crafting_schema import CraftingSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cost_core import qty_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -116,7 +117,7 @@ class CraftAction(Action):
         # match the proved planner-admissibility cost model
         # (formal/Formal/PlannerAdmissibility.lean, qtyCost). A partial craft is
         # merely over-costed, which keeps edge costs >= 0 and the search sound.
-        return 5.0 * self.quantity + dist
+        return qty_cost_pure(0.0, self.quantity, dist, 5.0)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         if self.workshop_location and (state.x, state.y) != self.workshop_location:

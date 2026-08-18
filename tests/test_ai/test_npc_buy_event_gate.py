@@ -105,7 +105,7 @@ class TestNpcBuyEventGate:
     def test_non_event_npc_applicable_without_active_events(self):
         """Non-event NPCs must not be gated on active_events (regression guard)."""
         gd = _non_event_gd()
-        state = make_state(gold=100, active_events={})
+        state = make_state(gold=10_000, active_events={})
         with patch("artifactsmmo_cli.ai.actions.npc.datetime") as dt:
             dt.now.return_value = FIXED_NOW
             assert _non_event_action().is_applicable(state, gd) is True

@@ -11,6 +11,7 @@ from artifactsmmo_api_client.api.my_characters.action_deposit_bank_item_my_name_
 from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.bank_room import bank_has_room
 from artifactsmmo_cli.ai.game_data import GameData
@@ -62,7 +63,7 @@ class DepositItemAction(Action):
              history: LearningStore | None = None) -> float:
         dest = self.bank_location
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
-        return 2.0 + dist
+        return distance_cost_pure(2.0, dist)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         if (state.x, state.y) != self.bank_location:

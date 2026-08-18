@@ -12,6 +12,7 @@ from artifactsmmo_api_client.api.my_characters.action_npc_buy_item_my_name_actio
 from artifactsmmo_api_client.models.npc_merchant_buy_schema import NpcMerchantBuySchema
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.npc_buy_core import (
     npc_buy_apply_pure,
@@ -115,13 +116,10 @@ class NpcBuyAction(Action):
              history: LearningStore | None = None) -> float:
         dest = self.npc_location or (state.x, state.y)
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
-        price = game_data.npc_sells_item(self.npc_code, self.item_code) or 0
-        currency = game_data.npc_purchase_currency(self.npc_code, self.item_code) or "gold"
-        # Gold cost scaled to action cost: 1 unit per 10 gold. An item-currency
-        # purchase spends no gold, so only the travel + base cost applies (the
-        # currency was already earned).
-        gold_term = price * self.quantity / 10.0 if currency == "gold" else 0.0
-        return 2.0 + dist + gold_term
+        # Seconds. The purchase price is NOT added: the buy takes the same time
+        # at any price, and `is_applicable` already refuses a purchase that would
+        # break the gold reserve, so there is no shortfall to price here.
+        return distance_cost_pure(2.0, dist)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         if self.npc_location and (state.x, state.y) != self.npc_location:

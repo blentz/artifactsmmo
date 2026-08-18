@@ -10,6 +10,7 @@ from artifactsmmo_api_client.api.my_characters.action_accept_new_task_my_name_ac
 )
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -77,7 +78,7 @@ class AcceptTaskAction(Action):
              history: LearningStore | None = None) -> float:
         dest = self.taskmaster_location
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
-        return 1.0 + dist
+        return distance_cost_pure(1.0, dist)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         dest = self.taskmaster_location
