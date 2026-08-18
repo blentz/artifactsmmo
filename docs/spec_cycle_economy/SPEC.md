@@ -14,6 +14,13 @@ server's rules. They supply inputs. See OBSERVATION.md.
 Measured figures supporting these clauses are in **Evidence** at the end, keyed by
 clause. No clause body asserts a concrete output — the clauses are rules.
 
+**Read DOMAIN.md first.** It defines the entities these clauses quantify over —
+level (there are nine), XP, HP and defeat, action and cooldown, position,
+inventory and equipment slots, task, route, drop, currency, bank, plan,
+commitment, candidate, means, world state. Phase 1 found twenty-two of them absent
+from this document entirely, which left several clauses without subject matter.
+Every game-mechanical fact there is sourced to the published documentation.
+
 ---
 
 ## Clauses
