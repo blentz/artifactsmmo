@@ -194,8 +194,10 @@ reward; the documentation gives the price as **6 coins** and the API does not ex
 it as data, so the implementation learns the current price from the server's
 refusals rather than trusting the published figure.
 
-*The documentation states no expiry for a task, and does not state whether a
-character may hold more than one. Both are left open here rather than assumed.*
+*The published API settles both questions the prose leaves open. A character
+carries a single `task` string with one type, progress and total — so a character
+holds AT MOST ONE task — and the schema has no expiry field, so a held task does not
+lapse with time. It ends only by completion or by cancellation.*
 
 ## D-12 · Item, recipe, and route
 
@@ -687,6 +689,77 @@ version is not used. A decision is never re-derived by mixing two snapshots.
 *This is what makes S-004's "same state, same choice" meaningful across a content
 change: the snapshot is part of the state.*
 
+### S-038 · The candidate order is fixed by construction and never re-sorted
+
+Candidates are offered to the comparison in one order, produced by one assembly of
+the candidate set. Nothing downstream re-sorts that list. Because ties break by
+position in it, the order is part of the decision and not a presentation detail.
+
+*This closes what S-005 left open: the deadline can only ever truncate a FIXED
+order, so which candidates are evaluated under a short deadline is determined, not
+incidental.*
+
+### S-039 · Below a minimum of observations the published figure is used, not a learned one
+
+An observed quantity replaces its published or default counterpart only once the
+number of observations reaches a minimum. Below that minimum the published figure
+stands, and the sparse observations are not blended into it.
+
+*The minimum is a value, not a decision, and different quantities may carry
+different minima.*
+
+### S-040 · An action that keeps failing is withdrawn for a bounded time
+
+An action that fails repeatedly within a recent window is removed from the candidate
+set for a bounded number of cycles, and the wait between attempts grows with
+consecutive failures up to a cap. Withdrawal is of the ACTION, not merely of the
+course that proposed it, and it expires by itself.
+
+*This closes the retry hole: a commitment survives a failed action (S-008), but the
+action it names cannot be retried without limit. The window, the threshold, the
+block length and the backoff cap are values.*
+
+### S-041 · The horizon is a character level: the next ten-level milestone
+
+The quantity that bounds the horizon is the character's level, and the horizon is
+the next multiple of ten above it, capped at the final level. On reaching the cap
+the horizon is that cap, which is its own fixed point.
+
+*This closes what S-022 required to be stated. The game's own progression is banded
+in tens, so the horizon is the game's structure rather than a tuning constant.*
+
+### S-042 · What the objective cannot price is reported on the other scale, never as zero
+
+A candidate the objective cannot price is omitted from the priced ranking rather
+than given a number, and is reported instead on the scale that does apply to it.
+Every candidate carries a figure on exactly one of the two scales, and none falls
+back to a default.
+
+*A zero would claim the objective priced it at nothing. Omission says the objective
+could not price it, which is the true statement, and it is the same distinction
+S-015 draws between "costs a lot" and "cannot be done".*
+
+### S-043 · A held plan is re-derived when its grounds lapse, and in any case within a bound
+
+The remaining plan is reused only while the grounds it was made on hold: the last
+action succeeded, its goal is unmet, its next step is still applicable, and the
+world's relevant latches are unchanged. Any of those failing re-derives the plan,
+and so does a bounded number of cycles passing regardless.
+
+*The bound is what closes S-037's remaining gap. A plan cannot outlive the snapshot
+it was made against by more than that many cycles, without any need to detect a
+content change directly.*
+
+### S-044 · The objective that ranks work is the objective that abandons it
+
+Work is given up by the same measure that chose it. No second objective, with its
+own scale, margin or confidence gate, decides that committed work should stop.
+
+*This clause is currently VIOLATED by the implementation, deliberately recorded so
+rather than weakened to describe it: the abandon rule ranks character-XP per cycle
+against a held task while the choice to take that task was made on cost and cycles
+to the horizon. Reconciling them is implementation work, not a further decision.*
+
 ---
 
 ## Evidence
@@ -749,8 +822,8 @@ subject matter and assert no behaviour, so nothing is proved about them and noth
 breaks when one is corrected. This is why they are definitions and not clauses.
 
 **Provable as pure arithmetic**, over the existing extracted cores: S-001, S-002,
-S-003, S-006, S-009, S-020, S-026, S-027, S-028, S-029, S-031, S-035. Each is a
-statement about
+S-003, S-006, S-009, S-020, S-026, S-027, S-028, S-029, S-031, S-035, S-039,
+S-040, S-043. Each is a statement about
 how a number is composed, and the differential harness already exercises this shape.
 
 **Provable only against a model of the walk**: S-010, S-011, S-012, S-013, S-014,
@@ -761,13 +834,18 @@ nothing proves anything about the walk.
 **Already discharged, by a proof that predates the clause.** S-030's decision
 boundary is `low_yield_fires_pure`, whose monotonicity and no-sample safety are
 proved in `formal/Formal/LowYieldCancel.lean`; S-033's is `should_expand_bank`,
-proved over `Int` in `formal/Formal/BankExpansionTiming.lean`. Writing these two
-clauses cost no proof work at all — the obligation was met before the spec named it,
+proved over `Int` in `formal/Formal/BankExpansionTiming.lean`; S-041's horizon is
+`milestone_pure`, already proved. Writing these three clauses cost no proof work at
+all — the obligation was met before the spec named it,
 which is the reverse of the usual order and worth noticing.
 
-**Routed to the liveness census rather than the kernel**: S-036. "Never pursued" is
-a statement about which goals exist and what they emit, and the census already reads
-exactly that.
+**Routed to a census rather than the kernel**: S-036, S-038, S-042 and S-044. Each
+is a statement about which code paths exist and what they produce — that one list is
+assembled once and not re-sorted, that an unpriced candidate is omitted rather than
+defaulted, that no second objective abandons work. A theorem about a function cannot
+see a second function; a census over the modules can, and this repo already runs one
+every gate. S-044 additionally serves as an acceptance criterion, because the
+implementation violates it today.
 
 **Not provable, and honestly so**: S-004 (until D-21's equality relation is fixed,
 it has no formal content), S-005 (a wall-clock deadline is outside anything the
@@ -779,11 +857,11 @@ and S-037 (a version equality on data the kernel never sees). These are the runt
 rungs of the discharge table, and they should be routed there deliberately rather
 than attempted.
 
-**The trade this records.** Sixteen clauses were added while completing the model,
-and none of them moved an existing proof or landed in the walk tier — the tier that
-was already the epic's largest unknown. Four went to arithmetic, two were already
-proved before they were written, one goes to the census, and five are honest
-runtime rungs. The fear that a more complete model is a harder one to prove did not
+**The trade this records.** Twenty-three clauses were added while completing the
+model, and none of them moved an existing proof or landed in the walk tier — the
+tier that was already the epic's largest unknown. Seven went to arithmetic, three
+were already proved before they were written, four go to a census, and five are
+honest runtime rungs. The fear that a more complete model is a harder one to prove did not
 materialise here, and the reason is structural rather than lucky: completing a model
 mostly adds DEFINITIONS, which are proof-inert, and clauses about things the
 implementation had already decided, which is where the proofs already were. The
@@ -792,46 +870,37 @@ first.
 
 ## Residuals
 
-Four of the six holes recorded in the previous revision were **not holes.** The
-implementation already prices task cancellation, the coin exchange, bank expansion
-and sibling claims; it was the SPEC that was silent, and every one of them is
-declared dormant in the liveness census for the same single reason — they sit in the
-discretionary band, below an objective step present in 14,064 of 14,064 cycles.
-S-030..S-037 record the decisions the code had already made. What follows is what
-survives.
+**No unfilled holes remain.** Every question the earlier revisions recorded as open
+has been closed — most of them from the published API or from a decision the
+implementation had already made, none of them by guessing. The two that looked
+unanswerable were answered by reading the contract rather than the prose: a
+character carries a single `task` field with no expiry, which settles both
+multi-holding and lapsing.
 
-**Open questions, in the sense that nothing has decided them:**
+What is left is of three kinds, and none of them blocks implementation.
 
-* The exchange's reward distribution is unknown, so S-032 governs it and S-014 never
-  will. If the distribution is ever measured, the two clauses swap.
-* The documentation states no task expiry and does not say whether a character may
-  hold more than one task. Both remain unmodelled.
-* A commitment survives a failed action, so an action that fails forever is
-  re-committed forever; nothing here stops retrying.
-* The published constants this spec calls authoritative can change under it, and
-  S-037 fixes only that one snapshot is used — not what happens when the snapshot
-  changes mid-plan.
+**Genuinely unknowable, and governed.** The coin exchange's reward distribution is
+not published and not served. S-032 governs it — admitted on a safe lower bound,
+never valued at a guess — and S-014 will govern it instead if the distribution is
+ever measured. A closed question with an open input, not a hole.
 
-**Conflicts, which are worse than holes, because something HAS decided them and the
-decisions disagree:**
+**Implementation debt, recorded as clauses the code violates.** These are the
+acceptance criteria for the build:
 
-* **The abandon rule ranks on a different objective from J.** S-030's second limb is
-  implemented as a comparison of character-XP per cycle against the held task, at a
-  fixed goal value, with its own margin and confidence gates. J ranks acquisition
-  cost plus cycles to fifty. These are two objectives, and the one that decides
-  whether to abandon a task is not the one that decided to accept it. This is the
-  same shape as the epicycles this spec exists to remove, and no clause here
-  reconciles them.
-* **Capacity is priced in a denomination nothing else uses.** Every action edge is
-  denominated in SECONDS — established by the median of `predicted_cost /
-  actual_cooldown_seconds` at 1.00 over 40k cycles, which is what killed the earlier
-  divide-by-ten. The expansion edge adds `gold / 100` to that sum. At the first
-  expansion that is +35 seconds; at the published price cap of 448,000 gold it is
-  **+4,480 seconds on one edge.** S-027 gives the principled replacement — price the
-  gold by what obtaining it costs — and until that lands, the deterrent is a
-  hand-tuned number in the wrong unit. This is the fourth instance of the
-  wrong-denomination family in this codebase.
-
+* **S-044 is violated.** The abandon rule ranks character-XP per cycle against a
+  held task, with its own margin and confidence gates, while the choice to take that
+  task was made on cost and cycles to the horizon. Two objectives, and the one that
+  drops work is not the one that chose it.
+* **S-027 is violated by the capacity edge.** Every action edge is denominated in
+  SECONDS — settled by the median `predicted_cost / actual_cooldown_seconds` at 1.00
+  over 40k cycles, which is what killed the earlier divide-by-ten. The expansion edge
+  adds `gold / 100` to that sum: +35 seconds at the first expansion, **+4,480 seconds
+  at the published 448,000-gold cap.** S-027 says price the gold by what obtaining it
+  costs. Fourth instance of the wrong-denomination family in this codebase.
+* **Twenty-one rungs are unreachable**, all below an objective step present in
+  14,064 of 14,064 cycles. Every clause about tasks, capacity and consumables is
+  written against code that cannot currently be selected, so the band is the first
+  thing the build must open or the rest is inert.
 
 **Carve-outs the clauses make deliberately.** Each is a decision to leave
 something open, not an oversight:
