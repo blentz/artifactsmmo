@@ -13,6 +13,7 @@ from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.commands import account, action, bank, character, craft, info, stats, task, trade
 from artifactsmmo_cli.commands.combat_loadout_report import combat_loadout_report_command
 from artifactsmmo_cli.commands.macro_research import macro_research as macro_research_command
+from artifactsmmo_cli.commands.objective import objective as objective_command
 from artifactsmmo_cli.commands.plan import plan as plan_command
 from artifactsmmo_cli.commands.play import play as play_command
 from artifactsmmo_cli.config import Config
@@ -58,6 +59,11 @@ app.add_typer(info.app, name="info", help="Information and lookup commands")
 app.add_typer(account.app, name="account", help="Account management commands")
 app.command("play", help="Run the autonomous AI player")(play_command)
 app.command("plan", help="Print the plan the AI would execute this cycle (no actions)")(plan_command)
+app.command("objective",
+            help="Print the unified objective's candidate ranking and which key "
+                 "decided it (read-only)")(
+    objective_command
+)
 app.command("macro-research", help="Analyze learning.db for recurring progression macros (read-only)")(
     macro_research_command
 )

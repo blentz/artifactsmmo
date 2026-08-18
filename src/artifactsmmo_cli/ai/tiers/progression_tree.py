@@ -190,6 +190,25 @@ def _utility_candidates(state: WorldState, game_data: GameData,
     return candidates
 
 
+def objective_candidates(state: WorldState, game_data: GameData,
+                          objective: CharacterObjective) -> list[GearCandidate]:
+    """The candidate set the unified objective ranks: structural slots plus
+    utility slots, in that order.
+
+    Extracted from `decide_tree` so a DIAGNOSTIC cannot assemble a different
+    list than the decision does. `commands/objective.py` reproduces the
+    objective's ranking outside the bot, and a hand-rolled
+    `_structural_candidates(...) + _utility_candidates(...)` there would be a
+    second producer of the same list — the failure this repo has shipped twice
+    (`feedback_two_plan_producers`). One concatenation, one caller each side.
+
+    Order is load-bearing and must not be sorted here: `rank_candidates` breaks
+    ties by INPUT POSITION (S-008), so reordering this list silently reorders
+    the ranking."""
+    return (_structural_candidates(state, game_data, objective)
+            + _utility_candidates(state, game_data, objective))
+
+
 def _candidate_root(candidate: GearCandidate) -> ObtainItem:
     return ObtainItem(code=candidate.code, quantity=1, slot=candidate.slot)
 
@@ -528,8 +547,7 @@ def decide_tree(state: WorldState, game_data: GameData,
     unaffected."""
     trunk = ReachCharLevel(level=milestone_pure(state.level))
 
-    candidates = _structural_candidates(state, game_data, objective) \
-        + _utility_candidates(state, game_data, objective)
+    candidates = objective_candidates(state, game_data, objective)
     gear_target_exists = candidates != []
 
     # THE PIVOT. With a learning store the branch is chosen by the unified
