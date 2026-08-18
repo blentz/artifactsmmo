@@ -1,225 +1,245 @@
 # Ontology grid
 
-**Subjects:** cost_pair: express a quantity as (cycles, seconds), rank candidates on cycles, seconds-budget availability filter, action-rate budget accounting, marginal cost against committed work, committed-work set from the plan in flight, J scope: one character, sibling/bank stock as a route, deadline-bounded candidate evaluation and pick, projection walk that yields J, acquire-during-walk decision, route-set re-derivation at each level crossed, re-fit and credit after an acquisition, consumable credited as a rate change vs a depleting stock, route price as expected cost (learned vs published), pricing a course the state makes uncompletable, guard precedence over the priced comparison, task accept/decline evaluation, task-currency route pricing, horizon selection and behaviour at its extremes, totality-witness (last-resort means) selection, determinism: same state, same choice
-**Stimuli:** normal, boundary, degenerate, conflicting, absent, stale / expiry / deadline, retry / duplicate / replay, dependency-failure, concurrent
-**Stimulus-waivers:** No stimulus category is waived. The "pure decision core, no I/O" framing might suggest waiving time, dependency-failure and concurrency, but the spec itself defeats that: S-005 puts a WALL-CLOCK deadline inside the decision, S-003 names a rate budget "shared by every character", S-007 names siblings and a shared bank, S-008 names an action that "executes and fails", and S-014 names observations accumulated over time. A pure function whose inputs are supplied still faces supplied inputs that are stale, absent, mutually contradictory, or that changed between two evaluations, and the spec's own residuals concede several of these. Two individual CELLS are carved out as IGNORE (recorded in the grid with justifications), not two categories.
+**Subjects:** F01 price_option — build a cost as the (cycles, seconds) pair and convert other units into it (S-001), F02 rank_options — order available options against each other (S-002), F03 seconds_budget_filter — decide whether an option is available given its seconds (S-002/S-003), F04 decide(state) — determinism: same world state yields same choice (S-004), F05 generate_candidates — enumerate the options and fix the order they are offered in (D-19/S-005), F06 deadline_cutoff — select among candidates when the decision deadline expires (S-005), F07 marginal_cost — charge an option only the cycles it adds to committed work (S-006), F08 commitment_lifecycle — adopt a plan, discharge on success, re-choose on failure (S-008), F09 projection_walk / J — total cycles of one walk from current state to the horizon (S-009), F10 walk_acquisition_decision — pay a route inside the walk when it repays (S-010), F11 route_set_rederivation — recompute available routes at each level crossed (S-011), F12 acquisition_refit_credit — re-derive worn set and credit only the difference (S-012), F13 consumable_credit — credit a spent item as a rate change against a depleting stock (S-013), F14 route_expected_price — price a stochastic route, choosing observed vs published rate (S-014/D-22), F15 price_incompletable — price a course the state makes uncompletable (S-015), F16 means_vs_objective_step — compare a means against the objective step on one quantity (S-016), F17 guard_precedence — run an unpriced survival guard ahead of every comparison (S-017), F18 task_cost_value — price accepting a task and decide whether to take it (S-018/S-019), F19 task_currency_route_price — per-unit price of a currency earned by completing tasks (S-020), F20 horizon_selection — supply the one horizon and behave at its extremes (S-021/S-022), F21 totality_witness — select the always-selectable last-resort means (S-023), F22 shared_stock_route — price bank/sibling stock as a capacity-bearing route (S-007), F23 no_op_option — express and price the option that issues no action (D-05)
+**Stimuli:** normal — a well-formed, in-range input of the kind the clause was written for, boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge, degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option, conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity, absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon, TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant, RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever, DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing, CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision
+**Stimulus-waivers:** No stimulus category is waived. The artifact is described as a pure decision core, which would ordinarily waive time/failure/retry/concurrency — but this spec's own domain forbids that waiver on all four counts. TIME: D-16 makes event/raid windows part of the world state and D-22 gives every observation an AGE, so the decision reads aging inputs; the Sources note also records a published constant that already went stale (rest 1s/5HP -> 1s/1%). FAILURE: S-008 explicitly contemplates an action that executes and fails, and D-04 names an externally imposed rate budget that can refuse. RETRY: S-004 is a determinism clause, i.e. a statement about the SAME stimulus arriving twice, and the residuals admit an action that fails forever is re-committed forever. CONCURRENCY: D-01 puts five characters on one shared action budget, D-15 puts them on one shared bank, and D-17 lets a third party fill or cancel an order the price depends on. The one thing the spec does carve out on the record is the two-characters-one-stock RACE (S-007's note plus the matching residual delegate it to the coordination protocol); that carve-out is honoured as IGNORE on the two F22 cells it covers and nowhere else — it does not extend to the walk's own crediting of stock it may not get.
 
 <!-- ABSENT FROM THE SPEC ENTIRELY — the domain has these and the spec never names them,
      so they have no cell at all, not even a MISSING one. Decide whether they belong:
-       - THE COOLDOWN IN PROGRESS. The bot is always inside a cooldown when it decides; the decision window IS that cooldown (Evidence Σ dim 8 alludes to a 'planning window floored at 15 s'). No clause names the cooldown remaining at decision time, so S-005's deadline has no stated source and S-001's seconds are never related to the seconds the bot is already owed.
-       - A LEVEL, AND WHICH LEVEL. S-009/S-010/S-011/S-013 all say the walk 'crosses levels', but the spec never says what a level is, never distinguishes the combat level from the per-skill levels (a domain with gathering/crafting skills has many), and never names XP or the rate at which levels arrive — the very quantity the walk must project.
-       - THE LEVEL-UP EVENT and the XP quantity that produces it. The walk consumes levels as if they were free milestones; nothing names what advances one or what it costs.
-       - POSITION AND TRAVEL. Movement cooldown appears only in Evidence for S-001. Where the character IS, and the cycles of getting somewhere, are never an entity — yet every route in S-011/S-014 implies a place.
-       - INVENTORY SLOTS / CARRY CAPACITY. Conceded in a residual but named by no clause: the walk may acquire a holding the character cannot carry, and the cycles of making room are unpriced.
-       - GOLD AND SPENDABLE BALANCES. Conceded in a residual, clause-less: a purchase route is priced like any other even when the character cannot pay. Also means S-001's 'converted into both components' has no stated conversion for a price in gold.
-       - COMBAT LOSS / DEATH / HP. S-017 speaks of 'a condition on the state that must hold for the bot to continue operating' without ever naming HP, damage, a lost fight, or death — so the guard clause has no subject matter.
-       - THE DROP OUTCOME. S-014 refers to 'an outcome the character does not control' but never names drops, drop rates, quantities, or the variance the residual admits is unbounded.
-       - AN UNKNOWN ACTION OUTCOME. S-008 admits exactly two outcomes, success and failure. A timeout, a 429, an accepted-but-unconfirmed action — the case where the bot does not KNOW whether the commitment discharged — has no name.
-       - SERVER / API UNAVAILABILITY and the rate-limit rejection. S-003 names a per-IP-style budget as the scarce resource but never names what happens when an issued action is refused by it.
-       - PLAN ABANDONMENT / REPLAN. S-008 creates a commitment on adoption and discharges it only by success. Nothing names ending a commitment any other way, so a plan invalidated by the world has no exit and the residual's 'retrying forever' has no counterpart clause.
-       - THE CANDIDATE GENERATOR. S-005 makes evaluation ORDER decisive and then explicitly declines to fix it; the thing that enumerates candidates is never named as an entity at all.
-       - STATE IDENTITY. S-004 rests entirely on 'the same world state' with no equality relation named — no clause says which fields are part of the state, so 'same' is undecidable and the clause is unfalsifiable.
-       - THE BAND / POSITION structure. S-016 forbids winning 'by virtue of the band or position it occupies' and S-023 speaks of 'a means', but neither the means catalogue nor the band structure is ever defined.
-       - A RESERVATION / CLAIM on shared stock. S-007 gives sibling and bank stock a 'capacity' but no entity holds a claim against it, which is exactly what makes the two-characters-one-stock case undecidable.
-       - TIME-LIMITED WORLD CONTENT (events, raids, market orders with a lifetime). No clause admits a route that EXPIRES, so the route set of S-011 is implicitly eternal.
-       - THE MARKET / EXCHANGE as a route with a counterparty, an order lifetime, and a maker/taker distinction — and NPC vendors with limited stock. S-020 makes a task a source of currency but no clause names any other named source it is 'on the same footing' with.
-       - RECYCLING / DESTRUCTION as a route direction. Every route in the spec runs materials → item; a domain that crafts also converts an item back into materials, and that route is never named.
-       - EQUIPMENT SLOTS, including duplicate slots. S-012 re-fits 'which items the character wears' with no slot model, so 'displaces something already worn' has no defined resolution.
-       - AN ACCEPTED TASK AS STATE, plus task abandonment, task re-roll, and task progress. S-018/S-019/S-020 treat a task as an offer to be priced and never as a thing the character is already holding.
-       - STOCK CONSUMPTION RATE. S-013 debits a stock as the walk crosses levels and then disclaims how much a level consumes — the consuming entity is named nowhere.
-       - A NO-OP / ZERO-ACTION OPTION. S-001 defines a cycle as an executed planner action; an option that executes none (already satisfied, or the unpriced witness of S-023) has no defined cost and no defined rank.
+       - Account — D-04 and D-15 both quantify over 'the account' (its shared rate budget, its one bank, its five characters) but no entity is defined for it. Nothing owns the budget, so nothing can be asked how much of it is left.
+       - Clock / now — there is no 'current time' anywhere in the domain. A decision that must respect a per-hour rate budget (D-04), an event window (D-16), an observation's age (D-22) and its own deadline (S-005) cannot read any of them without a clock.
+       - Remaining rate-budget state — S-003 names the action rate as THE scarce resource, yet no observable attribute anywhere reports how much of it remains. The scarce resource is unmeasurable in the model that calls it scarce.
+       - Cooldown-in-progress / cooldown_expires_at — D-05 says a character 'is on cooldown', but D-01's attribute list has no cooldown field. The state that makes the no-op necessary is not part of the state.
+       - Action result / outcome record — S-008 turns on whether an action 'succeeded' or 'failed', but no entity records what an action returned. Success is a predicate over nothing.
+       - Error taxonomy — no failure kinds exist: rate-limited (429), on cooldown, insufficient gold, inventory full, slot occupied, equip condition unmet, tile blocked, transport/5xx, task already held. S-008 treats every failure identically, which is a decision the spec never got to make because the alternatives are unnamed.
+       - Monster — D-08 says a tile may hold one and D-13 defines its DROP, but the monster itself (level, HP, elemental attack/resist, its fight cooldown) is never an entity. The fight route is priced against a thing that does not exist in the domain.
+       - Resource node — same gap: D-08 mentions it, D-03's gathering XP formula reads its 'resource_level', D-04's gathering cooldown reads it too, but no entity carries it.
+       - Workshop, bank tile, NPC tile, tasks master tile as LOCATED things — every craft, deposit, buy and task route implies travel to a specific tile, and none of those tiles is an addressable entity.
+       - Distance / path length between two tiles — movement costs '5s per map' (D-08) and is one action, but nothing in the domain yields the number of maps between (layer,x,y) and (layer,x',y'). Every route's travel component is therefore unpriceable, in both components of S-001's pair.
+       - The levelling curve — D-02 says all nine levels share one curve and that level 1 needs 150 XP, and stops. A projection walk that 'crosses levels' (S-009/S-010/S-011) cannot know how much XP a crossing costs.
+       - Objective / target — J is 'the objective's value' and the walk runs 'to the horizon', but the thing being pursued is never an entity. There is no goal, no target item, no milestone, so nothing says what J is the value OF.
+       - Consumable / food, its effect and its consumption rate — S-013 quantifies over items that are 'spent rather than worn' and D-10 gives utility slots a quantity of 1-100, but no entity defines a consumable, what rate it changes, or how fast it is consumed.
+       - Task cancellation as an action, and task rerolling — D-11 prices cancelling at 1 task coin but never makes it an action, a candidate or a route; nothing says whether a held task can be abandoned when the objective moves.
+       - The 6-coin exchange reward — D-11 says exchanging 6 task coins 'yields a random reward'; the reward is an unmodelled random outcome that S-014's expected-cost machinery has no distribution for.
+       - NPC shop with prices and stock — D-12 and D-14 make purchase a route and say some NPCs accept item codes as payment, but no entity carries a price, a stock level or a currency-per-item mapping.
+       - The bot's own Grand Exchange orders and escrowed gold — D-17 describes the market as something other agents act on, never the bot's own outstanding orders, their lifetime, or gold locked in them.
+       - Bank expansion as a purchasable capacity — D-15 gives the full price ladder (3,500 doubling to 448,000) but no clause or entity treats slot capacity as something the decision can buy, so the ladder is inert.
+       - Gold as a scarce budget — acknowledged in the residuals but still absent as an entity: gold is an attribute of a character with no budget semantics, so a route with a purchase price is priced identically whether or not the character can pay.
+       - Inventory pressure as a cost — D-09 defines two independent limits (20 slots, item count) and warns either can bind, yet no entity or clause represents 'making room' (the deposit trip) as work the walk must pay for.
+       - Achievements — D-08 says tiles may be conditional on achievements; achievements are never defined, so a whole class of route gate is unrepresentable.
+       - Sibling plans / claims / reservations — D-18 defines a plan for one character only. With one shared bank (D-15) and one shared budget (D-04), what a sibling has COMMITTED to is plainly part of what this character faces, and it has no representation.
+       - World mutation by other agents as an EVENT — a GE order filled by a stranger, stock withdrawn by a sibling, a resource contested. D-21's world state is a snapshot with no notion of it changing under the decision.
+       - Server maintenance / API outage / content patch — the world can stop answering or can change the published constants the spec calls authoritative (D-03), and neither is an event the domain admits.
 -->
 
 ## Grid
 
 | Subject | Stimulus | Verdict | Clauses | Justification |
 |---|---|---|---|---|
-| cost_pair: express a quantity as (cycles, seconds) | normal | DEFINED | S-001 |  |
-| cost_pair: express a quantity as (cycles, seconds) | boundary | THIN | S-001 |  |
-| cost_pair: express a quantity as (cycles, seconds) | degenerate | MISSING |  |  |
-| cost_pair: express a quantity as (cycles, seconds) | conflicting | THIN | S-001 |  |
-| cost_pair: express a quantity as (cycles, seconds) | absent | MISSING |  |  |
-| cost_pair: express a quantity as (cycles, seconds) | stale / expiry / deadline | MISSING |  |  |
-| cost_pair: express a quantity as (cycles, seconds) | retry / duplicate / replay | THIN | S-004 |  |
-| cost_pair: express a quantity as (cycles, seconds) | dependency-failure | MISSING |  |  |
-| cost_pair: express a quantity as (cycles, seconds) | concurrent | IGNORE |  | Converting one supplied quantity into a pair holds no state and reads nothing shared; two conversions in flight cannot interact. Carved out here ONLY for the arithmetic — the concurrency question moves to the subjects that read world state. |
-| rank candidates on cycles | normal | DEFINED | S-002, S-016 |  |
-| rank candidates on cycles | boundary | THIN | S-002 |  |
-| rank candidates on cycles | degenerate | THIN | S-023 |  |
-| rank candidates on cycles | conflicting | THIN | S-002, S-016, S-017 |  |
-| rank candidates on cycles | absent | MISSING |  |  |
-| rank candidates on cycles | stale / expiry / deadline | MISSING |  |  |
-| rank candidates on cycles | retry / duplicate / replay | DEFINED | S-004 |  |
-| rank candidates on cycles | dependency-failure | MISSING |  |  |
-| rank candidates on cycles | concurrent | MISSING |  |  |
-| seconds-budget availability filter | normal | THIN | S-002 |  |
-| seconds-budget availability filter | boundary | THIN | S-002 |  |
-| seconds-budget availability filter | degenerate | MISSING |  |  |
-| seconds-budget availability filter | conflicting | MISSING |  |  |
-| seconds-budget availability filter | absent | MISSING |  |  |
-| seconds-budget availability filter | stale / expiry / deadline | MISSING |  |  |
-| seconds-budget availability filter | retry / duplicate / replay | THIN | S-004 |  |
-| seconds-budget availability filter | dependency-failure | MISSING |  |  |
-| seconds-budget availability filter | concurrent | MISSING |  |  |
-| action-rate budget accounting | normal | THIN | S-003 |  |
-| action-rate budget accounting | boundary | MISSING |  |  |
-| action-rate budget accounting | degenerate | MISSING |  |  |
-| action-rate budget accounting | conflicting | THIN | S-003, S-002 |  |
-| action-rate budget accounting | absent | MISSING |  |  |
-| action-rate budget accounting | stale / expiry / deadline | MISSING |  |  |
-| action-rate budget accounting | retry / duplicate / replay | MISSING |  |  |
-| action-rate budget accounting | dependency-failure | MISSING |  |  |
-| action-rate budget accounting | concurrent | THIN | S-003 |  |
-| marginal cost against committed work | normal | DEFINED | S-006, S-008 |  |
-| marginal cost against committed work | boundary | THIN | S-006 |  |
-| marginal cost against committed work | degenerate | DEFINED | S-006, S-008 |  |
-| marginal cost against committed work | conflicting | MISSING |  |  |
-| marginal cost against committed work | absent | MISSING |  |  |
-| marginal cost against committed work | stale / expiry / deadline | MISSING |  |  |
-| marginal cost against committed work | retry / duplicate / replay | DEFINED | S-008 |  |
-| marginal cost against committed work | dependency-failure | MISSING |  |  |
-| marginal cost against committed work | concurrent | MISSING |  |  |
-| committed-work set from the plan in flight | normal | DEFINED | S-008 |  |
-| committed-work set from the plan in flight | boundary | THIN | S-008 |  |
-| committed-work set from the plan in flight | degenerate | DEFINED | S-008 |  |
-| committed-work set from the plan in flight | conflicting | MISSING |  |  |
-| committed-work set from the plan in flight | absent | MISSING |  |  |
-| committed-work set from the plan in flight | stale / expiry / deadline | MISSING |  |  |
-| committed-work set from the plan in flight | retry / duplicate / replay | DEFINED | S-008 |  |
-| committed-work set from the plan in flight | dependency-failure | MISSING |  |  |
-| committed-work set from the plan in flight | concurrent | MISSING |  |  |
-| J scope: one character, sibling/bank stock as a route | normal | DEFINED | S-007 |  |
-| J scope: one character, sibling/bank stock as a route | boundary | THIN | S-007 |  |
-| J scope: one character, sibling/bank stock as a route | degenerate | THIN | S-007 |  |
-| J scope: one character, sibling/bank stock as a route | conflicting | MISSING |  |  |
-| J scope: one character, sibling/bank stock as a route | absent | MISSING |  |  |
-| J scope: one character, sibling/bank stock as a route | stale / expiry / deadline | MISSING |  |  |
-| J scope: one character, sibling/bank stock as a route | retry / duplicate / replay | THIN | S-004 |  |
-| J scope: one character, sibling/bank stock as a route | dependency-failure | MISSING |  |  |
-| J scope: one character, sibling/bank stock as a route | concurrent | IGNORE |  | S-007's note and the residuals BOTH state on the record that two characters pricing the same limited stock in one tick belongs to the coordination protocol, which the scope statement puts outside the artifact under test. Carved out as written — but the carve-out is only sound if some other document carries the witness; the spec asserts that and does not name the document. |
-| deadline-bounded candidate evaluation and pick | normal | DEFINED | S-005 |  |
-| deadline-bounded candidate evaluation and pick | boundary | THIN | S-005 |  |
-| deadline-bounded candidate evaluation and pick | degenerate | MISSING |  |  |
-| deadline-bounded candidate evaluation and pick | conflicting | THIN | S-004, S-005 |  |
-| deadline-bounded candidate evaluation and pick | absent | MISSING |  |  |
-| deadline-bounded candidate evaluation and pick | stale / expiry / deadline | DEFINED | S-005 |  |
-| deadline-bounded candidate evaluation and pick | retry / duplicate / replay | THIN | S-004, S-005 |  |
-| deadline-bounded candidate evaluation and pick | dependency-failure | MISSING |  |  |
-| deadline-bounded candidate evaluation and pick | concurrent | MISSING |  |  |
-| projection walk that yields J | normal | DEFINED | S-009 |  |
-| projection walk that yields J | boundary | THIN | S-022, S-021 |  |
-| projection walk that yields J | degenerate | MISSING |  |  |
-| projection walk that yields J | conflicting | THIN | S-009, S-015 |  |
-| projection walk that yields J | absent | MISSING |  |  |
-| projection walk that yields J | stale / expiry / deadline | MISSING |  |  |
-| projection walk that yields J | retry / duplicate / replay | THIN | S-004 |  |
-| projection walk that yields J | dependency-failure | MISSING |  |  |
-| projection walk that yields J | concurrent | MISSING |  |  |
-| acquire-during-walk decision | normal | DEFINED | S-010 |  |
-| acquire-during-walk decision | boundary | DEFINED | S-010 |  |
-| acquire-during-walk decision | degenerate | MISSING |  |  |
-| acquire-during-walk decision | conflicting | MISSING |  |  |
-| acquire-during-walk decision | absent | MISSING |  |  |
-| acquire-during-walk decision | stale / expiry / deadline | MISSING |  |  |
-| acquire-during-walk decision | retry / duplicate / replay | MISSING |  |  |
-| acquire-during-walk decision | dependency-failure | MISSING |  |  |
-| acquire-during-walk decision | concurrent | MISSING |  |  |
-| route-set re-derivation at each level crossed | normal | DEFINED | S-011 |  |
-| route-set re-derivation at each level crossed | boundary | DEFINED | S-011 |  |
-| route-set re-derivation at each level crossed | degenerate | MISSING |  |  |
-| route-set re-derivation at each level crossed | conflicting | MISSING |  |  |
-| route-set re-derivation at each level crossed | absent | MISSING |  |  |
-| route-set re-derivation at each level crossed | stale / expiry / deadline | DEFINED | S-011, S-004 |  |
-| route-set re-derivation at each level crossed | retry / duplicate / replay | THIN | S-004 |  |
-| route-set re-derivation at each level crossed | dependency-failure | MISSING |  |  |
-| route-set re-derivation at each level crossed | concurrent | MISSING |  |  |
-| re-fit and credit after an acquisition | normal | DEFINED | S-012 |  |
-| re-fit and credit after an acquisition | boundary | DEFINED | S-012 |  |
-| re-fit and credit after an acquisition | degenerate | DEFINED | S-012 |  |
-| re-fit and credit after an acquisition | conflicting | MISSING |  |  |
-| re-fit and credit after an acquisition | absent | MISSING |  |  |
-| re-fit and credit after an acquisition | stale / expiry / deadline | MISSING |  |  |
-| re-fit and credit after an acquisition | retry / duplicate / replay | MISSING |  |  |
-| re-fit and credit after an acquisition | dependency-failure | MISSING |  |  |
-| re-fit and credit after an acquisition | concurrent | MISSING |  |  |
-| consumable credited as a rate change vs a depleting stock | normal | DEFINED | S-013 |  |
-| consumable credited as a rate change vs a depleting stock | boundary | THIN | S-013 |  |
-| consumable credited as a rate change vs a depleting stock | degenerate | THIN | S-013 |  |
-| consumable credited as a rate change vs a depleting stock | conflicting | MISSING |  |  |
-| consumable credited as a rate change vs a depleting stock | absent | THIN | S-013 |  |
-| consumable credited as a rate change vs a depleting stock | stale / expiry / deadline | MISSING |  |  |
-| consumable credited as a rate change vs a depleting stock | retry / duplicate / replay | MISSING |  |  |
-| consumable credited as a rate change vs a depleting stock | dependency-failure | MISSING |  |  |
-| consumable credited as a rate change vs a depleting stock | concurrent | MISSING |  |  |
-| route price as expected cost (learned vs published) | normal | DEFINED | S-014 |  |
-| route price as expected cost (learned vs published) | boundary | THIN | S-014 |  |
-| route price as expected cost (learned vs published) | degenerate | DEFINED | S-014 |  |
-| route price as expected cost (learned vs published) | conflicting | THIN | S-014 |  |
-| route price as expected cost (learned vs published) | absent | MISSING |  |  |
-| route price as expected cost (learned vs published) | stale / expiry / deadline | MISSING |  |  |
-| route price as expected cost (learned vs published) | retry / duplicate / replay | THIN | S-004 |  |
-| route price as expected cost (learned vs published) | dependency-failure | MISSING |  |  |
-| route price as expected cost (learned vs published) | concurrent | MISSING |  |  |
-| pricing a course the state makes uncompletable | normal | DEFINED | S-015 |  |
-| pricing a course the state makes uncompletable | boundary | MISSING |  |  |
-| pricing a course the state makes uncompletable | degenerate | MISSING |  |  |
-| pricing a course the state makes uncompletable | conflicting | THIN | S-005, S-015 |  |
-| pricing a course the state makes uncompletable | absent | MISSING |  |  |
-| pricing a course the state makes uncompletable | stale / expiry / deadline | MISSING |  |  |
-| pricing a course the state makes uncompletable | retry / duplicate / replay | THIN | S-004 |  |
-| pricing a course the state makes uncompletable | dependency-failure | MISSING |  |  |
-| pricing a course the state makes uncompletable | concurrent | MISSING |  |  |
-| guard precedence over the priced comparison | normal | DEFINED | S-017 |  |
-| guard precedence over the priced comparison | boundary | MISSING |  |  |
-| guard precedence over the priced comparison | degenerate | MISSING |  |  |
-| guard precedence over the priced comparison | conflicting | MISSING |  |  |
-| guard precedence over the priced comparison | absent | MISSING |  |  |
-| guard precedence over the priced comparison | stale / expiry / deadline | MISSING |  |  |
-| guard precedence over the priced comparison | retry / duplicate / replay | MISSING |  |  |
-| guard precedence over the priced comparison | dependency-failure | MISSING |  |  |
-| guard precedence over the priced comparison | concurrent | MISSING |  |  |
-| task accept/decline evaluation | normal | DEFINED | S-018, S-019 |  |
-| task accept/decline evaluation | boundary | DEFINED | S-019 |  |
-| task accept/decline evaluation | degenerate | MISSING |  |  |
-| task accept/decline evaluation | conflicting | MISSING |  |  |
-| task accept/decline evaluation | absent | THIN | S-018 |  |
-| task accept/decline evaluation | stale / expiry / deadline | MISSING |  |  |
-| task accept/decline evaluation | retry / duplicate / replay | MISSING |  |  |
-| task accept/decline evaluation | dependency-failure | MISSING |  |  |
-| task accept/decline evaluation | concurrent | MISSING |  |  |
-| task-currency route pricing | normal | DEFINED | S-020, S-018 |  |
-| task-currency route pricing | boundary | THIN | S-020 |  |
-| task-currency route pricing | degenerate | MISSING |  |  |
-| task-currency route pricing | conflicting | MISSING |  |  |
-| task-currency route pricing | absent | MISSING |  |  |
-| task-currency route pricing | stale / expiry / deadline | MISSING |  |  |
-| task-currency route pricing | retry / duplicate / replay | MISSING |  |  |
-| task-currency route pricing | dependency-failure | MISSING |  |  |
-| task-currency route pricing | concurrent | MISSING |  |  |
-| horizon selection and behaviour at its extremes | normal | THIN | S-021, S-022 |  |
-| horizon selection and behaviour at its extremes | boundary | THIN | S-022 |  |
-| horizon selection and behaviour at its extremes | degenerate | MISSING |  |  |
-| horizon selection and behaviour at its extremes | conflicting | DEFINED | S-021 |  |
-| horizon selection and behaviour at its extremes | absent | MISSING |  |  |
-| horizon selection and behaviour at its extremes | stale / expiry / deadline | MISSING |  |  |
-| horizon selection and behaviour at its extremes | retry / duplicate / replay | THIN | S-004 |  |
-| horizon selection and behaviour at its extremes | dependency-failure | MISSING |  |  |
-| horizon selection and behaviour at its extremes | concurrent | MISSING |  |  |
-| totality-witness (last-resort means) selection | normal | DEFINED | S-023 |  |
-| totality-witness (last-resort means) selection | boundary | THIN | S-023 |  |
-| totality-witness (last-resort means) selection | degenerate | DEFINED | S-023 |  |
-| totality-witness (last-resort means) selection | conflicting | MISSING |  |  |
-| totality-witness (last-resort means) selection | absent | MISSING |  |  |
-| totality-witness (last-resort means) selection | stale / expiry / deadline | MISSING |  |  |
-| totality-witness (last-resort means) selection | retry / duplicate / replay | MISSING |  |  |
-| totality-witness (last-resort means) selection | dependency-failure | MISSING |  |  |
-| totality-witness (last-resort means) selection | concurrent | MISSING |  |  |
-| determinism: same state, same choice | normal | DEFINED | S-004 |  |
-| determinism: same state, same choice | boundary | THIN | S-004, S-002 |  |
-| determinism: same state, same choice | degenerate | MISSING |  |  |
-| determinism: same state, same choice | conflicting | THIN | S-004, S-005 |  |
-| determinism: same state, same choice | absent | MISSING |  |  |
-| determinism: same state, same choice | stale / expiry / deadline | MISSING |  |  |
-| determinism: same state, same choice | retry / duplicate / replay | DEFINED | S-004 |  |
-| determinism: same state, same choice | dependency-failure | MISSING |  |  |
-| determinism: same state, same choice | concurrent | MISSING |  |  |
+| F01 price_option — build a cost as the (cycles, seconds) pair and convert other units into it (S-001) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-001 |  |
+| F01 price_option — build a cost as the (cycles, seconds) pair and convert other units into it (S-001) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | MISSING |  |  |
+| F01 price_option — build a cost as the (cycles, seconds) pair and convert other units into it (S-001) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F01 price_option — build a cost as the (cycles, seconds) pair and convert other units into it (S-001) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | THIN | S-001, D-04 |  |
+| F01 price_option — build a cost as the (cycles, seconds) pair and convert other units into it (S-001) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | MISSING |  |  |
+| F01 price_option — build a cost as the (cycles, seconds) pair and convert other units into it (S-001) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F01 price_option — build a cost as the (cycles, seconds) pair and convert other units into it (S-001) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | THIN | S-004 |  |
+| F01 price_option — build a cost as the (cycles, seconds) pair and convert other units into it (S-001) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F01 price_option — build a cost as the (cycles, seconds) pair and convert other units into it (S-001) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F02 rank_options — order available options against each other (S-002) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-002, S-003 |  |
+| F02 rank_options — order available options against each other (S-002) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | THIN | S-002 |  |
+| F02 rank_options — order available options against each other (S-002) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | THIN | S-023 |  |
+| F02 rank_options — order available options against each other (S-002) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | THIN | S-002 |  |
+| F02 rank_options — order available options against each other (S-002) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | THIN | S-015, S-005 |  |
+| F02 rank_options — order available options against each other (S-002) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F02 rank_options — order available options against each other (S-002) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | THIN | S-004 |  |
+| F02 rank_options — order available options against each other (S-002) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F02 rank_options — order available options against each other (S-002) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F03 seconds_budget_filter — decide whether an option is available given its seconds (S-002/S-003) | normal — a well-formed, in-range input of the kind the clause was written for | THIN | S-002, S-003 |  |
+| F03 seconds_budget_filter — decide whether an option is available given its seconds (S-002/S-003) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | MISSING |  |  |
+| F03 seconds_budget_filter — decide whether an option is available given its seconds (S-002/S-003) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F03 seconds_budget_filter — decide whether an option is available given its seconds (S-002/S-003) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | THIN | S-002, S-021 |  |
+| F03 seconds_budget_filter — decide whether an option is available given its seconds (S-002/S-003) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | MISSING |  |  |
+| F03 seconds_budget_filter — decide whether an option is available given its seconds (S-002/S-003) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F03 seconds_budget_filter — decide whether an option is available given its seconds (S-002/S-003) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F03 seconds_budget_filter — decide whether an option is available given its seconds (S-002/S-003) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F03 seconds_budget_filter — decide whether an option is available given its seconds (S-002/S-003) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | THIN | S-003, D-04 |  |
+| F04 decide(state) — determinism: same world state yields same choice (S-004) | normal — a well-formed, in-range input of the kind the clause was written for | THIN | S-004, D-21 |  |
+| F04 decide(state) — determinism: same world state yields same choice (S-004) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | THIN | D-21 |  |
+| F04 decide(state) — determinism: same world state yields same choice (S-004) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F04 decide(state) — determinism: same world state yields same choice (S-004) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F04 decide(state) — determinism: same world state yields same choice (S-004) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | MISSING |  |  |
+| F04 decide(state) — determinism: same world state yields same choice (S-004) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | THIN | S-004 |  |
+| F04 decide(state) — determinism: same world state yields same choice (S-004) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | THIN | S-004, D-21 |  |
+| F04 decide(state) — determinism: same world state yields same choice (S-004) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F04 decide(state) — determinism: same world state yields same choice (S-004) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F05 generate_candidates — enumerate the options and fix the order they are offered in (D-19/S-005) | normal — a well-formed, in-range input of the kind the clause was written for | THIN | D-19, S-005 |  |
+| F05 generate_candidates — enumerate the options and fix the order they are offered in (D-19/S-005) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | MISSING |  |  |
+| F05 generate_candidates — enumerate the options and fix the order they are offered in (D-19/S-005) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | THIN | S-023 |  |
+| F05 generate_candidates — enumerate the options and fix the order they are offered in (D-19/S-005) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F05 generate_candidates — enumerate the options and fix the order they are offered in (D-19/S-005) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | THIN | S-023 |  |
+| F05 generate_candidates — enumerate the options and fix the order they are offered in (D-19/S-005) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F05 generate_candidates — enumerate the options and fix the order they are offered in (D-19/S-005) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F05 generate_candidates — enumerate the options and fix the order they are offered in (D-19/S-005) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F05 generate_candidates — enumerate the options and fix the order they are offered in (D-19/S-005) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F06 deadline_cutoff — select among candidates when the decision deadline expires (S-005) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-005 |  |
+| F06 deadline_cutoff — select among candidates when the decision deadline expires (S-005) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | THIN | S-005, S-023 |  |
+| F06 deadline_cutoff — select among candidates when the decision deadline expires (S-005) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F06 deadline_cutoff — select among candidates when the decision deadline expires (S-005) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F06 deadline_cutoff — select among candidates when the decision deadline expires (S-005) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | THIN | S-005 |  |
+| F06 deadline_cutoff — select among candidates when the decision deadline expires (S-005) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | DEFINED | S-005 |  |
+| F06 deadline_cutoff — select among candidates when the decision deadline expires (S-005) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F06 deadline_cutoff — select among candidates when the decision deadline expires (S-005) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F06 deadline_cutoff — select among candidates when the decision deadline expires (S-005) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F07 marginal_cost — charge an option only the cycles it adds to committed work (S-006) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-006, S-008 |  |
+| F07 marginal_cost — charge an option only the cycles it adds to committed work (S-006) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | MISSING |  |  |
+| F07 marginal_cost — charge an option only the cycles it adds to committed work (S-006) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | THIN | S-006, S-008 |  |
+| F07 marginal_cost — charge an option only the cycles it adds to committed work (S-006) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F07 marginal_cost — charge an option only the cycles it adds to committed work (S-006) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | MISSING |  |  |
+| F07 marginal_cost — charge an option only the cycles it adds to committed work (S-006) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F07 marginal_cost — charge an option only the cycles it adds to committed work (S-006) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F07 marginal_cost — charge an option only the cycles it adds to committed work (S-006) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F07 marginal_cost — charge an option only the cycles it adds to committed work (S-006) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F08 commitment_lifecycle — adopt a plan, discharge on success, re-choose on failure (S-008) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-008, D-18 |  |
+| F08 commitment_lifecycle — adopt a plan, discharge on success, re-choose on failure (S-008) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | MISSING |  |  |
+| F08 commitment_lifecycle — adopt a plan, discharge on success, re-choose on failure (S-008) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F08 commitment_lifecycle — adopt a plan, discharge on success, re-choose on failure (S-008) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F08 commitment_lifecycle — adopt a plan, discharge on success, re-choose on failure (S-008) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | THIN | S-008 |  |
+| F08 commitment_lifecycle — adopt a plan, discharge on success, re-choose on failure (S-008) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F08 commitment_lifecycle — adopt a plan, discharge on success, re-choose on failure (S-008) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | THIN | S-008 |  |
+| F08 commitment_lifecycle — adopt a plan, discharge on success, re-choose on failure (S-008) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F08 commitment_lifecycle — adopt a plan, discharge on success, re-choose on failure (S-008) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F09 projection_walk / J — total cycles of one walk from current state to the horizon (S-009) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-009, S-021 |  |
+| F09 projection_walk / J — total cycles of one walk from current state to the horizon (S-009) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | THIN | S-022 |  |
+| F09 projection_walk / J — total cycles of one walk from current state to the horizon (S-009) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | THIN | S-015, S-022 |  |
+| F09 projection_walk / J — total cycles of one walk from current state to the horizon (S-009) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | THIN | S-002 |  |
+| F09 projection_walk / J — total cycles of one walk from current state to the horizon (S-009) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | THIN | S-015 |  |
+| F09 projection_walk / J — total cycles of one walk from current state to the horizon (S-009) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F09 projection_walk / J — total cycles of one walk from current state to the horizon (S-009) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | THIN | S-004 |  |
+| F09 projection_walk / J — total cycles of one walk from current state to the horizon (S-009) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F09 projection_walk / J — total cycles of one walk from current state to the horizon (S-009) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F10 walk_acquisition_decision — pay a route inside the walk when it repays (S-010) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-010 |  |
+| F10 walk_acquisition_decision — pay a route inside the walk when it repays (S-010) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | THIN | S-010 |  |
+| F10 walk_acquisition_decision — pay a route inside the walk when it repays (S-010) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F10 walk_acquisition_decision — pay a route inside the walk when it repays (S-010) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F10 walk_acquisition_decision — pay a route inside the walk when it repays (S-010) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | THIN | S-015 |  |
+| F10 walk_acquisition_decision — pay a route inside the walk when it repays (S-010) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F10 walk_acquisition_decision — pay a route inside the walk when it repays (S-010) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F10 walk_acquisition_decision — pay a route inside the walk when it repays (S-010) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F10 walk_acquisition_decision — pay a route inside the walk when it repays (S-010) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F11 route_set_rederivation — recompute available routes at each level crossed (S-011) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-011 |  |
+| F11 route_set_rederivation — recompute available routes at each level crossed (S-011) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | DEFINED | S-011 |  |
+| F11 route_set_rederivation — recompute available routes at each level crossed (S-011) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F11 route_set_rederivation — recompute available routes at each level crossed (S-011) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F11 route_set_rederivation — recompute available routes at each level crossed (S-011) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | MISSING |  |  |
+| F11 route_set_rederivation — recompute available routes at each level crossed (S-011) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F11 route_set_rederivation — recompute available routes at each level crossed (S-011) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F11 route_set_rederivation — recompute available routes at each level crossed (S-011) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F11 route_set_rederivation — recompute available routes at each level crossed (S-011) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F12 acquisition_refit_credit — re-derive worn set and credit only the difference (S-012) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-012 |  |
+| F12 acquisition_refit_credit — re-derive worn set and credit only the difference (S-012) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | THIN | S-012 |  |
+| F12 acquisition_refit_credit — re-derive worn set and credit only the difference (S-012) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F12 acquisition_refit_credit — re-derive worn set and credit only the difference (S-012) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F12 acquisition_refit_credit — re-derive worn set and credit only the difference (S-012) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | DEFINED | S-012 |  |
+| F12 acquisition_refit_credit — re-derive worn set and credit only the difference (S-012) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F12 acquisition_refit_credit — re-derive worn set and credit only the difference (S-012) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F12 acquisition_refit_credit — re-derive worn set and credit only the difference (S-012) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | IGNORE |  | The loadout picker is named in the 'NOT under test' list, so which items the character would wear when the picker itself is unavailable or wrong is out of scope by construction; S-012 only constrains how the walk CREDITS whatever the picker returns. Recorded rather than silently dropped because the carve-out means J is only as sound as an artifact this spec never constrains. |
+| F12 acquisition_refit_credit — re-derive worn set and credit only the difference (S-012) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F13 consumable_credit — credit a spent item as a rate change against a depleting stock (S-013) | normal — a well-formed, in-range input of the kind the clause was written for | THIN | S-013 |  |
+| F13 consumable_credit — credit a spent item as a rate change against a depleting stock (S-013) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | MISSING |  |  |
+| F13 consumable_credit — credit a spent item as a rate change against a depleting stock (S-013) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F13 consumable_credit — credit a spent item as a rate change against a depleting stock (S-013) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F13 consumable_credit — credit a spent item as a rate change against a depleting stock (S-013) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | MISSING |  |  |
+| F13 consumable_credit — credit a spent item as a rate change against a depleting stock (S-013) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F13 consumable_credit — credit a spent item as a rate change against a depleting stock (S-013) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F13 consumable_credit — credit a spent item as a rate change against a depleting stock (S-013) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F13 consumable_credit — credit a spent item as a rate change against a depleting stock (S-013) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F14 route_expected_price — price a stochastic route, choosing observed vs published rate (S-014/D-22) | normal — a well-formed, in-range input of the kind the clause was written for | THIN | S-014 |  |
+| F14 route_expected_price — price a stochastic route, choosing observed vs published rate (S-014/D-22) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | THIN | S-014 |  |
+| F14 route_expected_price — price a stochastic route, choosing observed vs published rate (S-014/D-22) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | THIN | S-015 |  |
+| F14 route_expected_price — price a stochastic route, choosing observed vs published rate (S-014/D-22) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | THIN | S-014, D-03, D-22 |  |
+| F14 route_expected_price — price a stochastic route, choosing observed vs published rate (S-014/D-22) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | DEFINED | S-014 |  |
+| F14 route_expected_price — price a stochastic route, choosing observed vs published rate (S-014/D-22) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F14 route_expected_price — price a stochastic route, choosing observed vs published rate (S-014/D-22) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F14 route_expected_price — price a stochastic route, choosing observed vs published rate (S-014/D-22) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F14 route_expected_price — price a stochastic route, choosing observed vs published rate (S-014/D-22) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F15 price_incompletable — price a course the state makes uncompletable (S-015) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-015 |  |
+| F15 price_incompletable — price a course the state makes uncompletable (S-015) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | THIN | S-015 |  |
+| F15 price_incompletable — price a course the state makes uncompletable (S-015) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | THIN | S-015 |  |
+| F15 price_incompletable — price a course the state makes uncompletable (S-015) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F15 price_incompletable — price a course the state makes uncompletable (S-015) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | THIN | S-015 |  |
+| F15 price_incompletable — price a course the state makes uncompletable (S-015) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F15 price_incompletable — price a course the state makes uncompletable (S-015) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F15 price_incompletable — price a course the state makes uncompletable (S-015) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F15 price_incompletable — price a course the state makes uncompletable (S-015) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F16 means_vs_objective_step — compare a means against the objective step on one quantity (S-016) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-016, S-006 |  |
+| F16 means_vs_objective_step — compare a means against the objective step on one quantity (S-016) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | THIN | S-002 |  |
+| F16 means_vs_objective_step — compare a means against the objective step on one quantity (S-016) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F16 means_vs_objective_step — compare a means against the objective step on one quantity (S-016) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | THIN | S-016, D-20 |  |
+| F16 means_vs_objective_step — compare a means against the objective step on one quantity (S-016) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | MISSING |  |  |
+| F16 means_vs_objective_step — compare a means against the objective step on one quantity (S-016) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F16 means_vs_objective_step — compare a means against the objective step on one quantity (S-016) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F16 means_vs_objective_step — compare a means against the objective step on one quantity (S-016) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F16 means_vs_objective_step — compare a means against the objective step on one quantity (S-016) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F17 guard_precedence — run an unpriced survival guard ahead of every comparison (S-017) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-017 |  |
+| F17 guard_precedence — run an unpriced survival guard ahead of every comparison (S-017) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | MISSING |  |  |
+| F17 guard_precedence — run an unpriced survival guard ahead of every comparison (S-017) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F17 guard_precedence — run an unpriced survival guard ahead of every comparison (S-017) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F17 guard_precedence — run an unpriced survival guard ahead of every comparison (S-017) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | THIN | S-017 |  |
+| F17 guard_precedence — run an unpriced survival guard ahead of every comparison (S-017) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F17 guard_precedence — run an unpriced survival guard ahead of every comparison (S-017) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F17 guard_precedence — run an unpriced survival guard ahead of every comparison (S-017) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F17 guard_precedence — run an unpriced survival guard ahead of every comparison (S-017) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F18 task_cost_value — price accepting a task and decide whether to take it (S-018/S-019) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-018, S-006 |  |
+| F18 task_cost_value — price accepting a task and decide whether to take it (S-018/S-019) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | DEFINED | S-019 |  |
+| F18 task_cost_value — price accepting a task and decide whether to take it (S-018/S-019) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F18 task_cost_value — price accepting a task and decide whether to take it (S-018/S-019) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F18 task_cost_value — price accepting a task and decide whether to take it (S-018/S-019) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | THIN | S-018, S-014 |  |
+| F18 task_cost_value — price accepting a task and decide whether to take it (S-018/S-019) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F18 task_cost_value — price accepting a task and decide whether to take it (S-018/S-019) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F18 task_cost_value — price accepting a task and decide whether to take it (S-018/S-019) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F18 task_cost_value — price accepting a task and decide whether to take it (S-018/S-019) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F19 task_currency_route_price — per-unit price of a currency earned by completing tasks (S-020) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-020, S-018 |  |
+| F19 task_currency_route_price — per-unit price of a currency earned by completing tasks (S-020) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | MISSING |  |  |
+| F19 task_currency_route_price — per-unit price of a currency earned by completing tasks (S-020) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F19 task_currency_route_price — per-unit price of a currency earned by completing tasks (S-020) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F19 task_currency_route_price — per-unit price of a currency earned by completing tasks (S-020) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | THIN | S-015 |  |
+| F19 task_currency_route_price — per-unit price of a currency earned by completing tasks (S-020) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F19 task_currency_route_price — per-unit price of a currency earned by completing tasks (S-020) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F19 task_currency_route_price — per-unit price of a currency earned by completing tasks (S-020) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F19 task_currency_route_price — per-unit price of a currency earned by completing tasks (S-020) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F20 horizon_selection — supply the one horizon and behave at its extremes (S-021/S-022) | normal — a well-formed, in-range input of the kind the clause was written for | THIN | S-021, S-022 |  |
+| F20 horizon_selection — supply the one horizon and behave at its extremes (S-021/S-022) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | THIN | S-022 |  |
+| F20 horizon_selection — supply the one horizon and behave at its extremes (S-021/S-022) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | THIN | S-022 |  |
+| F20 horizon_selection — supply the one horizon and behave at its extremes (S-021/S-022) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | DEFINED | S-021 |  |
+| F20 horizon_selection — supply the one horizon and behave at its extremes (S-021/S-022) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | MISSING |  |  |
+| F20 horizon_selection — supply the one horizon and behave at its extremes (S-021/S-022) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F20 horizon_selection — supply the one horizon and behave at its extremes (S-021/S-022) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F20 horizon_selection — supply the one horizon and behave at its extremes (S-021/S-022) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F20 horizon_selection — supply the one horizon and behave at its extremes (S-021/S-022) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F21 totality_witness — select the always-selectable last-resort means (S-023) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-023 |  |
+| F21 totality_witness — select the always-selectable last-resort means (S-023) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | MISSING |  |  |
+| F21 totality_witness — select the always-selectable last-resort means (S-023) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F21 totality_witness — select the always-selectable last-resort means (S-023) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F21 totality_witness — select the always-selectable last-resort means (S-023) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | MISSING |  |  |
+| F21 totality_witness — select the always-selectable last-resort means (S-023) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F21 totality_witness — select the always-selectable last-resort means (S-023) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F21 totality_witness — select the always-selectable last-resort means (S-023) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F21 totality_witness — select the always-selectable last-resort means (S-023) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
+| F22 shared_stock_route — price bank/sibling stock as a capacity-bearing route (S-007) | normal — a well-formed, in-range input of the kind the clause was written for | DEFINED | S-007 |  |
+| F22 shared_stock_route — price bank/sibling stock as a capacity-bearing route (S-007) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | MISSING |  |  |
+| F22 shared_stock_route — price bank/sibling stock as a capacity-bearing route (S-007) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F22 shared_stock_route — price bank/sibling stock as a capacity-bearing route (S-007) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | IGNORE |  | S-007's note and the matching residual deliberately delegate the two-characters-one-limited-stock case to the coordination protocol, which the preamble lists as NOT under test. Carve-out recorded rather than omitted, and it is narrow: it covers only WHO gets contested stock, not how this character's own walk prices a route it may lose, which stays a live gap (see F10/F13/F22 concurrency-adjacent cells). |
+| F22 shared_stock_route — price bank/sibling stock as a capacity-bearing route (S-007) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | MISSING |  |  |
+| F22 shared_stock_route — price bank/sibling stock as a capacity-bearing route (S-007) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F22 shared_stock_route — price bank/sibling stock as a capacity-bearing route (S-007) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F22 shared_stock_route — price bank/sibling stock as a capacity-bearing route (S-007) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F22 shared_stock_route — price bank/sibling stock as a capacity-bearing route (S-007) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | IGNORE |  | Same explicit carve-out as the conflicting cell: S-007 says 'what happens when two characters price the same limited stock in the same tick is not decided here', and the residual states a witness about it belongs to the coordination spec. On the record because it means this spec's J can be computed from a holding that no longer exists by the time the plan executes, and nothing in this document detects that. |
+| F23 no_op_option — express and price the option that issues no action (D-05) | normal — a well-formed, in-range input of the kind the clause was written for | THIN | D-05 |  |
+| F23 no_op_option — express and price the option that issues no action (D-05) | boundary — the extreme admissible value: exact tie, zero, the threshold itself, the last unit, the horizon's edge | MISSING |  |  |
+| F23 no_op_option — express and price the option that issues no action (D-05) | degenerate — structurally empty or trivial: no candidates, no commitment, zero stock, zero levels crossed, unsatisfiable option | MISSING |  |  |
+| F23 no_op_option — express and price the option that issues no action (D-05) | conflicting — two admissible inputs that pull the decision opposite ways, or two clauses/sources that disagree about the same quantity | MISSING |  |  |
+| F23 no_op_option — express and price the option that issues no action (D-05) | absent — the input the decision needs is simply not supplied: no observation, no route, no budget, no plan, no horizon | MISSING |  |  |
+| F23 no_op_option — express and price the option that issues no action (D-05) | TIME expiry/staleness/TTL — the input or the decision itself gets old: an observation's age, an event/raid window closing, a state that changed between pricing and execution, a stale published constant | MISSING |  |  |
+| F23 no_op_option — express and price the option that issues no action (D-05) | RETRY duplicate/replay — the same stimulus arrives twice: the same state re-evaluated, the same candidate offered twice, a failed action re-committed and re-executed forever | MISSING |  |  |
+| F23 no_op_option — express and price the option that issues no action (D-05) | DEPENDENCY FAILURE — something underneath is unavailable or wrong: the observation store missing, game data with no row, the executor/server rejecting or erroring, the rate limiter refusing | MISSING |  |  |
+| F23 no_op_option — express and price the option that issues no action (D-05) | CONCURRENCY — two stimuli at once: five siblings sharing one action-rate budget and one bank, two characters pricing the same stock in the same tick, another player filling a GE order mid-decision | MISSING |  |  |
