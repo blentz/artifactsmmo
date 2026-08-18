@@ -7,6 +7,7 @@ the catalogs own the state and domain queries, the facade owns the API-load
 logic and delegates everything else.
 """
 
+import sys
 import time
 from collections.abc import Mapping
 from collections.abc import Set as AbstractSet
@@ -2122,18 +2123,28 @@ class GameData:
         no current entity (model them before something carries one), codes in use
         the registry does not define, and carveouts that no longer exist. The lazy
         GameDataCoverageError stays the hard gate when a new code is actually
-        carried by a monster/item."""
+        carried by a monster/item.
+
+        WARNINGS GO TO STDERR. Loading game data is a side effect of every CLI
+        command, including the read-only ones whose STDOUT is a machine-readable
+        payload (`objective --json`, piped into the objective spike's
+        experiments). A warning on stdout there is not a warning, it is a parse
+        error in the consumer. Nothing reads these lines programmatically, so
+        moving them costs no caller anything."""
         registry = set(self._effect_registry)
         latent = sorted(registry - self._seen_effect_codes)
         if latent:
-            print(f"[game_data] effect codes defined but on no current entity: {latent}")
+            print(f"[game_data] effect codes defined but on no current entity: {latent}",
+                  file=sys.stderr)
         anomaly = sorted(self._seen_effect_codes - registry)
         if anomaly:
-            print(f"[game_data] effect codes in use but not in /effects registry: {anomaly}")
+            print(f"[game_data] effect codes in use but not in /effects registry: {anomaly}",
+                  file=sys.stderr)
         carveouts = _MONSTER_EFFECT_CARVEOUTS | _ITEM_EFFECT_CARVEOUTS | _RUNE_ABILITY_CARVEOUTS
         stale = sorted(carveouts - registry)
         if stale:
-            print(f"[game_data] stale effect carveouts (not in /effects registry): {stale}")
+            print(f"[game_data] stale effect carveouts (not in /effects registry): {stale}",
+                  file=sys.stderr)
 
     def _fetch_events(self, client: AuthenticatedClient) -> list[EventSchema]:
         """Page all events; return the list of schema objects."""

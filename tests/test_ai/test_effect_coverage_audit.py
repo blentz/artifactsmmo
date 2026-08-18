@@ -14,14 +14,23 @@ def _gd(registry, seen):
 
 
 def test_latent_code_defined_but_unseen_warns(capsys):
+    """ON STDERR, deliberately (2026-08-18). Loading game data is a side effect of
+    every CLI command, including read-only ones whose STDOUT is a machine-readable
+    payload (`objective --json`). A warning on stdout there is a parse error in the
+    consumer, not a warning. Asserting the STREAM and not just the text is what
+    keeps that from silently regressing."""
     _gd({"poison": "Poison", "newfx": "New"}, {"poison"})._audit_effect_coverage()
-    out = capsys.readouterr().out
-    assert "newfx" in out and "defined but on no current entity" in out
+    captured = capsys.readouterr()
+    assert "newfx" in captured.err and "defined but on no current entity" in captured.err
+    assert captured.out == ""
 
 
 def test_seen_code_missing_from_registry_warns(capsys):
+    """Same stream contract as the latent-code warning above."""
     _gd({"poison": "Poison"}, {"poison", "ghost"})._audit_effect_coverage()
-    assert "ghost" in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert "ghost" in captured.err
+    assert captured.out == ""
 
 
 def test_fully_covered_registry_is_silent(capsys):
@@ -33,4 +42,8 @@ def test_fully_covered_registry_is_silent(capsys):
     registry = {"poison": "Poison"} | {c: c for c in carveouts}
     seen = {"poison"} | carveouts
     _gd(registry, seen)._audit_effect_coverage()
-    assert capsys.readouterr().out == ""
+    captured = capsys.readouterr()
+    # BOTH streams. The warnings moved to stderr on 2026-08-18, so asserting only
+    # `out` here would pass vacuously — silence on the stream nothing writes to.
+    assert captured.out == ""
+    assert captured.err == ""
