@@ -189,8 +189,10 @@ Completion pays gold and **task coins**, by type and character level:
 | items | 1–14 / 15–29 / 30–40 / 41+ | 150 / 250 / 350 / 300 | 2 / 3 / 4 / 4 |
 | monsters | 1–14 / 15–29 / 30+ | 200 / 300 / 500 | 3 / 4 / 5 |
 
-**Cancelling a task costs 1 task coin.** Exchanging **6 task coins** yields a random
-reward.
+**Cancelling a task costs 1 task coin.** Exchanging task coins yields a random
+reward; the documentation gives the price as **6 coins** and the API does not expose
+it as data, so the implementation learns the current price from the server's
+refusals rather than trusting the published figure.
 
 *The documentation states no expiry for a task, and does not state whether a
 character may hold more than one. Both are left open here rather than assumed.*
@@ -621,6 +623,70 @@ reduces it.
 
 *Nothing here decides how the allowance is divided among characters.*
 
+### S-030 · A held task is abandoned when it is unachievable, or when a measured alternative beats it
+
+A task the character holds is given up in exactly two situations: its target cannot
+be completed at all, or observation of both says some alternative pays materially
+more per cycle than finishing it does. Absent either, the task is kept.
+
+*"Materially more" is a margin, and this clause fixes neither the margin nor the
+confidence required before observation counts.*
+
+### S-031 · Abandoning a task is priced with the coin it costs
+
+Giving up a task consumes one task coin (D-11). That coin is part of the price of
+abandoning, and an option that abandons a task without holding one is unavailable.
+
+### S-032 · An unpriceable yield is admitted on a lower bound, never valued at a guess
+
+Where what a route yields is not exposed as data — a random reward, an undisclosed
+grant size — the route is admitted on a bound that is safe whatever the yield turns
+out to be, and no expected value is assigned to it. A published figure the API does
+not serve is treated the same way: it may inform the bound and does not become the
+price.
+
+*This is the opposite of S-014's rule, and deliberately so: S-014 prices a route
+whose outcome is uncertain but whose DISTRIBUTION is known. Here the distribution is
+unknown, and inventing one would put a fabricated number in the ranking.*
+
+### S-033 · Capacity is bought only when it is nearly exhausted and the reserve survives
+
+Storage capacity may be purchased. It is purchased only when what is stored is at or
+above a threshold fraction of capacity AND the purchase leaves the account's gold at
+or above its reserve. Both are hard conditions; neither alone is sufficient.
+
+*The threshold and the reserve are values, not decisions, and are not fixed here.*
+
+### S-034 · An option a sibling has claimed is unavailable while the claim lives
+
+Where the account's characters coordinate by claiming work, an option under another
+character's live claim is not available to this one. When the claim lapses the
+option returns.
+
+*How claims are made, held and expired belongs to the coordination protocol, which
+Σ places outside this artifact. This clause governs only what the comparison does
+with a claim it is given.*
+
+### S-035 · A sibling's holdings reduce what this character must produce
+
+What another character already holds against a shared need counts toward that need.
+This character's requirement is the shortfall, not the whole.
+
+### S-036 · Account-wide unlocks are read as gates, never pursued
+
+Account-level unlocks that open tiles or items are read from the world as facts and
+gate the routes behind them. No route is priced for the work of achieving one, and
+no option is chosen in order to achieve one.
+
+### S-037 · One decision is made against one snapshot of published data
+
+Every published constant the decision reads — recipes, drop rates, prices, effects —
+comes from a single snapshot identified by a version. Data carrying a different
+version is not used. A decision is never re-derived by mixing two snapshots.
+
+*This is what makes S-004's "same state, same choice" meaningful across a content
+change: the snapshot is part of the state.*
+
 ---
 
 ## Evidence
@@ -683,7 +749,8 @@ subject matter and assert no behaviour, so nothing is proved about them and noth
 breaks when one is corrected. This is why they are definitions and not clauses.
 
 **Provable as pure arithmetic**, over the existing extracted cores: S-001, S-002,
-S-003, S-006, S-009, S-020, S-026, S-027, S-028, S-029. Each is a statement about
+S-003, S-006, S-009, S-020, S-026, S-027, S-028, S-029, S-031, S-035. Each is a
+statement about
 how a number is composed, and the differential harness already exercises this shape.
 
 **Provable only against a model of the walk**: S-010, S-011, S-012, S-013, S-014,
@@ -691,19 +758,83 @@ S-015. These quantify over a projection whose Lean model does not yet exist, and
 they are the bulk of the new proof work. `Formal.Liveness` proves the ladder total;
 nothing proves anything about the walk.
 
+**Already discharged, by a proof that predates the clause.** S-030's decision
+boundary is `low_yield_fires_pure`, whose monotonicity and no-sample safety are
+proved in `formal/Formal/LowYieldCancel.lean`; S-033's is `should_expand_bank`,
+proved over `Int` in `formal/Formal/BankExpansionTiming.lean`. Writing these two
+clauses cost no proof work at all — the obligation was met before the spec named it,
+which is the reverse of the usual order and worth noticing.
+
+**Routed to the liveness census rather than the kernel**: S-036. "Never pursued" is
+a statement about which goals exist and what they emit, and the census already reads
+exactly that.
+
 **Not provable, and honestly so**: S-004 (until D-21's equality relation is fixed,
 it has no formal content), S-005 (a wall-clock deadline is outside anything the
 kernel can see), S-017 (guard precedence is a fact about the candidate set, not
 about a function), S-024 and S-025 (statements about a world that answers, or fails
-to). These are the runtime rungs of the discharge table, and they should be routed
-there deliberately rather than attempted.
+to), S-032 (a claim that a number is NOT computed, which no theorem about a computed
+number can express), S-034 (Σ puts the coordination protocol outside this artifact)
+and S-037 (a version equality on data the kernel never sees). These are the runtime
+rungs of the discharge table, and they should be routed there deliberately rather
+than attempted.
 
-**The trade this records:** the eight clauses added while filling the model moved
-none of the existing proofs and added two to the arithmetic tier and none to the
-walk tier. Completeness cost proof effort here mainly in the walk tier, which was
-already the epic's largest unknown.
+**The trade this records.** Sixteen clauses were added while completing the model,
+and none of them moved an existing proof or landed in the walk tier — the tier that
+was already the epic's largest unknown. Four went to arithmetic, two were already
+proved before they were written, one goes to the census, and five are honest
+runtime rungs. The fear that a more complete model is a harder one to prove did not
+materialise here, and the reason is structural rather than lucky: completing a model
+mostly adds DEFINITIONS, which are proof-inert, and clauses about things the
+implementation had already decided, which is where the proofs already were. The
+proof cost lives in the clauses that quantify over the walk, and those were written
+first.
 
 ## Residuals
+
+Four of the six holes recorded in the previous revision were **not holes.** The
+implementation already prices task cancellation, the coin exchange, bank expansion
+and sibling claims; it was the SPEC that was silent, and every one of them is
+declared dormant in the liveness census for the same single reason — they sit in the
+discretionary band, below an objective step present in 14,064 of 14,064 cycles.
+S-030..S-037 record the decisions the code had already made. What follows is what
+survives.
+
+**Open questions, in the sense that nothing has decided them:**
+
+* The exchange's reward distribution is unknown, so S-032 governs it and S-014 never
+  will. If the distribution is ever measured, the two clauses swap.
+* The documentation states no task expiry and does not say whether a character may
+  hold more than one task. Both remain unmodelled.
+* A commitment survives a failed action, so an action that fails forever is
+  re-committed forever; nothing here stops retrying.
+* The published constants this spec calls authoritative can change under it, and
+  S-037 fixes only that one snapshot is used — not what happens when the snapshot
+  changes mid-plan.
+
+**Conflicts, which are worse than holes, because something HAS decided them and the
+decisions disagree:**
+
+* **The abandon rule ranks on a different objective from J.** S-030's second limb is
+  implemented as a comparison of character-XP per cycle against the held task, at a
+  fixed goal value, with its own margin and confidence gates. J ranks acquisition
+  cost plus cycles to fifty. These are two objectives, and the one that decides
+  whether to abandon a task is not the one that decided to accept it. This is the
+  same shape as the epicycles this spec exists to remove, and no clause here
+  reconciles them.
+* **Capacity is priced in a denomination nothing else uses.** Every action edge is
+  denominated in SECONDS — established by the median of `predicted_cost /
+  actual_cooldown_seconds` at 1.00 over 40k cycles, which is what killed the earlier
+  divide-by-ten. The expansion edge adds `gold / 100` to that sum. At the first
+  expansion that is +35 seconds; at the published price cap of 448,000 gold it is
+  **+4,480 seconds on one edge.** S-027 gives the principled replacement — price the
+  gold by what obtaining it costs — and until that lands, the deterrent is a
+  hand-tuned number in the wrong unit. This is the fourth instance of the
+  wrong-denomination family in this codebase.
+
+
+**Carve-outs the clauses make deliberately.** Each is a decision to leave
+something open, not an oversight:
 
 * Whether the per-decision compute can be brought inside the planning window is
   unproven. If it cannot, S-009/S-010's walk-shaped objective is not affordable and
@@ -725,22 +856,3 @@ already the epic's largest unknown.
   how much observation is "enough" to prefer a learned rate to the published one.
 * A short deadline can mean only the first candidates are ever evaluated
   (S-005), and no clause fixes the order in which candidates are offered.
-* A commitment survives a failed action, so an action that fails forever is
-  re-committed forever; nothing here stops retrying.
-* The walk holds acquired items with no notion of inventory slot capacity, so a
-  walk that acquires several items may project a holding the character cannot
-  carry, and the cycles of making room are unpriced.
-* Gold and other spendable balances are not modelled as a scarce budget: a route
-  with a purchase price is priced like any other even when the character cannot
-  pay.
-* Task cancellation costs 1 task coin (D-11) and is not modelled as an option:
-  nothing says whether a held task may be abandoned when the objective moves.
-* The 6-coin exchange yields a random reward (D-11) with no distribution, so
-  S-014's expected-cost rule has nothing to apply to it.
-* Bank expansion is a purchasable capacity with a published price ladder (D-15) and
-  no clause treats capacity as something the decision can buy.
-* What a SIBLING has committed to (D-18 is per-character) is not part of this
-  character's committed work, although they share a bank and an allowance.
-* Achievements (D-33) gate some tiles and items and no clause prices clearing one.
-* Server outage and content patches: the published constants this spec calls
-  authoritative can change under it, and no clause admits that as an event.
