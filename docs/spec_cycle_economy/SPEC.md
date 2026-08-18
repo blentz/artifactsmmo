@@ -37,7 +37,9 @@ it shares with its siblings (D-04).
 
 Observable attributes: name, combat level, XP toward the next combat level, HP,
 maximum HP, position (D-08), the eight skill levels and their XP (D-02), inventory
-(D-09), equipment (D-10), gold, and the task it holds (D-11).
+(D-09), equipment (D-10), gold, the task it holds (D-11), and **the instant its
+current cooldown expires** — the attribute that makes D-05's no-op necessary and
+that bounds the decision's own deadline (S-005).
 
 ## D-02 · Level, and which level
 
@@ -48,7 +50,11 @@ word "level" is ambiguous between them:
 * eight **skill levels** — woodcutting, mining, fishing, alchemy, weaponry,
   gearcrafting, jewelrycrafting, cooking — each advanced by its own actions.
 
-All nine range 1–50 and share one levelling curve. Level 1 requires 150 XP.
+All nine range 1–50 and share one levelling curve. The XP required to leave each
+level is published and is not a formula but a table: 150 at level 1, 250, 350, 450,
+700, 950, 1 200, 1 450, 1 700, 2 100 at level 10, rising to 8 200 at 20, 19 700 at
+30, 36 500 at 40 and 54 200 at 49; level 50 is terminal. **The walk cannot price a
+level crossing without this table**, and it is the only source for it.
 
 A **level-up of the combat level** grants exactly two things: **+5 maximum HP** and
 **+2 inventory item capacity**. A skill level-up grants no stats; it unlocks
@@ -65,6 +71,12 @@ gathering  XP = Round((XP_base + (resource_level / player_level) × 8)
 crafting   XP = Round((XP_base + (item_level / player_level) × coefficient)
                       × skill_multiplier × level_penalty × wisdom_bonus)
 ```
+
+`XP_base` for gathering is banded by resource level: 5 below 10, then 10, 13, 16,
+20, 28 and 36 at 45+. Crafting carries a **skill multiplier**: 0.1 for mining,
+woodcutting and fishing; 0.5 for cooking; 1.0 for weaponcrafting, gearcrafting,
+jewelrycrafting and alchemy — so the same item level pays ten times more XP in a
+crafting skill than in a gathering one.
 
 `level_penalty` encodes the **grey rule**: a character ten or more levels above the
 resource or item earns **0 XP**; at or below its level the factor is 1.0. Wisdom
@@ -249,7 +261,13 @@ step, fallback step, discretionary — and selects the first that fires.
 ## D-21 · World state, and its identity **[impl]**
 
 The **world state** is the character's observable attributes (D-01) together with
-the bank (D-15), the tiles' contents (D-08), and the live events and raids (D-16).
+the account (D-23), the bank (D-15), the tiles' contents (D-08), the live events and
+raids (D-16), and the market (D-17).
+
+Parts of it are mutated by agents other than this character: a sibling withdraws
+from the shared bank, a stranger fills a posted order, a sibling spends the shared
+action budget. A world state is therefore a SNAPSHOT, and may already be out of date
+when the decision that read it issues its action.
 
 *What makes two world states "the same" — which attributes participate in the
 equality S-004 rests on — is **not** decided here. S-004 is unfalsifiable until it
@@ -262,6 +280,116 @@ per monster, cycles per goal. An observation has a sample count and an age. It m
 disagree with the published formula, and it may be absent.
 
 ---
+
+
+## D-23 · Account
+
+The owner of the characters, the bank and the action-rate budget. One account holds
+several characters (five here), exactly one bank (D-15), one gold-in-bank balance,
+and one allowance of actions per unit wall clock.
+
+Observable attributes: its characters, its bank, and **how much of the action-rate
+allowance remains in the current window** — without which the resource S-003 calls
+scarce cannot be read at all.
+
+## D-24 · Clock
+
+The current instant. Everything with an age or a deadline is read against it: the
+rate-budget window (D-23), a cooldown's expiry (D-01), an event or raid window
+(D-16), an observation's age (D-22), and the decision's own deadline (S-005).
+
+## D-25 · Action result
+
+What issuing an action returned: either the new world state and the cooldown
+granted, or a failure of one of D-26's kinds. An action that was issued but whose
+result never arrived is a third case and is not the same as either.
+
+## D-26 · Failure kinds
+
+Failures are distinguishable and the distinctions matter, because different kinds
+call for different responses. The server's own codes, with what was observed across
+63,310 executed actions:
+
+| kind | code | observed |
+|---|---|---|
+| success | — | 62,775 (99.16%) |
+| character on cooldown | 499 | 152 |
+| not found | 404 | 143 |
+| other / unclassified | — | 123 |
+| fight lost | — | 34 |
+| missing required items | 478 | 30 |
+| inventory full | 497 | 18 |
+| too many items for task | 475 | 18 |
+| transport failure | — | 10 |
+| server error | 5xx | 5 |
+| equipment slot error | 491 | 1 |
+| already at this location | 490 | 1 |
+
+Others the server defines and the fleet has not yet met: rate-limited (429),
+insufficient gold (492), skill level not met (493), requirements not met (496),
+character locked (486), no active task (487), already has a task (489), not enough
+HP (483), maximum utilities equipped (484).
+
+*A fight lost is a failure of the OUTCOME, not of the request: the action succeeded
+and the character lost (D-06). Rate-limited and on-cooldown are failures of
+TIMING — the same request would succeed later. Inventory-full and missing-items are
+failures of PRECONDITION — the same request fails again until the world changes.
+The spec does not yet say whether these three families are treated differently.*
+
+## D-27 · Monster
+
+A creature occupying one or more tiles. Observable: code, level, HP, elemental
+attacks and resistances, critical strike, its drop table (D-13), and the effects it
+carries. Its fight cooldown is 2s per turn (D-04), so a monster that takes more
+turns to kill costs more seconds at the same one cycle.
+
+## D-28 · Resource node
+
+A gatherable occupying one or more tiles. Observable: code, the skill it requires
+and at what level, its level (which sets both the gathering XP through D-03 and the
+gathering cooldown through D-04), and its drop table.
+
+## D-29 · Located content
+
+Every route implies a place. A workshop for a skill, a bank tile, an NPC, a tasks
+master, the Grand Exchange, a monster and a resource node each occupy one or more
+known tiles (D-08). A route to an item is therefore also a route to a place.
+
+## D-30 · Distance
+
+The number of maps between two tiles. Movement is one action costing 5s per map
+(D-04), and the server runs the pathfinding — so the action count of a move is one
+regardless of distance, while its seconds are proportional to it. **This is the
+sharpest case of S-001's two components diverging**, and a model carrying only
+cycles cannot see it at all.
+
+## D-31 · Objective
+
+What the character is trying to reach: the thing whose attainment `J` measures the
+cycles to. It may be a level (D-02), an item held or worn (D-12), or a quantity of
+a currency (D-14).
+
+*Which objective a character pursues, and how it is chosen, is not decided here.*
+
+## D-32 · Consumable
+
+An item that is spent on use rather than worn. A heal restores HP up to the maximum
+(overheal is discarded); other kinds grant gold or teleport. Using one costs 3s flat
+regardless of quantity (D-04). A utility slot holds 1–100 of one consumable, and the
+two utility slots must hold different items (D-10).
+
+## D-33 · Achievement
+
+An account-level accomplishment. Some tiles and some items are gated on one (D-08,
+D-10), so an achievement is a route gate the decision may not be able to clear at
+all.
+
+## D-34 · The bot's own market orders
+
+Orders this account has posted to the Grand Exchange (D-17): each has an item, a
+quantity, a price, and gold or items escrowed against it. A posted order may be
+filled or expire without further action by this character, and gold committed to one
+is not available to spend.
 
 ---
 
@@ -443,6 +571,56 @@ A means whose purpose is to be selectable in every state, so that some means is
 always selectable, is not priced and does not participate in the comparison. It is
 selected only when no other means is.
 
+### S-024 · A failure of timing, of precondition, and of outcome are distinguished
+
+An action that failed because the same request would succeed later, one that failed
+because the world must change first, and one that succeeded as a request while its
+outcome went against the character are three different results. The decision
+distinguishes them.
+
+*S-008 discharges no commitment on any of the three. This clause says only that they
+are told apart, not what is done differently with each.*
+
+### S-025 · An unknown result is not a failure
+
+An action whose result never arrived is neither a success nor a failure. The
+decision does not treat it as either until the world is observed again.
+
+*The account is charged for the action regardless (S-003), because the request was
+issued.*
+
+### S-026 · The seconds of a route include reaching its place
+
+Every route names a place (D-29). Its seconds component includes the travel to that
+place from where the character is, and its cycle component includes the move as one
+action.
+
+*This is where the two components of S-001 diverge most: distance changes the
+seconds and not the cycles.*
+
+### S-027 · A route the account cannot pay for is priced with the cost of paying
+
+Where a route consumes a currency or gold the character does not have, its price
+includes the cost of obtaining the shortfall by some other route. It is not priced
+as though the balance were sufficient.
+
+*This is S-020's rule generalised past task currencies to gold and to every other
+item used as payment.*
+
+### S-028 · Making room is work, and the walk pays for it
+
+Where holding what a route yields would exceed either inventory limit (D-09), the
+price of that route includes the actions required to make room.
+
+### S-029 · The action-rate allowance bounds availability, like seconds
+
+An option whose actions cannot be issued within the account's remaining allowance
+(D-23) is unavailable, on the same footing as an option whose seconds exceed a
+budget (S-002). The allowance is shared, so what a sibling has already issued
+reduces it.
+
+*Nothing here decides how the allowance is divided among characters.*
+
 ---
 
 ## Evidence
@@ -494,6 +672,37 @@ All game-mechanical facts above:
 the table is stale. An implementation must read the cooldown the server returns
 rather than either constant.
 
+## Proof surface
+
+A more complete model is harder to prove about, and that cost should be visible
+rather than discovered in Lean. Each clause is marked by what it demands of the
+proof tower.
+
+**Inert for proofs — background only.** Every D-NN definition. They give the clauses
+subject matter and assert no behaviour, so nothing is proved about them and nothing
+breaks when one is corrected. This is why they are definitions and not clauses.
+
+**Provable as pure arithmetic**, over the existing extracted cores: S-001, S-002,
+S-003, S-006, S-009, S-020, S-026, S-027, S-028, S-029. Each is a statement about
+how a number is composed, and the differential harness already exercises this shape.
+
+**Provable only against a model of the walk**: S-010, S-011, S-012, S-013, S-014,
+S-015. These quantify over a projection whose Lean model does not yet exist, and
+they are the bulk of the new proof work. `Formal.Liveness` proves the ladder total;
+nothing proves anything about the walk.
+
+**Not provable, and honestly so**: S-004 (until D-21's equality relation is fixed,
+it has no formal content), S-005 (a wall-clock deadline is outside anything the
+kernel can see), S-017 (guard precedence is a fact about the candidate set, not
+about a function), S-024 and S-025 (statements about a world that answers, or fails
+to). These are the runtime rungs of the discharge table, and they should be routed
+there deliberately rather than attempted.
+
+**The trade this records:** the eight clauses added while filling the model moved
+none of the existing proofs and added two to the arithmetic tier and none to the
+walk tier. Completeness cost proof effort here mainly in the walk tier, which was
+already the epic's largest unknown.
+
 ## Residuals
 
 * Whether the per-decision compute can be brought inside the planning window is
@@ -524,3 +733,14 @@ rather than either constant.
 * Gold and other spendable balances are not modelled as a scarce budget: a route
   with a purchase price is priced like any other even when the character cannot
   pay.
+* Task cancellation costs 1 task coin (D-11) and is not modelled as an option:
+  nothing says whether a held task may be abandoned when the objective moves.
+* The 6-coin exchange yields a random reward (D-11) with no distribution, so
+  S-014's expected-cost rule has nothing to apply to it.
+* Bank expansion is a purchasable capacity with a published price ladder (D-15) and
+  no clause treats capacity as something the decision can buy.
+* What a SIBLING has committed to (D-18 is per-character) is not part of this
+  character's committed work, although they share a bank and an allowance.
+* Achievements (D-33) gate some tiles and items and no clause prices clearing one.
+* Server outage and content patches: the published constants this spec calls
+  authoritative can change under it, and no clause admits that as an event.
