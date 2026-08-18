@@ -23,7 +23,7 @@ from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
-from artifactsmmo_cli.ai.progression_reserve import reserve_floor
+from artifactsmmo_cli.ai.progression_reserve import can_spend
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -42,11 +42,11 @@ class GePostBuyOrderAction(Action):
         if self.ge_location is None:
             return False
         cost = self.price * self.quantity
-        return state.gold - cost >= reserve_floor(state, game_data, self.item_code)
+        return can_spend(state, game_data, self.item_code, cost)
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         cost = self.price * self.quantity
-        if state.gold - cost < reserve_floor(state, game_data, self.item_code):
+        if not can_spend(state, game_data, self.item_code, cost):
             raise AssertionError(
                 f"GePostBuyOrderAction.apply: gold={state.gold} - cost={cost} below "
                 f"reserve floor — is_applicable invariant violated"

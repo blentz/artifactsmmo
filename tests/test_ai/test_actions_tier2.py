@@ -333,18 +333,27 @@ class TestNpcBuyAction:
         state = make_state(gold=10_000)
         assert action.is_applicable(state, gd) is True
 
-    def test_applicable_spending_the_pocket_to_zero(self):
-        """PINS A KNOWN GAP, not a desired behaviour. NpcBuy's only gold gate
-        is `gold >= price * quantity`, so an exactly-affordable buy is admitted
-        even though it leaves nothing. Every other gold sink (GePostBuyOrder,
-        GeFillSellOrder, the expansion) refuses below `reserve_floor`. Adding
-        that guard here is its own increment: `reserve_floor` reads POCKET gold
-        while the reserve is an ACCOUNT quantity, so wiring it in as-is refuses
-        a targeted upgrade the account can plainly afford."""
+    def test_not_applicable_when_the_buy_would_break_the_gold_reserve(self):
+        """An outright-affordable buy is still refused when it would leave the
+        ACCOUNT below the reserve every gold sink now shares (S-045). Before the
+        price term left this edge's cost an expensive buy merely ranked badly;
+        now it competes on travel time alone, so this refusal is the only thing
+        standing between the objective and an emptied purse."""
         action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1))
         gd = make_gd(npc_stock={"cook": {"cooked_chicken": 10}})
-        assert action.is_applicable(make_state(gold=10), gd) is True
-        assert action.is_applicable(make_state(gold=9), gd) is False
+        assert action.is_applicable(make_state(gold=10_000), gd) is True
+        # Covers the price of 10 outright, and leaves 95 — under the floor.
+        assert action.is_applicable(make_state(gold=105), gd) is False
+
+    def test_banked_gold_counts_toward_the_reserve(self):
+        """The reserve is an ACCOUNT property, so the bank counts. The same
+        pocket that is refused alone is admitted once the bank is known — this
+        is the reading whose absence refused a 20,000 upgrade to a character
+        holding 75,000 across pocket and bank."""
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1))
+        gd = make_gd(npc_stock={"cook": {"cooked_chicken": 10}})
+        assert action.is_applicable(make_state(gold=105), gd) is False
+        assert action.is_applicable(make_state(gold=105, bank_gold=5_000), gd) is True
 
     def test_apply_deducts_gold_and_adds_item(self):
         action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=2, npc_location=(2, 1))

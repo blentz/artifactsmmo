@@ -332,6 +332,47 @@ def test_equip_adds_exactly_one_action(state, game_data) -> None:
     assert with_equip == without + 1
 
 
+def test_a_gold_priced_vendor_route_is_paid_for_with_gold(state, game_data)\
+        -> None:
+    """THE WALL. A BUY route carries `inputs={"gold": price}`, nothing in the
+    game obtains gold, and the walk charges an unobtainable input
+    `UNOBTAINABLE_PER_UNIT` PER UNIT — so a 10,000-gold rune was priced at ten
+    BILLION actions and no gold-priced vendor item in the game could ever be
+    chosen. Crediting the pocket is what pays it down."""
+    rich = replace(state, inventory={}, gold=50_000)
+    cost = acquisition_actions("healing_rune", 1, rich, game_data,
+                               NO_PROFILE_CONTEXT, equip=False)
+    assert cost == 2      # hop to the vendor, one purchase
+
+    # The failure this pins is not "expensive". It is unreachable: the shortfall
+    # is charged at a million per gold piece.
+    broke = replace(state, inventory={}, gold=0)
+    assert acquisition_actions("healing_rune", 1, broke, game_data,
+                               NO_PROFILE_CONTEXT, equip=False) \
+        >= 10_000 * UNOBTAINABLE_PER_UNIT
+
+
+def test_gold_is_consumed_by_the_route_that_spends_it(state, game_data) -> None:
+    """Gold is credited as a holding, so it is also SPENT like one: two runes at
+    10,000 each are not affordable out of 15,000."""
+    one = replace(state, inventory={}, gold=15_000)
+    assert acquisition_actions("healing_rune", 1, one, game_data,
+                               NO_PROFILE_CONTEXT, equip=False) == 2
+    assert acquisition_actions("healing_rune", 2, one, game_data,
+                               NO_PROFILE_CONTEXT, equip=False) \
+        >= UNOBTAINABLE_PER_UNIT
+
+
+def test_banked_gold_is_not_credited_to_the_pocket(state, game_data) -> None:
+    """Same rule as every other holding in this module: the bag counts, the bank
+    is a priced route. Banked gold is therefore NOT spendable here — conservative,
+    and it under-credits rather than pricing the trip to the bank at nothing."""
+    banked_only = replace(state, inventory={}, gold=0, bank_gold=50_000)
+    assert acquisition_actions("healing_rune", 1, banked_only, game_data,
+                               NO_PROFILE_CONTEXT, equip=False) \
+        >= UNOBTAINABLE_PER_UNIT
+
+
 def test_held_stock_makes_an_item_free(state, game_data) -> None:
     """Bag holdings are credited; the bank deliberately is NOT (it is a priced
     withdraw route instead)."""

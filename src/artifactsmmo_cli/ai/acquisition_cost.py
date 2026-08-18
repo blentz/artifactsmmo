@@ -351,6 +351,28 @@ def acquisition_options(item: str, state: WorldState, game_data: GameData,
     return options
 
 
+def _owned_with_gold(state: WorldState) -> dict[str, int]:
+    """The bag, plus the gold in it.
+
+    A gold-priced BUY route carries `inputs={"gold": price}` and the walk prices
+    an input it cannot obtain at `UNOBTAINABLE_PER_UNIT` PER UNIT — so without
+    this, every gold-priced vendor route in the game was charged
+    `price * 1,000,000` actions. Measured live: `lifesteal_rune` at 20,000 gold
+    priced at 20,000,000,002 instead of 2, and 46 item/vendor pairs are sold for
+    gold. Nothing obtains gold, so nothing could ever pay that down; the route
+    was not expensive, it was unreachable.
+
+    POCKET ONLY, and that follows the bag-only rule this module already states:
+    the bank is a ROUTE, not a holding. Banked gold is therefore not credited
+    here, which is conservative — it under-credits rather than pricing a trip to
+    the bank at nothing. Making banked gold a withdraw route of its own is a
+    separate increment (`WithdrawGoldAction` exists and is dormant precisely
+    because no goal has ever needed banked gold — which is what this wall did)."""
+    owned = dict(state.inventory)
+    owned["gold"] = owned.get("gold", 0) + state.gold
+    return owned
+
+
 def acquisition_actions(item: str, qty: int, state: WorldState,
                         game_data: GameData, ctx: SelectionContext,
                         equip: bool,
@@ -370,7 +392,7 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
     so counting it as owned too would credit the same copy twice and price the
     trip to the bank at nothing. A banked item costs one hop plus one withdraw,
     which is what it costs."""
-    owned: dict[str, int] = dict(state.inventory)
+    owned: dict[str, int] = _owned_with_gold(state)
     options: Mapping[str, list[RouteOption]] = acquisition_options(
         item, state, game_data, ctx, store)
     return acquisition_cost(item, qty, options, owned) + (
@@ -396,7 +418,7 @@ def bundle_acquisition_actions(
     making it compare bundles is the epic, not a diagnostic.
 
     `equip` is charged PER ROOT, not once: every piece has to be put on."""
-    owned: dict[str, int] = dict(state.inventory)
+    owned: dict[str, int] = _owned_with_gold(state)
     options: dict[str, list[RouteOption]] = {}
     for item, _qty in roots:
         options.update(acquisition_options(item, state, game_data, ctx, store))

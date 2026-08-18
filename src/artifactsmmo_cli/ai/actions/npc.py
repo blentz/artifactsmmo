@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.actions.npc_buy_core import (
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.progression_reserve import can_spend
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -59,6 +60,14 @@ class NpcBuyAction(Action):
                 gold=state.gold,
                 price=price,
             ):
+                return False
+            # S-045: gold is protected by refusal, and the refusal is the same
+            # one every other gold sink asks. Before the price left this edge's
+            # cost, an expensive buy merely RANKED badly; now it competes on
+            # travel time alone, so the reserve is what stands between the
+            # objective and an emptied purse.
+            if not can_spend(state, game_data, self.item_code,
+                             price * self.quantity):
                 return False
         else:
             # Item-currency purchase: need a free slot for the bought item AND

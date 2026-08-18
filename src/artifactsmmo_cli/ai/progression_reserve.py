@@ -156,3 +156,33 @@ def reserve_floor_multi(state: WorldState, game_data: GameData,
     admitted SET against this joint floor closes that gap."""
     reserved = reserved_targets(state, game_data)
     return max(_MIN_SAFETY_FLOOR, effective_floor_multi(reserved, buying))
+
+
+def account_gold(state: WorldState) -> int:
+    """Gold the ACCOUNT holds, pocket plus bank.
+
+    The reserve is a property of the account (one bank, one gold balance shared
+    by every character), so every question of the form "does spending this break
+    the reserve" has to be asked of this total. Asking it of `state.gold` alone
+    refuses a purchase the account can plainly afford: measured on the
+    `l30_rune_fill` scenario, 25,000 in pocket and 50,000 in bank against a
+    20,000 upgrade and a 50,000 reserve reads as a refusal on the pocket and an
+    approval on the account.
+
+    `bank_gold` is `None` when the bank has not been read this cycle. That is
+    UNKNOWN, not zero, so it is credited as nothing — which degrades this back to
+    the pocket-only reading rather than inventing a balance."""
+    banked = state.bank_gold if state.bank_gold is not None else 0
+    return state.gold + banked
+
+
+def can_spend(state: WorldState, game_data: GameData, buying: str | None,
+              cost: int) -> bool:
+    """True iff spending `cost` gold to buy `buying` leaves the ACCOUNT at or
+    above its reserve floor.
+
+    The single definition every gold sink asks (S-045: gold is protected by
+    refusal, and one reserve governs). Executability — whether the gold is in
+    the right place to be spent at this venue — is a separate question and stays
+    with the caller."""
+    return account_gold(state) - cost >= reserve_floor(state, game_data, buying)

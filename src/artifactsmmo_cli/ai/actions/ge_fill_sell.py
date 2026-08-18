@@ -24,7 +24,7 @@ from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.progression_reserve import reserve_floor
+from artifactsmmo_cli.ai.progression_reserve import can_spend
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -50,7 +50,8 @@ class GeFillSellOrderAction(Action):
         # Gold gate: the buy must leave gold at or above the progression reserve
         # floor (mirrors craft_vs_buy's affordability constraint and NpcBuyAction's
         # gold gate, but honours the dynamic per-state reserve rather than a flat cap).
-        if state.gold - self.price * self.quantity < reserve_floor(state, game_data, self.item_code):
+        if not can_spend(state, game_data, self.item_code,
+                         self.price * self.quantity):
             return False
         order = game_data.ge_best_sell_order(self.item_code)
         if order is None:

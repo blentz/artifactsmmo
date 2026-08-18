@@ -772,6 +772,18 @@ in the ranking can distinguish an expensive purchase from a cheap one. Three of 
 four gold sinks refuse on a reserve today; the fourth does not, and all four read
 only the gold in the character's pocket. Both gaps are recorded below.*
 
+### S-046 · Gold is worth the cycles it saves, and nothing else
+
+Gold on hand is valued at the work it lets the decision avoid: for the routes gold
+can replace, the time of the route it replaces less the time of the purchase. Where
+gold replaces nothing, it is worth nothing. No fixed rate converts gold into time.
+
+*This is S-027 read backwards, and it is what lets a means whose output is gold be
+priced at all — without it, S-045's refusal-not-penalty rule leaves such a means at
+zero forever. The rate is derived from live prices in the state being decided, never
+tuned, because a tuned rate is the denomination constant S-045's own increment
+deleted four instances of.*
+
 ---
 
 ## Evidence
