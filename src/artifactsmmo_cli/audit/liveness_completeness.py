@@ -73,8 +73,16 @@ DORMANT: dict[str, str] = {
     "BuyBankExpansionAction": "unreachable: emitted only by ExpandBankGoal",
     "PostBuyBidGoal": "unreachable: MeansKind.GE_BID is in the discretionary band",
     "GePostBuyOrderAction": "unreachable: emitted only by PostBuyBidGoal",
-    "WaitGoal": "unreachable: MeansKind.WAIT is last in the discretionary band",
-    "WaitAction": "unreachable: emitted only by WaitGoal",
+    # --- PROOF WITNESS. Never firing is this rung WORKING, not this rung dead.
+    # `Formal.Liveness.NoDeadlockV2.productionLadder_total` — the headline
+    # no-deadlock theorem, that the bot always has something to do — is proved
+    # VIA `wait_mem_ladder` and `waitFires s = true`, i.e. `wait` is the ladder's
+    # totality witness. It is last in DISCRETIONARY_ORDER and fires
+    # unconditionally, so anything above it firing instead is the guarantee
+    # being redundant, which is the point. Deleting it breaks the proof.
+    "WaitGoal": "witness: MeansKind.WAIT is the unconditional last resort that "
+                "proves the ladder total (Liveness.NoDeadlockV2)",
+    "WaitAction": "witness: the action WaitGoal emits; same proof obligation",
     # --- Raids. RECLASSIFIED 2026-08-18: `conditional:` was wrong. No raid has
     # been open while the fleet ran, but that is not what stops it — every raid
     # goal is appended at BAND_DISCRETIONARY (`_raid_candidates`' call site), and

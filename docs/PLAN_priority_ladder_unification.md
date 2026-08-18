@@ -224,10 +224,29 @@ my objective step" is a genuine comparison of two productive uses of a cycle, an
 it is the same question option C asks about gear-versus-XP. An urgency hoist would
 be an invented threshold — precisely the epicycle this document is about.
 
-**Decision required:** activate (which means the means ladder gets the same
-one-currency treatment as the objective, i.e. a second epic) or delete (which
-retires the whole `tasks_coin` funding path, including the C4 epic built on it,
-and closes the only route to vendor-only items).
+**DECIDED 2026-08-18: activate, alongside option C, together with the C4 epic.**
+
+And the user supplied the design principle the code was missing — tasks are
+**synergistic** goals, not standalone ones:
+
+* Accept a task that **aligns with a skill-XP grind already committed to**. The
+  grind happens anyway, so the task's marginal cost is near zero and its rewards
+  are pure gain.
+* When character XP is what is needed, accept a **kill-monsters** task: the
+  fighting happens anyway, and `task reward + xp > xp alone`.
+* Pursue a task **for its own sake only when the rewards themselves are the
+  need** — gold or `tasks_coin` required to purchase something specific.
+
+That is exactly the one-currency framing, and it is why an urgency hoist was the
+wrong instrument: a task is worth accepting when the work it demands OVERLAPS
+work already committed, so its cost is marginal rather than additive.
+
+**Half of it already exists and is discarded.** `tiers/means_worth.py` computes
+`_task_need_overlap` — how many of a task's output kinds (char XP, skill XP, the
+task item, funding) serve a live objective need — and thresholds it through
+`synergy_pure(overlap, K) > S_MIN`. The overlap is a RANKING quantity being used
+as a boolean gate. The activation work is to let that number compete rather than
+merely veto, on the same cycle currency as everything else.
 
 ## Group B — raids (1 class). A design contradiction, and it has an urgency.
 
@@ -251,11 +270,32 @@ closed band. `MAINTAIN_CONSUMABLES` arguably has an urgency (about to fight
 without heals) and is the best candidate for the existing pattern; `BANK_EXPAND`
 and `GE_BID` are value comparisons like group A.
 
-## Group D — probably delete (2 classes)
+## Group D — NOT deletable. A proof witness. (2 classes)
 
-`WaitGoal`, `WaitAction`. Last in the discretionary order, and a bot with a step
-to take never wants to wait. Nothing is lost by removing them, and their presence
-in the ladder implies a fallback that does not exist.
+`WaitGoal`, `WaitAction`. This document first called them "probably delete —
+nothing is lost by removing them". **That was wrong, and checking the blast
+radius is what caught it.**
+
+`MeansKind.WAIT` is the liveness tower's totality witness.
+`Formal.Liveness.NoDeadlockV2.productionLadder_total` — the headline theorem that
+the bot always has something to do — is proved *via* `wait_mem_ladder` and
+`waitFires s = true`:
+
+```lean
+theorem productionLadder_total (s : State) : productionLadder s ≠ none := by
+  refine productionLadder_ne_none_of_fires wait_mem_ladder ?_
+  change waitFires s = true
+```
+
+So `wait` fires unconditionally and sits last: **anything above it winning
+instead is the guarantee being redundant, which is the point.** Its zero
+selections are the proof working, not dead code. Deleting it breaks
+`NoDeadlockV2` and 12 other Lean files.
+
+This is a distinct reason class, now recorded as `witness:` in the census. It is
+the one case where "never fired" carries no obligation at all — and without the
+category, a liveness census is an invitation to delete the very thing that proves
+the ladder cannot stall.
 
 ## What this document is NOT proposing
 

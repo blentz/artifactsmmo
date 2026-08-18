@@ -211,4 +211,17 @@ def test_every_reason_is_classified(reason):
     tracked defects above benign ones. A free-text reason with no prefix would
     silently land in the benign pile."""
     assert reason.split(":")[0] in {
-        "unreachable", "conditional", "subsumed", "UNCLASSIFIED"}, reason
+        "unreachable", "conditional", "subsumed", "witness", "UNCLASSIFIED"}, reason
+
+
+def test_a_proof_witness_is_never_reclassified_as_deletable():
+    """`witness:` is the category that says NEVER FIRING IS THE POINT.
+
+    `MeansKind.WAIT` fires unconditionally and sits last, so anything above it
+    winning instead is the totality guarantee being redundant —
+    `Liveness.NoDeadlockV2.productionLadder_total` is proved via it. A liveness
+    census that reported it as dead code would be inviting someone to delete the
+    witness that proves the bot always has something to do, which is precisely
+    what nearly happened on 2026-08-18."""
+    assert DORMANT["WaitGoal"].startswith("witness:")
+    assert DORMANT["WaitAction"].startswith("witness:")
