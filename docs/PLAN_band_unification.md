@@ -5,8 +5,10 @@ the objective step are compared on marginal cycles against cycles saved or progr
 unlocked over the horizon. Neither wins by virtue of the band or position it
 occupies."*
 
-**Status:** increment 0 is DONE and its verdict is below. Increment 1 is required,
-not optional. The gold question is answered (S-046).
+**Status: STOPPED at increment 2, deliberately, on the measurement's evidence.**
+Increments 0 and 1 are done. Increment 2 — collapsing the bands — is NOT justified:
+priced, the ladder's answer is already the right one wherever the price exists at
+all. See "Increment 2 — the verdict" below. Reopen if the evidence changes.
 
 ## What is there today
 
