@@ -99,14 +99,17 @@ consumer exists.
 
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 
+from artifactsmmo_cli.ai import accumulation_sell
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import destroyable
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind as SourceKind
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 # Sentinel capacity for a source kind that is never stock-limited (GATHER,
 # BUY, DROP, CRAFT — you can always gather/buy/craft/fight again). A plain
@@ -161,6 +164,7 @@ def obtain_sources(
     sources.extend(_gather_sources(item, game_data))
     sources.extend(_buy_sources(item, game_data))
     sources.extend(_drop_sources(item, state, game_data))
+    sources.extend(_sell_sources(item, state, game_data, ctx))
     return sources
 
 
@@ -292,6 +296,57 @@ def _buy_sources(item: str, game_data: GameData) -> list[Source]:
         if game_data.npc_location(npc_code) is None:
             continue
         out.append(Source(SourceKind.BUY, npc_code, 1, UNBOUNDED_CAPACITY))
+    return out
+
+
+def _sell_sources(
+    item: str, state: WorldState, game_data: GameData, ctx: SelectionContext
+) -> list[Source]:
+    """GOLD, obtained by selling what the keep authority licenses for sale.
+
+    Fires for one item code and no other. Gold is not a thing that sits in the
+    bag, but it IS an input — a gold-priced vendor route carries
+    `inputs={"gold": price}` — and the walk charges an input with no route
+    `UNOBTAINABLE_PER_UNIT` PER UNIT. Being 430 gold short therefore cost
+    430,000,002 actions, which is not "expensive", it is unreachable.
+
+    THE LICENCE IS `accumulation_sell.sellable_surplus`, NOT a fresh derivation:
+    the same authority the SELL_IDLE means asks, so the route can never price a
+    sale the means would refuse to make. `Source.code` is the item SOLD, exactly
+    as RECYCLE's is the item DESTROYED.
+
+    `npcs_buying_item` returns highest price first, so the first tradeable buyer
+    dominates every other for this code and the rest are not emitted — a second
+    buyer at a lower price is strictly worse at the same one action.
+
+    REACHABILITY IS `event_npc_tradeable`, THE SAME PREDICATE THE EMITTER USES
+    (`NpcSellAction.is_applicable`, `goals/sell_inventory`), and NOT the blunt
+    `is_event_npc` refusal that `_buy_sources` applies. Measured against live
+    game data: **every NPC in the game that buys items is an event NPC** — all
+    five of fish, gemstone, herbal, nomadic and timber merchant, 55 buyer rows
+    and not one non-event. The blunt gate would therefore not be conservative
+    here, it would be a second wall replacing the one this route exists to
+    remove. Buying keeps the blunt gate because it has non-event vendors to fall
+    back on; selling has none.
+
+    That predicate reads the clock, which is why this arm is guarded by the code
+    check first: `obtain_sources` is called over a million times in one search,
+    and a `datetime.now()` per call would be felt. Only a gold lookup gets here."""
+    if item != GOLD_CODE:
+        return []
+    now = datetime.now(timezone.utc)
+    out: list[Source] = []
+    for code, copies in sorted(accumulation_sell.sellable_surplus(
+            state, game_data, ctx).items()):
+        for npc_code, price in game_data.npcs_buying_item(code):
+            if price <= 0 or game_data.npc_location(npc_code) is None:
+                continue
+            if not event_npc_tradeable(npc_code, game_data, x=state.x, y=state.y,
+                                       active_events=state.active_events,
+                                       now=now):
+                continue
+            out.append(Source(SourceKind.SELL, code, price, copies * price))
+            break
     return out
 
 

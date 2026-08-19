@@ -18,6 +18,7 @@ most gear comes back unobtainable, and the reasons are worth reading.
 import json
 import time
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from fractions import Fraction
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     _price_of,
     _priced,
     _prospecting_relief,
+    _sale_of,
     _workshop_venue,
     acquisition_actions,
     acquisition_options,
@@ -297,6 +299,41 @@ def test_price_of_refuses_to_invent_a_missing_row(state, game_data) -> None:
         _price_of("backpack", "a_vendor_that_does_not_exist", game_data)
 
 
+def test_sale_of_refuses_to_invent_a_missing_row(state, game_data) -> None:
+    """Same contract as `_price_of`, for the sell side: `_sell_sources` built the
+    SELL source from this table under these gates, so no row means the two reads
+    disagreed inside one decision."""
+    with pytest.raises(KeyError):
+        _sale_of("an_item_nobody_buys", state, game_data)
+
+
+def test_a_buyer_with_no_known_location_is_skipped(state, game_data,
+                                                   monkeypatch) -> None:
+    """A price row is not a buyer. A dormant merchant with no location is
+    skipped by BOTH reads, so the source arm and the venue lookup stay in step
+    on which buyer they mean."""
+    real = game_data.npc_location
+    monkeypatch.setattr(game_data, "npc_location",
+                        lambda npc: None if npc == "gemstone_merchant" else real(npc))
+    held = _selling(state, game_data, diamond=2)
+    assert obtain_sources("gold", held, game_data, NO_PROFILE_CONTEXT) == []
+    with pytest.raises(KeyError):
+        _sale_of("diamond", held, game_data)
+
+
+def test_a_buyer_offering_nothing_is_skipped(state, game_data,
+                                             monkeypatch) -> None:
+    """A zero price is not an offer — selling into it would spend an action to
+    obtain no gold, and `yield_per` must stay >= 1."""
+    monkeypatch.setattr(game_data, "npcs_buying_item",
+                        lambda code: [("gemstone_merchant", 0)]
+                        if code == "diamond" else [])
+    held = _selling(state, game_data, diamond=2)
+    assert obtain_sources("gold", held, game_data, NO_PROFILE_CONTEXT) == []
+    with pytest.raises(KeyError):
+        _sale_of("diamond", held, game_data)
+
+
 def test_drop_table_refuses_to_invent_a_missing_row(state, game_data) -> None:
     """Same contract for the drop table."""
     with pytest.raises(KeyError):
@@ -350,6 +387,84 @@ def test_a_gold_priced_vendor_route_is_paid_for_with_gold(state, game_data)\
     assert acquisition_actions("healing_rune", 1, broke, game_data,
                                NO_PROFILE_CONTEXT, equip=False) \
         >= 10_000 * UNOBTAINABLE_PER_UNIT
+
+
+def _selling(state, game_data, **inv):
+    """A state whose gemstone-merchant window is OPEN.
+
+    EVERY NPC in the game that buys items is an event NPC — measured live, all
+    five merchants, 55 buyer rows and no non-event buyer at all. So a SELL route
+    only exists inside a window, and a fixture that forgets to open one tests the
+    absence of the route rather than the route."""
+    event = game_data.npc_event_code("gemstone_merchant")
+    assert event is not None, "fixture lost the gemstone merchant"
+    open_until = datetime.now(timezone.utc) + timedelta(hours=4)
+    return replace(state, inventory=dict(inv), active_events={event: open_until})
+
+
+def test_gold_is_obtained_by_selling_what_the_authority_licenses(
+        state, game_data) -> None:
+    """S-046 made operational: gold is a thing with a ROUTE, so a shortfall is
+    priced instead of walled.
+
+    `healing_rune` costs 10,000 gold. Holding 9,000 leaves a 1,000 shortfall,
+    which used to be charged 1,000 * UNOBTAINABLE_PER_UNIT — a billion actions
+    for being a tenth short. With diamonds in the bag at 5,000 apiece from a
+    buyer whose window is open, the shortfall is one sale."""
+    short = replace(_selling(state, game_data, diamond=4), gold=9_000)
+    cost = acquisition_actions("healing_rune", 1, short, game_data,
+                               NO_PROFILE_CONTEXT, equip=False)
+    assert cost < UNOBTAINABLE_PER_UNIT, cost
+    assert cost == 4, cost     # hop + sale to raise the 1,000, then hop + buy
+
+
+def test_the_sale_consumes_the_copy_it_sells(state, game_data) -> None:
+    """A sale is not free gold. `inputs={code: 1}` charges the copy, so a
+    shortfall bigger than the licensed stock can cover stays unpayable."""
+    one = replace(_selling(state, game_data, diamond=1), gold=0)
+    assert acquisition_actions("healing_rune", 1, one, game_data,
+                               NO_PROFILE_CONTEXT, equip=False) \
+        >= UNOBTAINABLE_PER_UNIT
+
+
+def test_no_sellable_stock_leaves_gold_with_no_route(state, game_data) -> None:
+    """The route is the keep authority's licence, not a wish. An empty bag
+    licenses no sale, so gold stays unobtainable and the shortfall stays honest
+    — S-046: where gold replaces nothing, it is worth nothing."""
+    broke = replace(_selling(state, game_data), gold=9_000)
+    assert acquisition_actions("healing_rune", 1, broke, game_data,
+                               NO_PROFILE_CONTEXT, equip=False) \
+        >= UNOBTAINABLE_PER_UNIT
+
+
+def test_a_closed_window_leaves_gold_with_no_route(state, game_data) -> None:
+    """Same stock, no open event: the buyer is not tradeable, so there is no
+    route. This is what makes the previous test's licence check meaningful
+    rather than incidental — the stock alone is not enough."""
+    shut = replace(state, inventory={"diamond": 4}, gold=9_000, active_events={})
+    assert obtain_sources("gold", shut, game_data, NO_PROFILE_CONTEXT) == []
+    assert acquisition_actions("healing_rune", 1, shut, game_data,
+                               NO_PROFILE_CONTEXT, equip=False) \
+        >= UNOBTAINABLE_PER_UNIT
+
+
+def test_a_sell_source_names_the_item_sold(state, game_data) -> None:
+    """`Source.code` for SELL is the item DESTROYED by the sale, the same
+    convention RECYCLE uses — not the gold, and not the buyer."""
+    held = _selling(state, game_data, diamond=2)
+    sources = obtain_sources("gold", held, game_data, NO_PROFILE_CONTEXT)
+    assert [(s.kind, s.code, s.yield_per) for s in sources] \
+        == [(SourceKind.SELL, "diamond", 5_000)]
+    assert sources[0].capacity == 2 * 5_000
+
+
+def test_gold_has_no_sources_for_any_other_code(state, game_data) -> None:
+    """The SELL arm answers for one code. Asking for a normal item must not
+    return a sale of something else."""
+    held = _selling(state, game_data, diamond=2)
+    assert all(s.kind is not SourceKind.SELL
+               for s in obtain_sources("copper_ore", held, game_data,
+                                       NO_PROFILE_CONTEXT))
 
 
 def test_gold_is_consumed_by_the_route_that_spends_it(state, game_data) -> None:

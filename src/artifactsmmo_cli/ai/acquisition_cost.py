@@ -23,6 +23,7 @@ the divergence the epic exists to remove.
 """
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime, timezone
 from fractions import Fraction
 from math import ceil
 
@@ -33,6 +34,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
 )
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
+from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Rank
@@ -177,6 +179,16 @@ def _priced(item: str, source: Source, state: WorldState,
                            actions_per_application=1,
                            yield_per=max(1, game_data.max_gather_yield),
                            capacity=source.capacity)
+    if source.kind is SourceKind.SELL:
+        npc_code, price = _sale_of(source.code, state, game_data)
+        # One sale: one action, at the buyer's tile, yielding `price` gold and
+        # consuming one copy of the item sold. `inputs` is what makes the walk
+        # charge that copy — a sale is not free gold, it is gold at the cost of
+        # whatever the copy cost, and a licensed surplus copy already in the bag
+        # costs nothing because `owned` credits it.
+        return RouteOption(kind=source.kind.value, venue=npc_code,
+                           actions_per_application=1, yield_per=price,
+                           capacity=source.capacity, inputs={source.code: 1})
     if source.kind is SourceKind.BUY:
         price, currency = _price_of(item, source.code, game_data)
         return RouteOption(kind=source.kind.value, venue=source.code,
@@ -202,6 +214,29 @@ def _price_of(item: str, npc_code: str, game_data: GameData) -> tuple[int, str]:
         if code == npc_code:
             return price, currency
     raise KeyError(f"no {npc_code} purchase row for {item}")
+
+
+def _sale_of(item: str, state: WorldState,
+             game_data: GameData) -> tuple[str, int]:
+    """`(npc, price)` for the best tradeable buyer of `item`.
+
+    Same contract as `_price_of`, and the gates must be the SAME ones
+    `obtain_sources._sell_sources` applied — price, known location, and
+    `event_npc_tradeable` — or the two would pick different buyers for one
+    source and the venue would name an NPC the model never admitted. That is why
+    `state` is threaded here rather than the item alone.
+
+    A missing row would mean the two calls disagreed about game data inside a
+    single decision, which cannot happen, so this raises rather than defaulting,
+    per the API-data rule."""
+    now = datetime.now(timezone.utc)
+    for npc_code, price in game_data.npcs_buying_item(item):
+        if price <= 0 or game_data.npc_location(npc_code) is None:
+            continue
+        if event_npc_tradeable(npc_code, game_data, x=state.x, y=state.y,
+                               active_events=state.active_events, now=now):
+            return npc_code, price
+    raise KeyError(f"no tradeable buyer for {item}")
 
 
 def _drop_table(item: str, monster_code: str,

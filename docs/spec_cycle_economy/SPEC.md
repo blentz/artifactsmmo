@@ -784,6 +784,11 @@ zero forever. The rate is derived from live prices in the state being decided, n
 tuned, because a tuned rate is the denomination constant S-045's own increment
 deleted four instances of.*
 
+*Operationally this makes gold OBTAINABLE: selling is a route like any other, at
+one action per sale for whatever the buyer pays, consuming the copy sold. A
+shortfall is then priced instead of walled. Where no sale is available the shortfall
+is still unpayable, and saying so is correct rather than a gap.*
+
 ---
 
 ## Evidence
@@ -902,6 +907,15 @@ character carries a single `task` field with no expiry, which settles both
 multi-holding and lapsing.
 
 What is left is of three kinds, and none of them blocks implementation.
+
+**A property of the game, recorded so it is not mistaken for a defect.** EVERY NPC
+in the game that buys items is an EVENT NPC — measured live: fish, gemstone, herbal,
+nomadic and timber merchant, 55 buyer rows, not one non-event buyer. So the only
+immediate route to gold exists only inside a merchant window, and outside one the
+account's gold is a fixed stock that cannot be added to. A gold shortfall is
+therefore genuinely unpayable much of the time, and S-046 reporting it as such is
+the model being right. The Grand Exchange is the standing alternative, but a posted
+sell order settles when a stranger buys, which is not something a plan can spend.
 
 **Genuinely unknowable, and governed.** The coin exchange's reward distribution is
 not published and not served. S-032 governs it — admitted on a safe lower bound,

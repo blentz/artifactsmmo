@@ -52,6 +52,13 @@ SKILL_NAMES = sorted(
 )
 
 TASKS_COIN_CODE = "tasks_coin"
+GOLD_CODE = "gold"
+"""The code gold travels under as a purchase CURRENCY.
+
+`GameData.npc_purchases` returns `(npc, price, currency)` and a gold-priced row
+carries this literal, so it is the key a BUY route puts in its `inputs` and the
+key the acquisition walk looks for a route to. Named here, beside the other
+currency code, so the pricer and the obtain model cannot disagree by a typo."""
 """The item code for task-reward coins (spent at the taskmaster exchange)."""
 
 
