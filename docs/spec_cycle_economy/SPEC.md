@@ -194,6 +194,12 @@ reward; the documentation gives the price as **6 coins** and the API does not ex
 it as data, so the implementation learns the current price from the server's
 refusals rather than trusting the published figure.
 
+**The taskmaster assigns; the character does not choose.** The assignment is
+LEVEL-APPROPRIATE — at or below the character's level — but its target is otherwise
+unguaranteed: a gathering task may ask for wood, ore or fish. So a task is a DRAW
+from the level-appropriate catalog, never a selection, and the character's influence
+is confined to what it does with the draw.
+
 *The published API settles both questions the prose leaves open. A character
 carries a single `task` string with one type, progress and total — so a character
 holds AT MOST ONE task — and the schema has no expiry field, so a held task does not
@@ -789,6 +795,51 @@ one action per sale for whatever the buyer pays, consuming the copy sold. A
 shortfall is then priced instead of walled. Where no sale is available the shortfall
 is still unpayable, and saying so is correct rather than a gap.*
 
+### S-047 · A drawn task is judged by what its target advances, not by what is in flight
+
+On receiving a task the decision asks one question of its target: does completing it
+advance the character's level, or a skill the objective needs? The course currently
+in flight does not enter that question.
+
+*Three answers follow, and S-048 to S-050 give them. Separating the question from
+the course in flight is what lets a task be worth keeping while something else is
+being done.*
+
+### S-048 · A task that advances nothing is discarded and redrawn
+
+Where a task's target advances neither the character's level nor a needed skill —
+its work falls in the zero-yield band — the task is given up and another drawn. It is
+not carried, and it is not worked.
+
+### S-049 · A task that advances something is kept, whatever is in flight
+
+Where a task's target advances progression but not the course in flight, the task is
+KEPT and the course in flight continues. The task is not abandoned merely for being
+untimely, and the course is not abandoned merely because a task arrived.
+
+### S-050 · Holding a task raises the value of every course sharing its target
+
+While a task is held, a course whose work overlaps the task's target is worth more by
+the reward that work would complete. This is the same marginal rule as S-018 read from
+the other side: there, held work makes a task cheap; here, a held task makes aligned
+work valuable.
+
+*Which is what makes S-049's "keep it" pay. A kept task is not idle — it is a standing
+premium on a course the objective may pick next, and the premium expires only when the
+task does.*
+
+### S-051 · Accepting a task is part of a course, not a rival to one
+
+Where a course's own work would complete a task's demand, accepting that task belongs
+to the course rather than competing with it. The decision does not rank "accept a
+task" against "do the work"; it recognises that doing the work while holding a task
+is worth more than doing it alone, and the acceptance is how that is realised.
+
+*This is what stops S-050 from needing a priority ladder to express. A means that must
+out-rank the objective step to fire will never fire (measured: the discretionary band
+is selected in 0.21% of cycles); a step that is nearly free and strictly increases the
+value of work already chosen does not have to out-rank anything.*
+
 ---
 
 ## Evidence
@@ -921,6 +972,13 @@ sell order settles when a stranger buys, which is not something a plan can spend
 not published and not served. S-032 governs it — admitted on a safe lower bound,
 never valued at a guess — and S-014 will govern it instead if the distribution is
 ever measured. A closed question with an open input, not a hole.
+
+**A conflict inside the task rules themselves.** S-048 discards a useless draw, and
+discarding costs one task coin (D-11). Coins come only from COMPLETING tasks, so at
+zero coins the discard is unavailable and the first draw must be kept whatever it is.
+The rule is therefore unreachable exactly once per character, at the moment it would
+first apply. Nothing here decides whether the first task is worked to buy the coin
+that makes the rule available, or simply carried dead.
 
 **Implementation debt, recorded as clauses the code violates.** These are the
 acceptance criteria for the build:
