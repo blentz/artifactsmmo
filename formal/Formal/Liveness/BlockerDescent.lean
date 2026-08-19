@@ -390,6 +390,8 @@ theorem descends_completeTask (s : State)
     apply fLt_of_phasePresent_dec
     · simp only [fMeasure, pressureDelta, hfl]
     · simp only [fMeasure, pressureDelta, hfl, hfx]
+    -- slot 3 (`drawOwedFlag`) is untouched by `.completeTask`
+    · simp [fMeasure, pressureDelta, applyActionKind]
     · simp [fMeasure, pressureDelta, hph, hphase]
 
 /-- `taskCancel` (→ `.taskCancel`) strictly descends at `phasePresent`. -/

@@ -70,6 +70,13 @@ open Formal.Liveness.CycleStepFIteration
 structure FMeasure where
   levelDeficit           : Nat
   xpDeficit              : Nat
+  -- Slot 3 (2026-08-19). ACCEPT_TASK is promoted ABOVE `.objectiveStep`, and
+  -- accepting RAISES `phasePresent` (none -> accepted) while touching no earlier
+  -- slot — so unlike every other promoted rung it cannot descend at the bottom of
+  -- the cascade the way `geCancelFlag` and `supplyDemandSlot` do. It descends
+  -- HERE instead: a draw owed for the current course is discharged by taking it.
+  -- The slot must precede `phasePresent` for that to dominate the phase rise.
+  drawOwedFlag           : Nat
   phasePresent           : Nat
   overstockFlag          : Nat
   selectBankDepositsFlag : Nat
@@ -117,6 +124,7 @@ structure FMeasure where
 noncomputable def fMeasure (s : State) : FMeasure :=
   { levelDeficit           := 50 - s.level
     xpDeficit              := xpToNextLevel s.level - s.xp
+    drawOwedFlag           := b2n s.drawOwed
     phasePresent           := b2n (decide (s.taskLifecyclePhase ≠ .none))
     overstockFlag          := b2n s.hasOverstockItems
     selectBankDepositsFlag := b2n s.selectBankDepositsNonempty
@@ -141,26 +149,34 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
   m₁.levelDeficit < m₂.levelDeficit
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit < m₂.xpDeficit)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag < m₂.drawOwedFlag)
+  ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent < m₂.phasePresent)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent = m₂.phasePresent
      ∧ m₁.overstockFlag < m₂.overstockFlag)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent = m₂.phasePresent
      ∧ m₁.overstockFlag = m₂.overstockFlag
      ∧ m₁.selectBankDepositsFlag < m₂.selectBankDepositsFlag)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent = m₂.phasePresent
      ∧ m₁.overstockFlag = m₂.overstockFlag
      ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
      ∧ m₁.sellableFlag < m₂.sellableFlag)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent = m₂.phasePresent
      ∧ m₁.overstockFlag = m₂.overstockFlag
      ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
      ∧ m₁.sellableFlag = m₂.sellableFlag
      ∧ m₁.recyclableFlag < m₂.recyclableFlag)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent = m₂.phasePresent
      ∧ m₁.overstockFlag = m₂.overstockFlag
      ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
@@ -168,6 +184,7 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.recyclableFlag = m₂.recyclableFlag
      ∧ m₁.craftReliefFlag < m₂.craftReliefFlag)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent = m₂.phasePresent
      ∧ m₁.overstockFlag = m₂.overstockFlag
      ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
@@ -176,6 +193,7 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
      ∧ m₁.craftPotionsFlag < m₂.craftPotionsFlag)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent = m₂.phasePresent
      ∧ m₁.overstockFlag = m₂.overstockFlag
      ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
@@ -185,6 +203,7 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
      ∧ m₁.gearReviewFlag < m₂.gearReviewFlag)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent = m₂.phasePresent
      ∧ m₁.overstockFlag = m₂.overstockFlag
      ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
@@ -195,6 +214,7 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.gearReviewFlag = m₂.gearReviewFlag
      ∧ m₁.pendingFlag < m₂.pendingFlag)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent = m₂.phasePresent
      ∧ m₁.overstockFlag = m₂.overstockFlag
      ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
@@ -206,6 +226,7 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.pendingFlag = m₂.pendingFlag
      ∧ m₁.bankPressure < m₂.bankPressure)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent = m₂.phasePresent
      ∧ m₁.overstockFlag = m₂.overstockFlag
      ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
@@ -218,6 +239,7 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.bankPressure = m₂.bankPressure
      ∧ m₁.hpDeficit < m₂.hpDeficit)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent = m₂.phasePresent
      ∧ m₁.overstockFlag = m₂.overstockFlag
      ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
@@ -231,6 +253,7 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.hpDeficit = m₂.hpDeficit
      ∧ m₁.geCancelFlag < m₂.geCancelFlag)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent = m₂.phasePresent
      ∧ m₁.overstockFlag = m₂.overstockFlag
      ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
@@ -245,6 +268,7 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.geCancelFlag = m₂.geCancelFlag
      ∧ m₁.supplyDemandSlot < m₂.supplyDemandSlot)
   ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
      ∧ m₁.phasePresent = m₂.phasePresent
      ∧ m₁.overstockFlag = m₂.overstockFlag
      ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
@@ -262,15 +286,17 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
 
 /-! ### Well-foundedness via embedding into Mathlib lex. -/
 
-/-- Right-associated 16-tuple of `Nat`. -/
+/-- Right-associated 17-tuple of `Nat`. Widened from sixteen on 2026-08-19 for
+    `drawOwedFlag` — the third widening of this tuple, after slots 15 and 16. -/
 abbrev LexSixteen :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
-    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
+    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
 /-- Embed an `FMeasure` into the right-associated lex 16-tuple. -/
 def toLex13 (m : FMeasure) : LexSixteen :=
   toLex (m.levelDeficit,
     toLex (m.xpDeficit,
+      toLex (m.drawOwedFlag,
       toLex (m.phasePresent,
         toLex (m.overstockFlag,
           toLex (m.selectBankDepositsFlag,
@@ -283,66 +309,68 @@ def toLex13 (m : FMeasure) : LexSixteen :=
                         toLex (m.bankPressure,
                           toLex (m.hpDeficit,
                             toLex (m.geCancelFlag,
-                              toLex (m.supplyDemandSlot, m.currencyTurnInFlag)))))))))))))))
+                              toLex (m.supplyDemandSlot, m.currencyTurnInFlag))))))))))))))))
 
 /-- `fMeasureLt` implies the embedded `<` on `LexFifteen`. -/
 theorem toLex13_lt_of_fMeasureLt
     {m₁ m₂ : FMeasure} (h : fMeasureLt m₁ m₂) :
     toLex13 m₁ < toLex13 m₂ := by
   simp only [toLex13, Prod.Lex.lt_iff, ofLex_toLex]
-  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h
+  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h
   · exact Or.inl h
   · obtain ⟨h1, h⟩ := h
     exact Or.inr ⟨h1, Or.inl h⟩
   · obtain ⟨h1, h2, h⟩ := h
     exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inl h⟩⟩
-  · obtain ⟨h1, h2, h3, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inl h⟩⟩⟩
-  · obtain ⟨h1, h2, h3, h4, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inl h⟩⟩⟩⟩
-  · obtain ⟨h1, h2, h3, h4, h5, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
-            Or.inr ⟨h5, Or.inl h⟩⟩⟩⟩⟩
-  · obtain ⟨h1, h2, h3, h4, h5, h6, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
-            Or.inr ⟨h5, Or.inr ⟨h6, Or.inl h⟩⟩⟩⟩⟩⟩
-  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
-            Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inl h⟩⟩⟩⟩⟩⟩⟩
-  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
-            Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩
-  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
+  · obtain ⟨h1, h2, hd, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inl h⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inl h⟩⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h4, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4, Or.inl h⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h4, h5, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
+            Or.inr ⟨h5, Or.inl h⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h4, h5, h6, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
+            Or.inr ⟨h5, Or.inr ⟨h6, Or.inl h⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h4, h5, h6, h7, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
+            Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
+            Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
             Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
-              Or.inr ⟨h9, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩
-  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
+              Or.inr ⟨h9, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
             Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
-              Or.inr ⟨h9, Or.inr ⟨h10, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
-  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
+              Or.inr ⟨h9, Or.inr ⟨h10, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10, h11, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
             Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
-              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
-  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
+              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
             Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
-              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
-  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
-            Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
-              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
-                Or.inr ⟨h13, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
-  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
+              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
             Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
               Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
-                Or.inr ⟨h13, Or.inr ⟨h14, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
-  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h⟩ := h
-    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
+                Or.inr ⟨h13, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
             Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
               Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
-                Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+                Or.inr ⟨h13, Or.inr ⟨h14, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
+            Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
+              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
+                Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Well-foundedness of `fMeasureLt`, by `InvImage` reduction to Mathlib's
     standard well-founded order on `LexSixteen`. -/
@@ -366,57 +394,72 @@ theorem fLt_of_xpDeficit_dec {m₁ m₂ : FMeasure}
     (h : m₁.xpDeficit < m₂.xpDeficit) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inl ⟨h1, h⟩)
 
-/-- Slot 3 (`phasePresent`) decrease with slots 1-2 equal. -/
+/-- Slot 3 (`drawOwedFlag`) decrease with slots 1-2 equal. Taking the owed draw
+    discharges it, which is why `.acceptTask` descends despite RAISING
+    `phasePresent` one slot below. -/
+theorem fLt_of_drawOwed_dec {m₁ m₂ : FMeasure}
+    (h1 : m₁.levelDeficit = m₂.levelDeficit)
+    (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (h : m₁.drawOwedFlag < m₂.drawOwedFlag) : fMeasureLt m₁ m₂ :=
+  Or.inr (Or.inr (Or.inl ⟨h1, h2, h⟩))
+
+/-- Slot 4 (`phasePresent`) decrease with slots 1-2 equal. -/
 theorem fLt_of_phasePresent_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h : m₁.phasePresent < m₂.phasePresent) : fMeasureLt m₁ m₂ :=
-  Or.inr (Or.inr (Or.inl ⟨h1, h2, h⟩))
+  Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h⟩)))
 
 /-- Slot 4 (`overstockFlag`) decrease with slots 1-3 equal. -/
 theorem fLt_of_overstock_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h : m₁.overstockFlag < m₂.overstockFlag) : fMeasureLt m₁ m₂ :=
-  Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, h3, h⟩)))
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h⟩))))
 
 /-- Slot 5 (`selectBankDepositsFlag`) decrease with slots 1-4 equal. -/
 theorem fLt_of_selectBankDeposits_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.overstockFlag = m₂.overstockFlag)
     (h : m₁.selectBankDepositsFlag < m₂.selectBankDepositsFlag) :
     fMeasureLt m₁ m₂ :=
-  Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, h3, h4, h⟩))))
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h⟩)))))
 
 /-- Slot 6 (`sellableFlag`) decrease with slots 1-5 equal. -/
 theorem fLt_of_sellable_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.overstockFlag = m₂.overstockFlag)
     (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
     (h : m₁.sellableFlag < m₂.sellableFlag) : fMeasureLt m₁ m₂ :=
-  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, h3, h4, h5, h⟩)))))
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h⟩))))))
 
 /-- Slot 7 (`recyclableFlag`) decrease with slots 1-6 equal. -/
 theorem fLt_of_recyclable_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.overstockFlag = m₂.overstockFlag)
     (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
     (h6 : m₁.sellableFlag = m₂.sellableFlag)
     (h : m₁.recyclableFlag < m₂.recyclableFlag) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inl ⟨h1, h2, h3, h4, h5, h6, h⟩))))))
+    (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h⟩)))))))
 
 /-- Slot 8 (`craftReliefFlag`) decrease with slots 1-7 equal. -/
 theorem fLt_of_craftRelief_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.overstockFlag = m₂.overstockFlag)
     (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
@@ -424,12 +467,13 @@ theorem fLt_of_craftRelief_dec {m₁ m₂ : FMeasure}
     (h7 : m₁.recyclableFlag = m₂.recyclableFlag)
     (h : m₁.craftReliefFlag < m₂.craftReliefFlag) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inl ⟨h1, h2, h3, h4, h5, h6, h7, h⟩)))))))
+    (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h⟩))))))))
 
 /-- Slot 9 (`craftPotionsFlag`) decrease with slots 1-8 equal. -/
 theorem fLt_of_craftPotions_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.overstockFlag = m₂.overstockFlag)
     (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
@@ -438,12 +482,13 @@ theorem fLt_of_craftPotions_dec {m₁ m₂ : FMeasure}
     (h8 : m₁.craftReliefFlag = m₂.craftReliefFlag)
     (h : m₁.craftPotionsFlag < m₂.craftPotionsFlag) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inl ⟨h1, h2, h3, h4, h5, h6, h7, h8, h⟩))))))))
+    (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h⟩)))))))))
 
 /-- Slot 10 (`gearReviewFlag`) decrease with slots 1-9 equal. -/
 theorem fLt_of_gearReview_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.overstockFlag = m₂.overstockFlag)
     (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
@@ -453,13 +498,14 @@ theorem fLt_of_gearReview_dec {m₁ m₂ : FMeasure}
     (h9 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
     (h : m₁.gearReviewFlag < m₂.gearReviewFlag) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inl ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h⟩)))))))))
+    (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h⟩))))))))))
 
 /-- Slot 11 (`pendingFlag`) decrease with slots 1-10 equal (slot 12 free — the
     claim mint's `+1` pressure is exactly what this dominates). -/
 theorem fLt_of_pending_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.overstockFlag = m₂.overstockFlag)
     (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
@@ -470,12 +516,13 @@ theorem fLt_of_pending_dec {m₁ m₂ : FMeasure}
     (h10 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h : m₁.pendingFlag < m₂.pendingFlag) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inl ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h⟩))))))))))
+    (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10, h⟩)))))))))))
 
 /-- Slot 13 (`hpDeficit`) decrease with slots 1-12 equal. -/
 theorem fLt_of_hpDeficit_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.overstockFlag = m₂.overstockFlag)
     (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
@@ -488,8 +535,8 @@ theorem fLt_of_hpDeficit_dec {m₁ m₂ : FMeasure}
     (h12 : m₁.bankPressure = m₂.bankPressure)
     (h : m₁.hpDeficit < m₂.hpDeficit) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11,
-      h12, h⟩))))))))))))
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10, h11,
+      h12, h⟩)))))))))))))
 
 /-- Slot 14 (`geCancelFlag`) decrease with slots 1-13 equal — the fire-and-lose
     GE_CANCEL guard. `.geCancelOrder` clears only `geCancelTargetsNonempty`, so every
@@ -497,6 +544,7 @@ theorem fLt_of_hpDeficit_dec {m₁ m₂ : FMeasure}
 theorem fLt_of_geCancel_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.overstockFlag = m₂.overstockFlag)
     (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
@@ -510,8 +558,8 @@ theorem fLt_of_geCancel_dec {m₁ m₂ : FMeasure}
     (h13 : m₁.hpDeficit = m₂.hpDeficit)
     (h : m₁.geCancelFlag < m₂.geCancelFlag) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10,
-      h11, h12, h13, h⟩)))))))))))))
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10,
+      h11, h12, h13, h⟩))))))))))))))
 
 /-- Slot 15 (`supplyDemandSlot`) decrease with slots 1-14 equal (2026-08-01).
     The SUPPLY_BANK rung's `.gather` apply touches no other slot, so — exactly
@@ -520,6 +568,7 @@ theorem fLt_of_geCancel_dec {m₁ m₂ : FMeasure}
 theorem fLt_of_supplyDemand_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.overstockFlag = m₂.overstockFlag)
     (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
@@ -534,8 +583,8 @@ theorem fLt_of_supplyDemand_dec {m₁ m₂ : FMeasure}
     (h14 : m₁.geCancelFlag = m₂.geCancelFlag)
     (h : m₁.supplyDemandSlot < m₂.supplyDemandSlot) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10,
-      h11, h12, h13, h14, h⟩))))))))))))))
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10,
+      h11, h12, h13, h14, h⟩)))))))))))))))
 
 /-- Slot 16 (`currencyTurnInFlag`) decrease with slots 1-15 equal
     (2026-08-16). The CURRENCY_TURNIN rung's `.npcBuy` apply touches no other
@@ -547,6 +596,7 @@ theorem fLt_of_supplyDemand_dec {m₁ m₂ : FMeasure}
 theorem fLt_of_currencyTurnIn_dec {m₁ m₂ : FMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h3 : m₁.phasePresent = m₂.phasePresent)
     (h4 : m₁.overstockFlag = m₂.overstockFlag)
     (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
@@ -562,8 +612,9 @@ theorem fLt_of_currencyTurnIn_dec {m₁ m₂ : FMeasure}
     (h15 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
     (h : m₁.currencyTurnInFlag < m₂.currencyTurnInFlag) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10,
-      h11, h12, h13, h14, h15, h⟩))))))))))))))
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+      ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10,
+       h11, h12, h13, h14, h15, h⟩)))))))))))))))
 
 /-! ## The engine — reach 50 from per-cycle FMeasure descent (the
 `MeasureDescent.exists_level_ge_of_descent` shape over the richer tuple). -/
