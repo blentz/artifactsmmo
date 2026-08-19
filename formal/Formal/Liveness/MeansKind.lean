@@ -175,10 +175,15 @@ def allInLadderOrder : List MeansKind :=
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh, .gearReview,
    .craftPotions,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
+   -- 2026-08-19 (S-051): promoted out of the discretionary group. Below
+   -- `.objectiveStep` it was unreachable — a character essentially always has a
+   -- step — and accepting belongs to a COURSE rather than competing with one.
+   -- AFTER both cancel rungs, so a dead draw goes back before a new one is taken.
+   .acceptTask,
    .supplyBank,
    .currencyTurnIn,
    .objectiveStep,
-   .pursueTask, .acceptTask, .taskExchange, .maintainConsumables,
+   .pursueTask, .taskExchange, .maintainConsumables,
    .sellIdle, .recycleSurplus, .bankExpand, .geBid, .drainBankJunk,
    .wait]
 

@@ -80,9 +80,13 @@ def _gd():
 
 
 def _ctx(**kw):
+    # `draw_owed=True`: a taskless character owes a draw, which is what
+    # ACCEPT_TASK is gated on since its promotion above the objective step
+    # (S-051). Before the gate the rung fired on `not task_code` alone, so this
+    # default is what these fixtures already assumed.
     base = dict(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
                 initial_xp=0, task_exchange_min_coins=1, combat_monster=None,
-                gear_review_active=False)
+                gear_review_active=False, draw_owed=True)
     base.update(kw)
     return SelectionContext(**base)
 
@@ -2693,24 +2697,35 @@ def _unplannable_objective_arbiter(plannable):
     return arbiter
 
 
-def _select_with(arbiter, **kw):
+def _select_with(arbiter, *, draw_owed=True, **kw):
+    """`draw_owed=True`: a taskless character owes a draw, so ACCEPT_TASK is the
+    fall-through goal these fixtures expect to win.
+
+    It sits ABOVE the objective step since 2026-08-19 (S-051), which is why
+    `objective_unplannable` now skips collect-band attempts — otherwise the
+    accept, a one-action booking, would be recorded as the abandoned objective.
+    """
     state = make_state(hp=150, max_hp=150, task_code=None, task_total=0)
     return arbiter.select(
         _FakeDecision(chosen_step=ReachCharLevel(5)), state, _make_planner_gd(),
         [AcceptTaskAction(taskmaster_location=(2, 1))],
-        _ctx(combat_monster="chicken"), **kw)
+        _ctx(combat_monster="chicken", draw_owed=draw_owed), **kw)
 
 
 def test_first_attempted_candidate_is_recorded_when_it_is_abandoned():
     """31 hours of traces recorded NOTHING when the first-attempted objective was
     abandoned; the run read as 'the bot chose to grind XP'. The fall-through to a
     lower-ranked candidate is intended — only the silence is the bug."""
-    arbiter = _unplannable_objective_arbiter(plannable={"AcceptTask"})
+    # ACCEPT_TASK is attempted FIRST now — it sits in the collect band above the
+    # objective step (S-051) — and is unplannable here, so the walk reaches the
+    # step, abandons it, and falls through to Wait. The accept must NOT be what
+    # gets recorded: a one-action booking is not the abandoned objective.
+    arbiter = _unplannable_objective_arbiter(plannable=set())
     goal, plan, tried = _select_with(arbiter)
-    # The walk attempted the objective step first and it produced no plan.
-    assert [t["goal"] for t in tried] == ["GrindCharacterXP(chicken)", "AcceptTask"]
-    # Fall-through is intended.
-    assert repr(goal) == "AcceptTask" and len(plan) == 1
+    assert [t["goal"] for t in tried] == ["AcceptTask", "GrindCharacterXP(chicken)"]
+    # Fall-through is intended — here to the unconditional Wait rung, which is
+    # selected outside the walk and so never appears in `goals_tried`.
+    assert repr(goal) == "Wait" and len(plan) == 1
     assert arbiter.objective_unplannable is not None, \
         "the abandoned objective must be recorded, not silently dropped"
     assert arbiter.objective_unplannable["goal"] == "GrindCharacterXP(chicken)"
@@ -2761,7 +2776,11 @@ def test_under_a_commitment_the_event_names_the_COMMITTED_objective():
 def test_event_is_cleared_on_the_next_healthy_cycle():
     """The field is per-cycle state: a cycle whose first attempt plans must not
     inherit the previous cycle's abandonment."""
-    arbiter = _unplannable_objective_arbiter(plannable={"AcceptTask"})
+    # Cycle 0: nothing plans, so the walk reaches the objective step, abandons
+    # it, and falls through to the unconditional Wait rung. (With ACCEPT_TASK
+    # plannable the walk would stop at it — a collect-band booking above the
+    # step — and never attempt the objective at all.)
+    arbiter = _unplannable_objective_arbiter(plannable=set())
     _select_with(arbiter)
     assert arbiter.objective_unplannable is not None
     arbiter.set_cycle(1)

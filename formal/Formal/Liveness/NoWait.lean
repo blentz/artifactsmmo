@@ -26,12 +26,21 @@ open Formal.Liveness.Measure
 open Formal.Liveness.MeansKind
 open Formal.Liveness.ProductionLadder
 
-/-- Phase-totality: for every state, one of the three task means fires. -/
+/-- Phase-totality, WEAKENED 2026-08-19. One of the three task means fires — or
+    the character is taskless with no draw owed, which is the one state none of
+    them covers.
+
+    `acceptTaskFires` used to be `phase = .none` outright, making this a genuine
+    totality. The USER's no-immediate-redraw rule gates it on `drawOwed` (S-048
+    discards a dead draw; redrawing at once would spin accept/discard above the
+    objective step, burning a coin a cycle), and a gated accept cannot cover the
+    taskless case unconditionally. The fourth disjunct is that hole, named. -/
 theorem task_means_always_fires (s : State) :
     fires .acceptTask s = true ∨ fires .pursueTask s = true
-      ∨ fires .completeTask s = true := by
+      ∨ fires .completeTask s = true
+      ∨ (s.taskLifecyclePhase = .none ∧ s.drawOwed = false) := by
   simp only [fires, acceptTaskFires, pursueTaskFires, completeTaskFires]
-  cases h : s.taskLifecyclePhase <;> simp [h]
+  cases h : s.taskLifecyclePhase <;> cases hd : s.drawOwed <;> simp [h, hd]
 
 /-- Generic: a member whose body is `some` makes `findSome?` non-`none`. -/
 theorem findSome?_ne_none_of_mem {α β : Type} {f : α → Option β} {l : List α}
@@ -50,15 +59,31 @@ theorem ladder_split : allInLadderOrder = allInLadderOrder.dropLast ++ [MeansKin
 
 theorem wait_notin_init : MeansKind.wait ∉ allInLadderOrder.dropLast := by decide
 
-/-- **hnowait, unconditional.** The ladder never returns `.wait`: a task means
-always fires before it, so the first firing means is productive. -/
-theorem productionLadder_ne_wait (s : State) : productionLadder s ≠ some .wait := by
+/-- **hnowait, CONDITIONAL since 2026-08-19.** The ladder never returns `.wait`
+    while there is something to do: a task is in flight, a draw is owed, or the
+    objective has a step.
+
+    It was unconditional, and rested entirely on `acceptTaskFires = (phase =
+    .none)` — "you can always accept a task". Gating the accept on `drawOwed`
+    (see `task_means_always_fires`) opens exactly one hole: taskless, no draw
+    owed, and no objective step. `.wait` is the CORRECT answer there and
+    `WaitGoal` is the declared totality witness for it, so this is a deliberate
+    loosening rather than a regression — but it is a loosening, and the
+    hypothesis says so out loud. -/
+theorem productionLadder_ne_wait (s : State)
+    (hlive : s.taskLifecyclePhase ≠ .none ∨ s.drawOwed = true
+             ∨ s.objectiveStepFires = true) :
+    productionLadder s ≠ some .wait := by
   -- A task means fires AND lives in the init (before .wait).
   have hinit_fires : ∃ k ∈ allInLadderOrder.dropLast, fires k s = true := by
-    rcases task_means_always_fires s with h | h | h
+    rcases task_means_always_fires s with h | h | h | ⟨hnone, hnodraw⟩
     · exact ⟨.acceptTask, by decide, h⟩
     · exact ⟨.pursueTask, by decide, h⟩
     · exact ⟨.completeTask, by decide, h⟩
+    · rcases hlive with hph | hdraw | hstep
+      · exact absurd hnone hph
+      · rw [hnodraw] at hdraw; cases hdraw
+      · exact ⟨.objectiveStep, by decide, by simp [fires, objectiveStepFires, hstep]⟩
   obtain ⟨k, hkmem, hkf⟩ := hinit_fires
   -- so the init's findSome? is `some b` for some firing init member b.
   have hne : allInLadderOrder.dropLast.findSome? (f s) ≠ none :=

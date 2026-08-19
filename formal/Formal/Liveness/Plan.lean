@@ -182,7 +182,11 @@ noncomputable def applyActionKind : ActionKind → State → State
       { s with taskCode := some newCode,
                taskTotal := 1,
                taskProgress := 0,
-               taskLifecyclePhase := .accepted }
+               taskLifecyclePhase := .accepted,
+               -- 2026-08-19: the owed draw is DISCHARGED by taking it — the whole
+               -- descent argument for `.acceptTask` above `.objectiveStep`. Slot 3
+               -- falls, dominating the `phasePresent` rise at slot 4.
+               drawOwed := false }
   -- TaskExchangeAction.apply (task_exchange.py:44+): consumes `min_coins`
   -- task coins from inventory, grants reward. The Lean model abstracts the
   -- coin counter via `taskCoinsTotal`; the conservative single-action

@@ -1335,6 +1335,9 @@ class StrategyArbiter:
         worth_suppressed = self._worth_gate_suppressed(
             objective, chosen_root, discretionary_kinds, state, game_data, ctx)
 
+        # Captured BEFORE `_committed_repr` is overwritten: the goal this cycle
+        # was STICKY on, which `select_pure` probes ahead of the ranked walk.
+        prev_committed = self._committed_repr
         chosen, plan, new_committed = self._arbitrate(
             candidates, suppressed, worth_suppressed, state, game_data, actions, ctx)
 
@@ -1362,7 +1365,21 @@ class StrategyArbiter:
         # a goal only when its `try_plan` came back NON-EMPTY, and the dedupe
         # above keeps each goal's LAST attempt — so `first["plan_len"] == 0`
         # already proves `first` is not what ran.
-        first = self.goals_tried[0] if self.goals_tried else None
+        # COLLECT-BAND ATTEMPTS ARE SKIPPED. This field means "the objective the
+        # arbiter was pursuing and abandoned", and it used to read
+        # `goals_tried[0]` because nothing cheap preceded the step. ACCEPT_TASK
+        # was promoted into the collect band on 2026-08-19 (S-051), so the first
+        # attempt can now be a one-action booking that has nothing to do with the
+        # objective — and labelling THAT the abandoned objective would make the
+        # 31-hour silence this field exists to break unreadable in a new way.
+        # ...EXCEPT one the arbiter was COMMITTED to. A sticky commitment is
+        # probed before the ranked walk, so a committed collect goal that stops
+        # planning IS the objective this cycle abandoned — which is the case the
+        # field was added to name.
+        collect_reprs = {c.repr_ for c in candidates
+                         if c.band == BAND_COLLECT and c.repr_ != prev_committed}
+        first = next((g for g in self.goals_tried
+                      if g["goal"] not in collect_reprs), None)
         if first is not None and not first["plan_len"] and chosen is not None:
             self.objective_unplannable = dict(first)
         return chosen, plan, self.goals_tried
@@ -1718,7 +1735,19 @@ class StrategyArbiter:
             return worth_suppressed
         needs = objective_needs(chosen_root, state, game_data)
         if not needs.is_empty:
-            for mk in (MeansKind.PURSUE_TASK, MeansKind.ACCEPT_TASK):
+            # PURSUE_TASK only. ACCEPT_TASK left this gate with its promotion
+            # to the collect band on 2026-08-19, and the gate could never have
+            # worked for it anyway: `means_serves` scores the overlap between the
+            # HELD task and the objective's needs, and an accept has no held task
+            # to score — it returned 0 and suppressed the rung whenever the
+            # objective had any unmet need, which is nearly always. A draw cannot
+            # be judged before it is drawn; S-047 judges it after, and S-048
+            # discards it when it advances nothing.
+            #
+            # The loop also only ever sees `discretionary_kinds`, which
+            # ACCEPT_TASK is no longer a member of — leaving it named here would
+            # be a dead branch.
+            for mk in (MeansKind.PURSUE_TASK,):
                 if mk not in discretionary_kinds:
                     continue
                 g = map_means(mk, game_data, ctx, state)

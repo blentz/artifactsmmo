@@ -237,6 +237,8 @@ def _ctx(draw: st.DrawFn) -> SelectionContext:
         initial_xp=draw(st.integers(min_value=0, max_value=100_000)),
         task_exchange_min_coins=draw(st.integers(min_value=1_000, max_value=10_000)),
         combat_monster=None,
+        # a draw is OWED — the normal taskless state, and ACCEPT_TASK's gate
+        draw_owed=True,
     )
 
 
@@ -461,10 +463,13 @@ def test_ladder_entry_count_matches_lean() -> None:
 
 
 def test_no_task_state_acceptTask_fires() -> None:
-    """A baseline: state with no task ⇒ ACCEPT_TASK fires (means.py:92-93).
-    This is one of the three witness branches of the Lean headline."""
+    """A baseline: no task AND a draw owed ⇒ ACCEPT_TASK fires.
+
+    The draw-owed conjunct is new (2026-08-19, S-051): the rung sits above the
+    objective step now, and without the gate accept/discard would spin there."""
     gd = _empty_gd()
     ctx = SelectionContext(
+        draw_owed=True,
         bank_accessible=True,
         bank_required_level=0,
         bank_unlock_monster=None,

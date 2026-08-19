@@ -394,6 +394,27 @@ theorem descends_completeTask (s : State)
     · simp [fMeasure, pressureDelta, applyActionKind]
     · simp [fMeasure, pressureDelta, hph, hphase]
 
+/-- `acceptTask` (→ `.acceptTask`) strictly descends at `drawOwedFlag`.
+
+    The rung that could not descend before slot 3 existed: accepting RAISES
+    `phasePresent` (none → accepted) and touches nothing earlier, so under the old
+    tuple it strictly increased the measure. It fires only with a draw OWED and
+    discharges it, and `drawOwedFlag` sits one slot ABOVE `phasePresent` — so the
+    discharge dominates the phase rise. -/
+theorem descends_acceptTask (s : State)
+    (hk : productionLadder (perceptionRefresh s) = some .acceptTask) :
+    fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, acceptTaskFires, Bool.and_eq_true, decide_eq_true_eq] at hfire
+  have hdraw : (perceptionRefresh s).drawOwed = true := hfire.2
+  rw [cycleStepF_some s hk, ← fMeasure_perceptionRefresh s]
+  have hcs : cycleStep (perceptionRefresh s) =
+      applyActionKind .acceptTask (perceptionRefresh s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  apply fLt_of_drawOwed_dec <;>
+    simp [fMeasure, pressureDelta, applyActionKind, hdraw]
+
 /-- `taskCancel` (→ `.taskCancel`) strictly descends at `phasePresent`. -/
 theorem descends_taskCancel (s : State)
     (hk : productionLadder (perceptionRefresh s) = some .taskCancel) :

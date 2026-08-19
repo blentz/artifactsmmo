@@ -478,7 +478,11 @@ theorem _fires_acceptTask_implies_acceptTask_positive
     acceptTaskValue (acceptTaskSatisfied s) > 0 := by
   intro h
   unfold fires acceptTaskFires at h
-  simp only [decide_eq_true_eq] at h
+  -- `acceptTaskFires` is a conjunction since 2026-08-19 (`&& s.drawOwed`), so the
+  -- phase equality has to be projected out of it. The drawOwed half says nothing
+  -- about the VALUE and is discarded.
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
+  obtain ⟨h, _hdraw⟩ := h
   -- h : s.taskLifecyclePhase = .none
   obtain ⟨hderive, hnonemp, htotpos⟩ := hcons
   rw [h] at hderive

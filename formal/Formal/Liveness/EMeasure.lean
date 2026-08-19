@@ -35,6 +35,9 @@ structure EMeasure where
   gearGap                : Nat
   inadequacyFlag         : Nat
   xpDeficit              : Nat
+  -- 2026-08-19: mirrors FMeasure/DMeasure. `.acceptTask` RAISES
+  -- `phasePresent`, so it can only descend at a slot ABOVE it.
+  drawOwedFlag           : Nat
   phasePresent           : Nat
   taskCycles             : Nat
   pendingFlag            : Nat
@@ -74,6 +77,7 @@ noncomputable def eMeasure (s : State) : EMeasure :=
     gearGap                := s.gearGap
     inadequacyFlag         := b2n (!s.loadoutAdequate)
     xpDeficit              := xpToNextLevel s.level - s.xp
+    drawOwedFlag           := b2n s.drawOwed
     phasePresent           := b2n (decide (s.taskLifecyclePhase ≠ .none))
     taskCycles             := s.taskTotal - s.taskProgress
     pendingFlag            := b2n s.pendingItemsNonempty
@@ -98,7 +102,7 @@ noncomputable def eMeasure (s : State) : EMeasure :=
 abbrev LexE :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
-    Nat ×ₗ Nat ×ₗ Nat
+    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
 /-- Embed an `EMeasure` into the lex 23-tuple. -/
 def toLexE (m : EMeasure) : LexE :=
@@ -106,6 +110,7 @@ def toLexE (m : EMeasure) : LexE :=
       toLex (m.gearGap,
       toLex (m.inadequacyFlag,
       toLex (m.xpDeficit,
+      toLex (m.drawOwedFlag,
       toLex (m.phasePresent,
       toLex (m.taskCycles,
       toLex (m.pendingFlag,
@@ -123,7 +128,7 @@ def toLexE (m : EMeasure) : LexE :=
       toLex (m.geCancelFlag,
       toLex (m.supplyDemandSlot,
       toLex (m.currencyTurnInFlag,
-      toLex (m.gearReviewFlag, m.objectiveStepFlag))))))))))))))))))))))
+      toLex (m.gearReviewFlag, m.objectiveStepFlag)))))))))))))))))))))))
 
 /-- Strict lex order via the Mathlib embedding. -/
 def eMeasureLt (m₁ m₂ : EMeasure) : Prop :=
@@ -170,57 +175,72 @@ theorem eLt_of_xpDeficit_dec {m₁ m₂ : EMeasure}
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
   exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inl h⟩⟩⟩
 
+theorem eLt_of_drawOwed_dec {m₁ m₂ : EMeasure}
+    (h1 : m₁.levelDeficit = m₂.levelDeficit)
+    (h2 : m₁.gearGap = m₂.gearGap)
+    (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
+    (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (h : m₁.drawOwedFlag < m₂.drawOwedFlag) : eMeasureLt m₁ m₂ := by
+  apply lex_intro
+  simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inl h⟩⟩⟩⟩
+
 theorem eLt_of_phasePresent_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h : m₁.phasePresent < m₂.phasePresent) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inl h⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inl h⟩⟩⟩⟩⟩
 
 theorem eLt_of_taskCycles_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h : m₁.taskCycles < m₂.taskCycles) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inl h⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inl h⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_pending_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h : m₁.pendingFlag < m₂.pendingFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inl h⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inl h⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_overstockDebt_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
     (h : m₁.overstockDebt < m₂.overstockDebt) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inl h⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_overstock_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -228,13 +248,14 @@ theorem eLt_of_overstock_dec {m₁ m₂ : EMeasure}
     (h : m₁.overstockFlag < m₂.overstockFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_depositDebt_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -243,13 +264,14 @@ theorem eLt_of_depositDebt_dec {m₁ m₂ : EMeasure}
     (h : m₁.depositDebt < m₂.depositDebt) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_selectBankDeposits_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -259,13 +281,14 @@ theorem eLt_of_selectBankDeposits_dec {m₁ m₂ : EMeasure}
     (h : m₁.selectBankDepositsFlag < m₂.selectBankDepositsFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_sellDebt_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -276,13 +299,14 @@ theorem eLt_of_sellDebt_dec {m₁ m₂ : EMeasure}
     (h : m₁.sellDebt < m₂.sellDebt) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_sellable_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -294,13 +318,14 @@ theorem eLt_of_sellable_dec {m₁ m₂ : EMeasure}
     (h : m₁.sellableFlag < m₂.sellableFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_recyclable_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -313,13 +338,14 @@ theorem eLt_of_recyclable_dec {m₁ m₂ : EMeasure}
     (h : m₁.recyclableFlag < m₂.recyclableFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_craftRelief_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -333,13 +359,14 @@ theorem eLt_of_craftRelief_dec {m₁ m₂ : EMeasure}
     (h : m₁.craftReliefFlag < m₂.craftReliefFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_craftPotions_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -354,13 +381,14 @@ theorem eLt_of_craftPotions_dec {m₁ m₂ : EMeasure}
     (h : m₁.craftPotionsFlag < m₂.craftPotionsFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_hpDeficit_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -377,13 +405,14 @@ theorem eLt_of_hpDeficit_dec {m₁ m₂ : EMeasure}
     (h : m₁.hpDeficit < m₂.hpDeficit) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_gearReview_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -404,13 +433,14 @@ theorem eLt_of_gearReview_dec {m₁ m₂ : EMeasure}
     (h : m₁.gearReviewFlag < m₂.gearReviewFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_objectiveStepFlag_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -432,13 +462,14 @@ theorem eLt_of_objectiveStepFlag_dec {m₁ m₂ : EMeasure}
     (h : m₁.objectiveStepFlag < m₂.objectiveStepFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inr ⟨h22, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inr ⟨h22, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_geCancel_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -456,7 +487,7 @@ theorem eLt_of_geCancel_dec {m₁ m₂ : EMeasure}
     (h : m₁.geCancelFlag < m₂.geCancelFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Slot 20 (`supplyDemandSlot`, 2026-08-01) decrease with slots 1-19 equal. -/
 theorem eLt_of_supplyDemand_dec {m₁ m₂ : EMeasure}
@@ -464,6 +495,7 @@ theorem eLt_of_supplyDemand_dec {m₁ m₂ : EMeasure}
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -482,7 +514,7 @@ theorem eLt_of_supplyDemand_dec {m₁ m₂ : EMeasure}
     (h : m₁.supplyDemandSlot < m₂.supplyDemandSlot) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Slot 21 (`currencyTurnInFlag`, 2026-08-16) decrease with slots 1-20 equal.
     No threshold needed (unlike `supplyDemandSlot`): `.npcBuy` clears
@@ -492,6 +524,7 @@ theorem eLt_of_currencyTurnIn_dec {m₁ m₂ : EMeasure}
     (h2 : m₁.gearGap = m₂.gearGap)
     (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
     (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
     (h5 : m₁.phasePresent = m₂.phasePresent)
     (h6 : m₁.taskCycles = m₂.taskCycles)
     (h7 : m₁.pendingFlag = m₂.pendingFlag)
@@ -511,7 +544,7 @@ theorem eLt_of_currencyTurnIn_dec {m₁ m₂ : EMeasure}
     (h : m₁.currencyTurnInFlag < m₂.currencyTurnInFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-! ## The engine. -/
 

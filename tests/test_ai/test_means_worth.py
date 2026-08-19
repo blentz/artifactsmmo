@@ -92,3 +92,15 @@ def test_monsters_task_serves_char_level_objective():
     state = make_state(task_type="monsters", task_code="chicken")
     needs = NeedSet(frozenset(), frozenset(), frozenset(), char_xp=True)
     assert means_serves(MeansKind.PURSUE_TASK, None, needs, state, gd) is True
+
+def test_a_task_kind_with_no_held_task_serves_nothing():
+    """The empty-`task_code` arm of `_task_skills`.
+
+    It used to be reached through ACCEPT_TASK, which by definition has no held
+    task to score — and that is exactly why the worth gate could never work for
+    it, and why ACCEPT_TASK left the gate when it was promoted to the collect
+    band (2026-08-19). PURSUE_TASK always holds one, so the arm needs its own
+    test now."""
+    gd = GameData()
+    state = make_state(task_code=None, task_type=None, task_total=0)
+    assert means_serves(MeansKind.PURSUE_TASK, None, _weapon_needs(), state, gd) is False

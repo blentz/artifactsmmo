@@ -12,7 +12,13 @@ from pathlib import Path
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
+from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
+from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.strategy_driver import map_means
+from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.tiers.taskmaster_choice import choose_taskmaster
 from tests.test_ai.fixtures import make_state
 
@@ -120,3 +126,27 @@ def test_choice_fires_on_real_bundle(bundle_game_data: GameData):
     assert chosen is not None, "no task at level 40 in either pool — choice inert"
     code, tile = chosen
     assert code in tiles and tile == tiles[code]
+
+def test_map_means_parameterises_the_goal_with_the_chosen_master(
+        bundle_game_data: GameData):
+    """The choice reaches the GOAL, not just the helper. A parameterised
+    `AcceptTaskGoal` carries the chosen tile and emits its own action rather than
+    filtering the prebuilt pool, which is what steers the task DISTRIBUTION."""
+    state = make_state(level=40, x=0, y=0)
+    ctx = SelectionContext(
+        bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
+        initial_xp=0, task_exchange_min_coins=1, combat_monster=None,
+        draw_owed=True)
+    goal = map_means(MeansKind.ACCEPT_TASK, bundle_game_data, ctx, state)
+    assert isinstance(goal, AcceptTaskGoal)
+    emitted = goal.relevant_actions([], state, bundle_game_data)
+    assert len(emitted) == 1, "a parameterised goal emits its own accept"
+    assert emitted[0].taskmaster_location in bundle_game_data.taskmaster_tiles.values()
+
+
+def test_an_unparameterised_goal_filters_the_prebuilt_pool():
+    """The fallback arm: no second master, so the goal keeps today's behaviour
+    and narrows whatever the factory built."""
+    goal = AcceptTaskGoal()
+    pool = [AcceptTaskAction(taskmaster_location=(2, 1)), MoveAction(x=0, y=0)]
+    assert goal.relevant_actions(pool, make_state(), GameData()) == [pool[0]]

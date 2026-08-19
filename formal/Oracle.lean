@@ -2505,7 +2505,10 @@ def runLadder (args : Array Json) : Json :=
     bankJunkNonempty := b 31, craftPotionsFires := b 32,
     goldReserve := n 33, geBidCandidateNonempty := b 34,
     geCancelTargetsNonempty := b 35, supplyDemand := n 36,
-    currencyTurnInActive := b 37, supplyAsymmetric := b 38 }
+    currencyTurnInActive := b 37, supplyAsymmetric := b 38,
+    -- [39] drawOwed (2026-08-19): ACCEPT_TASK's gate, and the slot the accept
+    -- descends. Appended, so every existing caller keeps its indices.
+    drawOwed := b 39 }
   let firesFields : List (String × Json) :=
     allInLadderOrder.map (fun k => (meansKindName k, Json.bool (fires k s)))
   let selected : Json := match productionLadder s with

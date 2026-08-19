@@ -371,6 +371,10 @@ def _make_world(scn: Scenario) -> WorldState:
 
 def _make_ctx(scn: Scenario) -> SelectionContext:
     return SelectionContext(
+        # 2026-08-19: a draw is OWED — the normal state for a taskless
+        # character. ACCEPT_TASK is gated on it (S-051), so leaving it
+        # False here would test the rung's absence, not the rung.
+        draw_owed=True,
         bank_accessible=scn.bank_accessible,
         bank_required_level=scn.bank_required_level,
         bank_unlock_monster=scn_unlock_name() if scn.has_bank_unlock_monster else None,
@@ -505,6 +509,9 @@ def _oracle_args(scn: Scenario, w: WorldState,
         # oracle args always hard-wired `supplyAsymmetric := false` and the
         # differential never actually compared the new arm against Python).
         _supply_asymmetric(_make_ctx(scn)),
+        # 39 drawOwed (2026-08-19): ACCEPT_TASK's gate. Read off the SAME
+        # ctx production reads, so neither side can drift on it.
+        1 if _make_ctx(scn).draw_owed else 0,
     ]
 
 
@@ -958,6 +965,7 @@ def _rich_oracle_args(
         # which hard-wired the Lean side to `false` and made the differential
         # unable to catch a Lean/Python disagreement on this arm.
         _supply_asymmetric(ctx),  # 38 supplyAsymmetric
+        1 if ctx.draw_owed else 0,               # 39 drawOwed
     ]
 
 
@@ -1070,7 +1078,8 @@ def _craft_relief_ctx() -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
-        gear_review_active=False)
+        gear_review_active=False,
+        draw_owed=True)
 
 
 def _craft_relief_world(inventory_max: int) -> WorldState:
@@ -1164,7 +1173,8 @@ def _recycle_ctx(*, protect_dagger: bool = False) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
         gear_keep={"dagger": 2} if protect_dagger else {},
-        gear_review_active=False)
+        gear_review_active=False,
+        draw_owed=True)
 
 
 def _recycle_world(dagger_qty: int) -> WorldState:
@@ -1250,7 +1260,8 @@ def _drain_ctx(*, protect_sap: bool = False) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
         gear_keep={"sap": 5} if protect_sap else {},
-        gear_review_active=False)
+        gear_review_active=False,
+        draw_owed=True)
 
 
 def _drain_world(bank_sap_qty: int) -> WorldState:
@@ -1343,7 +1354,8 @@ def _gebid_ctx(step_profile: dict[str, int]) -> SelectionContext:
     return SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        step_profile=step_profile)
+        step_profile=step_profile,
+        draw_owed=True)
 
 
 def _gebid_world(*, open_steel_order: bool = False) -> WorldState:
@@ -1462,7 +1474,8 @@ def _rest_combat_ctx() -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
         target_gear=frozenset(), target_tools=frozenset(),
-        gear_review_active=False)
+        gear_review_active=False,
+        draw_owed=True)
 
 
 def _rest_combat_world(hp: int, max_hp: int) -> WorldState:
@@ -1563,7 +1576,8 @@ def _maintain_ctx() -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
         target_gear=frozenset(), target_tools=frozenset(),
-        gear_review_active=False)
+        gear_review_active=False,
+        draw_owed=True)
 
 
 def _maintain_world(potion_qty: int) -> WorldState:
@@ -1726,12 +1740,19 @@ def _too_hard_monsters_gd() -> GameData:
     return gd
 
 
-def _plain_ctx(*, combat_monster: str | None = None) -> SelectionContext:
+def _plain_ctx(*, combat_monster: str | None = None,
+               draw_owed: bool = True) -> SelectionContext:
+    """`draw_owed` defaults FALSE, which keeps ACCEPT_TASK quiet.
+
+    ACCEPT_TASK was promoted above the objective step on 2026-08-19 (S-051), so
+    with a draw owed it outranks every rung these fixtures drive. Defaulting the
+    gate off preserves what each of them is actually testing; the accept's own
+    fixtures opt in."""
     return SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=combat_monster,
         target_gear=frozenset(), target_tools=frozenset(),
-        gear_review_active=False)
+        gear_review_active=False, draw_owed=draw_owed)
 
 
 def _monsters_task_world(*, task_code: str, progress: int, total: int,
@@ -2033,7 +2054,8 @@ def _supply_ctx(demand: int) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
         gear_review_active=False,
-        supply_target=("copper_ore", 999, demand))
+        supply_target=("copper_ore", 999, demand),
+        draw_owed=True)
 
 
 def test_supply_bank_threshold_at_boundary_agrees_and_wins_over_objective() -> None:
@@ -2087,7 +2109,8 @@ def _supply_ctx_asymmetric(demand: int, *, asymmetric: bool) -> SelectionContext
         target_gear=frozenset(), target_tools=frozenset(),
         gear_review_active=False,
         supply_target=("copper_ore", 999, demand),
-        asymmetric_demand=frozenset({"copper_ore"}) if asymmetric else frozenset())
+        asymmetric_demand=frozenset({"copper_ore"}) if asymmetric else frozenset(),
+        draw_owed=True)
 
 
 def test_supply_bank_asymmetric_fires_below_threshold_and_wins_over_objective() -> None:

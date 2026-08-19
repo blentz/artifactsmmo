@@ -131,6 +131,21 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     MeansKind.SELL_PRESSURED,
     MeansKind.LOW_YIELD_CANCEL,
     MeansKind.TASK_CANCEL,
+    # 2026-08-19, USER ruling + S-051: ACCEPT_TASK is promoted out of
+    # DISCRETIONARY_ORDER to here. Below the step it was unreachable for the same
+    # reason SUPPLY_BANK was — a character essentially always has an objective
+    # step (14,064 of 14,064 traced cycles) — and the fleet has held a task in 0
+    # of 63,310 cycles, so every rung downstream of it has never run.
+    #
+    # It is gated on `ctx.draw_owed`, which is what makes the promotion sound
+    # rather than a livelock: accept and discard both sit above the step, so an
+    # ungated redraw would spin between them at a coin a cycle. The gate is
+    # mirrored in `acceptTaskFires` and is the conjunct the Lean descent argument
+    # rests on.
+    #
+    # POSITION: with the one-or-few-action group and AFTER both cancel rungs — a
+    # dead draw goes back before a new one is taken.
+    MeansKind.ACCEPT_TASK,
     # 2026-08-01, human ruling: SUPPLY_BANK is promoted out of
     # DISCRETIONARY_ORDER to here, ABOVE the objective step, so a character can
     # pause its own chain to serve a sibling's declared, SUBSTANTIAL request
@@ -175,7 +190,6 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
 )
 DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.PURSUE_TASK,
-    MeansKind.ACCEPT_TASK,
     MeansKind.TASK_EXCHANGE,
     MeansKind.MAINTAIN_CONSUMABLES,  # prep heals for combat before idle housekeeping
     MeansKind.SELL_IDLE,
@@ -243,6 +257,12 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
 
     if kind is MeansKind.ACCEPT_TASK:
         if state.task_code:
+            return False
+        # S-051 + the no-immediate-redraw rule: a draw must be OWED. Mirrors
+        # `Formal.Liveness.ProductionLadder.acceptTaskFires`, which carries the
+        # same conjunct so the rung can descend `drawOwedFlag` from above the
+        # objective step.
+        if not ctx.draw_owed:
             return False
         # Defer AcceptTask whenever the player has GEAR-CHAIN work to do.
         # An immediate AcceptTask after TaskComplete re-locks the cycle

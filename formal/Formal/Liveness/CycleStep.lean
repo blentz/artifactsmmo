@@ -635,7 +635,11 @@ theorem cycleStep_progress_or_waits
     have hcs : cycleStep s = applyActionKind .acceptTask s := by
       unfold cycleStep; rw [hk]; rfl
     rw [hcs]
-    simp only [fires, acceptTaskFires, decide_eq_true_eq] at hfires
+    -- `acceptTaskFires` gained `&& s.drawOwed` on 2026-08-19; project the phase
+    -- equality out of the conjunction. The drawOwed half is irrelevant to the
+    -- phase transition being contradicted below.
+    simp only [fires, acceptTaskFires, Bool.and_eq_true, decide_eq_true_eq] at hfires
+    obtain ⟨hfires, _hdraw⟩ := hfires
     -- hfires : s.taskLifecyclePhase = .none
     intro heq
     have hpost : (applyActionKind .acceptTask s).taskLifecyclePhase

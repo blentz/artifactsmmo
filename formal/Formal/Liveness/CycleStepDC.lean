@@ -83,7 +83,10 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
       { s with taskCode := some newCode,
                taskTotal := 1,
                taskProgress := 0,
-               taskLifecyclePhase := .accepted }
+               taskLifecyclePhase := .accepted,
+               -- mirrors `Plan.applyActionKind`; `applyActionKindC_eq` is what
+               -- forces the two to move together.
+               drawOwed := false }
   -- TaskExchangeAction.apply (task_exchange.py:44+): consumes `min_coins`
   -- task coins from inventory, grants reward. The Lean model abstracts the
   -- coin counter via `taskCoinsTotal`; the conservative single-action

@@ -170,6 +170,7 @@ def _ctx(**overrides) -> SelectionContext:
         initial_xp=0,
         task_exchange_min_coins=1,
         combat_monster=None,
+        draw_owed=True,      # ACCEPT_TASK's gate; taskless means a draw is owed
     )
     defaults.update(overrides)
     return SelectionContext(**defaults)

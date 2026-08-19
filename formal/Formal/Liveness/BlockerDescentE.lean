@@ -57,6 +57,12 @@ private theorem cycleStepE_some (s : State) {k : MeansKind}
 /-! ## perceptionRefreshE field bridges — only the objective Bools and the
 gear latch can move. -/
 
+private theorem refreshE_drawOwed (s : State) :
+    (perceptionRefreshE s).drawOwed = s.drawOwed := by
+  unfold perceptionRefreshE
+  split
+  · split <;> rfl
+  · rfl
 private theorem refreshE_phase (s : State) :
     (perceptionRefreshE s).taskLifecyclePhase = s.taskLifecyclePhase := by
   unfold perceptionRefreshE
@@ -342,7 +348,7 @@ theorem descendsE_hpCritical (s : State)
   apply eLt_of_hpDeficit_dec <;>
     simp only [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
       applyActionKind, if_false, Bool.false_eq_true, Bool.false_and, reduceIte,
-      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -370,7 +376,7 @@ theorem descendsE_restForCombat (s : State)
   apply eLt_of_hpDeficit_dec <;>
     simp only [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
       applyActionKind, if_false, Bool.false_eq_true, Bool.false_and, reduceIte,
-      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -396,7 +402,7 @@ theorem descendsE_recycleRelief (s : State)
   apply eLt_of_recyclable_dec <;>
     simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
       applyActionKind, hfire.2,
-      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -420,7 +426,7 @@ theorem descendsE_geCancel (s : State)
   apply eLt_of_geCancel_dec <;>
     simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
       applyActionKind, hfire,
-      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -454,7 +460,7 @@ theorem descendsE_supplyBank (s : State)
   apply eLt_of_supplyDemand_dec <;>
     simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
       applyActionKind,
-      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -480,7 +486,7 @@ theorem descendsE_currencyTurnIn (s : State)
   apply eLt_of_currencyTurnIn_dec <;>
     simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
       applyActionKind, hfire,
-      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -502,7 +508,7 @@ theorem descendsE_craftRelief (s : State)
   apply eLt_of_craftRelief_dec <;>
     simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
       applyActionKind, hfire,
-      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -510,6 +516,32 @@ theorem descendsE_craftRelief (s : State)
       refreshE_gearGap, refreshE_adequate,
       perceptionRefreshE_level, perceptionRefreshE_xp]
 
+
+/-- `acceptTask` strictly descends `drawOwedFlag` — the E-tower twin of
+    `descends_acceptTask`. Fires only with a draw OWED, discharges it, and the
+    flag sits above `phasePresent`, which the accept raises. -/
+theorem descendsE_acceptTask (s : State)
+    (hk : productionLadder (perceptionRefreshE s) = some .acceptTask) :
+    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, acceptTaskFires, Bool.and_eq_true, decide_eq_true_eq,
+    refreshE_drawOwed] at hfire
+  have hdraw : s.drawOwed = true := hfire.2
+  rw [cycleStepE_some s hk]
+  have hcs : cycleStep (perceptionRefreshE s) =
+      applyActionKind .acceptTask (perceptionRefreshE s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  apply eLt_of_drawOwed_dec <;>
+    simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
+      applyActionKind, hdraw,
+      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
+      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
+      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
+      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
+      refreshE_gearGap, refreshE_adequate,
+      perceptionRefreshE_level, perceptionRefreshE_xp]
 
 /-- `claimPending` (→ `.claimPendingItem`) strictly descends. -/
 theorem descendsE_claimPending (s : State)
@@ -525,7 +557,7 @@ theorem descendsE_claimPending (s : State)
   apply eLt_of_pending_dec <;>
     simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
       applyActionKind, hfire,
-      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -548,7 +580,7 @@ theorem descendsE_discardCritical (s : State)
   · apply eLt_of_overstock_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hfire.1.1, hdebt,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -558,7 +590,7 @@ theorem descendsE_discardCritical (s : State)
   · apply eLt_of_overstockDebt_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hfire.1.1, hdebt,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -582,7 +614,7 @@ theorem descendsE_discardHigh (s : State)
   · apply eLt_of_overstock_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hfire.1.1, hdebt,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -592,7 +624,7 @@ theorem descendsE_discardHigh (s : State)
   · apply eLt_of_overstockDebt_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hfire.1.1, hdebt,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -616,7 +648,7 @@ theorem descendsE_depositFull (s : State)
   · apply eLt_of_selectBankDeposits_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hfire.2, hdebt,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -626,7 +658,7 @@ theorem descendsE_depositFull (s : State)
   · apply eLt_of_depositDebt_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hfire.2, hdebt,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -650,7 +682,7 @@ theorem descendsE_sellPressured (s : State)
   · apply eLt_of_sellable_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hfire.2, hdebt,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -660,7 +692,7 @@ theorem descendsE_sellPressured (s : State)
   · apply eLt_of_sellDebt_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hfire.2, hdebt,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -684,7 +716,7 @@ theorem descendsE_sellRelief (s : State)
   · apply eLt_of_sellable_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hfire.2, hdebt,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -694,7 +726,7 @@ theorem descendsE_sellRelief (s : State)
   · apply eLt_of_sellDebt_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hfire.2, hdebt,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -718,7 +750,7 @@ theorem descendsE_craftPotions (s : State)
   · apply eLt_of_craftRelief_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hrelief,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -729,7 +761,7 @@ theorem descendsE_craftPotions (s : State)
     apply eLt_of_craftPotions_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hrelief, hfire,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -754,7 +786,7 @@ theorem descendsE_taskCancel (s : State)
   apply eLt_of_phasePresent_dec <;>
     simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
       applyActionKind, hphase,
-      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -779,7 +811,7 @@ theorem descendsE_lowYieldCancel (s : State)
   apply eLt_of_phasePresent_dec <;>
     simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
       applyActionKind, hphase,
-      refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -830,7 +862,7 @@ theorem descendsE_completeTask (s : State)
         perceptionRefreshE_level, perceptionRefreshE_xp] using hwill
     apply eLt_of_phasePresent_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD, applyActionKind, hwillP, hphase, taskCompleteXpEstimate,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -874,7 +906,7 @@ theorem descendsE_gearReview (s : State) (hlvl : s.level < 50)
     apply eLt_of_gearReview_dec <;>
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hlatch, hprodf, hid, refreshE_geCancel, refreshE_currencyTurnIn,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -902,7 +934,7 @@ theorem descendsE_gearReview (s : State) (hlvl : s.level < 50)
         simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
           applyActionKind, hgap, hadq, hlatch, hprodc, refreshE_geCancel, refreshE_supplyDemand,
           refreshE_currencyTurnIn,
-          refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+          refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -915,7 +947,7 @@ theorem descendsE_gearReview (s : State) (hlvl : s.level < 50)
         simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
           applyActionKind, hgap, hadq', hprodc, refreshE_productive, fightLoss_productive,
           partialClear_productive, pressureDeltaD_productive, apply_optimizeLoadout_productive,
-          refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+          refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -927,7 +959,7 @@ theorem descendsE_gearReview (s : State) (hlvl : s.level < 50)
       simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
         applyActionKind, hgap, hprodc, refreshE_productive, fightLoss_productive,
         partialClear_productive, pressureDeltaD_productive, apply_optimizeLoadout_productive,
-        refreshE_phase, refreshE_progress, refreshE_total, refreshE_overstock,
+        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
       refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
@@ -1000,7 +1032,8 @@ private def gearScanPrefix : List MeansKind :=
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
    .discardHigh, .gearReview, .craftPotions, .claimPending, .completeTask,
-   .sellPressured, .lowYieldCancel, .taskCancel, .supplyBank, .currencyTurnIn]
+   .sellPressured, .lowYieldCancel, .taskCancel, .acceptTask,
+   .supplyBank, .currencyTurnIn]
 
 private theorem blockerPrefix_split :
     Formal.Liveness.UnconditionalDescent.blockerPrefix
@@ -1209,6 +1242,8 @@ theorem descendsE_pursueTask (s : State) (hArms : AdequateArmsFightAt s) (hlvl :
   · simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD, applyActionKind]
   · simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD, applyActionKind]
   · simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD, applyActionKind]
+  -- slot 5 (`drawOwedFlag`): untouched by this action
+  · simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD, applyActionKind, refreshE_drawOwed]
   · simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD, hpost, hphase]
   · simp only [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
       if_false, Bool.false_eq_true, Bool.false_and, reduceIte, applyActionKind]

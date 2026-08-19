@@ -286,7 +286,9 @@ def _fix_COMPLETE_TASK():
 def _fix_ACCEPT_TASK():
     gd = _base_gd()
     w = _base_world()
-    ctx = _ctx()
+    # A draw is OWED — ACCEPT_TASK's gate since 2026-08-19 (S-051). Without it
+    # the rung is quiet and this fixture drives nothing.
+    ctx = _ctx(draw_owed=True)
     cs = _world_to_cycle(w, ctx=ctx, gd=gd, overrides={})
     return cs, w, gd, ctx, AcceptTaskAction(taskmaster_location=(1, 2)), \
            LadderMeans.ACCEPT_TASK

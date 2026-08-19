@@ -92,11 +92,13 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.SELL_PRESSURED,
     LadderMeans.LOW_YIELD_CANCEL,
     LadderMeans.TASK_CANCEL,
+    # 2026-08-19 (S-051): promoted above the objective step, mirroring
+    # `Formal.Liveness.MeansKind.allInLadderOrder`.
+    LadderMeans.ACCEPT_TASK,
     LadderMeans.SUPPLY_BANK,
     LadderMeans.CURRENCY_TURNIN,
     LadderMeans.OBJECTIVE_STEP,
     LadderMeans.PURSUE_TASK,
-    LadderMeans.ACCEPT_TASK,
     LadderMeans.TASK_EXCHANGE,
     LadderMeans.MAINTAIN_CONSUMABLES,
     LadderMeans.SELL_IDLE,
@@ -168,13 +170,13 @@ assert COLLECT_REWARD_ORDER == (
     MeansKind.SELL_PRESSURED,
     MeansKind.LOW_YIELD_CANCEL,
     MeansKind.TASK_CANCEL,
+    MeansKind.ACCEPT_TASK,
     MeansKind.SUPPLY_BANK,
     MeansKind.CURRENCY_TURNIN,
 ), "COLLECT_REWARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 assert DISCRETIONARY_ORDER == (
     MeansKind.PURSUE_TASK,
-    MeansKind.ACCEPT_TASK,
     MeansKind.TASK_EXCHANGE,
     MeansKind.MAINTAIN_CONSUMABLES,
     MeansKind.SELL_IDLE,

@@ -284,7 +284,7 @@ def pursueTaskFires (s : State) : Bool :=
     Production: `means.py:92-93` checks `not state.task_code`, which
     is precisely `TaskLifecyclePhase.none`. -/
 def acceptTaskFires (s : State) : Bool :=
-  decide (s.taskLifecyclePhase = .none)
+  decide (s.taskLifecyclePhase = .none) && s.drawOwed
 
 /-- TASK_EXCHANGE. Mirrors `means.py:95-96`:
       tasks_coin_total ≥ ctx.task_exchange_min_coins -/

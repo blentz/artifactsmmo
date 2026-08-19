@@ -9,7 +9,7 @@
 | Cell | Rung | licensed | swept | contradictions | Verdict | Goal | Plan |
 |---|---|---|---|---|---|---|---|
 | drain_selectable | DrainBankJunk | 1993 | 0 | 0 | PASS | `DrainBankJunk` | `Withdraw(sap×120)` |
-| drain_quiet | DrainBankJunk | 0 | 0 | 0 | PASS | `AcceptTask` | `AcceptTask` |
+| drain_quiet | DrainBankJunk | 0 | 0 | 0 | PASS | `Wait` | `Wait` |
 | sell_selectable | SellInventory | 702 | 0 | 0 | PASS | `SellInventory` | `Withdraw(sap×120) → NpcSell(sap×120@timber_merchant)` |
 | recycle_selectable | RecycleSurplus | 29 | 0 | 0 | PASS | `RecycleSurplus` | `Recycle(copper_helmet×29)` |
 | route_coherence | - | 476 | 476 | 0 | PASS | `None` | `(none)` |
