@@ -4,9 +4,12 @@ Covers the shared pure helpers (consumable_supply), the MAINTAIN_CONSUMABLES
 means predicate, its arbiter mapping, and MaintainConsumablesGoal.
 """
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
+from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.consumable_supply import (
     HEAL_STOCK_FLOOR,
@@ -25,6 +28,7 @@ from artifactsmmo_cli.ai.goals.maintain_consumables import (
 from artifactsmmo_cli.ai.strategy_driver import map_means
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind, active_means
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 
@@ -195,6 +199,125 @@ def test_goal_relevant_actions_filters_to_heal_closure():
     assert [g.resource_code for g in gathers] == ["fishing_spot"]
     assert [w.code for w in withdraws] == ["raw_fish"]
     assert any(isinstance(a, MoveAction) for a in out)
+
+
+def _gd_drop_heal() -> GameData:
+    """GameData where the only heal's material comes ONLY from a monster drop.
+
+    `raw_beef` is gatherable from no resource — the live shape: `raw_chicken`,
+    `raw_beef` and `milk_bucket` all drop off animals and are gatherable from
+    nothing."""
+    gd = GameData()
+    gd._item_stats = {
+        "cooked_beef": ItemStats(code="cooked_beef", level=1, type_="consumable",
+                                 hp_restore=60, crafting_skill="cooking",
+                                 crafting_level=1),
+        "raw_beef": ItemStats(code="raw_beef", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"cooked_beef": {"raw_beef": 1}}
+    gd._resource_drops = {}
+    gd._workshop_locations = {"cooking": (3, 0)}
+    gd._monster_level = {"cow": 1}
+    gd._monster_locations = {"cow": [(6, 6)]}
+    gd._monster_drops = {"cow": [("raw_beef", 1, 1, 1)]}
+    gd._monster_hp = {"cow": 10}
+    gd._monster_attack = {"cow": {"air": 2}}
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+def _fighter(**kw):
+    """A state that can actually win — `make_state` has no attack, and
+    `is_winnable` is false against every monster without one, which would make
+    the dropper emission untestable rather than absent."""
+    base = dict(attack={"air": 20}, dmg=20, hp=150, max_hp=150)
+    base.update(kw)
+    return _state(**base)
+
+
+def test_a_pure_drop_material_gets_a_dropper_fight_and_its_swap():
+    """GAP-6 RECURRING. The filter admits Craft/Gather/Withdraw/Move and dropped
+    every Fight, so a heal whose material only DROPS had no acquisition edge and
+    the goal could never plan. Measured live on three of five characters: the
+    rung fired every cycle and `relevant_actions` came back with the Craft
+    alone."""
+    gd = _gd_drop_heal()
+    goal = MaintainConsumablesGoal(game_data=gd)
+    pool = [
+        CraftAction(code="cooked_beef", quantity=1, workshop_location=(3, 0)),
+        FightAction(monster_code="cow", locations=frozenset({(6, 6)})),
+    ]
+    out = goal.relevant_actions(pool, _fighter(inventory={}), gd)
+    assert [a.monster_code for a in out if isinstance(a, FightAction)] == ["cow"]
+    # Its companion swap: FightAction.is_applicable carries a hard
+    # optimal-loadout gate and nothing else here can satisfy it.
+    assert any(isinstance(a, OptimizeLoadoutAction) for a in out)
+
+
+def test_rest_is_admitted_so_a_multi_kill_farm_can_complete():
+    """`FightAction.apply` charges a flat `max_hp // 5`, so a character can fit
+    exactly four fights before the hp floor and a five-kill demand stalls one
+    short. Resting is normally the REST_FOR_COMBAT guard's job BETWEEN cycles,
+    which cannot help a goal that needs a COMPLETE plan to return anything."""
+    gd = _gd_drop_heal()
+    goal = MaintainConsumablesGoal(game_data=gd)
+    pool = [
+        CraftAction(code="cooked_beef", quantity=1, workshop_location=(3, 0)),
+        FightAction(monster_code="cow", locations=frozenset({(6, 6)})),
+        RestAction(),
+    ]
+    out = goal.relevant_actions(pool, _fighter(inventory={}), gd)
+    assert any(isinstance(a, RestAction) for a in out)
+
+
+def test_banked_material_earns_a_withdraw_the_pool_never_carried():
+    """The material was in the bank the whole time. Live: Lor's bank held 116
+    `raw_chicken` against a demand of 5 and the licensed pool carried no
+    withdraw for it, because the factory enumerates withdraws for codes a heal's
+    raw material is not among. `withdrawable` names the code, so the filter
+    would admit the action — there was simply none to admit."""
+    gd = _gd_drop_heal()
+    goal = MaintainConsumablesGoal(game_data=gd)
+    pool = [
+        CraftAction(code="cooked_beef", quantity=1, workshop_location=(3, 0)),
+        FightAction(monster_code="cow", locations=frozenset({(6, 6)})),
+        # Proof the bank is reachable this cycle; its flags are copied.
+        WithdrawItemAction(code="something_else", quantity=1, bank_location=(4, 0)),
+    ]
+    state = _fighter(inventory={}, bank_items={"raw_beef": 116})
+    out = goal.relevant_actions(pool, state, gd)
+    minted = [a for a in out if isinstance(a, WithdrawItemAction)
+              and a.code == "raw_beef"]
+    assert len(minted) == 1 and minted[0].quantity == HEAL_STOCK_FLOOR
+    assert minted[0].bank_location == (4, 0)
+
+
+def test_bank_stock_does_not_suppress_the_dropper_fight():
+    """PINS A REGRESSION THAT SHIPPED IN THIS FILE'S OWN DEVELOPMENT. Skipping
+    the fight because the bank holds the material removed the only edge that
+    actually planned — the pool has no withdraw for it — and took three of four
+    live characters from a plan back to none. Bank stock earns a withdraw; it
+    never earns a skip."""
+    gd = _gd_drop_heal()
+    goal = MaintainConsumablesGoal(game_data=gd)
+    pool = [
+        CraftAction(code="cooked_beef", quantity=1, workshop_location=(3, 0)),
+        FightAction(monster_code="cow", locations=frozenset({(6, 6)})),
+    ]
+    state = _fighter(inventory={}, bank_items={"raw_beef": 116})
+    out = goal.relevant_actions(pool, state, gd)
+    assert any(isinstance(a, FightAction) for a in out)
+
+
+def test_a_material_already_in_the_bag_earns_no_fight():
+    gd = _gd_drop_heal()
+    goal = MaintainConsumablesGoal(game_data=gd)
+    pool = [
+        CraftAction(code="cooked_beef", quantity=1, workshop_location=(3, 0)),
+        FightAction(monster_code="cow", locations=frozenset({(6, 6)})),
+    ]
+    out = goal.relevant_actions(pool, _fighter(inventory={"raw_beef": 99}), gd)
+    assert not any(isinstance(a, FightAction) for a in out)
 
 
 def test_goal_relevant_actions_includes_craftable_intermediate():
