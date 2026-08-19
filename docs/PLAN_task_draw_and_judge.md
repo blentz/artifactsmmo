@@ -29,11 +29,9 @@ does not have to out-rank anything. `docs/PLAN_band_unification.md` stays stoppe
 1. **Discard a useless draw (S-048).** Route `task_advances_progression == False` to
    the existing `TaskCancelAction`. ⚠️ Blocked once per character by the coin
    bootstrap below.
-2. **Accept as part of a course (S-051).** The live blocker: nothing ever accepts.
-   Acceptance is cheap and strictly raises the value of a grind already chosen, so
-   it belongs with its siblings `COMPLETE_TASK` and `TASK_CANCEL` in the COLLECT
-   band — which is not a new ladder, it is the band those two already occupy and
-   whose meaning is "cheap, and worth doing before the step".
+2. **Accept as part of a course (S-051).** ⛔ ATTEMPTED 2026-08-19 AND BACKED OUT.
+   The promotion is unsafe as stated; see "The redraw loop" below. Increments 3
+   and 4 are blocked behind it, because nothing ever accepts.
 3. **The held-task premium (S-050).** A course whose work overlaps the held task's
    target is worth more by the reward that work would complete. This is S-018 read
    from the other side and it is what makes S-049's "keep it" pay.
@@ -41,7 +39,46 @@ does not have to out-rank anything. `docs/PLAN_band_unification.md` stays stoppe
    which is the only way the ASSIGNMENT distribution S-014 needs can ever be
    observed. It is published nowhere.
 
-## The one thing that needs a decision, not a design
+## The redraw loop — why increment 2 was backed out
+
+Moving `ACCEPT_TASK` into the COLLECT band puts it ABOVE the objective step, next
+to `TASK_CANCEL` which is already there. With S-048 firing the cancel on any grey
+draw, that produces:
+
+> no task → **accept** → the draw is grey → **discard** (1 coin) → no task →
+> **accept** → …
+
+Both rungs sit above the step, so nothing else runs while it spins. It costs one
+coin and two actions per iteration and self-terminates only when the coins run out
+and S-052 forces the draw to be worked. Bounded, and still a livelock that preempts
+all progress for as long as coins last.
+
+**The Lean liveness proof refused it, which is the proof doing its job.**
+`descends_taskCancel` holds because cancelling moves the task phase from present to
+none, descending the measure; accepting moves it the other way, so `acceptTask`
+above `.objectiveStep` needs a descent argument it does not have. `Measure.lean`
+already names the hazard — `accept_cancel_loop_bound` exists because
+"taskCancelFires would trigger early and re-enter the `.none → .accepted` cycle
+indefinitely". The measure cannot see the COIN, which is the quantity that actually
+decreases.
+
+Reverted: `MeansKind.allInLadderOrder`, `UnconditionalDescent`'s prefix/tail split,
+the `formal/sim` mirror, the band tuples, and the worth-gate exemption that went
+with them. The tree is green and `ACCEPT_TASK` is back where it was — unreachable.
+
+**Three ways forward, and the choice is a design decision:**
+
+* **Make the coin the measure.** Honest — it IS the decreasing quantity — and it is
+  real Lean work: a new descent lemma keyed on `taskCoinsTotal`, plus reshaping the
+  21-hypothesis bundle in `PursueTaskSelection`.
+* **Do not redraw immediately.** Discard, then resume the course, and accept again
+  only at the course's next natural boundary. Kills the loop without touching the
+  measure, at the cost of a rule about WHEN to accept that nothing states yet.
+* **Accept only when a coin is spare**, so a draw is never taken that cannot be
+  judged. Simplest, and it inverts S-052: the first task is then never drawn at all,
+  which contradicts the decision to work it.
+
+## The decision already taken
 
 **S-048's discard costs a task coin, and coins come only from completing tasks.** At
 zero coins the discard is unavailable, so the FIRST draw must be kept whatever it
