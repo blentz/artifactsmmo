@@ -5771,8 +5771,8 @@ LADDER_MEANS_FIRES_MUTATIONS = [
     ),
     (
         "ladder/means: SELL_PRESSURED fill comparator >= -> > (boundary 0.85 leaks)",
-        "        return _used_fraction(state) >= SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)",
-        "        return _used_fraction(state) > SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)",
+        "        return (_used_fraction(state) >= SELL_PRESSURE_FRACTION",
+        "        return (_used_fraction(state) > SELL_PRESSURE_FRACTION",
     ),
     (
         "ladder/means: SELL_PRESSURE_FRACTION 0.85 -> 0.95 (pressure boundary shifts)",
@@ -5786,8 +5786,10 @@ LADDER_MEANS_FIRES_MUTATIONS = [
     ),
     (
         "ladder/means: SELL_IDLE fill comparator < -> <= (boundary 0.85 leaks vs sellPressured)",
-        "        return _used_fraction(state) < SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)",
-        "        return _used_fraction(state) <= SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)",
+        "        return (_used_fraction(state) < SELL_PRESSURE_FRACTION\n"
+        "                and sellable_tradeable_now(state, game_data))",
+        "        return (_used_fraction(state) <= SELL_PRESSURE_FRACTION\n"
+        "                and sellable_tradeable_now(state, game_data))",
     ),
     (
         # The guard delegates to the proven should_expand_bank core

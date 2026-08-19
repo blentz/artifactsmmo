@@ -7,6 +7,7 @@ Pure: predicates read state/game_data/history + an explicit SelectionContext
 from dataclasses import replace
 from enum import Enum
 
+from artifactsmmo_cli.ai.accumulation_sell import sellable_tradeable_now
 from artifactsmmo_cli.ai.bank_room import bank_has_room
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.cancel_selection import cancel_targets
@@ -108,32 +109,6 @@ GUARD_ORDER: tuple[GuardKind, ...] = (
     GuardKind.GEAR_REVIEW,  # post-level-up / post-loss gear prioritization
     GuardKind.CRAFT_POTIONS,  # lowest-priority guard: stock potions before grind
 )
-
-
-def _has_sellable(state: WorldState, game_data: GameData) -> bool:
-    """Item is sellable-NOW when it has a reachable buyer NPC (npc_location is not
-    None) AND the server-side `tradeable` flag is true.
-
-    Dormant event merchants appear in the price table but their location is None
-    while their spawn window is closed — NpcSellAction.is_applicable rejects them
-    on the same npc_location-is-None check.  Aligning the guard predicate with
-    is_applicable prevents SELL_RELIEF from firing for unreachable buyers, which
-    was causing a permanent bag-full livelock (no rung could act).
-
-    Canonical definition — tiers/means.py imports this instead of duplicating it."""
-    for code, qty in state.inventory.items():
-        if qty <= 0:
-            continue
-        buyers = game_data.npcs_buying_item(code)
-        if not buyers:
-            continue
-        stats = game_data.item_stats(code)
-        if stats is not None and not stats.tradeable:
-            continue
-        # At least one buyer must be reachable now.
-        if any(game_data.npc_location(npc) is not None for npc, _price in buyers):
-            return True
-    return False
 
 
 def _quantity_fraction(state: WorldState) -> float:
@@ -265,7 +240,7 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
     if kind is GuardKind.SELL_RELIEF:
         return (not bank_has_room(ctx.bank_accessible, state.bank_items,
                                   game_data.bank_capacity)
-                and _has_sellable(state, game_data))
+                and sellable_tradeable_now(state, game_data))
     if kind is GuardKind.DEPOSIT_FULL:
         return (ctx.bank_accessible
                 and bank_has_room(ctx.bank_accessible, state.bank_items,

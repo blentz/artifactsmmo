@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 import artifactsmmo_cli.ai.learning.projections as projections_mod
+from artifactsmmo_cli.ai.accumulation_sell import sell_targets
 from artifactsmmo_cli.ai.arbiter_select import (
     BAND_COLLECT,
     BAND_DISCRETIONARY,
@@ -152,20 +153,64 @@ def test_claim_pending_fires_with_pending_items():
     assert MeansKind.CLAIM_PENDING in collect
 
 
-def test_sell_pressured_vs_idle_mutually_exclusive_on_bag():
+def _sells_copper_ore() -> GameData:
     gd = GameData()
     gd._npc_sell_prices = {"merchant": {"copper_ore": 5}}
-    gd._npc_locations = {"merchant": (1, 2)}  # reachable now (required by _has_sellable)
+    gd._npc_locations = {"merchant": (1, 2)}   # located, and non-event => tradeable now
+    return gd
+
+
+def test_sell_pressured_vs_idle_mutually_exclusive_on_bag():
+    """The two sell rungs split the fill axis, and BOTH need a hoard the goal
+    would actually sell — so the idle state carries the same 18 copies at a
+    roomier cap rather than a trickle."""
+    gd = _sells_copper_ore()
     pressured = make_state(inventory={"copper_ore": 18}, inventory_max=20, task_code="t",
                            task_total=1, task_progress=0)  # 0.90 fill; task held so ACCEPT_TASK off
-    idle = make_state(inventory={"copper_ore": 2}, inventory_max=20, task_code="t",
-                      task_total=1, task_progress=0)        # 0.10 fill
+    idle = make_state(inventory={"copper_ore": 18}, inventory_max=200, task_code="t",
+                      task_total=1, task_progress=0)        # 0.09 fill, same hoard
     pc, pd = active_means(pressured, gd, None, _ctx())
     ic, idd = active_means(idle, gd, None, _ctx())
     assert MeansKind.SELL_PRESSURED in pc
     assert MeansKind.SELL_IDLE not in pd          # exclusivity: not both at high fill
     assert MeansKind.SELL_IDLE in idd
     assert MeansKind.SELL_PRESSURED not in ic     # exclusivity: not both at low fill
+
+
+def test_a_sell_rung_still_fires_below_its_goal_ratio_gate():
+    """PINS A KNOWN RESIDUAL, not a desired behaviour.
+
+    Two copies are below `sellable_accumulation`'s ratio gate, so SELL_IDLE's
+    goal would report itself satisfied — yet the rung fires, because the shared
+    predicate is licence-blind on purpose. All three sell rungs map to goals with
+    DIFFERENT licences (idle and pressured to `relief=False`, the guard to
+    `relief=True` under `deposit_context`), and one predicate cannot be all of
+    them. Splitting it needs a SECOND opaque Bool in the Lean ladder state, whose
+    33-slot vector `cycle_step_d` reuses by index for the composed liveness
+    capstone.
+
+    Harmless in the selection — a satisfied candidate is skipped — and it is the
+    record that suffers: a fired-but-unselectable rung is indistinguishable from
+    one the band suppressed, which is the measurement the band epic turns on."""
+    gd = _sells_copper_ore()
+    trickle = make_state(inventory={"copper_ore": 2}, inventory_max=200,
+                         task_code="t", task_total=1, task_progress=0)
+    _, discretionary = active_means(trickle, gd, None, _ctx())
+    assert MeansKind.SELL_IDLE in discretionary
+    # What the goal would actually do with it: nothing.
+    assert sell_targets(trickle, gd, _ctx()) == {}
+
+
+def test_a_sell_rung_does_not_fire_when_no_buyer_can_trade_now():
+    """Same hoard, buyer behind a SHUT event window. Every NPC in the game that
+    buys items is an event NPC, so this is the usual case and not an edge one."""
+    gd = _sells_copper_ore()
+    gd.world.npc_event_codes["merchant"] = "merchant_visit"
+    hoard = make_state(inventory={"copper_ore": 18}, inventory_max=200,
+                       task_code="t", task_total=1, task_progress=0,
+                       active_events={})
+    _, discretionary = active_means(hoard, gd, None, _ctx())
+    assert MeansKind.SELL_IDLE not in discretionary
 
 
 def test_band_order_matches_declared_order():

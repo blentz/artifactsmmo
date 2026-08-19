@@ -7,6 +7,7 @@ from artifactsmmo_cli.ai.accumulation_sell import (
     sell_targets,
     sellable_accumulation,
     sellable_surplus,
+    sellable_tradeable_now,
     worst_accumulation_steps,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -150,3 +151,53 @@ def test_worst_accumulation_steps_skips_unsellable_and_zero_qty():
     # Also test with negative qty (edge case, but ensures continue is exercised)
     state = make_state(level=1, inventory={"unsellable_item": -5})
     assert worst_accumulation_steps(state, gd, CTX) == 0
+
+
+def _buys_ore(location, *, event=None) -> GameData:
+    gd = GameData()
+    gd._npc_sell_prices = {"merchant": {"copper_ore": 5}}
+    if location is not None:
+        gd._npc_locations = {"merchant": location}
+    if event is not None:
+        gd.world.npc_event_codes["merchant"] = event
+    return gd
+
+
+def test_sellable_tradeable_now_true_for_a_located_permanent_buyer():
+    state = make_state(inventory={"copper_ore": 3})
+    assert sellable_tradeable_now(state, _buys_ore((1, 2))) is True
+
+
+def test_sellable_tradeable_now_skips_a_buyer_with_no_known_location():
+    """A price row is not a buyer. A dormant merchant with no tile cannot take
+    the sale, and NpcSellAction.is_applicable refuses on the same check."""
+    state = make_state(inventory={"copper_ore": 3})
+    assert sellable_tradeable_now(state, _buys_ore(None)) is False
+
+
+def test_sellable_tradeable_now_passes_over_an_unlocated_buyer_to_a_located_one():
+    """Buyers come back highest price first, so the best one may be the dormant
+    one. The walk must keep going rather than answer on the first row — with only
+    ONE unlocated buyer `_is_sellable` already refuses, so it takes a second,
+    cheaper, located buyer to reach that decision at all."""
+    gd = GameData()
+    gd._npc_sell_prices = {"rich_but_absent": {"copper_ore": 500},
+                           "merchant": {"copper_ore": 5}}
+    gd._npc_locations = {"merchant": (1, 2)}
+    state = make_state(inventory={"copper_ore": 3})
+    assert next(n for n, _p in gd.npcs_buying_item("copper_ore")) == "rich_but_absent"
+    assert sellable_tradeable_now(state, gd) is True
+
+
+def test_sellable_tradeable_now_skips_a_shut_event_window():
+    """The half `_has_sellable` was blind to, and the usual case rather than an
+    edge one: EVERY NPC in the game that buys items is an event NPC."""
+    state = make_state(inventory={"copper_ore": 3}, active_events={})
+    gd = _buys_ore((1, 2), event="merchant_visit")
+    assert sellable_tradeable_now(state, gd) is False
+
+
+def test_sellable_tradeable_now_skips_zero_quantity_and_unsellable_codes():
+    gd = _buys_ore((1, 2))
+    assert sellable_tradeable_now(make_state(inventory={"copper_ore": 0}), gd) is False
+    assert sellable_tradeable_now(make_state(inventory={"obscure": 4}), gd) is False

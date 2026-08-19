@@ -160,6 +160,7 @@ import dataclasses
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from artifactsmmo_cli.ai.accumulation_sell import sellable_tradeable_now
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.cancel_selection import cancel_targets
@@ -172,7 +173,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext, _has_sellable
+from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.means import SUPPLY_DEMAND_MIN
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.diff.oracle_client import run_oracle
@@ -313,9 +314,11 @@ def _make_game_data(scn: Scenario) -> GameData:
     gd._workshop_locations = {}
     gd._npc_stock = {}
     gd._npc_sell_prices = {SELLER_NPC: {JUNK: 5}} if scn.item_sellable else {}
-    # _has_sellable now requires a reachable buyer (npc_location is not None).
-    # Provide a static location for SELLER_NPC whenever the scenario declares
-    # the item as sellable so the production predicate matches the oracle arg[22].
+    # `sellable_now` requires a buyer with a TILE that is TRADEABLE NOW, and the
+    # keep authority's licence on top. Provide a static location for SELLER_NPC
+    # whenever the scenario declares the item sellable, so the production
+    # predicate matches the oracle arg[22]. SELLER_NPC is not an event NPC here,
+    # so the window half is vacuously open.
     gd._npc_locations = {SELLER_NPC: (1, 2)} if scn.item_sellable else {}
     gd._bank_capacity = scn.bank_capacity
     gd._next_expansion_cost = scn.next_expansion_cost
@@ -900,7 +903,7 @@ def _rich_oracle_args(
         1 if discardable_surplus(w, gd, ctx) else 0,  # 19 hasOverstockItems
         1 if select_bank_deposits(w, gd) else 0,     # 20 selectBankDepositsNonempty
         1 if w.pending_items else 0,                 # 21 pendingItemsNonempty
-        1 if _has_sellable(w, gd) else 0,            # 22 sellableInventoryNonempty
+        1 if sellable_tradeable_now(w, gd) else 0,   # 22 sellableInventoryNonempty
         1 if prod[LadderMeans.RECYCLE_SURPLUS] else 0,   # 23 recyclableSurplusNonempty
         1 if task_feasible_projected else 0,         # 24 taskFeasibleProjected
         1 if prod[LadderMeans.REST_FOR_COMBAT] else 0,   # 25 restForCombatReady

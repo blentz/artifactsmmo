@@ -52,7 +52,10 @@ pure cores — they mirror the Lean `Formal.AccumulationSell` defs byte-for-byte
 the differential gate.
 """
 
+from datetime import datetime, timezone
+
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
+from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import bankable, destroyable
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -176,6 +179,45 @@ def sell_targets(state: WorldState, game_data: GameData, ctx: SelectionContext,
     if relief:
         return sellable_surplus(state, game_data, ctx)
     return sellable_accumulation(state, game_data, ctx)
+
+
+def sellable_tradeable_now(state: WorldState, game_data: GameData) -> bool:
+    """A held item a buyer can actually take RIGHT NOW.
+
+    THE PREDICATE ALL THREE SELL RUNGS ASK — SELL_PRESSURED, SELL_IDLE and the
+    SELL_RELIEF guard. It replaces `tiers/guards._has_sellable`, which asked only
+    whether some held code had a LOCATED buyer and a tradeable flag, and was blind
+    to whether that buyer's event window is OPEN.
+
+    That blindness is not an edge case here. EVERY NPC in the game that buys items
+    is an EVENT NPC — all five merchants, 55 buyer rows, no non-event buyer — so
+    outside a window no sale is applicable at all. Measured live: the old
+    predicate reported True for three of five characters while no window was open
+    and the keep authority licensed nothing, so the rung fired and its goal was
+    already satisfied. Harmless in the selection, because a satisfied candidate is
+    skipped — and NOT harmless in the record, since a fired-but-unselectable rung
+    reads exactly like a rung the band suppressed, which is the measurement the
+    band epic turns on.
+
+    DELIBERATELY CTX-FREE AND LICENCE-BLIND, and that is a residual rather than a
+    choice. The three rungs map to goals with DIFFERENT licences — SELL_IDLE and
+    SELL_PRESSURED to `sell_targets(relief=False)`, the ratio-gated hoards; the
+    guard to `relief=True` under `deposit_context`. Splitting the predicate to
+    match each would need a SECOND opaque Bool in the Lean ladder state, and that
+    vector is the 33-slot one `cycle_step_d` reuses by index for the composed
+    liveness capstone. So the licence half stays out until that slot exists, and
+    SELL_IDLE can still fire on a surplus below its ratio gate."""
+    now = datetime.now(timezone.utc)
+    for code, quantity in state.inventory.items():
+        if quantity <= 0 or not _is_sellable(code, game_data):
+            continue
+        for npc_code, _price in game_data.npcs_buying_item(code):
+            if game_data.npc_location(npc_code) is None:
+                continue
+            if event_npc_tradeable(npc_code, game_data, x=state.x, y=state.y,
+                                   active_events=state.active_events, now=now):
+                return True
+    return False
 
 
 def worst_accumulation_steps(state: WorldState, game_data: GameData,

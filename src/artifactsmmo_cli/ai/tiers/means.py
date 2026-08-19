@@ -7,6 +7,7 @@ No Goal-class imports — the driver (StrategyArbiter) maps MeansKind to goals.
 
 from enum import Enum
 
+from artifactsmmo_cli.ai.accumulation_sell import sellable_tradeable_now
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.bank_expansion_timing import (
     TRIGGER_FILL_DEN,
@@ -24,7 +25,6 @@ from artifactsmmo_cli.ai.task_decision import PIVOT, PURSUE, task_decision
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import (
     SelectionContext,
-    _has_sellable,
     _used_fraction,
 )
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -205,7 +205,10 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
                 and state.task_progress >= state.task_total)
 
     if kind is MeansKind.SELL_PRESSURED:
-        return _used_fraction(state) >= SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)
+        # A buyer that can take it NOW — never the window-blind "some held code
+        # has a located buyer" test. See `sellable_tradeable_now`.
+        return (_used_fraction(state) >= SELL_PRESSURE_FRACTION
+                and sellable_tradeable_now(state, game_data))
 
     if kind is MeansKind.LOW_YIELD_CANCEL:
         return low_yield_cancel_fires(state, game_data, history)
@@ -259,7 +262,8 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         return _tasks_coin_total(state) >= ctx.task_exchange_min_coins
 
     if kind is MeansKind.SELL_IDLE:
-        return _used_fraction(state) < SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)
+        return (_used_fraction(state) < SELL_PRESSURE_FRACTION
+                and sellable_tradeable_now(state, game_data))
 
     if kind is MeansKind.RECYCLE_SURPLUS:
         # Idle/low-pressure only: recovered materials need room to land (under

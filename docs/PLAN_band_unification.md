@@ -71,8 +71,17 @@ S-023 exempts the totality witness from comparison.
 | scenarios | **25 of 30** |
 
 Fired kinds, live: `accept_task` 5/5, `maintain_consumables` 4/5,
-`recycle_surplus` 4/5, `sell_idle` 3/5. Each lost to the step by POSITION. The
-epic is not cancellable.
+`recycle_surplus` 4/5. Each lost to the step by POSITION. The epic is not
+cancellable.
+
+**Corrected after the fact.** The first run of this measurement also reported
+`sell_idle` 3/5, and that was an over-count caused by the very hazard it was
+measuring: the sell rungs asked a predicate blind to whether any buyer's window
+was open, so they fired while their goal was already satisfied. A
+fired-but-unselectable rung is indistinguishable in this table from one the band
+suppressed. Fixed, and re-measured: `sell_idle` is now 0/5, and the spurious
+guard fires went with it. The headline 5/5 is unchanged because `accept_task`
+carries it.
 
 **Finding 2: the epic cannot be justified by measured harm, because there is no
 common scale — and that is S-016's entire content.** Of the two sides S-016
