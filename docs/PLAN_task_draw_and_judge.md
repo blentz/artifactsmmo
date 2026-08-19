@@ -108,6 +108,46 @@ the bot must ride a task to completion. Two problems with leaning on it:
 That is a real increment with a Lean core, not a follow-on to the predicate work.
 It should be budgeted as one.
 
+## The Lean increment — done, and where it stops
+
+**Landed (`0c82d5dc`, green): `fMeasure` widened with `drawOwedFlag`.** The slot
+sits between `xpDeficit` and `phasePresent` precisely so discharging an owed draw
+dominates the phase rise one slot below — every previously-promoted rung
+(geCancel, supplyBank, currencyTurnIn) could take a flag at the BOTTOM of the
+cascade because its apply touches no higher slot, and `.acceptTask` cannot, because
+it RAISES `phasePresent`. The placement also makes a course boundary safe: setting
+the flag raises slot 3, but a boundary decreases `xpDeficit` at slot 2, which is
+earlier. Third widening of this tuple; mechanical, and the whole tree rebuilds.
+
+**Stopped at the next obligation, which is not mechanical.** Gating
+`acceptTaskFires` on `drawOwed` — required, or selecting `.acceptTask` with no draw
+owed would not descend — breaks three proofs, and one of them is headline:
+
+```
+theorem productionLadder_ne_wait (s : State) : productionLadder s ≠ some .wait
+```
+
+It is UNCONDITIONAL, and its proof is `task_means_always_fires`: for every state
+one of acceptTask / pursueTask / completeTask fires, because `acceptTask` fires
+whenever the phase is `.none`. **The model's entire no-wait guarantee rests on "you
+can always accept a task."** Gate the accept and a state with no task, no owed draw
+and no objective step reaches `.wait`.
+
+That is not a proof artefact — it is a real behaviour change. Today production
+cannot idle while taskless, because ACCEPT_TASK fires unconditionally at the bottom
+of the ladder. Under the rule it can.
+
+**So the honest next step weakens a liveness guarantee**, from "the ladder never
+waits" to "the ladder never waits while a draw is owed, a task is held, or the
+objective has a step". Everything downstream of `productionLadder_ne_wait` inherits
+that. It is defensible — waiting IS correct when there is genuinely nothing to do,
+and `WaitGoal` exists as the totality witness for exactly that — but it is a
+deliberate loosening of a no-deadlock property and should be signed off, not
+absorbed as a step in an increment.
+
+Reverted to green: the gate and the `.acceptTask` clear are backed out; only the
+measure widening is committed. Resuming means starting there.
+
 **The three options as originally written:**
 
 * **Make the coin the measure.** Honest — it IS the decreasing quantity — and it is
