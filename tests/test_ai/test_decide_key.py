@@ -56,9 +56,16 @@ def test_currency_turnin_is_last_in_the_collect_reward_band() -> None:
     LAST among the collect-reward rungs so it never parks a pending reward
     claim or a >=85%-full bag behind it."""
     assert MeansKind.CURRENCY_TURNIN not in DISCRETIONARY_ORDER
-    assert COLLECT_REWARD_ORDER[-1] is MeansKind.CURRENCY_TURNIN
     assert (COLLECT_REWARD_ORDER.index(MeansKind.SUPPLY_BANK)
             < COLLECT_REWARD_ORDER.index(MeansKind.CURRENCY_TURNIN))
+    # 2026-08-19 (S-051): ACCEPT_TASK joined this band and took the last slot.
+    # The property that matters is unchanged and is asserted directly — the
+    # turn-in still sits behind nothing open-ended. A one-action draw is not
+    # something a resolved election can rot behind, and putting the accept
+    # BEFORE the turn-in did preempt it (caught by test_turn_in_scenario).
+    assert COLLECT_REWARD_ORDER[-1] is MeansKind.ACCEPT_TASK
+    assert (COLLECT_REWARD_ORDER.index(MeansKind.CURRENCY_TURNIN)
+            < COLLECT_REWARD_ORDER.index(MeansKind.ACCEPT_TASK))
     for cheap in (MeansKind.CLAIM_PENDING, MeansKind.COMPLETE_TASK,
                   MeansKind.SELL_PRESSURED, MeansKind.LOW_YIELD_CANCEL,
                   MeansKind.TASK_CANCEL):

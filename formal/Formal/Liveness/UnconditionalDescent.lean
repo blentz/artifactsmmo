@@ -56,8 +56,8 @@ def blockerPrefix : List MeansKind :=
    .geCancel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
    .discardHigh, .gearReview, .craftPotions, .claimPending, .completeTask,
-   .sellPressured, .lowYieldCancel, .taskCancel, .acceptTask,
-   .supplyBank, .currencyTurnIn,
+   .sellPressured, .lowYieldCancel, .taskCancel,
+   .supplyBank, .currencyTurnIn, .acceptTask,
    .objectiveStep]
 
 /-- The discretionary tail — everything after `.objectiveStep`. -/

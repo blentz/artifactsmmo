@@ -175,13 +175,15 @@ def allInLadderOrder : List MeansKind :=
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh, .gearReview,
    .craftPotions,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
+   .supplyBank,
+   .currencyTurnIn,
    -- 2026-08-19 (S-051): promoted out of the discretionary group. Below
    -- `.objectiveStep` it was unreachable — a character essentially always has a
    -- step — and accepting belongs to a COURSE rather than competing with one.
-   -- AFTER both cancel rungs, so a dead draw goes back before a new one is taken.
+   -- LAST in the collect group: a one-action booking must not preempt a resolved
+   -- turn-in election or a sibling's supply request, which is the same argument
+   -- those two make for their own positions.
    .acceptTask,
-   .supplyBank,
-   .currencyTurnIn,
    .objectiveStep,
    .pursueTask, .taskExchange, .maintainConsumables,
    .sellIdle, .recycleSurplus, .bankExpand, .geBid, .drainBankJunk,

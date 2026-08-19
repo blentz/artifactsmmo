@@ -131,21 +131,6 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     MeansKind.SELL_PRESSURED,
     MeansKind.LOW_YIELD_CANCEL,
     MeansKind.TASK_CANCEL,
-    # 2026-08-19, USER ruling + S-051: ACCEPT_TASK is promoted out of
-    # DISCRETIONARY_ORDER to here. Below the step it was unreachable for the same
-    # reason SUPPLY_BANK was — a character essentially always has an objective
-    # step (14,064 of 14,064 traced cycles) — and the fleet has held a task in 0
-    # of 63,310 cycles, so every rung downstream of it has never run.
-    #
-    # It is gated on `ctx.draw_owed`, which is what makes the promotion sound
-    # rather than a livelock: accept and discard both sit above the step, so an
-    # ungated redraw would spin between them at a coin a cycle. The gate is
-    # mirrored in `acceptTaskFires` and is the conjunct the Lean descent argument
-    # rests on.
-    #
-    # POSITION: with the one-or-few-action group and AFTER both cancel rungs — a
-    # dead draw goes back before a new one is taken.
-    MeansKind.ACCEPT_TASK,
     # 2026-08-01, human ruling: SUPPLY_BANK is promoted out of
     # DISCRETIONARY_ORDER to here, ABOVE the objective step, so a character can
     # pause its own chain to serve a sibling's declared, SUBSTANTIAL request
@@ -187,6 +172,24 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     # every firing cycle is one the fleet can actually complete — there is no
     # sub-threshold case to filter the way SUPPLY_DEMAND_MIN filters SUPPLY_BANK.
     MeansKind.CURRENCY_TURNIN,
+    # 2026-08-19, USER ruling + S-051: ACCEPT_TASK is promoted out of
+    # DISCRETIONARY_ORDER to here. Below the step it was unreachable for the same
+    # reason SUPPLY_BANK was — a character essentially always has an objective
+    # step (14,064 of 14,064 traced cycles) — and the fleet has held a task in 0
+    # of 63,310 cycles, so every rung downstream of it has never run.
+    #
+    # It is gated on `ctx.draw_owed`, which is what makes the promotion sound
+    # rather than a livelock: accept and discard both sit above the step, so an
+    # ungated redraw would spin between them at a coin a cycle. The gate is
+    # mirrored in `acceptTaskFires` and is the conjunct the Lean descent argument
+    # rests on.
+    #
+    # POSITION: LAST in this group. A one-action booking must not preempt a
+    # resolved turn-in election or a sibling's supply request — the same
+    # argument SUPPLY_BANK and CURRENCY_TURNIN make for their own positions —
+    # and it is still AFTER both cancel rungs, so a dead draw goes back before
+    # a new one is taken.
+    MeansKind.ACCEPT_TASK,
 )
 DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.PURSUE_TASK,

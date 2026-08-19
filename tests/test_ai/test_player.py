@@ -331,13 +331,32 @@ class TestArbiterSelection:
             decision, player.state, player.game_data, actions, player._selection_context())
         assert goal is not None and repr(goal) == "CompleteTask"
 
-    def test_idle_no_task_winnable_monsters_selects_xp_grind(self):
-        """Step goal (GrindCharacterXP) outranks discretionary AcceptTask when
-        winnable monsters exist. The old `best_eq >= monster_level-1` gear gate
-        used to block cow (L2, best_eq=0) so AcceptTask won; after that gate was
-        removed (2026-06-29) the step goal correctly fires first."""
+    def test_idle_no_task_takes_its_owed_draw_before_grinding(self):
+        """UPDATED 2026-08-19 (S-051). ACCEPT_TASK moved into the collect band
+        above the objective step, so a taskless character with a draw OWED takes
+        it first — one action, and holding the task then raises the value of the
+        very grind it delayed (S-050).
+
+        The step still wins once the draw is spent, which the companion below
+        pins. Before the promotion this test asserted the grind outright."""
         player = self._with_strategy(make_game_data_mock(), level=3,
                                      task_type=None, task_code=None)
+        decision = player._strategy.decide(player.state, player.game_data)
+        actions = player._build_actions()
+        goal, _plan, _tried = player._arbiter.select(
+            decision, player.state, player.game_data, actions, player._selection_context())
+        assert goal is not None and repr(goal) == "AcceptTask"
+
+    def test_idle_no_task_selects_xp_grind_once_no_draw_is_owed(self):
+        """The other half: with the draw spent, the objective step is what runs.
+        A taskless character does not sit accepting — it takes ONE draw per
+        course (the USER's no-immediate-redraw rule) and then gets on with it."""
+        player = self._with_strategy(make_game_data_mock(), level=3,
+                                     task_type=None, task_code=None)
+        player._draw_owed = False
+        # Same course as the tracker already holds, so nothing re-arms the draw.
+        # `_last_decision` is None here, and the tracker stores that as None too.
+        player._draw_course = None
         decision = player._strategy.decide(player.state, player.game_data)
         actions = player._build_actions()
         goal, _plan, _tried = player._arbiter.select(
