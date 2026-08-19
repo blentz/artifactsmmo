@@ -345,7 +345,10 @@ def objective(
             "milestone": milestone_pure(state.level),
             "target": target_level,
             "store": ("persistent " + db_path if use_learn
-                      else "ephemeral :memory: (cold)"),
+                      else "ephemeral :memory: (cold — a skill-gated craft "
+                           "cannot be priced without an observed grind rate, "
+                           "so a cost of 1000001 here may be the COLD STORE "
+                           "and not a real wall; re-run with --learn)"),
         }
         if as_json:
             print(json.dumps({

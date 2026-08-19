@@ -266,8 +266,21 @@ def cheapest_path_to_level(
     cycles per level a trace shows, not the fight-cycles-per-level it used to
     match (`formal/diff/level_cost_replay.py` corroborates it).
 
-    Returns a PathPlan with `blocked=True` and `total_cycles=inf` when no
-    beatable monster exists at some intermediate level.
+    Returns a PathPlan with `blocked=True` and `total_cycles=inf` on EITHER of
+    two conditions at some intermediate level, and the second is the one that
+    fires in practice:
+
+    * no beatable monster exists at all, or
+    * every beatable monster is GREY — beatable, and worth zero XP, so the rung
+      has nothing that advances it (`best_xp_per_cycle <= 0`).
+
+    Measured live 2026-08-18: C3P0 at level 19 had SEVEN winnable monsters and
+    still blocked, because the best of them is `cow` at level 8 — a gap of 11,
+    one past the zero-XP band — while the nearest monsters that pay (`pig` 19,
+    `spider` 20, `ogre` 20) are unwinnable. R2D2 blocked the same way at a
+    projected level 26 with eleven winnable. A blocked walk is therefore usually
+    a COMBAT WALL and not an empty map, and reading it as the latter misdiagnoses
+    a character that needs gear as one that needs a monster.
 
     Known limits:
       - Assumes each level requires `state.max_xp` XP. We don't have the

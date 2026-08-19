@@ -206,7 +206,12 @@ class TestCommand:
         assert "DECIDED BY:" in out
         assert "WINNER:" in out
         assert "milestone=10" in out
-        assert "ephemeral :memory: (cold)" in out
+            # The cold-store line carries a WARNING now: a skill-gated craft cannot
+        # be priced without an observed grind rate, so a 1000001 in a cold run
+        # may be the store rather than a real wall. Measured live:
+        # greater_wooden_staff read 1000001 cold and 733 against learning.db.
+        assert "ephemeral :memory: (cold" in out
+        assert "--learn" in out
         assert "timing:" in out
 
     def test_a_swept_target_reaches_the_projection_and_says_so(self, capsys):

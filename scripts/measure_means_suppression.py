@@ -189,14 +189,24 @@ def _scenario_players() -> list[tuple[str, GamePlayer]]:
 
 
 def _live_players() -> list[tuple[str, GamePlayer]]:
+    """Players seeded the way the `plan` CLI seeds them — through `_initialize`,
+    NOT `seed_offline`.
+
+    `seed_offline` takes a bare `WorldState.from_character_schema`, which carries
+    no BANK CONTENTS. That is not a detail: a first measurement built players that
+    way and reported `RecycleSurplus` as the selected goal on three of five live
+    characters, when the real cycle pursues a gear root whose plan opens
+    `Withdraw(ash_wood x10)`. The step could not plan without a bank, so the walk
+    fell through to housekeeping and the table recorded the fall as a preference.
+    """
     ClientManager().initialize(Config.from_token_file(None))
     client = ClientManager().client
-    game_data = GameData.load(client)
     out = []
     for schema in APIWrapper(client).get_my_characters().data:
         store = LearningStore(db_path=_learn_db(), character=schema.name)
         player = GamePlayer(character=schema.name, history=store)
-        player.seed_offline(WorldState.from_character_schema(schema), game_data)
+        player._initialize(client)
+        player._maybe_periodic_refresh(client)
         out.append((schema.name, player))
     return out
 

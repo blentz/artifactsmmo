@@ -127,7 +127,7 @@ reports None for every live character and measures nothing):
 |---|---|---|---|---|
 | Robby | L29 → L30 | 791 | 1 action | 0 |
 | R2D2 | L20 → L30 | **UNREACHABLE** | 1 action | — |
-| C3P0 | L19 → L20 | **UNREACHABLE** | 1 action | — |
+| C3P0 | L19 → L20 | **UNREACHABLE** | 3 actions | — |
 | HAL | L17 → L20 | 1,727 | 1 action | 0 |
 | Lor | L17 → L20 | 2,443 | 1 action | 2 |
 
@@ -141,11 +141,48 @@ away. Increment 2 must compare a step's WHOLE course, which is the root's
 acquisition, against the means' whole course. Comparing this cycle's legs would
 hand the ranking to whichever candidate happens to finish in one action.
 
-**Finding 2, unrelated to the band and worth its own look: two of five live
-characters cannot reach their own next milestone at all.** C3P0 at level 19 cannot
-project a path to 20; R2D2 at 20 cannot project one to 30. Their horizon is not
-expensive, it is blocked, which means `J` is void for them and the objective is
-deciding on its second key.
+**Finding 2, unrelated to the band: two of five live characters cannot reach their
+own next milestone — and the cause is a COMBAT WALL, not an empty map.**
+
+`cheapest_path_to_level`'s docstring said `blocked` means "no beatable monster
+exists". Measured: C3P0 has SEVEN winnable monsters and R2D2 ELEVEN, and both
+block. The exit that actually fires is the second one, `best_xp_per_cycle <= 0` —
+every beatable monster is GREY.
+
+| character | best winnable | gap | XP | nearest that pays |
+|---|---|---|---|---|
+| C3P0 L19 | `cow` L8 | 11 | **0** | `pig` 19, `spider` 20, `ogre` 20 — all unwinnable |
+| R2D2 L26 | `highwayman`/`wolf` L15 | 11 | **0** | `vampire` 24, `cyclops` 25 — unwinnable |
+| Lor L17 | `cow` L8 | 9 | 14 | inside the band, fine |
+
+Lor pins the boundary from the other side: gap 9 pays 14 and gap 10 pays 9, so the
+zero band starts at gap 11 exactly. This is the situation this whole epic opened
+with — grind to the level where fights start being lost, then face a skill-grind
+for gear that can win them.
+
+**The bot's response is correct, and that is worth recording too.** The objective
+ranks `greater_wooden_staff` as the ONLY candidate reaching L26 while every other
+sits at 19, decided by S-006 key 1 (furthest progress) — the right key when `J` is
+void. C3P0's live cycle pursues exactly that: `GatherMaterials(ash_plank)`, a
+three-action plan opening `Recycle(water_bow x2)`. Nothing to fix in the decision.
+
+**Two real defects fell out of the diagnosis, both fixed:**
+
+* The walk's docstring named one of its two blocked exits, so a blocked walk read
+  as "the map has nothing to fight" when it means "everything I can beat is grey".
+  That misdiagnoses a character needing GEAR as one needing a MONSTER.
+* `objective` without `--learn` uses a cold `:memory:` store, and a skill-gated
+  craft cannot be priced without an observed grind rate. Cold, the staff reads
+  1,000,001 — indistinguishable from a real wall. Against the live learning DB it
+  costs 733. The header now says so.
+
+**And a defect in the measurement harness itself, found by disagreeing with the
+CLI.** `_live_players` seeded states from `WorldState.from_character_schema`, which
+carries no BANK CONTENTS, so the gear step could not plan (its first legs are
+`Withdraw`) and the walk fell through to housekeeping. The table above briefly
+recorded `RecycleSurplus` as three characters' chosen course. It now seeds through
+`_initialize`, the same path the `plan` CLI uses. The suppression figures in
+increment 0 were re-measured after the fix and are unchanged.
 
 0. **Measure.** ✅ DONE — `scripts/measure_means_suppression.py`, verdict below.
 1. **Price a means.** ✅ DONE, and it turned out to be "price a COURSE", which is
