@@ -840,6 +840,17 @@ out-rank the objective step to fire will never fire (measured: the discretionary
 is selected in 0.21% of cycles); a step that is nearly free and strictly increases the
 value of work already chosen does not have to out-rank anything.*
 
+### S-052 · A task that cannot be discarded is worked
+
+Where the rule would discard a task (S-048) and the means of discarding is not
+available, the task is worked to completion instead of carried.
+
+*USER decision, and it resolves the bootstrap the rules would otherwise deadlock on:
+discarding costs a task coin, coins come only from COMPLETING tasks, so the first
+draw of a character's life can never be discarded. Working it costs the grey work
+once and buys the coin that makes S-048 available from then on. Carrying it dead
+costs nothing now and never terminates, because that coin has exactly one source.*
+
 ---
 
 ## Evidence
@@ -973,12 +984,10 @@ not published and not served. S-032 governs it — admitted on a safe lower boun
 never valued at a guess — and S-014 will govern it instead if the distribution is
 ever measured. A closed question with an open input, not a hole.
 
-**A conflict inside the task rules themselves.** S-048 discards a useless draw, and
-discarding costs one task coin (D-11). Coins come only from COMPLETING tasks, so at
-zero coins the discard is unavailable and the first draw must be kept whatever it is.
-The rule is therefore unreachable exactly once per character, at the moment it would
-first apply. Nothing here decides whether the first task is worked to buy the coin
-that makes the rule available, or simply carried dead.
+**The conflict inside the task rules is resolved, by decision.** S-048 discards a
+useless draw and discarding costs a task coin, which only completing a task can
+supply — so the first draw of a character's life is undiscardable. S-052 works it.
+The cost is the grey work once; the alternative never terminates.
 
 **Implementation debt, recorded as clauses the code violates.** These are the
 acceptance criteria for the build:

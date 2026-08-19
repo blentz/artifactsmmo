@@ -2033,9 +2033,12 @@ class TestBuildGoalsTaskCancelNeverSuppressed:
             gd._monster_resistance["dragon"] = {}
             gd._monster_critical_strike["dragon"] = 0
             gd._monster_initiative["dragon"] = 0
+            # A pocket coin: S-052 works an undiscardable task rather than
+            # cancelling it, so TASK_CANCEL needs one to fire at all.
             player.state = make_state(hp=150, max_hp=150,
                                       level=5, task_type="monsters", task_code="dragon",
-                                      task_total=5, task_progress=0)
+                                      task_total=5, task_progress=0,
+                                      inventory={"tasks_coin": 1})
             player._suppressed_goals = {"TaskCancel": 5}
             decision = player._strategy.decide(player.state, player.game_data)
             actions = player._build_actions()

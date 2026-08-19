@@ -21,6 +21,7 @@ from artifactsmmo_cli.ai.ge_order_config import BID_FILL_HORIZON_SECONDS
 from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
+from artifactsmmo_cli.ai.task_alignment import task_advances_progression
 from artifactsmmo_cli.ai.task_decision import PIVOT, PURSUE, task_decision
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import (
@@ -214,9 +215,24 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         return low_yield_cancel_fires(state, game_data, history)
 
     if kind is MeansKind.TASK_CANCEL:
-        if not state.task_code or history is None:
+        if not state.task_code:
             return False
-        return task_decision(state, game_data, history) == PIVOT
+        # S-052: no coin, no discard — so the task is WORKED instead of carried.
+        # POCKET only, matching `TaskCancelAction.is_applicable`: a banked coin
+        # cannot be spent at the taskmaster and firing on one would be a rung with
+        # nothing to do, the shape this ladder has already been bitten by twice.
+        # This gate is new to the PIVOT arm too, which fired without it.
+        if state.inventory.get(TASKS_COIN_CODE, 0) < 1:
+            return False
+        # S-048: a draw whose target advances neither the character's level nor a
+        # skill is dead work. Asked BEFORE the pivot rule and without `history`,
+        # because it is a fact about game data and the character, not about
+        # observed rates — a character with no learning store still knows a grey
+        # task when it sees one.
+        if not task_advances_progression(state, game_data):
+            return True
+        return (history is not None
+                and task_decision(state, game_data, history) == PIVOT)
 
     if kind is MeansKind.PURSUE_TASK:
         return (state.task_type == "items"

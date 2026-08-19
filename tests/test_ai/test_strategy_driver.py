@@ -1414,8 +1414,11 @@ def test_select_never_suppresses_task_cancel(tmp_path):
     fill_monster_stat_defaults(gd)
     store = LearningStore(db_path=str(tmp_path / "tc.db"), character="hero")
     try:
+        # A coin in the POCKET: S-052 works an undiscardable task instead of
+        # cancelling it, and `TaskCancelAction.is_applicable` spends a pocket coin.
         state = make_state(level=5, hp=150, max_hp=150, task_code="dragon",
-                           task_type="monsters", task_progress=0, task_total=5)
+                           task_type="monsters", task_progress=0, task_total=5,
+                           inventory={"tasks_coin": 1})
         actions = [TaskCancelAction(taskmaster_location=(2, 1))]
         ctx = _ctx()
         arbiter = StrategyArbiter(planner, history=store)

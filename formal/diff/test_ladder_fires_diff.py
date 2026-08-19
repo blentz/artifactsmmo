@@ -404,7 +404,8 @@ def _production_answers(
 _PHASE_INT = {"none": 0, "accepted": 1, "inProgress": 2, "complete": 3}
 
 
-def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
+def _oracle_args(scn: Scenario, w: WorldState,
+                 task_cancel_fires: bool = False) -> list[int]:
     """Build the oracle arg array (the `runLadder` docstring layout,
     Oracle.lean) reading the STRUCTURAL facts off the
     same constructed `WorldState` production reads (coin total, bank item
@@ -444,7 +445,13 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         1 if scn.has_pending else 0,             # 21 pendingItemsNonempty
         1 if scn.item_sellable and scn.junk_qty > 0 else 0,  # 22 sellableInventoryNonempty
         0,                                       # 23 recyclableSurplusNonempty (deferred)
-        1,                                       # 24 taskFeasibleProjected (defer taskCancel)
+        # Fed from production's own verdict, the way 23/25/27 are fed in
+        # `_rich_oracle_args`. It was a hardcoded 1 that DEFERRED taskCancel, and
+        # S-048 gave production a second way to fire it (a task advancing nothing
+        # is dead work), so the deferral stopped being true. Deriving it keeps the
+        # two in lockstep whatever the rule becomes; the ladder ORDERING is what
+        # this harness tests, and that is unaffected.
+        0 if task_cancel_fires else 1,           # 24 taskFeasibleProjected
         0,                                       # 25 restForCombatReady (deferred TRUE path)
         1 if scn.gear_review else 0,             # 26 gearReviewFires (passed identically)
         0,                                       # 27 craftReliefFires (deferred)
@@ -572,8 +579,10 @@ def _deposit_nonempty(scn: Scenario) -> bool:
     return scn.junk_qty > 0
 
 
-def _lean_answers(scn: Scenario, w: WorldState) -> tuple[dict[LadderMeans, bool], LadderMeans | None]:
-    res = run_oracle("ladder_fires", [_oracle_args(scn, w)])[0]
+def _lean_answers(scn: Scenario, w: WorldState, task_cancel_fires: bool = False
+                  ) -> tuple[dict[LadderMeans, bool], LadderMeans | None]:
+    res = run_oracle("ladder_fires",
+                     [_oracle_args(scn, w, task_cancel_fires)])[0]
     per_slot = {k: bool(res[_ORACLE_KEY[k]]) for k in ALL_IN_LADDER_ORDER}
     selected_name = res["selected"]
     selected = None
@@ -638,7 +647,7 @@ def test_ladder_fires_matches_production(scn: Scenario) -> None:
     Lean ladder oracle and real production `_guard_fires`/`_means_fires`."""
     w = _make_world(scn)
     prod, prod_sel = _production_answers(scn, w)
-    lean, lean_sel = _lean_answers(scn, w)
+    lean, lean_sel = _lean_answers(scn, w, prod[LadderMeans.TASK_CANCEL])
     for k in ASSERTED_SLOTS:
         assert prod[k] == lean[k], (
             f"SLOT DIVERGENCE {k.name}: production={prod[k]} lean={lean[k]}\n"
@@ -684,7 +693,7 @@ def _base_scn(**overrides) -> Scenario:
 def _assert_full_agreement(scn: Scenario) -> None:
     w = _make_world(scn)
     prod, prod_sel = _production_answers(scn, w)
-    lean, lean_sel = _lean_answers(scn, w)
+    lean, lean_sel = _lean_answers(scn, w, prod[LadderMeans.TASK_CANCEL])
     for k in ASSERTED_SLOTS:
         assert prod[k] == lean[k], (k.name, prod[k], lean[k], scn)
     assert prod_sel == lean_sel, (prod_sel, lean_sel, scn)
@@ -905,7 +914,11 @@ def _rich_oracle_args(
         1 if w.pending_items else 0,                 # 21 pendingItemsNonempty
         1 if sellable_tradeable_now(w, gd) else 0,   # 22 sellableInventoryNonempty
         1 if prod[LadderMeans.RECYCLE_SURPLUS] else 0,   # 23 recyclableSurplusNonempty
-        1 if task_feasible_projected else 0,         # 24 taskFeasibleProjected
+        # PURSUE iff the caller says feasible AND production is not cancelling.
+        # S-048 and S-052 both changed when production cancels, and a hand-set
+        # constant cannot track that.
+        1 if (task_feasible_projected
+              and not prod[LadderMeans.TASK_CANCEL]) else 0,  # 24 taskFeasibleProjected
         1 if prod[LadderMeans.REST_FOR_COMBAT] else 0,   # 25 restForCombatReady
         1 if ctx.gear_review_active else 0,          # 26 gearReviewFires
         1 if prod[LadderMeans.CRAFT_RELIEF] else 0,  # 27 craftReliefFires
@@ -1721,12 +1734,20 @@ def _plain_ctx(*, combat_monster: str | None = None) -> SelectionContext:
         gear_review_active=False)
 
 
-def _monsters_task_world(*, task_code: str, progress: int, total: int) -> WorldState:
+def _monsters_task_world(*, task_code: str, progress: int, total: int,
+                         coins: int = 0) -> WorldState:
     # level 5; full hp, empty bag, no bank/pending so every slot above
     # taskCancel(13)/lowYieldCancel(12) stays quiet.
+    #
+    # `coins` is opt-in per fixture, NOT a default. S-052 works a task it cannot
+    # discard and `TaskCancelAction.is_applicable` spends a POCKET coin, so the
+    # cancel-driving fixtures need one — but handing every caller a coin changes
+    # what the SUPPLY_BANK fixtures are testing, which is how the first attempt
+    # at this broke four unrelated tests.
     return WorldState(
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
-        gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        gold=0, skills={}, x=0, y=0,
+        inventory={"tasks_coin": coins} if coins else {}, inventory_max=20,
         inventory_slots_max=20,
         equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
         pending_items=None, task_code=task_code, task_type="monsters",
@@ -1740,7 +1761,7 @@ def test_task_cancel_drives_and_selects() -> None:
     higher lowYieldCancel quiet; taskFeasibleProjected=0 makes Lean taskCancel
     fire. taskCancel is the highest firing slot and WINS selection on BOTH
     ladders. A wrong Lean priority for taskCancel would break selection here."""
-    w = _monsters_task_world(task_code="hard_mob", progress=0, total=5)
+    w = _monsters_task_world(task_code="hard_mob", progress=0, total=5, coins=1)
     gd = _too_hard_monsters_gd()
     hist = _empty_history()
     prod, prod_sel, lean, lean_sel = drive_and_contest(
@@ -1878,7 +1899,9 @@ def test_pursue_task_near_miss_too_hard() -> None:
     contest honest (taskCancel becomes the agreed winner)."""
     w = WorldState(
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
-        gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        # A pocket coin: this fixture DRIVES taskCancel, and S-052 refuses to
+        # discard without one.
+        gold=0, skills={}, x=0, y=0, inventory={"tasks_coin": 1}, inventory_max=20,
         inventory_slots_max=20,
         equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
         pending_items=None, task_code="gizmo", task_type="items",

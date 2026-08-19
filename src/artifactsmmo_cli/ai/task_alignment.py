@@ -42,6 +42,11 @@ def task_advances_progression(state: WorldState, game_data: GameData) -> bool:
     """
     if not state.task_code or state.task_total <= 0:
         return False
+    if state.task_progress >= state.task_total:
+        # ALREADY DONE. Whatever its target was worth, the work is spent and the
+        # reward is one turn-in away — discarding here would throw away a paid-for
+        # reward AND a coin. Completion is a different rung's job.
+        return True
     if state.task_type == "monsters":
         # The task code IS the monster code, so the authoritative answer is
         # available directly: what a kill pays this character right now. Same
@@ -50,7 +55,11 @@ def task_advances_progression(state: WorldState, game_data: GameData) -> bool:
     if state.task_type == "items":
         requirement = game_data.producing_requirement(state.task_code)
         if requirement is None:
-            return False      # nothing known produces it; no progression to see
+            # UNKNOWN, NOT GREY, and the difference decides a destructive act.
+            # Absence of a producing route in the catalog is not evidence the
+            # target is worthless, and discarding costs a coin. "Use only API data
+            # or fail" cuts against spending one on a gap in what we know.
+            return True
         skill, content_level = requirement
         return skill_xp_positive(content_level, state.skills.get(skill, 1))
-    return False
+    return True

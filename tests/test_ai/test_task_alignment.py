@@ -81,16 +81,28 @@ def test_an_items_task_past_the_grey_skill_band_advances_nothing():
     assert task_advances_progression(past, gd) is False
 
 
-def test_an_items_task_nothing_produces_advances_nothing():
+def test_an_items_task_nothing_produces_is_unknown_not_grey():
+    """Absence of a producing route is not evidence the target is worthless, and
+    S-048's discard COSTS A COIN. Spending one on a gap in what we know is the
+    opposite of "use only API data or fail"."""
     gd = _gd()
     state = _items("mystery_relic")
     assert gd.producing_requirement("mystery_relic") is None
-    assert task_advances_progression(state, gd) is False
+    assert task_advances_progression(state, gd) is True
 
 
-def test_an_unknown_task_type_advances_nothing():
+def test_an_unknown_task_type_is_not_discarded():
     state = make_state(task_code="whatever", task_type="riddle", task_total=3)
-    assert task_advances_progression(state, _gd()) is False
+    assert task_advances_progression(state, _gd()) is True
+
+
+def test_a_finished_task_is_never_discarded():
+    """The work is spent and the reward is one turn-in away. Discarding here
+    would throw away a paid-for reward AND the coin it costs — completion is a
+    different rung's job."""
+    done = make_state(level=30, task_code="chicken", task_type="monsters",
+                      task_total=10, task_progress=10)
+    assert task_advances_progression(done, _gd()) is True   # grey, but FINISHED
 
 
 def test_a_task_with_no_total_advances_nothing():

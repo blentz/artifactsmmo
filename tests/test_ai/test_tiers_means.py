@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.tiers.means import (
     active_means,
     means_fires,
 )
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 
@@ -372,6 +373,49 @@ def test_task_cancel_absent_when_no_history():
     assert MeansKind.TASK_CANCEL not in collect
 
 
+def test_task_cancel_discards_a_task_that_advances_nothing():
+    """S-048. A grey draw is dead work and goes back, and the rung needs no
+    learning store to know it — greyness is a fact about game data and the
+    character, not about observed rates."""
+    gd = GameData()
+    gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)
+    state = make_state(level=30, task_code="chicken", task_type="monsters",
+                       task_total=10, task_progress=0,
+                       inventory={"tasks_coin": 1})
+    collect, _ = active_means(state, gd, None, _ctx())
+    assert MeansKind.TASK_CANCEL in collect
+
+
+def test_a_paying_task_is_not_discarded():
+    gd = GameData()
+    gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)
+    state = make_state(level=1, task_code="chicken", task_type="monsters",
+                       task_total=10, task_progress=0,
+                       inventory={"tasks_coin": 1})
+    collect, _ = active_means(state, gd, None, _ctx())
+    assert MeansKind.TASK_CANCEL not in collect
+
+
+def test_without_a_coin_a_grey_task_is_worked_not_discarded():
+    """S-052, the USER's resolution of the bootstrap: discarding costs a coin and
+    coins come only from COMPLETING tasks, so the first draw of a character's life
+    is undiscardable. It is worked. Firing here would also be a rung with nothing
+    to do — `TaskCancelAction.is_applicable` spends a POCKET coin."""
+    gd = GameData()
+    gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)
+    grey = dict(level=30, task_code="chicken", task_type="monsters",
+                task_total=10, task_progress=0)
+    assert MeansKind.TASK_CANCEL not in active_means(
+        make_state(**grey, inventory={}), gd, None, _ctx())[0]
+    # A BANKED coin is not spendable at the taskmaster either.
+    assert MeansKind.TASK_CANCEL not in active_means(
+        make_state(**grey, inventory={}, bank_items={"tasks_coin": 9}),
+        gd, None, _ctx())[0]
+
+
 def test_task_cancel_fires_when_pivot(tmp_path):
     """task_decision returns PIVOT for a combat-gated task → TASK_CANCEL fires."""
     store = LearningStore(db_path=str(tmp_path / "tc.db"), character="hero")
@@ -391,6 +435,7 @@ def test_task_cancel_fires_when_pivot(tmp_path):
     state = make_state(
         task_code="small_health_potion", task_type="items",
         task_total=29, task_progress=0,
+        inventory={"tasks_coin": 1},   # S-052: no coin, no discard
         skills={"alchemy": 1, "mining": 1, "woodcutting": 1,
                 "fishing": 1, "weaponcrafting": 1, "gearcrafting": 1,
                 "jewelrycrafting": 1, "cooking": 1},
