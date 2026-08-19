@@ -74,13 +74,12 @@ twice.
 """
 
 from dataclasses import replace
-from math import ceil
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
+from artifactsmmo_cli.ai.tiers.horizon_contribution import horizon_outcome
 from artifactsmmo_cli.ai.tiers.progression_choice import (
     TARGET_LEVEL,
     ProgressionCandidate,
@@ -132,11 +131,17 @@ def _outcome(projected: WorldState, store: LearningStore,
     claim that reaching 50 is free — the band already says it is out of reach.
 
     Rounded UP: a fractional cycle is still an action the character has to spend,
-    and `J` is an integer objective (S-013 — exact, no floats, no thresholds)."""
-    plan = cheapest_path_to_level(target, projected, store, game_data)
-    reachable_level = projected.level + len(plan.segments)
-    cycles = 0 if plan.blocked else ceil(plan.total_cycles)
-    return reachable_level, cycles
+    and `J` is an integer objective (S-013 — exact, no floats, no thresholds).
+
+    THE CYCLES HALF IS `horizon_contribution.cycles_to_horizon`, not a second copy
+    of it. That module needs the same figure for a state with no candidate attached
+    (a MEANS has none), and two spellings of "run the walk and round up" would be
+    free to drift — which would put the objective and the worth of a course on
+    subtly different scales, the exact defect S-016 is about. It answers None for a
+    blocked walk; the 0 filler is applied HERE, where the band that ignores it
+    lives."""
+    reachable_level, reached = horizon_outcome(projected, store, game_data, target)
+    return reachable_level, 0 if reached is None else reached
 
 
 def trunk_candidate(state: WorldState, store: LearningStore,

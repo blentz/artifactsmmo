@@ -110,11 +110,47 @@ because the step's benefit — its contribution to cycles-to-the-horizon — is 
 computed anywhere per-step. Increment 1 is not optional, and it is bigger than
 "price a means": it has to price BOTH sides.
 
-## Increments, once the question is answered
+## Increment 1 — the price, and what measuring it exposed
+
+`horizon_contribution` supplies the missing half. `cycles_to_horizon(state)` is one
+`cheapest_path_to_level` walk; `contribution(before, after)` is the difference; and
+a course's post-state is its own PLAN applied, so a means needs no bespoke
+projection and adding one later costs nothing. `branch_objective._outcome` now
+delegates its cycles half to the same walk, so `J` and the worth of a course cannot
+drift onto different scales. Unreachable is `None`, never 0 — the 0 filler stays in
+`_outcome`, where the band that ignores it lives.
+
+Measured live, at S-041's horizon (the next ten-level milestone; a fifty-horizon
+reports None for every live character and measures nothing):
+
+| character | horizon | cycles to it | this cycle's plan | worth |
+|---|---|---|---|---|
+| Robby | L29 → L30 | 791 | 1 action | 0 |
+| R2D2 | L20 → L30 | **UNREACHABLE** | 1 action | — |
+| C3P0 | L19 → L20 | **UNREACHABLE** | 1 action | — |
+| HAL | L17 → L20 | 1,727 | 1 action | 0 |
+| Lor | L17 → L20 | 2,443 | 1 action | 2 |
+
+**Finding 1: the two sides of S-016 are not the same length, and that is a defect in
+the comparison rather than in the price.** A step's plan is ONE LEG of a long chain —
+the planner emits a single action per cycle — while a means' plan is its whole
+course (sell the hoard, recycle the surplus). Pricing "the plan" therefore charges a
+means for everything it does and credits a step with one action's worth of progress,
+which is why every step above scores 0 or 2 against a horizon hundreds of cycles
+away. Increment 2 must compare a step's WHOLE course, which is the root's
+acquisition, against the means' whole course. Comparing this cycle's legs would
+hand the ranking to whichever candidate happens to finish in one action.
+
+**Finding 2, unrelated to the band and worth its own look: two of five live
+characters cannot reach their own next milestone at all.** C3P0 at level 19 cannot
+project a path to 20; R2D2 at 20 cannot project one to 30. Their horizon is not
+expensive, it is blocked, which means `J` is void for them and the objective is
+deciding on its second key.
 
 0. **Measure.** ✅ DONE — `scripts/measure_means_suppression.py`, verdict below.
-1. **Price a means.** `means_price(kind, state, game_data, ctx) -> int | None`,
-   None = unavailable. Same units as the objective step's marginal cycles (S-006).
+1. **Price a means.** ✅ DONE, and it turned out to be "price a COURSE", which is
+   what makes it work for a step and a means alike —
+   `ai/tiers/horizon_contribution`. Findings below.
 2. **One comparison.** Collapse bands 1–4 into a single priced ranking. `BAND_GUARD`
    stays a hard precedence — S-017 exempts guards from pricing, and that exemption
    is deliberate, not an oversight.

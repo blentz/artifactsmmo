@@ -34,6 +34,11 @@ from artifactsmmo_cli.ai.scenario import (
     scenario_state,
 )
 from artifactsmmo_cli.ai.tiers import means
+from artifactsmmo_cli.ai.tiers.horizon_contribution import (
+    cycles_to_horizon,
+    plan_contribution,
+)
+from artifactsmmo_cli.ai.tiers.progression_tree_core import milestone_pure
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
@@ -240,11 +245,41 @@ def _price(players: list[tuple[str, GamePlayer]], label: str) -> None:
           "benefit\n  is what S-016 needs and what nothing computes.")
 
 
+def _worth(players: list[tuple[str, GamePlayer]], label: str) -> None:
+    """What the cycle's chosen course is worth, and what it costs.
+
+    This is the figure increment 0 found missing: the step's BENEFIT. Its
+    post-state is its own plan applied, which is the same route a MEANS will take
+    when it is priced — no candidate needed, so nothing here is specific to steps.
+    """
+    print(f"--- {label} ---")
+    priced = 0
+    for name, player in players:
+        report = player.plan_from_state()
+        state, game_data, store = player.state, player.game_data, player.history
+        if store is None or state is None or game_data is None:
+            print(f"  {name:<34} no store — a grind rate is needed to walk")
+            continue
+        horizon = milestone_pure(state.level)
+        start = cycles_to_horizon(state, store, game_data, horizon)
+        worth = plan_contribution(state, report.plan, store, game_data, horizon)
+        if worth is not None:
+            priced += 1
+        print(f"  {name:<34} L{state.level:<2} -> L{horizon:<2} "
+              f"start={start if start is not None else 'UNREACHABLE':<12} "
+              f"plan={len(report.plan):<2} worth="
+              f"{worth if worth is not None else '-':<8} "
+              f"goal={report.selected_goal!r:.34}")
+    print(f"  priced: {priced}/{len(players)}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--live", action="store_true", help="also drive live characters")
     ap.add_argument("--price", action="store_true",
                     help="stage 2: price the step against recycle_surplus")
+    ap.add_argument("--worth", action="store_true",
+                    help="price the chosen step on the objective's own scale")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
@@ -264,6 +299,15 @@ def main() -> None:
         _price(_scenario_players(), "scenarios")
         if args.live:
             _price(_live_players(), "live characters")
+    if args.worth:
+        print("\n=== the step's WORTH, in cycles to the horizon ===")
+        print("  Horizon is S-041's: the next ten-level milestone, capped at 50.")
+        print("  Level 50 itself is out of reach for every live character, so a")
+        print("  fifty-horizon would report None for all of them and measure")
+        print("  nothing.\n")
+        _worth(_scenario_players(), "scenarios")
+        if args.live:
+            _worth(_live_players(), "live characters")
     if args.json:
         print(json.dumps(out, indent=2, default=str))
 
