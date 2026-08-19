@@ -5,7 +5,8 @@ the objective step are compared on marginal cycles against cycles saved or progr
 unlocked over the horizon. Neither wins by virtue of the band or position it
 occupies."*
 
-**Status:** blocked on one design question. Everything else is scoped below.
+**Status:** increment 0 is DONE and its verdict is below. Increment 1 is required,
+not optional. The gold question is answered (S-046).
 
 ## What is there today
 
@@ -53,11 +54,56 @@ Three ways out, and choosing between them is a modelling decision, not a coding 
    denomination constant, the fifth instance of the family the previous increment
    deleted four members of.
 
+## Increment 0 — the measurement, and what it found
+
+`scripts/measure_means_suppression.py` drives the REAL decision path
+(`plan_from_state`) and reads the snapshot the driver already takes for the trace
+(`StrategyArbiter.last_fires`), so there is no second producer of the fired-kinds
+list. The bound `SelectionContext` — which nothing exposes after the driver binds
+`step_profile` — is observed by wrapping the production function that receives it.
+
+**Finding 1: the suppression is real, and it is not small.** WAIT excluded, since
+S-023 exempts the totality witness from comparison.
+
+| | priceable means fired while a step was present |
+|---|---|
+| live characters | **5 of 5** |
+| scenarios | **25 of 30** |
+
+Fired kinds, live: `accept_task` 5/5, `maintain_consumables` 4/5,
+`recycle_surplus` 4/5, `sell_idle` 3/5. Each lost to the step by POSITION. The
+epic is not cancellable.
+
+**Finding 2: the epic cannot be justified by measured harm, because there is no
+common scale — and that is S-016's entire content.** Of the two sides S-016
+compares, only one exists:
+
+| | scenarios | live |
+|---|---|---|
+| step priced on the acquisition scale | 14/30 | 1/5 |
+| step **unpriceable** (walls at 10^6) | 8/30 | 0/5 |
+| step **off-scale** (`ReachCharLevel`) | 7/30 | 4/5 |
+
+And of the four means that fire, exactly ONE (`recycle_surplus`) can be priced at
+all today. `sell_idle` needs S-046, `maintain_consumables` needs a survivability
+value, `accept_task` needs S-018's reward term and the reward table holds no rows.
+
+**Finding 3, and it is a warning about this instrument.** Its first version
+declared a winner by testing `recycle_benefit > step_cost` and reported *"the
+priced answer differs from the ladder's in 0 of 23 comparable pairs"* — a
+confident number from an arithmetic that meant nothing, because a BENEFIT and a
+COST are not on one scale. The same units error the epic exists to remove,
+committed by the tool measuring it. It now prints the halves and refuses a verdict.
+
+**What increment 0 therefore settles:** the ladder suppresses 3–4 fired options per
+live character every cycle, and NOTHING can currently say whether that is right,
+because the step's benefit — its contribution to cycles-to-the-horizon — is not
+computed anywhere per-step. Increment 1 is not optional, and it is bigger than
+"price a means": it has to price BOTH sides.
+
 ## Increments, once the question is answered
 
-0. **Measure.** Instrument each discretionary means with the price it WOULD carry,
-   log it for a fleet run, and confirm the ordering the ladder currently imposes
-   disagrees with the priced one. If they agree, this epic is unnecessary.
+0. **Measure.** ✅ DONE — `scripts/measure_means_suppression.py`, verdict below.
 1. **Price a means.** `means_price(kind, state, game_data, ctx) -> int | None`,
    None = unavailable. Same units as the objective step's marginal cycles (S-006).
 2. **One comparison.** Collapse bands 1–4 into a single priced ranking. `BAND_GUARD`
