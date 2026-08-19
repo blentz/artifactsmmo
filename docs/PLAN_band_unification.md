@@ -199,6 +199,92 @@ increment 0 were re-measured after the fix and are unchanged.
 4. **Re-run the liveness census.** The 21 `unreachable:` declarations should collapse
    to whatever is genuinely conditional. Any that do not are a finding.
 
+## Increment 2 — the verdict: do not collapse the bands
+
+With both sides priced as whole courses (`--net`), measured live at S-041's
+horizon. Net = cycles saved minus cycles spent; positive means the course pays for
+itself.
+
+| character | trunk baseline | best gear course | best means | ladder chose | agree? |
+|---|---|---|---|---|---|
+| Robby L29→30 | 791 | `ring_of_the_adept` **-4** (saves -1, costs 3) | -1 | trunk | ✅ |
+| HAL L17→20 | 1,727 | `small_health_potion` **-69** (saves 0) | -1 | a GUARD, exempt by S-017 | ✅ |
+| Lor L17→20 | 2,443 | `small_health_potion` **-81** (saves 0) | -1 | trunk | ✅ |
+| R2D2 L20→30 | **blocked** | off-scale | off-scale | gear step, 2nd key | price is silent |
+| C3P0 L19→20 | **blocked** | off-scale | off-scale | gear step, 2nd key | price is silent |
+
+**Nothing pays for itself.** Every net is ≤ 0, so the trunk — net 0 by construction,
+since it acquires nothing — is the correct winner wherever the scale exists, and it
+is what the ladder picked in all three priceable cases. Collapsing bands 1-4 into a
+priced ranking would change no live decision today.
+
+**And where the band matters most, the price cannot speak.** The two characters whose
+horizon is blocked are the ones at the combat wall, and for them every course is off
+the cycles scale (S-042), leaving the objective on its second key. Pricing helps
+least exactly where the structure does the most work.
+
+So increment 0's premise does not survive increment 2: suppression is REAL (5/5 live
+characters) and HARMLESS, because everything suppressed is worth no more than what
+won. A means nets -1 — one action, moving the horizon by nothing — which is the
+honest answer for recycling or accepting a task.
+
+### ACCEPT_TASK: the verdict above does NOT cover it
+
+`ACCEPT_TASK` was priced at -1 by taking the plan-contribution of the ACCEPT ACTION.
+Accepting changes nothing about the horizon by itself; the value arrives later. So
+-1 is a floor, not the task's worth. S-018 prices the COURSE: cost is the demanded
+work NOT already committed, value is the reward plus the value of that work.
+
+**A residual in SPEC.md was wrong and is corrected.** It recorded the reward term as
+unpriceable because "the reward table holds no rows". That is the LEARNING table,
+empty because no character has ever held a task. The GAME DATA carries a gold and
+coin reward per task code, from the API, and always has.
+
+**The synergy the design describes is real.** Four of five live characters are
+grinding a monster that IS a task code:
+
+| character | grind target | the matching task pays |
+|---|---|---|
+| Robby | `pig` | 300 gold + 4 coins |
+| R2D2 | `highwayman` | 300 gold + 4 coins |
+| HAL, Lor | `red_slime` | 200 gold + 3 coins |
+| C3P0 | none — combat wall | — |
+
+For those four the demanded kills are ones they would make anyway, so S-018's
+marginal cost is near zero and the reward is very nearly free. The bot has accepted
+a task in **0 of 63,310 cycles**.
+
+**But it is not SELECTABLE, and that is what S-018 has to price.** The taskmaster
+ASSIGNS a task; the character does not choose one. The catalog is 85 codes — 38
+monster-typed, 47 item-typed — with monster tasks spanning levels 1 to 50, so a
+level-17 character can be handed `baby_red_dragon` as easily as `red_slime`. Rewards
+run 150-500 gold and 2-5 coins.
+
+So the value is an EXPECTATION over a distribution the bot cannot steer — S-014's
+shape rather than S-032's, because the catalog is known. What is NOT known is the
+ASSIGNMENT distribution: the documentation does not state it, and 0 observations
+cannot measure it. Assuming uniform would invent exactly the number S-032 forbids.
+
+**A bootstrap worth knowing.** Cancelling a task costs 1 task coin (D-11) and coins
+come only from completing tasks, so the FIRST task cannot be cancelled. The exposure
+is bounded — a held task blocks no other course and is merely dead weight — but the
+first accept is one-way.
+
+**So if this epic is reopened, the next increment is to price ACCEPT_TASK as an
+expectation over the task catalog** and re-measure. It is the one candidate whose net
+could plausibly clear zero, because its cost is shared with work already committed.
+
+**What else would reopen this:**
+
+* A character whose horizon is NOT blocked and whose best gear course nets positive.
+  None of the five is close; the nearest is -4.
+* The two blocked characters becoming priceable, which needs the combat wall broken —
+  and that is the objective's second key doing its job, not the band's.
+
+**A loose thread, closed 2026-08-19.** `MaintainConsumables` fired on three of five
+characters and returned NO PLAN — four missing acquisition edges, fixed at 6651c3a7.
+It inflated the suppression count the way `sell_idle` did.
+
 ## What NOT to do
 
 Do not open the band by reordering `DISCRETIONARY_ORDER` or by promoting specific

@@ -956,8 +956,11 @@ something open, not an oversight:
 * Whether the per-decision compute can be brought inside the planning window is
   unproven. If it cannot, S-009/S-010's walk-shaped objective is not affordable and
   the design must change rather than the budget.
-* The task-reward table holds no rows, so S-018's reward term has no observations
-  behind it yet.
+* S-018's reward term has no OBSERVATIONS behind it — no character has ever held a
+  task — but the GAME DATA carries a gold and coin reward per task code and always
+  did. What is genuinely missing is the ASSIGNMENT distribution: the taskmaster
+  hands out one of 85 codes and neither the documentation nor 0 observations say
+  with what probability, so S-014 has a shape to price and no numbers to price with.
 * S-017 exempts guards by assertion. Nobody has measured whether a guard ever fires
   where a priced option would have paid more.
 * The deep-fan-out recipe that once caused a search blow-up at this seam is
