@@ -66,7 +66,49 @@ Reverted: `MeansKind.allInLadderOrder`, `UnconditionalDescent`'s prefix/tail spl
 the `formal/sim` mirror, the band tuples, and the worth-gate exemption that went
 with them. The tree is green and `ACCEPT_TASK` is back where it was — unreachable.
 
-**Three ways forward, and the choice is a design decision:**
+**USER chose "do not redraw immediately" (2026-08-19). Investigating how to build
+it turned up two things that change what that costs.**
+
+**1. The redraw rule does not, by itself, discharge the proof obligation.**
+`fMeasure`'s third lex slot is `phasePresent := b2n (phase ≠ .none)`, and nothing
+earlier changes on an accept — so accepting STRICTLY INCREASES the measure. Any rung
+above `.objectiveStep` that CREATES a task is unprovable under
+`UnconditionalDescent`, whose theorem shape is "every selected rung descends",
+whatever rule governs when the accept fires. Removing the livelock and discharging
+the descent are two different problems.
+
+**2. The model already has machinery for exactly this hazard, and it rests on an
+assumption reality does not honour.** `State` carries `taskPool` and
+`taskCodesSeen`, added to discharge `accept_cancel_loop_bound` by pigeonhole: each
+`.taskCancel` pushes the cancelled code onto `taskCodesSeen`, and `.acceptTask`
+draws a code NOT already seen (`CycleStepDC`:
+`taskPool.find? (fun c => ¬ (c ∈ s.taskCodesSeen))`), so after `|taskPool|` cancels
+the bot must ride a task to completion. Two problems with leaning on it:
+
+* `accept_cancel_loop_bound` is an **AXIOM**, not a theorem (`LivenessAudit`
+  references "the accept_cancel_loop_bound axiom's existential"), so the bound is
+  assumed rather than proved.
+* It models the server as never re-drawing a cancelled code. The USER's own
+  description says otherwise — the assignment is level-appropriate and its target
+  is otherwise unguaranteed, so a redraw CAN repeat. **Production has no
+  counterpart to `taskCodesSeen` at all** (grep finds nothing), so the assumption
+  is neither enforced nor observed.
+
+**What that leaves.** Building the USER's rule needs, in order:
+
+1. A production notion of "a draw is owed for this course" — the rule itself. Small,
+   and INERT until acceptance can fire, so it is not worth landing alone.
+2. Either a new measure slot that the accept DESCENDS (the "draw owed" bit is the
+   natural candidate: accept clears it), or a change to `UnconditionalDescent`'s
+   theorem shape from "every rung descends" to "descends or is bounded". The first
+   is one bit and mechanical-ish; the second is architecture.
+3. The oracle vector grows from 33 slots, and `cycle_step_d` reuses index 33
+   onward — so every extra arg shifts, in `Oracle.lean` and both harnesses.
+
+That is a real increment with a Lean core, not a follow-on to the predicate work.
+It should be budgeted as one.
+
+**The three options as originally written:**
 
 * **Make the coin the measure.** Honest — it IS the decreasing quantity — and it is
   real Lean work: a new descent lemma keyed on `taskCoinsTotal`, plus reshaping the
