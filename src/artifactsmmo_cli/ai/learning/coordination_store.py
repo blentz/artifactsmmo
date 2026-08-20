@@ -38,7 +38,10 @@ from artifactsmmo_cli.ai.learning.models import (
     SupplyClaim,
     TurnInClaim,
 )
-from artifactsmmo_cli.ai.learning.schema_init import exclusive_schema_lock
+from artifactsmmo_cli.ai.learning.schema_init import (
+    exclusive_schema_lock,
+    schema_lock_connect_args,
+)
 
 LEASE_TTL_SECONDS = 600
 """Seconds a lease survives without renewal. Renewed every cycle, so this only
@@ -243,7 +246,8 @@ class CoordinationStore:
         # LearningStore case happened to run first in the same process and
         # create the directory as a side effect.
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._engine = create_engine(f"sqlite:///{db_path}")
+        self._engine = create_engine(f"sqlite:///{db_path}",
+                                    connect_args=schema_lock_connect_args())
         # Dispose the engine's pooled SQLite connection when this store is
         # garbage-collected, so callers that forget close() don't leak a
         # connection (raises ResourceWarning). Bound to the engine, not self —

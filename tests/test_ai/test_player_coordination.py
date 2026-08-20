@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy import text
 from sqlmodel import Session as SqlSession
 from sqlmodel import select
 
@@ -2211,3 +2212,68 @@ def test_a_lost_supply_claim_falls_through_to_the_next_candidate(tmp_path, monke
 
     assert target is not None and target[0] == "ash_wood"
     assert store.supply_claim_holder("ash_wood", NOW) == "Robby"
+
+
+# ---------------------------------------------------------------------------
+# The read-only planning path sees the fleet — without joining it.
+#
+# `plan <char>` never called `_update_coordination` (it runs only in `run()`'s
+# loop), so every coordination field was stale-empty in the `plan`, `objective`
+# and `combat-deficit` diagnostics. Invisible while the fields only DAMPENED
+# things — a sibling's bank claim can only shrink a shed licence — and visible
+# the moment the sibling ROUTE landed, because an empty `sibling_skills` turns a
+# reachable recipe back into an unobtainable one.
+# ---------------------------------------------------------------------------
+
+
+def _coord_player(tmp_path, character: str = "C3P0"):  # type: ignore[no-untyped-def]
+    db = str(tmp_path / "coord.db")
+    player = GamePlayer(character=character)
+    player.set_coordination_store(CoordinationStore(db_path=db, character=character))
+    return player, db
+
+
+def test_refresh_sibling_reads_populates_every_pure_read_field(tmp_path) -> None:
+    """All four fields the selection context needs, from one shared reader."""
+    now = datetime.now(tz=timezone.utc)
+    CoordinationStore(db_path=str(tmp_path / "coord.db"),
+                      character="Robby").publish_skills({"jewelrycrafting": 15}, now)
+    player, _ = _coord_player(tmp_path)
+
+    player._refresh_sibling_reads(now)
+
+    assert player._sibling_skills == {"jewelrycrafting": 15}
+    assert player._sibling_bank_claims == {}
+    assert player._sibling_order_claims == frozenset()
+    assert player._asymmetric_demand == frozenset()
+
+
+def test_refresh_sibling_reads_publishes_nothing_and_claims_nothing(tmp_path) -> None:
+    """THE SAFETY PROPERTY. A read-only command must not be able to change what
+    the fleet does: publishing would put a diagnostic's snapshot on the shared
+    board, and claiming would take an election away from a live child.
+
+    Asserted against the TABLES rather than by inspecting the method, so a future
+    edit that slips a publish or a claim into the reader fails here.
+    """
+    now = datetime.now(tz=timezone.utc)
+    player, _db = _coord_player(tmp_path)
+
+    player._refresh_sibling_reads(now)
+
+    engine = player._coordination._engine
+    with SqlSession(engine) as s:
+        for table in ("skill_ledger", "material_demand", "holding_ledger",
+                      "supply_claims", "turn_in_claims", "role_leases",
+                      "bank_stock_claims", "ge_order_claims"):
+            rows = s.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
+            assert rows == 0, f"the read-only refresh wrote to {table}"
+
+
+def test_refresh_sibling_reads_is_a_no_op_without_coordination(tmp_path) -> None:
+    """Every single-character run takes this path."""
+    player = GamePlayer(character="solo")
+
+    player._refresh_sibling_reads(datetime.now(tz=timezone.utc))
+
+    assert player._sibling_skills == {}

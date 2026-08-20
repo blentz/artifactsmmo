@@ -178,11 +178,25 @@ Each lands with `bash formal/gate.sh` green before the next starts.
   `_update_coordination`, so `skill_ledger` stays empty (and the route correctly
   absent) until the running children are restarted on this code.
 
-  ⚠️ PRE-EXISTING GAP FOUND, NOT FIXED: `_update_coordination` is called only from
-  `run()`, never from `plan_from_state`, so `plan <char>` has never reflected
-  coordination state — `supply_target` and `asymmetric_demand` are equally blind
-  there. Worth its own increment; it makes the CLI diagnostics understate the
-  fleet.
+  ✅ FIXED (same session): `_refresh_sibling_reads` extracts the four PURE-READ
+  sibling facts from `_update_coordination` and `plan_from_state` now calls it,
+  so `plan` / `objective` / `combat-deficit` see the fleet. It stays READ-ONLY by
+  construction — the rest of `_update_coordination` publishes and contends, and a
+  diagnostic that published would put its snapshot on the shared board while one
+  that claimed would take an election from a live child. `supply_target`,
+  `turn_in`, `recall` and `role_change` therefore stay absent in diagnostics by
+  design: each is the OUTCOME of an election, unobservable without holding it.
+
+  ✅ ALSO FIXED: the `database is locked` flake. Root cause was not a retry gap —
+  both stores enable `journal_mode=WAL` only AFTER `exclusive_schema_lock` (a
+  journal-mode change is illegal inside a transaction), so the five-way first-open
+  race runs in ROLLBACK-JOURNAL mode protected solely by pysqlite's **undeclared**
+  5-second default. `schema_init` reasoned about that 5 seconds while nothing set,
+  stated or tested it. `SCHEMA_LOCK_TIMEOUT_SECONDS = 30` +
+  `schema_lock_connect_args()` make it one declared decision for both stores,
+  pinned by asserting what a real connection REPORTS (`PRAGMA busy_timeout`) and
+  by a counterfactual test that a bare engine still gets 5000ms — so deleting
+  `connect_args` from a store fails rather than looking green.
 
 * **4 — the bounded skill grind (c).**
   Lift `_next_tier_level` out of `grey_farm` into a shared core and use it as the

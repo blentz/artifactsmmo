@@ -985,6 +985,11 @@ class GamePlayer:
         state = self.state
         game_data = self.game_data
         self._maybe_retry_bank()
+        # Sibling facts the ctx needs. `run()` gets these from
+        # `_update_coordination`, which this path deliberately does NOT call: it
+        # publishes and it contends, and a read-only diagnostic must not change
+        # what the fleet does. See `_refresh_sibling_reads`.
+        self._refresh_sibling_reads(datetime.now(tz=timezone.utc))
         prev = self._prev_level if self._prev_level is not None else state.level
         self._gear_latch.update(prev, state, self._last_outcome, game_data)
         self._prev_level = state.level
@@ -3188,6 +3193,38 @@ class GamePlayer:
         level_of_item = {code: req[1] for code, req in producing.items() if req is not None}
         return skill_of_item, level_of_item
 
+    def _refresh_sibling_reads(self, now: datetime) -> None:
+        """Re-read the four PURE-READ sibling facts the selection context needs.
+
+        Split out of `_update_coordination` so the read-only planning path can
+        use it too. `plan <char>` never called `_update_coordination` — it runs
+        only in `run()`'s loop — so every coordination field was stale-empty in
+        the `plan`, `objective` and `combat-deficit` diagnostics, and they
+        understated the fleet. That was invisible while the fields only DAMPENED
+        things (a sibling's bank claim can only shrink a shed licence); the
+        sibling ROUTE made it visible, because an empty `sibling_skills` turns a
+        reachable recipe back into an unobtainable one and the diagnostic then
+        disagrees with the bot.
+
+        READS ONLY, and that is the whole reason this is a separate method
+        rather than a call to `_update_coordination`. The rest of that method
+        PUBLISHES (`publish_demand`/`publish_holdings`/`publish_skills`) and
+        CONTENDS (`claim_supply`, `claim_turn_in`, role renewal). A diagnostic
+        that published would put its own snapshot on the fleet's board, and one
+        that claimed would take an election away from a live child — a read-only
+        command must not be able to change what the fleet does.
+
+        So `supply_target`, `turn_in`, `recall` and `role_change` stay absent in
+        the diagnostics by design: each is the OUTCOME of an election, and there
+        is no way to show it without holding it.
+        """
+        if self._coordination is None:
+            return
+        self._sibling_bank_claims = self._coordination.sibling_bank_claims(now)
+        self._sibling_order_claims = self._coordination.sibling_order_claims(now)
+        self._asymmetric_demand = self._coordination.sibling_demand_asymmetric(now)
+        self._sibling_skills = self._coordination.sibling_skill_levels(now)
+
     def _update_coordination(self, state: "WorldState", game_data: GameData) -> None:
         """Renew, publish, and re-decide this character's role for one cycle,
         and recompute this cycle's supply target.
@@ -3223,12 +3260,11 @@ class GamePlayer:
         # with the rest of the coordination block (one SQLite query, no API
         # call) so the shed licence this cycle derives is netted against it —
         # see `ai/bank_drain`'s module docstring for the contention it fixes.
-        self._sibling_bank_claims = self._coordination.sibling_bank_claims(now)
+        self._refresh_sibling_reads(now)
         # GE order ids a sibling has already committed to cancelling. Same read
         # cadence, same seam, same reason: Grand Exchange orders are ACCOUNT-scoped,
         # so without this every child plans the same cancel and all but one pay
         # HTTP 404 "Order not found" out of the per-IP action budget.
-        self._sibling_order_claims = self._coordination.sibling_order_claims(now)
         if self._role is not None:
             self._coordination.renew(self._role, now)
         # The real self_servable set (Task 3, role_driven_supply): the codes
@@ -3262,8 +3298,6 @@ class GamePlayer:
         # signal the supply rung (Task 4) gates on. Same per-cycle lifecycle
         # as `_supply_target`, cleared to empty above whenever no coordination
         # store is attached.
-        self._asymmetric_demand = self._coordination.sibling_demand_asymmetric(now)
-        self._sibling_skills = self._coordination.sibling_skill_levels(now)
 
         item_demand = self._coordination.sibling_demand(now)
         skill_of_item, level_of_item = self._producing_split(item_demand, game_data)

@@ -35,6 +35,38 @@ from contextlib import contextmanager
 
 from sqlalchemy import Connection, Engine
 
+#: Seconds a process waits for the first-open schema lock before giving up.
+#:
+#: pysqlite's own default is 5, and this module USED to depend on it silently —
+#: the docstring below reasoned that the queue "drains well inside the default
+#: five-second busy timeout" while nothing in the codebase set, stated or tested
+#: it. That assumption is load-dependent and it broke: a gate run on 2026-08-20
+#: killed a child with `sqlite3.OperationalError: database is locked` under
+#: `pytest -n auto`, seventeen workers doing real SQLite I/O at once.
+#:
+#: The window is worse than the old docstring implied, for a reason worth
+#: stating: both stores enable `journal_mode=WAL` only AFTER this lock (a
+#: journal-mode change is illegal inside a transaction), so the five-way
+#: first-open race runs in ROLLBACK-JOURNAL mode, where a writer excludes every
+#: reader.
+#:
+#: 30 seconds is not "absorbing" the error. The lock is held for milliseconds on
+#: an idle machine, so a higher ceiling costs a healthy run exactly nothing and
+#: only spends time that would otherwise have been a crash. A genuinely stuck
+#: database still raises, just as loudly, 30 seconds later.
+SCHEMA_LOCK_TIMEOUT_SECONDS = 30
+
+
+def schema_lock_connect_args() -> dict[str, float]:
+    """`create_engine(..., connect_args=...)` for a store sharing the schema lock.
+
+    Exists so the timeout is set in ONE place for both stores. A store that
+    builds its engine without it silently gets pysqlite's 5-second default and
+    the first-open race becomes load-sensitive again — the defect
+    `SCHEMA_LOCK_TIMEOUT_SECONDS` documents.
+    """
+    return {"timeout": float(SCHEMA_LOCK_TIMEOUT_SECONDS)}
+
 
 @contextmanager
 def exclusive_schema_lock(engine: Engine) -> Iterator[Connection]:
@@ -45,9 +77,10 @@ def exclusive_schema_lock(engine: Engine) -> Iterator[Connection]:
     begin, which takes it at the first write — far too late, since the probe
     that decides whether to write happens before that). A sibling process
     executing the same statement gets SQLITE_BUSY and pysqlite's busy handler
-    retries it until the lock frees; first-open schema work on an empty file
-    costs milliseconds, so the queue drains well inside the default five-second
-    busy timeout.
+    retries it until the lock frees. Callers MUST build their engine with
+    `schema_lock_connect_args()`, so that handler has
+    `SCHEMA_LOCK_TIMEOUT_SECONDS` rather than pysqlite's undeclared five-second
+    default — see that constant for the gate run where five was not enough.
 
     The body must therefore contain BOTH halves of every check-then-create
     pair. Splitting them across two locks would be no better than no lock at

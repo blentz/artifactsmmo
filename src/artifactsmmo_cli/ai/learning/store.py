@@ -33,7 +33,10 @@ from artifactsmmo_cli.ai.learning.models import (
 from artifactsmmo_cli.ai.learning.recovery_attribution import (
     attribute_forced_recovery,
 )
-from artifactsmmo_cli.ai.learning.schema_init import exclusive_schema_lock
+from artifactsmmo_cli.ai.learning.schema_init import (
+    exclusive_schema_lock,
+    schema_lock_connect_args,
+)
 from artifactsmmo_cli.ai.learning.store_warmup_core import (
     WARMUP_MIN_SAMPLES,
     warmup_gated_median,
@@ -130,7 +133,8 @@ class LearningStore:
     def __init__(self, db_path: str, character: str) -> None:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
-        self._engine = create_engine(f"sqlite:///{db_path}")
+        self._engine = create_engine(f"sqlite:///{db_path}",
+                                    connect_args=schema_lock_connect_args())
         # Dispose the engine's pooled SQLite connection when this store is
         # garbage-collected, so callers that forget close() don't leak a
         # connection (raises ResourceWarning). Bound to the engine, not self.
