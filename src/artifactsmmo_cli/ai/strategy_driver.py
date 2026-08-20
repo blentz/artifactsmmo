@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from artifactsmmo_cli.ai.accumulation_sell import bank_sellable_surplus, sell_targets
+from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.wait import WaitAction
@@ -21,6 +22,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
     select_pure,
 )
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
+from artifactsmmo_cli.ai.combat_deficit import deficit_upgrade_target
 from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.craft_plan_gen import _closure_items, generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
@@ -328,8 +330,33 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
     if kind is GuardKind.GEAR_REVIEW:
         if state is None:
             raise ValueError("GEAR_REVIEW guard requires a state")
-        probe = UpgradeEquipmentGoal(initial_equipment=state.equipment)
-        target = probe.find_upgrade_target(state, game_data)
+        # The MONSTER-AWARE target first: when a held monsters task cannot be
+        # won, the gear worth building is the gear that closes THAT fight, not
+        # whatever the generic value scan likes. `find_upgrade_target` takes no
+        # monster argument, and live that cost ten hours — it chose `iron_boots`,
+        # already worn and absent from every item that improved the pig margin,
+        # while the weapon that moved `rounds_to_kill` went unbuilt. This is the
+        # "lose fight -> upgrade gear" link the bot never had; the value scan
+        # stays the fallback for every other reason to upgrade.
+        def _deficit_cost(code: str) -> float:
+            """Actions to acquire ONE — the SAME pricing `J` and the
+            `combat-deficit` diagnostic use, so the guard cannot chase a
+            different item than the oracle reports. Without it the walk ranks on
+            RAW margin and picks the biggest jump regardless of reach: unpriced
+            it chose `king_slime_sword` (jasper-gated), priced it chooses a
+            cheap partial gain and gets there.
+
+            Measured 386ms per firing on live C3P0 (22 priced candidates — cost
+            is computed only for the ones that actually improve the margin),
+            against a ~70s cycle.
+            """
+            return float(acquisition_actions(code, 1, state, game_data, ctx,
+                                             equip=True, store=history))
+
+        target = deficit_upgrade_target(state, game_data, cost_of=_deficit_cost)
+        if target is None:
+            probe = UpgradeEquipmentGoal(initial_equipment=state.equipment)
+            target = probe.find_upgrade_target(state, game_data)
         if target is None:
             # No upgrade found — defensive fallback (active_guards gates on ctx,
             # so this branch is only reachable if the latch fired without an upgrade).

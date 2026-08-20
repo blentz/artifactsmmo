@@ -1,10 +1,12 @@
 import dataclasses
 import json
 from dataclasses import dataclass
+from unittest.mock import patch
 
 import pytest
 
 import artifactsmmo_cli.ai.strategy_driver as sd
+from artifactsmmo_cli.ai import strategy_driver
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
@@ -166,6 +168,56 @@ def test_map_guard_gear_review_gathers_when_materials_missing():
     gd._crafting_recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
     state = make_state(level=4, inventory={}, bank_items={})
     goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
+    assert isinstance(goal, GatherMaterialsGoal)
+
+
+def test_map_guard_gear_review_prices_the_deficit_target():
+    """GEAR_REVIEW asks the DEFICIT first, and prices it with the same function
+    `J` and the `combat-deficit` diagnostic use.
+
+    Both halves matter. Monster-blindness is what let `find_upgrade_target` chase
+    `iron_boots` — already worn, and absent from all 24 items that improved the
+    pig margin — for ten hours. And without PRICING, the deficit walk ranks on
+    raw margin and takes the biggest jump regardless of reach: unpriced it picked
+    `king_slime_sword`, gated behind a `jasper_crystal` the character has no
+    route to.
+
+    The `cost_of` closure is INVOKED here rather than merely constructed: a
+    closure that is never called is not wired to anything.
+    """
+    gd = GameData()
+    gd._item_stats = {"copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                                crafting_skill="gearcrafting", crafting_level=1)}
+    gd._crafting_recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
+    state = make_state(level=4, inventory={}, bank_items={})
+    seen = {}
+
+    def fake_target(st, game_data, cost_of=None, **k):
+        seen["cost"] = cost_of("copper_boots")
+        return "copper_boots", "boots_slot"
+
+    with patch.object(strategy_driver, "acquisition_actions", return_value=7):
+        with patch.object(strategy_driver, "deficit_upgrade_target", fake_target):
+            goal = map_guard(GuardKind.GEAR_REVIEW, gd,
+                             _ctx(gear_review_active=True), state)
+
+    assert seen["cost"] == 7.0
+    assert isinstance(goal, GatherMaterialsGoal | UpgradeEquipmentGoal)
+
+
+def test_map_guard_gear_review_falls_back_to_the_value_scan():
+    """No deficit (no monsters task, or one already winnable) leaves the generic
+    upgrade scan deciding, exactly as before — the deficit is an ADDITION for the
+    blocked case, not a replacement for every reason to upgrade."""
+    gd = GameData()
+    gd._item_stats = {"copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                                crafting_skill="gearcrafting", crafting_level=1)}
+    gd._crafting_recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
+    state = make_state(level=4, inventory={}, bank_items={})
+
+    with patch.object(strategy_driver, "deficit_upgrade_target", return_value=None):
+        goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
+
     assert isinstance(goal, GatherMaterialsGoal)
 
 

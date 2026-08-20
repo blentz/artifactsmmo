@@ -14,7 +14,7 @@ includes worn gear; a fixture that puts a sword in `equipment` while leaving
 `test_weapon_winnability`.
 """
 
-from artifactsmmo_cli.ai.combat_deficit import combat_deficit
+from artifactsmmo_cli.ai.combat_deficit import combat_deficit, deficit_upgrade_target
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -254,6 +254,87 @@ def test_each_step_records_what_it_cost() -> None:
                           cost_of=lambda code: 37.0).chain[0]
 
     assert step.acquire_cost == 37.0
+
+
+# ---------------------------------------------------------------------------
+# `deficit_upgrade_target` — the missing causal link, "lose fight -> upgrade gear".
+#
+# `map_guard`'s GEAR_REVIEW branch picks what to build with a monster-BLIND
+# `_best_by_value` scan. Live, that chose `iron_boots` — already worn, and absent
+# from all 24 items that improved the pig margin — while the weapon that actually
+# moved `rounds_to_kill` went unbuilt for ten hours. The latch knew a fight had
+# been lost; nothing carried WHICH fight into the gear decision.
+# ---------------------------------------------------------------------------
+
+
+def _task_state(**over):  # type: ignore[no-untyped-def]
+    base = dict(level=1, hp=100, max_hp=100, equipment={}, inventory={},
+                task_code="boar", task_type="monsters", task_total=104,
+                task_progress=0)
+    base.update(over)
+    return make_state(**base)
+
+
+def test_target_is_the_deficits_first_step_against_the_task_monster() -> None:
+    """The gear we build is the gear that closes the fight we are blocked on."""
+    target = deficit_upgrade_target(_task_state(), _gd())
+
+    assert target == ("steel_sword", "weapon_slot")
+
+
+def test_no_target_when_the_task_monster_is_already_winnable() -> None:
+    """Nothing to fix — the generic value scan should decide instead."""
+    assert deficit_upgrade_target(_task_state(inventory={"steel_sword": 1}),
+                                  _gd()) is None
+
+
+def test_no_target_without_a_monsters_task() -> None:
+    """An items task, or none at all, leaves the gear choice to the value scan.
+
+    Scoped to the held task deliberately: after the tier-1 bypass closed, the
+    monster we last LOST to is no longer the farm target, so "last loss" is a
+    stale signal. The task is the thing we are actually blocked on, and working
+    toward being able to fight it is how S-052 is honoured by a character that
+    cannot fight it yet.
+    """
+    assert deficit_upgrade_target(_task_state(task_type="items"), _gd()) is None
+    assert deficit_upgrade_target(_task_state(task_code=None, task_type=None),
+                                  _gd()) is None
+
+
+def test_no_target_for_a_finished_task() -> None:
+    assert deficit_upgrade_target(_task_state(task_progress=104), _gd()) is None
+
+
+def test_no_target_when_no_gear_closes_the_gap() -> None:
+    """`closes=False` with an empty chain must not yield a phantom target."""
+    assert deficit_upgrade_target(_task_state(), _gd(),
+                                  candidates=("cloth_cap",)) is None
+
+
+def test_the_target_is_PRICED_when_a_cost_is_supplied() -> None:
+    """The guard must chase the same item the `combat-deficit` oracle reports.
+
+    Unpriced, the walk ranks on RAW margin and takes the biggest jump regardless
+    of reach — live that was `king_slime_sword`, gated behind a `jasper_crystal`
+    C3P0 has no route to. Priced, it takes a cheap partial gain and actually
+    gets there.
+    """
+    gd = _gd()
+    cost = {"steel_sword": 400.0, "bronze_sword": 20.0}
+
+    assert deficit_upgrade_target(_task_state(), gd) == ("steel_sword", "weapon_slot")
+    assert deficit_upgrade_target(_task_state(), gd, cost_of=cost.get) == (
+        "bronze_sword", "weapon_slot")
+
+
+def test_the_target_slot_matches_the_items_type() -> None:
+    """Body armour must not be handed to the weapon slot — the guard equips into
+    exactly the slot this returns."""
+    target = deficit_upgrade_target(_task_state(inventory={"bronze_sword": 1}),
+                                    _gd(), candidates=("hide_vest",))
+
+    assert target == ("hide_vest", "body_armor_slot")
 
 
 def test_default_candidate_pool_excludes_gear_above_the_characters_level() -> None:

@@ -292,12 +292,39 @@ Each lands with `bash formal/gate.sh` green before the next starts.
   C3P0's `None` is `project_blocked_horizon_is_a_grey_wall`: everything beatable
   is grey, everything non-grey it loses. It needs GEAR, which 6b points it at.
 
-* **6b — point the gear chain at the deficit.** The remaining half. Closing the
-  bypass stops the bleeding; it does not yet CURE, because `map_guard`'s
-  GEAR_REVIEW still picks its target with a monster-blind `_best_by_value` scan.
-  When the latch was set by a loss, the target should be `combat_deficit`'s first
-  step against THAT monster. Only then does "lose fight -> upgrade gear" close as
-  a loop.
+* **6b — point the gear chain at the deficit.** ✅ DONE.
+  `deficit_upgrade_target` gives GEAR_REVIEW the item that closes the fight the
+  character is blocked on; the generic value scan stays the fallback for every
+  other reason to upgrade.
+
+  Scoped to the HELD TASK, not the last loss. Once 6a closed the bypass, an
+  unwinnable task monster stops being the farm target — so "the monster we last
+  lost to" decays as a signal exactly when it matters. The task is what the
+  character is blocked on, and building toward being able to fight it is how a
+  character that CANNOT fight it yet honours S-052.
+
+  PRICED with the same `acquisition_actions` the CLI uses, so the actor and the
+  oracle cannot chase different items. Unpriced the walk ranks on raw margin and
+  takes the biggest jump regardless of reach — it picked `king_slime_sword`,
+  gated behind a `jasper_crystal` C3P0 has no route to.
+
+  Verified live, `map_guard` REACHING it (1 call, same value, per character):
+
+      C3P0   value scan: earth_boost_potion  ->  deficit: highwayman_dagger
+      R2D2   value scan: iron_pickaxe        ->  deficit: earth_boost_potion
+      Robby  value scan: earth_boost_potion  ->  deficit: wooden_club
+
+  Cost: 386ms per firing on live C3P0 (22 priced candidates — cost is computed
+  only for the ones that improve the margin) against a ~70s cycle. Planning
+  itself is unchanged at ~3s.
+
+  ⚠️ OPEN TUNING QUESTION for the USER: gain-per-action with `max_chain=1`
+  prefers a cheap partial improvement over the item that CLOSES the fight. It
+  converges — each acquisition raises the margin and the crumbs run out — but
+  gradually, and it is why Robby is pointed at a `wooden_club` (it currently
+  wields a `copper_pickaxe`, so almost any weapon is a cheap real gain). The
+  alternative is to prefer a step that closes outright when one is affordable.
+  Not changed unilaterally: it is a policy call, not a defect.
 
 * **6c — retire the countdown for this class.** With 6a+6b in place the
   `GOAL_OSCILLATION` suppression of a losing grind should be unreachable rather

@@ -134,6 +134,57 @@ def _margin_owning(state: WorldState, game_data: GameData, monster: str,
     return combat_margin(dataclasses.replace(state, inventory=trial), game_data, monster)
 
 
+def deficit_upgrade_target(
+    state: WorldState,
+    game_data: GameData,
+    candidates: tuple[str, ...] | None = None,
+    cost_of: Callable[[str], float] | None = None,
+) -> tuple[str, str] | None:
+    """`(item_code, slot)` to build next to make the HELD TASK's monster winnable.
+
+    This is the causal link "lose fight -> upgrade gear" that the bot never had.
+    `map_guard`'s GEAR_REVIEW branch sets its target with a monster-BLIND
+    `_best_by_value` scan: live it chose `iron_boots`, already worn and absent
+    from all 24 items that improved the pig margin, while the weapon that
+    actually moved `rounds_to_kill` went unbuilt for ten hours. The gear latch
+    knew a fight had been lost; nothing carried WHICH fight into the decision.
+
+    Scoped to the HELD TASK rather than to the last loss, deliberately. Once the
+    tier-1 bypass closed, an unwinnable task monster stops being the farm target,
+    so "the monster we last lost to" is a stale signal that decays as soon as it
+    matters. The task is what the character is actually blocked on — and building
+    toward being able to fight it is how S-052 ("work a task you cannot discard")
+    is honoured by a character that cannot fight it yet.
+
+    Returns None when there is nothing to fix — no monsters task, one already
+    finished, a monster already winnable, or a gap no gear closes. The generic
+    value scan then decides, unchanged.
+
+    The slot is the first in `ITEM_TYPE_TO_SLOTS` order for the item's type, the
+    same rule `UpgradeEquipmentGoal` uses, so the guard equips into a slot that
+    accepts it.
+    """
+    if state.task_type != "monsters" or not state.task_code:
+        return None
+    if state.task_total == 0 or state.task_progress >= state.task_total:
+        return None
+    deficit = combat_deficit(state, game_data, state.task_code,
+                             candidates=candidates, max_chain=1, cost_of=cost_of)
+    if deficit is None or not deficit.chain:
+        return None
+    step = deficit.chain[0]
+    slots = ITEM_TYPE_TO_SLOTS.get(step.item_type, [])
+    if not slots:
+        # Totality guard, provably unreachable: an item can only improve the
+        # margin by being picked into a loadout, which requires a slot — and the
+        # default pool filters on `ITEM_TYPE_TO_SLOTS` besides. It stays because
+        # `candidates` is caller-supplied and `slots[0]` would IndexError rather
+        # than decline. Same idiom as `buy_source_venue.choose_buy_venue3`'s
+        # unreachable arm.
+        return None  # pragma: no cover
+    return step.code, slots[0]
+
+
 def combat_deficit(
     state: WorldState,
     game_data: GameData,
