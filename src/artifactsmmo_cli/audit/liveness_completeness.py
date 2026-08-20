@@ -55,19 +55,25 @@ DORMANT: dict[str, str] = {
     # `docs/PLAN_priority_ladder_unification.md`: the discretionary means band
     # sits below the objective step, and a step is present in 14,064 of 14,064
     # traced cycles, so nothing in that band can be selected.
-    "AcceptTaskGoal": "unreachable: MeansKind.ACCEPT_TASK is in DISCRETIONARY_ORDER, "
-                      "below the objective step, present in 14064 of 14064 cycles",
-    "AcceptTaskAction": "unreachable: emitted only by AcceptTaskGoal",
-    "PursueTaskGoal": "unreachable: requires a held task, and AcceptTask can never be selected",
-    "CompleteTaskGoal": "unreachable: requires a held task; task_code non-null in 0 of 63,310 cycles",
-    "CompleteTaskAction": "unreachable: emitted only by CompleteTaskGoal",
-    "TaskCancelGoal": "unreachable: requires a held task",
-    "TaskCancelAction": "unreachable: emitted only by TaskCancelGoal",
-    "LowYieldCancelGoal": "unreachable: requires a held task to judge",
-    "TaskExchangeGoal": "unreachable: requires tasks_coin, earned only by "
+    #
+    # AcceptTaskGoal / AcceptTaskAction LEFT THIS TABLE on 2026-08-19: ACCEPT_TASK
+    # was promoted into COLLECT_REWARD_ORDER (S-051, gated on an owed draw), and
+    # the store recorded its first selection — after 0 of 63,310 cycles. The
+    # entries below are RECLASSIFIED with it: they were declared unreachable
+    # because no task could ever be held, and that premise is gone. They are
+    # CONDITIONAL now — waiting on a draw the fleet has not yet made in anger,
+    # not on a structure that forbids one.
+    "PursueTaskGoal": "conditional: requires a held items-task the projection says to pursue",
+    "CompleteTaskGoal": "conditional: requires a task worked to completion",
+    "CompleteTaskAction": "conditional: emitted only by CompleteTaskGoal",
+    "TaskCancelGoal": "conditional: requires a held task AND a pocket tasks_coin "
+                      "to spend on the cancel (S-052 works one it cannot discard)",
+    "TaskCancelAction": "conditional: emitted only by TaskCancelGoal",
+    "LowYieldCancelGoal": "conditional: requires a held task and enough samples to judge it",
+    "TaskExchangeGoal": "conditional: requires tasks_coin, earned only by "
                         "completing tasks",
-    "TaskExchangeAction": "unreachable: emitted only by TaskExchangeGoal",
-    "TaskTradeAction": "unreachable: items-task delivery, requires a held task",
+    "TaskExchangeAction": "conditional: emitted only by TaskExchangeGoal",
+    "TaskTradeAction": "conditional: items-task delivery, requires a held items-task",
     "MaintainConsumablesGoal": "unreachable: MeansKind.MAINTAIN_CONSUMABLES is in the discretionary band",
     "ExpandBankGoal": "unreachable: MeansKind.BANK_EXPAND is in the discretionary band",
     "BuyBankExpansionAction": "unreachable: emitted only by ExpandBankGoal",
