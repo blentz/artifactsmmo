@@ -16,6 +16,7 @@ in-memory so a diagnostic run cannot write session rows into the fleet's db.
 
 import typer
 
+from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.combat_deficit import CombatDeficit, combat_deficit
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -37,8 +38,9 @@ def _print_deficit(monster: str, deficit: CombatDeficit | None, level: int) -> N
     for i, step in enumerate(deficit.chain, start=1):
         gate = (f"{step.crafting_skill}@{step.crafting_level}"
                 if step.crafting_skill else "not craftable (drop/vendor)")
+        cost = "?" if step.acquire_cost is None else f"{step.acquire_cost:.0f}"
         print(f"  {i}. {step.code:28s} L{step.item_level:<3} {step.item_type:12s} "
-              f"{gate:24s} margin -> {step.margin_after}")
+              f"{gate:24s} {cost:>9s} actions   margin -> {step.margin_after}")
 
 
 def combat_deficit_command(
@@ -57,7 +59,7 @@ def combat_deficit_command(
         player = GamePlayer(character=character, history=store,
                             game_data_ttl_minutes=config.game_data_ttl_minutes)
         player.plan_once()
-        state, game_data = player.state, player.game_data
+        state, game_data, ctx = player.state, player.game_data, player._last_ctx
         if state is None or game_data is None:
             raise typer.BadParameter(f"could not sense state for {character!r}")
         target = monster or state.task_code
@@ -69,8 +71,21 @@ def combat_deficit_command(
         print(f"task: {state.task_type}/{state.task_code} "
               f"{state.task_progress}/{state.task_total}")
         print("-" * 70)
+
+        def cost_of(code: str) -> float:
+            """Actions to acquire ONE — the SAME function `J` prices routes with.
+
+            This is what makes the chain answer clause (c) without a rule for it:
+            a skill-gated craft carries `unlock_actions` (its grind, or the
+            measured cost of asking a sibling), so preferring a low skill
+            requirement and preferring a cheap acquisition are one ordering.
+            """
+            return float(acquisition_actions(code, 1, state, game_data, ctx,
+                                             equip=True, store=store))
+
         _print_deficit(target, combat_deficit(state, game_data, target,
-                                              max_chain=max_chain), state.level)
+                                              max_chain=max_chain,
+                                              cost_of=cost_of), state.level)
     finally:
         store.end_session(exit_reason="normal")
         store.close()

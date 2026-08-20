@@ -151,6 +151,111 @@ def test_chain_is_bounded_by_max_chain() -> None:
     assert deficit.closes is False
 
 
+def test_the_deficit_does_not_move_with_transient_hp() -> None:
+    """THE D2 LESSON, replayed. "What gear closes this fight" is a different
+    question from "should I fight right now", and only the second depends on
+    current hp. Rest is an action the planner has.
+
+    Found live: C3P0 at 1/385 hp reported `margin -21, chain DOES NOT CLOSE`
+    while the same character at 385/385 reported `margin -10, chain CLOSES` —
+    the GEAR PLAN flipping on hp alone. That is the same shape as the 7,000x
+    iron-gear price swing `PLAN_iron_gear_acquisition` increment 2 fixed by
+    asking route existence at restorable hp.
+
+    The first version of this module argued the opposite ("a deficit computed at
+    full hp would clear itself every time the character rested"). That reasoning
+    was simply wrong: resting does not change `max_hp`, so a deficit measured
+    there is STABLE, not cleared. Engagement at low hp is already prevented by
+    `FightAction._structurally_applicable`'s hp floor and the RESTORE_HP guard —
+    different gates, and this is not one of them.
+    """
+    gd = _gd()
+    healthy = make_state(level=1, hp=100, max_hp=100, equipment={}, inventory={})
+    hurt = make_state(level=1, hp=1, max_hp=100, equipment={}, inventory={})
+
+    assert combat_deficit(hurt, gd, "boar") == combat_deficit(healthy, gd, "boar")
+
+
+def test_a_fight_winnable_only_when_rested_has_no_gear_deficit() -> None:
+    """The boundary case of the rule above: hurt and unwinnable NOW, but no gear
+    would help — what it needs is a rest, and inventing a gear chain for it would
+    send the character shopping instead of sleeping."""
+    gd = _gd()
+    hurt = make_state(level=1, hp=1, max_hp=100, equipment={},
+                      inventory={"steel_sword": 1})
+
+    assert combat_deficit(hurt, gd, "boar") is None
+
+
+def test_ranking_is_margin_gain_PER_ACTION_when_a_cost_is_supplied() -> None:
+    """THE JOIN. Clause (c) — "lowest skill requirements, prefer things we can
+    build" — needs no rule of its own, because `acquisition_cost` already
+    expresses a skill gate as `unlock_actions` CYCLES. Lowest skill requirement
+    IS cheapest unlock, so preferring it is just preferring gain per action.
+
+    Live shape: `combat-deficit C3P0` ranked on raw margin and chose
+    `king_slime_sword` (weaponcrafting@15, C3P0 at 6) over `iron_sword`
+    (weaponcrafting@10) — the FURTHER item, because its margin jump was bigger.
+    """
+    gd = _gd()
+    # steel_sword gains more margin outright; bronze_sword gains less but is far
+    # cheaper to get. Per action, bronze wins.
+    cost = {"steel_sword": 400.0, "bronze_sword": 20.0, "hide_vest": 20.0}
+
+    deficit = combat_deficit(_state(), gd, "boar", cost_of=cost.get)
+
+    assert deficit.chain[0].code == "bronze_sword", (
+        "ranked on raw gain, steel_sword wins; per action it does not")
+
+
+def test_cost_ranking_still_requires_a_real_margin_gain() -> None:
+    """Cheap is not a reason to acquire something that does not help. Only
+    candidates that actually move the margin are ranked at all, so a free item
+    with zero gain can never win on a ratio."""
+    gd = _gd()
+    cost = {"cloth_cap": 1.0, "steel_sword": 500.0}
+
+    deficit = combat_deficit(_state(), gd, "boar",
+                             candidates=("cloth_cap", "steel_sword"),
+                             cost_of=cost.get)
+
+    assert [s.code for s in deficit.chain] == ["steel_sword"]
+
+
+def test_a_zero_cost_candidate_cannot_divide_by_zero() -> None:
+    """An item already owned is priced 0 by the acquisition model. It cannot
+    improve the margin (`pick_loadout` would already be wearing it), but the
+    ranking must not be able to blow up if one ever is."""
+    gd = _gd()
+
+    deficit = combat_deficit(_state(), gd, "boar", cost_of=lambda code: 0.0)
+
+    assert deficit.closes is True
+
+
+def test_without_a_cost_the_ranking_is_unchanged() -> None:
+    """`cost_of` defaults to None so every existing caller keeps raw-margin
+    ranking exactly — the same contract `route_options` gives its `store`."""
+    gd = _gd()
+
+    assert (combat_deficit(_state(), gd, "boar").chain[0].code
+            == combat_deficit(_state(), gd, "boar", cost_of=None).chain[0].code
+            == "steel_sword")
+
+
+def test_each_step_records_what_it_cost() -> None:
+    """The chain must be readable as a plan, not just a verdict: a four-step chain
+    whose steps cost 20 and 400 cycles is a different decision from one whose
+    steps all cost 20."""
+    gd = _gd()
+
+    step = combat_deficit(_state(), gd, "boar",
+                          candidates=("steel_sword",),
+                          cost_of=lambda code: 37.0).chain[0]
+
+    assert step.acquire_cost == 37.0
+
+
 def test_default_candidate_pool_excludes_gear_above_the_characters_level() -> None:
     """The pool is what the character could actually equip, not the whole catalog."""
     gd = _gd()

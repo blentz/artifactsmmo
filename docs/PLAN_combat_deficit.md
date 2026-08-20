@@ -198,18 +198,67 @@ Each lands with `bash formal/gate.sh` green before the next starts.
   by a counterfactual test that a bare engine still gets 5000ms — so deleting
   `connect_args` from a store fails rather than looking green.
 
-* **4 — the bounded skill grind (c).**
-  Lift `_next_tier_level` out of `grey_farm` into a shared core and use it as the
-  grind CAP: raise a skill only to the level that unlocks the next item or tier,
-  never speculatively past it. `_gated_craft_option` already prices the unlock via
-  `skill_grind_cycles`; this bounds what it is allowed to price.
-  ⚠️ `project_learned_rate_level_scoping` — a learned rate that carries no level
-  silently voids the grey-mob rule. Keep the cap level-scoped.
+* **4 — the bounded skill grind (c).** ❌ **NOT BUILT — the problem does not exist.**
+  Scoped as "lift `_next_tier_level` out of `grey_farm` and use it as a grind
+  cap". Measured first, and the cap is already STRUCTURAL: `factory.py` emits a
+  `LevelSkill(skill->level)` only for levels at which game data actually gates a
+  craft or a resource, so a target that unlocks nothing is unrepresentable.
+  Checked every `LevelSkill` target in the store's whole history against the real
+  gate set:
 
-* **5 — `combat_deficit` consumes the acquisition model. THE JOIN.**
-  `candidates=` (already injectable, built in increment 1 for exactly this) is fed
-  the acquirable set; the greedy walk ranks on margin gain (a) and tie-breaks on
-  bounded skill distance (c). One selection, three clauses, no new rung.
+      weaponcrafting->10  11026 cycles   real gate (next above: 15)
+      gearcrafting->10     4261          real gate (next above: 15)
+      woodcutting->20      2300          real gate (next above: 30)
+      ... 12 distinct targets, 22,459 cycles
+
+      cycles spent grinding toward a level that gates NOTHING: 0
+
+  `strategy_driver` additionally caps the task-skill grind at
+  `current + LEVEL_LOOKAHEAD` (3). Building a second cap beside these would be
+  the exact epicycle this epic exists to stop.
+
+  The OTHER half of clause (c) — "lowest skill requirements, prefer things we can
+  build" — needs no mechanism either: `acquisition_cost` already expresses a skill
+  requirement as `unlock_actions` CYCLES (`skill_grind_cycles` for an own grind,
+  the measured 15 for a sibling). **Lowest skill requirement IS cheapest unlock**,
+  so (c) falls out of cost-ranking rather than needing a rule. It folds into
+  increment 5.
+
+  ⚠️ The first version of this probe reported "22,459 speculative cycles" because
+  it built `GameData` by a path that left the catalog EMPTY, so every gate lookup
+  missed. A completeness check whose reference set is empty reports total failure
+  and looks like a finding. Assert the reference set is non-empty before trusting
+  a census that only ever says NO.
+
+* **5 — `combat_deficit` consumes the acquisition model. THE JOIN.** ✅ DONE.
+  `cost_of` is injected (the core stays pure, same shape as `candidates`), and
+  the greedy walk ranks on **margin gain PER ACTION** instead of raw gain. The
+  CLI supplies `acquisition_actions` — the same function `J` prices routes with —
+  so clause (c) falls out with no rule of its own.
+
+  Measured live on C3P0 vs pig, all three routes priced side by side:
+
+      mushstaff    GE_FILL  1 action, 1000g,  unlock 0                 <- chosen
+                   craft    unlock skill:weaponcrafting:15 = 1310 actions
+      iron_sword   GE_FILL  1 action,  794g,  unlock 0
+                   craft    unlock skill:weaponcrafting:10 =  556 actions
+                   craft    unlock sibling:iron_sword      =   15 actions
+
+  GE < sibling (15) << own grind (556/1310) — the ordering the USER's heuristic
+  asks for, out of ONE cost function. Acquisition costs span 26 distinct values
+  over 47 equippables, so the ratio ranking is not inert.
+
+  🔥 **DEFECT I INTRODUCED, caught by running it live.** Increment 1 evaluated the
+  deficit at CURRENT hp and the docstring defended it ("a deficit computed at full
+  hp would clear itself every time the character rested"). That reasoning was
+  wrong — resting does not change `max_hp` — and the cost was the D2 pathology
+  replayed: C3P0 at 1/385 reported `margin -21, chain DOES NOT CLOSE` while the
+  same character at 385/385 reported `margin -10, chain CLOSES`. A GEAR plan
+  moving with transient hp is exactly the 7,000x swing
+  `PLAN_iron_gear_acquisition` increment 2 fixed. Now evaluated at `max_hp`,
+  following `tiers/objective.py`'s `rested` precedent. Two tests pin it, including
+  the boundary case: hurt but no gear would help ⇒ no deficit, because what it
+  needs is a rest.
 
 * **6 — replace the countdown with the fact, and DELETE the bypass.**
   Grind on `m` blocked while `combat_deficit(m)` is non-`None`; remove the

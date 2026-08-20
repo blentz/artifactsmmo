@@ -74,7 +74,6 @@ DORMANT: dict[str, str] = {
                         "completing tasks",
     "TaskExchangeAction": "conditional: emitted only by TaskExchangeGoal",
     "TaskTradeAction": "conditional: items-task delivery, requires a held items-task",
-    "MaintainConsumablesGoal": "unreachable: MeansKind.MAINTAIN_CONSUMABLES is in the discretionary band",
     "ExpandBankGoal": "unreachable: MeansKind.BANK_EXPAND is in the discretionary band",
     "BuyBankExpansionAction": "unreachable: emitted only by ExpandBankGoal",
     "PostBuyBidGoal": "unreachable: MeansKind.GE_BID is in the discretionary band",

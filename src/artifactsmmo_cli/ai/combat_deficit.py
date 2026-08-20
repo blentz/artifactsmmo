@@ -44,6 +44,7 @@ Costs one `combat_margin` per candidate per step. That is fine for the read-only
 """
 
 import dataclasses
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.combat import combat_margin, predict_win
@@ -78,6 +79,13 @@ class DeficitStep:
     crafting_skill: str | None
     crafting_level: int
     margin_after: int
+    acquire_cost: float | None = None
+    """Actions to acquire ONE of this step, from the caller's `cost_of`.
+
+    None when the caller supplied no pricing. Recorded so the chain reads as a
+    PLAN rather than a verdict: four steps costing 20 cycles each is a different
+    decision from four costing 400.
+    """
 
 
 @dataclass(frozen=True)
@@ -132,13 +140,13 @@ def combat_deficit(
     monster: str,
     candidates: tuple[str, ...] | None = None,
     max_chain: int = MAX_CHAIN,
+    cost_of: Callable[[str], float] | None = None,
 ) -> CombatDeficit | None:
     """The gear gap against `monster`, or None when the fight is already winnable.
 
     Args:
-      state:      the character. Read at its CURRENT hp, exactly as `predict_win`
-                  does — a deficit computed at full hp would clear itself every
-                  time the character rested.
+      state:      the character. Evaluated at `max_hp`, NOT current hp — see the
+                  note at the top of the function body.
       game_data:  static world data.
       monster:    monster code.
       candidates: item codes to consider acquiring. Defaults to every equippable
@@ -146,7 +154,25 @@ def combat_deficit(
                   narrow it to what is actually acquirable (`obtain_sources`)
                   without this core taking a dependency on the acquisition model.
       max_chain:  bound on the greedy walk.
+      cost_of:    actions to acquire ONE of an item — in production
+                  `acquisition_cost.acquisition_actions`. When supplied the walk
+                  ranks on margin gain PER ACTION instead of raw gain, which is
+                  what makes clause (c) fall out for free: `acquisition_cost`
+                  already prices a skill gate as `unlock_actions` cycles, so
+                  "lowest skill requirement" and "cheapest unlock" are the same
+                  ordering and neither needs a rule of its own. Defaults to None
+                  so every existing caller keeps raw-margin ranking exactly —
+                  the same contract `route_options` gives its `store`.
     """
+    # RESTORABLE hp, never current. "What gear closes this fight" is a different
+    # question from "should I fight right now", and only the second depends on
+    # how damaged we happen to be — rest is an action the planner has. Measured
+    # live: C3P0 at 1/385 reported margin -21 with a chain that does NOT close,
+    # and the same character at 385/385 reported -10 with one that does. A gear
+    # plan that moves with transient hp is the same defect as the 7,000x iron-gear
+    # price swing, fixed the same way (PLAN_iron_gear_acquisition increment 2),
+    # and `tiers/objective.py` sets the precedent for building `rested` here.
+    state = dataclasses.replace(state, hp=state.max_hp)
     if predict_win(state, game_data, monster):
         return None
     baseline = combat_margin(state, game_data, monster)
@@ -159,10 +185,21 @@ def combat_deficit(
     while len(chain) < max_chain:
         best: tuple[str, ItemStats] | None = None
         best_margin = current
+        best_score = 0.0
+        best_cost: float | None = None
         for code, stats in pool:
             margin = _margin_owning(state, game_data, monster, inventory, code)
-            if margin > best_margin:
-                best, best_margin = (code, stats), margin
+            if margin <= current:
+                continue  # cheap is no reason to acquire something that cannot help
+            gain = margin - current
+            cost = None if cost_of is None else cost_of(code)
+            # `max(cost, 1.0)`: an item priced 0 is one already owned, which
+            # cannot improve the margin anyway (`pick_loadout` would be wearing
+            # it) — but the ranking must not be able to divide by zero if one is.
+            score = float(gain) if cost is None else float(gain) / max(cost, 1.0)
+            if best is None or score > best_score:
+                best, best_margin, best_score, best_cost = (
+                    (code, stats), margin, score, cost)
         if best is None:
             break
         best_code, best_stats = best
@@ -175,6 +212,7 @@ def combat_deficit(
             crafting_skill=best_stats.crafting_skill,
             crafting_level=best_stats.crafting_level,
             margin_after=current,
+            acquire_cost=best_cost,
         ))
         if predict_win(dataclasses.replace(state, inventory=inventory), game_data, monster):
             closes = True

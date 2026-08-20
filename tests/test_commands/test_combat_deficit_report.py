@@ -28,17 +28,19 @@ def _player(**state_overrides):
 def _run(deficit, **kwargs):
     """Invoke the command with a canned player and a canned `combat_deficit`."""
     player = kwargs.pop("player", None) or _player()
-    with patch.object(cmd.Config, "from_token_file", return_value=MagicMock()):
-        with patch.object(cmd, "ClientManager"):
-            with patch.object(cmd, "LearningStore") as store_cls:
-                store_cls.return_value = MagicMock()
-                with patch.object(cmd, "GamePlayer", return_value=player):
-                    with patch.object(cmd, "combat_deficit", return_value=deficit):
-                        cmd.combat_deficit_command(
-                            character="C3P0",
-                            monster=kwargs.pop("monster", None),
-                            max_chain=kwargs.pop("max_chain", 8),
-                        )
+    with (
+        patch.object(cmd.Config, "from_token_file", return_value=MagicMock()),
+        patch.object(cmd, "ClientManager"),
+        patch.object(cmd, "LearningStore", return_value=MagicMock()),
+        patch.object(cmd, "GamePlayer", return_value=player),
+        patch.object(cmd, "acquisition_actions", return_value=1),
+        patch.object(cmd, "combat_deficit", return_value=deficit),
+    ):
+        cmd.combat_deficit_command(
+            character="C3P0",
+            monster=kwargs.pop("monster", None),
+            max_chain=kwargs.pop("max_chain", 8),
+        )
 
 
 def test_reports_the_chain_that_closes_a_losing_fight(capsys) -> None:
@@ -57,6 +59,60 @@ def test_reports_the_chain_that_closes_a_losing_fight(capsys) -> None:
     assert "margin -> 2" in out
     # the task line is what ties the deficit to the task the bot cannot advance
     assert "monsters/pig 0/104" in out
+
+
+def test_the_command_prices_candidates_with_the_same_function_J_uses(capsys) -> None:
+    """The `cost_of` closure is what makes the chain answer clause (c): a
+    skill-gated craft carries `unlock_actions` (its grind, or the measured cost
+    of asking a sibling), so "lowest skill requirement" and "cheapest
+    acquisition" become one ordering and neither needs a rule.
+
+    Asserted by INVOKING the closure the command hands to `combat_deficit`,
+    because a closure that is merely constructed is not wired to anything —
+    the earlier tests mocked `combat_deficit` and never called it.
+    """
+    player = _player()
+    captured = {}
+
+    def fake_deficit(state, game_data, monster, max_chain=8, cost_of=None):
+        captured["cost"] = cost_of("iron_sword")
+        return None
+
+    with (
+        patch.object(cmd.Config, "from_token_file", return_value=MagicMock()),
+        patch.object(cmd, "ClientManager"),
+        patch.object(cmd, "LearningStore", return_value=MagicMock()),
+        patch.object(cmd, "GamePlayer", return_value=player),
+        patch.object(cmd, "acquisition_actions", return_value=42),
+        patch.object(cmd, "combat_deficit", fake_deficit),
+    ):
+        cmd.combat_deficit_command(character="C3P0", monster=None, max_chain=8)
+
+    assert captured["cost"] == 42.0
+
+
+def test_a_step_prints_what_it_cost(capsys) -> None:
+    """The chain must read as a plan: four steps at 20 actions is a different
+    decision from four at 400."""
+    _run(CombatDeficit(
+        monster="pig", baseline_margin=-10, closes=True,
+        chain=(DeficitStep(code="mushstaff", item_type="weapon", item_level=15,
+                           crafting_skill="weaponcrafting", crafting_level=15,
+                           margin_after=1, acquire_cost=3.0),)))
+
+    assert "3 actions" in capsys.readouterr().out
+
+
+def test_an_unpriced_step_prints_a_question_mark_not_a_zero(capsys) -> None:
+    """`acquire_cost` is None when no pricing was supplied. Printing 0 would read
+    as free, which is the opposite of unknown."""
+    _run(CombatDeficit(
+        monster="pig", baseline_margin=-10, closes=True,
+        chain=(DeficitStep(code="mushstaff", item_type="weapon", item_level=15,
+                           crafting_skill="weaponcrafting", crafting_level=15,
+                           margin_after=1),)))
+
+    assert "? actions" in capsys.readouterr().out
 
 
 def test_no_deficit_says_so_rather_than_printing_an_empty_chain(capsys) -> None:
