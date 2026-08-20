@@ -32,9 +32,25 @@ does not have to out-rank anything. `docs/PLAN_band_unification.md` stays stoppe
 2. **Accept as part of a course (S-051).** ⛔ ATTEMPTED 2026-08-19 AND BACKED OUT.
    The promotion is unsafe as stated; see "The redraw loop" below. Increments 3
    and 4 are blocked behind it, because nothing ever accepts.
-3. **The held-task premium (S-050).** A course whose work overlaps the held task's
-   target is worth more by the reward that work would complete. This is S-018 read
-   from the other side and it is what makes S-049's "keep it" pay.
+3. **The held-task premium (S-050).** ✅ ALREADY BUILT, and I claimed otherwise
+   once — the correction is worth keeping. `GamePlayer._task_aligned_monster` +
+   `_winnable_farm_target`'s cascade already make a held PURSUE monsters-task
+   force the grind target, which IS "a course sharing the task's target wins",
+   and `test_pursue_monster_task_retargets_grind` has pinned it all along.
+   `projections.project_task_completion` already values the held task from the
+   API reward (`task_gold_reward` / `task_coin_reward`), not a hardcoded figure.
+
+   Verified live 2026-08-19 with a task injected into each character's real
+   state: Robby's grind moves `pig -> chicken`, Lor's `red_slime -> chicken`, and
+   `draw_owed` reads False while the task is held — the no-redraw rule holding.
+
+   **What is genuinely absent is the VALUATION half, not the behaviour.** The
+   objective's ranking (`branch_ranking` / `J`) does not add the task's reward to
+   a course sharing its target, so the premium cannot tip a choice BETWEEN
+   courses — only the already-chosen grind is retargeted. Pricing it needs the
+   reward in cycles, which needs S-046's rate, which is inert until a sell route
+   exists (every buyer is an event NPC). So this is blocked behind gold, not
+   behind tasks.
 4. **Re-measure.** With acceptance live, the learning DB finally gets task rows —
    which is the only way the ASSIGNMENT distribution S-014 needs can ever be
    observed. It is published nowhere.
