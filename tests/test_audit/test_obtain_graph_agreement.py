@@ -46,6 +46,13 @@ from artifactsmmo_cli.audit.craft_census import craftable_recipes
 #: RECYCLE are state-only (see module docstring).
 _STATE_FREE = frozenset({SourceKind.CRAFT, SourceKind.GATHER,
                          SourceKind.BUY, SourceKind.DROP})
+#: GE_FILL joins WITHDRAW and RECYCLE in the excluded set, and for the same
+#: reason rather than by oversight: it is STATE-dependent. A GE fill exists only
+#: while a specific standing sell order does, which is live world state exactly
+#: as bank stock is — the graph's state-free `leaves` models capability, and
+#: "someone currently has one listed" is not a capability of the item.
+_EXCLUDED_AS_STATE_DEPENDENT = frozenset({
+    SourceKind.WITHDRAW, SourceKind.RECYCLE, SourceKind.GE_FILL})
 
 
 def _open_state(game_data: GameData) -> WorldState:
@@ -69,6 +76,28 @@ def closure_items(bundle_game_data: GameData) -> list[str]:
     for code in craftable_recipes(bundle_game_data):
         items |= requirement_closure(graph, [code])
     return sorted(items)
+
+
+def test_every_source_kind_is_classified_state_free_or_state_dependent() -> None:
+    """The two sets PARTITION `SourceKind` — total, and disjoint.
+
+    Without this, adding a SourceKind silently omits it from `_STATE_FREE` and the
+    subset invariant below goes quietly vacuous for the new route: it would assert
+    nothing about the very kind just added. This is what made the census green
+    rather than correct when GE_FILL landed. Anyone adding SourceKind 8 must
+    classify it here, deliberately, and say why.
+
+    SELL is neither: it obtains GOLD, not an item, so it has no `leaves` counterpart
+    to be a subset of.
+    """
+    classified = _STATE_FREE | _EXCLUDED_AS_STATE_DEPENDENT | {SourceKind.SELL}
+
+    assert not (_STATE_FREE & _EXCLUDED_AS_STATE_DEPENDENT), "a kind cannot be both"
+    unclassified = set(SourceKind) - classified
+    assert not unclassified, (
+        f"unclassified SourceKind(s): {sorted(k.name for k in unclassified)} — "
+        "add each to _STATE_FREE (the graph models it) or to "
+        "_EXCLUDED_AS_STATE_DEPENDENT (it depends on live world state), with a reason")
 
 
 def test_obtain_sources_state_free_kinds_are_a_subset_of_graph_leaves(

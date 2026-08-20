@@ -1,8 +1,8 @@
 """THE model of how an item can be obtained — the one source of truth every
 producer of a plan must consume.
 
-The bot has two plan producers: the GOAP action pool (six ways to get an
-item — gather, craft, withdraw, recycle, NPC-buy, fight-for-drop) and
+The bot has two plan producers: the GOAP action pool (gather, craft,
+withdraw, recycle, NPC-buy, GE-fill, fight-for-drop) and
 `ai/craft_plan_gen`'s recipe-tree chain builder (`ai/next_craft_core.py`'s
 `NextAction.kind`, which can express only THREE — gather, craft, withdraw,
 because it walks recipe edges and nothing else). Every route beyond those
@@ -44,7 +44,11 @@ sources in this declared order — a descent takes the FIRST applicable one:
     4. GATHER   — some resource drops it.
     5. BUY      — a permanent (non-event) NPC vendor sells it and its
                   location is known.
-    6. DROP     — a winnable monster drops it.
+    6. GE_FILL  — a STANDING Grand Exchange sell order can be filled, and the
+                  GE tile is known. Same gold cost as BUY but strictly less
+                  reliable (finite quantity; another player may take it first),
+                  so it ranks directly below.
+    7. DROP     — a winnable monster drops it.
 
 Rationale: prefer sources that consume stock ALREADY OWNED over sources that
 create new work. This generalises the rule `next_craft_core._next` already
@@ -154,8 +158,8 @@ class Source:
 def obtain_sources(
     item: str, state: WorldState, game_data: GameData, ctx: SelectionContext
 ) -> list[Source]:
-    """Every way `item` can be obtained from the current state, in the
-    declared priority order (WITHDRAW, RECYCLE, CRAFT, GATHER, BUY, DROP).
+    """Every way `item` can be obtained from the current state, in the declared
+    priority order (WITHDRAW, RECYCLE, CRAFT, GATHER, BUY, GE_FILL, DROP).
     THE model — see the module docstring."""
     sources: list[Source] = []
     sources.extend(_withdraw_sources(item, state, ctx))
@@ -163,6 +167,7 @@ def obtain_sources(
     sources.extend(_craft_sources(item, state, game_data))
     sources.extend(_gather_sources(item, game_data))
     sources.extend(_buy_sources(item, game_data))
+    sources.extend(_ge_fill_sources(item, game_data))
     sources.extend(_drop_sources(item, state, game_data))
     sources.extend(_sell_sources(item, state, game_data, ctx))
     return sources
@@ -297,6 +302,40 @@ def _buy_sources(item: str, game_data: GameData) -> list[Source]:
             continue
         out.append(Source(SourceKind.BUY, npc_code, 1, UNBOUNDED_CAPACITY))
     return out
+
+
+def _ge_fill_sources(item: str, game_data: GameData) -> list[Source]:
+    """A STANDING Grand Exchange sell order for `item`, and a reachable GE.
+
+    Route EXISTENCE, not venue CHOICE. `goals/gathering.py` admits a GE fill only
+    when `choose_buy_venue` says it beats the NPC price, which is the right test
+    for "should I buy here"; it is the wrong test for "does a route exist at all",
+    and applying it here is what left an item sold ONLY on the GE with no route
+    and a price of `UNOBTAINABLE_PER_UNIT`. Which venue is cheaper is decided
+    downstream, on the priced options — the same separation the D2 fix made for
+    DROP (route existence asks at restorable hp; engagement asks at current hp).
+
+    Two gates, both existence conditions and neither a preference:
+
+    * a standing order must EXIST. `ge_best_sell_order` returns None when none
+      does — `buy_source_venue` calls that the anti-surrogate guard, and it is
+      what keeps a merely-postable order (which may never fill) from counting.
+    * the GE must have a known tile, exactly as a BUY source needs
+      `npc_location`. No tile, no plan can anchor there.
+
+    The `is_event_npc` gate `_buy_sources` applies is deliberately NOT propagated:
+    the Grand Exchange is not an NPC, and that gate would kill the route outright.
+
+    Capacity is the ORDER's quantity, not `UNBOUNDED_CAPACITY`: unlike a vendor
+    you cannot buy again once the order is exhausted.
+    """
+    order = game_data.ge_best_sell_order(item)
+    if order is None:
+        return []
+    if game_data.grand_exchange_location() is None:
+        return []
+    order_id, _price, quantity = order
+    return [Source(SourceKind.GE_FILL, order_id, 1, quantity)]
 
 
 def _sell_sources(

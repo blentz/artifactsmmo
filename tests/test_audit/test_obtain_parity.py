@@ -15,6 +15,7 @@ import pytest
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
@@ -234,6 +235,13 @@ def test_action_source_kind_maps_every_obtain_action() -> None:
         GatherAction(resource_code="copper_rocks")) is SourceKind.GATHER
     assert action_source_kind(
         NpcBuyAction(npc_code="tailor", item_code="cloth")) is SourceKind.BUY
+    # GE_FILL: the census must SEE the Grand Exchange route. Before it did, the
+    # census was green about GE by being blind to it — `obtain_sources` named no
+    # GE_FILL source and `action_source_kind` mapped GeFillSellOrderAction to
+    # None, so both sides agreed on nothing and the check passed vacuously.
+    assert action_source_kind(
+        GeFillSellOrderAction(order_id="ord-1", item_code="cloth",
+                              price=10)) is SourceKind.GE_FILL
     assert action_source_kind(
         FightAction(monster_code="chicken")) is SourceKind.DROP
     # A scaffolding leg obtains nothing.
@@ -254,6 +262,11 @@ def test_action_yields_uses_the_per_kind_target_relation(
     assert action_yields(NpcBuyAction(npc_code="tailor", item_code="cloth"),
                          "cloth", gd)
     assert action_yields(FightAction(monster_code="chicken"), "feather", gd)
+    # A GE fill yields the item the standing order is FOR.
+    assert action_yields(GeFillSellOrderAction(order_id="ord-1", item_code="cloth",
+                                               price=10), "cloth", gd)
+    assert not action_yields(GeFillSellOrderAction(order_id="ord-1", item_code="cloth",
+                                                   price=10), "copper_ore", gd)
     # Non-matches and a non-obtain action yield nothing.
     assert not action_yields(GatherAction(resource_code="copper_rocks"),
                              "iron_ore", gd)

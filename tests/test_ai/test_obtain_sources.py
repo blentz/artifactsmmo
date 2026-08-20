@@ -496,3 +496,88 @@ def test_the_DROP_source_does_not_depend_on_current_hp(game_data, ctx) -> None:
     assert live, "the fixture slime is not winnable when healthy — proves nothing"
     assert (obtain_sources("slime_ball", hurt, game_data, ctx)
             == obtain_sources("slime_ball", healthy, game_data, ctx))
+
+
+# ---------------------------------------------------------------------------
+# GE_FILL — the Grand Exchange as a route in THE MODEL, not just in one goal.
+#
+# `buy_source_venue.choose_buy_venue3` (Lean-proved, `Formal/BuySourceVenue.lean`)
+# was already consumed by `goals/gathering.py` and `ge_bid.py`, so the ACTION POOL
+# could fill a standing sell order that this model said did not exist. That is the
+# exact failure class the module docstring exists to kill — the same shape as the
+# recycle epic that shipped seven green-but-inert commits.
+#
+# Route EXISTENCE is a different question from venue CHOICE. `gathering.py` admits
+# GE only when it beats the NPC price, which is correct for "should I buy here";
+# it is wrong for "does a route exist at all", and it is why an item with a
+# standing sell order and no NPC vendor priced at UNOBTAINABLE_PER_UNIT. Same
+# lesson as the D2 hp fix in `PLAN_iron_gear_acquisition.md`.
+# ---------------------------------------------------------------------------
+
+
+def _with_ge(gd: GameData, orders: dict[str, tuple[str, int, int]],
+             tile: tuple[int, int] | None = (7, 7)) -> GameData:
+    """Attach standing GE SELL orders (item -> (order_id, price, quantity))."""
+    gd._ge_sell_orders = orders
+    gd._grand_exchange_location = tile
+    return gd
+
+
+def test_standing_sell_order_is_a_ge_fill_source(game_data, ctx):
+    """A fillable standing SELL order is a live route, priced and bounded by it."""
+    _with_ge(game_data, {"iron_ore": ("ord-1", 12, 40)})
+    ge = [s for s in obtain_sources("iron_ore", make_state(gold=10_000), game_data, ctx)
+          if s.kind is SourceKind.GE_FILL]
+    assert [s.code for s in ge] == ["ord-1"]
+    assert ge[0].yield_per == 1
+    assert ge[0].capacity == 40, "capacity is the ORDER's quantity, not unbounded"
+
+
+def test_ge_fill_is_a_route_even_when_no_npc_sells_the_item(game_data, ctx):
+    """THE BUG. `_buy_sources` is NPC-only, so an item sold only on the GE had no
+    route at all and priced at UNOBTAINABLE_PER_UNIT — while the action pool would
+    happily have filled the order."""
+    _with_ge(game_data, {"jasper_crystal": ("ord-j", 2000, 3)})
+    sources = obtain_sources("jasper_crystal", make_state(gold=10_000), game_data, ctx)
+    assert not [s for s in sources if s.kind is SourceKind.BUY], \
+        "fixture invalid: an NPC sells this, so the GE route is not the only one"
+    assert [s.kind for s in sources if s.kind is SourceKind.GE_FILL] == [SourceKind.GE_FILL]
+
+
+def test_no_standing_order_is_no_ge_route(game_data, ctx):
+    """The ANTI-SURROGATE guard: absence is encoded as None and must stay absent.
+
+    A posted buy order may never fill, so its price is speculative. Only an order
+    that ALREADY STANDS is a route.
+    """
+    _with_ge(game_data, {})
+    assert not [s for s in obtain_sources("iron_ore", make_state(gold=10_000), game_data, ctx)
+                if s.kind is SourceKind.GE_FILL]
+
+
+def test_unreachable_grand_exchange_is_no_ge_route(game_data, ctx):
+    """No GE tile on the map -> no plan can anchor there, exactly as an NPC with
+    no known location is not a BUY source."""
+    _with_ge(game_data, {"iron_ore": ("ord-1", 12, 40)}, tile=None)
+    assert not [s for s in obtain_sources("iron_ore", make_state(gold=10_000), game_data, ctx)
+                if s.kind is SourceKind.GE_FILL]
+
+
+def test_ge_fill_does_not_inherit_the_event_npc_gate(game_data, ctx):
+    """The GE is not an NPC. Propagating `_buy_sources`' blunt `is_event_npc` gate
+    would kill the route outright — the trap recorded in
+    `reference_every_buyer_is_an_event_npc`."""
+    _with_ge(game_data, {"event_only_item": ("ord-e", 5, 2)})
+    assert [s for s in obtain_sources("event_only_item", make_state(gold=10_000),
+                                      game_data, ctx)
+            if s.kind is SourceKind.GE_FILL]
+
+
+def test_ge_fill_ranks_below_npc_buy(game_data, ctx):
+    """Declared priority: NPC BUY is always realizable; a standing order can be
+    taken by someone else before we arrive. Both spend gold, so GE sits directly
+    after BUY rather than anywhere else in the order."""
+    _with_ge(game_data, {"iron_ore": ("ord-1", 12, 40)})
+    kinds = [s.kind for s in obtain_sources("iron_ore", make_state(gold=10_000),
+                                            game_data, ctx)]
+    assert kinds.index(SourceKind.BUY) < kinds.index(SourceKind.GE_FILL)

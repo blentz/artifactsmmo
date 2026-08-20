@@ -108,6 +108,43 @@ def test_gather_uses_the_resource_tile_as_its_venue(state, game_data) -> None:
     assert opt.yield_per == max(1, game_data.max_gather_yield)
 
 
+def test_ge_fill_is_priced_in_gold_at_the_standing_order(state, game_data) -> None:
+    """REGRESSION. Adding `SourceKind.GE_FILL` to `obtain_sources` was green across
+    the whole gate and still broke the live bot on the first plan:
+
+        KeyError: no 6a803d67e8e9a9dd4ab01f5d drop row for battlestaff
+
+    `_priced`'s DROP arm was an UNGUARDED FALLTHROUGH — every kind without an
+    explicit branch reached it — so a GE order id was handed to `_drop_table` as
+    if it were a monster code. The census could not catch it either: parity
+    compares KINDS, not prices. Hence both halves of the fix are pinned here — the
+    GE branch, and DROP no longer swallowing the unclassified.
+    """
+    gd = game_data
+    gd._ge_sell_orders = {"backpack": ("ord-x", 137, 4)}
+    opt = _priced("backpack",
+                  Source(SourceKind.GE_FILL, "ord-x", 1, 4),
+                  state, gd)
+    assert opt.venue == "ord-x"
+    assert opt.actions_per_application == 1
+    assert opt.capacity == 4, "a standing order is FINITE, unlike a vendor"
+    assert opt.inputs == {"gold": 137}, "the realizable cost is the order's price"
+
+
+def test_ge_fill_without_a_standing_order_raises_rather_than_defaulting(
+        state, game_data) -> None:
+    """CLAUDE.md: use only API data or fail with an error.
+
+    `obtain_sources` produced the source from the same order book, so the row
+    exists; if it does not, the two reads disagreed inside one decision and a
+    default would price a route that is not there. Same contract as `_price_of`.
+    """
+    gd = game_data
+    gd._ge_sell_orders = {}
+    with pytest.raises(KeyError, match="no standing GE sell order"):
+        _priced("backpack", Source(SourceKind.GE_FILL, "ord-gone", 1, 4), state, gd)
+
+
 def test_buy_carries_its_price_as_a_currency_input(state, game_data) -> None:
     """THE TERM `min_plan_length` CANNOT EXPRESS. A purchase is priced as the
     purchase plus obtaining what it is priced in, so a 50,000-gold backpack

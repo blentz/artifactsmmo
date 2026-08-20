@@ -78,6 +78,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
@@ -253,6 +254,8 @@ def action_source_kind(action: Action) -> SourceKind | None:
         return SourceKind.GATHER
     if isinstance(action, NpcBuyAction):
         return SourceKind.BUY
+    if isinstance(action, GeFillSellOrderAction):
+        return SourceKind.GE_FILL
     if isinstance(action, FightAction):
         return SourceKind.DROP
     return None
@@ -274,6 +277,8 @@ def action_yields(action: Action, material: str, game_data: GameData) -> bool:
     if isinstance(action, RecycleAction):
         return material in (game_data.crafting_recipe(action.code) or {})
     if isinstance(action, NpcBuyAction):
+        return action.item_code == material
+    if isinstance(action, GeFillSellOrderAction):
         return action.item_code == material
     if isinstance(action, FightAction):
         return any(material == item

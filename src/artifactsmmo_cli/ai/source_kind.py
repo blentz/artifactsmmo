@@ -1,4 +1,4 @@
-"""`SourceKind` — the six ways an item can be obtained.
+"""`SourceKind` — the ways an item can be obtained.
 
 Extracted from `obtain_sources` in Wave 2 of the requirement-model unification
 epic. It lives alone because it is a pure enum with no dependencies, while
@@ -27,12 +27,23 @@ class SourceKind(Enum):
     430 gold priced at 430,000,002 actions, so no gold-priced route in the game
     could survive a comparison the moment the purse was a coin short. Selling is
     how the bot gets gold, so selling is the route (S-046: gold is worth the
-    cycles it saves, at a rate read off live prices)."""
+    cycles it saves, at a rate read off live prices).
+
+    GE_FILL is buying from a STANDING Grand Exchange sell order. It is separate
+    from BUY because the two have different existence conditions: an NPC vendor is
+    permanent, while a GE order is finite (its `quantity` bounds the source) and
+    may be taken by someone else before we arrive. It sits directly after BUY for
+    that reason — same gold cost, strictly less reliable.
+
+    Only a standing order counts. A GE order we might POST is speculative and may
+    never fill, so it is not a route; `buy_source_venue` calls that the
+    anti-surrogate guard and encodes absence as `None`."""
 
     WITHDRAW = "withdraw"
     RECYCLE = "recycle"
     CRAFT = "craft"
     GATHER = "gather"
     BUY = "buy"
+    GE_FILL = "ge_fill"
     DROP = "drop"
     SELL = "sell"

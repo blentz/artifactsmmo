@@ -194,12 +194,45 @@ def _priced(item: str, source: Source, state: WorldState,
         return RouteOption(kind=source.kind.value, venue=source.code,
                            actions_per_application=1, yield_per=source.yield_per,
                            capacity=source.capacity, inputs={currency: price})
-    rate, min_q, max_q = _drop_table(item, source.code, game_data)
-    return RouteOption(
-        kind=source.kind.value, venue=source.code,
-        actions_per_application=_drop_actions(item, source.code, rate, min_q,
-                                              max_q, state, game_data, store),
-        yield_per=source.yield_per, capacity=source.capacity)
+    if source.kind is SourceKind.GE_FILL:
+        price = _ge_price_of(item, source.code, game_data)
+        # `Source.code` is the ORDER id, not an item — the venue token is the
+        # order because that is what `GeFillSellOrderAction` fills. Cost is gold
+        # at the order's own price, which is what makes it REALIZABLE: we never
+        # price a route at an order we would have to post and hope fills.
+        return RouteOption(kind=source.kind.value, venue=source.code,
+                           actions_per_application=1, yield_per=source.yield_per,
+                           capacity=source.capacity, inputs={"gold": price})
+    if source.kind is SourceKind.DROP:
+        rate, min_q, max_q = _drop_table(item, source.code, game_data)
+        return RouteOption(
+            kind=source.kind.value, venue=source.code,
+            actions_per_application=_drop_actions(item, source.code, rate, min_q,
+                                                  max_q, state, game_data, store),
+            yield_per=source.yield_per, capacity=source.capacity)
+    # DROP is now an EXPLICIT branch rather than the fallthrough it used to be.
+    # As the fallthrough it silently swallowed every unclassified kind: adding
+    # GE_FILL passed the entire gate and then broke the live bot on the first
+    # plan, because a GE order id reached `_drop_table` as a monster code
+    # ("no 6a803d67e8e9a9dd4ab01f5d drop row for battlestaff"). A new SourceKind
+    # must now be priced deliberately or say so loudly.
+    raise ValueError(  # pragma: no cover - every SourceKind above is handled
+        f"{source.kind} has no pricing branch in `_priced` — add one rather than "
+        "letting it fall through to another kind's arm")
+
+
+def _ge_price_of(item: str, order_id: str, game_data: GameData) -> int:
+    """The gold price of the standing GE sell order `obtain_sources` named.
+
+    Re-read for the same reason `_price_of` re-reads `npc_purchases`: `Source`
+    carries only the order id. A missing row means the order book changed between
+    two reads inside one decision, which cannot happen — so this raises rather
+    than defaulting, per the API-data rule (CLAUDE.md: use only API data or fail).
+    """
+    order = game_data.ge_best_sell_order(item)
+    if order is None or order[0] != order_id:
+        raise KeyError(f"no standing GE sell order {order_id!r} for {item}")
+    return order[1]
 
 
 def _price_of(item: str, npc_code: str, game_data: GameData) -> tuple[int, str]:
