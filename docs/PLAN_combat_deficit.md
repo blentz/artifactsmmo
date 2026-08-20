@@ -86,29 +86,81 @@ Net change is **removal**: one Lean theorem, one constant, one countdown path.
 So there is **no fallback branch**. The deficit closes incrementally; the character
 keeps closing it. It does NOT fall back to grey monsters and does NOT park the task.
 
+## The unified route (USER heuristic, 2026-08-20)
+
+> "find the best candidate item that has a) best stats for the job and b) has
+> obtainable materials — inclusive of requesting materials from the fleet, and
+> inclusive of buyable materials from either NPC or Grand Exchange and c) has the
+> lowest skill requirements (prefer things we can build, but grind skill XP only
+> until it unlocks the next item or tier)"
+
+ONE selection answers "what do I build next", parameterised by the job. Today the
+job is "beat monster M"; nothing in the shape is combat-specific.
+
+| clause | mechanism | state |
+|---|---|---|
+| (a) best stats for the job | `combat_deficit` margin gain vs M | ✅ built (increment 1) |
+| (b) withdraw / recycle / craft / gather / NPC-buy / drop | `obtain_sources` SourceKinds 1-6 | ✅ exists |
+| (b) Grand Exchange | `buy_source_venue.choose_buy_venue3` | ⚠️ built + Lean-proved, NOT consulted by `obtain_sources` |
+| (b) fleet request | `role_leases`, `supply_claims`, `material_demand`, SUPPLY_BANK | ⚠️ exists as a PRODUCER rung; not a route |
+| (c) bounded skill grind | `grey_farm._next_tier_level`, `GREY_FARM_NEXT_TIER_MARGIN` | ⚠️ exists, scoped to grey-farm suppression |
+
+So (b) and (c) are **wiring and generalisation of proved parts**, not new
+machinery. That is the point: the fix must be composition, not a seventh
+mechanism beside six others.
+
+**Ordering is forced.** `project_objective_spike_verdict`: pricing wall BEFORE
+the acquisition edge. A candidate pool fed by a model that still walls real
+routes at `10^6` would select correctly over a wrong menu.
+
 ## Increments
 
 Each lands with `bash formal/gate.sh` green before the next starts.
 
-* **0 — `combat-deficit` CLI (read-only).** Prints baseline margin, the ranked
-  improving items, and the greedy reachable chain — i.e. what the offline sweep
-  produced. This is the ORACLE every later increment is checked against, and it
-  is how "did this actually change live behaviour" gets answered. Precedent:
-  `project_objective_cli_diagnostic`.
-* **1 — `combat_deficit` core.** Pure, over `combat_margin`; unit + differential
-  tests. Must NOT be another proved-but-uncalled helper
-  (`feedback_proof_over_an_uncalled_helper`) — increment 2 is its first caller and
-  lands in the same series.
-* **2 — GEAR_REVIEW becomes monster-aware.** `find_upgrade_target` takes the
-  monster the latch fired on; ranks by marginal winnability, not `_best_by_value`.
-  Generalises `marginal_weapon_winnability` from weapons-only/negative-filter
-  (its sole caller today is `progression_tree.py:121`, `<= 0` -> exclude) to
-  all-slots/driver.
-* **3 — suppression by fact.** Grind on `m` blocked while `combat_deficit(m)` is
-  non-`None`; remove the oscillation countdown for this class.
-* **4 — delete the tier-1 bypass** and its Lean no-veto theorem; task pursuit
-  gated on deficit.
-* **5 — delete the monsters branch of `MONSTER_LEVEL_MARGIN`.**
+* **0-1 — `combat_deficit` core + `combat-deficit` CLI.** ✅ DONE @ee8d401e.
+  Read-only; no behaviour change. The oracle everything below is checked against.
+
+* **2 — GE becomes a route in the MODEL, not just in one goal.**
+  `obtain_sources._buy_sources` is permanent-NPC-only. `choose_buy_venue3` (NPC /
+  GE-fill / GE-post, proved in `formal/Formal/BuySourceVenue.lean`) is already
+  consumed by `goals/gathering.py:605` and `ge_bid.py:67` — so the ACTION POOL can
+  fill a standing sell order that the ROUTE MODEL says does not exist. That is
+  exactly the failure class `obtain_sources`' docstring was written to kill
+  ("it taught the action pool about recycling, and the generator — which answers
+  first — could not express it"). Keep the anti-surrogate discipline: GE is a
+  route only when a standing sell order is FILLABLE (`ge_price is not None`),
+  never on a speculative posted price.
+  ⚠️ `reference_every_buyer_is_an_event_npc`: do NOT propagate `_buy_sources`'
+  blunt `is_event_npc` gate to the GE side — GE is not an NPC and that gate would
+  kill the route.
+
+* **3 — SIBLING as SourceKind 8 (the fleet request).**
+  This is `PLAN_iron_gear_acquisition.md` increment 4, whose open question its own
+  text already settles: *"whether the sibling route belongs in `obtain_sources` as
+  a seventh `SourceKind` … Recommend the former; the module docstring argues for
+  exactly that."* Today a skill-gated item is unobtainable to a character even
+  when a sibling is one craft away. ⚠️ `project_supply_claim_and_batch`: one
+  producer per request, and a batch target that holds still — two characters once
+  delivered 456 units against an ask of 60.
+
+* **4 — the bounded skill grind (c).**
+  Lift `_next_tier_level` out of `grey_farm` into a shared core and use it as the
+  grind CAP: raise a skill only to the level that unlocks the next item or tier,
+  never speculatively past it. `_gated_craft_option` already prices the unlock via
+  `skill_grind_cycles`; this bounds what it is allowed to price.
+  ⚠️ `project_learned_rate_level_scoping` — a learned rate that carries no level
+  silently voids the grey-mob rule. Keep the cap level-scoped.
+
+* **5 — `combat_deficit` consumes the acquisition model. THE JOIN.**
+  `candidates=` (already injectable, built in increment 1 for exactly this) is fed
+  the acquirable set; the greedy walk ranks on margin gain (a) and tie-breaks on
+  bounded skill distance (c). One selection, three clauses, no new rung.
+
+* **6 — replace the countdown with the fact, and DELETE the bypass.**
+  Grind on `m` blocked while `combat_deficit(m)` is non-`None`; remove the
+  `GOAL_OSCILLATION` countdown for this class; delete `winnable_cascade` tier-1
+  and its Lean no-veto theorem, and the monsters branch of
+  `MONSTER_LEVEL_MARGIN`. Net removal.
 
 ## Acceptance
 

@@ -325,7 +325,7 @@ fewer fields than `WorldState` and broke on the first consumer to read one of th
 missing ones, so it is now the real `make_state` three sibling harnesses already
 use.
 
-### Increment 3 — verify the grind now completes, then decide whether it needs a latch
+### Increment 3 — verify the grind now completes, then decide whether it needs a latch  ✅ DONE 2026-08-20 (no code)
 
 The original framing of this increment assumed the abandoned grind needs a
 stickiness mechanism. That assumption should not be implemented before it is
@@ -354,6 +354,29 @@ So this increment is a measurement with a decision gate, not a code change:
 4. If the grind is still abandoned, capture *what* displaced it from
    `cycles.selected_goal` around the abandonment, and specify the fix against that
    evidence rather than against this guess.
+
+**CLOSED 2026-08-20 WITH NO CODE — the level landed on three of four characters.**
+Increments 1+2 were enough; the stickiness latch this increment was hedging
+against is not needed.
+
+Read from `cycles.skill_levels_json` (durable store, never the trace files).
+Before 2026-08-18 gearcrafting had never reached 10 on ANY character, across
+3,658 `LevelSkill(gearcrafting->10)` cycles spanning 08-03 to 08-15:
+
+| char | gearcrafting | when |
+|---|---|---|
+| C3P0 | 9 -> **10** | 2026-08-20T04:23 — first in the fleet's history |
+| Lor  | 7 -> 8 -> **9** | 2026-08-20T01:48, 10:15 — two levels |
+| HAL  | 8 -> **9** | 2026-08-20T08:59 |
+| R2D2 | 9 (flat) | ground woodcutting 13->16 instead — different skill, not an abandonment |
+
+Other skills moved too, which is the absorbing state releasing generally rather
+than one lucky recipe: C3P0 weaponcrafting 5->6 and jewelrycrafting 7->8,
+woodcutting up on four characters.
+
+The predicted mechanism is the one observed: an estimator measured over the
+grind's OWN cycles cannot empty while the grind is running, so the price no
+longer flips to 10^6 mid-grind and the goal is no longer dropped.
 
 ### Increment 4 (tuning) — amortize the unlock across the fleet
 
