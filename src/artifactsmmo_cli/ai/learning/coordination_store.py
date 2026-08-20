@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.learning.models import (
     HoldingLedger,
     MaterialDemand,
     RoleLease,
+    SkillLedger,
     SupplyClaim,
     TurnInClaim,
 )
@@ -618,6 +619,69 @@ class CoordinationStore:
         for row in rows:
             totals[row.item_code] = totals.get(row.item_code, 0) + row.quantity
         return totals
+
+    def publish_skills(self, skills: Mapping[str, int], now: datetime) -> None:
+        """Replace this character's `SkillLedger` rows wholesale.
+
+        Modelled line-for-line on `publish_holdings`. Uses `DEMAND_TTL_SECONDS`,
+        the same clock as `MaterialDemand`, `RoleLease` and `HoldingLedger`, on
+        purpose: the coordination system has exactly ONE liveness rule, and a
+        second TTL constant here would be a second one.
+        """
+        _require_utc(now)
+        expiry = self._demand_expiry(now)
+        try:
+            with SqlSession(self._engine) as s:
+                stale = s.exec(
+                    select(SkillLedger).where(
+                        SkillLedger.character == self._character
+                    )
+                ).all()
+                for row in stale:
+                    s.delete(row)
+                # Flush the deletes before the inserts, exactly as
+                # `publish_holdings` must: UNIQUE(character, skill) would reject
+                # a same-skill republish whose DELETE the unit of work has not
+                # yet ordered ahead of the INSERT.
+                s.flush()
+                for skill, level in skills.items():
+                    if level > 0:
+                        s.add(SkillLedger(character=self._character, skill=skill,
+                                          level=level, expires_at=expiry))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[coordination] publish_skills failed: {e}")
+
+    def sibling_skill_levels(self, now: datetime) -> dict[str, int]:
+        """The BEST unexpired level per skill across every OTHER character.
+
+        Max, not sum: skills do not pool. One sibling at jewelrycrafting 15 makes
+        the recipe reachable; three at 8 do not, and summing them would invent a
+        capability the fleet does not have — the shape of error
+        `sibling_holdings`' sum is right to make for units and wrong for levels.
+
+        This character's own row is excluded on the same grounds as
+        `sibling_holdings`: the caller has its own levels live in `state.skills`,
+        which is fresher than anything it published.
+        """
+        _require_utc(now)
+        stamp = now.isoformat()
+        best: dict[str, int] = {}
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(
+                    select(SkillLedger).where(
+                        SkillLedger.expires_at > stamp,
+                        SkillLedger.character != self._character,
+                    )
+                ).all()
+        except SQLAlchemyError as e:
+            print(f"[coordination] sibling_skill_levels failed: {e}")
+            return {}
+        for row in rows:
+            if row.level > best.get(row.skill, 0):
+                best[row.skill] = row.level
+        return best
 
     def _bank_claim_expiry(self, now: datetime) -> str:
         return (now + timedelta(seconds=BANK_CLAIM_TTL_SECONDS)).isoformat()

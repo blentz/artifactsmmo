@@ -1729,3 +1729,77 @@ def test_grind_action_prefix_is_the_repr_LevelSkill_writes():
     assert grind_action_prefix("gearcrafting") == "LevelSkill(gearcrafting->"
     assert repr(LevelSkill(skill="gearcrafting", target_level=10)).startswith(
         grind_action_prefix("gearcrafting"))
+
+
+class TestFleetSupplyRequestCycles:
+    """The MEASURED price of the `sibling:` unlock in `acquisition_cost`.
+
+    It is read off history rather than chosen because the alternative was a
+    constant, and a modelling constant nothing pins is proof-inert however green
+    the gate (`feedback_gate_green_does_not_pin_a_constant`).
+    """
+
+    @staticmethod
+    def _supply_cycles(db: str, goal: str, character: str, n: int) -> None:
+        """`record_cycle` stamps the STORE's character onto every row, so a
+        producer is a store — which is also how it works live: one `play --all`
+        child, one `LearningStore`, one character."""
+        store = LearningStore(db_path=db, character=character)
+        store.start_session()
+        for i in range(n):
+            store.record_cycle(Cycle(
+                ts=f"2026-08-20T00:00:{i:02d}+00:00", session_id="s",
+                cycle_index=i, character=character, outcome="ok",
+                selected_goal=goal))
+        store.close()
+
+    def test_median_producer_cycles_per_request(self, tmp_db_path):
+        """Grouped per (request, producer) pair — the same shape `_grind_rate`
+        reads `LevelSkill(<skill>-><level>)` cycles."""
+        self._supply_cycles(tmp_db_path, "SupplyBank(iron_orex80)", "HAL", 10)
+        self._supply_cycles(tmp_db_path, "SupplyBank(spruce_woodx60)", "R2D2", 20)
+        self._supply_cycles(tmp_db_path, "SupplyBank(copper_orex10)", "Lor", 30)
+        store = LearningStore(db_path=tmp_db_path, character="Robby")
+
+        assert store.fleet_supply_request_cycles() == 20.0
+        store.close()
+
+    def test_median_not_mean_so_one_pathological_request_cannot_price_the_rest(
+            self, tmp_db_path):
+        """Measured live: a 239-cycle request against a median of 15. A mean would
+        let that single request price every future one."""
+        self._supply_cycles(tmp_db_path, "SupplyBank(ax1)", "HAL", 5)
+        self._supply_cycles(tmp_db_path, "SupplyBank(bx1)", "R2D2", 6)
+        self._supply_cycles(tmp_db_path, "SupplyBank(cx1)", "Lor", 239)
+        store = LearningStore(db_path=tmp_db_path, character="Robby")
+
+        assert store.fleet_supply_request_cycles() == 6.0, "mean would be ~83"
+        store.close()
+
+    def test_the_same_request_served_by_two_producers_counts_twice(
+            self, tmp_db_path):
+        """Live 2026-08-08, before `SupplyClaim`: `SupplyBank(spruce_woodx60)` was
+        served SIMULTANEOUSLY by R2D2 (225 gathers) and Robby (231). Each is a
+        real producer cost, so the PAIR — not the request — is the unit."""
+        self._supply_cycles(tmp_db_path, "SupplyBank(spruce_woodx60)", "R2D2", 4)
+        self._supply_cycles(tmp_db_path, "SupplyBank(spruce_woodx60)", "Robby", 8)
+        store = LearningStore(db_path=tmp_db_path, character="X")
+
+        assert store.fleet_supply_request_cycles() == 6.0, "median of [4, 8]"
+        store.close()
+
+    def test_only_supply_requests_count(self, tmp_db_path):
+        """No observation, no honest price — and `_sibling_craft_option` withholds
+        the route rather than defaulting."""
+        self._supply_cycles(tmp_db_path, "GatherMaterials(iron_ore, {iron_ore:8})",
+                            "HAL", 10)
+        store = LearningStore(db_path=tmp_db_path, character="Robby")
+
+        assert store.fleet_supply_request_cycles() is None
+        store.close()
+
+    def test_swallows_db_error_and_returns_none(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="Robby")
+        _break_engine(store)
+        assert store.fleet_supply_request_cycles() is None
+        store.close()

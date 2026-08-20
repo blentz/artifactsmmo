@@ -1981,6 +1981,29 @@ def test_sibling_holdings_swallows_error_and_returns_empty(
     assert "[coordination] sibling_holdings failed" in capsys.readouterr().out
 
 
+def test_publish_skills_swallows_error(tmp_path: Path, capsys) -> None:
+    """Best-effort, like every sibling method: a coordination write must never be
+    the thing that kills a character's run."""
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    _break_engine(hal)
+    hal.publish_skills({"jewelrycrafting": 15}, _T0)
+    assert "[coordination] publish_skills failed" in capsys.readouterr().out
+
+
+def test_sibling_skill_levels_swallows_error_and_returns_empty(
+    tmp_path: Path, capsys
+) -> None:
+    """Degrades to "no sibling can help", which makes the sibling route absent —
+    the safe direction, since the alternative is pricing a route on a failed read.
+    """
+    db = str(tmp_path / "coord.db")
+    hal = CoordinationStore(db_path=db, character="HAL")
+    _break_engine(hal)
+    assert hal.sibling_skill_levels(_T0) == {}
+    assert "[coordination] sibling_skill_levels failed" in capsys.readouterr().out
+
+
 def test_holding_ledger_roundtrip(engine) -> None:
     with SqlSession(engine) as s:
         s.add(HoldingLedger(character="HAL", item_code="lich_race_medal", quantity=2,

@@ -183,6 +183,19 @@ class SelectionContext:
     # ability, not just the quantity, has to ride on the row.
     asymmetric_demand: frozenset[str] = field(default_factory=frozenset)
 
+    # Best crafting-skill level held by any LIVE SIBLING, per skill —
+    # `CoordinationStore.sibling_skill_levels`, read once per cycle by the player
+    # and threaded here as DATA, the same seam as `supply_target`, `role_skills`,
+    # `sibling_bank_claims` and `asymmetric_demand`. Empty (the default) on every
+    # single-character run, which makes the sibling route silently absent rather
+    # than wrong.
+    #
+    # CAPABILITY, NOT AVAILABILITY: it says a sibling COULD craft this today, not
+    # that any units exist. `acquisition_cost._sibling_craft_option` still charges
+    # the recipe as inputs and the measured request cost as the unlock, so a
+    # sibling saves the SKILL GATE and nothing else.
+    sibling_skills: dict[str, int] = field(default_factory=dict)
+
 
 NO_PROFILE_CONTEXT = SelectionContext(
     bank_accessible=True,

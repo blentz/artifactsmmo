@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from statistics import median
 from typing import TypeVar
 
 from sqlalchemy import func, text
@@ -718,6 +719,51 @@ class LearningStore:
         gear and level are baked into them.
         """
         return self._grind_rate(skill, window, character=None)
+
+    def fleet_supply_request_cycles(self) -> float | None:
+        """Median producer cycles ONE fleet supply request has historically cost,
+        or None when the fleet has never served one.
+
+        This is the price of the `sibling:` unlock in `acquisition_cost` — what a
+        character pays, in fleet cycles, to have a sibling make something it
+        cannot make itself. It is MEASURED rather than chosen: the alternative
+        was a constant, and a modelling constant nothing pins is proof-inert
+        however green the gate (`feedback_gate_green_does_not_pin_a_constant`).
+
+        Read off `SupplyBank(<item>x<qty>)` goal cycles, grouped per
+        (request, producer) pair — the same shape `_grind_rate` reads
+        `LevelSkill(<skill>-><level>)` cycles. Measured 2026-08-20 over 172 pairs:
+        median 15 cycles per request, mean 19, max 239 — against ~413 cycles for a
+        character to grind gearcrafting 9->10 itself. That ratio is the whole
+        argument for the route.
+
+        MEDIAN, not mean: the distribution has a long tail (one 239-cycle request
+        against a median of 15) and a mean would let a single pathological request
+        price every future one.
+
+        The coordination tables are UPSERTED rather than append-only, so the
+        requester's IDLE WAIT between publishing a demand and the units landing
+        cannot be recovered from the store and is NOT included here. That is a
+        declared gap, not a forgotten one: this number is the fleet's PRODUCTION
+        cost, and it understates the requester's wall-clock latency.
+        """
+        try:
+            with SqlSession(self._engine) as s:
+                rows = list(s.exec(
+                    select(Cycle.selected_goal, Cycle.character)
+                    .where(col(Cycle.selected_goal).contains("SupplyBank("))))
+        except SQLAlchemyError:
+            return None
+        # The key type admits a None goal rather than guarding against one:
+        # `contains` cannot match NULL, so the query already excludes it, and a
+        # guard here would be a branch no schema state can reach.
+        # `cycles.character` is NOT NULL, so the producer half is always present.
+        per_pair: dict[tuple[str | None, str], int] = {}
+        for goal, character in rows:
+            per_pair[(goal, character)] = per_pair.get((goal, character), 0) + 1
+        if not per_pair:
+            return None
+        return float(median(sorted(per_pair.values())))
 
     def _grind_rate(self, skill: str, window: int,
                     character: str | None) -> float | None:

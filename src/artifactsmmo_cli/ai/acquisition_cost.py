@@ -369,6 +369,61 @@ def _gated_craft_option(item: str, state: WorldState, game_data: GameData,
     )
 
 
+def _sibling_craft_option(item: str, state: WorldState, game_data: GameData,
+                          ctx: SelectionContext,
+                          store: LearningStore) -> RouteOption | None:
+    """A LIVE SIBLING already clears the crafting gate this character does not.
+
+    The third deferred route, and it sits here for the same reason
+    `_gated_craft_option` does: `obtain_sources` answers "what can I do RIGHT
+    NOW" and its eligibility mirrors the action pool, but no action a character
+    can plan this cycle makes a sibling craft something. Modelling it as a
+    seventh `SourceKind` — which `PLAN_iron_gear_acquisition.md` increment 4
+    recommended — would have produced a source with no action in existence to
+    serve it, exactly what `_withdraw_sources`' `bank_accessible` gate exists to
+    prevent, and the obtain-parity census would have been right to reject it.
+    `RouteOption.unlock` is already the mechanism for "a prerequisite this route
+    must satisfy before its first application", so this is one more instance of
+    it rather than a new concept.
+
+    The gate must ALREADY be met by the sibling. A sibling that could grind
+    toward the skill is not a route, for the same reason a GE order we could POST
+    is not one: both are work nobody has committed to, and pricing speculation is
+    how a route model starts lying. "One craft away" is the whole claim.
+
+    The requester still owes the MATERIALS — `inputs` is the recipe, unchanged
+    from a normal craft, and `acquisition_options` follows it transitively. What
+    a sibling saves is strictly the SKILL GATE, which is exactly the asymmetry
+    `MaterialDemand.self_servable` already encodes ("ASYMMETRY IS STRICTLY ABOUT
+    SKILL GATES").
+
+    The unlock is keyed on the ITEM rather than the skill because that is what a
+    request is for: two items behind the same sibling skill are two requests, and
+    two units of one item are one. `unlock_actions` is paid once across every
+    route sharing the key, which is precisely the batching `SupplyClaim` elects a
+    single producer to perform.
+    """
+    recipe = game_data.crafting_recipe(item)
+    stats = game_data.item_stats(item)
+    if recipe is None or stats is None or not stats.crafting_skill:
+        return None
+    skill = stats.crafting_skill
+    if state.skills.get(skill, 1) >= stats.crafting_level:
+        return None  # our own CRAFT route already covers it
+    if ctx.sibling_skills.get(skill, 0) < stats.crafting_level:
+        return None  # nobody is one craft away
+    cost = store.fleet_supply_request_cycles()
+    if cost is None or cost <= 0:
+        return None  # the fleet has never served a request; nothing to price it with
+    return RouteOption(
+        kind=SourceKind.CRAFT.value, venue=BANK_VENUE,
+        actions_per_application=1, yield_per=game_data.craft_yield(item),
+        capacity=UNBOUNDED_CAPACITY, inputs=dict(recipe),
+        unlock=f"sibling:{item}",
+        unlock_actions=int(cost),
+    )
+
+
 def route_options(item: str, state: WorldState, game_data: GameData,
                   ctx: SelectionContext,
                   store: LearningStore | None = None) -> list[RouteOption]:
@@ -376,14 +431,18 @@ def route_options(item: str, state: WorldState, game_data: GameData,
     only when a `store` is supplied — the skill-gated craft it withholds.
 
     `store` defaults to None so every existing caller keeps today's behaviour
-    exactly. A gated craft cannot be priced without an observed grind rate, and
-    the store is the only thing that has one."""
+    exactly. Neither deferred route can be priced without the store: a gated
+    craft needs an observed grind rate, and a sibling craft needs the observed
+    cost of a fleet supply request."""
     routes = [_priced(item, s, state, game_data, store)
               for s in obtain_sources(item, state, game_data, ctx)]
     if store is not None:
         gated = _gated_craft_option(item, state, game_data, store)
         if gated is not None:
             routes.append(gated)
+        sibling = _sibling_craft_option(item, state, game_data, ctx, store)
+        if sibling is not None:
+            routes.append(sibling)
     return routes
 
 

@@ -447,6 +447,7 @@ class GamePlayer:
         # every single-character run — the supply rung (Task 4) that reads it
         # stays inert there, exactly like every other coordination field.
         self._asymmetric_demand: frozenset[str] = frozenset()
+        self._sibling_skills: dict[str, int] = {}
 
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
@@ -3204,6 +3205,7 @@ class GamePlayer:
             self._turn_in = None
             self._recall = None
             self._asymmetric_demand = frozenset()
+            self._sibling_skills = {}
             return
         role_before = self._role
         now = datetime.now(tz=timezone.utc)
@@ -3213,6 +3215,10 @@ class GamePlayer:
         # rather than a stale one. Costs nothing extra: same local SQLite
         # write path as `publish_demand` just above/below.
         self._coordination.publish_holdings(dual_role_holdings(state, game_data), now)
+        # Our crafting levels, so a sibling that CANNOT make something can see
+        # that we can and price asking as a route rather than as unobtainable.
+        # Same write path and same TTL as the holdings publish directly above.
+        self._coordination.publish_skills(state.skills, now)
         # Bank stock a sibling has already committed to withdrawing. Read here
         # with the rest of the coordination block (one SQLite query, no API
         # call) so the shed licence this cycle derives is netted against it —
@@ -3257,6 +3263,7 @@ class GamePlayer:
         # as `_supply_target`, cleared to empty above whenever no coordination
         # store is attached.
         self._asymmetric_demand = self._coordination.sibling_demand_asymmetric(now)
+        self._sibling_skills = self._coordination.sibling_skill_levels(now)
 
         item_demand = self._coordination.sibling_demand(now)
         skill_of_item, level_of_item = self._producing_split(item_demand, game_data)
@@ -3630,6 +3637,11 @@ class GamePlayer:
             # lifecycle as `supply_target`: set by `_update_coordination`,
             # empty on every single-character run.
             asymmetric_demand=self._asymmetric_demand,
+            # Best crafting level any live sibling holds, same source and
+            # lifecycle as `supply_target`: set by `_update_coordination`, empty
+            # on every single-character run. Feeds
+            # `acquisition_cost._sibling_craft_option`.
+            sibling_skills=self._sibling_skills,
         )
 
     def _role_owned_skills(self) -> frozenset[str]:

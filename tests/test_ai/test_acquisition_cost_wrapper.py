@@ -108,6 +108,106 @@ def test_gather_uses_the_resource_tile_as_its_venue(state, game_data) -> None:
     assert opt.yield_per == max(1, game_data.max_gather_yield)
 
 
+def _ctx_with_siblings(**skills):  # type: ignore[no-untyped-def]
+    return replace(NO_PROFILE_CONTEXT, sibling_skills=dict(skills))
+
+
+class _SupplyStore:
+    """A store that has seen fleet supply requests but no grind evidence, so the
+    sibling route is the only deferred option under test."""
+
+    def __init__(self, request_cycles=15.0):  # type: ignore[no-untyped-def]
+        self._request_cycles = request_cycles
+
+    def fleet_supply_request_cycles(self):  # type: ignore[no-untyped-def]
+        return self._request_cycles
+
+    def skill_grind_rate(self, skill):  # type: ignore[no-untyped-def]
+        return None
+
+    def fleet_skill_grind_rate(self, skill):  # type: ignore[no-untyped-def]
+        return None
+
+
+def test_sibling_route_opens_a_skill_gate_the_character_cannot_meet(
+        state, game_data) -> None:
+    """THE GAP. `iron_sword` needs weaponcrafting 10; this character has 1. Today
+    that prices at UNOBTAINABLE_PER_UNIT even when a sibling is one craft away —
+    four characters each paying 160-514 cycles to unlock the same five recipes
+    (PLAN_iron_gear_acquisition increment 4).
+    """
+    st = replace(state, skills={**state.skills, "weaponcrafting": 1})
+    routes = route_options("iron_sword", st, game_data,
+                           _ctx_with_siblings(weaponcrafting=10), _SupplyStore())
+
+    sibling = [r for r in routes if r.unlock == "sibling:iron_sword"]
+    assert len(sibling) == 1
+    opt = sibling[0]
+    assert opt.unlock_actions == 15, "priced from the MEASURED fleet request cost"
+    assert opt.inputs == game_data.crafting_recipe("iron_sword"), \
+        "the requester still owes the MATERIALS — a sibling saves the SKILL GATE only"
+    assert opt.venue == BANK_VENUE, "our own action is a withdraw, not a workshop trip"
+
+
+def test_no_sibling_route_when_the_character_can_already_craft_it(
+        state, game_data) -> None:
+    """Its own CRAFT route already covers it; a second, dearer copy of the same
+    thing would just be noise in the ranking."""
+    st = replace(state, skills={**state.skills, "weaponcrafting": 10})
+    routes = route_options("iron_sword", st, game_data,
+                           _ctx_with_siblings(weaponcrafting=10), _SupplyStore())
+
+    assert not [r for r in routes if r.unlock.startswith("sibling:")]
+
+
+def test_a_sibling_who_is_merely_CLOSE_is_not_a_route(state, game_data) -> None:
+    """"One craft away" is the whole claim. A sibling that could GRIND toward the
+    skill is not a route, for the same reason a GE order we could POST is not
+    one: both are work nobody has committed to, and pricing speculation is how a
+    route model starts lying."""
+    st = replace(state, skills={**state.skills, "weaponcrafting": 1})
+    routes = route_options("iron_sword", st, game_data,
+                           _ctx_with_siblings(weaponcrafting=9), _SupplyStore())
+
+    assert not [r for r in routes if r.unlock.startswith("sibling:")]
+
+
+def test_no_siblings_at_all_is_no_route(state, game_data) -> None:
+    """Every single-character run takes this path."""
+    st = replace(state, skills={**state.skills, "weaponcrafting": 1})
+    routes = route_options("iron_sword", st, game_data, NO_PROFILE_CONTEXT,
+                           _SupplyStore())
+
+    assert not [r for r in routes if r.unlock.startswith("sibling:")]
+
+
+def test_a_fleet_that_never_served_a_request_cannot_price_the_route(
+        state, game_data) -> None:
+    """CLAUDE.md: use only API/observed data or fail. With no observation there
+    is no honest price, and a default would be exactly the invented constant this
+    method exists to avoid."""
+    st = replace(state, skills={**state.skills, "weaponcrafting": 1})
+    routes = route_options("iron_sword", st, game_data,
+                           _ctx_with_siblings(weaponcrafting=10),
+                           _SupplyStore(request_cycles=None))
+
+    assert not [r for r in routes if r.unlock.startswith("sibling:")]
+
+
+def test_sibling_unlock_is_keyed_ON_THE_ITEM_so_a_batch_pays_once(
+        state, game_data) -> None:
+    """`unlock_actions` is paid once across every route sharing the key, which is
+    precisely the batching `SupplyClaim` elects a single producer to perform. Two
+    units of one item are ONE request; keying on the skill instead would collapse
+    two different items into one request that only delivers one of them."""
+    st = replace(state, skills={**state.skills, "weaponcrafting": 1})
+    routes = route_options("iron_sword", st, game_data,
+                           _ctx_with_siblings(weaponcrafting=10), _SupplyStore())
+
+    keys = [r.unlock for r in routes if r.unlock.startswith("sibling:")]
+    assert keys == ["sibling:iron_sword"], "keyed on the item, not the skill"
+
+
 def test_ge_fill_is_priced_in_gold_at_the_standing_order(state, game_data) -> None:
     """REGRESSION. Adding `SourceKind.GE_FILL` to `obtain_sources` was green across
     the whole gate and still broke the live bot on the first plan:

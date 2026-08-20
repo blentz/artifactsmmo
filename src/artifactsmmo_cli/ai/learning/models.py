@@ -278,6 +278,45 @@ class HoldingLedger(SQLModel, table=True):
     expires_at: str
 
 
+class SkillLedger(SQLModel, table=True):
+    """One character's level in one crafting skill — the fleet's CAPABILITY board.
+
+    The gap this fills is the CONSUMER half of fleet supply. `MaterialDemand`
+    already lets a character publish "I need this and cannot make it myself"
+    (`self_servable`), and `SupplyClaim` elects exactly one producer to answer.
+    But nothing let the ASKER know whether asking is worth anything: a
+    skill-gated item was priced `UNOBTAINABLE_PER_UNIT` even when a sibling
+    already held the skill and was one craft away. That is the gap
+    `PLAN_iron_gear_acquisition.md` increment 4 names — four characters each
+    paying 160-514 cycles to unlock the same five recipes.
+
+    Only the MET level is published, never a projection: `acquisition_cost`'s
+    sibling route requires a sibling whose skill ALREADY clears the gate, so a
+    request is one craft away and not a second character's speculative grind.
+
+    Upsert key is (character, skill) and rows are replaced wholesale like
+    `HoldingLedger`, because a level is a snapshot of right now — and unlike
+    holdings it only ever rises, so a stale row understates rather than
+    licensing work against units that no longer exist.
+
+    Carries the same `expires_at` liveness rule as `RoleLease`,
+    `MaterialDemand`, `HoldingLedger`, `BankStockClaim` and `GeOrderClaim` — a
+    row is real if unexpired — so the coordination system still has exactly ONE
+    liveness rule. A character that has stopped playing stops offering its
+    skills on the same clock that frees its role."""
+
+    __tablename__ = "skill_ledger"
+    __table_args__ = (
+        UniqueConstraint("character", "skill", name="uq_skill_ledger_holder"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    character: str = Field(index=True)
+    skill: str = Field(index=True)
+    level: int
+    expires_at: str
+
+
 class BankStockClaim(SQLModel, table=True):
     """One character's claim on BANK stock it is withdrawing. Upsert key is
     (character, item_code), the same shape as `MaterialDemand`.

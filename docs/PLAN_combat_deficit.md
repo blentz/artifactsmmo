@@ -134,14 +134,55 @@ Each lands with `bash formal/gate.sh` green before the next starts.
   blunt `is_event_npc` gate to the GE side — GE is not an NPC and that gate would
   kill the route.
 
-* **3 — SIBLING as SourceKind 8 (the fleet request).**
-  This is `PLAN_iron_gear_acquisition.md` increment 4, whose open question its own
-  text already settles: *"whether the sibling route belongs in `obtain_sources` as
-  a seventh `SourceKind` … Recommend the former; the module docstring argues for
-  exactly that."* Today a skill-gated item is unobtainable to a character even
-  when a sibling is one craft away. ⚠️ `project_supply_claim_and_batch`: one
-  producer per request, and a batch target that holds still — two characters once
-  delivered 456 units against an ask of 60.
+* **3 — the sibling route.** ✅ DONE.
+  ⚠️ **DEVIATION, deliberate.** `PLAN_iron_gear_acquisition.md` increment 4
+  recommended a seventh `SourceKind` in `obtain_sources` — it flagged this as an
+  open question and the answer turns out to be no. `obtain_sources` answers "what
+  can I do RIGHT NOW" and its eligibility mirrors the action pool; **no action a
+  character can plan this cycle makes a sibling craft something**, so a SIBLING
+  source would be a source with no action to serve it — exactly what
+  `_withdraw_sources`' `bank_accessible` gate exists to prevent, and the
+  obtain-parity census would have been right to reject it.
+
+  It lands instead beside `_gated_craft_option` in `acquisition_cost`, which is
+  already the home of DEFERRED routes: `route_options` is explicitly "the ones
+  `obtain_sources` names, plus the skill-gated craft it withholds", and
+  `RouteOption.unlock`/`unlock_actions` is already the mechanism for "a
+  prerequisite this route must satisfy before its first application". One more
+  instance of an existing mechanism, not a new concept — and no new SourceKind,
+  so the partition test added in increment 2 stays satisfied.
+
+  Pieces: `SkillLedger` + `publish_skills`/`sibling_skill_levels` (the fleet
+  CAPABILITY board, mirroring `HoldingLedger` and its ONE liveness rule),
+  `ctx.sibling_skills`, and `_sibling_craft_option`.
+
+  **The unlock price is MEASURED, not chosen.** `fleet_supply_request_cycles()`
+  reads the median producer cycles per `SupplyBank(<item>x<qty>)` request off
+  history: 15 cycles over 172 (request, producer) pairs, against ~413 to grind
+  gearcrafting 9->10 yourself. Median not mean — one 239-cycle request against a
+  median of 15 would otherwise price every future one. No observation means no
+  route, never a default (`feedback_gate_green_does_not_pin_a_constant`).
+
+  The gate must ALREADY be met by a sibling. A sibling that could grind toward it
+  is not a route, for the same reason a GE order we could POST is not one.
+  The requester still owes the MATERIALS — `inputs` is the recipe, unchanged —
+  because the asymmetry is strictly about SKILL GATES, exactly as
+  `MaterialDemand.self_servable` already encodes it.
+
+  Verified live against a COPY of learning.db: with Robby's real skills published,
+  the route opens **32 recipes C3P0 cannot craft itself**, including `earth_ring`
+  (jewelrycrafting@15 vs its 8) and `earth_boost_potion` (alchemy@10 vs its 9) —
+  steps 4 and 3 of its measured pig chain.
+
+  ⚠️ DORMANT UNTIL THE FLEET RESTARTS: `publish_skills` runs in
+  `_update_coordination`, so `skill_ledger` stays empty (and the route correctly
+  absent) until the running children are restarted on this code.
+
+  ⚠️ PRE-EXISTING GAP FOUND, NOT FIXED: `_update_coordination` is called only from
+  `run()`, never from `plan_from_state`, so `plan <char>` has never reflected
+  coordination state — `supply_target` and `asymmetric_demand` are equally blind
+  there. Worth its own increment; it makes the CLI diagnostics understate the
+  fleet.
 
 * **4 — the bounded skill grind (c).**
   Lift `_next_tier_level` out of `grey_farm` into a shared core and use it as the
