@@ -11,6 +11,7 @@ from rich.console import Console
 from artifactsmmo_cli import __version__
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.commands import account, action, bank, character, craft, info, stats, task, trade
+from artifactsmmo_cli.commands.combat_deficit_report import combat_deficit_command
 from artifactsmmo_cli.commands.combat_loadout_report import combat_loadout_report_command
 from artifactsmmo_cli.commands.macro_research import macro_research as macro_research_command
 from artifactsmmo_cli.commands.objective import objective as objective_command
@@ -66,6 +67,11 @@ app.command("objective",
 )
 app.command("macro-research", help="Analyze learning.db for recurring progression macros (read-only)")(
     macro_research_command
+)
+app.command("combat-deficit",
+            help="Why a character loses a fight and which acquisitions close the "
+                 "gap (read-only)")(
+    combat_deficit_command
 )
 app.command("combat-loadout-report",
             help="Per-task predict_win calibration + which loadouts won (read-only)")(
