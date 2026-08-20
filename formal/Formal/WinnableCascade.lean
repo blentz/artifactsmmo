@@ -7,11 +7,16 @@ delegated through `winnable_cascade.winnable_farm_target_pure`.
 The function is a TOTAL 3-tier precedence cascade picking the next
 combat target:
 
-  1. `task_monster` if present (winnable check intentionally BYPASSED —
-     the upstream `task_decision == PURSUE` gate has already cleared the
-     task-feasibility margin; a borderline-margin task monster is still
-     picked because the task forces the target. A persistent loss loop
-     is caught by the stuck/recovery backstop, not here).
+  1. `task_monster` if present. This tier does not TEST winnability;
+     the supplier (`Player._task_aligned_monster`) guarantees it by
+     applying `_is_winnable` before passing a monster in. The comment
+     here previously called the missing check intentional, justified by
+     "a persistent loss loop is caught by the stuck/recovery backstop".
+     That was wrong — the backstop's remedy is a countdown that expires
+     whether or not anything changed, and live on 2026-08-20 a character
+     went 0/42 against its task monster and the ladder killed the run.
+     The theorems below are unaffected: `task_wins` states the
+     PRECEDENCE, which was always the intended contract.
   2. `path_monster` if present AND `path_winnable` — the cheapest-path
      projection's next-monster recommendation, accepted only when the
      runtime beatability predictor agrees.
@@ -44,8 +49,9 @@ def winnableFarmTargetPure (i : CascadeInputs) : Option String :=
     | _, _ => i.pickWinnable
 
 /-- Tier-1: task_monster, when set, wins unconditionally — the path /
-pick tiers are NEVER consulted (the winnable check is bypassed by
-design). -/
+pick tiers are NEVER consulted. This is a statement about PRECEDENCE,
+not about beatability: the supplier is what guarantees a monster reaching
+this tier is winnable. -/
 theorem task_wins (i : CascadeInputs) (t : String)
     (h : i.taskMonster = some t) :
     winnableFarmTargetPure i = some t := by

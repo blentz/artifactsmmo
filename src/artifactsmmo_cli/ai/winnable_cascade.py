@@ -3,9 +3,9 @@
 The three-tier cascade that picks which monster the combat-driving goals
 should target each cycle:
 
-  1. `task_monster` — the active task's monster (already gated by
-     `task_decision == PURSUE` upstream, so a borderline-margin task
-     monster is still picked here intentionally).
+  1. `task_monster` — the active task's monster. The SUPPLIER
+     (`Player._task_aligned_monster`) is what guarantees this is
+     winnable; see the note below.
   2. `path_monster` IF `path_winnable` — the cheapest-path-to-max-level
      next-monster recommendation, accepted only when the runtime
      beatability predictor (stat math + observed-loss veto) agrees.
@@ -16,8 +16,21 @@ should target each cycle:
 The decision is total (always returns a value, possibly `None`) and is
 the EXACT precedence used by the production planner to retarget combat.
 The Lean module `formal/Formal/WinnableCascade.lean` proves the
-precedence laws, totality, and the no-veto property: if `task_monster`
-fires, the winnable check is BYPASSED (intentional, by design).
+precedence laws and totality.
+
+WHERE THE WINNABLE CHECK LIVES (corrected 2026-08-20). Tier 1 does not
+test winnability, and this module used to call that "intentional, by
+design", justified by "a persistent loss loop is caught by the
+stuck/recovery backstop". It is not: that backstop's remedy is a
+COUNTDOWN that expires whether or not anything changed, and its terminal
+rung raises `StuckExit`. Live, C3P0 went 0 wins / 42 losses against its
+task pig and the ladder killed the run.
+
+The cascade itself was never the defect and `task_wins` was never wrong —
+"a supplied task monster wins" is exactly the precedence intended. The
+SUPPLIER was wrong. `Player._task_aligned_monster` now applies
+`_is_winnable` before supplying one, so this function's contract is
+unchanged and its proofs stand as written.
 """
 from dataclasses import dataclass
 
@@ -36,7 +49,8 @@ def winnable_farm_target_pure(inputs: CascadeInputs) -> str | None:
     """Return the next combat target per the documented 3-tier cascade.
 
     Precedence (highest first):
-      1. `task_monster` if set (winnable check INTENTIONALLY bypassed).
+      1. `task_monster` if set (its winnability is the SUPPLIER's
+         guarantee — see the module docstring).
       2. `path_monster` if set AND `path_winnable`.
       3. `pick_winnable` (may itself be `None` if nothing is winnable).
     """

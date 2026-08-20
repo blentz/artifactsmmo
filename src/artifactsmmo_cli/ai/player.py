@@ -2770,14 +2770,33 @@ class GamePlayer:
         )
 
     def _task_aligned_monster(self) -> str | None:
-        """The active task's monster when it's a PURSUE monster-task; else None.
+        """The active task's monster when it is a PURSUE monster-task AND winnable.
 
-        A PURSUE monster-task has cleared the level-margin feasibility gate
-        (task_decision returns PIVOT for combat-gated tasks), so the objective-step
-        grind can advance it directly once retargeted here. This bypasses the
-        non-task _is_winnable fallback; a borderline-margin monster is still picked
-        because the task forces the target. A persistent loss loop is caught by the
-        stuck/recovery backstop, not here.
+        A PURSUE monster-task has cleared `task_feasibility`'s level margin, which
+        answers "is this task workable at my LEVEL". That is a different question
+        from "will I win this fight with this GEAR", and the two disagree: pig is
+        level 19 and C3P0 was level 19, so the margin passed, while `predict_win`
+        said lose — correctly, 42 times out of 42.
+
+        This used to return the task monster with NO winnability check, and the
+        cascade documented that as deliberate: "a persistent loss loop is caught by
+        the stuck/recovery backstop, not here". It is not. That backstop's remedy
+        is a COUNTDOWN (`_suppressed_goals`, 5 cycles then 15) which expires
+        whether or not anything changed, so the loop could not converge, and its
+        terminal rung raises `StuckExit` — killing the character instead of fixing
+        the gear. Live 2026-08-20: C3P0, 0 wins / 42 losses, the fleet's first
+        `stuck_exit` in 345 sessions.
+
+        `_is_winnable` is exactly the check that was skipped, and it is the right
+        one: it already projects to `max_hp` (so a mid-damage cycle cannot flicker
+        the target) and already carries the learned-loss veto, which a 0/42 record
+        trips on its own. When it refuses, the cascade falls through to tiers 2
+        and 3 — both already winnability-gated — so the character grinds something
+        it CAN beat rather than standing down.
+
+        The level margin is NOT removed. It answers the task-feasibility question
+        (`task_decision` routes a combat-gated task to PIVOT on it) and is not a
+        worse copy of this one.
         """
         s = self.state
         if s is None or self.game_data is None or s.task_type != "monsters" or not s.task_code:
@@ -2785,6 +2804,8 @@ class GamePlayer:
         if s.task_total == 0 or s.task_progress >= s.task_total:
             return None
         if task_decision(s, self.game_data, self.history) != PURSUE:
+            return None
+        if not self._is_winnable(s.task_code):
             return None
         return s.task_code
 

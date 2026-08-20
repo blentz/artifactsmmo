@@ -260,11 +260,49 @@ Each lands with `bash formal/gate.sh` green before the next starts.
   the boundary case: hurt but no gear would help ⇒ no deficit, because what it
   needs is a rest.
 
-* **6 — replace the countdown with the fact, and DELETE the bypass.**
-  Grind on `m` blocked while `combat_deficit(m)` is non-`None`; remove the
-  `GOAL_OSCILLATION` countdown for this class; delete `winnable_cascade` tier-1
-  and its Lean no-veto theorem, and the monsters branch of
-  `MONSTER_LEVEL_MARGIN`. Net removal.
+* **6a — close the tier-1 bypass.** ✅ DONE.
+  `_task_aligned_monster` now applies `_is_winnable` before supplying a monster.
+  That is exactly the check the cascade called "INTENTIONALLY bypassed", and
+  `_is_winnable` was already the right one: it projects to `max_hp` (so a
+  mid-damage cycle cannot flicker the target) and carries the learned-loss veto,
+  which a 0/42 record trips on its own.
+
+  ⚠️ **`WinnableCascade.lean` is NOT deleted, and the plan was wrong to say it
+  should be.** The theorems were never false: `task_wins` states PRECEDENCE — "a
+  supplied task monster wins" — which is exactly the intended contract. The
+  SUPPLIER was the defect. Deleting a sound proof to fix a caller would have
+  destroyed evidence and left a hole. What WAS false is the prose in three
+  places, now corrected: the Python module docstring, the Lean header comment,
+  and the `formal/README.md` row all claimed the missing check was deliberate and
+  that "a persistent loss loop is caught by the stuck/recovery backstop".
+
+  ⚠️ **`MONSTER_LEVEL_MARGIN` is NOT deleted either.** The plan called it "a worse
+  duplicate of `predict_win`". It is not a duplicate: it answers "is this task
+  workable at my LEVEL", which `task_decision` uses to route a combat-gated task
+  to PIVOT. Removing it would have deleted a different gate, not a redundant one.
+
+  Verified live, and the behaviour differs per character rather than blanket-
+  disabling monster tasks:
+
+      C3P0  task=pig    winnable=False  ->  farm target NONE      (loop closed)
+      R2D2  task=pig    winnable=False  ->  farm target highwayman (falls through)
+      Robby task=rat    winnable=False  ->  farm target pig
+      HAL   task=sheep  winnable=True   ->  farm target sheep      (task still drives)
+
+  C3P0's `None` is `project_blocked_horizon_is_a_grey_wall`: everything beatable
+  is grey, everything non-grey it loses. It needs GEAR, which 6b points it at.
+
+* **6b — point the gear chain at the deficit.** The remaining half. Closing the
+  bypass stops the bleeding; it does not yet CURE, because `map_guard`'s
+  GEAR_REVIEW still picks its target with a monster-blind `_best_by_value` scan.
+  When the latch was set by a loss, the target should be `combat_deficit`'s first
+  step against THAT monster. Only then does "lose fight -> upgrade gear" close as
+  a loop.
+
+* **6c — retire the countdown for this class.** With 6a+6b in place the
+  `GOAL_OSCILLATION` suppression of a losing grind should be unreachable rather
+  than merely unused; verify against the store before removing anything.
+
 
 ## Acceptance
 
