@@ -55,6 +55,69 @@ does not have to out-rank anything. `docs/PLAN_band_unification.md` stays stoppe
    which is the only way the ASSIGNMENT distribution S-014 needs can ever be
    observed. It is published nowhere.
 
+## First live run — the rung works, and the premise does not
+
+173 cycles, five characters, ~40 minutes (learning.db `cycles`, 2026-08-20T01:14
+to 01:54). Not the trace files, which are not durable.
+
+**What worked.** All five accepted a task, once each — the first `AcceptTask`
+selections in 63,483 recorded cycles. The gate, the promotion and the per-course
+draw all behaved.
+
+**What the draws actually were.** Five of five were MONSTERS tasks, and every one
+is enormous:
+
+| character | task | kills | reward | gold/kill | advances? |
+|---|---|---|---|---|---|
+| Robby | `rat` | 107 | 300g + 4 coins | 2.8 | yes |
+| R2D2 | `pig` | 137 | 300g + 4 coins | 2.2 | yes |
+| C3P0 | `pig` | 104 | 300g + 4 coins | 2.9 | yes |
+| HAL | `sheep` | 317 | 200g + 3 coins | 0.6 | **no (grey)** |
+| Lor | `yellow_slime` | 185 | 200g + 3 coins | 1.1 | **no (grey)** |
+
+`task_total` of 104–317 is an order of magnitude above what this plan assumed. At
+the calibrated ~52 cycles/hour/character, HAL's sheep task is roughly SIX HOURS of
+kills for 200 gold.
+
+**PROGRESS IS ZERO IN ALL 173 CYCLES, AND THE CAUSE IS STRUCTURAL.** `PURSUE_TASK`
+— the rung that pursues a held task — is ITEMS-ONLY:
+
+```python
+if kind is MeansKind.PURSUE_TASK:
+    return (state.task_type == "items" and ...)
+```
+
+A MONSTERS task has no rung that pursues it. Its only mechanism is the grind
+retarget (`_task_aligned_monster` → `_winnable_farm_target`), which only bites
+when the objective is already running a character-XP grind. All five characters
+are doing GEAR work — `GatherMaterials(hardwood_plank)`, `UpgradeEquipment`,
+`SupplyBank` — so the retarget never applies and the task is inert annotation.
+
+**So S-052 is not honoured in practice.** "A task that cannot be discarded is
+worked": they cannot discard (0 coins, never completed one) and they are not
+working it. They carry it dead — the outcome the USER's decision explicitly
+rejected. The clause is implemented as "do not cancel without a coin"; nothing
+makes the work happen.
+
+**And the epic's premise does not hold as stated.** "The demanded kills are ones
+they would make anyway" was measured against characters whose objective was a
+grind. These five are chasing gear, so the overlap is zero and the task is pure
+added cost. The synergy is real (it was measured) but CONDITIONAL on the objective
+being a grind — and that condition is not part of the accept decision.
+
+**Three ways to close it, and the choice is the USER's:**
+
+* **Owe a draw only while the objective is a character-XP grind.** Smallest, and
+  closest to the stated intent — "tasks are ideal as SYNERGISTIC goals". The
+  accept gate already exists; this narrows when it arms. Characters chasing gear
+  simply do not draw.
+* **Give monsters tasks a pursuit rung**, the twin of items-only `PURSUE_TASK`.
+  Makes the task real work in its own right — which the USER called desirable only
+  when the rewards are needed, so it wants the reward valuation S-046 blocks.
+* **Judge the SIZE at draw time.** 317 kills for 200 gold is a bad trade at any
+  overlap; S-047 currently asks only whether the target is grey, not whether the
+  demand is proportionate.
+
 ## The redraw loop — why increment 2 was backed out
 
 Moving `ACCEPT_TASK` into the COLLECT band puts it ABOVE the objective step, next
