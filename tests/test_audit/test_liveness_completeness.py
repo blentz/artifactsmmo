@@ -16,6 +16,7 @@ import pytest
 from artifactsmmo_cli.audit.liveness_completeness import (
     DORMANT,
     REPR_ALIASES,
+    WITNESS_BASELINE,
     LivenessRow,
     defined_classes,
     observed_counts,
@@ -225,3 +226,73 @@ def test_a_proof_witness_is_never_reclassified_as_deletable():
     what nearly happened on 2026-08-18."""
     assert DORMANT["WaitGoal"].startswith("witness:")
     assert DORMANT["WaitAction"].startswith("witness:")
+
+
+# ---------------------------------------------------------------------------
+# LIVENESS ALARM — a proof witness FIRING is a different fact from a stale
+# declaration, and needs the opposite remedy.
+# ---------------------------------------------------------------------------
+
+
+def test_a_firing_witness_is_an_alarm_not_a_stale_declaration() -> None:
+    """STALE says "remove the declaration". For a `witness:` row that is exactly
+    the wrong advice — removing `WaitGoal`'s declaration invites deleting the
+    witness that proves the ladder total, which
+    `test_a_proof_witness_is_never_reclassified_as_deletable` exists to stop.
+
+    Same detection, opposite remedy: the declaration STAYS and the question is
+    why every rung above the witness had nothing to offer.
+    """
+    row = _row("WaitGoal", observed=WITNESS_BASELINE["WaitGoal"] + 1,
+               declared="witness: the ladder's totality witness")
+
+    assert row.liveness_alarm is True
+    assert row.stale_declaration is False, "must not double-report as STALE"
+
+
+def test_a_firing_non_witness_is_still_stale() -> None:
+    """The carve-out is scoped to `witness:` and must not weaken the check that
+    caught `AcceptTaskGoal` and `MaintainConsumablesGoal`."""
+    row = _row("SomeGoal", observed=3, declared="unreachable: never selected")
+
+    assert row.stale_declaration is True
+    assert row.liveness_alarm is False
+
+
+def test_the_baseline_acknowledges_investigated_firings_only() -> None:
+    """An alarm nothing can clear is an alarm everyone learns to ignore — the 24
+    cycles are in the store permanently. At the baseline it is silent; ONE above
+    it, something deadlocked again and the gate fails.
+    """
+    base = WITNESS_BASELINE["WaitGoal"]
+    declared = "witness: the ladder's totality witness"
+
+    assert _row("WaitGoal", base, declared).liveness_alarm is False
+    assert _row("WaitGoal", base + 1, declared).liveness_alarm is True
+
+
+def test_the_matrix_renders_an_alarm_at_the_top_and_names_it() -> None:
+    """The report's only affordance is ORDER — a reader scans the top of a diff.
+    A deadlock belongs there with UNDECLARED, and it must not read as `dormant`
+    (which is what it looked like before the category existed).
+    """
+    rows = [
+        _row("LiveGoal", 9),
+        _row("BenignGoal", 0, "conditional: needs a raid"),
+        _row("StuckWitnessGoal", 5, "witness: the ladder's totality witness"),
+    ]
+
+    matrix = render_matrix(rows)
+    lines = [ln for ln in matrix.splitlines() if ln.startswith("| `")]
+
+    assert "**LIVENESS ALARM**" in matrix
+    assert "StuckWitnessGoal" in lines[0], "the alarm must sort to the top"
+    assert "liveness alarms 1" in matrix
+
+
+def test_an_unbaselined_witness_alarms_on_its_very_first_firing() -> None:
+    """A witness with no baseline entry has never been investigated, so one
+    firing is already news."""
+    row = _row("SomeFutureWitness", observed=1, declared="witness: something")
+
+    assert row.liveness_alarm is True

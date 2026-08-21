@@ -9,77 +9,77 @@ observed live or carry a reason in
 `docs/PLAN_priority_ladder_unification.md` for why the `unreachable:`
 rows are a defect being tracked rather than a design.
 
-70 classes; LIVE 0; declared-dormant 35 (of which unreachable 18, unclassified 5); undeclared 0; stale 0; no store read (70 unknown)
+70 classes; LIVE 40; declared-dormant 32 (of which unreachable 7, unclassified 0); undeclared 0; stale 0; liveness alarms 2
 
 | class | kind | observed | status | reason |
 |---|---|---|---|---|
-| `CurrencyTurnInGoal` | goal | unknown | dormant | UNCLASSIFIED: MeansKind.CURRENCY_TURNIN is ABOVE the step, so the priority ladder is not the cause |
-| `ProvisionMarginalFightGoal` | goal | unknown | dormant | UNCLASSIFIED: never observed; reason not yet established |
-| `ReachCurrencyGoal` | goal | unknown | dormant | UNCLASSIFIED: never observed; reason not yet established |
-| `ReachSkillGoal` | goal | unknown | dormant | UNCLASSIFIED: never observed; reason not yet established |
-| `SurrenderCurrencyGoal` | goal | unknown | dormant | UNCLASSIFIED: never observed; reason not yet established |
-| `AcceptTaskAction` | action | unknown | dormant | unreachable: emitted only by AcceptTaskGoal |
-| `AcceptTaskGoal` | goal | unknown | dormant | unreachable: MeansKind.ACCEPT_TASK is in DISCRETIONARY_ORDER, below the objective step, present in 14064 of 14064 cycles |
-| `BuyBankExpansionAction` | action | unknown | dormant | unreachable: emitted only by ExpandBankGoal |
-| `CompleteTaskAction` | action | unknown | dormant | unreachable: emitted only by CompleteTaskGoal |
-| `CompleteTaskGoal` | goal | unknown | dormant | unreachable: requires a held task; task_code non-null in 0 of 63,310 cycles |
-| `ExpandBankGoal` | goal | unknown | dormant | unreachable: MeansKind.BANK_EXPAND is in the discretionary band |
-| `GePostBuyOrderAction` | action | unknown | dormant | unreachable: emitted only by PostBuyBidGoal |
-| `LowYieldCancelGoal` | goal | unknown | dormant | unreachable: requires a held task to judge |
-| `MaintainConsumablesGoal` | goal | unknown | dormant | unreachable: MeansKind.MAINTAIN_CONSUMABLES is in the discretionary band |
-| `PostBuyBidGoal` | goal | unknown | dormant | unreachable: MeansKind.GE_BID is in the discretionary band |
-| `PursueTaskGoal` | goal | unknown | dormant | unreachable: requires a held task, and AcceptTask can never be selected |
-| `TaskCancelAction` | action | unknown | dormant | unreachable: emitted only by TaskCancelGoal |
-| `TaskCancelGoal` | goal | unknown | dormant | unreachable: requires a held task |
-| `TaskExchangeAction` | action | unknown | dormant | unreachable: emitted only by TaskExchangeGoal |
-| `TaskExchangeGoal` | goal | unknown | dormant | unreachable: requires tasks_coin, earned only by completing tasks |
-| `TaskTradeAction` | action | unknown | dormant | unreachable: items-task delivery, requires a held task |
-| `WaitAction` | action | unknown | dormant | unreachable: emitted only by WaitGoal |
-| `WaitGoal` | goal | unknown | dormant | unreachable: MeansKind.WAIT is last in the discretionary band |
-| `DepositGoldAction` | action | unknown | dormant | conditional: gold is banked by DepositAll, not as a separate step |
-| `GeFillSellOrderAction` | action | unknown | dormant | subsumed: the fleet posts sell orders and fills buys |
-| `MapTransitionAction` | action | unknown | dormant | conditional: needs a layer transition (raid/underground areas) |
-| `MoveAction` | action | unknown | dormant | subsumed: travel is folded into each action's own venue hop |
-| `MoveTo` | action | unknown | dormant | subsumed: superseded by the venue model in obtain_sources |
-| `ParticipateRaidGoal` | goal | unknown | dormant | conditional: needs a live raid; none has been open while the fleet ran |
-| `ReachUnlockLevelGoal` | goal | unknown | dormant | conditional: fires only below the bank-unlock level |
-| `TeleportAction` | action | unknown | dormant | conditional: needs an unlocked teleport destination |
-| `UnequipAction` | action | unknown | dormant | subsumed: OptimizeLoadoutAction performs swaps atomically |
-| `UnlockBankGoal` | goal | unknown | dormant | conditional: the bank is already unlocked for every live character |
-| `UseGoldBagAction` | action | unknown | dormant | conditional: no gold bag has dropped |
-| `WithdrawGoldAction` | action | unknown | dormant | conditional: no goal has needed banked gold yet |
-| `CancelOrdersGoal` | goal | unknown | live |  |
-| `ClaimPendingGoal` | goal | unknown | live |  |
-| `ClaimPendingItemAction` | action | unknown | live |  |
-| `CraftAction` | action | unknown | live |  |
-| `CraftPotionsGoal` | goal | unknown | live |  |
-| `CraftReliefGoal` | goal | unknown | live |  |
-| `DeleteItemAction` | action | unknown | live |  |
-| `DepositAllAction` | action | unknown | live |  |
-| `DepositInventoryGoal` | goal | unknown | live |  |
-| `DepositItemAction` | action | unknown | live |  |
-| `DiscardOverstockGoal` | goal | unknown | live |  |
-| `DrainBankJunkGoal` | goal | unknown | live |  |
-| `EquipAction` | action | unknown | live |  |
-| `EquipOwnedGoal` | goal | unknown | live |  |
-| `FightAction` | action | unknown | live |  |
-| `GatherAction` | action | unknown | live |  |
-| `GatherMaterialsGoal` | goal | unknown | live |  |
-| `GeCancelOrderAction` | action | unknown | live |  |
-| `GeFillBuyOrderAction` | action | unknown | live |  |
-| `GePostSellOrderAction` | action | unknown | live |  |
-| `GrindCharacterXPGoal` | goal | unknown | live |  |
-| `LevelSkill` | action | unknown | live |  |
-| `NpcBuyAction` | action | unknown | live |  |
-| `NpcSellAction` | action | unknown | live |  |
-| `OptimizeLoadoutAction` | action | unknown | live |  |
-| `RecycleAction` | action | unknown | live |  |
-| `RecycleSurplusGoal` | goal | unknown | live |  |
-| `RestAction` | action | unknown | live |  |
-| `RestoreHPGoal` | goal | unknown | live |  |
-| `SellInventoryGoal` | goal | unknown | live |  |
-| `SupplyBankGoal` | goal | unknown | live |  |
-| `UpgradeEquipmentGoal` | goal | unknown | live |  |
-| `UseConsumableAction` | action | unknown | live |  |
-| `WithdrawItemAction` | action | unknown | live |  |
-| `WithdrawToolsGoal` | goal | unknown | live |  |
+| `WaitAction` | action | 27 | **LIVENESS ALARM** | witness: the action WaitGoal emits; same proof obligation |
+| `WaitGoal` | goal | 27 | **LIVENESS ALARM** | witness: MeansKind.WAIT is the unconditional last resort that proves the ladder total (Liveness.NoDeadlockV2) |
+| `BuyBankExpansionAction` | action | 0 | dormant | unreachable: emitted only by ExpandBankGoal |
+| `ExpandBankGoal` | goal | 0 | dormant | unreachable: MeansKind.BANK_EXPAND is in the discretionary band |
+| `GePostBuyOrderAction` | action | 0 | dormant | unreachable: emitted only by PostBuyBidGoal |
+| `ParticipateRaidGoal` | goal | 0 | dormant | unreachable: appended at BAND_DISCRETIONARY, below the objective step, so a raid window closes unused |
+| `PostBuyBidGoal` | goal | 0 | dormant | unreachable: MeansKind.GE_BID is in the discretionary band |
+| `ReachCurrencyGoal` | goal | 0 | dormant | unreachable: routed only from a currency-blocked leaf, and it mints only tasks_coin, which requires tasks |
+| `ReachSkillGoal` | goal | 0 | dormant | unreachable: constructed only under MeansKind.PURSUE_TASK, which requires a held task |
+| `CompleteTaskAction` | action | 0 | dormant | conditional: emitted only by CompleteTaskGoal |
+| `CompleteTaskGoal` | goal | 0 | dormant | conditional: requires a task worked to completion |
+| `CurrencyTurnInGoal` | goal | 0 | dormant | conditional: the only sink whose item a loadout can wear (lich_race_trophy) needs 10 medals and the fleet holds 4; every READY sink buys a resource, which _resolve_turn_in rule 3 can never accept |
+| `DepositGoldAction` | action | 0 | dormant | conditional: gold is banked by DepositAll, not as a separate step |
+| `GeFillSellOrderAction` | action | 0 | dormant | subsumed: the fleet posts sell orders and fills buys |
+| `LowYieldCancelGoal` | goal | 0 | dormant | conditional: requires a held task and enough samples to judge it |
+| `MapTransitionAction` | action | 0 | dormant | conditional: needs a layer transition (raid/underground areas) |
+| `MoveAction` | action | 0 | dormant | subsumed: travel is folded into each action's own venue hop |
+| `MoveTo` | action | 0 | dormant | subsumed: superseded by the venue model in obtain_sources |
+| `ProvisionMarginalFightGoal` | goal | 0 | dormant | conditional: needs a held utility-slot heal; best_held_heal is None on every character |
+| `PursueTaskGoal` | goal | 0 | dormant | conditional: requires a held items-task the projection says to pursue |
+| `ReachUnlockLevelGoal` | goal | 0 | dormant | conditional: fires only below the bank-unlock level |
+| `SurrenderCurrencyGoal` | goal | 0 | dormant | conditional: the holder side of the same election, so it waits on the same turn-in being resolved |
+| `TaskCancelAction` | action | 0 | dormant | conditional: emitted only by TaskCancelGoal |
+| `TaskCancelGoal` | goal | 0 | dormant | conditional: requires a held task AND a pocket tasks_coin to spend on the cancel (S-052 works one it cannot discard) |
+| `TaskExchangeAction` | action | 0 | dormant | conditional: emitted only by TaskExchangeGoal |
+| `TaskExchangeGoal` | goal | 0 | dormant | conditional: requires tasks_coin, earned only by completing tasks |
+| `TaskTradeAction` | action | 0 | dormant | conditional: items-task delivery, requires a held items-task |
+| `TeleportAction` | action | 0 | dormant | conditional: needs an unlocked teleport destination |
+| `UnequipAction` | action | 0 | dormant | subsumed: OptimizeLoadoutAction performs swaps atomically |
+| `UnlockBankGoal` | goal | 0 | dormant | conditional: the bank is already unlocked for every live character |
+| `UseGoldBagAction` | action | 0 | dormant | conditional: no gold bag has dropped |
+| `WithdrawGoldAction` | action | 0 | dormant | conditional: no goal has needed banked gold yet |
+| `AcceptTaskAction` | action | 5 | live |  |
+| `AcceptTaskGoal` | goal | 5 | live |  |
+| `CancelOrdersGoal` | goal | 123 | live |  |
+| `ClaimPendingGoal` | goal | 2 | live |  |
+| `ClaimPendingItemAction` | action | 2 | live |  |
+| `CraftAction` | action | 1083 | live |  |
+| `CraftPotionsGoal` | goal | 1242 | live |  |
+| `CraftReliefGoal` | goal | 556 | live |  |
+| `DeleteItemAction` | action | 744 | live |  |
+| `DepositAllAction` | action | 418 | live |  |
+| `DepositInventoryGoal` | goal | 116 | live |  |
+| `DepositItemAction` | action | 45 | live |  |
+| `DiscardOverstockGoal` | goal | 995 | live |  |
+| `DrainBankJunkGoal` | goal | 114 | live |  |
+| `EquipAction` | action | 599 | live |  |
+| `EquipOwnedGoal` | goal | 56 | live |  |
+| `FightAction` | action | 17529 | live |  |
+| `GatherAction` | action | 6015 | live |  |
+| `GatherMaterialsGoal` | goal | 8024 | live |  |
+| `GeCancelOrderAction` | action | 123 | live |  |
+| `GeFillBuyOrderAction` | action | 120 | live |  |
+| `GePostSellOrderAction` | action | 83 | live |  |
+| `GrindCharacterXPGoal` | goal | 16400 | live |  |
+| `LevelSkill` | action | 22624 | live |  |
+| `MaintainConsumablesGoal` | goal | 3 | live |  |
+| `NpcBuyAction` | action | 32 | live |  |
+| `NpcSellAction` | action | 6 | live |  |
+| `OptimizeLoadoutAction` | action | 101 | live |  |
+| `RecycleAction` | action | 227 | live |  |
+| `RecycleSurplusGoal` | goal | 47 | live |  |
+| `RestAction` | action | 13999 | live |  |
+| `RestoreHPGoal` | goal | 14863 | live |  |
+| `SellInventoryGoal` | goal | 14 | live |  |
+| `SupplyBankGoal` | goal | 3469 | live |  |
+| `UpgradeEquipmentGoal` | goal | 20154 | live |  |
+| `UseConsumableAction` | action | 1699 | live |  |
+| `WithdrawItemAction` | action | 775 | live |  |
+| `WithdrawToolsGoal` | goal | 46 | live |  |

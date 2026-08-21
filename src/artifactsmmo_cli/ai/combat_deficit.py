@@ -134,6 +134,33 @@ def _margin_owning(state: WorldState, game_data: GameData, monster: str,
     return combat_margin(dataclasses.replace(state, inventory=trial), game_data, monster)
 
 
+def _blocked_task_monster(state: WorldState) -> str | None:
+    """The held monsters-task's code when it is still workable, else None."""
+    if state.task_type != "monsters" or not state.task_code:
+        return None
+    if state.task_total == 0 or state.task_progress >= state.task_total:
+        return None
+    return state.task_code
+
+
+def has_combat_deficit(state: WorldState, game_data: GameData) -> bool:
+    """Is the held task's monster unwinnable? The CHEAP form of the same fact.
+
+    `combat_deficit` walks every candidate to name what closes the gap; this is
+    one `predict_win`. `GearLatch.update` runs every cycle and only needs to know
+    THAT a deficit exists, so the walk would be the wrong thing to put there.
+
+    Exactly equivalent to `combat_deficit(...) is not None` — pinned by a test,
+    because if the two ever disagreed the latch would arm for a deficit the gear
+    chain cannot name, and the character would review gear forever.
+    """
+    monster = _blocked_task_monster(state)
+    if monster is None:
+        return False
+    return not predict_win(dataclasses.replace(state, hp=state.max_hp),
+                           game_data, monster)
+
+
 def deficit_upgrade_target(
     state: WorldState,
     game_data: GameData,
@@ -164,11 +191,10 @@ def deficit_upgrade_target(
     same rule `UpgradeEquipmentGoal` uses, so the guard equips into a slot that
     accepts it.
     """
-    if state.task_type != "monsters" or not state.task_code:
+    monster = _blocked_task_monster(state)
+    if monster is None:
         return None
-    if state.task_total == 0 or state.task_progress >= state.task_total:
-        return None
-    deficit = combat_deficit(state, game_data, state.task_code,
+    deficit = combat_deficit(state, game_data, monster,
                              candidates=candidates, max_chain=1, cost_of=cost_of)
     if deficit is None or not deficit.chain:
         return None

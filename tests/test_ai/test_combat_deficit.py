@@ -14,7 +14,11 @@ includes worn gear; a fixture that puts a sword in `equipment` while leaving
 `test_weapon_winnability`.
 """
 
-from artifactsmmo_cli.ai.combat_deficit import combat_deficit, deficit_upgrade_target
+from artifactsmmo_cli.ai.combat_deficit import (
+    combat_deficit,
+    deficit_upgrade_target,
+    has_combat_deficit,
+)
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -254,6 +258,36 @@ def test_each_step_records_what_it_cost() -> None:
                           cost_of=lambda code: 37.0).chain[0]
 
     assert step.acquire_cost == 37.0
+
+
+def test_has_combat_deficit_is_the_cheap_boolean_form() -> None:
+    """The LATCH needs "is there a deficit", not "what closes it".
+
+    `deficit_upgrade_target` walks every candidate; this is one `predict_win`.
+    It runs every cycle in `GearLatch.update`, so the walk would be the wrong
+    thing to put there.
+    """
+    gd = _gd()
+
+    assert has_combat_deficit(_task_state(), gd) is True
+    assert has_combat_deficit(_task_state(inventory={"steel_sword": 1}), gd) is False
+
+
+def test_has_combat_deficit_agrees_with_the_full_walk() -> None:
+    """The cheap form and the expensive one must never disagree about EXISTENCE,
+    or the latch would arm for a deficit the gear chain then cannot name."""
+    gd = _gd()
+    for state in (_task_state(), _task_state(inventory={"steel_sword": 1})):
+        assert has_combat_deficit(state, gd) is (
+            combat_deficit(state, gd, "boar") is not None)
+
+
+def test_has_combat_deficit_is_false_without_a_workable_monsters_task() -> None:
+    gd = _gd()
+
+    assert has_combat_deficit(_task_state(task_type="items"), gd) is False
+    assert has_combat_deficit(_task_state(task_code=None, task_type=None), gd) is False
+    assert has_combat_deficit(_task_state(task_progress=104), gd) is False
 
 
 # ---------------------------------------------------------------------------

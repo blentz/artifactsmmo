@@ -31,6 +31,7 @@ import sys
 from pathlib import Path
 
 from artifactsmmo_cli.audit.liveness_completeness import (
+    liveness_alarms,
     orphan_declarations,
     render_matrix,
     run_census,
@@ -62,11 +63,18 @@ def main() -> None:
     bad_undeclared = undeclared(rows)
     bad_stale = stale(rows)
     bad_orphans = orphan_declarations(rows)
-    if not (bad_undeclared or bad_stale or bad_orphans):
+    alarms = liveness_alarms(rows)
+    if not (bad_undeclared or bad_stale or bad_orphans or alarms):
         print("GATE CLEAN: 0 undeclared, 0 stale, 0 orphan declarations.",
               file=sys.stderr)
         return
 
+    for row in alarms:
+        print(f"GATE FAILED (LIVENESS ALARM): {row.kind} {row.name} is a PROOF "
+              f"WITNESS and the store shows it firing {row.observed} times. The "
+              f"bot had nothing to do. Do NOT remove the declaration — find out "
+              f"why every rung above the witness had nothing to offer.",
+              file=sys.stderr)
     for row in bad_undeclared:
         print(f"GATE FAILED (UNDECLARED): {row.kind} {row.name} has never run and "
               f"carries no reason. Add one to "

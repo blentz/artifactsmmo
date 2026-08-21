@@ -48,6 +48,27 @@ AI_ROOT = Path(__file__).resolve().parents[1] / "ai"
 
 #: Classes with no observed run and a REASON. The key is the class name; the
 #: value says why dormancy is expected and what would end it. A reason of the
+#: Witness firings already investigated, per class. The alarm fires only ABOVE
+#: this count.
+#:
+#: An alarm nothing can clear is an alarm everyone learns to ignore, and these
+#: cycles are in the store permanently. Raising a number here is not a way to
+#: silence it: it requires writing down what was found, exactly as `DORMANT`
+#: requires a reason. If the count grows, something deadlocked AGAIN.
+WITNESS_BASELINE: dict[str, int] = {
+    # 2026-08-20 23:22-23:51, 24 cycles out of 66,250 ever, all within 40 minutes
+    # of the tier-1 winnability gate (e4df6bef) shipping. Two causes:
+    #   C3P0 x12 — the gear latch armed only on a LOSS, and the gate stopped the
+    #              bot taking the fight it was losing, so the cure lost its
+    #              trigger. FIXED: the latch now arms on the deficit FACT.
+    #   HAL  x12 — `GrindCharacterXP(sheep)` ranked at 30.0 but planned to
+    #              plan_len 0 in 3 nodes, at hp 258/310 and inventory 109/132
+    #              (83%): too full to fight, below the 85% deposit guard. A dead
+    #              band between two thresholds. OPEN.
+    "WaitGoal": 24,
+    "WaitAction": 24,
+}
+
 #: form "unreachable: ..." is a DEFECT that is being tracked, not an excuse —
 #: the census reports those separately so they cannot hide among the benign.
 DORMANT: dict[str, str] = {
@@ -182,8 +203,41 @@ class LivenessRow:
 
     @property
     def stale_declaration(self) -> bool:
-        """Declared dormant, but the store shows it running."""
-        return self.observed > 0 and self.declared is not None
+        """Declared dormant, but the store shows it running.
+
+        A `witness:` row is deliberately EXCLUDED. Its declaration is not a claim
+        that the rung is unused — it is a claim that the rung firing means
+        something is WRONG — so observing it does not make the declaration stale
+        and "remove the declaration" is the wrong remedy. See
+        `liveness_alarm`.
+        """
+        return (self.observed > 0 and self.declared is not None
+                and not self.declared.startswith("witness:"))
+
+    @property
+    def liveness_alarm(self) -> bool:
+        """A PROOF WITNESS fired — the bot did the thing that means it was stuck.
+
+        The census had exactly one signal for "the bot deadlocked" and it was
+        `WaitGoal`'s declaration going stale. That framing gave the wrong advice:
+        STALE says "remove the declaration", and removing this one invites
+        deleting the witness that proves the ladder total — which
+        `test_a_proof_witness_is_never_reclassified_as_deletable` exists to stop,
+        after it nearly happened on 2026-08-18.
+
+        Same detection, opposite remedy. The declaration STAYS; what needs
+        attention is why everything above the witness had nothing to offer.
+
+        Live 2026-08-20: `Wait` fired 24 times out of 66,250 cycles ever, all of
+        them in the 40 minutes after the tier-1 winnability gate shipped — C3P0
+        x12 (its gear latch armed only on a LOSS, and the gate stopped it taking
+        the fight it was losing, so the cure lost its trigger) and HAL x12
+        (`GrindCharacterXP(sheep)` ranked but planned to plan_len 0 at inventory
+        109/132, a dead band below the 85% deposit guard).
+        """
+        return (self.declared is not None
+                and self.declared.startswith("witness:")
+                and self.observed > WITNESS_BASELINE.get(self.name, 0))
 
 
 def defined_classes() -> dict[str, str]:
@@ -253,6 +307,12 @@ def undeclared(rows: list[LivenessRow]) -> list[LivenessRow]:
     return [r for r in rows if r.undeclared_dormant]
 
 
+def liveness_alarms(rows: list[LivenessRow]) -> list[LivenessRow]:
+    """Proof witnesses the store shows FIRING — the bot was stuck. See
+    `LivenessRow.liveness_alarm`."""
+    return [r for r in rows if r.liveness_alarm]
+
+
 def stale(rows: list[LivenessRow]) -> list[LivenessRow]:
     """Declarations the store contradicts. Empty when no store was read."""
     return [r for r in rows if r.stale_declaration]
@@ -282,7 +342,7 @@ def summary_line(rows: list[LivenessRow]) -> str:
     return (f"{len(rows)} classes; LIVE {live}; declared-dormant "
             f"{sum(1 for r in rows if r.declared)} (of which unreachable {tracked}, "
             f"unclassified {unclassified}); undeclared {len(undeclared(rows))}; "
-            f"stale {len(stale(rows))}"
+            f"stale {len(stale(rows))}; liveness alarms {len(liveness_alarms(rows))}"
             + (f"; no store read ({unknown} unknown)" if unknown else ""))
 
 
@@ -309,6 +369,8 @@ def render_matrix(rows: list[LivenessRow]) -> str:
     def sort_key(r: LivenessRow) -> tuple[int, str]:
         if r.undeclared_dormant:
             return (0, r.name)
+        if r.liveness_alarm:
+            return (0, r.name)
         if r.stale_declaration:
             return (1, r.name)
         if r.declared and r.declared.startswith("UNCLASSIFIED:"):
@@ -321,6 +383,8 @@ def render_matrix(rows: list[LivenessRow]) -> str:
     for r in sorted(rows, key=sort_key):
         if r.undeclared_dormant:
             status = "**UNDECLARED**"
+        elif r.liveness_alarm:
+            status = "**LIVENESS ALARM**"
         elif r.stale_declaration:
             status = "**STALE**"
         elif r.declared:
