@@ -62,11 +62,20 @@ WITNESS_BASELINE: dict[str, int] = {
     #              bot taking the fight it was losing, so the cure lost its
     #              trigger. FIXED: the latch now arms on the deficit FACT.
     #   HAL  x12 — `GrindCharacterXP(sheep)` ranked at 30.0 but planned to
-    #              plan_len 0 in 3 nodes, at hp 258/310 and inventory 109/132
-    #              (83%): too full to fight, below the 85% deposit guard. A dead
-    #              band between two thresholds. OPEN.
-    "WaitGoal": 24,
-    "WaitAction": 24,
+    #              plan_len 0 in 3 nodes. NOT the inventory dead band it first
+    #              looked like (23 slots free, hp 83%): sheep is level 5 against
+    #              HAL's 17, so `xp_per_kill == 0` and
+    #              `FightAction._structurally_applicable` refuses a zero-xp
+    #              fight. Tier 1 supplied a GREY monster to a character-XP grind.
+    #              FIXED: tier 1 now requires xp-positive as well as winnable,
+    #              the filter tier 3 always had.
+    #
+    # The count keeps rising until the fleet RESTARTS on both fixes — the running
+    # children are on older code. Raise this only after a restart shows it flat;
+    # raising it while the cause is still live is how a baseline becomes a mute
+    # button.
+    "WaitGoal": 28,
+    "WaitAction": 28,
 }
 
 #: form "unreachable: ..." is a DEFECT that is being tracked, not an excuse —

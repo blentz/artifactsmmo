@@ -21,10 +21,10 @@ def _player(tmp_path):
 def test_pursue_monster_task_retargets_grind(tmp_path):
     """PURSUE monster-task: _winnable_farm_target returns the task's monster code.
 
-    `_is_winnable` is patched because tier 1 now CONSULTS it — before the bypass
-    was closed this test needed no monster stats at all, since the task tier
-    short-circuited ahead of every beatability read. The assertion is unchanged;
-    only the dependency it now has is supplied.
+    `_is_winnable` and `xp_per_kill` are patched because tier 1 now CONSULTS
+    both — before the bypass was closed this test needed no monster stats at all,
+    since the task tier short-circuited ahead of every read. The assertion is
+    unchanged; only the dependencies it now has are supplied.
     """
     p = _player(tmp_path)
     p.state = make_state(
@@ -35,7 +35,8 @@ def test_pursue_monster_task_retargets_grind(tmp_path):
     )
     with patch("artifactsmmo_cli.ai.player.task_decision", return_value="pursue"):
         with patch.object(GamePlayer, "_is_winnable", return_value=True):
-            result = p._winnable_farm_target()
+            with patch.object(type(p.game_data), "xp_per_kill", lambda s, c, lv: 20):
+                result = p._winnable_farm_target()
     assert result == "yellow_slime"
     p.history.close()
 
@@ -151,7 +152,8 @@ def test_a_winnable_task_monster_is_still_retargeted(tmp_path):
                          task_total=20, task_progress=0)
     with patch("artifactsmmo_cli.ai.player.task_decision", return_value="pursue"):
         with patch.object(GamePlayer, "_is_winnable", return_value=True):
-            result = p._winnable_farm_target()
+            with patch.object(type(p.game_data), "xp_per_kill", lambda s, c, lv: 20):
+                result = p._winnable_farm_target()
     assert result == "yellow_slime"
     p.history.close()
 
@@ -169,4 +171,44 @@ def test_an_unwinnable_task_monster_falls_through_to_the_winnable_tiers(tmp_path
                               return_value="chicken"):
                 result = p._winnable_farm_target()
     assert result == "chicken"
+    p.history.close()
+
+
+def test_a_GREY_task_monster_is_not_retargeted(tmp_path):
+    """Winnable is not the same as USEFUL, and the grind needs both.
+
+    `FightAction._structurally_applicable` refuses a fight with
+    `xp_per_kill == 0` — the server's zero-xp band, `char_level - monster_level
+    >= 10`. So handing `GrindCharacterXPGoal` a grey monster produces a goal that
+    is ranked, planned, and CANNOT plan: live HAL sat at
+    `GrindCharacterXP(sheep)` priority 30.0, plan_len 0 in 3 nodes, for 12
+    consecutive cycles of `Wait` — sheep is level 5 against HAL's 17, a gap of 12.
+
+    Tier 3 (`_pick_winnable_monster`) has always applied this filter. Tier 1 did
+    not, so the task could inject a target the action layer would always reject.
+    Same supplier/consumer mismatch the winnability gate fixed, one predicate
+    over.
+    """
+    p = _player(tmp_path)
+    p.state = make_state(level=17, task_code="sheep", task_type="monsters",
+                         task_total=317, task_progress=0)
+    p.game_data._monster_levels = {"sheep": 5}
+    with patch("artifactsmmo_cli.ai.player.task_decision", return_value="pursue"):
+        with patch.object(GamePlayer, "_is_winnable", return_value=True):
+            with patch.object(type(p.game_data), "xp_per_kill", lambda s, c, lv: 0):
+                result = p._winnable_farm_target()
+    assert result != "sheep", "a grey task monster still reached the grind"
+    p.history.close()
+
+
+def test_an_xp_positive_task_monster_is_still_retargeted(tmp_path):
+    """The filter must not disable monster tasks whose monster actually pays."""
+    p = _player(tmp_path)
+    p.state = make_state(level=17, task_code="highwayman", task_type="monsters",
+                         task_total=20, task_progress=0)
+    with patch("artifactsmmo_cli.ai.player.task_decision", return_value="pursue"):
+        with patch.object(GamePlayer, "_is_winnable", return_value=True):
+            with patch.object(type(p.game_data), "xp_per_kill", lambda s, c, lv: 33):
+                result = p._winnable_farm_target()
+    assert result == "highwayman"
     p.history.close()

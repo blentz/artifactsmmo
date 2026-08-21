@@ -2794,6 +2794,20 @@ class GamePlayer:
         and 3 — both already winnability-gated — so the character grinds something
         it CAN beat rather than standing down.
 
+        WINNABLE IS NOT THE SAME AS USEFUL, and the grind needs both.
+        `FightAction._structurally_applicable` refuses a fight worth `xp_per_kill
+        == 0` — the server's zero-xp band, `char_level - monster_level >= 10` — so
+        a grey task monster yields a `GrindCharacterXPGoal` that is ranked,
+        planned, and CANNOT plan. Live: HAL sat at `GrindCharacterXP(sheep)`
+        priority 30.0, plan_len 0 in 3 nodes, for 12 consecutive cycles of `Wait`,
+        because sheep is level 5 against its 17. Tier 3
+        (`_pick_winnable_monster`) has always applied this filter; tier 1 did not,
+        so the task could inject a target the action layer would always reject.
+
+        A grey task is not thereby abandoned — it is simply not a CHARACTER-XP
+        grind, which is the only thing this cascade feeds. Fighting greys for
+        their drops is `drop_farm`'s job and bypasses exactly this gate.
+
         The level margin is NOT removed. It answers the task-feasibility question
         (`task_decision` routes a combat-gated task to PIVOT on it) and is not a
         worse copy of this one.
@@ -2806,6 +2820,8 @@ class GamePlayer:
         if task_decision(s, self.game_data, self.history) != PURSUE:
             return None
         if not self._is_winnable(s.task_code):
+            return None
+        if self.game_data.xp_per_kill(s.task_code, s.level) <= 0:
             return None
         return s.task_code
 
