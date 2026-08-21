@@ -40,13 +40,38 @@ class DepositAllAction(Action):
     # profile while the executed action ignored it — banking all 59 ash_wood the
     # active wooden_shield grind needed (14 withdraw cycles to recover).
     ctx: SelectionContext = field(default=NO_PROFILE_CONTEXT, repr=False)
+    #: One-entry `(state, deposits)` memo for `_deposits`; see there. Excluded
+    #: from `repr`/`eq` so an action carrying a warm memo still compares equal to
+    #: a cold one — the planner dedups actions by value.
+    _last_deposits: "tuple[WorldState, list[tuple[str, int]]] | None" = field(
+        default=None, repr=False, compare=False)
 
     def _deposits(self, state: WorldState) -> list[tuple[str, int]]:
         """Surplus copies to bank this trip (per-code quantity, sell-value
-        ordered), or [] when no game_data is available (no banking without data)."""
+        ordered), or [] when no game_data is available (no banking without data).
+
+        MEMOISED ON THE STATE OBJECT ITSELF, for the immediately repeated call.
+        The planner asks `is_applicable(state)` and then `apply(state)` with the
+        SAME state object, and both need this list, so every expanded node paid
+        for it twice. Profiled on C3P0's skill-gap search: 10,846 calls for 5,423
+        nodes, 11.7s of a 15.0s budget, the whole of it `select_bank_deposits` ->
+        `bankable` -> `reason_quantity` (1.48M calls).
+
+        IDENTITY, NOT VALUE. The key is `is`, so this cannot answer for a
+        different state that merely looks equal — and it needs no hash of a
+        115-item bag, which is what makes it cheaper than the call it replaces.
+        One entry: the pattern being exploited is an immediate repeat, and
+        holding more states alive would trade a search's worth of memory for
+        nothing. Correct even if the planner stops repeating — it would simply
+        never hit."""
         if self.game_data is None:
             return []
-        return select_bank_deposits(state, self.game_data, self.ctx)
+        cached = self._last_deposits
+        if cached is not None and cached[0] is state:
+            return cached[1]
+        out = select_bank_deposits(state, self.game_data, self.ctx)
+        self._last_deposits = (state, out)
+        return out
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         return self.accessible and bool(self._deposits(state))
