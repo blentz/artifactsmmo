@@ -4,6 +4,7 @@ existing goal.
 Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle."""
 
 import time
+from collections.abc import Collection
 from dataclasses import replace
 from datetime import datetime, timezone
 
@@ -252,6 +253,32 @@ def _materials_in_hand(item: str, state: WorldState, game_data: GameData) -> boo
 # ---------------------------------------------------------------------------
 # Flat map functions + StrategyArbiter
 # ---------------------------------------------------------------------------
+
+#: Goal reprs that recovery may NEVER suppress, whatever the stuck ladder decides.
+#:
+#: `TaskCancel` is the escape hatch for a stuck TASK, and an escape hatch you can
+#: suppress is not one.
+#:
+#: `Wait` is the escape hatch for a stuck LADDER, and the argument is stronger:
+#: `Formal.Liveness.NoDeadlockV2.productionLadder_total` — the headline "the bot
+#: always has something to do" theorem — is proved VIA `waitFires s = true`, so
+#: the Lean model says `wait` fires UNCONDITIONALLY while the runtime could
+#: suppress it. That divergence killed C3P0 twice on 2026-08-21: every goal timed
+#: out, every goal was memoised doomed, the ranking went empty, `Wait` was
+#: selected as the last resort — and because `Wait` changes no state,
+#: `STATE_FROZEN` fired and its L2 remedy is `_suppressed_goals[last] = 5` with
+#: `last == "Wait"`. With the witness suppressed there were NO candidates at all:
+#: four cycles of `<none>` / `no_plan`, then `StuckExit`. Idle became dead.
+#:
+#: Suppressing `Wait` cannot help under ANY signal — it is the rung that exists
+#: for when nothing else fires, so removing it can only empty the ladder.
+NEVER_SUPPRESSED: frozenset[str] = frozenset({"TaskCancel", "Wait"})
+
+
+def _suppressed_predicate(goal_repr: str, suppressed: "Collection[str]") -> bool:
+    """Is this goal shelved by stuck-recovery? `NEVER_SUPPRESSED` is exempt."""
+    return goal_repr not in NEVER_SUPPRESSED and goal_repr in suppressed
+
 
 def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
               state: WorldState | None = None,
@@ -1800,8 +1827,7 @@ class StrategyArbiter:
         real budget for every objective."""
 
         def _is_suppressed_base(goal: Goal) -> bool:
-            r = repr(goal)
-            return r != "TaskCancel" and r in suppressed
+            return _suppressed_predicate(repr(goal), suppressed)
 
         _effective_suppressed = set(suppressed) | worth_suppressed
 

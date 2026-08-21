@@ -2839,3 +2839,35 @@ def test_event_is_cleared_on_the_next_healthy_cycle():
     arbiter._planner.plannable = {"AcceptTask", "GrindCharacterXP(chicken)"}
     _select_with(arbiter)
     assert arbiter.objective_unplannable is None
+
+
+def test_wait_is_never_suppressed_because_it_is_the_totality_witness() -> None:
+    """THE DEADLOCK. `Liveness.NoDeadlockV2.productionLadder_total` — the headline
+    "the bot always has something to do" theorem — is proved VIA `waitFires s =
+    true`, i.e. `wait` fires UNCONDITIONALLY. The runtime could suppress it, so
+    the model and the implementation disagreed on the one rung the proof rests on.
+
+    Live C3P0, 2026-08-21, twice: every goal timed out, every goal was memoised
+    doomed, the ranking went empty, `Wait` was selected as last resort — and
+    because `Wait` changes no state, `STATE_FROZEN` fired and its L2 remedy is
+    `self._suppressed_goals[last] = 5` where `last` is "Wait". With the witness
+    suppressed there were NO candidates at all: four cycles of `<none>` /
+    `no_plan`, then `StuckExit`. Idle became dead.
+
+    `TaskCancel` already carries this exemption for the same reason — it is the
+    escape hatch for a stuck task, and an escape hatch you can suppress is not
+    one. `Wait` is the escape hatch for a stuck LADDER.
+    """
+    suppressed = {"Wait", "TaskCancel", "GrindCharacterXP(pig)"}
+
+    assert _is_suppressed_for_test("GrindCharacterXP(pig)", suppressed) is True
+    assert _is_suppressed_for_test("TaskCancel", suppressed) is False
+    assert _is_suppressed_for_test("Wait", suppressed) is False
+
+
+def _is_suppressed_for_test(goal_repr: str, suppressed: set[str]) -> bool:
+    """Exercise the REAL predicate through the arbiter rather than restating it —
+    a test that re-implemented the rule would agree with any implementation."""
+    from artifactsmmo_cli.ai.strategy_driver import _suppressed_predicate
+
+    return _suppressed_predicate(goal_repr, suppressed)
