@@ -131,9 +131,28 @@ def _reserve_key(state: WorldState) -> tuple[object, ...]:
 
 
 def reserved_targets(state: WorldState, game_data: GameData) -> dict[str, int]:
-    """All unmet near-term BUY-acquired progression targets -> buy price, unioned
-    across the category sources. Same code from two sources prices identically
-    (min npc/ge), so dict union is unambiguous.
+    """THE NEXT TARGET, and only that one: the cheapest unmet near-term purchase.
+
+    Gold is spent one purchase at a time, so a reserve protects ONE thing — the
+    next purchase the character could actually complete. Reserving the SUM of
+    every near-term want assumed they would all be bought at once, which never
+    happens, and produced a floor 2.5x the balance: every gold purchase refused,
+    the gold idle, and none of the wanted items ever bought. Reserving the most
+    EXPENSIVE would be the opposite failure — the cheap upgrades starve while the
+    account saves for something that may never be reachable.
+
+    Cheapest is also the weakest claim that still guarantees progress: whatever
+    else happens, the account keeps the ability to complete SOMETHING.
+
+    ONE APPROXIMATION, STATED. On an exact price tie the representative is picked
+    by code, which decides nothing about the floor's VALUE (the tied prices are
+    equal) but does decide which code `effective_floor` credits back when that
+    code is the one being bought. Buying one of two equally-cheap targets
+    therefore drops the floor to the safety floor for that one decision instead
+    of holding at the tied price. The error is bounded by the SMALLEST
+    reservation in play — the least consequential it could be — and it corrects
+    on the next cycle, when the bought item is no longer unmet and the other
+    becomes the next target.
 
     MEMOISED on the snapshot (`GameData.reserved_targets_memo`), because this
     walks every item in the game and `can_spend` asks it from three actions'
@@ -148,9 +167,16 @@ def reserved_targets(state: WorldState, game_data: GameData) -> dict[str, int]:
     hit = memo.get(key)
     if hit is not None:
         return hit
-    targets: dict[str, int] = {}
-    for source in (gear_targets, crafting_unlock_targets, boss_targets):
-        targets.update(source(state, game_data))
+    # ENDS first: `gear_targets` is already code -> buy price, and a boss target
+    # is the same kind of thing. MEANS are consulted only when there is no end
+    # left to save for.
+    ends = {**gear_targets(state, game_data), **boss_targets(state, game_data)}
+    wanted = ends or crafting_unlock_targets(state, game_data)
+    if wanted:
+        code = min(wanted, key=lambda c: (wanted[c], c))
+        targets = {code: wanted[code]}
+    else:
+        targets = {}
     memo[key] = targets
     return targets
 
@@ -165,22 +191,18 @@ def progression_reserve(state: WorldState, game_data: GameData) -> int:
 def _binding(floor: int, state: WorldState) -> int:
     """`floor`, unless the account cannot fund it — then only the safety floor.
 
-    A RESERVE YOU CANNOT FUND DOES NOT BIND. `reserved_targets` prices every
-    unmet progression target inside a two-level horizon, and that total routinely
-    exceeds the balance: measured live on all five characters, 57,307-78,750
-    reserved against 28,511-35,768 held, with a 50,000 `backpack` and a 20,000
-    `lifesteal_rune` accounting for most of it. Held literally, "never drop below
-    75,745" blocks EVERY gold purchase at 30,532 — including the 1,498 one that
-    buys the very upgrade the reserve exists to protect.
+    A RESERVE YOU CANNOT FUND DOES NOT BIND. A floor above the balance refuses
+    every purchase forever, including the one that buys the very thing being
+    reserved for — so the gold sits idle and the reservation defeats itself.
 
-    So the gold sits idle, none of the reserved targets is ever bought, and the
-    reservation defeats itself. When the earmarks cannot all be honoured anyway,
-    the safety floor is the only part still worth enforcing; once the account can
-    actually fund the plan, the full floor binds again.
-
-    Measured consequence of NOT doing this: C3P0 timed out planning
-    `adventurer_pants` and fell through to Wait every cycle, with a standing GE
-    order offering one for 1,498 gold and 14,532 in his pocket."""
+    A BACKSTOP NOW, NOT THE MAIN EVENT. This was load-bearing while
+    `reserved_targets` summed every near-term want: that total ran 57,307-78,750
+    against 28,511-35,768 held on all five characters, so it was ALWAYS
+    unfundable and this fallback fired every time. Since `reserved_targets`
+    became the NEXT target alone the live floors are 343 to 20,000 against
+    28,511-35,768 — comfortably fundable — and this only fires when a single
+    target costs more than the account holds, which is a real state (saving for
+    something out of reach) and still must not deadlock."""
     return _MIN_SAFETY_FLOOR if floor >= account_gold(state) else floor
 
 

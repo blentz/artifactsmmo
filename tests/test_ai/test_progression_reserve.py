@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.progression_reserve import (
     reserve_floor_multi,
     reserved_targets,
 )
+from artifactsmmo_cli.ai.progression_reserve_core import effective_floor_multi
 from tests.test_ai.fixtures import make_state
 
 
@@ -238,27 +239,80 @@ def test_reserve_floor_multi_matches_single_leaf_for_singleton():
 
 
 def test_reserve_floor_multi_dedups_every_leaf_in_the_set():
-    """Two DISTINCT reserved targets (iron_armor 250, a second gear upgrade
-    200 — priced well above `_MIN_SAFETY_FLOOR` so the floor clamp doesn't
-    mask the dedup arithmetic) bought TOGETHER dedup BOTH from the floor —
-    checking either alone would only dedup itself, silently crediting the
-    other's price as still-protected room (the exact joint-overspend gap
-    Task 4 closes)."""
+    """The JOINT arithmetic, exercised at the core with an explicit mapping.
+
+    It used to be driven through `reserved_targets`, which no longer yields two
+    entries — the reserve is the NEXT target alone. The gap this closes is still
+    real and still reachable from `currency_demand`, which admits a SET of
+    gold-priced leaves against one floor, so the test moved to where the
+    arithmetic lives rather than being deleted with the fixture that fed it.
+
+    Checking either leaf alone would only dedup itself, silently crediting the
+    other's price as still-protected room."""
+    reserved = {"iron_armor": 250, "shiny_ring": 200}
+    assert effective_floor_multi(reserved, frozenset({"iron_armor"})) == 200
+    assert effective_floor_multi(reserved, frozenset({"iron_armor", "shiny_ring"})) == 0
+    assert effective_floor_multi(reserved, frozenset()) == 450
+
+
+def test_the_reserve_is_the_next_target_alone_not_the_wish_list():
+    """THE PRINCIPLED FORM. Gold is spent one purchase at a time, so the reserve
+    protects ONE thing. Summing every near-term want produced a floor 2.5x the
+    balance on all five live characters (57,307-78,750 reserved against
+    28,511-35,768 held), which refused every purchase including the one that
+    buys the reserved item.
+
+    Cheapest, because that is the next purchase the account can actually
+    complete: reserving the DEAREST starves the cheap upgrades while saving for
+    something possibly out of reach, which is the deadlock this replaces."""
     gd = _gd_buyable_armor()
     gd._npc_stock["merchant"]["iron_armor"] = 250
     gd._item_stats["shiny_ring"] = ItemStats(
         code="shiny_ring", level=5, type_="ring", hp_bonus=1)
     gd._npc_stock["jeweler"] = {"shiny_ring": 200}
-    # gold covers the 450 reserved; an unfundable reserve would fall back to
-    # the safety floor and mask the dedup arithmetic under test.
     state = make_state(level=5, gold=5_000,
                        equipment={"body_armor_slot": "rags", "ring1_slot": None})
-    assert reserved_targets(state, gd) == {"iron_armor": 250, "shiny_ring": 200}
-    # Buying iron_armor alone: only its own 250 dedups -> floor 200 (shiny_ring protected).
-    assert reserve_floor_multi(state, gd, frozenset({"iron_armor"})) == 200
-    # Buying BOTH together: both dedup -> raw floor 0, clamped to _MIN_SAFETY_FLOOR.
-    assert reserve_floor_multi(state, gd, frozenset({"iron_armor", "shiny_ring"})) == 100
-    assert reserve_floor_multi(state, gd, frozenset()) == 450  # nothing bought -> full total
+    assert gear_targets(state, gd) == {"iron_armor": 250, "shiny_ring": 200}
+    assert reserved_targets(state, gd) == {"shiny_ring": 200}
+    assert reserve_floor(state, gd, None) == 200
+    # Buying the reserved target itself credits it back, then the safety floor.
+    assert reserve_floor(state, gd, "shiny_ring") == _MIN_SAFETY_FLOOR
+    # Buying anything else leaves it protected.
+    assert reserve_floor(state, gd, "iron_armor") == 200
+
+
+def test_a_means_is_reserved_only_when_no_end_remains():
+    """ENDS BEFORE MEANS. Gear is what the objective ranks and what the account
+    saves for; a buyable recipe INPUT is a step inside a plan the objective has
+    already priced. Reserving the cheapest of everything picked an 8-gold
+    `skeleton_skull` on the live fleet and protected nothing at all.
+
+    With no gear left to want, the material need is the only target there is."""
+    gd = _gd_buyable_armor()
+    state = make_state(level=5, gold=5_000, equipment={"body_armor_slot": "rags"})
+    assert reserved_targets(state, gd) == {"iron_armor": 120}   # the END wins
+
+
+
+def test_a_means_is_reserved_when_there_is_no_end_left():
+    """The other half: a world with a buyable recipe input and NO gear to want.
+    The material is then the only target there is, so it is what gets reserved —
+    the fallback is not a silent nothing."""
+    gd = GameData()
+    gd._item_stats = {
+        "steel_sword": ItemStats(code="steel_sword", level=6, type_="weapon",
+                                 attack={"fire": 30}, crafting_skill="weaponcrafting",
+                                 crafting_level=1),
+        "steel_bar": ItemStats(code="steel_bar", level=6, type_="resource"),
+    }
+    gd._crafting_recipes = {"steel_sword": {"steel_bar": 3}}
+    gd._npc_stock = {"smith": {"steel_bar": 25}}
+    gd._monster_level = {"chicken": 1}
+    state = make_state(level=5, gold=5_000, skills={"weaponcrafting": 1})
+    # steel_sword is CRAFTABLE, so it is not a gold gear target; only its input is.
+    assert gear_targets(state, gd) == {}
+    assert crafting_unlock_targets(state, gd) == {"steel_bar": 75}
+    assert reserved_targets(state, gd) == {"steel_bar": 75}
 
 
 def test_reserve_floor_multi_floors_at_min_safety():
