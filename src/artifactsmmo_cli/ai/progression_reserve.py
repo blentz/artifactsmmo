@@ -132,12 +132,35 @@ def progression_reserve(state: WorldState, game_data: GameData) -> int:
     return max(_MIN_SAFETY_FLOOR, reserve_total(reserved_targets(state, game_data)))
 
 
+def _binding(floor: int, state: WorldState) -> int:
+    """`floor`, unless the account cannot fund it — then only the safety floor.
+
+    A RESERVE YOU CANNOT FUND DOES NOT BIND. `reserved_targets` prices every
+    unmet progression target inside a two-level horizon, and that total routinely
+    exceeds the balance: measured live on all five characters, 57,307-78,750
+    reserved against 28,511-35,768 held, with a 50,000 `backpack` and a 20,000
+    `lifesteal_rune` accounting for most of it. Held literally, "never drop below
+    75,745" blocks EVERY gold purchase at 30,532 — including the 1,498 one that
+    buys the very upgrade the reserve exists to protect.
+
+    So the gold sits idle, none of the reserved targets is ever bought, and the
+    reservation defeats itself. When the earmarks cannot all be honoured anyway,
+    the safety floor is the only part still worth enforcing; once the account can
+    actually fund the plan, the full floor binds again.
+
+    Measured consequence of NOT doing this: C3P0 timed out planning
+    `adventurer_pants` and fell through to Wait every cycle, with a standing GE
+    order offering one for 1,498 gold and 14,532 in his pocket."""
+    return _MIN_SAFETY_FLOOR if floor >= account_gold(state) else floor
+
+
 def reserve_floor(state: WorldState, game_data: GameData,
                   buying: str | None) -> int:
     """The deduction-aware reserve floor that applies while buying `buying`,
-    floored at `_MIN_SAFETY_FLOOR`."""
+    floored at `_MIN_SAFETY_FLOOR` and not binding above what the account holds
+    (`_binding`)."""
     reserved = reserved_targets(state, game_data)
-    return max(_MIN_SAFETY_FLOOR, effective_floor(reserved, buying))
+    return _binding(max(_MIN_SAFETY_FLOOR, effective_floor(reserved, buying)), state)
 
 
 def reserve_floor_multi(state: WorldState, game_data: GameData,
@@ -155,7 +178,8 @@ def reserve_floor_multi(state: WorldState, game_data: GameData,
     is double-counted as spendable room by both checks). Checking the whole
     admitted SET against this joint floor closes that gap."""
     reserved = reserved_targets(state, game_data)
-    return max(_MIN_SAFETY_FLOOR, effective_floor_multi(reserved, buying))
+    return _binding(
+        max(_MIN_SAFETY_FLOOR, effective_floor_multi(reserved, buying)), state)
 
 
 def account_gold(state: WorldState) -> int:

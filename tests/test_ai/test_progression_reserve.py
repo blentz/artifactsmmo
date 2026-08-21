@@ -2,6 +2,7 @@
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.progression_reserve import (
     _MIN_SAFETY_FLOOR,
+    account_gold,
     boss_targets,
     buy_price,
     crafting_unlock_targets,
@@ -36,7 +37,10 @@ def test_buy_price_is_cheapest_seller():
 
 def test_gear_targets_reserves_unmet_buyable_upgrade():
     gd = _gd_buyable_armor()
-    state = make_state(level=5, equipment={"body_armor_slot": "rags"})
+    # `gold=` covers the 120 reserved: an account that cannot fund its own
+    # reserve falls back to the safety floor (see the unfundable tests at the
+    # end), which would mask what this test is about.
+    state = make_state(level=5, gold=5_000, equipment={"body_armor_slot": "rags"})
     targets = gear_targets(state, gd)
     assert targets == {"iron_armor": 120}
 
@@ -50,7 +54,10 @@ def test_gear_targets_skips_already_equipped_best():
 def test_gear_targets_skips_out_of_horizon():
     gd = _gd_buyable_armor()
     gd._item_stats["iron_armor"].level = 99  # far above level+2
-    state = make_state(level=5, equipment={"body_armor_slot": "rags"})
+    # `gold=` covers the 120 reserved: an account that cannot fund its own
+    # reserve falls back to the safety floor (see the unfundable tests at the
+    # end), which would mask what this test is about.
+    state = make_state(level=5, gold=5_000, equipment={"body_armor_slot": "rags"})
     assert gear_targets(state, gd) == {}
 
 
@@ -59,7 +66,10 @@ def test_gear_targets_skips_craftable_upgrade():
     need (it can be crafted) → excluded from gear_targets."""
     gd = _gd_buyable_armor()
     gd._crafting_recipes = {"iron_armor": {"iron_bar": 3}}  # craftable, not a BUY
-    state = make_state(level=5, equipment={"body_armor_slot": "rags"})
+    # `gold=` covers the 120 reserved: an account that cannot fund its own
+    # reserve falls back to the safety floor (see the unfundable tests at the
+    # end), which would mask what this test is about.
+    state = make_state(level=5, gold=5_000, equipment={"body_armor_slot": "rags"})
     assert gear_targets(state, gd) == {}
 
 
@@ -68,7 +78,10 @@ def test_gear_targets_skips_upgrade_with_no_seller():
     buy price → cannot be a gold need → excluded from gear_targets."""
     gd = _gd_buyable_armor()
     gd._npc_stock = {}  # nobody sells iron_armor; not craftable either
-    state = make_state(level=5, equipment={"body_armor_slot": "rags"})
+    # `gold=` covers the 120 reserved: an account that cannot fund its own
+    # reserve falls back to the safety floor (see the unfundable tests at the
+    # end), which would mask what this test is about.
+    state = make_state(level=5, gold=5_000, equipment={"body_armor_slot": "rags"})
     assert gear_targets(state, gd) == {}
 
 
@@ -175,14 +188,20 @@ def test_boss_targets_is_stub_empty():
 
 def test_reserved_targets_unions_sources():
     gd = _gd_buyable_armor()
-    state = make_state(level=5, equipment={"body_armor_slot": "rags"})
+    # `gold=` covers the 120 reserved: an account that cannot fund its own
+    # reserve falls back to the safety floor (see the unfundable tests at the
+    # end), which would mask what this test is about.
+    state = make_state(level=5, gold=5_000, equipment={"body_armor_slot": "rags"})
     assert reserved_targets(state, gd) == {"iron_armor": 120}
     assert progression_reserve(state, gd) == 120
 
 
 def test_reserve_floor_deducts_when_buying_a_reserved_item():
     gd = _gd_buyable_armor()
-    state = make_state(level=5, equipment={"body_armor_slot": "rags"})
+    # `gold=` covers the 120 reserved: an account that cannot fund its own
+    # reserve falls back to the safety floor (see the unfundable tests at the
+    # end), which would mask what this test is about.
+    state = make_state(level=5, gold=5_000, equipment={"body_armor_slot": "rags"})
     # buying the reserved iron_armor -> its 120 is credited -> raw floor 0,
     # but clamped up to _MIN_SAFETY_FLOOR (100) so the bot never spends to zero.
     assert reserve_floor(state, gd, "iron_armor") == 100
@@ -208,7 +227,10 @@ def test_reserve_floor_multi_matches_single_leaf_for_singleton():
     3's single-leaf gate when only one leaf is in play, never a silent
     behavior fork."""
     gd = _gd_buyable_armor()
-    state = make_state(level=5, equipment={"body_armor_slot": "rags"})
+    # `gold=` covers the 120 reserved: an account that cannot fund its own
+    # reserve falls back to the safety floor (see the unfundable tests at the
+    # end), which would mask what this test is about.
+    state = make_state(level=5, gold=5_000, equipment={"body_armor_slot": "rags"})
     assert (reserve_floor_multi(state, gd, frozenset({"iron_armor"}))
             == reserve_floor(state, gd, "iron_armor") == 100)
     assert (reserve_floor_multi(state, gd, frozenset({"copper_ore"}))
@@ -227,7 +249,10 @@ def test_reserve_floor_multi_dedups_every_leaf_in_the_set():
     gd._item_stats["shiny_ring"] = ItemStats(
         code="shiny_ring", level=5, type_="ring", hp_bonus=1)
     gd._npc_stock["jeweler"] = {"shiny_ring": 200}
-    state = make_state(level=5, equipment={"body_armor_slot": "rags", "ring1_slot": None})
+    # gold covers the 450 reserved; an unfundable reserve would fall back to
+    # the safety floor and mask the dedup arithmetic under test.
+    state = make_state(level=5, gold=5_000,
+                       equipment={"body_armor_slot": "rags", "ring1_slot": None})
     assert reserved_targets(state, gd) == {"iron_armor": 250, "shiny_ring": 200}
     # Buying iron_armor alone: only its own 250 dedups -> floor 200 (shiny_ring protected).
     assert reserve_floor_multi(state, gd, frozenset({"iron_armor"})) == 200
@@ -242,3 +267,47 @@ def test_reserve_floor_multi_floors_at_min_safety():
     gd._monster_level = {"chicken": 1}
     state = make_state(level=5)
     assert reserve_floor_multi(state, gd, frozenset({"anything"})) == _MIN_SAFETY_FLOOR
+
+
+def test_a_reserve_the_account_cannot_fund_does_not_bind():
+    """MEASURED LIVE, all five characters: `reserved_targets` priced 57,307 to
+    78,750 of near-term progression against 28,511 to 35,768 actually held — a
+    50,000 backpack and a 20,000 rune accounting for most of it. Held literally,
+    "never drop below 75,745" refuses EVERY purchase at 30,532, including the
+    1,498 one that buys the upgrade being reserved for. The gold then sits idle
+    and none of the reserved targets is ever bought.
+
+    So an unfundable reserve falls back to the safety floor. `buying=None` is
+    used here because the deduction is irrelevant to the pathology."""
+    gd = _gd_buyable_armor()
+    poor = make_state(gold=50, bank_gold=0, equipment={"body_armor_slot": "rags"})
+    assert reserved_targets(poor, gd)             # something IS reserved
+    assert reserve_floor(poor, gd, None) == _MIN_SAFETY_FLOOR
+    assert reserve_floor_multi(poor, gd, frozenset()) == _MIN_SAFETY_FLOOR
+
+
+def test_a_reserve_the_account_can_fund_still_binds():
+    """The guard is not switched off — once the balance covers the plan, the
+    full floor is back. This is the half that would silently disappear if the
+    fallback were written as an unconditional cap."""
+    gd = _gd_buyable_armor()
+    rich = make_state(gold=1_000_000, bank_gold=0,
+                      equipment={"body_armor_slot": "rags"})
+    floor = reserve_floor(rich, gd, None)
+    assert floor > _MIN_SAFETY_FLOOR
+    assert floor == sum(reserved_targets(rich, gd).values())
+
+
+def test_the_binding_test_is_against_ACCOUNT_gold_not_the_pocket():
+    """The reserve is an account property. The same pocket that cannot fund the
+    reserve alone can fund it once the bank is counted, and then the floor binds
+    again."""
+    gd = _gd_buyable_armor()
+    equip = {"body_armor_slot": "rags"}
+    total = sum(reserved_targets(make_state(gold=0, equipment=equip), gd).values())
+    pocket_only = make_state(gold=total - 1, bank_gold=0, equipment=equip)
+    with_bank = make_state(gold=total - 1, bank_gold=1_000, equipment=equip)
+    assert account_gold(pocket_only) < total
+    assert reserve_floor(pocket_only, gd, None) == _MIN_SAFETY_FLOOR
+    assert account_gold(with_bank) > total
+    assert reserve_floor(with_bank, gd, None) == total

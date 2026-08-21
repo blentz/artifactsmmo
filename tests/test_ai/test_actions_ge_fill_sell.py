@@ -189,11 +189,27 @@ class TestGeFillSellOrderAction:
     def test_not_applicable_when_buy_would_breach_progression_reserve(self):
         # reserve_floor(state, gd, "widget") == 650 (iron_armor NPC-priced at 650,
         # body_armor_slot is "rags" so the upgrade is unmet).
-        # gold=620, price=20, quantity=1 → 620-20=600 >= old flat reserve (500) [old gate: PASS]
-        # but 600 < 650 [progression reserve gate: BLOCK] → not applicable
+        # gold=660 FUNDS that reserve, so it binds: 660-20=640 < 650 → blocked.
+        gd = _gd_buyable_armor_and_ge_item()
+        state = make_state(level=5, gold=660, equipment={"body_armor_slot": "rags"},
+                           inventory={}, inventory_max=20)
+        a = GeFillSellOrderAction(order_id="ord-w", item_code="widget", price=20, quantity=1,
+                                  ge_location=(5, 1))
+        assert a.is_applicable(state, gd) is False
+
+    def test_applicable_when_the_reserve_is_larger_than_the_account(self):
+        """THE TRADE-OFF, pinned so it is a decision and not a surprise.
+
+        At gold=620 the 650 reserve cannot be funded at all. It used to block
+        this buy anyway, which is defensible in the small — 30 gold short of the
+        armour, do not fritter it — and is a deadlock in the large: measured
+        live, `reserved_targets` priced 57,307-78,750 against 28,511-35,768 held
+        on all five characters, so EVERY gold purchase was refused, the gold sat
+        idle, and none of the reserved targets was ever bought. An unfundable
+        reserve now falls back to the safety floor."""
         gd = _gd_buyable_armor_and_ge_item()
         state = make_state(level=5, gold=620, equipment={"body_armor_slot": "rags"},
                            inventory={}, inventory_max=20)
         a = GeFillSellOrderAction(order_id="ord-w", item_code="widget", price=20, quantity=1,
                                   ge_location=(5, 1))
-        assert a.is_applicable(state, gd) is False
+        assert a.is_applicable(state, gd) is True

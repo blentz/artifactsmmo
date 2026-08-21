@@ -6,6 +6,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS, EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
@@ -476,6 +477,36 @@ class UpgradeEquipmentGoal(Goal):
                 # GatherMaterialsGoal's Task 6b fix).
                 result.append(OptimizeLoadoutAction(
                     target_monster_code=fight.monster_code, game_data=game_data))
+                if not any(isinstance(a, EquipAction) and a.code == target_item
+                           and a.slot == target_slot for a in result):
+                    result.append(EquipAction(code=target_item, slot=target_slot))
+            # THE STANDING GE SELL ORDER FOR THE TARGET ITSELF. `obtain_sources`
+            # emits a `SourceKind.GE_FILL` for any item with a live sell order,
+            # and that source is what tells `forced_craft_grind` the craft is
+            # AVOIDABLE — which zeroes this goal's heuristic. Until now nothing
+            # admitted the matching action here, so the goal was left with h=0
+            # AND no access to the route that zeroed it: an unguided search over
+            # a mandatory skill-grind edge and a dozen cheap withdraws.
+            #
+            # Measured live on C3P0. `adventurer_pants` needs gearcrafting 15
+            # against his 10, a standing order offered one for 1,498 gold with
+            # 14,532 in pocket, and the cycle timed out at 449 nodes and fell all
+            # the way through to Wait — every cycle.
+            #
+            # `GatherMaterialsGoal` synthesizes this action too, but only for a
+            # closure MATERIAL and only when an NPC also sells it (it compares
+            # the two prices). Nothing sells crafted gear, so that path can never
+            # cover a goal's own target. Same reason the dropper fight above is
+            # re-emitted: the factory enumerates neither.
+            ge_location = game_data.grand_exchange_location()
+            ge_order = game_data.ge_best_sell_order(target_item)
+            if ge_location is not None and ge_order is not None and ge_order[2] >= 1:
+                order_id, ge_price, _available = ge_order
+                # Affordability and the gold reserve are `is_applicable`'s job
+                # (S-045), not a second gate here that could disagree with it.
+                result.append(GeFillSellOrderAction(
+                    order_id=order_id, item_code=target_item, price=ge_price,
+                    quantity=1, ge_location=ge_location))
                 if not any(isinstance(a, EquipAction) and a.code == target_item
                            and a.slot == target_slot for a in result):
                     result.append(EquipAction(code=target_item, slot=target_slot))
