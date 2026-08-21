@@ -5,6 +5,7 @@ import multiprocessing
 import os
 import sqlite3
 import tempfile
+from contextlib import closing
 
 import pytest
 from sqlalchemy import text
@@ -1803,3 +1804,111 @@ class TestFleetSupplyRequestCycles:
         _break_engine(store)
         assert store.fleet_supply_request_cycles() is None
         store.close()
+
+
+class TestTheHottestReadIsIndexed:
+    """`win_count` / `sample_count` are the hottest reads in the codebase, and
+    they went quadratic-ish as the store grew.
+
+    Measured 2026-08-21 on the live 66,359-row store: `is_winnable`'s
+    learned-loss veto and monotonic-win inference issued 64,738 `win_count` calls
+    in ONE `plan_from_state`, 5,902 of them cache misses, at ~6.5ms each — 40 of
+    the plan's 86 seconds. Planner timeouts went from 0.0% of cycles in early
+    August to 14.1%, purely because the table got bigger.
+
+    Two causes, both here: SQLite could only use `ix_cycles_character`, so every
+    call scanned one character's ENTIRE history and filtered `action_repr`
+    row-by-row; and the count was `len(list(...))`, which ships every matching row
+    id to Python to measure its length. Composite index + `COUNT(*)`: 6.47ms ->
+    0.29ms, a 22x cut.
+    """
+
+    @staticmethod
+    def _seed(store: LearningStore, n: int) -> None:
+        store.start_session()
+        for i in range(n):
+            store.record_cycle(Cycle(
+                ts=f"2026-08-21T00:00:{i % 60:02d}+00:00", session_id="s",
+                cycle_index=i, character="hero",
+                outcome="ok" if i % 2 else "error:fight_lost",
+                action_repr="Fight(pig)" if i % 3 else "Fight(cow)"))
+
+    def test_the_composite_index_exists(self, tmp_db_path):
+        """Without `(character, action_repr)` SQLite falls back to the
+        character-only index and scans the whole history for that character."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        with SqlSession(store._engine) as s:
+            names = {r[0] for r in s.execute(text(
+                "select name from sqlite_master where type='index' "
+                "and tbl_name='cycles'")).all()}
+        store.close()
+        assert "ix_cycles_char_action" in names
+
+    def test_the_query_plan_actually_uses_it(self, tmp_db_path):
+        """The index existing is not the same as the planner choosing it — this
+        asserts the thing that was actually slow."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        with SqlSession(store._engine) as s:
+            plan = " ".join(str(r) for r in s.execute(text(
+                "explain query plan select count(*) from cycles "
+                "where character='hero' and action_repr='Fight(pig)'")).all())
+        store.close()
+        assert "ix_cycles_char_action" in plan, plan
+
+    def test_a_PRE_EXISTING_db_gains_the_index(self, tmp_path):
+        """THE ONE THAT MATTERS. `SQLModel.metadata.create_all` adds missing
+        TABLES and their indexes; it does not add an index to a table that
+        already exists. Without a one-shot migration the fix would be inert on
+        every store that has rows — which is the only place the 66,359 rows are,
+        and the only place the slowness was.
+
+        Verified before writing the migration: opening the live store's copy with
+        the model change alone left the index absent.
+        """
+        db = str(tmp_path / "legacy.db")
+        first = LearningStore(db_path=db, character="hero")
+        self._seed(first, 5)
+        first.close()
+        with closing(sqlite3.connect(db)) as conn:
+            conn.execute("drop index if exists ix_cycles_char_action")
+            conn.commit()
+            gone = {r[0] for r in conn.execute(
+                "select name from sqlite_master where type='index' "
+                "and tbl_name='cycles'")}
+        assert "ix_cycles_char_action" not in gone, "precondition: index removed"
+
+        reopened = LearningStore(db_path=db, character="hero")
+        with SqlSession(reopened._engine) as s:
+            names = {r[0] for r in s.execute(text(
+                "select name from sqlite_master where type='index' "
+                "and tbl_name='cycles'")).all()}
+        reopened.close()
+
+        assert "ix_cycles_char_action" in names
+
+    def test_win_count_and_sample_count_still_answer_correctly(self, tmp_db_path):
+        """The speedup must not change the numbers. 30 rows: 20 `Fight(pig)`
+        (i % 3 != 0), of which the odd-i ones are wins."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        self._seed(store, 30)
+
+        assert store.sample_count("Fight(pig)") == sum(
+            1 for i in range(30) if i % 3)
+        assert store.win_count("Fight(pig)") == sum(
+            1 for i in range(30) if i % 3 and i % 2)
+        assert store.sample_count("Fight(never)") == 0
+        assert store.win_count("Fight(never)") == 0
+        store.close()
+
+    def test_they_count_only_this_characters_rows(self, tmp_db_path):
+        """The character predicate is half the index and half the meaning: a
+        sibling's losses must not veto this character's fight."""
+        hero = LearningStore(db_path=tmp_db_path, character="hero")
+        self._seed(hero, 30)
+        other = LearningStore(db_path=tmp_db_path, character="other")
+        self._seed(other, 30)
+
+        assert other.sample_count("Fight(pig)") == sum(1 for i in range(30) if i % 3)
+        assert hero.sample_count("Fight(pig)") == sum(1 for i in range(30) if i % 3)
+        hero.close()
+        other.close()

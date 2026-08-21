@@ -17,8 +17,13 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.audit.craft_census import craftable_recipes
 from artifactsmmo_cli.audit.craft_completeness import (
-    CraftCell, GapClass, census_state, classify_gap, craft_cell_verdict,
-    craft_grid, plan_craft,
+    CraftCell,
+    GapClass,
+    census_state,
+    classify_gap,
+    craft_cell_verdict,
+    craft_grid,
+    plan_craft,
 )
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")

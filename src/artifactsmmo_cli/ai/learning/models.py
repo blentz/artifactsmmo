@@ -8,7 +8,7 @@ to get validation; construct as `Cycle(...)` directly to skip validation (SQLMod
 default for table models, optimised for ORM round-trips).
 """
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Index, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -89,9 +89,24 @@ class CycleBase(SQLModel):
 
 
 class Cycle(CycleBase, table=True):
-    """ORM-persisted Cycle. Inherits all fields from CycleBase."""
+    """ORM-persisted Cycle. Inherits all fields from CycleBase.
+
+    The COMPOSITE index is load-bearing, not tidiness. `win_count` /
+    `sample_count` filter on `(character, action_repr)` and are the hottest reads
+    in the codebase: `is_winnable`'s learned-loss veto and monotonic-win
+    inference issued 64,738 `win_count` calls in ONE `plan_from_state` on
+    2026-08-21. With only the single-column indexes SQLite picked
+    `ix_cycles_character` and then filtered `action_repr` row by row, so every
+    call scanned that character's ENTIRE history — 6.47ms each at 66,359 rows,
+    40 of the plan's 86 seconds, and planner timeouts rising from 0.0% of cycles
+    in early August to 14.1%. The store simply outgrew the index. Composite:
+    0.29ms, a 22x cut.
+    """
 
     __tablename__ = "cycles"
+    __table_args__ = (
+        Index("ix_cycles_char_action", "character", "action_repr"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
 

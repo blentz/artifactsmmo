@@ -187,6 +187,39 @@ class LearningStore:
                 conn.exec_driver_sql("ALTER TABLE craft_yield ADD COLUMN skill_level INTEGER")
 
         # PRAGMAs go on their OWN connection, after the lock is released:
+            # Composite-index migration (2026-08-21). `create_all` adds missing
+            # TABLES and their indexes; it does NOT add an index to a table that
+            # already exists, so without this the fix is inert on every store
+            # that HAS rows — which is the only place the slowness ever was.
+            # Verified before writing it: opening the live 66,359-row store with
+            # the model change alone left the index absent.
+            #
+            # LAST, AFTER every column ALTER above, and that ordering is
+            # load-bearing: a legacy schema may not have `action_repr` yet, and
+            # indexing a column that does not exist fails the whole open with
+            # "no such column: action_repr" —
+            # `test_store_migrates_consumables_expended_column` caught exactly
+            # that when this ran first.
+            #
+            # `IF NOT EXISTS` makes it a no-op on a fresh DB (where `create_all`
+            # already built it) and on every subsequent open. Inside the same
+            # `exclusive_schema_lock` as the ALTERs for the same reason: five
+            # `play --all` children open this file within a second of each other
+            # and a probe-then-create pair is not atomic across processes.
+            # Re-read: the ALTERs above may have changed the column set, and a
+            # legacy schema can lack `action_repr` entirely (nothing back-fills
+            # it — `create_all` does not add columns to an existing table). An
+            # index over a column that does not exist fails the whole OPEN with
+            # "no such column: action_repr", taking the store down for a
+            # performance nicety. Guarded, exactly like the ALTERs.
+            cycle_cols = {row[1]
+                          for row in conn.exec_driver_sql("PRAGMA table_info(cycles)")}
+            if {"character", "action_repr"} <= cycle_cols:
+                conn.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS ix_cycles_char_action "
+                    "ON cycles (character, action_repr)"
+                )
+
         # SQLite refuses a journal_mode change inside a transaction.
         with self._engine.connect() as conn:
             conn.execute(text("PRAGMA journal_mode=WAL"))
@@ -794,14 +827,17 @@ class LearningStore:
         """Number of cycles recorded for this action_repr and the store's character."""
         try:
             with SqlSession(self._engine) as s:
+                # COUNT(*) over `ix_cycles_char_action` — same reason as
+                # `_win_count_uncached` directly below.
                 stmt = (
-                    select(Cycle.id)
+                    select(func.count())
+                    .select_from(Cycle)
                     .where(
                         Cycle.character == self._character,
                         Cycle.action_repr == action_repr,
                     )
                 )
-                return len(list(s.exec(stmt)))
+                return int(s.exec(stmt).one())
         except SQLAlchemyError:
             return 0
 
@@ -826,15 +862,21 @@ class LearningStore:
     def _win_count_uncached(self, action_repr: str) -> int:
         try:
             with SqlSession(self._engine) as s:
+                # COUNT(*), not `len(list(...))`: the old form shipped every
+                # matching row id to Python to measure its length. Paired with
+                # `ix_cycles_char_action` (see `Cycle.__table_args__`) this is
+                # the difference between 6.47ms and 0.22ms per call, on the
+                # hottest read in the codebase.
                 stmt = (
-                    select(Cycle.id)
+                    select(func.count())
+                    .select_from(Cycle)
                     .where(
                         Cycle.character == self._character,
                         Cycle.action_repr == action_repr,
                         Cycle.outcome == "ok",
                     )
                 )
-                return len(list(s.exec(stmt)))
+                return int(s.exec(stmt).one())
         except SQLAlchemyError:
             return 0
 

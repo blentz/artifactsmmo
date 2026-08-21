@@ -13,8 +13,8 @@ rows are a defect being tracked rather than a design.
 
 | class | kind | observed | status | reason |
 |---|---|---|---|---|
-| `WaitAction` | action | 27 | **LIVENESS ALARM** | witness: the action WaitGoal emits; same proof obligation |
-| `WaitGoal` | goal | 27 | **LIVENESS ALARM** | witness: MeansKind.WAIT is the unconditional last resort that proves the ladder total (Liveness.NoDeadlockV2) |
+| `WaitAction` | action | 40 | **LIVENESS ALARM** | witness: the action WaitGoal emits; same proof obligation |
+| `WaitGoal` | goal | 40 | **LIVENESS ALARM** | witness: MeansKind.WAIT is the unconditional last resort that proves the ladder total (Liveness.NoDeadlockV2) |
 | `BuyBankExpansionAction` | action | 0 | dormant | unreachable: emitted only by ExpandBankGoal |
 | `ExpandBankGoal` | goal | 0 | dormant | unreachable: MeansKind.BANK_EXPAND is in the discretionary band |
 | `GePostBuyOrderAction` | action | 0 | dormant | unreachable: emitted only by PostBuyBidGoal |
@@ -50,36 +50,36 @@ rows are a defect being tracked rather than a design.
 | `CancelOrdersGoal` | goal | 123 | live |  |
 | `ClaimPendingGoal` | goal | 2 | live |  |
 | `ClaimPendingItemAction` | action | 2 | live |  |
-| `CraftAction` | action | 1083 | live |  |
+| `CraftAction` | action | 1084 | live |  |
 | `CraftPotionsGoal` | goal | 1242 | live |  |
 | `CraftReliefGoal` | goal | 556 | live |  |
 | `DeleteItemAction` | action | 744 | live |  |
-| `DepositAllAction` | action | 418 | live |  |
+| `DepositAllAction` | action | 420 | live |  |
 | `DepositInventoryGoal` | goal | 116 | live |  |
-| `DepositItemAction` | action | 45 | live |  |
-| `DiscardOverstockGoal` | goal | 995 | live |  |
+| `DepositItemAction` | action | 46 | live |  |
+| `DiscardOverstockGoal` | goal | 996 | live |  |
 | `DrainBankJunkGoal` | goal | 114 | live |  |
-| `EquipAction` | action | 599 | live |  |
-| `EquipOwnedGoal` | goal | 56 | live |  |
-| `FightAction` | action | 17529 | live |  |
-| `GatherAction` | action | 6015 | live |  |
+| `EquipAction` | action | 600 | live |  |
+| `EquipOwnedGoal` | goal | 57 | live |  |
+| `FightAction` | action | 17550 | live |  |
+| `GatherAction` | action | 6025 | live |  |
 | `GatherMaterialsGoal` | goal | 8024 | live |  |
 | `GeCancelOrderAction` | action | 123 | live |  |
 | `GeFillBuyOrderAction` | action | 120 | live |  |
 | `GePostSellOrderAction` | action | 83 | live |  |
-| `GrindCharacterXPGoal` | goal | 16400 | live |  |
-| `LevelSkill` | action | 22624 | live |  |
+| `GrindCharacterXPGoal` | goal | 16421 | live |  |
+| `LevelSkill` | action | 22641 | live |  |
 | `MaintainConsumablesGoal` | goal | 3 | live |  |
 | `NpcBuyAction` | action | 32 | live |  |
 | `NpcSellAction` | action | 6 | live |  |
 | `OptimizeLoadoutAction` | action | 101 | live |  |
 | `RecycleAction` | action | 227 | live |  |
 | `RecycleSurplusGoal` | goal | 47 | live |  |
-| `RestAction` | action | 13999 | live |  |
-| `RestoreHPGoal` | goal | 14863 | live |  |
+| `RestAction` | action | 14014 | live |  |
+| `RestoreHPGoal` | goal | 14884 | live |  |
 | `SellInventoryGoal` | goal | 14 | live |  |
-| `SupplyBankGoal` | goal | 3469 | live |  |
-| `UpgradeEquipmentGoal` | goal | 20154 | live |  |
-| `UseConsumableAction` | action | 1699 | live |  |
-| `WithdrawItemAction` | action | 775 | live |  |
+| `SupplyBankGoal` | goal | 3489 | live |  |
+| `UpgradeEquipmentGoal` | goal | 20171 | live |  |
+| `UseConsumableAction` | action | 1705 | live |  |
+| `WithdrawItemAction` | action | 782 | live |  |
 | `WithdrawToolsGoal` | goal | 46 | live |  |

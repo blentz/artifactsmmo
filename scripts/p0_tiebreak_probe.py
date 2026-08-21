@@ -4,16 +4,15 @@ whether gear roots ever TIE on the leading decide_key fields (final, effort,
 protection). If they never tie, the decide_key repr tiebreak (Site B) is inert and
 the load-bearing fix is sticky WIP-retention (Site C). Read-only, no actions.
 """
-from fractions import Fraction
 
-from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.client_manager import ClientManager
-from artifactsmmo_cli.config import Config
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import objective_roots
-from artifactsmmo_cli.ai.tiers.strategy import actionable_step, root_cost
+from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
+from artifactsmmo_cli.ai.tiers.prerequisite_graph import objective_roots
+from artifactsmmo_cli.ai.tiers.strategy import root_cost
+from artifactsmmo_cli.client_manager import ClientManager
+from artifactsmmo_cli.config import Config
 
 
 def owned_inputs(root, state, game_data):
