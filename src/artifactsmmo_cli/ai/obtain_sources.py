@@ -210,27 +210,43 @@ def _recycle_sources(
     subsumed by this RECYCLE arm and deleted),
     per-source-item rather than aggregated into a material map.
 
-    KNOWN HOT SPOT, UNFIXED (profile 2026-08-13). This is why a live planner
-    search costs several times more per node than any offline harness with an
-    empty bag — not the LearningStore, which `planner.py`'s budget docstring used
-    to blame. The loop below is O(|inventory ∪ bank|), `obtain_sources` calls it
-    ~1.2M times in one from-scratch `greater_wooden_staff` search, and every held
-    code whose recipe consumes `item` then pays `destroyable` ->
-    `inventory_caps._is_equippable_dominated` -> a pairwise gear-value
-    comparison. So the innermost cost is O(holdings × holdings). Same search,
-    varying ONLY the banked-code count: 0.434 ms/node at 1, 0.618 at 21, 0.950 at
-    61, 11.29 at 121 — and at 121 this function is 94% of the search (27.5s of
-    29.4s). Live R2D2 at `inv=65/130` with a stocked bank: 1.99 ms/node.
-    A reverse index from `item` to the held codes whose recipes consume it would
-    remove the outer scan; it needs a state-keyed memo, so it needs an
-    invalidation argument, which is why it was not done under a perf task."""
+    THE HOT SPOT, NOW FIXED (profiled 2026-08-13, fixed 2026-08-19). This was why
+    a live planner search cost several times more per node than any offline
+    harness with an empty bag — not the LearningStore, which `planner.py`'s budget
+    docstring used to blame. The loop scanned |inventory ∪ bank| on EVERY call,
+    `obtain_sources` is called ~1.2M times in one from-scratch
+    `greater_wooden_staff` search, and every held code whose recipe consumes
+    `item` then pays `destroyable` -> `inventory_caps._is_equippable_dominated` ->
+    a pairwise gear-value comparison, making the innermost cost O(holdings ×
+    holdings). Same search, varying ONLY the banked-code count: 0.434 ms/node at
+    1, 0.618 at 21, 0.950 at 61, 11.29 at 121 — and at 121 this function was 94%
+    of the search (27.5s of 29.4s).
+
+    `GameData.recipe_consumers` inverts the question: instead of asking every
+    held code whether its recipe consumes `item`, ask `item` which recipes consume
+    it and test those against the holdings. The old note here assumed such an
+    index had to be state-keyed and therefore needed an invalidation argument —
+    it does not. "Whose recipe consumes X" is a fact about GAME DATA, which is
+    immutable for the life of a `GameData`, so it is a plain cached property and
+    the holdings enter as an O(1) membership test.
+
+    ORDER IS PRESERVED EXACTLY: the consumers are sorted, and the old loop walked
+    `sorted(inventory ∪ bank)`, so the surviving candidates come out in the same
+    relative order and no ranking can shift underneath this."""
     out: list[Source] = []
     bank = state.bank_items or {}
-    codes = sorted(set(state.inventory) | set(bank))
-    for code in codes:
-        recipe = game_data.crafting_recipe(code)
-        if recipe is None or item not in recipe:
+    for code in game_data.recipe_consumers.get(item, ()):
+        if code not in state.inventory and code not in bank:
             continue
+        # No `item in recipe` re-check: the index is BUILT from
+        # `_crafting_recipes`, which is what `crafting_recipe` reads, so a code
+        # listed under `item` has a recipe and that recipe consumes `item`. The
+        # old scan needed the test because it walked holdings and asked; this
+        # walks the answer. `recipe` is still read for `yield_per` below.
+        recipe = game_data.crafting_recipe(code)
+        assert recipe is not None and item in recipe, (
+            f"recipe_consumers[{item!r}] lists {code!r}, whose recipe is "
+            f"{recipe!r} — the index and the recipe table disagree")
         stats = game_data.item_stats(code)
         if stats is None or not stats.crafting_skill:
             continue

@@ -115,13 +115,43 @@ def boss_targets(state: WorldState, game_data: GameData) -> dict[str, int]:
     return {}
 
 
+def _reserve_key(state: WorldState) -> tuple[object, ...]:
+    """Everything `reserved_targets` reads off the state, and nothing else.
+
+    `gear_targets` reads the level and the worn equipment; `crafting_unlock_targets`
+    reads the level; `boss_targets` is a stub. Quantities, gold and position do
+    not enter, which is what makes the key stable across the states a search
+    projects — the planner changes the bag on almost every node and the
+    reservation does not move with it.
+
+    Equipment is sorted BY SLOT, never by the pair: a slot's value may be None,
+    and comparing None against a code raises."""
+    return (state.level,
+            tuple(sorted(state.equipment.items(), key=lambda kv: kv[0])))
+
+
 def reserved_targets(state: WorldState, game_data: GameData) -> dict[str, int]:
     """All unmet near-term BUY-acquired progression targets -> buy price, unioned
     across the category sources. Same code from two sources prices identically
-    (min npc/ge), so dict union is unambiguous."""
+    (min npc/ge), so dict union is unambiguous.
+
+    MEMOISED on the snapshot (`GameData.reserved_targets_memo`), because this
+    walks every item in the game and `can_spend` asks it from three actions'
+    `is_applicable` — once per candidate per node. Profiled at 8ms a call and
+    4.2s of one 15s planning budget.
+
+    The returned mapping is SHARED with the cache. Callers read it (`sum`,
+    membership, `effective_floor`) and none mutates it; a caller that needs to
+    must copy first."""
+    memo = game_data.reserved_targets_memo
+    key = _reserve_key(state)
+    hit = memo.get(key)
+    if hit is not None:
+        return hit
     targets: dict[str, int] = {}
     for source in (gear_targets, crafting_unlock_targets, boss_targets):
         targets.update(source(state, game_data))
+    memo[key] = targets
     return targets
 
 

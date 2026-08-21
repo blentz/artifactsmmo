@@ -13,6 +13,7 @@ LevelSkill (only the target's own gated (skill, level), never every grind).
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
+from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
@@ -115,3 +116,57 @@ def test_relevant_actions_scopes_level_skill_to_target_gated_skill() -> None:
                           inventory={"gear_ore": 2}), gd)
     assert not [a for a in goal.relevant_actions(actions, at, gd)
                 if isinstance(a, LevelSkill)]
+
+
+def test_relevant_actions_admits_the_ge_fill_for_the_goals_own_target() -> None:
+    """THE C3P0 WAIT DEADLOCK. `obtain_sources` emits a `SourceKind.GE_FILL` for
+    any item with a live sell order, and that source is what tells
+    `forced_craft_grind` the craft is AVOIDABLE — which zeroes this goal's
+    heuristic. Nothing used to admit the matching action, so the goal was left
+    with h=0 AND no access to the route that zeroed it, and an unguided search
+    over a mandatory skill-grind edge timed out. `GatherMaterialsGoal`
+    synthesizes this action only for a closure MATERIAL that an NPC also sells,
+    and nothing sells crafted gear, so that path can never cover a goal's own
+    target.
+
+    Measured live: C3P0 held 14,532 gold against a standing 1,498-gold order for
+    `adventurer_pants` and Waited for 84 consecutive cycles."""
+    gd = _gd()
+    gd._ge_sell_orders = {"gear_shield": ("ord-shield", 40, 3)}
+    gd._grand_exchange_location = (2, 2)
+    state = _under_skill_state(gd)
+    goal = UpgradeEquipmentGoal(committed_target=("gear_shield", "shield_slot"))
+    rel = goal.relevant_actions([], state, gd)
+    fills = [a for a in rel if isinstance(a, GeFillSellOrderAction)]
+    assert [(a.item_code, a.order_id, a.price, a.quantity) for a in fills] \
+        == [("gear_shield", "ord-shield", 40, 1)]
+    # The equip leg has to come with it, or the bought item never reaches the slot.
+    assert any(isinstance(a, EquipAction) and a.code == "gear_shield"
+               and a.slot == "shield_slot" for a in rel)
+
+
+def test_no_ge_fill_admitted_when_no_order_stands() -> None:
+    """The route is a live order, not a wish. Without one the goal is back to
+    the craft chain, which is what makes the previous test meaningful rather
+    than incidental."""
+    gd = _gd()
+    gd._grand_exchange_location = (2, 2)
+    state = _under_skill_state(gd)
+    goal = UpgradeEquipmentGoal(committed_target=("gear_shield", "shield_slot"))
+    rel = goal.relevant_actions([], state, gd)
+    assert not [a for a in rel if isinstance(a, GeFillSellOrderAction)]
+
+
+def test_no_ge_fill_admitted_when_the_target_is_already_held() -> None:
+    """Owned already: the withdraw/equip edges serve it and buying another copy
+    is not this goal's business — the same guard the dropper-fight arm uses."""
+    gd = _gd()
+    gd._ge_sell_orders = {"gear_shield": ("ord-shield", 40, 3)}
+    gd._grand_exchange_location = (2, 2)
+    state = scenario_state(
+        ScenarioCharacter(name="t", level=5,
+                          skills={"gearcrafting": 1, "mining": 1},
+                          inventory={"gear_ore": 2, "gear_shield": 1}), gd)
+    goal = UpgradeEquipmentGoal(committed_target=("gear_shield", "shield_slot"))
+    rel = goal.relevant_actions([], state, gd)
+    assert not [a for a in rel if isinstance(a, GeFillSellOrderAction)]

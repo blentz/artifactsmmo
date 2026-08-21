@@ -74,8 +74,39 @@ WITNESS_BASELINE: dict[str, int] = {
     # children are on older code. Raise this only after a restart shows it flat;
     # raising it while the cause is still live is how a baseline becomes a mute
     # button.
-    "WaitGoal": 28,
-    "WaitAction": 28,
+    #
+    # 2026-08-19, +70 (28 -> 98). C3P0 x84 across cycle ids 66,120-67,157 and HAL
+    # x14, against a max id of 67,318 — i.e. right up to the point the fleet was
+    # stopped, so this was the CURRENT behaviour and not an old scar. One cause,
+    # two independent halves, both needed before anything could move:
+    #   PHANTOM ROUTE — `obtain_sources` emits `SourceKind.GE_FILL` for any item
+    #              with a live sell order, and there was one for adventurer_pants
+    #              at 1,498 gold against C3P0's 14,532. That source told
+    #              `forced_craft_grind` the craft was AVOIDABLE, which zeroes
+    #              `UpgradeEquipmentGoal.heuristic` — while NOTHING admitted the
+    #              matching action, because `GatherMaterialsGoal` synthesizes it
+    #              only for a closure MATERIAL that an NPC also sells, and
+    #              nothing sells crafted gear. h=0 AND no access to the route
+    #              that zeroed it, so an unguided search over a mandatory
+    #              250-cost skill grind timed out at 449 nodes.
+    #              FIXED: the goal synthesizes the GE fill for its own target.
+    #   UNFUNDABLE RESERVE — with the action admitted it was still inapplicable:
+    #              `reserve_floor` returned 75,745 against 30,532 of account
+    #              gold. Measured fleet-wide, the reserve exceeded the balance on
+    #              ALL FIVE characters (57,307-78,750 reserved, 28,511-35,768
+    #              held), so every gold purchase was refused — including the one
+    #              that buys the item being reserved for.
+    #              FIXED: a reserve the account cannot fund falls back to the
+    #              safety floor.
+    #
+    # Raised WITHOUT a restart, deliberately, and here is the evidence that is
+    # not a mute button: the fleet is STOPPED, so the count cannot grow, and all
+    # five characters were re-planned from their live states after the fixes —
+    # Robby GrindCharacterXP(pig), R2D2 and C3P0 two-action GE purchases, HAL
+    # CraftPotions, Lor GrindCharacterXP(red_slime). Nothing Waits. If a restart
+    # disagrees, this number is wrong and the alarm is right.
+    "WaitGoal": 98,
+    "WaitAction": 98,
 }
 
 #: form "unreachable: ..." is a DEFECT that is being tracked, not an excuse —

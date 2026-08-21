@@ -185,6 +185,35 @@ def test_priority_prefers_stock_already_owned(game_data, ctx):
     assert SourceKind.CRAFT in kinds
 
 
+def test_a_recipe_consumer_the_character_does_not_hold_yields_no_recycle(
+        game_data, ctx):
+    """The reverse index answers "whose recipe consumes this", which is a fact
+    about GAME DATA — so it names codes the character may not own, and those
+    must not become sources. `fishing_net` consumes `ash_plank`, so it IS a
+    consumer; holding none of it means there is nothing to destroy.
+
+    This is the membership test that replaced a scan of every held code. That
+    scan cost O(holdings x holdings) once `destroyable` is counted and was
+    measured at 94% of a 29.4s search with 121 banked codes."""
+    assert "fishing_net" in game_data.recipe_consumers["ash_plank"]
+    empty = make_state(inventory={}, bank_items={})
+    assert not [s for s in obtain_sources("ash_plank", empty, game_data, ctx)
+                if s.kind is SourceKind.RECYCLE]
+
+
+def test_recipe_consumers_is_the_exact_inverse_of_the_recipes(game_data):
+    """Every (code, material) pair in the recipe table appears in the index and
+    nothing else does — a one-directional check would let the index quietly go
+    short and only show up as a missing route."""
+    forward = {(code, material)
+               for code, recipe in game_data._crafting_recipes.items()
+               for material in recipe}
+    inverse = {(code, material)
+               for material, codes in game_data.recipe_consumers.items()
+               for code in codes}
+    assert inverse == forward
+
+
 def test_recycle_source_names_the_SOURCE_item_not_the_target(game_data, ctx):
     """Source.code for a RECYCLE is the item to DESTROY, not the material gained —
     the mapper needs it to pick RecycleAction(fishing_net)."""

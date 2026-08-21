@@ -1169,6 +1169,48 @@ class GameData:
         return self._craft_yields
 
     @cached_property
+    def reserved_targets_memo(self) -> dict[tuple[object, ...], dict[str, int]]:
+        """Scratch cache owned by `progression_reserve.reserved_targets`.
+
+        It lives here because its lifetime is a `GameData`'s: the reservation is
+        a function of the character's level and worn equipment against THIS
+        snapshot of item stats and prices (S-037 — one decision, one snapshot),
+        so it must not outlive a reload. Keyed and filled there; this side only
+        supplies the box.
+
+        Measured need: `reserved_targets` walks every item in the game, and
+        `can_spend` calls it from three actions' `is_applicable` — i.e. once per
+        candidate per node. Profiled at 8ms a call, 525 calls, 4.2s of one 15s
+        planning budget.
+        """
+        return {}
+
+    @cached_property
+    def recipe_consumers(self) -> Mapping[str, tuple[str, ...]]:
+        """material -> every craftable code whose recipe consumes it, sorted.
+
+        THE REVERSE OF `crafting_recipe`, and the fix for `obtain_sources`'
+        documented hot spot. `_recycle_sources` asked "which HELD code has a
+        recipe consuming this item" by scanning every held code on every call —
+        and `obtain_sources` is called ~1.2M times in one from-scratch search, so
+        the cost was O(holdings x holdings) once `destroyable` is counted.
+        Measured there: 0.434 ms/node at one banked code, 11.29 at 121, where the
+        function was 94% of a 29.4s search.
+
+        Derived from GAME DATA ALONE, which is why it can be a plain
+        `cached_property` and needs no invalidation argument. The earlier note in
+        `_recycle_sources` assumed the index had to be state-keyed — it does not,
+        because the question "whose recipe consumes X" has nothing to do with
+        what the character is carrying. Holdings then enter as an O(1) membership
+        test per candidate instead of a scan.
+        """
+        out: dict[str, list[str]] = {}
+        for code, recipe in self._crafting_recipes.items():
+            for material in recipe:
+                out.setdefault(material, []).append(code)
+        return {material: tuple(sorted(codes)) for material, codes in out.items()}
+
+    @cached_property
     def equippable_types(self) -> frozenset[str]:
         """All item types that occupy an equipment slot (derived from CharacterSchema)."""
         return frozenset(ITEM_TYPE_TO_SLOTS)
