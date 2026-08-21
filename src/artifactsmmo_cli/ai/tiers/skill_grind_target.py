@@ -329,6 +329,51 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     return _with_wanted(candidates, ctx)
 
 
+def has_grind_target(skill: str, state: WorldState,
+                    game_data: GameData) -> bool:
+    """Whether ANY rung qualifies to grind `skill` — existence, not the argmax.
+
+    EXACTLY `skill_grind_target(skill, state, game_data) is not None`, and much
+    cheaper. `skill_grind_selection_pure` admits a candidate on four conditions —
+    same skill, in level, `obtainable`, `xp_positive` — and returns the
+    `_beats`-maximal survivor, where a None incumbent "is always beaten". So it
+    returns non-empty iff at least one candidate passes those four, and whether
+    ANY passes is answerable without ranking anything.
+
+    WHAT THAT SAVES IS THE WHOLE COST. `acquire_steps` — a full
+    `acquisition_actions` walk per rung — is the RANKING key and appears in none
+    of the four filters, so an existence check never needs it. Profiled on
+    C3P0's `adventurer_pants` goal, `LevelSkill.is_applicable` was 13.3s of a
+    15.1s planning budget, essentially all of it `acquisition_actions` under
+    `build_selectable_grind_candidates`. This also stops at the FIRST qualifying
+    rung instead of pricing every one of them.
+
+    NOT MEMOISED, and it does not need to be. `build_selectable_grind_candidates`
+    caches on a key that includes inventory and bank WITH COUNTS, which is
+    correct and useless inside a search: the planner changes the bag on almost
+    every node, so the memo misses structurally and pays for building the key as
+    well. This walks game data and short-circuits instead.
+
+    `reserved` is not a parameter because the caller that needs speed —
+    `LevelSkill.is_applicable` — takes `skill_grind_target`'s default empty set.
+    A caller that filters reserved materials wants the target itself anyway.
+    """
+    current = state.skills.get(skill, 0)
+    gatherable = game_data.gatherable_drop_items()
+    for code, stats in game_data.all_item_stats.items():
+        if stats.crafting_skill != skill or stats.crafting_level > current:
+            continue
+        if not game_data.crafting_recipe(code):
+            continue
+        # Free arithmetic before the recursive walk: a grey rung pays no craft
+        # xp, so it can never open the gate this was invoked to open.
+        if not skill_xp_positive(stats.crafting_level, current):
+            continue
+        if _obtainable(code, state, game_data, frozenset(), gatherable):
+            return True
+    return False
+
+
 def skill_grind_target(skill: str, state: WorldState, game_data: GameData,
                        reserved: frozenset[str] = frozenset(),
                        ctx: SelectionContext = NO_PROFILE_CONTEXT) -> str | None:

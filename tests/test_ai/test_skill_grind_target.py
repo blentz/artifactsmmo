@@ -2,12 +2,15 @@
 
 import dataclasses
 
+import pytest
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     CACHE_MAX_ENTRIES,
     _cache_for,
     build_selectable_grind_candidates,
+    has_grind_target,
     is_obtainable,
     skill_grind_target,
 )
@@ -431,3 +434,81 @@ def test_the_memo_key_may_omit_hp_because_obtainable_no_longer_reads_it():
     assert is_obtainable("hide_vest", healthy, gd, frozenset()), \
         "not obtainable even when healthy — this cannot reach the predicate"
     assert is_obtainable("hide_vest", hurt, gd, frozenset())
+
+
+@pytest.mark.parametrize("skills,inventory,bank", [
+    ({"weaponcrafting": 3}, {}, {}),                       # rungs available
+    ({"weaponcrafting": 3}, {"copper_bar": 6}, {}),        # materials in hand
+    ({"weaponcrafting": 3}, {}, {"copper_bar": 6}),        # materials banked
+    ({"weaponcrafting": 0}, {}, {}),                       # nothing in level
+    ({"weaponcrafting": 10}, {}, {}),                      # every rung grey-ish
+    ({"cooking": 5}, {}, {}),                              # a skill with no recipes
+])
+def test_has_grind_target_agrees_with_the_full_selection(skills, inventory, bank):
+    """THE EQUIVALENCE THE SPEED-UP RESTS ON, and the guard against drift.
+
+    `LevelSkill.is_applicable` asks existence, not the argmax, so it now calls
+    `has_grind_target` — which skips `acquire_steps`, a full acquisition walk per
+    rung, because that is the RANKING key and appears in none of the selector's
+    four filters. If someone adds a fifth filter to
+    `skill_grind_selection_pure` and not here, the two answers part company and
+    the planner starts proposing grinds that resolve to no rung. This test is
+    what makes that a failure rather than a live livelock.
+
+    Measured motivation: `is_applicable` was 13.3s of a 15.1s planning budget on
+    C3P0's `adventurer_pants` goal, which then timed out at 444 nodes. After:
+    the whole search completes in 8.3s and the goal plans in 2,755."""
+    gd = _gd()
+    state = make_state(skills=skills, inventory=inventory, bank_items=bank)
+    assert has_grind_target("weaponcrafting", state, gd) is (
+        skill_grind_target("weaponcrafting", state, gd) is not None)
+
+
+def test_has_grind_target_is_false_when_the_chain_is_ungettable():
+    """Obtainability is a FILTER and must survive the cheap path: a rung whose
+    leaf nothing drops cannot be ground, so existence is False even though the
+    rung is in-skill and in-level."""
+    gd = _gd()
+    gd._resource_drops = {}          # no gatherable leaves at all
+    gd._resource_drops_full = {}
+    state = make_state(skills={"weaponcrafting": 3})
+    assert has_grind_target("weaponcrafting", state, gd) is False
+    assert skill_grind_target("weaponcrafting", state, gd) is None
+
+
+def test_has_grind_target_skips_an_in_skill_item_with_no_recipe():
+    """`all_item_stats` can name a crafting skill for an item the recipe table
+    has no entry for. There is nothing to craft, so it cannot be a grind rung —
+    and reading `recipe` for the xp check below would be reading None."""
+    gd = _gd()
+    gd._item_stats["phantom_blade"] = ItemStats(
+        code="phantom_blade", level=1, type_="weapon",
+        crafting_skill="weaponcrafting", crafting_level=1)
+    state = make_state(skills={"weaponcrafting": 1})
+    # copper_dagger (level 1, real recipe) still answers, so the phantom is
+    # skipped rather than crashing or counting.
+    assert has_grind_target("weaponcrafting", state, gd) is True
+    gd._crafting_recipes = {}          # now NOTHING has a recipe
+    assert has_grind_target("weaponcrafting", state, gd) is False
+
+
+def test_has_grind_target_skips_a_grey_rung_but_finds_a_paying_one():
+    """A rung far enough below the current skill pays NO craft xp, so grinding
+    it can never open the gate. It must be skipped, not merely ranked below —
+    the same filter (not tie-break) `skill_grind_selection_pure` applies."""
+    gd = _gd()
+    grey = make_state(skills={"weaponcrafting": 20})
+    # copper_dagger (1) and wooden_staff (3) are grey at 20; iron_dagger (10)
+    # is not, so existence still holds and the grey ones were skipped.
+    assert has_grind_target("weaponcrafting", grey, gd) is True
+    assert skill_grind_target("weaponcrafting", grey, gd) == "iron_dagger"
+
+    # Drop the only paying rung: every survivor is grey, so nothing qualifies.
+    # A FRESH GameData, not a mutation of the one above —
+    # `build_selectable_grind_candidates` memoises per GameData instance, so an
+    # in-place edit would be served from the stale list and the assertion would
+    # pass for the wrong reason. (Production never mutates loaded game data.)
+    lean = _gd()
+    del lean._item_stats["iron_dagger"]
+    assert has_grind_target("weaponcrafting", grey, lean) is False
+    assert skill_grind_target("weaponcrafting", grey, lean) is None
