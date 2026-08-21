@@ -73,6 +73,7 @@ from artifactsmmo_cli.ai.kit_selection import (
     best_owned_fighting_weapon,
     best_owned_gathering_tools,
 )
+from artifactsmmo_cli.ai.per_state_memo import per_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
@@ -168,6 +169,7 @@ def _active_task(code: str, state: WorldState, game_data: GameData,
     return max(0, state.task_total - state.task_progress)
 
 
+@per_state
 def _held_heals(state: WorldState, game_data: GameData) -> list[tuple[str, int, int]]:
     """Every HELD heal code as `(code, qty, hp_restore)`, strongest first, ties
     broken on the lexically smallest code (a stable sort over `sorted()` keys).

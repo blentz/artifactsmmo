@@ -172,7 +172,13 @@ DORMANT: dict[str, str] = {
     "MoveAction": "subsumed: travel is folded into each action's own venue hop",
     "MoveTo": "subsumed: superseded by the venue model in obtain_sources",
     "UnequipAction": "subsumed: OptimizeLoadoutAction performs swaps atomically",
-    "GeFillSellOrderAction": "subsumed: the fleet posts sell orders and fills buys",
+    # GeFillSellOrderAction WAS here as "subsumed: the fleet posts sell orders and
+    # fills buys". It went LIVE on 2026-08-19: `UpgradeEquipmentGoal` now
+    # synthesizes the GE fill for its own target, so a standing sell order is a
+    # route the planner can take. C3P0 bought `adventurer_pants` for 1,498 gold
+    # with it — the purchase that ended an 84-cycle Wait deadlock. The census
+    # flagged the declaration stale on the first six executed cycles, which is
+    # what the stale check is for.
     # --- Two more downstream of the dead task subsystem, established 2026-08-18.
     "ReachCurrencyGoal": "unreachable: routed only from a currency-blocked leaf, "
                          "and it mints only tasks_coin, which requires tasks",

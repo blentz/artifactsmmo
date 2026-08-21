@@ -39,6 +39,7 @@ from collections import OrderedDict
 from artifactsmmo_cli.ai.equipment.scoring import gather_score
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
+from artifactsmmo_cli.ai.per_state_memo import per_state
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -175,11 +176,13 @@ def _held_tool_candidates(state: WorldState) -> set[str]:
     return candidates
 
 
+@per_state
 def best_fighting_weapon(state: WorldState, game_data: GameData) -> str | None:
     """The weapon the character is WORKING with — best over bag + equipped."""
     return _pick_weapon(_held_weapon_candidates(state), game_data)
 
 
+@per_state
 def best_owned_fighting_weapon(state: WorldState, game_data: GameData) -> str | None:
     """The best fighting weapon the character OWNS — bag + bank + equipped. The
     ownership cap's question: destroying this one leaves the character unarmed
@@ -187,6 +190,7 @@ def best_owned_fighting_weapon(state: WorldState, game_data: GameData) -> str | 
     return _pick_weapon(_held_weapon_candidates(state) | _banked(state), game_data)
 
 
+@per_state
 def best_gathering_tools(state: WorldState, game_data: GameData) -> frozenset[str]:
     """Best tool per gathering skill among what is to hand (bag + equipped) —
     the working kit. Depositing it undoes the WithdrawTools ferry and re-creates
@@ -197,6 +201,7 @@ def best_gathering_tools(state: WorldState, game_data: GameData) -> frozenset[st
     return _pick_tools(_held_tool_candidates(state), game_data)
 
 
+@per_state
 def best_owned_gathering_tools(state: WorldState, game_data: GameData) -> frozenset[str]:
     """Best tool per gathering skill among everything OWNED — bag + bank +
     equipped. The ownership cap's question: a tool held only in the BANK is
