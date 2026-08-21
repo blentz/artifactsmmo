@@ -177,8 +177,6 @@ DORMANT: dict[str, str] = {
     # empty on all five characters. `UseConsumableAction` fires 1,621 times, so
     # the fleet does eat — just never a utility-slot heal it is holding for a
     # fight. Adjacent to the objective never ranking a utility candidate.
-    "ProvisionMarginalFightGoal": "conditional: needs a held utility-slot heal; "
-                                  "best_held_heal is None on every character",
 }
 
 
