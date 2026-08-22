@@ -991,10 +991,14 @@ class GamePlayer:
         # what the fleet does. See `_refresh_sibling_reads`.
         self._refresh_sibling_reads(datetime.now(tz=timezone.utc))
         prev = self._prev_level if self._prev_level is not None else state.level
-        self._gear_latch.update(prev, state, self._last_outcome, game_data)
+        # The farm target is computed BEFORE the latch because the latch's
+        # standing arm needs it: a gear deficit against an unwinnable task
+        # monster only blocks when there is nothing else worth fighting.
+        combat_monster = self._winnable_farm_target()
+        self._gear_latch.update(prev, state, self._last_outcome, game_data,
+                                winnable_alternative=combat_monster is not None)
         self._prev_level = state.level
         self._arbiter.set_cycle(self._cycle_counter)
-        combat_monster = self._winnable_farm_target()
         ctx = self._selection_context(combat_monster)
         self._last_ctx = ctx
         # Synergy is wired here too — NOT just in `_decide_band` — so the `plan`
@@ -1111,7 +1115,12 @@ class GamePlayer:
                 # character level from the previous cycle (or the current level
                 # on the very first cycle, so no spurious level-up trigger).
                 prev = self._prev_level if self._prev_level is not None else state.level
-                self._gear_latch.update(prev, state, self._last_outcome, game_data)
+                # Computed BEFORE the latch because the latch's standing arm
+                # needs it: a gear deficit against an unwinnable task monster
+                # only blocks when there is nothing else worth fighting.
+                combat_monster = self._winnable_farm_target()
+                self._gear_latch.update(prev, state, self._last_outcome, game_data,
+                                        winnable_alternative=combat_monster is not None)
                 self._prev_level = state.level
                 # Coordination: renew our lease, publish what we still need,
                 # and re-decide our role. All local SQLite against the shared
@@ -1124,7 +1133,6 @@ class GamePlayer:
                 self._arbiter.set_planning_deadline(self._planning_deadline())
 
                 assert self._strategy is not None
-                combat_monster = self._winnable_farm_target()
                 selected_goal, plan, goals_tried, replanned = self._plan_or_reuse(
                     state, game_data, actions, combat_monster)
                 # Whether the arbiter could actually plan this cycle's supply
