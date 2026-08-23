@@ -572,7 +572,7 @@ def _resolution_rows(state, game_data, resolution, ctx) -> "list[strategy.RootSc
 
 ### 5.3 The root graph
 
-Six nodes. Each is one `Decision[MetaGoal]` in `ai/decisions/root.py`.
+Five nodes (an earlier draft of this line said six and drew five; five is correct — wave-3a task 4 built five and invented no sixth). Each is one `Decision[MetaGoal]` in `ai/decisions/root.py`.
 
 ```
 IsMyGearBehindMyTier                 gear_targets_with_blockers(state, history) non-empty?

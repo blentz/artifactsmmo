@@ -165,7 +165,7 @@ in 3a.6. Do not delete it and do not wire it early.
 
 **Spec sections:** §5.1 and §5.3.
 
-**Interfaces produced:** six `Decision[MetaGoal]` classes, `resolve_root`,
+**Interfaces produced:** five `Decision[MetaGoal]` classes, `resolve_root`,
 `RootResolution`.
 
 Nothing calls it yet.
