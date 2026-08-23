@@ -127,3 +127,39 @@ def test_xp_tiebreak_without_monkeypatched_band_derivation(monkeypatch):
     best = max(("spider", "ogre"), key=lambda c: gd.xp_per_kill(c, state.level))
     result = band_combat_target(state, gd, None)
     assert result == best
+
+
+def test_band_bound_not_defeated_by_xp_ordering(monkeypatch):
+    """Discriminating case: out-of-band monster is both winnable and higher-XP
+    than everything in the band. T10 uncleared: goblin(15) normal unwinnable,
+    mushmush(10) normal winnable. band(10) = [mushmush]. spider(20) sits outside
+    band(10) at higher XP. At char level 12: both mushmush and spider are
+    positive-XP, spider (level 20, gap=-8) is grey but still higher XP than
+    mushmush (level 10, gap=2). Correct (banded T10): picks mushmush. Mutation
+    (unbounded): picks spider."""
+    def fake_is_winnable(s: object, g: object, c: str, h: object) -> bool:
+        # Only goblin unwinnable, makes T10 uncleared; spider winnable
+        return c != "goblin"
+    monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
+    monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
+    gd = GameData()
+    gd._item_stats = {
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon"),
+        "iron_sword": ItemStats(code="iron_sword", level=10, type_="weapon"),
+        "battlestaff": ItemStats(code="battlestaff", level=20, type_="weapon"),
+    }
+    # Add goblin(15) normal to make band(10) have unwinnable member
+    gd._monster_level = {"chicken": 1, "mushmush": 10, "goblin": 15,
+                         "spider": 20, "ogre": 20}
+    gd._monster_type = {"chicken": "normal", "mushmush": "normal",
+                        "goblin": "normal", "spider": "normal", "ogre": "normal"}
+    gd._monster_hp = {"chicken": 60, "mushmush": 350, "goblin": 400,
+                      "spider": 550, "ogre": 650}
+    state = make_state(level=12)
+    # At level 12: mushmush(10) gap=2 (XP > 0), spider(20) grey
+    # T1 cleared (chicken winnable), T10 uncleared (goblin unwinnable)
+    # band(10) = [mushmush], no other normal monsters
+    # Correct (banded T10): picks mushmush (only winnable in band)
+    # Mutation (unbounded): could pick spider if grey XP doesn't zero out
+    result = band_combat_target(state, gd, None)
+    assert result == "mushmush"
