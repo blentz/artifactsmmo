@@ -14,9 +14,13 @@ character cannot be drawn in the first place. A character whose LEVEL has
 outrun its TIER — Robby at 30 with T20 uncleared — correctly keeps fighting the
 tier it is stuck on; its constraint is gear, not target selection.
 
-None means the band holds nothing winnable, which is a GEAR wall and must be
-reported as such rather than papered over with a monster from a lower tier.
+None is returned in two cases: the ladder is fully cleared, or the tier's band
+holds no winnable monsters — a gear wall. A consumer needing to distinguish them
+(e.g. to report different user messages) must add the distinction rather than
+guessing from None. Do not change the signature speculatively.
 """
+
+import dataclasses
 
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
@@ -28,13 +32,19 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 def band_combat_target(state: WorldState, game_data: GameData,
                        history: LearningStore | None) -> str | None:
-    """Best winnable normal monster in the next uncleared tier's band, by XP."""
+    """Best winnable normal monster in the next uncleared tier's band, by XP.
+
+    Evaluated at RESTORABLE HP, never current — route existence must not
+    depend on incidental damage. A character resting to full is always an
+    option, so "is this tier's band winnable" must not flip with transient HP.
+    """
     tier = next_uncleared_tier(state, game_data, history)
     if tier is None:
         return None
+    rested = dataclasses.replace(state, hp=state.max_hp)
     winnable = [code for code in normal_band(game_data, tier)
-                if is_winnable(state, game_data, code, history)]
+                if is_winnable(rested, game_data, code, history)]
     if not winnable:
         return None
     return max(winnable, key=lambda code: (game_data.xp_per_kill(code, state.level),
-                                           code))
+                                           game_data.monster_levels[code]))
