@@ -92,3 +92,6 @@ logs.txt
 # macro-research / ad-hoc report output (never commit)
 report.md
 report.md.
+
+# Isolated worktrees for subagent-driven development
+.worktrees/
