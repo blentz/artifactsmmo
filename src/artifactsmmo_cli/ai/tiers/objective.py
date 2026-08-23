@@ -402,15 +402,32 @@ class CharacterObjective:
         return targets
 
     def _classify_target(self, code: str, state: WorldState) -> GearTarget:
-        """Attainable now, or the first blocker standing in front of it."""
-        if is_attainable_now(code, state, self._game_data):
-            return GearTarget(code=code, attainable=True, blocker=None)
+        """Attainable now, or the first blocker standing in front of it.
+
+        The crafting-skill gate is checked BEFORE `is_attainable_now`, not
+        after. `is_attainable_now` is materials-only — it never inspects
+        `crafting_skill`/`crafting_level` (that meaning is relied on by its
+        other callers and must not change here) — so if the skill check ran
+        second, it would be unreachable for any target whose materials happen
+        to be reachable: `is_attainable_now` would already have returned True
+        and short-circuited the classification. Fix-round-1 (2026-08-23)
+        found 17 live bundle items exactly in that shape — e.g. `maple_plank`
+        (woodcutting@40, character at 30) reported `attainable=True,
+        blocker=None` although the character cannot perform that craft at
+        all. Structurally the same bug Task 5 fixed in
+        `objective_step_goal` (an earlier check masking a later one, there
+        the monster-drop branch masking the skill gate); the fix here is the
+        same shape: reorder so the gate that is unconditionally blocking
+        (no skill, no craft, regardless of material stock) is tested first.
+        Do not swap 1 and 2 back — that reintroduces the mask."""
         stats = self._game_data.item_stats(code)
         if (stats is not None and stats.crafting_skill
                 and state.skills.get(stats.crafting_skill, 1) < stats.crafting_level):
             return GearTarget(
                 code=code, attainable=False,
                 blocker=f"skill:{stats.crafting_skill}:{stats.crafting_level}")
+        if is_attainable_now(code, state, self._game_data):
+            return GearTarget(code=code, attainable=True, blocker=None)
         recipe = self._game_data.crafting_recipe(code) or {}
         for material in sorted(recipe):
             if not is_attainable_now(material, state, self._game_data):

@@ -52,8 +52,12 @@ def test_already_equipped_best_item_is_dropped_not_reoffered(bundle_game_data):
 
 
 def test_skill_blocked_target_names_skill_and_level(bundle_game_data):
-    """A target whose crafting skill is too low, and whose materials are ALSO
-    unavailable, blocks on the skill: `skill:<name>:<level>`."""
+    """A target whose crafting skill is too low, and whose materials also
+    happen to be unavailable, blocks on the skill: `skill:<name>:<level>`.
+    (This case alone does not prove the skill check runs BEFORE
+    `is_attainable_now` — both blockers would apply either way. See
+    `test_skill_gate_blocks_even_when_materials_are_reachable` for the case
+    that pins the ordering.)"""
     gd = bundle_game_data
     objective = CharacterObjective.from_game_data(gd)
     state = make_state(level=30, skills={"weaponcrafting": 10})
@@ -62,6 +66,29 @@ def test_skill_blocked_target_names_skill_and_level(bundle_game_data):
 
     assert target.attainable is False
     assert target.blocker == "skill:gearcrafting:5"
+
+
+def test_skill_gate_blocks_even_when_materials_are_reachable(bundle_game_data):
+    """Fix-round-1 (2026-08-23): `_classify_target` consulted
+    `is_attainable_now` FIRST, and that function is materials-only — it never
+    inspects `crafting_skill`/`crafting_level`. So the skill-gate branch was
+    unreachable for any target whose materials happened to be reachable: 17
+    live-bundle items (e.g. `maple_plank`, woodcutting@40 with the character
+    at woodcutting 30) reported `attainable=True, blocker=None` although the
+    character cannot perform that craft at all — an earlier check masking a
+    later one, the same shape Task 5 fixed in `objective_step_goal`.
+
+    `maple_plank` needs only `maple_wood` (a gatherable raw, always
+    attainable-now) so `is_attainable_now("maple_plank", ...)` is True on its
+    own — this pins that the skill gate still wins."""
+    gd = bundle_game_data
+    objective = CharacterObjective.from_game_data(gd)
+    state = make_state(level=30, skills={"woodcutting": 30})
+
+    target = objective._classify_target("maple_plank", state)
+
+    assert target.attainable is False
+    assert target.blocker == "skill:woodcutting:40"
 
 
 def test_unattainable_leaf_item_blocks_on_its_own_code(bundle_game_data):
