@@ -3,6 +3,7 @@
 from sqlmodel import Session
 
 import artifactsmmo_cli.ai.learning.projections as proj
+import artifactsmmo_cli.ai.player as player_mod
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -259,11 +260,22 @@ class TestPickWinnableMonster:
 
 
 class TestPathAlignedMonster:
-    """G-I: when path projection has a recommendation, use it as farm_target."""
+    """Task 5.2 (2026-08-23): `_path_aligned_monster` delegates the DECISION
+    to `band_combat_target`, whose candidates are bounded to the next
+    uncleared tier's band. `cheapest_path_to_level`'s unbounded projection
+    (floor of level 1) still runs — when a store is available — so
+    `_last_path_plan` stays populated for the trace, but its own
+    `next_action_monster` recommendation is no longer read as the target.
+    These tests used to pin the OLD contract (path recommendation IS the
+    target); that contract is exactly what this task removes, so they are
+    rewritten to pin the delegation instead. `band_combat_target`'s own
+    banding/winnability/XP-tiebreak logic is covered in
+    `tests/test_ai/test_band_target.py` (task 5.1) and is monkeypatched away
+    here to keep this a unit test of the delegation, not a re-test of it."""
 
-    def test_uses_path_recommendation_when_available(self, monkeypatch, tmp_path):
-        # Both chicken and yellow_slime beatable (is_winnable monkeypatched to
-        # True for both). Path picks higher-yield one by XP formula.
+    def test_delegates_to_band_combat_target(self, monkeypatch, tmp_path):
+        """The returned target is whatever `band_combat_target` says, and the
+        cheapest-path plan is still cached as a trace-only diagnostic."""
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
@@ -273,34 +285,46 @@ class TestPathAlignedMonster:
         player.game_data._monster_type = {"chicken": "normal", "yellow_slime": "normal"}
         # Harmless: `cheapest_path_to_level` charges each kill the Rest its damage
         # forces, so it reads combat stats now. Zero damage keeps this case about
-        # the xp formula picking the higher-yield monster, which is what it pins.
+        # the diagnostic projection running cleanly, not about its recommendation
+        # (which is no longer read).
         player.game_data._monster_attack = {"chicken": {}, "yellow_slime": {}}
         player.game_data._monster_resistance = {"chicken": {}, "yellow_slime": {}}
         player.game_data._monster_critical_strike = {"chicken": 0, "yellow_slime": 0}
         player.state = make_state(level=1, xp=0, max_xp=100, character="hero")
-        # Path projection: at L1, both monsters beatable. yellow_slime
-        # higher level → higher XP per formula → picked.
+        monkeypatch.setattr(player_mod, "band_combat_target",
+                            lambda state, game_data, history: "yellow_slime")
         target = player._path_aligned_monster()
         assert target == "yellow_slime"
-        # Plan cached for trace.
+        # Plan still cached for trace exposure, even though its own
+        # recommendation is not what decided the target above.
         assert player._last_path_plan is not None
-        assert player._last_path_plan.next_action_monster == "yellow_slime"
         store.close()
 
-    def test_returns_none_when_blocked(self, tmp_path):
-        """No beatable monster → path blocked → return None to fall back."""
+    def test_returns_none_when_band_has_no_target(self, monkeypatch, tmp_path):
+        """The projection being blocked no longer matters — only the band's
+        answer decides, and `None` (ladder finished or a gear wall) passes
+        straight through."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
         player.game_data = GameData()
         player.game_data._monster_level = {"ogre": 50}  # unbeatable at L1
         player.state = make_state(level=1, character="hero")
+        monkeypatch.setattr(player_mod, "band_combat_target",
+                            lambda state, game_data, history: None)
         assert player._path_aligned_monster() is None
         store.close()
 
-    def test_returns_none_without_history(self):
-        """No store wired → return None so caller falls back to winnable picker."""
+    def test_band_target_consulted_without_history(self, monkeypatch):
+        """No store wired: the diagnostic `cheapest_path_to_level` call is
+        skipped (it requires a store) and `_last_path_plan` stays unset, but
+        `band_combat_target` does not need a store and IS still consulted —
+        unlike the old projection-only tier, a missing store no longer
+        forces a fall-through to the windowed picker."""
         player = GamePlayer(character="hero", history=None)
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1}
         player.state = make_state(level=1, character="hero")
-        assert player._path_aligned_monster() is None
+        monkeypatch.setattr(player_mod, "band_combat_target",
+                            lambda state, game_data, history: "chicken")
+        assert player._path_aligned_monster() == "chicken"
+        assert player._last_path_plan is None

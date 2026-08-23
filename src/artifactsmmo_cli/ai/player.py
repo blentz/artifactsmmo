@@ -132,6 +132,7 @@ from artifactsmmo_cli.ai.tiers import (
     StrategyDecision,
     StrategyEngine,
 )
+from artifactsmmo_cli.ai.tiers.band_target import band_combat_target
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.progression_tree import has_structural_upgrade
@@ -2754,29 +2755,32 @@ class GamePlayer:
         return snapshot
 
     def _path_aligned_monster(self) -> str | None:
-        """Return the next-monster recommendation from the cheapest-path
-        projection to max character level, or None if no path or no store.
+        """Return the best winnable monster in the next uncleared tier's
+        band, or None if no store, or the ladder is finished, or the band
+        holds nothing winnable (a gear wall — see `band_target`'s module
+        docstring; the two None cases are deliberately not distinguished
+        here).
 
-        G-I: this replaces win-rate-based picking when the projection is
-        usable. The projection uses observed char_xp/cycle (or the
-        documented XP formula) to pick the monster that maximizes
-        progression per cycle — which is exactly what the max-level root
-        objective wants.
+        G-I: `cheapest_path_to_level`'s candidate filter floors at level 1,
+        so its `next_action_monster` used to outrank the windowed picker at
+        tier 3 and left four of five live characters grinding 4-10 levels
+        below themselves. `band_combat_target` bounds candidates to the
+        character's current tier band instead, so a target far below the
+        character can never be drawn.
         """
-        if self.history is None or self.game_data is None or self.state is None:
+        if self.game_data is None or self.state is None:
             return None
-        plan = cheapest_path_to_level(
-            self.game_data.max_character_level, self.state, self.history, self.game_data,
-        )
-        # Cache for trace exposure later in the cycle.
-        self._last_path_plan = plan
-        # Even when path is blocked at some later level, the FIRST segment
-        # is a valid immediate-next action — the bot can keep grinding it
-        # until either (a) a new monster opens up after a level-up or
-        # (b) UpgradeEquipment / other goals unblock further progression.
-        if not plan.segments:
-            return None
-        return plan.next_action_monster
+        # `cheapest_path_to_level` is still run and cached here (when a
+        # store is available) so `_last_path_plan` stays populated for the
+        # trace (projected_cycles, path_next_action, path_blocked). Its
+        # `next_action_monster` is a diagnostic ONLY now, never a decision
+        # input — the band target below decides, and it tolerates a missing
+        # store (`band_combat_target`'s `history` parameter is Optional).
+        if self.history is not None:
+            self._last_path_plan = cheapest_path_to_level(
+                self.game_data.max_character_level, self.state, self.history, self.game_data,
+            )
+        return band_combat_target(self.state, self.game_data, self.history)
 
     def _is_winnable(self, monster_code: str) -> bool:
         """Target-selection beatability: can the bot beat this monster AFTER
@@ -2888,7 +2892,7 @@ class GamePlayer:
 
     def _winnable_farm_target(self) -> str | None:
         # Lazy short-circuit preserved: task wins outright; otherwise we
-        # only consult the path projection / global winnable scan.
+        # only consult the tier band target / global winnable scan.
         task_monster = self._task_aligned_monster()
         if task_monster is not None:
             return winnable_farm_target_pure(CascadeInputs(
