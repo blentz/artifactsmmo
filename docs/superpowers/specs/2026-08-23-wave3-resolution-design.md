@@ -294,8 +294,29 @@ unconditionally; if no rung is open at level `C`, the goal is unplannable and th
 arbiter falls through — silently. Under wave 3 that node is on the *only* path
 from a skill-gated gear target to work, so a silent fall-through is a stall. This
 is a **census**, not a theorem: sweep every `(skill, level)` reachable in the
-scenario set and assert an open, XP-positive rung exists or the node emits a
-named wall. Cheap; it is the wave-2 §7 census the plan already scoped.
+scenario set and assert an open, XP-positive rung exists or the closure is
+explained. Cheap; it is the wave-2 §7 census the plan already scoped.
+
+**Amended after wave-3a task 5 built it.** This paragraph originally said "or
+the node emits a named wall". No such thing exists: `IsThisTargetBlocked`
+returns `ReachSkillLevel` unconditionally and there is no wall arm anywhere in
+`ai/decisions/`. Read literally the disjunct is always false, every closed cell
+is a violation, and the gate ships red on day one.
+
+The census owns the wall taxonomy instead. What makes that a real obligation
+rather than "the census can always explain itself" is that the residual is
+`closed AND routed` — `classify_gap` tests `routed` **before** any wall arm, so
+no wall name can launder a closure the graph actually routes to. Two residual
+kinds fail the gate: `O1_SILENT_STALL` (routed but closed) and `O1_UNEXPLAINED`.
+A third, `SKILL_CATALOGUE_EMPTY`, exists because a skill whose recipes vanish
+from the bundle would otherwise classify as the most benign wall and exit 0.
+
+Two limits, stated because a gate that oversells its coverage is worse than one
+that does not: the residual arm reaches only the ROUTED subset — 19 of 240 cells,
+3 of 8 skills, weaponcrafting only at level 1 — so the L38-48 walls this epic
+cares about are outside its teeth until new scenarios route there. And a
+runtime named wall is still missing: post-flip the bot can be blocked and unable
+to say why. That is a wave-4 concern, not an O1 one.
 
 **O2 — the root graph is acyclic.** `MAX_RESOLVE_DEPTH = 32` raises rather than
 truncating (`ai/decision.py:26-32`), which is the right runtime behaviour but is
@@ -385,7 +406,7 @@ material-raising action descends. There is no such slot in a 4-tuple. This is wh
 
 | spec obligation | discharge |
 |---|---|
-| "Every `SkillToNextLevel(S, C+1)` has at least one open rung, or the node reports an honest wall" | O1 — census, wave 3a |
+| "Every `SkillToNextLevel(S, C+1)` has at least one open rung, or the closure is explained (census-owned taxonomy — see the §3.5 amendment)" | O1 — census, wave 3a |
 | "No `Decision` cycle exists" | O2 — static DAG test over `ai/decisions/`, wave 3a |
 
 ---
