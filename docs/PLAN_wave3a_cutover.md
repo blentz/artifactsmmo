@@ -69,7 +69,7 @@ deleted. Nothing in 3a deletes a module. If a task tempts you to, report it.
 
 ---
 
-## Task 3a.1: `resolve_node` becomes leaf-type-agnostic
+## Task 1: (3a.1) `resolve_node` becomes leaf-type-agnostic
 
 **Files:**
 - Modify: `src/artifactsmmo_cli/ai/decision.py`
@@ -100,7 +100,7 @@ in no other way.
 
 ---
 
-## Task 3a.2: `ReachSkillLevel` MetaGoal
+## Task 2: (3a.2) `ReachSkillLevel` MetaGoal
 
 **Files:**
 - Modify: `src/artifactsmmo_cli/ai/tiers/meta_goal.py` (append)
@@ -126,7 +126,7 @@ Nothing constructs it yet, so this task changes no behaviour.
 
 ---
 
-## Task 3a.3: `GearTarget.blocker` becomes structured
+## Task 3: (3a.3) `GearTarget.blocker` becomes structured
 
 **Files:**
 - Modify: `src/artifactsmmo_cli/ai/tiers/objective.py`
@@ -156,7 +156,7 @@ in 3a.6. Do not delete it and do not wire it early.
 
 ---
 
-## Task 3a.4: the root graph
+## Task 4: (3a.4) the root graph
 
 **Files:**
 - Create: `src/artifactsmmo_cli/ai/decisions/root.py`
@@ -182,7 +182,7 @@ Nothing calls it yet.
 
 ---
 
-## Task 3a.5: the O1 open-rung census
+## Task 5: (3a.5) the O1 open-rung census
 
 **Files:**
 - Create: a sweep under `src/artifactsmmo_cli/audit/`
@@ -210,7 +210,7 @@ a named wall.
 
 ---
 
-## Task 3a.6: THE FLIP
+## Task 6: (3a.6) THE FLIP
 
 **Files:**
 - Modify: `src/artifactsmmo_cli/ai/tiers/progression_tree.py` (`decide_tree`)
@@ -250,7 +250,7 @@ Parameters `band_adequate`, `focus`, `seats`, `committed_root_code`,
 
 ---
 
-## Task 3a.7: display
+## Task 7: (3a.7) display
 
 **Files:**
 - Modify: `src/artifactsmmo_cli/ai/plan_tree.py` (`_resolution_rows`,
@@ -290,7 +290,7 @@ than rounded up.
 ## Self-review
 
 **Spec coverage.** Design §7's 3a.1-3a.7 map one-to-one onto tasks 3a.1-3a.7.
-§3.5's two new obligations are folded into 3a.4 (O2) and 3a.5 (O1) rather than
+§3.5's two new obligations are folded into task 4 (O2) and task 5 (O1) rather than
 given their own tasks, because each belongs in the commit that creates the thing
 it constrains.
 
@@ -298,7 +298,7 @@ it constrains.
 section. Implementers receive both paths and the spec is authoritative on
 content — the alternative is two documents that can disagree about one design.
 
-**Known soft spot.** 3a.6 removes six parameters from two public-ish functions.
+**Known soft spot.** Task 6 removes six parameters from two public-ish functions.
 The blast radius is whatever calls them; the plan names the two `player.py` call
 sites the design found, and the implementer must grep for others rather than
 trusting that list — the same discipline task 5.3 vindicated.
