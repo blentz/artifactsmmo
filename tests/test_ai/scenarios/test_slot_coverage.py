@@ -128,24 +128,36 @@ never endorsements. Gap index:
       dead search now plans Gather(bass_spot->small_pearls)) and the unit
       level (test_recipe_closure.py's secondary-drop tests).
   GAP-8 (band target outruns the fight window, l10_bag_pursuit — discovered
-      2026-08-23 wiring the cascade to `band_combat_target`, task 5.2): a
-      tier is "cleared" once every NORMAL monster in its band is winnable by
-      stat prediction (`is_winnable`), with no check that the monster is
-      inside `FightAction`'s own `monster_level <= state.level + 2`
-      structural window. At L10 here, tier 10 (flying_snake L12, mushmush)
-      is cleared by that definition, so `band_combat_target` advances to
-      tier 15's band and picks `highwayman` (L15) — stat-winnable with this
-      loadout, but 15 > 10+2, so `FightAction` refuses it outright.
-      `GrindCharacterXP(highwayman)` therefore plans to `plan_len: 0` in one
-      node (see `goals_tried`) and the arbiter falls all the way past combat
-      to `MaintainConsumables` (priority 25 vs the dead goal's 30) — instead
-      of falling back to a lower, still-in-window, still-winnable monster
-      such as flying_snake. NOT fixed here: `band_target.py` is task 5.1's
-      module and out of this task's scope (`player.py` wiring only); this
-      GAP is a tripwire on the real, current, regressed-from-the-old-
-      unbounded-projection behavior, not an endorsement of it. Pinned at the
-      scenario level below
-      (test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point)."""
+      2026-08-23 wiring the cascade to `band_combat_target`, task 5.2) —
+      FIXED 2026-08-23 (task 5.2, fix round 1): a tier used to read "cleared"
+      once every NORMAL monster in its band was winnable by stat prediction
+      (`is_winnable`) alone, with no check that the monster was inside
+      `FightAction`'s own `monster_level <= state.level +
+      FIGHT_LEVEL_GAP_CEILING` structural window. At L10 here, tier 10
+      (flying_snake L12, mushmush) read cleared by that definition, so
+      `band_combat_target` advanced to tier 15's band and picked
+      `highwayman` (L15) — stat-winnable with this loadout, but 15 > 10+2,
+      so `FightAction` refused it outright: `GrindCharacterXP(highwayman)`
+      planned to `plan_len: 0` in one node, and — because a non-None
+      "winnable" path_monster outranks tier 3 in
+      `GamePlayer._winnable_farm_target` — the windowed picker that would
+      have found flying_snake never ran, so the arbiter fell all the way
+      past combat to `MaintainConsumables`. `band_combat_target` now filters
+      each band candidate on `FIGHT_LEVEL_GAP_CEILING` (imported from
+      `ai.actions.combat`, the executor's own constant — not a second guess
+      at the number) BEFORE the `is_winnable` check, so a candidate outside
+      the executor's window is never offered at all and the tier is no
+      longer considered "cleared" by it. At L10 this un-clears tier 10 (its
+      OWN band member `flying_snake` is winnable and in-window, so tier 10
+      is still cleared on its own account — the fix is in what tier 15
+      offers, which is now nothing, i.e. `band_combat_target` returns
+      `None`), so the cascade falls through to tier 3
+      (`_pick_winnable_monster`), whose window `[9, 12]` finds
+      `flying_snake` directly — restoring the ORIGINAL 2026-08-04
+      derivation verbatim. Covered at the unit level
+      (`test_band_target.py`'s ceiling tests) and the wiring level
+      (`test_band_target_wiring.py`'s fall-through test); pinned again here
+      at the scenario level, this time with no tripwire needed."""
 
 import json
 from pathlib import Path
@@ -460,10 +472,17 @@ def test_bag_slot_banked_stock_credited() -> None:
 
 
 def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
-    """RE-DERIVED AGAIN 2026-08-23 (task 5.2, GAP-8) for the closing combat
-    assertions ONLY — see GAP-8 in the module docstring for what changed and
-    why. Everything above the `_run` call (loadout convergence, satchel gate)
-    is unaffected and kept from the 2026-08-04 derivation below.
+    """Task 5.2 fix round 1 (2026-08-23, GAP-8 in the module docstring)
+    round-tripped the closing combat assertions: wiring the cascade to
+    `band_combat_target` briefly broke them (tier 15's band offered a
+    stat-winnable but unfightable `highwayman`, so the arbiter fell all the
+    way to `MaintainConsumables`), and adding the executor's
+    `FIGHT_LEVEL_GAP_CEILING` to the band filter restored this derivation
+    verbatim — `band_combat_target` now returns `None` for tier 15 (nothing
+    in its band is both winnable AND in-window), so the cascade falls
+    through to tier 3's windowed picker, which finds `flying_snake` exactly
+    as it did before task 5.2 touched anything. See GAP-8 for the full
+    mechanism.
 
     RE-DERIVED AGAIN 2026-08-04 (pursuit_value unification).
 
@@ -511,25 +530,20 @@ def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
     assert report.decision.chosen_root == ReachCharLevel(level=20)
     assert not any(r.code == "satchel" for r in report.decision.fallback_roots
                    if isinstance(r, ObtainItem)), report.decision.fallback_roots
-    # RE-DERIVED AGAIN 2026-08-23 (task 5.2, GAP-8 above): tier 10
-    # (flying_snake, mushmush) is now CLEARED by the band model, so
-    # `band_combat_target` advances to tier 15 and offers `highwayman`
-    # (L15) — stat-winnable with this loadout, but outside `FightAction`'s
-    # `level <= state.level + 2` window (10+2=12 < 15), so the planner
-    # cannot build a plan for it (`goals_tried` shows `plan_len: 0` for
-    # `GrindCharacterXP(highwayman)`). The arbiter falls past combat
-    # entirely to `MaintainConsumables` (priority 25 vs the dead goal's 30)
-    # rather than to a lower, in-window, still-winnable monster like
-    # flying_snake — that fallback does not exist yet. This is the observed,
-    # current, GAP-8 behavior, not the desired one: fixing GAP-8 should
-    # FAIL this pin and require it to be updated again (`band_target.py` is
-    # task 5.1's module, out of this task's `player.py`-only scope).
+    # The grind target moved with the re-converged loadout (2026-08-04): at the
+    # ruler's own fixed point this L10 build beats `flying_snake`, which out-XPs
+    # the cow it used to grind. Still a plain combat grind on the trunk, which
+    # is what this pin is about. GAP-8 (fix round 1, 2026-08-23) briefly moved
+    # this to MaintainConsumables via an unfightable band pick (highwayman,
+    # tier 15) — see the module docstring for the mechanism; with
+    # FIGHT_LEVEL_GAP_CEILING now filtering the band, tier 15 offers nothing
+    # and the cascade falls through to tier 3, which finds flying_snake again.
     assert [g["goal"] for g in report.goals_tried] == [
-        "GrindCharacterXP(highwayman)", "MaintainConsumables",
+        "GrindCharacterXP(flying_snake)",
     ], report.goals_tried
-    assert report.goals_tried[0]["plan_len"] == 0, report.goals_tried
-    assert repr(report.selected_goal) == "MaintainConsumables", repr(report.selected_goal)
-    assert report.plan and repr(report.plan[0]).startswith("Fight(chicken"), \
+    assert repr(report.selected_goal).startswith("GrindCharacterXP(flying_snake"), (
+        repr(report.selected_goal))
+    assert report.plan and repr(report.plan[0]).startswith("Fight(flying_snake"), \
         report.plan
 
 

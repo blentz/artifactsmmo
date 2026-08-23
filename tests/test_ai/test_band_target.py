@@ -8,6 +8,7 @@ import dataclasses
 
 import artifactsmmo_cli.ai.tiers.band_target as mod
 import artifactsmmo_cli.ai.tiers.tier_progress as tp
+from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.tiers.band_target import band_combat_target
@@ -267,3 +268,44 @@ def test_band_bound_not_defeated_by_xp_ordering(monkeypatch):
     # Mutation (unbounded): could pick spider if grey XP doesn't zero out
     result = band_combat_target(state, gd, None)
     assert result == "mushmush"
+
+
+def test_stat_winnable_but_out_of_window_yields_none(monkeypatch):
+    """GAP-8 / task 5.2 fix round 1: `is_winnable` is a pure stat question and
+    knows nothing about `FightAction`'s own `state.level +
+    FIGHT_LEVEL_GAP_CEILING` structural ceiling. Live 2026-08-23:
+    `l10_bag_pursuit` (char level 10) had tier 10 (flying_snake, mushmush)
+    read CLEARED, so `next_uncleared_tier` advanced to tier 15, whose band
+    is (highwayman L15, pig L19, skeleton L18, wolf L15) — `highwayman` was
+    stat-winnable with that loadout, so the OLD `band_combat_target`
+    offered it, but 15 > 10+2 so `FightAction` refused it outright and
+    `GrindCharacterXP(highwayman)` planned to zero nodes.
+
+    Fixture: `highwayman` (L15) is the band's ONLY stat-winnable member —
+    `pig` (L19, also outside the window) stays unwinnable so tier 15 itself
+    stays uncleared (the point under test is the CANDIDATE filter, not tier
+    clearance). At char level 10 both band members sit above
+    `10 + FIGHT_LEVEL_GAP_CEILING`, so the fixed `band_combat_target` must
+    filter both out and return None — a gear wall, not an unfightable
+    target."""
+    def fake_is_winnable(s: object, g: object, c: str, h: object) -> bool:
+        return c != "pig"
+    monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
+    monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
+    gd = GameData()
+    gd._item_stats = {
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon"),
+        "iron_sword": ItemStats(code="iron_sword", level=10, type_="weapon"),
+        "steel_sword": ItemStats(code="steel_sword", level=15, type_="weapon"),
+    }
+    gd._monster_level = {"chicken": 1, "mushmush": 10, "highwayman": 15, "pig": 19}
+    gd._monster_type = {"chicken": "normal", "mushmush": "normal",
+                        "highwayman": "normal", "pig": "normal"}
+    gd._monster_hp = {"chicken": 60, "mushmush": 350, "highwayman": 500, "pig": 600}
+    state = make_state(level=10)
+
+    # Sanity: highwayman is genuinely outside the executor's window here —
+    # this test says nothing if the fixture accidentally sits inside it.
+    assert gd.monster_levels["highwayman"] > state.level + FIGHT_LEVEL_GAP_CEILING
+
+    assert band_combat_target(state, gd, None) is None

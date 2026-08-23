@@ -30,6 +30,22 @@ from artifactsmmo_cli.ai.world_state import WorldState
 _MIN_FIGHT_HP_FRACTION = 0.3
 """Don't start a fight below this HP fraction — rest/heal first."""
 
+FIGHT_LEVEL_GAP_CEILING = 2
+"""The suicide-guard upper bound: `_structurally_applicable` refuses a monster
+more than this many levels above the character, regardless of what `is_winnable`
+(a pure stat question) says. Named here — the executor's own gate — so every
+OTHER consumer that needs to know "can the executor actually fight this" (not
+just "would it win") imports this constant instead of copying the `2`.
+`ai.tiers.band_target.band_combat_target` is one such consumer (task 5.2 fix
+round 1, 2026-08-23): a target picked by stat-winnability alone but outside
+this window is unplannable — `GrindCharacterXP` reaches 0 nodes — so the two
+must agree or the cascade hands the planner a target it can never execute.
+`ai.combat_picker.pick_winnable_monster_pure` also encodes this bound (its own
+bare `char_level + 2`, proven equal to this gate by
+`formal/Formal/CombatTargetExistence.lean` / `formal/diff/
+test_combat_picker_diff.py`) — that copy is intentionally left alone here, out
+of this fix's scope, and not a third independent guess at the number."""
+
 LOADOUT_PENALTY = 5.0
 """Added to Fight cost when the loadout is suboptimal for the monster, so the
 planner sequences OptimizeLoadout before the fight (player executes plan[0] only).
@@ -79,7 +95,8 @@ class FightAction(Action):
         if not self.locations or state.inventory_free < self._MIN_FREE_SLOTS:
             return False
         monster_level = game_data.monster_level(self.monster_code)
-        if not (state.hp_percent > _MIN_FIGHT_HP_FRACTION and monster_level <= state.level + 2):
+        if not (state.hp_percent > _MIN_FIGHT_HP_FRACTION
+                and monster_level <= state.level + FIGHT_LEVEL_GAP_CEILING):
             return False
         # LOWER level gate: xp_per_kill > 0, NOT the old hard window
         # `monster_level >= max(1, level-1)`. The XP curve zeroes out at
