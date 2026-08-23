@@ -82,9 +82,17 @@ echo "== (c'') openapi conformance (strict) =="; ( cd "$ROOT" && uv run python f
 # actions, a task subsystem that never once ran, and the unified objective `J`
 # itself. It needs NO learning DB: the roster comes from the source, so CI
 # still fails on a Goal or Action added without a liveness decision.
-echo "== (c''') census (--check x7) =="
+# open-rung added 2026-08-23 (wave-3 resolution design, obligation O1),
+# measured standalone at 2.1s: 240 catalogue cells plus one `resolve_root`
+# drive per scenario. Placed beside shed for the same reason -- it is a
+# catalogue sweep, not a planner drive. It is the acceptance gate for "the bot
+# cannot raise this skill and cannot say why": wave 3 puts ReachSkillLevel on
+# the ONLY path from a skill-gated gear target to work, so a root the graph
+# routes to and the planner cannot serve is a silent stall, not a low score.
+echo "== (c''') census (--check x8) =="
 ( cd "$ROOT" \
   && uv run python scripts/gen_liveness.py --check \
+  && uv run python scripts/gen_open_rung.py --check \
   && uv run python scripts/gen_shed_reachability.py --check \
   && uv run python scripts/gen_inventory_completeness.py --check \
   && uv run python scripts/gen_recycle_source_completeness.py --check \
