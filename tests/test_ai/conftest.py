@@ -1,7 +1,8 @@
 """Shared pytest fixtures for the test_ai package."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.scenario import load_bundle_game_data

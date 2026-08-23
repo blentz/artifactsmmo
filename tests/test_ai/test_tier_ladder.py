@@ -1,5 +1,9 @@
 """The tier ladder is DERIVED from item levels, never hardcoded, and its
 monster bands partition the whole monster table."""
+import itertools
+
+import pytest
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.tier_ladder import (
     band,
@@ -50,6 +54,17 @@ def test_tier_of_level_below_the_first_rung_is_the_first_rung():
     assert tier_of_level(_gd(), 0) == 1
 
 
+def test_tier_of_level_raises_on_empty_ladder():
+    """When no equippable items exist, tier_of_level must raise ValueError."""
+    gd = GameData()
+    gd._item_stats = {"ash_plank": ItemStats(code="ash_plank", level=7,
+                                             type_="resource")}
+    gd._monster_level = {}
+    gd._monster_type = {}
+    with pytest.raises(ValueError, match="no equippable items"):
+        tier_of_level(gd, 1)
+
+
 def test_band_holds_monsters_from_the_rung_up_to_the_next():
     gd = _gd()
     assert band(gd, 1) == ("chicken",)
@@ -89,5 +104,5 @@ def test_the_live_ladder_is_not_the_audit_ten_level_banding(bundle_game_data):
     """Pins the distinction from `audit/content_tiers.py`, so a later reader
     cannot 'unify' them by accident. The derived ladder is uneven."""
     rungs = ladder(bundle_game_data)
-    steps = {b - a for a, b in zip(rungs, rungs[1:])}
+    steps = {b - a for a, b in itertools.pairwise(rungs)}
     assert steps != {10}, "derived ladder must not be a uniform 10-level banding"
