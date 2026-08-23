@@ -17,7 +17,31 @@ def test_an_unattainable_target_is_kept_and_carries_its_blocker(bundle_game_data
     assert "weapon_slot" in targets, "the weapon slot must produce a target"
     weapon = targets["weapon_slot"]
     if not weapon.attainable:
-        assert weapon.blocker is not None, "unattainable target must name a blocker"
+        assert weapon.blocker == "material:wooden_stick", \
+            "unattainable target must name its exact blocker"
+
+
+def test_attainable_target_is_reported_attainable_with_no_blocker(bundle_game_data):
+    """Fix-round-2 (2026-08-23): the happy-path return in `_classify_target`
+    (`attainable=True, blocker=None`) had ZERO assertion coverage — a mutant
+    that replaced it with `attainable=False, blocker="MUTATION_PROBE"` (every
+    attainable target reported as blocked) still passed every existing test,
+    because they only assert inside `if not target.attainable:` branches.
+    `copper_helmet` is verified attainable under this fixture state (level 30,
+    weaponcrafting 10 — gearcrafting defaults to 1, but copper_helmet's
+    materials/skill are within reach): pin that `helmet_slot` reports it as
+    attainable with no blocker."""
+    gd = bundle_game_data
+    objective = CharacterObjective.from_game_data(gd)
+    state = make_state(level=30, skills={"weaponcrafting": 10})
+
+    targets = objective.gear_targets_with_blockers(state, None)
+
+    assert "helmet_slot" in targets
+    helmet = targets["helmet_slot"]
+    assert helmet.code == "copper_helmet"
+    assert helmet.attainable is True
+    assert helmet.blocker is None
 
 
 def test_every_unattainable_target_names_a_blocker(bundle_game_data):
