@@ -116,33 +116,34 @@ def test_an_action_with_no_item_has_no_rejection_key():
 # ---------------------------------------------------------------------------
 
 
-def test_build_actions_drops_a_categorically_refused_action(bundle_game_data):
-    """C3P0's loop, at the seam that ends it.
+def test_the_player_wires_its_planner_to_the_refusal_memo(bundle_game_data):
+    """The WIRING. `set_refusal_filter` is only useful if the player actually
+    calls it, and the predicate it passes must read the live memo.
 
-    Asserts on the ACTION LIST `_build_actions` returns, not on the helper it
-    calls. An earlier version of this test checked `_is_categorically_refused`
-    directly and survived deleting the filter from `_build_actions` outright —
-    the pure pieces were right and the wiring did nothing, which is precisely
-    how the bug being fixed here lasted eight hours.
+    An earlier version of this test asserted on `_build_actions`' output. That
+    filter has since been removed: a goal may SYNTHESISE actions rather than
+    select from that pool (`RecycleSurplusGoal` does), so filtering the pool
+    missed the very action that caused this — the fleet restarted onto that
+    version at 12:43Z 2026-08-23 and C3P0 resumed within seconds.
     """
     player = GamePlayer(character="C3P0")
     player.game_data = bundle_game_data
     player.state = make_state(level=20, inventory={"water_boost_potion": 3},
                               skills={"alchemy": 13})
 
-    def recycles_of(code: str) -> list[object]:
-        return [a for a in player._build_actions()
-                if isinstance(a, RecycleAction) and a.code == code]
+    refused = RecycleAction(code="water_boost_potion", quantity=1)
+    survivors = player.planner._surviving_actions([refused])
+    assert survivors == [refused], "precondition: not refused yet"
 
-    assert recycles_of("water_boost_potion"), (
-        "precondition: the factory must offer this recycle before the refusal")
-
-    key = rejection_key(RecycleAction(code="water_boost_potion", quantity=1))
+    key = rejection_key(refused)
     assert key is not None
     player._rejected_actions.mark(key, player.state, cycle=player._cycle_counter)
 
-    assert recycles_of("water_boost_potion") == [], (
-        "a categorically refused recycle must leave the action pool entirely")
+    assert player.planner._surviving_actions([refused]) == [], (
+        "the player's planner must consult the live refusal memo")
+    assert player.planner._surviving_actions(
+        [RecycleAction(code="copper_ring", quantity=1)]) != [], (
+        "poisoning one item must not disturb another")
 
 
 def test_a_refused_action_is_offered_again_after_the_reprobe_window():
@@ -231,3 +232,17 @@ def test_a_cooldown_does_not_poison_the_action(monkeypatch, bundle_game_data):
 
     assert player._rejected_actions.is_doomed(
         key, player.state, player._cycle_counter) is False
+
+
+def test_the_refusal_predicate_is_safe_before_the_world_is_sensed():
+    """The planner holds this predicate from construction, before `plan_once`
+    or `run` has fetched any state. "Not sensed yet" must answer False, not
+    raise — an exception here would fire inside a per-action hot path on the
+    very first search."""
+    player = GamePlayer(character="C3P0")
+    assert player.state is None
+
+    assert player._is_categorically_refused(
+        RecycleAction(code="water_boost_potion", quantity=1)) is False
+    assert player.planner._surviving_actions(
+        [RecycleAction(code="water_boost_potion", quantity=1)]) != []

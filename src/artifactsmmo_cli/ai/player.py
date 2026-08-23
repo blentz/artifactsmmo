@@ -214,6 +214,13 @@ class GamePlayer:
         self._game_data_ttl_minutes = game_data_ttl_minutes
         self._refresh_game_data = refresh_game_data
         self.planner = GOAPPlanner()
+        # Actions the server has categorically refused are filtered INSIDE the
+        # planner, at `goal.relevant_actions`, because that is the only point
+        # every action passes through. Filtering the `_build_actions` pool alone
+        # missed goals that synthesise their own — `RecycleSurplusGoal` builds
+        # its `RecycleAction`s from `recyclable_surplus`, so C3P0's refused
+        # recycle sailed straight past that filter (live 2026-08-23 12:43Z).
+        self.planner.set_refusal_filter(self._is_categorically_refused)
         self._arbiter = StrategyArbiter(self.planner, history)
         # active_events and raids are account-GLOBAL: identical for every
         # character, yet re-read every cycle. With five `play --all` children
@@ -2572,21 +2579,25 @@ class GamePlayer:
         # block is recorded from a goal-SIZED gather (`Gather(x×47)`) while the
         # factory here always builds the unsized one (`Gather(x×1)`), so the
         # filter would silently match nothing. See `CycleRecord.action_key`.
+        # Categorical server refusals are NOT filtered here. They are filtered
+        # inside the planner at `goal.relevant_actions` (`set_refusal_filter`),
+        # because a goal may synthesise actions instead of selecting from this
+        # pool — `RecycleSurplusGoal` does, and filtering here alone let C3P0's
+        # refused recycle through untouched (live 2026-08-23 12:43Z). One rule,
+        # one site; a second filter here would be duplication that can drift.
         if self._failed_action_backoff:
-            built = [a for a in built
-                     if a.learning_key() not in self._failed_action_backoff]
-        # Drop anything the server has categorically refused. This is the ONLY
-        # consult site, so every action inherits the feedback path — not just
-        # the one whose refusal was noticed. Matched on the quantity-free
-        # `rejection_key`, the same identity the mark side used.
-        if self.state is not None:
-            built = [a for a in built
-                     if not self._is_categorically_refused(a)]
+            return [a for a in built
+                    if a.learning_key() not in self._failed_action_backoff]
         return built
 
     def _is_categorically_refused(self, action: Action) -> bool:
-        """Has the server refused this action's item as ineligible, recently?"""
-        assert self.state is not None
+        """Has the server refused this action's item as ineligible, recently?
+
+        False before state exists: the planner holds this predicate from
+        construction, and "we have not sensed the world yet" must not be an
+        assertion failure inside a per-action hot path."""
+        if self.state is None:
+            return False
         key = rejection_key(action)
         if key is None:
             return False

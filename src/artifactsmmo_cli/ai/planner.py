@@ -2,6 +2,7 @@
 
 import heapq
 import time
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 
@@ -157,6 +158,10 @@ class GOAPPlanner:
 
     def __init__(self) -> None:
         self.last_stats = PlanStats()
+        self._is_refused: Callable[[Action], bool] | None = None
+        """Predicate for actions the server has categorically refused, wired by
+        `set_refusal_filter`. None = no filtering (the default for every caller
+        that never wires one)."""
         self.action_floor_seconds = 0.0
         """Seconds one REQUEST costs when the per-IP rate budget, not the action
         cooldown, is what paces this character. Zero (the default) restores the
@@ -174,6 +179,33 @@ class GOAPPlanner:
         the ENVIRONMENT (this process's share of one per-IP budget), constant
         across every goal and every re-plan, not of an individual search."""
         self.action_floor_seconds = seconds
+
+    def set_refusal_filter(self, is_refused: "Callable[[Action], bool] | None") -> None:
+        """Wire the server-refusal predicate (`ai/action_rejection`).
+
+        Same rationale as `set_action_floor`: what the server has categorically
+        refused is a property of the ENVIRONMENT this session runs in, constant
+        across every goal and every re-plan.
+
+        THIS is the seam, not the caller's action list. A goal's
+        `relevant_actions` may SYNTHESISE actions instead of selecting from the
+        list it is handed — `goals/recycle_surplus.py` builds its own
+        `RecycleAction`s from `recyclable_surplus`, and `ai/disposal_route.py`
+        does the same. Filtering the pool `_build_actions` produces therefore
+        misses them entirely: the fleet restarted onto exactly that fix at
+        12:43Z 2026-08-23 and C3P0 resumed its refused recycle within seconds.
+        Every action, whoever made it, passes through `goal.relevant_actions`
+        below.
+
+        Default None = no filtering, so every caller that never wires one keeps
+        the pre-change planner exactly."""
+        self._is_refused = is_refused
+
+    def _surviving_actions(self, relevant: "list[Action]") -> "list[Action]":
+        """`relevant` minus anything the server has categorically refused."""
+        if self._is_refused is None:
+            return relevant
+        return [a for a in relevant if not self._is_refused(a)]
 
     def plan(
         self,
@@ -201,7 +233,8 @@ class GOAPPlanner:
         stats = PlanStats(nodes_created=1)  # the root node below
 
         visited: set[tuple[object, ...]] = set()
-        relevant = goal.relevant_actions(actions, state, game_data)
+        relevant = self._surviving_actions(
+            goal.relevant_actions(actions, state, game_data))
 
         cache_ctx = history.search_cache() if history is not None else nullcontext()
         with cache_ctx:
