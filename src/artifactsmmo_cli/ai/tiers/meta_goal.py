@@ -75,3 +75,21 @@ class ObtainItem:
                 return owned_count(state, self.code) >= self.quantity
             return self.code in state.equipment.values()
         return owned_count(state, self.code) >= self.quantity
+
+
+@dataclass(frozen=True)
+class ReachSkillLevel:
+    """The character reaches `level` in `skill`.
+
+    A root-level sibling of `ReachCharLevel`: the tier ladder's answer when a
+    gear target is skill-gated is "raise the skill by one", and `chosen_root`
+    must be able to name that. Wave 2 could route to `ReachSkillGoal` (a planner
+    Goal) but had no MetaGoal for it, so the pane reported the gear root while
+    the bot ground a skill.
+    """
+
+    skill: str
+    level: int
+
+    def is_satisfied(self, state: WorldState, game_data: GameData) -> bool:
+        return state.skills.get(self.skill, 1) >= self.level

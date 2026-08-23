@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
+    ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
@@ -155,6 +156,10 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
             return []
         weapon = best_attainable_weapon(game_data)
         return [ObtainItem(weapon)] if weapon is not None else []
+    if isinstance(node, ReachSkillLevel):
+        # A skill climb has no MetaGoal prerequisites — LevelSkill /
+        # ReachSkillGoal owns the sub-plan (§5.1).
+        return []
     return []
 
 

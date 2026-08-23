@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
+    ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.objective import (
     ATTAINABILITY_ALLOWS_GREY,
@@ -48,6 +49,8 @@ index)."""
 def root_category(node: MetaGoal) -> str:
     if isinstance(node, ReachCharLevel):
         return "char_level"
+    if isinstance(node, ReachSkillLevel):
+        return "skill"
     return "gear"  # ObtainItem
 
 

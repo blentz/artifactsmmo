@@ -2,6 +2,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
+    ReachSkillLevel,
     owned_count,
 )
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
@@ -13,6 +14,34 @@ GD = GameData()
 def test_reach_char_level_satisfaction():
     assert ReachCharLevel(10).is_satisfied(make_state(level=10), GD) is True
     assert ReachCharLevel(10).is_satisfied(make_state(level=9), GD) is False
+
+
+def test_reach_skill_level_construction_and_repr():
+    node = ReachSkillLevel(skill="weaponcrafting", level=11)
+    assert node.skill == "weaponcrafting"
+    assert node.level == 11
+    assert repr(node) == "ReachSkillLevel(skill='weaponcrafting', level=11)"
+
+
+def test_reach_skill_level_hashable_and_equal():
+    # frozen dataclass → usable in visited-sets during P3 traversal, same as
+    # ReachCharLevel/ObtainItem.
+    assert {ReachSkillLevel("mining", 5), ReachSkillLevel("mining", 3)}
+    assert ReachSkillLevel("mining", 5) == ReachSkillLevel("mining", 5)
+
+
+def test_reach_skill_level_satisfaction():
+    state = make_state(skills={"weaponcrafting": 10})
+    assert ReachSkillLevel("weaponcrafting", 10).is_satisfied(state, GD) is True
+    assert ReachSkillLevel("weaponcrafting", 11).is_satisfied(state, GD) is False
+
+
+def test_reach_skill_level_satisfaction_unknown_skill_defaults_to_one():
+    # state.skills.get(skill, 1): a skill absent from the dict reads as level 1
+    # (the API's floor), matching the spec's `.get(self.skill, 1)`.
+    state = make_state(skills={})
+    assert ReachSkillLevel("mining", 1).is_satisfied(state, GD) is True
+    assert ReachSkillLevel("mining", 2).is_satisfied(state, GD) is False
 
 
 def test_owned_count_inventory_bank_equipped():

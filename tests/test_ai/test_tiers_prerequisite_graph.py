@@ -1,5 +1,5 @@
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
     best_attainable_weapon,
     combat_capable,
@@ -206,3 +206,10 @@ def test_cyclic_recipe_traversal_terminates():
         seen.add(node)
         frontier.extend(prerequisites(node, make_state(), gd))
     assert ObtainItem("a", 1) in seen and ObtainItem("b", 1) in seen
+
+
+def test_reach_skill_level_has_no_prerequisites():
+    # §5.1: a skill climb has no MetaGoal prerequisites — LevelSkill /
+    # ReachSkillGoal owns the sub-plan, not the prerequisite graph.
+    gd = _gd()
+    assert prerequisites(ReachSkillLevel("weaponcrafting", 11), make_state(), gd) == []

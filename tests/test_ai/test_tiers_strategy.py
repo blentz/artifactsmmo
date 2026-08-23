@@ -2,7 +2,12 @@ import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import (
+    MetaGoal,
+    ObtainItem,
+    ReachCharLevel,
+    ReachSkillLevel,
+)
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
 from artifactsmmo_cli.ai.tiers.strategy import (
@@ -121,6 +126,7 @@ def test_unmet_closure_size_shrinks_with_a_ready_source():
 def test_root_category():
     assert root_category(ReachCharLevel(50)) == "char_level"
     assert root_category(ObtainItem("x")) == "gear"
+    assert root_category(ReachSkillLevel("weaponcrafting", 11)) == "skill"
 
 
 def test_desired_state_of():
