@@ -114,6 +114,26 @@ def test_abstract_intermediate_subclass_without_name_is_accepted():
     assert _ConcreteLeaf.name == "ConcreteLeaf"
 
 
+def test_resolve_node_walks_a_generic_leaf_type():
+    """resolve_node must be leaf-type-agnostic (wave3 spec 5.1): a Decision[str]
+    chain resolving to a plain str leaf. The pre-5.1 termination test
+    `isinstance(current, Goal)` cannot recognise a str as a leaf -- it is not
+    a Goal, so the walk treats it as another Decision and blows up trying to
+    read `.name`/`.resolve` off a str. Wave 3's root graph needs exactly this:
+    it terminates on a MetaGoal, a non-runtime-checkable Protocol."""
+    class _StrDecision(Decision[str]):
+        name = "StrDecision"
+
+        def __init__(self, child):
+            self._child = child
+
+        def resolve(self, state, game_data, ctx, history):
+            return self._child
+
+    leaf = "a-string-leaf"
+    assert resolve_node(_StrDecision(leaf), make_state(), None, None, None) == leaf
+
+
 def test_concrete_subclass_of_an_abstract_intermediate_still_needs_name():
     """The exemption in the test above must not swallow the real check: a
     CONCRETE subclass (non-abstract `resolve`) that forgets `name` is still

@@ -16,7 +16,6 @@ and every `Action` are untouched by this type.
 from abc import ABC, abstractmethod
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -31,7 +30,7 @@ is a programming error, so it raises rather than truncating.
 """
 
 
-class Decision(ABC):
+class Decision[Leaf](ABC):
     """A named predicate over state that selects a child node."""
 
     name: str
@@ -58,21 +57,28 @@ class Decision(ABC):
     @abstractmethod
     def resolve(self, state: WorldState, game_data: GameData,
                 ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision | Goal | None":
+                ) -> "Decision[Leaf] | Leaf | None":
         """The child this decision selects for `state`. None = no child."""
 
 
-Node = Decision | Goal
+type Node[Leaf] = Decision[Leaf] | Leaf
 
 
-def resolve_node(node: Node | None, state: WorldState, game_data: GameData,
-                 ctx: SelectionContext, history: LearningStore | None
-                 ) -> Goal | None:
-    """Walk `node` down to the Goal it selects, or None."""
+def resolve_node[Leaf](node: Decision[Leaf] | Leaf | None,
+                 state: WorldState, game_data: GameData,
+                 ctx: SelectionContext, history: LearningStore | None,
+                 ) -> Leaf | None:
+    """Walk `node` down to the leaf it selects, or None.
+
+    Terminates on 'not a Decision' rather than on a positive leaf test, so the
+    same walk serves the STEP graph (leaf = Goal, an ABC) and the ROOT graph
+    (leaf = MetaGoal, a Protocol that cannot be isinstance-tested). One walk,
+    two leaf kinds -- not two walks.
+    """
     seen: list[str] = []
-    current = node
+    current: Decision[Leaf] | Leaf | None = node
     for _ in range(MAX_RESOLVE_DEPTH):
-        if current is None or isinstance(current, Goal):
+        if not isinstance(current, Decision):
             return current
         seen.append(current.name)
         current = current.resolve(state, game_data, ctx, history)

@@ -47,7 +47,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-class CanIAffordTheCurrencyLeaf(Decision):
+class CanIAffordTheCurrencyLeaf(Decision[Goal]):
     """strategy_driver.py:898 (originally 896-900)."""
 
     name = "CanIAffordTheCurrencyLeaf"
@@ -58,7 +58,7 @@ class CanIAffordTheCurrencyLeaf(Decision):
 
     def resolve(self, state: WorldState, game_data: GameData,
                 ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision | Goal | None":
+                ) -> "Decision[Goal] | Goal | None":
         # DEMAND ROUTING (C4 Task 6): if obtaining this item is BLOCKED on an
         # unaffordable currency-buy leaf in its recipe closure (e.g. satchel <-
         # jasper_crystal @ tasks_trader for 8 tasks_coin, with 0 tasks_coin), the
@@ -80,7 +80,7 @@ class CanIAffordTheCurrencyLeaf(Decision):
         return IsTheStepTheEquippableItself(self.step, self.root)
 
 
-class IsTheStepTheEquippableItself(Decision):
+class IsTheStepTheEquippableItself(Decision[Goal]):
     """strategy_driver.py:903 (originally 901-905)."""
 
     name = "IsTheStepTheEquippableItself"
@@ -91,7 +91,7 @@ class IsTheStepTheEquippableItself(Decision):
 
     def resolve(self, state: WorldState, game_data: GameData,
                 ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision | Goal | None":
+                ) -> "Decision[Goal] | Goal | None":
         stats = game_data.item_stats(self.step.code)
         slots = ITEM_TYPE_TO_SLOTS.get(stats.type_) if stats is not None else None
         if slots:
@@ -100,7 +100,7 @@ class IsTheStepTheEquippableItself(Decision):
         return IsThisAnIntermediateOnAChain(self.step, self.root)
 
 
-class IsThisAnIntermediateOnAChain(Decision):
+class IsThisAnIntermediateOnAChain(Decision[Goal]):
     """strategy_driver.py:910 (originally 906-913, plus the line-1006
     fallback shared with the negative outcome of this branch)."""
 
@@ -112,7 +112,7 @@ class IsThisAnIntermediateOnAChain(Decision):
 
     def resolve(self, state: WorldState, game_data: GameData,
                 ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision | Goal | None":
+                ) -> "Decision[Goal] | Goal | None":
         # Intermediate step: if the chain root is an equippable, plan
         # against the root directly. UpgradeEquipmentGoal's planner
         # walks the recipe chain (craft intermediates + final + equip)
@@ -128,7 +128,7 @@ class IsThisAnIntermediateOnAChain(Decision):
                                    needed={self.step.code: self.step.quantity})
 
 
-class CanICraftCurrentTier(Decision):
+class CanICraftCurrentTier(Decision[Goal]):
     """strategy_driver.py:972 (originally 933-1002). HOISTED per PF-2 to run
     BEFORE `DoesTheRecipeNeedAMonsterDrop` (originally line 924) -- see the
     module docstring for the measurement that forced this. "I cannot craft
@@ -147,7 +147,7 @@ class CanICraftCurrentTier(Decision):
 
     def resolve(self, state: WorldState, game_data: GameData,
                 ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision | Goal | None":
+                ) -> "Decision[Goal] | Goal | None":
         # Root craft SKILL-GATED: the final craft is blocked until the
         # crafting skill rises. The step's materials cannot pay off a craft
         # that cannot run -- raise the skill instead. This is the only link
@@ -177,7 +177,7 @@ class CanICraftCurrentTier(Decision):
             self.step, self.root, self.root_slots)
 
 
-class DoesTheRecipeNeedAMonsterDrop(Decision):
+class DoesTheRecipeNeedAMonsterDrop(Decision[Goal]):
     """strategy_driver.py:924 (originally 914-932). Reached only once
     `CanICraftCurrentTier` has confirmed the crafting skill is adequate
     (PF-2 hoist). Absorbs the depth-budget chunking that previously lived in
@@ -194,7 +194,7 @@ class DoesTheRecipeNeedAMonsterDrop(Decision):
 
     def resolve(self, state: WorldState, game_data: GameData,
                 ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision | Goal | None":
+                ) -> "Decision[Goal] | Goal | None":
         # Recipe with a MONSTER-DROP input (feather <- chicken): planning the
         # whole craft+equip chain EXPLODES — the GOAP A* must interleave
         # fights, gathers, crafts and travel across the chicken spawn /
@@ -261,7 +261,7 @@ class DoesTheRecipeNeedAMonsterDrop(Decision):
         return DoesTheChainFitTheDepthBudget(self.root, tgt_code, tgt_qty, upgrade)
 
 
-class DoesTheChainFitTheDepthBudget(Decision):
+class DoesTheChainFitTheDepthBudget(Decision[Goal]):
     """strategy_driver.py:1003 (originally 1003-1005)."""
 
     name = "DoesTheChainFitTheDepthBudget"
@@ -275,14 +275,14 @@ class DoesTheChainFitTheDepthBudget(Decision):
 
     def resolve(self, state: WorldState, game_data: GameData,
                 ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision | Goal | None":
+                ) -> "Decision[Goal] | Goal | None":
         if _gather_step_target_is_root(self.tgt_code, self.root.code):
             return self.upgrade
         return GatherMaterialsGoal(target_item=self.tgt_code,
                                    needed={self.tgt_code: self.tgt_qty})
 
 
-def obtain_item_decision(step: ObtainItem, root: MetaGoal | None) -> Decision:
+def obtain_item_decision(step: ObtainItem, root: MetaGoal | None) -> Decision[Goal]:
     """The entry node for an `ObtainItem` step: the first branch of the
     original if-pile."""
     return CanIAffordTheCurrencyLeaf(step, root)

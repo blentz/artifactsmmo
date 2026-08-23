@@ -26,7 +26,7 @@ from artifactsmmo_cli.ai.combat_deficit import deficit_upgrade_target
 from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.craft_plan_gen import _closure_items, generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
-from artifactsmmo_cli.ai.decision import resolve_node
+from artifactsmmo_cli.ai.decision import Decision, resolve_node
 from artifactsmmo_cli.ai.decisions.obtain_item import obtain_item_decision
 from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
@@ -626,7 +626,20 @@ def objective_step_goal(
         # `.superpowers/sdd/PLAN_goal_decision_graph/progress.md` (PF-2) for
         # why `CanICraftCurrentTier` (the crafting-skill gate) runs BEFORE
         # `DoesTheRecipeNeedAMonsterDrop`, and `decision.py` for `resolve_node`.
-        return resolve_node(obtain_item_decision(step, root), state, game_data, ctx, history)
+        #
+        # `node` is annotated as the full `Decision[Goal] | Goal | None` union
+        # (resolve_node's own parameter shape) rather than left as the bare
+        # `Decision[Goal]` `obtain_item_decision` returns -- mypy's constraint
+        # solver cannot unify a self-referential `Decision[Leaf] | Leaf | None`
+        # parameter against a bare `Decision[Goal]` argument (it is ambiguous
+        # whether `Leaf` should bind to `Goal` via the `Decision[Leaf]` arm or
+        # to `Decision[Goal]` itself via the bare `Leaf` arm) and infers `Never`
+        # instead, rejecting the call. Widening the argument's static type to
+        # match the parameter's shape resolves the ambiguity without changing
+        # anything at runtime.
+        node: Decision[Goal] | Goal | None = obtain_item_decision(step, root)
+        resolved: Goal | None = resolve_node(node, state, game_data, ctx, history)
+        return resolved
     if isinstance(step, ReachCharLevel):
         if ctx.combat_monster is None:
             return None

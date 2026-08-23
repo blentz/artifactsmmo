@@ -354,6 +354,7 @@ FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding
 CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_afford_core.py"
 DOOMED_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "doomed_memo.py"
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
+DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decision.py"
 OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "obtain_item.py"
 # `_equippable_goal` / `_gather_goal_for_unreachable_equippable` /
 # `_gather_step_target_is_root` / `_recipe_has_combat_drop_input` moved here
@@ -2787,6 +2788,22 @@ COMBAT_VETO_MUTATIONS = [
     ("combat: weaken learned-veto threshold 0.4 -> 0.9 (blocks marginal-but-winnable targets)",
      "WIN_RATE_THRESHOLD = 0.4",
      "WIN_RATE_THRESHOLD = 0.9"),
+]
+
+
+# Killed by tests/test_ai/test_decision.py
+# (test_resolve_node_walks_a_generic_leaf_type): wave3 spec 5.1 made
+# resolve_node's walk leaf-type-agnostic by flipping the termination test from
+# "is it a Goal" to "is it NOT a Decision" -- the ROOT graph terminates on a
+# MetaGoal, a non-runtime-checkable Protocol, so a positive isinstance(...,
+# Goal) test cannot serve both leaf kinds. This mutant restores the old
+# positive test, which cannot recognise a non-Goal leaf (e.g. a plain str, or
+# a MetaGoal) and treats it as another Decision instead.
+DECISION_MUTATIONS = [
+    ("decision: resolve_node termination reverts to isinstance(current, Goal)"
+     " (cannot recognise a non-Goal leaf, e.g. MetaGoal)",
+     "        if not isinstance(current, Decision):\n            return current\n",
+     "        if current is None or isinstance(current, Goal):\n            return current\n"),
 ]
 
 
@@ -7489,6 +7506,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_currency_afford_diff.py", survivors)
     run_group(DOOMED_MEMO_SRC, DOOMED_MEMO_MUTATIONS,
               "formal/diff/test_doomed_memo_diff.py", survivors)
+    run_group(DECISION_SRC, DECISION_MUTATIONS,
+              "tests/test_ai/test_decision.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, STRATEGY_DRIVER_MUTATIONS,
               "tests/test_ai/test_strategy_driver_tiered.py", survivors)
     run_group(OBTAIN_ITEM_DECISION_SRC, OBTAIN_ITEM_DECISION_MUTATIONS,
