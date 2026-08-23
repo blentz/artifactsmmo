@@ -1053,6 +1053,204 @@ def objective_step_goal(
     return None
 
 
+def _legacy_objective_step_goal(
+    step: MetaGoal | None,
+    state: WorldState,
+    game_data: GameData,
+    ctx: SelectionContext,
+    root: MetaGoal | None = None,
+    committed_root: MetaGoal | None = None,
+    history: LearningStore | None = None,
+) -> Goal | None:
+    """Map the strategy's chosen step to a Goal.
+
+    When `root` is provided and is an equippable ObtainItem (e.g.
+    copper_boots) while `step` is an intermediate recipe-input
+    ObtainItem (e.g. copper_bar) along the root's chain, return
+    UpgradeEquipmentGoal targeting the ROOT so the planner crafts the
+    whole chain (intermediates + final + equip) under one goal commit
+    instead of stopping at the intermediate.
+
+    VERBATIM pre-transcription body, kept ONLY so
+    `tests/test_ai/test_decisions_obtain_item.py` can assert the Decision graph
+    returns the same goal. Deleted in Task 5 once parity is green.
+    """
+    if step is None:
+        return None
+    if isinstance(step, ObtainItem):
+        # DEMAND ROUTING (C4 Task 6): if obtaining this item is BLOCKED on an
+        # unaffordable currency-buy leaf in its recipe closure (e.g. satchel <-
+        # jasper_crystal @ tasks_trader for 8 tasks_coin, with 0 tasks_coin), the
+        # GatherMaterials/UpgradeEquipment goal built below is unplannable
+        # (GatherMaterialsGoal.is_plannable fast-fails — currency_afford_plannable_pure).
+        # Route to ReachCurrencyGoal to FUND the currency instead, so the arbiter
+        # has a plannable funding goal to select. Once funded the leaf becomes
+        # affordable and the next pass builds the craft path (buy + craft). Shares
+        # the ONE closure walk with is_plannable (analyze_currency_leaves). Only a
+        # tasks_coin-funded leaf yields a funding_target — a gold/event-only leaf is
+        # `blocked` (is_plannable prunes it) but NOT routed here (ReachCurrencyGoal
+        # mints only tasks_coin, so funding a gold leaf would chase an unreachable
+        # goal).
+        analysis = analyze_currency_leaves(
+            {step.code: step.quantity}, state, game_data)
+        if analysis.funding_target is not None:
+            currency, amount = analysis.funding_target
+            return ReachCurrencyGoal(currency=currency, target=amount)
+        stats = game_data.item_stats(step.code)
+        slots = ITEM_TYPE_TO_SLOTS.get(stats.type_) if stats is not None else None
+        if slots:
+            dest_slot = step.slot if step.slot is not None else slots[0]
+            return _equippable_goal(step.code, dest_slot, state, game_data, ctx)
+        # Intermediate step: if the chain root is an equippable, plan
+        # against the root directly. UpgradeEquipmentGoal's planner
+        # walks the recipe chain (craft intermediates + final + equip)
+        # while GatherMaterialsGoal stops at the intermediate.
+        if isinstance(root, ObtainItem) and root.code != step.code:
+            root_stats = game_data.item_stats(root.code)
+            root_slots = ITEM_TYPE_TO_SLOTS.get(root_stats.type_) if root_stats is not None else None
+            if root_slots:
+                # Recipe with a MONSTER-DROP input (feather <- chicken): planning the
+                # whole craft+equip chain EXPLODES — the GOAP A* must interleave
+                # fights, gathers, crafts and travel across the chicken spawn /
+                # resource node / workshop, which times out (live: feather_coat 57k
+                # nodes, depth 23, plan_len 0). The recipe is deterministic but the
+                # search is not. Collect inputs INCREMENTALLY: route to the flat
+                # actionable step (gather wood / craft plank / hunt chickens for
+                # feathers, one at a time). Each flat GatherMaterials plans within
+                # budget — GatherMaterials(feather) emits Fight(chicken) and is a flat
+                # hunt — and once every input is in hand the final craft is shallow.
+                if _recipe_has_combat_drop_input(root.code, game_data):
+                    return GatherMaterialsGoal(target_item=step.code,
+                                               needed={step.code: step.quantity})
+                dest_slot = root.slot if root.slot is not None else root_slots[0]
+                owned: dict[str, int] = dict(state.inventory)
+                for code, qty in (state.bank_items or {}).items():
+                    owned[code] = owned.get(code, 0) + qty
+                upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment,
+                                               committed_target=(root.code, dest_slot))
+                # Pursue the committed gear root one PLANNABLE CHUNK at a time — never
+                # hand the whole craft+equip chain to the A* at once. The old code
+                # returned the whole-chain `upgrade` whenever `upgrade.is_plannable`,
+                # but is_plannable means "achievable ever", NOT "the A* finds it within
+                # max_depth". A from-scratch copper_boots chain is ~96 actions (80 ore
+                # gathers + 8 bar crafts + boots + equip) ≫ max_depth 32, so the one-shot
+                # plan returned plan_len 0 and the bot abandoned boots for chicken grind
+                # (trace 2026-06-21). A depth
+                # predicate can't save it either: min_plan_length is only a LOWER bound
+                # (omits travel + the final assembly), so `<= max_depth` never PROVES the
+                # plan fits. So we always chunk: when the step is an intermediate, route
+                # to the deepest flat gather (gather_step_target), which plans within
+                # budget and makes incremental progress; once the materials accumulate
+                # the strategy's actionable_step advances to the next recipe level, and
+                # when every input is in hand the step becomes the root itself (handled
+                # by the equippable branch above as a shallow craft+equip). The root
+                # objective commitment is unchanged — only its EXECUTION is chunked.
+                #
+                # Root craft SKILL-GATED (not a depth problem): the final
+                # craft is blocked until the crafting skill rises, but the
+                # step's materials are needed regardless — plan the literal
+                # step, even when the root's raw-gather depth already fits
+                # the budget below. `gather_step_target`'s root-return check
+                # (`_gather_step_target_is_root`) only weighs MATERIAL gather
+                # depth against `equip_max_depth` — it has no notion of a
+                # crafting-skill gap, so a materially-shallow root can still
+                # fall through to `upgrade` there. Handing `upgrade` (the
+                # WHOLE craft+equip chain, now also carrying a LevelSkill
+                # grind for the gap) to the A* before the materials are even
+                # in hand is the one-shot-chain explosion the chunking above
+                # exists to avoid — the same skill-gated dead end this guard
+                # was written to prevent (trace 2026-06-11 18:46 cycle 15-16:
+                # both gear roots stalled and the arbiter fell through to
+                # slime grinding with the bar objective abandoned at 1/5).
+                # Once the materials are in hand AND the skill has risen
+                # enough, the equippable branch above hands the now-bounded
+                # remaining chunk to `upgrade` — UpgradeEquipmentGoal grinds
+                # the crafting skill planner-natively via the LevelSkill
+                # action (epic P3).
+                if (root_stats is not None and root_stats.crafting_skill
+                        and state.skills.get(root_stats.crafting_skill, 1)
+                        < root_stats.crafting_level):
+                    return GatherMaterialsGoal(target_item=step.code,
+                                               needed={step.code: step.quantity})
+                # Root chain depth-UNREACHABLE (from-scratch deep recipe). The
+                # old fallback GatherMaterials(root, root's DIRECT recipe) needs a
+                # plan that gathers min_gathers(root) raw units THROUGH the deep
+                # recipe — the GOAP search over gather/deposit/craft interleavings
+                # EXPLODES (live: 1M+ nodes, 90s timeout, plan_len 0, then
+                # fall-through; the gear chain never progresses). Route instead to
+                # the strategy's DEEPEST actionable step (the raw base material),
+                # whose gather is FLAT and budget-feasible and makes incremental
+                # progress; once it accumulates the next recipe level becomes the
+                # actionable step. Sound: the step is a prerequisite ON the root's
+                # path and never harder than the root (gather_step_target +
+                # formal/Formal/StepDispatch.lean gatherTarget_*).
+                #
+                # gather_step_target can also decide the ROOT's own gather cost
+                # already fits the depth budget and return it BY NAME — its own
+                # module docstring states that as a precondition of THIS call
+                # site ("the caller plans the root chain directly"), not
+                # license to wrap the root in a second GatherMaterials pass
+                # over itself (see `_gather_step_target_is_root`, shared with
+                # `_gather_goal_for_unreachable_equippable`, for the mechanism
+                # and the measured cost of getting this wrong). `upgrade` above
+                # is already the root's reachable-root goal to fall through to.
+                tgt_code, tgt_qty = gather_step_target(
+                    root.code, step.code, step.quantity,
+                    game_data.crafting_recipes, owned, upgrade.max_depth,
+                    game_data.max_gather_yield)
+                if _gather_step_target_is_root(tgt_code, root.code):
+                    return upgrade
+                return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
+        return GatherMaterialsGoal(target_item=step.code, needed={step.code: step.quantity})
+    if isinstance(step, ReachCharLevel):
+        if ctx.combat_monster is None:
+            return None
+        # Items-task stand-down was designed for the LONG-HAUL
+        # ReachCharLevel(50) root: don't preempt PURSUE_TASK's
+        # gold / tasks_coin / skill-XP / gear-progression payout
+        # with a 47-level combat grind. Items tasks DO NOT award
+        # character XP — combat is the only source (verified in
+        # trace: all 1229 char-XP gain events attributed to
+        # `Fight(...)`, zero to `CompleteTask` or `TaskTrade`). But
+        # items tasks chain indefinitely (one finishes, another
+        # starts), so the unconditional stand-down meant the bot
+        # NEVER fought — trace 2026-06-03/05 showed zero combat
+        # across 3300+ cycles and Robby permanently parked at
+        # level 3.
+        #
+        # Bootstrap roots (`ReachCharLevel(state.level + horizon)`,
+        # see tiers.prerequisite_graph._CHAR_LEVEL_BOOTSTRAP_HORIZON)
+        # are the critical-path nudge that breaks this. A small-gap
+        # step (target - current <= 4) is the bootstrap path: let it
+        # grind through even when an items task is active. The
+        # bootstrap target advances with each level-up so the bot is
+        # never grinding more than `horizon` levels at a time. The
+        # long-haul level-50 step still stands down — its grind would
+        # be 40+ unbroken combat cycles, which is the wrong trade for
+        # an in-progress items task that's paying out gold + skill XP
+        # + task rewards every batch.
+        # Fire-as-Fight decision extracted to the pure boundary
+        # `objective_step_is_fight_pure` (objective_step_fight_core.py) — the
+        # SAME predicate the Lean liveness Bool `objectiveStepIsFight` binds to
+        # via the differential gate. False here = long-haul grind deferred to an
+        # active items task.
+        if not objective_step_is_fight_pure(
+                is_reach_char_level=True,
+                target=step.level,
+                level=state.level,
+                has_combat_monster=ctx.combat_monster is not None,
+                task_type=state.task_type,
+                task_code=state.task_code,
+                task_total=state.task_total,
+                task_progress=state.task_progress):
+            return None        # long-haul grind, items task active → defer
+        provision = _marginal_provision_goal(ctx, state, game_data, history)
+        if provision is not None:
+            return provision
+        return GrindCharacterXPGoal(target_monster=ctx.combat_monster, initial_xp=state.xp)
+    return None
+
+
 class StrategyArbiter:
     """Compose guards → collect-reward → objective step → discretionary.
 

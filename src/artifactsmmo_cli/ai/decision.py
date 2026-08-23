@@ -36,7 +36,7 @@ class Decision(ABC):
 
     name: str
 
-    def __init_subclass__(cls, **kwargs):  # type: ignore[no-untyped-def]
+    def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         # Only check concrete subclasses (those that define resolve).
         # Allow intermediate abstract bases.
