@@ -22,29 +22,29 @@ Both poles are needed. The negative one passes trivially -- it passed before any
 raid capability existed at all -- so only the paired positive pole is evidence
 that the planner gained anything.
 
-WAVE 3a BROKE THE POSITIVE POLE, AND THIS FILE NOW RECORDS THAT RATHER THAN
-ASSERTING IT AWAY. The two poles are currently INDISTINGUISHABLE: both plan
-`GatherMaterials(mithril_bar)` and neither engages the boss. The chain is:
+WAVE 3a BROKE THE POSITIVE POLE AND FIX-ROUND 1 REPAIRED IT. For one commit
+both poles planned `GatherMaterials(mithril_bar)` and neither engaged the boss.
+The chain was: `derive_combat_stats` is off here (deliberately — see
+`scenario.py`), so `combat_capable` reads False and
+`prerequisites(ReachCharLevel)` emits a weapon; wave 3a runs `actionable_step`
+on EVERY root including the trunk, so that weapon became a plannable fallback
+step; `_resolve_step_goal` promoted it into the STEP slot; and raids sat at
+`BAND_DISCRETIONARY`, below everything. Two fixes, both in
+`ai/arbiter_select.py` / `ai/strategy_driver.py` and both independently
+justified:
 
-  * `derive_combat_stats` is off for these two scenarios, so a level-48
-    character in a full mithril set reports `attack == {}` and
-    `combat_capable` reads False;
-  * `prerequisites(ReachCharLevel)` therefore emits a weapon
-    (`ObtainItem(hell_reaper)`), and wave 3a runs `actionable_step` on EVERY
-    root including the trunk (spec 5.2), where the old XP branch set
-    `chosen_step = trunk` outright and never descended it;
-  * so the trunk's fallback step is now a plannable craft chain, the arbiter
-    takes it, and the raid rung -- which sits below the objective step -- never
-    gets a turn. Before the flip the objective step yielded None and the walk
-    reached the raid.
+  * raids moved to their own `BAND_RAID`, above the fallback steps. The
+    liveness census had ALREADY classified `ParticipateRaidGoal` unreachable
+    for this reason, before the flip made it visible here.
+  * a step goal promoted out of the fallbacks when the walk named a WALL
+    (`chosen_root is None`) is filed at `BAND_FALLBACK_STEP`, not `BAND_STEP`.
+    A fallback promoted because there was no step is not an objective step.
 
-Two separate things are wrong and neither is this file's to fix: the FIXTURE
-says a fully-armed L48 character has no weapon, and the ARBITER LADDER lets an
-ordinary craft preempt a time-limited raid window. Both are written up in
-`.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md` as the flip's most
-serious open regression. The assertions below pin what the bot ACTUALLY does so
-the loss is visible in the suite; `test_l48_raid_plan_engages_the_boss` states
-the property that must come back.
+Giving this scenario real combat stats instead does NOT work and is not a
+matter of taste: at real stats `expected_damage_per_fight` against `pixie`
+returns 1,844,857 against a 1570-hp character, so `raid_survivable_pure`
+refuses and the raid candidate is never built at all. That number is its own
+defect and is reported separately.
 """
 
 from pathlib import Path
@@ -92,6 +92,8 @@ def test_l48_without_a_raid_cannot_fight():
         "l48_band_adequate is the no-COMBAT pole: if the arbiter found a fight "
         "to try, the wall has moved and this pair needs re-deriving"
     )
+    assert repr(report.selected_goal) == "GatherMaterials(mithril_bar, {mithril_bar:11})", (
+        repr(report.selected_goal), report.plan)
 
 
 def test_l48_without_a_raid_emits_no_raid_fight():
@@ -108,40 +110,29 @@ def test_l48_with_an_active_raid_can_plan():
     """Same state, one difference: the raid window is open. The arbiter now has
     work, so the wall is a property of the world rather than a dead end.
 
-    WAVE 3a made this VACUOUS and it is kept only so the pair stays symmetric:
-    the negative pole has work too now (see this module's docstring), so
-    "the arbiter has something to try" no longer distinguishes the poles.
-    `test_l48_raid_plan_engages_the_boss` is where the real claim lives."""
+    The negative pole now also reaches a means (a mithril_bar craft chain, see
+    `test_l48_without_a_raid_cannot_fight`), so "has something to try" alone no
+    longer separates the poles — the SELECTED GOAL does, and it is asserted
+    below. `test_l48_raid_plan_engages_the_boss` carries the positive claim."""
     report = _report("l48_raid_active")
     assert report.goals_tried, (
         "an open raid window must give the arbiter something to try; if this is "
         "empty the raid fight never became selectable"
     )
-    assert repr(report.selected_goal) != "Wait", repr(report.selected_goal)
+    assert repr(report.selected_goal) == "ParticipateRaid(enchanted_fairy)", (
+        repr(report.selected_goal), [g.get("goal") for g in report.goals_tried])
 
 
 def test_l48_raid_plan_engages_the_boss():
-    """THE PROPERTY THAT MUST COME BACK, currently pinned as LOST.
+    """The plan must actually route to the raid boss -- goals_tried being
+    non-empty would otherwise be satisfied by any unrelated work.
 
-    The plan must route to the raid boss -- goals_tried being non-empty would
-    otherwise be satisfied by any unrelated work, and since wave 3a it is
-    exactly that: the trunk's weapon descent supplies a plannable craft chain
-    and the raid rung never runs. See this module's docstring for the full
-    chain and the two independent faults behind it.
-
-    Written as an inequality against the raid boss with the CURRENT plan spelled
-    out beside it, so the day either fault is fixed this test fails and has to
-    be turned back into the positive assertion it was. A bare
-    `assert not any(...)` would silently keep passing if the plan degenerated to
-    something else entirely."""
+    RESTORED in wave 3a fix-round 1. For one commit this asserted the negation;
+    see the module docstring for what broke it and the two fixes that brought
+    it back."""
     report = _report("l48_raid_active")
-    assert not any(isinstance(a, FightAction) and a.monster_code == _RAID_BOSS
-                   for a in report.plan), (
-        "the raid boss is engaged again — restore the positive assertion and "
-        "close the regression in the task-6 report")
-    assert [repr(a) for a in report.plan] == [
-        "Withdraw(mithril_ore×10)", "Gather(mithril_rocks×100)",
-        "Craft(mithril_bar×10)"], [repr(a) for a in report.plan]
+    assert any(isinstance(a, FightAction) and a.monster_code == _RAID_BOSS
+               for a in report.plan), [repr(a) for a in report.plan]
 
 
 def test_the_two_poles_differ_only_by_the_raid():

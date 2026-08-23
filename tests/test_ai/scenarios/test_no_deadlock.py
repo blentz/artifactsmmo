@@ -138,6 +138,11 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "ReachSkill(gearcrafting->6)"
     assert [repr(a) for a in report.plan] == ["LevelSkill(gearcrafting->10)"]
+    # An EQUALITY on chosen_root, as before — only the value moved. A
+    # membership test on a different field would be a weaker claim wearing the
+    # old test's name.
+    assert report.decision.chosen_root == ObtainItem(
+        code="novice_guide", quantity=1, slot="artifact1_slot")
     assert ReachSkillLevel(skill="gearcrafting", level=6) in \
         report.decision.fallback_roots
 
@@ -191,8 +196,13 @@ def test_l10_gearcrafting_gap_combat_blocked_search_bounded() -> None:
 # band-adequate — the trunk (char-level grind, or Wait when no monster in
 # the level window is winnable) must win instead. ---------------------------
 
-def test_l20_dual_utility_chosen_root_is_char_level_when_winnable() -> None:
-    """l20_dual_utility is band-adequate (no structural upgrade) with a
+def test_l20_dual_utility_climbs_the_blocking_skill_not_the_char_level() -> None:
+    """RENAMED IN WAVE 3a fix-round 1. LOST: this scenario no longer witnesses
+    "a full build grinds XP" — it is not a full build on the TIER sheet. The
+    criterion-2 guarantee it protects (never DEADLOCK on skilling) is asserted
+    below. Wave 4 owns finding a scenario that can witness the original claim.
+
+    l20_dual_utility is band-adequate (no structural upgrade) with a
     winnable monster (highwayman) in reach: the REAL `_tree_band_adequate`-
     wired decision (not the bare decide_tree default) must pick the
     char-level trunk, and the arbiter must plan a combat grind against it —
@@ -309,6 +319,9 @@ def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
     arbiter selects — same answer, reached as a root instead of derived from
     one."""
     report = _run("l12_gearcrafting_gap")
+    # An EQUALITY on chosen_root, as before — only the value moved.
+    assert report.decision.chosen_root == ObtainItem(
+        code="novice_guide", quantity=1, slot="artifact1_slot")
     assert ReachSkillLevel(skill="gearcrafting", level=6) in \
         report.decision.fallback_roots, report.decision.fallback_roots
     goal = repr(report.selected_goal)

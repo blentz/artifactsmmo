@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/arbiter_select.py (sha256: 1b583176efcd99d69c0d22495ec5d5fc196e4aa947b996bd4adb88e4a2431654) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/arbiter_select.py (sha256: a9ff7a9080b1194dd96c713fc0d40d1bdf03618c13b3e16c5622a134e3acd8a9) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.ArbiterSelect
@@ -32,14 +32,14 @@ def _findSome {α β : Type} (f : α → Option β) (xs : List α) : Option β :
     | some r => some r
     | none => _findSome f rest
 
-/-- Extracted from `@dataclass Candidate` (line 45). -/
+/-- Extracted from `@dataclass Candidate` (line 64). -/
 structure Candidate (Goal : Type) where
   goal : Goal
   is_means : Bool
   repr_ : String
   band : Int
 
-/-- Extracted from `_precedes` (line 60). -/
+/-- Extracted from `_precedes` (line 80). -/
 def _precedes {Goal : Type} (candidates : List (Candidate Goal)) (a_repr : String) (b_repr : String) :
     Bool :=
   let a_idx := (_findIdx (fun (c : Candidate Goal) => (decide ((c.repr_) = a_repr))) candidates)
@@ -54,7 +54,7 @@ def _precedes {Goal : Type} (candidates : List (Candidate Goal)) (a_repr : Strin
     | some b_idx_2 =>
       (decide (a_idx_1 < b_idx_2))))
 
-/-- Extracted from `select_pure` (line 69). -/
+/-- Extracted from `select_pure` (line 89). -/
 def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal)) (committed_repr : Option String) (try_plan : (Goal → (List Action))) (is_satisfied : (Goal → Bool)) (is_suppressed : (Goal → Bool)) :
     ((Option Goal) × (List Action) × (Option String)) :=
   let tried_repr : Option String := none
@@ -67,7 +67,7 @@ def select_pure {Goal : Type} {Action : Type} (candidates : List (Candidate Goal
        then
         let guard_reprs := (List.map (fun (c : Candidate Goal) => (c.repr_)) (List.filter (fun (c : Candidate Goal) => (!(c.is_means))) candidates))
         let guard_precedes := (List.any guard_reprs (fun (gr : String) => (_precedes candidates gr committed_repr_1)))
-        let lower_band_precedes := ((decide ((committed_cand_2.band) < 4)) && (List.any candidates (fun (c : Candidate Goal) => ((decide ((c.band) < (committed_cand_2.band))) && (_precedes candidates (c.repr_) committed_repr_1)))))
+        let lower_band_precedes := ((decide ((committed_cand_2.band) < 5)) && (List.any candidates (fun (c : Candidate Goal) => ((decide ((c.band) < (committed_cand_2.band))) && (_precedes candidates (c.repr_) committed_repr_1)))))
         (if ((!guard_precedes) && (!lower_band_precedes))
          then
           let plan := (try_plan (committed_cand_2.goal))

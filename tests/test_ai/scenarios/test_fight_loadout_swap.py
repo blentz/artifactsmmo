@@ -22,6 +22,7 @@ from pathlib import Path
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
@@ -106,10 +107,17 @@ def test_swap_precedes_fight_when_loadout_suboptimal() -> None:
     behind on the tier sheet, so the walk resolves a weapon-upgrade root and
     the arbiter pursues `UpgradeEquipment` rather than `GrindCharacterXP` — and
     that plan STILL front-loads the swap before the fight, which is the
-    precondition this feature installs. The old `isinstance(...,
-    GrindCharacterXPGoal)` line is replaced by asserting the plan contains a
-    fight at all: pinning the goal class was pinning the scenario, not the
-    feature."""
+    precondition this feature installs.
+
+    The original also asserted `isinstance(selected_goal, GrindCharacterXPGoal)`
+    under the heading "the guarantee this feature protects". That guarantee is
+    kept, but stated where it is actually true: on the CONTROL
+    (`test_no_swap_when_loadout_already_optimal`), whose loadout is optimal and
+    which therefore still grinds. Here the loadout is deliberately broken, which
+    puts `weapon_slot` behind on the tier sheet and makes the weapon upgrade the
+    honest objective — so requiring GrindCharacterXP would be requiring the bot
+    to ignore the very hole this test drilled. The goal class IS pinned, to the
+    class this state should produce, so the line is not merely dropped."""
     report = _run(_suboptimal_scenario())
     reprs = [repr(a) for a in report.plan]
     assert reprs, (repr(report.selected_goal), report.plan)
@@ -117,6 +125,8 @@ def test_swap_precedes_fight_when_loadout_suboptimal() -> None:
     assert f"Fight({TARGET_MONSTER})" in reprs, reprs
     assert (reprs.index(f"Fight({TARGET_MONSTER})")
             > reprs.index(f"OptimizeLoadout({TARGET_MONSTER})"))
+    assert isinstance(report.selected_goal, UpgradeEquipmentGoal), (
+        repr(report.selected_goal), report.plan)
 
 
 def test_no_swap_when_loadout_already_optimal() -> None:

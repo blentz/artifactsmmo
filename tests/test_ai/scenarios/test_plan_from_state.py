@@ -8,7 +8,7 @@ from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from tests.test_ai.fixtures import make_state
 
@@ -32,17 +32,17 @@ def test_plan_from_state_runs_offline() -> None:
 def test_plan_from_state_decision_is_the_tree_decision() -> None:
     """Phase 4b (THE FLIP): `report.decision` IS the progression-tree
     decision — there is no separate shadow (`tree_decision`/`enacted_engine`
-    died with the flag). l10_weapon_upgrade is gear-branch, so the chosen_root
-    is the gear ObtainItem the tree pins — the SHIELD slot since wave 3a (see
-    test_progression_tree's per-scenario pins and that module's docstring for
-    why the gear-target tier is 1 under this fixture)."""
+    died with the flag). Since wave 3a the chosen_root is whatever the
+    resolution walk names — here the jewelrycrafting climb that gates this
+    character's furthest-behind slot (see test_progression_tree's per-scenario
+    pins)."""
     gd = load_bundle_game_data(BUNDLE)
     sc = SCENARIOS["l10_weapon_upgrade"]
     player = GamePlayer(character=sc.name, history=None)
-    player.seed_offline(scenario_state(sc), gd)
+    player.seed_offline(scenario_state(sc, gd), gd)
     report = player.plan_from_state()
-    assert isinstance(report.decision.chosen_root, ObtainItem)
-    assert report.decision.chosen_root.slot == "shield_slot"
+    assert report.decision.chosen_root == ReachSkillLevel(
+        skill="jewelrycrafting", level=2)
     # The single decision is what the player stashed for trace/observer use.
     assert player._last_decision is not None
     assert repr(player._last_decision.chosen_root) == repr(report.decision.chosen_root)

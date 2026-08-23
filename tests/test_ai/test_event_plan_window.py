@@ -20,7 +20,10 @@ from datetime import datetime, timedelta, timezone
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
-from artifactsmmo_cli.ai.event_plan_window import plan_fits_event_window
+from artifactsmmo_cli.ai.event_plan_window import (
+    _event_only_target,
+    plan_fits_event_window,
+)
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -236,8 +239,11 @@ def test_classifier_ignores_plain_resources():
     whichever scenario happened to plan a gather while the window gate ran —
     `l35_artifact_fill`'s small_pearls route, which the flip removed. An arm
     covered by accident is one bad day away from being covered by nothing, so
-    it gets the direct unit its Fight-side twin already had."""
-    from artifactsmmo_cli.ai.event_plan_window import _event_only_target
+    it gets the direct unit its Fight-side twin already had.
+
+    (The inline import six siblings in this file use is NOT copied here: the
+    project rule is imports at the top of the file, and propagating a local
+    violation is how it becomes the house style.)"""
     gd = _gd()
     gd._resource_drops = {"ash_tree": "ash_wood"}
     gd._resource_locations = {"ash_tree": [(2, 2)]}

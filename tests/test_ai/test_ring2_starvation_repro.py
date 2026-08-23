@@ -30,8 +30,10 @@ from dataclasses import replace
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
+from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT, FOCUS_SPAN
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -106,34 +108,53 @@ def test_wolf_ears_route_is_genuinely_unattainable_from_scratch() -> None:
     assert is_attainable_now("wolf_ears", stripped, gd) is False
 
 
-def test_wave3a_walk_re_exhibits_the_starvation_this_file_was_written_for() -> None:
-    """AN HONEST REGRESSION PIN, not a passing feature.
+def test_stuck_drop_root_does_not_starve_the_craftable_second_ring() -> None:
+    """THE HEADLINE FIX, restored. Over a full falloff window (flat + decay +
+    margin) ring2's craftable iron_ring must be chosen at least once: the
+    aging hands cycles to it instead of wolf_ears monopolising forever.
 
-    The two tests that used to stand here drove `StrategyEngine.decide` with a
-    focus ledger and a d'Hondt seat accumulator over a full falloff window and
-    asserted that ring2 eventually got a cycle. Wave 3a deleted both parameters
-    and the aging they fed, so those tests could not be repaired — there is no
-    ledger left to pass.
+    RE-ROUTED BY WAVE 3a fix-round 1. The ledger no longer rides two
+    `decide()` parameters; it rides `SelectionContext`, the same seam
+    `supply_target` and `role_skills` use, and the walk reads it in
+    `WhichSlotIsFurthestBehind`. The loop below is otherwise the one that
+    stood here before the flip: bump focus for the committed slot every cycle,
+    bump a d'Hondt seat only on an INTERLEAVED decision (`aged_pick`), exactly
+    as `GamePlayer._charge_focus` does.
 
-    What remains is the fixture, and it still exhibits the shape the epic was
-    written for. `WhichSlotIsFurthestBehind` is a pure function of state: both
-    slots are empty, both targets sit on rung 1, so the tie breaks on the
-    character schema's slot order and `helmet_slot` wins EVERY cycle while the
-    state holds still. ring2 is offered only as an alternative behind it. This
-    test asserts exactly that, so the regression is visible in the suite
-    instead of vanishing with the tests that used to catch it.
+    Why the flip broke it and why servability does not cover it: `_slot_order`
+    is a pure, history-free total order over a target set that does not change
+    while the character makes no progress, and `_servable_promotion` only
+    demotes a root the planner CANNOT SERVE — wolf_ears is held, so its
+    `UpgradeEquipment` plans every cycle and never completes. Nothing but
+    aging rotates off it."""
+    state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
+    engine = StrategyEngine(objective)
+    focus: dict[tuple[str, str], int] = {}
+    seats: dict[str, int] = {}
+    chosen_ring2 = False
+    for _ in range(FOCUS_FLAT + FOCUS_SPAN + 20):
+        ctx = replace(NO_PROFILE_CONTEXT, gear_focus=focus, interleave_seats=seats)
+        d = engine.decide(state, gd, ctx=ctx)
+        chosen = repr(d.chosen_root)
+        if "ring2_slot" in chosen:
+            chosen_ring2 = True
+        key = ("ring2_slot", "iron_ring") if "ring2_slot" in chosen \
+            else ("helmet_slot", "wolf_ears")
+        focus[key] = focus.get(key, 0) + 1
+        if d.aged_pick:
+            seats[key[0]] = seats.get(key[0], 0) + 1
+    assert chosen_ring2, "ring2 iron_ring was never chosen — still starved"
 
-    Two things stop this being the same live bug, and neither is aging:
-    `_servable_promotion` demotes a pick the planner cannot serve, and a root
-    the character can actually finish LEAVES the sheet once the item is
-    equipped — the frozen state here is what makes the loop eternal. Whether
-    that is enough is recorded as an open question in
-    `.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md`."""
+
+def test_absent_aging_the_stuck_drop_root_would_starve() -> None:
+    """The non-vacuity twin: with the ledger frozen EMPTY every cycle the walk
+    takes its unaged fast path — `_slot_order`'s argmax, bit-identical to the
+    history-free order — and wolf_ears wins on EVERY cycle. Without this, the
+    test above could pass because the walk had become nondeterministic rather
+    than because the aging engaged."""
     state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
     engine = StrategyEngine(objective)
     picks = {repr(engine.decide(state, gd).chosen_root) for _ in range(30)}
     assert picks == {"ObtainItem(code='wolf_ears', quantity=1, slot='helmet_slot')"}
     assert ObtainItem(code="iron_ring", quantity=1, slot="ring2_slot") in \
         engine.decide(state, gd).fallback_roots
-
-

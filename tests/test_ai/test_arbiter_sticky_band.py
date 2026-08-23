@@ -21,10 +21,15 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 def test_discretionary_band_literal_matches_constant():
-    """`select_pure` inlines the discretionary threshold as the literal `4` (the
-    extractor's v1 subset can't resolve a module constant in the pure core). Guard
-    against drift between that literal and BAND_DISCRETIONARY."""
-    assert BAND_DISCRETIONARY == 4
+    """`select_pure` inlines the discretionary threshold as a literal (the
+    extractor's v1 subset can't resolve a module constant in the pure core).
+    Guard against drift between that literal and BAND_DISCRETIONARY.
+
+    IT WORKED: inserting `BAND_RAID` in wave 3a fix-round 1 renumbered
+    BAND_DISCRETIONARY 4 -> 5 and this test failed `assert 5 == 4` before the
+    inlined literal was updated. Without it the sticky-commitment exemption
+    would have silently started applying to the FALLBACK band instead."""
+    assert BAND_DISCRETIONARY == 5
 
 
 class _StubGoal(Goal):
@@ -70,7 +75,7 @@ def _cand(tag: str, is_means: bool, band: int) -> Candidate:
 def test_committed_lower_band_grind_yields_to_higher_band_step():
     """The exact freeze: committed band-3 grind loses to a plannable band-2 step."""
     step = _cand("GrindCharacterXP(green_slime)", is_means=True, band=2)
-    grind = _cand("GatherMaterials(copper_ring)", is_means=True, band=3)
+    grind = _cand("GatherMaterials(copper_ring)", is_means=True, band=4)
     # Candidate order mirrors _build_candidates: top step (band 2) precedes the
     # fallback grind (band 3).
     candidates = [step, grind]
@@ -92,8 +97,8 @@ def test_committed_lower_band_grind_yields_to_higher_band_step():
 def test_committed_same_band_is_still_kept():
     """Within-band anti-thrash preserved: committed defends against an equal-band
     peer that precedes it (the sticky-idempotence contract)."""
-    first = _cand("AcceptTask", is_means=True, band=4)
-    committed = _cand("PursueTask", is_means=True, band=4)
+    first = _cand("AcceptTask", is_means=True, band=5)
+    committed = _cand("PursueTask", is_means=True, band=5)
     candidates = [first, committed]  # peer precedes committed, SAME band
     try_plan, is_sat, is_sup = _closures(plannable={"AcceptTask", "PursueTask"})
 
@@ -114,7 +119,7 @@ def test_committed_discretionary_task_exempt_from_band_preemption():
     lower-band step — income tasks stay governed by the semantic worth gate, not
     this structural band rule (preserves the worth-gate epic's arbitration)."""
     step = _cand("GatherMaterials(copper_dagger)", is_means=True, band=2)
-    task = _cand("PursueTask(cooked_gudgeon)", is_means=True, band=4)
+    task = _cand("PursueTask(cooked_gudgeon)", is_means=True, band=5)
     candidates = [step, task]  # band-2 step precedes the band-4 committed task
     try_plan, is_sat, is_sup = _closures(
         plannable={"GatherMaterials(copper_dagger)", "PursueTask(cooked_gudgeon)"})
@@ -135,7 +140,7 @@ def test_committed_higher_band_still_wins_over_lower_band_when_first():
     """A committed candidate that is itself the lowest band present is still
     defended (nothing lower precedes it)."""
     committed = _cand("GrindCharacterXP(green_slime)", is_means=True, band=2)
-    grind = _cand("GatherMaterials(copper_ring)", is_means=True, band=3)
+    grind = _cand("GatherMaterials(copper_ring)", is_means=True, band=4)
     candidates = [committed, grind]
     try_plan, is_sat, is_sup = _closures(plannable={repr(committed.goal), repr(grind.goal)})
 

@@ -17,6 +17,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
     BAND_DISCRETIONARY,
     BAND_FALLBACK_STEP,
     BAND_GUARD,
+    BAND_RAID,
     BAND_STEP,
     Candidate,
     select_pure,
@@ -1339,11 +1340,28 @@ class StrategyArbiter:
         # nodes), emitting Wait. Including fallback steps lets the gear
         # chain (GatherMaterials/UpgradeEquipment) get tried even when the
         # top combat step can't plan.
+        # WHETHER THERE IS A REAL OBJECTIVE STEP AT ALL. `chosen_root is None`
+        # is the walk's WALL arm (`CanIClearMyTier`): no gear work and nothing
+        # winnable in the band. `_resolve_step_goal` still walks the fallbacks
+        # and may return one, but a fallback promoted because there was no step
+        # is not an objective step — filing it at BAND_STEP would let it claim a
+        # priority the walk explicitly declined to give anything.
+        step_is_real = chosen_root is not None
+        # Raids are placed relative to the step because `select_pure` walks this
+        # list IN ORDER — `band` governs sticky preemption, not walk order, so
+        # raising the band alone moves nothing. A raid yields to a REAL
+        # objective step (its docstring's intent) and to nothing below one.
+        if not step_is_real:
+            self._append_raid_candidates(candidates, state, game_data)
         added_reprs: set[str] = set()
         if step_goal is not None:
             r = repr(step_goal)
-            candidates.append(Candidate(goal=step_goal, is_means=True, repr_=r, band=BAND_STEP))
+            candidates.append(Candidate(
+                goal=step_goal, is_means=True, repr_=r,
+                band=BAND_STEP if step_is_real else BAND_FALLBACK_STEP))
             added_reprs.add(r)
+        if step_is_real:
+            self._append_raid_candidates(candidates, state, game_data)
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
             alt_goal = objective_step_goal(alt, state, game_data, ctx, root=alt_root,
@@ -1385,19 +1403,33 @@ class StrategyArbiter:
                 continue
             g = map_means(mk, game_data, ctx, state, self._history)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g), band=BAND_DISCRETIONARY))
+        return candidates
+
+    def _append_raid_candidates(self, candidates: list[Candidate],
+                                state: WorldState, game_data: GameData) -> None:
+        """File every open raid at `BAND_RAID`, at the caller's chosen position
+        in the walk order. One call site per position, not two lists."""
         for raid_goal in self._raid_candidates(state, game_data):
             candidates.append(Candidate(goal=raid_goal, is_means=True,
-                                        repr_=repr(raid_goal), band=BAND_DISCRETIONARY))
-        return candidates
+                                        repr_=repr(raid_goal), band=BAND_RAID))
 
     def _raid_candidates(self, state: WorldState,
                          game_data: GameData) -> list[ParticipateRaidGoal]:
         """One participation goal per OPEN raid whose boss is worth engaging.
 
         Deliberately NOT a MeansKind: a new kind ripples through the ladder,
-        DecideKey.lean and the E-tower rows. A plain discretionary candidate
-        yields to every guard and objective step, which is the right priority for
-        a timed bonus.
+        DecideKey.lean and the E-tower rows. The candidate yields to every guard
+        and to the committed objective step, which is the right priority for a
+        timed bonus.
+
+        BAND RAISED 2026-08-23 (wave 3a fix-round 1), from BAND_DISCRETIONARY to
+        its own BAND_RAID above BAND_FALLBACK_STEP. The intent above was already
+        undeliverable at the discretionary band: raids yielded to FALLBACK steps
+        too, and `audit/liveness_completeness` had classified this goal
+        UNREACHABLE for exactly that reason. Wave 3a's flip made a fallback step
+        plannable at L48 and turned the latent defect into an observable one —
+        the raid pair's positive pole stopped engaging its boss. See
+        `arbiter_select.BAND_RAID`.
 
         Gated on (window open, tile known, survivable, worth-positive). The worth
         gate uses the raid's remaining window in FIGHTS, which is unknown offline,

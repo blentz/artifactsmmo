@@ -167,6 +167,17 @@ def _print_report(header: dict[str, object],
           f"milestone={header['milestone']}  target={header['target']}  "
           f"candidates={len(ranked)}")
     print(f"    store: {header['store']}")
+    # LEGACY BANNER (wave 3a fix-round 1). `decide_tree` stopped consulting `J`
+    # when the resolution walk replaced the ranking, so this command is the last
+    # `branch_ranking` caller in the tree and its WINNER can disagree with the
+    # root the bot actually pursues — measured 2026-08-23: Lor's decision was
+    # `ReachSkillLevel(gearcrafting, 10)` while this printed
+    # `artifact1_slot:lich_race_trophy`. A diagnostic that silently contradicts
+    # production is worse than none, so it says so until wave 3b deletes `J`.
+    print("    NOTE: LEGACY — this is the retired `J` ranking, NOT the "
+          "decision. Since wave 3a the root is RESOLVED by ai/decisions/root.py;")
+    print("          run `artifactsmmo plan <char>` for what the bot will "
+          "actually do. Deleted with `J` in wave 3b.")
     print("-" * 78)
     print(f"{'identity':<44}{'cost':>10}{'reach':>7}{'cycles':>8}"
           f"{'J':>9}  band")

@@ -298,7 +298,7 @@ def test_plan_command_scenario_prints_tree_chosen_root(capsys):
                           refresh_game_data=False, scenario="l10_weapon_upgrade")
             cfg.assert_not_called()
     out = capsys.readouterr().out
-    assert "chosen_root: ObtainItem(" in out
-    assert "shield_slot" in out
+    assert "chosen_root: ReachSkillLevel(" in out
+    assert "jewelrycrafting" in out
     assert "tree: " not in out
     assert "TREE (shadow" not in out

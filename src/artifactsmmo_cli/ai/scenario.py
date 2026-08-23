@@ -3,7 +3,28 @@
 Phase 1 of the progression-tree spec (docs/superpowers/specs/
 2026-07-06-progression-tree-design.md): golden scenario tests and the
 `plan --scenario` CLI share these fixtures, so a planner change can be
-exercised offline against realistic data before it ever runs live."""
+exercised offline against realistic data before it ever runs live.
+
+WAVE 3a FIX-ROUND 1 turned `derive_combat_stats` ON for the four GOLDEN
+scenarios (`l1_fresh`, `l10_weapon_upgrade`, `l10_copper_adequate`,
+`l12_taskgated_bag`). Two reasons, and the second is why it could not wait:
+
+  * the zero-stat harness default asserts a world the API cannot produce — a
+    level-12 character in a full copper set losing to a 60-hp chicken;
+  * that fiction became LOAD-BEARING at the flip. The retired ranking read
+    `near_term_gear`, capped by LEVEL and blind to winnability. The resolution
+    walk reads `gear_targets_with_blockers`, which gears for
+    `tier_progress.gear_target_tier` — the rung being CLEARED. With no attack
+    nothing clears, so `gear_target_tier` pinned to 1 and all four goldens
+    collapsed onto ONE answer, `GatherMaterials(ash_wood)`. A golden suite that
+    cannot tell four scenarios apart is testing nothing.
+
+Measured before and after: the four goldens went from 1 distinct outcome to 3.
+`l10_weapon_upgrade` and `l12_taskgated_bag` still converge — recorded in
+`.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md` rather than papered
+over. The stats-OFF default is UNCHANGED for every other scenario; the ones
+that deliberately rely on it (the L48 pair, the gearcrafting ramps) say so in
+their own descriptions."""
 
 import json
 from dataclasses import dataclass, field
@@ -245,6 +266,7 @@ _COPPER_SET = {
 SCENARIOS: dict[str, ScenarioCharacter] = {
     "l1_fresh": ScenarioCharacter(
         name="l1_fresh", level=1, max_hp=120,
+        derive_combat_stats=True,  # wave 3a fix-round 1: see the module note
         description="Fresh start: nothing owned — trunk begins, xp branch, starter monster."),
     "l8_overstocked": ScenarioCharacter(
         name="l8_overstocked", level=8, max_hp=200,
@@ -258,12 +280,14 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                 "gearcrafting": 10, "alchemy": 5},
         equipment=dict(_COPPER_SET),
         bank={"sunflower": 20},
+        derive_combat_stats=True,  # wave 3a fix-round 1: see the module note
         description="Band-adequate copper set, empty utility slots, potion mats banked."),
     "l10_weapon_upgrade": ScenarioCharacter(
         name="l10_weapon_upgrade", level=10, max_hp=240,
         skills={"mining": 10, "weaponcrafting": 10},
         equipment={**_COPPER_SET, "weapon_slot": "wooden_stick"},
         bank={"iron_ore": 60, "copper_ore": 20},
+        derive_combat_stats=True,  # wave 3a fix-round 1: see the module note
         description="Weapon slot lags a tier; upgrade mats banked — gear branch."),
     "l3_low_hp": ScenarioCharacter(
         name="l3_low_hp", level=3, hp=20, max_hp=80,
@@ -273,6 +297,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         skills={"gearcrafting": 10},
         equipment=dict(_COPPER_SET),
         bank={"cowhide": 5, "feather": 2},
+        derive_combat_stats=True,  # wave 3a fix-round 1: see the module note
         description="Satchel mats banked, 0 tasks_coin — the task-funding chain."),
 
     # --- Per-band trunk liveness net (docs/superpowers/specs/

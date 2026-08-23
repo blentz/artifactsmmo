@@ -149,15 +149,20 @@ DORMANT: dict[str, str] = {
     "WaitGoal": "witness: MeansKind.WAIT is the unconditional last resort that "
                 "proves the ladder total (Liveness.NoDeadlockV2)",
     "WaitAction": "witness: the action WaitGoal emits; same proof obligation",
-    # --- Raids. RECLASSIFIED 2026-08-18: `conditional:` was wrong. No raid has
-    # been open while the fleet ran, but that is not what stops it — every raid
-    # goal is appended at BAND_DISCRETIONARY (`_raid_candidates`' call site), and
-    # its own docstring calls that "the right priority for a timed bonus". A
-    # timed bonus that yields to a step present in 14,064 of 14,064 cycles is one
-    # that expires unused, so the rationale defeats itself. Even with an open
-    # window, a known tile and a survivable boss it could not be selected.
-    "ParticipateRaidGoal": "unreachable: appended at BAND_DISCRETIONARY, below "
-                           "the objective step, so a raid window closes unused",
+    # --- Raids. RECLASSIFIED 2026-08-18 to `unreachable:` — every raid goal was
+    # appended at BAND_DISCRETIONARY, below even the FALLBACK steps, so "a timed
+    # bonus that yields to a step present in 14,064 of 14,064 cycles is one that
+    # expires unused, so the rationale defeats itself".
+    #
+    # RECLASSIFIED AGAIN 2026-08-23 (wave 3a fix-round 1): that band is FIXED.
+    # Raids now sit at their own `BAND_RAID`, above the fallback steps and below
+    # the committed objective step — the priority `_raid_candidates`' docstring
+    # always claimed. The rung is no longer structurally unreachable; what is
+    # left is the honest world-state condition, which is what it was
+    # mis-labelled as before 2026-08-18: no raid has been open while the fleet
+    # ran.
+    "ParticipateRaidGoal": "conditional: needs an OPEN raid window with a known "
+                           "boss tile; none has opened while the fleet ran",
     # --- Genuinely conditional on world state the fleet has not met.
     "MapTransitionAction": "conditional: needs a layer transition (raid/underground areas)",
     "TeleportAction": "conditional: needs an unlocked teleport destination",

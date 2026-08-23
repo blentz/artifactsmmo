@@ -2267,7 +2267,7 @@ ARBITER_SELECT_MUTATIONS = [
     # widen the discretionary exemption so band-4 commits are ALSO preemptable —
     # breaks the worth-gate-governed task arbitration the exemption preserves.
     ("arbiter_select: widen discretionary exemption (band < 4 -> band < 999)",
-     "            lower_band_precedes = committed_cand.band < 4 and any(",
+     "            lower_band_precedes = committed_cand.band < 5 and any(",
      "            lower_band_precedes = committed_cand.band < 999 and any("),
     # reverse the precedes comparison: a_idx < b_idx -> a_idx > b_idx, so a
     # guard at index 0 no longer "precedes" a means at index ≥ 1. guard_precedes
@@ -2841,9 +2841,12 @@ ROOT_DECISION_MUTATIONS = [
      " WITH gear targets is sent to the combat question",
      "        if not targets:\n            return IsThereACombatTarget(self.walk)\n",
      "        if targets:\n            return IsThereACombatTarget(self.walk)\n"),
+    # Re-anchored 2026-08-23 (fix-round 1): the head is chosen by `_aged_head`
+    # now, and the siblings are whatever is left, so the LEAST-behind mutant
+    # edits the fast path's return rather than a slice.
     ("root: WhichSlotIsFurthestBehind picks the LEAST-behind slot",
-     "        self.walk.sibling_targets = ranked[1:]\n        slot, target = ranked[0]\n",
-     "        self.walk.sibling_targets = ranked[:-1]\n        slot, target = ranked[-1]\n"),
+     "            return ranked[0]\n",
+     "            return ranked[-1]\n"),
     # The mask this graph exists to avoid: a skill-gated target also carries
     # `blocker=None`, so hoisting the attainable arm reports it as buildable
     # and the character chases a craft it cannot perform. Same shape as the
@@ -2933,6 +2936,29 @@ ROOT_DECISION_MUTATIONS = [
     ("root: alternatives are not de-duplicated",
      "        if alt != root and alt not in alternatives:\n",
      "        if alt != root:\n"),
+    # THE 2026-07-27 TRUNK-LAST RULING, re-anchored. Two mutants used to guard
+    # it against `decide_tree`'s hand-built `[*extra_roots, trunk,
+    # *demoted_roots]`; wave 3a deleted those lists and, in fix-round 1, it was
+    # found that neither replacement tested ORDERING at all. The ruling now
+    # lives HERE: `resolve_root` appends the trunk AFTER every sibling, so a
+    # single unservable gear step can no longer abandon the whole gear branch
+    # for XP while servable gear candidates sit behind the trunk (Robby, 9 of
+    # 15 cycles on ReachCharLevel with 7 structural candidates live).
+    ("root: the xp trunk is prepended to the alternatives instead of appended,"
+     " so one unservable gear step abandons the gear branch",
+     "    ordered.append(ReachCharLevel(level=milestone_pure(state.level)))\n",
+     "    ordered.insert(0, ReachCharLevel(level=milestone_pure(state.level)))\n"),
+    # The anti-starvation read side, reconnected in fix-round 1: drop the
+    # interleave and `WhichSlotIsFurthestBehind` is a pure, history-free total
+    # order again — the ring2 stuck-drop-root starvation, reinstated.
+    ("root: the aged head is dropped, so the slot order never rotates",
+     "        head = self._aged_head(ranked, state, game_data, ctx)\n",
+     "        head = ranked[0]\n"),
+    # ...and the fast-path guard inverted: an UNAGED board would take the
+    # d'Hondt interleave, so a fresh root jitters instead of being pursued.
+    ("root: the flat farm window is inverted, so fresh roots interleave",
+     "        if all(ctx.gear_focus.get((slot, target.code), 0) <= FOCUS_FLAT\n",
+     "        if any(ctx.gear_focus.get((slot, target.code), 0) > FOCUS_FLAT\n"),
 ]
 
 OBTAIN_ITEM_DECISION_MUTATIONS = [

@@ -534,6 +534,11 @@ def decide_tree(state: WorldState, game_data: GameData,
         ranking=_resolution_rows(state, game_data, resolution, ctx),
         fallback_steps=fallback_steps,
         fallback_roots=fallback_roots,
+        # Set by the ONE node that takes the interleave, not re-derived here.
+        # The old `aged_pick` was a clause-for-clause MIRROR of
+        # `focus_aging_pick`'s fast-path guard, carrying its own drift warning
+        # and two mutation anchors; a single producer cannot drift from itself.
+        aged_pick=resolution.aged,
         promoted_from=promoted_from,
     )
 

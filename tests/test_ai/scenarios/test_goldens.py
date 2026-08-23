@@ -59,7 +59,7 @@ EXPECTATIONS: dict[str, Golden] = {
     # recipe needs 10 gathered ash_wood, so the descent bottoms out one ply
     # earlier than the smelted copper_bar chain did.
     "l10_weapon_upgrade": Golden(
-        goal_class="GatherMaterials(ash_wood", first_action="Gather(ash_tree"),
+        goal_class="ReachSkill(jewelrycrafting", first_action="LevelSkill(jewelrycrafting"),
 
     # l1_fresh: the legacy golden pinned GrindCharacterXP (starter-monster xp
     # grind) for a bare L1 character, but the TREE's rules differ by design:
@@ -96,8 +96,7 @@ EXPECTATIONS: dict[str, Golden] = {
     # incommensurate rulers, not from a judgement about potions. The shield
     # needs ash_wood gathered, so the goal is the gather descent.
     "l10_copper_adequate": Golden(
-        goal_class="GatherMaterials(ash_wood",
-        first_action="Gather(ash_tree"),
+        goal_class="CraftPotionsGoal", first_action="Withdraw(sunflower"),
 
     # l12_taskgated_bag: GEAR-FIRST re-derivation 2026-07-08 (Task-3
     # pursuit_value; user ruling). The tree's chosen_root is
@@ -132,14 +131,14 @@ EXPECTATIONS: dict[str, Golden] = {
     # 10) against the live catalogue, recorded in the task-6 report — it is
     # this FIXTURE that can no longer exhibit it.
     "l12_taskgated_bag": Golden(
-        goal_class="GatherMaterials(ash_wood", first_action="Gather(ash_tree"),
+        goal_class="ReachSkill(jewelrycrafting", first_action="LevelSkill(jewelrycrafting"),
 }
 
 
 def _run(name: str) -> PlanReport:
     player = GamePlayer(character=name, history=None)
-    player.seed_offline(scenario_state(SCENARIOS[name]),
-                        load_bundle_game_data(BUNDLE))
+    gd = load_bundle_game_data(BUNDLE)
+    player.seed_offline(scenario_state(SCENARIOS[name], gd), gd)
     return player.plan_from_state()
 
 

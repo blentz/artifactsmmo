@@ -3742,6 +3742,13 @@ class GamePlayer:
             # `_update_coordination`, empty on every single-character run.
             # `bank_drain.bank_drain_excess` subtracts it from the bank's
             # available quantity so five children stop racing for one pile.
+            # The anti-starvation ledger, read by the root walk's
+            # `WhichSlotIsFurthestBehind` (wave 3a fix-round 1). Same seam and
+            # same lifecycle as `role_skills`: a per-cycle player runtime fact,
+            # owned and mutated by `_charge_focus`, threaded here as DATA
+            # rather than as two more `decide()` parameters.
+            gear_focus=self._gear_focus,
+            interleave_seats=self._interleave_seats,
             sibling_bank_claims=self._sibling_bank_claims,
             sibling_order_claims=self._sibling_order_claims,
             # This cycle's resolved fleet turn-in / recall ask, same source

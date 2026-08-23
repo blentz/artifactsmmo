@@ -338,26 +338,40 @@ def test_l48_event_candidates_are_event_gated() -> None:
 
 
 def test_l48_event_active_pursues_event_gear() -> None:
-    """With the event up the planner must NOT Wait: the event-sourced
-    corrupted_crown is the argmax gear candidate (gain 893 vs the mithril
-    helm), the chosen root, and the full stack plans the event-monster farm
-    for its corrupted_gem currency — the attainability leaf the event
-    opened. This is the wall-crossing behavior l48_band_adequate proves
-    impossible without events.
+    """With the event up the planner must NOT Wait: an event-sourced candidate
+    is on the gear sheet and the full stack plans the event-monster farm for its
+    corrupted_gem currency — the attainability leaf the event opened. This is
+    the wall-crossing behaviour l48_band_adequate proves impossible without
+    events.
 
-    WAVE 3a: the chosen ROOT moved from the crown itself to the MATERIAL that
-    blocks it. `IsThisTargetBlocked` reads `GearTarget.blocker`, and
-    `corrupted_crown` is blocked on `demon_horn` x4, so the walk routes to the
-    material at its recipe quantity rather than naming an item it has just
-    established cannot be built. The selected goal and the first action are
-    UNCHANGED — the event-gear pursuit this test exists for is intact — and the
-    crown is still on the sheet, which the assertion below checks so the root
-    change cannot hide the crown falling off entirely."""
+    WAVE 3a re-derived WHICH event candidate. `corrupted_crown` (helmet) is off
+    the sheet: `gear_targets_with_blockers` gears for `gear_target_tier`, which
+    is 30 here, and the crown sits above it — the helmet target is
+    `obsidian_helmet`. The event's contribution is now `corrupted_skull` at all
+    three artifact slots, and it is ATTAINABLE (`blocker is None`) precisely
+    because the event opened its corrupted_gem route. The selected goal and the
+    first action are UNCHANGED, which is the pursuit this test exists for.
+
+    (An earlier fix-round draft of this docstring claimed `demon_horn` was
+    `corrupted_crown`'s blocker. It is not — it blocks `gold_shield` and
+    `conjurer_cloak`. The assertions below read the blocker map rather than
+    restating it, so the claim and the code cannot drift again.)"""
     report = _run("l48_event_active")
-    assert report.decision.chosen_root == ObtainItem(
-        code="demon_horn", quantity=4)
-    assert any("corrupted_crown" in r.root_repr or "corrupted" in r.root_repr
-               for r in report.decision.ranking), report.decision.ranking
+    # Read the sheet off the SAME event-overlaid game data the run used
+    # (`seed_offline` applies the overlay from `state.active_events`).
+    gd_event = load_bundle_game_data(BUNDLE)
+    overlay = GamePlayer(character="l48_event_active", history=None)
+    overlay.seed_offline(_state("l48_event_active", gd_event), gd_event)
+    assert overlay._objective is not None
+    targets = overlay._objective.gear_targets_with_blockers(overlay.state, None)
+    # THE EVENT'S OWN CONTRIBUTION, by name and by attainability — not "any
+    # corrupted-anything root", which the previous form degenerated to.
+    for slot in ("artifact1_slot", "artifact2_slot", "artifact3_slot"):
+        assert targets[slot].code == "corrupted_skull", (slot, targets[slot])
+        assert targets[slot].blocker is None, (slot, targets[slot])
+    assert any(r.root_repr == "ObtainItem(code='corrupted_skull', quantity=1, "
+               "slot='artifact1_slot')" for r in report.decision.ranking), \
+        report.decision.ranking
     assert repr(report.selected_goal) != "Wait", (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal).startswith(
@@ -602,8 +616,13 @@ def test_l12_bag_pursuit_satchel_chain_gated() -> None:
     assert gd.npc_location("tasks_trader") is None
 
 
-def test_l12_bag_pursuit_satchel_chain_opens_when_the_achievement_lands() -> None:
-    """The other half, and the one that keeps the C4 funding chain covered.
+def test_l12_bag_pursuit_satchel_becomes_attainable_but_is_no_longer_pursued() -> None:
+    """RENAMED IN WAVE 3a fix-round 1. LOST: the decision half. The achievement
+    still opens satchel at the OBJECTIVE layer (asserted below, unchanged), but
+    the walk targets `backpack` and the C4 funding route is never planned.
+    Wave 4 restores it (task-6 report, R4).
+
+    The other half, and the one that kept the C4 funding chain covered.
 
     Same bundle, ONE bit flipped — tasks_farmer completed — and every assertion
     the shut-gate twin above used to make comes back verbatim: bag_slot ->
@@ -695,8 +714,14 @@ def test_l35_artifact_small_pearls_gatherable_via_full_drop_set() -> None:
     assert is_attainable_now("perfect_pearl", state, gd)      # propagates upward
 
 
-def test_l35_artifact_fill_pearl_route_plans() -> None:
-    """GAP-7 FIXED (2026-07-08) — the former tripwire
+def test_l35_artifact_fill_pearl_route_is_off_the_sheet_and_unplanned() -> None:
+    """RENAMED IN WAVE 3a fix-round 1. LOST: `perfect_pearl` is off the gear
+    sheet, the small_pearls route is neither the root nor tried, and the
+    scenario ends in `Wait`. GAP-2's `_gatherable` fix keeps its own direct
+    test (`test_l35_artifact_small_pearls_gatherable_via_full_drop_set`); wave 4
+    owns restoring the end-to-end route — task-6 report, R4.
+
+    GAP-7 FIXED (2026-07-08) — the former tripwire
     (test_l35_artifact_fill_pure_drop_gear_farms_dropper's nodes==1 /
     plan_len==0 pin), rewritten positive. The derivation up to the step is
     UNCHANGED from the GAP-2/GAP-3/GAP-6 re-derivations:
@@ -888,8 +913,13 @@ def test_l20_dual_utility_empty_utility_slots_are_not_decision_candidates() -> N
     assert ReachCharLevel(level=30) in report.decision.fallback_roots
 
 
-def test_l20_one_stocked_utility2_now_targeted() -> None:
-    """GAP-5 FIXED 2026-07-07 (renamed from ..._never_targeted, whose
+def test_l20_one_stocked_utility2_is_a_candidate_but_not_a_decision_root() -> None:
+    """RENAMED IN WAVE 3a fix-round 1. LOST: utility potions are not equipment
+    slots, so no potion reaches `fallback_roots` at all — the GAP-5 claim now
+    lives only at the `objective_candidates` layer, where it is asserted below.
+    Wave 4 owns the restoration (task-6 report, R3).
+
+    GAP-5 FIXED 2026-07-07 (renamed from ..._never_targeted, whose
     LIMITATION pin this flips): stock utility1 with the bootstrap target and
     utility2 is now REACHABLE. utility_potion_targets emits BOTH slots
     unconditionally (utility1: the effect-best craftable-now heal,

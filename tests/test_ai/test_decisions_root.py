@@ -20,6 +20,8 @@ then `all([])`, and the patch would decide nothing — the branch would be
 reached by an empty collection instead. Fix-round-1 found exactly that in two
 of these tests.
 """
+from dataclasses import replace
+
 import pytest
 
 import artifactsmmo_cli.ai.tiers.tier_progress as tier_progress
@@ -30,6 +32,7 @@ from artifactsmmo_cli.ai.decisions.root import (
     IsThisTargetBlocked,
     RootWalk,
     WhichSlotIsFurthestBehind,
+    _next_rung_above,
     _tier_gap,
     resolve_root,
 )
@@ -37,7 +40,8 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
-from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, normal_band
+from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT, FOCUS_SPAN
+from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, normal_band, tier_of_level
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_strategy_driver import _ctx
 
@@ -349,6 +353,38 @@ def test_combat_target_root_falls_back_to_the_milestone_past_the_last_rung():
     assert isinstance(result, ReachCharLevel) and not result.is_satisfied(state, gd)
 
 
+def test_combat_target_root_at_the_level_cap_is_the_satisfied_capstone():
+    """THE END THE FIRST DERIVATION DID NOT CHECK. `_next_rung_above` is
+    "strictly above" only while the ladder has a rung left; at the cap it falls
+    back to `milestone_pure`, whose L50 fixed point is 50, so a level-50
+    character DOES get an already-satisfied root and the three consequences the
+    correction was made to remove come back.
+
+    Pinned rather than fixed: there is no level above 50 to name, and
+    `CanIClearMyTier` reaches the same fixed point by the same route. It is the
+    L50 capstone's own open question (`project_l50_unconditional_descent`), and
+    the task-6 report's blanket claim that this arm always names an unreached
+    level was false here."""
+    gd = _gd()
+    state = make_state(level=50)
+    result = IsThereACombatTarget(RootWalk()).resolve(
+        state, gd, _ctx(combat_monster="chicken"), None)
+    assert result == ReachCharLevel(level=50)
+    assert isinstance(result, ReachCharLevel) and result.is_satisfied(state, gd)
+
+
+def test_next_rung_above_refuses_an_empty_ladder_like_its_sibling():
+    """`_next_rung_above` RAISES on a catalogue with no equippable items, the
+    same as `tier_of_level` — the fail-fast parity F6 asked for. It silently
+    returned `milestone_pure` until wave 3a fix-round 1, which would have made
+    the two disagree about one data fault while "tier_of_level correctly
+    refuses it" was the argument six test fixtures were changed on."""
+    with pytest.raises(ValueError, match="no equippable items in game data"):
+        _next_rung_above(GameData(), 5)
+    with pytest.raises(ValueError, match="no equippable items in game data"):
+        tier_of_level(GameData(), 5)
+
+
 def test_no_combat_target_asks_whether_the_tier_is_clear():
     gd = _gd()
     child = IsThereACombatTarget(RootWalk()).resolve(
@@ -406,6 +442,41 @@ def test_the_siblings_become_the_alternatives_with_the_trunk_last():
         ObtainItem(code="leather", quantity=2),
         ReachCharLevel(level=20),
     )
+
+
+def test_the_slot_walk_does_not_rotate_while_every_target_is_fresh():
+    """The unaged fast path: with an empty ledger the head is `_slot_order`'s
+    argmax on every call, bit-identical to the history-free walk. Every
+    ledger-free caller — the whole offline scenario set, `NO_PROFILE_CONTEXT` —
+    depends on this."""
+    gd = _gd()
+    state = make_state(level=15)
+    heads = {repr(resolve_root(state, gd, _objective(gd), _ctx(), None).root)
+             for _ in range(10)}
+    assert heads == {repr(ReachSkillLevel(skill="gearcrafting", level=2))}
+
+
+def test_an_aged_slot_hands_the_decision_to_an_alternative():
+    """THE ANTI-STARVATION FIX AT THE NODE. Age the winning slot past the flat
+    farm window and the d'Hondt interleave must hand the head to a different
+    slot — and say so, via `aged`, which is what gates the player's seat bump.
+
+    Without this the run_group for `ROOT_DECISION_MUTATIONS` could not reach
+    the claim at all: it binds only this file, and the end-to-end rotation
+    proof lives in `test_ring2_starvation_repro.py` (the run_group-binding trap
+    `test_progression_tree.py` already documents)."""
+    gd = _gd()
+    state = make_state(level=15)
+    fresh = resolve_root(state, gd, _objective(gd), _ctx(), None)
+    assert fresh.aged is False
+    # The head slot for this fixture is `shield_slot`/`iron_shield` — the
+    # one the fresh walk elects above, so ageing it is what forces a hand-off.
+    stuck = {("shield_slot", "iron_shield"): FOCUS_FLAT + FOCUS_SPAN}
+    aged_ctx = replace(_ctx(), gear_focus=stuck,
+                       interleave_seats={"shield_slot": 40})
+    rotated = resolve_root(state, gd, _objective(gd), aged_ctx, None)
+    assert rotated.aged is True
+    assert rotated.root != fresh.root
 
 
 def test_converting_a_sibling_does_not_pollute_the_trail():

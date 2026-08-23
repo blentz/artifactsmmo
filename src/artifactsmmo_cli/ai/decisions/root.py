@@ -35,6 +35,7 @@ recorded in `.superpowers/sdd/PLAN_wave3a_cutover/task-4-report.md`:
 """
 
 from dataclasses import dataclass, field
+from fractions import Fraction
 
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
 from artifactsmmo_cli.ai.game_data import GameData
@@ -47,7 +48,12 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
-from artifactsmmo_cli.ai.tiers.progression_tree_core import milestone_pure
+from artifactsmmo_cli.ai.tiers.progression_tree_core import (
+    FOCUS_FLAT,
+    dhondt_step,
+    falloff,
+    milestone_pure,
+)
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, tier_of_level
 from artifactsmmo_cli.ai.tiers.tier_progress import next_uncleared_tier
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
@@ -75,6 +81,11 @@ class RootResolution:
     root: MetaGoal | None
     alternatives: tuple[MetaGoal, ...]
     trail: tuple[str, ...]
+    aged: bool = False
+    """Whether `WhichSlotIsFurthestBehind` took the d'Hondt interleave rather
+    than its unaged fast path — see `RootWalk.aged`. `decide_tree` copies it
+    onto `StrategyDecision.aged_pick`, which is what gates the player's seat
+    bump (`GamePlayer._charge_focus`)."""
 
 
 @dataclass
@@ -95,10 +106,20 @@ class RootWalk:
     A node that is resolved OUTSIDE the main walk (`resolve_root` re-runs
     `IsThisTargetBlocked` once per sibling to turn it into a `MetaGoal`) is
     handed a throwaway `RootWalk`, so those visits never pollute the trail.
+
+    * `aged` — whether `WhichSlotIsFurthestBehind` took the d'Hondt
+      interleave rather than its unaged fast path. `GamePlayer._charge_focus`
+      gates the SEAT bump on it, so the schedule and the ledger advance in
+      lockstep. It is set by the ONE node that makes the choice and read
+      straight off `RootResolution`, which is strictly better than the shape
+      it replaces: `decide_tree` used to re-derive the same verdict as a
+      clause-for-clause MIRROR of `focus_aging_pick`'s fast-path guard, and
+      that duplicate carried its own drift warning and two mutation anchors.
     """
 
     trail: list[str] = field(default_factory=list)
     sibling_targets: list[tuple[str, GearTarget]] = field(default_factory=list)
+    aged: bool = False
 
 
 def _target_rung(game_data: GameData, code: str) -> int:
@@ -119,6 +140,18 @@ def _target_rung(game_data: GameData, code: str) -> int:
 def _next_rung_above(game_data: GameData, level: int) -> int:
     """The lowest ladder rung STRICTLY ABOVE `level`; the trunk milestone when
     the ladder is exhausted.
+
+    NOT STRICTLY ABOVE AT THE CAP, and the honest statement matters because the
+    cap is exactly where the risk was flagged. Past the last rung this falls
+    back to `milestone_pure`, whose L50 fixed point is `milestone_pure(50) ==
+    50` — so a level-50 character gets `ReachCharLevel(50)`, which
+    `is_satisfied` reports True, and all three consequences named below RETURN
+    at the cap. That is not a defect this function can fix: there is no level
+    above 50 to name, and `CanIClearMyTier` reaches the same fixed point by the
+    same route. It is the L50 capstone's own open question
+    (`project_l50_unconditional_descent`), pinned by
+    `test_combat_target_root_at_the_level_cap_is_the_satisfied_capstone` so it
+    cannot be rediscovered by accident.
 
     THE FLIP's correction to spec §5.3, which named
     `tier_of_level(game_data, state.level)` here — the highest rung AT OR BELOW
@@ -141,7 +174,16 @@ def _next_rung_above(game_data: GameData, level: int) -> int:
     already falls back on `milestone_pure`, which is also the level-50 fixed
     point (`milestone_pure(50) == 50`) once the ladder runs out.
     """
-    higher = [rung for rung in ladder(game_data) if rung > level]
+    rungs = ladder(game_data)
+    if not rungs:
+        # RAISES, exactly as its sibling `tier_of_level` does on the same
+        # input. `ladder` is empty only for a catalogue with no equippable
+        # items, which the API cannot produce; defaulting here while
+        # `tier_of_level` refused would make the two disagree about the same
+        # data fault, and "tier_of_level correctly refuses it" is the argument
+        # six test fixtures were changed on.
+        raise ValueError("no equippable items in game data — cannot derive a ladder")
+    higher = [rung for rung in rungs if rung > level]
     return higher[0] if higher else milestone_pure(level)
 
 
@@ -205,11 +247,40 @@ class IsMyGearBehindMyTier(Decision[MetaGoal]):
 
 
 class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
-    """The largest tier gap among the blocked slots wins; the rest become
-    `RootResolution.alternatives`, in the same order.
+    """The largest tier gap among the blocked slots wins — UNTIL the winner has
+    held the decision past its farm window, at which point the d'Hondt
+    interleave hands cycles to the alternatives. The rest become
+    `RootResolution.alternatives`, in `_slot_order`.
 
     `targets` is never empty: the only constructor call site is
     `IsMyGearBehindMyTier.resolve`, inside its `if not targets` NEGATIVE arm.
+
+    THE ANTI-STARVATION FIX LIVES HERE (reconnected, wave 3a fix-round 1).
+    `_slot_order` alone is a pure, history-free total order over a set that
+    does not change while the character makes no progress, so it re-elects the
+    same slot every cycle forever. That is precisely the ring2 shape the
+    arbiter-starvation epic was written for: a target whose only route is an
+    unbeatable monster's drop, held once, so it is a live candidate that PLANS
+    (a `Fight`) and never completes. Nothing else in the walk catches it —
+    `_servable_promotion` demotes what the planner CANNOT SERVE, and this root
+    can be; and it does not leave the sheet either, because
+    `gear_targets_with_blockers` deliberately keeps unattainable targets.
+
+    Two arms, mirroring `focus_aging_pick`'s own shape:
+
+    * every candidate inside the flat farm window (`focus <= FOCUS_FLAT`) —
+      the head is `_slot_order`'s argmax, BIT-IDENTICAL to the history-free
+      walk. No jitter for fresh roots, and every ledger-free caller (the whole
+      offline scenario set, `NO_PROFILE_CONTEXT`) is unaffected.
+    * otherwise — the head is one `dhondt_step` over `tier_gap * falloff(focus)`
+      GIVEN the seats handed out so far, so a decayed stuck root sheds cycles
+      to reachable alternatives without ever being abandoned (`FOCUS_FLOOR` is
+      strictly positive). `walk.aged` records that this happened; the player
+      bumps exactly one seat for it.
+
+    The weight is the TIER GAP, not `pursuit_value`: the gap is what
+    `_slot_order` already ranks on, so the aged and unaged arms decay the same
+    quantity and a fully-inert ledger cannot reorder anything.
     """
 
     name = "WhichSlotIsFurthestBehind"
@@ -224,9 +295,29 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
         self.walk.trail.append(self.name)
         ranked = sorted(self.targets.items(),
                         key=lambda item: _slot_order(item, state, game_data))
-        self.walk.sibling_targets = ranked[1:]
-        slot, target = ranked[0]
+        head = self._aged_head(ranked, state, game_data, ctx)
+        self.walk.sibling_targets = [item for item in ranked if item is not head]
+        slot, target = head
         return IsThisTargetBlocked(slot, target, self.walk)
+
+    def _aged_head(self, ranked: list[tuple[str, GearTarget]], state: WorldState,
+                   game_data: GameData, ctx: SelectionContext
+                   ) -> tuple[str, GearTarget]:
+        """`ranked[0]`, or the interleave's pick once anything has aged."""
+        if all(ctx.gear_focus.get((slot, target.code), 0) <= FOCUS_FLAT
+               for slot, target in ranked):
+            return ranked[0]
+        # `max(1, gap)`: a slot can only be a target because something wants
+        # replacing, but an equal-rung swap scores 0 and a zero weight is one
+        # `dhondt_step` can never elect — which would be starvation reinstated
+        # by the very mechanism that exists to prevent it.
+        weighted = [(slot, Fraction(max(1, _tier_gap(slot, target, state, game_data)))
+                     * falloff(ctx.gear_focus.get((slot, target.code), 0)))
+                    for slot, target in ranked]
+        winner = dhondt_step(weighted, ctx.interleave_seats)
+        assert winner is not None  # `ranked` is non-empty; see the docstring
+        self.walk.aged = True
+        return next(item for item in ranked if item[0] == winner)
 
 
 class IsThisTargetBlocked(Decision[MetaGoal]):
@@ -368,4 +459,4 @@ def resolve_root(state: WorldState, game_data: GameData,
         if alt != root and alt not in alternatives:
             alternatives.append(alt)
     return RootResolution(root=root, alternatives=tuple(alternatives),
-                          trail=tuple(walk.trail))
+                          trail=tuple(walk.trail), aged=walk.aged)
