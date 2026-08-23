@@ -356,6 +356,7 @@ DOOMED_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "doomed_memo.py"
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
 DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decision.py"
 OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "obtain_item.py"
+ROOT_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "root.py"
 # `_equippable_goal` / `_gather_goal_for_unreachable_equippable` /
 # `_gather_step_target_is_root` / `_recipe_has_combat_drop_input` moved here
 # from strategy_driver.py (goal-decision-graph Task 5) so `decisions/
@@ -2831,6 +2832,71 @@ STRATEGY_DRIVER_MUTATIONS = [
 # at the sibling. 11,434 LevelSkill(weaponcrafting->N) actions ran, target
 # never once above 10, dead on four characters since 2026-08-16. This mutant
 # restores exactly that regression.
+# The ROOT graph (`ai/decisions/root.py`, wave 3a task 4). One mutant per
+# branch claim: each of the five nodes' pivots, the blocker/skill read order,
+# the empty-slot rung rule and the slot tiebreak. Killed by
+# tests/test_ai/test_decisions_root.py.
+ROOT_DECISION_MUTATIONS = [
+    ("root: IsMyGearBehindMyTier's emptiness test is inverted -- a character"
+     " WITH gear targets is sent to the combat question",
+     "        if not targets:\n            return IsThereACombatTarget(self.walk)\n",
+     "        if targets:\n            return IsThereACombatTarget(self.walk)\n"),
+    ("root: WhichSlotIsFurthestBehind picks the LEAST-behind slot",
+     "        self.walk.sibling_targets = ranked[1:]\n        slot, target = ranked[0]\n",
+     "        self.walk.sibling_targets = ranked[:-1]\n        slot, target = ranked[-1]\n"),
+    # The mask this graph exists to avoid: a skill-gated target also carries
+    # `blocker=None`, so hoisting the attainable arm reports it as buildable
+    # and the character chases a craft it cannot perform. Same shape as the
+    # defect `objective._classify_target`'s own docstring warns about, and as
+    # the PF-2 hoist in `decisions/obtain_item.py`.
+    ("root: IsThisTargetBlocked reads `blocker` before the skill gate, so a"
+     " skill-gated target reports as attainable",
+     "        if self.target.blocking_skill is not None:\n",
+     "        if self.target.blocker is None:\n"
+     "            return ObtainItem(code=self.target.code, quantity=1, slot=self.slot)\n"
+     "        if self.target.blocking_skill is not None:\n"),
+    ("root: the skill-gated arm demands the whole climb instead of +1",
+     "            return ReachSkillLevel(skill=self.target.blocking_skill,\n"
+     "                                   level=current + 1)\n",
+     "            return ReachSkillLevel(skill=self.target.blocking_skill,\n"
+     "                                   level=self.target.blocking_skill_level)\n"),
+    ("root: the material-gated arm asks for ONE unit instead of the recipe's"
+     " quantity",
+     "        return ObtainItem(code=self.target.blocker,\n"
+     "                          quantity=recipe[self.target.blocker])\n",
+     "        return ObtainItem(code=self.target.blocker, quantity=1)\n"),
+    ("root: IsThereACombatTarget's combat test is inverted",
+     "        if ctx.combat_monster is not None:\n",
+     "        if ctx.combat_monster is None:\n"),
+    ("root: CanIClearMyTier swaps the finished ladder and the honest wall",
+     "        if next_uncleared_tier(state, game_data, history) is None:\n"
+     "            return ReachCharLevel(level=milestone_pure(state.level))\n"
+     "        return None\n",
+     "        if next_uncleared_tier(state, game_data, history) is not None:\n"
+     "            return ReachCharLevel(level=milestone_pure(state.level))\n"
+     "        return None\n"),
+    ("root: an empty slot counts as the ladder's FIRST rung, losing"
+     " empty-slot dominance",
+     "    worn_rung = 0 if worn is None else _target_rung(game_data, worn)\n",
+     "    worn_rung = (tier_of_level(game_data, 0) if worn is None\n"
+     "                 else _target_rung(game_data, worn))\n"),
+    ("root: equal gaps break alphabetically instead of on the schema's slot"
+     " order",
+     "            EQUIPMENT_SLOTS.index(slot))\n",
+     "            ord(slot[0]))\n"),
+    ("root: a gear target missing from game data silently defaults to rung 1"
+     " instead of failing",
+     "    stats = game_data.item_stats(code)\n"
+     "    if stats is None:\n",
+     "    stats = game_data.item_stats(code)\n"
+     "    if stats is None:\n"
+     "        return 1\n"),
+    ("root: the sibling conversion reuses the real walk, so converting an"
+     " alternative pollutes the trail",
+     "        IsThisTargetBlocked(slot, target, RootWalk()).resolve(\n",
+     "        IsThisTargetBlocked(slot, target, walk).resolve(\n"),
+]
+
 OBTAIN_ITEM_DECISION_MUTATIONS = [
     ("obtain_item: skill-gated root reverts to gathering the step's materials"
      " instead of raising the skill",
@@ -4128,6 +4194,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 _ALL_SRCS = [
     DOOMED_MEMO_SRC, STRATEGY_DRIVER_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
+    ROOT_DECISION_SRC,
     OBTAIN_ITEM_ROUTING_SRC, EQUIP_VALUE_SRC,
     GEAR_VALUE_CORE_SRC,
     GAME_DATA_PARSE_SRC, LOCATION_CATALOG_SRC,
@@ -7512,6 +7579,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_strategy_driver_tiered.py", survivors)
     run_group(OBTAIN_ITEM_DECISION_SRC, OBTAIN_ITEM_DECISION_MUTATIONS,
               "tests/test_ai/test_decisions_obtain_item.py", survivors)
+    run_group(ROOT_DECISION_SRC, ROOT_DECISION_MUTATIONS,
+              "tests/test_ai/test_decisions_root.py", survivors)
     run_group(EMPTY_SLOT_FILLS_SRC, EMPTY_SLOT_FILLS_MUTATIONS,
               "tests/test_ai/test_empty_slot_fills.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, EQUIP_OWNED_BAND_MUTATIONS,
