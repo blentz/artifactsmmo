@@ -4,7 +4,7 @@
 RUNTIME behaviour but is detection, not proof — it fires on the character whose
 cycle it is, in production, after 32 wasted resolutions. The honest discharge is
 static: enumerate every `Decision` class under `ai/decisions/`, read the set of
-`Decision` types each one's `resolve` can RETURN, and assert that relation is a
+`Decision` types each one's body can HAND BACK, and assert that relation is a
 DAG. The edges are Python control flow, not a modelled relation, so this is a
 reflection test rather than a Lean theorem — and worth more than a theorem here
 for exactly that reason.
@@ -54,28 +54,35 @@ def _decision_classes() -> list[type]:
     return sorted(found.values(), key=lambda cls: cls.__name__)
 
 
-def static_return_edges(classes: list[type]) -> dict[str, set[str]]:
-    """`class name -> the Decision classes its source can return`.
+def static_child_edges(classes: list[type]) -> dict[str, set[str]]:
+    """`class name -> the Decision classes its source can hand back`.
 
     Read from the AST of each class, not from a type annotation: an
     annotation says `Decision[Leaf] | Leaf | None` on every node and would
-    make the relation the complete graph. Any `Name(...)` construction inside
-    a `return` counts as an edge when that name is one of the swept classes —
-    deliberately over-approximating, so a cycle cannot hide behind a wrapper.
+    make the relation the complete graph.
+
+    EVERY `Name(...)` call anywhere in the class body counts as an edge when
+    that name is one of the swept classes — not only calls that sit inside a
+    `return`. Fix-round-1: scoping the walk to `ast.Return` UNDER-approximated
+    and the docstring claimed the opposite. The two-line idiom
+
+        child = IsThereACombatTarget(...)
+        return child
+
+    hides an edge from a return-scoped walk, and `strategy_driver.py:639`
+    already writes `resolve_node` exactly that way, so this is a shape the
+    codebase uses rather than a hypothetical. Walking every call is strictly
+    over-approximating: it can only ever ADD edges, so it cannot miss a cycle,
+    and a spurious edge fails loudly rather than passing silently.
     """
     names = {cls.__name__ for cls in classes}
     edges: dict[str, set[str]] = {}
     for cls in classes:
         tree = ast.parse(textwrap.dedent(inspect.getsource(cls)))
-        out: set[str] = set()
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Return) or node.value is None:
-                continue
-            for sub in ast.walk(node.value):
-                if (isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name)
-                        and sub.func.id in names):
-                    out.add(sub.func.id)
-        edges[cls.__name__] = out
+        edges[cls.__name__] = {
+            node.func.id for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id in names}
     return edges
 
 
@@ -111,7 +118,7 @@ def find_cycle(edges: dict[str, set[str]]) -> list[str] | None:
 def test_the_sweep_sees_the_whole_graph():
     classes = _decision_classes()
     names = {cls.__name__ for cls in classes}
-    edges = static_return_edges(classes)
+    edges = static_child_edges(classes)
     assert len(classes) >= _MIN_CLASSES, names
     assert sum(len(v) for v in edges.values()) >= _MIN_EDGES, edges
     # Named pins, so the floors above cannot be met by one module alone.
@@ -122,7 +129,7 @@ def test_the_sweep_sees_the_whole_graph():
 
 
 def test_the_decision_graph_is_acyclic():
-    edges = static_return_edges(_decision_classes())
+    edges = static_child_edges(_decision_classes())
     assert find_cycle(edges) is None
 
 
@@ -154,10 +161,30 @@ def test_a_cycle_is_detected():
     plus a cyclic pair. If this passed, `test_the_decision_graph_is_acyclic`
     would be asserting nothing."""
     classes = [*_decision_classes(), _CycleUp, _CycleDown]
-    cycle = find_cycle(static_return_edges(classes))
+    cycle = find_cycle(static_child_edges(classes))
     assert cycle is not None
     assert set(cycle) == {"_CycleUp", "_CycleDown"}
     assert cycle[0] == cycle[-1]
+
+
+class _WrappedChild(Decision[Goal]):
+    """Hands its child back through a local instead of straight out of the
+    `return`. Fix-round-1 regression pin: the old return-scoped walk could not
+    see this edge, and `strategy_driver.py:639` writes `resolve_node` in
+    exactly this shape, so it is a real idiom and not a hypothetical."""
+
+    name = "_WrappedChild"
+
+    def resolve(self, state: WorldState, game_data: GameData,
+                ctx: SelectionContext, history: LearningStore | None
+                ) -> "Decision[Goal] | Goal | None":
+        child = _CycleUp()
+        return child
+
+
+def test_an_edge_handed_back_through_a_local_is_still_an_edge():
+    edges = static_child_edges([_WrappedChild, _CycleUp, _CycleDown])
+    assert edges["_WrappedChild"] == {"_CycleUp"}
 
 
 def test_a_self_edge_is_a_cycle():

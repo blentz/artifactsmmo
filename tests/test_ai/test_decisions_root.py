@@ -6,13 +6,19 @@ on a real `CharacterObjective` over a small real `GameData` rather than on a
 stand-in for `gear_targets_with_blockers`: a double returning the three
 `GearTarget` shapes by hand would agree with `_classify_target` only for as
 long as somebody kept it in step, and this graph's entire job is to read that
-producer's output correctly.
+producer's output correctly. `_classify_target` emits FOUR shapes, not the
+three spec §5.3 tabulates: skill-gated, attainable, blocked on a material, and
+blocked on ITSELF. There is a test below for each.
 
 The one doubled collaborator is `tier_progress.is_winnable` — a boolean oracle
 over the combat model, monkeypatched so "the ladder is finished" and "a rung is
 still open" are both reachable without building a winnable and an unwinnable
 monster. That is the idiom `tests/test_ai/test_tier_progress.py` already uses
-for the same two branches.
+for the same two branches. Every test that patches it also puts a monster in
+the band first: the bare `_gd()` has an EMPTY monster table, `tier_cleared` is
+then `all([])`, and the patch would decide nothing — the branch would be
+reached by an empty collection instead. Fix-round-1 found exactly that in two
+of these tests.
 """
 import pytest
 
@@ -31,6 +37,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
+from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, normal_band
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_strategy_driver import _ctx
 
@@ -46,6 +53,7 @@ from tests.test_ai.test_strategy_driver import _ctx
 # The last two deliberately collide on `ObtainItem("leather", 2)`, which is
 # what makes the alternatives dedupe observable.
 _LADDER_RUNGS = (1, 10)
+_HIGH_LADDER_RUNGS = (10, 20)
 
 
 def _gd() -> GameData:
@@ -82,6 +90,35 @@ def _gd() -> GameData:
     return gd
 
 
+def _gd_two_ways_behind() -> GameData:
+    """A second ladder, built for ONE question: what happens when two slots
+    are behind by the SAME number of rungs but their targets sit on different
+    rungs.
+
+    Over `_gd()` that case cannot arise — every tied gap there is a tie in the
+    target rung too (all four rung-1 targets sit in empty slots), so
+    `_slot_order`'s middle key is never the one that decides and a mutant of
+    it would survive. Here:
+
+        weapon_slot  empty (rung 0)      -> iron_club   (rung 10)  gap 10
+        boots_slot   iron_boots (rung 10) -> steel_boots (rung 20)  gap 10
+
+    Same gap, different target rung, and the slots are in the OPPOSITE order
+    to the schema tiebreak (weapon is index 0, boots is index 6), so the
+    middle key is the only thing that can put boots first.
+    """
+    gd = GameData()
+    gd._item_stats = {
+        "iron_club": ItemStats(code="iron_club", level=10, type_="weapon",
+                               attack={"air": 10}),
+        "iron_boots": ItemStats(code="iron_boots", level=10, type_="boots",
+                                resistance={"earth": 10}),
+        "steel_boots": ItemStats(code="steel_boots", level=20, type_="boots",
+                                 resistance={"earth": 30}),
+    }
+    return gd
+
+
 def _objective(gd: GameData) -> CharacterObjective:
     return CharacterObjective(target_char_level=50, target_skill_levels={},
                               target_gear={}, _game_data=gd)
@@ -111,8 +148,8 @@ def test_the_fixture_ladder_is_the_two_rungs_the_gap_tests_assume():
     """Anti-vacuity: every gap number below is `rung - rung`, so a fixture
     whose ladder collapsed to one rung would make them all zero and the
     ordering tests would pass on a tie."""
-    from artifactsmmo_cli.ai.tiers.tier_ladder import ladder
     assert ladder(_gd()) == _LADDER_RUNGS
+    assert ladder(_gd_two_ways_behind()) == _HIGH_LADDER_RUNGS
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +209,29 @@ def test_equal_gaps_break_on_the_schema_slot_order_not_the_alphabet():
         "weapon_slot", "helmet_slot", "leg_armor_slot", "boots_slot"]
 
 
+def test_equal_gaps_prefer_the_HIGHER_rung_target():
+    """The middle key of `_slot_order`. Both slots are 10 rungs behind; boots
+    is chasing rung 20 and weapon rung 10, and boots must lead even though the
+    schema puts weapon_slot first. Feeding the targets dict straight in is
+    deliberate: this node's input IS a `dict[str, GearTarget]` and the claim
+    under test is the ORDERING, not how the blocker fields were classified."""
+    gd = _gd_two_ways_behind()
+    base = make_state(level=25)
+    state = make_state(level=25,
+                       equipment=dict(base.equipment, boots_slot="iron_boots"))
+    targets = {
+        "weapon_slot": _target(code="iron_club", attainable=True),
+        "boots_slot": _target(code="steel_boots", attainable=True),
+    }
+    assert _tier_gap("weapon_slot", targets["weapon_slot"], state, gd) == 10
+    assert _tier_gap("boots_slot", targets["boots_slot"], state, gd) == 10
+    walk = RootWalk()
+    child = WhichSlotIsFurthestBehind(targets, walk).resolve(state, gd, _ctx(), None)
+    assert isinstance(child, IsThisTargetBlocked)
+    assert child.slot == "boots_slot"
+    assert [slot for slot, _ in walk.sibling_targets] == ["weapon_slot"]
+
+
 def test_an_empty_slot_outranks_an_occupied_one_at_the_same_rung():
     """An empty slot counts as rung 0, strictly below the ladder's first rung
     — not `tier_of_level(0)`, which IS the first rung. Wearing a rung-1 item
@@ -193,7 +253,7 @@ def test_a_gear_target_absent_from_game_data_is_an_error_not_a_default_rung():
 
 
 # ---------------------------------------------------------------------------
-# IsThisTargetBlocked — one test per arm of the three GearTarget shapes
+# IsThisTargetBlocked — one test per arm of the FOUR GearTarget shapes
 # ---------------------------------------------------------------------------
 
 def _blocked(target: GearTarget, slot: str = "shield_slot", state=None):
@@ -281,9 +341,18 @@ def test_no_combat_target_asks_whether_the_tier_is_clear():
 
 
 def test_a_finished_ladder_resolves_to_the_trunk_milestone(monkeypatch):
+    """The chicken is REQUIRED, not decoration: on the bare `_gd()` the
+    monster table is empty, `normal_band(gd, 1)` is `()` and `tier_cleared` is
+    `all([])`, so `next_uncleared_tier` already returns None and the patch
+    below decides nothing. With a monster in the band the patch is what flips
+    the branch. Fix-round-1."""
+    gd = _gd()
+    gd._monster_level = {"chicken": 1}
+    gd._monster_type = {"chicken": "normal"}
+    assert normal_band(gd, 1) == ("chicken",)
     monkeypatch.setattr(tier_progress, "is_winnable", lambda s, g, c, h: True)
     result = CanIClearMyTier(RootWalk()).resolve(
-        make_state(level=15), _gd(), _ctx(), None)
+        make_state(level=15), gd, _ctx(), None)
     assert result == ReachCharLevel(level=20)
 
 
@@ -333,8 +402,10 @@ def test_converting_a_sibling_does_not_pollute_the_trail():
 
 
 def test_the_chosen_root_is_never_repeated_as_its_own_alternative(monkeypatch):
-    monkeypatch.setattr(tier_progress, "is_winnable", lambda s, g, c, h: True)
     gd = _gd()
+    gd._monster_level = {"chicken": 1}      # see the trunk test: without a
+    gd._monster_type = {"chicken": "normal"}  # monster the patch is inert
+    monkeypatch.setattr(tier_progress, "is_winnable", lambda s, g, c, h: True)
     resolution = resolve_root(_geared_state(), gd, _objective(gd), _ctx(), None)
     assert resolution.root == ReachCharLevel(level=20)
     assert resolution.alternatives == ()

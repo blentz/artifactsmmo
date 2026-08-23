@@ -2884,6 +2884,24 @@ ROOT_DECISION_MUTATIONS = [
      " order",
      "            EQUIPMENT_SLOTS.index(slot))\n",
      "            ord(slot[0]))\n"),
+    # Fix-round-1 finding 1: the middle key was never the one that decided
+    # over the original fixture (every tied gap was a tied rung too), so this
+    # mutant used to survive. `_gd_two_ways_behind` exists to exercise it.
+    ("root: equal gaps prefer the LOWER-rung target",
+     "            -_target_rung(game_data, target.code),\n",
+     "            _target_rung(game_data, target.code),\n"),
+    # Fix-round-1 finding 3: the arm spec 5.3 was SILENT on was the one arm
+    # of IsThisTargetBlocked with no anchor. Deleting it drops a self-blocked
+    # target through to the recipe lookup, which raises.
+    ("root: the its-own-blocker arm is deleted, so a target with no recipe"
+     " falls through to the material lookup",
+     "        if self.target.blocker == self.target.code:\n"
+     "            # `_classify_target`'s LAST arm: the target is its own blocker \u2014\n"
+     "            # it has no recipe, or every recipe material is reachable and the\n"
+     "            # item still is not. There is no material to route to, so the\n"
+     "            # root is the item itself and the step graph owns the rest.\n"
+     "            return ObtainItem(code=self.target.code, quantity=1, slot=self.slot)\n",
+     ""),
     ("root: a gear target missing from game data silently defaults to rung 1"
      " instead of failing",
      "    stats = game_data.item_stats(code)\n"

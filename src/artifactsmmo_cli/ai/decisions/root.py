@@ -208,12 +208,16 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
     """What actually stands in front of this slot's target.
 
     `GearTarget` carries the blocker as TYPED fields, and its one producer
-    (`objective._classify_target`) emits exactly three shapes, read here with
-    no guessing and no string parsing:
+    (`objective._classify_target`, objective.py:447-457) emits exactly FOUR
+    shapes, read here with no guessing and no string parsing:
 
         blocking_skill=S, blocking_skill_level=L, blocker=None -> skill-gated
-        blocker=<code>,   blocking_skill=None                  -> material-gated
         blocker=None,     blocking_skill=None                  -> attainable
+        blocker=<code> == self.code                            -> its OWN blocker
+        blocker=<code> != self.code                            -> material-gated
+
+    Spec §5.3's table names only the first three; the fourth is the last arm
+    of `_classify_target` and is handled below.
 
     The skill test runs FIRST because a skill-gated target also has
     `blocker=None`; testing `blocker is None` first would report it as
