@@ -1,7 +1,10 @@
 """A rung is cleared when every NORMAL monster in its band is winnable; the gear
 target is the rung being cleared, capped by character level."""
+import dataclasses
+
 import artifactsmmo_cli.ai.tiers.tier_progress as mod
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.tiers.tier_progress import (
     gear_target_tier,
     next_uncleared_tier,
@@ -68,6 +71,51 @@ def test_gear_target_is_capped_by_character_level(monkeypatch):
 def test_gear_target_with_nothing_left_to_clear_is_the_level_rung(monkeypatch):
     monkeypatch.setattr(mod, "is_winnable", lambda s, g, c, h: True)
     assert gear_target_tier(make_state(level=30), _gd(), None) == 20
+
+
+def test_bundle_backed_progress_uses_real_combat_prediction(bundle_game_data):
+    """I3: every OTHER test in this module monkeypatches `is_winnable`, so
+    nothing exercises `tier_progress` against the real combat predictor —
+    the asymmetry (`tier_ladder` has bundle census tests; this module had
+    none) is what let C1 survive six reviews. `l1_fresh` (level 1, no
+    combat stats) cannot clear even tier 1's easiest normal monsters, so its
+    rung is stuck at 1; `l10_gearcrafting_gap` (level 10, real derived
+    combat stats) has cleared tier 1 and progressed all the way to tier 10,
+    the rung its own level caps it at."""
+    gd = bundle_game_data
+    fresh = scenario_state(SCENARIOS["l1_fresh"], gd)
+    geared = scenario_state(SCENARIOS["l10_gearcrafting_gap"], gd)
+
+    assert tier_cleared(fresh, gd, 1, None) is False
+    assert next_uncleared_tier(fresh, gd, None) == 1
+    assert gear_target_tier(fresh, gd, None) == 1
+
+    assert tier_cleared(geared, gd, 1, None) is True
+    assert next_uncleared_tier(geared, gd, None) == 10
+    assert gear_target_tier(geared, gd, None) == 10
+
+
+def test_gear_target_tier_is_independent_of_current_hp(bundle_game_data):
+    """C1: route existence must not depend on incidental damage. Controller-
+    reproduced against `l10_gearcrafting_gap` (level 10, max_hp 345):
+    `gear_target_tier` swung 10 -> 5 -> 5 as hp dropped from 345 to 172 to
+    103, because `tier_cleared` asked `is_winnable` at CURRENT hp although
+    its module docstring promises restorable hp. Pins that the tier is
+    IDENTICAL at full and reduced hp for the same scenario state — this test
+    is the fix's whole point and must fail without the `max_hp` replace in
+    `tier_cleared`."""
+    gd = bundle_game_data
+    full_hp = scenario_state(SCENARIOS["l10_gearcrafting_gap"], gd)
+    assert full_hp.hp == full_hp.max_hp
+    damaged = dataclasses.replace(full_hp, hp=max(1, full_hp.max_hp // 3))
+    assert damaged.hp != damaged.max_hp
+
+    tier_full = gear_target_tier(full_hp, gd, None)
+    tier_damaged = gear_target_tier(damaged, gd, None)
+
+    assert tier_full == tier_damaged, (
+        f"gear_target_tier depends on current hp: {tier_full} at full hp vs "
+        f"{tier_damaged} damaged")
 
 
 def test_gear_target_follows_an_uncleared_lower_band_below_the_level_rung(monkeypatch):

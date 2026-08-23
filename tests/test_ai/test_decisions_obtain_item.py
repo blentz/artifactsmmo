@@ -17,7 +17,7 @@ descendants are only reachable when `root.code != step.code` — a parity
 test using only `root=step` would pass while exercising none of them, and
 would also leave those Decisions' `resolve` bodies uncovered.
 
-The tests below `test_objective_step_goal_delegates_to_the_graph` cover
+The tests below `test_objective_step_goal_forwards_to_the_graph` cover
 branches the bundle-catalog/scenario sweep never reaches: the
 `analyze_currency_leaves` funding-target route and the depth-reachable-root
 route are both real, live paths (see their docstrings) that happen not to be
@@ -65,7 +65,7 @@ def _step_root_pairs(gd):
 
 
 @pytest.mark.parametrize("scenario_name", sorted(SCENARIOS))
-def test_objective_step_goal_delegates_to_the_graph(scenario_name, bundle_game_data):
+def test_objective_step_goal_forwards_to_the_graph(scenario_name, bundle_game_data):
     """`objective_step_goal`'s `ObtainItem` arm must return exactly what
     calling the graph directly returns, for every (scenario, step, root)
     triple the bundle catalog produces -- pinning the production wiring

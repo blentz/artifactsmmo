@@ -1,5 +1,7 @@
 """Decision is a named branch point. It is never planned; it resolves to a Goal
 or to another Decision."""
+from abc import abstractmethod
+
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from tests.test_ai.fixtures import make_state
@@ -91,4 +93,42 @@ def test_missing_name_raises_at_class_definition():
         raise AssertionError("expected TypeError")
     except TypeError as exc:
         assert "_NoName" in str(exc)
+        assert "name" in str(exc)
+
+
+def test_abstract_intermediate_subclass_without_name_is_accepted():
+    """C2: an intermediate base that re-declares `resolve` as abstract (to
+    force its own concrete subclasses to implement it) must NOT be forced to
+    carry `name` -- it is never instantiated on its own. Must not raise."""
+    class _AbstractMid(Decision):
+        @abstractmethod
+        def resolve(self, state, game_data, ctx, history):
+            ...
+
+    class _ConcreteLeaf(_AbstractMid):
+        name = "ConcreteLeaf"
+
+        def resolve(self, state, game_data, ctx, history):
+            return None
+
+    assert _ConcreteLeaf.name == "ConcreteLeaf"
+
+
+def test_concrete_subclass_of_an_abstract_intermediate_still_needs_name():
+    """The exemption in the test above must not swallow the real check: a
+    CONCRETE subclass (non-abstract `resolve`) that forgets `name` is still
+    rejected, even when its parent is the abstract intermediate."""
+    class _AbstractMid(Decision):
+        @abstractmethod
+        def resolve(self, state, game_data, ctx, history):
+            ...
+
+    try:
+        class _ConcreteNoName(_AbstractMid):
+            def resolve(self, state, game_data, ctx, history):
+                return None
+
+        raise AssertionError("expected TypeError")
+    except TypeError as exc:
+        assert "_ConcreteNoName" in str(exc)
         assert "name" in str(exc)

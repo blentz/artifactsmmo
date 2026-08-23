@@ -11,9 +11,11 @@ bands partition the whole monster table.
 
 NOT `audit/content_tiers.py`. That module buckets content into fixed ten-level
 windows (`level // 10`) as the journey axis of the behavioural-completeness
-matrix document, and has no production consumer. This ladder is uneven, derived,
-and is what the planner descends. The two are different axes over the same world
-and must not be merged without the matrix owner's agreement.
+matrix document, and its production consumer is `scripts/gen_content_tiers.py`
+(which renders `docs/behavioral_completeness/content_tiers.md`), not the
+planner. This ladder is uneven, derived, and is what the planner descends. The
+two are different axes over the same world and must not be merged without the
+matrix owner's agreement.
 """
 
 from artifactsmmo_cli.ai.game_data import GameData
@@ -63,4 +65,4 @@ def normal_band(game_data: GameData, tier: int) -> tuple[str, ...]:
     """`band`, minus boss / elite / raid_boss — the monsters a rung is cleared on."""
     types = game_data.monsters.types
     return tuple(code for code in band(game_data, tier)
-                 if types.get(code, "normal") not in NON_FARMABLE_TYPES)
+                 if types[code] not in NON_FARMABLE_TYPES)

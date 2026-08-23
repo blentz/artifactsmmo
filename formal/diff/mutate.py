@@ -2822,6 +2822,23 @@ OBTAIN_ITEM_DECISION_MUTATIONS = [
      "                                  target_level=current + 1)\n",
      "            return GatherMaterialsGoal(target_item=self.step.code,\n"
      "                                       needed={self.step.code: self.step.quantity})\n"),
+    # PF-2 proved the return-rewire mutant above is a no-op ON ITS OWN --
+    # DoesTheRecipeNeedAMonsterDrop returns for every weapon in the game
+    # (12/12 checked have a monster-drop recipe input), so the skill gate was
+    # unreachable through the ORIGINAL, unhoisted call order. This second
+    # mutant reverts the HOIST itself: `IsThisAnIntermediateOnAChain.resolve`
+    # goes straight to the monster-drop check instead of `CanICraftCurrentTier`
+    # first, restoring the pre-PF-2 order that made the rewire above dead
+    # code. Killed by tests/test_ai/test_decisions_obtain_item.py.
+    ("obtain_item: the skill-gate hoist is reverted -- intermediate-on-chain"
+     " goes straight to the monster-drop check instead of the craftability"
+     " check first",
+     "                if root_slots:\n"
+     "                    return CanICraftCurrentTier(\n"
+     "                        self.step, self.root, root_stats, root_slots)\n",
+     "                if root_slots:\n"
+     "                    return DoesTheRecipeNeedAMonsterDrop(\n"
+     "                        self.step, self.root, root_slots)\n"),
 ]
 
 

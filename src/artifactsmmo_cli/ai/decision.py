@@ -38,12 +38,17 @@ class Decision(ABC):
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
-        # Only check concrete subclasses (those that define resolve).
-        # Allow intermediate abstract bases.
-        is_concrete = (
-            'resolve' in cls.__dict__ and
-            (not hasattr(cls, '__abstractmethods__') or 'resolve' not in cls.__abstractmethods__)
-        )
+        # Only check concrete subclasses (those that define a non-abstract
+        # `resolve`). Allow intermediate abstract bases through.
+        #
+        # `hasattr(cls, '__abstractmethods__')` is ALWAYS False here: ABCMeta
+        # computes and sets that slot AFTER `type.__new__` runs this hook, so
+        # the exemption below is checked on the FUNCTION OBJECT itself
+        # instead — `@abstractmethod` stamps `__isabstractmethod__ = True` on
+        # the function at decoration time, which is visible immediately.
+        resolve_fn = cls.__dict__.get('resolve')
+        is_concrete = resolve_fn is not None and not getattr(
+            resolve_fn, '__isabstractmethod__', False)
         if (is_concrete and
                 (not hasattr(cls, 'name') or not isinstance(cls.name, str) or not cls.name)):
             raise TypeError(

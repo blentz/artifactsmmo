@@ -13,6 +13,8 @@ which he has cleared by definition. Character level CAPS the target; it never
 sets it.
 """
 
+import dataclasses
+
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -22,8 +24,15 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 def tier_cleared(state: WorldState, game_data: GameData, tier: int,
                  history: LearningStore | None) -> bool:
-    """Is every normal monster in `tier`'s band winnable?"""
-    return all(is_winnable(state, game_data, code, history)
+    """Is every normal monster in `tier`'s band winnable?
+
+    Evaluated AT RESTORABLE HP, never current — route existence must not
+    depend on incidental damage. Same idiom as `obtain_sources._drop_sources`,
+    `weapon_winnability.marginal_weapon_winnability` and
+    `combat_deficit.combat_deficit`: a character resting to full is always an
+    option, so "is this rung clearable" must not flip with transient HP."""
+    rested = dataclasses.replace(state, hp=state.max_hp)
+    return all(is_winnable(rested, game_data, code, history)
                for code in normal_band(game_data, tier))
 
 

@@ -1,6 +1,8 @@
 """A gear target that cannot be built today is a target WITH A BLOCKER, never a
 target that was deleted."""
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.tier_progress import gear_target_tier
 from tests.test_ai.fixtures import make_state
 
 
@@ -16,9 +18,42 @@ def test_an_unattainable_target_is_kept_and_carries_its_blocker(bundle_game_data
 
     assert "weapon_slot" in targets, "the weapon slot must produce a target"
     weapon = targets["weapon_slot"]
-    if not weapon.attainable:
-        assert weapon.blocker == "material:wooden_stick", \
-            "unattainable target must name its exact blocker"
+    assert weapon.attainable is False
+    assert weapon.blocker == "material:wooden_stick", \
+        "unattainable target must name its exact blocker"
+
+
+def test_tier_cap_bounds_the_candidate_set(bundle_game_data):
+    """I2: every prior test in this file builds its state from `make_state()`,
+    whose `attack={}` makes `predict_win` False against every monster, so
+    `next_uncleared_tier` is always 1 and `gear_target_tier`'s cap is only
+    ever exercised in its degenerate corner (tier 1). `l10_gearcrafting_gap`
+    has real derived combat stats and clears through tier 10 -- pins that the
+    cap actually EXCLUDES higher-tier items rather than merely defaulting to
+    the lowest possible one. `artifact1_slot` is the witness: uncapped
+    (`target_gear`, the perfect sheet) it is `sandwhisper_codex` (level 50);
+    capped to tier 10 it must be `novice_guide` (level 10), never the
+    level-50 item."""
+    gd = bundle_game_data
+    objective = CharacterObjective.from_game_data(gd)
+    state = scenario_state(SCENARIOS["l10_gearcrafting_gap"], gd)
+
+    tier = gear_target_tier(state, gd, None)
+    assert tier == 10, "scenario fixture drifted; re-derive the expected tier"
+
+    targets = objective.gear_targets_with_blockers(state, None)
+    assert "artifact1_slot" in targets
+    capped = targets["artifact1_slot"]
+    assert capped.code == "novice_guide"
+    capped_stats = gd.item_stats(capped.code)
+    assert capped_stats is not None and capped_stats.level <= tier
+
+    perfect_code = objective.target_gear.get("artifact1_slot")
+    assert perfect_code == "sandwhisper_codex"
+    perfect_stats = gd.item_stats(perfect_code)
+    assert perfect_stats is not None and perfect_stats.level > tier, (
+        "the perfect-sheet target must be ABOVE the tier cap for this "
+        "assertion to prove the cap excludes it")
 
 
 def test_attainable_target_is_reported_attainable_with_no_blocker(bundle_game_data):

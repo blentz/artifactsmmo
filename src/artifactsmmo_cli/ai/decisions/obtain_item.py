@@ -16,10 +16,14 @@ never above 10, 2026-08-16..2026-08-22). "I cannot craft this at all"
 dominates "this chain is too big to plan in one go": hoisting is
 behaviour-neutral when the skill is adequate (the hoisted branch falls
 through to the monster-drop check exactly as line 924 ran today) and is the
-intended change when it is not. See
-`tests/test_ai/test_decisions_obtain_item.py` for the parity proof against
-`strategy_driver._legacy_objective_step_goal`, which keeps the ORIGINAL,
-unhoisted order as the pre-PF-2 reference.
+intended change when it is not. `strategy_driver.objective_step_goal`'s
+`ObtainItem` arm now IS `resolve_node(obtain_item_decision(step, root), ...)`
+-- the if-pile it was transcribed from is gone, so there is no longer a
+second, independent implementation to check parity against. See
+`tests/test_ai/test_decisions_obtain_item.py::test_objective_step_goal_forwards_to_the_graph`
+for the wiring pin (production forwards to this graph correctly) and
+`test_a_skill_gated_root_raises_the_skill_by_one` for the PF-2 behaviour
+change itself.
 """
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
@@ -115,11 +119,11 @@ class IsThisAnIntermediateOnAChain(Decision):
         # while GatherMaterialsGoal stops at the intermediate.
         if isinstance(self.root, ObtainItem) and self.root.code != self.step.code:
             root_stats = game_data.item_stats(self.root.code)
-            root_slots = (ITEM_TYPE_TO_SLOTS.get(root_stats.type_)
-                          if root_stats is not None else None)
-            if root_slots:
-                return CanICraftCurrentTier(
-                    self.step, self.root, root_stats, root_slots)
+            if root_stats is not None:
+                root_slots = ITEM_TYPE_TO_SLOTS.get(root_stats.type_)
+                if root_slots:
+                    return CanICraftCurrentTier(
+                        self.step, self.root, root_stats, root_slots)
         return GatherMaterialsGoal(target_item=self.step.code,
                                    needed={self.step.code: self.step.quantity})
 
@@ -135,7 +139,7 @@ class CanICraftCurrentTier(Decision):
     name = "CanICraftCurrentTier"
 
     def __init__(self, step: ObtainItem, root: ObtainItem,
-                root_stats: ItemStats | None, root_slots: list[str]) -> None:
+                root_stats: ItemStats, root_slots: list[str]) -> None:
         self.step = step
         self.root = root
         self.root_stats = root_stats
@@ -157,7 +161,11 @@ class CanICraftCurrentTier(Decision):
         # +1, not the target level: the graph re-derives from live state
         # every cycle, so the increment advances on its own and nothing has
         # to plan the whole climb to `crafting_level` in one shot.
-        if (self.root_stats is not None and self.root_stats.crafting_skill
+        #
+        # `self.root_stats` is never None here (M2): the only constructor
+        # call site is `IsThisAnIntermediateOnAChain.resolve`, which only
+        # builds this Decision inside `if root_stats is not None:`.
+        if (self.root_stats.crafting_skill
                 and state.skills.get(self.root_stats.crafting_skill, 1)
                 < self.root_stats.crafting_level):
             current = state.skills.get(self.root_stats.crafting_skill, 1)
@@ -166,7 +174,7 @@ class CanICraftCurrentTier(Decision):
         # Skill adequate: fall through to the monster-drop / depth-budget
         # chunking exactly as line 924 ran today.
         return DoesTheRecipeNeedAMonsterDrop(
-            self.step, self.root, self.root_stats, self.root_slots)
+            self.step, self.root, self.root_slots)
 
 
 class DoesTheRecipeNeedAMonsterDrop(Decision):
@@ -179,10 +187,9 @@ class DoesTheRecipeNeedAMonsterDrop(Decision):
     name = "DoesTheRecipeNeedAMonsterDrop"
 
     def __init__(self, step: ObtainItem, root: ObtainItem,
-                root_stats: ItemStats | None, root_slots: list[str]) -> None:
+                root_slots: list[str]) -> None:
         self.step = step
         self.root = root
-        self.root_stats = root_stats
         self.root_slots = root_slots
 
     def resolve(self, state: WorldState, game_data: GameData,

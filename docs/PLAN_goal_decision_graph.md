@@ -77,14 +77,12 @@ Task 1 pins the distinction with a docstring cross-reference and a test. Do
 | `src/artifactsmmo_cli/ai/tiers/tier_progress.py` (create) | State-aware: `next_uncleared_tier`, `gear_target_tier` |
 | `src/artifactsmmo_cli/ai/decision.py` (create) | `Node` marker + `Decision` base class |
 | `src/artifactsmmo_cli/ai/decisions/obtain_item.py` (create) | The six `ObtainItem` Decisions |
-| `src/artifactsmmo_cli/ai/decisions/reach_char_level.py` (create) | The two `ReachCharLevel` Decisions |
 | `src/artifactsmmo_cli/ai/strategy_driver.py` (modify) | `objective_step_goal` delegates to the Decisions |
 | `src/artifactsmmo_cli/ai/tiers/objective.py` (modify) | `near_term_gear` gains a blocker-emitting sibling |
 | `tests/test_ai/test_tier_ladder.py` (create) | Ladder + partition census |
 | `tests/test_ai/test_tier_progress.py` (create) | Clear rule and gear target tier |
 | `tests/test_ai/test_decision.py` (create) | `Decision` protocol |
 | `tests/test_ai/test_decisions_obtain_item.py` (create) | Transcription parity + the rewired edge |
-| `tests/test_ai/test_decisions_reach_char_level.py` (create) | Transcription parity |
 | `tests/test_ai/test_max_gear_for_level.py` (create) | Blocker-instead-of-filter invariant |
 
 ---
@@ -1001,7 +999,7 @@ Register an anchor for the rewired return so a mutant that restores
 Verify:
 
 ```bash
-uv run python scripts/gen_audit.py --check-anchors
+uv run python formal/diff/mutate.py --check-anchors
 ```
 
 - [ ] **Step 7: Lint and the coverage-enforcing suite**

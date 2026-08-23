@@ -79,6 +79,36 @@ def _slot_assignments(type_: str, slots: list[str],
     return out
 
 
+def _gear_candidates_by_type(
+    game_data: GameData, level_cap: int
+) -> dict[str, list[tuple[int, str]]]:
+    """Equippable items at or below `level_cap`, scored by `pursuit_value` and
+    ranked (highest value first, item code breaking ties) within each item
+    type. Shared candidate-build step for `near_term_gear` and
+    `gear_targets_with_blockers` (I1) — they differ only in the level cap
+    (`state.level` vs the gear-target tier) and in WHERE attainability is
+    applied: `near_term_gear` filters to attainable-now items BEFORE
+    `_slot_assignments` runs, so an unattainable item can never displace an
+    attainable one within a slot; `gear_targets_with_blockers` ranks first and
+    classifies attainability per ASSIGNED slot afterward, because an
+    unattainable target must still surface (carrying its blocker) rather than
+    vanish. That difference means the two functions can legitimately pick
+    different codes for the same slot from the same ranked list -- do not
+    move the attainability filter into this helper, and do not swap which
+    function filters and which classifies."""
+    by_type: dict[str, list[tuple[int, str]]] = {}
+    for code, stats in game_data.all_item_stats.items():
+        if (stats.type_ not in ITEM_TYPE_TO_SLOTS
+                or stats.type_ == "utility"
+                or stats.level > level_cap):
+            continue
+        value = pursuit_value(stats)
+        if value > 0:
+            by_type.setdefault(stats.type_, []).append((value, code))
+    return {type_: sorted(items, key=lambda vc: (-vc[0], vc[1]))
+            for type_, items in by_type.items()}
+
+
 GOLD = "gold"
 """The currency code for ordinary (gold) purchases (`NPCItem.currency`).
 Distinguished as ALWAYS attainable: the perfect sheet assumes full gold, and
@@ -356,19 +386,10 @@ class CharacterObjective:
         Trace 2026-06-11 16:42: level 6, body/leg/amulet slots empty, 148
         consecutive fights at -72.8 HP each. These near-term targets are the
         live roots that premise needs."""
-        by_type: dict[str, list[tuple[int, str]]] = {}
-        for code, stats in self._game_data.all_item_stats.items():
-            if (stats.type_ not in ITEM_TYPE_TO_SLOTS
-                    or stats.type_ == "utility"
-                    or stats.level > state.level):
-                continue
-            value = pursuit_value(stats)
-            if value > 0:
-                by_type.setdefault(stats.type_, []).append((value, code))
         targets: dict[str, str] = {}
-        for type_, items in by_type.items():
+        for type_, ranked in _gear_candidates_by_type(
+                self._game_data, state.level).items():
             slots = [s for s in ITEM_TYPE_TO_SLOTS[type_] if s in EQUIPMENT_SLOTS]
-            ranked = sorted(items, key=lambda vc: (-vc[0], vc[1]))
             attainable = [(value, code) for (value, code) in ranked
                           if is_attainable_now(code, state, self._game_data)]
             for slot, value, code in _slot_assignments(type_, slots, attainable):
@@ -382,19 +403,9 @@ class CharacterObjective:
         """Best target per slot up to the gear target tier, each carrying its
         blocker when it cannot be built now."""
         tier = gear_target_tier(state, self._game_data, history)
-        by_type: dict[str, list[tuple[int, str]]] = {}
-        for code, stats in self._game_data.all_item_stats.items():
-            if (stats.type_ not in ITEM_TYPE_TO_SLOTS
-                    or stats.type_ == "utility"
-                    or stats.level > tier):
-                continue
-            value = pursuit_value(stats)
-            if value > 0:
-                by_type.setdefault(stats.type_, []).append((value, code))
         targets: dict[str, GearTarget] = {}
-        for type_, items in by_type.items():
+        for type_, ranked in _gear_candidates_by_type(self._game_data, tier).items():
             slots = [s for s in ITEM_TYPE_TO_SLOTS[type_] if s in EQUIPMENT_SLOTS]
-            ranked = sorted(items, key=lambda vc: (-vc[0], vc[1]))
             for slot, value, code in _slot_assignments(type_, slots, ranked):
                 if value <= self._item_value(state.equipment.get(slot)):
                     continue
