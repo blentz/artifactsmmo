@@ -4,10 +4,15 @@
 and outranks the windowed picker, so four of five live characters were grinding
 4 to 10 levels below themselves on 2026-08-23.
 """
+import dataclasses
+
 import artifactsmmo_cli.ai.tiers.band_target as mod
 import artifactsmmo_cli.ai.tiers.tier_progress as tp
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.tiers.band_target import band_combat_target
+from artifactsmmo_cli.ai.tiers.tier_ladder import band as raw_band
+from artifactsmmo_cli.ai.tiers.tier_ladder import normal_band as real_normal_band
 from tests.test_ai.fixtures import make_state
 
 
@@ -39,26 +44,66 @@ def test_the_target_comes_from_the_next_uncleared_band(monkeypatch):
 
 
 def test_normal_band_is_called_not_band(monkeypatch):
-    """Rewrite of vacuous test. normal_band filters out bosses; band does not.
-    To make this fail, one would need to replace normal_band with band AND
-    add a boss that is unwinnable to create an uncleared tier. Single-line
-    change is insufficient. Production change that breaks this: replace
-    'normal_band(game_data, tier)' with 'band(game_data, tier)'.
-    Fixture: T10 is uncleared due to mushmush being unwinnable. band(10) has
-    both mushmush and king_slime; normal_band(10) has only mushmush. If band()
-    is called, the function picks from [mushmush, king_slime]; if normal_band()
-    is called, it picks from [mushmush]. Both have mushmush unwinnable, so
-    either way the band is empty. Test must use different data."""
+    """Genuinely discriminating rewrite. The prior version used a band where
+    the only boss present (`king_slime`) was never a candidate either way,
+    so swapping `normal_band` for `band` changed nothing — 8/8 tests passed
+    under that mutation.
+
+    This fixture makes the boss filter load-bearing: `strongboss` (type
+    boss, level 10) sits in the SAME band as `other_normal` (type normal,
+    level 10), both winnable, both same HP. The XP formula's monster-type
+    multiplier is exact (`_MONSTER_TYPE_MULT10`: boss=20, normal=10 — see
+    `monster_catalog.py`), so with identical level/hp `strongboss`'s XP is
+    always exactly double `other_normal`'s — it wins the XP argmax if it is
+    ever a candidate. `weakling` (normal, level 10, unwinnable) is what
+    keeps T10 uncleared, since `tier_cleared` only reads the boss-filtered
+    band and never consults the boss's winnability.
+
+    band(10) = (other_normal, strongboss, weakling) -- includes the boss.
+    normal_band(10) = (other_normal, weakling) -- excludes it.
+
+    Correct (normal_band): winnable = [other_normal] -> target=other_normal.
+    Mutated (band): winnable = [other_normal, strongboss], strongboss's XP
+    (double) wins the argmax -> target=strongboss.
+
+    Verified below by printing both candidates' xp_per_kill BEFORE the
+    assertion, per the coordinator's instruction not to assume the ranking.
+    """
     def fake_is_winnable(s: object, g: object, c: str, h: object) -> bool:
-        # Make spider unwinnable to keep T20 uncleared
-        return c != "spider"
+        return c != "weakling"
     monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
     monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
-    # With spider unwinnable, T20 is uncleared. band(20) and normal_band(20)
-    # both return [spider, ogre]. normal_band filters bosses, but these are
-    # both normal type so no difference. Ogre is winnable, so target is ogre.
-    target = band_combat_target(make_state(level=30), _gd(), None)
-    assert target == "ogre"
+
+    gd = GameData()
+    gd._item_stats = {
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon"),
+        "iron_sword": ItemStats(code="iron_sword", level=10, type_="weapon"),
+        "battlestaff": ItemStats(code="battlestaff", level=20, type_="weapon"),
+    }
+    gd._monster_level = {"chicken": 1, "weakling": 10, "other_normal": 10,
+                         "strongboss": 10}
+    gd._monster_type = {"chicken": "normal", "weakling": "normal",
+                        "other_normal": "normal", "strongboss": "boss"}
+    gd._monster_hp = {"chicken": 60, "weakling": 300, "other_normal": 300,
+                      "strongboss": 300}
+    state = make_state(level=12)
+
+    # Verify the discriminating property directly, not by assumption:
+    # band(10) includes the boss, normal_band(10) does not, and the boss
+    # outranks the only other winnable candidate on XP.
+    assert raw_band(gd, 10) == ("other_normal", "strongboss", "weakling")
+    assert real_normal_band(gd, 10) == ("other_normal", "weakling")
+    xp_other = gd.xp_per_kill("other_normal", state.level)
+    xp_boss = gd.xp_per_kill("strongboss", state.level)
+    print(f"sort key other_normal={xp_other} strongboss={xp_boss}")
+    assert xp_boss > xp_other, (
+        f"fixture must make the boss outrank the normal monster on XP: "
+        f"other_normal={xp_other} strongboss={xp_boss}")
+
+    target = band_combat_target(state, gd, None)
+    assert target == "other_normal", (
+        "boss must never be the target even though it outranks the only "
+        f"other winnable candidate on XP; got {target!r}")
 
 
 def test_no_winnable_monster_in_the_band_yields_none(monkeypatch):
@@ -80,23 +125,44 @@ def test_a_finished_ladder_yields_none(monkeypatch):
     assert band_combat_target(make_state(level=30), _gd(), None) is None
 
 
-def test_hp_does_not_affect_winnable_list(monkeypatch):
-    """Route existence must not depend on incidental damage. Winnable list is
-    computed at max HP, not current HP. Verifies that rest-projection is used.
-    At reduced HP, the fake is_winnable would exclude spider; at max HP it
-    includes spider. Function uses max HP, so spider is returned."""
-    def fake_is_winnable(s: object, g: object, c: str, h: object) -> bool:
-        # Only winnable at full HP (hp >= 100); reduced HP would exclude targets
-        return c != "ogre" and s.hp >= 100
-    monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
-    monkeypatch.setattr(tp, "is_winnable", fake_is_winnable)
-    gd = _gd()
-    state_reduced = make_state(level=30, hp=50)
+def test_hp_does_not_affect_winnable_list(bundle_game_data):
+    """Route existence must not depend on incidental damage. Uses the REAL
+    `is_winnable` (no monkeypatch) against the real game catalog, the same
+    pattern as `test_gear_target_tier_is_independent_of_current_hp` in
+    `test_tier_progress.py` — a stubbed predicate cannot exercise the HP
+    path at all, since the fake merely re-encodes whatever assumption it was
+    written with.
 
-    # Even at reduced HP, function should see spider as winnable because
-    # is_winnable is called with rested state (hp=max_hp)
-    result = band_combat_target(state_reduced, gd, None)
-    assert result == "spider"
+    Scenario: `l11_band_floor` (level 11, `derive_combat_stats=True` so its
+    equipped gear yields real, non-zero attack/dmg stats — `is_winnable`
+    reads 0 attack for every monster under the harness's zero-stat default,
+    which would make this test vacuously None at every HP). Confirmed below
+    that the full-HP target is not None before comparing it against the
+    damaged-HP target — a None-vs-None comparison would be the same vacuity
+    in a new costume.
+
+    Damage to `max_hp // 3`, the same fraction the sibling test in
+    `test_tier_progress.py` uses to prove `tier_cleared`'s rest-projection:
+    material enough that `predict_win`'s CURRENT-hp-driven rounds-to-die
+    calculation flips outcomes for this scenario's band candidates (verified
+    separately: without rest-projection the target changes at this damage
+    level — see the mutation proof in the task report)."""
+    gd = bundle_game_data
+    full_hp = scenario_state(SCENARIOS["l11_band_floor"], gd)
+    assert full_hp.hp == full_hp.max_hp
+
+    full_target = band_combat_target(full_hp, gd, None)
+    assert full_target is not None, (
+        "l11_band_floor must have a winnable band target at full HP for "
+        "this test to say anything about HP-independence")
+
+    damaged = dataclasses.replace(full_hp, hp=max(1, full_hp.max_hp // 3))
+    assert damaged.hp != damaged.max_hp
+
+    damaged_target = band_combat_target(damaged, gd, None)
+    assert damaged_target == full_target, (
+        f"band_combat_target depends on current hp: {full_target!r} at "
+        f"full hp vs {damaged_target!r} damaged")
 
 
 def test_semantic_tiebreak_uses_level_not_alphabetical(monkeypatch):
