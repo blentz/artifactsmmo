@@ -15,10 +15,12 @@ from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target, target_potion_pure
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
+from artifactsmmo_cli.ai.tiers.tier_progress import gear_target_tier
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
 # Single source: the duplicate-allowed slot types, read from actions/equip.py's
@@ -259,6 +261,22 @@ def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool
 
 
 @dataclass(frozen=True)
+class GearTarget:
+    """A per-slot target and, when it cannot be built today, WHY.
+
+    `near_term_gear` filters unattainable candidates out. That answers "what can
+    I build today" correctly and hides "what do I need". Live 2026-08-22: eight
+    weapons each unlocked a fight Robby could not win, every one failed
+    `is_attainable_now`, so the best surviving candidate was the battlestaff he
+    already wore and no weapon root existed at all.
+    """
+
+    code: str
+    attainable: bool
+    blocker: str | None
+
+
+@dataclass(frozen=True)
 class CharacterObjective:
     """The maxed character sheet: char level 50, every skill 50, best-value
     item per equipment slot, best tool per gathering skill. Built once from
@@ -357,6 +375,48 @@ class CharacterObjective:
                 if value > self._item_value(state.equipment.get(slot)):
                     targets[slot] = code
         return targets
+
+    def gear_targets_with_blockers(
+        self, state: WorldState, history: LearningStore | None
+    ) -> dict[str, GearTarget]:
+        """Best target per slot up to the gear target tier, each carrying its
+        blocker when it cannot be built now."""
+        tier = gear_target_tier(state, self._game_data, history)
+        by_type: dict[str, list[tuple[int, str]]] = {}
+        for code, stats in self._game_data.all_item_stats.items():
+            if (stats.type_ not in ITEM_TYPE_TO_SLOTS
+                    or stats.type_ == "utility"
+                    or stats.level > tier):
+                continue
+            value = pursuit_value(stats)
+            if value > 0:
+                by_type.setdefault(stats.type_, []).append((value, code))
+        targets: dict[str, GearTarget] = {}
+        for type_, items in by_type.items():
+            slots = [s for s in ITEM_TYPE_TO_SLOTS[type_] if s in EQUIPMENT_SLOTS]
+            ranked = sorted(items, key=lambda vc: (-vc[0], vc[1]))
+            for slot, value, code in _slot_assignments(type_, slots, ranked):
+                if value <= self._item_value(state.equipment.get(slot)):
+                    continue
+                targets[slot] = self._classify_target(code, state)
+        return targets
+
+    def _classify_target(self, code: str, state: WorldState) -> GearTarget:
+        """Attainable now, or the first blocker standing in front of it."""
+        if is_attainable_now(code, state, self._game_data):
+            return GearTarget(code=code, attainable=True, blocker=None)
+        stats = self._game_data.item_stats(code)
+        if (stats is not None and stats.crafting_skill
+                and state.skills.get(stats.crafting_skill, 1) < stats.crafting_level):
+            return GearTarget(
+                code=code, attainable=False,
+                blocker=f"skill:{stats.crafting_skill}:{stats.crafting_level}")
+        recipe = self._game_data.crafting_recipe(code) or {}
+        for material in sorted(recipe):
+            if not is_attainable_now(material, state, self._game_data):
+                return GearTarget(code=code, attainable=False,
+                                  blocker=f"material:{material}")
+        return GearTarget(code=code, attainable=False, blocker=f"material:{code}")
 
     def utility_potion_targets(self, state: WorldState) -> dict[str, str]:
         """The utility-slot heal(s) to pursue, judged by EFFECT not level
