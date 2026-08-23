@@ -44,13 +44,12 @@ from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_item_routing import _equippable_goal, _recipe_has_combat_drop_input
 from artifactsmmo_cli.ai.planner import GOAPPlanner, PlanStats
 from artifactsmmo_cli.ai.strategy_driver import (
     LEVEL_LOOKAHEAD,
     StrategyArbiter,
-    _equippable_goal,
     _gather_goal_for_unreachable_equippable,
-    _recipe_has_combat_drop_input,
     _task_recipe_inputs,
     map_guard,
     map_means,
@@ -2105,7 +2104,7 @@ def _gd_skill_gated_chain():
     return gd
 
 
-def test_objective_step_skill_gated_root_plans_literal_step():
+def test_objective_step_skill_gated_root_raises_the_skill():
     """Skill-gated root (gearcrafting 2 < 5) with an intermediate step: the
     root's raw-gather depth (14 ore over the 36 already held) trivially fits
     `equip_max_depth`, so `gather_step_target`'s root-return check would fall
@@ -2113,8 +2112,17 @@ def test_objective_step_skill_gated_root_plans_literal_step():
     gap) — handing the WHOLE craft+equip chain, now also carrying a LevelSkill
     grind, to the A* before materials are even in hand (trace 2026-06-11 18:46
     cycles 15-16: both gear roots stalled, objective abandoned at 1/5 bars).
-    The dispatch must plan the LITERAL step instead: its materials are needed
-    regardless, and the skill grind follows once they're in hand."""
+
+    Planning the literal step's materials regardless of the skill gap was the
+    fix for THAT stall, but it was also the ONLY link from a skill-gated gear
+    target to the skill it needs, and it pointed at the sibling (materials),
+    never the skill — weaponcrafting sat frozen at level 10 fleet-wide from
+    2026-08-16 to 2026-08-22 as a result (11,434 LevelSkill actions, target
+    never once above 10). `CanICraftCurrentTier`'s "no" branch now raises the
+    skill by one increment instead (PF-2,
+    `.superpowers/sdd/PLAN_goal_decision_graph/progress.md`); the step's
+    materials are picked up on a later cycle once the skill has risen, via the
+    depth-budget chunking that now runs AFTER the skill gate."""
     gd = _gd_skill_gated_chain()
     state = make_state(level=6, inventory={"copper_ore": 36},
                        skills={"gearcrafting": 2, "mining": 4, "woodcutting": 1,
@@ -2122,10 +2130,7 @@ def test_objective_step_skill_gated_root_plans_literal_step():
                                "cooking": 1, "alchemy": 1})
     goal = objective_step_goal(ObtainItem("copper_bar", 5), state, gd, _ctx(),
                                root=ObtainItem("copper_legs_armor", 1))
-    assert isinstance(goal, GatherMaterialsGoal)
-    assert repr(goal) == "GatherMaterials(copper_bar, {copper_bar:5})"
-    # And the goal it returns is actually plannable (bars craft on mining).
-    assert goal.is_plannable(state, gd) is True
+    assert repr(goal) == "ReachSkill(gearcrafting->3)"
     assert goal.is_satisfied(state) is False
 
 

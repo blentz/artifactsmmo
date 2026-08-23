@@ -3,9 +3,23 @@
 Transcribed verbatim from the `if isinstance(step, ObtainItem):` branch of
 `strategy_driver.objective_step_goal` (originally lines 882-1006). Each class
 below is one branch of that if-pile, chained in the order the if-pile
-evaluated them. This module changes no behaviour — see
+evaluated them -- EXCEPT for one deliberate reordering (PF-2, see
+`.superpowers/sdd/PLAN_goal_decision_graph/progress.md`): `CanICraftCurrentTier`
+(the crafting-skill gate, originally line 972) now runs BEFORE
+`DoesTheRecipeNeedAMonsterDrop` (originally line 924). Measured against the
+committed bundle: `_recipe_has_combat_drop_input` returns `True` for every
+weapon recipe checked (12/12, including iron_sword<-feather and
+battlestaff<-wolf_bone), so the original line 924 always returned first and
+the skill gate at line 972 was unreachable for the entire weapon tree -- the
+actual cause of the weaponcrafting freeze (11,434 LevelSkill actions, target
+never above 10, 2026-08-16..2026-08-22). "I cannot craft this at all"
+dominates "this chain is too big to plan in one go": hoisting is
+behaviour-neutral when the skill is adequate (the hoisted branch falls
+through to the monster-drop check exactly as line 924 ran today) and is the
+intended change when it is not. See
 `tests/test_ai/test_decisions_obtain_item.py` for the parity proof against
-`strategy_driver._legacy_objective_step_goal`.
+`strategy_driver._legacy_objective_step_goal`, which keeps the ORIGINAL,
+unhoisted order as the pre-PF-2 reference.
 """
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
@@ -17,13 +31,14 @@ from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.strategy_driver import (
+from artifactsmmo_cli.ai.obtain_item_routing import (
     _equippable_goal,
     _gather_step_target_is_root,
     _recipe_has_combat_drop_input,
 )
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -103,14 +118,63 @@ class IsThisAnIntermediateOnAChain(Decision):
             root_slots = (ITEM_TYPE_TO_SLOTS.get(root_stats.type_)
                           if root_stats is not None else None)
             if root_slots:
-                return DoesTheRecipeNeedAMonsterDrop(
+                return CanICraftCurrentTier(
                     self.step, self.root, root_stats, root_slots)
         return GatherMaterialsGoal(target_item=self.step.code,
                                    needed={self.step.code: self.step.quantity})
 
 
+class CanICraftCurrentTier(Decision):
+    """strategy_driver.py:972 (originally 933-1002). HOISTED per PF-2 to run
+    BEFORE `DoesTheRecipeNeedAMonsterDrop` (originally line 924) -- see the
+    module docstring for the measurement that forced this. "I cannot craft
+    this at all" dominates "this chain is too big to plan in one go":
+    chunking a chain whose final craft cannot run is work that cannot pay
+    off."""
+
+    name = "CanICraftCurrentTier"
+
+    def __init__(self, step: ObtainItem, root: ObtainItem,
+                root_stats: ItemStats | None, root_slots: list[str]) -> None:
+        self.step = step
+        self.root = root
+        self.root_stats = root_stats
+        self.root_slots = root_slots
+
+    def resolve(self, state: WorldState, game_data: GameData,
+                ctx: SelectionContext, history: LearningStore | None
+                ) -> "Decision | Goal | None":
+        # Root craft SKILL-GATED: the final craft is blocked until the
+        # crafting skill rises. The step's materials cannot pay off a craft
+        # that cannot run -- raise the skill instead. This is the only link
+        # from a skill-gated gear target to the skill it needs; before this
+        # rewire it pointed at the sibling (`GatherMaterialsGoal(step)` --
+        # gather materials for a craft that cannot run), and
+        # `DoesTheRecipeNeedAMonsterDrop` masked it besides (PF-2): 11,434
+        # LevelSkill(weaponcrafting->N) actions ran, target never once above
+        # 10, dead on four characters since 2026-08-16.
+        #
+        # +1, not the target level: the graph re-derives from live state
+        # every cycle, so the increment advances on its own and nothing has
+        # to plan the whole climb to `crafting_level` in one shot.
+        if (self.root_stats is not None and self.root_stats.crafting_skill
+                and state.skills.get(self.root_stats.crafting_skill, 1)
+                < self.root_stats.crafting_level):
+            current = state.skills.get(self.root_stats.crafting_skill, 1)
+            return ReachSkillGoal(skill_name=self.root_stats.crafting_skill,
+                                  target_level=current + 1)
+        # Skill adequate: fall through to the monster-drop / depth-budget
+        # chunking exactly as line 924 ran today.
+        return DoesTheRecipeNeedAMonsterDrop(
+            self.step, self.root, self.root_stats, self.root_slots)
+
+
 class DoesTheRecipeNeedAMonsterDrop(Decision):
-    """strategy_driver.py:924 (originally 914-932)."""
+    """strategy_driver.py:924 (originally 914-932). Reached only once
+    `CanICraftCurrentTier` has confirmed the crafting skill is adequate
+    (PF-2 hoist). Absorbs the depth-budget chunking that previously lived in
+    the second half of `CanICraftCurrentTier` (originally 977-1002), since
+    that logic only applies once a skill-adequate craft is in reach."""
 
     name = "DoesTheRecipeNeedAMonsterDrop"
 
@@ -143,26 +207,6 @@ class DoesTheRecipeNeedAMonsterDrop(Decision):
             owned[code] = owned.get(code, 0) + qty
         upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment,
                                        committed_target=(self.root.code, dest_slot))
-        return CanICraftCurrentTier(self.step, self.root, self.root_stats, upgrade, owned)
-
-
-class CanICraftCurrentTier(Decision):
-    """strategy_driver.py:972 (originally 933-1002)."""
-
-    name = "CanICraftCurrentTier"
-
-    def __init__(self, step: ObtainItem, root: ObtainItem,
-                root_stats: ItemStats | None, upgrade: UpgradeEquipmentGoal,
-                owned: dict[str, int]) -> None:
-        self.step = step
-        self.root = root
-        self.root_stats = root_stats
-        self.upgrade = upgrade
-        self.owned = owned
-
-    def resolve(self, state: WorldState, game_data: GameData,
-                ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision | Goal | None":
         # Pursue the committed gear root one PLANNABLE CHUNK at a time — never
         # hand the whole craft+equip chain to the A* at once. The old code
         # returned the whole-chain `upgrade` whenever `upgrade.is_plannable`,
@@ -181,32 +225,6 @@ class CanICraftCurrentTier(Decision):
         # by the equippable branch above as a shallow craft+equip). The root
         # objective commitment is unchanged — only its EXECUTION is chunked.
         #
-        # Root craft SKILL-GATED (not a depth problem): the final
-        # craft is blocked until the crafting skill rises, but the
-        # step's materials are needed regardless — plan the literal
-        # step, even when the root's raw-gather depth already fits
-        # the budget below. `gather_step_target`'s root-return check
-        # (`_gather_step_target_is_root`) only weighs MATERIAL gather
-        # depth against `equip_max_depth` — it has no notion of a
-        # crafting-skill gap, so a materially-shallow root can still
-        # fall through to `upgrade` there. Handing `upgrade` (the
-        # WHOLE craft+equip chain, now also carrying a LevelSkill
-        # grind for the gap) to the A* before the materials are even
-        # in hand is the one-shot-chain explosion the chunking above
-        # exists to avoid — the same skill-gated dead end this guard
-        # was written to prevent (trace 2026-06-11 18:46 cycle 15-16:
-        # both gear roots stalled and the arbiter fell through to
-        # slime grinding with the bar objective abandoned at 1/5).
-        # Once the materials are in hand AND the skill has risen
-        # enough, the equippable branch above hands the now-bounded
-        # remaining chunk to `upgrade` — UpgradeEquipmentGoal grinds
-        # the crafting skill planner-natively via the LevelSkill
-        # action (epic P3).
-        if (self.root_stats is not None and self.root_stats.crafting_skill
-                and state.skills.get(self.root_stats.crafting_skill, 1)
-                < self.root_stats.crafting_level):
-            return GatherMaterialsGoal(target_item=self.step.code,
-                                       needed={self.step.code: self.step.quantity})
         # Root chain depth-UNREACHABLE (from-scratch deep recipe). The
         # old fallback GatherMaterials(root, root's DIRECT recipe) needs a
         # plan that gathers min_gathers(root) raw units THROUGH the deep
@@ -231,9 +249,9 @@ class CanICraftCurrentTier(Decision):
         # is already the root's reachable-root goal to fall through to.
         tgt_code, tgt_qty = gather_step_target(
             self.root.code, self.step.code, self.step.quantity,
-            game_data.crafting_recipes, self.owned, self.upgrade.max_depth,
+            game_data.crafting_recipes, owned, upgrade.max_depth,
             game_data.max_gather_yield)
-        return DoesTheChainFitTheDepthBudget(self.root, tgt_code, tgt_qty, self.upgrade)
+        return DoesTheChainFitTheDepthBudget(self.root, tgt_code, tgt_qty, upgrade)
 
 
 class DoesTheChainFitTheDepthBudget(Decision):

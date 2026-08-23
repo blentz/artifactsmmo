@@ -84,17 +84,25 @@ EXPECTATIONS: dict[str, Golden] = {
 
     # l12_taskgated_bag: GEAR-FIRST re-derivation 2026-07-08 (Task-3
     # pursuit_value; user ruling). The tree's chosen_root is
-    # ObtainItem(iron_boots, boots_slot) (the GAP-1 attainability fix opened
-    # iron_boots; combat-dominant pursuit_value ranks it over the utility
-    # potion the flat scorer used to pick). iron_boots' closure resolves to
-    # GatherMaterials(iron_ore) for the iron_bar leg. iron_ore's sole source
-    # (iron_rocks) is mining-10-gated and the char is at mining 1, so the plan
-    # grinds the gather skill planner-natively: first action LevelSkill(mining
-    # ->10), then Gather(iron_rocks). This retired the old copper_bar skill-
-    # grind route (prereq-graph ReachSkillLevel node), completed by the P3b
-    # gather-skill-gate LevelSkill admission (2026-07-12).
+    # ObtainItem(iron_sword, weapon_slot), chosen_step ObtainItem(iron_ore, 10)
+    # (combat-dominant pursuit_value ranks the weapon over the utility potion
+    # the flat scorer used to pick; verified by re-running this scenario
+    # against the pre-Task-5 `objective_step_goal` body -- chosen_root/step
+    # are UNCHANGED by Task 5, root selection never calls the rewired code).
+    #
+    # RE-DERIVED 2026-08-22 (goal-decision-graph Task 5, PF-2): the character
+    # is weaponcrafting 1 against iron_sword's crafting_level 10. Pre-Task-5,
+    # iron_sword's recipe closure contains a monster-drop input (feather, from
+    # chicken), so `_recipe_has_combat_drop_input` returned True and masked
+    # the (correct, but unreached) crafting-skill gate -- the goal was
+    # `GatherMaterials(iron_ore)`: gather materials for a sword the character
+    # cannot craft at ANY quantity of iron_ore. This is the exact bug class
+    # Task 5 fixes (weaponcrafting frozen at 10 fleet-wide, 2026-08-16 to
+    # 2026-08-22): `CanICraftCurrentTier` now runs BEFORE the monster-drop
+    # check, so a skill-gated root raises the skill instead. First action is
+    # therefore LevelSkill(weaponcrafting->N), never a gather.
     "l12_taskgated_bag": Golden(
-        goal_class="GatherMaterials(iron_ore", first_action="LevelSkill(mining->10)"),
+        goal_class="ReachSkill(weaponcrafting", first_action="LevelSkill(weaponcrafting"),
 }
 
 

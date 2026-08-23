@@ -26,8 +26,10 @@ by waves 1-2).
 - No defaulting around missing API data — use API data or fail with an error.
 - Tests live under `tests/`; success criteria are 0 errors, 0 warnings, 0 skipped,
   100% coverage.
-- `bash formal/gate.sh` must be green at the end of every task. Check its exit
-  code directly or via `${PIPESTATUS[0]}` — piping to `tail` masks the code.
+- Implementers end each task with `uv run ruff check src/ tests/` then
+  `bash scripts/run_tests.sh`, run ONE AT A TIME. The controller runs the full
+  `formal/gate.sh` between tasks. Check exit codes directly or via
+  `${PIPESTATUS[0]}` — piping to `tail` masks the code.
 - Do not create a second implementation of anything. Fix in place.
 
 ---
@@ -111,6 +113,10 @@ Create `tests/test_ai/test_tier_ladder.py`:
 ```python
 """The tier ladder is DERIVED from item levels, never hardcoded, and its
 monster bands partition the whole monster table."""
+from itertools import pairwise
+
+import pytest
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.tier_ladder import (
     band,
@@ -159,6 +165,15 @@ def test_tier_of_level_floors_to_the_rung():
 
 def test_tier_of_level_below_the_first_rung_is_the_first_rung():
     assert tier_of_level(_gd(), 0) == 1
+
+
+def test_tier_of_level_with_no_equippables_raises():
+    """The project gate is `--cov-fail-under=100`, so the totality guard needs
+    a test rather than being left as an unexecuted line."""
+    gd = GameData()
+    gd._item_stats = {}
+    with pytest.raises(ValueError, match="no equippable items"):
+        tier_of_level(gd, 5)
 
 
 def test_band_holds_monsters_from_the_rung_up_to_the_next():
@@ -295,7 +310,7 @@ def test_the_live_ladder_is_not_the_audit_ten_level_banding(bundle_game_data):
     """Pins the distinction from `audit/content_tiers.py`, so a later reader
     cannot 'unify' them by accident. The derived ladder is uneven."""
     rungs = ladder(bundle_game_data)
-    steps = {b - a for a, b in zip(rungs, rungs[1:])}
+    steps = {b - a for a, b in pairwise(rungs)}
     assert steps != {10}, "derived ladder must not be a uniform 10-level banding"
 ```
 
@@ -304,10 +319,11 @@ only `make_planner_gd`, so the fixture is new — append it, do not replace the
 file:
 
 ```python
+from pathlib import Path
+
 import pytest
 
 from artifactsmmo_cli.ai.scenario import load_bundle_game_data
-from pathlib import Path
 
 _BUNDLE = (Path(__file__).resolve().parents[1]
            / "test_ai" / "scenarios" / "fixtures" / "gamedata_bundle.json")
@@ -330,13 +346,22 @@ Expected: 9 passed. If the bundle's monster records carry no `type`, the
 `normal_band` default of `"normal"` keeps the census green — confirm by
 inspecting one record rather than assuming.
 
-- [ ] **Step 7: Run the full gate**
+- [ ] **Step 7: Lint and the coverage-enforcing suite**
+
+Run these ONE AT A TIME, with nothing else running in the worktree:
 
 ```bash
-bash formal/gate.sh > /tmp/gate.txt 2>&1; echo "rc=$?"; tail -5 /tmp/gate.txt
+uv run ruff check src/ tests/
+bash scripts/run_tests.sh
 ```
 
-Expected: `rc=0` and `ALL GATE PARTS PASSED`.
+Expected: `All checks passed!` from the first, and
+`Required test coverage of 100% reached` from the second.
+
+Do NOT use `--no-cov` — the project sets `--cov-fail-under=100` and an
+unexecuted line in new code fails the gate. Do NOT run `formal/gate.sh` here;
+the controller runs it between tasks. Two processes sharing this worktree
+corrupt the shared `.coverage` file and produce a bogus ~45% total.
 
 - [ ] **Step 8: Commit**
 
@@ -516,13 +541,20 @@ uv run pytest tests/test_ai/test_tier_progress.py -q --no-cov
 
 Expected: 8 passed.
 
-- [ ] **Step 5: Run the full gate**
+- [ ] **Step 5: Lint and the coverage-enforcing suite**
 
 ```bash
-bash formal/gate.sh > /tmp/gate.txt 2>&1; echo "rc=$?"; tail -5 /tmp/gate.txt
+uv run ruff check src/ tests/
+bash scripts/run_tests.sh
 ```
 
-Expected: `rc=0`.
+Run them ONE AT A TIME with nothing else active in the worktree — concurrent
+processes corrupt the shared `.coverage` file and report a bogus ~45% total.
+Never pass `--no-cov`: the project sets `--cov-fail-under=100`, so a single
+unexecuted line in new code fails the gate. `formal/gate.sh` is the
+controller's job, not yours.
+
+Expected: `All checks passed!`, then `Required test coverage of 100% reached`.
 
 - [ ] **Step 6: Commit**
 
@@ -700,13 +732,20 @@ uv run pytest tests/test_ai/test_decision.py -q --no-cov
 Expected: 5 passed. (`WaitGoal()` takes no constructor arguments — verified
 against `src/artifactsmmo_cli/ai/goals/wait.py:28`.)
 
-- [ ] **Step 5: Run the full gate**
+- [ ] **Step 5: Lint and the coverage-enforcing suite**
 
 ```bash
-bash formal/gate.sh > /tmp/gate.txt 2>&1; echo "rc=$?"; tail -5 /tmp/gate.txt
+uv run ruff check src/ tests/
+bash scripts/run_tests.sh
 ```
 
-Expected: `rc=0`.
+Run them ONE AT A TIME with nothing else active in the worktree — concurrent
+processes corrupt the shared `.coverage` file and report a bogus ~45% total.
+Never pass `--no-cov`: the project sets `--cov-fail-under=100`, so a single
+unexecuted line in new code fails the gate. `formal/gate.sh` is the
+controller's job, not yours.
+
+Expected: `All checks passed!`, then `Required test coverage of 100% reached`.
 
 - [ ] **Step 6: Commit**
 
@@ -832,13 +871,20 @@ uv run pytest tests/test_ai/test_decisions_obtain_item.py -q --no-cov
 Expected: all parametrised cases pass. **Any failure is a transcription error,
 not a design question — fix the transcription.**
 
-- [ ] **Step 6: Run the full gate**
+- [ ] **Step 6: Lint and the coverage-enforcing suite**
 
 ```bash
-bash formal/gate.sh > /tmp/gate.txt 2>&1; echo "rc=$?"; tail -5 /tmp/gate.txt
+uv run ruff check src/ tests/
+bash scripts/run_tests.sh
 ```
 
-Expected: `rc=0`.
+Run them ONE AT A TIME with nothing else active in the worktree — concurrent
+processes corrupt the shared `.coverage` file and report a bogus ~45% total.
+Never pass `--no-cov`: the project sets `--cov-fail-under=100`, so a single
+unexecuted line in new code fails the gate. `formal/gate.sh` is the
+controller's job, not yours.
+
+Expected: `All checks passed!`, then `Required test coverage of 100% reached`.
 
 - [ ] **Step 7: Commit**
 
@@ -958,13 +1004,20 @@ Verify:
 uv run python scripts/gen_audit.py --check-anchors
 ```
 
-- [ ] **Step 7: Run the full gate**
+- [ ] **Step 7: Lint and the coverage-enforcing suite**
 
 ```bash
-bash formal/gate.sh > /tmp/gate.txt 2>&1; echo "rc=$?"; tail -5 /tmp/gate.txt
+uv run ruff check src/ tests/
+bash scripts/run_tests.sh
 ```
 
-Expected: `rc=0`. Other suites will move — a skill-gated root now produces a
+Run them ONE AT A TIME with nothing else active in the worktree — concurrent
+processes corrupt the shared `.coverage` file and report a bogus ~45% total.
+Never pass `--no-cov`: the project sets `--cov-fail-under=100`, so a single
+unexecuted line in new code fails the gate. `formal/gate.sh` is the
+controller's job, not yours.
+
+Expected: `All checks passed!` and 100% coverage. Other suites will move — a skill-gated root now produces a
 different goal. Update the tests that encode the old routing, and for each one
 state in the commit message why the new expectation is right.
 
@@ -1140,13 +1193,20 @@ uv run pytest tests/test_ai/test_max_gear_for_level.py -q --no-cov
 
 Expected: 2 passed.
 
-- [ ] **Step 5: Run the full gate**
+- [ ] **Step 5: Lint and the coverage-enforcing suite**
 
 ```bash
-bash formal/gate.sh > /tmp/gate.txt 2>&1; echo "rc=$?"; tail -5 /tmp/gate.txt
+uv run ruff check src/ tests/
+bash scripts/run_tests.sh
 ```
 
-Expected: `rc=0`.
+Run them ONE AT A TIME with nothing else active in the worktree — concurrent
+processes corrupt the shared `.coverage` file and report a bogus ~45% total.
+Never pass `--no-cov`: the project sets `--cov-fail-under=100`, so a single
+unexecuted line in new code fails the gate. `formal/gate.sh` is the
+controller's job, not yours.
+
+Expected: `All checks passed!`, then `Required test coverage of 100% reached`.
 
 - [ ] **Step 6: Commit**
 

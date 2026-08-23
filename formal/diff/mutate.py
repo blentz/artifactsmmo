@@ -354,6 +354,13 @@ FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding
 CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_afford_core.py"
 DOOMED_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "doomed_memo.py"
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
+OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "obtain_item.py"
+# `_equippable_goal` / `_gather_goal_for_unreachable_equippable` /
+# `_gather_step_target_is_root` / `_recipe_has_combat_drop_input` moved here
+# from strategy_driver.py (goal-decision-graph Task 5) so `decisions/
+# obtain_item.py` can depend on them without strategy_driver.py depending
+# back on decisions/obtain_item.py (a circular import otherwise).
+OBTAIN_ITEM_ROUTING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_item_routing.py"
 
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
@@ -2799,6 +2806,24 @@ STRATEGY_DRIVER_MUTATIONS = [
      "        if r in guard_reprs and plan:"),
 ]
 
+# Killed by tests/test_ai/test_decisions_obtain_item.py
+# (test_a_skill_gated_root_raises_the_skill_by_one): the Task-5/PF-2 fix.
+# `CanICraftCurrentTier`'s "no" branch used to return GatherMaterials for the
+# step -- gather materials for a craft that cannot run -- which was the only
+# link from a skill-gated gear target to the skill it needs, and it pointed
+# at the sibling. 11,434 LevelSkill(weaponcrafting->N) actions ran, target
+# never once above 10, dead on four characters since 2026-08-16. This mutant
+# restores exactly that regression.
+OBTAIN_ITEM_DECISION_MUTATIONS = [
+    ("obtain_item: skill-gated root reverts to gathering the step's materials"
+     " instead of raising the skill",
+     "            current = state.skills.get(self.root_stats.crafting_skill, 1)\n"
+     "            return ReachSkillGoal(skill_name=self.root_stats.crafting_skill,\n"
+     "                                  target_level=current + 1)\n",
+     "            return GatherMaterialsGoal(target_item=self.step.code,\n"
+     "                                       needed={self.step.code: self.step.quantity})\n"),
+]
+
 
 # EquipOwnedGoal (COLLECT band) wiring — Task 3 (spec 2026-07-03 equip-owned-gear).
 # The empty-slot Rank fill computation: each conjunct of the keep-filter is a
@@ -3977,7 +4002,8 @@ ROLE_OWNED_SKILLS_MUTATIONS = [
      "        return frozenset()"),
 ]
 
-# _equippable_goal passive-currency gate (strategy_driver.py). Unit-killed by
+# _equippable_goal passive-currency gate (obtain_item_routing.py, moved from
+# strategy_driver.py by goal-decision-graph Task 5). Unit-killed by
 # tests/test_ai/test_strategy_driver.py.
 PASSIVE_CURRENCY_GATE_MUTATIONS = [
     # Skip removed: a passively-accruing currency is dedicated-farmed again,
@@ -4067,7 +4093,8 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
-    DOOMED_MEMO_SRC, STRATEGY_DRIVER_SRC, EQUIP_VALUE_SRC,
+    DOOMED_MEMO_SRC, STRATEGY_DRIVER_SRC, OBTAIN_ITEM_DECISION_SRC,
+    OBTAIN_ITEM_ROUTING_SRC, EQUIP_VALUE_SRC,
     GEAR_VALUE_CORE_SRC,
     GAME_DATA_PARSE_SRC, LOCATION_CATALOG_SRC,
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
@@ -7447,6 +7474,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_doomed_memo_diff.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, STRATEGY_DRIVER_MUTATIONS,
               "tests/test_ai/test_strategy_driver_tiered.py", survivors)
+    run_group(OBTAIN_ITEM_DECISION_SRC, OBTAIN_ITEM_DECISION_MUTATIONS,
+              "tests/test_ai/test_decisions_obtain_item.py", survivors)
     run_group(EMPTY_SLOT_FILLS_SRC, EMPTY_SLOT_FILLS_MUTATIONS,
               "tests/test_ai/test_empty_slot_fills.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, EQUIP_OWNED_BAND_MUTATIONS,
@@ -7589,7 +7618,7 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_role_alignment.py", survivors)
     run_group(PLAYER_SRC, ROLE_OWNED_SKILLS_MUTATIONS,
               "tests/test_ai/test_player_coordination.py", survivors)
-    run_group(STRATEGY_DRIVER_SRC, PASSIVE_CURRENCY_GATE_MUTATIONS,
+    run_group(OBTAIN_ITEM_ROUTING_SRC, PASSIVE_CURRENCY_GATE_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHERING_PASSIVE_MUTATIONS,
               "tests/test_ai/test_craft_vs_buy_wiring.py", survivors)

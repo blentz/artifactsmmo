@@ -97,16 +97,26 @@ def test_l10_gearcrafting_gap_chosen_root_targets_iron_boots() -> None:
 
 
 def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
-    """The full plan_from_state seam: the selected goal is the
-    GatherMaterials craft-chain step (feather, the actionable leaf of
-    iron_boots' recipe closure — resolved via Fight(chicken), a normal
-    winnable dropper at this level/loadout) — NEVER GrindCharacterXP. Pins
-    the ACTUAL observed selected_goal/plan, not an assumption."""
+    """The full plan_from_state seam: the selected goal raises the
+    gearcrafting skill the root is blocked on — NEVER GrindCharacterXP.
+    Pins the ACTUAL observed selected_goal/plan, not an assumption.
+
+    RE-DERIVED 2026-08-22 (goal-decision-graph Task 5, PF-2): this scenario IS
+    the bug the task fixes. gearcrafting 5 < iron_boots' crafting_level 10,
+    and iron_boots' recipe closure has a monster-drop input (feather, from
+    chicken), so `_recipe_has_combat_drop_input` used to mask the (correct,
+    but unreached) crafting-skill gate — the old selected_goal was
+    `GatherMaterials(feather, {feather:3})`: gather feathers, via
+    Fight(chicken), for boots the character cannot craft at ANY quantity of
+    feathers. `CanICraftCurrentTier` now runs BEFORE the monster-drop check,
+    so the skill-gated root raises gearcrafting instead — still never
+    GrindCharacterXP, and now for the actual reason the craft chain was
+    blocked rather than a masked one."""
     report = _run(CRITERION_1_MAIN)
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "GatherMaterials(feather, {feather:3})"
-    assert [repr(a) for a in report.plan] == ["Fight(chicken)"]
+    assert repr(report.selected_goal) == "ReachSkill(gearcrafting->6)"
+    assert [repr(a) for a in report.plan] == ["LevelSkill(gearcrafting->10)"]
     assert report.decision.chosen_root == ObtainItem(
         code="iron_boots", quantity=1, slot="boots_slot")
 
@@ -230,13 +240,24 @@ def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
     """GAP-9 regression: at L12 the feather leaf's dropper (chicken) is GREY,
     so iron_boots' feather must be grey-farmed. The old lowest-consumer policy
     suppressed it (evaluated against unrelated apprentice_gloves) -> deadlock
-    to GrindCharacterXP. Pins the FIXED behavior: pursue iron_boots via the
-    feather grey-farm, never GrindCharacterXP."""
+    to GrindCharacterXP. Pins the FIXED behavior: pursue iron_boots, never
+    GrindCharacterXP.
+
+    RE-DERIVED 2026-08-22 (goal-decision-graph Task 5, PF-2): gearcrafting 5
+    < iron_boots' crafting_level 10, and iron_boots' recipe closure has a
+    monster-drop input (feather), so `_recipe_has_combat_drop_input` used to
+    mask the crafting-skill gate — the old goal was the feather grey-farm
+    (`GatherMaterials(feather...)` via `Fight(chicken)`), gathering feathers
+    for boots the character could not craft at ANY quantity of feathers.
+    `CanICraftCurrentTier` now runs BEFORE the monster-drop check, so the
+    skill-gated root raises gearcrafting instead of grey-farming a material
+    that could not have paid off yet — still never GrindCharacterXP, and the
+    grey-farm route is picked back up once the skill has risen."""
     report = _run("l12_gearcrafting_gap")
     assert repr(report.decision.chosen_root).startswith("ObtainItem(code='iron_boots'"), \
         report.decision.chosen_root
     goal = repr(report.selected_goal)
     assert "GrindCharacterXP" not in goal, goal  # the criterion-1 guarantee
-    assert goal.startswith("GatherMaterials(feather"), goal
-    assert report.plan and "Fight(chicken)" in repr(report.plan[0]), report.plan
+    assert goal == "ReachSkill(gearcrafting->6)", goal
+    assert report.plan and repr(report.plan[0]) == "LevelSkill(gearcrafting->10)", report.plan
     assert_search_bounded(report, "l12_gearcrafting_gap")

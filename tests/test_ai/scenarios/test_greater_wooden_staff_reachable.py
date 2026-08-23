@@ -45,7 +45,7 @@ from pathlib import Path
 
 import pytest
 
-from artifactsmmo_cli.ai import strategy_driver
+from artifactsmmo_cli.ai import obtain_item_routing
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -202,7 +202,7 @@ def test_from_scratch_routes_to_the_achievable_step_not_the_equippable():
     15s budget without timing out" — is asserted here directly by running
     the real planner over the real 321-recipe action pool."""
     gd, state = _game_data(), _state_without_banked_planks()
-    goal = strategy_driver._equippable_goal(
+    goal = obtain_item_routing._equippable_goal(
         "greater_wooden_staff", "weapon_slot", state, gd)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal._target_item == "spruce_wood"
@@ -224,7 +224,7 @@ def test_banked_materials_still_route_to_the_craft():
     real traced bank) rather than a second fixture building the same state —
     the file already has it under that name."""
     gd, state = _game_data(), _bank_covered_state()
-    goal = strategy_driver._equippable_goal(
+    goal = obtain_item_routing._equippable_goal(
         "greater_wooden_staff", "weapon_slot", state, gd)
     assert isinstance(goal, UpgradeEquipmentGoal)
 
@@ -233,14 +233,14 @@ def test_the_traversal_runs_once_per_decision(monkeypatch):
     """The helper re-derives the step when not given one. Threading it through
     must not double the walk — `actionable_step` is the expensive part."""
     calls = []
-    real = strategy_driver.actionable_step
+    real = obtain_item_routing.actionable_step
 
     def counting(*args, **kwargs):
         calls.append(1)
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(strategy_driver, "actionable_step", counting)
+    monkeypatch.setattr(obtain_item_routing, "actionable_step", counting)
     gd, state = _game_data(), _state_without_banked_planks()
-    strategy_driver._equippable_goal(
+    obtain_item_routing._equippable_goal(
         "greater_wooden_staff", "weapon_slot", state, gd)
     assert len(calls) == 1, f"actionable_step ran {len(calls)} times"
