@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.requirement_projections import requirement_edges
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
+    META_GOAL_KINDS,
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
@@ -160,7 +161,16 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
         # A skill climb has no MetaGoal prerequisites — LevelSkill /
         # ReachSkillGoal owns the sub-plan (§5.1).
         return []
-    return []
+    # Fail loudly rather than silently reporting "no prerequisites" for a kind
+    # this dispatch does not know (fix-round-1, task 2 review): the trailing
+    # `assert not isinstance(...)` distinguishes a truly foreign node from the
+    # DRIFT case — a variant registered in META_GOAL_KINDS but never given its
+    # own arm above — so the message tells a future maintainer which mistake
+    # they made.
+    assert not isinstance(node, META_GOAL_KINDS), (
+        f"{node!r} is registered in META_GOAL_KINDS but prerequisites() has "
+        f"no arm for it")
+    raise AssertionError(f"unhandled MetaGoal kind: {node!r}")
 
 
 _CHAR_LEVEL_BOOTSTRAP_HORIZON = 2

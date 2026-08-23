@@ -9,9 +9,11 @@ from artifactsmmo_cli.ai.cycle_snapshot import PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import (
+    META_GOAL_KINDS,
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
+    ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
@@ -56,6 +58,11 @@ def _label(node: MetaGoal) -> tuple[str, str]:
         return f"{node.code}{qty}", "obtain"
     if isinstance(node, ReachCharLevel):
         return f"character → {node.level}", "charlevel"
+    if isinstance(node, ReachSkillLevel):
+        # "skill" matches tiers.strategy.root_category's naming for this
+        # category, so the plan pane and the ranking agree on what kind of
+        # root this is.
+        return f"{node.skill} → {node.level}", "skill"
     return short_root(repr(node)), "obtain"
 
 
@@ -69,7 +76,13 @@ def _expand(node: MetaGoal, decision: StrategyDecision, state: WorldState,
     status = "current" if is_current else (
         "met" if node.is_satisfied(state, game_data) else "unmet")
     children: list[PlanTreeNode] = []
-    if node not in visited and depth < _DEPTH_CAP:
+    # Display's own policy for a MetaGoal kind this module doesn't recognise:
+    # render it as a leaf stub rather than descend. `prerequisites()` fails
+    # loudly on an unhandled kind (fix-round-1, task 2 review) — that is
+    # planning's policy, not display's, so this guard keeps the TUI from
+    # inheriting a crash it never asked for.
+    if (isinstance(node, META_GOAL_KINDS) and node not in visited
+            and depth < _DEPTH_CAP):
         nxt = visited | {node}
         for prereq in prerequisites(node, state, game_data, ctx):
             children.append(

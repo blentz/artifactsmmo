@@ -4,7 +4,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.plan_tree import build_plan_tree, rank_detail
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
 from tests.test_ai.fixtures import make_state
 
@@ -192,6 +192,20 @@ def test_reach_char_level_root_labelled_and_leaf():
     chosen = ReachCharLevel(5)
     tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 1)]), make_state(), gd, None)
     assert tree[0].label == "character → 5" and tree[0].kind == "charlevel"
+    assert tree[0].children == ()
+
+
+def test_reach_skill_level_root_labelled_and_leaf():
+    # fix-round-2, task 2 review: ReachSkillLevel used to fall through _label's
+    # unknown-node branch (kind "obtain", wrong — a skill climb is not an
+    # item). It now gets its own arm, in ReachCharLevel's style, with a kind
+    # string ("skill") that matches tiers.strategy.root_category so the pane
+    # and the ranking agree. prerequisites(ReachSkillLevel) == [] (§5.1), so
+    # the node is a leaf.
+    gd = _gd()
+    chosen = ReachSkillLevel("weaponcrafting", 11)
+    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 1)]), make_state(), gd, None)
+    assert tree[0].label == "weaponcrafting → 11" and tree[0].kind == "skill"
     assert tree[0].children == ()
 
 

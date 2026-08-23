@@ -93,3 +93,17 @@ class ReachSkillLevel:
 
     def is_satisfied(self, state: WorldState, game_data: GameData) -> bool:
         return state.skills.get(self.skill, 1) >= self.level
+
+
+META_GOAL_KINDS: tuple[type, ...] = (ObtainItem, ReachCharLevel, ReachSkillLevel)
+"""The complete set of concrete MetaGoal variants, as a runtime-checkable
+isinstance tuple. `MetaGoal` is a Protocol — it cannot be isinstance-tested
+directly — so this is the single place a fourth variant must be registered.
+Two independent consumers read it and each states its OWN policy for a node
+that is NOT one of these kinds: `prerequisite_graph.prerequisites` fails
+loudly (planning must not silently misreport a dispatch it doesn't recognise —
+see the fix-round-1 finding this closes), while `plan_tree._expand` treats an
+unrecognised node as a display leaf stub (a TUI pane degrades gracefully
+instead of crashing). Neither policy should be inferred from the other by
+leaning on a shared default; META_GOAL_KINDS is what keeps both in sync with
+the same list without coupling their behaviour."""

@@ -1,3 +1,7 @@
+from dataclasses import dataclass
+
+import pytest
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
@@ -5,8 +9,21 @@ from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
     combat_capable,
     prerequisites,
 )
+from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
+
+
+@dataclass(frozen=True)
+class _UnknownMetaGoal:
+    """A fourth MetaGoal-shaped node — satisfies the Protocol's duck-typed
+    interface without being ObtainItem/ReachCharLevel/ReachSkillLevel. Exists
+    only to exercise `prerequisites()`'s explicit unhandled-kind failure
+    (mirrors `strategy.py:_prereq_order`'s assert), since none of the three
+    real variants can reach that line."""
+
+    def is_satisfied(self, state: WorldState, game_data: GameData) -> bool:
+        return False
 
 
 def _gd() -> GameData:
@@ -213,3 +230,14 @@ def test_reach_skill_level_has_no_prerequisites():
     # ReachSkillGoal owns the sub-plan, not the prerequisite graph.
     gd = _gd()
     assert prerequisites(ReachSkillLevel("weaponcrafting", 11), make_state(), gd) == []
+
+
+def test_prerequisites_raises_on_unhandled_metagoal_kind():
+    # The trailing `return []` fallthrough was replaced with an explicit
+    # failure (fix-round 1, task 2 review): a fourth MetaGoal kind must raise,
+    # not silently report "no prerequisites" — the same "use only API data or
+    # fail with an error" principle applied to a dispatch, matching
+    # strategy.py:_prereq_order's `assert isinstance(...)` convention.
+    gd = _gd()
+    with pytest.raises(AssertionError, match="unhandled MetaGoal kind"):
+        prerequisites(_UnknownMetaGoal(), make_state(), gd)
