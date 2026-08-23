@@ -100,10 +100,15 @@ def test_hp_does_not_affect_winnable_list(monkeypatch):
 
 
 def test_semantic_tiebreak_uses_level_not_alphabetical(monkeypatch):
-    """Tiebreak uses semantic level not alphabetical code sort. This is verif-
-    ied by confirming 'z_weak' (alphabetically last) at level 20 beats 'a_strong'
-    (alphabetically first) at level 25 when XP is equal. If alphabetical tiebreak
-    were used, 'a_strong' would win. If level tiebreak is used, 'z_weak' wins."""
+    """Secondary tiebreak uses monster_level not code. With genuine XP tie,
+    alphabetical (max on code) picks zzz_low; level-semantic picks aaa_high.
+    Mutation test kills this: reverting monster_levels[code] to code.
+
+    Fixture details: both normal type, both in penalty band >= 5:
+    zzz_low level 10, hp=625: (2000*10 + 4*625*20)*7*10*1000/(20*10M) = 25
+    aaa_high level 15, hp=500: (2000*15 + 4*500*20)*7*10*1000/(20*10M) = 25
+    max(..., code) wins zzz_low (alphabetically last string).
+    max(..., monster_levels) wins aaa_high (higher level)."""
     def fake_is_winnable(s: object, g: object, c: str, h: object) -> bool:
         return True
     monkeypatch.setattr(mod, "is_winnable", fake_is_winnable)
@@ -111,31 +116,29 @@ def test_semantic_tiebreak_uses_level_not_alphabetical(monkeypatch):
     gd = GameData()
     gd._item_stats = {
         "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon"),
-        "iron_sword": ItemStats(code="iron_sword", level=25, type_="weapon"),
+        "iron_sword": ItemStats(code="iron_sword", level=15, type_="weapon"),
     }
-    # z_weak at level 20, a_strong at level 25, both same HP
-    # At char level 30: both grey, but a_strong (higher level) has more XP
-    # This verifies we're not using alphabetical sort for tiebreak
-    gd._monster_level = {"z_weak": 20, "a_strong": 25}
-    gd._monster_type = {"z_weak": "normal", "a_strong": "normal"}
-    gd._monster_hp = {"z_weak": 550, "a_strong": 550}
-    state = make_state(level=30)
+    gd._monster_level = {"zzz_low": 10, "aaa_high": 15}
+    gd._monster_type = {"zzz_low": "normal", "aaa_high": "normal"}
+    gd._monster_hp = {"zzz_low": 625, "aaa_high": 500}
+    state = make_state(level=20)
 
-    xp_z = gd.xp_per_kill("z_weak", state.level)
-    xp_a = gd.xp_per_kill("a_strong", state.level)
-    # a_strong (level 25) should have more XP than z_weak (level 20)
-    assert xp_a > xp_z, f"Expected a_strong XP > z_weak: {xp_a} > {xp_z}"
+    # Verify XP is truly tied
+    xp_low = gd.xp_per_kill("zzz_low", state.level)
+    xp_high = gd.xp_per_kill("aaa_high", state.level)
+    assert xp_low == xp_high, f"XP must be tied: zzz_low={xp_low}, aaa_high={xp_high}"
 
     def fake_next_uncleared(s: object, g: object, h: object) -> int:
-        return 25
+        return 15
     def fake_normal_band(g: object, t: object) -> tuple[str, ...]:
-        return ("z_weak", "a_strong")
+        return ("zzz_low", "aaa_high")
     monkeypatch.setattr(mod, "next_uncleared_tier", fake_next_uncleared)
     monkeypatch.setattr(mod, "normal_band", fake_normal_band)
     result = band_combat_target(state, gd, None)
-    # Pick the one with higher XP (a_strong), not alphabetically first (a_strong)
-    # Even though both happen to pick a_strong, the mechanism matters.
-    assert result == "a_strong"
+    # XP is tied. max(..., code) picks zzz_low (alphabetically last).
+    # max(..., monster_levels[code]) picks aaa_high (higher level).
+    # Semantic tiebreak picks the higher level.
+    assert result == "aaa_high"
 
 
 def test_xp_tiebreak_without_monkeypatched_band_derivation(monkeypatch):
