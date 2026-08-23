@@ -36,6 +36,20 @@ class Decision(ABC):
 
     name: str
 
+    def __init_subclass__(cls, **kwargs):  # type: ignore[no-untyped-def]
+        super().__init_subclass__(**kwargs)
+        # Only check concrete subclasses (those that define resolve).
+        # Allow intermediate abstract bases.
+        is_concrete = (
+            'resolve' in cls.__dict__ and
+            (not hasattr(cls, '__abstractmethods__') or 'resolve' not in cls.__abstractmethods__)
+        )
+        if (is_concrete and
+                (not hasattr(cls, 'name') or not isinstance(cls.name, str) or not cls.name)):
+            raise TypeError(
+                f"{cls.__name__} is a concrete Decision subclass but does not define "
+                f"a non-empty class attribute 'name'")
+
     @abstractmethod
     def resolve(self, state: WorldState, game_data: GameData,
                 ctx: SelectionContext, history: LearningStore | None

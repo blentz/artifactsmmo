@@ -50,3 +50,45 @@ def test_a_cycle_raises_rather_than_hanging():
         assert "Loop" in str(exc)
     else:
         raise AssertionError("expected RecursionError")
+
+
+def test_a_two_node_cycle_raises_with_full_walk():
+    """A two-node cycle must report both nodes in traversal order."""
+    class _CycleA(Decision):
+        name = "CycleA"
+
+        def resolve(self, state, game_data, ctx, history):
+            return _cycle_b
+
+    class _CycleB(Decision):
+        name = "CycleB"
+
+        def resolve(self, state, game_data, ctx, history):
+            return _cycle_a
+
+    _cycle_a = _CycleA()
+    _cycle_b = _CycleB()
+
+    try:
+        resolve_node(_cycle_a, make_state(), None, None, None)
+    except RecursionError as exc:
+        # Must mention both names and show the walk order.
+        assert "CycleA" in str(exc)
+        assert "CycleB" in str(exc)
+        assert "CycleA -> CycleB" in str(exc)
+    else:
+        raise AssertionError("expected RecursionError")
+
+
+def test_missing_name_raises_at_class_definition():
+    """A concrete Decision subclass that forgets 'name' is a programming error
+    caught at class definition time, not at runtime."""
+    try:
+        class _NoName(Decision):
+            def resolve(self, state, game_data, ctx, history):
+                return None
+
+        raise AssertionError("expected TypeError")
+    except TypeError as exc:
+        assert "_NoName" in str(exc)
+        assert "name" in str(exc)
