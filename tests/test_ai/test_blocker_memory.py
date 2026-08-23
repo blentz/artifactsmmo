@@ -17,6 +17,7 @@ from artifactsmmo_cli.ai.goals.reach_unlock_level import (
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
+from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
@@ -275,7 +276,19 @@ class TestPathAlignedMonster:
 
     def test_delegates_to_band_combat_target(self, monkeypatch, tmp_path):
         """The returned target is whatever `band_combat_target` says, and the
-        cheapest-path plan is still cached as a trace-only diagnostic."""
+        cheapest-path plan is still cached as a trace-only diagnostic.
+
+        Fix round 2 (coordinator finding, 2026-08-23): the FIRST version of
+        this test mocked `band_combat_target` to return `"yellow_slime"` —
+        exactly what the REAL, un-mocked `cheapest_path_to_level` projection
+        also picks for this fixture (verified directly below). A mock that
+        agrees with the code path it replaces tests nothing: reverting
+        `_path_aligned_monster` to `return
+        self._last_path_plan.next_action_monster` still passed this test.
+        The mock now returns `"chicken"`, which the real projection would
+        NOT pick (it picks `yellow_slime` — higher level, higher XP/cycle),
+        so only an actual delegation to `band_combat_target` can produce
+        `"chicken"` here."""
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
@@ -291,24 +304,61 @@ class TestPathAlignedMonster:
         player.game_data._monster_resistance = {"chicken": {}, "yellow_slime": {}}
         player.game_data._monster_critical_strike = {"chicken": 0, "yellow_slime": 0}
         player.state = make_state(level=1, xp=0, max_xp=100, character="hero")
+
+        # Sanity: the REAL projection picks yellow_slime, not chicken, for
+        # this fixture — confirmed directly, not assumed — so asserting
+        # "chicken" below can only be explained by the delegation.
+        real_plan = cheapest_path_to_level(
+            player.game_data.max_character_level, player.state, store, player.game_data)
+        assert real_plan.next_action_monster == "yellow_slime", (
+            "fixture's real projection must disagree with the mock below "
+            f"for this test to say anything about the delegation; got "
+            f"{real_plan.next_action_monster!r}")
+
         monkeypatch.setattr(player_mod, "band_combat_target",
-                            lambda state, game_data, history: "yellow_slime")
+                            lambda state, game_data, history: "chicken")
         target = player._path_aligned_monster()
-        assert target == "yellow_slime"
+        assert target == "chicken"
         # Plan still cached for trace exposure, even though its own
-        # recommendation is not what decided the target above.
+        # recommendation (yellow_slime) is not what decided the target above.
         assert player._last_path_plan is not None
         store.close()
 
     def test_returns_none_when_band_has_no_target(self, monkeypatch, tmp_path):
         """The projection being blocked no longer matters — only the band's
         answer decides, and `None` (ladder finished or a gear wall) passes
-        straight through."""
+        straight through.
+
+        Fix round 2 (coordinator finding, 2026-08-23): the FIRST version of
+        this test used an `ogre`-only fixture whose REAL projection is ALSO
+        blocked with no recommendation — so a mocked None and a "the
+        delegation never even ran" None were indistinguishable; reverting
+        `_path_aligned_monster` to read `self._last_path_plan
+        .next_action_monster` still passed. Reuses the sibling test's
+        chicken/yellow_slime fixture instead, whose real projection is
+        verified non-None below, so the None asserted here can only come
+        from the mocked `band_combat_target`."""
+        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
         player.game_data = GameData()
-        player.game_data._monster_level = {"ogre": 50}  # unbeatable at L1
-        player.state = make_state(level=1, character="hero")
+        player.game_data._monster_level = {"chicken": 1, "yellow_slime": 2}
+        player.game_data._monster_hp = {"chicken": 60, "yellow_slime": 70}
+        player.game_data._monster_type = {"chicken": "normal", "yellow_slime": "normal"}
+        player.game_data._monster_attack = {"chicken": {}, "yellow_slime": {}}
+        player.game_data._monster_resistance = {"chicken": {}, "yellow_slime": {}}
+        player.game_data._monster_critical_strike = {"chicken": 0, "yellow_slime": 0}
+        player.state = make_state(level=1, xp=0, max_xp=100, character="hero")
+
+        # Sanity: the REAL projection has a non-None recommendation for this
+        # fixture — confirmed directly, not assumed — so a None result below
+        # cannot be explained by the projection being blocked anyway.
+        real_plan = cheapest_path_to_level(
+            player.game_data.max_character_level, player.state, store, player.game_data)
+        assert real_plan.next_action_monster is not None, (
+            "fixture must have a real, non-None projection recommendation "
+            "for this test to say anything about the delegation")
+
         monkeypatch.setattr(player_mod, "band_combat_target",
                             lambda state, game_data, history: None)
         assert player._path_aligned_monster() is None
