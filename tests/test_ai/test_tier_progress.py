@@ -68,3 +68,13 @@ def test_gear_target_is_capped_by_character_level(monkeypatch):
 def test_gear_target_with_nothing_left_to_clear_is_the_level_rung(monkeypatch):
     monkeypatch.setattr(mod, "is_winnable", lambda s, g, c, h: True)
     assert gear_target_tier(make_state(level=30), _gd(), None) == 20
+
+
+def test_gear_target_follows_an_uncleared_lower_band_below_the_level_rung(monkeypatch):
+    """The case where min(level_rung, clearing) is load-bearing.
+
+    Level 30 gives level_rung=20, but mushmush (normal, level 10) is unwinnable
+    while spider (normal, level 20) is winnable. So clearing=10. The min() must
+    return 10, not 20. Exists to kill the `return tier_of_level(...)` mutant."""
+    monkeypatch.setattr(mod, "is_winnable", lambda s, g, c, h: c != "mushmush")
+    assert gear_target_tier(make_state(level=30), _gd(), None) == 10
