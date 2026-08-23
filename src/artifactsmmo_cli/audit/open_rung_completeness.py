@@ -66,6 +66,23 @@ below cannot name. The four wall classes are built from POSITIVE evidence
 only, never as an `else`, precisely so this residual is reachable — see
 `classify_gap`.
 
+`SKILL_CATALOGUE_EMPTY` is the data-fault arm: a skill the catalogue offers
+nothing at all. Without it `WALL_LADDER_TOPPED` would absorb a bundle whose
+rows for a skill went missing and `--check` would exit 0 on corrupted input.
+
+WHAT "0 RESIDUALS" DOES AND DOES NOT PROMISE. `O1_SILENT_STALL` is
+`closed AND routed`, so its reach is the ROUTED subset, not all 240 cells.
+Measured on the committed bundle: 19 cells are routed — jewelrycrafting 11,
+gearcrafting 6, weaponcrafting 2 — i.e. 3 of the 8 skills, and weaponcrafting
+only at level 1. Alchemy, cooking, fishing, mining and woodcutting are never
+routed by any scenario, so a closure in one of them can only ever be reported
+as an EXPLAINED wall; and the five real walls this census finds
+(weaponcrafting 35 and 42, the epic's own L38-48 territory) sit outside the
+residual's reach today. The other 221 cells are still swept, still verdicted
+and still walled by name — they just cannot produce the must-be-zero class.
+`routing_breakdown` prints this scope into the matrix on every run, computed
+rather than transcribed, so widening the routed set updates the claim itself.
+
 The four `WALL_*` classes are EXPLAINED closures, in the shape the shed census
 uses for its world limits: they say the CATALOGUE, not the graph, is what
 stopped the climb, and they do not fail the gate. A `WALL_*` count of zero
@@ -131,11 +148,40 @@ class OpenRungGap(Enum):
     of the four walls above holds. The bot cannot raise the skill and this
     census cannot say why either — which is the same failure one layer out."""
 
+    SKILL_CATALOGUE_EMPTY = "skill_catalogue_empty"
+    """RESIDUAL, and a DATA fault rather than a graph one: the catalogue offers
+    this skill NOTHING — no recipe at any level, no resource at any level.
+
+    It is a residual and not a wall because `WALL_LADDER_TOPPED` would other-
+    wise absorb it: a skill whose rows vanished from the bundle has
+    `above == 0 and gather_above == 0` and would classify as the most benign
+    name the taxonomy has ("an honest end"), and `--check` would exit 0 on a
+    corrupted catalogue. No live cell reaches this arm, so it has no coverage
+    from real data and would fire for the first time in exactly the data-loss
+    case; `census-gate.yml` runs the eight scripts and no pytest, so the suite's
+    wall-count pin does not protect CI. This is the project's
+    use-API-data-or-fail rule applied to the census's own inputs."""
+
 
 RESIDUALS = frozenset({OpenRungGap.O1_SILENT_STALL.value,
-                       OpenRungGap.O1_UNEXPLAINED.value})
-"""The two classes that must reach 0, mirroring the shed census's pair. The
-four `WALL_*` classes are EXPLAINED and do not fail the gate."""
+                       OpenRungGap.O1_UNEXPLAINED.value,
+                       OpenRungGap.SKILL_CATALOGUE_EMPTY.value})
+"""The classes that must reach 0, mirroring the shed census's pair. The four
+`WALL_*` classes are EXPLAINED and do not fail the gate."""
+
+MIN_CELLS = 200
+"""Blindness floor on the grid, enforced by `gen_open_rung.py --check` and not
+only by the suite.
+
+`--check`'s residual test is `[r for r in results if r.gap in RESIDUALS]`, and
+an EMPTY census satisfies it — "0 cells, PASS 0" would print `GATE CLEAN` and
+exit 0. The suite's floors cannot cover that path: `scripts/*` is
+coverage-omitted and `census-gate.yml` runs the scripts without pytest. So the
+floor lives here, where both the script and
+`test_open_rung_completeness` read the same number.
+
+200 against a current 240 (30 scenarios x 8 skills): enough headroom to retire
+a scenario or two without flapping, far too tight for a collapsed sweep."""
 
 
 @dataclass(frozen=True)
@@ -282,6 +328,13 @@ def classify_gap(open_rung: bool, routed: bool,
         return OpenRungGap.OPEN_RUNG
     if routed:
         return OpenRungGap.O1_SILENT_STALL
+    if (inventory.in_level + inventory.above == 0
+            and inventory.gather_in_level + inventory.gather_above == 0):
+        # BEFORE the topped-ladder arm, not after: "nothing above me" is true
+        # of a finished skill AND of a skill whose catalogue rows are gone, and
+        # only the ordering tells them apart. Getting this backwards is how a
+        # data-loss defect wears the most reassuring name in the taxonomy.
+        return OpenRungGap.SKILL_CATALOGUE_EMPTY
     if inventory.above == 0 and inventory.gather_above == 0:
         return OpenRungGap.WALL_LADDER_TOPPED
     if inventory.in_level == 0 and inventory.gather_in_level == 0:
@@ -317,18 +370,45 @@ def run_census(game_data: GameData) -> list[RungResult]:
 
 def summary_line(results: list[RungResult]) -> str:
     """One-line completeness metric: cells, distinct `(skill, level)` pairs,
-    PASS count, walled count, and the two must-be-zero residuals."""
+    PASS count, walled count, and every must-be-zero residual — including
+    `skill_catalogue_empty`, so a bundle that lost a skill is visible in the
+    headline and not only in the `--check` failure list."""
     walls = sum(1 for r in results
                 if r.gap.startswith("wall_"))
     stalls = sum(1 for r in results if r.gap == OpenRungGap.O1_SILENT_STALL.value)
     unexplained = sum(1 for r in results
                       if r.gap == OpenRungGap.O1_UNEXPLAINED.value)
+    absent = sum(1 for r in results
+                 if r.gap == OpenRungGap.SKILL_CATALOGUE_EMPTY.value)
     pairs = {(r.skill, r.level) for r in results}
     routed = sum(1 for r in results if r.routed)
     return (f"{len(results)} cells over {len(pairs)} distinct (skill, level) "
             f"pairs; PASS {sum(1 for r in results if r.passed)}; "
             f"routed {routed}; walled {walls}; "
-            f"o1_silent_stall {stalls}; o1_unexplained {unexplained}")
+            f"o1_silent_stall {stalls}; o1_unexplained {unexplained}; "
+            f"skill_catalogue_empty {absent}")
+
+
+def routing_breakdown(results: list[RungResult]) -> str:
+    """Which skills the graph actually routes to, and how many cells each.
+
+    THE RESIDUAL'S SCOPE, STATED OUT LOUD. `o1_silent_stall` is
+    `closed AND routed`, so a skill the graph never routes to can only ever be
+    reported as an EXPLAINED wall, never as the residual — a "0 residuals"
+    headline over 240 cells therefore promises less than the cell count
+    implies. Computed rather than transcribed so the claim cannot rot: a
+    scenario that widens the routed set updates this line by itself."""
+    counts: dict[str, int] = {}
+    for r in results:
+        if r.routed:
+            counts[r.skill] = counts.get(r.skill, 0) + 1
+    routed = sum(counts.values())
+    skills = ", ".join(
+        f"{skill} {counts[skill]}"
+        for skill in sorted(counts, key=lambda name: (-counts[name], name)))
+    return (f"residual scope: {routed} of {len(results)} cells are ROUTED "
+            f"({len(counts)} of {len(SKILL_NAMES)} skills) — {skills or 'none'}. "
+            f"A closure in an unrouted skill can only be an explained wall.")
 
 
 def render_matrix(results: list[RungResult]) -> str:
@@ -350,12 +430,20 @@ def render_matrix(results: list[RungResult]) -> str:
         "> `routed` is what `decisions/root.resolve_root` would actually send "
         "this character to grind (root + alternatives). A closed cell that is "
         "routed is `o1_silent_stall`, the residual the obligation exists for.",
+        ">",
+        "> Every field `classify_gap` reads is a column here, so a verdict can "
+        "be reconstructed from the row alone: `g-in`/`g-above` are the "
+        "in-range and above-range resource counts and `g-xp+` is whether the "
+        "HIGHEST in-range resource still pays XP — the three that separate "
+        "`wall_all_rungs_grey` from `wall_below_first_rung`.",
         "",
         summary_line(results),
         "",
+        routing_breakdown(results),
+        "",
         "| Scenario | Skill | C | Target | Verdict | routed | in-level | "
-        "xp+ | obtainable | above | gather rung |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "xp+ | obtainable | above | g-in | g-above | g-xp+ | gather rung |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
         verdict = "PASS" if r.passed else f"**{r.gap}**"
@@ -364,6 +452,8 @@ def render_matrix(results: list[RungResult]) -> str:
             f"| {r.scenario} | {r.skill} | {r.level} | {r.target} | {verdict} "
             f"| {'yes' if r.routed else '-'} | {inv.in_level} "
             f"| {inv.xp_positive} | {inv.obtainable} | {inv.above} "
+            f"| {inv.gather_in_level} | {inv.gather_above} "
+            f"| {'yes' if inv.gather_xp_positive else '-'} "
             f"| `{inv.gather_rung}` |")
     lines.append("")
     return "\n".join(lines) + "\n"

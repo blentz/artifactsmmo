@@ -46,7 +46,11 @@ from artifactsmmo_cli.audit.open_rung_completeness import (
 # Floors, not exact counts: a new scenario must not have to touch this file,
 # but a sweep that goes blind must. The committed set is 30 scenarios x 8
 # skills = 240 cells over 79 distinct (skill, level) pairs.
-_MIN_CELLS = 200
+#
+# The cell floor is `orc.MIN_CELLS`, NOT a local copy: `gen_open_rung.py
+# --check` enforces the same number, and two floors that could drift would
+# leave the script's copy — the one CI actually runs, on a path `scripts/*`
+# omits from coverage — silently weaker than the suite's.
 _MIN_PAIRS = 60
 _MIN_ROUTED = 10
 _MIN_WALLED = 1
@@ -89,7 +93,7 @@ def test_the_sweep_sees_the_whole_grid(results: list[orc.RungResult]) -> None:
     with zero routed cells or zero closed cells could never report it and the
     gate's clean verdict would be meaningless.
     """
-    assert len(results) >= _MIN_CELLS, len(results)
+    assert len(results) >= orc.MIN_CELLS, len(results)
     pairs = {(r.skill, r.level) for r in results}
     assert len(pairs) >= _MIN_PAIRS, sorted(pairs)
     assert {r.skill for r in results} == set(SKILL_NAMES)
@@ -106,11 +110,16 @@ def test_a_cell_is_open_iff_an_arm_offers_a_rung(
     """The census's catalogue decomposition and production's verdict are the
     SAME answer, on every cell.
 
-    `LevelSkill.is_applicable` is `best_gather_resource_drop(...) is not None
-    or has_grind_target(...)`, and `has_grind_target` returns True iff at least
-    one in-skill, in-level, XP-positive, obtainable recipe exists — which is
-    what `RungInventory.obtainable` counts. If this identity ever breaks, the
-    matrix's evidence columns are explaining a verdict they did not produce.
+    ONLY THE `obtainable` HALF IS A REAL PARITY CHECK, and the docstring says
+    so rather than implying more. `LevelSkill.is_applicable` is
+    `best_gather_resource_drop(...) is not None or has_grind_target(...)`, and
+    `RungInventory.gather_rung` is literally that same
+    `best_gather_resource_drop` call — that disjunct cannot disagree by
+    construction. The load-bearing half is `obtainable > 0` against
+    `has_grind_target`: two independent walks over the recipe table
+    (short-circuiting existence versus a counted list), which is where a drift
+    would actually appear and where the matrix's evidence columns would start
+    explaining a verdict they did not produce.
     """
     for r in results:
         arm = (r.inventory.gather_rung is not None
@@ -226,11 +235,31 @@ def test_routing_is_tested_before_any_wall() -> None:
         OpenRungGap.O1_SILENT_STALL
 
 
+def test_an_empty_skill_catalogue_is_a_residual_not_the_gentlest_wall() -> None:
+    """A skill the catalogue offers NOTHING is `skill_catalogue_empty`, which
+    fails the gate — not `wall_ladder_topped`, which does not.
+
+    Both shapes satisfy "nothing above me", so only the arm ORDER separates
+    them, and getting it backwards means a bundle that lost a skill's rows
+    reports "an honest end" and `--check` exits 0. `census-gate.yml` runs the
+    eight scripts and no pytest, so the suite's wall-count pin does not cover
+    CI; this arm does.
+    """
+    empty = _inventory()
+    assert orc.classify_gap(False, False, empty) is \
+        OpenRungGap.SKILL_CATALOGUE_EMPTY
+    assert OpenRungGap.SKILL_CATALOGUE_EMPTY.value in RESIDUALS
+    assert OpenRungGap.WALL_LADDER_TOPPED.value not in RESIDUALS
+
+
 def test_nothing_above_is_a_topped_ladder() -> None:
     """Not reached by the committed scenario set — no scenario declares a
     skill at the catalogue's top — so it is covered here. It is what a
-    level-50 skill must classify as, and it must not be an
-    `o1_unexplained`."""
+    level-50 skill must classify as, and it must not be an `o1_unexplained`.
+
+    `in_level=12` is load-bearing: it is what distinguishes a FINISHED ladder
+    from an ABSENT one, and dropping it moves this cell to the residual above.
+    """
     assert orc.classify_gap(False, False, _inventory(in_level=12, above=0)) is \
         OpenRungGap.WALL_LADDER_TOPPED
 
@@ -319,6 +348,10 @@ def test_the_matrix_renders_every_cell_and_the_summary(
     assert orc.summary_line(results) in matrix
     assert "**wall_rungs_unobtainable**" in matrix
     assert "| l40_band_entry | weaponcrafting | 35 | 36 |" in matrix
+    # Finding 4: every field `classify_gap` reads must be reconstructable from
+    # the row, so the three gather columns are part of the header contract.
+    assert "| g-in | g-above | g-xp+ | gather rung |" in matrix
+    assert orc.routing_breakdown(results) in matrix
 
 
 def test_the_summary_reports_both_residuals_and_the_pair_count(
@@ -327,7 +360,26 @@ def test_the_summary_reports_both_residuals_and_the_pair_count(
     assert f"{len(results)} cells over 79 distinct (skill, level) pairs" in line
     assert "o1_silent_stall 0" in line
     assert "o1_unexplained 0" in line
+    assert "skill_catalogue_empty 0" in line
     assert "walled 5" in line
+
+
+def test_the_routing_breakdown_scopes_the_residual(
+        results: list[orc.RungResult]) -> None:
+    """The residual arm reaches only the ROUTED subset, and the matrix says so.
+
+    Five of the eight skills are never routed by any scenario, so a closure in
+    one of them can only ever be an explained wall. That is not a defect, but a
+    "0 residuals" headline over 240 cells promises more than it delivers unless
+    the scope is printed beside it.
+    """
+    line = orc.routing_breakdown(results)
+    routed_skills = {r.skill for r in results if r.routed}
+    assert routed_skills == {"jewelrycrafting", "gearcrafting", "weaponcrafting"}
+    assert f"{len(routed_skills)} of {len(SKILL_NAMES)} skills" in line
+    assert f"{sum(1 for r in results if r.routed)} of {len(results)} cells" in line
+    # Ordered by cell count, so the reader sees the widest arm first.
+    assert line.index("jewelrycrafting") < line.index("weaponcrafting")
 
 
 def test_the_committed_matrix_is_the_current_answer(

@@ -15,8 +15,10 @@ more to spin up than the census takes to run.
 
     uv run python scripts/gen_open_rung.py
 
-CI gate: pass `--check` to exit non-zero when any cell classifies
-`o1_silent_stall` or `o1_unexplained` — the two must-be-zero residuals,
+CI gate: pass `--check` to exit non-zero when the sweep is smaller than
+`MIN_CELLS` (a blind sweep cannot report a clean residual), or when any cell
+classifies `o1_silent_stall`, `o1_unexplained` or `skill_catalogue_empty` —
+the must-be-zero residuals,
 mirroring the craft census's `planner_bug`, the shed census's
 `shed_starvation_bug` and the obtain census's `obtain_parity_bug`. The four
 `WALL_*` classes are EXPLAINED closures (the catalogue, not the graph, stopped
@@ -35,6 +37,7 @@ from pathlib import Path
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.audit.open_rung_completeness import (
+    MIN_CELLS,
     RESIDUALS,
     render_matrix,
     run_census,
@@ -57,9 +60,23 @@ def main() -> None:
     if not check:
         return
 
+    # BLINDNESS FLOOR, BEFORE the residual test. `[r for r in results if
+    # r.gap in RESIDUALS]` is satisfied by an EMPTY census, so a `run_census`
+    # that discovered nothing would print "0 cells ... PASS 0" and exit 0 --
+    # the flattering-gate failure this repo has shipped once already. The
+    # suite's floors cannot cover this path: `scripts/*` is coverage-omitted
+    # and census-gate.yml runs the scripts without pytest. `MIN_CELLS` is the
+    # SAME constant the suite asserts, so the two cannot drift.
+    if len(results) < MIN_CELLS:
+        print(f"GATE FAILED: census swept {len(results)} cells, floor is "
+              f"{MIN_CELLS} — the sweep went blind, so a clean residual count "
+              f"would mean nothing.", file=sys.stderr)
+        sys.exit(1)
+
     bugs = [r for r in results if r.gap in RESIDUALS]
     if not bugs:
-        print("GATE CLEAN: 0 O1_SILENT_STALL / O1_UNEXPLAINED cells.",
+        print(f"GATE CLEAN: {len(results)} cells swept, 0 residual "
+              f"(O1_SILENT_STALL / O1_UNEXPLAINED / SKILL_CATALOGUE_EMPTY).",
               file=sys.stderr)
         return
     print(f"GATE FAILED: {len(bugs)} residual cell(s):", file=sys.stderr)
