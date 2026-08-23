@@ -407,11 +407,26 @@ class TestServabilityDemotion:
     def test_every_gear_pair_unservable_still_reaches_the_trunk(self):
         """The trunk stays in the list, just last: a FULLY blocked gear branch
         must still yield to XP rather than deadlock on an unservable pick.
-        Yielding the branch is the last resort, not the first."""
+        Yielding the branch is the last resort, not the first.
+
+        FIX-ROUND 2: the STEP is asserted against the trunk's OWN paired step,
+        taken from the unpromoted decision, not against `self.TRUNK`. The loose
+        form was the very thing an earlier docstring here argued against — with
+        `chosen_root` also TRUNK, "a walk that promoted the root while keeping
+        some other root's step would pass". Reading the pair out of the
+        no-promotion decision keeps the discrimination without hard-coding a
+        step value that moves with the fixture."""
+        unpromoted = self._decide_with(lambda root, step: True)
+        trunk_at = unpromoted.fallback_roots.index(self.TRUNK)
+        trunk_step = unpromoted.fallback_steps[trunk_at]
         gear = (self.SKILL_JEWEL, self.SKILL_GEAR, self.SLIME, self.SHIELD)
         d = self._decide_with(lambda root, step: root not in gear)
         assert d.chosen_root == self.TRUNK
-        assert d.chosen_step == self.TRUNK
+        assert d.chosen_step == trunk_step
+        # …and the pair really is discriminating: the promoted step is NOT the
+        # step any other root would have contributed.
+        assert trunk_step not in unpromoted.fallback_steps[:trunk_at]
+        assert trunk_step != unpromoted.chosen_step
 
     def test_promotion_records_the_root_the_tree_actually_picked(self):
         """The trace could not tell "the tree chose this" from "promotion landed

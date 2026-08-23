@@ -644,11 +644,16 @@ def test_l12_bag_pursuit_satchel_becomes_attainable_but_is_no_longer_pursued() -
     report = _run_with("l12_bag_pursuit", gd)
     # WAVE 3a LOST THE DECISION HALF OF THIS TEST, and the loss is pinned here
     # rather than trimmed away. The walk reads `gear_targets_with_blockers`,
-    # which picks the best bag AT `gear_target_tier` — the rung being CLEARED.
-    # Under this fixture no scenario clears a low rung (the combat model says a
-    # geared character loses to a chicken), so the bag target is the rung-1
-    # `backpack`, not `satchel`, and the whole ReachCurrency(tasks_coin) ->
-    # AcceptTask funding route this test was written to cover goes untried.
+    # which picks the best bag AT `gear_target_tier` — the rung being CLEARED,
+    # CAPPED by character level. MEASURED here: `next_uncleared_tier` is 15 and
+    # the level cap is 10, so `gear_target_tier` is **10** — NOT 1. (A first
+    # draft of this comment blamed a "rung-1 collapse"; that story was withdrawn
+    # in fix-round 1 and this is one of the artifacts it had not reached.) At
+    # rung 10 the best bag is `backpack`, not `satchel`, so the whole
+    # ReachCurrency(tasks_coin) -> AcceptTask funding route this test was
+    # written to cover goes untried. The cap is ordinary, so this is NOT a
+    # fixture artefact: it bites live for any character that has not cleared
+    # its level's band.
     #
     # The OBJECTIVE-level half above is untouched and still bites: with the
     # achievement landed, `near_term_gear` names satchel and
@@ -760,11 +765,13 @@ def test_l35_artifact_fill_pearl_route_is_off_the_sheet_and_unplanned() -> None:
     # correctly outranked by snakeskin_boots and no longer a candidate; its
     # drop-farm coverage moved to l35_boots_drop_farm's wooden_club re-target).
     # WAVE 3a: `perfect_pearl` is off the sheet entirely and the artifact-slot
-    # target is `novice_guide`. SAME CAUSE as every other moved pin in this
-    # file: `gear_targets_with_blockers` gears for `gear_target_tier` — the rung
-    # being CLEARED — and under this fixture's combat model no low rung is ever
-    # cleared, so the target sheet stays at a low rung whatever the character's
-    # level. GAP-2's fix is NOT reverted: the `objective._gatherable` half is
+    # target is `novice_guide`. `gear_targets_with_blockers` gears for
+    # `gear_target_tier` — the rung being CLEARED, capped by character level.
+    # MEASURED here: `next_uncleared_tier` is 20 against a level-35 character,
+    # so the tier is **20** — NOT 1, and `perfect_pearl` sits above it. (A first
+    # draft blamed a "rung-1 collapse"; withdrawn in fix-round 1, and this is
+    # one of the artifacts it had not reached.) An ordinary cap, so this is not
+    # a fixture artefact. GAP-2's fix is NOT reverted: the `objective._gatherable` half is
     # pinned directly by
     # `test_l35_artifact_small_pearls_gatherable_via_full_drop_set`. What is no
     # longer covered is the small_pearls ROUTE being planned end to end, which

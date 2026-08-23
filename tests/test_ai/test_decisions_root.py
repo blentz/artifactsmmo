@@ -38,7 +38,13 @@ from artifactsmmo_cli.ai.decisions.root import (
 )
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemStats
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import (
+    ObtainItem,
+    ReachCharLevel,
+    ReachSkillLevel,
+    focus_key,
+    focus_key_str,
+)
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
 from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT, FOCUS_SPAN
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, normal_band, tier_of_level
@@ -469,11 +475,16 @@ def test_an_aged_slot_hands_the_decision_to_an_alternative():
     state = make_state(level=15)
     fresh = resolve_root(state, gd, _objective(gd), _ctx(), None)
     assert fresh.aged is False
-    # The head slot for this fixture is `shield_slot`/`iron_shield` — the
-    # one the fresh walk elects above, so ageing it is what forces a hand-off.
-    stuck = {("shield_slot", "iron_shield"): FOCUS_FLAT + FOCUS_SPAN}
-    aged_ctx = replace(_ctx(), gear_focus=stuck,
-                       interleave_seats={"shield_slot": 40})
+    # The stuck key is `focus_key(fresh.root)` — the RESOLVED root, which is
+    # what `GamePlayer._charge_focus` charges and therefore what the walk must
+    # read. Derived, not hand-written: this fixture's head is a skill-gated
+    # slot, so the key is `("<skill>", "gearcrafting")` and NOT
+    # `("shield_slot", "iron_shield")`. A hand-written sheet key here would be
+    # the fix-round-2 defect reproduced inside its own regression test.
+    stuck_key = focus_key(fresh.root)
+    assert stuck_key is not None
+    aged_ctx = replace(_ctx(), gear_focus={stuck_key: FOCUS_FLAT + FOCUS_SPAN},
+                       interleave_seats={focus_key_str(stuck_key): 40})
     rotated = resolve_root(state, gd, _objective(gd), aged_ctx, None)
     assert rotated.aged is True
     assert rotated.root != fresh.root

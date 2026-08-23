@@ -107,3 +107,78 @@ unrecognised node as a display leaf stub (a TUI pane degrades gracefully
 instead of crashing). Neither policy should be inferred from the other by
 leaning on a shared default; META_GOAL_KINDS is what keeps both in sync with
 the same list without coupling their behaviour."""
+
+
+SKILL_FOCUS_SLOT = "<skill>"
+"""Focus-ledger slot sentinel for a `ReachSkillLevel` root.
+
+Not an equipment slot, and deliberately unlike one: a skill climb is elected by
+`decisions/root.IsThisTargetBlocked` on behalf of whichever gear slot is gated
+on it, and TWO slots gated on the same skill are the SAME work, so they share
+one ledger entry. Angle brackets because no API slot name can collide with
+them."""
+
+ITEM_FOCUS_SLOT = "<item>"
+"""Focus-ledger slot sentinel for a slot-less `ObtainItem` — the material-gated
+head (`ObtainItem(code=blocker, quantity=n)`, no slot) and the recipe-input
+steps. Sibling of `SKILL_FOCUS_SLOT`."""
+
+
+def focus_key(node: "MetaGoal | None") -> tuple[str, str] | None:
+    """The anti-starvation ledger's key for a committed root, or None for a
+    root that does not compete for attention.
+
+    ONE key function for BOTH halves of the ledger: `GamePlayer._charge_focus`
+    writes with it and `decisions/root.WhichSlotIsFurthestBehind._aged_head`
+    reads with it. They used to disagree, and that is the whole reason this
+    function exists.
+
+    THE DEFECT IT CLOSES (wave 3a fix-round 2). `_gear_root_key` read
+    `getattr(root, "slot")` and `getattr(root, "code")` and returned None
+    unless BOTH were `str`. That was true for every root the RANKING could
+    produce — `_candidate_root` always built `ObtainItem(code, slot=slot)` —
+    and false for two of the three the WALK produces:
+
+      * `ReachSkillLevel` (skill-gated head) has neither attribute;
+      * `ObtainItem(code=blocker, quantity=n)` (material-gated head) has
+        `slot=None`.
+
+    Both keyed to None, `_charge_focus` returned early, and the ledger stayed
+    permanently EMPTY — so the aged arm never engaged and the same root won
+    every cycle. Measured over 130 charged cycles on `l10_weapon_upgrade` and
+    `l12_taskgated_bag`: one distinct root, `ledger: {}`. The skill-climb root
+    this epic exists to produce was exactly the root that could not rotate.
+
+    `ReachCharLevel` returns None ON PURPOSE and is an explicit arm, not a
+    fall-through: the xp trunk is not a slot contender, it is the last-resort
+    alternative every board carries, and ageing it would let the ledger decay
+    the one root that must always stay reachable. An UNREGISTERED kind fails
+    loudly instead — the silent None is what produced the defect above, and
+    `prerequisite_graph.prerequisites` already establishes the pattern.
+    """
+    if node is None:
+        return None                       # the wall: nothing was committed
+    if isinstance(node, ObtainItem):
+        return (node.slot or ITEM_FOCUS_SLOT, node.code)
+    if isinstance(node, ReachSkillLevel):
+        return (SKILL_FOCUS_SLOT, node.skill)
+    if isinstance(node, ReachCharLevel):
+        return None
+    assert not isinstance(node, META_GOAL_KINDS), (
+        f"{node!r} is registered in META_GOAL_KINDS but focus_key() has no "
+        f"arm for it")
+    raise AssertionError(f"unhandled MetaGoal kind: {node!r}")
+
+
+def focus_key_str(key: tuple[str, str]) -> str:
+    """`focus_key`'s tuple as ONE string.
+
+    Two consumers need a scalar: `CycleSnapshot.gear_focus` / `.interleave_seats`
+    are JSON objects, whose keys must be strings, and `dhondt_step` apportions
+    over a `Mapping[str, Fraction]`. The seat ledger is keyed by this FULL key
+    rather than by the slot alone — two slots can resolve to different roots
+    that share a sentinel slot (`<skill>` for `gearcrafting` and for
+    `jewelrycrafting`), and a slot-only seat key would collapse them into one
+    apportionment entry."""
+    slot, code = key
+    return f"{slot}|{code}"

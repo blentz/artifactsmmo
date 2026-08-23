@@ -154,15 +154,27 @@ DORMANT: dict[str, str] = {
     # bonus that yields to a step present in 14,064 of 14,064 cycles is one that
     # expires unused, so the rationale defeats itself".
     #
-    # RECLASSIFIED AGAIN 2026-08-23 (wave 3a fix-round 1): that band is FIXED.
-    # Raids now sit at their own `BAND_RAID`, above the fallback steps and below
-    # the committed objective step — the priority `_raid_candidates`' docstring
-    # always claimed. The rung is no longer structurally unreachable; what is
-    # left is the honest world-state condition, which is what it was
-    # mis-labelled as before 2026-08-18: no raid has been open while the fleet
-    # ran.
-    "ParticipateRaidGoal": "conditional: needs an OPEN raid window with a known "
-                           "boss tile; none has opened while the fleet ran",
+    # BAND FIXED 2026-08-23 (wave 3a fix-round 1): raids sit at their own
+    # `BAND_RAID`, above the fallback steps and below the committed objective
+    # step — the priority `_raid_candidates`' docstring always claimed.
+    #
+    # STILL `unreachable:` (fix-round 2). The band was only ONE of TWO blockers,
+    # and correcting it moved the wall rather than removing it. The other is the
+    # SURVIVABILITY gate: `expected_damage_per_fight` has no turn cap and no
+    # shared-raid model, so it prices a SOLO kill of a raid boss.
+    # Measured 2026-08-23 against `pixie` (600,000 hp): monster_per_turn 629.35,
+    # player_kill_step 204.58, 2,933 rounds -> 1,844,857 expected damage, so
+    # `raid_survivable_pure(1570, 1570, 1844857)` is False and
+    # `_raid_candidates` builds nothing. That holds for ANY raid boss a real
+    # loadout could meet, so the goal still cannot fire live.
+    #
+    # The offline pair passes its gate only because those two scenarios run
+    # `derive_combat_stats=False`: with no attack, `player_kill_step <= 0`,
+    # expected damage is 0, and the gate waves it through. A shared-raid damage
+    # model is a wave-4 change, not a cutover fix.
+    "ParticipateRaidGoal": "unreachable: expected_damage_per_fight prices a SOLO "
+                           "raid-boss kill (pixie: 1,844,857 vs 1,570 hp), so "
+                           "raid_survivable_pure refuses every real loadout",
     # --- Genuinely conditional on world state the fleet has not met.
     "MapTransitionAction": "conditional: needs a layer transition (raid/underground areas)",
     "TeleportAction": "conditional: needs an unlocked teleport destination",

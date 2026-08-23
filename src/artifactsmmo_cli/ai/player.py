@@ -134,7 +134,11 @@ from artifactsmmo_cli.ai.tiers import (
 )
 from artifactsmmo_cli.ai.tiers.band_target import band_combat_target
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
+from artifactsmmo_cli.ai.tiers.meta_goal import (
+    MetaGoal,
+    focus_key,
+    focus_key_str,
+)
 from artifactsmmo_cli.ai.tiers.progression_tree import has_structural_upgrade
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
@@ -534,23 +538,21 @@ class GamePlayer:
 
     @staticmethod
     def _gear_root_key(root: "MetaGoal | None") -> tuple[str, str] | None:
-        """(slot, code) for a slot-tagged gear obtain root, else None.
-        Non-gear roots (ReachCharLevel, task roots, and slot-less ObtainItem
-        recipe-input steps) do not age — only a root that targets a specific
-        equipment slot competes with siblings for that slot."""
-        slot = getattr(root, "slot", None)
-        code = getattr(root, "code", None)
-        if isinstance(slot, str) and isinstance(code, str):
-            return (slot, code)
-        return None
+        """The ledger key for a committed root — `meta_goal.focus_key`.
+
+        DELEGATES rather than reimplements (wave 3a fix-round 2). This used to
+        be a `getattr(root, "slot"/"code")` duck-type that returned None unless
+        BOTH were `str`, which silently excluded the two root shapes the
+        resolution walk introduced — `ReachSkillLevel` and the slot-less
+        material-gated `ObtainItem` — so the ledger never filled and the aged
+        arm never engaged. The read side in `decisions/root` now calls the SAME
+        function, which is the point: one key, both halves."""
+        return focus_key(root)
 
     @staticmethod
     def _focus_key_str(key: tuple[str, str]) -> str:
-        """Stringify a `_gear_focus`/`_gear_root_key` `(slot, code)` tuple
-        for JSON (object keys must be strings) — used to serialize the
-        ledger onto `CycleSnapshot.gear_focus`."""
-        slot, code = key
-        return f"{slot}|{code}"
+        """`meta_goal.focus_key_str` — the JSON/apportionment scalar form."""
+        return focus_key_str(key)
 
     def _bump_focus(self, decision: "StrategyDecision") -> None:
         """Age `decision.chosen_root` one more cycle-committed. This counts
@@ -602,8 +604,14 @@ class GamePlayer:
         # would falsely bump a seat on a fast-path cycle where no interleave
         # ran, polluting the d'Hondt schedule. Keyed by the charged root's
         # SLOT — the same slot `dhondt_step` returns.
+        #
+        # Keyed by the FULL key (fix-round 2), not by `key[0]`. Two roots can
+        # share a sentinel slot — `<skill>` for `gearcrafting` and for
+        # `jewelrycrafting` — and a slot-only seat key would collapse them into
+        # one apportionment entry. `_aged_head` reads the same string.
         if aged_pick:
-            self._interleave_seats[key[0]] = self._interleave_seats.get(key[0], 0) + 1
+            seat = self._focus_key_str(key)
+            self._interleave_seats[seat] = self._interleave_seats.get(seat, 0) + 1
 
     def _bump_committed_focus(self) -> None:
         """Bump the ledger for whichever gear root is EFFECTIVELY committed
@@ -655,10 +663,10 @@ class GamePlayer:
             self._gear_focus = {
                 k: v for k, v in self._gear_focus.items() if k in live_keys
             }
-            live_slots = {k[0] for k in live_keys}
+            live_seats = {self._focus_key_str(k) for k in live_keys}
             self._interleave_seats = {
-                slot: s for slot, s in self._interleave_seats.items()
-                if slot in live_slots
+                seat: s for seat, s in self._interleave_seats.items()
+                if seat in live_seats
             }  # lockstep with the pruned focus ledger
             return
         if outcome != "ok" or not isinstance(executed_action, CraftAction):
@@ -685,10 +693,10 @@ class GamePlayer:
             crafted_keys = {k for k in self._gear_focus if k[1] == executed_action.code}
             for key in crafted_keys:
                 self._gear_focus.pop(key, None)
-            live_slots = {k[0] for k in self._gear_focus}
+            live_seats = {self._focus_key_str(k) for k in self._gear_focus}
             self._interleave_seats = {
-                slot: s for slot, s in self._interleave_seats.items()
-                if slot in live_slots
+                seat: s for seat, s in self._interleave_seats.items()
+                if seat in live_seats
             }  # lockstep with the focus ledger
 
     def _decide_band(

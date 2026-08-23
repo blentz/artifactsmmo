@@ -2956,9 +2956,22 @@ ROOT_DECISION_MUTATIONS = [
      "        head = ranked[0]\n"),
     # ...and the fast-path guard inverted: an UNAGED board would take the
     # d'Hondt interleave, so a fresh root jitters instead of being pursued.
+    # Re-anchored 2026-08-23 (fix-round 2): the focus levels are now read
+    # through `_ledger_key`, on the ROOT each slot resolves to, so the guard
+    # reads a precomputed list instead of the sheet entry.
     ("root: the flat farm window is inverted, so fresh roots interleave",
-     "        if all(ctx.gear_focus.get((slot, target.code), 0) <= FOCUS_FLAT\n",
-     "        if any(ctx.gear_focus.get((slot, target.code), 0) > FOCUS_FLAT\n"),
+     "        if all(level <= FOCUS_FLAT for level in focus):\n",
+     "        if any(level > FOCUS_FLAT for level in focus):\n"),
+    # THE FIX-ROUND-2 DEFECT ITSELF, anchored so it cannot come back: read the
+    # SHEET entry `(slot, target.code)` instead of the resolved root's key, and
+    # a skill-gated or material-gated head can never match what
+    # `GamePlayer._charge_focus` wrote — the ledger stays empty and nothing
+    # ever ages.
+    ("root: the aged read keys on the SHEET entry, not on the resolved root,"
+     " so a skill-gated head can never age",
+     "        keys = [self._ledger_key(slot, target, state, game_data, ctx)\n"
+     "                for slot, target in ranked]\n",
+     "        keys = [(slot, target.code) for slot, target in ranked]\n"),
 ]
 
 OBTAIN_ITEM_DECISION_MUTATIONS = [

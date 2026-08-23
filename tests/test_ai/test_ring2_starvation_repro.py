@@ -26,17 +26,26 @@ in their place, pinning what the walk actually does now. Read that test's
 docstring before treating this file as green."""
 
 from dataclasses import replace
+from pathlib import Path
 
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
+from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.scenario import (
+    SCENARIOS,
+    ScenarioCharacter,
+    load_bundle_game_data,
+    scenario_state,
+)
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
 from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT, FOCUS_SPAN
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
+
+BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
 _UNBEATABLE_MONSTER = "ancient_wolf"
 """Level-40, hp 99999, attack fire 9999 dropper of `wolf_ears` — mirrors the
@@ -126,7 +135,16 @@ def test_stuck_drop_root_does_not_starve_the_craftable_second_ring() -> None:
     while the character makes no progress, and `_servable_promotion` only
     demotes a root the planner CANNOT SERVE — wolf_ears is held, so its
     `UpgradeEquipment` plans every cycle and never completes. Nothing but
-    aging rotates off it."""
+    aging rotates off it.
+
+    FIX-ROUND 2: the loop CALLS `GamePlayer._gear_root_key` and
+    `._focus_key_str` instead of hand-rolling
+    `("ring2_slot", "iron_ring") if … else …`. The hand-rolled version returned
+    what the real collaborator returns ONLY for this fixture's two slotted
+    `ObtainItem` roots, so it passed while the production key was answering
+    None for every skill-gated and material-gated root the walk can name — the
+    ledger stayed empty live and this test could not see it. Decorative
+    mechanism 5, in the pin written to prevent exactly this class of miss."""
     state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
     engine = StrategyEngine(objective)
     focus: dict[tuple[str, str], int] = {}
@@ -135,15 +153,61 @@ def test_stuck_drop_root_does_not_starve_the_craftable_second_ring() -> None:
     for _ in range(FOCUS_FLAT + FOCUS_SPAN + 20):
         ctx = replace(NO_PROFILE_CONTEXT, gear_focus=focus, interleave_seats=seats)
         d = engine.decide(state, gd, ctx=ctx)
-        chosen = repr(d.chosen_root)
-        if "ring2_slot" in chosen:
+        if "ring2_slot" in repr(d.chosen_root):
             chosen_ring2 = True
-        key = ("ring2_slot", "iron_ring") if "ring2_slot" in chosen \
-            else ("helmet_slot", "wolf_ears")
+        # EXACTLY `GamePlayer._charge_focus`, through the production key.
+        key = GamePlayer._gear_root_key(d.chosen_root)
+        assert key is not None, (
+            "the committed root must carry a ledger key, or nothing ages: "
+            f"{d.chosen_root!r}")
         focus[key] = focus.get(key, 0) + 1
         if d.aged_pick:
-            seats[key[0]] = seats.get(key[0], 0) + 1
+            seat = GamePlayer._focus_key_str(key)
+            seats[seat] = seats.get(seat, 0) + 1
     assert chosen_ring2, "ring2 iron_ring was never chosen — still starved"
+
+
+def test_a_skill_gated_head_carries_a_ledger_key_and_rotates() -> None:
+    """THE ROOT SHAPE THE FLIP INTRODUCED AND FIX-ROUND 1 COULD NOT AGE.
+
+    `IsThisTargetBlocked`'s skill arm returns `ReachSkillLevel`, which has
+    neither `.slot` nor `.code`; the material arm returns `ObtainItem` with
+    `slot=None`. The old `_gear_root_key` duck-typed both to None, so
+    `_charge_focus` returned early — no focus entry AND no d'Hondt seat — and
+    the ledger stayed permanently empty. Measured over 130 charged cycles on
+    `l10_weapon_upgrade`: one distinct root, `ledger: {}`. The skill-climb root
+    this whole epic exists to produce was precisely the one that could not
+    rotate.
+
+    Driven through `GamePlayer._gear_root_key` for the same reason the test
+    above now is: a hand-rolled key would pass whatever the production one
+    does."""
+    gd = load_bundle_game_data(BUNDLE)
+    state = scenario_state(SCENARIOS["l10_weapon_upgrade"], gd)
+    engine = StrategyEngine(CharacterObjective.from_game_data(gd))
+
+    first = engine.decide(state, gd)
+    assert first.chosen_root == ReachSkillLevel(skill="jewelrycrafting", level=2)
+    assert GamePlayer._gear_root_key(first.chosen_root) is not None, (
+        "a skill-gated head must key, or it can never age")
+
+    focus: dict[tuple[str, str], int] = {}
+    seats: dict[str, int] = {}
+    seen: set[str] = set()
+    for _ in range(FOCUS_FLAT + FOCUS_SPAN + 20):
+        ctx = replace(NO_PROFILE_CONTEXT, gear_focus=focus, interleave_seats=seats)
+        d = engine.decide(state, gd, ctx=ctx)
+        seen.add(repr(d.chosen_root))
+        key = GamePlayer._gear_root_key(d.chosen_root)
+        assert key is not None, (
+            f"the committed root must carry a ledger key: {d.chosen_root!r}")
+        focus[key] = focus.get(key, 0) + 1
+        if d.aged_pick:
+            seat = GamePlayer._focus_key_str(key)
+            seats[seat] = seats.get(seat, 0) + 1
+    assert focus, "the ledger never filled — nothing was charged"
+    assert len(seen) > 1, (
+        f"the skill-climb head never rotated over a full falloff window: {seen}")
 
 
 def test_absent_aging_the_stuck_drop_root_would_starve() -> None:

@@ -1,7 +1,7 @@
 """Regression: arbiter sticky commitment must not preempt a higher-priority
 (lower band) candidate.
 
-Trace play-trace-Robby.jsonl 2026-07-01: Robby committed to a band-3 fallback
+Trace play-trace-Robby.jsonl 2026-07-01: Robby committed to a fallback-band
 grind `GatherMaterials(copper_ring)` (jewelrycrafting) after a transient window,
 then froze at char level 4 for 35+ cycles because the sticky short-circuit kept
 returning the committed goal AHEAD of the plannable band-2 objective step
@@ -73,11 +73,11 @@ def _cand(tag: str, is_means: bool, band: int) -> Candidate:
 
 
 def test_committed_lower_band_grind_yields_to_higher_band_step():
-    """The exact freeze: committed band-3 grind loses to a plannable band-2 step."""
+    """The exact freeze: committed band-4 grind loses to a plannable band-2 step."""
     step = _cand("GrindCharacterXP(green_slime)", is_means=True, band=2)
     grind = _cand("GatherMaterials(copper_ring)", is_means=True, band=4)
     # Candidate order mirrors _build_candidates: top step (band 2) precedes the
-    # fallback grind (band 3).
+    # fallback grind (BAND_FALLBACK_STEP).
     candidates = [step, grind]
     try_plan, is_sat, is_sup = _closures(plannable={repr(step.goal), repr(grind.goal)})
 
@@ -115,12 +115,12 @@ def test_committed_same_band_is_still_kept():
 
 
 def test_committed_discretionary_task_exempt_from_band_preemption():
-    """Narrow rule: a committed DISCRETIONARY task (band 4) is NOT preempted by a
+    """Narrow rule: a committed DISCRETIONARY task is NOT preempted by a
     lower-band step — income tasks stay governed by the semantic worth gate, not
     this structural band rule (preserves the worth-gate epic's arbitration)."""
     step = _cand("GatherMaterials(copper_dagger)", is_means=True, band=2)
     task = _cand("PursueTask(cooked_gudgeon)", is_means=True, band=5)
-    candidates = [step, task]  # band-2 step precedes the band-4 committed task
+    candidates = [step, task]  # band-2 step precedes the discretionary committed task
     try_plan, is_sat, is_sup = _closures(
         plannable={"GatherMaterials(copper_dagger)", "PursueTask(cooked_gudgeon)"})
 

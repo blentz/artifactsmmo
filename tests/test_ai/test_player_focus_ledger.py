@@ -110,7 +110,11 @@ def test_a_displaced_pick_consumes_a_seat_when_interleaved():
     p._bump_focus(_decision_with_root(
         _obtain_item("life_ring", "ring1_slot"), aged_pick=True,
         promoted_from=_obtain_item("lich_race_trophy", "artifact3_slot")))
-    assert p._interleave_seats == {"ring1_slot": 1, "artifact3_slot": 1}
+    # KEYED BY THE FULL LEDGER KEY (fix-round 2), not by the slot alone: two
+    # roots can share a sentinel slot (`<skill>` for two different skills), and
+    # a slot-only seat key would collapse them into one apportionment entry.
+    assert p._interleave_seats == {"ring1_slot|life_ring": 1,
+                                   "artifact3_slot|lich_race_trophy": 1}
 
 
 def test_bump_increments_chosen_gear_root():
@@ -147,7 +151,7 @@ def test_seat_bump_advances_on_aged_pick():
     p._interleave_seats = {}
     p._bump_focus(_decision_with_root(_obtain_item("iron_ring", "ring2_slot"),
                                       aged_pick=True))
-    assert p._interleave_seats == {"ring2_slot": 1}  # keyed by the committed slot
+    assert p._interleave_seats == {"ring2_slot|iron_ring": 1}  # the full key
 
 
 def test_bump_focus_non_gear_root_is_noop():
@@ -186,10 +190,10 @@ def test_reset_on_level_up_preserves_focus_of_live_chosen_root():
     root = _obtain_item("wolf_ears", "helmet_slot")
     p._last_decision = _decision_with_root(root)
     p._gear_focus = {("helmet_slot", "wolf_ears"): 40}
-    p._interleave_seats = {"helmet_slot": 5}
+    p._interleave_seats = {"helmet_slot|wolf_ears": 5}
     p._maybe_reset_focus(prev_level=16, cur_level=17, executed_action=None, outcome="ok")
     assert p._gear_focus == {("helmet_slot", "wolf_ears"): 40}
-    assert p._interleave_seats == {"helmet_slot": 5}
+    assert p._interleave_seats == {"helmet_slot|wolf_ears": 5}
 
 
 def test_reset_on_level_up_preserves_focus_of_live_fallback_root():
@@ -227,25 +231,25 @@ def test_reset_on_level_up_drops_focus_of_non_live_root():
         ("helmet_slot", "wolf_ears"): 40,   # stale: not chosen_root/fallback_roots
         ("ring2_slot", "iron_ring"): 3,      # live: chosen_root
     }
-    p._interleave_seats = {"helmet_slot": 5, "ring2_slot": 1}
+    p._interleave_seats = {"helmet_slot|wolf_ears": 5, "ring2_slot|iron_ring": 1}
     p._maybe_reset_focus(prev_level=16, cur_level=17, executed_action=None, outcome="ok")
     assert p._gear_focus == {("ring2_slot", "iron_ring"): 3}
-    assert p._interleave_seats == {"ring2_slot": 1}  # pruned in lockstep with focus
+    assert p._interleave_seats == {"ring2_slot|iron_ring": 1}  # lockstep with focus
 
 
-def test_reset_on_level_up_prunes_seats_for_a_slot_with_no_live_root():
-    """Interleave seats are keyed by SLOT, not (slot, code); a slot with no
-    live root left in either `_gear_focus` or the decision's candidates is
-    pruned from `_interleave_seats` even if the slot itself had no ledger
-    entry (seats and focus are tracked independently but must stay in
-    lockstep after a prune)."""
+def test_reset_on_level_up_prunes_seats_for_a_key_with_no_live_root():
+    """RENAMED IN FIX-ROUND 2: interleave seats are keyed by the FULL ledger
+    key, not by SLOT — see `meta_goal.focus_key_str`. A key with no live root
+    left in either `_gear_focus` or the decision's candidates is pruned from
+    `_interleave_seats` even if it had no ledger entry (seats and focus are
+    tracked independently but must stay in lockstep after a prune)."""
     p = _bare_player()
     live_root = _obtain_item("iron_ring", "ring2_slot")
     p._last_decision = _decision_with_root(live_root)
     p._gear_focus = {("ring2_slot", "iron_ring"): 3}
-    p._interleave_seats = {"boots_slot": 9, "ring2_slot": 1}
+    p._interleave_seats = {"boots_slot|old_boots": 9, "ring2_slot|iron_ring": 1}
     p._maybe_reset_focus(prev_level=16, cur_level=17, executed_action=None, outcome="ok")
-    assert p._interleave_seats == {"ring2_slot": 1}
+    assert p._interleave_seats == {"ring2_slot|iron_ring": 1}
 
 
 def test_reset_on_equippable_craft_clears_only_the_crafted_root():
@@ -259,11 +263,11 @@ def test_reset_on_equippable_craft_clears_only_the_crafted_root():
     p = _player_with_items()
     p._last_decision = _decision_with_root(_obtain_item("iron_ring", "ring2_slot"))
     p._gear_focus = {("helmet_slot", "wolf_ears"): 40, ("ring2_slot", "iron_ring"): 7}
-    p._interleave_seats = {"helmet_slot": 5, "ring2_slot": 2}
+    p._interleave_seats = {"helmet_slot|wolf_ears": 5, "ring2_slot|iron_ring": 2}
     craft = _craft_action("iron_ring")  # iron_ring is a ring (equippable)
     p._maybe_reset_focus(prev_level=15, cur_level=15, executed_action=craft, outcome="ok")
     assert p._gear_focus == {("helmet_slot", "wolf_ears"): 40}
-    assert p._interleave_seats == {"helmet_slot": 5}  # seats in lockstep with focus
+    assert p._interleave_seats == {"helmet_slot|wolf_ears": 5}  # lockstep with focus
 
 
 def test_no_reset_on_consumable_craft():
@@ -457,13 +461,14 @@ def test_equippable_craft_preserves_focus_of_other_live_roots():
     stuck = _obtain_item("wolf_ears", "helmet_slot")
     p._last_decision = _decision_with_root(stuck)
     p._gear_focus = {("helmet_slot", "wolf_ears"): 40}
-    p._interleave_seats = {"helmet_slot": 5}
+    p._interleave_seats = {"helmet_slot|wolf_ears": 5}
     craft = _craft_action("iron_ring")          # a DIFFERENT root's item
     p._maybe_reset_focus(prev_level=15, cur_level=15, executed_action=craft, outcome="ok")
     assert p._gear_focus == {("helmet_slot", "wolf_ears"): 40}, (
         "an unrelated craft must not hand the stuck root a fresh farm window"
     )
-    assert p._interleave_seats == {"helmet_slot": 5}, "seats move in lockstep with focus"
+    assert p._interleave_seats == {"helmet_slot|wolf_ears": 5}, (
+        "seats move in lockstep with focus")
 
 
 def test_equippable_craft_drops_the_crafted_roots_own_focus():
@@ -473,13 +478,13 @@ def test_equippable_craft_drops_the_crafted_roots_own_focus():
     root = _obtain_item("iron_ring", "ring2_slot")
     p._last_decision = _decision_with_root(root)
     p._gear_focus = {("ring2_slot", "iron_ring"): 12, ("helmet_slot", "wolf_ears"): 40}
-    p._interleave_seats = {"ring2_slot": 3, "helmet_slot": 5}
+    p._interleave_seats = {"ring2_slot|iron_ring": 3, "helmet_slot|wolf_ears": 5}
     craft = _craft_action("iron_ring")
     p._maybe_reset_focus(prev_level=15, cur_level=15, executed_action=craft, outcome="ok")
     assert ("ring2_slot", "iron_ring") not in p._gear_focus
     assert p._gear_focus == {("helmet_slot", "wolf_ears"): 40}
-    assert "ring2_slot" not in p._interleave_seats
-    assert p._interleave_seats == {"helmet_slot": 5}
+    assert "ring2_slot|iron_ring" not in p._interleave_seats
+    assert p._interleave_seats == {"helmet_slot|wolf_ears": 5}
 
 
 def test_equippable_craft_with_no_decision_preserves_ledger():

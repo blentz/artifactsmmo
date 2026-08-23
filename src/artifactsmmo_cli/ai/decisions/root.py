@@ -46,6 +46,8 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
+    focus_key,
+    focus_key_str,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
@@ -300,24 +302,55 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
         slot, target = head
         return IsThisTargetBlocked(slot, target, self.walk)
 
+    def _ledger_key(self, slot: str, target: GearTarget, state: WorldState,
+                    game_data: GameData, ctx: SelectionContext
+                    ) -> tuple[str, str] | None:
+        """The ledger key this slot would be charged under if it won.
+
+        Keyed on the ROOT the slot RESOLVES TO, not on `(slot, target.code)`,
+        because that root is what `GamePlayer._charge_focus` charges. The two
+        differ for exactly the cases the flip introduced: a skill-gated slot
+        resolves to a `ReachSkillLevel` and a material-gated one to a slot-less
+        `ObtainItem`. Reading the sheet entry here while the player wrote the
+        resolved root would leave the two halves permanently unable to meet —
+        the fix-round-2 defect.
+
+        A throwaway `RootWalk`: this is a conversion, not a visit, so it must
+        not append to the trail. Same idiom as `resolve_root`'s sibling
+        conversion."""
+        root = IsThisTargetBlocked(slot, target, RootWalk()).resolve(
+            state, game_data, ctx, None)
+        return focus_key(root)
+
     def _aged_head(self, ranked: list[tuple[str, GearTarget]], state: WorldState,
                    game_data: GameData, ctx: SelectionContext
                    ) -> tuple[str, GearTarget]:
         """`ranked[0]`, or the interleave's pick once anything has aged."""
-        if all(ctx.gear_focus.get((slot, target.code), 0) <= FOCUS_FLAT
-               for slot, target in ranked):
+        keys = [self._ledger_key(slot, target, state, game_data, ctx)
+                for slot, target in ranked]
+        focus = [0 if key is None else ctx.gear_focus.get(key, 0) for key in keys]
+        if all(level <= FOCUS_FLAT for level in focus):
             return ranked[0]
+        # Apportioned over `focus_key_str`, the SAME scalar the player's seat
+        # ledger is keyed by. Two slots that resolve to one root (two slots
+        # gated on the same skill) collapse onto one entry ON PURPOSE — it is
+        # one piece of work — and `next(...)` below then returns the
+        # highest-ranked of them, which is `_slot_order`'s own answer.
+        #
         # `max(1, gap)`: a slot can only be a target because something wants
         # replacing, but an equal-rung swap scores 0 and a zero weight is one
         # `dhondt_step` can never elect — which would be starvation reinstated
         # by the very mechanism that exists to prevent it.
-        weighted = [(slot, Fraction(max(1, _tier_gap(slot, target, state, game_data)))
-                     * falloff(ctx.gear_focus.get((slot, target.code), 0)))
-                    for slot, target in ranked]
+        weighted = [
+            (focus_key_str(key) if key is not None else slot,
+             Fraction(max(1, _tier_gap(slot, target, state, game_data)))
+             * falloff(level))
+            for (slot, target), key, level in zip(ranked, keys, focus, strict=True)]
         winner = dhondt_step(weighted, ctx.interleave_seats)
         assert winner is not None  # `ranked` is non-empty; see the docstring
         self.walk.aged = True
-        return next(item for item in ranked if item[0] == winner)
+        return next(item for item, weight in zip(ranked, weighted, strict=True)
+                    if weight[0] == winner)
 
 
 class IsThisTargetBlocked(Decision[MetaGoal]):

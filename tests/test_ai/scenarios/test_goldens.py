@@ -51,13 +51,14 @@ EXPECTATIONS: dict[str, Golden] = {
     # GatherMaterials — the recipe needs copper_bar (smelted), the bank only
     # holds raw copper_ore/iron_ore, so objective_step_goal's fallback walk
     # resolves to the first unmet recipe input rather than a direct equip.
-    # RE-DERIVED WAVE 3a. The root is now ObtainItem(wooden_shield,
-    # shield_slot) — the gear sheet comes from `gear_targets_with_blockers`,
-    # which gears for `gear_target_tier`, and no scenario in this fixture
-    # clears rung 1 (see tests/test_ai/test_progression_tree.py's module
-    # docstring). copper_dagger is not on that sheet at all. The shield's
-    # recipe needs 10 gathered ash_wood, so the descent bottoms out one ply
-    # earlier than the smelted copper_bar chain did.
+    # RE-DERIVED WAVE 3a fix-round 1. The root is `ReachSkillLevel(
+    # jewelrycrafting, 2)`: the gear sheet comes from
+    # `gear_targets_with_blockers`, which gears for `gear_target_tier` — 5 here,
+    # measured — and the furthest-behind slot's target at that rung is
+    # skill-gated, so `IsThisTargetBlocked` routes to the skill. copper_dagger
+    # is not on that sheet at all. This golden and `l12_taskgated_bag` are the
+    # one pair that still cannot be told apart (same slot, same skill, same
+    # level); their RANKINGS differ, which the per-scenario pins assert.
     "l10_weapon_upgrade": Golden(
         goal_class="ReachSkill(jewelrycrafting", first_action="LevelSkill(jewelrycrafting"),
 
@@ -84,17 +85,16 @@ EXPECTATIONS: dict[str, Golden] = {
         goal_class="GatherMaterials(ash_wood", first_action="Gather(ash_tree"),
 
     # l10_copper_adequate: full copper set but shield_slot is empty.
-    # RE-DERIVED 2026-08-04 (pursuit_value unification). `_utility_candidates`
-    # joined `_structural_candidates` on `pursuit_value`, so the merged argmax
-    # stopped comparing two rulers ~1000x apart. On the ONE ruler the shield
-    # leads 52_800_000 to the potion's 6_000_000 — 8.8x, so the ACHIEVABILITY
-    # factor (shield 905/1534 for 10 gathered ash_wood, potion 1 for
-    # craftable-now) narrows without reversing it, and chosen_root is
-    # ObtainItem(wooden_shield, shield_slot). This restores the 2026-07-08
-    # "combat/gear pursuit outranks potion-stocking" ruling; the brief potion
-    # win under the previous commit came from the two branches riding
-    # incommensurate rulers, not from a judgement about potions. The shield
-    # needs ash_wood gathered, so the goal is the gather descent.
+    # RE-DERIVED WAVE 3a fix-round 1. The walk's root here is also the
+    # jewelrycrafting climb (gear-target tier 5), but the ARBITER does not
+    # reach it: a guard fires first and the goal is `CraftPotionsGoal`. That is
+    # what makes this scenario the one of the four that discriminates on the
+    # GUARD ladder rather than on the walk — and why its golden differs from
+    # `l10_weapon_upgrade`'s despite the identical root.
+    #
+    # (The 2026-08-04 pursuit_value derivation this replaces argued the shield
+    # over the potion on a 52.8M-vs-6.0M ranking. That ranking is deleted; the
+    # potion is back, but through the guard, not through a candidate score.)
     "l10_copper_adequate": Golden(
         goal_class="CraftPotionsGoal", first_action="Withdraw(sunflower"),
 
