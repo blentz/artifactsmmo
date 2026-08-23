@@ -593,6 +593,25 @@ def test_utility_potion_targets_picks_craftable_now():
     assert targets == {"utility1_slot": "small_health_potion"}
 
 
+def test_utility_potion_targets_is_empty_with_no_heal_in_the_catalogue():
+    """`bootstrap_potion_target` returning None short-circuits BOTH slots — a
+    catalogue with no heal offers nothing to stock, and slot 2 must not be
+    filled from a slot-1 target that does not exist.
+
+    Added by wave 3a as a direct unit. The early return used to be reached
+    only through `decide_tree`'s candidate pass against a mismatched GameData,
+    and that pass is gone.
+
+    A LOW ALCHEMY SKILL IS NOT ENOUGH to reach it: `bootstrap_potion_target`
+    falls back to the cheapest heal to UNLOCK when none is craftable yet, so
+    an under-skilled character still gets a target. The catalogue itself has to
+    contain no heal."""
+    gd = GameData()
+    gd._item_stats = {"pebble": ItemStats(code="pebble", level=1, type_="resource")}
+    obj = CharacterObjective.from_game_data(gd)
+    assert obj.utility_potion_targets(make_state(level=10)) == {}
+
+
 def test_is_attainable_now_credits_task_earnable_currency():
     """A leaf priced in a TASK-EARNABLE currency (jasper_crystal @ 8
     tasks_coin) is attainable-now even with 0 coins on hand: the C4 funding

@@ -175,10 +175,14 @@ from artifactsmmo_cli.ai.scenario import (
     load_bundle_game_data,
     scenario_state,
 )
-from artifactsmmo_cli.ai.thresholds import CURRENCY_GRIND_BATCH
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import (
+    ObtainItem,
+    ReachCharLevel,
+    ReachSkillLevel,
+)
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
+from artifactsmmo_cli.ai.tiers.progression_tree import objective_candidates
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
@@ -282,31 +286,21 @@ def test_slot_scenario_full_stack_liveness(name: str) -> None:
         [g.get("goal") for g in report.goals_tried])
 
 
-#: Scenarios that PROVABLY have nothing to try, so the bound is asserted with the
-#: guard FLIPPED (goals_tried must be EMPTY) rather than vacuously satisfied.
-#:
-#: EMPTIED 2026-08-15. It held l35_boots_drop_farm (region soundness,
-#: 2026-07-26) on the reading that its only two work sources were both
-#: legitimately closed: its near_term_gear target wooden_club, which the
-#: winnability guard correctly suppresses (at L35 fully geared its marginal
-#: winnability is 0 — see test_l35_boots_drop_farm_fights_grey_dropper), and an
-#: AcceptTask chain shut behind tasks_farmer (0/100). That enumeration was
-#: incomplete, and the omission was a PRODUCTION BUG rather than a fact about
-#: the scenario: a THIRD source, GrindCharacterXP(rat), was being suppressed by
-#: `xp_per_kill`'s zero band starting at diff 10. `rat` is level 25 and the
-#: character is level 35 — diff exactly 10, which the learning-store replay
-#: shows pays in full (32 xp/kill here). With the band corrected to 11 the
-#: scenario has bounded work again (GrindCharacterXP(rat) and
-#: MaintainConsumables, 1 node each), so the ordinary bound applies and
-#: asserting emptiness would be re-asserting the bug.
-_NO_WORK_SCENARIOS: set[str] = set()
+#: WAVE 3a: the `expect_no_work` flag this set fed is DELETED. It had already
+#: been emptied on 2026-08-15 (the l35_boots_drop_farm entry turned out to be
+#: a production bug in `xp_per_kill`'s zero band, not a fact about the
+#: scenario), and wave 3a took the last user — `l48_band_adequate` — out of
+#: the no-work category too: the resolution walk runs `actionable_step` on the
+#: trunk, so it descends to a weapon prerequisite instead of handing
+#: `objective_step_goal` a bare `ReachCharLevel` it answers None for. With no
+#: no-work scenario left anywhere, the flag and this set are both gone. See
+#: `search_bounds.assert_search_bounded`.
 
 
 @pytest.mark.parametrize("name", NEW_SCENARIOS)
 def test_slot_scenario_search_is_bounded(name: str) -> None:
     """Every tried goal bounded — the shared band-liveness bound."""
-    assert_search_bounded(_run(name), name,
-                          expect_no_work=name in _NO_WORK_SCENARIOS)
+    assert_search_bounded(_run(name), name)
 
 
 # --- Deliverable 1: event-gear pursuit across the L48 wall -----------------
@@ -349,10 +343,21 @@ def test_l48_event_active_pursues_event_gear() -> None:
     helm), the chosen root, and the full stack plans the event-monster farm
     for its corrupted_gem currency — the attainability leaf the event
     opened. This is the wall-crossing behavior l48_band_adequate proves
-    impossible without events."""
+    impossible without events.
+
+    WAVE 3a: the chosen ROOT moved from the crown itself to the MATERIAL that
+    blocks it. `IsThisTargetBlocked` reads `GearTarget.blocker`, and
+    `corrupted_crown` is blocked on `demon_horn` x4, so the walk routes to the
+    material at its recipe quantity rather than naming an item it has just
+    established cannot be built. The selected goal and the first action are
+    UNCHANGED — the event-gear pursuit this test exists for is intact — and the
+    crown is still on the sheet, which the assertion below checks so the root
+    change cannot hide the crown falling off entirely."""
     report = _run("l48_event_active")
     assert report.decision.chosen_root == ObtainItem(
-        code="corrupted_crown", quantity=1, slot="helmet_slot")
+        code="demon_horn", quantity=4)
+    assert any("corrupted_crown" in r.root_repr or "corrupted" in r.root_repr
+               for r in report.decision.ranking), report.decision.ranking
     assert repr(report.selected_goal) != "Wait", (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal).startswith(
@@ -361,11 +366,20 @@ def test_l48_event_active_pursues_event_gear() -> None:
         "Fight(corrupted_ogre"), report.plan
 
 
-def test_l48_no_event_witness_still_waits() -> None:
+def test_l48_no_event_witness_pursues_no_event_gear() -> None:
     """Isolation: the l48_band_adequate witness (zero-stat, no events) must
-    keep pinning the wall — the planner Waits there. If this ever flips,
+    keep pinning the wall — no event gear is pursued there. If this ever flips,
     the event-pursuit result above is no longer attributable to the event
     seam and both scenarios must be re-derived.
+
+    WAVE 3a: the witness no longer WAITS. Two changes compose. The walk names
+    the wall as `chosen_root is None` instead of handing back an unreachable
+    `ReachCharLevel(50)`; and the trunk fallback now goes through
+    `actionable_step`, so it descends to its weapon prerequisite and the
+    arbiter reaches a mithril_bar craft chain instead of idling. Neither is
+    event gear, so the isolation this test provides is unaffected — but the
+    assertion is now about WHAT is pursued rather than about Wait, because
+    Wait was only ever a proxy for "nothing event-shaped happened here".
 
     NOTE (2026-07-07 hp-derivation fix wave): l48_band_adequate does NOT set
     derive_combat_stats, so this Wait is a SYNTHETIC-hp tripwire (predict_win
@@ -379,9 +393,11 @@ def test_l48_no_event_witness_still_waits() -> None:
     narrower: isolating the event-gear pursuit result above from the
     zero-stat harness default, nothing more."""
     report = _run("l48_band_adequate")
-    assert repr(report.selected_goal) == "Wait", (
+    assert repr(report.selected_goal) == "GatherMaterials(mithril_bar, {mithril_bar:11})", (
         repr(report.selected_goal), report.plan)
-    assert report.decision.chosen_root == ReachCharLevel(level=50)
+    assert report.decision.chosen_root is None
+    assert not any("corrupted" in r.root_repr for r in report.decision.ranking), \
+        report.decision.ranking
 
 
 L47_50_WINDOW_MONSTERS = (
@@ -527,7 +543,15 @@ def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
         > equip_value(gd.item_stats("iron_armor"))
 
     report = _run("l10_bag_pursuit")
-    assert report.decision.chosen_root == ReachCharLevel(level=20)
+    # WAVE 3a: the chosen root is the furthest-behind slot on the TIER sheet
+    # (three empty artifact slots), not the trunk — `near_term_gear` being
+    # empty no longer means the gear sheet is. The satchel claim, which is what
+    # this test is named for, is unaffected and asserted below; the trunk is
+    # still offered, so the grind this scenario pins remains reachable and is
+    # in fact what the arbiter selects.
+    assert report.decision.chosen_root == ObtainItem(
+        code="novice_guide", quantity=1, slot="artifact1_slot")
+    assert ReachCharLevel(level=20) in report.decision.fallback_roots
     assert not any(r.code == "satchel" for r in report.decision.fallback_roots
                    if isinstance(r, ObtainItem)), report.decision.fallback_roots
     # The grind target moved with the re-converged loadout (2026-08-04): at the
@@ -538,7 +562,16 @@ def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
     # tier 15) — see the module docstring for the mechanism; with
     # FIGHT_LEVEL_GAP_CEILING now filtering the band, tier 15 offers nothing
     # and the cascade falls through to tier 3, which finds flying_snake again.
+    # WAVE 3a: the artifact/bag roots ahead of the grind are new — they are the
+    # tier sheet's empty slots, walked in order before the trunk is reached.
+    # None of them plans, so the grind still wins; the list is spelled out
+    # rather than trimmed so a future change that makes one of them plannable
+    # (and silently displaces the grind) fails here.
     assert [g["goal"] for g in report.goals_tried] == [
+        "UpgradeEquipment(novice_guide->artifact1_slot)",
+        "UpgradeEquipment(novice_guide->artifact2_slot)",
+        "UpgradeEquipment(novice_guide->artifact3_slot)",
+        "GatherMaterials(backpack, {backpack:1})",
         "GrindCharacterXP(flying_snake)",
     ], report.goals_tried
     assert repr(report.selected_goal).startswith("GrindCharacterXP(flying_snake"), (
@@ -590,13 +623,25 @@ def test_l12_bag_pursuit_satchel_chain_opens_when_the_achievement_lands() -> Non
     assert is_attainable_now("satchel", state, gd)
 
     report = _run_with("l12_bag_pursuit", gd)
-    assert report.decision.chosen_root == ObtainItem(
-        code="satchel", quantity=1, slot="bag_slot")
-    assert report.decision.chosen_step == ObtainItem(
-        code="jasper_crystal", quantity=1)
-    assert repr(report.selected_goal).startswith("ReachCurrency(tasks_coin"), (
-        repr(report.selected_goal))
-    assert report.plan and repr(report.plan[0]).startswith("AcceptTask"), report.plan
+    # WAVE 3a LOST THE DECISION HALF OF THIS TEST, and the loss is pinned here
+    # rather than trimmed away. The walk reads `gear_targets_with_blockers`,
+    # which picks the best bag AT `gear_target_tier` — the rung being CLEARED.
+    # Under this fixture no scenario clears a low rung (the combat model says a
+    # geared character loses to a chicken), so the bag target is the rung-1
+    # `backpack`, not `satchel`, and the whole ReachCurrency(tasks_coin) ->
+    # AcceptTask funding route this test was written to cover goes untried.
+    #
+    # The OBJECTIVE-level half above is untouched and still bites: with the
+    # achievement landed, `near_term_gear` names satchel and
+    # `is_attainable_now` agrees; the shut-gate twin asserts both go away. So
+    # the gate is still a gate. What is no longer covered anywhere is the C4
+    # pipeline running end to end, which is written up in
+    # `.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md`.
+    assert not any(isinstance(r, ObtainItem) and r.code == "satchel"
+                   for r in report.decision.fallback_roots), \
+        report.decision.fallback_roots
+    assert ObtainItem(code="backpack", quantity=1, slot="bag_slot") in \
+        report.decision.fallback_roots, report.decision.fallback_roots
 
 
 # --- Deliverable 3: artifact slots ------------------------------------------
@@ -689,28 +734,33 @@ def test_l35_artifact_fill_pearl_route_plans() -> None:
     # root outright — no old_boots demotion chain any more (old_boots is
     # correctly outranked by snakeskin_boots and no longer a candidate; its
     # drop-farm coverage moved to l35_boots_drop_farm's wooden_club re-target).
+    # WAVE 3a: `perfect_pearl` is off the sheet entirely and the artifact-slot
+    # target is `novice_guide`. SAME CAUSE as every other moved pin in this
+    # file: `gear_targets_with_blockers` gears for `gear_target_tier` — the rung
+    # being CLEARED — and under this fixture's combat model no low rung is ever
+    # cleared, so the target sheet stays at a low rung whatever the character's
+    # level. GAP-2's fix is NOT reverted: the `objective._gatherable` half is
+    # pinned directly by
+    # `test_l35_artifact_small_pearls_gatherable_via_full_drop_set`. What is no
+    # longer covered is the small_pearls ROUTE being planned end to end, which
+    # is written up in the task-6 report.
     report = _run("l35_artifact_fill")
     assert report.decision.chosen_root == ObtainItem(
-        code="perfect_pearl", quantity=1, slot="artifact1_slot")
-    small_pearls_entries = [g for g in report.goals_tried if str(g.get("goal", ""))
-                            .startswith("GatherMaterials(small_pearls")]
-    assert small_pearls_entries, report.goals_tried
-    # BATCHED 2026-07-20: the currency target is now the next CURRENCY_GRIND_BATCH
-    # milestone rather than held+1, so this step demands a batch instead of
-    # exactly one. CLOSURE-SIZED 2026-08-13: the goal now emits ONE gather
-    # carrying the whole outstanding batch, so the batch is spent on the
-    # quantity, not on plan length -- 2 nodes / 1 leg for any milestone size.
-    # The point of the original assertion was that the route is TRIVIALLY
-    # plannable (against the 1-node dead search it replaced), and it still is:
-    # nowhere near the 28K-node max_depth cliff the shallow-target rule guards
-    # against.
-    assert all(entry["nodes"] == 2 and entry["plan_len"] == 1
-               for entry in small_pearls_entries), small_pearls_entries  # GAP-7 flip
-    assert repr(report.selected_goal).startswith("GatherMaterials(small_pearls"), (
+        code="novice_guide", quantity=1, slot="artifact1_slot")
+    assert not any("perfect_pearl" in r.root_repr for r in report.decision.ranking), \
+        report.decision.ranking
+    # The pinned outcome, WAVE 3a. With perfect_pearl off the sheet the
+    # small_pearls gather is never tried and no candidate on the sheet plans,
+    # so the arbiter reaches its documented last resort. The BATCHED /
+    # CLOSURE-SIZED node-count pins that stood here measured
+    # `GatherMaterials(small_pearls)`, a goal this scenario no longer produces;
+    # they are not restated against a different goal, because that would be
+    # re-pointing a measurement at something it never measured. The batch
+    # mechanism keeps its own coverage in test_currency_grind.
+    assert repr(report.selected_goal) == "Wait", (
         repr(report.selected_goal), report.plan)
-    assert [repr(a) for a in report.plan] == \
-        [f"Gather(bass_spot->small_pearls×{CURRENCY_GRIND_BATCH})"], report.plan
-    assert report.plan[0].drop_item_override == "small_pearls"
+    assert not any("small_pearls" in str(g.get("goal", ""))
+                   for g in report.goals_tried), report.goals_tried
 
 
 def test_l35_boots_drop_farm_fights_grey_dropper() -> None:
@@ -799,7 +849,7 @@ def test_l30_rune_gold_buy_chain_plans() -> None:
 
 # --- Deliverable 5: both utility slots ---------------------------------------
 
-def test_l20_dual_utility_xp_outranks_empty_utility() -> None:
+def test_l20_dual_utility_empty_utility_slots_are_not_decision_candidates() -> None:
     """LIMITATION (GAP-4, pinned — DESIGNED, not a bug): both utility slots
     EMPTY, the bootstrap target (minor_health_potion, alchemy 20) craftable
     with banked mats, and the catalog's second-best (small_health_potion,
@@ -815,15 +865,27 @@ def test_l20_dual_utility_xp_outranks_empty_utility() -> None:
     the XP-outranks-empty-utility verdict this test exists to pin is
     UNCHANGED. Empty utility slots therefore fill opportunistically (when
     the trunk step yields no goal), never as the primary decision. If
-    utility provisioning is ever promoted, this pin flips."""
+    utility provisioning is ever promoted, this pin flips.
+
+    WAVE 3a FLIPPED IT THE OTHER WAY, and this is a real loss, recorded here
+    rather than quietly re-pinned. Utility potions were `_utility_candidates`,
+    part of the deleted candidate pass. The resolution walk reads
+    `gear_targets_with_blockers`, which is EQUIPMENT slots only, so a potion
+    can no longer be a root or a fallback root at all — not first, not last.
+    Potion provisioning survives only through the arbiter's own guard rungs
+    (`MaintainConsumables` / the combat-justified CRAFT_POTIONS rung,
+    project_potion_combat_justification), which this file does not cover.
+
+    The verdict this test was named for (XP outranks an empty utility slot) is
+    therefore no longer expressible: there is nothing to outrank. What IS
+    asserted is the fact that replaced it, so the absence is a pinned claim and
+    not a silently shorter list."""
     report = _run("l20_dual_utility")
-    assert report.decision.chosen_root == ReachCharLevel(level=30)
-    assert report.decision.fallback_roots == [
-        ObtainItem(code="minor_health_potion", quantity=1, slot="utility1_slot"),
-        ObtainItem(code="small_health_potion", quantity=1, slot="utility2_slot"),
-    ]
-    assert repr(report.selected_goal).startswith("GrindCharacterXP"), (
-        repr(report.selected_goal))
+    assert report.decision.chosen_root == ReachSkillLevel(
+        skill="gearcrafting", level=16)
+    assert not any("utility" in repr(r) for r in report.decision.fallback_roots), \
+        report.decision.fallback_roots
+    assert ReachCharLevel(level=30) in report.decision.fallback_roots
 
 
 def test_l20_one_stocked_utility2_now_targeted() -> None:
@@ -841,7 +903,16 @@ def test_l20_one_stocked_utility2_now_targeted() -> None:
     decision as a fallback root (XP still outranks it here per GAP-4's
     design — the band is adequate and structural candidates are empty, so
     the trunk is chosen; the utility2 candidate is real but does not win
-    the argmax in this scenario)."""
+    the argmax in this scenario).
+
+    WAVE 3a: the GAP-5 claim now lives entirely at the
+    `utility_potion_targets` / `objective_candidates` layer, which is where it
+    was always measured — the two `objective.*` assertions below are unchanged
+    and still bite. What is gone is the DECISION-level half: utility potions
+    are not equipment slots, so `gear_targets_with_blockers` never sees them
+    and no potion appears in `fallback_roots`. See
+    `test_l20_dual_utility_empty_utility_slots_are_not_decision_candidates`
+    for the full account of that loss."""
     gd = _bundle()
     state = _state("l20_dual_utility_one_stocked", gd)
     objective = CharacterObjective.from_game_data(gd)
@@ -853,13 +924,15 @@ def test_l20_one_stocked_utility2_now_targeted() -> None:
         "utility2_slot": "small_health_potion",
     }
 
+    # The GAP-5 fix itself, measured where it lives: the PER-SLOT stock check
+    # keeps utility1 (stocked) out and lets utility2 (empty) through. This half
+    # is untouched by wave 3a.
+    candidates = objective_candidates(state, gd, objective)
+    assert [c.slot for c in candidates if c.slot.startswith("utility")] == \
+        ["utility2_slot"], candidates
+
     report = _run("l20_dual_utility_one_stocked")
-    assert report.decision.chosen_root == ReachCharLevel(level=30)
-    assert report.decision.fallback_roots == [ObtainItem(
-        code="small_health_potion", quantity=1, slot="utility2_slot")]
-    all_reprs = [repr(r) for r in (
-        report.decision.chosen_root, report.decision.chosen_step,
-        *report.decision.fallback_roots, *report.decision.fallback_steps)]
-    assert any("utility2_slot" in r for r in all_reprs), all_reprs
-    assert repr(report.selected_goal).startswith("GrindCharacterXP"), (
-        repr(report.selected_goal))
+    assert report.decision.chosen_root == ReachSkillLevel(
+        skill="gearcrafting", level=16)
+    assert not any("utility" in repr(r) for r in report.decision.fallback_roots), \
+        report.decision.fallback_roots

@@ -286,10 +286,11 @@ def test_plan_command_scenario_unknown_name_exits(capsys):
 
 def test_plan_command_scenario_prints_tree_chosen_root(capsys):
     """Phase 4b (THE FLIP): the scenario report's `chosen_root:` line IS the
-    progression-tree decision — l10_weapon_upgrade pins the weapon-slot
-    ObtainItem (see test_progression_tree's per-scenario pins). The
-    Phase-3/4a shadow chrome (compact `tree:` agreement line, `TREE
-    (shadow` block) is gone from the output."""
+    progression-tree decision — l10_weapon_upgrade pins the SHIELD-slot
+    ObtainItem since wave 3a (see test_progression_tree's per-scenario pins and
+    that module's docstring for why the gear-target tier is 1 under this
+    fixture). The Phase-3/4a shadow chrome (compact `tree:` agreement line,
+    `TREE (shadow` block) is gone from the output."""
     with patch.object(plan_cmd, "check_mutation_lock",
                       return_value=MagicMock(state="clear")):
         with patch.object(plan_cmd.Config, "from_token_file") as cfg:
@@ -298,6 +299,6 @@ def test_plan_command_scenario_prints_tree_chosen_root(capsys):
             cfg.assert_not_called()
     out = capsys.readouterr().out
     assert "chosen_root: ObtainItem(" in out
-    assert "weapon_slot" in out
+    assert "shield_slot" in out
     assert "tree: " not in out
     assert "TREE (shadow" not in out

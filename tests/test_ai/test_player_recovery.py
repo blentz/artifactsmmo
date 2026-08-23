@@ -14,7 +14,7 @@ from artifactsmmo_cli.ai.recovery import (
     StuckExit,
     StuckSignal,
 )
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import LADDER_ITEM_STATS, make_state
 
 
 def _cycle(goal: str = "GoalA", action: str = "X", succeeded: bool = True,
@@ -46,11 +46,12 @@ def test_arbiter_skips_suppressed_goals():
     gd._monster_resistance = {"chicken": {}}
     gd._monster_critical_strike = {"chicken": 0}
     gd._monster_initiative = {"chicken": 0}
+    gd._monster_type = {"chicken": "normal"}
     gd._resource_locations = {}
     gd._workshop_locations = {}
     gd._bank_location = (4, 0)
     gd._taskmaster_location = (1, 2)
-    gd._item_stats = {}
+    gd._item_stats = dict(LADDER_ITEM_STATS)
     gd._crafting_recipes = {}
     gd._resource_skill = {}
     player.game_data = gd

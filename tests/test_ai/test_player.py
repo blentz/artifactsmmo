@@ -43,10 +43,20 @@ def make_game_data_mock() -> GameData:
     gd._workshop_locations = {"weaponcrafting": (5, 0)}
     gd._bank_location = (4, 0)
     gd._taskmaster_location = (1, 2)
-    gd._item_stats = {}
+    # ONE equippable item, and it is load-bearing: the tier ladder is DERIVED
+    # from the equippable catalogue (`tier_ladder.ladder`), and since wave 3a
+    # every decision walks it — `gear_target_tier` calls `tier_of_level`, which
+    # refuses an empty catalogue rather than inventing a rung. A game with no
+    # equippable items is not a world the API can produce.
+    gd._item_stats = {"wooden_stick": ItemStats(
+        code="wooden_stick", level=1, type_="weapon", attack={"air": 2})}
     gd._crafting_recipes = {}
     gd._resource_skill = {}
     gd._monster_level = {"chicken": 1, "cow": 2}
+    # `normal_band` (reached from `gear_target_tier` since wave 3a) reads
+    # `monsters.types` for every monster in the rung's band and KeyErrors on a
+    # level with no type — the API publishes `type` on every monster record.
+    gd._monster_type = {"chicken": "normal", "cow": "normal"}
     # Real combat stats so the winnability estimator can beat these low mobs.
     gd._monster_hp = {"chicken": 10, "cow": 20}
     gd._monster_attack = {"chicken": {"fire": 1}, "cow": {"fire": 2}}
@@ -224,12 +234,19 @@ class TestArbiterSelection:
         assert not hasattr(player, "_select_goal")
         assert not hasattr(player, "_build_goals")
 
-    def test_plan_from_state_activates_synergy(self):
-        """Regression (runtime activation): `plan_from_state` — the `plan` CLI and
-        the offline scenario harness — must pass `enable_synergy=True`, exactly
-        like the live `_decide_band`. It was silently synergy-blind (a second
-        decide producer that dropped the flag), so the whole scenario suite and
-        the `plan` diagnostic ran synergy INERT. This pins the flag on."""
+    def test_plan_from_state_decides_with_the_same_arguments_as_the_live_band(self):
+        """Regression (runtime activation), re-pointed by wave 3a. The original
+        pinned `enable_synergy=True`, a parameter the flip deleted. The RULE it
+        was guarding is not about synergy at all: `plan_from_state` — the `plan`
+        CLI and the offline scenario harness — is a SECOND decide producer, and
+        a second producer that quietly drops an argument the live band passes is
+        the two-plan-producers trap. It was once synergy-blind that way, so the
+        whole scenario suite and the `plan` diagnostic ran synergy inert.
+
+        Pinned as a KEY-SET comparison against `_decide_band`'s own call rather
+        than as a list of names, so the next parameter added to one site and
+        forgotten at the other fails here without anyone remembering to extend
+        this test."""
         player = GamePlayer(character="hero")
         player.seed_offline(make_state(level=5), make_game_data_mock())
 
@@ -241,7 +258,15 @@ class TestArbiterSelection:
         with patch.object(StrategyEngine, "decide", side_effect=_Stop) as spy:
             with pytest.raises(_Stop):
                 player.plan_from_state()
-        assert spy.call_args.kwargs.get("enable_synergy") is True
+        diagnostic_kwargs = spy.call_args.kwargs
+
+        with patch.object(StrategyEngine, "decide", side_effect=_Stop) as spy:
+            with pytest.raises(_Stop):
+                player._decide_band(player.state, player.game_data, [], None)
+        live_kwargs = spy.call_args.kwargs
+
+        assert set(diagnostic_kwargs) == set(live_kwargs)
+        assert set(live_kwargs) == {"step_servable", "ctx", "history"}
 
     def test_crafting_target_set_when_chosen_step_is_obtain_item(self):
         """Cycle must write state.crafting_target from the strategy's chosen_step."""
@@ -2025,11 +2050,15 @@ class TestBuildGoalsTaskCancelNeverSuppressed:
         gd._monster_resistance = {"chicken": {}}
         gd._monster_critical_strike = {"chicken": 0}
         gd._monster_initiative = {"chicken": 0}
+        gd._monster_type = {"chicken": "normal"}
         gd._resource_locations = {}
         gd._workshop_locations = {}
         gd._bank_location = (4, 0)
         gd._taskmaster_location = (1, 2)
-        gd._item_stats = {}
+        # See `make_game_data_mock`: the ladder is derived from the equippable
+        # catalogue and `tier_of_level` refuses an empty one.
+        gd._item_stats = {"wooden_stick": ItemStats(
+            code="wooden_stick", level=1, type_="weapon", attack={"air": 2})}
         gd._crafting_recipes = {}
         gd._resource_skill = {}
         player.game_data = gd
@@ -2052,6 +2081,7 @@ class TestBuildGoalsTaskCancelNeverSuppressed:
             gd._monster_resistance["dragon"] = {}
             gd._monster_critical_strike["dragon"] = 0
             gd._monster_initiative["dragon"] = 0
+            gd._monster_type["dragon"] = "normal"
             # A pocket coin: S-052 works an undiscardable task rather than
             # cancelling it, so TASK_CANCEL needs one to fire at all.
             player.state = make_state(hp=150, max_hp=150,

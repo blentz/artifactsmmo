@@ -3,9 +3,9 @@ before a Fight whenever the equipped loadout is suboptimal — the live Robby
 vs cow bug (a stale gathering tool in the weapon slot loses a winnable
 fight). This scenario drives the real offline planner (the same
 `SCENARIOS`/`scenario_state`/`GamePlayer` harness as test_no_deadlock.py) and
-pins the swap-before-fight ordering against `l20_dual_utility`, the same
-band-adequate criterion-2 scenario `test_no_deadlock.py` already proves
-selects `GrindCharacterXP(pig)` with an optimal loadout.
+pins the swap-before-fight ordering against `l10_bag_pursuit`, a fully-armed
+L10 build that plans `GrindCharacterXP(flying_snake)` with an optimal loadout
+(re-pointed by wave 3a — see `BASE_SCENARIO`).
 
 Full-bag relief (brief Step 3, "STRONGLY PREFERRED"): investigated below and
 found NOT reliably expressible as a single `plan_from_state()` call, or even
@@ -25,29 +25,32 @@ from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
-BASE_SCENARIO = "l20_dual_utility"
-"""Reused from test_no_deadlock.py's CRITERION_2_WINNABLE: a band-adequate
-L20 build (battlestaff/hard_leather_helmet/... — the ONE gear ruler's fixed
-point) with a winnable monster (pig) in reach.
-`test_l20_dual_utility_chosen_root_is_char_level_when_winnable` pins that,
-fully equipped, it plans `Fight(pig)` directly with NO swap — the
-"already optimal" half of this scenario's swap/no-swap pair.
+BASE_SCENARIO = "l10_bag_pursuit"
+"""RE-POINTED BY WAVE 3a, from `l20_dual_utility`.
 
-RE-DERIVED 2026-08-04 (pursuit_value unification): the scenario's weapon slot
-re-converged from battlestaff to battlestaff and the grind target from
-pig to pig. The swap/no-swap MECHANISM is untouched; only the two names
-moved with the loadout."""
+This file needs one thing from its base scenario: a state the planner answers
+with a FIGHT, so that arming-before-fighting is observable. `l20_dual_utility`
+stopped being one. It was chosen as "band-adequate", meaning `near_term_gear`
+was empty — but that list is LEVEL-capped, and the resolution walk reads the
+TIER sheet, on which that character's rune, artifact and bag slots are empty
+behind a gearcrafting gate. It now climbs gearcrafting instead of fighting (see
+`test_no_deadlock.test_l20_dual_utility_chosen_root_is_char_level_when_winnable`,
+re-derived for the same reason).
 
-TARGET_MONSTER = "pig"
+`l10_bag_pursuit` is a fully-armed L10 build whose planner answer IS
+`GrindCharacterXP(flying_snake)` -> `Fight(flying_snake)` — the "already
+optimal" half of the swap/no-swap pair — and it is already a committed
+scenario, so nothing new was invented to host this test."""
+
+TARGET_MONSTER = "flying_snake"
 WEAK_WEAPON = "wooden_stick"
 """L1 starter weapon (attack={'earth': 4}) — trivially outclassed by the
-scenario's real weapon `battlestaff` (L20, attack={'water': 40}, crit 5), so
-`pick_loadout` unambiguously prefers battlestaff whenever it is owned."""
-OPTIMAL_WEAPON = "battlestaff"
+scenario's real weapon `greater_wooden_staff`, so `pick_loadout`
+unambiguously prefers it whenever it is owned."""
+OPTIMAL_WEAPON = "greater_wooden_staff"
 
 JUNK_STACKS = {
     "algae": 1, "ash_plank": 1, "ash_wood": 1, "copper_bar": 1, "copper_ore": 1,
@@ -66,12 +69,12 @@ def _bundle():
 
 
 def _suboptimal_scenario():
-    """l20_dual_utility with the weak weapon equipped and battlestaff owned
-    (unequipped) — the exact "stale tool in the weapon slot, better weapon in
-    the bag" shape of the live bug, built via `dataclasses.replace` on the
-    SCENARIOS entry (not the derived WorldState) so `derive_combat_stats`
-    recomputes attack/dmg from the swapped-out weapon, not stale battlestaff
-    totals."""
+    """The base scenario with the weak weapon equipped and the real weapon
+    owned (unequipped) — the exact "stale tool in the weapon slot, better
+    weapon in the bag" shape of the live bug, built via `dataclasses.replace`
+    on the SCENARIOS entry (not the derived WorldState) so
+    `derive_combat_stats` recomputes attack/dmg from the swapped-out weapon,
+    not stale optimal-weapon totals."""
     base = SCENARIOS[BASE_SCENARIO]
     return dataclasses.replace(
         base,
@@ -92,30 +95,39 @@ def test_scenario_registered() -> None:
 
 
 def test_swap_precedes_fight_when_loadout_suboptimal() -> None:
-    """MANDATORY: a suboptimal-loadout state (wooden_stick equipped,
-    battlestaff owned with slot headroom) yields a plan whose first action
-    is OptimizeLoadout(pig) and which contains Fight(pig)
-    strictly after it — the planner arms its best owned weapon before
-    fighting rather than losing a winnable fight with a stale weapon."""
+    """MANDATORY: a suboptimal-loadout state (wooden_stick equipped, the real
+    weapon owned with slot headroom) yields a plan whose first action is
+    OptimizeLoadout(flying_snake) and which contains Fight(flying_snake)
+    strictly after it — the planner arms its best owned weapon before fighting
+    rather than losing a winnable fight with a stale weapon.
+
+    WAVE 3a: the ORDERING claim is unchanged and is still the whole test. What
+    moved is the GOAL underneath it. Stripping the weapon puts `weapon_slot`
+    behind on the tier sheet, so the walk resolves a weapon-upgrade root and
+    the arbiter pursues `UpgradeEquipment` rather than `GrindCharacterXP` — and
+    that plan STILL front-loads the swap before the fight, which is the
+    precondition this feature installs. The old `isinstance(...,
+    GrindCharacterXPGoal)` line is replaced by asserting the plan contains a
+    fight at all: pinning the goal class was pinning the scenario, not the
+    feature."""
     report = _run(_suboptimal_scenario())
     reprs = [repr(a) for a in report.plan]
     assert reprs, (repr(report.selected_goal), report.plan)
-    assert reprs[0] == "OptimizeLoadout(pig)", reprs
-    assert "Fight(pig)" in reprs, reprs
-    assert reprs.index("Fight(pig)") > reprs.index("OptimizeLoadout(pig)")
-    # The guarantee this feature protects — GrindCharacterXP is still the
-    # goal that gets pursued, just with the swap front-loaded.
-    assert isinstance(report.selected_goal, GrindCharacterXPGoal), (
-        repr(report.selected_goal), report.plan)
+    assert reprs[0] == f"OptimizeLoadout({TARGET_MONSTER})", reprs
+    assert f"Fight({TARGET_MONSTER})" in reprs, reprs
+    assert (reprs.index(f"Fight({TARGET_MONSTER})")
+            > reprs.index(f"OptimizeLoadout({TARGET_MONSTER})"))
 
 
 def test_no_swap_when_loadout_already_optimal() -> None:
-    """The unmodified l20_dual_utility scenario (battlestaff already
-    equipped) plans Fight(pig) directly, no leading swap — matches
-    test_no_deadlock.py's test_l20_dual_utility_chosen_root_is_char_level_when_winnable."""
+    """The unmodified l10_bag_pursuit scenario (greater_wooden_staff already
+    equipped) plans Fight(flying_snake) directly, no leading swap — the
+    control for the test above, and the reason its first-action assertion is
+    about the SWAP rather than about planning a fight at all."""
     report = _run(SCENARIOS[BASE_SCENARIO])
-    assert [repr(a) for a in report.plan] == ["Fight(pig)"]
-    assert report.decision.chosen_root == ReachCharLevel(level=30)
+    assert [repr(a) for a in report.plan] == [f"Fight({TARGET_MONSTER})"]
+    assert isinstance(report.selected_goal, GrindCharacterXPGoal), (
+        repr(report.selected_goal), report.plan)
 
 
 class TestFullBagRelief:

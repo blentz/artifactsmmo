@@ -29,13 +29,9 @@ recorded in `.superpowers/sdd/PLAN_wave3a_cutover/task-4-report.md`:
 * §5.3's `IsThereACombatTarget` "yes" arm names
   `ReachCharLevel(tier_of_level(game_data, state.level))`, which is a root the
   character has ALREADY satisfied (`tier_of_level` returns the highest rung at
-  or below `state.level`). It is implemented as written rather than silently
-  repaired, because inventing a different level here would be a behaviour
-  choice the flip task has to make with the traces in front of it, and a
-  behaviour choice hidden inside "groundwork" is how this epic loses changes.
-  `tests/test_ai/test_decisions_root.py::
-  test_combat_target_root_is_the_already_satisfied_rung` pins the shipped
-  behaviour so the flip cannot change it by accident.
+  or below `state.level`). Task 4 transcribed it because its contract was
+  "change no behaviour"; THE FLIP (task 6) is the task that decides, and it
+  decided against the spec — see `_next_rung_above`.
 """
 
 from dataclasses import dataclass, field
@@ -52,7 +48,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
 from artifactsmmo_cli.ai.tiers.progression_tree_core import milestone_pure
-from artifactsmmo_cli.ai.tiers.tier_ladder import tier_of_level
+from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, tier_of_level
 from artifactsmmo_cli.ai.tiers.tier_progress import next_uncleared_tier
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
 
@@ -118,6 +114,35 @@ def _target_rung(game_data: GameData, code: str) -> int:
             f"gear target {code!r} has no item stats in game data — cannot "
             f"place it on the ladder")
     return tier_of_level(game_data, stats.level)
+
+
+def _next_rung_above(game_data: GameData, level: int) -> int:
+    """The lowest ladder rung STRICTLY ABOVE `level`; the trunk milestone when
+    the ladder is exhausted.
+
+    THE FLIP's correction to spec §5.3, which named
+    `tier_of_level(game_data, state.level)` here — the highest rung AT OR BELOW
+    the level, i.e. a root the character has already satisfied. Three things
+    that root broke, all of them silent:
+
+      * `chosen_root.is_satisfied(...)` is True, so the walk's answer to "what
+        should this character pursue" is something it has already done;
+      * `objective_needs` reads `char_xp = state.level < root.level`, so an
+        already-met rung yields an EMPTY `NeedSet` and switches the arbiter's
+        PURSUE_TASK worth gate OFF — a live gate disabled by a level nobody
+        chose;
+      * the gap `target - level` is negative, so the long-haul items-task
+        stand-down in `objective_step_is_fight_pure` can never engage, whatever
+        the character is actually doing.
+
+    The rung strictly above is what the arm MEANT: this is the "there is a
+    monster to fight" arm, and the reason to fight is to reach the next gear
+    breakpoint. Both sibling arms name unreached levels and `CanIClearMyTier`
+    already falls back on `milestone_pure`, which is also the level-50 fixed
+    point (`milestone_pure(50) == 50`) once the ladder runs out.
+    """
+    higher = [rung for rung in ladder(game_data) if rung > level]
+    return higher[0] if higher else milestone_pure(level)
 
 
 def _tier_gap(slot: str, target: GearTarget, state: WorldState,
@@ -274,8 +299,8 @@ class IsThereACombatTarget(Decision[MetaGoal]):
     band's best winnable monster, or None when nothing in the band is
     beatable.
 
-    See the module docstring: the level this returns is the rung the character
-    is ALREADY on, transcribed from spec §5.3 rather than repaired here.
+    The level it names is the next ladder rung STRICTLY ABOVE the character's
+    — see `_next_rung_above` for why that is not what spec §5.3 wrote.
     """
 
     name = "IsThereACombatTarget"
@@ -288,7 +313,7 @@ class IsThereACombatTarget(Decision[MetaGoal]):
                 ) -> "Decision[MetaGoal] | MetaGoal | None":
         self.walk.trail.append(self.name)
         if ctx.combat_monster is not None:
-            return ReachCharLevel(level=tier_of_level(game_data, state.level))
+            return ReachCharLevel(level=_next_rung_above(game_data, state.level))
         return CanIClearMyTier(self.walk)
 
 

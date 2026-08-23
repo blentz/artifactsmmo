@@ -1,7 +1,11 @@
 """Tests for objective_needs: the committed objective's unmet NeedSet."""
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import (
+    ObtainItem,
+    ReachCharLevel,
+    ReachSkillLevel,
+)
 from artifactsmmo_cli.ai.tiers.objective_needs import _producible_by_self, objective_needs
 from tests.test_ai.fixtures import make_state
 
@@ -78,6 +82,38 @@ def test_reach_char_level_sets_char_xp():
     state = make_state(level=4)
     needs = objective_needs(ReachCharLevel(6), state, gd)
     assert needs.char_xp is True
+
+
+def test_reach_skill_level_names_that_skill_as_the_unmet_need():
+    """WAVE 3a. Before the flip nothing could hand this function a
+    `ReachSkillLevel`, so it fell through to the empty `NeedSet` — and an empty
+    NeedSet switches the arbiter's PURSUE_TASK worth gate OFF entirely
+    (`means_serves` returns True unconditionally on `needs.is_empty`). The
+    moment the root graph could resolve a skill climb, that fallthrough would
+    have disabled a live gate for the whole climb with nothing saying so.
+
+    `skill_xp` is the set `means_worth._task_need_overlap` intersects the held
+    task's craft/gather chain against, so naming the skill there is what makes
+    a task that exercises it count as serving the objective."""
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 10})
+    needs = objective_needs(ReachSkillLevel(skill="weaponcrafting", level=11),
+                            state, gd)
+    assert needs.skill_xp == frozenset({"weaponcrafting"})
+    assert not needs.is_empty
+    assert needs.char_xp is False
+    assert needs.materials == frozenset() and needs.buy_only == frozenset()
+
+
+def test_reach_skill_level_already_met_is_no_need():
+    """Mirrors the `ReachCharLevel` arm: the need is stated only while it is
+    UNMET, so a satisfied climb reports nothing rather than keeping the worth
+    gate armed on work that is already done."""
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 11})
+    needs = objective_needs(ReachSkillLevel(skill="weaponcrafting", level=11),
+                            state, gd)
+    assert needs.is_empty
 
 
 def test_empty_when_obtain_item_owned():

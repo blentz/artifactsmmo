@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, one_equippable_item_page
 
 
 @dataclass
@@ -125,7 +125,8 @@ def test_advance_with_history_persists_cursor(tmp_path):
         patch.object(MagicMock(), "client", MagicMock()) as _cm,
         patch("artifactsmmo_cli.ai.player.ClientManager", return_value=MagicMock(client=MagicMock())),
         patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=MagicMock(data=[])),
-        patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=MagicMock(data=[])),
+        patch("artifactsmmo_cli.ai.game_data.get_all_items",
+              return_value=one_equippable_item_page()),
         patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=MagicMock(data=[])),
         patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=MagicMock(data=[])),
         patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=MagicMock(data=[])),

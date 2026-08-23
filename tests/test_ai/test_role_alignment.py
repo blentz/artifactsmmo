@@ -1,9 +1,14 @@
 """Tests for the role_alignment fifth ranking factor: the pure core, its
-threading through progression_tree_core, and — since Task 14 — the LIVE
-`_role_map` assembly and its path through `decide_tree`."""
+threading through progression_tree_core, and the LIVE `_role_map` assembly.
+
+WAVE 3a DELETED THREE TESTS FROM THIS FILE — the no-role sweep, the
+role-flips-the-pick witness, and the role-alone `aged_pick` precondition. All
+three drove `decide_tree`, which no longer ranks candidates at all, so the role
+factor has no path through it to test. `role_alignment_pure`, `_role_map` and
+their threading through `focus_aging_pick`/`focus_aging_order` are still
+exercised here directly; the factor itself is deleted in wave 3b."""
 
 import json
-from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 
@@ -11,17 +16,8 @@ import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.role_alignment import ALIGNED, MISALIGNED, role_alignment_pure
-from artifactsmmo_cli.ai.role_catalog import ROLES_BY_NAME, role_skills
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import (
-    _achievability_map,
     _role_map,
-    _structural_candidates,
-    _utility_candidates,
-    decide_tree,
 )
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     GearCandidate,
@@ -198,135 +194,3 @@ def test_role_map_keys_two_same_code_candidates_separately() -> None:
         ("ring1_slot", "copper_bar"), ("ring2_slot", "copper_bar")}
 
 
-def _tree_candidates(state, gd, objective) -> list[GearCandidate]:
-    return _structural_candidates(state, gd, objective) + _utility_candidates(
-        state, gd, objective)
-
-
-def _gear_order(decision) -> list[str]:
-    """The gear rows of a decision's ranking, in order (row 0 is the trunk)."""
-    return [row.root_repr for row in decision.ranking[1:]]
-
-
-def _owned_skills(role_name: str | None) -> frozenset[str]:
-    """Test-side stand-in for what `GamePlayer._role_owned_skills` resolves in
-    production: a role NAME (as tests historically wired `ctx.role`) down to
-    the owned-skills frozenset `ctx.role_skills` now carries."""
-    return frozenset() if role_name is None else role_skills(ROLES_BY_NAME[role_name])
-
-
-def test_decide_tree_without_a_role_matches_the_four_factor_ranking() -> None:
-    """THE NO-ROLE PROOF, over every scenario that offers gear candidates.
-
-    The expected order is recomputed INDEPENDENTLY from the cores with the
-    role argument never supplied at all — literally the four-factor call that
-    existed before activation — and compared against what `decide_tree` now
-    produces for a role-less character. So this does not merely assert that
-    two role-less calls agree with each other (which would hold even if
-    `_role_map` returned junk for None); it asserts the live five-factor path
-    reproduces the four-factor function exactly.
-
-    `aged_pick` is checked too: the seat-ledger verdict must not start firing
-    on a character that has no role."""
-    gd = _bundle()
-    objective = CharacterObjective.from_game_data(gd)
-    checked = 0
-    for name in sorted(SCENARIOS):
-        state = scenario_state(SCENARIOS[name], gd)
-        candidates = _tree_candidates(state, gd, objective)
-        if not candidates:
-            continue
-        checked += 1
-        achievability = _achievability_map(candidates, state, gd)
-        # The pre-activation call: no `role` argument, no `_NO_ROLE`, nothing.
-        expected = focus_aging_order(candidates, {}, {}, {}, achievability)
-        expected_reprs = [repr(ObtainItem(code=c.code, quantity=1, slot=c.slot))
-                          for c in expected]
-        decision = decide_tree(state, gd, objective,
-                               ctx=replace(NO_PROFILE_CONTEXT, role_skills=frozenset()))
-        assert _gear_order(decision) == expected_reprs, name
-        assert _role_map(candidates, frozenset(), gd) == {}, name
-    assert checked >= 5, "the sweep must actually exercise scenarios with gear"
-
-
-def test_decide_tree_role_flips_the_gear_pick() -> None:
-    """The factor is LIVE, not merely threaded: on a real scenario a jeweler
-    demotes the gearcrafting boots (raw-gain leader) below the jewelrycrafting
-    amulet its own skill produces. Without the `role` argument reaching
-    `focus_aging_pick`/`focus_aging_order` inside `decide_tree`, both calls
-    return the role-less pick and this fails.
-
-    RE-DERIVED 2026-08-04 (pursuit_value unification): `l12_gearcrafting_gap`
-    was re-fixed-pointed onto the ONE gear ruler, which closed its amulet slot
-    — so the jewelrycrafting competitor this test needs no longer exists in the
-    stock scenario. The amulet slot is re-opened HERE (one `replace`, the same
-    technique `test_decide_tree_role_signal_alone_makes_the_pick_aged` uses)
-    rather than by de-converging the shared scenario, which would leak the
-    candidate into every other test that rides it.
-    """
-    gd = _bundle()
-    objective = CharacterObjective.from_game_data(gd)
-    base = scenario_state(SCENARIOS["l12_gearcrafting_gap"], gd)
-    state = replace(base, equipment={**base.equipment, "amulet_slot": None})
-    assert objective.near_term_gear(state) == {
-        "boots_slot": "iron_boots",              # gearcrafting
-        "amulet_slot": "air_and_water_amulet",   # jewelrycrafting
-    }
-
-    roleless = decide_tree(state, gd, objective, ctx=NO_PROFILE_CONTEXT)
-    jeweler = decide_tree(state, gd, objective,
-                          ctx=replace(NO_PROFILE_CONTEXT,
-                                      role_skills=_owned_skills("jeweler")))
-
-    assert roleless.chosen_root == ObtainItem(
-        code="iron_boots", quantity=1, slot="boots_slot")
-    assert jeweler.chosen_root == ObtainItem(
-        code="air_and_water_amulet", quantity=1, slot="amulet_slot")
-    # The fallback ORDER moves with the head — `focus_aging_order` must get the
-    # same role map, or `decide_tree`'s `ordered[0] == pick` assert would fire.
-    assert _gear_order(jeweler) != _gear_order(roleless)
-    assert _gear_order(jeweler)[0] == repr(jeweler.chosen_root)
-
-
-def test_decide_tree_role_signal_alone_makes_the_pick_aged() -> None:
-    """The Task-13 review's MANDATORY precondition, exercised.
-
-    The state offers a single gearcrafting candidate with focus, synergy and
-    achievability ALL inert — so `aged_pick` is False for a role-less character
-    and for a `logger` (which owns gearcrafting, hence ALIGNED). A `miner`
-    misaligns it, `focus_aging_pick` takes the d'Hondt interleave, and
-    `aged_pick` MUST flip to True or the player skips its seat bump and the
-    interleave schedule drifts from the seat ledger.
-
-    Drop the role clause from `decide_tree`'s `aged_pick` guard and the miner
-    case reads False — the exact silent drift the guard's comment warns of.
-
-    RE-DERIVED 2026-08-04 (dmg_elements hoist, the equip-loop fix): plain
-    `l10_bag_pursuit` no longer offers ANY gear candidate — pricing per-element
-    damage % made its equipped iron gear the L10 fixed point, so the
-    adventurer_vest candidate this test used to ride is gone (see
-    test_slot_coverage.test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point).
-    One slot is knocked back to copper_armor to restore EXACTLY the shape this
-    test needs — one craftable candidate (iron_armor, gearcrafting), nothing
-    else. The derived combat stats stay at the untouched loadout's values,
-    which is irrelevant here: this test reads `aged_pick`, not winnability."""
-    gd = _bundle()
-    objective = CharacterObjective.from_game_data(gd)
-    base = scenario_state(SCENARIOS["l10_bag_pursuit"], gd)
-    state = replace(base, equipment={**base.equipment,
-                                     "body_armor_slot": "copper_armor"})
-    # RE-DERIVED 2026-08-04 (pursuit_value unification): the L10 body argmax on
-    # the ONE ruler is adventurer_vest, not iron_armor (equip_value 174_400 vs
-    # 142_000 — the ruler has said so since Rank was unified onto armor_score;
-    # only the acquisition path's flat sum disagreed). Still ONE candidate, still
-    # gearcrafting, so the logger/miner alignment shape this test needs is intact.
-    assert objective.near_term_gear(state) == {"body_armor_slot": "adventurer_vest"}
-
-    def aged(role: str | None) -> bool:
-        return decide_tree(state, gd, objective,
-                           ctx=replace(NO_PROFILE_CONTEXT,
-                                       role_skills=_owned_skills(role))).aged_pick
-
-    assert aged(None) is False
-    assert aged("logger") is False    # gearcrafting: ALIGNED, still inert
-    assert aged("miner") is True      # off-role: a real signal, so aged

@@ -4,6 +4,17 @@ The load-bearing test here is `test_gear_candidate_projection_sees_the_item`: th
 whole wiring is worthless if a gear candidate's projection cannot tell the item
 apart from not having it, and the first implementation could not. See that test's
 docstring.
+
+WAVE 3a DELETED TEN TESTS FROM THIS FILE. Each one drove `decide_tree` and
+asserted what it did with `J` — the store opt-in, the justifying filter, the
+demoted tail, the `j`/`reachable_level` display columns, and the `aged_pick`
+mirror. `decide_tree` does not consult `J` any more; the root is RESOLVED by
+`ai/decisions/root.py`, not ranked. Those tests had no subject left, so they
+were removed rather than re-pointed at some other function they never tested.
+Everything they shared with the surviving tests — `branch_ranking`,
+`branch_from_ranking`, `justifying_identities`, `finite_j`,
+`candidate_identity`, `_j_by_identity` — is still exercised here directly. `J`
+itself is deleted in wave 3b.
 """
 
 from dataclasses import replace
@@ -24,7 +35,6 @@ from artifactsmmo_cli.ai.tiers.branch_objective import (
     justifying_identities,
     trunk_candidate,
 )
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_choice import (
     TARGET_LEVEL,
@@ -32,18 +42,13 @@ from artifactsmmo_cli.ai.tiers.progression_choice import (
     rank_candidates,
 )
 from artifactsmmo_cli.ai.tiers.progression_tree import (
-    _achievability_map,
     _j_by_identity,
     _structural_candidates,
     _utility_candidates,
-    decide_tree,
 )
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
-    FOCUS_FLAT,
-    FOCUS_SPAN,
     Branch,
     GearCandidate,
-    focus_aging_pick,
 )
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
@@ -214,37 +219,6 @@ def test_finite_j_is_none_outside_the_finite_band():
     assert finite_j(finite) == 50
 
 
-def test_decide_tree_without_a_store_keeps_the_legacy_pivot(game_data):
-    """No store means no projection, so the boolean pivot stands and every caller
-    that does not opt in is byte-identical to before the wiring."""
-    state, objective, gear = _candidates("l12_deep_chain_grind", game_data)
-    assert gear, "the legacy pivot only chooses GEAR when candidates exist"
-    decision = decide_tree(state, game_data, objective, band_adequate=False)
-    assert decision.j_ranking == []
-    assert not isinstance(decision.chosen_root, type(None))
-    # band_adequate False + candidates present is branch_pick_pure's GEAR arm,
-    # and J would have chosen XP here (see the xp test above) — so this pins the
-    # opt-out as a real difference, not a coincidence.
-    assert decision.chosen_root != decision.fallback_roots[-1]
-
-
-def test_decide_tree_with_a_store_uses_the_objective(game_data, store):
-    """The store is the opt-in: with one, the branch is J's and the ranking is
-    attached for the trace."""
-    state, objective, _gear = _candidates("l12_deep_chain_grind", game_data)
-    with store.search_cache():
-        decision = decide_tree(state, game_data, objective,
-                               band_adequate=False, store=store)
-    assert decision.j_ranking, "the objective ran, so its ranking must be attached"
-    assert decision.j_ranking[0].identity == TRUNK_IDENTITY
-    trace = decision.to_trace()
-    row = trace["j_ranking"][0]
-    assert row["identity"] == TRUNK_IDENTITY
-    assert row["acquire_cost"] == 0
-    # Unreachable here, so `j` is withheld rather than reported meaninglessly.
-    assert row["j"] is None
-    assert row["failed"] is False
-
 
 def test_unequippable_candidate_reads_as_worthless(game_data, store):
     """A candidate that cannot beat what is worn changes no monster's verdict and
@@ -303,87 +277,6 @@ def test_candidate_identity_matches_the_projected_identity(game_data, store):
     assert projected.identity == candidate_identity(c)
 
 
-def test_gear_root_is_the_one_that_justified_the_branch(game_data, store):
-    """The live R2D2 defect, as a test.
-
-    `J` chose GEAR because a weapon raised the reachable level, while the gear
-    branch committed to a body armour with zero ceiling gain.
-
-    NOT THE GUARD FOR THAT FIX — this one passes with the filter removed, because
-    in every committed scenario the raw-gain argmax already IS the ceiling-raiser.
-    It pins the agreement that must hold; `test_aged_weapon_still_wins_the_gear_
-    branch` is the test that bites."""
-    state, objective, gear = _candidates("l1_fresh", game_data)
-    with store.search_cache():
-        ranking = branch_ranking(state, game_data, gear, store)
-        decision = decide_tree(state, game_data, objective,
-                               band_adequate=False, store=store)
-    assert branch_from_ranking(ranking) is Branch.GEAR
-    assert justifying_identities(ranking) == {"weapon_slot:copper_dagger"}, (
-        "fixture drift: this test only bites while exactly one candidate "
-        "justifies the branch"
-    )
-    assert isinstance(decision.chosen_root, ObtainItem)
-    assert decision.chosen_root.code == "copper_dagger", (
-        "the gear branch pursued a root that did not justify choosing it"
-    )
-
-
-def test_aged_weapon_still_wins_the_gear_branch(game_data, store):
-    """The R2D2 shape, reproduced through the mechanism that actually caused it.
-
-    In every committed scenario the raw-gain argmax happens to BE the
-    ceiling-raiser (weapons carry the top gain), so the plain decision cannot
-    exhibit the split — an earlier version of the test above passed with the
-    filter removed, i.e. it was vacuous. What diverged live was the five
-    selection factors: a focus ledger, synergy, achievability or role steering
-    the pick away from the one candidate the objective had endorsed.
-
-    Here the weapon is aged far past `FOCUS_FLAT`, so `focus_aging_pick` decays it
-    and hands the cycle to another candidate. That is correct anti-starvation
-    behaviour among interchangeable roots — and wrong when the decayed root is the
-    ONLY one buying progression, because the alternatives it rotates to cannot
-    advance the character at all. The objective's filter has to win that argument.
-    """
-    state, objective, gear = _candidates("l1_fresh", game_data)
-    aged = {("weapon_slot", "copper_dagger"): FOCUS_FLAT + FOCUS_SPAN}
-    seats: dict[str, int] = {}
-
-    unfiltered = focus_aging_pick(gear, aged, dict(seats))
-    assert unfiltered is not None and unfiltered.code != "copper_dagger", (
-        "fixture drift: aging no longer moves the pick off the weapon, so this "
-        "test would prove nothing"
-    )
-
-    with store.search_cache():
-        decision = decide_tree(state, game_data, objective, band_adequate=False,
-                               focus=aged, seats=seats, store=store)
-    assert isinstance(decision.chosen_root, ObtainItem)
-    assert decision.chosen_root.code == "copper_dagger", (
-        "aging rotated the gear branch onto a root that buys no progression, "
-        "while the root that justified choosing the branch went unpursued"
-    )
-
-
-def test_demoted_candidates_stay_reachable_behind_the_trunk(game_data, store):
-    """Filtering must not cost liveness: every demoted root stays in the fallback
-    list, after the trunk, so a board whose justifying pick AND trunk are both
-    unservable cannot deadlock — while a root that buys no progression is never
-    tried ahead of simply grinding."""
-    state, objective, gear = _candidates("l1_fresh", game_data)
-    with store.search_cache():
-        decision = decide_tree(state, game_data, objective,
-                               band_adequate=False, store=store)
-    codes = [r.code for r in decision.fallback_roots if isinstance(r, ObtainItem)]
-    demoted = {c.code for c in gear if c.code != "copper_dagger"}
-    assert demoted <= set(codes), "a demoted candidate vanished from the fallbacks"
-    trunk_at = next(i for i, r in enumerate(decision.fallback_roots)
-                    if isinstance(r, ReachCharLevel))
-    demoted_positions = [i for i, r in enumerate(decision.fallback_roots)
-                         if isinstance(r, ObtainItem) and r.code in demoted]
-    assert min(demoted_positions) > trunk_at
-
-
 def test_j_by_identity_maps_only_finite_band_candidates():
     """The display map carries a value only where `J` means something.
 
@@ -405,139 +298,3 @@ def test_j_by_identity_maps_only_finite_band_candidates():
     )
 
 
-def test_every_ranked_root_gets_a_figure_on_one_scale(game_data, store):
-    """No row may fall back to the legacy `score` once the objective has run.
-
-    The offline scenarios sit entirely in the unreachable band, so every row here
-    carries `reachable_level` and none carries `j` — the mirror of the live
-    finite-band case, and between them the two cover both arms."""
-    state, objective, _gear = _candidates("l12_deep_chain_grind", game_data)
-    with store.search_cache():
-        decision = decide_tree(state, game_data, objective,
-                               band_adequate=False, store=store)
-    assert decision.ranking
-    for row in decision.ranking:
-        assert (row.j is not None) != (row.reachable_level is not None), (
-            f"{row.root_repr} carries both figures or neither — it must sit on "
-            f"exactly one scale"
-        )
-
-
-def test_display_ranking_carries_the_objective_value(game_data, store):
-    """The display must show the scale the pivot decided on.
-
-    `score` is `pursuit_value` for gear and a constant `Fraction(1)` for the xp
-    trunk — two unrelated scales in one column. Read as a ranking it showed gear
-    ahead 2.6e8 to 1.0 on live cycles where `J` had the trunk winning by 0.006%,
-    which is what sent a reader looking for a bug in the pivot (2026-08-08).
-    `j` is the row's real standing, and lower wins."""
-    state, objective, _gear = _candidates("l12_deep_chain_grind", game_data)
-    with store.search_cache():
-        decision = decide_tree(state, game_data, objective,
-                               band_adequate=False, store=store)
-    trunk_row = next(r for r in decision.ranking if r.category == "char_level")
-    # Still the legacy constant — deliberately NOT overwritten with J, which is
-    # lower-is-better and would invert the field's meaning.
-    assert trunk_row.score == Fraction(1)
-    by_identity = {c.identity: finite_j(c) for c in decision.j_ranking}
-    assert trunk_row.j == by_identity[TRUNK_IDENTITY]
-
-
-def test_display_ranking_has_no_objective_value_without_a_store(game_data):
-    """No store means no objective, so every row reports `j=None` rather than a
-    number the pivot never computed."""
-    state, objective, _gear = _candidates("l12_deep_chain_grind", game_data)
-    decision = decide_tree(state, game_data, objective, band_adequate=False)
-    assert all(r.j is None for r in decision.ranking)
-
-
-def test_display_ranking_keeps_the_demoted_candidates(game_data, store):
-    """The `ranking` rows are a diagnostic — a reader comparing them against
-    `j_ranking` must see the roots the objective ruled out."""
-    state, objective, gear = _candidates("l1_fresh", game_data)
-    with store.search_cache():
-        decision = decide_tree(state, game_data, objective,
-                               band_adequate=False, store=store)
-    assert len(decision.ranking) == len(gear) + 1  # + the trunk row
-
-
-def test_aged_verdict_ignores_a_candidate_the_objective_demoted(game_data, store):
-    """`decide_tree`'s `aged_pick` mirror must scan the SAME list
-    `focus_aging_pick` picks from — `eligible`, not `candidates`.
-
-    `aged_pick` is the player's gate for bumping a d'Hondt seat: True means the
-    pick went through the focus-aging interleave, so the schedule and the seat
-    ledger stay in step. Once the unified objective began filtering the
-    candidates handed to `focus_aging_pick`, a mirror still scanning the full
-    `candidates` would let a stale entry the objective EXCLUDED from the pick
-    declare the decision aged, and the player would consume a seat for an
-    interleave that never ran.
-
-    THE BOARD, and why it needs surgery. On every stock GEAR scenario the
-    achievability clause is already non-inert over `eligible` (l1_fresh:
-    905/1534), so the `and` chain is False before the focus clause is reached
-    and `aged_pick` reads True whichever list the focus clause scans — the
-    clause is MASKED and a test riding a stock scenario proves nothing. The one
-    candidate cheaper than the justifying weapon is the utility potion, which
-    takes achievability weight 1 and pushes every structural candidate below it.
-    Stocking `utility1_slot` drops the potion from the candidate list (the tree
-    skips a slot that is itself stocked), which leaves `copper_dagger` — the
-    JUSTIFYING candidate — tied for cheapest at weight 1. Synergy is off by
-    default and no role is wired, so with the achievability clause inert the
-    focus clause is the only one left that can move the verdict, which is
-    exactly the condition under which the mutant is observable.
-    """
-    base = scenario_state(SCENARIOS["l1_fresh"], game_data)
-    state = replace(base, utility1_slot_quantity=50)
-    objective = CharacterObjective.from_game_data(game_data)
-    candidates = (_structural_candidates(state, game_data, objective)
-                  + _utility_candidates(state, game_data, objective))
-
-    with store.search_cache():
-        ranking = branch_ranking(state, game_data, candidates, store)
-        justifying = justifying_identities(ranking)
-        eligible = [c for c in candidates
-                    if candidate_identity(c) in justifying]
-        demoted = [c for c in candidates if c not in eligible]
-
-        # Vacuity guards: each of these failing means the board stopped
-        # exhibiting the split and the assertions below would hold trivially.
-        assert branch_from_ranking(ranking) is Branch.GEAR, (
-            "fixture drift: the XP branch short-circuits aged_pick to False"
-        )
-        assert eligible and demoted, (
-            "fixture drift: with nothing demoted, `eligible` and `candidates` "
-            "are the same list and this test cannot tell them apart"
-        )
-        achievability = _achievability_map(candidates, state, game_data)
-        assert all(achievability.get((c.slot, c.code), Fraction(1)) == Fraction(1)
-                   for c in eligible), (
-            "fixture drift: the achievability clause is non-inert over "
-            "`eligible`, so the `and` chain never reaches the focus clause and "
-            "aged_pick reads True no matter which list that clause scans"
-        )
-
-        def aged(focus):
-            return decide_tree(state, game_data, objective, band_adequate=False,
-                               store=store, focus=focus).aged_pick
-
-        stale = FOCUS_FLAT + FOCUS_SPAN
-        assert aged({}) is False, (
-            "fixture drift: some other clause is already firing, which would "
-            "mask the focus clause this test is about"
-        )
-        # THE ASSERTION: every DEMOTED candidate stale, every eligible one
-        # fresh. The pick cannot have aged, because the objective already ruled
-        # these roots out of it.
-        assert aged({(c.slot, c.code): stale for c in demoted}) is False, (
-            "a root the objective demoted out of the pick declared the "
-            "decision aged; the player would bump a d'Hondt seat for an "
-            "interleave that never ran"
-        )
-        # Positive control: the same spike on the ELIGIBLE candidate DOES age
-        # the verdict, so the mechanism works and the assertion above is a
-        # statement about which list is scanned, not about a dead code path.
-        assert aged({(c.slot, c.code): stale for c in eligible}) is True, (
-            "staleness on the candidate actually being picked must still age "
-            "the verdict"
-        )

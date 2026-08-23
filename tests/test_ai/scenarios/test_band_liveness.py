@@ -79,15 +79,32 @@ def test_band_registered(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", BAND_NAMES)
-def test_decide_tree_is_total(name: str) -> None:
-    """decide_tree always answers: chosen_root and chosen_step are never
-    None. Every band scenario here is under-tier by construction (a
-    reachable structural upgrade exists in every slot set below), so this
-    also exercises the GEAR branch and its internal ordered[0] == pick
-    assertion (progression_tree.py:194) on real catalog data."""
+def test_decide_tree_answers_or_names_the_wall(name: str) -> None:
+    """WAVE 3a re-derived this from "decide_tree always answers" to "decide_tree
+    answers, or says None and offers the trunk".
+
+    Totality was a property of the old assembly: the trunk was ALWAYS the
+    chosen root or a fallback, so a character with nothing to do was handed a
+    level target it could not reach and the pane read as progress. The
+    resolution walk has an explicit wall arm — `CanIClearMyTier` returns None
+    when the gear sheet wants nothing AND no monster in the band is winnable —
+    and reporting that honestly is the behaviour, not a gap in it
+    (`root.py`: "reported as `None` rather than dressed up as a root the
+    character cannot make progress on").
+
+    `l48_band_adequate` is the one band scenario that hits it, and it hits it
+    for the documented L50 difficulty-wall reason (see
+    `test_l48_band_adequate_is_the_honest_wall`). Every other band still
+    resolves a root, so this stays a real assertion rather than a disjunction
+    that can never fail: the trunk alternative is required in BOTH arms, so a
+    walk that returned None with nothing behind it fails here."""
     d, _state = _decide(name)
-    assert d.chosen_root is not None
-    assert d.chosen_step is not None
+    if name == L48_BAND_ADEQUATE:
+        assert d.chosen_root is None and d.chosen_step is None
+    else:
+        assert d.chosen_root is not None
+        assert d.chosen_step is not None
+    assert any(isinstance(r, ReachCharLevel) for r in d.fallback_roots)
 
 
 @pytest.mark.parametrize("name", BAND_NAMES)
@@ -108,41 +125,58 @@ def test_band_search_is_bounded(name: str) -> None:
     """Every tried goal bounded — see search_bounds.assert_search_bounded
     (extracted for reuse by the slot-coverage net; the bound and its
     rationale live there now)."""
-    # l48_band_adequate provably has nothing to try: its L47-50 fight window is
-    # event-and-raid-only content. Both poles are asserted in test_l48_raid_pair.
-    assert_search_bounded(_run(name), name,
-                          expect_no_work=(name == L48_BAND_ADEQUATE))
+    # WAVE 3a: l48_band_adequate is no longer a no-work scenario — the trunk
+    # now descends through `actionable_step` and reaches a craft chain. See
+    # `search_bounds.assert_search_bounded`, which lost its `expect_no_work`
+    # flag for that reason.
+    assert_search_bounded(_run(name), name)
 
 
 @pytest.mark.parametrize("name", BAND_NAMES)
 def test_band_trunk_row_matches_milestone_pure(name: str) -> None:
-    """decide_tree's trunk row (ranking[0], category char_level) must be
-    exactly ReachCharLevel(level=milestone_pure(scenario.level)) — the
-    tree's own trunk semantics, checked against the pure core directly."""
+    """decide_tree's trunk row must be exactly
+    ReachCharLevel(level=milestone_pure(scenario.level)) — the tree's own trunk
+    semantics, checked against the pure core directly.
+
+    WAVE 3a moved WHERE the row sits and what its `category` reads. It is no
+    longer `ranking[0]`: `_resolution_rows` leads with the CHOSEN root, and
+    `resolve_root` appends the trunk after every sibling, so the trunk is LAST.
+    Its category is `alternative · char_level` — the column now says how a row
+    got there, and the trunk is an alternative in every one of these
+    scenarios. Both facts are asserted, so a walk that promoted the trunk to
+    the head or relabelled the column fails here."""
     d, state = _decide(name)
     expected_trunk = ReachCharLevel(level=milestone_pure(state.level))
-    trunk_row = d.ranking[0]
-    assert trunk_row.category == "char_level"
+    trunk_row = d.ranking[-1]
+    assert trunk_row.category == "alternative · char_level"
     assert trunk_row.root_repr == repr(expected_trunk)
 
 
-def test_l48_band_adequate_forced_xp_branch() -> None:
+def test_l48_band_adequate_is_the_honest_wall() -> None:
     """l48_band_adequate is constructed so has_structural_upgrade is False
     (every slot already holds the catalog-best is_attainable_now item, both
-    utility slots stocked past 0 — see the SCENARIOS docstring) — the XP/
-    capstone path the per-band net had no coverage for (test_decide_tree_
-    is_total's under-tier bands all exercise the GEAR branch). With
-    band_adequate explicitly True (the caller-supplied leg decide_tree
-    itself never computes), branch_pick_pure must pick XP and the chosen
-    root/step must be exactly the L48->50 trunk milestone, not a gear
-    candidate."""
+    utility slots stocked past 0 — see the SCENARIOS docstring).
+
+    WAVE 3a re-derived this test. It used to pass `band_adequate=True` and
+    assert `branch_pick_pure` picked the L48->50 trunk. There is no
+    `band_adequate` and no `branch_pick_pure` in the walk, and the answer is
+    strictly better: the gear sheet wants nothing, no L47-50 monster is
+    winnable (the documented event-gear wall — see
+    `test_l48_band_adequate_real_band_adequate_verdict`), and rung 50 is NOT
+    cleared, so `CanIClearMyTier` names the wall as `None` instead of handing
+    back a level-50 target the character has no route to.
+
+    The trunk is still OFFERED, last, so the arbiter can fall through to it —
+    which is what stops this being a deadlock and what the old assertion was
+    really buying."""
     gd = _bundle()
     state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE])
     objective = CharacterObjective.from_game_data(gd)
-    decision = decide_tree(state, gd, objective, band_adequate=True)
-    expected = ReachCharLevel(level=milestone_pure(state.level))
-    assert decision.chosen_root == expected
-    assert decision.chosen_step == expected
+    decision = decide_tree(state, gd, objective)
+    assert decision.chosen_root is None
+    assert decision.chosen_step is None
+    assert decision.fallback_roots == [
+        ReachCharLevel(level=milestone_pure(state.level))]
 
 
 def test_l48_band_adequate_real_band_adequate_verdict() -> None:
@@ -162,15 +196,15 @@ def test_l48_band_adequate_real_band_adequate_verdict() -> None:
     REQUIREMENT") — band_adequate reads False for a real, already-known
     reason, not a construction bug in this scenario.
 
-    decide_tree's answer is unaffected either way (branch_pick_pure picks
-    XP whenever gear_target_exists is False, regardless of band_adequate —
-    see test_l48_band_adequate_forced_xp_branch), so the plan_from_state
-    seam still selects and plans something: WaitGoal, the documented
-    last-resort fallback (goals/wait.py) — no combat target exists to grind
-    the trunk milestone with. That IS the genuine capstone-path finding
-    this test records rather than hides: at L48 with a complete non-event
-    loadout, this bundle's monster catalog cannot carry a character to L50
-    by combat alone."""
+    WAVE 3a changed what the seam then DOES with that verdict, and the change
+    is an improvement worth recording. The walk now names the wall (`chosen_root
+    is None` — see `test_l48_band_adequate_is_the_honest_wall`), and instead of
+    falling all the way to `WaitGoal` the arbiter reaches a real means:
+    `GatherMaterials(mithril_bar)`, a 3-action craft chain. The finding this
+    test exists to record is UNCHANGED — at L48 with a complete non-event
+    loadout this bundle's monster catalogue cannot carry a character to L50 by
+    combat alone — but the bot no longer idles on it, which is why the pinned
+    outcome moved from `Wait` to a plan."""
     gd = _bundle()
     state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE])
     objective = CharacterObjective.from_game_data(gd)
@@ -185,10 +219,9 @@ def test_l48_band_adequate_real_band_adequate_verdict() -> None:
     assert player._tree_band_adequate() is False
 
     report = player.plan_from_state()
-    # Pin the EXACT last-resort outcome (not just any non-empty plan): the
-    # docstring's finding is only witnessed if Wait is what gets selected.
-    assert repr(report.selected_goal) == "Wait", (
+    # Pin the EXACT outcome, not just any non-empty plan.
+    assert repr(report.selected_goal) == "GatherMaterials(mithril_bar, {mithril_bar:11})", (
         repr(report.selected_goal), report.plan)
     assert report.plan, (repr(report.selected_goal), report.plan)
-    assert report.decision.chosen_root == ReachCharLevel(level=50)
-    assert report.decision.chosen_step == ReachCharLevel(level=50)
+    assert report.decision.chosen_root is None
+    assert report.decision.chosen_step is None

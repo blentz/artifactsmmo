@@ -708,13 +708,6 @@ class GamePlayer:
         self._last_ctx = ctx
         servable_pred = self._step_servable(state, game_data, ctx)
         self._notify_planning(True)
-        # The committed root of the PRIOR cycle (this cycle's `_last_decision` is
-        # still last cycle's) feeds synergy B-assembly as a live member — usually
-        # also a sibling candidate, so its demand counts twice, biasing toward
-        # finishing what is started (synergy spec §3.6). None on the first cycle
-        # or whenever the committed root is not an item goal (e.g. the xp trunk).
-        prior_root = self._last_decision.chosen_root if self._last_decision else None
-        committed_root_code = prior_root.code if isinstance(prior_root, ObtainItem) else None
         # The search cache spans the WHOLE decision, not just the planner search
         # inside it: the unified objective runs one `cheapest_path_to_level` walk
         # per candidate, and each walk asks `is_winnable` about every monster at
@@ -727,13 +720,8 @@ class GamePlayer:
             decision = self._strategy.decide(
                 state, game_data,
                 step_servable=servable_pred,
-                band_adequate=self._tree_band_adequate(),
                 ctx=ctx,
-                focus=self._gear_focus,
-                seats=self._interleave_seats,
-                committed_root_code=committed_root_code,
-                enable_synergy=True,
-                store=self.history,
+                history=self.history,
             )
         # Focus-ledger bump lives at the `_plan_or_reuse` seam (once per
         # run-loop iteration, fresh-decide OR cache-hit), NOT here — bumping
@@ -1023,30 +1011,18 @@ class GamePlayer:
         self._arbiter.set_cycle(self._cycle_counter)
         ctx = self._selection_context(combat_monster)
         self._last_ctx = ctx
-        # Synergy is wired here too — NOT just in `_decide_band` — so the `plan`
-        # diagnostic reflects the synergy-active production decision rather than a
-        # synergy-blind one (the two-plan-producers trap: a second decide site that
-        # silently omits the flag). Mirrors `_decide_band` exactly.
-        #
-        # `store` and the search cache are wired for the same reason and it matters
-        # more here, not less: the whole point of this site is to SHOW what
-        # production would decide. Omitting the store would make `plan` report the
-        # legacy boolean pivot's branch while the bot ran the unified objective's —
-        # a diagnostic that contradicts production is worse than none.
-        prior_root = self._last_decision.chosen_root if self._last_decision else None
-        committed_root_code = prior_root.code if isinstance(prior_root, ObtainItem) else None
+        # `history` and the search cache are wired here — NOT just in
+        # `_decide_band` — because the whole point of this site is to SHOW what
+        # production would decide, and a decide site that silently omits an
+        # argument production passes is the two-plan-producers trap. It must
+        # keep mirroring `_decide_band` argument for argument.
         with (self.history.search_cache() if self.history is not None
               else nullcontext()):
             decision = self._strategy.decide(
                 state, game_data,
                 step_servable=self._step_servable(state, game_data, ctx),
-                band_adequate=self._tree_band_adequate(),
                 ctx=ctx,
-                focus=self._gear_focus,
-                seats=self._interleave_seats,
-                committed_root_code=committed_root_code,
-                enable_synergy=True,
-                store=self.history)
+                history=self.history)
         self._bump_focus(decision)
         self._last_decision = decision
         step = decision.chosen_step
@@ -2371,17 +2347,22 @@ class GamePlayer:
             # descent the bot never ran (whole-branch review, MINOR 5).
             # `_last_ctx` is this cycle's context, computed in `_decide_band` /
             # the decide path above.
-            # NOTE (Fix 2): the `self._strategy.decide(...)` fallback below
-            # omits `focus=`/`seats=`, so on the rare `_last_decision is
-            # None` path (trace emitted before any real decide() this
-            # session) it may show the UN-aged argmax pick — trace-record
-            # only. It never feeds `self._gear_focus`/`self._interleave_seats`
-            # and never drives the real chosen root (that's
-            # `_last_decision`/`_plan_cache`).
+            # THE THIRD CALL SITE. It is a fallback — `_last_decision` is None
+            # only on a trace emitted before any real decide() this session —
+            # and it is exactly the shape that hides a signature change from
+            # the suite, so it is listed with the other two rather than
+            # discovered at runtime. It differs from them in ONE respect:
+            # `step_servable` is omitted, so the traced decision carries the
+            # tree's own pick with no plannability promotion. That is
+            # deliberate — building the predicate needs a plan cache this path
+            # does not have — and it is trace-record only: it never drives the
+            # real chosen root (that's `_last_decision`/`_plan_cache`).
+            #
+            # (The Fix-2 note about `focus=`/`seats=` that stood here died with
+            # the aging ledger in wave 3a; there is no argmax left to un-age.)
             decision = self._last_decision or self._strategy.decide(
                 self.state, self.game_data,
-                band_adequate=self._tree_band_adequate(),
-                ctx=self._last_ctx)
+                ctx=self._last_ctx, history=self.history)
             record["strategy"] = decision.to_trace()
         self.tracer.write_cycle(record)
         self._cycle_counter += 1

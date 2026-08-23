@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.provision_marginal_fight import ProvisionMarginalFightGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal  # noqa: F401 (used in repr checks)
 from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
@@ -60,7 +61,11 @@ from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.thresholds import CURRENCY_GRIND_BATCH
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import (
+    ObtainItem,
+    ReachCharLevel,
+    ReachSkillLevel,
+)
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -1132,6 +1137,26 @@ def test_objective_step_reach_char_level_no_monster():
     step = ReachCharLevel(10)
     g = objective_step_goal(step, make_state(), _gd(), _ctx(combat_monster=None))
     assert g is None
+
+
+def test_objective_step_reach_skill_level_raises_that_skill():
+    """WAVE 3a's O1 fix, asserted directly.
+
+    `IsThisTargetBlocked`'s skill arm is the first thing in this codebase that
+    can put a `ReachSkillLevel` in `chosen_step`. Until this arm existed
+    `objective_step_goal` fell off the end and returned None for it — a SILENT
+    STALL: the arbiter would walk past a root it had just resolved and drop the
+    cycle into discretionary, with nothing anywhere saying the skill climb had
+    been dropped. That is exactly the failure the O1 open-rung census exists to
+    catch, and it is what a flip with no arm here would have shipped.
+
+    Both the skill NAME and the target LEVEL are asserted: an arm that returned
+    `ReachSkillGoal` for the right skill at the wrong level would aim
+    `LevelSkill` at a rung the character has already cleared."""
+    step = ReachSkillLevel(skill="weaponcrafting", level=11)
+    g = objective_step_goal(step, make_state(), _gd(), _ctx())
+    assert isinstance(g, ReachSkillGoal)
+    assert repr(g) == "ReachSkill(weaponcrafting->11)"
 
 
 def test_objective_step_none_step():

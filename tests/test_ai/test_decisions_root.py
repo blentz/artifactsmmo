@@ -318,19 +318,35 @@ def test_a_blocker_on_an_uncraftable_target_is_an_error():
 # IsThereACombatTarget / CanIClearMyTier
 # ---------------------------------------------------------------------------
 
-def test_combat_target_root_is_the_already_satisfied_rung():
-    """SPEC-AS-WRITTEN, and it is almost certainly wrong: `tier_of_level`
-    returns the highest rung AT OR BELOW the character's level, so at level
-    15 the root is `ReachCharLevel(10)` — a root the character has already
-    met. Transcribed rather than repaired (see the module docstring of
-    `ai/decisions/root.py`); this test exists so the flip task cannot change
-    it without noticing."""
+def test_combat_target_root_is_the_next_rung_up_not_the_one_already_reached():
+    """THE FLIP's correction to spec §5.3, which named `tier_of_level` — the
+    highest rung AT OR BELOW the level, i.e. a root already satisfied. The
+    fixture ladder is (1, 10), so at level 5 the answer is rung 10, and 10 is
+    strictly above 5: an UNMET root, which is the whole point.
+
+    `is_satisfied` is asserted False directly rather than inferred from the
+    level, because that is the property three downstream readers depend on
+    (`objective_needs`'s `char_xp`, `actionable_step`'s descent, and the plan
+    pane's "why") and the number alone does not state it."""
+    gd = _gd()
+    state = make_state(level=5)
+    result = IsThereACombatTarget(RootWalk()).resolve(
+        state, gd, _ctx(combat_monster="chicken"), None)
+    assert result == ReachCharLevel(level=10)
+    assert isinstance(result, ReachCharLevel) and not result.is_satisfied(state, gd)
+
+
+def test_combat_target_root_falls_back_to_the_milestone_past_the_last_rung():
+    """The ladder-exhausted arm of `_next_rung_above`. The fixture ladder tops
+    out at 10, so a level-15 character has no rung above it and the answer is
+    `milestone_pure(15) == 20` — still strictly above the level, and the same
+    trunk milestone `CanIClearMyTier` falls back on."""
     gd = _gd()
     state = make_state(level=15)
     result = IsThereACombatTarget(RootWalk()).resolve(
         state, gd, _ctx(combat_monster="chicken"), None)
-    assert result == ReachCharLevel(level=10)
-    assert isinstance(result, ReachCharLevel) and result.is_satisfied(state, gd)
+    assert result == ReachCharLevel(level=20)
+    assert isinstance(result, ReachCharLevel) and not result.is_satisfied(state, gd)
 
 
 def test_no_combat_target_asks_whether_the_tier_is_clear():

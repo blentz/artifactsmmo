@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, one_equippable_item_page
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
@@ -238,7 +238,8 @@ class TestPlayerRunVerboseAndExecute:
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
                 with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=MagicMock(data=[])):
-                    with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=MagicMock(data=[])):
+                    with patch("artifactsmmo_cli.ai.game_data.get_all_items",
+                               return_value=one_equippable_item_page()):
                         with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=MagicMock(data=[])):
                             with patch("artifactsmmo_cli.ai.game_data.get_all_monsters",
                                        return_value=MagicMock(data=[])):
@@ -291,7 +292,8 @@ class TestPlayerRunVerboseAndExecute:
         with patch.object(ClientManager_mock := MagicMock(), "client", client):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
                 with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=MagicMock(data=[])):
-                    with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=MagicMock(data=[])):
+                    with patch("artifactsmmo_cli.ai.game_data.get_all_items",
+                               return_value=one_equippable_item_page()):
                         with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=MagicMock(data=[])):
                             with patch("artifactsmmo_cli.ai.game_data.get_all_monsters",
                                        return_value=MagicMock(data=[])):

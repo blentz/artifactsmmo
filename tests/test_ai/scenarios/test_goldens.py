@@ -51,8 +51,15 @@ EXPECTATIONS: dict[str, Golden] = {
     # GatherMaterials — the recipe needs copper_bar (smelted), the bank only
     # holds raw copper_ore/iron_ore, so objective_step_goal's fallback walk
     # resolves to the first unmet recipe input rather than a direct equip.
+    # RE-DERIVED WAVE 3a. The root is now ObtainItem(wooden_shield,
+    # shield_slot) — the gear sheet comes from `gear_targets_with_blockers`,
+    # which gears for `gear_target_tier`, and no scenario in this fixture
+    # clears rung 1 (see tests/test_ai/test_progression_tree.py's module
+    # docstring). copper_dagger is not on that sheet at all. The shield's
+    # recipe needs 10 gathered ash_wood, so the descent bottoms out one ply
+    # earlier than the smelted copper_bar chain did.
     "l10_weapon_upgrade": Golden(
-        goal_class="GatherMaterials(copper_bar", first_action="Withdraw(copper_ore"),
+        goal_class="GatherMaterials(ash_wood", first_action="Gather(ash_tree"),
 
     # l1_fresh: the legacy golden pinned GrindCharacterXP (starter-monster xp
     # grind) for a bare L1 character, but the TREE's rules differ by design:
@@ -61,10 +68,20 @@ EXPECTATIONS: dict[str, Golden] = {
     # ObtainItem(copper_dagger, weapon_slot) — gear-first wins pre-adequacy,
     # same as l10_weapon_upgrade's design intent (see the retired legacy
     # XFAIL_TODAY["l1_fresh"]/["l10_weapon_upgrade"] reasons). Nothing is
-    # held or banked, so the recipe chain bottoms out at the raw material:
-    # GatherMaterials(copper_ore, {copper_ore:10}), first action Gather.
+    # held or banked, so the recipe chain bottoms out at the raw material.
+    #
+    # RE-DERIVED WAVE 3a, and this one is worth reading closely because it is
+    # the FALLBACK CHAIN doing its job, not a simple re-pin. The resolved root
+    # is ObtainItem(wooden_stick) — the material gating the rung-1 weapon
+    # target `wooden_staff` — and `objective_step_goal` maps it to
+    # UpgradeEquipment(wooden_stick->weapon_slot), which the planner CANNOT
+    # plan (nothing produces a wooden_stick in this fixture). The arbiter then
+    # walks `fallback_steps`, and the first servable pair is the shield slot's
+    # gather. `goals_tried` records both, in that order, which is exactly the
+    # 2026-06-06 regression `_resolve_step_goal` exists to prevent: a root
+    # whose goal does not plan must not drop the cycle into discretionary.
     "l1_fresh": Golden(
-        goal_class="GatherMaterials(copper_ore", first_action="Gather"),
+        goal_class="GatherMaterials(ash_wood", first_action="Gather(ash_tree"),
 
     # l10_copper_adequate: full copper set but shield_slot is empty.
     # RE-DERIVED 2026-08-04 (pursuit_value unification). `_utility_candidates`
@@ -99,10 +116,23 @@ EXPECTATIONS: dict[str, Golden] = {
     # cannot craft at ANY quantity of iron_ore. This is the exact bug class
     # Task 5 fixes (weaponcrafting frozen at 10 fleet-wide, 2026-08-16 to
     # 2026-08-22): `CanICraftCurrentTier` now runs BEFORE the monster-drop
-    # check, so a skill-gated root raises the skill instead. First action is
+    # check, so a skill-gated root raises the skill instead. First action was
     # therefore LevelSkill(weaponcrafting->N), never a gather.
+    #
+    # RE-DERIVED WAVE 3a, and this is a LOSS worth naming rather than burying:
+    # iron_sword is no longer a gear target here, so the weaponcrafting climb
+    # this golden used to witness is gone from this scenario. The cause is the
+    # tier model, not the graph — this scenario has no attack at all, so
+    # `tier_cleared(1)` is False and `gear_target_tier` refuses to gear for a
+    # rung whose band the character cannot clear. That refusal is the point of
+    # `gear_target_tier` (its own docstring's Robby-at-30 case) and it is
+    # arguably the better answer here: at zero attack, iron_sword's materials
+    # come from monsters this character loses to. The skill-climb root IS
+    # reachable post-flip — `plan Lor` resolves ReachSkillLevel(gearcrafting,
+    # 10) against the live catalogue, recorded in the task-6 report — it is
+    # this FIXTURE that can no longer exhibit it.
     "l12_taskgated_bag": Golden(
-        goal_class="ReachSkill(weaponcrafting", first_action="LevelSkill(weaponcrafting"),
+        goal_class="GatherMaterials(ash_wood", first_action="Gather(ash_tree"),
 }
 
 

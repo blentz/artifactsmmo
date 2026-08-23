@@ -1,7 +1,25 @@
-"""decide_tree(): the Phase-2 tree assembly over Phase-1 scenarios.
+"""decide_tree(): the wave-3a RESOLUTION walk over the Phase-1 scenarios.
 
-Drives the module DIRECTLY (not wired into StrategyEngine — Phase 3).
-Expectations are computed from the tree's own binding semantics."""
+Drives the module DIRECTLY (not wired into StrategyEngine).
+
+WAVE 3a MOVED EVERY SCENARIO PIN IN THIS FILE, and one fixture fact explains
+all of them. The walk reads `objective.gear_targets_with_blockers`, which gears
+for `tier_progress.gear_target_tier` — the rung being CLEARED, capped by
+character level. Under `scenarios/fixtures/gamedata_bundle.json` NO scenario
+clears rung 1: `predict_win` says a level-12 character in a full copper set
+loses to a 60-hp chicken, so `next_uncleared_tier` is 1 for every scenario and
+`gear_target_tier` is pinned to 1. Rung-1 gear — `wooden_shield`,
+`wooden_staff` (blocked on `wooden_stick`) — is therefore the whole target
+sheet, whatever the character's level.
+
+The retired ranking never consulted winnability: `near_term_gear` capped by
+LEVEL only, which is why the old pins read copper at L10 and iron at L12. The
+new values are what the shipped tier model says about this fixture, not a
+weakening. Live data does NOT behave this way — see
+`.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md`, which records
+`plan Robby` (L30, gearcrafting/jewelrycrafting roots) and `plan Lor` (L20,
+`ReachSkillLevel(gearcrafting, 10)` as the chosen root) against the live
+catalogue."""
 
 import json
 from dataclasses import replace
@@ -19,10 +37,9 @@ from artifactsmmo_cli.ai.tiers.progression_tree import (
     _utility_candidates,
     decide_tree,
     has_structural_upgrade,
+    objective_candidates,
 )
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
-    FOCUS_FLAT,
-    FOCUS_SPAN,
     GearCandidate,
     focus_aging_order,
 )
@@ -43,9 +60,14 @@ def _decide(name: str):
 
 
 def test_weapon_upgrade_scenario_picks_gear_branch():
+    """`shield_slot`, not `weapon_slot`: at gear-target tier 1 the weapon-slot
+    target is `wooden_staff`, blocked on the material `wooden_stick`, while the
+    EMPTY shield slot is a full rung behind (`_tier_gap` scores an empty slot
+    from rung 0) and resolves attainable. Still the gear branch, which is what
+    this test is named for."""
     d, _ = _decide("l10_weapon_upgrade")
     assert isinstance(d.chosen_root, ObtainItem)
-    assert d.chosen_root.slot == "weapon_slot"
+    assert d.chosen_root.slot == "shield_slot"
 
 
 def test_low_hp_scenario_still_produces_a_decision():
@@ -65,9 +87,15 @@ def test_xp_branch_when_no_gear_candidates():
 
 
 def test_trunk_milestone_matches_core():
+    """The trunk still rides the ranking, and still at `milestone_pure`. Its
+    `category` moved from the bare `"char_level"` to `"alternative · char_level"`
+    because post-flip the column says how a row got there: the chosen row
+    carries the resolution TRAIL, every other row is an alternative labelled by
+    kind (`_resolution_rows`)."""
     d, _state = _decide("l1_fresh")
-    trunk_rows = [r for r in d.ranking if r.category == "char_level"]
+    trunk_rows = [r for r in d.ranking if r.category.endswith("char_level")]
     assert trunk_rows and "10" in trunk_rows[0].root_repr
+    assert trunk_rows[0].category == "alternative · char_level"
 
 
 def test_ranking_renders_the_descent():
@@ -77,9 +105,17 @@ def test_ranking_renders_the_descent():
 
 
 def test_fallbacks_offer_the_other_branch():
+    """Asserted on `fallback_roots`, not `fallback_steps`. The trunk is still
+    last in the fallback list — the 2026-07-27 trunk-last ruling survives the
+    flip verbatim — but its STEP is no longer the trunk itself: this character
+    is not `combat_capable`, so `prerequisites(ReachCharLevel)` emits a weapon
+    and `actionable_step` descends to `ObtainItem(mithril_ore, 10)`. Matching
+    on the step therefore says nothing about whether the trunk is reachable,
+    which is the property this test is for."""
     d, _ = _decide("l10_weapon_upgrade")
-    assert any(isinstance(s, ReachCharLevel) for s in d.fallback_steps), (
+    assert any(isinstance(r, ReachCharLevel) for r in d.fallback_roots), (
         "gear decision must carry the xp trunk as an arbiter fallback")
+    assert d.fallback_roots[-1] == ReachCharLevel(level=20)
 
 
 # --- Per-scenario behavior pins ---------------------------------------------
@@ -92,22 +128,25 @@ def test_fallbacks_offer_the_other_branch():
 # in near_term_gear/utility_potion_targets/equip_value composition.
 
 class TestPerScenarioPins:
-    def test_l1_fresh_pins_weapon_gear_branch(self):
-        """Level 1, nothing owned: near_term_gear admits every attainable
-        item with stats.level <= 1 whose equip_value beats the empty slot
-        (gain > 0) — copper_dagger/helmet/boots/shield/rings all qualify,
-        plus small_health_potion via utility_potion_targets (unprovisioned,
-        weight 1 for hp_restore). candidates != [] -> gear_target_exists
-        -> GEAR (branch_pick_pure). copper_dagger's weighted gain (83) beats
-        every other candidate's, so it wins gear_target_pick's argmax.
-        The dagger isn't directly craftable-now (no bar/ore held), so
-        actionable_step descends to the gather leaf: copper_ore x10."""
+    def test_l1_fresh_pins_the_blocking_material_of_the_weapon_slot(self):
+        """WAVE 3a. Six slots are behind the rung-1 sheet; `weapon_slot` is the
+        furthest behind (empty, target `wooden_staff`), and `wooden_staff` is
+        material-gated on `wooden_stick`, so `IsThisTargetBlocked` routes to
+        the MATERIAL at its recipe quantity rather than to the staff. The old
+        pin (`copper_dagger`, the argmax of a value ranking) is gone with the
+        ranking.
+
+        Row 0 is now the CHOSEN row, not the trunk: `_resolution_rows` puts the
+        resolved root first and its `category` is the trail that produced it.
+        The trunk is last."""
         d, _ = _decide("l1_fresh")
-        assert d.chosen_root == ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
-        assert d.chosen_step == ObtainItem(code="copper_ore", quantity=10)
-        assert len(d.ranking) == 8  # trunk + 7 gear candidates
-        assert d.ranking[0].category == "char_level"
-        assert d.ranking[0].root_repr == "ReachCharLevel(level=10)"
+        assert d.chosen_root == ObtainItem(code="wooden_stick", quantity=1)
+        assert d.chosen_step == d.chosen_root
+        assert len(d.ranking) == 7  # chosen + 5 sibling slots + trunk
+        assert d.ranking[0].root_repr == "ObtainItem(code='wooden_stick', quantity=1)"
+        assert d.ranking[0].category == (
+            "IsMyGearBehindMyTier → WhichSlotIsFurthestBehind → IsThisTargetBlocked")
+        assert d.ranking[-1].root_repr == "ReachCharLevel(level=10)"
 
     def test_l8_overstocked_pins_gear_branch(self):
         """Level 8, full copper set (no shield in _COPPER_SET) + empty
@@ -128,11 +167,25 @@ class TestPerScenarioPins:
         ACHIEVABILITY factor (shield 905/1534 for 10 gathered ash_wood, potion 1
         for craftable-now) narrows it to 31.2M vs 6.0M without reversing it. The
         brief potion win under the previous commit came from the two branches
-        riding rulers ~1000x apart, not from a judgement about potions."""
+        riding rulers ~1000x apart, not from a judgement about potions.
+
+        WAVE 3a: the shield still wins, and the count is still 3, but neither
+        for the recorded reason. The shield wins because it is the
+        furthest-behind slot on the rung-1 sheet — an EMPTY slot, scored from
+        rung 0 by `_tier_gap`. And the third row is NOT the potion: potions
+        were `_utility_candidates`, part of the deleted candidate pass, and are
+        not gear targets at all. The rows are shield, the weapon slot's
+        blocking material, and the trunk. This test passed under both regimes
+        for different reasons, so the rows are now spelled out rather than
+        counted."""
         d, _ = _decide("l8_overstocked")
         assert d.chosen_root == ObtainItem(code="wooden_shield", quantity=1,
                                            slot="shield_slot")
-        assert len(d.ranking) == 3  # trunk + shield + potion
+        assert d.chosen_step == ObtainItem(code="ash_wood", quantity=10)
+        assert [r.root_repr for r in d.ranking] == [
+            "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
+            "ObtainItem(code='wooden_stick', quantity=1)",
+            "ReachCharLevel(level=10)"]
 
     def test_l10_copper_adequate_pins_gear_branch_not_xp(self):
         """The scenario NAME says 'adequate', but adequacy here is Phase-2's
@@ -144,41 +197,48 @@ class TestPerScenarioPins:
         RE-DERIVED 2026-08-04 (pursuit_value unification) — same cause as
         `test_l8_overstocked_pins_gear_branch`: both branches now rank on the
         ONE ruler, where the shield leads 52_800_000 to 6_000_000 and
-        achievability narrows without reversing."""
+        achievability narrows without reversing.
+
+        WAVE 3a: row 0 is the CHOSEN row now, not the trunk — `_resolution_rows`
+        leads with the resolved root and the trunk goes last. The trunk itself
+        is unchanged at `ReachCharLevel(20)`."""
         d, _ = _decide("l10_copper_adequate")
         assert d.chosen_root == ObtainItem(code="wooden_shield", quantity=1,
                                            slot="shield_slot")
         assert len(d.ranking) == 3
-        assert d.ranking[0].root_repr == "ReachCharLevel(level=20)"
+        assert d.ranking[0].root_repr == (
+            "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')")
+        assert d.ranking[-1].root_repr == "ReachCharLevel(level=20)"
 
-    def test_l10_weapon_upgrade_pins_weapon_over_potion(self):
-        """weapon_slot holds wooden_stick; copper_dagger's gain (64) beats
-        both small_health_potion (61) and wooden_shield (17) -> weapon_slot
-        wins gear_target_pick's argmax -> GEAR branch. copper_bar (6, from
-        the banked copper_ore/iron_ore smelt chain) is the actionable step,
-        not the raw ore -- the recipe is one level closer to satisfied here
-        than in l1_fresh (bars bankable, no ore held directly)."""
+    def test_l10_weapon_upgrade_pins_the_empty_shield_slot(self):
+        """WAVE 3a. `copper_dagger` is not on the target sheet: the gear-target
+        tier is 1 (see the module docstring), so the weapon slot's target is
+        `wooden_staff` and the character already wears a `wooden_stick` there.
+        The EMPTY shield slot is the furthest behind — `_tier_gap` scores an
+        empty slot from rung 0, so a rung-1 target in an empty slot outranks a
+        rung-1 target over an occupied one, which is the empty-slot dominance
+        the kernel proves.
+
+        Trunk LAST (2026-07-27) survives the flip: `resolve_root` appends the
+        trunk after every sibling."""
         d, _ = _decide("l10_weapon_upgrade")
-        assert d.chosen_root == ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
-        assert d.chosen_step == ObtainItem(code="copper_bar", quantity=6)
-        assert len(d.ranking) == 4  # trunk + dagger + potion + shield
-        # Trunk LAST (2026-07-27): gear fallbacks are walked before the branch
-        # is abandoned for XP — see TestServabilityDemotion's docstring.
+        assert d.chosen_root == ObtainItem(code="wooden_shield", quantity=1,
+                                           slot="shield_slot")
+        assert d.chosen_step == ObtainItem(code="ash_wood", quantity=10)
+        assert len(d.ranking) == 3
         assert d.fallback_roots[-1] == ReachCharLevel(level=20)
-        assert ObtainItem(code="small_health_potion", quantity=1,
-                          slot="utility1_slot") in d.fallback_roots
-        assert ObtainItem(code="wooden_shield", quantity=1, slot="shield_slot") in d.fallback_roots
+        assert ObtainItem(code="wooden_stick", quantity=1) in d.fallback_roots
 
     def test_l3_low_hp_pins_weapon_branch(self):
-        """Same near_term_gear pool as l1_fresh (all qualifying items are
-        level <= 1, so raising state.level to 3 admits nothing new) -> the
-        tree still answers with the GEAR branch. The survival guard that
-        would preempt this at the arbiter has no seam in decide_tree
-        itself (semantics: guards preempt at the ARBITER, not here)."""
+        """Same target sheet as l1_fresh (the gear-target tier is 1 for both,
+        and raising state.level to 3 admits nothing new) -> the tree still
+        answers with the GEAR branch and the same root. The survival guard that
+        would preempt this at the arbiter has no seam in decide_tree itself
+        (semantics: guards preempt at the ARBITER, not here)."""
         d, _ = _decide("l3_low_hp")
-        assert d.chosen_root == ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
-        assert d.chosen_step == ObtainItem(code="copper_ore", quantity=10)
-        assert len(d.ranking) == 8
+        assert d.chosen_root == ObtainItem(code="wooden_stick", quantity=1)
+        assert d.chosen_step == d.chosen_root
+        assert len(d.ranking) == 7
 
     def test_l12_taskgated_bag_pins_iron_boots_branch(self):
         """RE-DERIVED (GAP-1 fix, 2026-07-07): this scenario has zero attack
@@ -206,62 +266,37 @@ class TestPerScenarioPins:
         cannot win a fight should buy a sword before boots.
 
         (The retired flat `combat_raw` scored the sword's 24 attack against the
-        boots' resistance + hp 1:1, which is why the boots used to lead.)"""
+        boots' resistance + hp 1:1, which is why the boots used to lead.)
+
+        WAVE 3a: iron gear is off the sheet entirely. This scenario has NO
+        attack (`derive_combat_stats` off), so `tier_cleared(1)` is False and
+        `gear_target_tier` caps at rung 1 — the character is not asked to gear
+        for a rung whose band it cannot clear, which is the whole point of
+        `gear_target_tier` (its docstring's Robby-at-30 case). That is a
+        stronger answer than the old level-capped one, not a weaker one: at
+        zero attack, iron_sword's materials come from monsters this character
+        loses to.
+
+        The satchel assertion is kept verbatim — the region gate is unrelated
+        to the flip and must keep holding."""
         d, _ = _decide("l12_taskgated_bag")
-        assert d.chosen_root == ObtainItem(code="iron_sword", quantity=1,
-                                           slot="weapon_slot")
-        assert d.chosen_step == ObtainItem(code="iron_ore", quantity=10)
-        # 7, not 8: satchel left the ranking (region soundness). Its recipe needs
-        # jasper_crystal, sold ONLY by tasks_trader, who stands on
-        # (5,11,overworld) — a tile gated `conditional` on the tasks_farmer
-        # achievement, which the bundle now pins as 0/100 and uncompleted. The
-        # scenario is NAMED "taskgated"; until the world model honoured access
-        # conditions, the gate was named but never actually shut.
-        assert len(d.ranking) == 7
+        assert d.chosen_root == ObtainItem(code="wooden_shield", quantity=1,
+                                           slot="shield_slot")
+        assert d.chosen_step == ObtainItem(code="ash_wood", quantity=10)
+        assert len(d.ranking) == 3
         assert not any("satchel" in r.root_repr for r in d.ranking), \
             "satchel needs jasper_crystal from an unreachable trader"
 
 
 # --- band_adequate parameter (Phase-3 Task-1) -------------------------------
 #
-# Phase-2 computed band_adequate internally as `candidates == []`. Phase 3
-# replaces that stand-in with a caller-supplied verdict (Task 2 wires the
-# real progression-band signal) — decide_tree defaults band_adequate=False
-# so every existing caller (including all tests above) is unaffected.
-
-class TestAdequacyParameter:
-    def test_adequate_with_candidates_goes_xp_with_gear_fallbacks(self):
-        """Adequate band + upgrades available: XP is chosen, gear candidates
-        survive as arbiter fallbacks (Phase-2 final-review finding — they
-        must NOT be silently dropped)."""
-        gd = _bundle()
-        state = scenario_state(SCENARIOS["l10_weapon_upgrade"])
-        d = decide_tree(state, gd, CharacterObjective.from_game_data(gd),
-                        band_adequate=True)
-        assert isinstance(d.chosen_root, ReachCharLevel)
-        assert any(isinstance(r, ObtainItem) for r in d.fallback_roots), (
-            "gear candidates must survive as fallbacks under the XP branch")
-
-    def test_not_adequate_defaults_preserve_phase2_pins(self):
-        """band_adequate=False (the default) reproduces the Phase-2 behavior
-        pins exactly — the parameter is additive."""
-        gd = _bundle()
-        state = scenario_state(SCENARIOS["l10_weapon_upgrade"])
-        d = decide_tree(state, gd, CharacterObjective.from_game_data(gd))
-        assert isinstance(d.chosen_root, ObtainItem)
-        assert d.chosen_root.slot == "weapon_slot"
-
-    def test_adequate_no_candidates_pure_xp(self):
-        """Adequate + zero candidates: pure XP decision, empty gear
-        fallbacks. Reuses the same empty-GameData synthetic fixture as
-        TestSyntheticBranches.test_xp_branch_fires_when_candidates_are_truly_empty."""
-        gd = GameData()
-        objective = CharacterObjective.from_game_data(gd)
-        state = scenario_state(ScenarioCharacter(name="synthetic_empty", level=5, max_hp=100))
-        d = decide_tree(state, gd, objective, band_adequate=True)
-        assert isinstance(d.chosen_root, ReachCharLevel)
-        assert d.chosen_step == d.chosen_root
-        assert not any(isinstance(r, ObtainItem) for r in d.fallback_roots)
+# DELETED IN WAVE 3a. `band_adequate` was the input to `branch_pick_pure`, the
+# boolean gear/xp pivot. The resolution walk has no pivot to feed: the branch is
+# whatever `IsMyGearBehindMyTier` resolves to. The three tests that lived here
+# asserted the parameter's effect on `decide_tree` and had no other subject, so
+# they go with it rather than being re-pointed at something they never tested.
+# `branch_pick_pure` itself keeps its own unit tests in
+# tests/test_ai/test_progression_tree_core.py; it is deleted in wave 3b.
 
 
 # --- step_servable demotion (Phase-4b Task-1: THE FLIP) ---------------------
@@ -274,31 +309,27 @@ class TestAdequacyParameter:
 
 class TestServabilityDemotion:
     """l10_weapon_upgrade pins (see TestPerScenarioPins): chosen =
-    ObtainItem(copper_dagger, weapon_slot) / step ObtainItem(copper_bar, 6);
-    fallback_roots = [wooden_shield, small_health_potion, ReachCharLevel(20)].
-
-    GEAR-FIRST re-derivation 2026-07-08 (Task-3 pursuit_value; user ruling):
-    the SHIELD (a structural candidate) outranks the POTION (a utility-potion
-    candidate) in the merged argmax — combat/gear pursuit outranks
-    potion-stocking, potions still pursued once no structural upgrade remains.
-    Was [TRUNK, POTION, SHIELD].
-
-    ONE-RULER re-derivation 2026-08-04: `_utility_candidates` moved from
-    `equip_value` to `pursuit_value`, so the merged argmax stopped comparing two
-    rulers ~1000x apart. The shield/potion order the 2026-07-08 ruling asks for
-    is now a consequence of the ruler (52_800_000 vs 6_000_000) rather than of
-    the two branches' incommensurate scales.
+    ObtainItem(wooden_shield, shield_slot) / step ObtainItem(ash_wood, 10);
+    fallback_roots = [ObtainItem(wooden_stick), ReachCharLevel(20)].
 
     TRUNK-LAST correction 2026-07-27 (live trace): the trunk used to sit at
     index 0, so ONE unservable gear step promoted the XP trunk over servable
     gear candidates sitting behind it — Robby ran 9 of 15 cycles on
     ReachCharLevel with 7 live structural candidates and the branch verdict
-    saying GEAR. Was [TRUNK, SHIELD, POTION]."""
+    saying GEAR. That ruling is unchanged by wave 3a: `resolve_root` appends
+    the trunk AFTER every sibling, so this class keeps testing the same
+    property against the walk's own fallback order.
 
-    DAGGER = ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
-    TRUNK = ReachCharLevel(level=20)
-    POTION = ObtainItem(code="small_health_potion", quantity=1, slot="utility1_slot")
+    WAVE 3a re-derivation: the three candidate roots are now SHIELD (the
+    furthest-behind slot), STICK (the weapon slot's blocking material) and the
+    TRUNK — one fewer than before, because the POTION was a
+    `_utility_candidates` entry and utility potions are not gear targets. Every
+    test below keeps its exact assertion shape; only the constants moved."""
+
     SHIELD = ObtainItem(code="wooden_shield", quantity=1, slot="shield_slot")
+    SHIELD_STEP = ObtainItem(code="ash_wood", quantity=10)
+    STICK = ObtainItem(code="wooden_stick", quantity=1)
+    TRUNK = ReachCharLevel(level=20)
 
     def _decide_with(self, servable):
         gd = _bundle()
@@ -308,40 +339,49 @@ class TestServabilityDemotion:
 
     def test_servable_chosen_is_untouched(self):
         d = self._decide_with(lambda root, step: True)
-        assert d.chosen_root == self.DAGGER
-        assert d.fallback_roots == [self.SHIELD, self.POTION, self.TRUNK]
+        assert d.chosen_root == self.SHIELD
+        assert d.fallback_roots == [self.STICK, self.TRUNK]
 
     def test_unservable_chosen_promotes_the_next_gear_candidate_not_the_trunk(self):
         """THE 2026-07-27 REGRESSION. One unservable gear step must not
         abandon the gear branch: the promotion takes the next servable GEAR
         candidate, and the trunk stays behind it."""
-        d = self._decide_with(lambda root, step: root != self.DAGGER)
-        assert d.chosen_root == self.SHIELD
+        d = self._decide_with(lambda root, step: root != self.SHIELD)
+        assert d.chosen_root == self.STICK
         assert d.chosen_root != self.TRUNK
         # The demoted pair survives in the fallbacks, ahead of the rest —
         # original priority order minus the promotion.
-        assert d.fallback_roots == [self.DAGGER, self.POTION, self.TRUNK]
-        assert d.fallback_steps[0] == ObtainItem(code="copper_bar", quantity=6)
+        assert d.fallback_roots == [self.SHIELD, self.TRUNK]
+        assert d.fallback_steps[0] == self.SHIELD_STEP
 
     def test_walk_skips_unservable_fallbacks_in_order(self):
-        servable = lambda root, step: root not in (self.DAGGER, self.SHIELD)  # noqa: E731
+        servable = lambda root, step: root not in (self.SHIELD, self.STICK)  # noqa: E731
         d = self._decide_with(servable)
-        # DAGGER unservable, SHIELD (the next gear candidate) unservable too,
-        # so the walk skips it and reaches the POTION — still gear, still ahead
-        # of the trunk.
-        assert d.chosen_root == self.POTION
+        # SHIELD unservable, STICK (the next gear candidate) unservable too, so
+        # the walk skips it and reaches the trunk.
+        assert d.chosen_root == self.TRUNK
         # Demoted pairs (chosen first, then the skipped fallbacks) keep their
-        # relative order after the promoted pair leaves the list.
-        assert d.fallback_roots == [self.DAGGER, self.SHIELD, self.TRUNK]
+        # relative order after the promoted pair leaves the list. THIS is the
+        # in-order claim: a walk that took the last servable pair, or that
+        # reordered the demoted remainder, would fail here and not above.
+        assert d.fallback_roots == [self.SHIELD, self.STICK]
 
     def test_every_gear_pair_unservable_still_reaches_the_trunk(self):
         """The trunk stays in the list, just last: a FULLY blocked gear branch
         must still yield to XP rather than deadlock on an unservable pick.
-        Yielding the branch is the last resort, not the first."""
-        gear = (self.DAGGER, self.SHIELD, self.POTION)
+        Yielding the branch is the last resort, not the first.
+
+        The promoted STEP is `ObtainItem(mithril_ore, 10)`, not the trunk
+        itself: this character is not `combat_capable`, so the trunk's
+        prerequisite is a weapon and `actionable_step` descends into it. The
+        step is asserted explicitly rather than as `== chosen_root`, because
+        the promotion carries the (root, step) PAIR and a walk that promoted
+        the root while keeping some other root's step would pass the loose
+        form."""
+        gear = (self.SHIELD, self.STICK)
         d = self._decide_with(lambda root, step: root not in gear)
         assert d.chosen_root == self.TRUNK
-        assert d.chosen_step == self.TRUNK
+        assert d.chosen_step == ObtainItem(code="mithril_ore", quantity=10)
 
     def test_promotion_records_the_root_the_tree_actually_picked(self):
         """The trace could not tell "the tree chose this" from "promotion landed
@@ -349,33 +389,33 @@ class TestServabilityDemotion:
         promoted root always logs as servable. Live 2026-07-27, 9 of 15 cycles
         logged `ReachCharLevel, servable: true` and read as the tree choosing XP
         when every one was a displaced gear pick."""
-        d = self._decide_with(lambda root, step: root != self.DAGGER)
-        assert d.chosen_root == self.SHIELD
-        assert d.promoted_from == self.DAGGER
+        d = self._decide_with(lambda root, step: root != self.SHIELD)
+        assert d.chosen_root == self.STICK
+        assert d.promoted_from == self.SHIELD
 
     def test_no_promotion_records_nothing(self):
         d = self._decide_with(lambda root, step: True)
-        assert d.chosen_root == self.DAGGER
+        assert d.chosen_root == self.SHIELD
         assert d.promoted_from is None
 
     def test_all_unservable_records_no_promotion(self):
         """Nothing was displaced — the original choice is kept — so the field
         must stay None rather than pointing at the root that IS chosen."""
         d = self._decide_with(lambda root, step: False)
-        assert d.chosen_root == self.DAGGER
+        assert d.chosen_root == self.SHIELD
         assert d.promoted_from is None
 
     def test_all_unservable_keeps_original_choice(self):
         d = self._decide_with(lambda root, step: False)
-        assert d.chosen_root == self.DAGGER
-        assert d.fallback_roots == [self.SHIELD, self.POTION, self.TRUNK]
+        assert d.chosen_root == self.SHIELD
+        assert d.fallback_roots == [self.STICK, self.TRUNK]
 
     def test_default_none_predicate_is_untouched(self):
         gd = _bundle()
         state = scenario_state(SCENARIOS["l10_weapon_upgrade"])
         d = decide_tree(state, gd, CharacterObjective.from_game_data(gd))
-        assert d.chosen_root == self.DAGGER
-        assert d.fallback_roots == [self.SHIELD, self.POTION, self.TRUNK]
+        assert d.chosen_root == self.SHIELD
+        assert d.fallback_roots == [self.STICK, self.TRUNK]
 
     def test_predicate_sees_root_step_pairs(self):
         seen: list[tuple[object, object]] = []
@@ -386,8 +426,8 @@ class TestServabilityDemotion:
 
         self._decide_with(spy)
         # Walk order: chosen pair first, then fallbacks in order.
-        assert seen[0] == (self.DAGGER, ObtainItem(code="copper_bar", quantity=6))
-        assert [r for r, _ in seen[1:]] == [self.SHIELD, self.POTION, self.TRUNK]
+        assert seen[0] == (self.SHIELD, self.SHIELD_STEP)
+        assert [r for r, _ in seen[1:]] == [self.STICK, self.TRUNK]
 
 
 # --- Synthetic-GameData unit tests (coverage of branches the 6 scenarios
@@ -413,16 +453,27 @@ class TestHasStructuralUpgrade:
 
 
 class TestSyntheticBranches:
-    def test_xp_branch_fires_when_candidates_are_truly_empty(self):
-        """None of the 6 committed scenarios ever produce an empty
-        candidate list (there's always a spare slot or an unprovisioned
-        potion in the real catalog) -- so the `else` arm of decide_tree's
-        branch dispatch (chosen_root = chosen_step = trunk, no fallbacks)
-        needs its own minimal fixture: an EMPTY GameData (no items, so
-        near_term_gear and utility_potion_targets both return {})."""
-        gd = GameData()
+    def test_xp_branch_fires_when_gear_wants_nothing(self):
+        """None of the 6 committed scenarios ever leaves the gear sheet empty,
+        so the trunk-only outcome needs its own minimal fixture: ONE equippable
+        item, already worn. The catalogue cannot be EMPTY any more — the ladder
+        is derived from the equippable catalogue and `tier_of_level` refuses to
+        invent a rung for a game with no equipment, which is the correct
+        no-defaulting-around-API-data behaviour and not something to work
+        around.
+
+        With the one item worn, `gear_targets_with_blockers` is `{}`, there is
+        no monster in the band so `IsThereACombatTarget` says no, and
+        `CanIClearMyTier` finds the (empty) band cleared and returns the trunk.
+        `alternatives` is empty because the only ordered entry IS the trunk and
+        it is the chosen root."""
+        gd = GameData(items=ItemCatalog(stats={
+            "wooden_stick": ItemStats(code="wooden_stick", level=1,
+                                      type_="weapon", attack={"air": 2})}))
         objective = CharacterObjective.from_game_data(gd)
-        state = scenario_state(ScenarioCharacter(name="synthetic_empty", level=5, max_hp=100))
+        state = scenario_state(ScenarioCharacter(
+            name="synthetic_geared", level=5, max_hp=100,
+            equipment={"weapon_slot": "wooden_stick"}))
         d = decide_tree(state, gd, objective)
         assert d.chosen_root == ReachCharLevel(level=10)
         assert d.chosen_step == d.chosen_root
@@ -430,63 +481,61 @@ class TestSyntheticBranches:
         assert d.fallback_steps == []
         assert len(d.ranking) == 1  # trunk row only
 
-    def test_structural_and_utility_candidates_skip_unknown_item_stats(self):
-        """near_term_gear/utility_potion_targets are computed from the
-        OBJECTIVE's own bound game_data (baked in at from_game_data time),
-        not the `game_data` parameter decide_tree separately receives. If
-        the two ever diverge (a stale objective queried against a refreshed
-        catalog, or -- as here -- a deliberately mismatched pairing),
-        item_stats(code) can miss and both candidate builders must skip the
-        code rather than crash. Passing an empty GameData as the decide_tree
-        parameter (while the objective was built from the full bundle)
-        exercises both `stats is None: continue` guards at once, since
-        every code the objective offers is unknown to the empty catalog."""
+    def test_candidate_builders_skip_unknown_item_stats(self):
+        """`_structural_candidates` / `_utility_candidates` are computed from
+        the OBJECTIVE's own bound game_data (baked in at `from_game_data` time),
+        not the `game_data` parameter they separately receive. If the two ever
+        diverge, `item_stats(code)` can miss and both builders must skip the
+        code rather than crash. An empty `GameData` makes every code the
+        objective offers unknown, exercising both `stats is None: continue`
+        guards at once.
+
+        WAVE 3a re-pointed this at `objective_candidates` — the one function
+        that concatenates the two builders — because `decide_tree` no longer
+        calls them. The guards are still live: `commands/objective.py` runs the
+        same list outside the bot."""
         gd_full = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
         objective = CharacterObjective.from_game_data(gd_full)
         state = scenario_state(SCENARIOS["l1_fresh"])
         assert objective.near_term_gear(state), "sanity: real bundle offers structural candidates"
         assert objective.utility_potion_targets(state), "sanity: real bundle offers a potion target"
-        d = decide_tree(state, GameData(), objective)
-        # Every candidate got skipped (unknown stats) -> no gear candidates,
-        # tree falls to the trunk.
-        assert d.chosen_root == ReachCharLevel(level=10)
-        assert len(d.ranking) == 1
+        assert objective_candidates(state, gd_full, objective), \
+            "sanity: the SAME call is non-empty against the matching catalogue"
+        assert objective_candidates(state, GameData(), objective) == []
 
     def test_already_provisioned_utility_slot_is_skipped(self):
         """equipped_potion_qty > 0 must remove the potion from candidates
         (refill churn is the guard's job) -- scenario_state never sets a
         utility slot quantity > 0 (ScenarioCharacter has no such field), so
-        this needs a directly-constructed WorldState via dataclasses.replace."""
+        this needs a directly-constructed WorldState via dataclasses.replace.
+
+        WAVE 3a re-pointed this at `objective_candidates` for the same reason
+        as the test above."""
         gd = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
         objective = CharacterObjective.from_game_data(gd)
         base_state = scenario_state(SCENARIOS["l10_weapon_upgrade"])
         code = objective.utility_potion_targets(base_state)["utility1_slot"]
+        assert any(c.code == code for c in
+                   objective_candidates(base_state, gd, objective)), \
+            "sanity: the unprovisioned slot DOES offer the potion"
         provisioned_state = replace(
             base_state,
             equipment={**base_state.equipment, "utility1_slot": code},
             utility1_slot_quantity=5,
         )
-        d = decide_tree(provisioned_state, gd, objective)
-        # The potion candidate is gone; only the weapon (and shield, if any
-        # remain empty) compete -- small_health_potion must not appear
-        # anywhere in the rendered ranking.
-        assert not any(code in r.root_repr for r in d.ranking)
-        assert d.chosen_root == ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
+        assert not any(c.code == code for c in
+                       objective_candidates(provisioned_state, gd, objective))
 
-    def test_zero_gain_utility_candidate_is_filtered_and_falls_to_xp(self):
+    def test_zero_gain_utility_candidate_is_filtered(self):
         """A utility target whose own equip_value computes to 0 (all-zero
-        ItemStats) must never arm the gear branch -- the same `gain > 0`
-        guard _structural_candidates already has, applied to the utility
-        leg. Mirrors test_structural_and_utility_candidates_skip_unknown_
-        item_stats's mismatched-game_data trick: the OBJECTIVE stays bound
-        to the full bundle (bootstrap_potion_target legitimately picks
-        small_health_potion there -- it needs hp_restore > 0 to be picked
-        at all), but decide_tree's own `game_data` parameter maps that same
-        code to an all-zero ItemStats, so it survives the `stats is None`
-        skip yet contributes 0 weighted gain. near_term_gear's codes are
-        absent from this catalog entirely (only the potion code is
-        present), so structural_candidates is empty too, and decide_tree
-        must fall all the way to the XP trunk."""
+        ItemStats) must never become a candidate -- the same `gain > 0`
+        guard `_structural_candidates` already has, applied to the utility
+        leg. Mirrors the mismatched-game_data trick above: the OBJECTIVE stays
+        bound to the full bundle (`bootstrap_potion_target` legitimately picks
+        small_health_potion there -- it needs hp_restore > 0 to be picked at
+        all), but the `game_data` parameter maps that same code to an all-zero
+        ItemStats, so it survives the `stats is None` skip yet contributes 0
+        weighted gain."""
         gd_full = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
         objective = CharacterObjective.from_game_data(gd_full)
         state = scenario_state(SCENARIOS["l1_fresh"])
@@ -494,132 +543,7 @@ class TestSyntheticBranches:
         assert code == "small_health_potion"  # sanity: matches the Phase-2 pin
         zero_stats_gd = GameData(items=ItemCatalog(
             stats={code: ItemStats(code=code, level=1, type_="utility", subtype="tool")}))
-        d = decide_tree(state, zero_stats_gd, objective)
-        assert not any(code in r.root_repr for r in d.ranking)
-        assert d.chosen_root == ReachCharLevel(level=10)
-        assert d.chosen_step == d.chosen_root
-        assert d.fallback_roots == []
-        assert d.fallback_steps == []
-
-
-# --- focus/cycle aging parameters (arbiter anti-starvation epic, Task 4) ----
-#
-# decide_tree's pick/order swap from the plain gear_target_pick/_ordered
-# argmax to focus_aging_pick/focus_aging_order (Task 3's cores). The empty-
-# focus/cycle-0 default must reproduce today's argmax exactly; a fully-decayed
-# focus must hand cycles off to a reachable alternative without abandoning the
-# stuck root outright.
-
-def _two_gear_candidate_fixture() -> tuple:
-    """Two structural gear candidates with a wide gain gap: `wolf_ears`
-    (helmet_slot, hp_bonus=100 -> pursuit_value 100000, the argmax) and
-    `iron_ring` (ring1_slot AND ring2_slot -- rings are a DUPLICATE_SLOT_TYPE,
-    so one candidate item fills both -- hp_bonus=1 -> pursuit_value 1000, far
-    behind). Both items are held in inventory so `is_attainable_now`'s
-    stock_ok short-circuit fires without needing a recipe or a gatherable
-    resource (see objective.py's `_attainable_closure`/`is_attainable_now`).
-    Level 1 items, character level 5, so both clear near_term_gear's
-    `stats.level <= state.level` filter and neither slot is pre-equipped, so
-    every candidate's gain is strictly positive."""
-    gd = GameData(items=ItemCatalog(stats={
-        "wolf_ears": ItemStats(code="wolf_ears", level=1, type_="helmet", hp_bonus=100),
-        "iron_ring": ItemStats(code="iron_ring", level=1, type_="ring", hp_bonus=1),
-    }))
-    objective = CharacterObjective.from_game_data(gd)
-    state = scenario_state(ScenarioCharacter(
-        name="synthetic_two_gear", level=5, max_hp=100,
-        inventory={"wolf_ears": 1, "iron_ring": 1},
-    ))
-    return state, gd, objective
-
-
-class TestFocusAging:
-    def test_decide_tree_aging_hands_off_stuck_top(self):
-        """A helmet fully decayed past FOCUS_FLAT + FOCUS_SPAN never fully
-        starves the alternative (ring2_slot) over 40 cycles, and never fully
-        abandons the decayed top either -- FOCUS_FLOOR keeps it alive."""
-        state, gd, objective = _two_gear_candidate_fixture()
-        stuck_key = ("helmet_slot", "wolf_ears")
-        focus = {stuck_key: FOCUS_FLAT + FOCUS_SPAN}
-        seats: dict[str, int] = {}
-        seen = set()
-        for _ in range(40):
-            d = decide_tree(state, gd, objective, band_adequate=False,
-                            focus=focus, seats=seats)
-            root = d.chosen_root
-            seen.add(repr(root))
-            # accumulate one d'Hondt seat for the committed slot, mirroring the
-            # player's incremental interleave (Task 12)
-            slot = getattr(root, "slot", None)
-            if isinstance(slot, str):
-                seats[slot] = seats.get(slot, 0) + 1
-        assert any("ring2_slot" in r for r in seen), (
-            "starved alternative root must run within 40 aged cycles")
-        assert any("helmet_slot" in r for r in seen), (
-            "FOCUS_FLOOR keeps the decayed drop root alive, not abandoned")
-
-    def test_decide_tree_empty_focus_matches_argmax(self):
-        """Defaults (no focus arg, no seats arg) and an explicit empty focus
-        with arbitrary non-empty seats both agree with the plain argmax: the
-        aging swap must not perturb any caller that doesn't wire the ledger in,
-        and seats are not consulted while every candidate is unaged."""
-        state, gd, objective = _two_gear_candidate_fixture()
-        d0 = decide_tree(state, gd, objective, band_adequate=False)
-        d1 = decide_tree(state, gd, objective, band_adequate=False, focus={},
-                         seats={"helmet_slot": 7})
-        assert repr(d0.chosen_root) == repr(d1.chosen_root)
-        assert d0.chosen_root == ObtainItem(code="wolf_ears", quantity=1, slot="helmet_slot")
-
-    def test_aged_pick_false_when_all_candidates_unaged(self):
-        """Task 12 fix: `aged_pick` reflects the CANDIDATE-scoped fast-path
-        verdict. Empty focus -> every candidate unaged -> the fast-path argmax
-        was taken, no interleave -> aged_pick False (no seat should be
-        consumed)."""
-        state, gd, objective = _two_gear_candidate_fixture()
-        d = decide_tree(state, gd, objective, band_adequate=False, focus={}, seats={})
-        assert d.aged_pick is False
-
-    def test_aged_pick_ignores_stale_non_candidate_ledger_entry(self):
-        """Task 12 fix (the latent divergence pinned): a stale aged focus entry
-        for a root that has LEFT the candidate set (e.g. its slot filled by
-        equipping owned gear, no reset) must NOT flip `aged_pick`. Every real
-        candidate is unaged, so the fast path was taken and no seat is consumed
-        — a whole-ledger `any(> FOCUS_FLAT)` scan would wrongly report aged."""
-        state, gd, objective = _two_gear_candidate_fixture()
-        stale = {("boots_slot", "copper_boots"): FOCUS_FLAT + 50}  # not a candidate
-        d = decide_tree(state, gd, objective, band_adequate=False, focus=stale, seats={})
-        assert d.aged_pick is False
-
-    def test_aged_pick_true_when_a_candidate_is_aged(self):
-        """The gear branch's pick goes through the interleave IFF some CANDIDATE
-        has aged past the flat window -> aged_pick True (a seat is consumed)."""
-        state, gd, objective = _two_gear_candidate_fixture()
-        focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT + 50}  # a real candidate
-        d = decide_tree(state, gd, objective, band_adequate=False, focus=focus, seats={})
-        assert d.aged_pick is True
-
-    def test_aged_pick_true_via_achievability_alone(self):
-        """Task 4 review finding (Important 3): `test_aged_pick_false_when_
-        all_candidates_unaged` only proves `aged_pick` False when BOTH the
-        `_two_gear_candidate_fixture` items are fully held (`_effort_for`
-        returns 0 for each -> achievability collapses to `Fraction(1)` for
-        both, same as if achievability didn't exist) -- it never exercises
-        `aged_pick` flipping True from achievability with focus and synergy
-        BOTH inert. No new scaffolding needed: the already-pinned `l1_fresh`
-        scenario (`test_l1_fresh_pins_weapon_gear_branch`) has 7 structural
-        candidates over materials the level-1 character does NOT yet hold
-        (copper_dagger etc. need gathered ore), so their `_effort_for` is
-        strictly positive and unequal to `small_health_potion`'s (a stocked
-        utility candidate, effort 0) -- verified directly:
-        `_achievability_map` on this scenario returns `Fraction(707, 1336)`
-        for every structural candidate and exactly `Fraction(1)` only for
-        the fully-stocked utility one, so `all(... == Fraction(1))` is FALSE
-        purely from achievability. `_decide` wires no focus/seats (both
-        default to the empty/inert case) and `decide_tree`'s own
-        `enable_synergy` defaults to False, so synergy is `_NO_SYNERGY`
-        (inert) too -- achievability is the ONLY non-inert factor in play."""
-        d, _ = _decide("l1_fresh")
-        assert d.aged_pick is True
+        assert objective_candidates(state, zero_stats_gd, objective) == []
 
 
 # --- Achievability acceptance witness (Task 6) -------------------------------
@@ -730,6 +654,18 @@ def _ordered_candidates(state: WorldState, gd: GameData) -> list[GearCandidate]:
                   + _utility_candidates(state, gd, objective))
     achievability = _achievability_map(candidates, state, gd)
     return focus_aging_order(candidates, {}, {}, {}, achievability)
+
+
+def test_achievability_map_of_no_candidates_is_inert() -> None:
+    """`_achievability_map`'s empty guard, directly.
+
+    It exists because `min(efforts.values())` raises on an empty sequence, and
+    `{}` is the inert map every `.get(..., Fraction(1))` lookup reads as "no
+    penalty". Wave 3a made this a direct unit: `decide_tree` used to reach the
+    empty case whenever a state had no gear candidates, and it no longer calls
+    this function at all."""
+    assert _achievability_map([], scenario_state(SCENARIOS["l1_fresh"]),
+                              _bundle()) == {}
 
 
 class TestAchievabilityReversalWitness:

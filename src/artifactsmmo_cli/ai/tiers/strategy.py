@@ -357,23 +357,18 @@ class StrategyEngine:
 
     def decide(self, state: WorldState, game_data: GameData,
                step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
-               band_adequate: bool = False,
                ctx: SelectionContext = NO_PROFILE_CONTEXT,
-               focus: Mapping[tuple[str, str], int] = _NO_FOCUS,
-               seats: Mapping[str, int] = _NO_SEATS,
-               committed_root_code: str | None = None,
-               enable_synergy: bool = False,
-               store: LearningStore | None = None,
+               history: LearningStore | None = None,
                ) -> StrategyDecision:
-        """THE FLIP (Phase 4b): thin delegate to the progression tree — the
-        flat scalar ranking pipeline is deleted (Task 2). The tree is
-        deterministic, so decide-level sticky scoring and the learned blend
-        are gone with it; arbiter-level commitment (objective-committed
-        arbitration, zombie release) is unaffected.
+        """Thin delegate to the progression tree, which since wave 3a RESOLVES
+        the root through `ai/decisions/root.py` instead of ranking candidates.
 
-        `band_adequate` is the caller's progression-band verdict (see
-        `GamePlayer._tree_band_adequate`); `step_servable` keeps the
-        plannability demotion alive across the cutover (see
+        Six parameters went with the ranking — `band_adequate`, `focus`,
+        `seats`, `committed_root_code`, `enable_synergy` and `store` (renamed
+        `history`). See `progression_tree.decide_tree` for why each one has no
+        reader left.
+
+        `step_servable` keeps the plannability demotion alive (see
         `progression_tree._servable_promotion`). `ctx` is the caller's
         per-cycle `SelectionContext` (see `GamePlayer._decide_band` /
         `plan_from_state`), forwarded to every `actionable_step` call so the
@@ -383,30 +378,11 @@ class StrategyEngine:
         map). Defaults to `NO_PROFILE_CONTEXT` for every caller that doesn't
         wire it in.
 
-        `focus`/`seats` (arbiter anti-starvation epic, Task 4; Task 12 perf)
-        are forwarded straight through to `decide_tree`'s aging pick/order —
-        see that docstring. `seats` is the incremental d'Hondt seat accumulator
-        (O(candidates) per decision, replacing the unbounded global cycle
-        index). Both default to the empty-focus / empty-seats case, reproducing
-        today's plain argmax for every caller that doesn't wire the ledger
-        in.
-
-        `committed_root_code` (the prior cycle's committed root item, or None)
-        and `enable_synergy` (the player's opt-in) feed the synergy weighting in
-        `decide_tree` (spec 2026-07-19 §3). Both default to the inert case, so
-        every caller that does not opt in is byte-identical to today.
-
-        `store` is the learning store the unified objective `J` projects against,
-        and supplying it IS the opt-in: with a store the branch is chosen by `J`
-        (`tiers/branch_objective`), without one by the legacy `branch_pick_pure`
-        pivot. One parameter carries both the data channel and the switch because
-        `J` is not merely disabled without observations — it is undefined, since
-        `cheapest_path_to_level` cannot project a path without them. A separate
-        boolean flag could be set True with no store to project against, which is
-        a state that has no meaning."""
+        `history` is the learning store the root walk's own nodes read —
+        `IsMyGearBehindMyTier` passes it to `gear_targets_with_blockers` and
+        `CanIClearMyTier` to `next_uncleared_tier`. None is a legitimate
+        answer, not a disabled mode: both fall back to the state-only verdict
+        the same way every other `Decision` in the codebase does."""
         return progression_tree.decide_tree(
             state, game_data, self.objective,
-            band_adequate=band_adequate, step_servable=step_servable,
-            ctx=ctx, focus=focus, seats=seats,
-            committed_root_code=committed_root_code,
-            enable_synergy=enable_synergy, store=store)
+            step_servable=step_servable, ctx=ctx, history=history)

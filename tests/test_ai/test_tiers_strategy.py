@@ -1,6 +1,7 @@
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -146,15 +147,66 @@ def test_decide_delegates_to_the_progression_tree():
     assert eng.decide(state, gd) == decide_tree(state, gd, obj)
 
 
-def test_decide_forwards_band_adequate_and_step_servable():
-    """The two live parameters pass through to `decide_tree` unchanged."""
+def test_decide_forwards_step_servable_and_it_changes_the_answer():
+    """`step_servable` passes through to `decide_tree` — and the predicate
+    chosen here REJECTS every `ObtainItem` pair, so the delegate cannot agree
+    with the engine by accident: the two sides must both take the promotion.
+
+    Anti-vacuity is the second assert. Without it a delegate that silently
+    dropped `step_servable` would still satisfy the equality (both sides would
+    drop it identically), which is exactly the shape of pass-through test this
+    epic has been shipping."""
     gd = _gd()
     obj = CharacterObjective.from_game_data(gd)
     eng = StrategyEngine(objective=obj)
     state = make_state(level=5, skills={"mining": 3})
     servable = lambda root, step: not isinstance(root, ObtainItem)  # noqa: E731
-    assert eng.decide(state, gd, band_adequate=True, step_servable=servable) \
-        == decide_tree(state, gd, obj, band_adequate=True, step_servable=servable)
+    assert eng.decide(state, gd, step_servable=servable) \
+        == decide_tree(state, gd, obj, step_servable=servable)
+    assert eng.decide(state, gd, step_servable=servable) != eng.decide(state, gd)
+
+
+class _HistorySpyObjective(CharacterObjective):
+    """A `CharacterObjective` that records the `history` its blocker walk was
+    handed. Not a stand-in for the walk's ANSWER — it returns `{}`, which is a
+    real answer meaning "the gear sheet wants nothing" — only for the argument,
+    which is the one thing the test is about."""
+
+    seen: list[object]
+
+    def gear_targets_with_blockers(self, state, history):  # type: ignore[override]
+        self.seen.append(history)
+        return {}
+
+
+def test_decide_forwards_history_into_the_root_walk():
+    """`history` replaces `store` and must reach the graph's own nodes.
+
+    `IsMyGearBehindMyTier` hands it to `gear_targets_with_blockers` and
+    `CanIClearMyTier` to `next_uncleared_tier`; a delegate that dropped it
+    would silently give every character the state-only verdict, which is a
+    DIFFERENT decision, not a degraded one — `gear_target_tier` reads learned
+    win history to decide which rung to gear for.
+
+    Asserted on the argument rather than on the resulting decision because a
+    decision-level assertion needs a store whose contents actually move the
+    tier, and that is a fixture whose own correctness would then be doing the
+    work. Both a real store and None are checked, so a delegate hard-coding
+    either one fails."""
+    gd = _gd()
+    obj = _HistorySpyObjective.from_game_data(gd)
+    obj.seen = []
+    engine = StrategyEngine(objective=obj)
+    state = make_state(level=5, skills={"mining": 3})
+    store = LearningStore(db_path=":memory:", character="probe")
+    store.start_session()
+    try:
+        engine.decide(state, gd, history=store)
+        engine.decide(state, gd)
+    finally:
+        store.close()
+
+    assert obj.seen == [store, None]
 
 
 def test_unmet_closure_size_dedups_shared_prereq():
@@ -165,9 +217,19 @@ def test_unmet_closure_size_dedups_shared_prereq():
     assert unmet_closure_size(ObtainItem("X"), make_state(), gd) == 4  # X,A,B,C once each
 
 
-def test_decide_skips_blocked_unmet_root():
-    # A weapon whose only recipe is self-referential → its gear root is unmet
-    # but has no actionable step, so decide skips it (the `step is None` path).
+def test_a_self_blocked_root_is_reported_then_demoted_by_servability():
+    """WAVE 3a moved this. It used to assert that a root with no actionable
+    step was FILTERED OUT of the ranking — a property of the scored candidate
+    pass, which no longer exists. The graph does not filter: `IsThisTargetBlocked`'s
+    own-blocker arm names the item itself and says so (`root.py`: "the root is
+    the item itself and the step graph owns the rest"), so a wall is REPORTED
+    rather than hidden behind a silently shorter list.
+
+    What still has to hold is the guarantee the old filter was buying — the bot
+    must not commit to a root it cannot serve — and post-flip that guarantee is
+    `step_servable`. Both halves are asserted, because the first alone would
+    read as an accepted regression.
+    """
     gd = GameData()
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
@@ -175,11 +237,17 @@ def test_decide_skips_blocked_unmet_root():
     gd._crafting_recipes = {"cursed_blade": {"cursed_blade": 1}}
     obj = CharacterObjective.from_game_data(gd)
     eng = StrategyEngine(obj)
+    blocked = ObtainItem(code="cursed_blade", quantity=1, slot="weapon_slot")
+
     d = eng.decide(make_state(level=5), gd)
-    # the cursed_blade gear root is excluded from ranking (blocked)
-    assert all("cursed_blade" not in rs.root_repr for rs in d.ranking)
-    # but other roots (skills/level) still produce a decision
-    assert d.chosen_root is not None
+    assert d.chosen_root == blocked
+    assert any("cursed_blade" in rs.root_repr for rs in d.ranking)
+
+    served = eng.decide(
+        make_state(level=5), gd,
+        step_servable=lambda root, step: root != blocked)
+    assert served.chosen_root == ReachCharLevel(level=10)
+    assert served.promoted_from == blocked
 
 
 def test_root_cost_is_levels_remaining_for_char_level():
@@ -329,29 +397,55 @@ def test_actionable_step_descends_to_material_for_underskill_craftable() -> None
     assert step == ObtainItem("thread", 3)
 
 
-def test_decide_skips_root_unreachable_in_current_game_data():
-    # Objective built from data where iron_helm is craftable (attainable → targeted),
-    # but decide() runs against game data lacking that production → the tree's
-    # candidate pass finds no stats for it → the root is skipped.
+def test_an_objective_and_game_data_that_disagree_is_an_error_not_a_skip():
+    """WAVE 3a moved this. It used to assert that a target absent from the
+    game data `decide()` runs against is quietly dropped from the ranking —
+    the old candidate pass did `if stats is None: continue`.
+
+    The graph does not skip it, and must not: `root._target_rung` raises,
+    because an item the objective picked as a gear target and the catalogue
+    does not know is a DATA FAULT, and a silently-substituted rung would rank
+    it (`_target_rung`'s own docstring, and the project rule that missing API
+    data fails rather than defaults). This pairing — an objective built from
+    one catalogue, a decision run against another — is a shape production
+    never builds: `GamePlayer` loads one `GameData` and hands the same object
+    to both. So the honest statement is not "it is skipped" but "it is
+    refused, by name"."""
     gd_full = _reach_gd()
     obj = CharacterObjective.from_game_data(gd_full)
     assert obj.target_gear.get("helmet_slot") == "iron_helm"
     gd_empty = GameData()
     gd_empty._monster_level = {"chicken": 1}  # char reachable; iron_helm not producible here
     fill_monster_stat_defaults(gd_empty)
-    d = StrategyEngine(obj).decide(make_state(level=5), gd_empty)
-    assert all("iron_helm" not in rs.root_repr for rs in d.ranking)
+    with pytest.raises(ValueError, match="no item stats in game data"):
+        StrategyEngine(obj).decide(make_state(level=5), gd_empty)
 
 
-def test_unattainable_gear_not_targeted_but_craftable_is():
+def test_unattainable_gear_is_off_the_target_sheet_but_on_the_blocker_sheet():
+    """WAVE 3a moved the second half of this. `near_term_gear` still drops the
+    unattainable weapon (first two asserts, unchanged), but the resolution walk
+    does not read `near_term_gear` — it reads `gear_targets_with_blockers`, the
+    wave-2 walk built specifically so an unattainable target is reported WITH
+    what stands in front of it instead of dropped on the floor.
+
+    So `drop_blade` is now in the ranking, carrying its own code as its blocker,
+    and the walk chose it. That is a real live behaviour change and it is
+    asserted in full rather than trimmed to the part that still passes —
+    see `.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md`, which flags
+    the ordering (a drop-only weapon ahead of a craftable helm) as the flip's
+    largest open question."""
     gd = _reach_gd()  # drop_blade unattainable; iron_helm craftable-from-gatherables
     obj = CharacterObjective.from_game_data(gd)
     assert "weapon_slot" not in obj.target_gear           # drop_blade excluded at build
     assert obj.target_gear.get("helmet_slot") == "iron_helm"
+    assert obj.gear_targets_with_blockers(make_state(level=5), None)[
+        "weapon_slot"].blocker == "drop_blade"
     d = StrategyEngine(obj).decide(make_state(level=5), gd)
     reprs = [rs.root_repr for rs in d.ranking]
     assert any("iron_helm" in r for r in reprs)            # craftable gear is a candidate
-    assert all("drop_blade" not in r for r in reprs)
+    assert any("drop_blade" in r for r in reprs)
+    assert d.chosen_root == ObtainItem(code="drop_blade", quantity=1,
+                                       slot="weapon_slot")
 
 
 def _combat_gd() -> GameData:

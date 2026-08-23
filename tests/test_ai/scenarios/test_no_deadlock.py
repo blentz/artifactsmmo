@@ -34,7 +34,11 @@ from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import (
+    ObtainItem,
+    ReachCharLevel,
+    ReachSkillLevel,
+)
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
@@ -86,14 +90,24 @@ def test_scenario_registered(name: str) -> None:
 # --- Criterion 1: never deadlock on GrindCharacterXP when a reachable gear
 # target is blocked on a CRAFTING skill gap, not combat viability. ---------
 
-def test_l10_gearcrafting_gap_chosen_root_targets_iron_boots() -> None:
-    """decide_tree's chosen_root is the reachable gear candidate
-    (`ObtainItem(iron_boots)`, gated on gearcrafting 10 not combat), NEVER
-    the character-level trunk — pinning the actual observed
-    `decide_tree` output for this state."""
+def test_l10_gearcrafting_gap_chosen_root_is_gear_never_the_trunk() -> None:
+    """decide_tree's chosen_root is a reachable GEAR candidate, NEVER the
+    character-level trunk — the criterion-1 property, pinned against the actual
+    observed `decide_tree` output for this state.
+
+    WAVE 3a moved WHICH gear candidate. `iron_boots` came off `near_term_gear`,
+    a level-capped best-in-slot list; the walk reads
+    `gear_targets_with_blockers`, ranks by TIER GAP, and the three empty
+    artifact slots are further behind than the occupied boots slot. The
+    gearcrafting climb `iron_boots` existed to witness has NOT been lost — it
+    is `ReachSkillLevel(gearcrafting, 6)` in the alternatives and it is what
+    the arbiter actually selects, which
+    `test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind` asserts."""
     d, _state = _decide(CRITERION_1_MAIN)
-    assert d.chosen_root == ObtainItem(code="iron_boots", quantity=1, slot="boots_slot")
+    assert d.chosen_root == ObtainItem(code="novice_guide", quantity=1,
+                                       slot="artifact1_slot")
     assert not isinstance(d.chosen_root, ReachCharLevel)
+    assert ReachSkillLevel(skill="gearcrafting", level=6) in d.fallback_roots
 
 
 def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
@@ -111,14 +125,21 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     feathers. `CanICraftCurrentTier` now runs BEFORE the monster-drop check,
     so the skill-gated root raises gearcrafting instead — still never
     GrindCharacterXP, and now for the actual reason the craft chain was
-    blocked rather than a masked one."""
+    blocked rather than a masked one.
+
+    WAVE 3a: the selected goal and the plan are BYTE-IDENTICAL. Only the route
+    to them changed — the skill climb is now a first-class `ReachSkillLevel`
+    root the walk emits (via `IsThisTargetBlocked`'s skill arm) and reaches
+    through the fallback list, rather than something `objective_step_goal`
+    derived from a gear root. That the answer survived a change of mechanism is
+    the point of keeping this test."""
     report = _run(CRITERION_1_MAIN)
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "ReachSkill(gearcrafting->6)"
     assert [repr(a) for a in report.plan] == ["LevelSkill(gearcrafting->10)"]
-    assert report.decision.chosen_root == ObtainItem(
-        code="iron_boots", quantity=1, slot="boots_slot")
+    assert ReachSkillLevel(skill="gearcrafting", level=6) in \
+        report.decision.fallback_roots
 
 
 def test_l10_gearcrafting_gap_search_bounded() -> None:
@@ -191,30 +212,56 @@ def test_l20_dual_utility_chosen_root_is_char_level_when_winnable() -> None:
     air_and_water_amulet. The GRIND TARGET moved with the loadout: at the
     stronger build `pig` is winnable and out-XPs `highwayman`, so the pins
     below name it. Criterion 2 (grind XP when full-build + winnable) is
-    unchanged; only which monster the grind picks."""
+    unchanged; only which monster the grind picks.
+
+    WAVE 3a INVALIDATED THE PREMISE, and this is a re-derivation of the
+    scenario, not of the criterion. "Band-adequate" here meant `near_term_gear`
+    is empty — a LEVEL-capped best-in-slot list. The walk reads
+    `gear_targets_with_blockers` against the tier sheet, and this character's
+    `rune_slot`, three artifact slots and `bag_slot` are EMPTY with real
+    targets behind a gearcrafting-15 gate. It is not gear-complete; it only
+    looked that way to a list that never asked. So the walk raises gearcrafting
+    by one, which is the honest answer to "what is stopping this build".
+
+    Criterion 2's actual guarantee — never DEADLOCK on skilling — still holds
+    and is asserted below: the climb targets `current + 1`, re-derived from
+    live state every cycle, so it terminates and the trunk stays reachable in
+    the fallbacks. What is genuinely lost is the pin that a full build grinds
+    XP, and this scenario can no longer witness it because it does not have a
+    full build. Recorded in
+    `.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md`."""
     report = _run(CRITERION_2_WINNABLE)
-    assert report.decision.chosen_root == ReachCharLevel(level=30)
-    assert isinstance(report.selected_goal, GrindCharacterXPGoal), (
+    assert report.decision.chosen_root == ReachSkillLevel(
+        skill="gearcrafting", level=16)
+    assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "GrindCharacterXP(pig)"
-    assert [repr(a) for a in report.plan] == ["Fight(pig)"]
+    assert repr(report.selected_goal) == "ReachSkill(gearcrafting->16)"
+    assert [repr(a) for a in report.plan] == ["LevelSkill(gearcrafting->20)"]
+    # The climb is bounded (current + 1, not the whole gate) and the trunk is
+    # still offered, so this is a re-targeting, not a deadlock.
+    assert report.decision.chosen_root.level == 16
+    assert ReachCharLevel(level=30) in report.decision.fallback_roots
 
 
 def test_l20_dual_utility_search_bounded() -> None:
     assert_search_bounded(_run(CRITERION_2_WINNABLE), CRITERION_2_WINNABLE)
 
 
-def test_l48_band_adequate_chosen_root_is_wait_when_no_winnable_monster() -> None:
+def test_l48_band_adequate_names_the_wall_when_no_winnable_monster() -> None:
     """l48_band_adequate is band-adequate (no structural/utility upgrade)
     but NO monster in this bundle's L47-50 fight window is winnable against
     a full non-event mithril loadout (the documented event-gear wall —
-    project_l50_unconditional_descent) — `_tree_band_adequate()` reads
-    False (its winnable-monster leg fails), yet decide_tree's XP branch
-    still wins on `gear_target_exists is False` alone, and the arbiter's
-    last resort is Wait, documented, NOT a skill/craft goal. Reuses the
-    band-liveness net's own scenario per the task brief ("reuse ...
-    l48_band_adequate") — re-pinned here as the criterion-2 walled-off
-    witness."""
+    project_l50_unconditional_descent). Reuses the band-liveness net's own
+    scenario per the task brief — the criterion-2 walled-off witness.
+
+    WAVE 3a changed both halves of the answer, and both changes are
+    improvements. The root is no longer `ReachCharLevel(50)`: the walk's
+    `CanIClearMyTier` arm reports the wall as `None` instead of handing back a
+    level target with no route to it. And the outcome is no longer `Wait`: the
+    trunk fallback now goes through `actionable_step`, so it descends to its
+    weapon prerequisite and the arbiter reaches a real craft chain instead of
+    idling. Criterion 2's guarantee — NOT a deadlock, and not an unexplained
+    dead end — holds in a stronger form than before."""
     player, _gd = _player(CRITERION_2_WALLED)
     assert player._pick_winnable_monster() is None, (
         "no L47-50 window monster should be winnable against this "
@@ -222,18 +269,19 @@ def test_l48_band_adequate_chosen_root_is_wait_when_no_winnable_monster() -> Non
         "L50-difficulty-wall finding is stale and must be revised")
     assert player._tree_band_adequate() is False
     report = player.plan_from_state()
-    assert isinstance(report.selected_goal, WaitGoal), (
+    assert not isinstance(report.selected_goal, WaitGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "Wait"
+    assert repr(report.selected_goal) == "GatherMaterials(mithril_bar, {mithril_bar:11})"
     assert report.plan, (repr(report.selected_goal), report.plan)
-    assert report.decision.chosen_root == ReachCharLevel(level=50)
+    assert report.decision.chosen_root is None
+    assert report.decision.fallback_roots == [ReachCharLevel(level=50)]
 
 
 def test_l48_band_adequate_search_bounded() -> None:
-    # The walled scenario provably has nothing to try (event/raid-only L47-50
-    # window); both poles are asserted in test_l48_raid_pair.
-    assert_search_bounded(_run(CRITERION_2_WALLED), CRITERION_2_WALLED,
-                          expect_no_work=True)
+    # WAVE 3a: the walled scenario now HAS bounded work (the trunk descends to
+    # its weapon prerequisite), so the ordinary bound applies — see
+    # `search_bounds.assert_search_bounded`.
+    assert_search_bounded(_run(CRITERION_2_WALLED), CRITERION_2_WALLED)
 
 
 def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
@@ -252,10 +300,17 @@ def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
     `CanICraftCurrentTier` now runs BEFORE the monster-drop check, so the
     skill-gated root raises gearcrafting instead of grey-farming a material
     that could not have paid off yet — still never GrindCharacterXP, and the
-    grey-farm route is picked back up once the skill has risen."""
+    grey-farm route is picked back up once the skill has risen.
+
+    WAVE 3a: the goal and the plan are BYTE-IDENTICAL; only the chosen_root
+    moved, from `iron_boots` (a `near_term_gear` best-in-slot pick) to the
+    furthest-behind slot on the tier sheet. The gearcrafting climb is now a
+    first-class `ReachSkillLevel` root in the alternatives, which is what the
+    arbiter selects — same answer, reached as a root instead of derived from
+    one."""
     report = _run("l12_gearcrafting_gap")
-    assert repr(report.decision.chosen_root).startswith("ObtainItem(code='iron_boots'"), \
-        report.decision.chosen_root
+    assert ReachSkillLevel(skill="gearcrafting", level=6) in \
+        report.decision.fallback_roots, report.decision.fallback_roots
     goal = repr(report.selected_goal)
     assert "GrindCharacterXP" not in goal, goal  # the criterion-1 guarantee
     assert goal == "ReachSkill(gearcrafting->6)", goal

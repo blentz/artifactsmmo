@@ -32,17 +32,17 @@ def test_plan_from_state_runs_offline() -> None:
 def test_plan_from_state_decision_is_the_tree_decision() -> None:
     """Phase 4b (THE FLIP): `report.decision` IS the progression-tree
     decision — there is no separate shadow (`tree_decision`/`enacted_engine`
-    died with the flag). l10_weapon_upgrade is gear-branch (weapon slot lags
-    a tier, band inadequate), so the chosen_root is the weapon-slot
-    ObtainItem the tree pins (see test_progression_tree's per-scenario
-    pins)."""
+    died with the flag). l10_weapon_upgrade is gear-branch, so the chosen_root
+    is the gear ObtainItem the tree pins — the SHIELD slot since wave 3a (see
+    test_progression_tree's per-scenario pins and that module's docstring for
+    why the gear-target tier is 1 under this fixture)."""
     gd = load_bundle_game_data(BUNDLE)
     sc = SCENARIOS["l10_weapon_upgrade"]
     player = GamePlayer(character=sc.name, history=None)
     player.seed_offline(scenario_state(sc), gd)
     report = player.plan_from_state()
     assert isinstance(report.decision.chosen_root, ObtainItem)
-    assert report.decision.chosen_root.slot == "weapon_slot"
+    assert report.decision.chosen_root.slot == "shield_slot"
     # The single decision is what the player stashed for trace/observer use.
     assert player._last_decision is not None
     assert repr(player._last_decision.chosen_root) == repr(report.decision.chosen_root)

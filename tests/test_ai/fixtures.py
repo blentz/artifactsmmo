@@ -1,11 +1,42 @@
 """Shared test fixtures for AI module tests."""
 
+from unittest.mock import MagicMock
+
 import attrs
 from artifactsmmo_api_client.models.character_schema import CharacterSchema
+from artifactsmmo_api_client.models.item_schema import ItemSchema
 from artifactsmmo_api_client.models.map_layer import MapLayer
 
+from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
+
+LADDER_ITEM_STATS: dict[str, ItemStats] = {
+    "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
+                              attack={"air": 2}),
+}
+"""The smallest equippable catalogue a decision can be taken against.
+
+The tier ladder is DERIVED from the equippable items in game data
+(`tier_ladder.ladder`), and since wave 3a every decision walks it:
+`gear_target_tier` calls `tier_of_level`, which raises rather than inventing a
+rung for a catalogue with no equipment. That refusal is correct — the project
+rule is to use API data or fail — so the fixtures stop asserting a world the
+API cannot produce. Any hand-built `GameData` a `StrategyEngine.decide` or
+`decide_tree` call will see needs at least this."""
+
+
+def one_equippable_item_page() -> "MagicMock":
+    """`LADDER_ITEM_STATS` as a `get_all_items` page, for run-loop tests that
+    stub the whole API and let `GameData.load` build the catalogue itself.
+
+    Same reason as `LADDER_ITEM_STATS`: a loaded catalogue with zero equippable
+    items has no ladder, and since wave 3a the decision walks the ladder every
+    cycle."""
+    stats = LADDER_ITEM_STATS["wooden_stick"]
+    return MagicMock(data=[ItemSchema(
+        name="Wooden Stick", code=stats.code, level=stats.level,
+        type_=stats.type_, subtype="", description="", tradeable=True)])
 
 
 def make_character_schema(**overrides) -> CharacterSchema:

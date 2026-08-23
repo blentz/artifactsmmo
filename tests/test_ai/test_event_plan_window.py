@@ -227,6 +227,25 @@ def test_classifier_ignores_non_targeting_actions():
     assert _event_only_target(MoveAction(x=1, y=1), _gd()) is None
 
 
+def test_classifier_ignores_plain_resources():
+    """The GATHER mirror of `test_classifier_ignores_plain_content`: a resource
+    that is not in the event registry at all is never window-gated, whatever
+    its tiles.
+
+    Added by wave 3a. This arm used to be reached only incidentally, by
+    whichever scenario happened to plan a gather while the window gate ran —
+    `l35_artifact_fill`'s small_pearls route, which the flip removed. An arm
+    covered by accident is one bad day away from being covered by nothing, so
+    it gets the direct unit its Fight-side twin already had."""
+    from artifactsmmo_cli.ai.event_plan_window import _event_only_target
+    gd = _gd()
+    gd._resource_drops = {"ash_tree": "ash_wood"}
+    gd._resource_locations = {"ash_tree": [(2, 2)]}
+    gather = GatherAction(resource_code="ash_tree",
+                          locations=frozenset({(2, 2)}))
+    assert _event_only_target(gather, gd) is None
+
+
 def test_classifier_flags_event_only_resources():
     from artifactsmmo_cli.ai.event_plan_window import _event_only_target
     gd = _gd()

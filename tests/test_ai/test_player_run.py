@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from artifactsmmo_api_client.models.item_schema import ItemSchema
 from sqlmodel import Session as SqlSession
 from sqlmodel import select
 
@@ -40,7 +41,14 @@ def make_minimal_game_data() -> GameData:
     gd._resource_locations = {}
     gd._workshop_locations = {}
     gd._bank_location = (4, 0)
-    gd._item_stats = {}
+    # ONE equippable item, and it is not decoration: the tier ladder is DERIVED
+    # from the equippable catalogue (`tier_ladder.ladder`), and since wave 3a
+    # every decision walks it — `gear_target_tier` calls `tier_of_level`, which
+    # refuses an empty catalogue rather than inventing a rung. A game with no
+    # equippable items is not a state the API can produce, so the fixture stops
+    # asserting it.
+    gd._item_stats = {"wooden_stick": ItemStats(
+        code="wooden_stick", level=1, type_="weapon", attack={"air": 2})}
     gd._crafting_recipes = {}
     gd._resource_skill = {}
     gd._monster_level = {"chicken": 1}
@@ -60,15 +68,32 @@ class _NoopCache:
         return None
 
 
+def _one_equippable_item() -> ItemSchema:
+    """The smallest item catalogue that is not a fiction.
+
+    The tier ladder is DERIVED from the equippable catalogue
+    (`tier_ladder.ladder`), and since wave 3a every decision walks it —
+    `gear_target_tier` calls `tier_of_level`, which refuses an empty catalogue
+    rather than inventing a rung, per the project's no-defaulting-around-API-
+    data rule. A live game always has equippable items, so a fixture that
+    loaded zero of them was asserting a world the API cannot produce; the run
+    loop then only appeared to work because nothing consulted the ladder."""
+    return ItemSchema(name="Wooden Stick", code="wooden_stick", level=1,
+                      type_="weapon", subtype="", description="",
+                      tradeable=True)
+
+
 @contextlib.contextmanager
 def _patch_game_data_load():
     """Stub all GameData API calls + the disk cache for run-loop tests."""
     empty = MagicMock(data=[])
     with contextlib.ExitStack() as stack:
-        for name in ("get_all_maps", "get_all_items", "get_all_resources",
+        for name in ("get_all_maps", "get_all_resources",
                      "get_all_monsters", "get_all_npc_items", "get_all_tasks",
                      "get_all_events", "get_all_effects", "get_ge_orders"):
             stack.enter_context(patch(f"artifactsmmo_cli.ai.game_data.{name}", return_value=empty))
+        stack.enter_context(patch("artifactsmmo_cli.ai.game_data.get_all_items",
+                                  return_value=MagicMock(data=[_one_equippable_item()])))
         stack.enter_context(patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None))
         stack.enter_context(patch("artifactsmmo_cli.ai.game_data.get_account_details", return_value=None))
         stack.enter_context(patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache))

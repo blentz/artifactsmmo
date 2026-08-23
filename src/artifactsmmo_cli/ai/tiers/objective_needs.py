@@ -33,6 +33,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
+    ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -99,6 +100,26 @@ def objective_needs(root: MetaGoal, state: WorldState, game_data: GameData) -> N
     if isinstance(root, ReachCharLevel):
         return NeedSet(frozenset(), frozenset(), frozenset(),
                        char_xp=state.level < root.level)
+    if isinstance(root, ReachSkillLevel):
+        # Wave 3a THE FLIP. A skill climb's one unmet need is XP in that skill,
+        # and `NeedSet.skill_xp` is exactly the set `means_worth._task_need_
+        # overlap` intersects the held task's craft/gather chain against. Before
+        # the flip nothing could hand this function a `ReachSkillLevel`, so the
+        # empty fallthrough below was unreachable for it; the moment the root
+        # graph could resolve one, that fallthrough would have returned an EMPTY
+        # NeedSet and switched the arbiter's PURSUE_TASK worth gate OFF for the
+        # whole climb — `means_serves` returns True unconditionally on an empty
+        # need set. A live gate silently disabled by a new root kind is not a
+        # deletion anyone reviewed, so the arm lands with the flip that makes it
+        # reachable, not after it.
+        #
+        # Emptiness mirrors the `ReachCharLevel` arm above: the need is stated
+        # only while it is UNMET. `.get(..., 1)` is the skill floor this
+        # codebase reads everywhere (`ReachSkillLevel.is_satisfied`,
+        # `IsThisTargetBlocked`), not 0.
+        unmet = state.skills.get(root.skill, 1) < root.level
+        return NeedSet(frozenset(), frozenset({root.skill} if unmet else ()),
+                       frozenset(), char_xp=False)
     if isinstance(root, ObtainItem):
         if _owned(root.code, state) >= root.quantity:
             return NeedSet(frozenset(), frozenset(), frozenset(), char_xp=False)
