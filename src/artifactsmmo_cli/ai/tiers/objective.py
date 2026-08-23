@@ -299,11 +299,21 @@ class GearTarget:
     weapons each unlocked a fight Robby could not win, every one failed
     `is_attainable_now`, so the best surviving candidate was the battlestaff he
     already wore and no weapon root existed at all.
+
+    The blocker is typed rather than a formatted string a consumer would have
+    to parse back apart. `blocking_skill`/`blocking_skill_level` carry the
+    skill gate (`_classify_target`'s first, unconditionally-blocking check);
+    `blocker` carries the code of the material still out of reach (or the
+    target's own code, when it is a leaf with no recipe). Exactly one of
+    `blocking_skill` and `blocker` is set when `attainable` is False; both are
+    unset (`None`) when `attainable` is True.
     """
 
     code: str
     attainable: bool
     blocker: str | None
+    blocking_skill: str | None = None
+    blocking_skill_level: int = 0
 
 
 @dataclass(frozen=True)
@@ -435,16 +445,16 @@ class CharacterObjective:
         if (stats is not None and stats.crafting_skill
                 and state.skills.get(stats.crafting_skill, 1) < stats.crafting_level):
             return GearTarget(
-                code=code, attainable=False,
-                blocker=f"skill:{stats.crafting_skill}:{stats.crafting_level}")
+                code=code, attainable=False, blocker=None,
+                blocking_skill=stats.crafting_skill,
+                blocking_skill_level=stats.crafting_level)
         if is_attainable_now(code, state, self._game_data):
             return GearTarget(code=code, attainable=True, blocker=None)
         recipe = self._game_data.crafting_recipe(code) or {}
         for material in sorted(recipe):
             if not is_attainable_now(material, state, self._game_data):
-                return GearTarget(code=code, attainable=False,
-                                  blocker=f"material:{material}")
-        return GearTarget(code=code, attainable=False, blocker=f"material:{code}")
+                return GearTarget(code=code, attainable=False, blocker=material)
+        return GearTarget(code=code, attainable=False, blocker=code)
 
     def utility_potion_targets(self, state: WorldState) -> dict[str, str]:
         """The utility-slot heal(s) to pursue, judged by EFFECT not level

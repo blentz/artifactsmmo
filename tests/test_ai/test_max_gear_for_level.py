@@ -19,8 +19,10 @@ def test_an_unattainable_target_is_kept_and_carries_its_blocker(bundle_game_data
     assert "weapon_slot" in targets, "the weapon slot must produce a target"
     weapon = targets["weapon_slot"]
     assert weapon.attainable is False
-    assert weapon.blocker == "material:wooden_stick", \
-        "unattainable target must name its exact blocker"
+    assert weapon.blocking_skill is None, \
+        "this target is material-blocked, not skill-blocked"
+    assert weapon.blocker == "wooden_stick", \
+        "unattainable target must name its exact blocking material"
 
 
 def test_tier_cap_bounds_the_candidate_set(bundle_game_data):
@@ -77,6 +79,7 @@ def test_attainable_target_is_reported_attainable_with_no_blocker(bundle_game_da
     assert helmet.code == "copper_helmet"
     assert helmet.attainable is True
     assert helmet.blocker is None
+    assert helmet.blocking_skill is None
 
 
 def test_every_unattainable_target_names_a_blocker(bundle_game_data):
@@ -90,7 +93,8 @@ def test_every_unattainable_target_names_a_blocker(bundle_game_data):
     for slot, target in objective.gear_targets_with_blockers(state, None).items():
         if not target.attainable:
             examined_unattainable += 1
-            assert target.blocker is not None, f"{slot}/{target.code} has no blocker"
+            assert target.blocker is not None or target.blocking_skill is not None, \
+                f"{slot}/{target.code} has no blocker"
     # Guard against vacuous success: at level 30 with weaponcrafting 10 the
     # weapon_slot target (wooden_staff, materials from an unwinnable monster)
     # is unattainable, so this loop must actually examine it at least once.
@@ -124,7 +128,10 @@ def test_skill_blocked_target_names_skill_and_level(bundle_game_data):
     target = objective._classify_target("copper_legs_armor", state)
 
     assert target.attainable is False
-    assert target.blocker == "skill:gearcrafting:5"
+    assert target.blocker is None, \
+        "a skill-blocked target must not also carry a material blocker"
+    assert target.blocking_skill == "gearcrafting"
+    assert target.blocking_skill_level == 5
 
 
 def test_skill_gate_blocks_even_when_materials_are_reachable(bundle_game_data):
@@ -147,12 +154,16 @@ def test_skill_gate_blocks_even_when_materials_are_reachable(bundle_game_data):
     target = objective._classify_target("maple_plank", state)
 
     assert target.attainable is False
-    assert target.blocker == "skill:woodcutting:40"
+    assert target.blocker is None, \
+        "a skill-blocked target must not also carry a material blocker"
+    assert target.blocking_skill == "woodcutting"
+    assert target.blocking_skill_level == 40
 
 
 def test_unattainable_leaf_item_blocks_on_its_own_code(bundle_game_data):
     """A target with no recipe at all (a leaf item) that is not attainable now
-    blocks on itself: `material:<code>`, the fallback blocker."""
+    blocks on itself: the fallback material blocker is the target's own
+    code, with no skill involved."""
     gd = bundle_game_data
     objective = CharacterObjective.from_game_data(gd)
     state = make_state(level=30, skills={"weaponcrafting": 10})
@@ -160,4 +171,5 @@ def test_unattainable_leaf_item_blocks_on_its_own_code(bundle_game_data):
     target = objective._classify_target("wooden_stick", state)
 
     assert target.attainable is False
-    assert target.blocker == "material:wooden_stick"
+    assert target.blocking_skill is None
+    assert target.blocker == "wooden_stick"
