@@ -26,6 +26,7 @@ from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSc
 from artifactsmmo_api_client.types import Unset
 
 from artifactsmmo_cli.ai.action_kind import action_kind_of
+from artifactsmmo_cli.ai.action_rejection import is_categorical_rejection, rejection_key
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
@@ -63,6 +64,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
     RoleChange,
     RootScoreView,
 )
+from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.fight_record import FightRecord
@@ -242,6 +244,18 @@ class GamePlayer:
         # (live 476 deadlock: the RestoreHP guard looped UseConsumable). Decays
         # per cycle alongside _suppressed_goals.
         self._failed_action_backoff: dict[str, int] = {}
+        # Actions the SERVER has categorically refused (`ai/action_rejection`):
+        # 473 "invalid item for recycling" and friends say the item is not
+        # eligible for the action at all, which no state change fixes. The same
+        # memo the arbiter uses for unplannable goals, at the execution layer —
+        # one mechanism, two subjects. Keyed quantity-free by
+        # `rejection_key(action)`, NOT by repr.
+        #
+        # Live 2026-08-23: C3P0 sent `Recycle(water_boost_potion×1)` 37 times
+        # over eight hours, every one answered 473, because nothing carried the
+        # refusal back into the model. The escalating re-probe means a
+        # misclassified code self-heals instead of disabling an action forever.
+        self._rejected_actions = DoomedMemo()
         self._actions_since_full_refresh: int = 0
         # Consecutive no-cooldown action failures, driving the exponential
         # backoff that keeps a persistent error (e.g. a stuck Withdraw→478) from
@@ -1700,6 +1714,18 @@ class GamePlayer:
                 # Finer-grained learning label keyed on the structured code.
                 print(f"[{self._now()}] Action failed: {e} — refreshing state")
                 outcome = f"error:HTTP_{e.code}"
+                # A CATEGORICAL refusal means our model of what is possible is
+                # wrong, not that the state is temporarily unfavourable. Poison
+                # the action so `_build_actions` stops offering it; without this
+                # the identical impossible call is re-issued every cycle against
+                # the per-IP rate budget that binds the whole fleet.
+                if is_categorical_rejection(e.code) and self.state is not None:
+                    key = rejection_key(action)
+                    if key is not None:
+                        print(f"[{self._now()}] {key} refused categorically "
+                              f"(HTTP {e.code}) — routing around it")
+                        self._rejected_actions.mark(key, self.state,
+                                                    self._cycle_counter)
             refreshed = self._fetch_world_state(client)
             if outcome.startswith("error:HTTP_") and isinstance(
                 action, (WithdrawItemAction, DepositAllAction, DepositItemAction)
@@ -2547,8 +2573,24 @@ class GamePlayer:
         # factory here always builds the unsized one (`Gather(x×1)`), so the
         # filter would silently match nothing. See `CycleRecord.action_key`.
         if self._failed_action_backoff:
-            return [a for a in built if a.learning_key() not in self._failed_action_backoff]
+            built = [a for a in built
+                     if a.learning_key() not in self._failed_action_backoff]
+        # Drop anything the server has categorically refused. This is the ONLY
+        # consult site, so every action inherits the feedback path — not just
+        # the one whose refusal was noticed. Matched on the quantity-free
+        # `rejection_key`, the same identity the mark side used.
+        if self.state is not None:
+            built = [a for a in built
+                     if not self._is_categorically_refused(a)]
         return built
+
+    def _is_categorically_refused(self, action: Action) -> bool:
+        """Has the server refused this action's item as ineligible, recently?"""
+        assert self.state is not None
+        key = rejection_key(action)
+        if key is None:
+            return False
+        return self._rejected_actions.is_doomed(key, self.state, self._cycle_counter)
 
     def _notify_observer(
         self,
