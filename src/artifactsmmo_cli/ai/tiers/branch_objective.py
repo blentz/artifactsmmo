@@ -103,10 +103,12 @@ def _outcome(projected: WorldState, store: LearningStore,
     `cheapest_path_to_level` walk.
 
     `target` DEFAULTS TO `TARGET_LEVEL`, and every production caller takes the
-    default — this parameter exists so `commands/objective --target` can sweep
-    the horizon without monkey-patching a module constant, which is how the
-    measurements in `docs/PLAN_bounded_horizon_objective.md` were taken and is
-    not a thing a diagnostic should have to do.
+    default — this parameter exists so a target sweep can happen without
+    monkey-patching a module constant, which is how the measurements in
+    `docs/PLAN_bounded_horizon_objective.md` were taken and is not a thing a
+    diagnostic should have to do. (Its former caller, the `objective` CLI, was
+    retired in wave 3b; the parameter itself stays for the `--target` shape
+    documented in that plan's measurements.)
 
     IT DOES NOT PARAMETERISE THE BANDING, DELIBERATELY. `progression_choice`
     still classifies against its own `TARGET_LEVEL`, and that constant is
@@ -305,3 +307,25 @@ def branch_from_ranking(ranking: list[ProgressionCandidate]) -> Branch:
     "gear yields when it has no reachable target" arm as a consequence rather than
     as a rule."""
     return Branch.XP if ranking[0].identity == TRUNK_IDENTITY else Branch.GEAR
+
+
+def reached_spread(ranked: list[ProgressionCandidate], target: int) -> int | None:
+    """`max(cycles) - min(cycles)` over candidates whose walk actually REACHED
+    `target`, or None when fewer than two did.
+
+    How much the benefit term can discriminate at a given horizon. Measured live
+    2026-08-18 — Lor L16 to milestone 20 spread 229 cycles, R2D2 L19 to milestone
+    20 spread 0 — which is why the horizon has two degenerate ends and not one.
+    Relocated from the retired `objective` CLI in wave 3b; its sole remaining
+    caller is `tests/test_ai/scenarios/test_band_edge_horizon.py`, which measures
+    this spread directly over `branch_ranking`'s output.
+
+    Candidates whose walk stopped short are excluded, not counted as zero: their
+    cycles figure is a filler (`_outcome` returns 0 on a blocked walk), and
+    folding a filler into a spread would report a discrimination that does not
+    exist."""
+    reached = [c.cycles_to_fifty for c in ranked
+              if not c.failed and c.reachable_level >= target]
+    if len(reached) < 2:
+        return None
+    return max(reached) - min(reached)

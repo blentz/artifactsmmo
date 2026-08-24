@@ -26,11 +26,10 @@ import pytest
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.tiers.branch_objective import branch_ranking
+from artifactsmmo_cli.ai.tiers.branch_objective import branch_ranking, reached_spread
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import objective_candidates
 from artifactsmmo_cli.ai.tiers.progression_tree_core import milestone_pure
-from artifactsmmo_cli.commands.objective import reached_spread
 
 _BUNDLE = Path(__file__).resolve().parent / "fixtures" / "gamedata_bundle.json"
 

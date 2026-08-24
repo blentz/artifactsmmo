@@ -58,7 +58,14 @@ Three ways out, and choosing between them is a modelling decision, not a coding 
 
 ## Increment 0 — the measurement, and what it found
 
-`scripts/measure_means_suppression.py` drives the REAL decision path
+**RETIRED (wave 3b, 2026-08-24).** `scripts/measure_means_suppression.py` has
+been deleted. Its verdict is recorded below and does not depend on the script
+surviving — it was a one-shot, read-only probe, never gate-wired or CI-wired,
+and the `objective` CLI it shared its `branch_objective`/`horizon_contribution`
+imports with was retired the same wave. A future reader should not go looking
+for the script; the finding stands as prose.
+
+`scripts/measure_means_suppression.py` drove the REAL decision path
 (`plan_from_state`) and reads the snapshot the driver already takes for the trace
 (`StrategyArbiter.last_fires`), so there is no second producer of the fired-kinds
 list. The bound `SelectionContext` — which nothing exposes after the driver binds
