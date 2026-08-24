@@ -2453,7 +2453,7 @@ def test_deep_gear_routes_to_incremental_gather_not_empty_upgrade():
         "is_plannable must be False (min_plan_length ≫ max_depth 32) "
         "so the depth-reject — not any extra guard — drives the route"
     )
-    goal = objective_step_goal(step, state, gd, _ctx(), root=root, committed_root=root)
+    goal = objective_step_goal(step, state, gd, _ctx(), root=root)
     assert goal is not None
     assert type(goal).__name__ == "GatherMaterialsGoal"
 

@@ -77,7 +77,7 @@ def test_objective_step_goal_forwards_to_the_graph(scenario_name, bundle_game_da
         step = ObtainItem(code=step_code, quantity=1)
         root = ObtainItem(code=root_code, quantity=1)
         production = objective_step_goal(step, state, gd, NO_PROFILE_CONTEXT,
-                                         root=root, committed_root=root,
+                                         root=root,
                                          history=None)
         graph = resolve_node(obtain_item_decision(step, root), state, gd,
                              NO_PROFILE_CONTEXT, None)

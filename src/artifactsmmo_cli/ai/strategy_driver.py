@@ -607,7 +607,6 @@ def objective_step_goal(
     game_data: GameData,
     ctx: SelectionContext,
     root: MetaGoal | None = None,
-    committed_root: MetaGoal | None = None,
     history: LearningStore | None = None,
 ) -> Goal | None:
     """Map the strategy's chosen step to a Goal.
@@ -1113,7 +1112,7 @@ class StrategyArbiter:
         # is a ONE-action win (EquipAction) vs a multi-cycle GatherMaterials
         # chain; the ready-to-equip path is always preferable.
         step_goal = objective_step_goal(chosen_step, state, game_data, ctx,
-                                        root=chosen_root, committed_root=chosen_root,
+                                        root=chosen_root,
                                         history=self._history)
         if step_goal is not None:
             return step_goal
@@ -1121,7 +1120,6 @@ class StrategyArbiter:
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
             candidate = objective_step_goal(alt, state, game_data, ctx, root=alt_root,
-                                          committed_root=chosen_root,
                                           history=self._history)
             if isinstance(candidate, UpgradeEquipmentGoal):
                 return candidate
@@ -1129,7 +1127,6 @@ class StrategyArbiter:
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
             candidate = objective_step_goal(alt, state, game_data, ctx, root=alt_root,
-                                          committed_root=chosen_root,
                                           history=self._history)
             if candidate is not None:
                 return candidate
@@ -1365,7 +1362,6 @@ class StrategyArbiter:
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
             alt_goal = objective_step_goal(alt, state, game_data, ctx, root=alt_root,
-                                          committed_root=chosen_root,
                                           history=self._history)
             # Route every fallback-alt step goal through the SAME task
             # suppression as the top step (reservation + redundancy +
