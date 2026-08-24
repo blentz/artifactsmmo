@@ -513,7 +513,7 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
     across cycles.
 
     HOLDINGS ARE THE BAG ONLY, AND THAT IS A CHANGE. `min_plan_length`'s callers
-    pass inventory PLUS bank (`branch_objective._held`), because that model has
+    pass inventory PLUS bank, because that model has
     no withdraw action and so must treat a banked copy as already in hand. Here
     the bank is a ROUTE — `SourceKind.WITHDRAW`, capacity = the bank's stock —
     so counting it as owned too would credit the same copy twice and price the

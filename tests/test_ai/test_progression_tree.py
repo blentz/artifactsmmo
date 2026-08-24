@@ -40,18 +40,14 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import (
-    _achievability_map,
     _structural_candidates,
-    _utility_candidates,
     decide_tree,
     has_structural_upgrade,
     objective_candidates,
 )
-from artifactsmmo_cli.ai.tiers.progression_tree_core import (
-    GearCandidate,
-    focus_aging_order,
-)
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.weapon_winnability import marginal_weapon_winnability
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
+from tests.test_ai.fixtures import make_state
 
 BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures"
           / "gamedata_bundle.json")
@@ -540,8 +536,9 @@ class TestSyntheticBranches:
 
         WAVE 3a re-pointed this at `objective_candidates` — the one function
         that concatenates the two builders — because `decide_tree` no longer
-        calls them. The guards are still live: `commands/objective.py` runs the
-        same list outside the bot."""
+        calls them. WAVE 3b then retired `commands/objective.py`, the last
+        production reader of that concatenation, so this suite is now the only
+        thing exercising the two `stats is None: continue` guards."""
         gd_full = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
         objective = CharacterObjective.from_game_data(gd_full)
         state = scenario_state(SCENARIOS["l1_fresh"], gd_full)
@@ -594,165 +591,73 @@ class TestSyntheticBranches:
         assert objective_candidates(state, zero_stats_gd, objective) == []
 
 
-# --- Achievability acceptance witness (Task 6) -------------------------------
+# --- The weapon-slot winnability guard in `_structural_candidates` ------------
 #
-# THE acceptance test for the whole achievability-factor epic: the factor must
-# actually reorder live candidates, and the reordering must be REVERSIBLE by
-# holdings, or it is just a blanket penalty on long chains dressed up as an
-# effort measure. `lich_race_trophy` (achievability_core.py's own docstring
-# example -- "Live at L21 ... 1000 event_tickets away") is not itself in the
-# committed `gamedata_bundle.json` fixture (only `lich_crown`/`lich_tomb_key`
-# are), so this builds the same TWO-HOP currency shape
-# (`requirement_graph_memo.py`'s own docstring: trophy <- 10 medal <- 100
-# event_ticket each = 1000) on top of the real bundle: one synthetic BUY-only
-# artifact plus one synthetic intermediate currency, priced by two permanent
-# NPC vendors, bottoming out in `event_ticket` -- a real bundle item, gatherable
-# here (so it is attainable-now on its own, not only once held). This uses the
-# SAME post-load `npc_stock`/`npc_buy_currency`/`npc_tiles` mutation TECHNIQUE
-# tests/test_ai/test_requirement_graph_memo.py's `_gd_with_chain` uses (that
-# fixture is a synthetic `GameData()` modelling the chain in isolation; this one
-# is the real bundle, modelling the ranking-path consumer of it) -- a single-hop
-# price would exercise `_currency_cost`'s base case only, never its recursive
-# transitive-expansion arm, which is exactly what Task 1 added.
+# Coverage of that guard's `continue` used to ride on the achievability
+# acceptance witness, which wave 3b deleted along with `_achievability_map`. The
+# guard itself is LIVE — it is the fire_bow fix, where a damage-type-blind ruler
+# ground weaponcrafting toward a combat DOWNGRADE — so it gets a direct test
+# rather than incidental coverage. Both directions are asserted: a weapon that
+# unlocks nothing is dropped, and the SAME weapon on the SAME sheet is admitted
+# once a monster exists that only it can beat.
 
-def _bundle_with_currency_gated_artifact() -> GameData:
-    """`_bundle()` plus one synthetic artifact, `lich_race_trophy`: no recipe
-    (BUY leaf only), sold by a permanent vendor for 10 `lich_race_medal`, itself
-    sold by a second permanent vendor for 100 `event_ticket` each -- a genuine
-    two-hop chain (`_currency_cost`'s recursive arm, not just its base case),
-    totalling 1000 tickets exactly as `requirement_graph_memo.py`'s own
-    docstring describes. a 1.6x gain gap over the ring slot's real argmax -- comfortably under
-    achievability_core.A_MIN's documented 2x boundary (a maximally distant
-    candidate can only lose to a maximally close one below that gap), which is
-    the exact property this test exercises. `event_ticket` is made gatherable
-    (a resource drop) so it is attainable-now by itself; the poor/rich split
-    below turns entirely on how much of it is HELD, not on whether it can be
-    acquired in principle.
 
-    RE-DERIVED 2026-08-04 (pursuit_value unification). The near candidate used
-    to be `life_ring` (hp_bonus) and the trophy carried hp_bonus 40. On the ONE
-    ruler the ring slot's argmax is `iron_ring` (4% global damage,
-    pursuit 105_600_000) rather than `life_ring` (hp_bonus 25, 5_000_020), so
-    the near witness moved with it; the trophy's hp_bonus was re-derived to 845
-    (200 * 845 * 1000 = 169_000_000) to keep the SAME ~1.6x gain gap the test
-    needs -- comfortably under achievability_core.A_MIN's 2x boundary, which is
-    the property being exercised. Neither the mechanism nor the gap changed,
-    only the two items' absolute numbers."""
-    gd = _bundle()
-    gd.items.stats["lich_race_trophy"] = ItemStats(
-        code="lich_race_trophy", level=15, type_="artifact", hp_bonus=845)
-    gd.world.npc_stock["trophy_vendor"] = {"lich_race_trophy": 10}
-    gd.world.npc_buy_currency["trophy_vendor"] = {"lich_race_trophy": "lich_race_medal"}
-    gd.world.npc_tiles["trophy_vendor"] = (5, 5)
-    gd.world.npc_stock["medal_vendor"] = {"lich_race_medal": 100}
-    gd.world.npc_buy_currency["medal_vendor"] = {"lich_race_medal": "event_ticket"}
-    gd.world.npc_tiles["medal_vendor"] = (6, 6)
-    gd.recipes_catalog.resource_drops_full["event_shrine"] = [("event_ticket", 1, 1, 1)]
+def _weapon_guard_gd(with_fire_mob: bool) -> GameData:
+    """`stone_axe` (earth 20) and `flame_rod` (fire 40), one or two monsters.
+
+    `earth_mob` has no resistances, so the axe alone already beats it.
+    `fire_mob` resists earth 100, so the axe does zero damage to it and only the
+    rod unlocks it. Same shape as `tests/test_ai/test_weapon_winnability`'s
+    fixture — that suite pins the metric, this one pins the tree's use of it."""
+    gd = GameData()
+    gd._item_stats = {
+        "stone_axe": ItemStats(code="stone_axe", level=1, type_="weapon",
+                               attack={"earth": 20}),
+        "flame_rod": ItemStats(code="flame_rod", level=1, type_="weapon",
+                               attack={"fire": 40}),
+    }
+    gd._monster_level = {"earth_mob": 1}
+    gd._monster_hp = {"earth_mob": 30}
+    gd._monster_attack = {"earth_mob": {}}
+    gd._monster_resistance = {"earth_mob": {}}
+    if with_fire_mob:
+        gd._monster_level["fire_mob"] = 1
+        gd._monster_hp["fire_mob"] = 30
+        gd._monster_attack["fire_mob"] = {}
+        gd._monster_resistance["fire_mob"] = {"earth": 100}
+    fill_monster_stat_defaults(gd)
     return gd
 
 
-_ACHIEVABILITY_WITNESS_BANK = {
-    "iron_bar": 8, "iron_ore": 80, "cloth": 2, "mushroom": 5,
-    "wool": 6, "life_ring": 1, "iron_ring": 1,
-}
-"""Covers the near candidate's ENTIRE real requirement multiset so its
-`_effort_for(...)` is exactly 0 -- the achievability FLOOR every other
-candidate in the decision is scored against (`achievability_pure`'s
-`min_effort`). Holds BOTH rings: `life_ring` was the near candidate before the
-pursuit_value unification and `iron_ring` is it now (see
-`_bundle_with_currency_gated_artifact`), and keeping both makes the floor
-independent of which one the ruler picks for the slot."""
+def _weapon_guard_state():
+    """Empty weapon slot, `stone_axe` CARRIED (so `predict_win` may use it) and
+    `flame_rod` BANKED (so it is attainable-now for the sheet, but is not part
+    of the owned combat pool). That split is what makes the rod a real candidate
+    whose marginal winnability is the only thing left deciding it."""
+    return make_state(inventory={"stone_axe": 1}, bank_items={"flame_rod": 1})
 
 
-def _state_with(gd: GameData, inventory: dict[str, int]) -> WorldState:
-    """A near_term_gear fixed point for every slot EXCEPT rings/artifacts
-    (iterated empirically the same way every fixed-point entry in
-    scenario.SCENARIOS is -- see e.g. l30_rune_fill/l48_band_adequate), so
-    `life_ring` (ring1_slot/ring2_slot) and `lich_race_trophy`
-    (artifact1/2/3_slot) are the ONLY structural gear candidates. `gold=2000`
-    and `skills` clear life_ring's own currency/skill-gate tokens (see
-    `_ACHIEVABILITY_WITNESS_BANK`). `inventory` is the SOLE difference between
-    the poor and rich witnesses -- holding `event_ticket` is the only thing
-    that changes."""
-    sc = ScenarioCharacter(
-        name="achievability_witness", level=25, max_hp=500, gold=2000,
-        skills={"jewelrycrafting": 15, "mining": 10},
-        equipment={
-            "helmet_slot": "iron_helm", "weapon_slot": "copper_dagger",
-            "shield_slot": "iron_shield", "boots_slot": "copper_boots",
-            "body_armor_slot": "copper_armor",
-            "utility1_slot": "small_health_potion",
-        },
-        utility_quantities={"utility1_slot": 5},
-        bank=dict(_ACHIEVABILITY_WITNESS_BANK),
-        inventory=inventory, inventory_max=2000,
-    )
-    return scenario_state(sc)
-
-
-def _ordered_candidates(state: WorldState, gd: GameData) -> list[GearCandidate]:
-    """The tree's OWN achievability-weighted display order: exactly
-    `decide_tree`'s own `_structural_candidates + _utility_candidates` ->
-    `_achievability_map` -> `focus_aging_order` pipeline
-    (progression_tree.py:397-418), read directly -- NOT `decision.ranking`,
-    which is display-only (progression_tree.py:149-155: "no separate
-    weighting exists in this display path -- the trunk row does the same")."""
+def test_a_weapon_that_unlocks_no_monster_is_dropped_from_the_candidates():
+    """THE GUARD. `flame_rod` wins the weapon slot on the damage-type-blind
+    ruler (attack 40 against the axe's 20) and is attainable now, so it reaches
+    `_structural_candidates`. It beats nothing the carried axe already beats, so
+    it must not become a gear root — the live fire_bow case."""
+    gd = _weapon_guard_gd(with_fire_mob=False)
     objective = CharacterObjective.from_game_data(gd)
-    candidates = (_structural_candidates(state, gd, objective)
-                  + _utility_candidates(state, gd, objective))
-    achievability = _achievability_map(candidates, state, gd)
-    return focus_aging_order(candidates, {}, {}, {}, achievability)
+    state = _weapon_guard_state()
+    assert objective.near_term_gear(state).get("weapon_slot") == "flame_rod", \
+        "sanity: the sheet must actually offer the rod, or the guard is untested"
+    assert marginal_weapon_winnability("flame_rod", state, gd) == 0
+    assert [c.code for c in _structural_candidates(state, gd, objective)] == []
 
 
-def test_achievability_map_of_no_candidates_is_inert() -> None:
-    """`_achievability_map`'s empty guard, directly.
-
-    It exists because `min(efforts.values())` raises on an empty sequence, and
-    `{}` is the inert map every `.get(..., Fraction(1))` lookup reads as "no
-    penalty". Wave 3a made this a direct unit: `decide_tree` used to reach the
-    empty case whenever a state had no gear candidates, and it no longer calls
-    this function at all."""
-    gd = _bundle()
-    assert _achievability_map([], scenario_state(SCENARIOS["l1_fresh"], gd), gd) == {}
-
-
-class TestAchievabilityReversalWitness:
-    def test_achievability_reorders_the_live_bundle_and_is_reversible(self) -> None:
-        """THE acceptance test. With ordinary holdings the craftable iron_ring
-        outranks the currency-gated lich_race_trophy; give the character 1000
-        event_tickets and the trophy returns to the top. If the second half
-        failed, the factor would be a blanket penalty on long chains rather
-        than an effort measure that responds to what is actually held."""
-        gd = _bundle_with_currency_gated_artifact()
-        poor = _state_with(gd, inventory={})
-        rich = _state_with(gd, inventory={"event_ticket": 1000})
-
-        poor_order = [c.code for c in _ordered_candidates(poor, gd)]
-        rich_order = [c.code for c in _ordered_candidates(rich, gd)]
-
-        assert poor_order.index("iron_ring") < poor_order.index("lich_race_trophy")
-        assert rich_order.index("lich_race_trophy") < rich_order.index("iron_ring")
-
-    def test_reversal_is_falsifiable_by_the_inert_achievability_default(self) -> None:
-        """OVERRIDE (supersedes the brief's `git stash` step, per a standing
-        project rule against stashing mid-task): `focus_aging_order`'s
-        achievability parameter defaults to the empty `_NO_ACHIEVABILITY` map,
-        bit-identical to pre-factor behaviour (progression_tree_core.py's own
-        docstring). If the poor-holdings order above held regardless of
-        achievability, it would equal this inert-default order too -- it does
-        not, so the factor (not the candidates' raw gains alone) drives the
-        poor-case ranking. A permanent test, not a one-off manual diff."""
-        gd = _bundle_with_currency_gated_artifact()
-        poor = _state_with(gd, inventory={})
-        objective = CharacterObjective.from_game_data(gd)
-        candidates = (_structural_candidates(poor, gd, objective)
-                      + _utility_candidates(poor, gd, objective))
-
-        real_achievability = _achievability_map(candidates, poor, gd)
-        weighted_order = [c.code for c in
-                          focus_aging_order(candidates, {}, {}, {}, real_achievability)]
-        inert_order = [c.code for c in focus_aging_order(candidates, {}, {})]
-
-        assert weighted_order.index("iron_ring") < weighted_order.index("lich_race_trophy")
-        assert inert_order.index("lich_race_trophy") < inert_order.index("iron_ring")
-        assert weighted_order != inert_order
+def test_the_same_weapon_survives_once_it_unlocks_a_monster():
+    """NON-VACUITY. Identical sheet, identical state; the only change is a
+    monster that resists earth, which the rod beats and the axe cannot. The
+    candidate now survives, so the empty list above is the guard firing rather
+    than the candidate never having been built."""
+    gd = _weapon_guard_gd(with_fire_mob=True)
+    objective = CharacterObjective.from_game_data(gd)
+    state = _weapon_guard_state()
+    assert marginal_weapon_winnability("flame_rod", state, gd) > 0
+    assert [c.code for c in _structural_candidates(state, gd, objective)] == ["flame_rod"]

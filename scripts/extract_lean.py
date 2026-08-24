@@ -440,14 +440,6 @@ MODULES: tuple[ModuleSpec, ...] = (
         constants=("GREY_SKILL_GAP",),
     ),
     ModuleSpec(
-        source="src/artifactsmmo_cli/ai/tiers/progression_choice.py",
-        output=f"{GENERATED_DIR}/ProgressionChoice.lean",
-        core_name="ProgressionChoice",
-        functions=("candidate_band", "objective_j", "sort_key"),
-        structures=("ProgressionCandidate",),
-        constants=("TARGET_LEVEL", "_BAND_FINITE", "_BAND_UNREACHABLE", "_BAND_FAILED"),
-    ),
-    ModuleSpec(
         source="src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py",
         output=f"{GENERATED_DIR}/SkillGrindSelection.lean",
         core_name="SkillGrindSelection",

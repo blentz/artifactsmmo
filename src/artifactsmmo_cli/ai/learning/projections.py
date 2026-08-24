@@ -349,10 +349,11 @@ def cheapest_path_to_level(
         # monster_level <= state.level + 1, AND is_winnable (the same rested
         # verdict the runtime uses) so projection and executor agree on the monster.
         # THE BEATABILITY MARGIN SURVIVES. This filter (1 <= lvl <= sim_level + 1)
-        # has two call sites, and the plan that identified player.py:2780 as
-        # diagnostic-only missed the second: `tiers/horizon_contribution.py:62` feeds
-        # `branch_objective._outcome` and the objective's GEAR-vs-XP branch ranking,
-        # which is a live decision. The filter is Lean-diff-locked
+        # used to have two call sites, and the plan that identified player.py:2780
+        # as diagnostic-only missed the second: `tiers/horizon_contribution` fed
+        # the objective's GEAR-vs-XP branch ranking, which was a live decision.
+        # Wave 3b deleted that whole ranking, so this is the sole call site again —
+        # but it is now the DECIDING one, not a diagnostic. The filter is Lean-diff-locked
         # (`Formal/CheapestPath.lean`) and mutation-anchored (`formal/diff/mutate.py`:
         # "drop the +1 beatability margin"), so changing it carries a proof obligation.
         beatable = [

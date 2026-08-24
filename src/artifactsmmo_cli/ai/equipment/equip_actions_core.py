@@ -6,7 +6,8 @@ the best loadout the character is already CARRYING, not merely what it is wearin
 the gear branch projects a candidate by placing the item in INVENTORY, so an oracle
 that only ever looked at worn gear would make every gear candidate project
 byte-identically to the trunk. That bug has already been had here; its post-mortem
-is in `tiers/branch_objective.gear_candidate`.
+lived in `tiers/branch_objective.gear_candidate`, which wave 3b deleted with the
+rest of the retired ranking — the reading it justifies is unchanged.
 
 But the projection was taking the upgrade for FREE. The executor has to spend time
 putting each piece on, and S-004's unit is executed actions, so an unpriced equip is

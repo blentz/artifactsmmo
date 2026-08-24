@@ -11,12 +11,19 @@ the FIRST project import raised:
     initialized module 'artifactsmmo_cli.ai.role_catalog' (most likely due
     to a circular import)
 
-The fix: `ai.tiers.progression_tree._role_map` no longer imports
-`role_catalog` at all — it takes the role's owned skills (a `frozenset[str]`)
+The fix: `ai.tiers.progression_tree._role_map` no longer imported
+`role_catalog` at all — it took the role's owned skills (a `frozenset[str]`)
 straight from `SelectionContext.role_skills`, resolved once by
 `GamePlayer._role_owned_skills` on the `player.py` side of the boundary,
 which already depends on `role_catalog` for `decide_role`/`demand_by_role`
 and is never itself imported by the `ai.tiers` package.
+
+WAVE 3b deleted all three of those (`_role_map`, `SelectionContext.role_skills`
+and `_role_owned_skills`) as zero-reader after THE FLIP, along with
+`ai.role_alignment` — which is why that module is no longer in the entry-point
+list below. The cycle stays fixed by CONSTRUCTION now rather than by a
+deliberate hand-off: `ai.tiers.progression_tree` no longer names `role_catalog`
+at all. These subprocess imports are what would catch a refactor reviving it.
 
 Each case below launches `sys.executable -c "import X"` in a SUBPROCESS — a
 brand-new interpreter with an empty `sys.modules` — because importing inside
@@ -40,7 +47,6 @@ import pytest
 ENTRY_POINTS = [
     "artifactsmmo_cli.ai.role_catalog",
     "artifactsmmo_cli.ai.role_selection",
-    "artifactsmmo_cli.ai.role_alignment",
     "artifactsmmo_cli.ai.tiers.progression_tree",
     "artifactsmmo_cli.ai.player",
     "artifactsmmo_cli.ai.selection_context",

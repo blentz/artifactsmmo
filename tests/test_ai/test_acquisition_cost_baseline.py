@@ -22,7 +22,6 @@ nobody looks for a bug that makes the hard thing look cheap.
 """
 
 from dataclasses import replace
-from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -34,8 +33,6 @@ from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.min_plan_length import min_plan_length
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.branch_objective import gear_candidate
-from artifactsmmo_cli.ai.tiers.progression_tree_core import GearCandidate
 
 _BUNDLE = (Path(__file__).resolve().parent / "scenarios" / "fixtures"
            / "gamedata_bundle.json")
@@ -47,10 +44,10 @@ def game_data():  # type: ignore[no-untyped-def]
 
 
 def _cost(game_data, code: str) -> int:  # type: ignore[no-untyped-def]
-    """`acquire_cost` exactly as `tiers/branch_objective.gear_candidate` computes
-    it — same arguments, same `equip=True`, nothing held. Calling the production
-    function rather than restating its formula, so this cannot drift into
-    characterising a copy of the bug instead of the bug."""
+    """`acquire_cost` exactly as `J`'s deleted candidate builder computed it —
+    same arguments, same `equip=True`, nothing held. Calling the production
+    function `min_plan_length` rather than restating its formula, so this cannot
+    drift into characterising a copy of the bug instead of the bug."""
     return min_plan_length(code, 1, game_data.crafting_recipes, {},
                            game_data.max_gather_yield, equip=True)
 
@@ -258,39 +255,11 @@ def test_the_skill_gate_is_invisible_to_the_cost(game_data) -> None:
     assert _cost(game_data, "iron_sword") == 5
 
 
-def test_J_USES_THE_ROUTE_AWARE_COST(game_data) -> None:
-    """ACTIVATION, RE-LANDED after the blow-up was fixed.
-
-    This assertion has now flipped twice, and both flips were the point of having
-    it. It failed when the first activation was rolled back — proving the rollback
-    was deliberate rather than drift — and it fails again if anyone reverts.
-
-    THE ROLLBACK AND THE FIX. The first walk chose routes by re-walking the whole
-    subtree per route, and re-entered a node with a rebuilt options mapping when a
-    route's capacity fell short. That was exponential in recipe FAN-OUT:
-    `adventurer_vest` (four inputs) ran 10.1M recursive calls in 20s without
-    finishing, while `iron_sword` (two inputs) took 10ms. Live: four of five
-    characters ran ~2x slower per cycle.
-
-    `acquisition_cost_core` now memoises a per-item unit cost and ignores capacity
-    — which can only RAISE cost, so omitting it keeps the bound sound. Seven-input
-    recipes price in under 10ms. Measured through the real decision path on a
-    live-sized holding with 12 unheld multi-input candidates: the acquisition cost
-    contributes 123ms per decision, against 6777ms for the projection that was
-    always there.
-
-    Two benchmarks now guard HOLDING SIZE and recipe FAN-OUT — the dimension no
-    test exercised, which is why nine green gate runs said nothing."""
-    state = scenario_state(SCENARIOS["l12_deep_chain_grind"], game_data)
-    store = LearningStore(db_path=":memory:", character="activation_probe")
-    store.start_session()
-    try:
-        candidate = gear_candidate(
-            GearCandidate(slot="weapon_slot", code="iron_sword",
-                          gain=Fraction(1), level=10),
-            state, store, game_data)
-    finally:
-        store.end_session(exit_reason="normal")
-        store.close()
-    assert candidate.acquire_cost != _cost(game_data, "iron_sword")
-    assert candidate.acquire_cost > _cost(game_data, "iron_sword")
+# WAVE 3b deleted `test_J_USES_THE_ROUTE_AWARE_COST` from here. Its subject was
+# `tiers/branch_objective.gear_candidate` — it asserted that `J`'s candidate
+# builder priced gear with `acquisition_cost` rather than with the
+# `min_plan_length` model the rest of this file characterises. `J` and its
+# builder were deleted whole (re-derived deletion list §3 rows 11/12 under the
+# 2026-08-24 ruling retiring the `objective` CLI), so there is no longer a
+# consumer to assert that ABOUT. Everything above is untouched: it pins
+# `min_plan_length` itself, which is live.

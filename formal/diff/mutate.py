@@ -167,8 +167,6 @@ PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers"
 SLOT_OCCUPANCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "slot_occupancy.py"
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
-ACHIEVABILITY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "achievability_core.py"
-ROLE_ALIGNMENT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "role_alignment.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
 MEANS_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means_worth.py"
 TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "taskmaster_choice.py"
@@ -1281,55 +1279,6 @@ XP_VALUE_MUTATIONS = [
      "        num = ((2000 * monster_level + 4 * monster_hp)\n"),
 ]
 
-
-# progression_choice mutations -- the unified objective J. Killed by
-# formal/diff/test_progression_choice_diff.py (the sort key, pinned pointwise
-# against the proved Lean model) and tests/test_ai/test_progression_choice.py
-# (the acceptance suite harvested from the spec's witness ledger).
-PROGRESSION_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_choice.py"
-
-PROGRESSION_CHOICE_MUTATIONS = [
-    # THE ORIGINAL DEFECT, reintroduced: rank gear ahead of xp unconditionally by
-    # putting the unreachable band first. This is `branch_pick_pure`'s lexicographic
-    # pivot in disguise -- one band always wins -- and it must not survive.
-    ("progression_choice: unreachable band outranks finite",
-     "_BAND_FINITE = 0\n_BAND_UNREACHABLE = 1\n",
-     "_BAND_FINITE = 1\n_BAND_UNREACHABLE = 0\n"),
-    # let a FAILED projection win: a crash would masquerade as progress (S-012).
-    ("progression_choice: FAILED band no longer ranks last",
-     "_BAND_FAILED = 2\n",
-     "_BAND_FAILED = -1\n"),
-    # drop the acquisition cost from J -- gear becomes free and every upgrade
-    # outranks grinding, which is the 2950/2950 behaviour we are replacing (S-004).
-    ("progression_choice: J drops the acquisition cost",
-     "    return c.acquire_cost + c.cycles_to_fifty\n",
-     "    return c.cycles_to_fifty\n"),
-    # drop the projection from J -- ranks by price alone, so the cheapest thing
-    # always wins regardless of what it buys (S-004).
-    ("progression_choice: J drops the projection",
-     "    return c.acquire_cost + c.cycles_to_fifty\n",
-     "    return c.acquire_cost\n"),
-    # flip the furthest-progress key so a LOWER ceiling wins (S-006 first key).
-    ("progression_choice: unreachable prefers the lower ceiling",
-     "        return (band, TARGET_LEVEL - c.reachable_level, c.acquire_cost)\n",
-     "        return (band, c.reachable_level, c.acquire_cost)\n"),
-    # THE VOID-FIELD MUTANT: rank unreachable candidates by cycles-to-50, the
-    # figure S-014 declares meaningless below the target. This is the failure the
-    # withdrawn S-009 embodied one layer up -- a comparison on a field that carries
-    # no information in the band where it fires.
-    ("progression_choice: unreachable ranks on the void cycles field",
-     "        return (band, TARGET_LEVEL - c.reachable_level, c.acquire_cost)\n",
-     "        return (band, TARGET_LEVEL - c.reachable_level, c.cycles_to_fifty)\n"),
-    # decide unreachability with <= instead of < : level 50 itself becomes
-    # unreachable, so nothing is ever in the finite band (S-014 boundary).
-    ("progression_choice: band boundary off by one",
-     "    if c.reachable_level < TARGET_LEVEL:\n",
-     "    if c.reachable_level <= TARGET_LEVEL:\n"),
-    # ignore the FAILED flag entirely (S-012 / S-014 interaction).
-    ("progression_choice: FAILED flag ignored",
-     "    if c.failed:\n        return _BAND_FAILED\n",
-     "    if False:\n        return _BAND_FAILED\n"),
-]
 
 # skill_grind_selection mutations -- pure-core anchors for
 # skill_grind_selection_pure (the recipe-aware skill-grind target selector).
@@ -3790,8 +3739,6 @@ SYNERGY_CORE_MUTATIONS = [
      "    return sum(top, Fraction(0))"),
 ]
 
-# _synergy_map (progression_tree.py) — the impure B-assembly (spec §3.6).
-# Unit-killed by tests/test_ai/test_synergy_assembly.py.
 # decide_tree's GEAR-branch fallback ORDER (progression_tree.py). Its own group:
 # the mutant is unit-killed by tests/test_ai/test_progression_tree.py, not by
 # the synergy-assembly suite the other impure-tree group runs.
@@ -3821,45 +3768,20 @@ FALLBACK_ORDER_MUTATIONS = [
 # mirror's list). Every anchor was a line inside `decide_tree`'s ranking
 # assembly, and the resolution walk replaced all of it — `J` no longer
 # influences root selection at all, so there is no behaviour left for these
-# to break. `J`'s own cores keep their anchors elsewhere; `J` is deleted in
-# wave 3b.
-
-SYNERGY_ASSEMBLY_MUTATIONS = [
-    # Leave-one-out dropped: a candidate overlaps ITSELF (total[i] still counts
-    # its own copy), so every candidate scores 1 — a constant, i.e. inert (§3.3).
-    ("synergy assembly: leave-one-out subtraction dropped",
-     "                     if total[item] - qty > 0)",
-     "                     if total[item] > 0)"),
-    # Union overwrites instead of summing: the committed-root second copy no
-    # longer accumulates, killing the deliberate double-count (§3.6).
-    ("synergy assembly: demand union overwrites instead of summing",
-     "            total[item] = total.get(item, 0) + qty",
-     "            total[item] = qty"),
-    # Committed root dropped as a member: no double-count, no bias toward
-    # finishing what is started.
-    ("synergy assembly: committed root not a member",
-     "    if committed_root_code is not None:",
-     "    if False:"),
-    # Trunk dropped as a member: a drop-routed candidate no longer overlaps the
-    # char-level trunk, losing the level-up preference (§3.10).
-    ("synergy assembly: char-level trunk not a member",
-     "    members.append(_TRUNK_DEMAND)\n    if committed_root_code is not None:",
-     "    if committed_root_code is not None:"),
-    # Task-type branch flipped: an items/gather task takes the char_xp arm (loses
-    # its skill/material contribution) and a monsters task feeds a non-item code.
-    ("synergy assembly: monsters-task branch flipped",
-     '        if state.task_type == "monsters":',
-     '        if state.task_type != "monsters":'),
-    # synergy_pure args swapped: own_total >= shared, so this asserts (shared >
-    # total is impossible) — the assembly bug surfaces loudly rather than lying.
-    ("synergy assembly: synergy_pure args swapped",
-     "        out[key] = synergy_pure(shared, own_total)",
-     "        out[key] = synergy_pure(own_total, shared)"),
-]
+# to break. `J`'s own cores keep their anchors elsewhere.
+#
+# WAVE 3b then deleted `J` itself and, from here, the progression-choice group
+# (its pure core), the synergy-assembly group (`progression_tree._synergy_map`),
+# the achievability-core group, the role-alignment group, the role-map group and
+# the role-owned-skills group. Every one anchored a line in a file that no longer
+# exists, or in `player.py`'s `_role_owned_skills`, whose only reader was
+# `_role_map`. `SYNERGY_CORE_MUTATIONS` and `MEMO_ENRICH_MUTATIONS` STAY:
+# `tiers/synergy_core` and the enriched requirement multiset both have live
+# non-ranking consumers.
 
 # RequirementGraphMemo.requirement_multiset_for — the enriched (item + skill +
 # char_xp) requirement multiset (spec §3.10). Unit-killed by the differential and
-# firing tests in tests/test_ai/test_synergy_assembly.py.
+# firing tests in tests/test_ai/test_requirement_multiset_enrichment.py.
 MEMO_ENRICH_MUTATIONS = [
     # char_xp weight zeroed: no closure ever contributes a char-progression token,
     # so level-up alignment goes dark.
@@ -3952,125 +3874,6 @@ FOCUS_CHARGE_MUTATIONS = [
     ("focus ledger: committed root no longer ages",
      "        self._charge_focus(self._gear_root_key(decision.chosen_root),\n                           decision.aged_pick)",
      "        self._charge_focus(None, decision.aged_pick)"),
-]
-
-# achievability_core.py — the effort-to-reach multiplier. A_MIN is a live
-# decision knob (cf. POTION_LEAD_FIGHTS), so it is anchored, not just tested.
-# Unit-killed by tests/test_ai/test_achievability_core.py.
-ACHIEVABILITY_CORE_MUTATIONS = [
-    # Floor removed: a distant candidate decays to zero weight and d'Hondt never
-    # awards it a seat — the anti-starvation property minWeight_pos rests on.
-    ("achievability: floor removed",
-     "A_MIN = Fraction(1, 2)",
-     "A_MIN = Fraction(0, 1)"),
-    # Floor raised to 1: the factor becomes constant and cannot reorder anything.
-    ("achievability: factor flattened to a no-op",
-     "A_MIN = Fraction(1, 2)",
-     "A_MIN = Fraction(1, 1)"),
-    # Ratio inverted: MORE effort would score HIGHER, inverting the whole point.
-    ("achievability: effort ratio inverted",
-     "        min_effort + EFFORT_SCALE, effort + EFFORT_SCALE)",
-     "        effort + EFFORT_SCALE, min_effort + EFFORT_SCALE)"),
-    # Scale collapsed back to 1 — the value that SHIPPED and self-disabled
-    # (2026-07-27). A zero-effort candidate (a stocked utility potion, present in
-    # most real decisions) drags min_effort to 0 and pulls every other candidate
-    # onto the floor together, so the factor stops reordering anything and raw
-    # gain retakes the decision. The second live knob beside A_MIN.
-    ("achievability: effort scale collapsed to 1 (the self-disabling value)",
-     "EFFORT_SCALE = 100",
-     "EFFORT_SCALE = 1"),
-]
-
-# role_alignment.role_alignment_pure — the role-fit factor of weight =
-# gain*falloff*synergy*achievability*role (Task 13, 2026-08-01). Unit-killed
-# by tests/test_ai/test_role_alignment.py.
-ROLE_ALIGNMENT_MUTATIONS = [
-    # No-role identity dropped: an empty owned_skills set (no catalog role —
-    # the single-character path) would start damping instead of staying inert.
-    ("role: no-role identity dropped (empty owned_skills no longer inert)",
-     "    if not owned_skills:\n        return ALIGNED",
-     "    if not owned_skills:\n        return MISALIGNED"),
-    # No-invented-data rule dropped: an unknown producing skill (None) becomes
-    # a penalty instead of no signal — exactly what "use only API data or fail
-    # with an error" forbids (we don't know the chain is wrong).
-    ("role: unknown producing skill penalized instead of unpenalised",
-     "    if candidate_skill is None:\n        return ALIGNED",
-     "    if candidate_skill is None:\n        return MISALIGNED"),
-    # Damp direction inverted: an off-role candidate would outrank an on-role
-    # one instead of losing to it — the factor's entire point reversed.
-    ("role: damp direction inverted (misaligned candidates now favoured)",
-     "    return ALIGNED if candidate_skill in owned_skills else MISALIGNED",
-     "    return MISALIGNED if candidate_skill in owned_skills else ALIGNED"),
-]
-
-# _role_map (progression_tree.py) — the impure assembly that ACTIVATES the
-# fifth factor (Task 14, 2026-08-02), plus its two live wiring points inside
-# decide_tree. Its own group: unit-killed by tests/test_ai/test_role_alignment.py,
-# not by the synergy-assembly or fallback-order suites the other two
-# impure-tree groups run.
-#
-# `_role_map` took a role NAME and resolved it against `ROLE_CATALOG` itself
-# until the 2026-08-01 circular-import fix moved that resolution to
-# `GamePlayer._role_owned_skills` (see `ROLE_OWNED_SKILLS_MUTATIONS` below,
-# on `PLAYER_SRC`) — `_role_map` now takes the resolved `owned_skills`
-# directly, so the "unknown role raises" and "owned skills emptied by the
-# name lookup" mutations moved there with it.
-ROLE_MAP_MUTATIONS = [
-    # No-role guard dropped: a role-less character (every single-character
-    # run, `owned_skills == frozenset()`) falls through to
-    # `role_alignment_pure`, whose OWN no-owned-skills identity reads every
-    # candidate as ALIGNED — so the map becomes a constant-1 dict instead of
-    # the genuinely empty `{}` the no-role identity requires. The two are
-    # observationally different (`.get(key, Fraction(1))` cannot tell them
-    # apart downstream, but `== {}` can, which is exactly what
-    # `test_role_map_is_empty_without_a_role` checks).
-    ("role map: no-role guard dropped (empty owned_skills no longer short-circuits)",
-     "    if not owned_skills:\n        return {}",
-     "    if False:\n        return {}"),
-    # Keyed by code instead of (slot, code): every lookup in _scaled_weights and
-    # in both fast-path guards misses, so the factor goes inert again — and two
-    # same-code candidates in different slots would collapse onto one entry.
-    ("role map: keyed by code, not (slot, code)",
-     "    return {(c.slot, c.code): role_alignment_pure(",
-     "    return {(c.code, c.code): role_alignment_pure("),
-    # WAVE 3a DELETED TWO MUTANTS FROM THIS GROUP — "role map not threaded into
-    # the aging pick and order" and "aged_pick guard ignores the role signal".
-    # Both anchored lines inside `decide_tree`'s ranking assembly, which the
-    # resolution walk replaced: there is no aging pick, no `eligible` list and
-    # no `aged_pick` mirror left to mutate. `_role_map` itself is still anchored
-    # above; the factor is deleted in wave 3b.
-]
-
-# GamePlayer._role_owned_skills (player.py) — resolves the held role NAME
-# against ROLE_CATALOG into its owned skills for `SelectionContext.
-# role_skills`. Carved out of `progression_tree._role_map` by the 2026-08-01
-# circular-import fix (role_catalog -> tiers.skill_classes -> tiers.__init__
-# -> tiers.strategy -> tiers.progression_tree -> role_catalog): the name
-# resolution now happens on the player.py side of that boundary instead.
-# Unit-killed by tests/test_ai/test_player_coordination.py.
-ROLE_OWNED_SKILLS_MUTATIONS = [
-    # Unknown role silently degrades to "no role" instead of raising: a
-    # catalog/lease mismatch would switch the entire fifth factor off with no
-    # signal at all — the invisible-inertness failure this epic keeps
-    # guarding against.
-    ("role owned skills: unknown role degrades to no-role instead of raising",
-     "        role = ROLES_BY_NAME.get(self._role)\n"
-     "        if role is None:\n"
-     "            raise ValueError(\n"
-     "                f\"role {self._role!r} is not in ROLE_CATALOG: \"\n"
-     "                f\"{sorted(ROLES_BY_NAME)}\")\n"
-     "        return role_skills(role)",
-     "        role = ROLES_BY_NAME.get(self._role)\n"
-     "        if role is None:\n"
-     "            return frozenset()\n"
-     "        return role_skills(role)"),
-    # Owned skills emptied even for a resolved role: role_alignment_pure's
-    # no-owned-skills identity then makes EVERY candidate read ALIGNED, so the
-    # fifth factor is threaded but dead for every role-holder — the Task 14
-    # inert state, restored.
-    ("role owned skills: resolved role's skills emptied",
-     "        return role_skills(role)",
-     "        return frozenset()"),
 ]
 
 # _equippable_goal passive-currency gate (obtain_item_routing.py, moved from
@@ -7250,8 +7053,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_realizable_loadout_diff.py", survivors)
     run_group(SKILL_XP_CURVE_SRC, SKILL_XP_CURVE_MUTATIONS,
               "formal/diff/test_skill_xp_curve_diff.py", survivors)
-    run_group(PROGRESSION_CHOICE_SRC, PROGRESSION_CHOICE_MUTATIONS,
-              "formal/diff/test_progression_choice_diff.py", survivors)
     run_group(SKILL_GRIND_SELECTION_SRC, SKILL_GRIND_SELECTION_MUTATIONS,
               "formal/diff/test_skill_grind_selection_diff.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, SKILL_GRIND_TARGET_MUTATIONS,
@@ -7658,8 +7459,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_progression_tree_core.py", survivors)
     run_group(SYNERGY_CORE_SRC, SYNERGY_CORE_MUTATIONS,
               "tests/test_ai/test_synergy_core.py", survivors)
-    run_group(PROGRESSION_TREE_IMPURE_SRC, SYNERGY_ASSEMBLY_MUTATIONS,
-              "tests/test_ai/test_synergy_assembly.py", survivors)
     run_group(PROGRESSION_TREE_IMPURE_SRC, FALLBACK_ORDER_MUTATIONS,
               "tests/test_ai/test_progression_tree.py", survivors)
     # Equip-loop closure (2026-08-04): four unit-killed groups, each on its own
@@ -7677,21 +7476,13 @@ def _collect_all_groups() -> None:
     run_group(PLAYER_SRC, FOCUS_CHARGE_MUTATIONS,
               "tests/test_ai/test_player_focus_ledger.py", survivors)
     run_group(REQUIREMENT_GRAPH_MEMO_SRC, MEMO_ENRICH_MUTATIONS,
-              "tests/test_ai/test_synergy_assembly.py", survivors)
+              "tests/test_ai/test_requirement_multiset_enrichment.py", survivors)
     run_group(MEANS_WORTH_SRC, MEANS_SERVES_MUTATIONS,
               "tests/test_ai/test_means_worth.py", survivors)
     run_group(TASKMASTER_CHOICE_SRC, TASKMASTER_CHOICE_MUTATIONS,
               "tests/test_ai/test_taskmaster_choice.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, PASSIVE_CURRENCY_HELPER_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)
-    run_group(ACHIEVABILITY_CORE_SRC, ACHIEVABILITY_CORE_MUTATIONS,
-              "tests/test_ai/test_achievability_core.py", survivors)
-    run_group(ROLE_ALIGNMENT_SRC, ROLE_ALIGNMENT_MUTATIONS,
-              "tests/test_ai/test_role_alignment.py", survivors)
-    run_group(PROGRESSION_TREE_IMPURE_SRC, ROLE_MAP_MUTATIONS,
-              "tests/test_ai/test_role_alignment.py", survivors)
-    run_group(PLAYER_SRC, ROLE_OWNED_SKILLS_MUTATIONS,
-              "tests/test_ai/test_player_coordination.py", survivors)
     run_group(OBTAIN_ITEM_ROUTING_SRC, PASSIVE_CURRENCY_GATE_MUTATIONS,
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHERING_PASSIVE_MUTATIONS,

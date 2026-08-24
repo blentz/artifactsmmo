@@ -230,8 +230,9 @@ class RootScore:
     lets a reader see the decision that was actually taken.
 
     None when `J` was not consulted (no learning store) — and None for any root
-    outside the finite band, since the objective is void there (see
-    `branch_objective.finite_j`). Those roots carry `reachable_level` instead."""
+    outside the finite band, since the objective was void there. Wave 3b deleted
+    `J` and every module that computed it, so nothing in `src/` writes this any
+    more; roots carry `reachable_level` instead."""
 
     reachable_level: int | None = None
     """How far this root's projection actually gets, for a root `J` cannot price.

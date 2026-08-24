@@ -3,17 +3,9 @@
 Mirrored by Formal/ProgressionTree.lean; the PROGRESSION_TREE_MUTATIONS
 group binds these tests to the source."""
 
-import json
-from collections.abc import Mapping
-from dataclasses import fields, replace
+from dataclasses import fields
 from fractions import Fraction
-from functools import lru_cache
-from pathlib import Path
-from types import MappingProxyType
 
-from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.role_alignment import MISALIGNED
-from artifactsmmo_cli.ai.tiers.progression_tree import _effort_for
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     _NO_ACHIEVABILITY,
     _NO_ROLE,
@@ -37,43 +29,6 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     potion_type_weight,
 )
 from artifactsmmo_cli.ai.tiers.synergy_core import S_MIN
-from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
-
-_BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
-
-#: The `make_state` skill baseline (mirrored, not imported — that dict is a
-#: fixture-internal default), so `_bundle_and_state`'s `skills=` override can
-#: MERGE onto it instead of replacing the whole dict. Merging matters:
-#: `test_skill_tokens_count_as_the_level_deficit` compares two calls that vary
-#: only `jewelrycrafting`, and every other skill term (e.g. `mining`, also
-#: demanded by life_ring) must stay identical across both calls for the
-#: comparison to isolate the one deficit that changed.
-_DEFAULT_SKILLS: Mapping[str, int] = MappingProxyType({
-    "mining": 3, "woodcutting": 2, "fishing": 1, "weaponcrafting": 1,
-    "gearcrafting": 1, "jewelrycrafting": 1, "cooking": 1, "alchemy": 1,
-})
-
-
-@lru_cache(maxsize=1)
-def _bundle_game_data() -> GameData:
-    """The committed live-API bundle as GameData (same source used by the
-    synergy-assembly and taskmaster-choice tests) — real recipes/items, so
-    the effort numbers reflect the actual requirement graph rather than a
-    synthetic double. Cached: several tests load it, and it is read-only."""
-    return GameData.from_cache_bundle(json.loads(_BUNDLE.read_text()))
-
-
-def _bundle_and_state(gold: int = 50,
-                       skills: Mapping[str, int] | None = None,
-                       ) -> tuple[GameData, WorldState]:
-    """The real bundle GameData paired with a minimal WorldState, for
-    `_effort_for` tests. `skills` overrides merge onto `_DEFAULT_SKILLS`
-    (see its docstring for why merge, not replace)."""
-    merged_skills = dict(_DEFAULT_SKILLS)
-    if skills:
-        merged_skills.update(skills)
-    return _bundle_game_data(), make_state(gold=gold, skills=merged_skills)
 
 
 class TestMilestone:
@@ -415,68 +370,6 @@ def test_synergy_absent_from_gear_candidate_identity():
     assert repr(_gc("s", "c", 5)) == repr(_gc("s", "c", 5))
 
 
-# --- Task 3 (achievability factor): effort as unmet demand ---
-
-
-def test_effort_ignores_what_is_already_held():
-    """life_ring demands 2000 gold; a character holding 12382 has zero gold
-    effort. Total demand ranks by price tag; UNMET demand ranks by difficulty."""
-    gd, state = _bundle_and_state(gold=12382)
-    effort = _effort_for("life_ring", state, gd)
-    assert effort < 2000, "gold the character already holds must not count"
-
-
-def test_skill_tokens_count_as_the_level_deficit():
-    """A recipe needing jewelrycrafting 15 against skill 10 contributes 5 —
-    this is what separates a skill-gapped item from a currency-gated one."""
-    gd, state = _bundle_and_state(skills={"jewelrycrafting": 10})
-    with_gap = _effort_for("life_ring", state, gd)
-    gd2, state2 = _bundle_and_state(skills={"jewelrycrafting": 15})
-    assert _effort_for("life_ring", state2, gd2) < with_gap
-
-
-def test_char_xp_tokens_do_not_count_as_effort():
-    """char_xp marks drop-routed work for SYNERGY alignment; it is not a unit
-    of demand and must not inflate effort."""
-    gd, state = _bundle_and_state()
-    assert _effort_for("mushmush_jacket", state, gd) < 100
-
-
-def test_effort_credits_bank_items_against_demand():
-    """Held quantities are inventory PLUS bank: life_ring demands 8 iron_bar,
-    and a character with 8 banked (none in inventory) must not read that
-    material as still-needed — bank and inventory are the same 'already have
-    it' fact, just parked in different places."""
-    gd, state = _bundle_and_state()
-    without_bank = _effort_for("life_ring", state, gd)
-    banked = replace(state, bank_items={"iron_bar": 8})
-    assert _effort_for("life_ring", banked, gd) < without_bank
-
-
-def test_skill_deficit_uses_the_gates_own_level_not_the_candidates():
-    """Fix round 1 (critical review finding): life_ring's closure spans TWO
-    skills at DIFFERENT gates — jewelrycrafting 15 (life_ring's own recipe)
-    and mining 10 (from iron_ore/iron_bar in its closure). The original
-    implementation reused life_ring's OWN craft level (15) as `need` for
-    EVERY `skill:<name>` token, so a character already AT the real mining
-    gate (10) was still charged a phantom 5-level deficit, and effort kept
-    falling all the way out to mining 15 — the candidate's own level, wrongly
-    misattributed onto mining's token. The fix must plateau exactly at
-    mining's REAL gate (10): raising mining below it still costs, raising it
-    past it must not lower effort any further."""
-    gd, below = _bundle_and_state(skills={"mining": 9, "jewelrycrafting": 15})
-    gd2, at_gate = _bundle_and_state(skills={"mining": 10, "jewelrycrafting": 15})
-    gd3, past_gate = _bundle_and_state(skills={"mining": 20, "jewelrycrafting": 15})
-    effort_below = _effort_for("life_ring", below, gd)
-    effort_at_gate = _effort_for("life_ring", at_gate, gd2)
-    effort_past_gate = _effort_for("life_ring", past_gate, gd3)
-    assert effort_at_gate < effort_below, "below the real mining gate must still cost"
-    assert effort_past_gate == effort_at_gate, (
-        "past mining's REAL gate (10) effort must not keep falling toward "
-        "life_ring's own craft level (15) — that would be the candidate's "
-        "own level misattributed onto mining's token")
-
-
 # --- Task 4 (achievability factor): wiring into the weight ---
 
 
@@ -551,7 +444,17 @@ def test_tie_break_flips_under_achievability_dhondt_vs_argmax():
         "gear_target_pick's LOWER-slot tiebreak")
 
 
-# --- Task 13 (role_alignment factor): wiring into the weight, inert by default ---
+# --- Task 13 (role factor): wiring into the weight, inert by default ---
+#
+# `ai/role_alignment.py` held the two multipliers this section threads through
+# `_scaled_weights`' `role` parameter. Wave 3b deleted that module (re-derived
+# deletion list §3 row 9: its sole importer was `progression_tree._role_map`,
+# itself uncalled), so the two values are stated here as the literals they
+# were: ALIGNED = 1 (no signal, or on-role) and MISALIGNED = 1/2 (damped, never
+# zeroed). The `role` parameter itself is unchanged and is what these pin.
+
+_ALIGNED = Fraction(1)
+_MISALIGNED = Fraction(1, 2)
 
 
 def test_role_scales_the_weight():
@@ -559,7 +462,7 @@ def test_role_scales_the_weight():
     one — same shape as the achievability weight-scaling test above."""
     off_role = GearCandidate(slot="artifact3_slot", code="trophy", gain=Fraction(25050), level=20)
     on_role = GearCandidate(slot="ring1_slot", code="life_ring", gain=Fraction(21020), level=15)
-    role = {("artifact3_slot", "trophy"): MISALIGNED}
+    role = {("artifact3_slot", "trophy"): _MISALIGNED}
     weights = dict(_scaled_weights([off_role, on_role], {}, role=role))
     assert weights["ring1_slot"] > weights["artifact3_slot"]
 
@@ -578,7 +481,82 @@ def test_role_breaks_the_flat_window_short_circuit():
     Same bug synergy's and achievability's docstrings record."""
     off_role = GearCandidate(slot="artifact3_slot", code="trophy", gain=Fraction(25050), level=20)
     on_role = GearCandidate(slot="ring1_slot", code="life_ring", gain=Fraction(21020), level=15)
-    role = {("artifact3_slot", "trophy"): MISALIGNED}
+    role = {("artifact3_slot", "trophy"): _MISALIGNED}
     pick = focus_aging_pick([off_role, on_role], {}, {}, role=role)
     assert pick is not None
     assert pick.code == "life_ring", "flat-window fast path ignored role"
+
+
+# Relocated from `tests/test_ai/test_role_alignment.py`, which wave 3b deleted
+# with its subject (`ai/role_alignment.py`, re-derived deletion list §3 row 9).
+# These two do NOT test that module: their subject is the `role` PARAMETER of
+# `_scaled_weights` / `focus_aging_pick` / `focus_aging_order`, which survives.
+# They are kept because `test_empty_role_reproduces_the_old_weights` above is
+# deliberately weaker — it compares the default against `_NO_ROLE` itself, so a
+# `_NO_ROLE` poisoned with a real entry would still satisfy it. The pair below
+# compares against an INDEPENDENTLY constructed empty mapping, and then proves
+# that comparison can detect a difference at all.
+
+
+def _role_gear_candidates() -> list[GearCandidate]:
+    return [
+        GearCandidate(slot="weapon_slot", code="iron_sword", gain=Fraction(100), level=10),
+        GearCandidate(slot="ring1_slot", code="iron_ring", gain=Fraction(50), level=8),
+        GearCandidate(slot="ring2_slot", code="iron_ring", gain=Fraction(50), level=8),
+    ]
+
+
+def test_default_role_is_inert() -> None:
+    """The inert-landing proof.
+
+    Comparing the default call against `role=_NO_ROLE` explicitly would be
+    VACUOUS: `_NO_ROLE` IS the default, so both sides invoke the identical
+    object no matter what that object holds — a `_NO_ROLE` poisoned with a
+    real `(slot, code)` entry would still make the two sides equal to each
+    other (review finding, Task 13). Comparing against an INDEPENDENTLY
+    constructed empty mapping instead means this test actually depends on
+    `_NO_ROLE` being empty: if the default sentinel were ever poisoned, the
+    poisoned default (left side) would diverge from the genuinely empty map
+    (right side) and this test would fail."""
+    cands = _role_gear_candidates()
+    focus: dict = {}
+    seats: dict = {}
+    truly_empty: dict[tuple[str, str], Fraction] = {}
+    assert (_scaled_weights(cands, focus)
+            == _scaled_weights(cands, focus, role=truly_empty))
+    assert (focus_aging_pick(cands, focus, seats)
+            is focus_aging_pick(cands, focus, seats, role=truly_empty))
+    assert (focus_aging_order(cands, focus, seats)
+            == focus_aging_order(cands, focus, seats, role=truly_empty))
+
+
+def test_nonempty_role_map_changes_weight_pick_and_order() -> None:
+    """Sanity check for the comparison methodology `test_default_role_is_inert`
+    relies on: a role map that actually penalizes a candidate MUST change the
+    weight, the pick, AND the order — demonstrating the comparison is capable
+    of detecting a difference at all. Without this, a byte-identical assertion
+    is evidence of nothing (review finding, Task 13)."""
+    off_role = GearCandidate(slot="artifact3_slot", code="trophy", gain=Fraction(25050), level=20)
+    on_role = GearCandidate(slot="ring1_slot", code="life_ring", gain=Fraction(21020), level=15)
+    cands = [off_role, on_role]
+    focus: dict = {}
+    seats: dict = {}
+    role = {("artifact3_slot", "trophy"): _MISALIGNED}
+
+    default_weights = dict(_scaled_weights(cands, focus))
+    penalized_weights = dict(_scaled_weights(cands, focus, role=role))
+    assert penalized_weights["artifact3_slot"] != default_weights["artifact3_slot"]
+    assert penalized_weights["artifact3_slot"] == default_weights["artifact3_slot"] * _MISALIGNED
+    assert penalized_weights["ring1_slot"] == default_weights["ring1_slot"]
+
+    default_pick = focus_aging_pick(cands, focus, seats)
+    penalized_pick = focus_aging_pick(cands, focus, seats, role=role)
+    assert default_pick is not None and penalized_pick is not None
+    assert default_pick.code == "trophy"
+    assert penalized_pick.code == "life_ring"
+
+    default_order = [c.code for c in focus_aging_order(cands, focus, seats)]
+    penalized_order = [c.code for c in focus_aging_order(cands, focus, seats, role=role)]
+    assert default_order == ["trophy", "life_ring"]
+    assert penalized_order == ["life_ring", "trophy"]
+    assert default_order != penalized_order

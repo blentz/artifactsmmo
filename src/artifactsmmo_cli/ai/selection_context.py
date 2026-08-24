@@ -96,31 +96,10 @@ class SelectionContext:
     # player's per-cycle coordination block; None on every single-character
     # run (Task 11 wires the producer — this means is inert until then).
     supply_target: tuple[str, int, int] | None = None
-    # The OWNED SKILLS of the specialization role this character holds THIS
-    # cycle (`role_catalog.role_skills(role)`), or the empty frozenset when it
-    # holds none — every single-character run, and any cycle whose lease is
-    # not held. Populated by the player's per-cycle coordination block from
-    # `GamePlayer._role` (resolved against `role_catalog.ROLES_BY_NAME`
-    # there, not here — this module imports nothing from the package, see the
-    # module docstring), the same seam as `supply_target`: the role is a
-    # per-cycle player runtime fact, which is exactly what this context
-    # carries, so the tree reads it here rather than through a second
-    # `decide`/`decide_tree` parameter.
-    #
-    # Carrying owned SKILLS rather than the role NAME is deliberate: it lets
-    # `progression_tree._role_map` turn this straight into the per-candidate
-    # role-fit multiplier without resolving a name against `ROLE_CATALOG`
-    # itself, which would re-import `role_catalog` into `ai.tiers` and revive
-    # the circular import `role_catalog -> tiers.skill_classes ->
-    # tiers.__init__ -> tiers.strategy -> tiers.progression_tree ->
-    # role_catalog` (2026-08-01 fix). `role_skills(role)` is never empty for a
-    # real `Role`, so the empty frozenset is an unambiguous "no role" sentinel
-    # — `_role_map` returns `{}` for it, the inert four-factor product.
-    role_skills: frozenset[str] = field(default_factory=frozenset)
     # {item_code: quantity} of BANK stock a SIBLING has already committed to
     # withdrawing this cycle — `CoordinationStore.sibling_bank_claims`, read
     # once per cycle by the player's coordination block and threaded here as
-    # DATA, the same seam as `supply_target` and `role_skills`. Empty (the
+    # DATA, the same seam as `supply_target`. Empty (the
     # default) on every single-character run and whenever no coordination
     # store is attached, which makes `bank_drain.bank_drain_excess`
     # byte-identical to its pre-coordination behaviour.
@@ -183,7 +162,7 @@ class SelectionContext:
     # {item_code} some SIBLING wants but marked NOT self-servable for itself —
     # `CoordinationStore.sibling_demand_asymmetric`, read once per cycle by the
     # player's coordination block and threaded here as DATA, the same seam as
-    # `supply_target` and `role_skills`. Empty (the default) on every
+    # `supply_target`. Empty (the default) on every
     # single-character run and whenever no coordination store is attached.
     #
     # This is the signal that distinguishes "a sibling asked but could gather
@@ -195,7 +174,7 @@ class SelectionContext:
 
     # Best crafting-skill level held by any LIVE SIBLING, per skill —
     # `CoordinationStore.sibling_skill_levels`, read once per cycle by the player
-    # and threaded here as DATA, the same seam as `supply_target`, `role_skills`,
+    # and threaded here as DATA, the same seam as `supply_target`,
     # `sibling_bank_claims` and `asymmetric_demand`. Empty (the default) on every
     # single-character run, which makes the sibling route silently absent rather
     # than wrong.
@@ -211,8 +190,8 @@ class SelectionContext:
     # round 2 re-keyed it off equipment slot alone, once a root could resolve
     # to a sentinel slot like `<skill>`/`<item>` a slot-only key would
     # collapse) — both owned and mutated by `GamePlayer._charge_focus`. THE
-    # ROOT WALK READS THEM HERE, on the same seam `supply_target` and
-    # `role_skills` use and for the same reason those chose it: they are
+    # ROOT WALK READS THEM HERE, on the same seam `supply_target`
+    # uses and for the same reason it chose it: they are
     # per-cycle player runtime facts, which is exactly what this context
     # carries, so the walk reads them here rather than through two more
     # `decide`/`decide_tree` parameters (the six the flip removed).

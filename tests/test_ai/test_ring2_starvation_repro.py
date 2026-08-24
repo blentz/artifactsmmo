@@ -124,7 +124,7 @@ def test_stuck_drop_root_does_not_starve_the_craftable_second_ring() -> None:
 
     RE-ROUTED BY WAVE 3a fix-round 1. The ledger no longer rides two
     `decide()` parameters; it rides `SelectionContext`, the same seam
-    `supply_target` and `role_skills` use, and the walk reads it in
+    `supply_target` uses, and the walk reads it in
     `WhichSlotIsFurthestBehind`. The loop below is otherwise the one that
     stood here before the flip: bump focus for the committed slot every cycle,
     bump a d'Hondt seat only on an INTERLEAVED decision (`aged_pick`), exactly
