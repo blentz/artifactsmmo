@@ -204,7 +204,9 @@ _NO_SYNERGY: Mapping[tuple[str, str], Fraction] = MappingProxyType({})
 """The empty synergy map — 'no alignment signal'. A missing `(slot, code)` entry
 reads as `Fraction(1)` (the §3.4 degenerate), so `_scaled_weights` with this
 sentinel is byte-identical to the pre-synergy weight `gain * falloff`. Mirrors
-`progression_tree._NO_FOCUS`/`_NO_SEATS`; the default for every synergy-aware
+`selection_context`'s `_NO_FOCUS`/`_NO_SEATS` — the live pair; `progression_tree`
+and `strategy` each carried a dead copy until wave 3a deleted both, so do not
+look for them there. The default for every synergy-aware
 function so the whole plumbing lands inert before real values arrive (spec §3.8),
 and the one-line kill switch if a live trace goes wrong."""
 

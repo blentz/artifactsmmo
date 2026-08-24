@@ -188,13 +188,21 @@ def objective_candidates(state: WorldState, game_data: GameData,
 # `RootResolution` instead, so as of this commit they had zero callers and zero
 # reachable lines. They are NOT the wave-3b deletion list: that is the public
 # schema (`RootScore.j` / `.reachable_level`, `StrategyDecision.j_ranking`).
-# Task 3a.7 deleted their one production reader (`plan_tree.rank_detail`), so
-# by this commit they are ALSO zero-reader — same shape as the four helpers
-# above, just public instead of private, which is exactly why the field
-# deletion is deferred to 3b rather than folded in here (spec §1.4: a schema
-# change is its own commit). `StrategyDecision.aged_pick` is NOT in that list —
-# it is live, read by `GamePlayer._charge_focus` every cycle. `J` (`finite_j`)
-# itself still has ONE live reader, but not here and not in the TUI: the
+# Task 3a.7 deleted the one production reader of `RootScore.j` /
+# `.reachable_level` (`plan_tree.rank_detail`), so THOSE TWO FIELDS are now
+# zero-reader under the spec's §1.2 convention (an `asdict`-style
+# serialisation is not a reader) — same shape as the four helpers above, just
+# public instead of private, which is why the field deletion is deferred to 3b
+# rather than folded in here (spec §1.4: a schema change is its own commit).
+#
+# `StrategyDecision.j_ranking` is NOT zero-reader, and a 3b agent must not read
+# the paragraph above as saying it is: `StrategyDecision.to_trace`
+# (`strategy.py:329-333`) iterates it and calls `finite_j` on every element,
+# and `to_trace` runs live at `player.py:2378` on each traced cycle. Deleting
+# it without that call site breaks tracing.
+# `StrategyDecision.aged_pick` is live too — `GamePlayer._charge_focus` reads
+# it every cycle. And `J` (`finite_j`) has readers in BOTH directions: the
+# `to_trace` path just named, `_j_by_identity` below in this file, and the
 # standalone legacy `objective` CLI (`commands/objective.py`), which still
 # runs the retired ranking on its own and is explicitly out of this wave's
 # scope. Leaving dead public fields behind to be tidied later is how this repo
