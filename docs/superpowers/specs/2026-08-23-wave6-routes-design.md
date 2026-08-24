@@ -386,7 +386,7 @@ def route_price(goal: MetaGoal, state: WorldState, game_data: GameData,
     """
     if isinstance(goal, ObtainItem):
         return acquisition_actions(goal.code, goal.quantity, state, game_data,
-                                   ctx, equip=goal.slot is not None,
+                                   ctx, equip=goal.slot is not None,  # C11: the ONE equip rule
                                    store=history)
     if isinstance(goal, ReachSkillLevel):
         # Cycles ARE actions -- `skill_grind_cost_core`'s own headline. This
@@ -1112,15 +1112,33 @@ means did not fire. **The re-denomination of 5.4 is justified by unit hygiene
 (§3.1), not by a claim that it will make the rung fire.** Anyone expecting the
 latter should read O9b first.
 
-**U5 — whether `ObtainItem.slot` is the right `equip=` signal in `route_price`.**
-`acquisition_actions(..., equip=True)` adds exactly `EQUIP_ACTIONS = 1`
-(`acquisition_cost.py:62`). `ObtainItem` carries `slot: str | None`, and
-`IsThisTargetBlocked` constructs a slot-less `ObtainItem` for a *material*
-blocker (`root.py:436`) and a slotted one for the item itself (`:424`, `:430`).
-That mapping looks right, but I did not check whether any existing caller of
-`acquisition_actions` disagrees — `strategy_driver.py:378` passes `equip=True`
-unconditionally for a deficit code. If the two disagree, one of them is wrong
-and I do not know which.
+**U5 — RESOLVED 2026-08-24 by the user; `ObtainItem.slot` IS the signal, and it
+is the only one.** `acquisition_actions(..., equip=True)` adds exactly
+`EQUIP_ACTIONS = 1` (`acquisition_cost.py:62`). `ObtainItem` carries
+`slot: str | None`, and `IsThisTargetBlocked` constructs a slot-less
+`ObtainItem` for a *material* blocker (`root.py:436`) and a slotted one for the
+item itself (`:424`, `:430`).
+
+The worry was that `strategy_driver.py:378` passes `equip=True` unconditionally
+for a deficit code and might disagree. **It cannot.**
+`combat_deficit.deficit_upgrade_target` is typed `-> tuple[str, str] | None`
+and returns `(item_code, slot)` (`combat_deficit.py:164-169`), deriving the
+slot from `ITEM_TYPE_TO_SLOTS` on the candidate's item type and REJECTING any
+candidate with no slot. So every code it prices has a slot: `goal.slot is not
+None` and the hand-written `equip=True` are the same value, and the second one
+was duplication rather than a rival answer.
+
+Consequently wave 4's node passes NO `equip=` argument (wave 4 §5.1, amended):
+`cost_of` is widened to `(code, slot)` — the scan has already derived the slot —
+and `route_price` reads `goal.slot`. One rule for the slot, one rule for equip,
+no assertion beside a value that already knows.
+
+This does NOT generalise: `goals/supply_bank.py:223` and
+`tiers/skill_grind_target.py:308` pass `equip=False` for items that may be
+equippable, because those callers bank or craft-for-XP rather than wear. There,
+`equip` means "this character will put it on", which the item alone cannot
+answer, and the parameter stays. The predicates coincide only where the value
+in hand is a `(code, slot)` pair.
 
 ### 8.3 Which claims are MEASURED and which are REASONED
 

@@ -632,16 +632,21 @@ class WhichSlotClosesTheFight(Decision[MetaGoal]):
         self.walk.trail.append(self.name)
 
         # [AMENDED w6] Was a direct `acquisition_actions` closure, lifted from
-        # `strategy_driver.py:378` (verified: `equip=True` unconditionally,
-        # and it is strategy_driver's ONLY `acquisition_actions` call site).
-        # It now forwards through wave 6's funnel so `ai/decisions/` keeps a
-        # single pricing import and O6 stays green. `equip=True` is preserved
-        # DELIBERATELY, because 4.2 must be behaviour-preserving in price:
-        # `route_price` would derive `equip` from `goal.slot is not None`,
-        # which is wave 6 U5's open question (§11 C11). Do not "fix" it here.
-        def actions_of(code: str) -> int:
-            return route_price(ObtainItem(code, 1, slot=None), state,
-                               game_data, ctx, history, equip=True)
+        # `strategy_driver.py:378`. It now forwards through wave 6's funnel so
+        # `ai/decisions/` keeps a single pricing import and O6 stays green.
+        #
+        # [AMENDED C11] There is no `equip=` argument here, and that is the
+        # point. `route_price` derives it from `goal.slot`, which is the ONLY
+        # rule; the old `equip=True` was that same fact asserted a second time
+        # by hand. `cost_of` is widened to take the slot the scan has already
+        # derived (`combat_deficit` computes it from `ITEM_TYPE_TO_SLOTS` on
+        # `step.item_type`), so the slot rule lives in one place and the equip
+        # rule reads it. Price is unchanged: every candidate the scan prices
+        # has a slot, so the derived `equip` is True exactly where the hand-
+        # written one was.
+        def actions_of(code: str, slot: str) -> int:
+            return route_price(ObtainItem(code, 1, slot=slot), state,
+                               game_data, ctx, history)
 
         target = deficit_upgrade_target(state, game_data, cost_of=actions_of)
         if target is None:
@@ -1317,16 +1322,35 @@ of `CycleStepF` to tell, and I did not build.
 counted them separately and did not check whether one predominantly follows the
 other. It does not change any recommendation here.
 
-**U6 (new) — `[AMENDED w6]` which `equip=` signal is right when the deficit
-price moves to `route_price`.** `strategy_driver.py:378` passes `equip=True`
+**U6 (new) — ~~which `equip=` signal is right when the deficit price moves to
+`route_price`~~ — RESOLVED 2026-08-24, it was not a real question.** `strategy_driver.py:378` passes `equip=True`
 unconditionally for a deficit code (verified). Wave 6's `route_price` derives
 it as `goal.slot is not None`, and wave 6 U5 flags the same disagreement from
 the other side: *"If the two disagree, one of them is wrong and I do not know
-which."* Neither document resolves it, so **neither wave may resolve it by
-accident**: §5.1 pins `equip=True` explicitly so increment 4.2 is
-price-preserving, and the reconciliation is deferred to whichever wave first
-has a test that can see the difference. §11 C11 — this is the largest
-unresolved GAP between the two documents.
+which."*
+
+**RESOLVED, 2026-08-24, by the user: this was an epicycle — two mechanisms
+connoting one meaning, not two rival answers.** They cannot disagree at this
+call site, by construction rather than by convention:
+`combat_deficit.deficit_upgrade_target` is typed
+`-> tuple[str, str] | None` and returns `(item_code, slot)`
+(`combat_deficit.py:164-169`). Every candidate it hands to `_deficit_cost`
+therefore HAS a slot, so `goal.slot is not None` is `True` for all of them and
+`equip=True` is the same value written a second way.
+
+The fix is to delete the second mechanism, not to choose between them.
+`route_price` does NOT get its own `equip=goal.slot is not None` rule for the
+deficit price; the slot the target already carries is the single source of the
+answer. A caller asserting `equip=True` beside a value that already knows it is
+the duplication, and duplication is what produced the apparent conflict.
+
+This does not generalise to every `equip=` site, and the distinction is worth
+keeping: `goals/supply_bank.py:223` and `tiers/skill_grind_target.py:308` pass
+`equip=False` for items that may well BE equippable, because those callers bank
+or craft-for-XP rather than wear. `equip` there means "this character will put
+it on", which the item alone cannot answer. The predicates coincide for the
+deficit target specifically — where the value is a `(code, slot)` pair — and
+nowhere else automatically.
 
 ### 9.3 Which claims are measured and which are reasoned
 
@@ -1416,7 +1440,7 @@ about disagreements, not about deleting wave 4.
 | **C8** | who builds the shared fixtures, and in what order | §5.5 increment 4.0 — silent on wave 6 | §5.0 + R5 — *"wave 4 first"*, wave 6 inherits 4.0's fixtures | **GAP** (wave 4 never names wave 6) | Wave 4 §5.5 now records the ordering, and that **4.0 does not owe the GE order book or the `items`-type task** — those are wave 6 §5.0's |
 | **C9** | **`acquisition_cost` imported under `ai/decisions/`** | §5.1 — node body calls `acquisition_actions` directly | §7 O6 — *"no import of `acquisition_cost` … except in `decisions/route.py`"*, census wired into `gate.sh` | **SILENT CONFLICT — the most serious** | Verified: `ai/decisions/{obtain_item,root}.py` import **zero** pricing modules today, so wave 4's 4.2 is O6's first violation and the gate goes red the day it lands. §5.1 now prices via `route_price`; §5.5 adds increment **4.1b** so `decisions/route.py` exists first; §8 adds O6 as inherited |
 | **C10** | the `cost_of` callback's type and name | §5.1 — `def cost_of(code) -> float` | §3.2 — retype `int` / rename `actions_of`, *"in the same commit that moves the call site (wave 4's `WhichSlotClosesTheFight`)"* | **SILENT CONFLICT** | Wave 6 assigned work to a wave-4 commit; wave 4 never accepted it. Accepted now — §5.1 detail 4. Verified `combat_deficit`'s param is `Callable[[str], float]` (`:168`, `:220`) and `strategy_driver.py:378` wraps in `float(...)` |
-| **C11** | the `equip=` signal for the deficit price | §5.1 — `equip=True` unconditionally (matches `strategy_driver.py:378`, verified sole call site) | U5 — `route_price` derives `equip=goal.slot is not None`; *"If the two disagree, one of them is wrong and I do not know which"* | **GAP — the largest unresolved one** | Neither resolves it. §5.1 pins `equip=True` so 4.2 is price-preserving and §9.2 U6 records it as open. **Do not let a refactor silently pick one** |
+| **C11** | the `equip=` signal for the deficit price | §5.1 — `equip=True` unconditionally (matches `strategy_driver.py:378`, verified sole call site) | U5 — `route_price` derives `equip=goal.slot is not None` | ~~GAP~~ **RESOLVED 2026-08-24 — not a conflict** | An epicycle: `deficit_upgrade_target` is typed `-> tuple[str, str]` and returns `(item_code, slot)` (`combat_deficit.py:164-169`), so every priced candidate has a slot and the two predicates are the SAME VALUE here. Delete the duplicate rather than choose: `route_price` gets no `equip=` rule of its own for the deficit price. See §9.2 |
 | **C12** | no `Decision` branches on a `SourceKind` | silent; design adds none | §2.3 + O8 — *"the single rule most likely to be violated by a GE or potion feature request"* | AGREE (checked negative) | Verified: `SourceKind` appears **nowhere** in `ai/decisions/` or `combat_deficit.py`. Wave 4's design introduces no branch on it. The brief asked; the answer is clean |
 | **C13** | how many guards survive wave 4 | §4 — *"leaves exactly eleven"* | §1.1, §5.3 — build on `CRAFT_POTIONS` still being a `BAND_GUARD` rung | **SILENT CONFLICT** | §4's arithmetic assumed both sequencing guards leave; §6.1 keeps one. **Twelve** `GUARD_ORDER` entries survive. §4 and §5.3 corrected. Verified 13 members / 13 entries today |
 | **C14** | `decide_key` guard indices | §7 — removing index 8 shifts `craftPotions` **11→10** | §1.1 — *"oracle index 11"* | **SILENT CONFLICT** | Verified `_GUARD_INDEX` (`test_decide_key_diff.py:26-40`). Wave 6's own R5 puts wave 4 first, so wave 6's citation is stale on arrival. **Minimal wave-6 amendment applied** to §1.1 |
@@ -1449,8 +1473,11 @@ a reviewer may refuse it, and this document is that refusal.
 
 ### 11.2 What this reconciliation could not resolve
 
-* **C11 (`equip=`).** Both documents are aware; neither has a test that can see
-  the difference. It is pinned to today's behaviour and flagged, not decided.
+* ~~**C11 (`equip=`).**~~ **RESOLVED 2026-08-24** — see §9.2. It was an
+  epicycle: `deficit_upgrade_target` returns `(item_code, slot)`, so both
+  predicates are the same value at that call site and there was never a
+  disagreement to settle. One mechanism survives; `route_price` gains no rule
+  of its own for the deficit price.
 * **C19 (O9a's baseline).** Wave 6 owes a re-measurement it cannot take until
   wave 4's fixtures and node exist. Recorded as an ordering obligation.
 * **C24's magnitude.** Whether 22 hidden prices per firing is affordable at
