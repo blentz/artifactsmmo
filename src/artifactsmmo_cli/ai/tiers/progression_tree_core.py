@@ -8,7 +8,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from fractions import Fraction
-from types import MappingProxyType
 
 TRUNK_CAP = 50
 BAND = 10
@@ -25,15 +24,6 @@ def milestone_pure(level: int) -> int:
     return min(TRUNK_CAP, (level // BAND + 1) * BAND)
 
 
-def branch_pick_pure(band_adequate: bool, gear_target_exists: bool) -> Branch:
-    """Gear-first until the band's loadout is adequate; then xp to the next
-    milestone. One boolean pivot — no scalar competition (the design's core
-    bet). Gear also yields when it has no reachable target (nothing to do)."""
-    if not band_adequate and gear_target_exists:
-        return Branch.GEAR
-    return Branch.XP
-
-
 POTION_TYPE_WEIGHTS: dict[str, Fraction] = {
     "hp_restore": Fraction(1),
     "boost": Fraction(1, 4),
@@ -43,7 +33,7 @@ POTION_TYPE_WEIGHTS: dict[str, Fraction] = {
 """Per-effect-family consumable weights — the ONLY tuning surface for
 potions in the gear branch (user decision 2026-07-06: health maximized now,
 other families dialed later). Applied as a multiplier on the candidate's
-value gain before gear_target_pick."""
+value gain before the gear branch ranks it."""
 
 
 def potion_type_weight(family: str) -> Fraction:
@@ -55,8 +45,10 @@ def potion_type_weight(family: str) -> Fraction:
 
 FOCUS_FLAT = 10
 """Iterations a freshly-focused root farms at FULL weight before decay begins.
-Below this the aging pick is bit-identical to the plain `gear_target_pick`
-argmax (see `focus_aging_pick`)."""
+While every candidate is at or below this level the resolution walk takes its
+flat-window fast path — `WhichSlotIsFurthestBehind._aged_head`
+(`ai/decisions/root.py`) returns the plain head instead of a `dhondt_step`, so
+a fresh root sees no interleave jitter."""
 
 FOCUS_SPAN = 100
 """Iterations over which a focused root's weight decays from 1 to FOCUS_FLOOR.
@@ -109,48 +101,17 @@ def dhondt_step(weighted: list[tuple[str, Fraction]],
 
     Callers accumulate seats incrementally across decisions (one bump for the
     returned key), giving an O(candidates)-per-decision proportional schedule
-    instead of recomputing from a global cycle index — see `interleave_due`,
-    which is exactly the (cycle+1)-fold of this step from empty seats."""
+    instead of recomputing the whole apportionment from a global cycle index.
+    The live caller is `WhichSlotIsFurthestBehind._aged_head`
+    (`ai/decisions/root.py`), whose seat ledger is `GamePlayer._interleave_seats`;
+    the no-starvation bound on the resulting schedule is
+    `Formal.Liveness.InterleaveNoStarvation.interleaveDue_reaches`."""
     if not weighted:
         return None
     return max(
         weighted,
         key=lambda kw: (kw[1] / (seats.get(kw[0], 0) + 1), kw[1], kw[0]),
     )[0]
-
-
-def interleave_due(weighted: list[tuple[str, Fraction]], cycle: int) -> str | None:
-    """Deterministic proportional scheduler (d'Hondt / highest-averages).
-
-    Returns the key that receives the (cycle+1)-th seat when seats are handed
-    out one at a time, each to the key maximizing `w_i / (seats_i + 1)`. The
-    method is house-monotone (no Alabama paradox), so each added seat goes to
-    exactly one key; over any window each key wins about `w_i / total` of the
-    seats, and every strictly-positive-weight key wins a seat within
-    `total / w_i` cycles (the no-starvation bound). The winning quotient ties
-    break by higher weight then key string — a canonical, list-order-independent
-    total order — so the schedule depends only on the SET of (key, weight) pairs
-    and the cycle, never on input ordering. Pure function of (weighted, cycle):
-    no persisted accumulator, no RNG, no wall-clock. `None` only for an empty
-    list.
-
-    This is the REFERENCE BATCH scheduler, defined as the fold of `dhondt_step`
-    over an accumulating `seats` dict for `cycle+1` steps: seat-for-seat
-    identical to recomputing the whole d'Hondt allocation from seat 0 (its
-    former body), so it stays byte-for-byte behavior-identical for fixed
-    weights. Live callers instead advance seats incrementally and take ONE
-    `dhondt_step` per decision — the fold identity guarantees that reproduces
-    this same schedule while costing O(candidates) rather than O(cycle)."""
-    if not weighted:
-        return None
-    seats: dict[str, int] = {}
-    winner = weighted[0][0]
-    for _ in range(cycle + 1):
-        step = dhondt_step(weighted, seats)
-        assert step is not None  # weighted is non-empty here
-        winner = step
-        seats[winner] = seats.get(winner, 0) + 1
-    return winner
 
 
 @dataclass(frozen=True)
@@ -161,170 +122,3 @@ class GearCandidate:
     code: str
     gain: Fraction
     level: int
-
-
-def _gear_pref_key(c: GearCandidate) -> tuple[Fraction, int, str, str]:
-    """Canonical total order for gear candidates: biggest RAW gain, then higher
-    item level (newer gear generation), then code and slot ascending as PURE
-    disambiguators (insertion-order and hash-seed independent). The single
-    source of truth for `gear_target_pick`'s argmax — the UNWEIGHTED baseline
-    the aging fast path collapses to. Mirrors Lean
-    `Formal.ProgressionTree.better`; `focusAgingPick_unaged_eq_argmax` rests on
-    this staying raw, so the selection factors must never be folded in here.
-    `focus_aging_order`'s tail uses `_scaled_pref_key` instead."""
-    return (-c.gain, -c.level, c.code, c.slot)
-
-
-def _scaled_pref_key(c: GearCandidate, weight: Fraction) -> tuple[Fraction, int, str, str]:
-    """`_gear_pref_key` with the SCALED weight in place of raw gain — the order
-    used for `focus_aging_order`'s tail, i.e. the fallback list the arbiter walks
-    when the head is unservable.
-
-    Live 2026-07-27: the tail sorted by RAW GAIN, so behind an achievability-
-    demoted head sat `lich_race_trophy (25050), lich_race_trophy, life_ring
-    (21020), adventurer_pants…` — the exact ordering the achievability factor
-    exists to prevent, preserved one position down. A fallback list that
-    disagrees with the head's own ranking hands the arbiter the demoted
-    candidate the moment the head cannot be served.
-
-    Reduces to `_gear_pref_key` exactly when every factor is inert (weight ==
-    gain), so the fast-path/argmax equivalence and every unweighted caller are
-    byte-identical."""
-    return (-weight, -c.level, c.code, c.slot)
-
-
-def gear_target_pick(candidates: list[GearCandidate]) -> GearCandidate | None:
-    """Deterministic argmax over the canonical `_gear_pref_key` total order."""
-    if not candidates:
-        return None
-    return min(candidates, key=_gear_pref_key)
-
-
-_NO_SYNERGY: Mapping[tuple[str, str], Fraction] = MappingProxyType({})
-"""The empty synergy map — 'no alignment signal'. A missing `(slot, code)` entry
-reads as `Fraction(1)` (the §3.4 degenerate), so `_scaled_weights` with this
-sentinel is byte-identical to the pre-synergy weight `gain * falloff`. Mirrors
-`selection_context`'s `_NO_FOCUS`/`_NO_SEATS` — the live pair; `progression_tree`
-and `strategy` each carried a dead copy until wave 3a deleted both, so do not
-look for them there. The default for every synergy-aware
-function so the whole plumbing lands inert before real values arrive (spec §3.8),
-and the one-line kill switch if a live trace goes wrong."""
-
-
-_NO_ACHIEVABILITY: Mapping[tuple[str, str], Fraction] = MappingProxyType({})
-"""The empty achievability map — 'no effort signal'. A missing `(slot, code)`
-entry reads as `Fraction(1)` (the achievability-core degenerate for a
-zero-effort/undifferentiated candidate), so `_scaled_weights` with this
-sentinel is byte-identical to the pre-achievability weight
-`gain * falloff * synergy`. Sibling of `_NO_SYNERGY`; the default for every
-achievability-aware function so the whole plumbing lands inert before real
-values arrive, and the one-line kill switch if a live trace goes wrong."""
-
-
-_NO_ROLE: Mapping[tuple[str, str], Fraction] = MappingProxyType({})
-"""The empty role map — 'no role signal'. A missing `(slot, code)` entry reads
-as `Fraction(1)`, so this sentinel is byte-identical to the pre-role weight
-`gain * falloff * synergy * achievability`. Sibling of `_NO_SYNERGY` /
-`_NO_ACHIEVABILITY`; the default for every role-aware function so the whole
-plumbing lands inert before real values arrive, and the one-line kill switch if
-a live trace goes wrong."""
-
-
-def _scaled_weights(candidates: list[GearCandidate],
-                    focus: Mapping[tuple[str, str], int],
-                    synergy: Mapping[tuple[str, str], Fraction] = _NO_SYNERGY,
-                    achievability: Mapping[tuple[str, str], Fraction] = _NO_ACHIEVABILITY,
-                    role: Mapping[tuple[str, str], Fraction] = _NO_ROLE
-                    ) -> list[tuple[str, Fraction]]:
-    """(slot-keyed weight) = base gain * falloff(focus level) * synergy *
-    achievability * role per candidate — magnitude * staleness * purity *
-    effort-to-reach * role fit (spec §3.2, achievability spec). Keyed by SLOT —
-    unique per candidate (one gear candidate per slot), so two same-code
-    candidates (e.g. iron_ring targeting ring1_slot AND ring2_slot) stay
-    distinct; keying by code would collapse them. The caller maps the winning
-    slot back to its GearCandidate. `synergy`/`achievability`/`role` all look
-    up on the SAME `(slot, code)` key as `focus`; a missing entry is
-    `Fraction(1)` (no signal), so the empty `_NO_SYNERGY`/`_NO_ACHIEVABILITY`/
-    `_NO_ROLE` reproduce the pre-synergy/pre-achievability/pre-role
-    `gain * falloff` weight exactly."""
-    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0))
-             * synergy.get((c.slot, c.code), Fraction(1))
-             * achievability.get((c.slot, c.code), Fraction(1))
-             * role.get((c.slot, c.code), Fraction(1)))
-            for c in candidates]
-
-
-def focus_aging_pick(candidates: list[GearCandidate],
-                     focus: Mapping[tuple[str, str], int],
-                     seats: Mapping[str, int],
-                     synergy: Mapping[tuple[str, str], Fraction] = _NO_SYNERGY,
-                     achievability: Mapping[tuple[str, str], Fraction] = _NO_ACHIEVABILITY,
-                     role: Mapping[tuple[str, str], Fraction] = _NO_ROLE
-                     ) -> GearCandidate | None:
-    """The gear root to pursue THIS cycle, with anti-starvation aging.
-
-    While every candidate is still inside its flat farm window (focus <=
-    FOCUS_FLAT) AND no candidate carries a synergy signal (every synergy
-    multiplier is the `Fraction(1)` no-signal default) AND no candidate carries
-    an achievability signal (every achievability multiplier is likewise
-    `Fraction(1)`) AND no candidate carries a role signal (every role
-    multiplier is likewise `Fraction(1)`), the result is bit-identical to the
-    proven `gear_target_pick` argmax — no jitter for fresh roots. The synergy,
-    achievability, AND role clauses are all load-bearing: weights can differ
-    even when nothing is stale, so without any one clause that factor would be
-    silently inert for the first FOCUS_FLAT cycles of every root — exactly the
-    window where it matters most (spec Phase 3; the same bug the synergy
-    docstring records, inherited by achievability and role unless the clause
-    is extended here too). Once any candidate has been focused past the flat
-    window OR a synergy/achievability/role signal is present, its selection
-    weight decays (see `falloff`) / is scaled (see `synergy`, `achievability`,
-    `role`) and the pick is the single `dhondt_step` over scaled gains GIVEN
-    the seats handed out so far (the caller accumulates one seat per aged
-    decision — see `GamePlayer._interleave_seats`), so a decayed stuck root
-    hands cycles to reachable alternatives without ever being fully abandoned
-    (FOCUS_FLOOR > 0).
-
-    Seats are held on the caller (like the focus ledger) rather than recomputed
-    from a global cycle index: for fixed weights, incrementally accumulated
-    seats reproduce the old `interleave_due(scaled, cycle)` schedule seat-for-
-    seat (the `dhondt_step`/`interleave_due` fold identity) at O(candidates)
-    cost per decision."""
-    if not candidates:
-        return None
-    if (all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)
-            and all(synergy.get((c.slot, c.code), Fraction(1)) == Fraction(1)
-                    for c in candidates)
-            and all(achievability.get((c.slot, c.code), Fraction(1)) == Fraction(1)
-                    for c in candidates)
-            and all(role.get((c.slot, c.code), Fraction(1)) == Fraction(1)
-                    for c in candidates)):
-        return gear_target_pick(candidates)
-    winner_slot = dhondt_step(
-        _scaled_weights(candidates, focus, synergy, achievability, role), seats)
-    return next(c for c in candidates if c.slot == winner_slot)
-
-
-def focus_aging_order(candidates: list[GearCandidate],
-                      focus: Mapping[tuple[str, str], int],
-                      seats: Mapping[str, int],
-                      synergy: Mapping[tuple[str, str], Fraction] = _NO_SYNERGY,
-                      achievability: Mapping[tuple[str, str], Fraction] = _NO_ACHIEVABILITY,
-                      role: Mapping[tuple[str, str], Fraction] = _NO_ROLE
-                      ) -> list[GearCandidate]:
-    """Display/fallback order whose head is exactly `focus_aging_pick` and
-    whose tail is the remaining candidates by SCALED weight — the same
-    gain * falloff * synergy * achievability * role the head is picked on.
-    Keeps `decide_tree`'s `ordered[0] == pick` invariant intact under aging,
-    synergy, achievability, and role scaling.
-
-    The tail sorted by raw gain until 2026-07-27; see `_scaled_pref_key` for the
-    live failure. With every factor inert the scaled key reduces to
-    `_gear_pref_key`, so the unweighted order is unchanged."""
-    if not candidates:
-        return []
-    pick = focus_aging_pick(candidates, focus, seats, synergy, achievability, role)
-    assert pick is not None
-    weights = dict(_scaled_weights(candidates, focus, synergy, achievability, role))
-    rest = sorted((c for c in candidates if c is not pick),
-                  key=lambda c: _scaled_pref_key(c, weights[c.slot]))
-    return [pick, *rest]

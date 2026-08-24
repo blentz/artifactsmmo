@@ -3604,19 +3604,15 @@ RECIPE_PRODUCIBLE_MUTATIONS = [
 
 # Progression-tree cores (2026-07-06): unit-killed group (OBJECTIVE_NOW
 # precedent) bound to tests/test_ai/test_progression_tree_core.py.
+# SPLIT IN WAVE 3b (re-derived deletion list §4/§5, §6.4): eleven mutants were
+# retired with their subjects — one over `branch_pick_pure`, one over
+# `focus_aging_order`'s tail, one over `_gear_pref_key`, four over
+# `focus_aging_pick`'s fast-path guard and four over `_scaled_weights`. §6.4
+# named only the last eight; the other three anchored on the same deleted code
+# and would have failed `--check-anchors`. What is left guards what the
+# resolution walk actually calls: `milestone_pure`, `potion_type_weight`,
+# `falloff` and `dhondt_step` (`ai/decisions/root.py:348-365`).
 PROGRESSION_TREE_MUTATIONS = [
-    ("tree: branch pick ignores adequacy (gear whenever a target exists)",
-     "    if not band_adequate and gear_target_exists:",
-     "    if gear_target_exists:"),
-    # Aging-order TAIL back to raw gain — the shape that shipped and was
-    # measured wrong live 2026-07-27. The tail IS the fallback list the arbiter
-    # walks when the head is unservable, so sorting it by raw gain reinstates
-    # exactly the ordering the head's own factors rejected (lich_race_trophy
-    # 25050 ahead of adventurer_pants 15019, one position down). The head is
-    # unaffected, so only a tail assertion can catch this.
-    ("tree: aging-order tail sorts by RAW gain, ignoring every factor",
-     "                  key=lambda c: _scaled_pref_key(c, weights[c.slot]))",
-     "                  key=_gear_pref_key)"),
     ("tree: milestone off-by-a-band (current band, not next)",
      "    return min(TRUNK_CAP, (level // BAND + 1) * BAND)",
      "    return min(TRUNK_CAP, (level // BAND) * BAND)"),
@@ -3626,9 +3622,6 @@ PROGRESSION_TREE_MUTATIONS = [
     ("tree: unknown potion family weighs like health",
      "    return POTION_TYPE_WEIGHTS.get(family, Fraction(0))",
      "    return POTION_TYPE_WEIGHTS.get(family, Fraction(1))"),
-    ("tree: argmax gain sign flipped (worst upgrade wins)",
-     "    return (-c.gain, -c.level, c.code, c.slot)",
-     "    return (c.gain, -c.level, c.code, c.slot)"),
     # Focus-aging pure functions (Task 7, 2026-07-18): unit-killed group.
     # falloff: flat-window floor swap.
     ("falloff: floor instead of full weight in flat window",
@@ -3639,8 +3632,8 @@ PROGRESSION_TREE_MUTATIONS = [
      "    return Fraction(1) - (Fraction(1) - FOCUS_FLOOR) * t * t",
      "    return Fraction(1)"),
     # dhondt_step: ignore seats already handed out in the d'Hondt quotient
-    # (breaks proportionality — the same top-weight key wins every seat, so
-    # interleave_due collapses to one winner every cycle).
+    # (breaks proportionality — the same top-weight key wins every seat, so the
+    # aged head collapses to one winner every cycle: starvation reinstated).
     ("dhondt_step: ignore seats in the quotient (breaks proportionality)",
      "        key=lambda kw: (kw[1] / (seats.get(kw[0], 0) + 1), kw[1], kw[0]),",
      "        key=lambda kw: (kw[1], kw[1], kw[0]),"),
@@ -3653,58 +3646,6 @@ PROGRESSION_TREE_MUTATIONS = [
     ("dhondt_step: lowest-averages instead of highest",
      "    return max(\n        weighted,",
      "    return min(\n        weighted,"),
-    # focus_aging_pick: never take the bit-identical argmax fast-path.
-    ("aging pick: never take the argmax fast-path",
-     "    if (all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)\n            and all(synergy.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)\n            and all(achievability.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)\n            and all(role.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)):\n        return gear_target_pick(candidates)",
-     "    if False:\n        return gear_target_pick(candidates)"),
-    # focus_aging_pick: the FAST-PATH TRAP (spec Phase 3). Drop the synergy clause
-    # from the guard, so the argmax fast-path is taken whenever nothing is stale
-    # even if a synergy signal should have steered the pick — synergy goes silently
-    # inert for the first FOCUS_FLAT cycles of every root.
-    ("aging pick: fast-path ignores synergy signal (the Phase-3 trap)",
-     "    if (all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)\n            and all(synergy.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)\n            and all(achievability.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)\n            and all(role.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)):\n        return gear_target_pick(candidates)",
-     "    if (all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)\n            and all(achievability.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)\n            and all(role.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)):\n        return gear_target_pick(candidates)"),
-    # focus_aging_pick: achievability inherits the IDENTICAL Phase-3 trap (Task 4,
-    # 2026-07-26). Drop the achievability clause from the guard, so the argmax
-    # fast-path is taken whenever nothing is stale even if an achievability
-    # signal should have steered the pick — achievability goes silently inert
-    # for the first FOCUS_FLAT cycles of every root, exactly the window the
-    # brief's own trap warning targets.
-    ("aging pick: fast-path ignores achievability signal (inherits the Phase-3 trap)",
-     "    if (all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)\n            and all(synergy.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)\n            and all(achievability.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)\n            and all(role.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)):\n        return gear_target_pick(candidates)",
-     "    if (all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)\n            and all(synergy.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)\n            and all(role.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)):\n        return gear_target_pick(candidates)"),
-    # focus_aging_pick: role inherits the IDENTICAL Phase-3 trap (Task 13,
-    # 2026-08-01). Drop the role clause from the guard, so the argmax fast-path
-    # is taken whenever nothing is stale even if a role signal should have
-    # steered the pick — role goes silently inert for the first FOCUS_FLAT
-    # cycles of every root, exactly the window the brief's own trap warning
-    # targets (the same bug synergy's and achievability's docstrings record).
-    ("aging pick: fast-path ignores role signal (inherits the Phase-3 trap)",
-     "    if (all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)\n            and all(synergy.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)\n            and all(achievability.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)\n            and all(role.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)):\n        return gear_target_pick(candidates)",
-     "    if (all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)\n            and all(synergy.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)\n            and all(achievability.get((c.slot, c.code), Fraction(1)) == Fraction(1)\n                    for c in candidates)):\n        return gear_target_pick(candidates)"),
-    # _scaled_weights: key the returned weight by code instead of slot, so two
-    # same-code candidates in different slots (e.g. a ring in ring1/ring2)
-    # collapse into one interleave entry.
-    ("scaled weights: key by code instead of slot (collapses dual-slot candidates)",
-     "    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0))\n             * synergy.get((c.slot, c.code), Fraction(1))\n             * achievability.get((c.slot, c.code), Fraction(1))\n             * role.get((c.slot, c.code), Fraction(1)))\n            for c in candidates]",
-     "    return [(c.code, c.gain * falloff(focus.get((c.slot, c.code), 0))\n             * synergy.get((c.slot, c.code), Fraction(1))\n             * achievability.get((c.slot, c.code), Fraction(1))\n             * role.get((c.slot, c.code), Fraction(1)))\n            for c in candidates]"),
-    # _scaled_weights: drop the synergy factor, so alignment stops modulating the
-    # weight and a zero-overlap currency root is no longer suppressed.
-    ("scaled weights: drop the synergy factor",
-     "    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0))\n             * synergy.get((c.slot, c.code), Fraction(1))\n             * achievability.get((c.slot, c.code), Fraction(1))\n             * role.get((c.slot, c.code), Fraction(1)))\n            for c in candidates]",
-     "    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0))\n             * achievability.get((c.slot, c.code), Fraction(1))\n             * role.get((c.slot, c.code), Fraction(1)))\n            for c in candidates]"),
-    # _scaled_weights: drop the achievability factor (Task 4, 2026-07-26), so
-    # effort-to-reach stops modulating the weight and a maximally distant
-    # candidate competes on raw gain alone.
-    ("scaled weights: drop the achievability factor",
-     "    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0))\n             * synergy.get((c.slot, c.code), Fraction(1))\n             * achievability.get((c.slot, c.code), Fraction(1))\n             * role.get((c.slot, c.code), Fraction(1)))\n            for c in candidates]",
-     "    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0))\n             * synergy.get((c.slot, c.code), Fraction(1))\n             * role.get((c.slot, c.code), Fraction(1)))\n            for c in candidates]"),
-    # _scaled_weights: drop the role factor (Task 13, 2026-08-01), so role
-    # alignment stops modulating the weight and an off-role chain competes on
-    # raw gain*falloff*synergy*achievability alone.
-    ("scaled weights: drop the role factor",
-     "    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0))\n             * synergy.get((c.slot, c.code), Fraction(1))\n             * achievability.get((c.slot, c.code), Fraction(1))\n             * role.get((c.slot, c.code), Fraction(1)))\n            for c in candidates]",
-     "    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0))\n             * synergy.get((c.slot, c.code), Fraction(1))\n             * achievability.get((c.slot, c.code), Fraction(1)))\n            for c in candidates]"),
 ]
 
 # synergy_core.synergy_pure — the purity factor of weight = gain*falloff*synergy
