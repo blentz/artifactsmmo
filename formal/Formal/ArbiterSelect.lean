@@ -56,8 +56,10 @@ Lean core only — no mathlib.
 namespace Formal.ArbiterSelect
 
 /-- A candidate is `(id, isMeans, band)` where `isMeans = false` ⇒ guard.
-`band` is the priority band (guards 0, collect 1, step ~2/3, discretionary 4);
-lower band = higher priority. -/
+`band` is the priority band (guards 0, collect 1, step 2, raid 3,
+fallback step 4, discretionary 5); lower band = higher priority.
+RENUMBERED 2026-08-23 (wave 3a fix-round 1) when `BAND_RAID` was
+inserted at 3 — see `ai/arbiter_select.py`. -/
 structure Candidate where
   id : Nat
   isMeans : Bool
@@ -88,12 +90,18 @@ def guardPrecedes (cs : List Candidate) (committed : Nat) : Bool :=
   (cs.filter (fun c => !c.isMeans)).any (fun g => precedes cs g.id committed)
 
 /-- A strictly-lower-band candidate strictly precedes the committed id — and the
-committed band is not discretionary (band < 4). Mirrors the Python band-aware
+committed band is not discretionary (band < 5). Mirrors the Python band-aware
 sticky preemption: a higher-priority (lower-band) means that comes first must not
 be preempted by a sticky lower-priority commitment. Discretionary commits
-(band 4) are exempt. -/
+(band 5) are exempt.
+
+The literal was 4 until 2026-08-23, when `BAND_RAID` was inserted at 3 and
+discretionary moved 4 → 5. This mirrors the SAME inlined literal in
+`arbiter_select.select_pure` (the extractor's v1 subset cannot resolve a module
+constant), so the two must move together — the Python half is guarded by
+`test_discretionary_band_literal_matches_constant`. -/
 def lowerBandPrecedes (cs : List Candidate) (committed : Nat) (committedBand : Int) : Bool :=
-  decide (committedBand < 4) &&
+  decide (committedBand < 5) &&
     cs.any (fun d => decide (d.band < committedBand) && precedes cs d.id committed)
 
 /-! ### Walk + selector. -/
@@ -622,28 +630,36 @@ theorem select_pure_sticky_idempotent
 
 /-! ### Theorem (d'): band-aware anti-freeze (NO sticky preempt of a lower band).
 
-The copper_ring freeze: a band-3 step means was committed while a plannable
-band-2 collect means preceded it in the list. Sticky short-circuit would keep
-firing the band-3 commit forever. The band-aware rule blocks the sticky path
-whenever a strictly-lower-band candidate precedes the committed one (and the
-commit is not discretionary), letting the walk pick the higher-priority means. -/
+The copper_ring freeze: a FALLBACK-band step means was committed while a
+plannable band-2 collect means preceded it in the list. Sticky short-circuit
+would keep firing the fallback commit forever. The band-aware rule blocks the
+sticky path whenever a strictly-lower-band candidate precedes the committed one
+(and the commit is not discretionary), letting the walk pick the higher-priority
+means. (The fallback band is 4 since the 2026-08-23 renumber; the trace that
+produced this theorem called it band 3.) -/
 
 /-- When a strictly-lower-band candidate `d` precedes the committed means `c`
-(and `c` is not discretionary, `c.band < 4`), the sticky path does NOT return
+(and `c` is not discretionary, `c.band < 5`), the sticky path does NOT return
 the committed candidate — its first component is `none`, so `selectPure` runs
-the walk instead. -/
+the walk instead.
+
+STRENGTHENED 2026-08-23 by the `BAND_RAID` renumber: the hypothesis relaxed from
+`c.band < 4` to `c.band < 5`, so the theorem now also covers a committed
+FALLBACK-band means (4) — the exact band the copper_ring freeze occurred in —
+and exempts only band 5. Weaker hypothesis, same conclusion: strictly more
+cases, not fewer. -/
 theorem select_pure_no_sticky_preempt_lower_band
     (cs : List Candidate) (cid : Nat) (c d : Candidate)
     (plannable satisfied suppressed : Nat → Bool)
     (hfind : findCommitted cs cid = some c)
     (hlow : d ∈ cs)
     (hband : d.band < c.band)
-    (hcbandlt : c.band < 4)
+    (hcbandlt : c.band < 5)
     (hprec : precedes cs d.id cid = true) :
     (stickyOutcome cs (some cid) plannable satisfied suppressed).1 = none := by
   have hlbp : lowerBandPrecedes cs cid c.band = true := by
     unfold lowerBandPrecedes
-    have h1 : decide (c.band < 4) = true := by rw [decide_eq_true_eq]; exact hcbandlt
+    have h1 : decide (c.band < 5) = true := by rw [decide_eq_true_eq]; exact hcbandlt
     have h2 : cs.any (fun x => decide (x.band < c.band) && precedes cs x.id cid) = true := by
       rw [List.any_eq_true]
       refine ⟨d, hlow, ?_⟩
@@ -774,22 +790,36 @@ example :
         · simp at ha
 
 /-- Non-vacuity witness for the band-aware anti-freeze theorem (the copper_ring
-freeze): the committed band-3 means `⟨1, true, 3⟩` is preceded by a plannable
-band-2 means `⟨0, true, 2⟩`. The theorem's hypotheses all hold, so the sticky
-path yields `none`. -/
+freeze): the committed FALLBACK-band means `⟨1, true, 4⟩` is preceded by a
+plannable band-2 means `⟨0, true, 2⟩`. The theorem's hypotheses all hold, so the
+sticky path yields `none`.
+
+MOVED 3 → 4 by the 2026-08-23 renumber, and deliberately: 4 is the fallback
+band the copper_ring freeze actually occurred in, AND it is the new boundary
+case — the largest band the relaxed `c.band < 5` hypothesis admits. A witness at
+3 would still satisfy the OLD hypothesis and so would not exercise what
+changed. -/
 example :
-    (stickyOutcome [⟨0, true, 2⟩, ⟨1, true, 3⟩] (some 1)
+    (stickyOutcome [⟨0, true, 2⟩, ⟨1, true, 4⟩] (some 1)
       (fun _ => true) (fun _ => false) (fun _ => false)).1 = none :=
   select_pure_no_sticky_preempt_lower_band
-    [⟨0, true, 2⟩, ⟨1, true, 3⟩] 1 ⟨1, true, 3⟩ ⟨0, true, 2⟩
+    [⟨0, true, 2⟩, ⟨1, true, 4⟩] 1 ⟨1, true, 4⟩ ⟨0, true, 2⟩
     (fun _ => true) (fun _ => false) (fun _ => false)
     (by decide) (by decide) (by decide) (by decide) (by decide)
 
+/-- The OTHER side of the boundary, so the relaxed hypothesis is not silently
+too wide: a committed DISCRETIONARY means (band 5) preceded by a plannable
+band-2 means is EXEMPT — `lowerBandPrecedes` is false, so the sticky path still
+returns the commitment. Without this, moving `< 4` to `< 5` could have
+swallowed the discretionary exemption unnoticed. -/
+example :
+    lowerBandPrecedes [⟨0, true, 2⟩, ⟨1, true, 5⟩] 1 5 = false := by decide
+
 /-- End-to-end consequence: with the sticky path blocked, `selectPure` walks and
 returns the higher-priority band-2 means `⟨0, true, 2⟩` — not the committed
-band-3 means. -/
+fallback-band means. -/
 example :
-    (selectPure [⟨0, true, 2⟩, ⟨1, true, 3⟩] (some 1)
+    (selectPure [⟨0, true, 2⟩, ⟨1, true, 4⟩] (some 1)
       (fun _ => true) (fun _ => false) (fun _ => false)).1 = some ⟨0, true, 2⟩ := by
   decide
 

@@ -2264,9 +2264,11 @@ ARBITER_SELECT_MUTATIONS = [
     ("arbiter_select: lower_band comparison flip (< -> >)",
      "                c.band < committed_cand.band and _precedes(candidates, c.repr_, committed_repr)",
      "                c.band > committed_cand.band and _precedes(candidates, c.repr_, committed_repr)"),
-    # widen the discretionary exemption so band-4 commits are ALSO preemptable —
+    # widen the discretionary exemption so band-5 commits are ALSO preemptable —
     # breaks the worth-gate-governed task arbitration the exemption preserves.
-    ("arbiter_select: widen discretionary exemption (band < 4 -> band < 999)",
+    # (band-4 in the original; discretionary moved 4 -> 5 with the 2026-08-23
+    # `BAND_RAID` insertion.)
+    ("arbiter_select: widen discretionary exemption (band < 5 -> band < 999)",
      "            lower_band_precedes = committed_cand.band < 5 and any(",
      "            lower_band_precedes = committed_cand.band < 999 and any("),
     # reverse the precedes comparison: a_idx < b_idx -> a_idx > b_idx, so a

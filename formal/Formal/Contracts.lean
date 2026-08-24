@@ -3436,15 +3436,19 @@ example : ∀ (skillEffect : Formal.EquipmentScoring.Item → Int) (playerLevel 
 
 Pins the EXACT statement of the band-aware sticky-preemption block: when a
 strictly-lower-band candidate `d` precedes the committed means `c` (and `c` is
-not discretionary, `c.band < 4`), the sticky path yields `none` — the walk runs
-instead of re-firing the stale commitment (the copper_ring freeze fix). -/
+not discretionary, `c.band < 5`), the sticky path yields `none` — the walk runs
+instead of re-firing the stale commitment (the copper_ring freeze fix).
+
+The bound moved 4 → 5 on 2026-08-23 with the `BAND_RAID` renumber; the
+statement is STRICTLY STRONGER (a weaker hypothesis admits the fallback band 4,
+where the freeze actually occurred). -/
 example : ∀ (cs : List Formal.ArbiterSelect.Candidate) (cid : Nat)
     (c d : Formal.ArbiterSelect.Candidate)
     (plannable satisfied suppressed : Nat → Bool),
     Formal.ArbiterSelect.findCommitted cs cid = some c →
     d ∈ cs →
     d.band < c.band →
-    c.band < 4 →
+    c.band < 5 →
     Formal.ArbiterSelect.precedes cs d.id cid = true →
     (Formal.ArbiterSelect.stickyOutcome cs (some cid) plannable satisfied suppressed).1 = none :=
   @Formal.ArbiterSelect.select_pure_no_sticky_preempt_lower_band

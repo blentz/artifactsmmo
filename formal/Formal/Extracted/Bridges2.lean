@@ -220,14 +220,14 @@ hand `lowerBandPrecedes cs cid c.band`. -/
 private theorem lower_band_bridge (f : Nat → String) (hf : ∀ a b, f a = f b → a = b)
     (cs : List Formal.ArbiterSelect.Candidate) (c : Formal.ArbiterSelect.Candidate)
     (cid : Nat) :
-    (decide ((encC f c).band < 4)
+    (decide ((encC f c).band < 5)
         && List.any (cs.map (encC f))
             (fun x => decide (x.band < (encC f c).band)
               && Extracted.ArbiterSelect._precedes (cs.map (encC f)) x.repr_ (f cid)))
       = lowerBandPrecedes cs cid c.band := by
   unfold Formal.ArbiterSelect.lowerBandPrecedes
   simp only [encC_band]
-  exact congrArg (fun z => decide (c.band < 4) && z) (lower_band_any_aux f hf cs c.band cid cs)
+  exact congrArg (fun z => decide (c.band < 5) && z) (lower_band_any_aux f hf cs c.band cid cs)
 
 /-! ## The walk -/
 

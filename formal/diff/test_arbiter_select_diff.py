@@ -129,21 +129,26 @@ def _wellformed_input(draw):
     ids = draw(st.lists(st.integers(min_value=0, max_value=999),
                         min_size=n_guards + n_means, max_size=n_guards + n_means, unique=True))
     raw: list[tuple[int, bool, bool, bool, bool, int]] = []
-    # Bands drawn freely across 0..4 (guards conventionally 0 in production, but
+    # Bands drawn freely across 0..5 (guards conventionally 0 in production, but
     # the selector agrees for ANY band assignment — exercise the full space so
-    # the lower_band_precedes branch and its band<4 discretionary exemption are
+    # the lower_band_precedes branch and its band<5 discretionary exemption are
     # both hit).
+    #
+    # WIDENED 4 -> 5 on 2026-08-23 with the `BAND_RAID` renumber, and this was
+    # not cosmetic: discretionary moved to 5, so a 0..4 draw could no longer
+    # produce a discretionary candidate at all and the exemption branch went
+    # unexercised by the fuzzer while its comment still claimed otherwise.
     for i in range(n_guards):
         raw.append((
             ids[i], False,
             draw(st.booleans()), draw(st.booleans()), draw(st.booleans()),
-            draw(st.integers(min_value=0, max_value=4)),
+            draw(st.integers(min_value=0, max_value=5)),
         ))
     for j in range(n_means):
         raw.append((
             ids[n_guards + j], True,
             draw(st.booleans()), draw(st.booleans()), draw(st.booleans()),
-            draw(st.integers(min_value=0, max_value=4)),
+            draw(st.integers(min_value=0, max_value=5)),
         ))
     # Committed may target an existing means id, or be absent, or target an
     # arbitrary id (testing the no-match path).
@@ -226,12 +231,18 @@ def test_sticky_falls_through_when_committed_unplannable():
 
 
 def test_sticky_blocked_by_lower_band_step_freeze_regression():
-    """The copper_ring char-XP freeze (trace 2026-07-01): a committed band-3
-    fallback grind is preempted by a plannable band-2 objective step that precedes
-    it. The band-2 step must win — both implementations agree."""
+    """The copper_ring char-XP freeze (trace 2026-07-01): a committed FALLBACK
+    grind is preempted by a plannable band-2 objective step that precedes it.
+    The band-2 step must win — both implementations agree.
+
+    RENUMBERED 2026-08-23: the fallback band is 4 since `BAND_RAID` was inserted
+    at 3. Moved with it so the case still names the band the freeze occurred in
+    — and 4 is now the boundary case, the largest band the `< 5` exemption test
+    admits, so this exercises what changed rather than a band that was already
+    covered."""
     raw = [
         (0, True, True, False, False, 2),   # band-2 step (green_slime), plannable, precedes
-        (1, True, True, False, False, 3),   # band-3 committed grind (copper_ring)
+        (1, True, True, False, False, 4),   # band-4 committed fallback grind (copper_ring)
     ]
     py = _run_python(raw, committed=1)
     lean = _run_lean(raw, committed=1)
@@ -239,12 +250,32 @@ def test_sticky_blocked_by_lower_band_step_freeze_regression():
     assert lean == (0, True, 0)
 
 
-def test_sticky_discretionary_commit_exempt_from_band_preemption():
-    """Narrow rule: a committed DISCRETIONARY (band 4) candidate is NOT preempted
-    by a lower band — worth-gate governance is preserved. Both agree."""
+def test_sticky_raid_commit_is_preempted_by_a_lower_band():
+    """The band `BAND_RAID` occupies (3) is NOT exempt: an open raid window
+    yields to a plannable objective step that precedes it, exactly as the
+    fallback band does. Added 2026-08-23 with the renumber — 3 used to be the
+    fallback band, and without this the newly-inserted band would have no
+    differential coverage at all."""
     raw = [
         (0, True, True, False, False, 2),   # band-2 step precedes
-        (1, True, True, False, False, 4),   # band-4 committed discretionary → kept
+        (1, True, True, False, False, 3),   # band-3 committed raid
+    ]
+    py = _run_python(raw, committed=1)
+    lean = _run_lean(raw, committed=1)
+    assert py == (0, True, 0)
+    assert lean == (0, True, 0)
+
+
+def test_sticky_discretionary_commit_exempt_from_band_preemption():
+    """Narrow rule: a committed DISCRETIONARY candidate is NOT preempted by a
+    lower band — worth-gate governance is preserved. Both agree.
+
+    RENUMBERED 2026-08-23: discretionary is 5 since `BAND_RAID` was inserted at
+    3. This is the OTHER side of the boundary the test above rides, so the two
+    together pin exactly where the exemption starts."""
+    raw = [
+        (0, True, True, False, False, 2),   # band-2 step precedes
+        (1, True, True, False, False, 5),   # band-5 committed discretionary → kept
     ]
     py = _run_python(raw, committed=1)
     lean = _run_lean(raw, committed=1)
