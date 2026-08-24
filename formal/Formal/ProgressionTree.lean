@@ -97,13 +97,6 @@ example : milestonePure 12 = 20 := by decide
 example : milestonePure 49 = 50 := by decide
 example : milestonePure 50 = 50 := by decide
 
-/-! ### Branch pivot: gear | xp -/
-
-inductive Branch
-  | gear
-  | xp
-deriving DecidableEq, Repr
-
 /-! ### Potion-family weights -/
 
 inductive PotionFamily

@@ -472,3 +472,58 @@ Task 6/7 must delete this file in the SAME commit as `Formal.lean:78` and
 `Contracts.lean:14`. If that slips, add a one-line "provenance retired, pending
 deletion" note to the header rather than leaving a file asserting a provenance
 it cannot have.
+
+## 12. Amendments after tasks 5, 6 and 7 executed (2026-08-24)
+
+Five more errors in this document, found by executing it. Recorded because the
+whole point of §11 and §12 is that a deletion list ages against its branch —
+and this one aged against the very tasks it was written to drive.
+
+### 12.1 A DELETE range that ends inside a KEEP declaration
+
+§6.2 gives `ProgressionTree.lean:110-127` for `branchPick` and its two theorems.
+**That range ends inside `inductive PotionFamily`, which is a KEEP item.**
+Deleting it wholesale breaks the build. Task 6 deleted by DECLARATION NAME
+(`:106-122` as the file then stood) rather than by the stated range.
+
+Every other line range in §6.2 should be read as indicative, not executable.
+Line numbers in this document were taken before tasks 1-5 shifted the files.
+
+### 12.2 `Oracle.lean` and `Contracts.lean` DID need changes
+
+§6.3 lists both as "no change". That was true only while row 11 was a KEEP.
+Once the user retired the `objective` CLI and row 11 flipped to DELETE, both
+had to change. Also: the path is `formal/Oracle.lean`, NOT `formal/Formal/`;
+`runProgressionChoice` starts at `:2943`, not `:2946`; and its dispatch arm is
+two lines.
+
+### 12.3 §6's ProgressionChoice downstream was already partly gone
+
+It lists `test_progression_choice_diff.py`, `extract_lean.py`'s `ModuleSpec` and
+`PROGRESSION_CHOICE_MUTATIONS` as still to remove. Task 4 had already removed
+them.
+
+### 12.4 §6.4's mutant count is wrong in both directions
+
+Task 5 found it naming 8 where the group held 19, with three more anchoring on
+deleted code — retiring only the named 8 would have failed `--check-anchors` at
+gate phase (b'''') before a single test ran. Task 6/7 then found **zero** left to
+retire, because tasks 4 and 5 had already taken every group and mutant §6.4
+names. The section is not a reliable count in either direction; count them
+against `mutate.py` at execution time.
+
+### 12.5 `inductive Branch` — RESOLVED, deleted 2026-08-24
+
+Neither §4 nor §6 names it. Task 5 reported the Python `Branch` enum as newly
+zero-consumer and left it (§4 lists it under "stay", on evidence that cites
+`branch_objective.py:91` — a file task 1 deleted). Task 6/7 deleted the Python
+mirror and reported the Lean `inductive Branch` for the same reason.
+
+Controller ruling: **both deleted.** Verified zero Python consumers repo-wide and
+zero real Lean references — `Oracle.lean:1905`'s "Branch 4" is a numbered
+dispatch arm in `runActionCostNonneg`, not this type. The Python enum went with
+`branchPick`'s mirror in task 6/7; the Lean inductive followed immediately, so
+neither was left mirroring nothing. Gate rc=0 after.
+
+Both implementers were RIGHT to report rather than delete off-list. The
+discipline held; the ruling is the controller's job, and this is it.
