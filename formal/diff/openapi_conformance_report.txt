@@ -18,12 +18,13 @@ Tracked schemas: 4
 
 ## 14b — GameData.load schema imports
 
-Schemas imported by game_data.py: 15
+Schemas imported by game_data.py: 16
   - AccountAchievementSchema
   - BankSchema
   - CraftSkill
   - EffectSchema
   - EventSchema
+  - GEOrderSchema
   - GEOrderType
   - GatheringSkill
   - ItemSchema

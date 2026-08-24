@@ -36,6 +36,7 @@ from artifactsmmo_api_client.models.craft_skill import CraftSkill
 from artifactsmmo_api_client.models.effect_schema import EffectSchema
 from artifactsmmo_api_client.models.event_schema import EventSchema
 from artifactsmmo_api_client.models.gathering_skill import GatheringSkill
+from artifactsmmo_api_client.models.ge_order_schema import GEOrderSchema
 from artifactsmmo_api_client.models.ge_order_type import GEOrderType
 from artifactsmmo_api_client.models.item_schema import ItemSchema
 from artifactsmmo_api_client.models.map_content_type import MapContentType
@@ -50,6 +51,7 @@ from artifactsmmo_api_client.types import Unset
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.game_data_cache import GameDataCache
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
+from artifactsmmo_cli.ai.ge_order_index import index_best_ge_orders
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS, stats_is_combat_bearing
 from artifactsmmo_cli.ai.gear_taxonomy_core import (
     combat_gear_types as _core_combat_gear_types,
@@ -1523,15 +1525,49 @@ class GameData:
         return data
 
     @classmethod
-    def from_cache_bundle(cls, raw: dict[str, Any]) -> "GameData":
+    def from_cache_bundle(cls, raw: dict[str, Any], *,
+                          with_ge_orders: bool = False) -> "GameData":
         """Build a full GameData OFFLINE from the disk-cache bundle shape
         (`GameDataCache` JSON: maps/items/resources/monsters/npcs/tasks/
-        events/effects/bank). The Grand-Exchange order book is left EMPTY —
-        orders are live-only by design; scenario planning treats GE as quiet.
-        This is the scenario harness's loader (spec 2026-07-06 progression
-        tree, Phase 1): a real catalog with zero API dependency."""
+        events/effects/bank). This is the scenario harness's loader (spec
+        2026-07-06 progression tree, Phase 1): a real catalog with zero API
+        dependency.
+
+        `with_ge_orders` picks WHICH MARKET the offline world models, and it is
+        a declared world property rather than an accident of what the bundle
+        happens to carry:
+
+        * `False` (default) — a QUIET market: no standing order on any item, so
+          `obtain_sources` emits no `GE_FILL` and every rung is descended by
+          craft/gather/drop. This is the CONTROL side of the coverage matrix's
+          GE dimension; a populated-book scenario proves nothing without it.
+        * `True` — the order book captured into the bundle under `ge_orders`,
+          indexed by the same `index_best_ge_orders` rule the live pager uses.
+          This is the market the live bot actually plans in (34 % of catalogue
+          items carried a standing sell order at capture time).
+
+        Measured before this argument existed: hydrating the book unconditionally
+        moves 12 of the 30 committed scenarios' chosen step/goal/first action and
+        takes the 30-scenario planner sweep from 3.3 s to 48.5 s, with three
+        scenarios pinned to the 15 s search budget. Which market a harness models
+        therefore has to be its own decision, not a default.
+
+        A `True` with no `ge_orders` key raises `KeyError` from the bundle read.
+        An absent key must NOT read as an empty book: that is exactly the silent
+        default that let the fixture assert a quiet market for weeks while the
+        live bot planned against a busy one."""
         data = cls()
         data._build_from_objs(cls._hydrate_bundle(raw))
+        if with_ge_orders:
+            orders = [GEOrderSchema.from_dict(d) for d in raw["ge_orders"]["orders"]]
+            # The capture holds both halves of the book in one list, so the side
+            # is read off each order here; the live pager instead ASKS for one
+            # side per page, which is why `index_best_ge_orders` takes the side
+            # rather than deriving it.
+            data._ge_buy_orders.update(index_best_ge_orders(
+                [o for o in orders if o.type_ is GEOrderType.BUY], GEOrderType.BUY))
+            data._ge_sell_orders.update(index_best_ge_orders(
+                [o for o in orders if o.type_ is GEOrderType.SELL], GEOrderType.SELL))
         return data
 
     @staticmethod
@@ -2103,43 +2139,33 @@ class GameData:
         item for immediate, guaranteed acquisition (realizable cost). We page each
         side of the order book and keep, per item, the single best order (BUY: max
         price; SELL: min price; ties broken by larger quantity, then order id for
-        determinism). The API is the source of truth; no order is fabricated."""
+        determinism). The API is the source of truth; no order is fabricated.
+
+        The SELL side is the DUAL of the BUY side, and the reduction that picks
+        the best order on either side lives in `ge_order_index` — shared with
+        `from_cache_bundle`'s hydrator so the committed fixture's captured book
+        and the live book are indexed by the same rule rather than by two copies
+        of it."""
+        self._ge_buy_orders.update(index_best_ge_orders(
+            self._page_ge_orders(client, GEOrderType.BUY), GEOrderType.BUY))
+        self._ge_sell_orders.update(index_best_ge_orders(
+            self._page_ge_orders(client, GEOrderType.SELL), GEOrderType.SELL))
+
+    @staticmethod
+    def _page_ge_orders(client: AuthenticatedClient,
+                        side: GEOrderType) -> list[GEOrderSchema]:
+        """Every open order on one side of the book, paged to exhaustion."""
+        out: list[GEOrderSchema] = []
         page = 1
         while True:
-            result = get_ge_orders(client=client, type_=GEOrderType.BUY, page=page, size=100)
+            result = get_ge_orders(client=client, type_=side, page=page, size=100)
             if result is None or not result.data:
                 break
-            for order in result.data:
-                candidate = (order.id, order.price, order.quantity)
-                current = self._ge_buy_orders.get(order.code)
-                if current is None or (order.price, order.quantity, order.id) > (
-                    current[1], current[2], current[0]
-                ):
-                    self._ge_buy_orders[order.code] = candidate
+            out.extend(result.data)
             if len(result.data) < 100:
                 break
             page += 1
-        # SELL side (the DUAL): index the LOWEST-price open sell order per item.
-        # Filling such an order BUYS the item for immediate, guaranteed acquisition,
-        # so its price is a realizable cost (the cheapest fillable buy source). We
-        # keep, per item, the single lowest-price order (ties broken by larger
-        # quantity, then order id for determinism — same tie-break shape as the BUY
-        # pass). The API is the source of truth; no order is fabricated.
-        page = 1
-        while True:
-            result = get_ge_orders(client=client, type_=GEOrderType.SELL, page=page, size=100)
-            if result is None or not result.data:
-                break
-            for order in result.data:
-                candidate = (order.id, order.price, order.quantity)
-                current = self._ge_sell_orders.get(order.code)
-                if current is None or (-order.price, order.quantity, order.id) > (
-                    -current[1], current[2], current[0]
-                ):
-                    self._ge_sell_orders[order.code] = candidate
-            if len(result.data) < 100:
-                break
-            page += 1
+        return out
 
     def _fetch_effects(self, client: AuthenticatedClient) -> list[EffectSchema]:
         """Page all effect definitions; return the schema list."""

@@ -252,8 +252,18 @@ def scenario_state(sc: ScenarioCharacter,
     )
 
 
-def load_bundle_game_data(path: Path) -> GameData:
-    return GameData.from_cache_bundle(json.loads(path.read_text()))
+def load_bundle_game_data(path: Path, *, with_ge_orders: bool = False) -> GameData:
+    """The scenario harness's GameData, built from a committed cache bundle.
+
+    `with_ge_orders` forwards to `GameData.from_cache_bundle` and picks which
+    MARKET the offline world models: the default quiet book (no standing order
+    on anything — the control side of the coverage matrix's GE dimension), or
+    the order book captured into the bundle, which is the market the live bot
+    plans in. See `from_cache_bundle` for the measurement that made this a
+    declared argument rather than a default.
+    """
+    return GameData.from_cache_bundle(json.loads(path.read_text()),
+                                      with_ge_orders=with_ge_orders)
 
 
 _COPPER_SET = {
@@ -281,7 +291,16 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         equipment=dict(_COPPER_SET),
         bank={"sunflower": 20},
         derive_combat_stats=True,  # wave 3a fix-round 1: see the module note
-        description="Band-adequate copper set, empty utility slots, potion mats banked."),
+        # HELD TASK, value "unwinnable and NO gear closes the gap" (measured:
+        # has_combat_deficit True, deficit_upgrade_target None). A dryad is far
+        # out of this build's band, so the deficit walk runs to exhaustion and
+        # names nothing -- the fall-through arm of `deficit_upgrade_target`,
+        # which had no offline witness at all. IN_PROGRESS rather than 0/10 so
+        # the phase is distinct from ACCEPTED; measured not to move this
+        # scenario's chosen root/step/goal/first action.
+        task=("dryad", "monsters", 4, 10),
+        description="Band-adequate copper set, empty utility slots, potion mats banked. "
+                    "Holds an unwinnable dryad task no gear upgrade can close."),
     "l10_weapon_upgrade": ScenarioCharacter(
         name="l10_weapon_upgrade", level=10, max_hp=240,
         skills={"mining": 10, "weaponcrafting": 10},
@@ -964,6 +983,12 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "topaz_stone": 28, "wooden_shield": 1,
         },
         derive_combat_stats=True,
+        # HELD TASK, value "unwinnable but a gear chain CLOSES it" (measured:
+        # has_combat_deficit True, deficit_upgrade_target ('iron_sword',
+        # 'weapon_slot')). This is the "I lost, so get gear" link the bot spent
+        # ten hours without; the arm had no offline witness. Measured not to
+        # move this scenario's chosen root/step/goal/first action.
+        task=("cow", "monsters", 4, 10),
         description="Live-Robby mirror (2026-07-08): L13, weaponcrafting 5, "
                      "fire_bow root -> weaponcrafting skill gate -> "
                      "water_bow grinder whose recipe has a monster-drop leaf "
@@ -1054,6 +1079,11 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                    "amulet_slot": "air_and_water_amulet"},
         bank={"iron_bar": 10},
         derive_combat_stats=True,
+        # HELD TASK, value "workable" (measured: has_combat_deficit False,
+        # deficit_upgrade_target None) -- the NEGATIVE arm of the deficit check,
+        # which needs a task that IS winnable to be reached at all. Measured not
+        # to move this scenario's chosen root/step/goal/first action.
+        task=("cow", "monsters", 4, 10),
         description="GAP-9: L12, copper gear, gearcrafting 5, iron_bar banked "
                      "-> the committed iron_boots upgrade needs feather from a "
                      "GREY chicken (diff 11). The planner must farm feather "
