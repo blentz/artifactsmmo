@@ -183,6 +183,13 @@ def test_plan_command_prints_report(capsys):
     # drop-input winnability section: a winnable feather + an unwinnable scale.
     assert "WINNABLE via ['chicken']" in out
     assert "NOT WINNABLE" in out
+    # THE FLIP (wave 3a): the descent header shows the resolution — chosen
+    # root first, then the walk's ordered alternatives — not the old scored
+    # "cycles to 50" framing, and each row reads its `category` (the
+    # resolution trail / "alternative · <kind>"), not a numeric score.
+    assert "resolution (top 8)" in out
+    assert "cycles to 50" not in out
+    assert "  gear  ObtainItem(feather_coat)  ->  step=ObtainItem(feather)" in out
 
 
 def test_plan_command_passes_and_prints_simulated_state(capsys):

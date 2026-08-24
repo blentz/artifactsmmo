@@ -3,7 +3,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.plan_tree import build_plan_tree, rank_detail
+from artifactsmmo_cli.ai.plan_tree import _resolution_rows, build_plan_tree, rank_detail
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
 from tests.test_ai.fixtures import make_state
@@ -54,15 +54,15 @@ def test_chosen_expands_materials():
     assert kinds["topaz ×2"].status == "unmet"
 
 
-def test_chosen_node_shows_its_score():
-    """The chosen root's own score/category is rendered on its node — otherwise
-    the winner is the only node with no value and a user cannot see how it ranked
-    (or how dominant it is over a currency grind it funds)."""
+def test_chosen_node_shows_its_resolution_reason():
+    """The chosen root's own resolution reason (`RootScore.category`) is
+    rendered on its node — otherwise the chosen root is the only node with no
+    explanation and a user cannot see why the walk resolved there."""
     gd = _gd()
     state = make_state(skills={"jewelrycrafting": 1}, equipment={"amulet_slot": None})
     chosen = ObtainItem("life_amulet")
     tree = build_plan_tree(_decision(chosen, chosen, [_rs(chosen, 2)]), state, gd, None)
-    assert "2.00" in tree[0].detail and "gear" in tree[0].detail
+    assert tree[0].detail == "gear"
 
 
 def test_chosen_node_no_detail_when_absent_from_ranking():
@@ -159,7 +159,7 @@ def test_non_chosen_roots_are_leaf_stubs():
     assert len(tree) == 2
     stub = tree[1]
     assert stub.kind == "root_stub" and stub.children == ()
-    assert stub.label == "golden_ring" and "1.00" in stub.detail
+    assert stub.label == "golden_ring" and stub.detail == "root 2 · gear"
 
 
 def test_chosen_root_none_returns_empty():
@@ -240,22 +240,22 @@ def test_chosen_root_is_annotated_with_the_held_role():
     assert "[logger]" in root.detail
 
 
-def test_the_role_annotation_joins_the_score_rather_than_replacing_it():
+def test_the_role_annotation_joins_the_resolution_reason_rather_than_replacing_it():
     """A supplying character's root has to answer both questions at once: why
-    it won the ranking, and which role it is holding while it works."""
+    the walk resolved here, and which role it is holding while it works."""
     root = _supplying_tree(role="logger")[0]
-    assert "gear" in root.detail and "2.00" in root.detail and "[logger]" in root.detail
+    assert "gear" in root.detail and "[logger]" in root.detail
 
 
 def test_no_role_leaves_the_detail_exactly_as_it_was():
     """The single-character shape: byte-identical to the pre-specialization
     tree, not merely 'close'."""
-    assert _supplying_tree()[0].detail == "gear · 2.00"
+    assert _supplying_tree()[0].detail == "gear"
 
 
 def test_the_role_annotates_a_root_that_is_absent_from_the_ranking():
-    """The score and the role are independent: a root with no RootScore still
-    shows the role rather than dropping both."""
+    """The resolution reason and the role are independent: a root with no
+    RootScore still shows the role rather than dropping both."""
     gd = _gd()
     state = make_state(skills={"jewelrycrafting": 1})
     chosen = ObtainItem("life_amulet")
@@ -313,39 +313,57 @@ def test_snapshot_carries_grind_expansion():
 
 
 class TestRankDetail:
-    """What a root's standing reads as in the plan pane."""
+    """What's left of `RootScore.score`'s own rendering, now that
+    `_resolution_rows` (below) carries the plan pane's and the CLI's real
+    content. `rank_detail` survives only because `RootScoreView.score` is a
+    required field on a schema two test modules pin (spec §1.4); THE FLIP sets
+    `RootScore.score` to a constant on every resolution row, so `rank_detail`
+    no longer differentiates rows and nothing in `plan_tree` or `commands/
+    plan.py` calls it any more — these tests pin its ONE remaining case
+    directly."""
 
-    def test_shows_the_objective_value_when_the_pivot_priced_it(self):
-        """J leads, explicitly labelled and lower-is-better. Showing `score`
-        alone made gear look like a landslide (2.6e8 against the trunk's 1.0) on
-        live cycles where J had the trunk winning by 0.006% — two unrelated
-        scales sharing one column (2026-08-08)."""
+    def test_ignores_j_now_that_the_walk_produces_it(self):
+        """`RootScore.j` still exists (spec §1.4: not deleted until wave 3b)
+        but nothing sets it any more, and `rank_detail` must not special-case
+        it if it happens to be set — that arm is DELETED, not merely
+        unreachable. A stray non-None `j` must not resurrect it."""
         row = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
-                        cost=0, score=Fraction(264000025), step_repr="s", j=32981)
-        assert rank_detail(row) == "32981"
+                        cost=0, score=Fraction(5, 2), step_repr="s", j=32981)
+        assert rank_detail(row) == "2.50"
 
-    def test_shows_the_reachable_level_when_fifty_is_out_of_reach(self):
-        """R2D2's live board, 2026-08-08. Its xp trunk stalled at level 17 while
-        a gear root reached 50, so with only `j` to show the trunk fell back to
-        the legacy constant and the pane listed `1.00` beside `6490` — one
-        character mixing both scales, worse than the uniformly-wrong display it
-        replaced. The reachable level IS the ordering key in that band."""
+    def test_ignores_reachable_level_now_that_the_walk_produces_it(self):
+        """Same as above for `RootScore.reachable_level` — its arm is DELETED,
+        not merely unreachable."""
         row = RootScore(root_repr="r", category="char_level",
-                        contribution=Fraction(1), cost=0, score=Fraction(1),
+                        contribution=Fraction(1), cost=0, score=Fraction(5, 2),
                         step_repr="s", reachable_level=17)
-        assert rank_detail(row) == "->L17"
+        assert rank_detail(row) == "2.50"
 
-    def test_the_two_scales_are_visibly_different(self):
-        """A reachable level must not read as a small, excellent J."""
-        priced = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
-                           cost=0, score=Fraction(1), step_repr="s", j=17)
-        stalled = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
-                            cost=0, score=Fraction(1), step_repr="s",
-                            reachable_level=17)
-        assert rank_detail(priced) != rank_detail(stalled)
-
-    def test_falls_back_to_score_only_when_the_objective_never_ran(self):
-        """No learning store — the one case with neither figure to show."""
+    def test_renders_the_score_field(self):
+        """The one thing left: `RootScore.score` as a fixed-point string."""
         row = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
                         cost=0, score=Fraction(5, 2), step_repr="s")
         assert rank_detail(row) == "2.50"
+
+
+class TestResolutionRows:
+    """What the plan pane and the CLI actually print for a resolution row,
+    since THE FLIP moved the real content into `RootScore.category`."""
+
+    def test_reads_the_category(self):
+        row = RootScore(root_repr="r", category="IsMyGearBehindMyTier -> "
+                        "WhichSlotIsFurthestBehind", contribution=Fraction(1),
+                        cost=0, score=Fraction(1), step_repr="s")
+        assert _resolution_rows(row) == row.category
+
+    def test_ignores_the_now_constant_score(self):
+        """A mutant that concatenates `rank_detail(row)` back onto the result
+        must fail here: two rows with the SAME category but DIFFERENT scores
+        (exactly what `decide_tree` never produces any more, but nothing stops
+        a stray caller from doing) must read identically, because `score` is
+        no longer part of the answer."""
+        cheap = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
+                          cost=0, score=Fraction(1), step_repr="s")
+        pricey = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
+                           cost=0, score=Fraction(999), step_repr="s")
+        assert _resolution_rows(cheap) == _resolution_rows(pricey) == "gear"

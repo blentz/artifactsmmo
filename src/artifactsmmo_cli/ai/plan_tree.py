@@ -26,29 +26,42 @@ _DEPTH_CAP = 32
 
 
 def rank_detail(row: RootScore) -> str:
-    """How a root's standing reads in the plan pane, on the scale that ranked it.
+    """`RootScore.score` rendered as a string, and nothing else.
 
-    Three cases, and every root the objective saw lands in one of the first two,
-    so none falls back to `score`:
-
-      * FINITE band — its `J`, a cycle count, lower wins.
-      * UNREACHABLE band — `->L<n>`, the level its projection actually reaches.
-        That IS the ordering key there (furthest progress first, S-006), and the
-        arrow marks it as a different quantity so it cannot be misread as a small
-        and therefore excellent `J`.
-      * NO OBJECTIVE (no learning store) — the legacy per-category `score`.
-
-    The third case must stay visibly distinct because `score` is NOT comparable
-    across rows: `pursuit_value` for gear against a constant 1.0 for the xp trunk.
-    Mixing it with `J` in one list is what made R2D2's pane show `1.00` beside
-    `6490` on 2026-08-08 — its trunk was unreachable while a gear root was not —
-    and that mixed list was harder to read than the uniformly-wrong one it
-    replaced."""
-    if row.j is not None:
-        return f"{row.j}"
-    if row.reachable_level is not None:
-        return f"->L{row.reachable_level}"
+    THE FLIP (wave 3a) replaced the scored ranking with a resolution walk;
+    `RootScore.j` and `.reachable_level` are no longer set by anything (the
+    walk has no objective to price them against) so the two arms that used to
+    read them are gone, not merely unreachable — see `_resolution_rows` below
+    for what carries the walk's real content now. `score` itself stays: it is
+    a required field on `RootScoreView`, a Pydantic model with no default that
+    the TUI log pane and two test modules pin (spec §1.4), so `RootScore.score`
+    is not deleted here — that is wave 3b's schema change, in one commit with
+    the rest of it. `decide_tree` now writes the constant `Fraction(1)` to it
+    on every row, so this no longer differentiates one row from another; it
+    exists to keep `RootScoreView.score` constructible, not to be read for
+    meaning."""
     return f"{float(row.score):.2f}"
+
+
+def _resolution_rows(row: RootScore) -> str:
+    """The row's reason: what the plan pane and the CLI print in place of the
+    number `rank_detail` used to supply.
+
+    THE FLIP moved the walk's real content into `category` (spec §5.2,
+    `progression_tree._resolution_rows`, which builds these rows): the
+    resolution trail for the chosen root, `"alternative · <kind>"` for every
+    other row. Same name as that function on purpose — this is its
+    display-side counterpart, reading the field it writes — but a different
+    module: `progression_tree` builds the `RootScore` list from a
+    `RootResolution`; this one formats a single already-built row for a
+    reader, which is all a pure display module needs and keeps this module
+    free of a dependency on `decisions.root`/`resolve_root` it has never had.
+
+    Both `build_plan_tree` and `commands/plan.py` call this instead of
+    `rank_detail` now, so the plan pane and the CLI keep showing the SAME
+    reason for a cycle — the "single funnel" `rank_detail` used to be, before
+    its own content went constant."""
+    return row.category
 
 
 def _label(node: MetaGoal) -> tuple[str, str]:
@@ -60,8 +73,8 @@ def _label(node: MetaGoal) -> tuple[str, str]:
         return f"character → {node.level}", "charlevel"
     if isinstance(node, ReachSkillLevel):
         # "skill" matches tiers.strategy.root_category's naming for this
-        # category, so the plan pane and the ranking agree on what kind of
-        # root this is.
+        # category, so the plan pane and the resolved root's own category
+        # agree on what kind of root this is.
         return f"{node.skill} → {node.level}", "skill"
     return short_root(repr(node)), "obtain"
 
@@ -103,7 +116,8 @@ def _supply_node(supply_target: tuple[str, int, int] | None,
 
     A CHILD of the chosen root rather than a second root, because it is work
     this character is doing right now and the plan pane's top level is the
-    ranked-root ladder; and `kind="step"` rather than `obtain`, because it is
+    resolved-root list (chosen root plus `RootResolution.alternatives`); and
+    `kind="step"` rather than `obtain`, because it is
     NOT a prerequisite of the objective above it — it is the other thing the
     arbiter is spending cycles on. The `step` kind is what already carries that
     meaning for the synthetic serve node, and it takes the same dim-cyan style
@@ -153,17 +167,18 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
     chosen_node = _expand(decision.chosen_root, decision, state, game_data,
                           serve_step, frozenset(), 0, ctx, grind_children)
     chosen_repr = repr(decision.chosen_root)
-    # Show the chosen root's OWN score/category — alternatives already show theirs,
-    # so without this the winner is the only node with no value, and a user cannot
-    # see WHY it beat the rest (or how dominant it is).
+    # Show the chosen root's OWN resolution reason — alternatives already show
+    # theirs, so without this the chosen root is the only node with no
+    # explanation, and a user cannot see WHY the walk resolved here.
     chosen_score = next((r for r in decision.ranking if r.root_repr == chosen_repr), None)
     # Details accumulate rather than compete: a supplying character's root has to
-    # show BOTH why it won the ranking and which role it is holding while it
+    # show BOTH why the walk resolved here and which role it is holding while it
     # works. An empty list joins to "", which is the same detail a root absent
-    # from the ranking has always had, so the unannotated case is unchanged.
+    # from `decision.ranking` has always had, so the unannotated case is
+    # unchanged.
     details: list[str] = []
     if chosen_score is not None:
-        details.append(f"{chosen_score.category} · {rank_detail(chosen_score)}")
+        details.append(_resolution_rows(chosen_score))
     if role is not None:
         details.append(f"[{role}]")
     chosen_node = chosen_node.model_copy(update={
@@ -177,5 +192,5 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
         roots.append(PlanTreeNode(
             key=r.root_repr, label=short_root(r.root_repr), kind="root_stub",
             status="unmet",
-            detail=f"root {i + 1} · {r.category} · {rank_detail(r)}"))
+            detail=f"root {i + 1} · {_resolution_rows(r)}"))
     return tuple(roots)
