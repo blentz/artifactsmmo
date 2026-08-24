@@ -169,7 +169,10 @@ class TestPlayerTracer:
             ("helmet_slot", "wolf_ears"): 40,
             ("ring2_slot", "iron_ring"): 3,
         }
-        player._interleave_seats = {"helmet_slot": 5}
+        # The FULL ledger key, as `_charge_focus` writes it since wave 3a
+        # fix-round 2 — a slot-only seat is a shape production can no
+        # longer produce.
+        player._interleave_seats = {"helmet_slot|wolf_ears": 5}
         root = ObtainItem(code="wolf_ears", quantity=1, slot="helmet_slot")
         player._last_decision = StrategyDecision(
             interrupt=None, chosen_root=root, chosen_step=root, desired_state={},
@@ -187,7 +190,7 @@ class TestPlayerTracer:
         assert rec["gear_focus"] == {
             "helmet_slot|wolf_ears": 40, "ring2_slot|iron_ring": 3,
         }
-        assert rec["interleave_seats"] == {"helmet_slot": 5}
+        assert rec["interleave_seats"] == {"helmet_slot|wolf_ears": 5}
         assert rec["aged_pick"] is True
 
     def test_trace_record_aged_pick_false_when_no_decision_yet(self):

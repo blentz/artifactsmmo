@@ -46,7 +46,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
-    focus_key,
+    contender_focus_key,
     focus_key_str,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
@@ -304,7 +304,7 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
 
     def _ledger_key(self, slot: str, target: GearTarget, state: WorldState,
                     game_data: GameData, ctx: SelectionContext
-                    ) -> tuple[str, str] | None:
+                    ) -> tuple[str, str]:
         """The ledger key this slot would be charged under if it won.
 
         Keyed on the ROOT the slot RESOLVES TO, not on `(slot, target.code)`,
@@ -315,12 +315,24 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
         resolved root would leave the two halves permanently unable to meet —
         the fix-round-2 defect.
 
+        NEVER None, and by the TYPE rather than by a runtime check:
+        `IsThisTargetBlocked.resolve` returns `ObtainItem | ReachSkillLevel`,
+        which is exactly `contender_focus_key`'s domain. `focus_key`'s nullable
+        arms exist for `GamePlayer`, whose committed root can be the trunk or
+        the wall; neither can arrive here, and the `key is None` fallbacks this
+        used to feed were dead lines the coverage gate could not see
+        (`branch = false`). Their named failure mode is worth keeping in view:
+        a future arm returning `ReachCharLevel` would have been weighted under
+        its raw `slot` while the player wrote nothing for it, so that root
+        would never take a seat and could monopolise the interleave —
+        starvation reintroduced by a different door. The union above is what
+        now makes that unrepresentable.
+
         A throwaway `RootWalk`: this is a conversion, not a visit, so it must
         not append to the trail. Same idiom as `resolve_root`'s sibling
         conversion."""
-        root = IsThisTargetBlocked(slot, target, RootWalk()).resolve(
-            state, game_data, ctx, None)
-        return focus_key(root)
+        return contender_focus_key(IsThisTargetBlocked(
+            slot, target, RootWalk()).resolve(state, game_data, ctx, None))
 
     def _aged_head(self, ranked: list[tuple[str, GearTarget]], state: WorldState,
                    game_data: GameData, ctx: SelectionContext
@@ -328,7 +340,7 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
         """`ranked[0]`, or the interleave's pick once anything has aged."""
         keys = [self._ledger_key(slot, target, state, game_data, ctx)
                 for slot, target in ranked]
-        focus = [0 if key is None else ctx.gear_focus.get(key, 0) for key in keys]
+        focus = [ctx.gear_focus.get(key, 0) for key in keys]
         if all(level <= FOCUS_FLAT for level in focus):
             return ranked[0]
         # Apportioned over `focus_key_str`, the SAME scalar the player's seat
@@ -342,7 +354,7 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
         # `dhondt_step` can never elect — which would be starvation reinstated
         # by the very mechanism that exists to prevent it.
         weighted = [
-            (focus_key_str(key) if key is not None else slot,
+            (focus_key_str(key),
              Fraction(max(1, _tier_gap(slot, target, state, game_data)))
              * falloff(level))
             for (slot, target), key, level in zip(ranked, keys, focus, strict=True)]
@@ -373,10 +385,15 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
     attainable. That is the same masking defect `_classify_target`'s own
     docstring warns against, one layer up.
 
-    `resolve` narrows its return type to `MetaGoal`: every arm returns a leaf,
-    this node has no `Decision` child and no None arm, and the narrowing is
-    what lets `resolve_root` reuse it to convert a sibling target without
-    inventing an unreachable None branch to satisfy the type checker.
+    `resolve` narrows its return type all the way to `ObtainItem |
+    ReachSkillLevel`: every arm returns one of those two, this node has no
+    `Decision` child and no None arm. The narrowing is load-bearing twice over
+    — it lets `resolve_root` reuse this node to convert a sibling target
+    without inventing an unreachable None branch, and (fix-round 3) it lets
+    `_ledger_key` return a NON-optional key straight from
+    `meta_goal.contender_focus_key`, instead of carrying `key is None`
+    fallbacks that could never run and that `branch = false` hid from the
+    coverage gate.
     """
 
     name = "IsThisTargetBlocked"
@@ -388,7 +405,7 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
 
     def resolve(self, state: WorldState, game_data: GameData,
                 ctx: SelectionContext, history: LearningStore | None
-                ) -> MetaGoal:
+                ) -> "ObtainItem | ReachSkillLevel":
         self.walk.trail.append(self.name)
         if self.target.blocking_skill is not None:
             # +1, not `blocking_skill_level`: the graph re-derives from live

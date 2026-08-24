@@ -602,13 +602,13 @@ class GamePlayer:
         # a stale `(slot,code)` entry past FOCUS_FLAT for a root that has LEFT
         # the candidate set (its slot filled by equipping owned gear — no reset)
         # would falsely bump a seat on a fast-path cycle where no interleave
-        # ran, polluting the d'Hondt schedule. Keyed by the charged root's
-        # SLOT — the same slot `dhondt_step` returns.
+        # ran, polluting the d'Hondt schedule.
         #
-        # Keyed by the FULL key (fix-round 2), not by `key[0]`. Two roots can
-        # share a sentinel slot — `<skill>` for `gearcrafting` and for
-        # `jewelrycrafting` — and a slot-only seat key would collapse them into
-        # one apportionment entry. `_aged_head` reads the same string.
+        # Keyed by the FULL key (fix-round 2), not by the charged root's slot.
+        # Two roots can share a sentinel slot — `<skill>` for `gearcrafting`
+        # and for `jewelrycrafting` — and a slot-only seat key would collapse
+        # them into one apportionment entry. `_aged_head` apportions over the
+        # same string, so this IS the key `dhondt_step` returns.
         if aged_pick:
             seat = self._focus_key_str(key)
             self._interleave_seats[seat] = self._interleave_seats.get(seat, 0) + 1

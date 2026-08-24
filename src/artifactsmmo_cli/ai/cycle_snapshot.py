@@ -181,7 +181,11 @@ class CycleSnapshot(BaseModel):
     # interleave (`StrategyDecision.aged_pick`) rather than the plain argmax.
     aged_pick: bool = False
     # The d'Hondt seat accumulator (`GamePlayer._interleave_seats`), keyed by
-    # equipment slot.
+    # `meta_goal.focus_key_str` — the FULL "slot|code" ledger key, same as
+    # `gear_focus` above. It was keyed by equipment slot alone until wave 3a
+    # fix-round 2; a root can now resolve to a sentinel slot (`<skill>`,
+    # `<item>`), and a slot-only key would collapse two different roots into
+    # one apportionment entry.
     interleave_seats: dict[str, int] = Field(default_factory=dict)
 
     # The transcript of the fight executed this cycle, when the action was a

@@ -32,7 +32,6 @@ from pathlib import Path
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.item_catalog import ItemCatalog
-from artifactsmmo_cli.ai.player import GamePlayer  # noqa: F401  (scenario seam parity)
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,

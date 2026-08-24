@@ -124,6 +124,25 @@ head (`ObtainItem(code=blocker, quantity=n)`, no slot) and the recipe-input
 steps. Sibling of `SKILL_FOCUS_SLOT`."""
 
 
+def contender_focus_key(node: "ObtainItem | ReachSkillLevel") -> tuple[str, str]:
+    """The ledger key for a root that COMPETES for attention — TOTAL over the
+    two kinds a gear slot can resolve to, and never None.
+
+    Split out of `focus_key` in fix-round 3 so the caller that cannot receive a
+    trunk or a wall does not have to carry a dead `None` arm.
+    `decisions/root.IsThisTargetBlocked.resolve` returns exactly this union, so
+    `_ledger_key` gets a non-optional key from the TYPE rather than from a
+    runtime check — the two `key is None` fallbacks it used to carry were
+    unreachable, and `branch = false` in pyproject.toml meant the 100% coverage
+    gate could not see them.
+
+    `focus_key` remains the nullable view for `GamePlayer`, whose committed root
+    CAN be the trunk (an XP-branch or promoted decision) or None (the wall)."""
+    if isinstance(node, ObtainItem):
+        return (node.slot or ITEM_FOCUS_SLOT, node.code)
+    return (SKILL_FOCUS_SLOT, node.skill)
+
+
 def focus_key(node: "MetaGoal | None") -> tuple[str, str] | None:
     """The anti-starvation ledger's key for a committed root, or None for a
     root that does not compete for attention.
@@ -158,12 +177,10 @@ def focus_key(node: "MetaGoal | None") -> tuple[str, str] | None:
     """
     if node is None:
         return None                       # the wall: nothing was committed
-    if isinstance(node, ObtainItem):
-        return (node.slot or ITEM_FOCUS_SLOT, node.code)
-    if isinstance(node, ReachSkillLevel):
-        return (SKILL_FOCUS_SLOT, node.skill)
     if isinstance(node, ReachCharLevel):
-        return None
+        return None                       # the trunk: see the docstring
+    if isinstance(node, (ObtainItem, ReachSkillLevel)):
+        return contender_focus_key(node)
     assert not isinstance(node, META_GOAL_KINDS), (
         f"{node!r} is registered in META_GOAL_KINDS but focus_key() has no "
         f"arm for it")
