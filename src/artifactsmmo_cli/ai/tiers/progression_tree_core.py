@@ -6,16 +6,10 @@ two branches (gear | xp) switched by band adequacy, tertiary untouched."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import Enum
 from fractions import Fraction
 
 TRUNK_CAP = 50
 BAND = 10
-
-
-class Branch(Enum):
-    GEAR = "gear"
-    XP = "xp"
 
 
 def milestone_pure(level: int) -> int:

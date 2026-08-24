@@ -2940,22 +2940,6 @@ def runXpPositive (args : Array Json) : Json :=
   let n := fun i => (intArg args i).toNat
   Json.mkObj [("positive", Json.bool (Formal.XpPositive.xpPositiveGate (n 0) (n 1)))]
 
-/-- `progression_choice` — the unified objective's sort key. args are one
-candidate as `[acquire_cost, reachable_level, cycles_to_fifty, failed(0/1)]`;
-emits `{"band":Int, "primary":Int, "secondary":Int}`, the triple
-`Extracted.ProgressionChoice.sort_key` returns. The differential drives the REAL
-Python `sort_key` over the same inputs, so the whole order is pinned pointwise. -/
-def runProgressionChoice (args : Array Json) : Json :=
-  let c : Extracted.ProgressionChoice.ProgressionCandidate :=
-    { identity := "c",
-      acquire_cost := intArg args 0,
-      reachable_level := intArg args 1,
-      cycles_to_fifty := intArg args 2,
-      failed := intArg args 3 != 0 }
-  let k := Extracted.ProgressionChoice.sort_key c
-  Json.mkObj [("band", Json.num k.1), ("primary", Json.num k.2.1),
-              ("secondary", Json.num k.2.2)]
-
 /-- `skill_xp_positive` — the GATHER/CRAFT twin of `xp_positive`: args
 `[contentLevel, skillLevel]`; emits the extracted
 `Extracted.SkillXpPositive.skill_xp_positive` verdict. The differential pins the
@@ -3185,8 +3169,6 @@ def runOne (item : Json) : Json :=
     runXpPositive args
   else if kind == "skill_xp_positive" then
     runSkillXpPositive args
-  else if kind == "progression_choice" then
-    runProgressionChoice args
   else if kind == "xp_value" then
     runXpValue args
   else if kind == "next_craft" then

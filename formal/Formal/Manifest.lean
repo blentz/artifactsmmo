@@ -115,17 +115,6 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.SkillXpPositive.gate_antitone       -- leveling never un-greys a target
 #check @Formal.SkillXpPositive.gate_of_reachable   -- at-or-above-level content always pays
 
--- ProgressionChoice required roles (the unified progression objective J):
-#check @Formal.ProgressionChoice.band_iff_unreachable        -- level field ALONE decides the band
-#check @Formal.ProgressionChoice.band_trichotomy             -- exactly three bands
-#check @Formal.ProgressionChoice.finite_precedes_unreachable -- reaching 50 beats not reaching it
-#check @Formal.ProgressionChoice.nonfailed_precedes_failed   -- a crash never outranks a usable candidate
-#check @Formal.ProgressionChoice.finite_orders_by_j          -- lower J wins in the finite band
-#check @Formal.ProgressionChoice.unreachable_prefers_progress -- furthest progress first
-#check @Formal.ProgressionChoice.unreachable_tie_prefers_cheaper -- then cheaper acquisition
-#check @Formal.ProgressionChoice.unreachable_ignores_cycles  -- the void field cannot reach the order
-#check @Formal.ProgressionChoice.sort_key_total              -- the order is total, so choose is total
-
 -- SkillGrindSelection required roles (recipe-aware skill-grind target selector):
 #check @Formal.SkillGrindSelection.grind_same_skill -- non-empty result is a same-skill candidate
 #check @Formal.SkillGrindSelection.grind_in_level   -- selected candidate is in level
@@ -1329,18 +1318,14 @@ open Formal.PriorityBand
 #check @Formal.PotionProvisionQty.provision_le_max           -- never more than a full stack
 #check @Formal.PotionProvisionQty.provision_le_held          -- never more than actually held
 #check @Formal.PotionProvisionQty.provision_nonneg           -- never negative
--- ProgressionTree (trunk milestones, branch choice, focus-aging falloff and the
--- d'Hondt interleave — the selector that replaced the flat ranking):
+-- ProgressionTree (trunk milestones, potion weights, focus-aging falloff and the
+-- d'Hondt interleave — what `ai/decisions/root.py` calls on an aged cycle):
 #check @Formal.ProgressionTree.milestone_gt_level            -- the milestone strictly exceeds the level below the cap
 #check @Formal.ProgressionTree.milestone_le_cap              -- the milestone never exceeds the cap
 #check @Formal.ProgressionTree.milestone_band_aligned        -- milestones are band boundaries (divisible by 10)
 #check @Formal.ProgressionTree.milestone_advances            -- crossing a milestone strictly advances it (trunk descent)
-#check @Formal.ProgressionTree.branchPick_table              -- exhaustive truth table (all four input rows)
-#check @Formal.ProgressionTree.branchPick_gear_iff           -- gear is picked IFF gear work exists ∧ band not yet adequate
 #check @Formal.ProgressionTree.potionWeight_health_maximal   -- health dominates every potion family (tuning decision, pinned)
 #check @Formal.ProgressionTree.potionWeight_unknown_floor    -- unknown families never outrank anything
-#check @Formal.ProgressionTree.gearTargetPick_none_iff       -- totality: empty picks nothing, non-empty always picks
-#check @Formal.ProgressionTree.gearTargetPick_mem            -- SAFETY: the argmax never invents a candidate
 #check @Formal.ProgressionTree.falloff_flat                  -- FLAT window: below focusFlat the multiplier is exactly 1
 #check @Formal.ProgressionTree.falloff_le_one                -- the multiplier never exceeds 1
 #check @Formal.ProgressionTree.falloff_ge_floor              -- a stuck root is never fully abandoned (floor)
@@ -1348,7 +1333,6 @@ open Formal.PriorityBand
 #check @Formal.ProgressionTree.falloff_antitone              -- ANTITONE: aging never increases the multiplier
 #check @Formal.ProgressionTree.selectMax_quot_max            -- HIGHEST-AVERAGES: the per-seat winner maximises the d'Hondt quotient
 #check @Formal.ProgressionTree.dhondtStepKey_quot_max        -- dhondt_step returns a quotient-dominant key (one seat of apportionment)
-#check @Formal.ProgressionTree.focusAgingPick_unaged_eq_argmax -- unaged candidates reduce to the proven argmax (no jitter)
 -- Synergy (the pool-overlap multiplier pinned into [sMin, 1]):
 #check @Formal.Synergy.synergyRatio_nonneg                   -- the overlap ratio is nonneg
 #check @Formal.Synergy.synergyRatio_le_one                   -- with shared ≤ total the ratio is ≤ 1
@@ -1357,13 +1341,6 @@ open Formal.PriorityBand
 #check @Formal.Synergy.synergy_le_one                        -- never above 1
 #check @Formal.Synergy.synergy_floor_pos                     -- the floor is strictly positive (feeds interleaveDue_reaches)
 #check @Formal.Synergy.synergy_monotone                      -- MONOTONE: higher overlap scores no lower
--- Achievability (the effort-to-reach multiplier pinned into [aMin, 1]):
-#check @Formal.Achievability.ratio_nonneg                    -- the effort ratio is nonneg
-#check @Formal.Achievability.ratio_le_one                    -- with minEffort ≤ effort the ratio is ≤ 1
-#check @Formal.Achievability.achievability_ge_floor          -- never below aMin (the anti-starvation floor)
-#check @Formal.Achievability.achievability_le_one            -- never above 1
-#check @Formal.Achievability.achievability_floor_pos         -- the floor is strictly positive (feeds interleaveDue_reaches)
-#check @Formal.Achievability.achievability_antitone          -- ANTITONE: more effort scores no higher
 -- XpPositive (the server level_penalty band that decides whether a kill pays xp):
 #check @Formal.XpPositive.gate_iff                           -- characterisation: the gate IS the integer band, exactly
 #check @Formal.XpPositive.gate_false_iff                     -- the level_penalty = 0 band is exactly the complement
