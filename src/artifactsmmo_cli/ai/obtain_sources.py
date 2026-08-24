@@ -93,12 +93,17 @@ PLAN — the livelock shape of `3166d390`. In particular:
   and says nothing about reachability; an event monster whose event is
   inactive has no `FightAction` in existence, whatever its stats predict.
 
-Pure: reads state/game_data/ctx only, no I/O. INERT — nothing calls this
-yet. The parity census (a later task) will use this function AS ITS ORACLE:
-if the GOAP pool can serve a material, this function must be able to name a
-source for it, and vice versa. An oracle and its consumer written together
-are wrong together, so this module is pinned by unit tests before any
-consumer exists.
+Pure: reads state/game_data/ctx only, no I/O. LANDED INERT, LONG SINCE LIVE —
+it is now THE shared obtain model, imported by `acquisition_cost`,
+`craft_plan_gen`, `forced_craft_grind`, `next_craft_core`,
+`tiers/prerequisite_graph`, `strategy_driver` and the parity censuses. Do not
+read the staging note below as a dead-code claim.
+
+It landed with no consumer on purpose, because the parity census uses this
+function AS ITS ORACLE: if the GOAP pool can serve a material, this function
+must be able to name a source for it, and vice versa. An oracle and its
+consumer written together are wrong together, so this module was pinned by unit
+tests before any consumer existed.
 """
 
 from collections.abc import Iterable

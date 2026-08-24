@@ -1,8 +1,14 @@
 """The progression-tree selector (spec 2026-07-06): trunk -> branch -> target.
 
 Phase 4b: THE decision engine — `StrategyEngine.decide` delegates here.
-Consumes the same helpers the flat ranking used, so the cutover swapped the
-decision procedure, not the data sources.
+
+The Phase-4b cutover swapped the decision procedure, not the data sources: it
+kept consuming the same helpers the flat ranking had. That is no longer true of
+the RANKING helpers — wave 3a's resolution walk stopped calling them and wave 3b
+deleted them (see the WAVE 3b note below `objective_candidates`). What still
+holds, and is why the cutover was safe, is the CANDIDATE side: the two builders
+below and `pursuit_value`/`potion_type_weight` are the same ones the flat
+ranking read, so the walk ranks the same facts about the same world.
 
 Value semantics only — nothing here compares reprs with the Lean model
 (that lockstep lives at the pure-core level in progression_tree_core.py).
@@ -49,10 +55,15 @@ def _structural_candidates(state: WorldState, game_data: GameData,
     strictly beats the currently-equipped item, weight 1 (no scaling).
 
     Scored on `pursuit_value` (combat-dominant efficiency budget), NOT the flat
-    `equip_value`: cross-slot GAIN ranking (`focus_aging_order`) must let a
-    combat weapon outrank a pure-utility artifact instead of chasing the
-    prospecting artifact that flat equip_value mistakenly scored highest
-    (the cross-slot bug). Both the candidate stats AND the current-equipped
+    `equip_value`. The ruler was chosen for the cross-slot GAIN ranking that
+    `focus_aging_order` ran (waves 3a/3b removed that ranker; the walk orders
+    slots on `_tier_gap` instead): it had to let a combat weapon outrank a
+    pure-utility artifact instead of chasing the prospecting artifact that flat
+    equip_value mistakenly scored highest (the cross-slot bug). It stays on
+    `pursuit_value` because the `gain > 0` predicate this list is now read
+    through — `has_structural_upgrade` — inherits the same question: an item
+    that is an upgrade only on the flat ruler is not one.
+    Both the candidate stats AND the current-equipped
     baseline (`_item_value`, also pursuit_value) are on the SAME ruler, so
     the gain is consistent.
 
@@ -131,10 +142,14 @@ def _utility_candidates(state: WorldState, game_data: GameData,
     appear as a candidate.
 
     Scored on `pursuit_value`, the SAME ruler `_structural_candidates` uses.
-    The two candidate lists are merged into one argmax by `_gear_ranking_rows`
-    / `focus_aging_order`, so scoring them on different rulers made that
-    comparison meaningless — for years the potion branch rode a ruler ~500x
-    smaller than its competitor's. A potion carries no efficiency stat, so
+    The two lists used to be merged into one argmax by `_gear_ranking_rows` /
+    `focus_aging_order` (both deleted in waves 3a/3b), so scoring them on
+    different rulers made that comparison meaningless — for years the potion
+    branch rode a ruler ~500x smaller than its competitor's. `objective_candidates`
+    still concatenates them, so the shared ruler must be kept: any future
+    consumer of that concatenation compares the two lists against each other,
+    and that is exactly the comparison the bug lived in. A potion carries no
+    efficiency stat, so
     `pursuit_value == 1000 * equip_value` for it exactly; the switch changes no
     potion-vs-potion or potion-vs-gear VERDICT that held before, it only makes
     the merged ranking a comparison of like with like."""

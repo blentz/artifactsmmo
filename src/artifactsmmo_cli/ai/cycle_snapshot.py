@@ -178,7 +178,11 @@ class CycleSnapshot(BaseModel):
     # is encoded as `f"{slot}|{code}"` (see `GamePlayer._focus_key_str`).
     gear_focus: dict[str, int] = Field(default_factory=dict)
     # Whether THIS cycle's committed gear pick went through the focus-aging
-    # interleave (`StrategyDecision.aged_pick`) rather than the plain argmax.
+    # interleave (`StrategyDecision.aged_pick`) rather than the unaged fast
+    # path. The two arms are `WhichSlotIsFurthestBehind._aged_head`'s: the
+    # fast path is the head of `_slot_order`'s ranking, NOT the scored argmax
+    # the flat ranking used to run — wave 3a replaced that with the walk and
+    # wave 3b deleted it.
     aged_pick: bool = False
     # The d'Hondt seat accumulator (`GamePlayer._interleave_seats`), keyed by
     # `meta_goal.focus_key_str` — the FULL "slot|code" ledger key, same as

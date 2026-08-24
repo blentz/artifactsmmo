@@ -197,11 +197,28 @@ class SelectionContext:
     # `decide`/`decide_tree` parameters (the six the flip removed).
     #
     # THE FLIP DISCONNECTED THEM AND THAT WAS THE BRANCH'S MOST SERIOUS DEFECT.
-    # `decide_tree` was the only production caller of `focus_aging_pick` /
-    # `focus_aging_order` / `dhondt_step`, so removing its `focus`/`seats`
-    # parameters left `falloff` and the d'Hondt scheduler with zero callers and
-    # left `Formal.ProgressionTree.interleaveDue_reaches` — a kernel-checked
-    # no-starvation proof — INERT over a function nothing calls.
+    # `decide_tree` was the only production caller of the aging family
+    # (`focus_aging_pick` / `focus_aging_order`) and of `dhondt_step`, so
+    # removing its `focus`/`seats` parameters left `falloff` and the d'Hondt
+    # scheduler with no caller at all, and left
+    # `Formal.ProgressionTree.interleaveDue_reaches` — a kernel-checked
+    # no-starvation proof — modelling a scheduler nothing ran.
+    #
+    # BOTH HALVES OF THAT SENTENCE ARE HISTORY NOW, AND THEY RESOLVED
+    # DIFFERENTLY. `falloff` and `dhondt_step` are LIVE: fix-round 1
+    # reconnected them at `WhichSlotIsFurthestBehind._aged_head`
+    # (`ai/decisions/root.py:348-365`), which composes the fall-off and one
+    # d'Hondt seat directly, and the proof is live over them. Because that
+    # composition IS the walk's aged arm, wave 3b deleted `focus_aging_pick`
+    # and `focus_aging_order` — the pre-composed pair had no caller left. Do
+    # not read "the d'Hondt scheduler is dead" out of this comment: deleting
+    # `falloff`/`dhondt_step`/`FOCUS_FLAT`, or
+    # `Formal/Liveness/InterleaveNoStarvation.lean` (where
+    # `Formal.ProgressionTree.interleaveDue_reaches` is declared — that is its
+    # NAMESPACE; the file sits under `Formal/Liveness/`), breaks live code and
+    # destroys the proof of the exact anti-starvation the ledger below exists
+    # for.
+    #
     # `WhichSlotIsFurthestBehind`'s slot order is a pure, history-free total
     # order, so a stuck-but-plannable root (the ring2 shape: a `Fight` that
     # plans every cycle and never completes) wins it forever. Servability
@@ -212,8 +229,8 @@ class SelectionContext:
     #
     # Empty (the default) is the whole-history-free case and is BIT-IDENTICAL
     # to the unaged slot order: `WhichSlotIsFurthestBehind` takes its fast path
-    # while every candidate sits inside the flat farm window, exactly as
-    # `focus_aging_pick` does.
+    # while every candidate sits inside the flat farm window, exactly as the
+    # since-deleted `focus_aging_pick` did.
     gear_focus: Mapping[tuple[str, str], int] = field(
         default_factory=lambda: _NO_FOCUS)
     interleave_seats: Mapping[str, int] = field(

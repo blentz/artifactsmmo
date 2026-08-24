@@ -280,8 +280,14 @@ class StrategyDecision:
     fallback_roots: list[MetaGoal] = field(default_factory=list)
     # Whether the committed gear pick went through the focus-aging INTERLEAVE
     # this decision (Task 12): True iff a gear candidate was chosen AND at least
-    # one candidate had aged past FOCUS_FLAT (the negation of `focus_aging_pick`'s
-    # fast-path condition, over the SAME candidates). The player gates its
+    # one candidate had aged past FOCUS_FLAT. Produced by the ONE node that
+    # makes that choice — `WhichSlotIsFurthestBehind._aged_head`
+    # (`ai/decisions/root.py:348-365`) sets `RootResolution.aged`, and
+    # `decide_tree` copies it straight across. It used to be re-derived here as
+    # the negation of `focus_aging_pick`'s fast-path condition over the same
+    # candidates; wave 3a made the node the single producer and wave 3b deleted
+    # `focus_aging_pick`, so there is no second derivation left to drift from.
+    # The player gates its
     # d'Hondt SEAT bump on this — a seat is consumed only on an interleaved
     # decision, so a stale ledger entry for a root that has LEFT the candidate
     # set (e.g. its slot got filled by equipping owned gear, no reset) can no

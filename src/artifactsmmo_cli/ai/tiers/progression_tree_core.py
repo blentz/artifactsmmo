@@ -1,8 +1,15 @@
 """PURE cores of the progression-tree selector (spec 2026-07-06). No
 GameData/WorldState — plain data only, mirrored by Formal/ProgressionTree.lean.
 
-The tree replaces the flat scalar root ranking: trunk (L10..L50 milestones),
-two branches (gear | xp) switched by band adequacy, tertiary untouched."""
+The tree replaced the flat scalar root ranking: trunk (L10..L50 milestones),
+two branches (gear | xp) switched by band adequacy, tertiary untouched.
+
+WAVE 3a/3b: the boolean branch pivot is GONE. `resolve_root`'s five-node walk
+(`ai/decisions/root.py`) chooses between gear and xp by RESOLUTION, not by a
+`band_adequate` switch, so `Branch`, `branch_pick_pure` and the whole
+gear-argmax/aging family left this module. What remains is what that walk
+calls: `milestone_pure` (the trunk), `potion_type_weight`, the focus-aging
+constants with `falloff`, `dhondt_step`, and the `GearCandidate` record."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -110,8 +117,8 @@ def dhondt_step(weighted: list[tuple[str, Fraction]],
 
 @dataclass(frozen=True)
 class GearCandidate:
-    """One upgrade candidate for the gear branch. `gain` is the WEIGHTED
-    value gain (potion-family weight already applied by the assembler)."""
+    """One gear upgrade candidate. `gain` is the WEIGHTED value gain
+    (potion-family weight already applied by the assembler)."""
     slot: str
     code: str
     gain: Fraction

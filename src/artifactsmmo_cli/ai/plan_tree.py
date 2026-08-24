@@ -50,8 +50,10 @@ def root_detail(row: RootScore) -> str:
     formatting a field with zero remaining readers was proof over an uncalled
     helper (`feedback_proof_over_an_uncalled_helper`), not display code. The
     FIELD survives regardless — `RootScoreView.score` is a required float two
-    test modules pin (spec §1.4), and that is a schema question for wave 3b,
-    not a formatter question for this module.
+    test modules pin (spec §1.4), which was a schema question for wave 3b, not a
+    formatter question for this module. Wave 3b ruled: `.score` STAYS (frozen to
+    `Fraction(1)` on every row); `RootScore.cost` / `.contribution` /
+    `.instrumental` are the three it deleted.
 
     Both `build_plan_tree` and `commands/plan.py` call this for a row's
     "why", so the plan pane and the CLI keep showing the SAME reason for a

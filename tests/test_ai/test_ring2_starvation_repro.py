@@ -10,8 +10,10 @@ actually be COMPLETED (its only source is a monster the character cannot
 beat) permanently starves every lower-gain alternative. Tasks 1-7 fixed this
 by aging the focused root's selection weight down a deterministic falloff
 curve (`falloff`) and handing cycles to reachable alternatives via a
-deterministic proportional scheduler (`interleave_due`) once the focused root
-has run past `FOCUS_FLAT` cycles.
+deterministic proportional scheduler once the focused root has run past
+`FOCUS_FLAT` cycles. That scheduler was `interleave_due`; wave 3b deleted it in
+favour of the equivalent incremental form the resolution walk runs — one
+`dhondt_step` per cycle over `GamePlayer._interleave_seats`.
 
 This test drives the FULL decision path (`StrategyEngine.decide`, which
 delegates to `decide_tree`), not the pure cores in isolation — it is the

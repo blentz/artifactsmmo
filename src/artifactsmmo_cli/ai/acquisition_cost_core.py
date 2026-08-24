@@ -37,7 +37,8 @@ would not.
 
 SOUNDNESS CONTRACT. This is a LOWER bound on the length of any plan that obtains
 `qty` of `item`. Its consumers (`ProgressionGoal.is_plannable`,
-`SupplyBankGoal`, and `J`'s `acquire_cost`) use it to PRUNE, so it must never
+`SupplyBankGoal`, and — until wave 3b deleted the unified objective — `J`'s
+`acquire_cost`) use it to PRUNE, so it must never
 over-estimate: an over-estimate discards a reachable plan, which is a livelock,
 while an under-estimate merely wastes a search. Every modelling choice below
 that could go either way is therefore resolved DOWNWARD.
@@ -46,11 +47,14 @@ Kept pure — plain mappings, no `GameData`/`WorldState` — so the differential
 harness can execute it against the Lean oracle. `ai/acquisition_cost` is the
 impure wrapper that hoists `RouteOption`s out of `obtain_sources`.
 
-INERT ON ARRIVAL. Nothing consumes this yet; `J` still calls `min_plan_length`.
-That is deliberate — this project has twice shipped an epic whose green commits
-were INERT because a second producer answered first
-(`feedback_two_plan_producers`), so the model lands and is pinned by its own
-tests BEFORE any consumer switches to it, and the switch is a separate commit
+LANDED INERT, NOW LIVE — do not read the historical note below as a dead-code
+claim. `ai/acquisition_cost` imports this module's cores and is itself consumed
+across the planner; the switch that was pending has happened.
+
+The staging was deliberate: this project has twice shipped an epic whose green
+commits were INERT because a second producer answered first
+(`feedback_two_plan_producers`), so the model landed and was pinned by its own
+tests BEFORE any consumer switched to it, and the switch was a separate commit
 with its own live-trace check.
 """
 

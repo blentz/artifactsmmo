@@ -269,7 +269,8 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
     can be; and it does not leave the sheet either, because
     `gear_targets_with_blockers` deliberately keeps unattainable targets.
 
-    Two arms, mirroring `focus_aging_pick`'s own shape:
+    Two arms, inherited from the shape `focus_aging_pick` had before wave 3b
+    deleted it (this node is now the only place that shape exists):
 
     * every candidate inside the flat farm window (`focus <= FOCUS_FLAT`) —
       the head is `_slot_order`'s argmax, BIT-IDENTICAL to the history-free

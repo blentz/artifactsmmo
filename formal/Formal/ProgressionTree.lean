@@ -6,48 +6,48 @@ Formal model of the progression-tree pure cores extracted from
 The Python cores are bound to these semantics by the
 PROGRESSION_TREE_MUTATIONS group (unit-killed, formal/diff/mutate.py).
 
-The tree replaces the flat scalar root ranking:
+The tree replaced the flat scalar root ranking. WAVE 3a replaced the tree's own
+scored/branching layer with the five-node resolution walk in
+`ai/decisions/root.py`, and WAVE 3b deleted what that left with no Python
+mirror: `branchPick` (the boolean gear|xp pivot and its 4-row truth table),
+`inductive Branch`, and `gearTargetPick`/`focusAgingPick` (the gear argmax and
+its aging composition). What is modelled here is what the walk actually runs:
 
   * trunk    — L10..L50 milestones: `milestonePure level = min 50 ((level/10+1)*10)`
     (exact Nat division, no floats). Proven: the milestone strictly exceeds the
     level below the cap, never exceeds the cap, is band-aligned (`% 10 = 0`),
     and strictly advances when crossed (the trunk-descent measure).
-  * branches — one boolean pivot `branchPick`: gear-first until the band's
-    loadout is adequate, xp otherwise; gear also yields when it has no
-    reachable target. Proven exhaustively (4-row truth table + gear-iff).
   * potion weights — the closed per-effect-family tuning table
     (health 1, boost/resist/antipoison 1/4, unknown 0). Proven: health is
     maximal, unknown is the floor (an unmodeled consumable never outranks).
-  * gear argmax — `gearTargetPick` folds the strict preference
-    (gain desc, level desc, code asc, slot asc — the Python
-    `min(key=(-gain, -level, code, slot))`). Proven: none iff empty input,
-    and the pick is always a member of its input.
   * focus aging — `falloff` is the convex (flat → quadratic decay → floor)
-    selection-weight multiplier; `interleaveDue` is the d'Hondt / highest-
-    averages proportional scheduler; `focusAgingPick` combines them (argmax
-    while unaged, weighted interleave once decayed). Proven: `falloff` is flat
-    below the window, pinned at the positive floor above it, and antitone
-    throughout; the unaged pick equals the proven `gearTargetPick` argmax; and
-    the interleave always selects a quotient-maximal key (`selectMax_quot_max`,
-    the highest-averages optimality underlying no-starvation).
+    selection-weight multiplier and `dhondtStepKey` is one seat of the d'Hondt
+    / highest-averages apportionment; `WhichSlotIsFurthestBehind._aged_head`
+    composes exactly those two (Python `falloff` + `dhondt_step`). Proven:
+    `falloff` is flat below the window, pinned at the positive floor above it,
+    and antitone throughout; and the step always selects a quotient-maximal key
+    (`selectMax_quot_max` / `dhondtStepKey_quot_max`, the highest-averages
+    optimality underlying no-starvation).
+  * `interleaveDue` — the multi-seat FOLD of that step, kept as the object the
+    bounded no-starvation theorem is stated over. Its Python mirror
+    `interleave_due` is gone (the player accumulates seats incrementally and
+    calls `dhondt_step` once per cycle, which reproduces the fold seat-for-seat
+    — see `GamePlayer._interleave_seats`), so this definition is a MODEL, not a
+    mirror.
 
 Non-vacuity anchors: every hypothesis is satisfiable — `milestone_gt_level`
 and `milestone_advances` are witnessed at `level = 0` (see the concrete
 `example`s below); the truth-table theorems are hypothesis-free `decide`s.
 
-DEFERRED (Phase-2 bar per task brief): `gearTargetPick_perm`
-(permutation invariance of the pick). It requires antisymmetry/totality of
-the lexicographic `better` order over `Rat × Nat × String × String`, which
-balloons in core-only Lean (String order lemmas). The accepted substitute is
-`gearTargetPick_mem` + `gearTargetPick_none_iff` here plus the Python
-insertion-order unit tests binding the canonical total order.
-
-Also DEFERRED: `interleaveDue_reaches` (bounded no-starvation reachability) —
-its stepwise core is proven as `selectMax_quot_max`; the summation to close the
-window needs mathlib `Finset`/`BigOperators` (quarantined out of the safety
-core) plus `Nodup`/positivity hypotheses. See the detailed note above the
-theorem. Accepted substitute: `selectMax_quot_max` + the Python
-`interleave_due` no-starvation unit tests.
+`interleaveDue_reaches` (bounded no-starvation reachability) is PROVEN, with no
+`sorry`, as `Formal.ProgressionTree.interleaveDue_reaches` — declared in that
+namespace but living in the file `Formal/Liveness/InterleaveNoStarvation.lean`,
+because the summation argument needs mathlib and mathlib is quarantined out of
+this safety core. It was DEFERRED when this header was written; the note above
+the `interleaveDue` definition below records the original obstructions and how
+the liveness tier discharged them. THIS PROOF IS LIVE OVER CODE THE BOT RUNS —
+`falloff` and `dhondt_step` are called every aged cycle at
+`ai/decisions/root.py:348-365` — so neither it nor its file is orphaned.
 
 Lean core only — no mathlib (mathlib is quarantined to Formal/Liveness/).
 `omega` handles the min/div-by-10 milestone arithmetic; `decide` closes the
@@ -297,7 +297,10 @@ theorem falloff_antitone {a b : Nat} (h : a ≤ b) : falloff b ≤ falloff a := 
 
 /-! ### d'Hondt / highest-averages interleave (no-starvation scheduler)
 
-Mirrors `interleave_due`. Deterministic proportional apportionment: hand out
+Modelled the Python `interleave_due`, which wave 3b deleted; `dhondtStep`
+below is still an exact mirror of the live `dhondt_step`, and the player's seat
+accumulator reproduces this fold seat-for-seat. Deterministic proportional
+apportionment: hand out
 `cycle + 1` seats one at a time, each to the key maximising the quotient
 `w / (seats + 1)`, ties broken by `(quotient, weight, key)` — a canonical,
 list-order-independent total order. -/
@@ -447,7 +450,9 @@ theorem dhondtStepKey_quot_max (weighted : List (String × Rat)) (s : String →
   simp [dhondtStepKey, hr]
 
 /-- The key that receives the `(cycle + 1)`-th seat. `none` only for an empty
-list. Mirrors Python `interleave_due`. -/
+list. This modelled Python `interleave_due` (deleted in wave 3b); it is kept as
+the object `interleaveDue_reaches` is stated over. The single step it folds,
+`dhondtStep`, IS a live mirror — see `dhondtStepKey`. -/
 def interleaveDue (weighted : List (String × Rat)) (cycle : Nat) : Option String :=
   match weighted with
   | [] => none
@@ -481,8 +486,9 @@ unseated key `key` retains quotient `w / (0 + 1) = w` — is PROVEN here as
 (distinct) keys gives `w * (total seats) ≤ W`, so after `> W / w` seats `key`
 must have been chosen — contradiction, hence reachability.
 
-DEFERRED (same Phase-2 bar as `gearTargetPick_perm` above) for two concrete
-core-Lean obstructions, NOT because the statement is false:
+It was DEFERRED, in core-Lean, for two concrete obstructions, NOT because the
+statement is false (the liveness tier has since discharged both — see the
+RESOLVED note at the top of this section):
 
   1. The summation step needs list-sum monotonicity / constant-factoring
      (`List.sum_le_sum`, `w * Σ = Σ (w * ·)`) and a `total seats = step count`
@@ -494,9 +500,11 @@ core-Lean obstructions, NOT because the statement is false:
 
 Also note the kernel cannot reduce `Rat` division, so even a concrete
 `decide`/`rfl` witness (e.g. the 1:1 case winning `b` then `a`, the 3:1 case
-winning `a,a,a,b`) does not close — those hold by `#eval` / the Python unit
-tests only. Accepted substitute: `selectMax_quot_max` (the highest-averages
-optimality that drives no-starvation) here, plus the `interleave_due`
-no-starvation unit tests binding the 1:1 and 3:1 schedules on the Python side. -/
+winning `a,a,a,b`) does not close — those hold by `#eval` only. The substitute
+accepted while the deferral stood was `selectMax_quot_max` (the highest-averages
+optimality that drives no-starvation) here, plus the Python `interleave_due`
+no-starvation unit tests binding the 1:1 and 3:1 schedules; wave 3b deleted
+`interleave_due` and those tests with it, which costs nothing now that the full
+theorem is proven and `dhondt_step`'s own unit tests bind the live step. -/
 
 end Formal.ProgressionTree
