@@ -182,7 +182,6 @@ DORMANT: dict[str, str] = {
     "UnlockBankGoal": "conditional: the bank is already unlocked for every live character",
     "ReachUnlockLevelGoal": "conditional: fires only below the bank-unlock level",
     "DepositGoldAction": "conditional: gold is banked by DepositAll, not as a separate step",
-    "WithdrawGoldAction": "conditional: no goal has needed banked gold yet",
     "UseGoldBagAction": "conditional: no gold bag has dropped",
     # --- Subsumed: a live sibling does the same work, so these are candidates
     # for DELETION rather than activation. Flagged so the choice is deliberate.
@@ -199,8 +198,6 @@ DORMANT: dict[str, str] = {
     # --- Two more downstream of the dead task subsystem, established 2026-08-18.
     "ReachCurrencyGoal": "unreachable: routed only from a currency-blocked leaf, "
                          "and it mints only tasks_coin, which requires tasks",
-    "ReachSkillGoal": "unreachable: constructed only under MeansKind.PURSUE_TASK, "
-                      "which requires a held task",
     # --- Currency turn-in. Investigated 2026-08-18 with the fleet stopped; the
     # answer is TWO independent reasons, and only one of them is conditional.
     #
