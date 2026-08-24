@@ -12,7 +12,7 @@ import typer
 
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.plan_report import PlanReport
-from artifactsmmo_cli.ai.plan_tree import _root_detail
+from artifactsmmo_cli.ai.plan_tree import root_detail
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.config import Config
@@ -73,7 +73,7 @@ def _print_report(player: GamePlayer, report: PlanReport) -> None:
     # `d.ranking` is chosen root first, then `RootResolution.alternatives` in
     # order (trunk last). `category` carries the walk's own answer to "why" —
     # the resolution trail for the chosen root, `alternative · <kind>` for
-    # every other row — see `plan_tree._root_detail`, which this mirrors
+    # every other row — see `plan_tree.root_detail`, which this mirrors
     # so the CLI and the TUI plan pane never disagree about a cycle. There is
     # no more comparable numeric key: `score` is now a constant on every row
     # (kept only because `RootScoreView.score` is a schema-pinned field, spec
@@ -81,7 +81,7 @@ def _print_report(player: GamePlayer, report: PlanReport) -> None:
     print("resolution (top 8) — chosen root first, then the walk's ordered "
           "alternatives:")
     for rs in d.ranking[:8]:
-        print(f"  {_root_detail(rs)}  {rs.root_repr}  ->  step={rs.step_repr}")
+        print(f"  {root_detail(rs)}  {rs.root_repr}  ->  step={rs.step_repr}")
     print("=" * 70)
 
 

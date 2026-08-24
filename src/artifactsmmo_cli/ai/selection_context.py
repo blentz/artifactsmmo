@@ -206,8 +206,11 @@ class SelectionContext:
     # sibling saves the SKILL GATE and nothing else.
     sibling_skills: dict[str, int] = field(default_factory=dict)
     # ANTI-STARVATION LEDGER, reconnected in wave 3a fix-round 1. Per-(slot,
-    # code) consecutive-cycles-committed counts and the per-slot d'Hondt seat
-    # accumulator, both owned and mutated by `GamePlayer._charge_focus`. THE
+    # code) consecutive-cycles-committed counts and the d'Hondt seat
+    # accumulator keyed the same way — the FULL "slot|code" ledger key (fix-
+    # round 2 re-keyed it off equipment slot alone, once a root could resolve
+    # to a sentinel slot like `<skill>`/`<item>` a slot-only key would
+    # collapse) — both owned and mutated by `GamePlayer._charge_focus`. THE
     # ROOT WALK READS THEM HERE, on the same seam `supply_target` and
     # `role_skills` use and for the same reason those chose it: they are
     # per-cycle player runtime facts, which is exactly what this context

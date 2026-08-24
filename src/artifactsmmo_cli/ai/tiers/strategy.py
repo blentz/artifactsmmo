@@ -2,10 +2,9 @@
 actionable subgoal. `decide` delegates to `progression_tree.decide_tree`
 (Phase 4b THE FLIP); the flat scalar ranking pipeline is deleted."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from fractions import Fraction
-from types import MappingProxyType
 
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
@@ -29,21 +28,6 @@ from artifactsmmo_cli.ai.tiers.objective import (
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.progression_choice import ProgressionCandidate
 from artifactsmmo_cli.ai.world_state import WorldState
-
-_NO_FOCUS: Mapping[tuple[str, str], int] = MappingProxyType({})
-"""Immutable empty-focus default, sibling of `progression_tree._NO_FOCUS` (not
-imported directly: `progression_tree` imports this module at its top, so a
-reverse name-import here would race the circular load order). Avoids a
-mutable `{}` default (ruff B006); read-only, forwarded straight through to
-`decide_tree`."""
-
-_NO_SEATS: Mapping[str, int] = MappingProxyType({})
-"""Immutable empty-seats default, sibling of `_NO_FOCUS` and
-`progression_tree._NO_SEATS` (same circular-load reason it is redeclared here
-rather than imported). The d'Hondt seat accumulator for the focus-aging
-interleave; read-only, forwarded straight through to `decide_tree` (Task 12
-perf: O(candidates) incremental seats replace the unbounded global cycle
-index)."""
 
 
 def root_category(node: MetaGoal) -> str:

@@ -1,5 +1,6 @@
 """LogPane tests (no Textual app needed)."""
 
+from pathlib import Path
 from unittest.mock import patch
 
 from artifactsmmo_cli.ai.cycle_snapshot import (
@@ -9,7 +10,17 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
     RootScoreView,
 )
 from artifactsmmo_cli.ai.fight_record import FightRecord
+from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
 from artifactsmmo_cli.tui.widgets.log_pane import LogPane, build_log_lines
+
+# Same fixture `tests/test_ai/scenarios/test_band_liveness.py`'s `_decide` uses
+# to drive `decide_tree` for real — imported by path rather than duplicated,
+# so this file's one production-driven test (below) exercises the SAME
+# committed game data every other `decide_tree` test in the suite does.
+_BUNDLE = (Path(__file__).resolve().parent.parent / "test_ai" / "scenarios"
+          / "fixtures" / "gamedata_bundle.json")
 
 _FIGHT = FightRecord(
     started_at="2026-07-27T23:30:30.455000",
@@ -157,19 +168,54 @@ class TestBuildLogLines:
         lines = build_log_lines(_snap(chosen_root="ReachCharLevel(level=6)", strategy_ranking=[]))
         assert len(lines) == 1
 
-    def test_why_line_shows_chosen_category_and_score(self):
+    def test_why_line_shows_chosen_category(self):
+        """No score: THE FLIP (wave 3a) freezes `RootScore.score` to a
+        constant on every row, so it is not part of the answer any more —
+        `category` is."""
         why = build_log_lines(_ranked_snap())[1]
-        assert "why:" in why and "grind" in why and "1.80" in why
+        assert "why:" in why and "grind" in why
+        assert "1.80" not in why
 
     def test_why_line_shows_top_two_alternatives(self):
         why = build_log_lines(_ranked_snap())[1]
-        assert "copper_boots" in why and "1.00" in why
-        assert "cooked_gudgeon" in why and "0.40" in why
+        assert "copper_boots" in why and "gear" in why
+        assert "cooked_gudgeon" in why and "skill" in why
+        assert "1.00" not in why and "0.40" not in why
+
+    def test_why_line_shortens_a_multi_hop_trail_to_its_last_node(self):
+        """The chosen row's `category` can be an arrow-joined resolution
+        trail three or four names long
+        (`IsMyGearBehindMyTier → IsThereACombatTarget → CanIClearMyTier`) —
+        room enough in the multi-line plan pane, not in one `RichLog` row.
+        The log pane shows only the LAST node: the decision that actually
+        produced this root."""
+        why = build_log_lines(_ranked_snap(
+            chosen_root="ReachCharLevel(level=6)",
+            strategy_ranking=[RootScoreView(
+                root_repr="ReachCharLevel(level=6)",
+                category="IsMyGearBehindMyTier → IsThereACombatTarget → CanIClearMyTier",
+                score=1.0, step_repr="")]))[1]
+        assert "CanIClearMyTier" in why
+        assert "IsMyGearBehindMyTier" not in why and "→" not in why
+
+    def test_why_line_shortens_an_alternative_kind_to_drop_the_word_alternative(self):
+        """Every row in the `alt:` list is an alternative by construction, so
+        the word itself is noise — only the `<kind>` half of `"alternative ·
+        <kind>"` (production's real shape for a non-chosen row, spec §5.2)
+        survives."""
+        why = build_log_lines(_ranked_snap(strategy_ranking=[
+            RootScoreView(root_repr="ReachCharLevel(level=6)", category="grind", score=1.0,
+                          step_repr=""),
+            RootScoreView(root_repr="ObtainItem(code='copper_boots', quantity=1)",
+                          category="alternative · gear", score=1.0, step_repr=""),
+        ]))[1]
+        assert "gear" in why
+        assert "alternative" not in why
 
     def test_why_line_names_the_chosen_root(self):
-        """The chosen root's NAME, not just its category+score — otherwise a
-        currency grind (GatherMaterials(event_ticket)) shows in the log with no
-        link to the target it funds (lich_race_medal)."""
+        """The chosen root's NAME, not just its resolution reason — otherwise
+        a currency grind (GatherMaterials(event_ticket)) shows in the log with
+        no link to the target it funds (lich_race_medal)."""
         why = build_log_lines(_ranked_snap(
             chosen_root="ObtainItem(code='lich_race_medal', quantity=1)",
             strategy_ranking=[RootScoreView(
@@ -197,6 +243,36 @@ class TestBuildLogLines:
         snap = _ranked_snap(chosen_root="NonexistentGoal")
         lines = build_log_lines(snap)
         assert len(lines) == 1
+
+    def test_why_line_reflects_a_production_built_decision(self):
+        """Every other test in this class hand-builds a `RootScoreView` with a
+        distinct score per row — exactly the shape that let a whole-branch
+        review finding go unnoticed: `decide_tree`'s real
+        `_resolution_rows` (wave 3a, `progression_tree.py`) freezes
+        `RootScore.score` to a constant on every row, and nothing in this
+        file ever rendered what production actually writes there. This test
+        drives the REAL `decide_tree` -> `StrategyDecision.ranking` ->
+        `RootScoreView` conversion — the same one `player.py`'s
+        `_emit_trace` performs — and asserts the log line it produces
+        carries no numeric score and no un-shortened trail."""
+        gd = load_bundle_game_data(_BUNDLE)
+        state = scenario_state(SCENARIOS["l1_fresh"], gd)
+        objective = CharacterObjective.from_game_data(gd)
+        decision = decide_tree(state, gd, objective)
+        assert decision.chosen_root is not None
+        assert decision.ranking, "l1_fresh must produce a rendered descent"
+        snap = _ranked_snap(
+            chosen_root=repr(decision.chosen_root),
+            strategy_ranking=[
+                RootScoreView(root_repr=r.root_repr, category=r.category,
+                              score=float(r.score), step_repr=r.step_repr)
+                for r in decision.ranking
+            ],
+        )
+        why = build_log_lines(snap)[1]
+        assert "why:" in why
+        assert "1.00" not in why
+        assert "→" not in why
 
 
 class TestGrindExpansionLines:

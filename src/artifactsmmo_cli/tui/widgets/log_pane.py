@@ -44,6 +44,27 @@ def _role_event_line(ts: str, cycle_index: int, change: RoleChange) -> str:
     )
 
 
+def _trail_reason(category: str) -> str:
+    """The one word/phrase worth showing on a single log line, out of a
+    `RootScore.category` (spec §5.2, THE FLIP wave 3a).
+
+    The chosen row's `category` is the full resolution trail, arrow-joined
+    and sometimes three or four names long — room enough in the multi-line
+    plan pane (`plan_tree.root_detail` shows it whole), not in one `RichLog`
+    row. This keeps only the LAST node: the decision that actually produced
+    this root.
+
+    An alternative row's `category` is `"alternative · <kind>"`; every row in
+    the `alt:` list is an alternative by construction, so repeating the word
+    on each one is noise — this keeps only `<kind>`.
+
+    A category with neither separator (defensive: no live row produces this
+    today) passes through unchanged."""
+    if " → " in category:
+        return category.rsplit(" → ", 1)[-1]
+    return category.rsplit(" · ", 1)[-1]
+
+
 def _supply_line(snap: CycleSnapshot) -> list[str]:
     """The dim `role:` continuation, on supply cycles only — at most one line,
     and none at all on the cycles of every single-character run.
@@ -62,8 +83,9 @@ def _supply_line(snap: CycleSnapshot) -> list[str]:
 
 def build_log_lines(snap: CycleSnapshot) -> list[str]:
     """Rich-markup lines for one cycle: the compact decision line, an optional
-    dim 'why' line (chosen root score + top-2 alternatives) when a strategy
-    ranking is present, and — on a LevelSkill cycle — the captured grind chain
+    dim 'why' line (chosen root's resolution reason + top-2 alternatives) when
+    a strategy ranking is present, and — on a LevelSkill cycle — the captured
+    grind chain
     (the concrete gather/craft legs the step expands into), and — on a fight
     cycle — a structured one-line fight summary. Discretionary cycles (no
     chosen_root / empty ranking) get the single line plus any grind chain.
@@ -89,14 +111,21 @@ def build_log_lines(snap: CycleSnapshot) -> list[str]:
     chosen = (next((r for r in snap.strategy_ranking if r.root_repr == snap.chosen_root), None)
               if snap.chosen_root is not None and snap.strategy_ranking else None)
     if chosen is not None:
-        # Name the chosen root, not just its category+score — otherwise a currency
-        # grind (e.g. GatherMaterials(event_ticket)) shows in the log with no link
-        # to the target it funds (e.g. lich_race_medal), which reads as a pointless
-        # grind. The name is already on the snapshot; it was just not rendered.
-        why = f"   why: {short_root(chosen.root_repr)}  {chosen.category} {chosen.score:.2f}"
+        # Name the chosen root, not just its resolution reason — otherwise a
+        # currency grind (e.g. GatherMaterials(event_ticket)) shows in the log
+        # with no link to the target it funds (e.g. lich_race_medal), which
+        # reads as a pointless grind. The name is already on the snapshot; it
+        # was just not rendered.
+        #
+        # No `.score` here: THE FLIP (wave 3a) freezes `RootScore.score` to a
+        # constant on every row (`progression_tree._resolution_rows`), so it
+        # no longer differentiates rows — `category` (via `_trail_reason`) is
+        # the walk's real content now, same as the plan pane and the CLI.
+        why = f"   why: {short_root(chosen.root_repr)}  {_trail_reason(chosen.category)}"
         alts = [r for r in snap.strategy_ranking if r.root_repr != snap.chosen_root][:2]
         if alts:
-            alt_text = " | ".join(f"{short_root(r.root_repr)} {r.score:.2f}" for r in alts)
+            alt_text = " | ".join(
+                f"{short_root(r.root_repr)} {_trail_reason(r.category)}" for r in alts)
             why = f"{why}  alt: {alt_text}"
         lines.append(f"[dim]{why}[/dim]")
     lines.extend(_supply_line(snap))

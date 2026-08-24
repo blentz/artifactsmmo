@@ -44,24 +44,6 @@ from artifactsmmo_cli.ai.tiers.synergy_core import synergy_pure
 from artifactsmmo_cli.ai.weapon_winnability import marginal_weapon_winnability
 from artifactsmmo_cli.ai.world_state import WorldState
 
-_NO_FOCUS: Mapping[tuple[str, str], int] = MappingProxyType({})
-"""Immutable empty-focus default (mirrors the `NO_PROFILE_CONTEXT` convention):
-avoids a mutable `{}` default (ruff B006). `decide_tree` only reads it
-(`.get`), never mutates it — the anti-starvation ledger is owned and mutated
-by `GamePlayer` (Task 6)."""
-
-_NO_J: Mapping[str, int] = MappingProxyType({})
-"""Immutable empty J map — 'the objective was not consulted'. Every lookup misses
-and the display rows carry `j=None`, which is exactly the store-less case."""
-
-_NO_SEATS: Mapping[str, int] = MappingProxyType({})
-"""Immutable empty-seats default (sibling of `_NO_FOCUS`): the d'Hondt seat
-accumulator for the focus-aging interleave. `decide_tree` only reads it
-(`.get`), never mutates it — the accumulator is owned and bumped by
-`GamePlayer._interleave_seats` in lockstep with the focus ledger (Task 12).
-Empty seats + unaged focus reproduce the plain `gear_target_pick` argmax, so
-every default-arg caller is unaffected."""
-
 
 def _already_owned(code: str, state: WorldState) -> bool:
     """The character holds a copy (bag or bank) — so the only work this gear
@@ -205,9 +187,17 @@ def objective_candidates(state: WorldState, game_data: GameData,
 # candidate-ordered fallback pairs, and the resolution walk builds both from
 # `RootResolution` instead, so as of this commit they had zero callers and zero
 # reachable lines. They are NOT the wave-3b deletion list: that is the public
-# schema (`RootScore.j` / `.reachable_level`, `StrategyDecision.aged_pick` /
-# `.j_ranking`) and `J` itself, which still have live readers here and in the
-# TUI. Leaving dead private helpers behind to be tidied later is how this repo
+# schema (`RootScore.j` / `.reachable_level`, `StrategyDecision.j_ranking`).
+# Task 3a.7 deleted their one production reader (`plan_tree.rank_detail`), so
+# by this commit they are ALSO zero-reader — same shape as the four helpers
+# above, just public instead of private, which is exactly why the field
+# deletion is deferred to 3b rather than folded in here (spec §1.4: a schema
+# change is its own commit). `StrategyDecision.aged_pick` is NOT in that list —
+# it is live, read by `GamePlayer._charge_focus` every cycle. `J` (`finite_j`)
+# itself still has ONE live reader, but not here and not in the TUI: the
+# standalone legacy `objective` CLI (`commands/objective.py`), which still
+# runs the retired ranking on its own and is explicitly out of this wave's
+# scope. Leaving dead public fields behind to be tidied later is how this repo
 # grew `distance_cost_pure` — proved, differential-tested, and called by
 # nothing (`feedback_proof_over_an_uncalled_helper`).
 

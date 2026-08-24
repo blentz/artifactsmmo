@@ -2954,7 +2954,7 @@ ROOT_DECISION_MUTATIONS = [
     # interleave and `WhichSlotIsFurthestBehind` is a pure, history-free total
     # order again — the ring2 stuck-drop-root starvation, reinstated.
     ("root: the aged head is dropped, so the slot order never rotates",
-     "        head = self._aged_head(ranked, state, game_data, ctx)\n",
+     "        head = self._aged_head(ranked, state, game_data, ctx, history)\n",
      "        head = ranked[0]\n"),
     # ...and the fast-path guard inverted: an UNAGED board would take the
     # d'Hondt interleave, so a fresh root jitters instead of being pursued.
@@ -2971,7 +2971,7 @@ ROOT_DECISION_MUTATIONS = [
     # ever ages.
     ("root: the aged read keys on the SHEET entry, not on the resolved root,"
      " so a skill-gated head can never age",
-     "        keys = [self._ledger_key(slot, target, state, game_data, ctx)\n"
+     "        keys = [self._ledger_key(slot, target, state, game_data, ctx, history)\n"
      "                for slot, target in ranked]\n",
      "        keys = [(slot, target.code) for slot, target in ranked]\n"),
 ]

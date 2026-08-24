@@ -772,10 +772,14 @@ class GamePlayer:
         return selected_goal, plan, goals_tried
 
     def _tree_band_adequate(self) -> bool:
-        """The real progression-band adequacy verdict wired into
-        `decide_tree`'s `band_adequate` (via `StrategyEngine.decide`): a
-        winnable monster exists for the current loadout AND no positive-gain
-        structural upgrade is reachable. The upgrade leg is tier-aware
+        """The real progression-band adequacy verdict: a winnable monster
+        exists for the current loadout AND no positive-gain structural
+        upgrade is reachable. Pre-wave-3a this was wired into `decide_tree`'s
+        `band_adequate` parameter (via `StrategyEngine.decide`); THE FLIP
+        (wave 3a) removed that parameter along with the ranking it fed, and
+        nothing calls this method any more — a deliberate deferral (branch
+        review, wave-3a-final), not a bug this task fixes. The upgrade leg is
+        tier-aware
         (2026-07-07 live-shadow correction: a full COPPER set at L14 read as
         adequate under the old empty-armor-slot leg and the tree never
         geared) and SUBSUMES the old empty-slot check — an empty slot is a

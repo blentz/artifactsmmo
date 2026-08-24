@@ -314,6 +314,20 @@ class GearTarget:
     blocker: str | None
     blocking_skill: str | None = None
     blocking_skill_level: int = 0
+    """The crafting/gathering level `code`'s recipe actually demands of
+    `blocking_skill`. `decisions.root.IsThisTargetBlocked` deliberately does
+    NOT read this — it asks for `current + 1` instead, so the graph
+    re-derives the next rung from live state every cycle rather than
+    committing to the whole climb in one shot (see that class's docstring).
+    So this field's only production reader today is `formal/diff/mutate.py`'s
+    "the skill-gated arm demands the whole climb instead of +1" mutant, which
+    swaps `current + 1` for `self.target.blocking_skill_level` to prove the
+    incremental-climb choice is load-bearing. Kept as real, correctly-typed
+    data anyway (branch review F5) — it is exactly the number a future reader
+    debugging "how far is the actual gate" would want next to the incremental
+    step, and dropping it would re-derive the mutant on a strictly weaker
+    property (`current + 1` vs `current`, an off-by-one, not "ignores the
+    recipe's real requirement on purpose")."""
 
 
 @dataclass(frozen=True)

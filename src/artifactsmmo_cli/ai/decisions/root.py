@@ -9,9 +9,9 @@ against the trunk's 1.0). This graph answers "which root does the tier ladder
 select", and its `trail` is a named path a reader can follow instead of a
 number they could not.
 
-NOTHING CALLS THIS YET. `decide_tree` is flipped over to `resolve_root` in a
-later task of `PLAN_wave3a_cutover`; until then this module is groundwork and
-changes no runtime behaviour.
+`decide_tree` calls `resolve_root` directly — THE FLIP (task 6,
+`PLAN_wave3a_cutover`) wired it in; this is no longer groundwork sitting
+uncalled, it is what every live cycle's root comes from.
 
 One module, five behavioural classes: the same shape as
 `decisions/obtain_item.py`, whose six `Decision` subclasses share a file
@@ -21,11 +21,12 @@ mutually-referencing halves of a single control-flow structure behind five
 imports without making any of them independently usable.
 
 Spec: `docs/superpowers/specs/2026-08-23-wave3-resolution-design.md` §5.1,
-§5.3. Two places this module deliberately departs from that spec, both
-recorded in `.superpowers/sdd/PLAN_wave3a_cutover/task-4-report.md`:
+§5.3. One place this module deliberately departs from that spec, recorded in
+`.superpowers/sdd/PLAN_wave3a_cutover/task-4-report.md` (the spec's other
+disagreement at task-4 time — §5.3 saying "Six nodes" and drawing five — was
+the spec's own error; the spec text has since been corrected to "Five nodes"
+and no longer disagrees with this module):
 
-* §5.3's prose says "Six nodes" and then draws five. Five are implemented;
-  no sixth node is invented to make the count true.
 * §5.3's `IsThereACombatTarget` "yes" arm names
   `ReachCharLevel(tier_of_level(game_data, state.level))`, which is a root the
   character has ALREADY satisfied (`tier_of_level` returns the highest rung at
@@ -297,14 +298,14 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
         self.walk.trail.append(self.name)
         ranked = sorted(self.targets.items(),
                         key=lambda item: _slot_order(item, state, game_data))
-        head = self._aged_head(ranked, state, game_data, ctx)
+        head = self._aged_head(ranked, state, game_data, ctx, history)
         self.walk.sibling_targets = [item for item in ranked if item is not head]
         slot, target = head
         return IsThisTargetBlocked(slot, target, self.walk)
 
     def _ledger_key(self, slot: str, target: GearTarget, state: WorldState,
-                    game_data: GameData, ctx: SelectionContext
-                    ) -> tuple[str, str]:
+                    game_data: GameData, ctx: SelectionContext,
+                    history: LearningStore | None) -> tuple[str, str]:
         """The ledger key this slot would be charged under if it won.
 
         Keyed on the ROOT the slot RESOLVES TO, not on `(slot, target.code)`,
@@ -330,15 +331,18 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
 
         A throwaway `RootWalk`: this is a conversion, not a visit, so it must
         not append to the trail. Same idiom as `resolve_root`'s sibling
-        conversion."""
+        conversion — and passed the SAME `history`, not `None`, so the two
+        conversions cannot disagree if `IsThisTargetBlocked.resolve` ever
+        grows a history-dependent arm (inert today: it does not read
+        `history`)."""
         return contender_focus_key(IsThisTargetBlocked(
-            slot, target, RootWalk()).resolve(state, game_data, ctx, None))
+            slot, target, RootWalk()).resolve(state, game_data, ctx, history))
 
     def _aged_head(self, ranked: list[tuple[str, GearTarget]], state: WorldState,
-                   game_data: GameData, ctx: SelectionContext
-                   ) -> tuple[str, GearTarget]:
+                   game_data: GameData, ctx: SelectionContext,
+                   history: LearningStore | None) -> tuple[str, GearTarget]:
         """`ranked[0]`, or the interleave's pick once anything has aged."""
-        keys = [self._ledger_key(slot, target, state, game_data, ctx)
+        keys = [self._ledger_key(slot, target, state, game_data, ctx, history)
                 for slot, target in ranked]
         focus = [ctx.gear_focus.get(key, 0) for key in keys]
         if all(level <= FOCUS_FLAT for level in focus):

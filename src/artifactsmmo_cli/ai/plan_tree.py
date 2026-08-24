@@ -25,27 +25,9 @@ from artifactsmmo_cli.tui.plan_format import short_root, supply_detail
 _DEPTH_CAP = 32
 
 
-def rank_detail(row: RootScore) -> str:
-    """`RootScore.score` rendered as a string, and nothing else.
-
-    THE FLIP (wave 3a) replaced the scored ranking with a resolution walk;
-    `RootScore.j` and `.reachable_level` are no longer set by anything (the
-    walk has no objective to price them against) so the two arms that used to
-    read them are gone, not merely unreachable — see `_root_detail` below
-    for what carries the walk's real content now. `score` itself stays: it is
-    a required field on `RootScoreView`, a Pydantic model with no default that
-    the TUI log pane and two test modules pin (spec §1.4), so `RootScore.score`
-    is not deleted here — that is wave 3b's schema change, in one commit with
-    the rest of it. `decide_tree` now writes the constant `Fraction(1)` to it
-    on every row, so this no longer differentiates one row from another; it
-    exists to keep `RootScoreView.score` constructible, not to be read for
-    meaning."""
-    return f"{float(row.score):.2f}"
-
-
-def _root_detail(row: RootScore) -> str:
-    """The row's reason: what the plan pane and the CLI print in place of the
-    number `rank_detail` used to supply.
+def root_detail(row: RootScore) -> str:
+    """The row's reason: what the plan pane and the CLI print for a resolution
+    row.
 
     THE FLIP moved the walk's real content into `category` (spec §5.2,
     `progression_tree._resolution_rows`, which builds these rows): the
@@ -59,10 +41,21 @@ def _root_detail(row: RootScore) -> str:
     reader, which is all a pure display module needs and keeps this module
     free of a dependency on `decisions.root`/`resolve_root` it has never had.
 
-    Both `build_plan_tree` and `commands/plan.py` call this instead of
-    `rank_detail` now, so the plan pane and the CLI keep showing the SAME
-    reason for a cycle — the "single funnel" `rank_detail` used to be, before
-    its own content went constant."""
+    `RootScore.score` — the field this display used to read instead, via a
+    `rank_detail` formatter — is NOT this function's job any more:
+    `rank_detail` is deleted (branch review F4). Its own arms (`.j`,
+    `.reachable_level`) were already dead by the time this task landed —
+    nothing sets them once the walk replaces the objective's scoring — and
+    once `plan_tree`/`commands/plan.py` stopped calling the score arm too,
+    formatting a field with zero remaining readers was proof over an uncalled
+    helper (`feedback_proof_over_an_uncalled_helper`), not display code. The
+    FIELD survives regardless — `RootScoreView.score` is a required float two
+    test modules pin (spec §1.4), and that is a schema question for wave 3b,
+    not a formatter question for this module.
+
+    Both `build_plan_tree` and `commands/plan.py` call this for a row's
+    "why", so the plan pane and the CLI keep showing the SAME reason for a
+    cycle."""
     return row.category
 
 
@@ -180,7 +173,7 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
     # unchanged.
     details: list[str] = []
     if chosen_score is not None:
-        details.append(_root_detail(chosen_score))
+        details.append(root_detail(chosen_score))
     if role is not None:
         details.append(f"[{role}]")
     chosen_node = chosen_node.model_copy(update={
@@ -194,5 +187,5 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
         roots.append(PlanTreeNode(
             key=r.root_repr, label=short_root(r.root_repr), kind="root_stub",
             status="unmet",
-            detail=f"root {i + 1} · {_root_detail(r)}"))
+            detail=f"root {i + 1} · {root_detail(r)}"))
     return tuple(roots)

@@ -3,7 +3,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.plan_tree import _root_detail, build_plan_tree, rank_detail
+from artifactsmmo_cli.ai.plan_tree import build_plan_tree, root_detail
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
 from tests.test_ai.fixtures import make_state
@@ -312,58 +312,42 @@ def test_snapshot_carries_grind_expansion():
     assert snap.grind_expansion[0].label == "GatherAsh()"
 
 
-class TestRankDetail:
-    """What's left of `RootScore.score`'s own rendering, now that
-    `_root_detail` (below) carries the plan pane's and the CLI's real
-    content. `rank_detail` survives only because `RootScoreView.score` is a
-    required field on a schema two test modules pin (spec §1.4); THE FLIP sets
-    `RootScore.score` to a constant on every resolution row, so `rank_detail`
-    no longer differentiates rows and nothing in `plan_tree` or `commands/
-    plan.py` calls it any more — these tests pin its ONE remaining case
-    directly."""
-
-    def test_ignores_j_now_that_the_walk_produces_it(self):
-        """`RootScore.j` still exists (spec §1.4: not deleted until wave 3b)
-        but nothing sets it any more, and `rank_detail` must not special-case
-        it if it happens to be set — that arm is DELETED, not merely
-        unreachable. A stray non-None `j` must not resurrect it."""
-        row = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
-                        cost=0, score=Fraction(5, 2), step_repr="s", j=32981)
-        assert rank_detail(row) == "2.50"
-
-    def test_ignores_reachable_level_now_that_the_walk_produces_it(self):
-        """Same as above for `RootScore.reachable_level` — its arm is DELETED,
-        not merely unreachable."""
-        row = RootScore(root_repr="r", category="char_level",
-                        contribution=Fraction(1), cost=0, score=Fraction(5, 2),
-                        step_repr="s", reachable_level=17)
-        assert rank_detail(row) == "2.50"
-
-    def test_renders_the_score_field(self):
-        """The one thing left: `RootScore.score` as a fixed-point string."""
-        row = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
-                        cost=0, score=Fraction(5, 2), step_repr="s")
-        assert rank_detail(row) == "2.50"
-
-
-class TestResolutionRows:
+class TestRootDetail:
     """What the plan pane and the CLI actually print for a resolution row,
-    since THE FLIP moved the real content into `RootScore.category`."""
+    since THE FLIP moved the real content into `RootScore.category`.
+
+    There is no more `TestRankDetail`/`rank_detail` here (branch review F4):
+    `rank_detail` — a plain `f"{float(row.score):.2f}"` formatter — lost its
+    last production caller when this module switched to `root_detail`, and
+    kept existing only as a schema-pinned FIELD's formatter with no reader,
+    the proof-over-an-uncalled-helper shape this branch elsewhere warns
+    against. `RootScore.score`/`.j`/`.reachable_level` are unaffected — the
+    FIELDS stay (spec §1.4; deletion is wave 3b's schema change) — only the
+    function that rendered `.score` as a string is gone."""
 
     def test_reads_the_category(self):
         row = RootScore(root_repr="r", category="IsMyGearBehindMyTier -> "
                         "WhichSlotIsFurthestBehind", contribution=Fraction(1),
                         cost=0, score=Fraction(1), step_repr="s")
-        assert _root_detail(row) == row.category
+        assert root_detail(row) == row.category
 
     def test_ignores_the_now_constant_score(self):
-        """A mutant that concatenates `rank_detail(row)` back onto the result
-        must fail here: two rows with the SAME category but DIFFERENT scores
-        (exactly what `decide_tree` never produces any more, but nothing stops
-        a stray caller from doing) must read identically, because `score` is
-        no longer part of the answer."""
+        """A mutant that folds `row.score` back into the result must fail
+        here: two rows with the SAME category but DIFFERENT scores (exactly
+        what `decide_tree` never produces any more, but nothing stops a stray
+        caller from doing) must read identically, because `score` is not part
+        of the answer."""
         cheap = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
                           cost=0, score=Fraction(1), step_repr="s")
         pricey = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
                            cost=0, score=Fraction(999), step_repr="s")
-        assert _root_detail(cheap) == _root_detail(pricey) == "gear"
+        assert root_detail(cheap) == root_detail(pricey) == "gear"
+
+    def test_ignores_j_and_reachable_level_too(self):
+        """`RootScore.j`/`.reachable_level` still exist (spec §1.4) but
+        `root_detail` never reads them — a stray non-None value on either
+        must not leak into the result, the same way `score` must not."""
+        row = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
+                        cost=0, score=Fraction(1), step_repr="s",
+                        j=32981, reachable_level=17)
+        assert root_detail(row) == "gear"

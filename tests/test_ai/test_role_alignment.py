@@ -1,5 +1,6 @@
 """Tests for the role_alignment fifth ranking factor: the pure core, its
-threading through progression_tree_core, and the LIVE `_role_map` assembly.
+threading through progression_tree_core, and the `_role_map` assembly —
+no longer live (see below), exercised here directly instead.
 
 WAVE 3a DELETED THREE TESTS FROM THIS FILE — the no-role sweep, the
 role-flips-the-pick witness, and the role-alone `aged_pick` precondition. All
@@ -118,8 +119,10 @@ def test_nonempty_role_map_changes_weight_pick_and_order() -> None:
 
 # ---------------------------------------------------------------------------
 # ACTIVATION (Task 14): `_role_map`, the impure assembly that turns a held role
-# name into the per-(slot, code) multiplier, and its live path through
-# `decide_tree`.
+# name into the per-(slot, code) multiplier. Its path through `decide_tree`
+# was live at Task 14; wave 3a's resolution walk does not call it, so from
+# this commit `_role_map` is test-only, kept for wave 3b to judge along with
+# the rest of the ranking factor (module docstring above).
 # ---------------------------------------------------------------------------
 
 BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json")
