@@ -753,3 +753,62 @@ speculative:
 
 Nothing in this document authorises step 2 or later. It is a specification of
 what is missing and what a cell has to earn, not a plan.
+
+---
+
+## Addendum — a production finding the D3 measurement surfaced (2026-08-24)
+
+Measuring the GE pricing shift before populating the bundle (user's direction,
+"measure the pricing shift first") turned up something that is NOT a fixture
+property. Recording it here because it was found by this work, but it belongs to
+the acquisition model, not to the scenario set.
+
+### An affordable-but-unfunded route prices ABOVE the no-route sentinel
+
+`acquisition_cost_core.UNOBTAINABLE_PER_UNIT = 10**6` is the sentinel for "no
+route exists". A gold-priced route carries `inputs={"gold": price}`, and
+`_owned_with_gold` credits only the character's POCKET. Any shortfall beyond
+that is charged `UNOBTAINABLE_PER_UNIT` PER UNIT, so an unaffordable real route
+prices at `price * 10^6 + 2` — **strictly worse than a route that does not exist
+at all.** The comparison inverts: an impossible route outranks a merely
+unaffordable one.
+
+Measured while populating the GE book: emission went 0/30 -> 30/30 scenarios
+(5,370 emissions) and `acquisition_actions` moved for 33-160 codes per scenario,
+in that direction.
+
+### It is reachable LIVE, not only in the fixture
+
+My first reading was that empty fixture bags caused it — 26/30 scenarios carry an
+empty bag against **0 of 80,194** live cycles, so a live character always has
+something to sell. That reading was WRONG, and checking it is what corrected it.
+
+Gold's own route is `SourceKind.SELL`, emitted by `obtain_sources._sell_sources`,
+which iterates `accumulation_sell.sellable_surplus(state, ...)` AND requires
+`event_npc_tradeable`. **Every item-buying NPC in this game is an event NPC** —
+all five, 55 buyer rows, not one non-event (that function's own docstring states
+it, and it matches the recorded `reference_every_buyer_is_an_event_npc` finding).
+
+So gold has TWO gates: sellable surplus, and an OPEN BUYER EVENT. Live bags are
+never empty, but buyer windows are intermittent. During any window with no buyer
+event, gold is unobtainable and every unaffordable route prices above the
+sentinel.
+
+### Why this is the same family as the gold-holding wall
+
+`19804b6a` fixed "gold lives in `state.gold`, not `inventory`, so every
+gold-priced vendor route cost `price x 10^6`" — 46 walled pairs. `_owned_with_gold`
+is that fix, and its docstring states its own limit honestly: pocket only, bank
+not credited, "making banked gold a withdraw route of its own is a separate
+increment". This addendum is the NEXT limit of the same wall: the fix credits
+what is HELD, and says nothing about a shortfall.
+
+### Not fixed here, deliberately
+
+This is an acquisition-model change, not a fixture change, and the task that
+found it was scoped to prerequisites. Options worth weighing, none chosen:
+cap any priced route at `UNOBTAINABLE_PER_UNIT` so the sentinel is a true
+ceiling; credit banked gold via the dormant `WithdrawGoldAction`; or price a
+gold shortfall at the cost of ACQUIRING that gold rather than at the
+no-route sentinel. The first is the smallest and makes the comparison sound
+without claiming the route is cheap.
