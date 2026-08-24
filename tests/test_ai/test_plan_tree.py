@@ -3,7 +3,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.plan_tree import _resolution_rows, build_plan_tree, rank_detail
+from artifactsmmo_cli.ai.plan_tree import _root_detail, build_plan_tree, rank_detail
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
 from tests.test_ai.fixtures import make_state
@@ -314,7 +314,7 @@ def test_snapshot_carries_grind_expansion():
 
 class TestRankDetail:
     """What's left of `RootScore.score`'s own rendering, now that
-    `_resolution_rows` (below) carries the plan pane's and the CLI's real
+    `_root_detail` (below) carries the plan pane's and the CLI's real
     content. `rank_detail` survives only because `RootScoreView.score` is a
     required field on a schema two test modules pin (spec §1.4); THE FLIP sets
     `RootScore.score` to a constant on every resolution row, so `rank_detail`
@@ -354,7 +354,7 @@ class TestResolutionRows:
         row = RootScore(root_repr="r", category="IsMyGearBehindMyTier -> "
                         "WhichSlotIsFurthestBehind", contribution=Fraction(1),
                         cost=0, score=Fraction(1), step_repr="s")
-        assert _resolution_rows(row) == row.category
+        assert _root_detail(row) == row.category
 
     def test_ignores_the_now_constant_score(self):
         """A mutant that concatenates `rank_detail(row)` back onto the result
@@ -366,4 +366,4 @@ class TestResolutionRows:
                           cost=0, score=Fraction(1), step_repr="s")
         pricey = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
                            cost=0, score=Fraction(999), step_repr="s")
-        assert _resolution_rows(cheap) == _resolution_rows(pricey) == "gear"
+        assert _root_detail(cheap) == _root_detail(pricey) == "gear"

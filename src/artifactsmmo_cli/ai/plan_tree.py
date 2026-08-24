@@ -31,7 +31,7 @@ def rank_detail(row: RootScore) -> str:
     THE FLIP (wave 3a) replaced the scored ranking with a resolution walk;
     `RootScore.j` and `.reachable_level` are no longer set by anything (the
     walk has no objective to price them against) so the two arms that used to
-    read them are gone, not merely unreachable — see `_resolution_rows` below
+    read them are gone, not merely unreachable — see `_root_detail` below
     for what carries the walk's real content now. `score` itself stays: it is
     a required field on `RootScoreView`, a Pydantic model with no default that
     the TUI log pane and two test modules pin (spec §1.4), so `RootScore.score`
@@ -43,16 +43,18 @@ def rank_detail(row: RootScore) -> str:
     return f"{float(row.score):.2f}"
 
 
-def _resolution_rows(row: RootScore) -> str:
+def _root_detail(row: RootScore) -> str:
     """The row's reason: what the plan pane and the CLI print in place of the
     number `rank_detail` used to supply.
 
     THE FLIP moved the walk's real content into `category` (spec §5.2,
     `progression_tree._resolution_rows`, which builds these rows): the
     resolution trail for the chosen root, `"alternative · <kind>"` for every
-    other row. Same name as that function on purpose — this is its
-    display-side counterpart, reading the field it writes — but a different
-    module: `progression_tree` builds the `RootScore` list from a
+    other row. This is that function's display-side counterpart, reading the
+    field it writes. It is deliberately NOT called `_resolution_rows` too: a
+    bare grep for that name returning two unrelated signatures in two modules
+    is a footgun, and the two do different jobs — `progression_tree` builds
+    the `RootScore` list from a
     `RootResolution`; this one formats a single already-built row for a
     reader, which is all a pure display module needs and keeps this module
     free of a dependency on `decisions.root`/`resolve_root` it has never had.
@@ -178,7 +180,7 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
     # unchanged.
     details: list[str] = []
     if chosen_score is not None:
-        details.append(_resolution_rows(chosen_score))
+        details.append(_root_detail(chosen_score))
     if role is not None:
         details.append(f"[{role}]")
     chosen_node = chosen_node.model_copy(update={
@@ -192,5 +194,5 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
         roots.append(PlanTreeNode(
             key=r.root_repr, label=short_root(r.root_repr), kind="root_stub",
             status="unmet",
-            detail=f"root {i + 1} · {_resolution_rows(r)}"))
+            detail=f"root {i + 1} · {_root_detail(r)}"))
     return tuple(roots)
