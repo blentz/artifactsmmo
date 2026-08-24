@@ -3,7 +3,11 @@
 `docs/superpowers/specs/2026-07-19-requirement-model-unification-epic.md` §4.3.
 
 Each projection is the single answer that replaces one of the disagreeing walks.
-**Nothing consumes them yet**; Waves 3-8 swap consumers over one at a time.
+They landed unconsumed and Waves 3-9 swapped the consumers over one at a time;
+TWELVE production modules import this one today (`craft_plan_gen`,
+`strategy_driver`, `goals/gathering`, `goals/progression`, `tiers/objective
+_needs` and eight more). The wave-2 staging note that used to stand here is
+history, not a dead-code claim.
 
 | Projection            | Replaces                            | Axis 1  | Axis 2     |
 |-----------------------|-------------------------------------|---------|------------|

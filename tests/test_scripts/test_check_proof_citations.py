@@ -119,6 +119,59 @@ def test_tests_directory_is_not_scanned(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_a_wrong_namespace_fails_even_though_the_leaf_exists(tmp_path: Path) -> None:
+    """The 2026-08-24 defect: leaf-only resolution accepted ANY namespace.
+
+    `holds` is declared under `Formal.Widget`. Citing it as `Formal.Other.holds`
+    names something Lean would reject with "unknown identifier", so the gate
+    must reject it too — and say where the leaf really lives.
+    """
+    _tree(tmp_path)
+    (tmp_path / "src" / "wrongns.py").write_text('"""Proved in `Formal.Other.holds`."""\n')
+    result = _run(tmp_path)
+    assert result.returncode == 1
+    assert "Formal.Other.holds" in result.stdout
+    assert "wrong namespace" in result.stdout
+    assert "Formal.Widget.holds" in result.stdout
+
+
+def test_a_declaration_in_a_file_whose_path_differs_from_its_namespace(tmp_path: Path) -> None:
+    """The real shape: `interleaveDue_reaches` is declared under
+    `namespace Formal.ProgressionTree` inside `Formal/Liveness/...`. The
+    NAMESPACE resolves; the path-derived spelling does not."""
+    _tree(tmp_path)
+    (tmp_path / "formal" / "Formal" / "Liveness").mkdir()
+    (tmp_path / "formal" / "Formal" / "Liveness" / "Quarantined.lean").write_text(
+        "namespace Formal.Widget\n\ntheorem far (n : Nat) : n = n := rfl\n\nend Formal.Widget\n"
+    )
+    (tmp_path / "src" / "ns_ok.py").write_text('"""Proved in `Formal.Widget.far`."""\n')
+    assert _run(tmp_path).returncode == 0
+    (tmp_path / "src" / "ns_ok.py").write_text(
+        '"""Proved in `Formal.Liveness.Quarantined.far`."""\n'
+    )
+    assert _run(tmp_path).returncode == 1
+
+
+def test_a_declaration_inside_a_block_comment_is_not_indexed(tmp_path: Path) -> None:
+    """Prose that begins "theorem foo" must not mint a resolvable name."""
+    _tree(tmp_path)
+    (tmp_path / "formal" / "Formal" / "Prose.lean").write_text(
+        "namespace Formal.Prose\n/-\ntheorem imagined (n : Nat) : n = n := rfl\n-/\nend Formal.Prose\n"
+    )
+    (tmp_path / "src" / "prose.py").write_text('"""See `Formal.Prose.imagined`."""\n')
+    assert _run(tmp_path).returncode == 1
+
+
+def test_a_nested_namespace_resolves_by_its_joined_prefix(tmp_path: Path) -> None:
+    """`namespace Formal` + `namespace Inner` declares `Formal.Inner.x`."""
+    _tree(tmp_path)
+    (tmp_path / "formal" / "Formal" / "Nested.lean").write_text(
+        "namespace Formal\nnamespace Inner\nsection\ndef x : Nat := 1\nend\nend Inner\nend Formal\n"
+    )
+    (tmp_path / "src" / "nested.py").write_text('"""See `Formal.Inner.x`."""\n')
+    assert _run(tmp_path).returncode == 0
+
+
 def test_reports_every_violation_not_just_the_first(tmp_path: Path) -> None:
     _tree(tmp_path)
     (tmp_path / "src" / "one.py").write_text('"""`Formal.Widget.gone_a`."""\n')

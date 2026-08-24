@@ -3,9 +3,13 @@
 `docs/superpowers/specs/2026-07-19-requirement-model-unification-epic.md` §4.
 
 Six walks answer "what does obtaining X require" and disagree (D1-D4). This is
-the single model they migrate onto in Waves 3-8. **Nothing consumes it yet** —
-Wave 2 is additive by design, so the Wave 0 parity oracle stays green trivially
-and every later wave produces a binary signal.
+the single model they migrated onto across Waves 3-9. Wave 2 was additive by
+design — it landed with no consumer so the Wave 0 parity oracle stayed green
+trivially and every later wave produced a binary signal — but that staging note
+is HISTORY: `keep_valuation`, `requirement_projections` and
+`requirement_graph_memo` import this module today, and the projections it feeds
+are read across a dozen more. Do not read the wave-2 framing as a dead-code
+claim.
 
 What it fixes BY CONSTRUCTION
 -----------------------------

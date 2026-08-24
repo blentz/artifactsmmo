@@ -89,8 +89,16 @@ echo "== (c'') openapi conformance (strict) =="; ( cd "$ROOT" && uv run python f
 # cannot raise this skill and cannot say why": wave 3 puts ReachSkillLevel on
 # the ONLY path from a skill-gated gear target to work, so a root the graph
 # routes to and the planner cannot serve is a silent stall, not a low score.
-echo "== (c''') census (--check x8) =="
+# reachability-claims added 2026-08-24, measured standalone at 0.7s: `ast` over
+# src/ and nothing else, so it runs FIRST, ahead of even the liveness scan. It
+# verifies every comment that asserts a named thing has no caller, because the
+# wave-3b deletion pass found three that asserted LIVE code was dead -- the
+# worst on `ai/obtain_sources`, which ELEVEN production modules import and both
+# plan producers run through. Those comments were true when written and were
+# never revisited, which is what makes it a class rather than two incidents.
+echo "== (c''') census (--check x9) =="
 ( cd "$ROOT" \
+  && uv run python scripts/gen_reachability_claims.py --check \
   && uv run python scripts/gen_liveness.py --check \
   && uv run python scripts/gen_open_rung.py --check \
   && uv run python scripts/gen_shed_reachability.py --check \

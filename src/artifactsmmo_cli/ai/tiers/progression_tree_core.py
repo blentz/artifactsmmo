@@ -40,7 +40,22 @@ value gain before the gear branch ranks it."""
 def potion_type_weight(family: str) -> Fraction:
     """Table lookup. An UNKNOWN family weighs 0: an unmodeled consumable
     must never outrank modeled gear — the family universe is closed by the
-    table, and extending it is a deliberate tuning act, not a default."""
+    table, and extending it is a deliberate tuning act, not a default.
+
+    This function and `POTION_TYPE_WEIGHTS` have no production caller today,
+    and are RETAINED deliberately (user decision, wave 3b). Wave 3a stopped
+    `decide_tree` reading utility-slot candidates and wave 3b deleted
+    `_utility_candidates` / `objective_candidates`, which were the only
+    readers. Three things keep them: the Lean mirror `potionWeight` and its
+    two theorems are kept alongside, so deleting this half would leave a
+    proof over nothing; waves 4 and 6 both put potions back on the decision
+    surface; and the closed-universe contract above is the tuning decision
+    itself, which is expensive to rediscover and cheap to hold.
+
+    The claim in the first sentence is CHECKED, not asserted:
+    `scripts/gen_reachability_claims.py` resolves it to this function and
+    fails the gate the day something starts calling it while this note still
+    says nothing does."""
     return POTION_TYPE_WEIGHTS.get(family, Fraction(0))
 
 
@@ -106,7 +121,10 @@ def dhondt_step(weighted: list[tuple[str, Fraction]],
     The live caller is `WhichSlotIsFurthestBehind._aged_head`
     (`ai/decisions/root.py`), whose seat ledger is `GamePlayer._interleave_seats`;
     the no-starvation bound on the resulting schedule is
-    `Formal.Liveness.InterleaveNoStarvation.interleaveDue_reaches`."""
+    `Formal.ProgressionTree.interleaveDue_reaches` — that is the NAMESPACE it
+    is declared under; the file it lives in is
+    `formal/Formal/Liveness/InterleaveNoStarvation.lean`, because the summation
+    argument needs the Mathlib-permitted liveness tier."""
     if not weighted:
         return None
     return max(

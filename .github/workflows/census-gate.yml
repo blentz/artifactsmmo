@@ -49,6 +49,7 @@ on:
   pull_request:
     paths:
       - "src/**/*.py"
+      - "scripts/gen_reachability_claims.py"
       - "scripts/gen_craft_completeness.py"
       - "scripts/gen_inventory_completeness.py"
       - "scripts/gen_recycle_source_completeness.py"
@@ -61,6 +62,7 @@ on:
     branches: [main]
     paths:
       - "src/**/*.py"
+      - "scripts/gen_reachability_claims.py"
       - "scripts/gen_craft_completeness.py"
       - "scripts/gen_inventory_completeness.py"
       - "scripts/gen_recycle_source_completeness.py"
@@ -90,6 +92,14 @@ jobs:
           bash generate_openapi_client.sh
       - name: Sync deps
         run: uv sync --dev
+
+      # Comments that assert a named thing has NO CALLER, verified against the
+      # real import graph. The wave-3b deletion pass found three asserting that
+      # LIVE code was dead -- the worst on `ai/obtain_sources`, imported by
+      # eleven production modules and feeding both plan producers. Cheapest
+      # census in the set (0.7s, `ast` over src/ only), so it runs first.
+      - name: reachability-claim census — every no-caller claim is TRUE
+        run: uv run python scripts/gen_reachability_claims.py --check
 
       # Obligation O1 of the wave-3 resolution design (spec 2026-08-23 3.5):
       # every ReachSkillLevel(S, C+1) reachable across the scenario set has an
