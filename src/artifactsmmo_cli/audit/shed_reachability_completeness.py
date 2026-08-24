@@ -357,7 +357,7 @@ def drive_selector(cell: ShedCell, state: WorldState,
     arbiter.set_cycle(0)
     step = ReachCharLevel(level=CENSUS_STEP_LEVEL)
     decision = StrategyDecision(interrupt=None, chosen_root=step,
-                                chosen_step=step, desired_state={})
+                                chosen_step=step)
     goal, plan, tried = arbiter.select(decision, state, game_data, actions, ctx)
     failed = any(bool(attempt.get("timed_out")) for attempt in tried)
     return goal, plan, failed

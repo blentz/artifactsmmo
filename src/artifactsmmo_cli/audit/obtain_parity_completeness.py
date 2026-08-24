@@ -379,8 +379,7 @@ def census_decision(cell: ParityCell) -> StrategyDecision:
     bot resolves for a non-equippable step — the goal whose `relevant_actions` is
     the GOAP pool this census reads."""
     step = ObtainItem(code=cell.material, quantity=cell.needed)
-    return StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step,
-                            desired_state={})
+    return StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step)
 
 
 def expected_goal_repr(cell: ParityCell) -> str:

@@ -495,8 +495,7 @@ def census_decision(reason: KeepReason, game_data: GameData) -> StrategyDecision
     reason is exercised with NO step, so the arbiter's guard/means ladder — the
     disposal ladder — is what answers the cell."""
     step = scenario_for(reason, game_data).step
-    return StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step,
-                            desired_state={})
+    return StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step)
 
 
 def _cap_value(cap: str, code: str, state: WorldState, game_data: GameData,

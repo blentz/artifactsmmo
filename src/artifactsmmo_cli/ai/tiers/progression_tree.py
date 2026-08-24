@@ -186,28 +186,25 @@ def objective_candidates(state: WorldState, game_data: GameData,
 # four existed only to assemble `decide_tree`'s scored display rows and its
 # candidate-ordered fallback pairs, and the resolution walk builds both from
 # `RootResolution` instead, so as of this commit they had zero callers and zero
-# reachable lines. They are NOT the wave-3b deletion list: that is the public
-# schema (`RootScore.j` / `.reachable_level`, `StrategyDecision.j_ranking`).
-# Task 3a.7 deleted the one production reader of `RootScore.j` /
-# `.reachable_level` (`plan_tree.rank_detail`), so THOSE TWO FIELDS are now
-# zero-reader under the spec's §1.2 convention (an `asdict`-style
-# serialisation is not a reader) — same shape as the four helpers above, just
-# public instead of private, which is why the field deletion is deferred to 3b
-# rather than folded in here (spec §1.4: a schema change is its own commit).
+# reachable lines.
 #
-# `StrategyDecision.j_ranking` is NOT zero-reader, and a 3b agent must not read
-# the paragraph above as saying it is: `StrategyDecision.to_trace`
-# (`strategy.py:329-333`) iterates it and calls `finite_j` on every element,
-# and `to_trace` runs live at `player.py:2378` on each traced cycle. Deleting
-# it without that call site breaks tracing.
-# `StrategyDecision.aged_pick` is live too — `GamePlayer._charge_focus` reads
-# it every cycle. And `J` (`finite_j`) has readers in BOTH directions: the
-# `to_trace` path just named, `_j_by_identity` below in this file, and the
-# standalone legacy `objective` CLI (`commands/objective.py`), which still
-# runs the retired ranking on its own and is explicitly out of this wave's
-# scope. Leaving dead public fields behind to be tidied later is how this repo
-# grew `distance_cost_pure` — proved, differential-tested, and called by
-# nothing (`feedback_proof_over_an_uncalled_helper`).
+# WAVE 3b deleted `StrategyDecision.desired_state` and `.j_ranking`, and
+# `RootScore.cost` / `.contribution` / `.instrumental` (re-derived deletion
+# list, 2026-08-24, §3 rows 1/2/3/5/7). `j_ranking` had zero PRODUCERS —
+# nothing in `src/` ever assigned it, so it was permanently `[]` — and its one
+# reader was `StrategyDecision.to_trace` (`strategy.py`), which iterated the
+# empty list and called `finite_j` on each element; that block went with the
+# field, and with it `strategy.py`'s imports of `finite_j`
+# (`branch_objective`) and `ProgressionCandidate` (`progression_choice`).
+# `RootScore.j` and `.reachable_level` are UNCHANGED — spec §1.4 keeps those
+# two, they were folded into the wave-3b table's row count (9/10/11) not this
+# one. `StrategyDecision.aged_pick` is unchanged too: it is reconnected and
+# live (row 6) — `GamePlayer._charge_focus` reads it every cycle — and stays
+# set from `resolution.aged` in `decide_tree` below. `J` (`finite_j`) still
+# has other readers: `_j_by_identity` below in this file (itself uncalled in
+# `src/`, unrelated to this deletion) and the standalone legacy `objective`
+# CLI (`commands/objective.py`), which still runs the retired ranking on its
+# own and is explicitly out of this wave's scope.
 
 
 def _j_by_identity(
@@ -439,10 +436,11 @@ def _resolution_rows(state: WorldState, game_data: GameData,
     `score` is dropped to the constant `Fraction(1)` on every row rather than
     removed: `RootScoreView.score` is a required float on a Pydantic model that
     the TUI log pane and two test modules pin, and changing the snapshot schema
-    is a separate change from changing the decision (spec §1.4). `contribution`
-    and `cost` are constants for the same reason — the spec's own consumer
-    inventory records ZERO readers for both — and `j` / `reachable_level` are
-    left None because no objective priced these rows.
+    is a separate change from changing the decision (spec §1.4). `j` /
+    `reachable_level` are left None because no objective priced these rows.
+    `contribution`, `cost` and `instrumental` (wave 3b, spec row 1/2/3) were
+    deleted from `RootScore` entirely — zero production readers, and
+    `instrumental` had zero writers too.
 
     The row's real content is `category`. For the CHOSEN root it is the
     resolution trail: the ordered `Decision.name`s the walk actually visited, a
@@ -460,8 +458,7 @@ def _resolution_rows(state: WorldState, game_data: GameData,
         category = (" → ".join(resolution.trail) if index == 0 and chosen
                     else f"alternative · {strategy.root_category(root)}")
         rows.append(strategy.RootScore(
-            root_repr=repr(root), category=category,
-            contribution=Fraction(1), cost=0, score=Fraction(1),
+            root_repr=repr(root), category=category, score=Fraction(1),
             step_repr=repr(step)))
     return rows
 
@@ -488,9 +485,11 @@ def decide_tree(state: WorldState, game_data: GameData,
     store every other `Decision` in the codebase already takes under that name.
     Spec §5.2 keeps `band_adequate` in the signature and then never reads it;
     an unused parameter is dead surface that the next reader has to disprove,
-    so it is dropped. `StrategyDecision.aged_pick` and `.j_ranking` now take
-    their field defaults for the same reason — the ranking that produced them
-    is gone; the fields themselves are deleted in wave 3b.
+    so it is dropped. `StrategyDecision.j_ranking` took its field default for
+    the same reason — the ranking that produced it is gone — and wave 3b
+    deleted the field entirely, along with `.desired_state` (always `{}`
+    here). `.aged_pick` is NOT the same story: it is reconnected and live
+    (spec row 6), so it is set from `resolution.aged` below, not defaulted.
 
     What SURVIVES, and must:
 
@@ -521,14 +520,12 @@ def decide_tree(state: WorldState, game_data: GameData,
             chosen_root, chosen_step, fallback_roots, fallback_steps, step_servable)
     promoted_from = tree_pick_root if chosen_root is not tree_pick_root else None
 
-    # interrupt/desired_state are trace-shape compatibility only: RestoreHP
-    # preemption lives in the engine-independent arbiter guard ladder, and
-    # no consumer reads desired_state off the decision.
+    # interrupt is trace-shape compatibility only: RestoreHP preemption lives
+    # in the engine-independent arbiter guard ladder.
     return strategy.StrategyDecision(
         interrupt=None,
         chosen_root=chosen_root,
         chosen_step=chosen_step,
-        desired_state={},
         ranking=_resolution_rows(state, game_data, resolution, ctx),
         fallback_steps=fallback_steps,
         fallback_roots=fallback_roots,

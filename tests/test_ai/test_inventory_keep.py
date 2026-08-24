@@ -631,8 +631,7 @@ def test_goal_materials_is_LIVE_end_to_end_through_the_arbiter():
         inventory={"ash_wood": needed_wood + surplus}, inventory_max=110,
     )
     step = ObtainItem("ash_plank", 1)
-    decision = StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step,
-                                desired_state={})
+    decision = StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step)
     arbiter = _CtxSpyArbiter(planner)
     arbiter.set_cycle(0)
     arbiter.select(decision, state, gd, [], _ctx())
@@ -913,8 +912,7 @@ def test_means_predicates_fire_on_the_BOUND_step_profile():
                        inventory={}, inventory_max=110,
                        bank_items={"ash_wood": wood})
     step = ObtainItem("ash_plank", 40)
-    decision = StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step,
-                                desired_state={})
+    decision = StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step)
     arbiter = _CtxSpyArbiter(GOAPPlanner())
     arbiter.set_cycle(0)
     arbiter.select(decision, state, gd, [], _ctx())

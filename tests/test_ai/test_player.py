@@ -276,7 +276,6 @@ class TestArbiterSelection:
             interrupt=None,
             chosen_root=step,
             chosen_step=step,
-            desired_state={},
         )
         player._strategy = MagicMock()
         player._strategy.decide.return_value = decision
@@ -294,7 +293,6 @@ class TestArbiterSelection:
             interrupt=None,
             chosen_root=step,
             chosen_step=step,
-            desired_state={},
         )
         player._strategy = MagicMock()
         player._strategy.decide.return_value = decision
@@ -2229,7 +2227,7 @@ class TestNotifyObserverCooldown:
         player.state = make_state(level=4)
         player._last_decision = StrategyDecision(
             interrupt=None, chosen_root=ObtainItem("nonexistent_item"),
-            chosen_step=None, desired_state={}, ranking=[],
+            chosen_step=None, ranking=[],
         )
         player._notify_observer("ReachCharLevel(5)", "FightAction(cow)", "ok", [])
         assert len(captured) == 1
@@ -2298,7 +2296,7 @@ class TestGrindExpansionCapture:
         root = ObtainItem("nonexistent_item")
         player._last_decision = StrategyDecision(
             interrupt=None, chosen_root=root, chosen_step=root,
-            desired_state={}, ranking=[])
+            ranking=[])
         legs = (PlanTreeNode(key="l0", label="GatherAsh()", kind="obtain", status="current"),)
         player._last_grind_expansion = legs
         action = LevelSkill(skill="woodcutting", target_level=30)
@@ -2315,7 +2313,7 @@ class TestGrindExpansionCapture:
         player.state = make_state(level=4)
         player._last_decision = StrategyDecision(
             interrupt=None, chosen_root=ObtainItem("nonexistent_item"),
-            chosen_step=None, desired_state={}, ranking=[])
+            chosen_step=None, ranking=[])
         player._last_grind_expansion = (
             PlanTreeNode(key="stale", label="Stale()", kind="obtain", status="current"),)
         player._notify_observer("g", "FightAction(cow)", "ok", [], action=None)
@@ -2334,7 +2332,7 @@ class TestNotifyObserverChosenRoot:
         player.state = make_state(level=4)
         player._last_decision = StrategyDecision(
             interrupt=None, chosen_root=ObtainItem("nonexistent_item"),
-            chosen_step=None, desired_state={}, ranking=[],
+            chosen_step=None, ranking=[],
         )
         player._notify_observer("ReachCharLevel(5)", "FightAction(cow)", "ok", [])
         assert len(captured) == 1
@@ -2349,7 +2347,7 @@ class TestNotifyObserverChosenRoot:
         player.state = make_state(level=4)
         player._last_decision = StrategyDecision(
             interrupt=None, chosen_root=None, chosen_step=None,
-            desired_state={}, ranking=[],
+            ranking=[],
         )
         player._notify_observer("ReachCharLevel(5)", "FightAction(cow)", "ok", [])
         snap = captured[0]

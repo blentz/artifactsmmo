@@ -53,10 +53,15 @@ def test_emit_trace_omits_strategy_when_engine_absent():
 
 def test_emit_trace_strategy_record_keeps_to_trace_shape():
     """Phase 4b (THE FLIP): `record["strategy"]` carries the TREE decision
-    in the exact same `StrategyDecision.to_trace()` shape as before (the
-    cycle lockstep depends on it). The Phase-3/4a `record["tree"]` /
-    `record["enacted"]` shadow chrome died with the flag: one engine, one
-    record."""
+    in the `StrategyDecision.to_trace()` shape (the cycle lockstep depends on
+    it). The Phase-3/4a `record["tree"]` / `record["enacted"]` shadow chrome
+    died with the flag: one engine, one record.
+
+    Wave 3b (re-derived deletion list §3 rows 5/7) dropped `desired_state`
+    (1 reader, always `{}`) and `j_ranking` (0 producers — permanently `[]` —
+    and its only reader, this same `to_trace`, iterated the empty list) from
+    the shape. This is a schema change, not a coincidence of the field
+    deletion: a reader keying off either name now gets a `KeyError`."""
     player = GamePlayer(character="hero")
     player.game_data = _gd()
     player.state = make_state(level=3)
@@ -69,14 +74,8 @@ def test_emit_trace_strategy_record_keeps_to_trace_shape():
 
     rec = player.tracer.records[0]
     assert set(rec["strategy"].keys()) == {
-        "interrupt", "chosen_root", "chosen_step", "desired_state",
+        "interrupt", "chosen_root", "chosen_step",
         "ranking", "fallback_steps", "fallback_roots",
-        # ADDED with the unified objective's branch pivot: the J ranking that
-        # chose GEAR or XP, or [] when J was not consulted (no learning store).
-        # Additive — every existing key keeps its name and meaning, and this is
-        # the only place the pivot is legible, since `ranking` scores gear on
-        # `pursuit_value` against a trunk pinned at a constant 1.0.
-        "j_ranking",
     }
     assert "tree" not in rec
     assert "enacted" not in rec

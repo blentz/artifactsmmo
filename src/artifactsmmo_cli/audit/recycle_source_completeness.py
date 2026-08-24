@@ -349,8 +349,7 @@ def census_decision(cell: RecycleSourceCell) -> StrategyDecision:
     resolves for a non-equippable step — the goal whose `relevant_actions` admits
     the licensed recycles (`goals/gathering.py`)."""
     step = ObtainItem(code=cell.material, quantity=cell.needed)
-    return StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step,
-                            desired_state={})
+    return StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step)
 
 
 def expected_goal_repr(cell: RecycleSourceCell) -> str:

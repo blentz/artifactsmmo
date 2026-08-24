@@ -175,7 +175,7 @@ class TestPlayerTracer:
         player._interleave_seats = {"helmet_slot|wolf_ears": 5}
         root = ObtainItem(code="wolf_ears", quantity=1, slot="helmet_slot")
         player._last_decision = StrategyDecision(
-            interrupt=None, chosen_root=root, chosen_step=root, desired_state={},
+            interrupt=None, chosen_root=root, chosen_step=root,
             aged_pick=True,
         )
 

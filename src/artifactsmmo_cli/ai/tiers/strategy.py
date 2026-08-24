@@ -11,7 +11,6 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import progression_tree
-from artifactsmmo_cli.ai.tiers.branch_objective import finite_j
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -26,7 +25,6 @@ from artifactsmmo_cli.ai.tiers.objective import (
     _permanent_vendor_purchases,
 )
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
-from artifactsmmo_cli.ai.tiers.progression_choice import ProgressionCandidate
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -218,11 +216,8 @@ def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,
 class RootScore:
     root_repr: str
     category: str
-    contribution: Fraction
-    cost: int
     score: Fraction
     step_repr: str
-    instrumental: bool = False
     j: int | None = None
     """The unified objective's value for this root — LOWER IS BETTER, the
     opposite of `score`, which is why it is a separate field and not folded in.
@@ -256,7 +251,6 @@ class RootScore:
         # record stays JSON-numeric by converting ONCE here (trace-only seam,
         # never read back into decisions).
         d = asdict(self)
-        d["contribution"] = float(self.contribution)
         d["score"] = float(self.score)
         return d
 
@@ -266,7 +260,6 @@ class StrategyDecision:
     interrupt: str | None
     chosen_root: MetaGoal | None
     chosen_step: MetaGoal | None
-    desired_state: dict[str, object]
     ranking: list[RootScore] = field(default_factory=list)
     # Ranked alternative steps below the chosen one. Used by the arbiter
     # to fall back when the top step's goal is None (e.g. ReachCharLevel
@@ -301,37 +294,15 @@ class StrategyDecision:
     # read as the tree choosing XP, when the tree had chosen GEAR every time
     # and promotion walked to the trunk sitting at fallback index 0.
     promoted_from: MetaGoal | None = None
-    # The unified objective's branch verdict: every gear root plus the xp trunk
-    # in `J` order, or EMPTY when `J` was not consulted (no learning store — see
-    # `decide`'s `store`). Diagnostic only; the branch itself is already decided
-    # by the time this is attached.
-    #
-    # It is here because the tree's own `ranking` CANNOT show it. That list scores
-    # gear on `pursuit_value` and pins the trunk at a constant `score=1.0`, so a
-    # trace reader watching it sees gear at 2.6e8 against a trunk at 1.0 and reads
-    # a landslide — a display artifact of two incomparable scales, not the pivot.
-    # `J` puts both arms on one scale, and this is where that scale is legible.
-    j_ranking: list[ProgressionCandidate] = field(default_factory=list)
 
     def to_trace(self) -> dict[str, object]:
         return {
             "interrupt": self.interrupt,
             "chosen_root": repr(self.chosen_root) if self.chosen_root is not None else None,
             "chosen_step": repr(self.chosen_step) if self.chosen_step is not None else None,
-            "desired_state": self.desired_state,
             "ranking": [rs.to_dict() for rs in self.ranking],
             "fallback_steps": [repr(s) for s in self.fallback_steps],
             "fallback_roots": [repr(r) for r in self.fallback_roots],
-            # `j` is NULL outside the finite band — see `finite_j`. Printing the
-            # sum anyway would put a meaningless number in the trace under the
-            # objective's own name, which is the same "a quantity that isn't what
-            # it claims to be" defect this objective exists to retire.
-            "j_ranking": [
-                {"identity": c.identity, "j": finite_j(c),
-                 "acquire_cost": c.acquire_cost, "reachable_level": c.reachable_level,
-                 "cycles_to_fifty": c.cycles_to_fifty, "failed": c.failed}
-                for c in self.j_ranking
-            ],
         }
 
 

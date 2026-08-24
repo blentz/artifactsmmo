@@ -29,12 +29,12 @@ def _gd() -> GameData:
 
 def _decision(chosen, step, ranking):
     return StrategyDecision(interrupt=None, chosen_root=chosen, chosen_step=step,
-                            desired_state={}, ranking=ranking)
+                            ranking=ranking)
 
 
 def _rs(node, score, category="gear"):
     return RootScore(root_repr=repr(node), category=category,
-                     contribution=Fraction(0), cost=0, score=Fraction(score), step_repr="")
+                     score=Fraction(score), step_repr="")
 
 
 def test_chosen_expands_materials():
@@ -322,13 +322,14 @@ class TestRootDetail:
     kept existing only as a schema-pinned FIELD's formatter with no reader,
     the proof-over-an-uncalled-helper shape this branch elsewhere warns
     against. `RootScore.score`/`.j`/`.reachable_level` are unaffected — the
-    FIELDS stay (spec §1.4; deletion is wave 3b's schema change) — only the
-    function that rendered `.score` as a string is gone."""
+    FIELDS stay (spec §1.4; wave 3b deleted `.contribution`/`.cost`/
+    `.instrumental` instead, all zero-reader) — only the function that
+    rendered `.score` as a string is gone."""
 
     def test_reads_the_category(self):
         row = RootScore(root_repr="r", category="IsMyGearBehindMyTier -> "
-                        "WhichSlotIsFurthestBehind", contribution=Fraction(1),
-                        cost=0, score=Fraction(1), step_repr="s")
+                        "WhichSlotIsFurthestBehind",
+                        score=Fraction(1), step_repr="s")
         assert root_detail(row) == row.category
 
     def test_ignores_the_now_constant_score(self):
@@ -337,17 +338,17 @@ class TestRootDetail:
         what `decide_tree` never produces any more, but nothing stops a stray
         caller from doing) must read identically, because `score` is not part
         of the answer."""
-        cheap = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
-                          cost=0, score=Fraction(1), step_repr="s")
-        pricey = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
-                           cost=0, score=Fraction(999), step_repr="s")
+        cheap = RootScore(root_repr="r", category="gear",
+                          score=Fraction(1), step_repr="s")
+        pricey = RootScore(root_repr="r", category="gear",
+                           score=Fraction(999), step_repr="s")
         assert root_detail(cheap) == root_detail(pricey) == "gear"
 
     def test_ignores_j_and_reachable_level_too(self):
         """`RootScore.j`/`.reachable_level` still exist (spec §1.4) but
         `root_detail` never reads them — a stray non-None value on either
         must not leak into the result, the same way `score` must not."""
-        row = RootScore(root_repr="r", category="gear", contribution=Fraction(1),
-                        cost=0, score=Fraction(1), step_repr="s",
+        row = RootScore(root_repr="r", category="gear",
+                        score=Fraction(1), step_repr="s",
                         j=32981, reachable_level=17)
         assert root_detail(row) == "gear"

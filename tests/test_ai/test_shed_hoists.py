@@ -90,7 +90,7 @@ def _drive(gd: GameData, state: WorldState) -> tuple[Goal | None, list]:
     arbiter.set_cycle(0)
     step = ReachCharLevel(level=12)
     decision = StrategyDecision(interrupt=None, chosen_root=step,
-                                chosen_step=step, desired_state={})
+                                chosen_step=step)
     goal, plan, _tried = arbiter.select(decision, state, gd, actions, _ctx())
     return goal, plan
 

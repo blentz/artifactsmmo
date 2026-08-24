@@ -83,7 +83,7 @@ def test_plan_once_crafting_target_from_fallback():
     client = MagicMock()
     state = make_state()
     decision = StrategyDecision(
-        interrupt=None, chosen_root=None, chosen_step=None, desired_state={},
+        interrupt=None, chosen_root=None, chosen_step=None,
         fallback_steps=[ObtainItem("copper_ore", 10)])
     fake_strategy = MagicMock()
     fake_strategy.decide.return_value = decision
@@ -118,7 +118,7 @@ def test_plan_once_reports_drop_input_winnability():
     state = make_state(level=6, x=0, y=0, hp=200, max_hp=200, attack={"fire": 40})
     decision = StrategyDecision(
         interrupt=None, chosen_root=ObtainItem("feather_coat", 1, "body_armor_slot"),
-        chosen_step=ObtainItem("feather", 5), desired_state={})
+        chosen_step=ObtainItem("feather", 5))
     fake_strategy = MagicMock()
     fake_strategy.decide.return_value = decision
     player = GamePlayer(character="hero")
@@ -140,8 +140,7 @@ def _canned_report() -> PlanReport:
         interrupt=None,
         chosen_root=ObtainItem("feather_coat", 1, "body_armor_slot"),
         chosen_step=ObtainItem("feather", 2),
-        desired_state={},
-        ranking=[RootScore("ObtainItem(feather_coat)", "gear", Fraction(5, 2), 3,
+        ranking=[RootScore("ObtainItem(feather_coat)", "gear",
                            Fraction(5, 2), "ObtainItem(feather)")],
     )
     return PlanReport(
@@ -198,7 +197,7 @@ def test_plan_command_passes_and_prints_simulated_state(capsys):
     injected in-memory arbiter state."""
     report = PlanReport(
         decision=StrategyDecision(interrupt=None, chosen_root=None, chosen_step=None,
-                                  desired_state={}, ranking=[]),
+                                  ranking=[]),
         selected_goal=None, plan=[], goals_tried=[],
         simulated_doomed=("GrindCharacterXP(green_slime)",),
         simulated_committed="ReachSkill(jewelrycrafting->20)")
@@ -227,7 +226,7 @@ def test_plan_command_passes_and_prints_simulated_state(capsys):
 def test_plan_command_empty_plan_branch(capsys):
     report = PlanReport(
         decision=StrategyDecision(interrupt=None, chosen_root=None, chosen_step=None,
-                                  desired_state={}, ranking=[]),
+                                  ranking=[]),
         selected_goal=None, plan=[], goals_tried=[])
     with patch.object(plan_cmd, "check_mutation_lock",
                       return_value=MagicMock(state="clear")):

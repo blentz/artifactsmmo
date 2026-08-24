@@ -31,7 +31,7 @@ def _reach_char_level(level: int) -> ReachCharLevel:
 def _decision_with_root(root, aged_pick: bool = False,
                         promoted_from=None) -> StrategyDecision:
     return StrategyDecision(
-        interrupt=None, chosen_root=root, chosen_step=root, desired_state={},
+        interrupt=None, chosen_root=root, chosen_step=root,
         aged_pick=aged_pick, promoted_from=promoted_from,
     )
 
@@ -204,7 +204,7 @@ def test_reset_on_level_up_preserves_focus_of_live_fallback_root():
     chosen = _obtain_item("iron_ring", "ring2_slot")
     fallback = _obtain_item("wolf_ears", "helmet_slot")
     decision = StrategyDecision(
-        interrupt=None, chosen_root=chosen, chosen_step=chosen, desired_state={},
+        interrupt=None, chosen_root=chosen, chosen_step=chosen,
         fallback_roots=[fallback],
     )
     p._last_decision = decision

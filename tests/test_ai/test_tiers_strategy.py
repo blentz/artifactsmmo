@@ -273,13 +273,6 @@ def test_root_cost_shrinks_with_a_ready_source():
     assert root_cost(ObtainItem("copper_dagger"), state, gd, NO_PROFILE_CONTEXT) == 2
 
 
-def test_rootscore_instrumental_always_false():
-    gd = _gd()
-    obj = CharacterObjective.from_game_data(gd)
-    d = StrategyEngine(obj).decide(make_state(level=5), gd)
-    assert all(rs.instrumental is False for rs in d.ranking)
-
-
 def _reach_gd():
     gd = GameData()
     gd._item_stats = {
