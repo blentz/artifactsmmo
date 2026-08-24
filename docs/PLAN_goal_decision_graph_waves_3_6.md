@@ -524,6 +524,30 @@ explicitly so a later implementer cannot mistake the scope.
 
 - [ ] **Step 3: Write the design document and STOP for approval.**
 
+**RECONCILED 2026-08-23 against task 6.1's design.** Ruling: *"Agree with
+measurements from wave 6. Reconcile wave 4 against wave 6."* The wave-4 design
+is amended in place (see its new §11: 24 contact points — 8 AGREE, 4 DISAGREE,
+6 SILENT CONFLICT, 4 GAP, 2 STANDS). What this task now promises, differing
+from the text above:
+
+* **`MaxGearForLevel` does not exist** and never did — ninth spec error this
+  epic; wave 4 §1 maps the intent onto the wave-3a subgraph instead.
+* **"The eleven interrupt guards stay untouched" is right about the interrupts
+  and wrong about the count that survives.** Wave 4 recommends KEEPING
+  `CRAFT_POTIONS` (its §6.1) and wave 6 §5.3 concurs, so **twelve**
+  `GUARD_ORDER` entries survive, not eleven.
+* **The potion justification for `WhichSlotClosesTheFight` is withdrawn.**
+  Wave 6 measured the arm reachable in at most 19.4 % of cycles (15,239 of
+  78,551, PRE-flip), so it recovers neither the 1,183 potion-root cycles nor
+  the 289 GE fills. **The node still ships**, for combat-deficit gear; potion
+  provisioning is task 6.1's `GeFillSellOrderAction` widening instead.
+* **New increment 4.1b:** `ai/decisions/route.py` (task 6.1's increment 5.1,
+  taken early and inert) must exist before 4.2, or wave 6's O6 census is red
+  the day 4.2 lands. This was a SILENT CONFLICT neither design saw.
+* **Ordering is now fixed: wave 4 first, wave 6 second** (wave 6 R5). 4.0 owns
+  the task-carrying scenarios; the GE order-book fixture and the `items`-type
+  task stay with 6.1.
+
 ---
 
 # WAVE 6 — supporting mechanisms as route options
@@ -539,6 +563,18 @@ explicitly so a later implementer cannot mistake the scope.
 
 Potion crafting, cooking, task synergy and GE trading. For each: is it a root,
 a guard, or a discretionary goal today?
+
+**RECONCILED 2026-08-23.** Task 6.1's design is authoritative on measurements
+and is amended only twice, both because a sentence goes false once task 4.1
+lands in the order 6.1 itself recommends: its §1.1 `CRAFT_POTIONS` oracle index
+(11 → 10 after increment 4.4) and its §2.2 call-budget rule (an injected
+pricing callback counts per candidate priced). **Two wave-6 items are declined
+or re-scoped by the reconciliation:** §5.2's deletion of
+`MeansKind.MAINTAIN_CONSUMABLES` is refused — its own R2 invites the refusal
+and the substitutability claim is reasoned, not measured (wave 4 §6.2) — while
+its cooking-route pin (`test_restore_hp_may_cook`) still ships; and O9a's
+≥28/30 threshold must be **re-baselined after wave 4**, because it was measured
+on the taskless scenario set that increment 5.0 replaces.
 
 - [ ] **Step 2: Specify the route-option contract**
 

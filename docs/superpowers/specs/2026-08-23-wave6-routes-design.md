@@ -107,7 +107,7 @@ references" collapsing to zero production callers.
 | `GUARD_ORDER` last slot | `tiers/guards.py:110` | production | lowest-priority guard, still above the objective step |
 | firing predicate | `tiers/guards.py:262-263` → `potion_supply.craft_potions_fires` (`potion_supply.py:167`) | production | 9 helper reads, incl. TWO independent combat-target opinions (`primary_combat_target:29`, `unlock_boost_target`) that the root graph does not share |
 | goal mapping | `strategy_driver.py:408-413` → `CraftPotionsGoal` | production | **the ONLY construction site of `CraftPotionsGoal` in `src/`**, so `selected_goal='CraftPotionsGoal'` in `learning.db` is an EXACT firing count |
-| `decide_key._GUARD_REPR[CRAFT_POTIONS]` | `decide_key.py:52` | production | oracle index 11 |
+| `decide_key._GUARD_REPR[CRAFT_POTIONS]` | `tiers/decide_key.py:52` | production | oracle index 11 — **`[AMENDED by the w4/w6 reconciliation]` becomes 10 after wave 4's increment 4.4**, which removes `GEAR_REVIEW` at index 8 and shifts everything above it down one (wave 4 §7, §11 C14). R5 of this document recommends wave 4 first, so an implementer reading "11" here would edit the wrong dispatch arm |
 | `MeansKind.MAINTAIN_CONSUMABLES` | `tiers/means.py:121`, `:197` (`DISCRETIONARY_ORDER`), `:376` (`_fires`), `strategy_driver.py:506` | production | **a DISCRETIONARY MEANS** at `BAND_DISCRETIONARY` (5) |
 | `objective.utility_potion_targets` | `tiers/objective.py:473` | production **but not a decision** | sole caller is `progression_tree._utility_candidates:131`, whose sole caller is `objective_candidates:165`, whose sole caller is **`commands/objective.py:261` — a read-only CLI diagnostic**. `decide_tree` no longer calls it (post-flip body: `progression_tree.py:507`) |
 | utility exclusion from the gear sheet | `tiers/objective.py:102` (`stats.type_ == "utility"` in `_gear_candidates_by_type`) | production | why the root graph cannot see a potion |
@@ -412,6 +412,13 @@ CLI measured a live ranking walk at 33.9 s against a documented 300 ms. So:
 
 > A `Decision` may call `route_price` **at most once per candidate child, and
 > only when the node has more than one child that is a genuine alternative**.
+> **`[AMENDED by the w4/w6 reconciliation]` A call that INJECTS a pricing
+> callback into a helper counts as one call per candidate the helper prices,
+> not as one call.** Wave 4's `WhichSlotClosesTheFight` makes one textual call
+> to `deficit_upgrade_target` which prices 22 candidates behind a `cost_of`
+> closure (`strategy_driver.py:374-379`) — the §1.5 grep trap inverted into a
+> budget-evasion. Without this sentence the rule does not bind the one node
+> that most needs it (wave 4 §9.1 R1, §11 C24).
 > It may never appear inside a `sorted(...)` key over a list of unbounded
 > length, and never inside a loop over the gear sheet. A node that needs to
 > rank a LIST ranks it on an integer with a meaning
