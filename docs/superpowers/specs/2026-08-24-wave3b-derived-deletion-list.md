@@ -411,3 +411,64 @@ code and has already turned a visible `GATE FAIL` into `rc=0` once in this repo.
   total, and several modules (`test_ring2_starvation_repro.py`,
   `test_decisions_root.py`, `test_progression_tree_core.py`) now cover the LIVE
   falloff/d'Hondt path and must be preserved rather than deleted wholesale.
+
+---
+
+## 11. Amendments after task 4 executed (2026-08-24)
+
+Task 4 deleted the five ranking modules. Its review found four corrections to
+this document. Recorded here rather than in a task report, because tasks 6 and 7
+act on this catalogue and a task report is not where they will look.
+
+### 11.1 `Contracts.lean:478-521` holds SEVEN bridge examples, not nine
+
+The task-4 orphan catalogue said nine. **It is seven** — `:484, :489, :494,
+:499, :505, :513, :519`, every one over
+`Extracted.ProgressionChoice.ProgressionCandidate`. Nine is the `#check` count
+at `Manifest.lean:118-127`, conflated.
+
+**This matters and is not a tidying note.** The line range `:478-521` is
+correct, so an agent deleting that range wholesale is safe. An agent *counting
+to nine* over-reaches into `:530+`, which is `SkillXpPositive` — a LIVE
+contract with live `Extracted.SkillXpPositive` bridges. Deleting two of those
+would remove proofs of code the bot runs.
+
+### 11.2 `_utility_candidates` is orphaned too, and §5 omits it
+
+`tiers/progression_tree.py:120`. Its only remaining reachability is through
+`objective_candidates` (`:174-175`), which task 4 reported as zero-caller and
+correctly left alone as off-list. Its sibling `_structural_candidates` survives
+independently via `has_structural_upgrade` -> `player.py:794`;
+`_utility_candidates` does NOT.
+
+This is the callers-of-callers shape §1 warns about. Whichever wave rules on
+`objective_candidates` must rule on `_utility_candidates` in the same breath, or
+it will under-scope by one function. Delete them together or keep them together.
+
+### 11.3 Horizon-monotonicity is a KNOWINGLY DROPPED property
+
+Task 4 deleted `reached_spread` and `tests/.../test_band_edge_horizon.py`
+together. The reasoning is sound and the review confirmed it: the helper's
+parameter type (`ProgressionCandidate`) and its only producer (`branch_ranking`)
+are both deleted, and re-homing it would require the candidate projection loop
+(`_outcome` -> `horizon_outcome`), also deleted — i.e. a reimplementation of a
+deleted model.
+
+The property it measured — **horizon-monotonicity of the objective's benefit
+term** — is therefore not merely untested but currently UNSTATABLE: the
+surviving `cheapest_path_to_level` is the benefit term, but nothing computes the
+spread over candidates. Recorded here so it is a decision with a name rather
+than a silent loss.
+
+### 11.4 `Extracted/ProgressionChoice.lean` has stale provenance and has left the drift gate
+
+Its header still reads `GENERATED from
+src/artifactsmmo_cli/ai/tiers/progression_choice.py (sha256: d077ceff...)` for a
+file that no longer exists, and removing its `ModuleSpec` from
+`scripts/extract_lean.py` means `--check` no longer covers it — 24 modules now,
+silently one fewer.
+
+Task 6/7 must delete this file in the SAME commit as `Formal.lean:78` and
+`Contracts.lean:14`. If that slips, add a one-line "provenance retired, pending
+deletion" note to the header rather than leaving a file asserting a provenance
+it cannot have.
