@@ -155,7 +155,7 @@ def test_next_grind_goal_descends_when_rung_held_but_materials_absent() -> None:
     ash_plank, but a SKILL GRIND gathers its materials fresh — it does not
     recycle gear to source them (recycling gear is low-priority; the grind
     produces new material). `next_grind_goal` runs the descent with
-    `exclude_recycle_leaf=True`, so a RECYCLE source never leafs a material for
+    `grind_descent=True`, so a RECYCLE source never leafs a material for
     the grind; ash_plank (recyclable-only) is not a leaf and the descent falls
     through to ash_wood (gatherable). This keeps the grind PLANNABLE (a flat
     gather, one leg) and cannot churn the rung — subsuming the null cycle. The
@@ -208,6 +208,41 @@ def test_next_grind_goal_descends_when_rung_is_BANKED() -> None:
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal.skill_grind is True
     # NOT {"fire_staff": 6} — the banked copies must not become the target.
+    assert goal.needed == {"ash_wood": 10}
+    assert goal.exclude_recycle == frozenset({"fire_staff"})
+
+
+def test_next_grind_goal_descends_past_a_standing_GE_ORDER_on_the_rung() -> None:
+    """THE ROBBY STALL (live 2026-08-24: `ReachSkill(gearcrafting->16)` selected
+    32 times over 3.5h, gearcrafting stuck at 15, 11 of 38 grind cycles
+    `error:other` at ~42 277 nodes).
+
+    Third sibling of the BANKED and EQUIPPED livelocks above, through a leaf arm
+    `grind_probe_state` CANNOT strip: a STRANGER'S standing Grand Exchange sell
+    order on the rung. `obtain_sources` emits a GE_FILL for it, `_source_leafs`
+    leafed on every non-CRAFT source, so `prerequisites` returned [],
+    `actionable_step` handed the rung straight back and `next_grind_goal` fell
+    through to `GatherMaterials(rung, held+1)` — the from-scratch chain the
+    descent exists to prevent. Robby's snapshot carried such an order on 21 of
+    the 23 gearcrafting rungs at level <= 15, which is why the whole skill
+    stopped moving.
+
+    Buying the rung earns ZERO skill XP — only the craft does — so the order must
+    not end the descent. The first assertion pins that the order is real and
+    BITES (without the fix the goal is the rung itself), so the second cannot
+    pass vacuously against a fixture that has no order at all."""
+    gd = _deep_gd()
+    gd._ge_sell_orders = {"fire_staff": ("ord-robby", 3000, 1)}
+    gd._grand_exchange_location = (5, 1)
+    state = scenario_state(
+        ScenarioCharacter(name="t", level=13, skills={"weaponcrafting": 6},
+                          bank={"red_slimeball": 20}, gold=100_000), gd)
+    assert gd.ge_best_sell_order("fire_staff") is not None, \
+        "the fixture must carry the standing order that triggers the stall"
+    goal = next_grind_goal("weaponcrafting", state, gd)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.skill_grind is True
+    # NOT {"fire_staff": 1} — the from-scratch rung goal is the explosion.
     assert goal.needed == {"ash_wood": 10}
     assert goal.exclude_recycle == frozenset({"fire_staff"})
 

@@ -1666,17 +1666,30 @@ RECOVERABLE_LEAF_MUTATIONS = [
     # test_a_material_with_a_ready_source_is_a_leaf (a RECYCLE source must
     # short-circuit to []).
     ("prerequisite_graph: drop ready-source leaf branch (always descend)",
-     "            return any(_source_leafs(s, game_data, exclude_recycle_leaf)\n"
+     "            return any(_source_leafs(s, game_data, grind_descent)\n"
      "                       for s in sources)",
      "            return False"),
     # Grind value-aware recycle leafing: flip the JUNK-vs-current-tier floor
-    # comparison. Killed by test_exclude_recycle_leaf_descends_past_a_recycle_
-    # only_material (current-tier copper_dagger must NOT leaf -> descend) AND
-    # test_exclude_recycle_leaf_still_leafs_a_junk_recycle (junk rusty_scrap
+    # comparison. Killed by test_grind_descent_descends_past_a_recycle_only_
+    # material (current-tier copper_dagger must NOT leaf -> descend) AND
+    # test_grind_descent_still_leafs_a_junk_recycle (junk rusty_scrap
     # must leaf).
     ("prerequisite_graph: grind recycle-leaf value floor comparison flipped",
-     "        return stats is not None and pursuit_value(stats) < RECYCLE_LEAF_VALUE_FLOOR",
-     "        return stats is not None and pursuit_value(stats) >= RECYCLE_LEAF_VALUE_FLOOR"),
+     "            return stats is not None and pursuit_value(stats) < RECYCLE_LEAF_VALUE_FLOOR",
+     "            return stats is not None and pursuit_value(stats) >= RECYCLE_LEAF_VALUE_FLOOR"),
+    # Restore the 2026-08-24 Robby stall: a craft-substitute (BUY / GE_FILL) once
+    # again LEAFS a grind's descent, so `prerequisites` returns [] at the rung,
+    # `actionable_step` hands the rung back and `next_grind_goal` emits the
+    # from-scratch chain that timed out every cycle. Killed by
+    # test_grind_descent_descends_past_a_standing_ge_sell_order and
+    # test_grind_descent_descends_past_a_permanent_npc_vendor (unit) and by
+    # test_next_grind_goal_descends_past_a_standing_GE_ORDER_on_the_rung
+    # (the caller path).
+    ("prerequisite_graph: craft-substitute leafs a grind descent (Robby stall)",
+     "        if source.kind in CRAFT_SUBSTITUTE_KINDS:\n"
+     "            return False",
+     "        if source.kind in CRAFT_SUBSTITUTE_KINDS:\n"
+     "            return True"),
 ]
 
 

@@ -156,10 +156,10 @@ def test_no_destroyable_copies_still_descends():
         == [ObtainItem("copper_ore", 10)]
 
 
-def test_exclude_recycle_leaf_descends_past_a_recycle_only_material():
+def test_grind_descent_descends_past_a_recycle_only_material():
     """A skill grind gathers its materials fresh — it does not recycle gear to
     source them (recycling gear is low-priority; the grind produces new
-    material). With `exclude_recycle_leaf=True` a RECYCLE source no longer leafs
+    material). With `grind_descent=True` a RECYCLE source no longer leafs
     a material, so copper_bar (whose only ready source is recycling the held
     copper_dagger) is NOT a leaf and the descent falls through to its gatherable
     raw, copper_ore. Default (grind flag off): copper_bar still leafs via the
@@ -168,10 +168,10 @@ def test_exclude_recycle_leaf_descends_past_a_recycle_only_material():
     state = make_state(inventory={"copper_dagger": 2})
     assert prerequisites(ObtainItem("copper_bar", 6), state, gd) == []
     assert prerequisites(ObtainItem("copper_bar", 6), state, gd,
-                         exclude_recycle_leaf=True) == [ObtainItem("copper_ore", 10)]
+                         grind_descent=True) == [ObtainItem("copper_ore", 10)]
 
 
-def test_exclude_recycle_leaf_still_leafs_a_junk_recycle():
+def test_grind_descent_still_leafs_a_junk_recycle():
     """The grind's value-aware flag skips only CURRENT-TIER gear recycle. A JUNK
     item (pursuit_value < RECYCLE_LEAF_VALUE_FLOOR) still leafs the material — a
     fast grind recovers surplus junk instead of gathering raw (2026-07-13
@@ -185,7 +185,69 @@ def test_exclude_recycle_leaf_still_leafs_a_junk_recycle():
     gd._crafting_recipes = {**gd._crafting_recipes, "rusty_scrap": {"copper_bar": 6}}
     state = make_state(inventory={"rusty_scrap": 2})
     assert prerequisites(ObtainItem("copper_bar", 6), state, gd,
-                         exclude_recycle_leaf=True) == []
+                         grind_descent=True) == []
+
+
+def test_grind_descent_descends_past_a_standing_ge_sell_order():
+    """LIVE 2026-08-24, Robby. A STRANGER'S standing Grand Exchange sell order on
+    the rung emitted a GE_FILL source, `_source_leafs` leafed on it, and the
+    grind's whole descent switched off — `prerequisites` returned [],
+    `actionable_step` handed the rung back and `next_grind_goal` fell through to
+    the from-scratch craft chain (63k nodes, timeout).
+
+    The order is REAL in this fixture and it BITES: the first assertion pins the
+    default (non-grind) descent leafing on it, so the third assertion cannot pass
+    vacuously through an absent order. `grind_descent=True` must descend into the
+    recipe instead, because filling someone's sell order pays zero skill XP —
+    only the craft does.
+
+    `grind_probe_state` cannot defeat this the way it defeats the WITHDRAW /
+    owned / worn arms: a stranger's order is not ours to remove."""
+    gd = _gd()
+    gd._ge_sell_orders = {"copper_dagger": ("ord-robby", 3000, 1)}
+    gd._grand_exchange_location = (5, 1)
+    state = make_state(gold=100_000)
+    assert gd.ge_best_sell_order("copper_dagger") is not None, \
+        "the fixture must actually carry the standing order that triggers the bug"
+    assert prerequisites(ObtainItem("copper_dagger"), state, gd) == [], \
+        "the GE_FILL source must leaf the plain (non-grind) descent"
+    assert prerequisites(ObtainItem("copper_dagger"), state, gd,
+                         grind_descent=True) == [ObtainItem("copper_bar", 6)]
+
+
+def test_grind_descent_descends_past_a_permanent_npc_vendor():
+    """The other craft-substitute `grind_probe_state` cannot neutralise: a
+    permanent NPC vendor. Buying the rung earns no skill XP either, so a BUY
+    source must not end a grind's descent.
+
+    Same non-vacuity guard as the GE case — the second assertion pins that the
+    vendor really does leaf the default descent, so the third is not passing
+    because the vendor is missing."""
+    gd = _gd()
+    gd._npc_stock = {"gear_vendor": {"copper_dagger": 250}}
+    gd._npc_locations = {"gear_vendor": (2, 2)}
+    state = make_state(gold=100_000)
+    assert gd.npc_purchases("copper_dagger") == [("gear_vendor", 250, "gold")], \
+        "the fixture must actually carry the vendor that triggers the bug"
+    assert prerequisites(ObtainItem("copper_dagger"), state, gd) == [], \
+        "the BUY source must leaf the plain (non-grind) descent"
+    assert prerequisites(ObtainItem("copper_dagger"), state, gd,
+                         grind_descent=True) == [ObtainItem("copper_bar", 6)]
+
+
+def test_grind_descent_still_leafs_a_gather_source():
+    """The rule is narrow ON PURPOSE: only sources that SUBSTITUTE for the craft
+    are suspended. A GATHER source is not a substitute — gathering IS the work
+    the grind descends to — so it still leafs under `grind_descent`, and the
+    descent stops at the gatherable material instead of walking into its recipe.
+    Guards against widening `CRAFT_SUBSTITUTE_KINDS` to GATHER/DROP."""
+    gd = _gd()
+    gd._resource_drops = {**gd._resource_drops, "copper_bar_vein": "copper_bar"}
+    gd._resource_skill = {**gd._resource_skill, "copper_bar_vein": ("mining", 1)}
+    gd._resource_locations = {"copper_bar_vein": [(2, 2)], "copper_rocks": [(1, 1)]}
+    state = make_state(skills={"mining": 5})
+    assert prerequisites(ObtainItem("copper_bar", 6), state, gd,
+                         grind_descent=True) == []
 
 
 def test_gatherable_craftable_is_a_leaf_via_gather_source():

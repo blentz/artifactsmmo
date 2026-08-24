@@ -118,15 +118,22 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
         # descent enters the recipe and stops at the deepest actionable
         # material — a flat, cheap gather — no matter how many copies are
         # already banked, carried or worn.
-        # exclude_recycle_leaf=True: a skill grind GATHERS its materials fresh —
-        # the descent skips a recyclable-only intermediate (ash_plank via
-        # recycling gear) and lands on the gatherable raw (ash_wood), a flat,
-        # always-plannable gather. This keeps the grind plannable AND cannot
-        # churn gear to grind (recycling the rung to source its own material is
-        # a null cycle; recycling OTHER current-tier gear is low priority).
+        # grind_descent=True: a skill grind GATHERS its materials fresh, because
+        # THE CRAFT is what pays the XP — so no source that SUBSTITUTES for the
+        # craft may end this descent. The descent skips a recyclable-only
+        # intermediate (ash_plank via recycling gear) and lands on the gatherable
+        # raw (ash_wood), a flat, always-plannable gather; it likewise refuses to
+        # stop at a rung it could merely BUY from a vendor or fill from a
+        # stranger's standing GE order, neither of which earns a point of skill
+        # XP and neither of which `grind_probe_state` can strip (live Robby
+        # 2026-08-24: a GE sell order on 21 of 23 gearcrafting rungs switched the
+        # whole descent off, and the fallthrough below timed out every cycle for
+        # 2.5h). This keeps the grind plannable AND cannot churn gear to grind
+        # (recycling the rung to source its own material is a null cycle;
+        # recycling OTHER current-tier gear is low priority).
         step = actionable_step(ObtainItem(rung, quantity=1),
                                grind_probe_state(state, rung),
-                               game_data, ctx, exclude_recycle_leaf=True)
+                               game_data, ctx, grind_descent=True)
         if isinstance(step, ObtainItem) and step.code != rung:
             # exclude_recycle={rung}: never recycle the rung to source its own
             # crafting material — that is the null cycle (rung -> material ->

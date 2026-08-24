@@ -70,7 +70,7 @@ def _prereq_order(node: MetaGoal) -> tuple[int, str, int]:
 
 def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData,
                     ctx: SelectionContext = NO_PROFILE_CONTEXT,
-                    exclude_recycle_leaf: bool = False) -> MetaGoal | None:
+                    grind_descent: bool = False) -> MetaGoal | None:
     """Deepest unmet node reachable from root whose DIRECT prerequisites are all
     satisfied (the 'singular loop' step). None when cyclically blocked.
 
@@ -80,14 +80,16 @@ def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData,
     rejected (cycle guard); a node reached via a sibling branch is NOT pruned
     (the path frozenset backtracks on return).
 
-    `exclude_recycle_leaf` (a SKILL GRIND sets it): a RECYCLE source does not
-    leaf a material, so the grind descends past a recyclable-only intermediate
-    to its gatherable raw — see `prerequisites`."""
+    `grind_descent` (a SKILL GRIND sets it): a source that SUBSTITUTES for the
+    craft does not leaf a material, so the grind descends past a
+    recyclable-only intermediate to its gatherable raw, and past a rung it
+    could merely BUY or fill from a standing GE order to the material it must
+    gather before it can craft — see `prerequisites`."""
     def _step(node: MetaGoal, path: frozenset[MetaGoal]) -> MetaGoal | None:
         if node in path:
             return None
         unmet = [p for p in prerequisites(node, state, game_data, ctx,
-                                          exclude_recycle_leaf)
+                                          grind_descent)
                  if not p.is_satisfied(state, game_data)]
         if not unmet:
             if isinstance(node, ObtainItem) and not _producible(node.code, state, game_data):
