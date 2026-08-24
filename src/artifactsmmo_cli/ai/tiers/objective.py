@@ -487,9 +487,14 @@ class CharacterObjective:
         re-equipping a code already worn in a sibling slot), so the two
         utility slots can never legally target the same code. Emission order
         is deterministic (utility1 first, then utility2) and is independent
-        of current equipment/stock — `_utility_candidates` is the layer that
-        skips a slot whose OWN quantity is already stocked. Replaces the
-        level-based best-in-slot utility roots that armor enumeration
+        of current equipment/stock: this method itself never filters by
+        stock. `_utility_candidates`, deleted wave 3b, used to be the layer
+        that skipped a slot whose OWN quantity was already stocked — it had
+        zero production callers by then, so no per-slot filter survives it.
+        The only live stock gate on a potion is `equipped_potion_qty`'s
+        any-slot sum (the churn guard `MaintainConsumables` reads), which
+        cannot distinguish "slot 1 stocked" from "slot 2 stocked". Replaces
+        the level-based best-in-slot utility roots that armor enumeration
         (target_gear / near_term_gear) used to emit."""
         targets: dict[str, str] = {}
         primary = bootstrap_potion_target(state, self._game_data)

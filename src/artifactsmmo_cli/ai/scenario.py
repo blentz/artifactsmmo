@@ -881,10 +881,13 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # The second-slot probe: utility1 already stocked with the bootstrap
     # target. Same RE-DERIVED fixed-point loadout as l20_dual_utility above.
     # GAP-5 FIXED 2026-07-07: utility_potion_targets now emits BOTH slots
-    # (utility2 gets the catalog's second-best heal) and _utility_candidates
-    # skips a slot only when THAT slot's own quantity is stocked — with
-    # slot 1 stocked, utility2_slot now arms a real fallback root (it does
-    # not win the argmax here; XP still outranks it per GAP-4's design).
+    # (utility2 gets the catalog's second-best heal). The per-slot stock
+    # check that used to let utility2_slot survive into `_utility_candidates`
+    # while slot 1 was skipped lived ONLY in that function, which wave 3b
+    # deleted (zero production callers since wave 3a stopped reading it) —
+    # so as of wave 3b no potion reaches `fallback_roots` at all, stocked or
+    # not (utility slots aren't equipment slots `gear_targets_with_blockers`
+    # sees). This scenario now exercises that absence rather than a win.
     "l20_dual_utility_one_stocked": ScenarioCharacter(
         name="l20_dual_utility_one_stocked", level=20, gold=100,
         skills={"mining": 18, "woodcutting": 18, "weaponcrafting": 15,

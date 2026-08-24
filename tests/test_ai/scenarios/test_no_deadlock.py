@@ -178,7 +178,17 @@ def test_l10_gearcrafting_gap_combat_blocked_retargets_not_char_grind() -> None:
     factor narrows without reversing, so the re-target is
     `GatherMaterials(ash_wood)`/`wooden_shield` — the 2026-07-08 pursuit_value
     landing's verdict, restored. Still a plannable, combat-free gather; the
-    GUARANTEE (not GrindCharacterXP) is unchanged, which is the criterion."""
+    GUARANTEE (not GrindCharacterXP) is unchanged, which is the criterion.
+
+    WAVE 3a/3b: the merged-argmax comparison above no longer runs — the
+    resolution walk picks `wooden_shield` off `gear_targets_with_blockers`
+    (EQUIPMENT slots, ordered by `_tier_gap`), and `small_health_potion` is
+    never a candidate for that walk at all (utility slots aren't equipment
+    slots). `_utility_candidates` and `objective_candidates` had zero
+    production callers by wave 3a and wave 3b deleted both. The shield/potion
+    comparison above is retained as the historical reason the pin exists;
+    the current mechanism no longer runs it, but the GUARANTEE this test
+    checks does not depend on which mechanism produced the answer."""
     report = _run(CRITERION_1_RAMP)
     # GUARANTEE: re-target to a reachable non-combat goal, never XP-thrash.
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (

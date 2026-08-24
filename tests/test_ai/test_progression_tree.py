@@ -27,7 +27,6 @@ extreme — `plan Robby` at L30 targets L30-tier gear — which is recorded in
 `.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md`."""
 
 import json
-from dataclasses import replace
 from pathlib import Path
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -43,7 +42,6 @@ from artifactsmmo_cli.ai.tiers.progression_tree import (
     _structural_candidates,
     decide_tree,
     has_structural_upgrade,
-    objective_candidates,
 )
 from artifactsmmo_cli.ai.weapon_winnability import marginal_weapon_winnability
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -526,69 +524,27 @@ class TestSyntheticBranches:
         assert len(d.ranking) == 1  # trunk row only
 
     def test_candidate_builders_skip_unknown_item_stats(self):
-        """`_structural_candidates` / `_utility_candidates` are computed from
-        the OBJECTIVE's own bound game_data (baked in at `from_game_data` time),
-        not the `game_data` parameter they separately receive. If the two ever
-        diverge, `item_stats(code)` can miss and both builders must skip the
-        code rather than crash. An empty `GameData` makes every code the
-        objective offers unknown, exercising both `stats is None: continue`
-        guards at once.
+        """`_structural_candidates` is computed from the OBJECTIVE's own bound
+        game_data (baked in at `from_game_data` time), not the `game_data`
+        parameter it separately receives. If the two ever diverge,
+        `item_stats(code)` can miss and the builder must skip the code rather
+        than crash. An empty `GameData` makes every code the objective offers
+        unknown, exercising the `stats is None: continue` guard.
 
-        WAVE 3a re-pointed this at `objective_candidates` — the one function
-        that concatenates the two builders — because `decide_tree` no longer
-        calls them. WAVE 3b then retired `commands/objective.py`, the last
-        production reader of that concatenation, so this suite is now the only
-        thing exercising the two `stats is None: continue` guards."""
+        WAVE 3a re-pointed this at `objective_candidates`, which concatenated
+        this builder with `_utility_candidates`' matching guard. WAVE 3b
+        deleted `_utility_candidates` and `objective_candidates` themselves
+        (zero production callers — `decide_tree` stopped reading them in
+        wave 3a and the last diagnostic reader, `commands/objective.py`, was
+        retired in wave 3b), so this test now calls `_structural_candidates`
+        directly and only pins its own guard."""
         gd_full = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
         objective = CharacterObjective.from_game_data(gd_full)
         state = scenario_state(SCENARIOS["l1_fresh"], gd_full)
         assert objective.near_term_gear(state), "sanity: real bundle offers structural candidates"
-        assert objective.utility_potion_targets(state), "sanity: real bundle offers a potion target"
-        assert objective_candidates(state, gd_full, objective), \
+        assert _structural_candidates(state, gd_full, objective), \
             "sanity: the SAME call is non-empty against the matching catalogue"
-        assert objective_candidates(state, GameData(), objective) == []
-
-    def test_already_provisioned_utility_slot_is_skipped(self):
-        """equipped_potion_qty > 0 must remove the potion from candidates
-        (refill churn is the guard's job) -- scenario_state never sets a
-        utility slot quantity > 0 (ScenarioCharacter has no such field), so
-        this needs a directly-constructed WorldState via dataclasses.replace.
-
-        WAVE 3a re-pointed this at `objective_candidates` for the same reason
-        as the test above."""
-        gd = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
-        objective = CharacterObjective.from_game_data(gd)
-        base_state = scenario_state(SCENARIOS["l10_weapon_upgrade"], gd)
-        code = objective.utility_potion_targets(base_state)["utility1_slot"]
-        assert any(c.code == code for c in
-                   objective_candidates(base_state, gd, objective)), \
-            "sanity: the unprovisioned slot DOES offer the potion"
-        provisioned_state = replace(
-            base_state,
-            equipment={**base_state.equipment, "utility1_slot": code},
-            utility1_slot_quantity=5,
-        )
-        assert not any(c.code == code for c in
-                       objective_candidates(provisioned_state, gd, objective))
-
-    def test_zero_gain_utility_candidate_is_filtered(self):
-        """A utility target whose own equip_value computes to 0 (all-zero
-        ItemStats) must never become a candidate -- the same `gain > 0`
-        guard `_structural_candidates` already has, applied to the utility
-        leg. Mirrors the mismatched-game_data trick above: the OBJECTIVE stays
-        bound to the full bundle (`bootstrap_potion_target` legitimately picks
-        small_health_potion there -- it needs hp_restore > 0 to be picked at
-        all), but the `game_data` parameter maps that same code to an all-zero
-        ItemStats, so it survives the `stats is None` skip yet contributes 0
-        weighted gain."""
-        gd_full = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
-        objective = CharacterObjective.from_game_data(gd_full)
-        state = scenario_state(SCENARIOS["l1_fresh"], gd_full)
-        code = objective.utility_potion_targets(state)["utility1_slot"]
-        assert code == "small_health_potion"  # sanity: matches the Phase-2 pin
-        zero_stats_gd = GameData(items=ItemCatalog(
-            stats={code: ItemStats(code=code, level=1, type_="utility", subtype="tool")}))
-        assert objective_candidates(state, zero_stats_gd, objective) == []
+        assert _structural_candidates(state, GameData(), objective) == []
 
 
 # --- The weapon-slot winnability guard in `_structural_candidates` ------------

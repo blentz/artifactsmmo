@@ -5,10 +5,16 @@ Phase 4b: THE decision engine — `StrategyEngine.decide` delegates here.
 The Phase-4b cutover swapped the decision procedure, not the data sources: it
 kept consuming the same helpers the flat ranking had. That is no longer true of
 the RANKING helpers — wave 3a's resolution walk stopped calling them and wave 3b
-deleted them (see the WAVE 3b note below `objective_candidates`). What still
-holds, and is why the cutover was safe, is the CANDIDATE side: the two builders
-below and `pursuit_value`/`potion_type_weight` are the same ones the flat
-ranking read, so the walk ranks the same facts about the same world.
+deleted them (see the WAVE 3b note below `_servable_promotion`). What still
+holds, and is why the cutover was safe, is the CANDIDATE side: the builder
+below and `pursuit_value` are the same ones the flat ranking read, so the walk
+ranks the same facts about the same world.
+`_utility_candidates` and its caller `objective_candidates` were the OTHER
+builder — utility-slot candidates, weighted by `potion_type_weight` — but
+wave 3b deleted both: decide_tree stopped reading them in wave 3a (potions no
+longer become roots or fallback roots, only equipment slots do) and the
+diagnostic CLI that read the concatenation directly was retired in wave 3b,
+leaving zero callers.
 
 Value semantics only — nothing here compares reprs with the Lean model
 (that lockstep lives at the pure-core level in progression_tree_core.py).
@@ -31,10 +37,7 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionC
 from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.progression_tree_core import (
-    GearCandidate,
-    potion_type_weight,
-)
+from artifactsmmo_cli.ai.tiers.progression_tree_core import GearCandidate
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.weapon_winnability import marginal_weapon_winnability
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -113,81 +116,6 @@ def has_structural_upgrade(state: WorldState, game_data: GameData,
     deliberately excluded: consumable restock must never break adequacy or
     the empty-slot churn loop re-enters through the branch switch."""
     return bool(_structural_candidates(state, game_data, objective))
-
-
-_UTILITY_SLOT_QTY_ATTR = {
-    "utility1_slot": "utility1_slot_quantity",
-    "utility2_slot": "utility2_slot_quantity",
-}
-"""Per-slot quantity field, mirrored from equipped_potion.py's `_QTY_ATTR`
-(not imported — that map is keyed the same way but private to its module).
-Used by `_utility_candidates` for the PER-SLOT stock check: unlike
-`equipped_potion_qty` (which sums both slots for a given code — the churn
-guard other consumers rely on and must not change), the tree needs to know
-whether THIS slot specifically is already stocked, so a fill in slot 1 never
-blocks a candidate for the still-empty slot 2."""
-
-
-def _utility_candidates(state: WorldState, game_data: GameData,
-                         objective: CharacterObjective) -> list[GearCandidate]:
-    """Semantics item 2 (utility slots): skip a slot that is ITSELF already
-    stocked (`state.utility1_slot_quantity`/`utility2_slot_quantity` > 0 —
-    refill churn is the guard's job, not the tree's) — a per-slot check, not
-    `equipped_potion_qty`'s any-slot sum, so utility1 being stocked no longer
-    blacks out utility2's candidate (GAP-5). Weight by the hp_restore family
-    (the only family utility_potion_targets emits today — see
-    potion_type_weight's docstring for when boost/resist targets join this
-    path). Same `gain > 0` guard _structural_candidates has: a zero-weighted
-    family (unmodeled) or a zero-value item must never arm the gear branch or
-    appear as a candidate.
-
-    Scored on `pursuit_value`, the SAME ruler `_structural_candidates` uses.
-    The two lists used to be merged into one argmax by `_gear_ranking_rows` /
-    `focus_aging_order` (both deleted in waves 3a/3b), so scoring them on
-    different rulers made that comparison meaningless — for years the potion
-    branch rode a ruler ~500x smaller than its competitor's. `objective_candidates`
-    still concatenates them, so the shared ruler must be kept: any future
-    consumer of that concatenation compares the two lists against each other,
-    and that is exactly the comparison the bug lived in. A potion carries no
-    efficiency stat, so
-    `pursuit_value == 1000 * equip_value` for it exactly; the switch changes no
-    potion-vs-potion or potion-vs-gear VERDICT that held before, it only makes
-    the merged ranking a comparison of like with like."""
-    candidates = []
-    for slot, code in objective.utility_potion_targets(state).items():
-        if getattr(state, _UTILITY_SLOT_QTY_ATTR[slot]) > 0:
-            continue
-        stats = game_data.item_stats(code)
-        if stats is None:
-            continue
-        gain = potion_type_weight("hp_restore") * Fraction(pursuit_value(stats))
-        if gain > 0:
-            candidates.append(GearCandidate(slot=slot, code=code, gain=gain, level=stats.level))
-    return candidates
-
-
-def objective_candidates(state: WorldState, game_data: GameData,
-                          objective: CharacterObjective) -> list[GearCandidate]:
-    """The candidate set the unified objective ranks: structural slots plus
-    utility slots, in that order.
-
-    Extracted from `decide_tree` so a DIAGNOSTIC cannot assemble a different
-    list than the decision does: a hand-rolled
-    `_structural_candidates(...) + _utility_candidates(...)` elsewhere would be
-    a second producer of the same list — the failure this repo has shipped
-    twice (`feedback_two_plan_producers`). One concatenation, one caller each
-    side.
-
-    WAVE 3b: the diagnostic this existed to serve — the `objective` CLI — was
-    retired, so `src/` no longer calls this. It is kept because the two builders
-    are private and this is the only honest way to assemble their concatenation
-    from outside; the slot-coverage suite asserts against it.
-
-    Order is load-bearing and must not be sorted here: `rank_candidates` breaks
-    ties by INPUT POSITION (S-008), so reordering this list silently reorders
-    the ranking."""
-    return (_structural_candidates(state, game_data, objective)
-            + _utility_candidates(state, game_data, objective))
 
 
 # WAVE 3a deleted four private helpers from here — `_candidate_root`,

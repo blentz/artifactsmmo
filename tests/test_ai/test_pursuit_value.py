@@ -244,14 +244,18 @@ def test_consumer_3_item_value_baseline_is_the_same_ruler():
 
 
 def test_consumer_4_tree_branches_now_share_one_ruler():
-    """`tiers/progression_tree._structural_candidates` AND `_utility_candidates`.
-    The utility branch used to score gain on `equip_value` while the structural
-    branch used `pursuit_value`, and the two lists are merged into ONE argmax —
-    a comparison across rulers ~1000x apart. Both are on `pursuit_value` now.
+    """`tiers/progression_tree._structural_candidates` and (until wave 3b
+    deleted it, zero production callers) `_utility_candidates`: the utility
+    branch used to score gain on `equip_value` while the structural branch
+    used `pursuit_value`, and the two lists were merged into ONE argmax by
+    `objective_candidates` (also deleted) — a comparison across rulers ~1000x
+    apart. Both were moved onto `pursuit_value` before either builder was
+    retired, so `_structural_candidates` inherits the ruler unification.
 
-    The switch changes no verdict that held before: an item with no efficiency
-    stat (every potion, every weapon, most armor) has `pursuit_value ==
-    1000 * equip_value` exactly, so the merged ranking is rescaled uniformly."""
+    The switch changed no verdict that held before: an item with no
+    efficiency stat (every potion, every weapon, most armor) has
+    `pursuit_value == 1000 * equip_value` exactly, so the (then-)merged
+    ranking was rescaled uniformly."""
     gd = _bundle()
     for code in ("small_health_potion", "wooden_shield", "iron_sword"):
         stats = gd.item_stats(code)

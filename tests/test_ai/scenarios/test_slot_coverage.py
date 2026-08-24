@@ -77,15 +77,16 @@ never endorsements. Gap index:
       craftable-now heal, unchanged) and utility2_slot (the catalog's
       SECOND-best heal, via `bootstrap_potion_target`'s new `exclude`
       parameter — same-code dual utility slots are not server-legal, see
-      actions/equip.py's DUPLICATE_SLOT_TYPES comment), and
-      `_utility_candidates` skips a slot only when THAT slot's own quantity
-      is stocked (`state.utility1_slot_quantity`/`utility2_slot_quantity`),
-      not `equipped_potion_qty`'s any-slot sum. Pinned at the CODE level
-      (test_l20_one_stocked_utility2_now_targeted, renamed from
-      ..._never_targeted) and the tree level: with utility1 stocked, slot 2
-      now arms a real fallback root. equipped_potion_qty ITSELF is
-      unchanged — other consumers (guard/goal provisioning) still rely on
-      its any-slot sum.
+      actions/equip.py's DUPLICATE_SLOT_TYPES comment). `_utility_candidates`
+      used to apply a PER-SLOT stock check on top of that emission (a slot
+      skipped only when THAT slot's own quantity — not
+      `equipped_potion_qty`'s any-slot sum — was stocked), but wave 3b
+      deleted it (zero production callers). Pinned at the CODE level
+      (test_l20_one_stocked_utility2_is_a_candidate_but_not_a_decision_root,
+      which now pins only the surviving emission half — no potion, stocked
+      or not, has reached `fallback_roots` since wave 3a). equipped_potion_qty
+      ITSELF is unchanged — other consumers (guard/goal provisioning) still
+      rely on its any-slot sum.
   GAP-6 (pure-drop dead end, l35_artifact_fill — discovered by the
       2026-07-07 hp-derivation fix wave) — FIXED 2026-07-08: a near_term_gear
       candidate that is a recipe-less, non-purchasable, pure MONSTER-DROP
@@ -182,7 +183,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
-from artifactsmmo_cli.ai.tiers.progression_tree import objective_candidates
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
@@ -922,9 +922,7 @@ def test_l20_dual_utility_empty_utility_slots_are_not_decision_candidates() -> N
 
 def test_l20_one_stocked_utility2_is_a_candidate_but_not_a_decision_root() -> None:
     """RENAMED IN WAVE 3a fix-round 1. LOST: utility potions are not equipment
-    slots, so no potion reaches `fallback_roots` at all — the GAP-5 claim now
-    lives only at the `objective_candidates` layer, where it is asserted below.
-    Wave 4 owns the restoration (task-6 report, R3).
+    slots, so no potion reaches `fallback_roots` at all.
 
     GAP-5 FIXED 2026-07-07 (renamed from ..._never_targeted, whose
     LIMITATION pin this flips): stock utility1 with the bootstrap target and
@@ -932,24 +930,24 @@ def test_l20_one_stocked_utility2_is_a_candidate_but_not_a_decision_root() -> No
     unconditionally (utility1: the effect-best craftable-now heal,
     minor_health_potion; utility2: the catalog's SECOND-best,
     small_health_potion, via bootstrap_potion_target's new `exclude`
-    parameter — same-code dual utility slots are not server-legal).
-    _utility_candidates then applies the PER-SLOT stock check: utility1's
-    own quantity (15, from the scenario) is > 0 so its candidate is skipped
-    (churn guard intact — a stocked slot is never re-targeted), while
-    utility2's own quantity (0) is not, so its candidate survives into the
-    decision as a fallback root (XP still outranks it here per GAP-4's
-    design — the band is adequate and structural candidates are empty, so
-    the trunk is chosen; the utility2 candidate is real but does not win
-    the argmax in this scenario).
+    parameter — same-code dual utility slots are not server-legal). That
+    emission (asserted below) is unchanged and still bites.
 
-    WAVE 3a: the GAP-5 claim now lives entirely at the
-    `utility_potion_targets` / `objective_candidates` layer, which is where it
-    was always measured — the two `objective.*` assertions below are unchanged
-    and still bite. What is gone is the DECISION-level half: utility potions
-    are not equipment slots, so `gear_targets_with_blockers` never sees them
-    and no potion appears in `fallback_roots`. See
-    `test_l20_dual_utility_empty_utility_slots_are_not_decision_candidates`
-    for the full account of that loss."""
+    `_utility_candidates` used to apply a PER-SLOT stock check on top of that
+    emission (utility1's own quantity > 0 skipped; utility2's own quantity 0
+    let it through into a fallback root, GAP-5's actual claim), but wave 3b
+    deleted `_utility_candidates` and its caller `objective_candidates` —
+    zero production callers, since decide_tree stopped reading them in wave
+    3a and the last diagnostic reader was retired in wave 3b. The per-slot
+    check has no surviving reader: no consumer in `src/` distinguishes
+    utility1-stocked from utility2-stocked any more (the only live stock
+    gate, `equipped_potion_qty`, sums both slots). GAP-5's decision-level
+    half was already gone (see
+    `test_l20_dual_utility_empty_utility_slots_are_not_decision_candidates`);
+    this was the last place any half of it was still measured, so this test
+    now only pins the emission — `utility_potion_targets` — and the
+    decision-level fact that no potion, stocked or not, reaches
+    `fallback_roots`."""
     gd = _bundle()
     state = _state("l20_dual_utility_one_stocked", gd)
     objective = CharacterObjective.from_game_data(gd)
@@ -960,13 +958,6 @@ def test_l20_one_stocked_utility2_is_a_candidate_but_not_a_decision_root() -> No
         "utility1_slot": "minor_health_potion",
         "utility2_slot": "small_health_potion",
     }
-
-    # The GAP-5 fix itself, measured where it lives: the PER-SLOT stock check
-    # keeps utility1 (stocked) out and lets utility2 (empty) through. This half
-    # is untouched by wave 3a.
-    candidates = objective_candidates(state, gd, objective)
-    assert [c.slot for c in candidates if c.slot.startswith("utility")] == \
-        ["utility2_slot"], candidates
 
     report = _run("l20_dual_utility_one_stocked")
     assert report.decision.chosen_root == ReachSkillLevel(

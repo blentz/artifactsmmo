@@ -2,10 +2,16 @@
 
 Unifying Rank onto `weapon_score`/`armor_score` moved its range from ~10^2 to
 ~10^3-10^6. A changed scale silently breaks any ABSOLUTE threshold, so this
-module enumerates the seven call sites `grep -rn "gear_value.*Rank\\|equip_value"
-src/` finds and pins what each one actually does with the number. Six compare
+module enumerates the six call sites `grep -rn "gear_value.*Rank\\|equip_value"
+src/` finds and pins what each one actually does with the number. Five compare
 Rank values to each other WITHIN one slot or one item type (scale-free); one
 compares against 0.
+
+A seventh consumer, `tiers/progression_tree._utility_candidates`, was pinned
+here (gate on `gain > 0`) until wave 3b deleted it — zero production callers,
+since `decide_tree` stopped reading it in wave 3a and its last diagnostic
+reader was retired in wave 3b. Its test went with it, not renumbered away
+quietly: this paragraph is that record.
 
 If a new Rank consumer appears, it belongs here.
 """
@@ -22,11 +28,9 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.inventory_caps import useful_quantity_cap
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.progression_reserve import _best_per_slot
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import best_attainable_weapon
-from artifactsmmo_cli.ai.tiers.progression_tree import _utility_candidates
 from tests.test_ai.fixtures import make_state
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
@@ -86,25 +90,7 @@ def test_progression_reserve_compares_within_a_slot_and_against_zero() -> None:
         assert equip_value(stats) > 0, (slot, code)
 
 
-# --- 4. tiers/progression_tree._utility_candidates --------------------------
-
-def test_utility_candidates_gate_on_strictly_positive_rank() -> None:
-    """The ONE consumer that uses Rank as a magnitude rather than an ordering:
-    `gain = potion_type_weight(family) * equip_value(stats)`, admitted on
-    `gain > 0`. `hp_restore` had to join `armor_score`'s flat-utility block for
-    this to survive the move — without it every healing potion scores 0 and this
-    branch empties."""
-    gd = _bundle()
-    state = scenario_state(SCENARIOS["l8_overstocked"])
-    cands = _utility_candidates(state, gd, CharacterObjective.from_game_data(gd))
-    assert cands, "the utility-potion branch must not empty at the new scale"
-    for c in cands:
-        assert c.gain > 0
-        stats = gd.item_stats(c.code)
-        assert stats is not None and stats.hp_restore > 0
-
-
-# --- 5. goals/progression.UpgradeEquipmentGoal._upgrade_value ---------------
+# --- 4. goals/progression.UpgradeEquipmentGoal._upgrade_value ---------------
 
 def test_upgrade_goal_ranks_a_slot_replacement_by_rank() -> None:
     """`_is_upgrade_over` compares a candidate to the item in the SAME slot.
@@ -119,7 +105,7 @@ def test_upgrade_goal_ranks_a_slot_replacement_by_rank() -> None:
     assert goal._upgrade_value(strong) == equip_value(strong)
 
 
-# --- 6. inventory_caps._is_equippable_dominated -----------------------------
+# --- 5. inventory_caps._is_equippable_dominated -----------------------------
 
 def test_delete_dominance_gate_is_a_strict_ordering_among_same_slot_peers() -> None:
     """`gear_value(peer, Rank) > gear_value(item, Rank)`, and the peer must fit
@@ -137,7 +123,7 @@ def test_delete_dominance_gate_is_a_strict_ordering_among_same_slot_peers() -> N
     assert useful_quantity_cap("weak_amulet", state, gd) == 0
 
 
-# --- 7. equipment/empty_slot_fills -> pick_loadout_cached(Rank()) -----------
+# --- 6. equipment/empty_slot_fills -> pick_loadout_cached(Rank()) -----------
 
 def test_empty_slot_fill_requires_strictly_positive_rank() -> None:
     """`pick_loadout`'s empty-slot gate discards a best candidate scoring <= 0.

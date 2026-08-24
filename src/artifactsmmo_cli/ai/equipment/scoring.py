@@ -310,9 +310,7 @@ def armor_score_pure(elements: list[str], resistance: dict[str, int],
     it, this function did not, and `equipment/slot_occupancy._flat_utility`
     already had to add it back by hand ("plus hp_restore, which no scorer
     reads") to keep its displacement rule sound. With Rank routed through here,
-    omitting it would have scored every healing potion 0 and emptied the
-    progression tree's utility-slot branch (`tiers/progression_tree.
-    _utility_candidates` gates on `gain > 0`); it also means
+    omitting it would have scored every healing potion 0, which also means
     ``pick_loadout(Combat)`` can finally see a utility-slot heal, which it
     previously priced at 0 and would never equip.
 
