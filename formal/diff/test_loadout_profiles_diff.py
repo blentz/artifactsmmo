@@ -18,7 +18,8 @@ what the MAX (across loadouts) and the count (within a loadout) are there to
 handle. The oracle receives each loadout's `.values()` (the code list) since the
 Lean model is over code lists, dropping the slot keys the Python map carries.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.loadout_profiles_core import bank_space_cost, gear_demand
 from formal.diff.oracle_client import run_oracle_structured
@@ -41,7 +42,7 @@ def _check(loadouts: list[dict[str, str]], equipped: list[str]) -> None:
     # gearDemand is per-code; query EVERY code appearing anywhere (so codes with
     # demand 0 are never silently skipped) AND a guaranteed-absent code (the
     # foldl-0 / dict.get default).
-    query_codes = sorted({c for ld in code_lists for c in ld}) + ["__absent__"]
+    query_codes = [*sorted({c for ld in code_lists for c in ld}), "__absent__"]
     demand_reqs = [[code_lists, c] for c in query_codes]
     lean_demand = run_oracle_structured("gear_demand", demand_reqs)
     for c, res in zip(query_codes, lean_demand, strict=True):

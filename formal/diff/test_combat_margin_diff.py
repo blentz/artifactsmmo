@@ -16,7 +16,8 @@ here in addition to the exact-value agreement, acting as a double-bind.
 """
 import random
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from pytest import MonkeyPatch
 
 import artifactsmmo_cli.ai.combat as combat_mod
@@ -134,8 +135,12 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         py_win = combat_mod.predict_win(_FakeState(), _FakeGameData(), MONSTER)
 
     # Same arg layout as test_predict_win_diff.py (46 ints, indices 0..45).
+    # RUF005 (unpack instead of `+`) is declined here and in test_predict_win_diff:
+    # this is a 46-int POSITIONAL oracle layout, and the `+` boundaries are what
+    # make each block auditable against the Lean argument order. Flattening it to
+    # one `[*..., *...]` literal drops the per-block comments with it.
     args = (
-        _elem_args(p_attack, p_dmg, p_dmg_elem, m_resist)  # player vs monster resist
+        _elem_args(p_attack, p_dmg, p_dmg_elem, m_resist)  # noqa: RUF005 - player vs monster resist
         + [p_crit, m_hp]
         + _elem_args(m_attack, 0, {}, p_resist)            # monster vs player resist
         + [m_crit, p_max_hp, 1 if p_init >= m_init else 0]

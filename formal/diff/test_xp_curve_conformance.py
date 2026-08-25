@@ -41,7 +41,6 @@ import pytest
 from artifactsmmo_api_client import AuthenticatedClient, Client
 from artifactsmmo_api_client.api.server_details import get_server_details_get
 
-
 _API_BASE = os.environ.get("ARTIFACTSMMO_API_URL", "https://api.artifactsmmo.com")
 _TOKEN = os.environ.get("ARTIFACTSMMO_TOKEN")
 

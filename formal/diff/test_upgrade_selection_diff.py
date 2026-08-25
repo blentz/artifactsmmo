@@ -23,7 +23,8 @@ small value domain values also repeat, exercising the full tiebreak chain
 tie. Both sides must resolve a tie FIRST-WINS (keep the first equal-key candidate
 in list order), which this test pins.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.goals.upgrade_selection import (
     UpgradeCandidate,
@@ -155,5 +156,5 @@ def test_best_by_value_tie_prefers_inventory_against_lean():
     py = best_by_value(inv, craft)
     assert py is inv
     lean = run_oracle("upgrade_selection",
-                      [[0, 1, 1] + _block(inv) + _block(craft)])[0]
+                      [[0, 1, 1, *_block(inv), *_block(craft)]])[0]
     assert _chosen(py) == _oracle_chosen(lean) == ("1", 3)

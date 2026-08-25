@@ -89,7 +89,6 @@ from artifactsmmo_cli.ai.tiers.means import _fires as _means_fires
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.sim.production_ladder import LadderMeans
 
-
 # ---------------------------------------------------------------------------
 # Test-fixture builders
 # ---------------------------------------------------------------------------

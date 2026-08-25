@@ -62,7 +62,16 @@ echo "== (b'''') mutation anchors =="; ( cd "$ROOT" && uv run python formal/diff
 # that were missing from this script despite it claiming to be "the whole
 # local gate". Same commands the workflows run, so a local pass means the
 # CI job passes too.
-echo "== (c) ruff =="; ( cd "$ROOT" && uv run ruff check src/ tests/ )
+# `formal/` joined the ruff scope 2026-08-25. It had been EXECUTED by this
+# script (anchors, openapi conformance, 850 differential tests) but never
+# LINTED: `ruff check formal/` reported 177 errors, among them 14 unused
+# locals / unpacked variables / loop variables. In a differential harness that
+# class is not cosmetic — an unused `lean_*` binding means both sides were
+# computed and only one compared. Two of the 14 were real (a missing
+# criticality comparison and a never-asserted current-item score); the rest
+# were leftovers, now `_`-prefixed so an UNPREFIXED unused binding stays a
+# signal. Keep the three paths in one command so local and lint-gate.yml agree.
+echo "== (c) ruff =="; ( cd "$ROOT" && uv run ruff check src/ tests/ formal/ )
 echo "== (c') mypy strict =="; ( cd "$ROOT" && uv run mypy src/ )
 echo "== (c'') openapi conformance (strict) =="; ( cd "$ROOT" && uv run python formal/diff/openapi_conformance.py --strict )
 # census-gate.yml's six --check scripts. Measured standalone 2026-07-25:

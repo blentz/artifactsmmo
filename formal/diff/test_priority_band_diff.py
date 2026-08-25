@@ -16,7 +16,8 @@ production invocation uses the same exact-rational arithmetic this test pins.
 """
 from fractions import Fraction
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from formal.diff.oracle_client import run_oracle

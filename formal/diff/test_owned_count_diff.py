@@ -16,7 +16,8 @@ equipped item is never a double-count. We exercise the full cross product
 no-bank (None) path, and pin the load-bearing `ownedCount_counts_equipped`
 property (an equipped item with zero spares/bank counts as 1).
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from formal.diff.oracle_client import run_oracle

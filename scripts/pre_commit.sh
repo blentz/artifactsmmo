@@ -22,9 +22,15 @@ fi
 echo "[pre-commit] mypy strict..."
 uv run mypy src/
 
-echo "[pre-commit] ruff bug-finder rules on src/artifactsmmo_cli/ai/..."
-uv run ruff check src/artifactsmmo_cli/ai/ \
-  --select B007,SIM110,SIM115,RUF005,RUF059
+# formal/ added 2026-08-25: it was gate-EXECUTED but never LINTED, and the
+# unused-binding rules below (B007/RUF059, plus F841) are exactly the class
+# that matters in a differential harness — an unused `lean_*` binding means
+# both sides were computed and only one compared. F841 is included here (it
+# is not in the src/ai selection) because two of the fourteen findings in
+# formal/ were F841, not RUF059.
+echo "[pre-commit] ruff bug-finder rules on src/artifactsmmo_cli/ai/ and formal/..."
+uv run ruff check src/artifactsmmo_cli/ai/ formal/ \
+  --select B007,F841,SIM110,SIM115,RUF005,RUF059
 
 echo "[pre-commit] pytest (no-cov, fast, excludes live-API integration tests)..."
 uv run pytest tests/test_ai/ --no-cov -q -x -m "not integration"

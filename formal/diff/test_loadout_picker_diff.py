@@ -45,7 +45,8 @@ Python ``max(..., key=...)`` over an unordered set breaks ties arbitrarily while
 the Lean ``argmaxBy`` keeps the earliest, so we assert the SCORE/BENEFIT of the
 pick (== the proved optimal value), never a specific tie-winner item.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.equipment.elements import ELEMENTS

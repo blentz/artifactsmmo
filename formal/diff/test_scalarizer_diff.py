@@ -39,7 +39,8 @@ coin-inversion identity (over Int counts).
 """
 from fractions import Fraction
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.learning.scalar_core import (
     coins_spent_from_delta,
@@ -85,7 +86,7 @@ def _lean_args(char_xp, level, gold, tasks_coins, coin_value, skill_terms, activ
     _rat(flat, CHAR_SCALAR)
     _rat(flat, Fraction(1, GOLD_PER_XP))  # goldUnit = 1/gold_per_xp = 1/100
     flat.append(len(skill_terms))
-    for name, xp, active in skill_terms:
+    for _name, xp, active in skill_terms:
         w = RELEVANT_W if active else BASELINE_W
         _rat(flat, w)
         _rat(flat, Fraction(xp))

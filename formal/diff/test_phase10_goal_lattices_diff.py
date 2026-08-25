@@ -13,23 +13,23 @@ This Python-side test verifies the same contracts directly against the
 live Python implementations so that Lean and Python remain in lockstep
 as the source evolves. Each test maps 1:1 to a Lean theorem name.
 """
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import (
-    DiscardOverstockGoal,
     _DISCARD_OVERSTOCK_BASE,
-    _DISCARD_OVERSTOCK_HIGH_PRESSURE,
     _DISCARD_OVERSTOCK_CRITICAL,
+    _DISCARD_OVERSTOCK_HIGH_PRESSURE,
+    DiscardOverstockGoal,
 )
 from artifactsmmo_cli.ai.goals.pursue_task import PRIORITY_FLOOR, PursueTaskGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import (
-    ReachUnlockLevelGoal,
-    PRIORITY_WHEN_BLOCKER_ACTIVE,
     MAX_ACHIEVABLE_GAP,
+    PRIORITY_WHEN_BLOCKER_ACTIVE,
+    ReachUnlockLevelGoal,
 )
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 
@@ -57,7 +57,6 @@ def test_deposit_zero_cap_returns_zero():
 
 
 def test_deposit_below_ramp_returns_zero():
-    g = DepositInventoryGoal(bank_accessible=True, game_data=None)
     state = _mk(inventory={"x": 40}, inventory_max=100)
     # used_fraction = 0.4 < 0.85 high watermark → 0
     # (game_data=None → is_satisfied=True actually short-circuits; bypass

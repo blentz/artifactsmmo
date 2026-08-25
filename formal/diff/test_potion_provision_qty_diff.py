@@ -9,7 +9,8 @@ hp_need >= 0, so the integer `ceilDiv` matches Python's floor `//` bit-for-bit.
 The `@example` anchors pin the mutation-boundary cases (ceil->floor, held clamp,
 max_stack clamp, slot-filled guard) that random sampling could otherwise miss.
 """
-from hypothesis import example, given, settings, strategies as st
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from formal.diff.oracle_client import run_oracle

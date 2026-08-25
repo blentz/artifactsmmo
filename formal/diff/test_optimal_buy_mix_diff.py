@@ -15,7 +15,8 @@ bought), `prices` in `[1,10]`, `gold` in `[0,200]`, `max_batch` in `[1,20]`. The
 real-deficit case (the `b*need - held` -> `held - b*need` sign flip), which the
 two kept mutants diverge on.
 """
-from hypothesis import example, given, settings, strategies as st
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.optimal_buy_mix import optimal_buy_mix_pure
 from formal.diff.oracle_client import run_oracle

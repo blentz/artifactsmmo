@@ -6,7 +6,7 @@ Closes diff-coverage gap for src/artifactsmmo_cli/ai/event_availability.py.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 

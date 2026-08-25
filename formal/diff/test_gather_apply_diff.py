@@ -9,7 +9,8 @@ Boundary cases pinned explicitly:
 * `inventory_used == cap` (apply would overrun if invoked — `is_applicable` blocks)
 * multi-step chains with `n == cap - used` (chain exactly fills the cap)
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.actions.gather_apply_core import (
     GatherInv,

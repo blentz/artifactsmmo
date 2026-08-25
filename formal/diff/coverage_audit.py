@@ -56,10 +56,9 @@ def imports_from_diff_tests(diff_dir: Path) -> dict[str, set[str]]:
         except SyntaxError:
             continue
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                if node.module.startswith(prefix):
-                    sub = node.module[len(prefix):]
-                    out[sub].add(path.name)
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith(prefix):
+                sub = node.module[len(prefix):]
+                out[sub].add(path.name)
     return out
 
 

@@ -14,7 +14,8 @@ The grid straddles `keep == bank_qty` — the boundary where the surplus is
 exactly 0 and the two gates must BOTH decline (nothing to drain, nothing more
 worth banking).
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.keep_valuation import (
     bank_surplus_pure,

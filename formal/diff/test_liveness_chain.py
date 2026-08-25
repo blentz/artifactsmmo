@@ -34,7 +34,6 @@ from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
 from artifactsmmo_cli.ai.world_state import WorldState
 
-
 # ---------- Fixtures ----------------------------------------------------------
 
 def _empty_equipment() -> dict[str, str | None]:

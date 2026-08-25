@@ -17,7 +17,8 @@ over >= 200 random graphs including CYCLIC and DIAMOND shapes.
 """
 import random
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.recipe_closure import (
@@ -25,6 +26,7 @@ from artifactsmmo_cli.ai.recipe_closure import (
     _raw_units,
     recipe_closure,
 )
+from formal.diff.oracle_client import run_oracle
 
 
 def raw_units(game_data, item):
@@ -40,7 +42,6 @@ def raw_units(game_data, item):
     recipes = game_data.crafting_recipes
     return _raw_units(len(recipes) + 1, item, recipes,
                       game_data.craft_yields, {})
-from formal.diff.oracle_client import run_oracle
 
 
 def _gd(recipes: dict[int, dict[int, int]], drops: dict[int, int]) -> GameData:
@@ -61,7 +62,7 @@ def _encode_args(recipes: dict[int, dict[int, int]], drops: dict[int, int],
     drop_pairs: list[int] = []
     for res, drop in drops.items():
         drop_pairs += [res, drop]
-    args = [n_recipe] + triples + [len(drops)] + drop_pairs + [len(roots)] + roots + [query, fuel]
+    args = [n_recipe, *triples, len(drops), *drop_pairs, len(roots), *roots, query, fuel]
     return args
 
 
@@ -217,7 +218,7 @@ def _encode_demand_via_tr(
     args += [1, root, multiplier, 0]
     args += [0]                          # nNeeded
     args += [0]                          # nOwned
-    args += [len(queries)] + list(queries)
+    args += [len(queries), *list(queries)]
     args += [fuel]
     if yields:
         args += [len(yields)]
@@ -263,7 +264,7 @@ def test_yield_closure_demand_matches_lean(seed):
     """_closure_demand with Y>1 yields must agree with the task_reservation oracle.
     Exercises the parseYieldFn + closureDemand ceil-batch arithmetic path."""
     rng = random.Random(seed)
-    recipes, drops, roots, query, fuel = _rand_graph(rng, allow_cycle=False)
+    recipes, _drops, _roots, _query, fuel = _rand_graph(rng, allow_cycle=False)
     if not recipes:
         return
     crafted = list(recipes.keys())

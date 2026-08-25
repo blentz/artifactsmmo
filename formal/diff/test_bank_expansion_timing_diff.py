@@ -11,7 +11,8 @@ no-reserve corner) so the SAFETY gate is exercised at a non-zero floor and at th
 degenerate zero floor; the trigger is sampled near the production 95/100 plus a
 few alternates so the cross-multiply boundary is exercised exactly.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.bank_expansion_timing import should_expand_bank
 from formal.diff.oracle_client import run_oracle

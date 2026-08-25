@@ -14,9 +14,9 @@ The Lean model is pure (no oracle round-trip): the post-fix contract is
 * `monster_level` absent ⇒ silent 0 (documented).
 """
 
-from hypothesis import given, settings, strategies as st
-
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.game_data import GameData
 

@@ -8,7 +8,8 @@ This bridges the model↔code gap for the per-goal inventory-profile design
 SAME function the kernel proved space-driven (free slots ⇒ no overstock),
 profile-protecting (held ≤ target ⇒ never overstock), and monotone.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.inventory_caps import overstock_excess
 from formal.diff.oracle_client import run_oracle

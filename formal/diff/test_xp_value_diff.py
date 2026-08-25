@@ -10,7 +10,8 @@ sampling). The type→mult10 map is exercised by driving production with the
 type STRING and the oracle with the derived mult10. Kills the XP_VALUE
 mutation group in mutate.py.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
 from formal.diff.oracle_client import run_oracle
@@ -57,7 +58,7 @@ def test_penalty_boundaries_and_ties_exact():
     cases.append((8, 38, 2000, "normal", 100))  # exact .5 tie, even floor
     batch = [[c, m, hp, _MULT10[t], w] for (c, m, hp, t, w) in cases]
     leans = run_oracle("xp_value", batch)
-    for (c, m, hp, t, w), lean in zip(cases, leans):
+    for (c, m, hp, t, w), lean in zip(cases, leans, strict=True):
         assert _py(c, m, hp, t, w) == lean["xp"], (c, m, hp, t, w, lean)
     # The tie case pins the HALF-UP rule specifically: an exact .5 with an EVEN
     # floor is the only shape where half-up and half-to-even disagree, so this

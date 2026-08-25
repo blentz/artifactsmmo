@@ -17,7 +17,8 @@ code to a fixed width so lexicographic string order coincides with numeric order
 and feed the SAME integer code to the oracle. Codes are unique per list so the
 tie-break is well-defined.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.monster_drop_selection import (
     MonsterDropCandidate,

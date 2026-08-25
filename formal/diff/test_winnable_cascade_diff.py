@@ -14,7 +14,8 @@ can round-trip them; the Lean model and the Python core both operate on
 arbitrary `str | None`, but the diff drives them over the same encoding for
 byte-identical comparison.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from formal.diff.oracle_client import run_oracle

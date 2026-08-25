@@ -1,4 +1,6 @@
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
 from formal.diff.oracle_client import run_oracle
 

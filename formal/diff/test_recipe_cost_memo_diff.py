@@ -9,7 +9,8 @@ encoded as string keys in a minimal GameData stub.
 
 import random
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.recipe_closure import closure_demand

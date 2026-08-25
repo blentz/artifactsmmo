@@ -60,7 +60,8 @@ from __future__ import annotations
 
 from fractions import Fraction
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.learning.cycles_for_progress_core import (
     CycleRow,

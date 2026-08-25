@@ -16,7 +16,8 @@ the list indices (unique per request, as the oracle's predicate lookup
 requires); the Python core uses the stringified index so the comparison
 is byte-identical after decoding.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from formal.diff.oracle_client import run_oracle

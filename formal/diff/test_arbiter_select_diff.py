@@ -12,7 +12,8 @@ means is active AND a guard fires AND is plannable — the guard MUST win.
 """
 from collections.abc import Callable
 
-from hypothesis import HealthCheck, given, settings, strategies as st
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.arbiter_select import Candidate, select_pure

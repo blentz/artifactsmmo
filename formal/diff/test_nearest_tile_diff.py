@@ -10,7 +10,8 @@ that closes the MoveTo apply/execute divergence).
 
 Tiles are unique per list so the selected tile is well-defined.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.nearest_tile import nearest_tile
 from formal.diff.oracle_client import run_oracle

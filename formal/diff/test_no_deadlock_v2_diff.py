@@ -33,11 +33,13 @@ INTEGRITY rules (Phase 20d-v2 scope):
 Result reporting: at session end the module emits a coverage summary
 (per-MeansKind firing rate, invariant violations, sampled state count).
 """
-from hypothesis import HealthCheck, given, settings, strategies as st
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.means import MeansKind, _fires as _means_fires
+from artifactsmmo_cli.ai.tiers.means import MeansKind
+from artifactsmmo_cli.ai.tiers.means import _fires as _means_fires
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.sim.fake_server import FakeServer
 from formal.sim.production_ladder import (
@@ -46,7 +48,6 @@ from formal.sim.production_ladder import (
     all_other_fires,
     production_ladder,
 )
-
 
 # ---------------------------------------------------------------------------
 # Reporting infrastructure

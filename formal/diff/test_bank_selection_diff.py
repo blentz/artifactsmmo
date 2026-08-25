@@ -303,6 +303,7 @@ def test_working_tool_spares_bank_and_the_kit_stays():
     state, gd, py_crit, py_deposits, lean_crit, lean_deposits = _run(
         inventory, [], None, False, None, {}, attrs,
     )
+    assert py_crit == lean_crit
     assert py_deposits == lean_deposits
     assert dict(py_deposits)[1] == 17
     assert 1 in py_crit  # the working tool is shed LAST by the last-resort
@@ -323,6 +324,7 @@ def test_tasks_coin_keep_all_never_banked():
     )
     assert py_deposits == lean_deposits
     assert py_deposits == [(1, 3)]  # the coin yields NOTHING, at any quantity
+    _assert_freeze(state, gd, py_deposits)
 
 
 def test_last_resort_at_full_bag_matches_lean():

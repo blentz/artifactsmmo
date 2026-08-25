@@ -20,7 +20,8 @@ the strategy generates the full grid (including qty<=0 / restore<=0 that BOTH si
 must skip) to exercise the filter end-to-end. The boundary `restore == deficit`
 (a fitter, NOT overheal) is included via the restore/deficit ranges overlapping.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.consumable_selection import select_consumable
 from artifactsmmo_cli.ai.game_data import ItemStats

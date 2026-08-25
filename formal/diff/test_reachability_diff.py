@@ -27,7 +27,8 @@ the functions under test (`is_reachable`, `actionable_step`) are NOT stubbed.
 """
 import random
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from pytest import MonkeyPatch
 
 from artifactsmmo_cli.ai.tiers import strategy
@@ -81,8 +82,7 @@ def _encode(graph, root, fuel):
     args = [graph.n]
     for i in range(graph.n):
         pre = graph.prereqs[i]
-        args += [1 if graph.sat[i] else 0, 1 if graph.prod[i] else 0,
-                 graph.kinds[i], len(pre)] + list(pre)
+        args += [1 if graph.sat[i] else 0, 1 if graph.prod[i] else 0, graph.kinds[i], len(pre), *list(pre)]
     args += [root, fuel]
     return args
 

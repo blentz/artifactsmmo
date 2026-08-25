@@ -33,9 +33,10 @@ integer ceiling division; the contract we PROVE and PIN is structural
 float arithmetic is a separate Python-side concern (already exercised
 by the existing pytest suite for `cheapest_path_to_level`).
 """
-import artifactsmmo_cli.ai.learning.projections as projections_module
-from hypothesis import HealthCheck, given, settings, strategies as st
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
+import artifactsmmo_cli.ai.learning.projections as projections_module
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -176,7 +177,7 @@ def test_single_step_structural_matches(tmp_path, char_level, n_monsters, seed):
     rng_hps = [40 + ((seed >> (3 * i + 1)) & 0x3F) for i in range(n_monsters)]
     monsters = [
         (f"m{i}", max(1, lvl), hp)  # ensure level >= 1 (zero filtered separately)
-        for i, (lvl, hp) in enumerate(zip(rng_levels, rng_hps))
+        for i, (lvl, hp) in enumerate(zip(rng_levels, rng_hps, strict=False))
     ]
     codes = [code for code, _, _ in monsters]
     winnable_stub = lambda state, gd, code, store: True  # noqa: E731
@@ -315,7 +316,7 @@ def test_zero_xp_per_kill_blocks(tmp_path):
     store.close()
     assert plan.blocked is True, "zero xp_per_kill must trigger blocked branch"
     # The Lean greedy with xpPerCycle=0 also blocks (stepLevel_all_zero_blocks).
-    code_to_id = {"chicken": 1}
+    _code_to_id = {"chicken": 1}
     lean = run_oracle("cheapest_path",
                       [_encode_args(12, 13, 100, 0, [(1, 1, 0, 1)])])[0]
     assert lean["blocked"] is True
@@ -385,7 +386,7 @@ def test_the_rung_body_grows_so_a_later_rung_can_beat_more(tmp_path):
         "fixture drift: the wolf must out-yield the cub or the greedy would "
         "keep the cub even once the wolf is winnable"
     )
-    assert all(2 <= sim_level + 1 for sim_level in (1, 2, 3)), (
+    assert all(sim_level + 1 >= 2 for sim_level in (1, 2, 3)), (
         "the wolf (L2) must clear the walk's `lvl <= sim_level + 1` filter at "
         "every rung, so winnability is the only thing gating it"
     )

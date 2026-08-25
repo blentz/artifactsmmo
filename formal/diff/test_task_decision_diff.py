@@ -27,7 +27,8 @@ Production constants: `DEFAULT_COIN_VALUE_GOLD = 5.0`, `LOW_CONFIDENCE_MARGIN = 
 """
 from fractions import Fraction
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.task_decision_core import required_vpc, task_decision_pure
 from artifactsmmo_cli.ai.task_decision_labels import PIVOT, PURSUE

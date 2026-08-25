@@ -10,7 +10,8 @@ the proven gate over random catalogs (levels, hp, type, wisdom), including the
 out-of-band, unknown-monster (level 0), and band-edge cases. Kills the
 XP_POSITIVE mutation group in mutate.py.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
 from formal.diff.oracle_client import run_oracle
@@ -56,7 +57,7 @@ def test_band_edges_exact():
                 cases.append((char_level, monster_level, hp))
     batch = [[c, m] for (c, m, _hp) in cases]
     leans = run_oracle("xp_positive", batch)
-    for (char_level, monster_level, hp), lean in zip(cases, leans):
+    for (char_level, monster_level, hp), lean in zip(cases, leans, strict=True):
         catalog = MonsterCatalog(
             levels={"m": monster_level}, hp={"m": hp}, types={"m": "normal"},
         )

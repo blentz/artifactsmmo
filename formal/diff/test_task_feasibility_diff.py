@@ -20,7 +20,8 @@ and over (monster_level, char_level) pairs including the `+2` boundary:
 """
 import random
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
@@ -132,11 +133,7 @@ def _encode_items(recipes, item_stats, char_skills, task_item, fuel) -> list[int
         n_craft += 1
         n_lvl += 1
     args = (
-        [n_edges] + edges
-        + [n_skill] + skill_pairs
-        + [n_craft] + craft_pairs
-        + [n_lvl] + lvl_pairs
-        + [task_item, fuel]
+        [n_edges, *edges, n_skill, *skill_pairs, n_craft, *craft_pairs, n_lvl, *lvl_pairs, task_item, fuel]
     )
     return args
 

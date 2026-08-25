@@ -29,7 +29,8 @@ PRODUCTION CONSTANTS: `LOW_YIELD_CONFIDENCE_THRESHOLD = 1/2`,
 """
 from fractions import Fraction
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.learning.low_yield_boundary import low_yield_fires_pure
 from formal.diff.oracle_client import run_oracle

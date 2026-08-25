@@ -396,9 +396,9 @@ def cycle_step_mirror(s: CycleState) -> CycleState:
 __all__ = [
     "ACCEPT_TASK_PLACEHOLDER_CODE",
     "BANK_EXPANSION_SLOTS",
-    "CycleState",
     "MIRROR_LADDER_ORDER",
     "MIRROR_PLAN_FOR",
+    "CycleState",
     "apply_action_kind_mirror",
     "cycle_step_mirror",
     "fires_mirror",

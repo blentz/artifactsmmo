@@ -13,7 +13,8 @@ here), `held` in `[0,50]` (incl. 0 so the any-ingredient-short -> 0 path fires),
 short-ingredient boundaries that the floor-div / min / yield-multiply mutants
 diverge on.
 """
-from hypothesis import example, given, settings, strategies as st
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.max_batch_from_held import max_batch_from_held_pure
 from formal.diff.oracle_client import run_oracle

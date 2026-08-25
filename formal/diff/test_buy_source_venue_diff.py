@@ -9,7 +9,8 @@ gePrice`. The test asserts BOTH the chosen venue AND the realized cost, so a mut
 that drops the `isSome` guard (buying from a phantom order) or flips the strict `<`
 to `<=` (choosing GE on a mere tie) diverges from the proof.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue, realized_cost
 from formal.diff.oracle_client import run_oracle

@@ -1101,7 +1101,8 @@ def test_craft_relief_drives_and_selects() -> None:
     craftReliefFires=1 (production's verdict), selects craftRelief too."""
     w = _craft_relief_world(inventory_max=5)
     gd = _craft_relief_gd()
-    prod, prod_sel, lean, lean_sel = drive_and_contest(w, gd, _craft_relief_ctx(), driven=frozenset({LadderMeans.CRAFT_RELIEF}))
+    prod, prod_sel, _lean, lean_sel = drive_and_contest(
+        w, gd, _craft_relief_ctx(), driven=frozenset({LadderMeans.CRAFT_RELIEF}))
     # Production REALLY fires the driven slot (not faked):
     assert prod[LadderMeans.CRAFT_RELIEF] is True
     assert prod_sel is LadderMeans.CRAFT_RELIEF
@@ -1113,7 +1114,9 @@ def test_craft_relief_near_miss_low_fill() -> None:
     Per-slot + selection agreement still holds (slot False on both sides)."""
     w = _craft_relief_world(inventory_max=20)
     gd = _craft_relief_gd()
-    prod, _, _, _ = drive_and_contest(w, gd, _craft_relief_ctx(), driven=frozenset({LadderMeans.CRAFT_RELIEF}), assert_selection=False)
+    prod, _, _, _ = drive_and_contest(
+        w, gd, _craft_relief_ctx(), driven=frozenset({LadderMeans.CRAFT_RELIEF}),
+        assert_selection=False)
     assert prod[LadderMeans.CRAFT_RELIEF] is False
 
 
@@ -1122,7 +1125,9 @@ def test_craft_relief_near_miss_zero_net_relief() -> None:
     so `craft_relief_candidates` is empty -> CRAFT_RELIEF does NOT fire."""
     w = _craft_relief_world(inventory_max=5)
     gd = _single_input_relief_gd()
-    prod, _, _, _ = drive_and_contest(w, gd, _craft_relief_ctx(), driven=frozenset({LadderMeans.CRAFT_RELIEF}), assert_selection=False)
+    prod, _, _, _ = drive_and_contest(
+        w, gd, _craft_relief_ctx(), driven=frozenset({LadderMeans.CRAFT_RELIEF}),
+        assert_selection=False)
     assert prod[LadderMeans.CRAFT_RELIEF] is False
 
 
@@ -1198,7 +1203,8 @@ def test_recycle_surplus_drives_true() -> None:
     contest."""
     w = _recycle_world(dagger_qty=2)
     gd = _recycle_gd()
-    prod, prod_sel, lean, lean_sel = drive_and_contest(w, gd, _recycle_ctx(), driven=frozenset({LadderMeans.RECYCLE_SURPLUS}))
+    prod, prod_sel, lean, lean_sel = drive_and_contest(
+        w, gd, _recycle_ctx(), driven=frozenset({LadderMeans.RECYCLE_SURPLUS}))
     assert prod[LadderMeans.RECYCLE_SURPLUS] is True
     assert lean[LadderMeans.RECYCLE_SURPLUS] is True
     # recycleSurplus is structurally unreachable as a Lean selection; both

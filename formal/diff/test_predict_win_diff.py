@@ -25,7 +25,8 @@ float-vs-exact disagreement is a real finding and surfaces the exact tuple.
 """
 import random
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from pytest import MonkeyPatch
 
 import artifactsmmo_cli.ai.combat as combat_mod
@@ -143,8 +144,10 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         py = combat_mod.predict_win(_FakeState(), _FakeGameData(), MONSTER)
 
     # monster attack uses dmg_global=0, dmg_elements={} vs player resistance.
+    # RUF005 declined: positional oracle layout, `+` marks the block boundaries
+    # (see the note in test_combat_margin_diff.py, same 46-int layout).
     args = (
-        _elem_args(p_attack, p_dmg, p_dmg_elem, m_resist)  # player vs monster resist
+        _elem_args(p_attack, p_dmg, p_dmg_elem, m_resist)  # noqa: RUF005 - player vs monster resist
         + [p_crit, m_hp]
         + _elem_args(m_attack, 0, {}, p_resist)            # monster vs player resist
         + [m_crit, p_max_hp, 1 if p_init >= m_init else 0]

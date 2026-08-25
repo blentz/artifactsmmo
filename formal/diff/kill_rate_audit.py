@@ -74,7 +74,7 @@ def count_mutations_per_constant(path: Path) -> dict[str, int]:
 def report(calls: list[tuple[str, str, str]], mut_counts: dict[str, int]) -> str:
     lines: list[str] = []
     lines.append("# Item 12 — Mutation kill-rate audit (enumeration surface)\n")
-    lines.append(f"Source of truth: formal/diff/mutate.py")
+    lines.append("Source of truth: formal/diff/mutate.py")
     lines.append(f"Total run_group calls: {len(calls)}")
     src_to_calls: dict[str, list[tuple[str, str]]] = defaultdict(list)
     test_to_calls: dict[str, list[tuple[str, str]]] = defaultdict(list)

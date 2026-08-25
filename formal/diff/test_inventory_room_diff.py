@@ -14,7 +14,8 @@ Rows required by the spec (Task 3):
 * both-room                    -> allowed
 * multi-new-stack boundary     -> new_stacks=2 vs slots_free {1 blocked, 2 ok}
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.inventory_room import has_room
 from formal.diff.oracle_client import run_oracle

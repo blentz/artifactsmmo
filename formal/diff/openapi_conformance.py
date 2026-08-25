@@ -16,7 +16,6 @@ Run from the repo root:
 
 from __future__ import annotations
 
-import ast
 import json
 import re
 import sys
@@ -101,7 +100,7 @@ def report(spec: dict) -> str:
         lines.append(f"### {name}")
         actual = info["actual"]
         if not actual:
-            lines.append(f"  ⚠ schema not found in openapi.json")
+            lines.append("  ⚠ schema not found in openapi.json")
             any_drift = True
             continue
         extras = info["extra_in_spec"]

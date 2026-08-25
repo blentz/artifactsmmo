@@ -276,7 +276,8 @@ def _ratio_table(
             all_flat.add(skill_level)
         lines.append(
             f"skill_level={skill_level}: "
-            + ", ".join(f"cl={cl}:xp={levels[cl]:.2f},ratio={r:.3f}" for cl, r in zip(ordered_cls, ratios, strict=False))
+            + ", ".join(f"cl={cl}:xp={levels[cl]:.2f},ratio={r:.3f}"
+                        for cl, r in zip(ordered_cls, ratios, strict=False))
             + "  steps: " + "; ".join(steps)
         )
     return lines, qualifying, all_flat

@@ -46,6 +46,7 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import combat_capable, prerequisites
 from artifactsmmo_cli.ai.world_state import WorldState
+from formal.diff.oracle_client import run_oracle
 from tests.test_ai.fixtures import make_state
 
 _EQUIPMENT_SLOTS = (
@@ -54,7 +55,6 @@ _EQUIPMENT_SLOTS = (
     "artifact1_slot", "artifact2_slot", "artifact3_slot",
     "utility1_slot", "utility2_slot", "bag_slot", "rune_slot",
 )
-from formal.diff.oracle_client import run_oracle
 
 
 def _unsatisfied_state() -> WorldState:

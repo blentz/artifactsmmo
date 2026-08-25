@@ -71,9 +71,10 @@ import re
 import sys
 from pathlib import Path
 
+from store_records import CycleRecord, EmptyCorpusError, load_cycles
+
 from artifactsmmo_cli.ai.skill_xp_positive import GREY_SKILL_GAP, skill_xp_positive
 from artifactsmmo_cli.learning_db_path import default_learn_db_path
-from store_records import CycleRecord, EmptyCorpusError, load_cycles
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPORT = REPO_ROOT / "formal" / "diff" / "gather_xp_replay_report.txt"
@@ -212,7 +213,7 @@ def main() -> int:
         buckets[gap][0 if paid else 1] += 1
 
     gather_lines, violations, outliers = _render(buckets)
-    lines = [*header] + gather_lines
+    lines = [*header, *gather_lines]
     lines.append("")
     lines.append("OUT-OF-BAND OUTLIERS (unexplained if any; see module docstring): " + (
         "; ".join(outliers) if outliers else "none"))

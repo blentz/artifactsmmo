@@ -61,6 +61,15 @@ ignore = [
 # typer's declarative CLI API requires call-in-default (B008 false positive).
 extend-immutable-calls = ["typer.Argument", "typer.Option"]
 
+[tool.ruff.lint.per-file-ignores]
+# `fires_mirror` is a column-aligned dispatch table that mirrors
+# `Formal.Liveness.ProductionLadder.fires` arm-for-arm — one `if k is X: return …`
+# per Lean match arm, aligned so the two can be read side by side. E701 would
+# split each arm across two lines, tripling the table's height and destroying the
+# arm-for-arm correspondence that makes the mirror auditable. Scoped to this one
+# file and this one rule: everything else in formal/ is linted normally.
+"formal/sim/cycle_step.py" = ["E701"]
+
 [tool.mypy]
 python_version = "3.13"
 strict = true

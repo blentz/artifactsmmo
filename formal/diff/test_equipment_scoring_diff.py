@@ -28,7 +28,8 @@ fixed monster attack/resistance dicts. WorldState carries the inventory (owned i
 codes), the equipment map (current per-slot codes), and the player level — exactly
 the inputs `pick_loadout` / `_candidates_for_slot` read.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.equipment.elements import ELEMENTS
@@ -178,6 +179,15 @@ def _check(table, monster_atk, monster_res, level, inventory, equipment, slots,
         py_chosen_score = (
             _py_score(chosen_stats, slot, monster_atk, monster_res, player_attack)
             if chosen_stats is not None else None)
+        # The CURRENT (worn) item's score, differentially. Below, `cur_score`
+        # enters only as a lower bound whenever the feasible argmax wins, so a
+        # divergence in scoring the WORN item would be invisible there. Lean
+        # computes it from the raw stat block `_item_block` shipped; Python
+        # computes it from `cur_stats` — two independent evaluations.
+        py_cur_score = (
+            _py_score(cur_stats, slot, monster_atk, monster_res, player_attack)
+            if cur_stats is not None else 0)
+        assert py_cur_score == res["cur_score"], (slot, py_cur_score, res)
 
         feasible_exists = any(
             (st_.level <= level) and (slot in ITEM_TYPE_TO_SLOTS.get(st_.type_, []))

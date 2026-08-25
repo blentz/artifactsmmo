@@ -10,7 +10,8 @@ Boundary cases pinned explicitly:
 * `gold == price * quantity` (boundary on gold gate)
 * `gold == price * quantity - 1` (one short on gold)
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.actions.npc_buy_core import (
     npc_buy_apply_pure,
@@ -159,8 +160,12 @@ def test_currency_is_applicable_matches_lean(used, span, quantity, on_hand, spen
         # proved invariant: free slot AND currency covers spend; net stays in cap
         assert (cap - used) >= quantity
         assert on_hand >= spent
-        post = npc_buy_currency_apply_pure({"x": used, "coin": on_hand}, "x", quantity, "coin", spent)
-        # net slot count = used + quantity - spent (truncating); must fit cap
+        # net slot count = used + quantity - spent (truncating); must fit cap.
+        # `npc_buy_currency_apply_pure`'s bookkeeping is NOT asserted here: the
+        # only inventory this test can build is `{"x": used, ...}`, which reads a
+        # slot COUNT as an item quantity, so nothing about the post-state would
+        # mean anything. `test_currency_apply_matches_lean` (below) covers apply
+        # against the Lean `applyCurrency` projection on a well-formed inventory.
         net_used = max(0, used + quantity - spent)
         assert net_used <= cap
 

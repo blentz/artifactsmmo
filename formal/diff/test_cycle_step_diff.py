@@ -77,18 +77,14 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
-from hypothesis import HealthCheck, given, settings, strategies as st
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
-from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
-from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
-from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
-from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
@@ -96,13 +92,12 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.sim.cycle_step import (
-    CycleState,
     MIRROR_PLAN_FOR,
+    CycleState,
     cycle_step_mirror,
     mirror_production_ladder,
 )
 from formal.sim.production_ladder import LadderMeans, production_ladder
-
 
 # ---------------------------------------------------------------------------
 # Projection helpers — the fields we compare across mirror/production.

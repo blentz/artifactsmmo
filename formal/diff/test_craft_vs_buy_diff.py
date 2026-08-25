@@ -1,5 +1,6 @@
 """cheaper_acquisition (Python) must agree with Formal.CraftVsBuy.cheaperAcquisition."""
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.craft_vs_buy import Method, cheaper_acquisition
 from formal.diff.oracle_client import run_oracle

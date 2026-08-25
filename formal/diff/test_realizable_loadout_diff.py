@@ -27,7 +27,8 @@ invariant (`cur >= 1` on the inventory decrement); if the invariant is
 violated, apply raises — so this differential also doubles as the apply
 assertion's gating contract.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction

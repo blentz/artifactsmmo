@@ -18,7 +18,8 @@ We compare ONLY the parts the Lean model proves exactly:
 import math
 from fractions import Fraction
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.learning.skill_xp_curve import DEFAULT_GROWTH_RATIO, SkillXpCurve
 from formal.diff.oracle_client import run_oracle
@@ -60,7 +61,7 @@ def test_python_matches_lean(observed, current, span, xp_per_cycle, query_pick):
     if observed:
         keys = sorted(observed)
         min_key = keys[0]
-        candidates = list(keys) + [min_key - 1, 0]  # observed + below-all (zero)
+        candidates = [*keys, min_key - 1, 0]  # observed + below-all (zero)
         query_level = candidates[query_pick % len(candidates)]
         # guard: if query_level not observed, ensure no observed level is below it
         if query_level not in observed and any(k < query_level for k in observed):

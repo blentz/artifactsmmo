@@ -36,7 +36,7 @@ def test_whole_grid_matches_lean() -> None:
     for content in range(0, _MAX_SKILL + 1):
         batch = [[content, skill] for skill in range(0, _MAX_SKILL + 1)]
         lean = run_oracle("skill_xp_positive", batch)
-        for (_, skill), out in zip(batch, lean, strict=False):
+        for (_, skill), out in zip(batch, lean, strict=True):
             assert skill_xp_positive(content, skill) == out["positive"], (content, skill)
 
 

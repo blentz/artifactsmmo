@@ -15,7 +15,8 @@ game world realizing any chosen `(mats, held)` pair — no monkeypatching:
 This makes the Python `usable = (free + held) - 3` and `fit = usable // mats`
 identical to the Lean inputs, isolating the max/min/cap clamp for the differential.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.task_batch import BATCH_CAP, craft_batch_size_pure, task_batch_size
@@ -137,6 +138,8 @@ def test_craft_batch_zero_mats_per_unit():
     # (NOT the mats==0 branch); it is harmless coverage of the demand-floor path.
     zero_recipe = {"Z": {"M": 0}}
     drops = {"R": "M"}
-    assert craft_batch_size_pure("Z", 4, {}, 100, zero_recipe, drops, {}) == 4    # mats==0 branch: max(1, min(4, 10)) = 4
+    # mats==0 branch: max(1, min(4, 10)) = 4
+    assert craft_batch_size_pure("Z", 4, {}, 100, zero_recipe, drops, {}) == 4
     assert craft_batch_size_pure("Z", 999, {}, 100, zero_recipe, drops, {}) == BATCH_CAP  # mats==0 branch: capped at 10
-    assert craft_batch_size_pure("Z", 0, {}, 100, zero_recipe, drops, {}) == 1    # demand<=0 guard fires first, not mats==0
+    # demand<=0 guard fires first, not mats==0
+    assert craft_batch_size_pure("Z", 0, {}, 100, zero_recipe, drops, {}) == 1

@@ -20,7 +20,8 @@ Hypothesis (≥200 examples each) generates `(used, span, quantity)` tuples
 including boundary cases. The four chain_safe actions agree with the Lean
 oracle and the verified probe scenarios are pinned as regression tests.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
@@ -30,7 +31,6 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.diff.oracle_client import run_oracle
-
 
 _GD = GameData()
 
@@ -132,7 +132,7 @@ def test_claim_matches_lean(used, span, has_pending):
                       [[1, used, cap, 1 if has_pending else 0]])[0]
     assert py == lean["applicable"]
     if py:
-        assert 1 <= cap - used
+        assert cap - used >= 1
         post = a.apply(state, _GD)
         assert post.inventory_used <= post.inventory_max
 
@@ -178,7 +178,7 @@ def test_unequip_matches_lean(used, span, slot_filled):
                       [[2, used, cap, 1 if slot_filled else 0]])[0]
     assert py == lean["applicable"]
     if py:
-        assert 1 <= cap - used
+        assert cap - used >= 1
         post = a.apply(state, _GD)
         assert post.inventory_used <= post.inventory_max
 
@@ -243,7 +243,7 @@ def test_task_exchange_matches_lean(used, span, coins, min_coins):
                       [[3, used, cap, coins, min_coins]])[0]
     assert py == lean["applicable"]
     if py:
-        assert 1 <= cap - used
+        assert cap - used >= 1
         assert min_coins <= coins
         post = a.apply(state, _GD)
         assert post.inventory_used <= post.inventory_max

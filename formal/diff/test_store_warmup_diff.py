@@ -5,7 +5,8 @@ Pins the warmup-gate contracts of the `LearningStore` pure helpers.
 import statistics
 from fractions import Fraction
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.learning.store_warmup_core import (
     WARMUP_MIN_SAMPLES,

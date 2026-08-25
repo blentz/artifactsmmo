@@ -12,7 +12,8 @@ these functions read. The same data is encoded for the Lean oracle (flat ints).
 """
 import random
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
@@ -179,11 +180,8 @@ def _encode_attainable(recipes, leaf_codes, query, fuel, buy_edges=None):
     buy_flat = []
     for it, cur in perm_edges:
         buy_flat += [it, cur]
-    args = ([n_edges] + edges
-            + [len(has_list)] + has_list
-            + [len(drop_items)] + drop_items
-            + [len(perm_edges)] + buy_flat
-            + [query, fuel])
+    args = ([n_edges, *edges, len(has_list), *has_list, len(drop_items), *drop_items,
+             len(perm_edges), *buy_flat, query, fuel])
     return args
 
 

@@ -30,7 +30,6 @@ green until the data is captured), mirroring `test_winnable_across_band_diff.py`
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -45,7 +44,6 @@ from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.item_catalog import ItemStats
-
 from formal.diff.test_winnable_across_band_diff import (
     BAND_HI,
     BAND_LO,
@@ -137,7 +135,7 @@ def test_witness_rows_pin_projection_and_verdict() -> None:
     rows = build_witness_table(base_stats, stats_by_code, game_data)
 
     # The witness must cover every band level for which base stats exist.
-    captured = {int(l) for l in base_stats}
+    captured = {int(lvl) for lvl in base_stats}
     band = set(range(BAND_LO, BAND_HI))
     assert {r.level for r in rows} == captured & band, (
         f"witness levels {sorted(r.level for r in rows)} != captured band "

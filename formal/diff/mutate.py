@@ -213,7 +213,8 @@ CRAFT_PLAN_DRIVER_RECYCLE_MUTATIONS = [
     ("craft_plan_driver: recycle consumed uses truncating floor-div, not ceil (under-counts consumption)",
      "        consumed = math.ceil(na.qty / match.yield_per)",
      "        consumed = na.qty // match.yield_per"),
-    ("craft_plan_driver: cumulative-cap ledger not advanced (consumed never accumulates → over-recycles protected copies)",
+    ("craft_plan_driver: cumulative-cap ledger not advanced "
+     "(consumed never accumulates → over-recycles protected copies)",
      "            cur_consumed[na.code] = cur_consumed.get(na.code, 0) + na.qty",
      "            cur_consumed[na.code] = cur_consumed.get(na.code, 0)"),
 ]
@@ -2500,8 +2501,14 @@ WINNABLE_CASCADE_MUTATIONS = [
     # Mutation 3: swap tier 2 and tier 3 — return pick_winnable first,
     # demoting the path projection. Violates the documented precedence.
     ("winnable_cascade: swap path and pick tiers",
-     "    if inputs.path_monster is not None and inputs.path_winnable:\n        return inputs.path_monster\n    return inputs.pick_winnable\n",
-     "    if inputs.pick_winnable is not None:\n        return inputs.pick_winnable\n    if inputs.path_monster is not None and inputs.path_winnable:\n        return inputs.path_monster\n    return None\n"),
+     "    if inputs.path_monster is not None and inputs.path_winnable:\n"
+     "        return inputs.path_monster\n"
+     "    return inputs.pick_winnable\n",
+     "    if inputs.pick_winnable is not None:\n"
+     "        return inputs.pick_winnable\n"
+     "    if inputs.path_monster is not None and inputs.path_winnable:\n"
+     "        return inputs.path_monster\n"
+     "    return None\n"),
 ]
 
 
@@ -3884,7 +3891,8 @@ FOCUS_CHARGE_MUTATIONS = [
     # ages, so nothing ever rotates away from it — the starvation the ledger
     # exists to prevent. Both charges are load-bearing, in opposite directions.
     ("focus ledger: committed root no longer ages",
-     "        self._charge_focus(self._gear_root_key(decision.chosen_root),\n                           decision.aged_pick)",
+     "        self._charge_focus(self._gear_root_key(decision.chosen_root),\n"
+     "                           decision.aged_pick)",
      "        self._charge_focus(None, decision.aged_pick)"),
 ]
 
@@ -5067,8 +5075,12 @@ KEEP_VALUATION_ADAPTER_MUTATIONS = [
 # delete. Killed by TestDiscardOverstockRouting.test_fallback_deposits_recipe_demanded_material.
 DISCARD_OVERSTOCK_ROUTING_MUTATIONS = [
     ("discard_overstock: bank_accessible not threaded (deposit arm dead)",
-     "                result.append(overstock_disposal(\n                    code, excess_qty, state, game_data, self._bank_accessible,\n                    self._ctx))",
-     "                result.append(overstock_disposal(\n                    code, excess_qty, state, game_data, False,\n                    self._ctx))"),
+     "                result.append(overstock_disposal(\n"
+     "                    code, excess_qty, state, game_data, self._bank_accessible,\n"
+     "                    self._ctx))",
+     "                result.append(overstock_disposal(\n"
+     "                    code, excess_qty, state, game_data, False,\n"
+     "                    self._ctx))"),
 ]
 
 # buy_source_venue mutations (DUAL of liquidation_venue) -- old strings matched to
@@ -5625,7 +5637,9 @@ CONSUMABLE_SUPPLY_MUTATIONS = [
 MEANS_MAINTAIN_MUTATIONS = [
     (
         "means: MAINTAIN_CONSUMABLES drops the combat-active gate (fires when idle)",
-        "        if ctx.combat_monster is None:\n            return False\n        return maintain_consumables_fires(state, game_data)",
+        "        if ctx.combat_monster is None:\n"
+        "            return False\n"
+        "        return maintain_consumables_fires(state, game_data)",
         "        return maintain_consumables_fires(state, game_data)",
     ),
 ]
@@ -6167,7 +6181,10 @@ FIGHT_APPLICABILITY_MUTATIONS = [
         "             for c in state.equipment.values() if c and c in game_data.all_item_stats),\n"
         "            default=0,\n"
         "        )\n"
-        "        return self.drop_farm or (game_data.xp_per_kill(self.monster_code, state.level) > 0 and best_eq >= monster_level - 1)",
+        # E501: this is ONE injected line of production source. Splitting the
+        # literal would inject a line break into the mutant body, so its width is
+        # set by the code it replaces, not by formatting.
+        "        return self.drop_farm or (game_data.xp_per_kill(self.monster_code, state.level) > 0 and best_eq >= monster_level - 1)",  # noqa: E501
     ),
     (
         # Widen the drop-farm bypass to swallow the whole gate: every fight
@@ -6184,7 +6201,8 @@ FIGHT_APPLICABILITY_MUTATIONS = [
 
 APPLY_BANK_EXPANSION_MUTATIONS = [
     (
-        "apply-baseline-bank-expansion: revert BuyBankExpansionAction.apply to explicit WorldState(...) dropping baseline",
+        "apply-baseline-bank-expansion: revert BuyBankExpansionAction.apply "
+        "to explicit WorldState(...) dropping baseline",
         "        return dataclasses.replace(\n"
         "            state,\n"
         "            gold=state.gold - game_data.next_expansion_cost,\n"

@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent

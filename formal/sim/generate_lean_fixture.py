@@ -16,7 +16,6 @@ Run from the repo root as a module so the `formal` package resolves:
 """
 
 import json
-from collections import defaultdict, deque
 from pathlib import Path
 
 from formal.sim.winnable_witness import (
@@ -100,8 +99,12 @@ def _emit_monster_catalog(lines: list[str], snapshot: dict) -> None:
         lines.append(f"def monster_{safe} : CatalogMonster :=")
         lines.append(f'  {{ code := "{escape_lean_string(code)}", level := {snapshot["monster_level"][code]}')
         lines.append(f'    hp := {snapshot["monster_hp"][code]}')
-        lines.append(f'    attackFire := {atk.get("fire", 0)}, attackEarth := {atk.get("earth", 0)}, attackWater := {atk.get("water", 0)}, attackAir := {atk.get("air", 0)}')
-        lines.append(f'    resFire := {res.get("fire", 0)}, resEarth := {res.get("earth", 0)}, resWater := {res.get("water", 0)}, resAir := {res.get("air", 0)}')
+        lines.append(
+            f'    attackFire := {atk.get("fire", 0)}, attackEarth := {atk.get("earth", 0)}, '
+            f'attackWater := {atk.get("water", 0)}, attackAir := {atk.get("air", 0)}')
+        lines.append(
+            f'    resFire := {res.get("fire", 0)}, resEarth := {res.get("earth", 0)}, '
+            f'resWater := {res.get("water", 0)}, resAir := {res.get("air", 0)}')
         lines.append(f'    crit := {snapshot["monster_critical_strike"][code]} }}')
         lines.append("")
     lines.append("def monsterCatalog : List CatalogMonster :=")
@@ -120,8 +123,12 @@ def _emit_base_stats_table(lines: list[str], base_doc: dict) -> None:
         r = row["resistance"]
         lines.append(f"def baseStats_{lvl} : BaseStatsRow :=")
         lines.append(f'  {{ level := {lvl}, maxHp := {row["max_hp"]}')
-        lines.append(f'    attackFire := {a.get("fire", 0)}, attackEarth := {a.get("earth", 0)}, attackWater := {a.get("water", 0)}, attackAir := {a.get("air", 0)}')
-        lines.append(f'    resFire := {r.get("fire", 0)}, resEarth := {r.get("earth", 0)}, resWater := {r.get("water", 0)}, resAir := {r.get("air", 0)}')
+        lines.append(
+            f'    attackFire := {a.get("fire", 0)}, attackEarth := {a.get("earth", 0)}, '
+            f'attackWater := {a.get("water", 0)}, attackAir := {a.get("air", 0)}')
+        lines.append(
+            f'    resFire := {r.get("fire", 0)}, resEarth := {r.get("earth", 0)}, '
+            f'resWater := {r.get("water", 0)}, resAir := {r.get("air", 0)}')
         lines.append(f'    crit := {row["critical_strike"]}, initiative := {row["initiative"]} }}')
         lines.append("")
     lines.append("def baseStatsTable : List BaseStatsRow :=")
@@ -142,10 +149,16 @@ def _emit_item_catalog(lines: list[str], snapshot: dict) -> None:
         atk = s.get("attack") or {}
         res = s.get("resistance") or {}
         lines.append(f"def item_{safe} : CatalogItem :=")
-        lines.append(f'  {{ code := "{escape_lean_string(code)}", level := {s["level"]}, slotType := "{escape_lean_string(s["type"])}"')
-        lines.append(f'    attackFire := {atk.get("fire", 0)}, attackEarth := {atk.get("earth", 0)}, attackWater := {atk.get("water", 0)}, attackAir := {atk.get("air", 0)}')
+        lines.append(
+            f'  {{ code := "{escape_lean_string(code)}", level := {s["level"]}, '
+            f'slotType := "{escape_lean_string(s["type"])}"')
+        lines.append(
+            f'    attackFire := {atk.get("fire", 0)}, attackEarth := {atk.get("earth", 0)}, '
+            f'attackWater := {atk.get("water", 0)}, attackAir := {atk.get("air", 0)}')
         lines.append(f'    hpBonus := {s.get("hp_bonus", 0)}')
-        lines.append(f'    resFire := {res.get("fire", 0)}, resEarth := {res.get("earth", 0)}, resWater := {res.get("water", 0)}, resAir := {res.get("air", 0)}')
+        lines.append(
+            f'    resFire := {res.get("fire", 0)}, resEarth := {res.get("earth", 0)}, '
+            f'resWater := {res.get("water", 0)}, resAir := {res.get("air", 0)}')
         lines.append(f'    crit := {s.get("critical_strike", 0)} }}')
         lines.append("")
     lines.append("def itemCatalog : List CatalogItem :=")
@@ -227,7 +240,8 @@ def _emit_witness_table(lines: list[str], rows: list[WitnessRow]) -> None:
             + f"      rawPlayer := {r.raw_player}, monsterHp := {r.monster_hp}, rawMonster := {r.raw_monster}\n"
             + f"      mCrit := {r.m_crit}, mAtkSum := {r.m_atk_sum}, mLifesteal := {r.m_lifesteal}\n"
             + f"      mPoison := {r.m_poison}, mBarrier := {r.m_barrier}, mBurn := {r.m_burn}\n"
-            + f"      mHealing := {r.m_healing}, mReconstitution := {r.m_reconstitution}, mVoidDrain := {r.m_void_drain}\n"
+            + f"      mHealing := {r.m_healing}, mReconstitution := {r.m_reconstitution}, "
+            + f"mVoidDrain := {r.m_void_drain}\n"
             + f"      mBerserk := {r.m_berserk}, mFrenzy := {r.m_frenzy}, mBubble := {r.m_bubble}\n"
             + f"      playerFirst := {first} }}"
         )
@@ -286,10 +300,10 @@ def generate_lean(snapshot: dict) -> str:
         "open Formal.Liveness.SkillGapClosure",
         "open Formal.Liveness.RecipeChainClosure",
         "",
-        f"/-- Snapshot timestamp (UTC ISO 8601). -/",
+        "/-- Snapshot timestamp (UTC ISO 8601). -/",
         f'def snapshotCapturedAt : String := "{snapshot["captured_at"]}"',
         "",
-        f"/-- Snapshot API base URL. -/",
+        "/-- Snapshot API base URL. -/",
         f'def snapshotApiBaseUrl : String := "{snapshot["api_base_url"]}"',
         "",
         "/-! ## Live recipes (sorted by output code) -/",
@@ -423,7 +437,7 @@ def generate_lean(snapshot: dict) -> str:
         "          ++ (List.replicate K_craft .craft)",
         "          ++ (List.replicate K_taskTrade .taskTrade))",
         "        fixtureFreshState).taskLifecyclePhase = TaskLifecyclePhase.complete := by",
-        f"  apply recipe_then_complete_reachable recipe_"
+        "  apply recipe_then_complete_reachable recipe_"
         + "".join(c if c.isalnum() else "_" for c in sorted_recipes[0][0])
         + " fixtureFreshState",
         "  · decide",
@@ -500,7 +514,7 @@ def generate_lean(snapshot: dict) -> str:
         old_marker, "def acquirableWitness : List WitnessRow :=")
     # drop the duplicated docstring block of the reused emitter
     sub_lines = sub_text.split("\n")
-    start = next(i for i, l in enumerate(sub_lines) if l.startswith("def acquirableWitness"))
+    start = next(i for i, line in enumerate(sub_lines) if line.startswith("def acquirableWitness"))
     lines.extend(sub_lines[start:])
 
     lines.append("end Formal.Liveness.GameDataFixture")

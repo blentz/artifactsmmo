@@ -25,7 +25,8 @@ Cases covered: identity (loadout = equipment), single swap, double swap,
 unequip (new = None), equip into empty slot (old = None), and downgrade (a
 picked item strictly worse than the equipped one -> negative deltas).
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.game_data import ItemStats

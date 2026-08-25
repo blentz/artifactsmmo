@@ -89,6 +89,7 @@ Output: formal/diff/trace_characterize_report.txt + stdout summary.
 Usage: uv run python formal/diff/trace_characterize.py [db_path]
 """
 
+import itertools
 import sys
 from collections import Counter
 from pathlib import Path
@@ -181,7 +182,7 @@ def main() -> int:
     )
     lvl_regressions = sum(
         1
-        for ((prev_char, _), prev_lvl), ((cur_char, _), cur_lvl) in zip(level_rows, level_rows[1:])
+        for ((prev_char, _), prev_lvl), ((cur_char, _), cur_lvl) in itertools.pairwise(level_rows)
         if prev_char == cur_char and cur_lvl < prev_lvl
     )
     ts_span = (min(r.ts for r in records), max(r.ts for r in records))

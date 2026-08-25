@@ -20,8 +20,6 @@ This test:
 * Pins the probe-verified regression cases for Move and Equip (the user's
   explicit witnesses).
 """
-from dataclasses import dataclass, field as dc_field
-from datetime import datetime
 from typing import Any
 
 from hypothesis import given, settings

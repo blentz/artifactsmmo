@@ -18,7 +18,8 @@ fire osc; failure-driven flapping must.
 """
 import random
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from formal.diff.oracle_client import run_oracle
@@ -236,7 +237,7 @@ def test_eviction_counter_gt_len():
     for i in range(20):
         det.record(_record(i % 2, i % 2, no_plan=False))
     det.acknowledge(StuckSignal.STATE_FROZEN)  # cutoff = 20
-    for i in range(25):  # total 45 > maxlen 30 -> eviction
+    for _ in range(25):  # total 45 > maxlen 30 -> eviction
         det.record(_record(0, 0, no_plan=False))
     assert det._cycle_counter == 45
     assert len(det._history) == 30

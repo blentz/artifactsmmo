@@ -8,7 +8,8 @@ The test asserts BOTH the chosen venue AND the realized gold, so a mutation that
 drops the `isSome` guard (choosing GE on a phantom order) or flips the strict `>`
 to `>=` (choosing GE on a mere tie) diverges from the proof.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.liquidation_venue import Venue, choose_venue, realized_proceeds
 from formal.diff.oracle_client import run_oracle

@@ -9,6 +9,7 @@ stat-vector (`pareto_dominates`) is the SAME function the kernel proved
 """
 from hypothesis import given, settings
 from hypothesis import strategies as st
+
 from artifactsmmo_cli.ai.dominance_pareto import pareto_dominates
 from formal.diff.oracle_client import run_oracle
 

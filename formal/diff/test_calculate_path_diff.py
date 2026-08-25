@@ -1,5 +1,6 @@
 """Differential test: the real Python calculate_path must agree with the proved Lean def."""
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.utils.pathfinding import calculate_path
 from formal.diff.oracle_client import run_oracle

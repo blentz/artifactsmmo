@@ -24,12 +24,13 @@ Pins three contracts surfaced during the Phase-6 recon:
 """
 from fractions import Fraction
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.actions.equip import (
     DUPLICATE_SLOT_TYPES,
-    EquipAction,
     ITEM_TYPE_TO_SLOTS,
+    EquipAction,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal

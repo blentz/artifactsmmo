@@ -96,7 +96,7 @@ def _brute_force_min_cost(state, goal, actions, gd, max_depth):
         for action in actions:
             if not action.is_applicable(s, gd):
                 continue
-            rec(action.apply(s, gd), plan + [action], cost + action.cost(s, gd, None), depth + 1)
+            rec(action.apply(s, gd), [*plan, action], cost + action.cost(s, gd, None), depth + 1)
 
     rec(state, [], 0.0, 0)
     return best

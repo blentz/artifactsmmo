@@ -22,7 +22,8 @@ the same defs `rankValue_decomp` / `rankValue_eq_gearValue_canonical` and the tw
 ordering theorems are proved about (the teeth behind the mutation gate).
 NO `unique=True` — the strategies sample independently so summands can repeat.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.gear_value import gear_components, gear_value

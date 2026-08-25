@@ -20,7 +20,8 @@ model mirrors this — the assertion closes the historical TLA+-era gap.
 """
 import random
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from pytest import MonkeyPatch
 
 from artifactsmmo_cli.ai.tiers import strategy
@@ -79,8 +80,7 @@ def _encode(graph, root, fuel):
     args = [graph.n]
     for i in range(graph.n):
         pre = graph.prereqs[i]
-        args += [1 if graph.sat[i] else 0, 1 if graph.prod[i] else 0,
-                 graph.kinds[i], len(pre)] + list(pre)
+        args += [1 if graph.sat[i] else 0, 1 if graph.prod[i] else 0, graph.kinds[i], len(pre), *list(pre)]
     args += [root, fuel]
     return args
 
@@ -163,7 +163,10 @@ def _is_actionable(graph, i):
         return False
     if any(not graph.sat[p] for p in graph.prereqs[i]):
         return False
-    if graph.kinds[i] == KIND_OBTAIN and not graph.prod[i]:
+    # SIM103 is suppressed on the last arm: folding it to `return not (...)`
+    # breaks the one-clause-per-guard shape the other two arms have and that the
+    # docstring's three-conjunct spec is read against.
+    if graph.kinds[i] == KIND_OBTAIN and not graph.prod[i]:  # noqa: SIM103
         return False
     return True
 
@@ -202,8 +205,7 @@ def _encode_root_cost(graph, root, fuel, kind, target, have):
     args = [graph.n]
     for i in range(graph.n):
         pre = graph.prereqs[i]
-        args += [1 if graph.sat[i] else 0, 1 if graph.prod[i] else 0,
-                 graph.kinds[i], len(pre)] + list(pre)
+        args += [1 if graph.sat[i] else 0, 1 if graph.prod[i] else 0, graph.kinds[i], len(pre), *list(pre)]
     args += [root, fuel, kind, target, have]
     return args
 

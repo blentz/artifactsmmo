@@ -15,7 +15,8 @@ Strategy:
 * Per-action structural assertions pin the formula.
 * Cross-check Lean oracle on the four structural cores.
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
@@ -156,7 +157,7 @@ def test_rest_cost_pure_nonneg(max_hp, frac):
     Also spot-checks the formula, which is denominated in REAL SECONDS: a full
     deficit (hp=0) is 100.0, a full-HP rest is 3.0 (the 3s minimum), and a
     10%-missing deficit is 10.0."""
-    hp = int(round((1.0 - frac) * max_hp))
+    hp = round((1.0 - frac) * max_hp)
     hp = max(0, min(hp, max_hp))
     out = rest_cost_pure(hp, max_hp)
     assert out >= 0.0
@@ -190,7 +191,7 @@ def test_overheal_sentinel_dominates_rest_cost(max_hp, frac):
 
     Agreement of the two constants is asserted separately against the Lean value
     itself, in `test_overheal_sentinel_matches_lean`."""
-    hp = int(round((1.0 - frac) * max_hp))
+    hp = round((1.0 - frac) * max_hp)
     hp = max(0, min(hp, max_hp))
     assert rest_cost_pure(hp, max_hp) < OVERHEAL_CONSUMABLE_COST
     # The bound is tight at a full deficit: 100.0 < 200.0, with REST_COST_MAX the

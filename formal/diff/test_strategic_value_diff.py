@@ -8,7 +8,8 @@ to the same def the Bridges9 nonneg/monotone theorems are proved about, so a
 dropped term, flipped operator, or swapped weight diverges from the oracle and
 is caught (the teeth behind the mutation gate).
 """
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.tiers.strategic_value import strategic_value_pure
 from formal.diff.oracle_client import run_oracle

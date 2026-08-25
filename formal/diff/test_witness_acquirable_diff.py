@@ -96,7 +96,7 @@ def test_acquirability_tables_match_independent_recompute():
     )
     cert_set = set(expected_cert)
     assert len(emitted) == len(rows)
-    for (lvl, mon, codes), row in zip(emitted, rows):
+    for (lvl, mon, codes), row in zip(emitted, rows, strict=True):
         assert int(lvl) == row.level
         assert mon == row.monster_code
         emitted_codes = re.findall(r'"([^"]+)"', codes)

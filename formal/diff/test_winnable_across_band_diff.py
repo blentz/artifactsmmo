@@ -506,6 +506,6 @@ def test_synthetic_gap_when_no_winnable_target() -> None:
         setattr(gd, attr, {"dragon": 0})
 
     base_stats = _synthetic_base_stats()
-    winners, gaps, missing = _sweep_band(base_stats, stats_by_code, gd)
+    winners, gaps, _missing = _sweep_band(base_stats, stats_by_code, gd)
     assert winners == {}, winners
     assert gaps == [5], gaps

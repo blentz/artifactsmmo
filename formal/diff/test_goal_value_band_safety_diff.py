@@ -18,17 +18,26 @@ production callers.
 import os
 import tempfile
 
-from hypothesis import HealthCheck, given, settings, strategies as st
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import (
     PRIORITY_CEILING as GATHER_CEILING,
+)
+from artifactsmmo_cli.ai.goals.gathering import (
     PRIORITY_FLOOR as GATHER_FLOOR,
+)
+from artifactsmmo_cli.ai.goals.gathering import (
     GatherMaterialsGoal,
 )
 from artifactsmmo_cli.ai.goals.pursue_task import (
     PRIORITY_CEILING as PURSUE_CEILING,
+)
+from artifactsmmo_cli.ai.goals.pursue_task import (
     PRIORITY_FLOOR as PURSUE_FLOOR,
+)
+from artifactsmmo_cli.ai.goals.pursue_task import (
     PursueTaskGoal,
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
