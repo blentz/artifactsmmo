@@ -20,6 +20,26 @@ constructed by one another, and splitting them across five files would put
 mutually-referencing halves of a single control-flow structure behind five
 imports without making any of them independently usable.
 
+THE STANDALONE SKILL ROOT IS A RESTORED CAPABILITY, NOT A NEW FEATURE.
+`ef67c1d6` ("refactor(flip)!: delete the flat scalar ranking") deleted four
+standalone `ReachSkillLevel` root emitters at once — craft bootstrap, the
+alchemy gather-bootstrap, the recipe curve and the skill-50 long-haul — on the
+premise its own message states: "skills are pure prerequisites now". That
+premise is false for any skill whose output nothing equips. After it, the ONLY
+producer of a `ReachSkillLevel` was `IsThisTargetBlocked` off
+`GearTarget.blocking_skill`, which is a GEAR target's own crafting skill, so a
+skill no gear target can name had no producer at all and the bot could not
+choose to raise it. Live consequence, measured on
+`~/.cache/artifactsmmo/learning.db`: 33,840 cooking XP earned, 99.6% of it as a
+side effect of `Craft(cooked_*)` legs inside `RestoreHP` plans — an entire
+skill levelled by accident.
+
+`_orphan_skill_roots` restores the seam, as a rule about the CATALOGUE rather
+than about cooking, and `resolve_root` offers its roots one rank BELOW the
+trunk. It adds no node and no argmax: a root that has to be CHOSEN against gear
+is a ranking, and deleting one is what this epic is for. `CanIClearMyTier`
+records the measurement that rejected the node.
+
 Spec: `docs/superpowers/specs/2026-08-23-wave3-resolution-design.md` §5.1,
 §5.3. One place this module deliberately departs from that spec, recorded in
 `.superpowers/sdd/PLAN_wave3a_cutover/task-4-report.md` (the spec's other
@@ -38,8 +58,20 @@ and no longer disagrees with this module):
 from dataclasses import dataclass, field
 from fractions import Fraction
 
+# `level_skill` is imported as a MODULE, not as `from ... import LevelSkill`,
+# and that is load-bearing rather than stylistic. `actions/level_skill.py`
+# imports `ai.tiers.skill_grind_target`, which runs `ai/tiers/__init__.py` ->
+# `strategy` -> `progression_tree` -> THIS module: so whenever `level_skill` is
+# the first of the two to be imported (it is, via `ai/actions/factory.py` from
+# `ai/player.py`, and in `audit/open_rung_completeness`), root.py executes while
+# `level_skill` is only half built and a NAME import raises ImportError.
+# Binding the module object defers the attribute lookup to CALL time, by which
+# point both halves are complete. Exactly the idiom `tiers/strategy.py:13` and
+# `tiers/progression_tree.py:37` already use on each other, for this reason.
+from artifactsmmo_cli.ai.actions import level_skill
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import (
@@ -59,7 +91,7 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import (
 )
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, tier_of_level
 from artifactsmmo_cli.ai.tiers.tier_progress import next_uncleared_tier
-from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
+from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
 
 @dataclass(frozen=True)
@@ -68,8 +100,10 @@ class RootResolution:
     trail that produced it.
 
     `alternatives` is NOT a ranking. It is the ordered remainder of the ONE
-    list-valued node in the graph (`WhichSlotIsFurthestBehind`), plus the trunk
-    last. It exists because `objective_step_goal` can still return None for a
+    list-valued node in the graph (`WhichSlotIsFurthestBehind`), then the
+    trunk, then the orphan skill roots (`_orphan_skill_roots`) — three ordered
+    groups, none of them scored against each other. It exists because
+    `objective_step_goal` can still return None for a
     resolved root (`ReachCharLevel` with no combat target, the long-haul
     items-task defer) and because `_servable_promotion` still needs somewhere
     to walk. Deleting it regresses three named live traces — see
@@ -222,6 +256,92 @@ def _slot_order(item: tuple[str, GearTarget], state: WorldState,
     return (-_tier_gap(slot, target, state, game_data),
             -_target_rung(game_data, target.code),
             EQUIPMENT_SLOTS.index(slot))
+
+
+def _gear_nameable_skills(game_data: GameData) -> frozenset[str]:
+    """Every skill SOME gear target could name.
+
+    A gear target names exactly one skill — `GearTarget.blocking_skill`, which
+    `objective._classify_target` reads off the TARGET's own `crafting_skill` —
+    and a gear target is by construction an item some equipment slot accepts:
+    `objective.gear_targets_with_blockers` iterates `ITEM_TYPE_TO_SLOTS` and
+    keeps only the slots `EQUIPMENT_SLOTS` declares. So the skills reachable
+    through `IsThisTargetBlocked` are exactly the crafting skills of items that
+    pass that same filter, read off the same two catalogue facts the sheet is
+    built from rather than from a list anyone maintains.
+
+    Measured on the committed bundle: gearcrafting (132 recipes, all
+    equippable), weaponcrafting (69), jewelrycrafting (50) and ALCHEMY — 20 of
+    its 25 recipes are `utility` potions, which `utility1_slot`/`utility2_slot`
+    accept. Alchemy is therefore NOT an orphan: the cells-6-12 report's "alchemy
+    may already be routable because potions are utility equippables" is correct
+    as a structural claim, and `_orphan_skill_roots` must not admit it.
+    """
+    return frozenset(
+        stats.crafting_skill
+        for stats in game_data.all_item_stats.values()
+        if stats.crafting_skill and any(
+            slot in EQUIPMENT_SLOTS
+            for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, ())))
+
+
+def _orphan_skill_roots(state: WorldState,
+                        game_data: GameData) -> tuple[ReachSkillLevel, ...]:
+    """THE RULE, and the whole of it:
+
+        a skill with an open, XP-positive rung that NO gear target can name
+        still deserves a root.
+
+    Two conjuncts, each read from production rather than restated:
+
+    * "no gear target can name it" is `_gear_nameable_skills` — a property of
+      the CATALOGUE, not of this cycle's gear sheet. Deliberately not "no
+      current target names it": that would hand weaponcrafting a standalone
+      root every cycle the weapon slot happens to be satisfied, which is a
+      skill that IS a prerequisite doing prerequisite work. The orphans are the
+      skills the prerequisite seam structurally cannot reach.
+    * "an open, XP-positive rung" is `LevelSkill(S, C+1).is_applicable` — the
+      SAME predicate `ReachSkillGoal`'s only action offers and the same one the
+      O1 census (`audit/open_rung_completeness`) verdicts a cell on. A skill
+      with no open rung gets NO root: emitting one would be the census's
+      `o1_silent_stall` residual — an unplannable root with no node saying why —
+      which is the failure this seam is supposed to make impossible, not one it
+      may cause.
+
+    Measured on the committed bundle the rule admits exactly four skills:
+    cooking, fishing, mining and woodcutting — the four whose every recipe
+    produces a `consumable` or a `resource`. Cooking is the instance the epic
+    named; the other three arrive because the rule is about the catalogue.
+
+    ORDER: ONE INTEGER, `state.level - skill level` — how far the skill trails
+    the character, largest first — with ties broken by `SKILL_NAMES`, the
+    schema vocabulary `world_state` derives from the API's own enums (never
+    `sorted()` as a decision key; see `feedback_no_alphabetical_tiebreak`).
+    The integer has a meaning: the game tiers its content by level, so the
+    skill furthest behind the character is the one whose content is furthest
+    from what the character can currently use, and it is the same "furthest
+    behind" quantity `WhichSlotIsFurthestBehind` ranks slots on.
+
+    DO NOT ADD A SECOND TERM. This epic exists to delete a flat scalar ranking
+    that multiplied four weights into one column; the pressure that produced
+    those four will apply here (wave-3 design §8 R2 says so about the sibling
+    node, and this node is the same shape). A tie-break that is not the
+    declared vocabulary, or a weight beside the gap, turns a named order into
+    an argmax again — at which point the reader is back to a number they cannot
+    follow. If the order is wrong, change WHICH integer it is, not how many.
+    """
+    nameable = _gear_nameable_skills(game_data)
+    orphans = [
+        skill for skill in SKILL_NAMES
+        if skill not in nameable
+        and level_skill.LevelSkill(
+            skill=skill, target_level=state.skills.get(skill, 1) + 1
+        ).is_applicable(state, game_data)]
+    orphans.sort(key=lambda skill: (state.skills.get(skill, 1) - state.level,
+                                    SKILL_NAMES.index(skill)))
+    return tuple(ReachSkillLevel(skill=skill,
+                                 level=state.skills.get(skill, 1) + 1)
+                 for skill in orphans)
 
 
 class IsMyGearBehindMyTier(Decision[MetaGoal]):
@@ -472,6 +592,19 @@ class CanIClearMyTier(Decision[MetaGoal]):
     gear for, and nothing to fight: that is a WALL, and it is reported as
     `None` rather than dressed up as a root the character cannot make progress
     on. `MAX_RESOLVE_DEPTH` never sees it — `None` terminates the walk.
+
+    THE ORPHAN SKILL ROOTS DO NOT GO HERE, and that was MEASURED rather than
+    assumed. A sixth node on this arm — "before you call it a wall, is there a
+    skill nothing can name?" — reads well and is wrong: `chosen_root is None`
+    is what `strategy_driver._build_candidates` keys `step_is_real` on, and a
+    non-None root there demotes the raid candidates below the objective step.
+    Measured on the scenario set, that turned `l48_raid_active` from
+    `ParticipateRaid(enchanted_fairy)` into a cooking grind — a time-limited
+    event traded for a skill climb — and dissolved the wall three suites pin as
+    a designed verdict (`scenarios/test_band_liveness.py`,
+    `scenarios/test_no_deadlock.py`). The wall is a real answer, and a skill
+    with an open rung is an ALTERNATIVE to it, not a replacement for it: see
+    `resolve_root`, which offers the same roots one rank below the trunk.
     """
 
     name = "CanIClearMyTier"
@@ -508,6 +641,25 @@ def resolve_root(state: WorldState, game_data: GameData,
         for slot, target in walk.sibling_targets
     ]
     ordered.append(ReachCharLevel(level=milestone_pure(state.level)))
+    # THE RESTORED SEAM: the orphan skill roots, after the gear siblings and
+    # after the trunk. Produced here, beside the trunk, and for the same reason
+    # the trunk is produced here — neither is a question the tier walk asks,
+    # both are roots the resolution OFFERS for when the walk's own answer
+    # cannot be served. Nothing is ranked against anything: three groups
+    # concatenated in a fixed order, and `_orphan_skill_roots` orders its own
+    # group on one integer.
+    #
+    # BEHIND THE TRUNK, AND THAT POSITION WAS MEASURED. Ahead of it reads
+    # better — the trunk is documented as the fallback of fallbacks — but the
+    # trunk's step goal is NOT only `GrindCharacterXP`: `objective_step_goal`'s
+    # `ReachCharLevel` arm runs `_marginal_provision_goal` first, so the trunk
+    # slot is also how the objective's own provisioning gets planned. Placed
+    # ahead of it, a cooking climb displaced `GatherMaterials(mithril_bar)` at
+    # `l48_band_adequate` — the mithril gear that BREAKS the L38-48 wall,
+    # pinned by three suites — and an orphan skill climb unblocks nothing.
+    # Behind it, an orphan root is reached exactly when no gear step and no
+    # trunk step can be served, which is where the bot used to emit `Wait`.
+    ordered.extend(_orphan_skill_roots(state, game_data))
 
     alternatives: list[MetaGoal] = []
     for alt in ordered:

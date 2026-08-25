@@ -5,17 +5,22 @@ cooking, fishing, mining and woodcutting. Cooking is the one the design named �
 33,840 live cooking XP that no node models — and `l24_fisher_cooking_rung` is
 the first scenario whose skill grind stands on a cooking rung at all.
 
-**A design correction, recorded as a failing-when-false assertion.** §5.3 says
-this cell closes "the O1 census's 5 never-routed skills". **It cannot close
-cooking, and neither can any other scenario.** `ReachSkillLevel` has exactly one
+**A design correction that became a regression fix.** When this cell was
+written, §5.3's claim that it closes "the O1 census's 5 never-routed skills"
+was false, and the reason was structural: `ReachSkillLevel` had exactly one
 producer — `decisions.root.IsThisTargetBlocked`, off `GearTarget.blocking_skill`
 — and that field is the crafting skill of an EQUIPPABLE gear target. Every one
 of the catalogue's twenty cooking recipes produces a `consumable`, which
 `ITEM_TYPE_TO_SLOTS` maps to no slot, so a cooking item can never be a gear
 target and `blocking_skill` can never be "cooking".
-`test_cooking_cannot_be_routed_by_any_gear_target` states that as a property of
-the CATALOGUE, so the day a cooking-crafted equippable appears it fails and the
-claim stops being true silently.
+
+That half is still true and `test_cooking_cannot_be_routed_by_any_GEAR_TARGET`
+still states it over the CATALOGUE. What changed is the conclusion drawn from
+it: a skill no gear target can name needed a producer of its own, which is what
+`ef67c1d6` deleted ("skills are pure prerequisites now") and what
+`decisions.root._orphan_skill_roots` restores. Cooking, fishing, mining and
+woodcutting are routable now; alchemy is not, and correctly so — its potions
+are `utility` equippables, so it really is a prerequisite skill.
 
 What the cell DOES close is the D11 value: a cooking rung, walked. `fisher` is
 a declared role (`role_catalog`: gather `fishing`, craft `cooking`), and the
@@ -31,6 +36,7 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
+from artifactsmmo_cli.ai.decisions.root import _gear_nameable_skills
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
@@ -38,7 +44,8 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.role_catalog import ROLES_BY_NAME, role_skills
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -155,16 +162,19 @@ def test_the_role_is_what_makes_the_gather_plannable(
 
 # --- the design correction --------------------------------------------------
 
-def test_cooking_cannot_be_routed_by_any_gear_target(
+def test_cooking_cannot_be_routed_by_any_GEAR_TARGET(
         bundle_game_data: GameData, state: WorldState) -> None:
-    """§5.3 says this cell closes the census's never-routed skills. It cannot,
-    and this is why: `blocking_skill` is a gear target's own crafting skill,
-    and NO cooking recipe produces an item any equipment slot accepts.
+    """`blocking_skill` is a gear target's own crafting skill, and NO cooking
+    recipe produces an item any equipment slot accepts. That half of the
+    original finding is unchanged and is exactly WHY the standalone root had to
+    come back: `ef67c1d6` deleted the four standalone `ReachSkillLevel`
+    emitters on the premise "skills are pure prerequisites now", which is false
+    for a skill nothing equips.
 
     Stated over the catalogue rather than over this one character, so it is a
     claim about the game and not about a fixture — and it fails the day a
-    cooking-crafted equippable exists, which is exactly when the design's
-    sentence would become true."""
+    cooking-crafted equippable exists, which is exactly when cooking would stop
+    being an orphan and `_orphan_skill_roots` would stop admitting it."""
     cooking_items = [code for code, stats
                      in bundle_game_data.all_item_stats.items()
                      if stats.crafting_skill == SKILL]
@@ -172,16 +182,48 @@ def test_cooking_cannot_be_routed_by_any_gear_target(
     for code in cooking_items:
         stats = bundle_game_data.all_item_stats[code]
         assert not ITEM_TYPE_TO_SLOTS.get(stats.type_), code
-    assert SKILL not in routed_skills(
-        census_state(SCENARIOS[CELL], bundle_game_data), bundle_game_data)
+    assert SKILL not in _gear_nameable_skills(bundle_game_data)
 
 
-def test_no_scenario_at_all_routes_cooking(bundle_game_data: GameData) -> None:
-    """The whole-set form of the same claim: the census's `routed` column, over
-    every scenario, still contains no cooking cell. This is the number the
-    design expected to move, recorded as it actually is."""
+def test_every_scenario_now_routes_cooking(bundle_game_data: GameData) -> None:
+    """THE REGRESSION FIX, AS A NUMBER. This test used to read
+    `assert routed == {"jewelrycrafting", "gearcrafting", "weaponcrafting"}` —
+    the honest record that no scenario could route cooking, fishing, mining or
+    woodcutting, because the ONE producer of a `ReachSkillLevel` was a gear
+    target's crafting skill.
+
+    `decisions/root._orphan_skill_roots` restores the standalone producer for
+    the skills no gear target can name, so all four are routed now and alchemy
+    still is not — alchemy's potions ARE utility equippables, so it is a
+    prerequisite skill and the rule correctly declines it. The O1 census's
+    routed count moves 26 -> 194 of 336 cells with this change; residuals stay
+    at 0 because the rule's second conjunct is `LevelSkill(S, C+1).
+    is_applicable`, the same predicate the census verdicts a cell on."""
     routed: set[str] = set()
     for scenario in SCENARIOS.values():
         routed |= routed_skills(census_state(scenario, bundle_game_data),
                                 bundle_game_data)
-    assert routed == {"jewelrycrafting", "gearcrafting", "weaponcrafting"}
+    assert routed == {"jewelrycrafting", "gearcrafting", "weaponcrafting",
+                      "cooking", "fishing", "mining", "woodcutting"}
+    assert "alchemy" not in routed
+
+
+def test_the_fishers_cooking_root_plans_a_cooking_grind(
+        bundle_game_data: GameData, state: WorldState) -> None:
+    """The root reaches an ACTION, which is what "routable" has to mean.
+
+    `ReachSkillLevel(cooking, C+1)` -> `ReachSkillGoal` (the
+    `strategy_driver.objective_step_goal` skill arm) -> a `LevelSkill` plan on
+    the live action factory. Nothing here re-enters the root walk: the descent
+    from the cooking rung into its fishing-gated input happens inside the
+    planner, as `test_the_role_is_what_makes_the_gather_plannable` shows."""
+    root = ReachSkillLevel(skill=SKILL, level=state.skills[SKILL] + 1)
+    goal = objective_step_goal(root, state, bundle_game_data,
+                               NO_PROFILE_CONTEXT, root=root, history=None)
+    assert repr(goal) == f"ReachSkill({SKILL}->{state.skills[SKILL] + 1})"
+    player = GamePlayer(character=CELL, history=None)
+    player.seed_offline(state, bundle_game_data)
+    plan = GOAPPlanner().plan(state, goal, list(player._build_actions()),
+                              bundle_game_data, history=None,
+                              budget_seconds=PLAN_BUDGET_SECONDS)
+    assert plan and repr(plan[0]).startswith(f"LevelSkill({SKILL}->")

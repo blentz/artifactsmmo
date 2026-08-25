@@ -32,12 +32,15 @@ from artifactsmmo_cli.ai.decisions.root import (
     IsThisTargetBlocked,
     RootWalk,
     WhichSlotIsFurthestBehind,
+    _gear_nameable_skills,
     _next_rung_above,
+    _orphan_skill_roots,
     _tier_gap,
     resolve_root,
 )
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemStats
+from artifactsmmo_cli.ai.scenario import SCENARIOS
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
@@ -48,6 +51,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
 from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT, FOCUS_SPAN
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, normal_band, tier_of_level
+from artifactsmmo_cli.audit.open_rung_completeness import census_state
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_strategy_driver import _ctx
 
@@ -437,9 +441,16 @@ def test_resolve_root_walks_gear_to_the_skill_gate_and_names_the_path():
                                 "IsThisTargetBlocked")
 
 
-def test_the_siblings_become_the_alternatives_with_the_trunk_last():
+def test_the_siblings_become_the_alternatives_then_the_trunk_then_the_orphans():
     """leg_armor and boots are both blocked on two `leather`, so they resolve
-    to the SAME `ObtainItem` and appear once."""
+    to the SAME `ObtainItem` and appear once.
+
+    THREE ORDERED GROUPS, and the order is the whole contract: every gear
+    sibling, then the trunk, then the orphan skill roots
+    (`_orphan_skill_roots`). This fixture's catalogue crafts `ash_plank` from
+    woodcutting and nothing woodcutting makes is equippable, so woodcutting is
+    an orphan here — the restored seam is exercised by the unit fixture and not
+    only by the scenario set."""
     gd = _gd()
     resolution = resolve_root(make_state(level=15), gd, _objective(gd), _ctx(), None)
     assert resolution.alternatives == (
@@ -447,6 +458,7 @@ def test_the_siblings_become_the_alternatives_with_the_trunk_last():
         ObtainItem(code="copper_helmet", quantity=1, slot="helmet_slot"),
         ObtainItem(code="leather", quantity=2),
         ReachCharLevel(level=20),
+        ReachSkillLevel(skill="woodcutting", level=3),
     )
 
 
@@ -506,7 +518,9 @@ def test_the_chosen_root_is_never_repeated_as_its_own_alternative(monkeypatch):
     monkeypatch.setattr(tier_progress, "is_winnable", lambda s, g, c, h: True)
     resolution = resolve_root(_geared_state(), gd, _objective(gd), _ctx(), None)
     assert resolution.root == ReachCharLevel(level=20)
-    assert resolution.alternatives == ()
+    # The trunk is the ROOT here, so it is not repeated as its own alternative;
+    # the orphan skill root behind it still is one.
+    assert resolution.alternatives == (ReachSkillLevel(skill="woodcutting", level=3),)
     assert resolution.trail == ("IsMyGearBehindMyTier", "IsThereACombatTarget",
                                 "CanIClearMyTier")
 
@@ -518,4 +532,133 @@ def test_a_wall_still_offers_the_trunk_as_an_alternative(monkeypatch):
     monkeypatch.setattr(tier_progress, "is_winnable", lambda s, g, c, h: False)
     resolution = resolve_root(_geared_state(), gd, _objective(gd), _ctx(), None)
     assert resolution.root is None
-    assert resolution.alternatives == (ReachCharLevel(level=20),)
+    # The wall is still `None` — the orphan skill roots are OFFERED behind the
+    # trunk, they do not replace the wall verdict. `CanIClearMyTier`'s
+    # docstring records the measurement that rejected putting them on this arm.
+    assert resolution.alternatives == (ReachCharLevel(level=20),
+                                       ReachSkillLevel(skill="woodcutting", level=3))
+
+
+# ---------------------------------------------------------------------------
+# The restored standalone skill root — `_orphan_skill_roots`
+#
+# `ef67c1d6` deleted four standalone `ReachSkillLevel` emitters on the premise
+# "skills are pure prerequisites now". These tests state the rule that premise
+# is false for, and the catalogue ones answer about the GAME rather than about
+# a fixture.
+# ---------------------------------------------------------------------------
+
+def test_the_nameable_skills_are_exactly_those_with_an_equippable_recipe(
+        bundle_game_data: GameData):
+    """The rule's first conjunct, measured on the committed bundle.
+
+    Four skills craft something an equipment slot accepts, so a gear target can
+    name them through `GearTarget.blocking_skill`. ALCHEMY IS ONE OF THEM, and
+    that is why the set is asserted rather than its complement: the
+    coverage-cells report guessed "alchemy may already be routable because
+    potions are utility equippables", and it is right — 20 of alchemy's 25
+    recipes are `utility` items. The rule must NOT admit alchemy, however few
+    scenarios happen to route it today."""
+    nameable = _gear_nameable_skills(bundle_game_data)
+    assert nameable == {"alchemy", "gearcrafting", "jewelrycrafting",
+                        "weaponcrafting"}
+    potions = [code for code, stats in bundle_game_data.all_item_stats.items()
+               if stats.crafting_skill == "alchemy" and stats.type_ == "utility"]
+    assert len(potions) >= 20, potions
+
+
+def test_the_rule_admits_the_four_skills_nothing_equips(
+        bundle_game_data: GameData):
+    """The rule, end to end, on a real scenario character: cooking, fishing,
+    mining and woodcutting — every one of whose recipes produces a
+    `consumable` or a `resource`. Cooking is the instance the epic named; the
+    other three arrive because the rule is about the catalogue, not about
+    cooking."""
+    state = census_state(SCENARIOS["l1_fresh"], bundle_game_data)
+    roots = _orphan_skill_roots(state, bundle_game_data)
+    assert [r.skill for r in roots] == ["cooking", "fishing", "mining",
+                                        "woodcutting"]
+    assert all(r.level == state.skills[r.skill] + 1 for r in roots)
+
+
+def test_an_orphan_skill_with_no_open_rung_gets_no_root():
+    """The rule's SECOND conjunct, and the reason it is not decoration. A root
+    the planner cannot serve is the O1 census's `o1_silent_stall` residual —
+    the exact failure this seam exists to prevent — so a skill with no open,
+    XP-positive rung must produce NOTHING.
+
+    This fixture's woodcutting has one rung (`ash_tree` -> `ash_wood`, level
+    1). At woodcutting 50 that rung is deep in the server's zero-xp band and
+    `LevelSkill.is_applicable` refuses, so the orphan tuple is empty even
+    though woodcutting is still un-nameable by any gear target."""
+    gd = _gd()
+    assert "woodcutting" not in _gear_nameable_skills(gd)
+    grinding = make_state(level=15, skills={"woodcutting": 2})
+    assert [r.skill for r in _orphan_skill_roots(grinding, gd)] == ["woodcutting"]
+    topped = make_state(level=15, skills={"woodcutting": 50})
+    assert _orphan_skill_roots(topped, gd) == ()
+
+
+def test_the_orphan_order_is_the_gap_to_the_character_level(
+        bundle_game_data: GameData):
+    """ONE INTEGER decides, and it is `skill level - character level` (the
+    skill trailing furthest goes first). Two states over the same catalogue,
+    differing only in WHICH orphan skill trails further, must swap the head —
+    a fixed vocabulary order alone could not do that.
+
+    `l1_fresh` is the tie case: every orphan is at the floor, every gap is
+    equal, and the order falls to `SKILL_NAMES`, the API schema's own
+    vocabulary, never `sorted()` as a decision key."""
+    base = census_state(SCENARIOS["l1_fresh"], bundle_game_data)
+    assert [r.skill for r in _orphan_skill_roots(base, bundle_game_data)] == [
+        "cooking", "fishing", "mining", "woodcutting"]
+
+    # fishing and woodcutting are parked AT the character level so the contest
+    # is cooking against mining and nothing else: a skill left at the floor
+    # trails by 19 and would win both halves, which would prove nothing.
+    parked = {"fishing": 20, "woodcutting": 20}
+    cook_ahead = replace(base, level=20,
+                         skills={**base.skills, **parked,
+                                 "cooking": 15, "mining": 5})
+    assert _orphan_skill_roots(cook_ahead, bundle_game_data)[0].skill == "mining"
+    mine_ahead = replace(base, level=20,
+                         skills={**base.skills, **parked,
+                                 "cooking": 5, "mining": 15})
+    assert _orphan_skill_roots(mine_ahead, bundle_game_data)[0].skill == "cooking"
+
+
+def test_cooking_is_a_root_the_walk_offers(bundle_game_data: GameData):
+    """THE REGRESSION, DIRECTLY. Before this fix `resolve_root` could not yield
+    `ReachSkillLevel(cooking, ...)` for ANY of the 42 scenarios: the sole
+    producer was `IsThisTargetBlocked` off a gear target's crafting skill, and
+    no cooking recipe produces an equippable. Now the fisher's own skill is a
+    root the resolution offers — which is what
+    `strategy_driver._resolve_step_goal` and `_servable_promotion` need in
+    order to reach it at all."""
+    state = census_state(SCENARIOS["l24_fisher_cooking_rung"], bundle_game_data)
+    resolution = resolve_root(
+        state, bundle_game_data,
+        CharacterObjective.from_game_data(bundle_game_data), _ctx(), None)
+    offered = [g for g in (resolution.root, *resolution.alternatives)
+               if isinstance(g, ReachSkillLevel)]
+    assert ReachSkillLevel(skill="cooking",
+                           level=state.skills["cooking"] + 1) in offered
+
+
+def test_the_orphan_roots_sit_behind_the_trunk(bundle_game_data: GameData):
+    """The ORDER is the safety property, and it was measured rather than
+    guessed. `objective_step_goal`'s `ReachCharLevel` arm runs
+    `_marginal_provision_goal` FIRST, so the trunk slot is also how the
+    objective's own provisioning gets planned; an orphan skill climb placed
+    ahead of it displaced `GatherMaterials(mithril_bar)` at
+    `l48_band_adequate` — the gear that breaks the L38-48 wall. Behind it, an
+    orphan root is reached exactly when nothing else can be served."""
+    state = census_state(SCENARIOS["l1_fresh"], bundle_game_data)
+    alts = resolve_root(state, bundle_game_data,
+                        CharacterObjective.from_game_data(bundle_game_data),
+                        _ctx(), None).alternatives
+    trunk = next(i for i, alt in enumerate(alts)
+                 if isinstance(alt, ReachCharLevel))
+    skills = [i for i, alt in enumerate(alts) if isinstance(alt, ReachSkillLevel)]
+    assert skills, alts
+    assert min(skills) > trunk

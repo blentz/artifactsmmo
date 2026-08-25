@@ -107,17 +107,46 @@ def test_ranking_renders_the_descent():
 
 
 def test_fallbacks_offer_the_other_branch():
-    """Asserted on `fallback_roots`, not `fallback_steps`. The trunk is still
-    last in the fallback list — the 2026-07-27 trunk-last ruling survives the
-    flip verbatim — but its STEP is no longer the trunk itself: this character
-    is not `combat_capable`, so `prerequisites(ReachCharLevel)` emits a weapon
-    and `actionable_step` descends to `ObtainItem(mithril_ore, 10)`. Matching
-    on the step therefore says nothing about whether the trunk is reachable,
-    which is the property this test is for."""
+    """Asserted on `fallback_roots`, not `fallback_steps`. The trunk sits
+    behind every GEAR fallback — the 2026-07-27 trunk-after-gear ruling
+    survives the flip verbatim — but its STEP is no longer the trunk itself:
+    this character is not `combat_capable`, so `prerequisites(ReachCharLevel)`
+    emits a weapon and `actionable_step` descends to
+    `ObtainItem(mithril_ore, 10)`. Matching on the step therefore says nothing
+    about whether the trunk is reachable, which is the property this test is
+    for.
+
+    The trunk is no longer the LAST entry: the restored standalone skill roots
+    (`decisions/root._orphan_skill_roots`) are offered behind it. The property
+    is stated as a relation now — every gear root ahead of the trunk, every
+    orphan skill root behind it — which is what `[-1]` was standing in for."""
     d, _ = _decide("l10_weapon_upgrade")
     assert any(isinstance(r, ReachCharLevel) for r in d.fallback_roots), (
         "gear decision must carry the xp trunk as an arbiter fallback")
-    assert d.fallback_roots[-1] == ReachCharLevel(level=20)
+    trunk = d.fallback_roots.index(ReachCharLevel(level=20))
+    assert all(isinstance(r, ObtainItem | ReachSkillLevel)
+               for r in d.fallback_roots[:trunk])
+    assert all(isinstance(r, ReachSkillLevel)
+               for r in d.fallback_roots[trunk + 1:])
+    assert d.fallback_roots[trunk + 1:], "the orphan skill roots must be offered"
+
+
+_ORPHAN_ROWS_AT_FLOOR = [
+    "ReachSkillLevel(skill='cooking', level=2)",
+    "ReachSkillLevel(skill='fishing', level=2)",
+    "ReachSkillLevel(skill='mining', level=2)",
+    "ReachSkillLevel(skill='woodcutting', level=2)",
+]
+"""The tail every pin below grew: the restored standalone skill roots
+(`decisions/root._orphan_skill_roots`) — the skills NO gear target can name,
+because nothing they craft is equippable. They are appended after the trunk, so
+they extend each pinned list rather than reordering it, and the levels are
+`current + 1`; this constant is the all-at-the-floor case and the scenarios
+whose gather skills are higher spell their own tail out.
+
+`ef67c1d6` deleted the standalone `ReachSkillLevel` emitters on the premise
+"skills are pure prerequisites now"; cooking is the counter-example the epic
+measured (33,840 live XP, 99.6% of it a `RestoreHP` side effect)."""
 
 
 # --- Per-scenario behavior pins ---------------------------------------------
@@ -156,7 +185,8 @@ class TestPerScenarioPins:
             "ObtainItem(code='copper_boots', quantity=1, slot='boots_slot')",
             "ObtainItem(code='copper_ring', quantity=1, slot='ring1_slot')",
             "ObtainItem(code='copper_ring', quantity=1, slot='ring2_slot')",
-            "ReachCharLevel(level=10)"]
+            "ReachCharLevel(level=10)",
+            *_ORPHAN_ROWS_AT_FLOOR]
         assert d.ranking[0].category == (
             "IsMyGearBehindMyTier → WhichSlotIsFurthestBehind → IsThisTargetBlocked")
 
@@ -197,7 +227,11 @@ class TestPerScenarioPins:
         assert [r.root_repr for r in d.ranking] == [
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
             "ObtainItem(code='wooden_stick', quantity=1)",
-            "ReachCharLevel(level=10)"]
+            "ReachCharLevel(level=10)",
+            "ReachSkillLevel(skill='cooking', level=2)",
+            "ReachSkillLevel(skill='fishing', level=2)",
+            "ReachSkillLevel(skill='mining', level=6)",
+            "ReachSkillLevel(skill='woodcutting', level=6)"]
 
     def test_l10_copper_adequate_pins_gear_branch_not_xp(self):
         """The scenario NAME says 'adequate', but adequacy here is Phase-2's
@@ -227,7 +261,11 @@ class TestPerScenarioPins:
             "ObtainItem(code='cowhide', quantity=5)",
             "ObtainItem(code='water_bow', quantity=1, slot='weapon_slot')",
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
-            "ReachCharLevel(level=20)"]
+            "ReachCharLevel(level=20)",
+            "ReachSkillLevel(skill='cooking', level=2)",
+            "ReachSkillLevel(skill='fishing', level=2)",
+            "ReachSkillLevel(skill='mining', level=11)",
+            "ReachSkillLevel(skill='woodcutting', level=11)"]
 
     def test_l10_weapon_upgrade_pins_the_skill_gating_the_weapon(self):
         """WAVE 3a + FIX-ROUND 1. `copper_dagger` is not on the target sheet:
@@ -250,8 +288,17 @@ class TestPerScenarioPins:
             "ReachSkillLevel(skill='gearcrafting', level=2)",
             "ObtainItem(code='blue_slimeball', quantity=2)",
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
-            "ReachCharLevel(level=20)"]
-        assert d.fallback_roots[-1] == ReachCharLevel(level=20)
+            "ReachCharLevel(level=20)",
+            "ReachSkillLevel(skill='cooking', level=2)",
+            "ReachSkillLevel(skill='fishing', level=2)",
+            "ReachSkillLevel(skill='woodcutting', level=2)",
+            "ReachSkillLevel(skill='mining', level=11)"]
+        # The trunk is no longer last — the orphan skill roots sit behind it —
+        # but it is still ahead of every one of them, which is the ordering
+        # 2026-07-27 bought and the ordering `l48_band_adequate` re-proved.
+        trunk = d.fallback_roots.index(ReachCharLevel(level=20))
+        assert all(isinstance(root, ReachSkillLevel)
+                   for root in d.fallback_roots[trunk + 1:])
 
     def test_l3_low_hp_pins_weapon_branch(self):
         """Same target sheet as l1_fresh (the gear-target tier is 1 for both,
@@ -262,7 +309,9 @@ class TestPerScenarioPins:
         d, _ = _decide("l3_low_hp")
         assert d.chosen_root == ObtainItem(code="wooden_stick", quantity=1)
         assert d.chosen_step == d.chosen_root
-        assert len(d.ranking) == 7
+        # 7 gear/trunk rows + the four restored orphan skill roots.
+        assert len(d.ranking) == 11
+        assert [r.root_repr for r in d.ranking[-4:]] == _ORPHAN_ROWS_AT_FLOOR
 
     def test_l12_taskgated_bag_pins_iron_boots_branch(self):
         """RE-DERIVED (GAP-1 fix, 2026-07-07): this scenario has zero attack
@@ -311,7 +360,8 @@ class TestPerScenarioPins:
             "ObtainItem(code='jasper_crystal', quantity=1)",
             "ReachSkillLevel(skill='weaponcrafting', level=2)",
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
-            "ReachCharLevel(level=20)"]
+            "ReachCharLevel(level=20)",
+            *_ORPHAN_ROWS_AT_FLOOR]
         assert not any("satchel" in r.root_repr for r in d.ranking), \
             "satchel needs jasper_crystal from an unreachable trader"
 
@@ -361,6 +411,16 @@ class TestServabilityDemotion:
     SHIELD = ObtainItem(code="wooden_shield", quantity=1, slot="shield_slot")
     SHIELD_STEP = ObtainItem(code="ash_wood", quantity=10)
     TRUNK = ReachCharLevel(level=20)
+    ORPHANS = [ReachSkillLevel(skill="cooking", level=2),
+               ReachSkillLevel(skill="fishing", level=2),
+               ReachSkillLevel(skill="woodcutting", level=2),
+               ReachSkillLevel(skill="mining", level=11)]
+    """The restored standalone skill roots for this character
+    (`decisions/root._orphan_skill_roots`), offered BEHIND the trunk. They
+    extend every list below without reordering it, and they widen the
+    demotion walk's reach: a fully blocked gear branch now has somewhere past
+    the trunk to go. Order is `skill level - character level`, largest gap
+    first — mining is at 10 here and the other three at the floor."""
 
     def _decide_with(self, servable):
         gd = _bundle()
@@ -372,7 +432,7 @@ class TestServabilityDemotion:
         d = self._decide_with(lambda root, step: True)
         assert d.chosen_root == self.SKILL_JEWEL
         assert d.fallback_roots == [self.SKILL_GEAR, self.SLIME, self.SHIELD,
-                                    self.TRUNK]
+                                    self.TRUNK, *self.ORPHANS]
 
     def test_unservable_chosen_promotes_the_next_gear_candidate_not_the_trunk(self):
         """THE 2026-07-27 REGRESSION. One unservable gear step must not
@@ -384,7 +444,7 @@ class TestServabilityDemotion:
         # The demoted pair survives in the fallbacks, ahead of the rest —
         # original priority order minus the promotion.
         assert d.fallback_roots == [self.SKILL_JEWEL, self.SLIME, self.SHIELD,
-                                    self.TRUNK]
+                                    self.TRUNK, *self.ORPHANS]
         assert d.fallback_steps[0] == self.SKILL_JEWEL
 
     def test_walk_skips_unservable_fallbacks_in_order(self):
@@ -395,7 +455,7 @@ class TestServabilityDemotion:
         d = self._decide_with(lambda root, step: root not in blocked)
         assert d.chosen_root == self.SLIME
         assert d.fallback_roots == [self.SKILL_JEWEL, self.SKILL_GEAR,
-                                    self.SHIELD, self.TRUNK]
+                                    self.SHIELD, self.TRUNK, *self.ORPHANS]
 
     def test_every_gear_pair_unservable_still_reaches_the_trunk(self):
         """The trunk stays in the list, just last: a FULLY blocked gear branch
@@ -447,7 +507,7 @@ class TestServabilityDemotion:
         d = self._decide_with(lambda root, step: False)
         assert d.chosen_root == self.SKILL_JEWEL
         assert d.fallback_roots == [self.SKILL_GEAR, self.SLIME, self.SHIELD,
-                                    self.TRUNK]
+                                    self.TRUNK, *self.ORPHANS]
 
     def test_default_none_predicate_is_untouched(self):
         gd = _bundle()
@@ -455,7 +515,7 @@ class TestServabilityDemotion:
         d = decide_tree(state, gd, CharacterObjective.from_game_data(gd))
         assert d.chosen_root == self.SKILL_JEWEL
         assert d.fallback_roots == [self.SKILL_GEAR, self.SLIME, self.SHIELD,
-                                    self.TRUNK]
+                                    self.TRUNK, *self.ORPHANS]
 
     def test_predicate_sees_root_step_pairs(self):
         seen: list[tuple[object, object]] = []
@@ -468,7 +528,8 @@ class TestServabilityDemotion:
         # Walk order: chosen pair first, then fallbacks in order.
         assert seen[0] == (self.SKILL_JEWEL, self.SKILL_JEWEL)
         assert [r for r, _ in seen[1:]] == [self.SKILL_GEAR, self.SLIME,
-                                            self.SHIELD, self.TRUNK]
+                                            self.SHIELD, self.TRUNK,
+                                            *self.ORPHANS]
         assert dict(seen)[self.SHIELD] == self.SHIELD_STEP
 
 

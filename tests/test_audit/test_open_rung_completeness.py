@@ -376,17 +376,28 @@ def test_the_routing_breakdown_scopes_the_residual(
         results: list[orc.RungResult]) -> None:
     """The residual arm reaches only the ROUTED subset, and the matrix says so.
 
-    Five of the eight skills are never routed by any scenario, so a closure in
-    one of them can only ever be an explained wall. That is not a defect, but a
-    "0 residuals" headline over 336 cells promises more than it delivers unless
-    the scope is printed beside it.
+    SEVEN of the eight skills are routed now, up from three: restoring the
+    standalone skill root (`decisions/root._orphan_skill_roots`) put cooking,
+    fishing, mining and woodcutting on the routed side, and the routed cell
+    count moved 26 -> 194 of 336. Before it, `ReachSkillLevel` had exactly one
+    producer — a GEAR target's crafting skill — so a skill nothing equips could
+    not be routed by any scenario and its closures could only ever be explained
+    walls. Alchemy is the one skill still unrouted, and correctly: its potions
+    ARE utility equippables, so it is a prerequisite skill that a gear target
+    can name whenever a utility slot wants one.
+
+    The scope line still matters — 142 cells remain unrouted — but it now
+    understates far less than it did.
     """
     line = orc.routing_breakdown(results)
     routed_skills = {r.skill for r in results if r.routed}
-    assert routed_skills == {"jewelrycrafting", "gearcrafting", "weaponcrafting"}
+    assert routed_skills == {"jewelrycrafting", "gearcrafting", "weaponcrafting",
+                             "cooking", "fishing", "mining", "woodcutting"}
+    assert "alchemy" not in routed_skills
     assert f"{len(routed_skills)} of {len(SKILL_NAMES)} skills" in line
     assert f"{sum(1 for r in results if r.routed)} of {len(results)} cells" in line
     # Ordered by cell count, so the reader sees the widest arm first.
+    assert line.index("cooking") < line.index("jewelrycrafting")
     assert line.index("jewelrycrafting") < line.index("weaponcrafting")
 
 

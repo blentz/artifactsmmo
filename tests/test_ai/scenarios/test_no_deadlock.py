@@ -294,7 +294,16 @@ def test_l48_band_adequate_names_the_wall_when_no_winnable_monster() -> None:
     assert repr(report.selected_goal) == "GatherMaterials(mithril_bar, {mithril_bar:11})"
     assert report.plan, (repr(report.selected_goal), report.plan)
     assert report.decision.chosen_root is None
-    assert report.decision.fallback_roots == [ReachCharLevel(level=50)]
+    # The trunk is still the FIRST fallback, which is what makes
+    # `GatherMaterials(mithril_bar)` above the selected goal — the trunk arm of
+    # `objective_step_goal` runs `_marginal_provision_goal` first. Behind it
+    # sit the restored standalone skill roots (`_orphan_skill_roots`), offered
+    # but not preferred: ahead of the trunk they displaced that mithril gather,
+    # which is the gear that breaks the L38-48 wall.
+    assert report.decision.fallback_roots[0] == ReachCharLevel(level=50)
+    assert all(isinstance(root, ReachSkillLevel)
+               for root in report.decision.fallback_roots[1:]), (
+        report.decision.fallback_roots)
 
 
 def test_l48_band_adequate_search_bounded() -> None:

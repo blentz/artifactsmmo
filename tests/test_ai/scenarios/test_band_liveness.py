@@ -21,7 +21,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree, has_structural_upgrade
 from artifactsmmo_cli.ai.tiers.progression_tree_core import milestone_pure
@@ -140,16 +140,26 @@ def test_band_trunk_row_matches_milestone_pure(name: str) -> None:
 
     WAVE 3a moved WHERE the row sits and what its `category` reads. It is no
     longer `ranking[0]`: `_resolution_rows` leads with the CHOSEN root, and
-    `resolve_root` appends the trunk after every sibling, so the trunk is LAST.
-    Its category is `alternative · char_level` — the column now says how a row
-    got there, and the trunk is an alternative in every one of these
-    scenarios. Both facts are asserted, so a walk that promoted the trunk to
-    the head or relabelled the column fails here."""
+    `resolve_root` appends the trunk after every sibling. Its category is
+    `alternative · char_level` — the column now says how a row got there, and
+    the trunk is an alternative in every one of these scenarios. Both facts
+    are asserted, so a walk that promoted the trunk to the head or relabelled
+    the column fails here.
+
+    THE TRUNK IS NO LONGER THE LAST ROW, and that is the restored standalone
+    skill root (`decisions/root._orphan_skill_roots`): a skill no gear target
+    can name is offered BEHIND the trunk, so `ranking[-1]` is a skill row on
+    every character with an open orphan rung. The row is located by its
+    identity instead of by its index — which is what this test was always
+    about. The orphan rows' position relative to the trunk is asserted where
+    it is decided, in
+    `test_decisions_root.test_the_orphan_roots_sit_behind_the_trunk`."""
     d, state = _decide(name)
     expected_trunk = ReachCharLevel(level=milestone_pure(state.level))
-    trunk_row = d.ranking[-1]
-    assert trunk_row.category == "alternative · char_level"
-    assert trunk_row.root_repr == repr(expected_trunk)
+    rows = [row for row in d.ranking
+            if row.root_repr == repr(expected_trunk)]
+    assert len(rows) == 1, [row.root_repr for row in d.ranking]
+    assert rows[0].category == "alternative · char_level"
 
 
 def test_l48_band_adequate_is_the_honest_wall() -> None:
@@ -166,17 +176,25 @@ def test_l48_band_adequate_is_the_honest_wall() -> None:
     cleared, so `CanIClearMyTier` names the wall as `None` instead of handing
     back a level-50 target the character has no route to.
 
-    The trunk is still OFFERED, last, so the arbiter can fall through to it —
-    which is what stops this being a deadlock and what the old assertion was
-    really buying."""
+    The trunk is still OFFERED, ahead of everything else, so the arbiter can
+    fall through to it — which is what stops this being a deadlock and what
+    the old assertion was really buying. Behind the trunk sit the restored
+    standalone skill roots (`decisions/root._orphan_skill_roots`): the walk
+    still NAMES the wall, and offering a skill nothing can gear for is what a
+    walled character has left after the trunk. Both are asserted, because the
+    ORDER is the safety property — an orphan root ahead of the trunk displaced
+    this scenario's `GatherMaterials(mithril_bar)`, the gear that breaks the
+    L38-48 wall."""
     gd = _bundle()
     state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE])
     objective = CharacterObjective.from_game_data(gd)
     decision = decide_tree(state, gd, objective)
     assert decision.chosen_root is None
     assert decision.chosen_step is None
-    assert decision.fallback_roots == [
-        ReachCharLevel(level=milestone_pure(state.level))]
+    assert decision.fallback_roots[0] == ReachCharLevel(
+        level=milestone_pure(state.level))
+    assert all(isinstance(root, ReachSkillLevel)
+               for root in decision.fallback_roots[1:]), decision.fallback_roots
 
 
 def test_l48_band_adequate_real_band_adequate_verdict() -> None:

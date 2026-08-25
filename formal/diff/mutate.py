@@ -2903,6 +2903,32 @@ ROOT_DECISION_MUTATIONS = [
      "    stats = game_data.item_stats(code)\n"
      "    if stats is None:\n"
      "        return 1\n"),
+    # THE RESTORED STANDALONE SKILL ROOT (`_orphan_skill_roots`). `ef67c1d6`
+    # deleted four standalone `ReachSkillLevel` emitters on the premise "skills
+    # are pure prerequisites now", which is false for a skill nothing equips —
+    # 33,840 live cooking XP, 99.6% of it a `RestoreHP` side effect. Each of
+    # the rule's three parts gets its own mutant, plus the ordering.
+    ("root: the orphan rule drops the not-nameable filter, so a skill a gear"
+     " target CAN name gets a standalone root as well",
+     "        if skill not in nameable\n",
+     "        if skill in nameable or skill not in nameable\n"),
+    ("root: the orphan rule drops the open-rung conjunct, so a skill with no"
+     " XP-positive rung is routed anyway (the o1_silent_stall residual)",
+     "        and level_skill.LevelSkill(\n"
+     "            skill=skill, target_level=state.skills.get(skill, 1) + 1\n"
+     "        ).is_applicable(state, game_data)]\n",
+     "    ]\n"),
+    ("root: the orphan order runs from the LEAST-behind skill",
+     "    orphans.sort(key=lambda skill: (state.skills.get(skill, 1) - state.level,\n",
+     "    orphans.sort(key=lambda skill: (state.level - state.skills.get(skill, 1),\n"),
+    # The ORDER is the safety property and it was measured: ahead of the trunk,
+    # a cooking climb displaced `GatherMaterials(mithril_bar)` at
+    # `l48_band_adequate` -- the gear that breaks the L38-48 wall.
+    ("root: the orphan skill roots are offered AHEAD of the trunk, displacing"
+     " the trunk's provisioning step",
+     "    ordered.append(ReachCharLevel(level=milestone_pure(state.level)))\n",
+     "    ordered.extend(_orphan_skill_roots(state, game_data))\n"
+     "    ordered.append(ReachCharLevel(level=milestone_pure(state.level)))\n"),
     ("root: the sibling conversion reuses the real walk, so converting an"
      " alternative pollutes the trail",
      "        IsThisTargetBlocked(slot, target, RootWalk()).resolve(\n",
