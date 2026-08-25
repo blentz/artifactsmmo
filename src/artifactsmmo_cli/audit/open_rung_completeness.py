@@ -47,7 +47,7 @@ sees 0 attack)". A rung's obtainability walk bottoms out in `drop_obtainable`,
 so with the flag off EVERY monster-drop leaf in the catalogue is unreachable
 and the census would report walls that are properties of the fixture. Measured
 on the committed bundle: 47 closed cells with the flag off everywhere, 19 with
-the scenarios AS COMMITTED (11 of the 30 opt the flag on), and 5 with it forced
+the scenarios AS COMMITTED (20 of the 30 opt the flag on), and 5 with it forced
 on. The flag is therefore forced on for every cell — the census derives the
 combat totals a live character wearing that scenario's declared loadout would
 report. The committed scenarios are NOT modified; `census_state` builds its own
