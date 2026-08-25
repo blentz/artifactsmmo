@@ -219,7 +219,8 @@ class TestTaskCancelGoal:
 
     def test_value_nonzero_when_monster_too_strong(self):
         goal = TaskCancelGoal()
-        state = make_state(level=5, task_code="dragon", task_type="monsters", task_total=10)
+        state = make_state(level=5, task_code="dragon", task_type="monsters",
+                            task_total=10, inventory={TASKS_COIN_CODE: 1})
         gd = make_gd(monster_level={"dragon": 20})
         assert goal.value(state, gd) > 0.0
 

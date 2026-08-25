@@ -130,7 +130,8 @@ class TestPriorityGating:
         _seed_cycles(store, cycles)
         goal = LowYieldCancelGoal()
         state = make_state(task_code="x", task_type="items",
-                           task_total=50, task_progress=10)
+                           task_total=50, task_progress=10,
+                           inventory={"tasks_coin": 1})
         assert goal.value(state, _gd_with_woodcutting_task(), store) == 70.0
         store.close()
 
@@ -189,7 +190,8 @@ class TestGHCharXpFastCancel:
         _seed_cycles(store, cycles)
         goal = LowYieldCancelGoal()
         state = make_state(task_code="gudgeon", task_type="items",
-                           task_total=347, task_progress=5)
+                           task_total=347, task_progress=5,
+                           inventory={"tasks_coin": 1})
         # Should fire immediately — no need to wait for confidence threshold.
         assert goal.value(state, _gd_with_woodcutting_task(), store) == LOW_YIELD_CANCEL
         store.close()
@@ -204,3 +206,64 @@ class TestGHCharXpFastCancel:
                            task_total=347, task_progress=5)
         assert goal.value(state, _gd_with_woodcutting_task(), store) == 0.0
         store.close()
+
+
+# ---------------------------------------------------------------------------
+# NO COIN, NO PROPOSAL.
+#
+# `TaskCancelAction.is_applicable` refuses without a POCKET `tasks_coin` (the
+# server answers HTTP 478), so a cancel GOAL that can be selected without one is
+# a goal that can only ever return an EMPTY plan. That is a planning budget spent
+# inside the cooldown window to rediscover what the bag already said, and the
+# budget is the per-IP rate limit the whole five-character fleet shares.
+#
+# It was latent while no cancel goal could win anything (`TaskCancelGoal` at 12.0
+# lost to everything; `LowYieldCancelGoal` at 70.0 was selected in 0 of 84,180
+# recorded cycles). The one-level horizon makes cancel able to fire, so the gate
+# ships with it.
+#
+# USER (2026-08-25): "we can attempt cancel_task iff we have a task_coin, but if
+# we have no coins we shouldn't waste the cycles."
+# ---------------------------------------------------------------------------
+
+
+class TestTheCoinGate:
+    def test_no_pocket_coin_means_no_low_yield_cancel(self, tmp_path):
+        """The SAME history that fires above, with the coin taken out of the bag."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        cycles = (
+            [_cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(35)] +
+            [_cycle(35 + i, "GrindCharacterXP(chicken)", delta_xp=5) for i in range(35)]
+        )
+        _seed_cycles(store, cycles)
+        goal = LowYieldCancelGoal()
+        held = dict(task_code="x", task_type="items", task_total=50, task_progress=10)
+        gd = _gd_with_woodcutting_task()
+
+        assert goal.value(make_state(**held, inventory={"tasks_coin": 1}), gd, store) == 70.0
+        assert goal.value(make_state(**held, inventory={}), gd, store) == 0.0
+        # A BANKED coin cannot be spent at the taskmaster either — the action's
+        # own gate is `state.inventory`, so the goal's must be too or they
+        # disagree about the same cycle.
+        assert goal.value(
+            make_state(**held, inventory={}, bank_items={"tasks_coin": 9}),
+            gd, store) == 0.0
+
+    def test_the_gate_matches_the_action_it_proposes(self, tmp_path):
+        """The property that makes the gate right rather than merely cautious:
+        wherever the goal offers a positive value, the action it emits is
+        applicable — so a selected cancel always has a plan to return."""
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
+        cycles = (
+            [_cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(35)] +
+            [_cycle(35 + i, "GrindCharacterXP(chicken)", delta_xp=5) for i in range(35)]
+        )
+        _seed_cycles(store, cycles)
+        goal = LowYieldCancelGoal()
+        gd = _gd_with_woodcutting_task()
+        action = TaskCancelAction(taskmaster_location=(1, 2))
+        for inventory in ({}, {"tasks_coin": 1}, {"tasks_coin": 4}):
+            state = make_state(task_code="x", task_type="items", task_total=50,
+                               task_progress=10, inventory=inventory)
+            if goal.value(state, gd, store) > 0.0:
+                assert action.is_applicable(state, gd) is True

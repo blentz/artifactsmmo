@@ -140,7 +140,7 @@ def _margin_owning(state: WorldState, game_data: GameData, monster: str,
     return combat_margin(dataclasses.replace(state, inventory=trial), game_data, monster)
 
 
-def _blocked_task_monster(state: WorldState) -> str | None:
+def blocked_task_monster(state: WorldState) -> str | None:
     """The held monsters-task's code when it is still workable, else None."""
     if state.task_type != "monsters" or not state.task_code:
         return None
@@ -160,7 +160,7 @@ def has_combat_deficit(state: WorldState, game_data: GameData) -> bool:
     because if the two ever disagreed the latch would arm for a deficit the gear
     chain cannot name, and the character would review gear forever.
     """
-    monster = _blocked_task_monster(state)
+    monster = blocked_task_monster(state)
     if monster is None:
         return False
     return not predict_win(dataclasses.replace(state, hp=state.max_hp),
@@ -225,7 +225,7 @@ def deficit_upgrade_target(
     same rule `UpgradeEquipmentGoal` uses, so the guard equips into a slot that
     accepts it.
     """
-    monster = _blocked_task_monster(state)
+    monster = blocked_task_monster(state)
     if monster is None:
         return None
     deficit = combat_deficit(state, game_data, monster,

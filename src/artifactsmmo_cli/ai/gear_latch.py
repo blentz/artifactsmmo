@@ -4,23 +4,25 @@ Two arms, deliberately not the same shape:
 
   * EDGE — a level-up or a predicted-winnable fight loss. A moment, so it latches
     and holds until no craftable upgrade remains for any slot.
-  * STANDING — a held task whose monster is unwinnable AND no other monster worth
-    fighting. A condition, so it is recomputed every cycle and releases on its
-    own the moment either half stops holding.
+  * STANDING — a held task whose monster is unwinnable, GEAR IS WHAT CLOSES IT
+    (`task_horizon.HORIZON_GEAR`), and no other monster is worth fighting. A
+    condition, so it is recomputed every cycle and releases on its own the moment
+    any part stops holding.
 
 Owned by the player and updated once per cycle BEFORE goal selection; read via
 `active` to fire the GEAR_REVIEW guard. See the tiered-budget spec."""
 
-from artifactsmmo_cli.ai.combat_deficit import has_combat_deficit
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_appropriateness import has_craftable_upgrade_any_slot
+from artifactsmmo_cli.ai.task_horizon import HORIZON_GEAR, resolve_task_horizon
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
 class GearLatch:
     """Boolean latch. SET on level-up or `error:fight_lost` (holding until no
     craftable upgrade remains for any slot), and additionally ACTIVE for as long
-    as a held task's monster is unwinnable with nothing else worth fighting."""
+    as a held task's monster is unwinnable, a gear chain CLOSES that fight, and
+    nothing else is worth fighting."""
 
     def __init__(self) -> None:
         self._active = False
@@ -75,5 +77,24 @@ class GearLatch:
         # STANDING, not latched: a frozen character has no edge left to re-trigger
         # it, so an arm that only stopped RE-arming would need a restart to take
         # effect. Releasing on its own is what unfreezes one mid-run.
-        self._blocked = (craftable and not winnable_alternative
-                         and has_combat_deficit(state, game_data))
+        #
+        # ...AND ONLY WHEN GEAR IS WHAT STANDS IN THE WAY, which is this class's
+        # whole contract (see the module docstring) and was NOT what it checked.
+        # `has_combat_deficit` is the BARE FACT "this fight is lost", so the latch
+        # armed identically whether the catalogue held a chain that wins the fight
+        # or held nothing that could. In the second case GEAR_REVIEW preempts the
+        # objective step to build gear that provably cannot close the gap — measured
+        # over the offline corpus after `e6a2e37c`, the "nothing closes it" side is
+        # the MAJORITY of losing pairs, and it is the side that falls through to the
+        # monster-blind value scan (`iron_boots`, ten hours).
+        #
+        # `HORIZON_LEVEL_UP` deliberately does NOT arm it either. The standing arm's
+        # other conjunct is `not winnable_alternative` — no monster worth fighting —
+        # so a level-up verdict reached here has nothing to fight for the level, and
+        # `map_guard`'s LEVEL_UP arm would map to a goal with no beatable monster in
+        # its `relevant_actions`. That verdict is served from the EDGE arm (a real
+        # loss or level-up, where the cascade does find something), and served here
+        # by the latch STAYING OFF so the objective's own XP grind runs.
+        horizon = (resolve_task_horizon(state, game_data)
+                   if craftable and not winnable_alternative else None)
+        self._blocked = horizon is not None and horizon.verdict == HORIZON_GEAR

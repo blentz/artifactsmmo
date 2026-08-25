@@ -180,6 +180,7 @@ INVENTORY_KEEP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_keep.
 CURRENCY_TURNIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_turnin.py"
 DUAL_ROLE_CURRENCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "dual_role_currency.py"
 COMBAT_DEFICIT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_deficit.py"
+TASK_HORIZON_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_horizon.py"
 
 # craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
 # model is the soundness-critical part; killed by
@@ -3995,6 +3996,58 @@ COMBAT_DEFICIT_FUTILE_TARGET_MUTATIONS = [
      "                             candidates=candidates, max_chain=1, cost_of=cost_of)"),
 ]
 
+# The ONE-LEVEL PLANNING HORIZON (USER 2026-08-25): "cancel tasks that we can't
+# meet through gear upgrade, or (level-up by exactly 1 level and gear upgrade)."
+# One mutation per verdict, all killed by tests/test_ai/test_task_horizon.py.
+# OWN run_group (unit-killed mutants).
+TASK_HORIZON_MUTATIONS = [
+    ("task_horizon: the gear arm never fires",
+     "    target = deficit_upgrade_target(state, game_data)",
+     "    target = None"),
+    # THE HALF-MODELLED SHORTCUT the design forbids. `combat_deficit._pool`
+    # filters `stats.level <= state.level`, so bumping the level alone widens the
+    # candidate pool and looks like a complete +1 evaluation. Measured over the
+    # ten corpus LEVEL_UP pairs, the +5 Max HP grant flips 10 of 10 and the pool
+    # widening flips 0 of 10 — this mutation deletes the middle clause entirely.
+    ("task_horizon: level+1 widens the POOL but leaves the body unchanged",
+     "    max_hp = projected_max_hp(state.max_hp, state.level, level)\n"
+     "    return dataclasses.replace(state, level=level, max_hp=max_hp, hp=max_hp)",
+     "    return dataclasses.replace(state, level=level)"),
+    # `combat_deficit` returns None when the fight is ALREADY won, so the None arm
+    # is "the level alone wins it, nothing to acquire" — the cheapest instance of
+    # the rule. Reading it as out-of-reach cancels a task one HP grant from being
+    # workable.
+    ("task_horizon: the level-alone win reads as out of reach",
+     "    if at_next is None or at_next.closes:",
+     "    if at_next is not None and at_next.closes:"),
+]
+
+# The horizon's consumer on the discard rung. Killed by
+# tests/test_ai/test_tiers_means.py. OWN run_group (unit-killed mutant).
+MEANS_TASK_HORIZON_MUTATIONS = [
+    ("means: TASK_CANCEL stops reading the one-level horizon",
+     "            return horizon is not None and horizon.verdict == HORIZON_OUT_OF_REACH",
+     "            return False"),
+]
+
+# NO COIN, NO PROPOSAL. `TaskCancelAction.is_applicable` refuses without a POCKET
+# tasks_coin, so a cancel GOAL selectable without one can only ever return an
+# EMPTY plan — a planning budget spent inside the cooldown window to rediscover
+# what the bag already said. Two goals, two anchors, two OWN run_groups.
+TASK_CANCEL_GOAL_COIN_MUTATIONS = [
+    ("task_cancel goal: propose a cancel with no coin to spend",
+     "        if state.inventory.get(TASKS_COIN_CODE, 0) < 1:\n"
+     "            return 0.0\n",
+     ""),
+]
+
+LOW_YIELD_CANCEL_COIN_MUTATIONS = [
+    ("low_yield_cancel_fires: propose a cancel with no coin to spend",
+     "    if state.inventory.get(TASKS_COIN_CODE, 0) < 1:\n"
+     "        return False\n",
+     ""),
+]
+
 
 def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
               survivors: list[str]) -> None:
@@ -4051,6 +4104,7 @@ _ALL_SRCS = [
     WINNABLE_CASCADE_SRC,
     COMBAT_PICKER_SRC,
     COMBAT_DEFICIT_SRC,
+    TASK_HORIZON_SRC,
     PROJECTIONS_SRC,
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
     GATHERING_GOAL_SRC, PURSUE_TASK_GOAL_SRC, SCALAR_PRIORITY_SRC,
@@ -7592,6 +7646,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_combat_deficit_ceiling_tie.py", survivors)
     run_group(COMBAT_DEFICIT_SRC, COMBAT_DEFICIT_FUTILE_TARGET_MUTATIONS,
               "tests/test_ai/test_combat_deficit.py", survivors)
+    run_group(TASK_HORIZON_SRC, TASK_HORIZON_MUTATIONS,
+              "tests/test_ai/test_task_horizon.py", survivors)
+    run_group(MEANS_SRC, MEANS_TASK_HORIZON_MUTATIONS,
+              "tests/test_ai/test_tiers_means.py", survivors)
+    run_group(TASK_CANCEL_GOAL_SRC, TASK_CANCEL_GOAL_COIN_MUTATIONS,
+              "tests/test_ai/test_goals.py", survivors)
+    run_group(PROJECTIONS_SRC, LOW_YIELD_CANCEL_COIN_MUTATIONS,
+              "tests/test_ai/test_low_yield_cancel.py", survivors)
 def _run_all_groups() -> int:
     survivors: list[str] = []
     _UNITS.clear()

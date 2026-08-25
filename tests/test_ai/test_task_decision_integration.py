@@ -3,6 +3,7 @@
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai.fixtures import make_state
 
 
@@ -36,6 +37,10 @@ class TestTaskDecisionIntegration:
             task_total=29,
             task_progress=0,
             skills={"alchemy": 1},
+            # NO COIN, NO PROPOSAL — `TaskCancelGoal.value` gates on the POCKET
+            # coin `TaskCancelAction.is_applicable` spends, so a fixture that
+            # means "the goal fires" has to hold one.
+            inventory={TASKS_COIN_CODE: 1},
         )
         try:
             assert TaskCancelGoal().value(state, gd, store) > 0

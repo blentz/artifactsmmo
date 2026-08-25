@@ -595,12 +595,17 @@ def test_upgrade_equipment_constants_consistent():
 def test_task_cancel_pivot_warm_path_is_exactly_12():
     """PIVOT-firing state must yield exactly 12.0. Combat task whose monster
     is far above character level forces task_requirement → combat, which
-    routes to PIVOT regardless of history."""
+    routes to PIVOT regardless of history.
+
+    A POCKET `tasks_coin` is part of the firing branch since 2026-08-25: the
+    goal's only action (`TaskCancelAction`) spends one and refuses without it,
+    so a state with no coin returns 0.0 rather than proposing a cancel the
+    planner could never satisfy."""
     gd = _gd()
     gd._monster_level = {"hard_mob": 99}
     goal = TaskCancelGoal()
     s = make_state(task_code="hard_mob", task_type="monsters", task_total=5,
-                   task_progress=0, level=1)
+                   task_progress=0, level=1, inventory={"tasks_coin": 1})
     v = goal.value(s, gd)
     assert Fraction(v) == Fraction(12), v
 

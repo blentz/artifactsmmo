@@ -82,6 +82,7 @@ from artifactsmmo_cli.ai.requirement_projections import demand_set
 from artifactsmmo_cli.ai.shed_urgency import bank_shed_hoist, shed_urgency
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
+from artifactsmmo_cli.ai.task_horizon import HORIZON_LEVEL_UP, resolve_task_horizon
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.tiers.guards import (
@@ -386,6 +387,31 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
                                              equip=True, store=history))
 
         target = deficit_upgrade_target(state, game_data, cost_of=_deficit_cost)
+        # Asked only when the PRICED walk named nothing, so the gear arm above is
+        # byte-identical to what it was and the horizon costs nothing on the path
+        # that already had an answer. Where the two disagree — the priced walk
+        # closes and the unpriced one does not, measured on `l35_artifact_fill` vs
+        # `demon` — the gear arm wins, which is the right order: an item is faster
+        # than a level.
+        horizon = (None if target is not None
+                   else resolve_task_horizon(state, game_data))
+        if horizon is not None and horizon.verdict == HORIZON_LEVEL_UP:
+            # A LEVEL, NOT AN ITEM. The held task's fight is lost, no chain of
+            # acquisitions closes it at this level, and one level plus the gear
+            # that level admits does. Before this the same state fell straight
+            # through to the monster-blind value scan below, which is exactly
+            # the scan that spent ten hours on `iron_boots` — a guard reviewing
+            # gear for a fight no gear it can name will win.
+            #
+            # `ReachUnlockLevelGoal` rather than a new goal class: it is already
+            # "grind character XP until state.level >= target_level", already
+            # emits Fight over every beatable monster plus HP recovery, and is
+            # already mapped from a guard slot. A second class would be a second
+            # implementation of one sentence. The target is `state.level + 1` and
+            # nothing else — the horizon is a HARD bound, and its own
+            # MAX_ACHIEVABLE_GAP (5) can never bind at a gap of one.
+            return ReachUnlockLevelGoal(target_level=state.level + 1,
+                                        blocker_code=state.task_code or "task")
         if target is None:
             probe = UpgradeEquipmentGoal(initial_equipment=state.equipment)
             target = probe.find_upgrade_target(state, game_data)

@@ -700,6 +700,17 @@ def low_yield_cancel_fires(
     """
     if history is None or not state.task_code or state.task_total <= 0:
         return False
+    # NO COIN, NO PROPOSAL — the same gate `_fires(TASK_CANCEL)` carries, asked
+    # here so BOTH consumers of this predicate (`LowYieldCancelGoal.value` and
+    # the LOW_YIELD_CANCEL means rung) inherit it from the single source of
+    # truth. Cancelling costs one POCKET `tasks_coin`
+    # (`TaskCancelAction.is_applicable`, HTTP 478 without one), so a firing
+    # verdict with no coin can only produce an EMPTY plan — a planning budget
+    # spent inside the cooldown window to rediscover what the bag already said.
+    # USER (2026-08-25): "we can attempt cancel_task iff we have a task_coin,
+    # but if we have no coins we shouldn't waste the cycles."
+    if state.inventory.get(TASKS_COIN_CODE, 0) < 1:
+        return False
 
     # The CURRENT activity's rate: task pursuit, pooled over the taskmaster that
     # issues tasks for the held item's skill (`yield_reprs.task_pursuit_reprs_for`).

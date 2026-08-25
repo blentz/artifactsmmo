@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.task_alignment import task_advances_progression
 from artifactsmmo_cli.ai.task_decision import PIVOT, PURSUE, task_decision
+from artifactsmmo_cli.ai.task_horizon import HORIZON_OUT_OF_REACH, resolve_task_horizon
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import (
     SelectionContext,
@@ -234,11 +235,14 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
     if kind is MeansKind.TASK_CANCEL:
         if not state.task_code:
             return False
-        # S-052: no coin, no discard — so the task is WORKED instead of carried.
+        # S-052: no coin, no discard. The task then stays INERT — carried, not
+        # worked and (since the gear latch's standing arm now reads the horizon)
+        # not gear-reviewed either — while the character does other work. USER
+        # 2026-08-25: "It is a known condition that Tasks might be uncancelable
+        # until we get a coin. Tasks can remain inert until that condition is met."
         # POCKET only, matching `TaskCancelAction.is_applicable`: a banked coin
         # cannot be spent at the taskmaster and firing on one would be a rung with
         # nothing to do, the shape this ladder has already been bitten by twice.
-        # This gate is new to the PIVOT arm too, which fired without it.
         if state.inventory.get(TASKS_COIN_CODE, 0) < 1:
             return False
         # S-048: a draw whose target advances neither the character's level nor a
@@ -248,6 +252,19 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # task when it sees one.
         if not task_advances_progression(state, game_data):
             return True
+        if state.task_type == "monsters":
+            # THE ONE-LEVEL HORIZON (USER 2026-08-25), replacing `task_decision`'s
+            # combat arm for this rung. That arm is `req_is_combat -> PIVOT` over
+            # `task_feasibility`'s level proxy — a monster more than
+            # MONSTER_LEVEL_MARGIN (2) levels above the character — and a level
+            # proxy is the wrong question twice over: it discards a high-level
+            # monster the character's gear already beats, and it keeps an in-band
+            # one no gear in the catalogue can beat. `task_horizon` asks the fight
+            # itself. `task_decision` is untouched (it is the formalisation target
+            # of `Formal/TaskDecision.lean` and still serves PURSUE_TASK and the
+            # items arm below).
+            horizon = resolve_task_horizon(state, game_data)
+            return horizon is not None and horizon.verdict == HORIZON_OUT_OF_REACH
         return (history is not None
                 and task_decision(state, game_data, history) == PIVOT)
 

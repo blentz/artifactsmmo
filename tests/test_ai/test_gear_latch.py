@@ -2,7 +2,22 @@
 level-appropriate; monotone (stays set until clear holds)."""
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_latch import GearLatch
+from artifactsmmo_cli.ai.task_horizon import (
+    HORIZON_GEAR,
+    HORIZON_LEVEL_UP,
+    HORIZON_OUT_OF_REACH,
+    TaskHorizon,
+)
 from tests.test_ai.fixtures import make_state
+
+_GEAR_CLOSES = TaskHorizon(monster="pig", verdict=HORIZON_GEAR,
+                           gear_target=("iron_sword", "weapon_slot"))
+"""A held task the character loses AND a gear chain that closes the fight.
+
+The latch's standing arm reads the VERDICT, not the bare "this fight is lost"
+fact it used to read, so a stub has to name which of the three answers it is
+standing in for. `_GEAR_CLOSES` is the only one that arms it — see
+`test_a_futile_deficit_does_not_arm_the_latch`."""
 
 
 def _gd_with_boots():
@@ -74,7 +89,7 @@ def test_an_unwinnable_task_arms_the_latch_without_a_loss(monkeypatch) -> None:
     no OTHER monster worth fighting either, and the gear is still what stands
     between it and its task."""
     import artifactsmmo_cli.ai.gear_latch as mod
-    monkeypatch.setattr(mod, "has_combat_deficit", lambda s, g: True)
+    monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: _GEAR_CLOSES)
     monkeypatch.setattr(mod, "has_craftable_upgrade_any_slot", lambda s, g: True)
     latch = GearLatch()
 
@@ -87,7 +102,7 @@ def test_no_deficit_and_no_loss_leaves_the_latch_alone(monkeypatch) -> None:
     """The fact must not arm it unconditionally — a character with a winnable
     task has no gear emergency."""
     import artifactsmmo_cli.ai.gear_latch as mod
-    monkeypatch.setattr(mod, "has_combat_deficit", lambda s, g: False)
+    monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: None)
     monkeypatch.setattr(mod, "has_craftable_upgrade_any_slot", lambda s, g: True)
     latch = GearLatch()
 
@@ -123,7 +138,7 @@ def test_an_unwinnable_task_does_not_arm_the_latch_when_another_fight_is_winnabl
         monkeypatch) -> None:
     """R2D2's live shape: the pig is unwinnable, the skeleton is not."""
     import artifactsmmo_cli.ai.gear_latch as mod
-    monkeypatch.setattr(mod, "has_combat_deficit", lambda s, g: True)
+    monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: _GEAR_CLOSES)
     monkeypatch.setattr(mod, "has_craftable_upgrade_any_slot", lambda s, g: True)
     latch = GearLatch()
 
@@ -140,7 +155,7 @@ def test_the_deficit_arm_releases_when_a_winnable_fight_appears(monkeypatch) -> 
     that only stops the RE-arming would need a restart to take effect.
     """
     import artifactsmmo_cli.ai.gear_latch as mod
-    monkeypatch.setattr(mod, "has_combat_deficit", lambda s, g: True)
+    monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: _GEAR_CLOSES)
     monkeypatch.setattr(mod, "has_craftable_upgrade_any_slot", lambda s, g: True)
     latch = GearLatch()
 
@@ -161,7 +176,7 @@ def test_a_lost_fight_arms_the_latch_even_when_another_fight_is_winnable(
     character that ever loses one.
     """
     import artifactsmmo_cli.ai.gear_latch as mod
-    monkeypatch.setattr(mod, "has_combat_deficit", lambda s, g: False)
+    monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: None)
     monkeypatch.setattr(mod, "has_craftable_upgrade_any_slot", lambda s, g: True)
     latch = GearLatch()
 
@@ -169,3 +184,56 @@ def test_a_lost_fight_arms_the_latch_even_when_another_fight_is_winnable(
                  winnable_alternative=True)
 
     assert latch.active is True
+
+
+# ---------------------------------------------------------------------------
+# ...AND ONLY WHEN GEAR IS WHAT STANDS IN THE WAY.
+#
+# The fact-arm above reads "this fight is lost". That is strictly broader than
+# the latch's own contract ("prioritizes the gear chain WHILE GEAR IS WHAT STANDS
+# IN THE WAY"), and after `e6a2e37c` taught `deficit_upgrade_target` to honour
+# `closes` the difference became the majority case: measured over the offline
+# corpus' derive_combat_stats characters, 1,375 of 1,493 losing (character,
+# monster) pairs have NO chain that closes the fight, and every one of them armed
+# this latch. GEAR_REVIEW then preempts the objective step and falls through to
+# the monster-blind value scan — `iron_boots`, ten hours.
+#
+# USER (2026-08-25): "cancel tasks that we can't meet through gear upgrade, or
+# (level-up by exactly 1 level and gear upgrade). anything beyond a 1-level
+# horizon is too far out to be a reasonable near-term planning target."
+# ---------------------------------------------------------------------------
+
+
+def test_a_futile_deficit_does_not_arm_the_latch(monkeypatch) -> None:
+    """`l32_held_task_open`'s live shape: the lich is unwinnable and NOTHING in
+    the catalogue closes it. Reviewing gear for that fight is the ten-hour
+    `iron_boots` failure with the monster scoped in; the latch must stay off so
+    the cancel rung — which sits above the objective step already — is reached."""
+    import artifactsmmo_cli.ai.gear_latch as mod
+    monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: TaskHorizon(
+        monster="lich", verdict=HORIZON_OUT_OF_REACH, gear_target=None))
+    monkeypatch.setattr(mod, "has_craftable_upgrade_any_slot", lambda s, g: True)
+    latch = GearLatch()
+
+    latch.update(5, make_state(level=5), None, GameData(), winnable_alternative=False)
+
+    assert latch.active is False
+
+
+def test_a_level_up_verdict_does_not_arm_the_standing_arm(monkeypatch) -> None:
+    """The other conjunct decides this one, not a preference.
+
+    The standing arm only reaches here when `winnable_alternative` is False — no
+    monster worth fighting — so a LEVEL_UP verdict reached HERE has nothing to
+    fight for the level, and `map_guard`'s LEVEL_UP arm would map to a goal whose
+    `relevant_actions` contain no beatable monster. That verdict is served from
+    the EDGE arm instead (see `test_the_gear_review_guard_takes_the_level`)."""
+    import artifactsmmo_cli.ai.gear_latch as mod
+    monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: TaskHorizon(
+        monster="mushmush", verdict=HORIZON_LEVEL_UP, gear_target=None))
+    monkeypatch.setattr(mod, "has_craftable_upgrade_any_slot", lambda s, g: True)
+    latch = GearLatch()
+
+    latch.update(5, make_state(level=5), None, GameData(), winnable_alternative=False)
+
+    assert latch.active is False

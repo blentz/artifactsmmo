@@ -1964,9 +1964,19 @@ def test_pursue_task_near_miss_too_hard() -> None:
 def _farm_items_world(*, progress: int, total: int) -> WorldState:
     # An IN_PROGRESS items-task (progress 1/5), clean otherwise so every slot
     # above lowYieldCancel(12) stays quiet.
+    #
+    # A POCKET `tasks_coin`, for the same reason `_monsters_task_world` takes
+    # one: `low_yield_cancel_fires` gained the coin gate on 2026-08-25 so both
+    # cancel rungs agree with `TaskCancelAction.is_applicable` about whether a
+    # cancel can happen at all. The Lean ladder does not model the coin (neither
+    # `taskCancelFires` nor `lowYieldCancelFires` takes it), so a fixture that
+    # means "this rung fires" has to hold one — exactly the convention the
+    # taskCancel fixtures already follow. Every slot ABOVE 12 stays quiet with a
+    # coin in the bag (COMPLETE_TASK needs progress>=total, SELL_* need a buyer,
+    # CLAIM_PENDING needs pending items), so this does not disturb the contest.
     return WorldState(
         character="diff", level=10, xp=0, max_xp=999999, hp=100, max_hp=100,
-        gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        gold=0, skills={}, x=0, y=0, inventory={"tasks_coin": 1}, inventory_max=20,
         inventory_slots_max=20,
         equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
         pending_items=None, task_code="widget", task_type="items",

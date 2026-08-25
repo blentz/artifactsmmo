@@ -2,7 +2,7 @@
 
 `ScenarioCharacter.task` has existed since the harness was built and, until this
 file, no scenario set it: 30 of 30 carried `task_code=None`, so
-`combat_deficit._blocked_task_monster` returned `None` in every offline test and
+`combat_deficit.blocked_task_monster` returned `None` in every offline test and
 everything downstream of it — `has_combat_deficit`, `deficit_upgrade_target`,
 `GearLatch`, the `GEAR_REVIEW` guard — was reachable only through hand-built
 states. Live, 21.1 % of cycles hold a task, and every one of them is a
@@ -59,8 +59,10 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import map_guard
+from artifactsmmo_cli.ai.task_horizon import HORIZON_LEVEL_UP, resolve_task_horizon
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.tiers.guards import GuardKind
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -122,7 +124,7 @@ def test_the_three_task_values_are_distinct(gd: GameData) -> None:
 
 
 def test_workable_task_reaches_the_negative_deficit_arm(gd: GameData) -> None:
-    """`_blocked_task_monster` names a monster AND `predict_win` says yes.
+    """`blocked_task_monster` names a monster AND `predict_win` says yes.
 
     The negative arm is only reachable with a task in hand: no task at all
     short-circuits before `predict_win` is ever called, which is why 30/30
@@ -182,7 +184,7 @@ def test_the_held_task_triple_varies_only_the_task() -> None:
 def test_the_task_triple_splits_the_deficit_three_ways(gd: GameData) -> None:
     """One character, three tasks, three answers at the branch D2 names.
 
-    `_blocked_task_monster` is reached in all three (a task is held); what
+    `blocked_task_monster` is reached in all three (a task is held); what
     differs is only which arm of `has_combat_deficit` / `deficit_upgrade_target`
     the monster lands on. Measured over all 58 catalogue monsters at this
     loadout: 12 are workable, 8 closable, 38 open — so none of the three values
@@ -221,7 +223,24 @@ def test_the_task_triple_flips_the_gear_latch(gd: GameData) -> None:
     failure cannot be blamed on it) and the second is supplied explicitly —
     see `test_no_offline_scenario_can_starve_the_winnable_cascade` for why it
     has to be. So the latch's answer moves with the deficit, i.e. with the
-    task, which is exactly the claim cell 2 makes."""
+    task, which is exactly the claim cell 2 makes.
+
+    THE OPEN CELL FLIPPED ON 2026-08-25, and it is the point of the one-level
+    horizon rather than a regression. The third conjunct was `has_combat_deficit`
+    — the bare fact "this fight is lost" — so cells 2 and 3 armed the latch
+    IDENTICALLY even though only cell 2 has gear that wins the fight. GEAR_REVIEW
+    is a guard, so for cell 3 that meant preempting the objective step to build
+    gear the walk had just proved cannot close the gap, and falling through to
+    the monster-blind value scan to pick it (measured: the SAME goal cell 1
+    produces — see `test_the_task_triple_moves_the_gear_review_target`). Live
+    R2D2 did that for 981 consecutive cycles with character XP frozen 31.6 h.
+    The conjunct is now `task_horizon` == HORIZON_GEAR, so the latch arms where
+    gear really is what stands in the way and nowhere else — which is what the
+    class docstring said all along.
+
+    Cell 2 still arms it. A fix that quieted cell 3 by deleting the standing arm
+    would have deleted the loss->upgrade link with it, and this line is what
+    says so."""
     def _latch(name: str, *, winnable_alternative: bool) -> bool:
         state = _state(name, gd)
         assert has_craftable_upgrade_any_slot(state, gd) is True
@@ -232,7 +251,7 @@ def test_the_task_triple_flips_the_gear_latch(gd: GameData) -> None:
 
     assert _latch(TRIPLE_WORKABLE, winnable_alternative=False) is False
     assert _latch(TRIPLE_CLOSABLE, winnable_alternative=False) is True
-    assert _latch(TRIPLE_OPEN, winnable_alternative=False) is True
+    assert _latch(TRIPLE_OPEN, winnable_alternative=False) is False
     # The other conjunct still binds: an alternative to fight releases all three.
     for name in TRIPLE:
         assert _latch(name, winnable_alternative=True) is False
@@ -285,3 +304,58 @@ def test_the_task_triple_moves_the_gear_review_target(gd: GameData) -> None:
     # whole reason the monster-aware arm was added.
     assert goals[TRIPLE_WORKABLE] == goals[TRIPLE_OPEN]
     assert goals[TRIPLE_CLOSABLE] != goals[TRIPLE_WORKABLE]
+
+
+# --- the ONE-LEVEL PLANNING HORIZON over the same three cells ---------------
+#
+# USER (2026-08-25): "cancel tasks that we can't meet through gear upgrade, or
+# (level-up by exactly 1 level and gear upgrade). anything beyond a 1-level
+# horizon is too far out to be a reasonable near-term planning target."
+#
+# `test_the_task_triple_moves_the_gear_review_target` above records what the guard
+# DOES with each cell, and the flat fact that cells 1 and 3 land on the same
+# monster-blind goal. What it could not say is that landing there is WRONG for
+# cell 3 and right for cell 1: the workable cell has no fight to lose, the open
+# cell has one it will never win with gear. The three tests below are that
+# distinction, taken at the three places the fact is consumed.
+
+
+def test_the_gear_review_guard_takes_the_level_when_gear_cannot(gd: GameData) -> None:
+    """The middle clause, at the one place it becomes an action.
+
+    `l13_drop_recipe_grind` against `mushmush`: no chain closes the fight at 13,
+    `iron_dagger` closes it at 14, and the catalogue pool is identical at both
+    levels — so the level, not the pool, is what buys the fight. The guard maps to
+    `ReachUnlockLevelGoal(14)` instead of falling through to the monster-blind
+    value scan, which is what it did for every such state before."""
+    state = dataclasses.replace(
+        _state(UNWINNABLE_CLOSABLE, gd), task_code="mushmush", task_type="monsters",
+        task_progress=0, task_total=10,
+        task_lifecycle_phase=TaskLifecyclePhase.IN_PROGRESS)
+    ctx = dataclasses.replace(NO_PROFILE_CONTEXT, gear_review_active=True)
+
+    assert resolve_task_horizon(state, gd).verdict == HORIZON_LEVEL_UP
+    assert repr(map_guard(GuardKind.GEAR_REVIEW, gd, ctx, state=state)) == (
+        f"ReachUnlockLevel({state.level + 1})")
+
+
+def test_the_open_task_is_cancelled_end_to_end_with_a_coin(gd: GameData) -> None:
+    """The whole ladder, from a held task to a first action.
+
+    Measured on this exact cell at HEAD~ (a `tasks_coin` added to the pocket so
+    the rung's S-052 gate is satisfied): the bot planned
+    `GatherMaterials(flying_wing, {flying_wing:6})` with a first action of
+    `Fight(flying_snake)` — it kept the dead lich task and went and did something
+    else, forever, because `task_feasibility`'s level proxy reported a level-30
+    monster feasible for a level-32 character. Cell 2 already cancelled before
+    this change and still does, but for S-048's reason (an ogre pays a level-32
+    character no XP), which is why it cannot stand in for cell 3."""
+    state = _state(TRIPLE_OPEN, gd)
+    state = dataclasses.replace(
+        state, inventory={**state.inventory, TASKS_COIN_CODE: 1})
+    player = GamePlayer(character=TRIPLE_OPEN, history=None)
+    player.seed_offline(state, gd)
+    report = player.plan_from_state()
+
+    assert repr(report.selected_goal) == "TaskCancel"
+    assert repr(report.plan[0]) == "TaskCancel"

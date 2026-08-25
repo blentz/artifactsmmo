@@ -348,7 +348,8 @@ def test_task_exchange_fires_when_enough_coins():
 
 
 def test_low_yield_cancel_absent_when_no_history():
-    state = make_state(task_code="x", task_total=20, task_progress=5)
+    state = make_state(task_code="x", task_total=20, task_progress=5,
+                       inventory={"tasks_coin": 1})
     collect, _ = active_means(state, GameData(), None, _ctx())
     assert MeansKind.LOW_YIELD_CANCEL not in collect
 
@@ -368,7 +369,8 @@ def test_low_yield_cancel_fires_with_seeded_history(tmp_path):
     cycles = [_cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
     cycles += [_cycle(5 + i, "GrindCharacterXP(slime)", delta_xp=15) for i in range(3)]
     _seed_cycles(store, cycles)
-    state = make_state(task_code="gudgeon", task_type="items", task_total=347, task_progress=5)
+    state = make_state(task_code="gudgeon", task_type="items", task_total=347,
+                       task_progress=5, inventory={"tasks_coin": 1})
     collect, _ = active_means(state, _gd_task_rewards(), store, _ctx())
     assert MeansKind.LOW_YIELD_CANCEL in collect
     store.close()
@@ -403,10 +405,20 @@ def test_task_cancel_discards_a_task_that_advances_nothing():
 
 
 def test_a_paying_task_is_not_discarded():
+    """S-048's negative arm: the chicken pays XP at level 1, so it is kept.
+
+    `attack` is REQUIRED here and was not before. A character's base combat stats
+    are zero (the server reports totals = base 0 + gear), so a state with no
+    attack loses to EVERY monster — and since the one-level horizon
+    (`ai/task_horizon.py`) reads the fight rather than the monster's level, a
+    zero-attack fixture now reads OUT OF REACH and would be discarded for a reason
+    that has nothing to do with what the test is asserting. Same vacuity the
+    scenario harness records for `derive_combat_stats`."""
     gd = GameData()
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
-    state = make_state(level=1, task_code="chicken", task_type="monsters",
+    state = make_state(level=1, attack={"earth": 5}, task_code="chicken",
+                       task_type="monsters",
                        task_total=10, task_progress=0,
                        inventory={"tasks_coin": 1})
     collect, _ = active_means(state, gd, None, _ctx())
@@ -523,7 +535,8 @@ def test_low_yield_cancel_absent_when_no_alt_history(tmp_path):
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
     cycles = [_cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(5)]
     _seed_cycles(store, cycles)
-    state = make_state(task_code="x", task_type="items", task_total=20, task_progress=5)
+    state = make_state(task_code="x", task_type="items", task_total=20, task_progress=5,
+                       inventory={"tasks_coin": 1})
     collect, _ = active_means(state, GameData(), store, _ctx())
     assert MeansKind.LOW_YIELD_CANCEL not in collect
     store.close()
@@ -534,7 +547,8 @@ def test_low_yield_cancel_absent_when_no_farmitems_history(tmp_path):
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
     cycles = [_cycle(i, "GrindCharacterXP(slime)", delta_xp=15) for i in range(3)]
     _seed_cycles(store, cycles)
-    state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5)
+    state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5,
+                       inventory={"tasks_coin": 1})
     collect, _ = active_means(state, GameData(), store, _ctx())
     assert MeansKind.LOW_YIELD_CANCEL not in collect
     store.close()
@@ -550,7 +564,8 @@ def test_low_yield_cancel_positive_path_fires_above_margin(tmp_path):
         [_cycle(35 + i, "GrindCharacterXP(chicken)", delta_xp=5) for i in range(35)]
     )
     _seed_cycles(store, cycles)
-    state = make_state(task_code="x", task_type="items", task_total=50, task_progress=10)
+    state = make_state(task_code="x", task_type="items", task_total=50,
+                       task_progress=10, inventory={"tasks_coin": 1})
     collect, _ = active_means(state, _gd_task_rewards(), store, _ctx())
     assert MeansKind.LOW_YIELD_CANCEL in collect
     store.close()
@@ -565,7 +580,8 @@ def test_low_yield_cancel_absent_below_confidence_threshold(tmp_path):
         [_cycle(3 + i, "GrindCharacterXP(chicken)", delta_xp=5) for i in range(3)]
     )
     _seed_cycles(store, cycles)
-    state = make_state(task_code="x", task_type="items", task_total=50, task_progress=3)
+    state = make_state(task_code="x", task_type="items", task_total=50, task_progress=3,
+                       inventory={"tasks_coin": 1})
     collect, _ = active_means(state, _gd_task_rewards(), store, _ctx())
     assert MeansKind.LOW_YIELD_CANCEL not in collect
     store.close()
@@ -580,7 +596,8 @@ def test_low_yield_cancel_positive_path_no_fire_below_margin(tmp_path):
         [_cycle(60 + i, "GrindCharacterXP(chicken)", delta_xp=2) for i in range(6)]
     )
     _seed_cycles(store, cycles)
-    state = make_state(task_code="x", task_type="items", task_total=50, task_progress=10)
+    state = make_state(task_code="x", task_type="items", task_total=50, task_progress=10,
+                       inventory={"tasks_coin": 1})
     collect, _ = active_means(state, _gd_task_rewards(), store, _ctx())
     assert MeansKind.LOW_YIELD_CANCEL not in collect
     store.close()
@@ -591,7 +608,8 @@ def test_best_alternative_repr_returns_none_on_sqla_error(tmp_path):
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
     cycles = [_cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
     _seed_cycles(store, cycles)
-    state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5)
+    state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5,
+                       inventory={"tasks_coin": 1})
     with patch("artifactsmmo_cli.ai.learning.projections.Session") as mock_session:
         mock_session.side_effect = SQLAlchemyError("db error")
         collect, _ = active_means(state, GameData(), store, _ctx())
@@ -605,7 +623,8 @@ def test_best_alternative_repr_returns_none_when_all_goals_none(tmp_path):
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
     cycles = [_cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
     _seed_cycles(store, cycles)
-    state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5)
+    state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5,
+                       inventory={"tasks_coin": 1})
 
     class FakeSession:
         def __init__(self, *a, **kw):
@@ -674,7 +693,8 @@ def test_low_yield_cancel_absent_when_alt_repr_found_but_no_yield(tmp_path):
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
     cycles = [_cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
     _seed_cycles(store, cycles)
-    state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5)
+    state = make_state(task_code="gudgeon", task_type="items", task_total=50, task_progress=5,
+                       inventory={"tasks_coin": 1})
 
     def fake_best_alt(history: LearningStore) -> str | None:
         return "GrindCharacterXP(ghost)"
@@ -732,3 +752,97 @@ def test_bank_expand_fill_gate_is_exact_cross_multiply():
     at = make_state(bank_items={f"item{i}": 1 for i in range(38)}, gold=500)
     _, disc_at = active_means(at, gd, None, _ctx(bank_accessible=True))
     assert MeansKind.BANK_EXPAND in disc_at
+
+
+# ---------------------------------------------------------------------------
+# THE ONE-LEVEL PLANNING HORIZON (USER 2026-08-25) on the TASK_CANCEL rung.
+#
+# The rung's combat arm was `task_decision(...) == PIVOT`, and `task_decision`'s
+# combat arm is `task_feasibility`'s LEVEL PROXY: a monster more than
+# MONSTER_LEVEL_MARGIN (2) levels above the character. A level proxy is the wrong
+# question in both directions — measured on the scenario corpus,
+# `l32_held_task_open` holds a level-30 `lich` at character level 32 (IN BAND, so
+# PURSUE) that nothing in the catalogue can beat, while a high-level monster the
+# character's gear already beats would be discarded.
+#
+# `ai/task_horizon.py` asks the fight instead:
+#   gear closes it             -> keep it, build the gear
+#   one level + gear closes it -> keep it, take the level
+#   neither                    -> out of reach; discard it if a coin is in the
+#                                 pocket, otherwise carry it INERT and do other
+#                                 work.
+# ---------------------------------------------------------------------------
+
+
+def _horizon_world() -> GameData:
+    """A catalogue with ONE monster and NO equippable items.
+
+    No items means no chain can ever close a fight, which is what makes the
+    out-of-reach arm reachable from a hand-built world at all."""
+    gd = GameData()
+    gd._item_stats = {}
+    gd._crafting_recipes = {}
+    gd._monster_level = {"rat": 1}
+    fill_monster_stat_defaults(gd)
+    gd._monster_hp = {"rat": 60}
+    gd._monster_attack = {"rat": {"earth": 6}}
+    gd._monster_resistance = {"rat": {}}
+    return gd
+
+
+def test_task_cancel_fires_for_a_fight_outside_the_one_level_horizon():
+    """Clause 3, and it needs NO learning store.
+
+    Whether a fight is winnable is a fact about game data and the character —
+    the same reason S-048's grey arm above is asked without `history`. The old
+    combat arm required one (`history is not None and task_decision(...)`), so a
+    fresh character could never discard an unwinnable draw at all."""
+    gd = _horizon_world()
+    state = make_state(level=1, hp=20, max_hp=20, attack={"earth": 1},
+                       task_code="rat", task_type="monsters",
+                       task_total=10, task_progress=0,
+                       inventory={"tasks_coin": 1})
+    collect, _ = active_means(state, gd, None, _ctx())
+    assert MeansKind.TASK_CANCEL in collect
+
+
+def test_an_out_of_horizon_task_is_carried_inert_without_a_coin():
+    """S-052 is NOT broken by the horizon: the coin gate is asked first.
+
+    USER (2026-08-25): "It is a known condition that Tasks might be uncancelable
+    until we get a coin. Tasks can remain inert until that condition is met." So
+    the coinless character does not cancel, and does not gear-review for the
+    fight either (`GearLatch`); it carries the task and does other work. USER
+    again: "we can attempt cancel_task iff we have a task_coin, but if we have
+    no coins we shouldn't waste the cycles" — a rung that fired here would put a
+    goal in front of the planner that `TaskCancelAction.is_applicable` refuses,
+    which is a planning budget spent to rediscover what the bag already said."""
+    gd = _horizon_world()
+    bare = dict(level=1, hp=20, max_hp=20, attack={"earth": 1},
+                task_code="rat", task_type="monsters",
+                task_total=10, task_progress=0)
+    assert MeansKind.TASK_CANCEL not in active_means(
+        make_state(**bare, inventory={}), gd, None, _ctx())[0]
+    # A BANKED coin cannot be spent at the taskmaster either.
+    assert MeansKind.TASK_CANCEL not in active_means(
+        make_state(**bare, inventory={}, bank_items={"tasks_coin": 9}),
+        gd, None, _ctx())[0]
+
+
+def test_a_fight_gear_closes_is_kept_however_far_above_the_character_it_is():
+    """Clause 1 from the rung's side, and the direction the LEVEL PROXY got wrong.
+
+    The rat is nine levels above this character, so `task_feasibility` reports a
+    combat requirement and `task_decision` answers PIVOT — the old arm discarded
+    it. A `bronze_sword` in the catalogue closes the fight, so the horizon keeps
+    the task and the gear chain is what gets built."""
+    gd = _horizon_world()
+    gd._monster_level = {"rat": 10}
+    gd._item_stats = {"bronze_sword": ItemStats(
+        code="bronze_sword", level=1, type_="weapon", attack={"earth": 40})}
+    state = make_state(level=1, hp=200, max_hp=200, attack={"earth": 1},
+                       task_code="rat", task_type="monsters",
+                       task_total=10, task_progress=0,
+                       inventory={"tasks_coin": 1})
+    collect, _ = active_means(state, gd, None, _ctx())
+    assert MeansKind.TASK_CANCEL not in collect

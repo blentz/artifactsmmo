@@ -1874,7 +1874,8 @@ def test_task_cancel_fires_for_infeasible_items_task():
         crafting_skill="alchemy", crafting_level=5)
     gd._crafting_recipes["small_health_potion"] = {"sunflower": 3}
     state = make_state(task_code="small_health_potion", task_type="items",
-                       task_total=29, task_progress=0, skills={"alchemy": 1})
+                       task_total=29, task_progress=0, skills={"alchemy": 1},
+                       inventory={TASKS_COIN_CODE: 1})
     assert TaskCancelGoal().value(state, gd) > 0.0
 
 
@@ -1892,8 +1893,28 @@ def test_task_cancel_zero_for_feasible_items_task():
 def test_task_cancel_still_fires_for_too_hard_monster():
     gd = make_game_data()
     gd._monster_level = {"dragon": 40}
-    state = make_state(task_code="dragon", task_type="monsters", task_total=1, level=3)
+    state = make_state(task_code="dragon", task_type="monsters", task_total=1, level=3,
+                       inventory={TASKS_COIN_CODE: 1})
     assert TaskCancelGoal().value(state, gd) > 0.0
+
+
+def test_task_cancel_is_silent_without_a_pocket_coin():
+    """NO COIN, NO PROPOSAL — the gate `TaskCancelAction.is_applicable` already
+    applies, asked at SELECTION so a coinless character never spends a planning
+    budget on a goal whose only action refuses.
+
+    Latent while 12.0 lost to everything; the one-level horizon
+    (`ai/task_horizon.py`) makes cancel able to fire, so the gate ships with it.
+    USER (2026-08-25): "we can attempt cancel_task iff we have a task_coin, but
+    if we have no coins we shouldn't waste the cycles."
+    """
+    gd = make_game_data()
+    gd._monster_level = {"dragon": 40}
+    held = dict(task_code="dragon", task_type="monsters", task_total=1, level=3)
+    assert TaskCancelGoal().value(make_state(**held, inventory={}), gd) == 0.0
+    # A BANKED coin is not spendable at the taskmaster either.
+    assert TaskCancelGoal().value(
+        make_state(**held, inventory={}, bank_items={TASKS_COIN_CODE: 9}), gd) == 0.0
 
 
 class TestDepositInventorySelective:

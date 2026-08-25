@@ -782,7 +782,14 @@ class TestTaskPursuitYield:
 
 
 class TestLowYieldCancelFires:
-    """Unit tests for the shared low_yield_cancel_fires predicate."""
+    """Unit tests for the shared low_yield_cancel_fires predicate.
+
+    Every state that is meant to reach a DOWNSTREAM condition carries a pocket
+    `tasks_coin`. Since 2026-08-25 the predicate asks for one first — cancelling
+    spends a coin (`TaskCancelAction.is_applicable`, HTTP 478 without it), so a
+    firing verdict with no coin could only produce an empty plan. A fixture
+    without the coin therefore tests the coin gate, not the margin/confidence
+    logic it was written for."""
 
     @staticmethod
     def _gd() -> GameData:
@@ -849,7 +856,8 @@ class TestLowYieldCancelFires:
         cycles = [self._cycle(i, "PursueTask(x)", delta_xp=0, task_progress=i) for i in range(5)]
         cycles += [self._cycle(5 + i, "GrindCharacterXP(slime)", delta_xp=15) for i in range(3)]
         self._seed(store, cycles)
-        state = make_state(task_code="gudgeon", task_total=347, task_progress=5)
+        state = make_state(task_code="gudgeon", task_total=347, task_progress=5,
+                           inventory={"tasks_coin": 1})
         assert low_yield_cancel_fires(state, self._gd(), store) is True
         store.close()
 
@@ -858,7 +866,8 @@ class TestLowYieldCancelFires:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         cycles = [self._cycle(i, "GrindCharacterXP(slime)", delta_xp=15) for i in range(5)]
         self._seed(store, cycles)
-        state = make_state(task_code="gudgeon", task_total=50, task_progress=5)
+        state = make_state(task_code="gudgeon", task_total=50, task_progress=5,
+                           inventory={"tasks_coin": 1})
         assert low_yield_cancel_fires(state, self._gd(), store) is False
         store.close()
 
@@ -867,7 +876,8 @@ class TestLowYieldCancelFires:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         cycles = [self._cycle(i, "PursueTask(x)", delta_xp=1, task_progress=i) for i in range(35)]
         self._seed(store, cycles)
-        state = make_state(task_code="x", task_total=50, task_progress=10)
+        state = make_state(task_code="x", task_total=50, task_progress=10,
+                           inventory={"tasks_coin": 1})
         assert low_yield_cancel_fires(state, self._gd(), store) is False
         store.close()
 
@@ -879,7 +889,8 @@ class TestLowYieldCancelFires:
             [self._cycle(35 + i, "GrindCharacterXP(chicken)", delta_xp=5) for i in range(35)]
         )
         self._seed(store, cycles)
-        state = make_state(task_code="x", task_total=50, task_progress=10)
+        state = make_state(task_code="x", task_total=50, task_progress=10,
+                           inventory={"tasks_coin": 1})
         assert low_yield_cancel_fires(state, self._gd(), store) is True
         store.close()
 
@@ -891,7 +902,8 @@ class TestLowYieldCancelFires:
             [self._cycle(3 + i, "GrindCharacterXP(chicken)", delta_xp=5) for i in range(3)]
         )
         self._seed(store, cycles)
-        state = make_state(task_code="x", task_total=50, task_progress=3)
+        state = make_state(task_code="x", task_total=50, task_progress=3,
+                           inventory={"tasks_coin": 1})
         assert low_yield_cancel_fires(state, self._gd(), store) is False
         store.close()
 
@@ -904,7 +916,8 @@ class TestLowYieldCancelFires:
             [self._cycle(60 + i, "GrindCharacterXP(chicken)", delta_xp=2) for i in range(6)]
         )
         self._seed(store, cycles)
-        state = make_state(task_code="x", task_total=50, task_progress=10)
+        state = make_state(task_code="x", task_total=50, task_progress=10,
+                           inventory={"tasks_coin": 1})
         assert low_yield_cancel_fires(state, self._gd(), store) is False
         store.close()
 
@@ -917,7 +930,8 @@ class TestLowYieldCancelFires:
         # Return a repr that has no cycles in the store for this character.
         monkeypatch.setattr(proj, "_best_alternative_repr",
                             lambda h: "GrindCharacterXP(ghost_that_does_not_exist)")
-        state = make_state(task_code="x", task_total=50, task_progress=5)
+        state = make_state(task_code="x", task_total=50, task_progress=5,
+                           inventory={"tasks_coin": 1})
         assert low_yield_cancel_fires(state, self._gd(), store) is False
         store.close()
 
