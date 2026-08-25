@@ -134,6 +134,23 @@ class ScenarioCharacter:
     (predict_win sees 0 attack). Flipping them retroactively would silently
     re-derive their pins, so realistic combat stats (including derived
     max_hp) are opt-in per scenario."""
+    ge_market: bool = False
+    """Which Grand-Exchange MARKET this scenario is planned in: the quiet book
+    (False, no standing order on anything) or the order book captured into the
+    bundle (True). Forwarded to `load_bundle_game_data(..., with_ge_orders=)`
+    by every harness that plans a scenario, including `plan --scenario`.
+
+    It lives on the character rather than on the loader because the market is
+    part of what a scenario ASSERTS, exactly like `active_events` and `raids`:
+    a GE-populated cell and its quiet control are the SAME character in two
+    worlds, and a control the harness cannot name is a control nobody can run.
+    Measured (see `GameData.from_cache_bundle`): with the book hydrated, an
+    adequate-skill character standing on `iron_legs_armor` plans
+    `GeBuy(iron_legs_armor)`; in the quiet book the same character plans
+    `Gather(iron_rocks x42)`.
+
+    Default False so every scenario written before the book existed keeps the
+    market it was pinned in."""
     description: str = ""
 
 
@@ -272,6 +289,64 @@ _COPPER_SET = {
     "boots_slot": "copper_boots", "ring1_slot": "copper_ring",
     "ring2_slot": "copper_ring",
 }
+
+def _held_task_cell(name: str, task: tuple[str, str, int, int],
+                    description: str) -> ScenarioCharacter:
+    """One member of the coverage matrix's HELD-TASK triple (cells 1-3).
+
+    Every field is fixed here so the ONLY thing that differs between the three
+    cells is `task`. Built by a function rather than copied three times because
+    a controlled triple that drifts apart stops being a control, and three
+    hand-maintained literals are exactly how it drifts."""
+    return ScenarioCharacter(
+        name=name, level=32,
+        skills={"mining": 20, "woodcutting": 20, "weaponcrafting": 15,
+                "gearcrafting": 15, "jewelrycrafting": 15, "cooking": 10,
+                "alchemy": 10, "fishing": 10},
+        equipment={
+            "weapon_slot": "iron_sword", "helmet_slot": "iron_helm",
+            "body_armor_slot": "iron_armor", "leg_armor_slot": "iron_legs_armor",
+            "boots_slot": "iron_boots", "ring1_slot": "iron_ring",
+            "ring2_slot": "iron_ring", "shield_slot": "iron_shield",
+            "amulet_slot": "life_amulet",
+        },
+        inventory={"iron_ore": 12, "cowhide": 4, "feather": 6},
+        inventory_max=140,
+        bank={"iron_bar": 6, "cowhide": 8},
+        gold=12000,
+        derive_combat_stats=True,
+        task=task, description=description)
+
+
+def _ge_market_cell(name: str, *, gearcrafting: int, ge_market: bool,
+                    description: str) -> ScenarioCharacter:
+    """One member of the coverage matrix's GRAND-EXCHANGE triple (cells 4/5/7).
+
+    The two axes those cells vary are the arguments: `gearcrafting` (D11 — 9 is
+    one short of the `feather_coat` rung, 10 is adequate) and `ge_market` (D3).
+    Everything else is fixed, which is what makes cell 7 a control rather than
+    a fourth unrelated character. `leg_armor_slot` is held a tier behind on
+    purpose: it is what makes `iron_legs_armor` the leg target and
+    `gearcrafting` the binding skill."""
+    return ScenarioCharacter(
+        name=name, level=12,
+        skills={"mining": 10, "woodcutting": 10, "weaponcrafting": 10,
+                "gearcrafting": gearcrafting, "jewelrycrafting": 5,
+                "cooking": 5, "alchemy": 5, "fishing": 5},
+        equipment={
+            "weapon_slot": "iron_sword", "helmet_slot": "iron_helm",
+            "body_armor_slot": "iron_armor", "leg_armor_slot": "copper_legs_armor",
+            "boots_slot": "iron_boots", "ring1_slot": "iron_ring",
+            "ring2_slot": "iron_ring", "shield_slot": "iron_shield",
+            "amulet_slot": "life_amulet",
+        },
+        inventory={"iron_ore": 8, "cowhide": 1},
+        inventory_max=130,
+        bank={"iron_bar": 3, "cowhide": 2},
+        gold=3000,
+        derive_combat_stats=True,
+        ge_market=ge_market, description=description)
+
 
 SCENARIOS: dict[str, ScenarioCharacter] = {
     "l1_fresh": ScenarioCharacter(
@@ -1249,4 +1324,98 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         description="NINE levels below the L20 milestone: the horizon's long "
                      "end, where a banded projection walks the most rungs and "
                      "an acquisition has the most room to repay itself."),
+
+    # --- COVERAGE MATRIX cells 1-3 (design 2026-08-24 §5.3): the HELD-TASK
+    # dimension as a CONTROLLED triple. Three scenarios already hold a task
+    # (`l12_gearcrafting_gap`, `l13_drop_recipe_grind`, `l10_copper_adequate`)
+    # and between them cover the same three values — but on three DIFFERENT
+    # characters, so nothing they measure can be attributed to the task rather
+    # than to the level, gear or bank that also differ. These three are ONE
+    # character in three task states: every field below is identical across
+    # them and `task` is the only thing that moves, which is what makes the
+    # dimension the thing under test.
+    #
+    # D1 = derived, mandatory here. Measured (design §5.1 I1): at zero total
+    # attack a `cow` task gives `has_combat_deficit` in 30/30 scenarios and a
+    # `chicken` task in 29/30, because every monster is unwinnable — so a task
+    # cell on the zero-attack side measures the harness, not the bot. The
+    # D1=zero half of this pair is deliberately NOT built.
+    #
+    # Packed independent dimensions (§5.3's "packs" column, taken as a set over
+    # the triple rather than split across it — splitting them would confound the
+    # only comparison these three exist to make): D8 mid-band (32 sits between
+    # the 30 and 35 ladder rungs), D9 >= 10k (live 82.3 % of cycles hold >= 1000
+    # gold; the committed set had 3/30), D6 non-empty bag but well below every
+    # relief watermark (live: 0 of 80,194 cycles carry an empty bag; the
+    # committed set carried one in 26/30) and D7 stocked.
+    #
+    # The three monsters are catalogue facts at this loadout, not guesses —
+    # measured over all 58 monsters: 12 are workable, 37 unwinnable-with-a-
+    # closing-chain and 9 unwinnable-with-none.
+    # D2 = WORKABLE. `pig` is the monster C3P0 lost 42 straight fights to at
+    # level 19; at this loadout it is winnable, so `has_combat_deficit` is
+    # False and `deficit_upgrade_target` is None through its FIRST return.
+    "l32_held_task_workable": _held_task_cell(
+        "l32_held_task_workable", ("pig", "monsters", 4, 10),
+        "Held-task triple, value WORKABLE: a pig task this loadout wins — "
+        "the negative arm of the deficit check."),
+    # D2 = UNWINNABLE, A GEAR CHAIN CLOSES IT. The greedy margin walk names
+    # `perfect_bow` unpriced and `earth_boost_potion` under the GEAR_REVIEW
+    # guard's `acquisition_actions` pricing — either way it names SOMETHING,
+    # which is the "I lost, so get gear" link, and the input that makes
+    # `strategy_driver`'s GEAR_REVIEW arm pick a MONSTER-AWARE target instead
+    # of falling through to the monster-blind value scan.
+    "l32_held_task_closable": _held_task_cell(
+        "l32_held_task_closable", ("ogre", "monsters", 4, 10),
+        "Held-task triple, value UNWINNABLE-CLOSABLE: an ogre task this "
+        "loadout loses and `perfect_bow` closes."),
+    # D2 = UNWINNABLE, NOTHING CLOSES IT. `lich` is level 30 against this
+    # character's 32 — IN BAND, so the fall-through is not an artefact of
+    # picking an absurd monster — and no single acquisition in the catalogue
+    # improves the margin, so the walk runs to exhaustion and names nothing.
+    "l32_held_task_open": _held_task_cell(
+        "l32_held_task_open", ("lich", "monsters", 4, 10),
+        "Held-task triple, value UNWINNABLE-OPEN: an in-band lich task no "
+        "gear in the catalogue closes."),
+
+    # --- COVERAGE MATRIX cells 4, 5 and 7 (design §5.3): the GRAND-EXCHANGE
+    # dimension, as a controlled triple over ONE character. Cell 7 is the
+    # CONTROL and exists because cells 4 and 5 prove nothing without it.
+    #
+    # All three stand on the same rung shape: `feather_coat`
+    # (gearcrafting 10, recipe {feather:5, ash_plank:2}) is depth-2 and
+    # DROP-FED — `feather` comes off the chicken, `ash_plank` from `ash_wood`.
+    # That shape is 70.7 % of the catalogue and 87.2 % of live UpgradeEquipment
+    # cycles, and it carried 4/30 scenarios. `feather_coat` also carries a
+    # standing GE sell order in the captured book, which is what puts the
+    # `_source_leafs` GE arm on the descent at all.
+    # D11 = ONE SHORT (gearcrafting 9 against the rung's 10), so the descent is
+    # a GRIND descent and `_source_leafs` takes its `CRAFT_SUBSTITUTE_KINDS`
+    # arm: the standing GE order must NOT end the walk, because buying the rung
+    # pays zero skill XP. This is the Robby stall of 2026-08-24 as a scenario.
+    "l12_ge_book_grind": _ge_market_cell(
+        "l12_ge_book_grind", gearcrafting=9, ge_market=True,
+        description="GE triple, cell 4: busy order book, gearcrafting ONE "
+                    "SHORT of the rung — the grind must descend PAST the "
+                    "standing GE sell order to the material it has to gather."),
+    # THE CONTROL. Character-identical to `l12_ge_book_grind`; the ONLY
+    # difference in the whole world is that no order stands on anything, so
+    # `obtain_sources` emits no GE_FILL and the GE arm of `_source_leafs` is
+    # never reached. Without this row, cell 4's descent could be right for a
+    # reason that has nothing to do with the order book.
+    "l12_quiet_book_grind": _ge_market_cell(
+        "l12_quiet_book_grind", gearcrafting=9, ge_market=False,
+        description="GE triple, cell 7 (CONTROL): the same character as "
+                    "l12_ge_book_grind in a QUIET market — no standing order, "
+                    "so the GE leaf rule is never consulted."),
+    # D11 = ADEQUATE, so the descent is NOT a grind and `_source_leafs` takes
+    # its other arm: a GE_FILL DOES leaf, because here the item is the goal
+    # rather than the craft. Measured: this character plans
+    # `GeBuy(iron_legs_armor)` in the busy book and `Gather(iron_rocks x42)` in
+    # the quiet one — the sharpest single flip the GE dimension produces.
+    "l12_ge_book_adequate": _ge_market_cell(
+        "l12_ge_book_adequate", gearcrafting=10, ge_market=True,
+        description="GE triple, cell 5: busy order book, gearcrafting ADEQUATE "
+                    "— outside a grind the standing GE order LEAFS the descent "
+                    "and the rung is bought rather than crafted."),
 }

@@ -46,12 +46,12 @@ zero-stat states "`is_winnable` is False against EVERY monster (predict_win
 sees 0 attack)". A rung's obtainability walk bottoms out in `drop_obtainable`,
 so with the flag off EVERY monster-drop leaf in the catalogue is unreachable
 and the census would report walls that are properties of the fixture. Measured
-on the committed bundle: 47 closed cells with the flag off everywhere, 19 with
-the scenarios AS COMMITTED (20 of the 30 opt the flag on), and 5 with it forced
+on the committed bundle: 56 closed cells with the flag off everywhere, 19 with
+the scenarios AS COMMITTED (26 of the 36 opt the flag on), and 5 with it forced
 on. The flag is therefore forced on for every cell — the census derives the
 combat totals a live character wearing that scenario's declared loadout would
 report. The committed scenarios are NOT modified; `census_state` builds its own
-copy. `test_the_zero_stat_harness_would_measure_the_fixture` pins the 47/19/5
+copy. `test_the_zero_stat_harness_would_measure_the_fixture` pins the 56/19/5
 spread so a later default flip cannot make this note quietly false.
 
 THE RESIDUALS (must be zero)
@@ -71,14 +71,14 @@ nothing at all. Without it `WALL_LADDER_TOPPED` would absorb a bundle whose
 rows for a skill went missing and `--check` would exit 0 on corrupted input.
 
 WHAT "0 RESIDUALS" DOES AND DOES NOT PROMISE. `O1_SILENT_STALL` is
-`closed AND routed`, so its reach is the ROUTED subset, not all 240 cells.
-Measured on the committed bundle: 19 cells are routed — jewelrycrafting 11,
-gearcrafting 6, weaponcrafting 2 — i.e. 3 of the 8 skills, and weaponcrafting
+`closed AND routed`, so its reach is the ROUTED subset, not all 288 cells.
+Measured on the committed bundle: 24 cells are routed — jewelrycrafting 14,
+gearcrafting 8, weaponcrafting 2 — i.e. 3 of the 8 skills, and weaponcrafting
 only at level 1. Alchemy, cooking, fishing, mining and woodcutting are never
 routed by any scenario, so a closure in one of them can only ever be reported
 as an EXPLAINED wall; and the five real walls this census finds
 (weaponcrafting 35 and 42, the epic's own L38-48 territory) sit outside the
-residual's reach today. The other 221 cells are still swept, still verdicted
+residual's reach today. The other 264 cells are still swept, still verdicted
 and still walled by name — they just cannot produce the must-be-zero class.
 `routing_breakdown` prints this scope into the matrix on every run, computed
 rather than transcribed, so widening the routed set updates the claim itself.
@@ -180,7 +180,7 @@ coverage-omitted and `census-gate.yml` runs the scripts without pytest. So the
 floor lives here, where both the script and
 `test_open_rung_completeness` read the same number.
 
-200 against a current 240 (30 scenarios x 8 skills): enough headroom to retire
+200 against a current 288 (36 scenarios x 8 skills): enough headroom to retire
 a scenario or two without flapping, far too tight for a collapsed sweep."""
 
 
@@ -395,7 +395,7 @@ def routing_breakdown(results: list[RungResult]) -> str:
     THE RESIDUAL'S SCOPE, STATED OUT LOUD. `o1_silent_stall` is
     `closed AND routed`, so a skill the graph never routes to can only ever be
     reported as an EXPLAINED wall, never as the residual — a "0 residuals"
-    headline over 240 cells therefore promises less than the cell count
+    headline over 288 cells therefore promises less than the cell count
     implies. Computed rather than transcribed so the claim cannot rot: a
     scenario that widens the routed set updates this line by itself."""
     counts: dict[str, int] = {}

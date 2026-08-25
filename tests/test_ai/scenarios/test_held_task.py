@@ -15,6 +15,21 @@ values rather than three copies of one:
 * `l13_drop_recipe_grind` — a task it cannot win, with gear that closes the gap,
 * `l10_copper_adequate` — a task it cannot win, with NO gear that closes it.
 
+Those three populate the dimension. They do not CONTROL it: they are three
+different characters at three levels with three loadouts, so nothing measured
+across them can be attributed to the task rather than to everything else that
+also differs. Coverage-matrix cells 1-3 (design 2026-08-24 §5.3) add the
+controlled form — ONE character in three task states, every other field
+identical:
+
+* `l32_held_task_workable` — pig, winnable,
+* `l32_held_task_closable` — ogre, unwinnable, a chain closes it,
+* `l32_held_task_open` — lich, unwinnable, nothing closes it.
+
+`test_the_held_task_triple_varies_only_the_task` is what keeps them a control;
+`test_the_task_triple_moves_the_gear_review_target` is what shows the flip
+reaches a decision rather than stopping at a predicate.
+
 Two properties this file is built to keep, both of them measured rather than
 assumed:
 
@@ -30,6 +45,7 @@ assumed:
    how a dimension quietly stops discriminating.
 """
 
+import dataclasses
 import json
 from pathlib import Path
 
@@ -37,15 +53,27 @@ import pytest
 
 from artifactsmmo_cli.ai.combat_deficit import deficit_upgrade_target, has_combat_deficit
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_appropriateness import has_craftable_upgrade_any_slot
+from artifactsmmo_cli.ai.gear_latch import GearLatch
+from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
+from artifactsmmo_cli.ai.tiers.guards import GuardKind
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
 WORKABLE = "l12_gearcrafting_gap"
 UNWINNABLE_CLOSABLE = "l13_drop_recipe_grind"
 UNWINNABLE_OPEN = "l10_copper_adequate"
-TASK_SCENARIOS = (WORKABLE, UNWINNABLE_CLOSABLE, UNWINNABLE_OPEN)
+
+TRIPLE_WORKABLE = "l32_held_task_workable"
+TRIPLE_CLOSABLE = "l32_held_task_closable"
+TRIPLE_OPEN = "l32_held_task_open"
+TRIPLE = (TRIPLE_WORKABLE, TRIPLE_CLOSABLE, TRIPLE_OPEN)
+
+TASK_SCENARIOS = (WORKABLE, UNWINNABLE_CLOSABLE, UNWINNABLE_OPEN, *TRIPLE)
 
 
 @pytest.fixture(scope="module")
@@ -129,3 +157,124 @@ def test_unwinnable_task_with_no_closing_chain_names_nothing(gd: GameData) -> No
     state = _state(UNWINNABLE_OPEN, gd)
     assert has_combat_deficit(state, gd) is True
     assert deficit_upgrade_target(state, gd) is None
+
+
+# --- coverage-matrix cells 1-3: the same character, three task states --------
+
+def test_the_held_task_triple_varies_only_the_task() -> None:
+    """The control property, asserted rather than trusted.
+
+    Cells 1-3 exist to attribute an effect to the HELD TASK. That attribution
+    is only valid while `task` is the sole difference between them, so this
+    compares every other field of the three `ScenarioCharacter`s and fails on
+    any drift — including a well-meaning edit that tunes one cell's gold or
+    bank and quietly turns the triple into three unrelated characters."""
+    def _rest(name: str) -> dict[str, object]:
+        return {k: v for k, v in dataclasses.asdict(SCENARIOS[name]).items()
+                if k not in ("name", "task", "description")}
+
+    reference = _rest(TRIPLE_WORKABLE)
+    for name in TRIPLE[1:]:
+        assert _rest(name) == reference, f"{name} differs from the triple by more than its task"
+    assert len({SCENARIOS[n].task for n in TRIPLE}) == 3
+
+
+def test_the_task_triple_splits_the_deficit_three_ways(gd: GameData) -> None:
+    """One character, three tasks, three answers at the branch D2 names.
+
+    `_blocked_task_monster` is reached in all three (a task is held); what
+    differs is only which arm of `has_combat_deficit` / `deficit_upgrade_target`
+    the monster lands on. Measured over all 58 catalogue monsters at this
+    loadout: 12 are workable, 37 closable, 9 open — so none of the three values
+    is a lucky single."""
+    workable = _state(TRIPLE_WORKABLE, gd)
+    closable = _state(TRIPLE_CLOSABLE, gd)
+    open_ = _state(TRIPLE_OPEN, gd)
+
+    assert has_combat_deficit(workable, gd) is False
+    assert deficit_upgrade_target(workable, gd) is None
+
+    assert has_combat_deficit(closable, gd) is True
+    target = deficit_upgrade_target(closable, gd)
+    assert target == ("perfect_bow", "weapon_slot")
+
+    assert has_combat_deficit(open_, gd) is True
+    assert deficit_upgrade_target(open_, gd) is None
+    # ...and the lich really is IN BAND, so the fall-through is a gear fact and
+    # not the artefact of naming a monster twenty levels out of reach.
+    assert gd.monster_level("lich") <= SCENARIOS[TRIPLE_OPEN].level
+
+
+def test_the_task_triple_flips_the_gear_latch(gd: GameData) -> None:
+    """`gear_latch.py:79`, the STANDING arm, with the task as the only input moving.
+
+    The latch's standing arm is a three-way conjunction: a craftable upgrade
+    exists, the cascade found nothing else worth fighting, and a combat deficit
+    exists. The first is identical across the triple (asserted here so a
+    failure cannot be blamed on it) and the second is supplied explicitly —
+    see `test_no_offline_scenario_can_starve_the_winnable_cascade` for why it
+    has to be. So the latch's answer moves with the deficit, i.e. with the
+    task, which is exactly the claim cell 2 makes."""
+    def _latch(name: str, *, winnable_alternative: bool) -> bool:
+        state = _state(name, gd)
+        assert has_craftable_upgrade_any_slot(state, gd) is True
+        latch = GearLatch()
+        latch.update(state.level, state, None, gd,
+                     winnable_alternative=winnable_alternative)
+        return latch.active
+
+    assert _latch(TRIPLE_WORKABLE, winnable_alternative=False) is False
+    assert _latch(TRIPLE_CLOSABLE, winnable_alternative=False) is True
+    assert _latch(TRIPLE_OPEN, winnable_alternative=False) is True
+    # The other conjunct still binds: an alternative to fight releases all three.
+    for name in TRIPLE:
+        assert _latch(name, winnable_alternative=True) is False
+
+
+def test_no_offline_scenario_can_starve_the_winnable_cascade(gd: GameData) -> None:
+    """Why the test above passes `winnable_alternative` instead of measuring it.
+
+    `GearLatch`'s standing arm needs the cascade to find NOTHING worth
+    fighting. Offline it always finds something: `_path_aligned_monster` returns
+    a winnable low-level slime for every derived-stats character measured
+    (levels 20-45, copper and iron loadouts alike), so `winnable_alternative`
+    is True and the standing arm cannot fire from a scenario alone. The EDGE
+    arm needs `last_outcome == "error:fight_lost"` or a level-up, and
+    `ScenarioCharacter` can declare neither.
+
+    Recorded as an assertion rather than a comment so that the day the cascade
+    CAN come up empty offline, this fails and cell 2 gets promoted from
+    "the latch's state conjuncts hold" to "the guard fires end to end"."""
+    for name in TRIPLE:
+        player = GamePlayer(character=name, history=None)
+        player.seed_offline(_state(name, gd), gd)
+        assert player._winnable_farm_target() is not None
+        player.plan_from_state()
+        assert player._last_ctx is not None
+        assert player._last_ctx.gear_review_active is False
+
+
+def test_the_task_triple_moves_the_gear_review_target(gd: GameData) -> None:
+    """`strategy_driver.py:381` — both arms, reached from the triple.
+
+    This is where D2 stops being a predicate and becomes a DECISION. The
+    GEAR_REVIEW guard asks `deficit_upgrade_target` FIRST and only falls
+    through to the monster-blind value scan when it names nothing. Cell 2 takes
+    the first arm; cells 1 and 3 take the fall-through, and they take it for
+    different reasons (no deficit at all vs a deficit no gear closes) — which
+    is why the triple needs all three rows and not two.
+
+    Measured: the guard prices its candidates with `acquisition_actions`, so the
+    deficit target it lands on (`earth_boost_potion`) is the priced answer, not
+    the unpriced `perfect_bow` of `test_the_task_triple_splits_the_deficit_three_ways`.
+    Both are `deficit_upgrade_target`; only the `cost_of` differs."""
+    ctx = dataclasses.replace(NO_PROFILE_CONTEXT, gear_review_active=True)
+    goals = {name: repr(map_guard(GuardKind.GEAR_REVIEW, gd, ctx,
+                                  state=_state(name, gd)))
+             for name in TRIPLE}
+    assert "earth_boost_potion" in goals[TRIPLE_CLOSABLE]
+    # The two fall-through rows agree with each other and DISAGREE with the
+    # deficit-driven one — the generic scan is monster-blind, which is the
+    # whole reason the monster-aware arm was added.
+    assert goals[TRIPLE_WORKABLE] == goals[TRIPLE_OPEN]
+    assert goals[TRIPLE_CLOSABLE] != goals[TRIPLE_WORKABLE]

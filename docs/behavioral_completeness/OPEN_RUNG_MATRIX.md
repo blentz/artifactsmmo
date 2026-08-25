@@ -8,9 +8,9 @@
 >
 > Every field `classify_gap` reads is a column here, so a verdict can be reconstructed from the row alone: `g-in`/`g-above` are the in-range and above-range resource counts and `g-xp+` is whether the HIGHEST in-range resource still pays XP — the three that separate `wall_all_rungs_grey` from `wall_below_first_rung`.
 
-240 cells over 79 distinct (skill, level) pairs; PASS 235; routed 19; walled 5; o1_silent_stall 0; o1_unexplained 0; skill_catalogue_empty 0
+288 cells over 82 distinct (skill, level) pairs; PASS 283; routed 24; walled 5; o1_silent_stall 0; o1_unexplained 0; skill_catalogue_empty 0
 
-residual scope: 19 of 240 cells are ROUTED (3 of 8 skills) — jewelrycrafting 11, gearcrafting 6, weaponcrafting 2. A closure in an unrouted skill can only be an explained wall.
+residual scope: 24 of 288 cells are ROUTED (3 of 8 skills) — jewelrycrafting 14, gearcrafting 8, weaponcrafting 2. A closure in an unrouted skill can only be an explained wall.
 
 | Scenario | Skill | C | Target | Verdict | routed | in-level | xp+ | obtainable | above | g-in | g-above | g-xp+ | gather rung |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -254,4 +254,52 @@ residual scope: 19 of 240 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l11_band_floor | mining | 21 | 22 | PASS | - | 7 | 5 | 5 | 7 | 3 | 4 | yes | `coal` |
 | l11_band_floor | weaponcrafting | 10 | 11 | PASS | - | 18 | 18 | 13 | 51 | 0 | 0 | - | `None` |
 | l11_band_floor | woodcutting | 15 | 16 | PASS | - | 2 | 1 | 1 | 9 | 2 | 5 | yes | `spruce_wood` |
+| l32_held_task_workable | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
+| l32_held_task_workable | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
+| l32_held_task_workable | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
+| l32_held_task_workable | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
+| l32_held_task_workable | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
+| l32_held_task_workable | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
+| l32_held_task_workable | weaponcrafting | 15 | 16 | PASS | - | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |
+| l32_held_task_workable | woodcutting | 20 | 21 | PASS | - | 3 | 2 | 2 | 8 | 3 | 4 | yes | `birch_wood` |
+| l32_held_task_closable | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
+| l32_held_task_closable | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
+| l32_held_task_closable | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
+| l32_held_task_closable | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
+| l32_held_task_closable | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
+| l32_held_task_closable | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
+| l32_held_task_closable | weaponcrafting | 15 | 16 | PASS | - | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |
+| l32_held_task_closable | woodcutting | 20 | 21 | PASS | - | 3 | 2 | 2 | 8 | 3 | 4 | yes | `birch_wood` |
+| l32_held_task_open | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
+| l32_held_task_open | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
+| l32_held_task_open | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
+| l32_held_task_open | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
+| l32_held_task_open | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
+| l32_held_task_open | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
+| l32_held_task_open | weaponcrafting | 15 | 16 | PASS | - | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |
+| l32_held_task_open | woodcutting | 20 | 21 | PASS | - | 3 | 2 | 2 | 8 | 3 | 4 | yes | `birch_wood` |
+| l12_ge_book_grind | alchemy | 5 | 6 | PASS | - | 2 | 2 | 2 | 23 | 1 | 4 | yes | `sunflower` |
+| l12_ge_book_grind | cooking | 5 | 6 | PASS | - | 4 | 4 | 4 | 16 | 0 | 0 | - | `None` |
+| l12_ge_book_grind | fishing | 5 | 6 | PASS | - | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
+| l12_ge_book_grind | gearcrafting | 9 | 10 | PASS | yes | 7 | 7 | 6 | 125 | 0 | 0 | - | `None` |
+| l12_ge_book_grind | jewelrycrafting | 5 | 6 | PASS | yes | 2 | 2 | 2 | 48 | 0 | 0 | - | `None` |
+| l12_ge_book_grind | mining | 10 | 11 | PASS | - | 2 | 2 | 2 | 12 | 2 | 5 | yes | `iron_ore` |
+| l12_ge_book_grind | weaponcrafting | 10 | 11 | PASS | - | 18 | 18 | 13 | 51 | 0 | 0 | - | `None` |
+| l12_ge_book_grind | woodcutting | 10 | 11 | PASS | - | 2 | 2 | 2 | 9 | 2 | 5 | yes | `spruce_wood` |
+| l12_quiet_book_grind | alchemy | 5 | 6 | PASS | - | 2 | 2 | 2 | 23 | 1 | 4 | yes | `sunflower` |
+| l12_quiet_book_grind | cooking | 5 | 6 | PASS | - | 4 | 4 | 4 | 16 | 0 | 0 | - | `None` |
+| l12_quiet_book_grind | fishing | 5 | 6 | PASS | - | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
+| l12_quiet_book_grind | gearcrafting | 9 | 10 | PASS | yes | 7 | 7 | 6 | 125 | 0 | 0 | - | `None` |
+| l12_quiet_book_grind | jewelrycrafting | 5 | 6 | PASS | yes | 2 | 2 | 2 | 48 | 0 | 0 | - | `None` |
+| l12_quiet_book_grind | mining | 10 | 11 | PASS | - | 2 | 2 | 2 | 12 | 2 | 5 | yes | `iron_ore` |
+| l12_quiet_book_grind | weaponcrafting | 10 | 11 | PASS | - | 18 | 18 | 13 | 51 | 0 | 0 | - | `None` |
+| l12_quiet_book_grind | woodcutting | 10 | 11 | PASS | - | 2 | 2 | 2 | 9 | 2 | 5 | yes | `spruce_wood` |
+| l12_ge_book_adequate | alchemy | 5 | 6 | PASS | - | 2 | 2 | 2 | 23 | 1 | 4 | yes | `sunflower` |
+| l12_ge_book_adequate | cooking | 5 | 6 | PASS | - | 4 | 4 | 4 | 16 | 0 | 0 | - | `None` |
+| l12_ge_book_adequate | fishing | 5 | 6 | PASS | - | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
+| l12_ge_book_adequate | gearcrafting | 10 | 11 | PASS | - | 18 | 18 | 16 | 114 | 0 | 0 | - | `None` |
+| l12_ge_book_adequate | jewelrycrafting | 5 | 6 | PASS | yes | 2 | 2 | 2 | 48 | 0 | 0 | - | `None` |
+| l12_ge_book_adequate | mining | 10 | 11 | PASS | - | 2 | 2 | 2 | 12 | 2 | 5 | yes | `iron_ore` |
+| l12_ge_book_adequate | weaponcrafting | 10 | 11 | PASS | - | 18 | 18 | 13 | 51 | 0 | 0 | - | `None` |
+| l12_ge_book_adequate | woodcutting | 10 | 11 | PASS | - | 2 | 2 | 2 | 9 | 2 | 5 | yes | `spruce_wood` |
 

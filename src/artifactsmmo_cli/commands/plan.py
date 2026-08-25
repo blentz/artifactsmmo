@@ -125,7 +125,12 @@ def plan(
             raise typer.Exit(code=2)
         bundle_path = Path(bundle) if isinstance(bundle, str) else _DEFAULT_BUNDLE
         player = GamePlayer(character=scenario, history=None)
-        scenario_game_data = load_bundle_game_data(bundle_path)
+        # The MARKET is the scenario's own declaration (`ge_market`), not the
+        # loader's default: a GE-populated cell and its quiet control are the
+        # same character in two worlds, and reproducing one of them here with
+        # the other's order book would print a plan the harness never asserts.
+        scenario_game_data = load_bundle_game_data(
+            bundle_path, with_ge_orders=SCENARIOS[scenario].ge_market)
         player.seed_offline(
             scenario_state(SCENARIOS[scenario], scenario_game_data),
             scenario_game_data)
