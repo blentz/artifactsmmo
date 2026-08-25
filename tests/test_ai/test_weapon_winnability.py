@@ -103,16 +103,16 @@ def test_memo_hit_returns_the_same_count_without_recomputing():
 def test_memo_evicts_the_oldest_entry_when_full(monkeypatch):
     """Bounded cache: exceeding _MEMO_MAX pops the least-recently-used key."""
     import artifactsmmo_cli.ai.weapon_winnability as ww
-    monkeypatch.setattr(ww, "_MEMO_MAX", 2)
     ww._MEMO.clear()
+    monkeypatch.setattr(ww._MEMO, "max_entries", 2)
     gd = _gd()
     # Three distinct kits (distinct hp -> distinct fingerprints) with a 2-entry cap.
     for hp in (10, 20, 30):
         beatable_count(make_state(inventory={"stone_axe": 1}, hp=hp, max_hp=30), gd)
-    assert len(ww._MEMO) == 2
+    assert len(ww._MEMO.cache_for(gd)) == 2
 
 
-def test_the_memo_keeps_alive_the_game_data_its_key_names():
+def test_a_freed_catalogue_leaves_no_entry_for_the_next_one_at_its_address():
     """`id()` is unique only among LIVE objects, so a key naming a freed one is
     a key naming nothing — the next `GameData` allocated at that address reads
     the previous catalogue's answer.
@@ -126,15 +126,40 @@ def test_the_memo_keeps_alive_the_game_data_its_key_names():
     entry turns that 1 into a 0.
 
     Asserted as the INVARIANT rather than by hunting a collision, because a
-    collision hunt is exactly as luck-dependent as the bug. The fix is that
-    `_MEMO` stores the `GameData` beside the count; this fails the moment that
-    reference is dropped as unused."""
+    collision hunt is exactly as luck-dependent as the bug. The first fix stored
+    the `GameData` beside the count to PIN the address; `_MEMO` is now a
+    `CatalogueScope`, which purges instead of pinning — so the assertion is that
+    the entry is GONE, and that `beatable_count` never reads a stale one. Both
+    fail the moment `CatalogueScope.cache_for` drops its `weakref.finalize`."""
     _MEMO.clear()
     gd = _gd()
     beatable_count(make_state(inventory={"stone_axe": 1}), gd)
     ref = weakref.ref(gd)
+    assert _MEMO.live_catalogues() == 1
     del gd
     gc.collect()
-    assert ref() is not None, (
-        "_MEMO keyed on id(game_data) but let the GameData be collected — the "
-        "address is now free for another catalogue to reuse")
+
+    assert ref() is None, "_MEMO pinned the catalogue; the scope must not"
+    assert _MEMO.live_catalogues() == 0, (
+        "_MEMO keyed on id(game_data) and kept the entry after the GameData "
+        "was collected — the address is now free for another catalogue to reuse")
+
+
+def test_a_recycled_address_never_serves_the_previous_catalogues_count():
+    """The collision itself, on the production entry point. `_gd()` builds a
+    fresh catalogue each round and frees it, so the allocator hands the same
+    address back over and over; every round must recount, not recall."""
+    _MEMO.clear()
+    state = make_state(inventory={"stone_axe": 1})
+    for round_ in range(300):
+        populated = _gd()
+        assert beatable_count(state, populated) == 1, (
+            f"round {round_}: the populated catalogue was served an empty one's "
+            f"count from a recycled address")
+        del populated
+
+        empty = GameData()   # no monsters at all -> nothing is beatable
+        assert beatable_count(state, empty) == 0, (
+            f"round {round_}: an empty catalogue was served the populated "
+            f"catalogue's count from a recycled address")
+        del empty

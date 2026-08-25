@@ -14,15 +14,21 @@ from tests.test_ai.fixtures import make_state
 
 @pytest.fixture(autouse=True)
 def clear_unlock_boost_cache():
-    """Clear the module-level single-entry cache before and after each test.
+    """Clear the per-catalogue cache before and after each test.
 
-    The cache in unlock_boost keyed (level, equip_sig, owned) does NOT include
-    id(game_data), so a stale result from a previous test using a different
-    GameData with the same key shape would produce wrong results. Clearing the
-    cache per test removes that risk entirely."""
-    _unlock_boost_module._cache.clear()
+    THIS FIXTURE USED TO BE THE ONLY THING STANDING BETWEEN TWO CATALOGUES.
+    Until 2026-08-25 the cache was a bare module dict whose key carried
+    `id(game_data)` and nothing that kept that catalogue alive, so a freed
+    fixture's answer was served to the next `GameData` allocated at the same
+    address. Its own docstring said the key "does NOT include id(game_data)" —
+    it did. Clearing between tests hid the hole INSIDE this file and did nothing
+    for the rest of the suite. `_CACHE` is a `CatalogueScope` now and the
+    scoping is the guarantee; this stays only so an assertion about entry counts
+    starts from a known state.
+    """
+    _unlock_boost_module._CACHE.clear()
     yield
-    _unlock_boost_module._cache.clear()
+    _unlock_boost_module._CACHE.clear()
 
 
 def _gd_unlock():
@@ -259,3 +265,46 @@ def test_is_craftable_boost_false_when_skill_insufficient():
                                                       crafting_level=10, dmg_elements={"fire": 40})}
     st = dataclasses.replace(_state_stalled(), skills={**_state_stalled().skills, "alchemy": 5})
     assert _is_craftable_boost("fire_boost_potion", st, gd) is False
+
+
+def test_a_recycled_address_never_serves_the_previous_catalogues_boost():
+    """THE BUG THIS SCOPING FIXES, exhibited on the production entry point.
+
+    `id()` is unique only among LIVE objects, and until 2026-08-25 the key
+    carried `id(game_data)` while the cache held no reference to that catalogue
+    and registered no finalizer. CPython hands a freed address straight to the
+    next allocation, so a fresh `GameData` with a DIFFERENT catalogue read the
+    dead one's boost answer — and the key's other components (level, equipment,
+    owned boosts) come from the STATE, which is identical here, so nothing else
+    distinguishes them.
+
+    Two catalogues that disagree, alternating, with the first freed before the
+    second is built: `_gd_unlock()` (minus `weak`, so `mob` is unwinnable bare
+    and the boost flips it) answers ("fire_boost_potion", "mob"); a catalogue
+    with no craftable boost at all answers None. Under the old code the second
+    call is served the first's answer as soon as the allocator recycles the
+    address, which it does within a handful of rounds."""
+    st = _state_stalled()
+    for round_ in range(200):
+        with_boost = _gd_unlock()
+        for gone in ("weak",):
+            del with_boost._monster_level[gone]
+            with_boost._monster_attack.pop(gone, None)
+            with_boost._monster_hp.pop(gone, None)
+            with_boost._monster_resistance.pop(gone, None)
+        assert unlock_boost_target(st, with_boost) == ("fire_boost_potion", "mob"), (
+            f"round {round_}: the boost catalogue was served the boost-less "
+            f"catalogue's answer from a recycled address")
+        del with_boost
+
+        boostless = _gd_unlock()
+        for gone in ("weak",):
+            del boostless._monster_level[gone]
+            boostless._monster_attack.pop(gone, None)
+            boostless._monster_hp.pop(gone, None)
+            boostless._monster_resistance.pop(gone, None)
+        boostless._crafting_recipes = {}  # nothing craftable -> no unlock exists
+        assert unlock_boost_target(st, boostless) is None, (
+            f"round {round_}: the boost-less catalogue was served the boost "
+            f"catalogue's answer from a recycled address")
+        del boostless

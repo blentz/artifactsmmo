@@ -182,8 +182,8 @@ DUAL_ROLE_CURRENCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "dual_role_c
 COMBAT_DEFICIT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_deficit.py"
 TASK_HORIZON_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_horizon.py"
 GEAR_LATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_latch.py"
-WEAPON_WINNABILITY_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
-                          / "weapon_winnability.py")
+CATALOGUE_SCOPE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
+                       / "catalogue_scope.py")
 
 # craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
 # model is the soundness-critical part; killed by
@@ -4035,17 +4035,22 @@ TASK_HORIZON_MUTATIONS = [
 # tests/test_ai/scenarios/test_held_task.py — the guard fires for all three of a
 # GEAR / LEVEL_UP / OUT_OF_REACH task instead of only the first, and the character
 # is diverted off its own objective. OWN run_group (unit-killed mutant).
-# `_combat_fingerprint` distinguishes catalogues by `id(game_data)`, which is
-# unique only among LIVE objects — so the memo MUST keep the GameData alive or a
-# recycled address serves one catalogue's answer to another. That is not a
-# hypothetical: it is what made `test_flame_rod_has_positive_marginal...` return 0
-# at 97% of a serial run on 2026-08-25. The stored reference looks unused and is
-# exactly the thing a tidying edit would delete, so it gets an anchor. Killed by
-# tests/test_ai/test_weapon_winnability.py. OWN run_group (unit-killed mutant).
-WEAPON_WINNABILITY_PIN_MUTATIONS = [
-    ("weapon_winnability: the memo stops pinning the GameData its key names",
-     "    _MEMO[key] = (game_data, result)",
-     "    _MEMO[key] = (GameData(), result)"),
+# Every per-catalogue memo names its GameData by `id()`, which is unique only
+# among LIVE objects — so the scope MUST drop a catalogue's sub-cache before its
+# address can be recycled, or one catalogue's answers are served to another. Not
+# a hypothetical: it made `test_flame_rod_has_positive_marginal...` return 0 at
+# 97% of a serial run on 2026-08-25, and `unlock_boost_target` hand a boost-less
+# catalogue the previous catalogue's boost on the FIRST recycled address.
+# `weakref.finalize`'s return value is discarded, so it is exactly the line a
+# tidying edit deletes as dead — hence the anchor. Killed at every call site:
+# tests/test_ai/test_catalogue_scope.py, test_unlock_boost.py,
+# test_weapon_winnability.py, test_loadout_cache.py, test_kit_selection.py and
+# test_skill_grind_target.py all fail on this one edit.
+# OWN run_group (unit-killed mutant).
+CATALOGUE_SCOPE_PURGE_MUTATIONS = [
+    ("catalogue_scope: a catalogue's sub-cache outlives the catalogue",
+     "            weakref.finalize(game_data, self._caches.pop, key, None)",
+     "            pass  # finalizer removed"),
 ]
 
 GEAR_LATCH_HORIZON_MUTATIONS = [
@@ -4138,7 +4143,7 @@ _ALL_SRCS = [
     COMBAT_DEFICIT_SRC,
     TASK_HORIZON_SRC,
     GEAR_LATCH_SRC,
-    WEAPON_WINNABILITY_SRC,
+    CATALOGUE_SCOPE_SRC,
     PROJECTIONS_SRC,
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
     GATHERING_GOAL_SRC, PURSUE_TASK_GOAL_SRC, SCALAR_PRIORITY_SRC,
@@ -7719,8 +7724,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_task_horizon.py", survivors)
     run_group(GEAR_LATCH_SRC, GEAR_LATCH_HORIZON_MUTATIONS,
               "tests/test_ai/scenarios/test_held_task.py", survivors)
-    run_group(WEAPON_WINNABILITY_SRC, WEAPON_WINNABILITY_PIN_MUTATIONS,
-              "tests/test_ai/test_weapon_winnability.py", survivors)
+    run_group(CATALOGUE_SCOPE_SRC, CATALOGUE_SCOPE_PURGE_MUTATIONS,
+              "tests/test_ai/test_catalogue_scope.py", survivors)
     run_group(MEANS_SRC, MEANS_TASK_HORIZON_MUTATIONS,
               "tests/test_ai/test_tiers_means.py", survivors)
     run_group(TASK_CANCEL_GOAL_SRC, TASK_CANCEL_GOAL_COIN_MUTATIONS,

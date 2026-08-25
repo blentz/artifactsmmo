@@ -20,8 +20,8 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.equipment.loadout_cache import (
+    _CACHES,
     CACHE_MAX_ENTRIES,
-    _caches,
     pick_loadout_cached,
 )
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
@@ -185,16 +185,16 @@ class TestPickLoadoutCached:
                                              attack={"earth": 1})
             pick_loadout_cached(Gather("woodcutting"),
                                 _make_state(inventory={"iron_axe": 1, code: 1}), gd)
-        assert len(_caches[id(gd)]) == CACHE_MAX_ENTRIES
+        assert len(_CACHES.cache_for(gd)) == CACHE_MAX_ENTRIES
 
     def test_cache_is_dropped_with_its_gamedata(self) -> None:
         gd = _gd()
         pick_loadout_cached(Gather("woodcutting"), _make_state(inventory={"iron_axe": 1}), gd)
-        key = id(gd)
-        assert key in _caches
+        assert _CACHES.live_catalogues() >= 1
+        before = _CACHES.live_catalogues()
         del gd
         gc.collect()
-        assert key not in _caches
+        assert _CACHES.live_catalogues() == before - 1
 
     def test_distinct_gamedata_instances_do_not_collide(self) -> None:
         state = _make_state(inventory={"iron_axe": 1})

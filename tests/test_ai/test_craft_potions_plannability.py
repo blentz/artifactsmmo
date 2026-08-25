@@ -37,9 +37,9 @@ _HURTS = "biting_slime"
 def clear_unlock_boost_cache():
     """unlock_boost keeps a module-level single-entry cache; clear it so these
     fixtures cannot inherit another test's verdict under an equal-shaped key."""
-    _unlock_boost_module._cache.clear()
+    _unlock_boost_module._CACHE.clear()
     yield
-    _unlock_boost_module._cache.clear()
+    _unlock_boost_module._CACHE.clear()
 
 
 def _gd(*, with_boost: bool, monster_level: int = 3, ingredient_qty: int = 1) -> GameData:

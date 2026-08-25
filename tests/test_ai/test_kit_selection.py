@@ -170,9 +170,8 @@ def test_both_memos_are_bounded() -> None:
         kit_selection.best_gathering_tools(state, gd)
         kit_selection.best_fighting_weapon(state, gd)
 
-    tools, weapons = kit_selection._cache_for(gd)
-    assert len(tools) <= kit_selection._KIT_MEMO_MAX
-    assert len(weapons) <= kit_selection._KIT_MEMO_MAX
+    assert len(kit_selection._TOOL_CACHES.cache_for(gd)) <= kit_selection._KIT_MEMO_MAX
+    assert len(kit_selection._WEAPON_CACHES.cache_for(gd)) <= kit_selection._KIT_MEMO_MAX
 
 
 def test_two_catalogs_do_not_share_answers() -> None:
@@ -209,5 +208,27 @@ def test_each_catalog_gets_its_own_cache() -> None:
     kit_selection.best_gathering_tools(state, first)
     kit_selection.best_gathering_tools(state, second)
 
-    assert id(first) in kit_selection._tool_caches
-    assert id(second) in kit_selection._tool_caches
+    assert kit_selection._TOOL_CACHES.cache_for(first) is not \
+        kit_selection._TOOL_CACHES.cache_for(second)
+
+
+def test_a_recycled_address_never_serves_the_previous_catalogs_tools() -> None:
+    """The keying above is by `id(game_data)`, and an `id()` is unique only among
+    LIVE objects — CPython hands a freed address straight to the next allocation.
+    Two catalogs alternating, each freed before the next is built, so the
+    allocator recycles the address every round; each must get its OWN answer.
+
+    `CatalogueScope.cache_for`'s `weakref.finalize` is what makes that hold: drop
+    it and the second catalog reads the first's tool set."""
+    state = make_state(inventory={"iron_axe": 1})
+    for round_ in range(200):
+        with_axe = _gd_with_tools()
+        assert kit_selection.best_gathering_tools(state, with_axe) == {"iron_axe"}, (
+            f"round {round_}: served a freed catalog's answer")
+        del with_axe
+
+        bare = GameData()   # same code, no stats -> the axe is not a tool here
+        assert kit_selection.best_gathering_tools(state, bare) == set(), (
+            f"round {round_}: an empty catalog was served the tool catalog's "
+            f"answer from a recycled address")
+        del bare

@@ -19,21 +19,22 @@ them and is verified by unit tests + the runtime check, not by Lean.
 """
 
 import dataclasses
-from collections import OrderedDict
 
+from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.world_state import WorldState
 
-_MEMO: "OrderedDict[tuple[object, ...], tuple[GameData, int]]" = OrderedDict()
-"""Key -> (the GameData the key was built from, the count).
+_MEMO_MAX = 4096
+_MEMO: "CatalogueScope[tuple[object, ...], int]" = CatalogueScope(_MEMO_MAX)
+"""Fingerprint -> beatable count, SCOPED PER CATALOGUE by `ai/catalogue_scope`.
 
-THE CATALOGUE IS STORED, NOT JUST ITS ADDRESS, AND THAT IS THE POINT.
-`_combat_fingerprint` distinguishes two catalogues by `id(game_data)` alone, and
-an `id()` is only unique among LIVE objects: CPython hands the same address to
-the next allocation once the first is freed. Keying on an address the cache does
-not keep alive is therefore keying on nothing — a second `GameData` at the
-recycled address reads the first one's answer.
+THE CATALOGUE IS NOT PART OF THE FINGERPRINT, AND THAT IS THE POINT.
+Until 2026-08-25 `_combat_fingerprint` distinguished two catalogues by
+`id(game_data)` alone, and an `id()` is only unique among LIVE objects: CPython
+hands the same address to the next allocation once the first is freed. Keying on
+an address the cache does not keep alive is therefore keying on nothing — a
+second `GameData` at the recycled address reads the first one's answer.
 
 Not theoretical. 2026-08-25, `tests/test_ai/test_weapon_winnability.py::
 test_flame_rod_has_positive_marginal_it_unlocks_fire_mob` failed at 97 % of a
@@ -45,15 +46,17 @@ tests churn will move. Reproduced by hand: ONE stale entry turns the 1 into the
 0. Live the exposure is smaller but real, since `GameData` is rebuilt whenever
 the cache is refreshed within a process.
 
-Holding the object pins the address for exactly as long as the entry that names
-it, so no live key can collide. Eviction drops the reference and the entry
-together, so a recycled address can only ever mint a FRESH entry.
+The first fix (same day) stored the `GameData` beside the count to pin the
+address. That worked, but it PINNED the whole catalogue for the life of an
+entry, and it was the second hand-rolled answer to a question four other modules
+were also answering. `CatalogueScope` is the one answer: a `weakref.finalize`
+drops this catalogue's whole sub-cache before its address can be recycled, and
+pins nothing.
 
 Same defect class the `per_state_memo` docstring already records against
 `kit_selection._tool_caches` ("a state-only key served one test's items to
-another"). RULE: a cache key that names an object must keep that object alive.
-"""
-_MEMO_MAX = 4096
+another"). RULE: a cache key that names an object must be scoped by that
+object's lifetime."""
 
 
 BAND_MARGIN = 5
@@ -72,18 +75,18 @@ def _band_monsters(state: WorldState, game_data: GameData) -> list[str]:
                   if level <= state.level + BAND_MARGIN)
 
 
-def _combat_fingerprint(state: WorldState, game_data: GameData) -> tuple[object, ...]:
+def _combat_fingerprint(state: WorldState) -> tuple[object, ...]:
     """Everything `predict_win` / `project_loadout_stats` reads from `state` —
     the owned candidate pool (inventory + equipment), current hp, and the
-    projected combat stats — plus the GameData identity. Any change that could
-    alter `beatable_count` changes this key.
+    projected combat stats. Any change that could alter `beatable_count` for a
+    GIVEN catalogue changes this key.
 
-    `id(game_data)` is NOT "process-stable", which is what this said until
-    2026-08-25 and is the whole reason the memo was wrong: an address is unique
-    only among LIVE objects. `_MEMO` stores the `GameData` alongside the count to
-    keep it live for the lifetime of the entry — see `_MEMO`. That stored
-    reference is never dereferenced, and deleting it for that reason is the edit
-    this bug came back from: keeping the object alive IS its whole job."""
+    THE CATALOGUE IS DELIBERATELY ABSENT FROM THIS KEY. It used to end in
+    `id(game_data)`, which is NOT "process-stable" — an address is unique only
+    among LIVE objects — and that is the whole reason the memo was wrong (see
+    `_MEMO`). The catalogue is now a SCOPE, not a key component: `_MEMO` holds a
+    separate sub-cache per `GameData` and drops it when that `GameData` dies, so
+    two catalogues cannot meet in one key at all."""
     return (
         tuple(sorted((c, q) for c, q in state.inventory.items() if q > 0)),
         tuple(sorted((s, c) for s, c in state.equipment.items() if c)),
@@ -92,7 +95,6 @@ def _combat_fingerprint(state: WorldState, game_data: GameData) -> tuple[object,
         tuple(sorted(state.attack.items())),
         tuple(sorted(state.dmg_elements.items())),
         tuple(sorted(state.resistance.items())),
-        id(game_data),
     )
 
 
@@ -113,19 +115,15 @@ def beatable_count(state: WorldState, game_data: GameData) -> int:
     cycle-to-cycle, so the steady state is ~free. The result is computed from the
     REAL `state` (not a rebuilt template), so no field `predict_win` reads is
     lost; the fingerprint only decides cache identity."""
-    key = _combat_fingerprint(state, game_data)
-    hit = _MEMO.get(key)
+    cache = _MEMO.cache_for(game_data)
+    key = _combat_fingerprint(state)
+    hit = cache.get(key)
     if hit is not None:
-        _MEMO.move_to_end(key)
-        return hit[1]
+        cache.move_to_end(key)
+        return hit
     result = sum(1 for code in _band_monsters(state, game_data)
                  if predict_win(state, game_data, code))
-    # `game_data` is stored, not discarded: it is what keeps the `id()` in `key`
-    # from being recycled under a different catalogue. See `_MEMO`.
-    _MEMO[key] = (game_data, result)
-    if len(_MEMO) > _MEMO_MAX:
-        _MEMO.popitem(last=False)
-    return result
+    return _MEMO.remember(cache, key, result)
 
 
 def marginal_weapon_winnability(code: str, state: WorldState,

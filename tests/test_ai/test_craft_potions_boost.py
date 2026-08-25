@@ -24,9 +24,9 @@ _INGREDIENT = "sunflower"
 def clear_unlock_boost_cache():
     """Clear the unlock_boost module-level single-entry cache before and after
     each test, preventing cross-test contamination (same key shape, different gd)."""
-    _unlock_boost_module._cache.clear()
+    _unlock_boost_module._CACHE.clear()
     yield
-    _unlock_boost_module._cache.clear()
+    _unlock_boost_module._CACHE.clear()
 
 
 def _gd_stalled() -> GameData:

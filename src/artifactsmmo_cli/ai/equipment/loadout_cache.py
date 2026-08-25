@@ -11,14 +11,14 @@ lookups.
 The key is exactly pick_loadout's determinants: purpose, `state.level`,
 `state.equipment`, and `state.inventory` WITH counts (the ring/artifact
 occupancy cap is physical ownership, so quantities change the answer).
-Entries are scoped per-GameData via weak references — a GameData's cache
+Entries are scoped per-GameData by `CatalogueScope` — a GameData's cache
 dies with it, and distinct instances (test fixtures) never collide.
 """
 
-import weakref
 from collections import OrderedDict
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
@@ -32,36 +32,28 @@ unbounded keys would accumulate for the life of the process)."""
 _CacheKey = tuple[tuple[object, ...], int, tuple[tuple[str, str | None], ...],
                   tuple[tuple[str, int], ...]]
 
-_caches: dict[int, "OrderedDict[_CacheKey, dict[str, str | None]]"] = {}
-"""Keyed by id(game_data) — GameData is an eq-dataclass (unhashable), so a
-WeakKeyDictionary can't hold it. A `weakref.finalize` purges the entry the
-moment its GameData is collected, which also makes id-reuse impossible: the
-old id is evicted before the allocator can hand it out again."""
+_CACHES: "CatalogueScope[_CacheKey, dict[str, str | None]]" = CatalogueScope(CACHE_MAX_ENTRIES)
+"""Scoped per GameData — see `ai/catalogue_scope`, which owns the whole argument
+about why a cache may not name a catalogue by a bare `id()`."""
 
-_equippable_memo: dict[int, dict[str, bool]] = {}
+_EQUIPPABLE_MEMO: "CatalogueScope[str, bool]" = CatalogueScope(CACHE_MAX_ENTRIES)
 """Per-GameData `code -> can this code ever occupy a slot`. Catalog-static, so
-memoized once per code; purged together with the loadout cache."""
+memoized once per code, and scoped exactly like the loadout cache. The bound is
+shared with it and never binds in practice: the answer set is one entry per item
+code the planner has ever asked about."""
 
 
-def _cache_for(game_data: GameData) -> "OrderedDict[_CacheKey, dict[str, str | None]]":
-    key = id(game_data)
-    cache = _caches.get(key)
-    if cache is None:
-        cache = OrderedDict()
-        _caches[key] = cache
-        _equippable_memo[key] = {}
-        weakref.finalize(game_data, _caches.pop, key, None)
-        weakref.finalize(game_data, _equippable_memo.pop, key, None)
-    return cache
+def _equippable(code: str, memo: "OrderedDict[str, bool]", game_data: GameData) -> bool:
+    """Is `code` a type that can occupy a slot at all?
 
-
-def _equippable(code: str, game_data: GameData) -> bool:
-    memo = _equippable_memo[id(game_data)]
+    The memo is passed IN rather than looked up here: this runs once per bag code
+    on every key build, and re-resolving the catalogue's sub-cache per code cost
+    4 % of the memo's own hit path (measured 2026-08-25, 2.33 -> 2.23 us/hit)."""
     known = memo.get(code)
     if known is None:
         stats = game_data.item_stats(code)
         known = stats is not None and stats.type_ in ITEM_TYPE_TO_SLOTS
-        memo[code] = known
+        _EQUIPPABLE_MEMO.remember(memo, code, known)
     return known
 
 
@@ -90,7 +82,8 @@ def pick_loadout_cached(
     Both the stored entry and the returned dict are private copies, so a
     caller mutating its result can never poison later hits.
     """
-    cache = _cache_for(game_data)
+    cache = _CACHES.cache_for(game_data)
+    equippable_memo = _EQUIPPABLE_MEMO.cache_for(game_data)
     # Inventory enters the key PROJECTED onto equippable codes: pick_loadout
     # reads the inventory only through the candidate pool (qty>0, item type in
     # ITEM_TYPE_TO_SLOTS) and the dup-cap ownership of those same candidates,
@@ -103,7 +96,7 @@ def pick_loadout_cached(
         tuple(sorted(state.equipment.items())),
         tuple(sorted(
             (code, qty) for code, qty in state.inventory.items()
-            if qty > 0 and _equippable(code, game_data)
+            if qty > 0 and _equippable(code, equippable_memo, game_data)
         )),
     )
     hit = cache.get(key)
@@ -111,7 +104,5 @@ def pick_loadout_cached(
         cache.move_to_end(key)
         return dict(hit)
     result = pick_loadout(purpose, state, game_data)
-    cache[key] = dict(result)
-    if len(cache) > CACHE_MAX_ENTRIES:
-        cache.popitem(last=False)
+    _CACHES.remember(cache, key, dict(result))
     return result

@@ -7,8 +7,8 @@ import pytest
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
+    _CACHES,
     CACHE_MAX_ENTRIES,
-    _cache_for,
     build_selectable_grind_candidates,
     has_grind_target,
     is_obtainable,
@@ -212,7 +212,7 @@ def test_the_memo_returns_a_hit_for_an_identical_state():
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
     build_selectable_grind_candidates("weaponcrafting", state, gd)
-    cache = _cache_for(gd)
+    cache = _CACHES.cache_for(gd)
     assert len(cache) == 1
     key = next(iter(cache))
     first_entry = cache[key]
@@ -243,19 +243,41 @@ def test_the_memo_key_notices_a_changed_skill_level():
 
 
 def test_each_game_data_gets_its_own_cache():
-    """Scoped by `id(game_data)` with a weakref purge, exactly as
-    `equipment/loadout_cache` does, so two fixtures never serve each other's
+    """Scoped per catalogue by `ai/catalogue_scope`, exactly as
+    `equipment/loadout_cache` is, so two fixtures never serve each other's
     answers."""
     state = make_state(skills={"weaponcrafting": 3})
     assert (build_selectable_grind_candidates("weaponcrafting", state, _gd())
             is not build_selectable_grind_candidates("weaponcrafting", state, _gd()))
 
 
+def test_a_recycled_address_never_serves_the_previous_catalogues_candidates():
+    """The scoping above is by `id(game_data)`, and an `id()` is unique only
+    among LIVE objects — CPython hands a freed address straight to the next
+    allocation. Two catalogues alternating, each freed before the next is built:
+    `_gd()` has weaponcrafting rungs, a bare `GameData` has none.
+
+    `CatalogueScope.cache_for`'s `weakref.finalize` is what makes that hold: drop
+    it and the empty catalogue reads the full one's candidate list."""
+    state = make_state(skills={"weaponcrafting": 3})
+    for round_ in range(200):
+        full = _gd()
+        assert build_selectable_grind_candidates("weaponcrafting", state, full), (
+            f"round {round_}: served a freed catalogue's empty list")
+        del full
+
+        bare = GameData()
+        assert build_selectable_grind_candidates("weaponcrafting", state, bare) == [], (
+            f"round {round_}: an empty catalogue was served the full "
+            f"catalogue's candidates from a recycled address")
+        del bare
+
+
 def test_the_cache_is_bounded():
     """Inventory churns every action, so unbounded keys would accumulate for the
     life of the process. The oldest entry is evicted at the bound."""
     gd = _gd()
-    cache = _cache_for(gd)
+    cache = _CACHES.cache_for(gd)
     for i in range(CACHE_MAX_ENTRIES):
         cache[("filler", i, (), (), (), ())] = []
     build_selectable_grind_candidates("weaponcrafting", make_state(skills={"weaponcrafting": 3}), gd)

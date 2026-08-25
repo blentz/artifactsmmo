@@ -33,9 +33,7 @@ every copy of this code" is exactly the hoard bug this epic exists to kill
 (18 `copper_axe` in the bag, all shielded, none banked).
 """
 
-import weakref
-from collections import OrderedDict
-
+from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.equipment.scoring import gather_score
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
@@ -59,7 +57,7 @@ def _pick_weapon(candidates: set[str], game_data: GameData) -> str | None:
     memoized this became the top cost of the same search — 229,300 calls, 4.5 of
     15 seconds — which is what fixing one half of a pair looks like.
     """
-    _, cache = _cache_for(game_data)
+    cache = _WEAPON_CACHES.cache_for(game_data)
     key = frozenset(candidates)
     if key in cache:
         cache.move_to_end(key)
@@ -74,10 +72,7 @@ def _pick_weapon(candidates: set[str], game_data: GameData) -> str | None:
         if best is None or attack > best[0] or (attack == best[0] and code < best[1]):
             best = (attack, code)
     answer = best[1] if best else None
-    cache[key] = answer
-    if len(cache) > _KIT_MEMO_MAX:
-        cache.popitem(last=False)
-    return answer
+    return _WEAPON_CACHES.remember(cache, key, answer)
 
 
 #: Per-`GameData` memos for `_pick_tools` / `_pick_weapon`, keyed on the
@@ -94,31 +89,15 @@ def _pick_weapon(candidates: set[str], game_data: GameData) -> str | None:
 #: cost the moment `_pick_tools` stopped being it — fixing one half of a pair
 #: only moves the cost).
 #:
-#: KEYED PER `GameData`, following `equipment/loadout_cache`. The catalog is a
-#: determinant of the answer, and a process-global key is unsound the moment two
-#: catalogs exist: the test suite builds a fresh `GameData` per test, and a
-#: candidates-only key served one test's answer to another's items (six
+#: SCOPED PER `GameData` by `ai/catalogue_scope`. The catalog is a determinant of
+#: the answer, and a process-global key is unsound the moment two catalogs exist:
+#: the test suite builds a fresh `GameData` per test, and a candidates-only key
+#: served one test's answer to another's items (six
 #: `formal/diff/test_bank_selection_diff` failures that passed in isolation).
-#: `weakref.finalize` drops the entry with the catalog, which is also what makes
-#: `id()` safe against reuse.
-_tool_caches: "dict[int, OrderedDict[frozenset[str], frozenset[str]]]" = {}
-_weapon_caches: "dict[int, OrderedDict[frozenset[str], str | None]]" = {}
+#: `CatalogueScope` owns the reason a bare `id()` is not enough on its own.
 _KIT_MEMO_MAX = 4096
-
-
-def _cache_for(game_data: GameData) -> tuple[
-        "OrderedDict[frozenset[str], frozenset[str]]",
-        "OrderedDict[frozenset[str], str | None]"]:
-    key = id(game_data)
-    tools = _tool_caches.get(key)
-    if tools is None:
-        tools = OrderedDict()
-        weapons: OrderedDict[frozenset[str], str | None] = OrderedDict()
-        _tool_caches[key] = tools
-        _weapon_caches[key] = weapons
-        weakref.finalize(game_data, _tool_caches.pop, key, None)
-        weakref.finalize(game_data, _weapon_caches.pop, key, None)
-    return tools, _weapon_caches[key]
+_TOOL_CACHES: "CatalogueScope[frozenset[str], frozenset[str]]" = CatalogueScope(_KIT_MEMO_MAX)
+_WEAPON_CACHES: "CatalogueScope[frozenset[str], str | None]" = CatalogueScope(_KIT_MEMO_MAX)
 
 
 def _pick_tools(candidates: set[str], game_data: GameData) -> frozenset[str]:
@@ -132,7 +111,7 @@ def _pick_tools(candidates: set[str], game_data: GameData) -> frozenset[str]:
     straight back, so a mutable one would let a single caller's `.add()`
     corrupt every later node.
     """
-    cache, _ = _cache_for(game_data)
+    cache = _TOOL_CACHES.cache_for(game_data)
     key = frozenset(candidates)
     hit = cache.get(key)
     if hit is not None:
@@ -151,10 +130,7 @@ def _pick_tools(candidates: set[str], game_data: GameData) -> frozenset[str]:
         if best is not None:
             tools.add(best[1])
     answer = frozenset(tools)
-    cache[key] = answer
-    if len(cache) > _KIT_MEMO_MAX:
-        cache.popitem(last=False)
-    return answer
+    return _TOOL_CACHES.remember(cache, key, answer)
 
 
 def _held_weapon_candidates(state: WorldState) -> set[str]:

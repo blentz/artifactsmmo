@@ -32,10 +32,9 @@ such items so the reachable `copper_dagger` wins.
 """
 
 import dataclasses
-import weakref
-from collections import OrderedDict
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
+from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.grind_probe_state import grind_probe_state
@@ -133,21 +132,10 @@ CACHE_MAX_ENTRIES = 4096
 """Per-GameData LRU bound, mirroring `equipment/loadout_cache`: comfortably holds
 one arbitration cycle's distinct search states while capping long-run growth."""
 
-_caches: dict[int, "OrderedDict[_CacheKey, list[GrindCandidate]]"] = {}
-"""Keyed by `id(game_data)` with a `weakref.finalize` purge, exactly as
-`loadout_cache` does — GameData is an eq-dataclass and so unhashable, and the
-finalizer makes id-reuse impossible because the old id is evicted before the
-allocator can hand it out again."""
-
-
-def _cache_for(game_data: GameData) -> "OrderedDict[_CacheKey, list[GrindCandidate]]":
-    key = id(game_data)
-    cache = _caches.get(key)
-    if cache is None:
-        cache = OrderedDict()
-        _caches[key] = cache
-        weakref.finalize(game_data, _caches.pop, key, None)
-    return cache
+_CACHES: "CatalogueScope[_CacheKey, list[GrindCandidate]]" = CatalogueScope(CACHE_MAX_ENTRIES)
+"""Scoped per GameData by `ai/catalogue_scope`, exactly as `loadout_cache` is —
+GameData is an eq-dataclass and so unhashable, and that module owns the reason a
+bare `id()` key is unsound on its own."""
 
 
 def _cache_key(skill: str, state: WorldState) -> "_CacheKey":
@@ -270,7 +258,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
 
     `recipe_closure` is built ONCE per call and shared across candidates, so the
     added cost is one closure walk per rung rather than one per material."""
-    cache = _cache_for(game_data)
+    cache = _CACHES.cache_for(game_data)
     key = _cache_key(skill, state)
     hit = cache.get(key)
     if hit is not None:
@@ -323,9 +311,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
             xp_positive=skill_xp_positive(stats.crafting_level,
                                           state.skills.get(skill, 0)),
         ))
-    cache[key] = candidates
-    if len(cache) > CACHE_MAX_ENTRIES:
-        cache.popitem(last=False)
+    _CACHES.remember(cache, key, candidates)
     return _with_wanted(candidates, ctx)
 
 
