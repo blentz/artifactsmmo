@@ -81,6 +81,8 @@ MONSTER_DROP_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
 LIQUIDATION_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "liquidation_venue.py"
 DISPOSAL_ROUTE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "disposal_route.py"
+ACQUISITION_COST_CORE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
+                             / "acquisition_cost_core.py")
 KEEP_VALUATION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "keep_valuation.py"
 BUY_SOURCE_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "buy_source_venue.py"
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
@@ -1351,6 +1353,30 @@ SKILL_GRIND_TARGET_MUTATIONS = [
     # check whether any rung with obtainable=True exceeds the cap. Nothing here
     # rules that out in general -- it says only that no such rung exists in the
     # scenario this group binds to, at the prices measured on 2026-08-15.
+]
+
+# THE PRICING INVERSION, pinned. `UNOBTAINABLE_PER_UNIT` is the price of an item
+# with NO route; a gold-priced route whose shortfall was charged that sentinel
+# PER GOLD PIECE therefore priced ABOVE it -- burn_rune at 30,000,000,002 against
+# 1,000,000 for a thing that does not exist -- so an impossible route outranked a
+# merely unaffordable one. `_capped` makes the sentinel a CEILING. The in-group
+# killers below were read off a real run on 2026-08-24, not guessed.
+ACQUISITION_CEILING_MUTATIONS = [
+    # Straight back to the defect: no ceiling at all. Killed in-group by
+    # test_no_route_is_the_CEILING_so_an_unaffordable_route_never_prices_worse
+    # (1,000,000 vs 100,000,002); also, on real catalog data, by the wrapper's
+    # test_a_gold_priced_vendor_route_is_paid_for_with_gold.
+    ("acquisition_cost_core: the no-route sentinel stops being a ceiling",
+     "    return min(total, UNOBTAINABLE_PER_UNIT * units)\n",
+     "    return total\n"),
+    # The ceiling stops scaling with the demand, so obtaining three of a walled
+    # item prices the same as obtaining one -- and an unaffordable route for
+    # three no longer ties with a no-route one for three, it beats it. Killed
+    # in-group by test_an_item_with_no_route_is_unobtainable_not_free, which is
+    # the test that PINS the per-unit scaling and runs before the ceiling test.
+    ("acquisition_cost_core: ceiling flat instead of per-unit",
+     "    return min(total, UNOBTAINABLE_PER_UNIT * units)\n",
+     "    return min(total, UNOBTAINABLE_PER_UNIT)\n"),
 ]
 
 # HOW THE "killed in-group by" ATTRIBUTIONS IN THIS LIST ARE MEANT TO READ.
@@ -3943,6 +3969,7 @@ _ALL_SRCS = [
     GATHER_SELECTION_SRC,
     MONSTER_DROP_SELECTION_SRC,
     CRAFT_VS_BUY_SRC,
+    ACQUISITION_COST_CORE_SRC,
     NEAREST_TILE_SRC,
     CONSUMABLE_SELECTION_SRC,
     POTION_PROVISION_QTY_SRC,
@@ -7091,6 +7118,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_monster_drop_selection_diff.py", survivors)
     run_group(CRAFT_VS_BUY_SRC, CRAFT_VS_BUY_MUTATIONS,
               "formal/diff/test_craft_vs_buy_diff.py", survivors)
+    run_group(ACQUISITION_COST_CORE_SRC, ACQUISITION_CEILING_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_core.py", survivors)
     run_group(LIQUIDATION_VENUE_SRC, LIQUIDATION_VENUE_MUTATIONS,
               "formal/diff/test_liquidation_venue_diff.py", survivors)
     run_group(DISPOSAL_ROUTE_SRC, DISPOSAL_ROUTE_MUTATIONS,

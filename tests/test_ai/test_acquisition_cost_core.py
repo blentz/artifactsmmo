@@ -51,13 +51,46 @@ def test_an_item_with_no_route_is_unobtainable_not_free() -> None:
 def test_unobtainable_is_finite_so_two_bad_chains_still_compare() -> None:
     """Not infinity, deliberately. A caller ranking candidates must get a total
     order over unobtainable chains rather than a pile of ties, so the OTHER work
-    in the chain still shows through."""
-    options = {"gadget": [craft("workshop", {"mystery": 1, "ore": 1})],
-               "ore": [gather("ore_node")]}
+    in the chain still shows through — UNDER THE CEILING, which is where the
+    order is a real one. Three gadgets come off one craft, so a single walled
+    `mystery` sits inside a demand whose no-route price is three sentinels, and
+    the ore still separates the two chains."""
+    near = {"gadget": [craft("workshop", {"mystery": 1, "ore": 1}, yield_per=3)],
+            "ore": [gather("ore_node")]}
+    far = {"gadget": [craft("workshop", {"mystery": 1, "ore": 8}, yield_per=3)],
+           "ore": [gather("ore_node")]}
     cheap = acquisition_cost("mystery", 1, {}, {})
-    with_extra = acquisition_cost("gadget", 1, options, {})
-    assert with_extra > cheap
-    assert with_extra < 2 * UNOBTAINABLE_PER_UNIT
+    with_extra = acquisition_cost("gadget", 3, near, {})
+    with_more = acquisition_cost("gadget", 3, far, {})
+    assert cheap < with_extra < with_more < 2 * UNOBTAINABLE_PER_UNIT
+    assert with_more - with_extra == 7, "the seven extra ore, and nothing else"
+
+
+def test_no_route_is_the_CEILING_so_an_unaffordable_route_never_prices_worse()\
+        -> None:
+    """THE INVERSION, pinned. A gold-priced route carries `inputs={"gold": N}`
+    and a shortfall is charged `UNOBTAINABLE_PER_UNIT` PER GOLD PIECE, so a real
+    vendor route nobody could afford priced at `N * 10**6 + 2` — measured at
+    100,000,002 here — against 1,000,000 for an item with no route in the game at
+    all. An IMPOSSIBLE route outranked a merely UNAFFORDABLE one, and every
+    consumer ranking on this bound preferred the impossible one.
+
+    `UNOBTAINABLE_PER_UNIT` is a ceiling now, so the two TIE. That collapse is
+    deliberate and is what the fix costs: a route that exists but cannot be paid
+    for is priced at exactly "cannot", not worse than "does not exist"."""
+    options = {"widget": [buy("merchant", "gold", 100)]}
+    no_route = acquisition_cost("mystery", 1, {}, {})
+    unaffordable = acquisition_cost("widget", 1, options, {})
+    assert no_route == unaffordable == UNOBTAINABLE_PER_UNIT
+
+    # One gold piece short is still short, and still capped rather than 1,000,002.
+    assert acquisition_cost("widget", 1, options, {"gold": 99}) \
+        == UNOBTAINABLE_PER_UNIT
+    # The ceiling scales with the demand, exactly as the no-route price does.
+    assert acquisition_cost("widget", 3, options, {}) \
+        == acquisition_cost("mystery", 3, {}, {}) == 3 * UNOBTAINABLE_PER_UNIT
+    # ...and it does not touch a route the character CAN pay for.
+    assert acquisition_cost("widget", 1, options, {"gold": 100}) == 2
 
 
 def test_one_gather_route_costs_the_walk_plus_the_gathers() -> None:

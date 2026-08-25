@@ -68,11 +68,18 @@ Large enough that a chain containing one dominates any real alternative, so a
 planner gate reading this bound prunes the chain — which is correct, because
 `obtain_sources` naming no route means no action in the pool can serve it.
 
-It is NOT infinity, and the difference matters: two unobtainable chains still
-compare by how much OTHER work they carry, so a caller ranking candidates gets a
-total order rather than a pile of ties. This mirrors `min_gathers`' existing
-fuel-exhaustion convention of accounting the remaining need as raw work rather
-than failing.
+It is NOT infinity, and the difference matters: an unobtainable unit still adds
+to a chain that carries other work, so a caller ranking candidates that stay
+under the ceiling gets a total order rather than a pile of ties. This mirrors
+`min_gathers`' existing fuel-exhaustion convention of accounting the remaining
+need as raw work rather than failing.
+
+IT IS ALSO A CEILING, AND THAT IS THE OTHER HALF OF THE SAME IDEA — see
+`_capped`. "No route at all" is the WORST an answer can be, so no answer may
+price above it; an unaffordable-but-real route that did was ranked below a route
+that does not exist. That defect is what makes this a ceiling and not merely a
+per-unit charge, and it is why the total order above is stated for chains under
+the ceiling only: at or above it, everything ties, deliberately.
 
 CAVEAT, RECORDED HONESTLY. `obtain_sources` is STATE-AWARE — it answers "how may
 I obtain this RIGHT NOW". An item with no source this cycle (bank unreachable,
@@ -83,6 +90,47 @@ re-evaluated every cycle, so the prune is temporary rather than a permanent
 verdict. A consumer that CACHES this bound across cycles would break that
 argument and must not.
 """
+
+
+def _capped(total: int, units: int) -> int:
+    """`total`, held at the price the same demand would carry with NO route.
+
+    THE DEFECT THIS EXISTS FOR. A gold-priced route carries
+    `inputs={"gold": price}`; `acquisition_cost._owned_with_gold` credits the
+    character's POCKET; and any shortfall beyond the pocket is charged
+    `UNOBTAINABLE_PER_UNIT` PER GOLD PIECE. So a real vendor route the character
+    could not afford priced at `price * 10**6 + 2` — measured at 100,000,002 for
+    a 100-gold item, against 1,000,000 for an item with no route in the game at
+    all. The comparison INVERTED: an impossible route outranked a merely
+    unaffordable one, and every consumer ranking on this bound preferred the
+    impossible one.
+
+    It is reachable live, not only where a bag is empty. Gold's own route is
+    `SourceKind.SELL` (`obtain_sources._sell_sources`), which needs sellable
+    surplus AND `event_npc_tradeable` — and every item-buying NPC in this game is
+    an event NPC, all five, 55 buyer rows. During any window with no buyer event
+    open, gold has no route and every unaffordable route inverts.
+
+    WHY A CAP AND NOT A RICHER PRICE. The shortfall's honest price is what
+    ACQUIRING that gold costs, and where gold has a route the walk already
+    charges exactly that — `_sell_sources` is that model, and it is untouched
+    here. This is only the fallback for when it has none, and there the walk has
+    no information beyond "cannot". Charging the no-route price says exactly that
+    and no more.
+
+    CLAMPING DOWN IS ALWAYS SOUND. The module contract is a LOWER bound, so
+    under-estimating merely wastes a search while over-estimating discards a
+    reachable plan. A ceiling can only lower an answer, so it cannot break the
+    contract in the direction that matters — and it retires an over-estimate of
+    up to `price` times the sentinel.
+
+    WHAT IT COSTS, STATED PLAINLY. Two answers that both reach the ceiling now
+    TIE, where before they compared by their other work. That ordering was only
+    ever over candidates every consumer must prune, and the tie falls through to
+    whatever the consumer ranks on next — for `combat_deficit`, whose score is
+    `gain / cost`, that is raw margin gain, which is a sane order over items none
+    of which can be had this cycle."""
+    return min(total, UNOBTAINABLE_PER_UNIT * units)
 
 
 @dataclass(frozen=True)
@@ -254,6 +302,10 @@ def acquisition_cost(
     `UNOBTAINABLE_PER_UNIT` per unit. `owned` is credited (and consumed) first,
     on a private copy — the caller's mapping is never mutated.
 
+    THAT PER-UNIT CHARGE IS ALSO THE CEILING: the answer never exceeds
+    `UNOBTAINABLE_PER_UNIT * qty`, so a real route the character cannot currently
+    pay for is never ranked below one that does not exist. See `_capped`.
+
     TWO PASSES, BOTH LINEAR. `_cheapest_route` memoises a per-item unit cost;
     `_accumulate` then walks the demand closure once, crediting holdings and
     collecting pay-once keys. Total = per-item actions + the pay-once keys the
@@ -267,7 +319,9 @@ def acquisition_cost(
     paid: dict[str, int] = {}
     _accumulate(item, qty, options, {}, dict(owned), paid, actions,
                 len(options) + 1)
-    return actions[0] + sum(paid.values())
+    # `max(0, qty)`: `_accumulate` already answers 0 for a non-positive demand,
+    # and a negative ceiling would turn that 0 into a negative price.
+    return _capped(actions[0] + sum(paid.values()), max(0, qty))
 
 
 def bundle_acquisition_cost(
@@ -310,6 +364,12 @@ def bundle_acquisition_cost(
     memo: dict[str, tuple[int, RouteOption | None]] = {}
     holdings = dict(owned)
     fuel = len(options) + 1
+    units = 0
     for item, qty in roots:
         _accumulate(item, qty, options, memo, holdings, paid, actions, fuel)
-    return actions[0] + sum(paid.values()), paid
+        units += max(0, qty)
+    # The ceiling is over the WHOLE bundle's demand, not per root: a bundle is
+    # one plan, and the alternative it is being held against is that same plan
+    # with no route for any of it. `paid` is returned unclamped — it names which
+    # keys were shared, and at the ceiling it no longer sums into the total.
+    return _capped(actions[0] + sum(paid.values()), units), paid

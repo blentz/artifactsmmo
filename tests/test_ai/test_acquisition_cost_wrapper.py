@@ -518,12 +518,16 @@ def test_a_gold_priced_vendor_route_is_paid_for_with_gold(state, game_data)\
                                NO_PROFILE_CONTEXT, equip=False)
     assert cost == 2      # hop to the vendor, one purchase
 
-    # The failure this pins is not "expensive". It is unreachable: the shortfall
-    # is charged at a million per gold piece.
+    # ...and the shortfall beyond the pocket is charged a million per gold piece,
+    # which used to price this route at 10,000 * UNOBTAINABLE_PER_UNIT — ABOVE
+    # the price of an item with no route in the game at all, so the walk ranked
+    # the impossible thing ahead of the merely unaffordable one. The sentinel is
+    # a CEILING now (`acquisition_cost_core._capped`), so the unaffordable route
+    # prices at exactly what a missing one does, and never worse.
     broke = replace(state, inventory={}, gold=0)
-    assert acquisition_actions("healing_rune", 1, broke, game_data,
-                               NO_PROFILE_CONTEXT, equip=False) \
-        >= 10_000 * UNOBTAINABLE_PER_UNIT
+    unaffordable = acquisition_actions("healing_rune", 1, broke, game_data,
+                                       NO_PROFILE_CONTEXT, equip=False)
+    assert unaffordable == UNOBTAINABLE_PER_UNIT, unaffordable
 
 
 def _selling(state, game_data, **inv):
