@@ -95,6 +95,25 @@ class GearLatch:
         # its `relevant_actions`. That verdict is served from the EDGE arm (a real
         # loss or level-up, where the cascade does find something), and served here
         # by the latch STAYING OFF so the objective's own XP grind runs.
+        #
+        # WHAT THE VERDICT COSTS, since `update` runs EVERY cycle for every
+        # character and the fleet's binding constraint is a per-IP rate budget.
+        # Measured 2026-08-25 on the scenario bundle, median of 20, over the six
+        # task-holding cells — the guard `craftable and not winnable_alternative`
+        # is unchanged, so this compares like for like against the
+        # `has_combat_deficit` call it replaced:
+        #
+        #   old (has_combat_deficit, one predict_win)      0.018 ms
+        #   new, no deficit (early-out on the same call)   0.019 ms
+        #   new, a verdict to reach          1.3 - 5.4 ms  (2.0 ms mean)
+        #   new, `per_state` memo hit                      0.0001 ms
+        #
+        # The 5.4 ms worst case is the OUT_OF_REACH arm, which is the only one
+        # that walks the catalogue twice (once at this level, once at level+1).
+        # Against the live mean cycle of 28.95 s (84,590 cycles in
+        # `learning.db`) that is 0.019 % of one cycle, and the memo means the
+        # guard mapper and the cancel rung then pay nothing. Not a finding —
+        # recorded so the next edit to this arm has a baseline to beat.
         horizon = (resolve_task_horizon(state, game_data)
                    if craftable and not winnable_alternative else None)
         self._blocked = horizon is not None and horizon.verdict == HORIZON_GEAR

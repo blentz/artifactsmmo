@@ -125,15 +125,51 @@ def resolve_task_horizon(state: WorldState, game_data: GameData) -> TaskHorizon 
     character already beats. Callers that must distinguish "no task" from "out of
     reach" get that for free — a verdict exists only where a fight is lost.
 
-    UNPRICED, DELIBERATELY. `combat_deficit` ranks its greedy walk on margin gain PER
-    ACTION when a `cost_of` is supplied, which changes WHICH item is picked at each
-    step and can therefore change whether the chain closes inside `MAX_CHAIN`. That
-    is the right ranking for "what do I build first" and the wrong one for "does a
-    chain exist at all": maximising raw margin gain per step is the walk's best shot
-    at closing, so the unpriced walk is the one whose `closes` answers the existence
-    question. The `GEAR_REVIEW` guard keeps its own priced call for the target it
-    commits to — that answer is pinned by
-    `test_the_task_triple_moves_the_gear_review_target` and does not move here.
+    UNPRICED — AND THAT IS A COST DECISION, NOT A SOUNDNESS ONE. `combat_deficit`
+    ranks its greedy walk on margin gain PER ACTION when a `cost_of` is supplied,
+    which changes WHICH item is picked at each step and can therefore change whether
+    the chain closes inside `MAX_CHAIN`. The first version of this docstring
+    justified the unpriced call by claiming that maximising raw margin gain per step
+    is the walk's best shot at closing. **That claim is false and was measured false
+    on 2026-08-25.** Over the four (character, monster) pairs where the two
+    orderings disagree, the PRICED walk closes and the unpriced one does not, every
+    time — and it does so by going DEEPER, not by picking better:
+
+        l35_artifact_fill          demon        unpriced stalls at 2  priced closes at 4
+        l35_boots_drop_farm        demon        unpriced stalls at 2  priced closes at 5
+        l35_boots_drop_farm        cursed_tree  unpriced stalls at 3  priced closes at 7
+        l25_currency_leaf_unfunded vampire      unpriced stalls at 2  priced closes at 5
+
+    (all four first steps are utility-slot boost potions — the cheapest thing the
+    priced ranking can reach, which the raw-margin ranking passes over.)
+
+    Greedy is greedy: neither ordering is an existence oracle, and the unpriced one
+    is simply the one that is affordable here. It stays for two reasons that are
+    about cost and coherence rather than accuracy:
+
+      * The priced call is NOT a function of `(state, game_data)` — `_deficit_cost`
+        closes over a `SelectionContext` and a `LearningStore`
+        (`strategy_driver.map_guard`). Asking it here would make the verdict
+        ctx-dependent and break the `per_state` identity memo below, which is the
+        only thing keeping the latch, the guard mapper and the cancel rung from
+        disagreeing with each other. Trading a two-oracle divergence for a
+        three-consumer one is a bad trade.
+      * Measured on those same four pairs, the priced walk costs 85-193 ms against
+        58-88 ms unpriced, on a path that runs every cycle.
+
+    THE RESIDUAL THIS LEAVES, stated rather than hidden: over the 1,375 non-GEAR
+    derived pairs, two would be read OUT_OF_REACH although a priced chain closes
+    them (0.15 %). That is only reachable at all once a `tasks_coin` is in a pocket,
+    and as of 84,590 live cycles in `learning.db` no fleet character has ever held
+    one (0 task completions, 0 coin drops, 5 accepts). If it ever does matter, the
+    fix is to thread the WHOLE verdict on `SelectionContext` — the seam
+    `supply_target` and `turn_in` use — computed once by the player with the guard's
+    own pricing. It is NOT a second pricing path into `tiers/means.py`, whose own
+    header records the import cycle that would reopen.
+
+    The `GEAR_REVIEW` guard keeps its own priced call for the target it commits to —
+    that answer is pinned by `test_the_task_triple_moves_the_gear_review_target` and
+    does not move here.
 
     ONE READING PER CYCLE, SHARED. Memoised on the IDENTITY of `(state, game_data)`
     (`per_state_memo`, the pattern the keep authority uses): the gear latch, the

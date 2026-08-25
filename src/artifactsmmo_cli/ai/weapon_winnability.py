@@ -25,7 +25,34 @@ from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.world_state import WorldState
 
-_MEMO: "OrderedDict[tuple[object, ...], int]" = OrderedDict()
+_MEMO: "OrderedDict[tuple[object, ...], tuple[GameData, int]]" = OrderedDict()
+"""Key -> (the GameData the key was built from, the count).
+
+THE CATALOGUE IS STORED, NOT JUST ITS ADDRESS, AND THAT IS THE POINT.
+`_combat_fingerprint` distinguishes two catalogues by `id(game_data)` alone, and
+an `id()` is only unique among LIVE objects: CPython hands the same address to
+the next allocation once the first is freed. Keying on an address the cache does
+not keep alive is therefore keying on nothing — a second `GameData` at the
+recycled address reads the first one's answer.
+
+Not theoretical. 2026-08-25, `tests/test_ai/test_weapon_winnability.py::
+test_flame_rod_has_positive_marginal_it_unlocks_fire_mob` failed at 97 % of a
+SERIAL run (`marginal_weapon_winnability` returned 0 for a weapon that unlocks a
+monster) and passed run-alone and under xdist, because each test builds a fresh
+throwaway `GameData` and whether one lands on a freed predecessor's address is
+allocator luck — luck that any unrelated change to how much memory the preceding
+tests churn will move. Reproduced by hand: ONE stale entry turns the 1 into the
+0. Live the exposure is smaller but real, since `GameData` is rebuilt whenever
+the cache is refreshed within a process.
+
+Holding the object pins the address for exactly as long as the entry that names
+it, so no live key can collide. Eviction drops the reference and the entry
+together, so a recycled address can only ever mint a FRESH entry.
+
+Same defect class the `per_state_memo` docstring already records against
+`kit_selection._tool_caches` ("a state-only key served one test's items to
+another"). RULE: a cache key that names an object must keep that object alive.
+"""
 _MEMO_MAX = 4096
 
 
@@ -48,8 +75,15 @@ def _band_monsters(state: WorldState, game_data: GameData) -> list[str]:
 def _combat_fingerprint(state: WorldState, game_data: GameData) -> tuple[object, ...]:
     """Everything `predict_win` / `project_loadout_stats` reads from `state` —
     the owned candidate pool (inventory + equipment), current hp, and the
-    projected combat stats — plus the GameData identity (process-stable). Any
-    change that could alter `beatable_count` changes this key."""
+    projected combat stats — plus the GameData identity. Any change that could
+    alter `beatable_count` changes this key.
+
+    `id(game_data)` is NOT "process-stable", which is what this said until
+    2026-08-25 and is the whole reason the memo was wrong: an address is unique
+    only among LIVE objects. `_MEMO` stores the `GameData` alongside the count to
+    keep it live for the lifetime of the entry — see `_MEMO`. That stored
+    reference is never dereferenced, and deleting it for that reason is the edit
+    this bug came back from: keeping the object alive IS its whole job."""
     return (
         tuple(sorted((c, q) for c, q in state.inventory.items() if q > 0)),
         tuple(sorted((s, c) for s, c in state.equipment.items() if c)),
@@ -83,10 +117,12 @@ def beatable_count(state: WorldState, game_data: GameData) -> int:
     hit = _MEMO.get(key)
     if hit is not None:
         _MEMO.move_to_end(key)
-        return hit
+        return hit[1]
     result = sum(1 for code in _band_monsters(state, game_data)
                  if predict_win(state, game_data, code))
-    _MEMO[key] = result
+    # `game_data` is stored, not discarded: it is what keeps the `id()` in `key`
+    # from being recycled under a different catalogue. See `_MEMO`.
+    _MEMO[key] = (game_data, result)
     if len(_MEMO) > _MEMO_MAX:
         _MEMO.popitem(last=False)
     return result

@@ -18,6 +18,8 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.projections import Yield
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.strategy_driver import map_means
+from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import (
     COLLECT_REWARD_ORDER,
@@ -846,3 +848,35 @@ def test_a_fight_gear_closes_is_kept_however_far_above_the_character_it_is():
                        inventory={"tasks_coin": 1})
     collect, _ = active_means(state, gd, None, _ctx())
     assert MeansKind.TASK_CANCEL not in collect
+
+
+def test_the_rung_and_the_goal_it_emits_report_the_same_answer():
+    """ONE PRODUCER OF THE CANCEL REASON.
+
+    `_fires(TASK_CANCEL)` has three independent reasons to fire — S-048, the
+    one-level horizon, and `task_decision == PIVOT` for the items arm — and
+    `TaskCancelGoal.value` used to re-derive only the third. So a rung that fired
+    for either of the first two emitted a goal reporting `0.0`, which is what the
+    arbiter records as the trace's `goal_rank` and what both TUI consumers of
+    that panel filter out (`strategy_driver.py:820`, written when that panel last
+    rendered empty for exactly this reason).
+
+    Measured on the offline corpus before this was unified: three of three cells
+    where the arbiter SELECTED `TaskCancel` (`l32_held_task_open` on the horizon
+    arm, `l32_held_task_closable` and `l32_held_task_workable` on S-048) reported
+    a value of 0.0.
+
+    The state below is the horizon arm's own witness — a level-1 character
+    holding a level-1 `rat` task in a world with no items, so `task_decision`
+    answers PURSUE (the monster is IN BAND) while the horizon answers
+    out-of-reach. It is the exact shape `l32_held_task_open` has live."""
+    gd = _horizon_world()
+    state = make_state(level=1, hp=20, max_hp=20, attack={"earth": 1},
+                       task_code="rat", task_type="monsters",
+                       task_total=10, task_progress=0,
+                       inventory={"tasks_coin": 1})
+    assert task_decision(state, gd, None) == PURSUE
+    collect, _ = active_means(state, gd, None, _ctx())
+    assert MeansKind.TASK_CANCEL in collect
+    goal = map_means(MeansKind.TASK_CANCEL, gd, _ctx(), state, None)
+    assert goal.value(state, gd, None) > 0.0

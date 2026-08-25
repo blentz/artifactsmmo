@@ -59,7 +59,12 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import map_guard
-from artifactsmmo_cli.ai.task_horizon import HORIZON_LEVEL_UP, resolve_task_horizon
+from artifactsmmo_cli.ai.task_horizon import (
+    HORIZON_GEAR,
+    HORIZON_LEVEL_UP,
+    HORIZON_OUT_OF_REACH,
+    resolve_task_horizon,
+)
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.tiers.guards import GuardKind
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
@@ -257,20 +262,25 @@ def test_the_task_triple_flips_the_gear_latch(gd: GameData) -> None:
         assert _latch(name, winnable_alternative=True) is False
 
 
-def test_no_offline_scenario_can_starve_the_winnable_cascade(gd: GameData) -> None:
+def test_the_triple_cannot_starve_the_winnable_cascade(gd: GameData) -> None:
     """Why the test above passes `winnable_alternative` instead of measuring it.
 
-    `GearLatch`'s standing arm needs the cascade to find NOTHING worth
-    fighting. Offline it always finds something: `_path_aligned_monster` returns
-    a winnable low-level slime for every derived-stats character measured
-    (levels 20-45, copper and iron loadouts alike), so `winnable_alternative`
-    is True and the standing arm cannot fire from a scenario alone. The EDGE
-    arm needs `last_outcome == "error:fight_lost"` or a level-up, and
-    `ScenarioCharacter` can declare neither.
+    `GearLatch`'s standing arm needs the cascade to find NOTHING worth fighting,
+    and for THESE THREE cells it always finds something: `_path_aligned_monster`
+    returns a winnable low-level slime for each of them, so `winnable_alternative`
+    is True and the standing arm cannot fire from the triple alone.
 
-    Recorded as an assertion rather than a comment so that the day the cascade
-    CAN come up empty offline, this fails and cell 2 gets promoted from
-    "the latch's state conjuncts hold" to "the guard fires end to end"."""
+    THE SCOPE OF THAT CLAIM WAS WRONG AND IS NOW MEASURED. This test used to be
+    called `test_no_offline_scenario_can_starve_the_winnable_cascade` and its
+    docstring generalised to "every derived-stats character measured" — but it
+    only ever asserted over `TRIPLE`, three of forty-two. Swept over all of them
+    (2026-08-25), **11 of 42 scenarios DO starve the cascade**: `l1_fresh`,
+    `l3_low_hp`, `l8_overstocked`, `l10_gearcrafting_gap_combat_blocked`,
+    `l15_midband`, `l20_band_entry`, `l30_band_entry`, `l40_band_entry`,
+    `l48_capstone_approach`, `l48_band_adequate`, `l48_raid_active`. None of them
+    holds a task, which is the real and much narrower reason the standing arm was
+    unreachable — and giving one a task is all it took to reach it. That witness
+    is `test_a_starved_cascade_witnesses_the_standing_arm_end_to_end` below."""
     for name in TRIPLE:
         player = GamePlayer(character=name, history=None)
         player.seed_offline(_state(name, gd), gd)
@@ -359,3 +369,107 @@ def test_the_open_task_is_cancelled_end_to_end_with_a_coin(gd: GameData) -> None
 
     assert repr(report.selected_goal) == "TaskCancel"
     assert repr(report.plan[0]) == "TaskCancel"
+
+
+# --- the STANDING ARM, end to end -------------------------------------------
+#
+# `GearLatch` has a 981-cycle / 31.6-hour character-XP freeze in its history, and
+# it was caused by exactly the class of edit `63533b82` made to it: the standing
+# arm armed on a STANDING FACT ("this fight is lost"), so `GEAR_REVIEW` — a GUARD,
+# which preempts the objective step outright — held the character for 981
+# consecutive cycles with no level-up and no `error:fight_lost` to release it.
+# The rule that came out of that is "a standing condition must not drive a sticky
+# latch", and the arm is not sticky. But narrowing WHEN it arms is a change to
+# the same machinery, and it shipped with component-level evidence only.
+#
+# It does not have to. The arm needs three things at once: a craftable upgrade,
+# a held monsters task whose fight is lost, and NO winnable alternative. Eleven
+# of the forty-two scenarios starve the cascade (see
+# `test_the_triple_cannot_starve_the_winnable_cascade`); none of them holds a
+# task. Giving one a task closes the last conjunct and the arm becomes reachable
+# from `plan_from_state` — the same entry point production uses.
+
+STARVED = "l48_capstone_approach"
+STARVED_GEAR = "corrupted_ogre"
+STARVED_LEVEL_UP = "dryad"
+STARVED_OUT_OF_REACH = "baby_red_dragon"
+
+
+def _starved_state(monster: str, game_data: GameData):
+    """`l48_capstone_approach` holding a monsters task, and nothing else changed.
+
+    A CONTROL, in the same sense the l32 triple is one: one character, one
+    loadout, one level, three tasks. Everything that differs between the three
+    rows below is the monster code."""
+    return dataclasses.replace(
+        _state(STARVED, game_data), task_code=monster, task_type="monsters",
+        task_progress=0, task_total=10,
+        task_lifecycle_phase=TaskLifecyclePhase.IN_PROGRESS)
+
+
+def _starved_run(monster: str | None, game_data: GameData):
+    state = (_state(STARVED, game_data) if monster is None
+             else _starved_state(monster, game_data))
+    player = GamePlayer(character=STARVED, history=None)
+    player.seed_offline(state, game_data)
+    report = player.plan_from_state()
+    assert player._last_ctx is not None
+    return state, player, report
+
+
+def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -> None:
+    """The `GEAR_REVIEW` guard, fired and NOT fired, through `plan_from_state`.
+
+    All three rows share `has_combat_deficit is True` — the bare fact the arm
+    used to test — so before `63533b82` all three armed the latch and all three
+    handed the character to the guard. The horizon splits them: only the row a
+    gear chain closes is entitled to preempt the objective.
+
+    The EDGE arm is provably not what fires here: `plan_from_state` passes
+    `self._last_outcome` (None on a seeded player) and `prev_level == state.level`,
+    so `self._active` cannot be set. What is measured is `_blocked` alone."""
+    for monster in (STARVED_GEAR, STARVED_LEVEL_UP, STARVED_OUT_OF_REACH):
+        state, player, _ = _starved_run(monster, gd)
+        # The three conjuncts of the standing arm, measured rather than passed in.
+        assert player._winnable_farm_target() is None
+        assert has_craftable_upgrade_any_slot(state, gd) is True
+        # ...and the fact the OLD arm read, identical across all three rows.
+        assert has_combat_deficit(state, gd) is True
+
+    verdicts = {m: resolve_task_horizon(_starved_state(m, gd), gd).verdict
+                for m in (STARVED_GEAR, STARVED_LEVEL_UP, STARVED_OUT_OF_REACH)}
+    assert verdicts == {STARVED_GEAR: HORIZON_GEAR,
+                        STARVED_LEVEL_UP: HORIZON_LEVEL_UP,
+                        STARVED_OUT_OF_REACH: HORIZON_OUT_OF_REACH}
+
+    active = {m: _starved_run(m, gd)[1]._last_ctx.gear_review_active
+              for m in (STARVED_GEAR, STARVED_LEVEL_UP, STARVED_OUT_OF_REACH)}
+    assert active == {STARVED_GEAR: True,
+                      STARVED_LEVEL_UP: False,
+                      STARVED_OUT_OF_REACH: False}
+
+
+def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(
+        gd: GameData) -> None:
+    """INERT means INDISTINGUISHABLE FROM NOT HOLDING THE TASK — measured.
+
+    This is the freeze the latch caused, stated as an outcome instead of a flag.
+    The control is the SAME character with no task at all: a task the horizon
+    cannot reach must not change what it does, and a task gear closes must.
+
+    `HORIZON_LEVEL_UP` lands with the out-of-reach row deliberately, and the
+    reason is in `gear_latch.py`: the standing arm's other conjunct is
+    `not winnable_alternative`, so a level-up verdict reached HERE has no monster
+    to fight for the level. Letting the objective's own XP grind run IS the
+    level-up being pursued."""
+    _, _, control = _starved_run(None, gd)
+    control_goal, control_first = repr(control.selected_goal), repr(control.plan[0])
+
+    for monster in (STARVED_LEVEL_UP, STARVED_OUT_OF_REACH):
+        _, _, report = _starved_run(monster, gd)
+        assert repr(report.selected_goal) == control_goal
+        assert repr(report.plan[0]) == control_first
+
+    # ...and the closable row is the one that DOES divert the character.
+    _, _, gear = _starved_run(STARVED_GEAR, gd)
+    assert repr(gear.selected_goal) != control_goal

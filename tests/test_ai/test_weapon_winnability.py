@@ -6,8 +6,12 @@ the character beat a monster it cannot beat now?
 """
 
 
+import gc
+import weakref
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.weapon_winnability import (
+    _MEMO,
     beatable_count,
     marginal_weapon_winnability,
 )
@@ -106,3 +110,31 @@ def test_memo_evicts_the_oldest_entry_when_full(monkeypatch):
     for hp in (10, 20, 30):
         beatable_count(make_state(inventory={"stone_axe": 1}, hp=hp, max_hp=30), gd)
     assert len(ww._MEMO) == 2
+
+
+def test_the_memo_keeps_alive_the_game_data_its_key_names():
+    """`id()` is unique only among LIVE objects, so a key naming a freed one is
+    a key naming nothing — the next `GameData` allocated at that address reads
+    the previous catalogue's answer.
+
+    That is not hypothetical: on 2026-08-25
+    `test_flame_rod_has_positive_marginal_it_unlocks_fire_mob` returned 0 instead
+    of 1 at 97 % of a SERIAL `tests/test_ai/` run, and passed run-alone and under
+    xdist — every test in this file builds a throwaway `GameData`, and whether one
+    lands on a freed predecessor's address is allocator luck that any unrelated
+    change to preceding memory churn will move. Reproduced by hand: ONE stale
+    entry turns that 1 into a 0.
+
+    Asserted as the INVARIANT rather than by hunting a collision, because a
+    collision hunt is exactly as luck-dependent as the bug. The fix is that
+    `_MEMO` stores the `GameData` beside the count; this fails the moment that
+    reference is dropped as unused."""
+    _MEMO.clear()
+    gd = _gd()
+    beatable_count(make_state(inventory={"stone_axe": 1}), gd)
+    ref = weakref.ref(gd)
+    del gd
+    gc.collect()
+    assert ref() is not None, (
+        "_MEMO keyed on id(game_data) but let the GameData be collected — the "
+        "address is now free for another catalogue to reuse")

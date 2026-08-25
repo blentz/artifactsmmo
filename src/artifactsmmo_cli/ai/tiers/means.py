@@ -263,6 +263,17 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
             # itself. `task_decision` is untouched (it is the formalisation target
             # of `Formal/TaskDecision.lean` and still serves PURSUE_TASK and the
             # items arm below).
+            #
+            # THIS FUNCTION IS THE ONLY PRODUCER OF THE CANCEL REASON, across all
+            # three arms (S-048 above, the horizon here, `task_decision` below).
+            # `TaskCancelGoal` — the goal `map_means` builds once this returns
+            # True — used to re-derive the third arm on its own and report the
+            # answer as its `value`, so a rung that fired for either of the other
+            # two emitted a goal reporting 0.0. Measured on the offline corpus,
+            # that was three of three cells where the arbiter actually SELECTS it.
+            # The goal now reports the scalar and asks nothing;
+            # `test_the_rung_and_the_goal_it_emits_report_the_same_answer` is what
+            # fails if a second reader is ever added back.
             horizon = resolve_task_horizon(state, game_data)
             return horizon is not None and horizon.verdict == HORIZON_OUT_OF_REACH
         return (history is not None

@@ -181,6 +181,9 @@ CURRENCY_TURNIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_turni
 DUAL_ROLE_CURRENCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "dual_role_currency.py"
 COMBAT_DEFICIT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_deficit.py"
 TASK_HORIZON_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_horizon.py"
+GEAR_LATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_latch.py"
+WEAPON_WINNABILITY_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
+                          / "weapon_winnability.py")
 
 # craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
 # model is the soundness-critical part; killed by
@@ -4022,6 +4025,35 @@ TASK_HORIZON_MUTATIONS = [
      "    if at_next is not None and at_next.closes:"),
 ]
 
+# The horizon's consumer on the LATCH — the highest-risk edit of the change and,
+# until 2026-08-25, the one with no anchor and no end-to-end witness at all.
+# `GearLatch` has a 981-cycle / 31.6-hour character-XP freeze in its history caused
+# by this arm arming on a STANDING FACT, so a mutation that re-broadens it back to
+# that fact must not survive. `resolve_task_horizon` returns non-None exactly when
+# `has_combat_deficit` does, so dropping the verdict test IS the pre-`63533b82`
+# code. Killed end to end (`plan_from_state`) by
+# tests/test_ai/scenarios/test_held_task.py — the guard fires for all three of a
+# GEAR / LEVEL_UP / OUT_OF_REACH task instead of only the first, and the character
+# is diverted off its own objective. OWN run_group (unit-killed mutant).
+# `_combat_fingerprint` distinguishes catalogues by `id(game_data)`, which is
+# unique only among LIVE objects — so the memo MUST keep the GameData alive or a
+# recycled address serves one catalogue's answer to another. That is not a
+# hypothetical: it is what made `test_flame_rod_has_positive_marginal...` return 0
+# at 97% of a serial run on 2026-08-25. The stored reference looks unused and is
+# exactly the thing a tidying edit would delete, so it gets an anchor. Killed by
+# tests/test_ai/test_weapon_winnability.py. OWN run_group (unit-killed mutant).
+WEAPON_WINNABILITY_PIN_MUTATIONS = [
+    ("weapon_winnability: the memo stops pinning the GameData its key names",
+     "    _MEMO[key] = (game_data, result)",
+     "    _MEMO[key] = (GameData(), result)"),
+]
+
+GEAR_LATCH_HORIZON_MUTATIONS = [
+    ("gear_latch: the standing arm re-broadens to the bare fight-lost fact",
+     "        self._blocked = horizon is not None and horizon.verdict == HORIZON_GEAR",
+     "        self._blocked = horizon is not None"),
+]
+
 # The horizon's consumer on the discard rung. Killed by
 # tests/test_ai/test_tiers_means.py. OWN run_group (unit-killed mutant).
 MEANS_TASK_HORIZON_MUTATIONS = [
@@ -4105,6 +4137,8 @@ _ALL_SRCS = [
     COMBAT_PICKER_SRC,
     COMBAT_DEFICIT_SRC,
     TASK_HORIZON_SRC,
+    GEAR_LATCH_SRC,
+    WEAPON_WINNABILITY_SRC,
     PROJECTIONS_SRC,
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
     GATHERING_GOAL_SRC, PURSUE_TASK_GOAL_SRC, SCALAR_PRIORITY_SRC,
@@ -6863,9 +6897,14 @@ TASK_EXCHANGE_GOAL_MUTATIONS = [
 ]
 
 TASK_CANCEL_GOAL_MUTATIONS = [
-    ("task_cancel: return 12.0 if PIVOT -> 120.0",
-     "        return 12.0 if task_decision(state, game_data, history) == PIVOT else 0.0",
-     "        return 120.0 if task_decision(state, game_data, history) == PIVOT else 0.0"),
+    # Anchor refreshed 2026-08-25: the goal no longer re-derives the cancel REASON
+    # (`task_decision == PIVOT`) — `tiers/means._fires` is the sole producer of it,
+    # and re-deriving only its third arm made the goal report 0.0 for the two other
+    # arms, on three of three offline cells where it is actually SELECTED. What
+    # survives here is the scalar the arbiter records as `goal_rank`.
+    ("task_cancel: return 12.0 -> 120.0",
+     "        return 12.0\n",
+     "        return 120.0\n"),
 ]
 
 COMPLETE_TASK_GOAL_MUTATIONS = [
@@ -7648,6 +7687,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_combat_deficit.py", survivors)
     run_group(TASK_HORIZON_SRC, TASK_HORIZON_MUTATIONS,
               "tests/test_ai/test_task_horizon.py", survivors)
+    run_group(GEAR_LATCH_SRC, GEAR_LATCH_HORIZON_MUTATIONS,
+              "tests/test_ai/scenarios/test_held_task.py", survivors)
+    run_group(WEAPON_WINNABILITY_SRC, WEAPON_WINNABILITY_PIN_MUTATIONS,
+              "tests/test_ai/test_weapon_winnability.py", survivors)
     run_group(MEANS_SRC, MEANS_TASK_HORIZON_MUTATIONS,
               "tests/test_ai/test_tiers_means.py", survivors)
     run_group(TASK_CANCEL_GOAL_SRC, TASK_CANCEL_GOAL_COIN_MUTATIONS,
