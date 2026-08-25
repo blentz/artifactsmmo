@@ -133,12 +133,27 @@ class CraftPotionsGoal(Goal):
                                               POTION_HIGH_LEVEL, POTION_HIGH_QTY)
         if game_data is None or state is None:
             return 0
-        # Derive the monster the way the GUARD does when none was injected. The
-        # arbiter can hand this goal a SelectionContext whose combat_monster is
-        # None while the guard -- which calls primary_combat_target itself -- has
-        # already fired. Trusting only the injected value would make the goal
-        # inert in exactly the cycles the guard just selected it for: the same
-        # guard/goal divergence, inverted.
+        # ONE MONSTER, AND `craft_potions_fires` NAMES IT. Both arms of this
+        # expression resolve to `primary_combat_target(state, game_data)` — the
+        # call the GUARD makes — so the goal cannot size for a monster the guard
+        # did not fire on. `strategy_driver.map_guard` forwards exactly that call
+        # as `combat_monster`; the fall-through covers the goals built by hand in
+        # tests and by the differential harness.
+        #
+        # BOTH HALVES ARE SCAR TISSUE FROM THE SAME DIVERGENCE. The fall-through
+        # went in first (2026-07-19): the arbiter could pass `combat_monster=None`
+        # while the guard had already fired, leaving the goal inert in exactly the
+        # cycles it was selected for. The other half is the same bug not inverted
+        # but merely DIFFERENT — `map_guard` used to inject `ctx.combat_monster`,
+        # the arbiter's FARM target from `GamePlayer._winnable_farm_target`, and a
+        # non-None monster the guard had not fired on silenced the goal just as
+        # thoroughly (`is_satisfied() == True`, so `select_pure` never even tried
+        # it). Measured 2026-08-25: 14 of 294 offline cells, e.g.
+        # `l21_grey_material_grind` sizing for `mushmush` while the guard fired on
+        # `pig`. Fixed at the injection site, not here, because
+        # `craft_potions_fires(state, game_data, history)` is a 3-arg Bool with a
+        # Lean mirror and a differential harness — threading the ctx INTO it would
+        # have created a second reading, which is the thing being removed.
         monster = self._combat_monster or primary_combat_target(state, game_data)
         if monster is None:
             return 0

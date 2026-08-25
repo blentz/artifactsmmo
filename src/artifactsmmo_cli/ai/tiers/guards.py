@@ -46,6 +46,12 @@ from artifactsmmo_cli.ai.world_state import WorldState
 # The thresholds ladder enforces this ordering in one ascending block.
 DISCARD_HIGH_FRACTION = PRESSURE_HIGH_FRACTION
 DISCARD_CRITICAL_FRACTION = PRESSURE_CRITICAL_FRACTION
+# THE FIRING SIDE OF A NUMBER THAT IS DECLARED TWICE. `goals/reach_unlock_level.py`
+# declares a same-named constant of its own and `ReachUnlockLevelGoal.value`
+# returns 0.0 on the exact complement of the test below. This one decides — the
+# goal is only ever built after this guard has fired — so the goal-side branch is
+# unreachable in production; see that constant's docstring for the sweep
+# (2026-08-25) that established it. Change one and you must change the other.
 MAX_ACHIEVABLE_GAP = 5
 
 

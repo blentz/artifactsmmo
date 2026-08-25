@@ -2,10 +2,18 @@
 
 from unittest.mock import patch
 
+from artifactsmmo_cli.ai.combat_targets import combat_target_monsters
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
+from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
-from artifactsmmo_cli.ai.thresholds import DEPOSIT_FULL_FRACTION
+from artifactsmmo_cli.ai.potion_supply import (
+    craft_potions_fires,
+    primary_combat_target,
+    projected_heal_need_per_fight,
+)
+from artifactsmmo_cli.ai.strategy_driver import map_guard
+from artifactsmmo_cli.ai.thresholds import DEPOSIT_FULL_FRACTION, PRESSURE_HIGH_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import (
     GUARD_ORDER,
     GuardKind,
@@ -821,3 +829,92 @@ def test_ge_cancel_guard_in_ladder_below_fight_gates():
     i = GUARD_ORDER.index(GuardKind.GE_CANCEL)
     assert GUARD_ORDER[i - 1] is GuardKind.REACH_UNLOCK_LEVEL
     assert GUARD_ORDER[i + 1] is GuardKind.DISCARD_CRITICAL
+
+
+def test_deposit_full_never_fires_on_a_goal_that_reports_zero_value():
+    """ONE SPACE-PRESSURE FRACTION, not two.
+
+    `Formal.Liveness.MeansFiring._fires_depositFull_implies_depositInventory_positive`
+    proves `fires(DEPOSIT_FULL) => depositInventoryValue > 0`, and the ordering
+    that makes it true (DEPOSIT_FULL_FRACTION 0.90 strictly above the goal's
+    ramp start 0.85) is spelled out at `DISCARD_HIGH_FRACTION`'s comment in
+    tiers/guards.py. The model has ONE `usedFractionRat`; production had TWO —
+    the guard's `_used_fraction` is max(QUANTITY, SLOT) while the goal read the
+    quantity fraction alone with a binary `slots_free == 0 -> 1.0` override.
+
+    18 singleton stacks in a 20-slot / 124-quantity bag is 0.90 of the SLOTS and
+    0.145 of the quantity, so the guard fired and the goal reported 0.0 with two
+    slots still free. Measured 2026-08-25 over the 42 scenarios x 7 bag shapes:
+    82 of 294 cells, and end to end on `l8_overstocked` the arbiter SELECTED
+    `DepositInventory` with `plan[0]=DepositAll` at `goal_rank` 0.0 — invisible
+    to both TUI consumers of that panel, which filter `priority > 0`.
+    """
+    gd = GameData()
+    gd._bank_capacity = 50
+    state = make_state(inventory={f"junk{i}": 1 for i in range(18)},
+                       inventory_max=124, inventory_slots_max=20,
+                       bank_items={"x": 1})
+    ctx = _ctx()
+    assert state.inventory_slots_free == 2          # NOT the slots-full override
+    assert state.inventory_used / state.inventory_max < PRESSURE_HIGH_FRACTION
+    assert _fires(GuardKind.DEPOSIT_FULL, state, gd, None, ctx) is True
+    goal = DepositInventoryGoal(bank_accessible=True, game_data=gd, ctx=ctx)
+    assert goal.is_satisfied(state) is False
+    assert goal.value(state, gd) > 0.0
+
+
+def test_craft_potions_goal_sizes_from_the_monster_the_guard_fired_on():
+    """ONE MONSTER, AND `craft_potions_fires` NAMES IT.
+
+    `craft_potions_fires` is documented as "the exclusive gating truth for
+    CraftPotionsGoal — the guard never fires when the goal would have no
+    plannable path", and it projects the heal need from
+    `primary_combat_target(state, game_data)`. `map_guard` used to seed the
+    goal with `ctx.combat_monster` — the arbiter's FARM target, a different
+    cascade (`GamePlayer._winnable_farm_target`) — so when the two named
+    different monsters the goal sized from one the guard had not fired on,
+    reported `is_satisfied() == True`, and `select_pure` skipped it: the
+    guard's decision was discarded with nothing in `goals_tried` to say so.
+
+    Measured 2026-08-25: `l21_grey_material_grind` / `l22_grey_rung_grind`
+    (ctx `mushmush` vs the guard's `pig`) in the as-shipped corpus, 14 of 294
+    cells across the 42 scenarios x 7 bag shapes.
+
+    This cell has TWO tiled winnable monsters. `combat_target_monsters` orders
+    them, so `primary_combat_target` names one of them, and the ctx names the
+    other on purpose — exactly the divergence above.
+    """
+    gd = GameData()
+    gd._item_stats = {
+        "small_health_potion": ItemStats(code="small_health_potion", level=1,
+                                         type_="utility", hp_restore=30,
+                                         crafting_skill="alchemy", crafting_level=1),
+        "sunflower": ItemStats(code="sunflower", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"small_health_potion": {"sunflower": 1}}
+    gd._resource_drops = {"sunflower_field": "sunflower"}
+    gd._resource_locations = {"sunflower_field": [(2, 0)]}
+    gd._workshop_locations = {"alchemy": (3, 0)}
+    gd._monster_level = {"biter": 3, "nibbler": 2}
+    gd._monster_hp = {"biter": 60, "nibbler": 50}
+    gd._monster_attack = {"biter": {"fire": 40}, "nibbler": {"fire": 30}}
+    gd._monster_resistance = {"biter": {}, "nibbler": {}}
+    gd._monster_locations = {"biter": [(1, 0)], "nibbler": [(4, 0)]}
+    fill_monster_stat_defaults(gd)
+    state = make_state(level=1, hp=150, max_hp=150, attack={"fire": 20})
+
+    fired = primary_combat_target(state, gd)
+    other = "nibbler" if fired == "biter" else "biter"
+    # NON-VACUOUS: both monsters are winnable and tiled, the guard fires on
+    # `fired` (projected need 120 HP) and `other` projects 0 — so seeding the
+    # goal with `other` is what used to silence it.
+    assert combat_target_monsters(state, gd) == ["biter", "nibbler"]
+    assert projected_heal_need_per_fight(state, gd, fired, None) > 0
+    assert projected_heal_need_per_fight(state, gd, other, None) == 0
+    assert craft_potions_fires(state, gd, None) is True
+
+    goal = map_guard(GuardKind.CRAFT_POTIONS, gd, _ctx(combat_monster=other),
+                     state, None, None)
+    # A guard that fired must not emit a goal the arbiter throws away unread.
+    assert goal.is_satisfied(state) is False
+    assert goal.value(state, gd) > 0.0

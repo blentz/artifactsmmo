@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
+from artifactsmmo_cli.ai.tiers.guards import _used_fraction
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MIN_FREE_SLOTS = 5
@@ -48,21 +49,30 @@ class DepositInventoryGoal(Goal):
             return 0.0
         if self.is_satisfied(state):
             return 0.0
-        used_fraction = state.inventory_used / state.inventory_max
-        # SLOTS-FULL livelock fix (Task 7, slot-aware-inventory-room): 20/20
-        # distinct stacks full but low total QUANTITY (e.g. 20 singleton
-        # junk stacks in a 124-capacity bag) never crosses the RAMP_START
-        # watermark on `used_fraction` alone, so this goal never gets
-        # priority and junk never gets banked — the slot-exhaustion
-        # livelock. Zero free slots is treated as maximal pressure by
-        # forcing `used_fraction` to 1.0 (the top of the ramp's domain)
-        # rather than adding a new branch: `depositInventoryValue` in
-        # formal/Formal/GoalSystem.lean proves this EXACT ramp formula for
-        # every `usedFraction` the bridge lifts into `[0, 1]`, so feeding it
-        # the value 1.0 stays inside the already-proven universal domain —
-        # no Lean mirror change needed.
-        if state.inventory_slots_free == 0:
-            used_fraction = 1.0
+        # ONE SPACE-PRESSURE FRACTION, AND THE GUARD OWNS IT. `_used_fraction`
+        # is `max(QUANTITY fraction, SLOT fraction)` — the same call
+        # `_fires(DEPOSIT_FULL)` makes — so the guard can no longer fire on a
+        # goal that reports zero. It used to: the guard read the max while this
+        # method read the quantity fraction alone, patched with a BINARY
+        # `slots_free == 0 -> 1.0` override, so 18 singleton stacks in a
+        # 20-slot / 124-quantity bag were 0.90 of the SLOTS (guard fires) and
+        # 0.145 of the quantity with two slots still free (value 0.0). Measured
+        # 2026-08-25 over the 42 scenarios x 7 bag shapes: 82 of 294 cells, and
+        # end to end the arbiter SELECTED `DepositInventory`/`DepositAll` at
+        # `goal_rank` 0.0 — which both TUI consumers of that panel filter away
+        # (`priority > 0`, strategy_driver.py:820).
+        #
+        # `Formal.Liveness.MeansFiring._fires_depositFull_implies_depositInventory_positive`
+        # proves `fires(DEPOSIT_FULL) => value > 0` over ONE `usedFractionRat`;
+        # production had two, which is precisely why a proved lemma did not
+        # bind. Sharing the guard's function is what makes the model's single
+        # fraction true of the code. The old override is SUBSUMED, not dropped:
+        # `slots_free == 0` makes the slot fraction exactly 1.0, so the max is
+        # 1.0 — the same top-of-ramp value, now reached by the general rule.
+        # `depositInventoryValue` (formal/Formal/GoalSystem.lean) proves this
+        # EXACT ramp formula for every `usedFraction` in `[0, 1]`, so no Lean
+        # mirror changes.
+        used_fraction = _used_fraction(state)
         if used_fraction < self._RAMP_START:
             return 0.0
         # Linear ramp from _RAMP_START → 1.0 mapped onto 0 → _MAX_VALUE.

@@ -6987,6 +6987,30 @@ DEPOSIT_INVENTORY_GOAL_MUTATIONS = [
      "    _MAX_VALUE = 800.0   # value at 100% used; outranks FarmItems(35) once near cap"),
 ]
 
+# UNIT-KILLED, so its OWN run_group against the guard-ladder unit tests rather
+# than the value differential: the divergence is between the GUARD's space
+# fraction and the GOAL's, and the differential's model carries only one
+# `usedFractionRat` (formal/Formal/Liveness/MeansFiring.lean) — which is exactly
+# why a proved lemma did not bind on production. Restoring the quantity-only
+# read re-opens the window where DEPOSIT_FULL fires on SLOT pressure and the
+# goal it selects reports 0.0.
+DEPOSIT_INVENTORY_SPACE_FRACTION_MUTATIONS = [
+    ("deposit_inventory: value() reads the QUANTITY fraction, not the guard's max",
+     "        used_fraction = _used_fraction(state)",
+     "        used_fraction = state.inventory_used / state.inventory_max"),
+]
+
+# UNIT-KILLED, own run_group (same reason). `map_guard(CRAFT_POTIONS)` must seed
+# the goal with the monster `craft_potions_fires` fired on, never the arbiter's
+# farm target: naming a different monster makes the goal answer
+# `is_satisfied() == True` and the fired guard is silently discarded.
+CRAFT_POTIONS_GUARD_MONSTER_MUTATIONS = [
+    ("map_guard(CRAFT_POTIONS): seed the FARM target instead of the guard's monster",
+     "            combat_monster=(primary_combat_target(state, game_data)\n"
+     "                            if state is not None else None),",
+     "            combat_monster=ctx.combat_monster,"),
+]
+
 SELL_INVENTORY_GOAL_MUTATIONS = [
     # SEIZE_WINDOW_VALUE 60 -> 600 (breaks band claim).
     ("sell_inventory: SEIZE_WINDOW_VALUE = 60.0 -> 600.0",
@@ -7503,6 +7527,12 @@ def _collect_all_groups() -> None:
               "formal/diff/test_goal_system_value_diff.py", survivors)
     run_group(DEPOSIT_INVENTORY_GOAL_SRC, DEPOSIT_INVENTORY_GOAL_MUTATIONS,
               "formal/diff/test_goal_system_value_diff.py", survivors)
+    # Goal.value / firing-predicate agreement (R4 sweep, 2026-08-25) — killed by
+    # the guard-ladder unit tests, so they get their own groups.
+    run_group(DEPOSIT_INVENTORY_GOAL_SRC, DEPOSIT_INVENTORY_SPACE_FRACTION_MUTATIONS,
+              "tests/test_ai/test_tiers_guards.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, CRAFT_POTIONS_GUARD_MONSTER_MUTATIONS,
+              "tests/test_ai/test_tiers_guards.py", survivors)
     run_group(SELL_INVENTORY_GOAL_SRC, SELL_INVENTORY_GOAL_MUTATIONS,
               "formal/diff/test_goal_system_value_diff.py", survivors)
     # Phase-19d — Tier-1 liveness differential.

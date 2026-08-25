@@ -157,6 +157,33 @@ class UpgradeEquipmentGoal(Goal):
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
+        """Urgency, and NOT the reason this goal is a candidate.
+
+        WHO DECIDED IT FIRES, AND WHY THIS ASKS SOMETHING ELSE. A committed
+        instance reaches the arbiter from `obtain_item_routing._equippable_goal`
+        (the objective step / fallback steps) or from `map_guard(GEAR_REVIEW)`.
+        Neither asks what this method asks: the router asks whether
+        `actionable_step` names the root itself, the guard asks whether the
+        deficit walk named the item, and `_find_upgrade` asks whether the
+        COMMITTED target's materials are in hand. So a committed goal whose
+        chain has dead-ended — a recipe-less, non-vendor equippable such as
+        `novice_guide` or `wooden_stick` — is a live candidate reporting 0.0.
+
+        THIS IS NOT THE `TaskCancelGoal` DEFECT, AND THE DIFFERENCE IS MEASURED,
+        not assumed. Swept 2026-08-25 over the 42 offline scenarios x 7 bag
+        shapes: 62 of 488 planner attempts recorded `priority == 0.0`, ALL of
+        them this class, ALL with `plan_len == 0`, and NONE selected — the
+        dead-ended closure admits no actions, which is the bounded fast-fail
+        `_equippable_goal`'s docstring intends, and `select_pure` returns a goal
+        only on a non-empty plan. That coincidence is empirical, not a theorem:
+        the router is what keeps a materials-short-but-gatherable target out of
+        this class (it routes to `GatherMaterials` instead), so if that routing
+        ever changes, this method becomes a second producer of the firing
+        decision and the R4 sweep must be re-run. The 62 attempts DO vanish from
+        the TUI goal-rank panel (both consumers filter `priority > 0`,
+        strategy_driver.py:820); `objective_unplannable` is where a no-plan
+        objective attempt is surfaced instead.
+        """
         upgrade = self._find_upgrade(state, game_data)
         if upgrade is None:
             return 0.0

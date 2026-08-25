@@ -176,7 +176,17 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
     so there is no threshold to tune and no bound to rot.
 
     `ctx` is forwarded to `_gather_goal_for_unreachable_equippable`
-    (one-obtain-model epic, Task 5); defaults to `NO_PROFILE_CONTEXT`."""
+    (one-obtain-model epic, Task 5); defaults to `NO_PROFILE_CONTEXT`.
+
+    THIS FUNCTION IS THE PRODUCER OF "PURSUE THIS UPGRADE"; the goal's
+    `value()` is NOT. `UpgradeEquipmentGoal.value` asks a different question —
+    are the committed target's materials in hand — so a dead-ended target
+    returned here reports 0.0. That is a report, not a second firing decision,
+    and the sweep that establishes it (62 of 488 attempts at priority 0.0, all
+    with `plan_len == 0`, none selected, 2026-08-25) is written up at that
+    method. If the routing above ever admits a materials-short-but-gatherable
+    target into `UpgradeEquipment`, the two DO become two producers and that
+    census has to be re-run."""
     upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment, committed_target=(code, slot))
     owned = (state.inventory.get(code, 0) > 0
              or (state.bank_items or {}).get(code, 0) > 0)
