@@ -23,6 +23,30 @@ def _epoch(timestamp: str) -> float:
     return datetime.fromisoformat(timestamp.replace("Z", "+00:00")).timestamp()
 
 
+def cooldown_expiry_epoch(timestamp: str, cooldown_remaining: float, now: float) -> float | None:
+    """Wall-clock epoch at which a snapshot's cooldown ends; None once it is over.
+
+    `cooldown_remaining` is the value AS OF `timestamp` — a `CycleSnapshot` is
+    frozen at end-of-cycle — NOT as of display time. Anchoring the countdown at
+    display time (`monotonic() + cooldown_remaining`) restarted it from full
+    every time the pane was re-bound, so a snapshot captured two minutes ago
+    counted down its whole cooldown again on a character switch.
+
+    Both ends of this subtraction are WALL CLOCK: the anchor is a UTC timestamp
+    produced by the bot process, so `now` must come from `time.time()`. Mixing
+    in `time.monotonic()` — whose epoch is an arbitrary process-local zero —
+    would be the very bug being fixed here.
+
+    Elapsed is floored at zero so that a TUI clock running BEHIND the bot's
+    cannot print a countdown longer than the cooldown the server published: the
+    worst skew shows the full cooldown, never more. A snapshot old enough that
+    its cooldown has expired yields None, i.e. "ready", which is the truth.
+    """
+    elapsed = max(0.0, now - _epoch(timestamp))
+    remaining = cooldown_remaining - elapsed
+    return now + remaining if remaining > 0 else None
+
+
 def task_eta_seconds(samples: list[tuple[float, int]], remaining: int) -> float | None:
     """Estimate seconds to finish `remaining` task units from (time, progress)
     samples. None when there is too little data or no positive progress rate."""
@@ -57,9 +81,8 @@ class StatusPane(Static):
 
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         self._track_eta(snap)
-        self._cooldown_expiry = (
-            time.monotonic() + snap.cooldown_remaining
-            if snap.cooldown_remaining > 0 else None
+        self._cooldown_expiry = cooldown_expiry_epoch(
+            snap.timestamp, snap.cooldown_remaining, time.time()
         )
         self.snapshot = snap
 
@@ -72,6 +95,11 @@ class StatusPane(Static):
         projection for someone else. `None` means the new character has
         produced no cycle yet, so the pane goes blank rather than keep showing
         the previous character's numbers.
+
+        Clearing stays load-bearing after the countdown was re-based on the
+        snapshot's own timestamp: a `None` snapshot never reaches
+        `update_snapshot`, so without the clear the OLD character's expiry
+        would survive the switch and keep ticking under the new name.
         """
         self._eta_task = None
         self._eta_samples = []
@@ -92,9 +120,14 @@ class StatusPane(Static):
                 self._cooldown_expiry = None
 
     def _cooldown_remaining(self) -> float:
+        """Seconds left on the focused character's cooldown, right now.
+
+        `_cooldown_expiry` is a wall-clock epoch (see `cooldown_expiry_epoch`),
+        so the clock read here must be `time.time()` to match it.
+        """
         if self._cooldown_expiry is None:
             return 0.0
-        return max(0.0, self._cooldown_expiry - time.monotonic())
+        return max(0.0, self._cooldown_expiry - time.time())
 
     def _track_eta(self, snap: CycleSnapshot) -> None:
         if not snap.task_code:

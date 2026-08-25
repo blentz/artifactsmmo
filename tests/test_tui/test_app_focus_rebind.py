@@ -15,6 +15,8 @@ an append-only log. Three defects followed, all reproduced here:
    ETA samples across the switch.
 """
 
+from datetime import datetime, timezone
+
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.app import WatchApp
@@ -84,10 +86,16 @@ async def test_the_log_pane_shows_only_the_focused_characters_history():
 
 async def test_switching_resets_the_previous_characters_cooldown():
     """A 300s cooldown belonging to alice must not keep counting down while the
-    operator is watching bob."""
+    operator is watching bob.
+
+    The timestamp is `now`, not the module default: the countdown is anchored
+    to the snapshot's own capture time, so a fixed 2026-07-31 timestamp would
+    already have expired and the cooldown under test would never arm.
+    """
     app = _app()
     async with app.run_test(size=(120, 50)) as pilot:
-        app.update_snapshot(_snap("alice", cooldown_remaining=300.0))
+        now = datetime.now(tz=timezone.utc).isoformat()
+        app.update_snapshot(_snap("alice", timestamp=now, cooldown_remaining=300.0))
         status = app.query_one("#status", StatusPane)
         assert status._cooldown_expiry is not None
 

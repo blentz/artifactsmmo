@@ -2,11 +2,31 @@
 
 import io
 import time
+from datetime import datetime, timezone
 
 from rich.console import Console
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalRankEntry
-from artifactsmmo_cli.tui.widgets.status_pane import ETA_WINDOW, StatusPane, format_eta, task_eta_seconds
+from artifactsmmo_cli.tui.widgets.status_pane import (
+    ETA_WINDOW,
+    StatusPane,
+    cooldown_expiry_epoch,
+    format_eta,
+    task_eta_seconds,
+)
+
+NOW = 1_780_000_000.0
+"""Fixed wall-clock epoch the cooldown tests pin `time.time()` to."""
+
+
+def _ts(seconds_ago: float = 0.0) -> str:
+    """An ISO-8601 UTC timestamp `seconds_ago` before `NOW`.
+
+    Snapshots in these tests are DELIBERATELY aged: the cooldown countdown is
+    anchored to the snapshot's own capture time, so a test that always feeds a
+    fresh timestamp cannot observe a stale one restarting from full.
+    """
+    return datetime.fromtimestamp(NOW - seconds_ago, tz=timezone.utc).isoformat()
 
 
 def _snap(**overrides) -> CycleSnapshot:
@@ -98,16 +118,16 @@ class TestStatusPaneCooldown:
         assert "ready" in _render(pane)
 
     def test_cooldown_shows_seconds_when_positive(self, monkeypatch):
-        monkeypatch.setattr(time, "monotonic", lambda: 500.0)
+        monkeypatch.setattr(time, "time", lambda: NOW)
         pane = StatusPane()
-        pane.update_snapshot(_snap(cooldown_remaining=5.5))
+        pane.update_snapshot(_snap(timestamp=_ts(), cooldown_remaining=5.5))
         assert "6s" in _render(pane)
 
     def test_cooldown_high_value(self, monkeypatch):
         """Values >= 10 are colored red, still displays correctly."""
-        monkeypatch.setattr(time, "monotonic", lambda: 500.0)
+        monkeypatch.setattr(time, "time", lambda: NOW)
         pane = StatusPane()
-        pane.update_snapshot(_snap(cooldown_remaining=15.0))
+        pane.update_snapshot(_snap(timestamp=_ts(), cooldown_remaining=15.0))
         assert "15s" in _render(pane)
 
 
@@ -312,52 +332,117 @@ class TestStatusEtaRow:
 
 class TestStatusPaneLiveCooldown:
     def test_update_snapshot_sets_expiry_from_remaining(self, monkeypatch):
-        monkeypatch.setattr(time, "monotonic", lambda: 1000.0)
+        monkeypatch.setattr(time, "time", lambda: NOW)
         pane = StatusPane()
-        pane.update_snapshot(_snap(cooldown_remaining=45.0))
-        assert pane._cooldown_expiry == 1045.0
+        pane.update_snapshot(_snap(timestamp=_ts(), cooldown_remaining=45.0))
+        assert pane._cooldown_expiry == NOW + 45.0
 
     def test_update_snapshot_zero_remaining_clears_expiry(self, monkeypatch):
-        monkeypatch.setattr(time, "monotonic", lambda: 1000.0)
+        monkeypatch.setattr(time, "time", lambda: NOW)
         pane = StatusPane()
-        pane.update_snapshot(_snap(cooldown_remaining=0.0))
+        pane.update_snapshot(_snap(timestamp=_ts(), cooldown_remaining=0.0))
         assert pane._cooldown_expiry is None
 
     def test_remaining_decreases_as_time_advances(self, monkeypatch):
-        clock = {"t": 1000.0}
-        monkeypatch.setattr(time, "monotonic", lambda: clock["t"])
+        clock = {"t": NOW}
+        monkeypatch.setattr(time, "time", lambda: clock["t"])
         pane = StatusPane()
-        pane.update_snapshot(_snap(cooldown_remaining=45.0))
-        clock["t"] = 1030.0
+        pane.update_snapshot(_snap(timestamp=_ts(), cooldown_remaining=45.0))
+        clock["t"] = NOW + 30.0
         assert pane._cooldown_remaining() == 15.0
-        clock["t"] = 1100.0
+        clock["t"] = NOW + 100.0
         assert pane._cooldown_remaining() == 0.0
 
     def test_remaining_zero_when_no_expiry(self):
         assert StatusPane()._cooldown_remaining() == 0.0
 
     def test_render_shows_live_countdown_not_frozen_snapshot(self, monkeypatch):
-        clock = {"t": 1000.0}
-        monkeypatch.setattr(time, "monotonic", lambda: clock["t"])
+        clock = {"t": NOW}
+        monkeypatch.setattr(time, "time", lambda: clock["t"])
         pane = StatusPane()
-        pane.update_snapshot(_snap(cooldown_remaining=45.0))
-        clock["t"] = 1020.5
+        pane.update_snapshot(_snap(timestamp=_ts(), cooldown_remaining=45.0))
+        clock["t"] = NOW + 20.5
         out = _render(pane)
         assert "25s" in out and "45" not in out
 
     def test_render_ready_when_countdown_elapsed(self, monkeypatch):
-        clock = {"t": 1000.0}
-        monkeypatch.setattr(time, "monotonic", lambda: clock["t"])
+        clock = {"t": NOW}
+        monkeypatch.setattr(time, "time", lambda: clock["t"])
         pane = StatusPane()
-        pane.update_snapshot(_snap(cooldown_remaining=5.0))
-        clock["t"] = 1010.0
+        pane.update_snapshot(_snap(timestamp=_ts(), cooldown_remaining=5.0))
+        clock["t"] = NOW + 10.0
         assert "ready" in _render(pane)
 
     def test_tick_clears_expiry_once_elapsed(self, monkeypatch):
-        clock = {"t": 1000.0}
-        monkeypatch.setattr(time, "monotonic", lambda: clock["t"])
+        clock = {"t": NOW}
+        monkeypatch.setattr(time, "time", lambda: clock["t"])
         pane = StatusPane()
-        pane.update_snapshot(_snap(cooldown_remaining=5.0))
-        clock["t"] = 1010.0
+        pane.update_snapshot(_snap(timestamp=_ts(), cooldown_remaining=5.0))
+        clock["t"] = NOW + 10.0
         pane._tick()
         assert pane._cooldown_expiry is None
+
+
+class TestStatusPaneStaleSnapshotCooldown:
+    """The reported bug: toggling characters restarted the visible countdown.
+
+    `CycleSnapshot.cooldown_remaining` is the value AS OF the snapshot's
+    `timestamp`. The pane used to anchor it at DISPLAY time, so re-binding to a
+    snapshot captured minutes ago replayed its whole cooldown from full. Every
+    snapshot in this class is deliberately AGED — a test that feeds a fresh
+    timestamp cannot observe the defect at all.
+    """
+
+    def test_stale_snapshot_counts_the_elapsed_time_off(self, monkeypatch):
+        monkeypatch.setattr(time, "time", lambda: NOW)
+        pane = StatusPane()
+        pane.update_snapshot(_snap(timestamp=_ts(120.0), cooldown_remaining=300.0))
+        assert pane._cooldown_remaining() == 180.0
+        assert "180s" in _render(pane)
+
+    def test_rebind_to_a_stale_snapshot_does_not_restart_the_countdown(self, monkeypatch):
+        """Toggling to another character and back re-binds the SAME stored
+        snapshot. It must read the same elapsed-adjusted value, not full."""
+        monkeypatch.setattr(time, "time", lambda: NOW)
+        stale = _snap(timestamp=_ts(120.0), cooldown_remaining=300.0)
+        pane = StatusPane()
+        pane.update_snapshot(stale)
+        pane.rebind(None)
+        assert pane._cooldown_remaining() == 0.0
+        pane.rebind(stale)
+        assert pane._cooldown_remaining() == 180.0
+        assert "300s" not in _render(pane)
+
+    def test_snapshot_older_than_its_cooldown_reads_ready(self, monkeypatch):
+        """A character idle for ten minutes is not still on a 5-minute cooldown."""
+        monkeypatch.setattr(time, "time", lambda: NOW)
+        pane = StatusPane()
+        pane.update_snapshot(_snap(timestamp=_ts(600.0), cooldown_remaining=300.0))
+        assert pane._cooldown_expiry is None
+        assert "ready" in _render(pane)
+
+    def test_clock_skew_cannot_print_more_than_the_published_cooldown(self, monkeypatch):
+        """The timestamp comes from the bot process; the TUI may run elsewhere.
+        A TUI clock running behind makes `now < timestamp`, and an unclamped
+        subtraction would inflate the countdown past the server's own value."""
+        monkeypatch.setattr(time, "time", lambda: NOW)
+        pane = StatusPane()
+        pane.update_snapshot(_snap(timestamp=_ts(-3600.0), cooldown_remaining=30.0))
+        assert pane._cooldown_remaining() == 30.0
+
+
+class TestCooldownExpiryEpoch:
+    def test_fresh_snapshot_expires_a_full_cooldown_out(self):
+        assert cooldown_expiry_epoch(_ts(), 45.0, NOW) == NOW + 45.0
+
+    def test_elapsed_time_comes_off_the_expiry(self):
+        assert cooldown_expiry_epoch(_ts(20.0), 45.0, NOW) == NOW + 25.0
+
+    def test_expired_cooldown_is_none(self):
+        assert cooldown_expiry_epoch(_ts(45.0), 45.0, NOW) is None
+
+    def test_zero_cooldown_is_none(self):
+        assert cooldown_expiry_epoch(_ts(), 0.0, NOW) is None
+
+    def test_future_timestamp_is_clamped_to_the_full_cooldown(self):
+        assert cooldown_expiry_epoch(_ts(-500.0), 45.0, NOW) == NOW + 45.0
