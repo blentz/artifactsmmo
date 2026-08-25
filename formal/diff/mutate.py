@@ -179,6 +179,7 @@ INVENTORY_KEEP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_keep.
 # Task 9 (formal/mutation debt for the fleet-currency-turn-in epic).
 CURRENCY_TURNIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_turnin.py"
 DUAL_ROLE_CURRENCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "dual_role_currency.py"
+COMBAT_DEFICIT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_deficit.py"
 
 # craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
 # model is the soundness-critical part; killed by
@@ -3960,6 +3961,24 @@ DUAL_ROLE_HOLDINGS_MUTATIONS = [
      ""),
 ]
 
+# combat_deficit's ceiling tie-break. `acquisition_cost_core._capped` makes an
+# unaffordable route and a nonexistent one price IDENTICALLY, so on the real
+# catalogue whole candidate sets tie on cost and this comparison is what decides
+# the pick. Killed by tests/test_ai/test_combat_deficit_ceiling_tie.py, which
+# drives the committed bundle. OWN run_group (unit-killed mutants need one).
+COMBAT_DEFICIT_TIEBREAK_MUTATIONS = [
+    # Strict `>` keeps the incumbent on a tie, so the winner is the FIRST
+    # extreme in `_pool` order. `>=` takes the LAST — measured on the bundle it
+    # flips l24_fisher_cooking_rung/king_slime from skull_staff to
+    # steel_battleaxe, and l47_depth3_amulet/dusk_beetle from emerald_amulet
+    # (level 25) to greater_ruby_amulet (level 40) for the same +1 margin. This
+    # is the exact "a future consumer using `>=` would decide it by iteration
+    # order" hazard the ceiling fix flagged and could not pin.
+    ("combat_deficit: ceiling tie taken by the LAST candidate, not the first",
+     "            if best is None or score > best_score:",
+     "            if best is None or score >= best_score:"),
+]
+
 
 def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
               survivors: list[str]) -> None:
@@ -4015,6 +4034,7 @@ _ALL_SRCS = [
     MONSTER_CATALOG_SRC,
     WINNABLE_CASCADE_SRC,
     COMBAT_PICKER_SRC,
+    COMBAT_DEFICIT_SRC,
     PROJECTIONS_SRC,
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
     GATHERING_GOAL_SRC, PURSUE_TASK_GOAL_SRC, SCALAR_PRIORITY_SRC,
@@ -7552,6 +7572,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_currency_turnin_goals.py", survivors)
     run_group(DUAL_ROLE_CURRENCY_SRC, DUAL_ROLE_HOLDINGS_MUTATIONS,
               "tests/test_ai/test_dual_role_currency.py", survivors)
+    run_group(COMBAT_DEFICIT_SRC, COMBAT_DEFICIT_TIEBREAK_MUTATIONS,
+              "tests/test_ai/test_combat_deficit_ceiling_tie.py", survivors)
 def _run_all_groups() -> int:
     survivors: list[str] = []
     _UNITS.clear()
