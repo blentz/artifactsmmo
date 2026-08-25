@@ -10,7 +10,7 @@ from pathlib import Path
 from statistics import median
 from typing import TypeVar
 
-from sqlalchemy import func, text
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, col, create_engine, select
@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.learning.recovery_attribution import (
     attribute_forced_recovery,
 )
 from artifactsmmo_cli.ai.learning.schema_init import (
+    enable_wal,
     exclusive_schema_lock,
     schema_lock_connect_args,
 )
@@ -220,11 +221,12 @@ class LearningStore:
                     "ON cycles (character, action_repr)"
                 )
 
-        # SQLite refuses a journal_mode change inside a transaction.
-        with self._engine.connect() as conn:
-            conn.execute(text("PRAGMA journal_mode=WAL"))
-            conn.execute(text("PRAGMA synchronous=NORMAL"))
-            conn.commit()
+        # SQLite refuses a journal_mode change inside a transaction, so this
+        # runs OUTSIDE the lock above — which means every sibling runs it while
+        # the others are still queueing for that lock, and the conversion is the
+        # ONE statement in this constructor the 30-second busy timeout does not
+        # protect. `enable_wal` owns that; see its docstring for the measurement.
+        enable_wal(self._engine)
 
         self._character = character
         self._session_id: str | None = None

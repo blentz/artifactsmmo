@@ -23,7 +23,7 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import Connection, text
+from sqlalchemy import Connection
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, col, create_engine, select
@@ -39,6 +39,7 @@ from artifactsmmo_cli.ai.learning.models import (
     TurnInClaim,
 )
 from artifactsmmo_cli.ai.learning.schema_init import (
+    enable_wal,
     exclusive_schema_lock,
     schema_lock_connect_args,
 )
@@ -262,10 +263,10 @@ class CoordinationStore:
             SQLModel.metadata.create_all(conn)
             _migrate_role_lease_unique_index(conn)
             _migrate_material_demand_self_servable(conn)
-        with self._engine.connect() as conn:
-            conn.execute(text("PRAGMA journal_mode=WAL"))
-            conn.execute(text("PRAGMA synchronous=NORMAL"))
-            conn.commit()
+        # Same exposure as `LearningStore`, on the same file: the journal-mode
+        # change cannot go inside the lock above, so it races every sibling that
+        # is still queueing for it. One shared implementation, not two.
+        enable_wal(self._engine)
         self._character = character
 
     @property
