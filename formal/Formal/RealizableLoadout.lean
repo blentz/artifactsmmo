@@ -66,9 +66,24 @@ We prove:
   * `pickLoadout_single_ring_no_dup_fill`: 1 owned ⇒ ring2 stays EMPTY (the
     realizability boundary; we never over-fill past physical ownership).
   * `pickLoadout_triple_artifact_fills_when_three_owned` /
-    `pickLoadout_single_artifact_no_dup_fill`: the artifact analogues after
-    artifacts joined rings as dup-allowed (2026-07-03) — 3 owned ⇒ all three
-    artifact slots fill; 1 owned ⇒ siblings stay empty (same ownership cap).
+    `pickLoadout_single_artifact_no_dup_fill`: the THREE-slot analogues of the
+    two ring theorems — 3 owned ⇒ all three slots fill; 1 owned ⇒ siblings stay
+    empty (same ownership cap). Written 2026-07-03 when artifacts were believed
+    dup-allowed; that belief was reverted 2026-08-22 (see below), so they no
+    longer mirror a production type. They are kept because `dupAllowed` is an
+    INPUT to `pickLoadout`, not a constant: these two are the only witnesses
+    that the cap logic is arity-general — that dup filling and its ownership
+    boundary behave the same at 3 slots as at 2 — which is what any FUTURE
+    dup-allowed type would rely on. Read `perfect_pearl` as "some code the
+    caller marked dup-allowed", not as an artifact.
+
+  NOTE ON ARTIFACTS (2026-08-22). Python's `equip.py:DUPLICATE_SLOT_TYPES` is
+  `{"ring"}` again. Artifacts were added to it in 2026-07-03 on the ASSERTION
+  that the dual-ring HTTP 200 established a per-slot equip model; the live probe
+  that assertion asked for finally ran (character Lor, a 2nd lich_race_medal
+  into an EMPTY artifact2_slot) and returned HTTP 485. The server's artifact
+  model is per-CODE. Nothing in this file was wrong — `dupAllowed` was always a
+  parameter — but the CALLER now passes False for artifact-type codes.
 
 Lean core only — no mathlib. `Nat` arithmetic via `omega`/`simp`; lists via
 fold/induction.
@@ -877,13 +892,17 @@ theorem pickLoadout_single_ring_no_dup_fill :
       = [some "copper_ring", none] := by
   decide
 
-/-- **THE ARTIFACT TRIPLE-FILL CASE (2026-07-03, dup carve-out extended)**:
-perfect_pearl worn in artifact1_slot, TWO more copies in inventory
-(ownership = 3), artifact2 and artifact3 empty, perfect_pearl marked
-dup-allowed (artifact-type). Artifacts join rings as duplicate-allowed
-(`equip.py:DUPLICATE_SLOT_TYPES`), so `capOf perfect_pearl = ownership = 3` and
-all three artifact slots FILL with the same code. This is realizable (3 owned,
-3 worn) — the exact artifact analogue of `pickLoadout_dual_ring_fills_when_two_owned`. -/
+/-- **THE THREE-SLOT DUP-FILL CASE**: a code worn in slot 1, TWO more copies in
+inventory (ownership = 3), slots 2 and 3 empty, the code marked dup-allowed by
+the caller. `capOf = ownership = 3`, so all three slots FILL with the same code
+and the result is realizable (3 owned, 3 worn) — the 3-slot analogue of
+`pickLoadout_dual_ring_fills_when_two_owned`.
+
+Written 2026-07-03 for artifacts, when `equip.py:DUPLICATE_SLOT_TYPES` contained
+"artifact". It does not any more (Lor probe 2026-08-22 → HTTP 485; artifacts are
+per-CODE like everything except rings), so `perfect_pearl` here stands for ANY
+code the caller marks dup-allowed, at an arity no production type currently
+uses. Kept as the arity-generality witness — see the module docstring. -/
 theorem pickLoadout_triple_artifact_fills_when_three_owned :
     pickLoadout (fun c => c = "perfect_pearl")
       (fun c => if c = "perfect_pearl" then 2 else 0)
@@ -897,12 +916,13 @@ theorem pickLoadout_triple_artifact_fills_when_three_owned :
       = [some "perfect_pearl", some "perfect_pearl", some "perfect_pearl"] := by
   decide
 
-/-- **THE ARTIFACT REALIZABILITY BOUNDARY (anti-over-fill)**: perfect_pearl worn
-in artifact1_slot, NONE in inventory (ownership = 1), artifact2/artifact3 empty,
-perfect_pearl dup-allowed. Even though artifact duplicates are now allowed in
-principle, `capOf perfect_pearl = ownership = 1` so the single worn copy fills
-the cap and BOTH sibling artifact slots stay EMPTY. We never over-fill past
-physical ownership — the artifact analogue of `pickLoadout_single_ring_no_dup_fill`. -/
+/-- **THE THREE-SLOT REALIZABILITY BOUNDARY (anti-over-fill)**: the same
+dup-allowed code worn in slot 1, NONE in inventory (ownership = 1), slots 2 and
+3 empty. Even with duplicates allowed in principle, `capOf = ownership = 1` so
+the single worn copy fills the cap and BOTH sibling slots stay EMPTY. We never
+over-fill past physical ownership — the 3-slot analogue of
+`pickLoadout_single_ring_no_dup_fill`. Same 2026-08-22 caveat as the theorem
+above: no production type is dup-allowed at 3 slots any more. -/
 theorem pickLoadout_single_artifact_no_dup_fill :
     pickLoadout (fun c => c = "perfect_pearl")
       (fun _ => 0)

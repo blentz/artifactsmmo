@@ -470,10 +470,12 @@ def test_ring_slots_duplicate_fill_when_one_attainable():
     assert obj.target_gear["ring2_slot"] == "copper_ring"
 
 
-def test_artifact_slots_duplicate_filled():
-    """Artifacts are duplicate-allowed (join rings in DUPLICATE_SLOT_TYPES): one
-    attainable artifact fills ALL THREE artifact slots, mirroring the dual-ring
-    carve-out. Acquisition is bounded by ownership downstream (min slots, owned)."""
+def test_artifact_slots_are_not_duplicate_filled():
+    """Artifacts are NOT duplicate-allowed (revert 2026-08-22 — the live probe
+    the 2026-07-03 assertion asked for returned HTTP 485 on a 2nd copy into an
+    EMPTY sibling slot). One attainable artifact therefore targets exactly ONE
+    artifact slot; the other two are honestly untargeted rather than aimed at a
+    copy whose equip the server would refuse forever."""
     gd = GameData()
     gd._item_stats = {"ancient_relic": ItemStats(code="ancient_relic", level=1,
                                                   type_="artifact", hp_bonus=3)}
@@ -482,8 +484,8 @@ def test_artifact_slots_duplicate_filled():
     gd._resource_skill = {"rocks": ("mining", 1)}
     obj = CharacterObjective.from_game_data(gd)
     assert obj.target_gear["artifact1_slot"] == "ancient_relic"
-    assert obj.target_gear["artifact2_slot"] == "ancient_relic"
-    assert obj.target_gear["artifact3_slot"] == "ancient_relic"
+    assert obj.target_gear.get("artifact2_slot") is None
+    assert obj.target_gear.get("artifact3_slot") is None
 
 
 def test_near_term_gear_duplicate_fills_empty_second_ring():
@@ -501,17 +503,19 @@ def test_near_term_gear_duplicate_fills_empty_second_ring():
     assert nt.get("ring2_slot") == "copper_ring"  # empty 2nd ring slot still targeted
 
 
-def test_artifact_slots_duplicate_best_over_second_ranked_distinct():
-    """GAP-2 review quirk (Task 2, follow-up wave): with TWO distinct
-    attainable artifacts, artifact2_slot must get a 2nd copy of the BEST
-    artifact (perfect_relic, equip_value from hp_bonus 100) rather than the
-    2nd-ranked DISTINCT artifact (lesser_relic, hp_bonus 5) — duplicating the
-    top item is dup-allowed (DUPLICATE_SLOT_TYPES) and strictly higher value
-    than any lower-ranked distinct item, since `attainable` is already
-    sorted descending by value. Ownership is NOT a constraint at this
-    target-setting layer (acquisition/ownership caps live downstream in
-    scoring.py's pick_loadout) — mirrors the ring precedent
-    (test_paired_ring_slots_duplicate_best_over_second_distinct)."""
+def test_artifact_slots_take_ranked_distinct_never_a_second_copy():
+    """The INVERSE of the 2026-07-08 GAP-2 quirk, after the 2026-08-22 artifact
+    revert. With TWO distinct attainable artifacts, artifact2_slot takes the
+    2nd-ranked DISTINCT item (lesser_relic, hp_bonus 5) — NOT a 2nd copy of the
+    higher-valued perfect_relic (hp_bonus 100), even though that copy would
+    score better. A 2nd copy is worth nothing at all: the server refuses its
+    equip with HTTP 485, so the higher "value" is unrealizable.
+
+    artifact3_slot has no third distinct candidate and stays untargeted.
+
+    The duplicate-best rule itself is unchanged and still applies to rings,
+    which have a real HTTP-200 probe — see
+    test_paired_ring_slots_duplicate_best_over_second_distinct."""
     gd = GameData()
     gd._item_stats = {
         "perfect_relic": ItemStats(code="perfect_relic", level=1, type_="artifact",
@@ -524,8 +528,8 @@ def test_artifact_slots_duplicate_best_over_second_ranked_distinct():
     gd._resource_skill = {"rocks": ("mining", 1)}
     obj = CharacterObjective.from_game_data(gd)
     assert obj.target_gear["artifact1_slot"] == "perfect_relic"
-    assert obj.target_gear["artifact2_slot"] == "perfect_relic"
-    assert obj.target_gear["artifact3_slot"] == "perfect_relic"
+    assert obj.target_gear["artifact2_slot"] == "lesser_relic"
+    assert obj.target_gear.get("artifact3_slot") is None
 
 
 # --- C1: task-currency leaf ---

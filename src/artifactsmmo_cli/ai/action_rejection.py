@@ -25,16 +25,41 @@ CATEGORICAL_REJECTIONS = frozenset({
     472,  # Invalid equipment item
     473,  # Invalid item for recycling
     476,  # Invalid consumable item
+    485,  # This item is already equipped
     437,  # Invalid item for Grand Exchange
     441,  # Item not for sale from NPC
     442,  # NPC does not buy this item
 })
 """Rejections that mean "this item is ineligible for this action", full stop.
 
-Every member names an ITEM/ACTION mismatch. Deliberately excluded, though it
-might look similar: 493 ("does not meet skill level requirements") is a gate a
-level-up opens, and 471/478 (quantity/materials) are answered by acquiring more.
-Those are contingent and must keep retrying.
+Six of the seven name a pure ITEM/ACTION mismatch. Deliberately excluded, though
+they might look similar: 493 ("does not meet skill level requirements") is a
+gate a level-up opens, and 471/478 (quantity/materials) are answered by
+acquiring more. Those are contingent and must keep retrying.
+
+485 IS THE ODD ONE AND IT IS DELIBERATE. "This item is already equipped" is not
+a fact about game data — unequip the worn copy and the same equip succeeds — so
+on the letter of the rule above it is contingent. It is here because of what it
+tells us: 485 fires only when the planner believed a code could occupy a second
+slot, i.e. when our per-code occupancy MODEL disagrees with the server. That is
+precisely the "our model of what is possible is wrong" condition this module
+exists to feed back, and no amount of playing fixes a wrong model.
+
+Live 2026-08-22: Lor sent the same `Equip(lich_race_medal -> artifact2/3_slot)`
+55 times in 50 minutes through four different goals, every one answered 485,
+because `DUPLICATE_SLOT_TYPES` asserted (never probed) that artifacts were
+multi-slot. Zero progress, whole per-IP budget. The model has since been
+corrected — but a corrected model is exactly what was believed on 2026-07-03,
+and the point of this entry is that the NEXT wrong occupancy assertion costs one
+cycle instead of a day.
+
+The unequip that would make a 485-refused equip legal changes `state.equipment`,
+which `plannability_signature` does NOT carry (it is `(level, skills)`), so this
+poisoning does not self-heal on that specific change — it heals on a level/skill
+change or when `DoomedMemo`'s escalating re-probe window elapses (20 → 160
+cycles). That bound is the whole point and the cost is nil: while the code is
+still worn the server refuses anyway, and once it is unequipped the loadout
+picker re-derives the equip from the free slot on the next re-probe.
 """
 
 

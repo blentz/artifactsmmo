@@ -18,19 +18,33 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Item types whose code may legally occupy MORE THAN ONE slot, up to physical
-# ownership. Live-server probe 2026-06-14 (character Robby): a 2nd identical
-# copper_ring equipped into ring2_slot returned HTTP 200 — the server allows
-# duplicate rings. Artifacts (3 slots) JOIN rings here: the game exposes three
-# artifact slots and the dual-ring probe establishes the server's per-slot (not
-# per-code) equip model, so a 2nd identical artifact is asserted-allowed. This
-# is NOT yet live-probed (no character can hold ≥2 of a duplicable artifact yet
-# — see the spec's probe trigger: on the first ≥2-owned artifact, confirm the
-# 2nd-copy equip returns HTTP 200, else revert "artifact"). All remaining types
-# keep the strict one-slot-per-code rule (HTTP 485 "already equipped";
+# ownership. RINGS ONLY. Live-server probe 2026-06-14 (character Robby): a 2nd
+# identical copper_ring equipped into ring2_slot returned HTTP 200 — the server
+# allows duplicate rings. That probe stands and is why "ring" is here.
+#
+# ARTIFACTS WERE HERE FROM 2026-07-03 TO 2026-08-22; THE SERVER SAID NO.
+# They were added by ASSERTION, not measurement: the dual-ring HTTP 200 was read
+# as establishing a per-SLOT equip model, so a 2nd identical artifact was
+# asserted-allowed, and the spec recorded the trigger "on the first ≥2-owned
+# artifact, confirm the 2nd-copy equip returns HTTP 200, else revert artifact".
+# THE TRIGGER FIRED AND THE ANSWER WAS 485. Live probe 2026-08-22 (character
+# Lor): lich_race_medal worn in artifact1_slot, a 2nd copy in the bag,
+# artifact2_slot and artifact3_slot BOTH EMPTY — equipping the 2nd copy returns
+# HTTP 485 "This item is already equipped". The server's artifact model is
+# per-CODE, not per-slot, so the assertion was wrong and "artifact" is reverted.
+# Cost of the wrong assertion: 55 zero-progress cycles in 50 minutes across four
+# different goals (EquipOwnedGear, ReachSkill×2, UpgradeEquipment), every one
+# bottoming out on the same refused equip, spent against the per-IP rate budget
+# that binds the whole fleet.
+#
+# The ring carve-out does NOT generalise — it is one measured fact about one
+# item type. Anything added here needs its own HTTP 200.
+#
+# All remaining types keep the strict one-slot-per-code rule (HTTP 485;
 # documented utility small_health_potion case). Shared with
-# `equipment/scoring.py` (pick_loadout cap) and the objective layer's
+# `equipment/loadout_picker.py` (pick_loadout cap) and the objective layer's
 # `_DUPLICATE_FILL_TYPES` (both read this set generically).
-DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring", "artifact"})
+DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring"})
 
 
 @dataclass

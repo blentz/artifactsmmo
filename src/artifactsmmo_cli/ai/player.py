@@ -1697,31 +1697,51 @@ class GamePlayer:
                       f"to fight {unlock_monster or '?'}; remembered for future sessions")
                 outcome = "error:bank_locked"
             elif e.code == ERROR_CODE_ALREADY_EQUIPPED:
-                # HTTP 485 ("This item is already equipped"). The plan-time
-                # gate in EquipAction.is_applicable keeps planned equips from
-                # ever reaching this, but any future 485 must stay an
-                # ordinary failed-cycle outcome: record it, refresh state,
-                # and let the cycle complete so replanning and the stuck
-                # detector can react (2026-06-10 Robby trace: utility2
-                # equip-485 livelock preceded a silent worker-thread death).
+                # HTTP 485 ("This item is already equipped"). Keeps its own
+                # outcome label — the learning store has years of
+                # `error:already_equipped` rows and the plain `error:HTTP_485`
+                # of the `else` arm would split that history.
+                #
+                # 2026-06-10 (Robby, utility2) this branch's comment said a 485
+                # "must stay an ordinary failed-cycle outcome ... so replanning
+                # and the stuck detector can react". It still is one, and all
+                # three of those properties are preserved below: the cycle
+                # completes, state is refreshed, and the outcome is recorded.
+                # What that reading MISSED is that replanning cannot react —
+                # nothing about a 485 changes the state the replan reads, so it
+                # re-derives the identical step forever, and it does so through
+                # whichever goal happens to rank first, which is what keeps a
+                # stuck detector from seeing a stuck bot. Live 2026-08-22: Lor
+                # spent 55 cycles / 50 minutes on the same refused equip across
+                # FOUR goals. So 485 now ALSO falls through to the categorical
+                # poisoning below (see ai/action_rejection.py), which removes
+                # the impossible step from the search instead of the cycle from
+                # the log. The two mechanisms cooperate: poisoning is what makes
+                # the resulting dead end visible to the goal-level doomed memo.
                 print(f"[{self._now()}] Item already equipped (HTTP 485) — refreshing state")
                 outcome = "error:already_equipped"
             else:
                 # Finer-grained learning label keyed on the structured code.
                 print(f"[{self._now()}] Action failed: {e} — refreshing state")
                 outcome = f"error:HTTP_{e.code}"
-                # A CATEGORICAL refusal means our model of what is possible is
-                # wrong, not that the state is temporarily unfavourable. Poison
-                # the action so `_build_actions` stops offering it; without this
-                # the identical impossible call is re-issued every cycle against
-                # the per-IP rate budget that binds the whole fleet.
-                if is_categorical_rejection(e.code) and self.state is not None:
-                    key = rejection_key(action)
-                    if key is not None:
-                        print(f"[{self._now()}] {key} refused categorically "
-                              f"(HTTP {e.code}) — routing around it")
-                        self._rejected_actions.mark(key, self.state,
-                                                    self._cycle_counter)
+            # A CATEGORICAL refusal means our model of what is possible is
+            # wrong, not that the state is temporarily unfavourable. Poison
+            # the action so the planner stops offering it; without this the
+            # identical impossible call is re-issued every cycle against the
+            # per-IP rate budget that binds the whole fleet.
+            #
+            # OUTSIDE the if/elif chain on purpose. It used to live in the
+            # `else` arm, so a code with its own branch could never be
+            # classified — and 485 is exactly such a code. The named branches
+            # it now also covers are 499 and 496, neither of which is
+            # categorical, so hoisting changes nothing for them.
+            if is_categorical_rejection(e.code) and self.state is not None:
+                key = rejection_key(action)
+                if key is not None:
+                    print(f"[{self._now()}] {key} refused categorically "
+                          f"(HTTP {e.code}) — routing around it")
+                    self._rejected_actions.mark(key, self.state,
+                                                self._cycle_counter)
             refreshed = self._fetch_world_state(client)
             if outcome.startswith("error:HTTP_") and isinstance(
                 action, (WithdrawItemAction, DepositAllAction, DepositItemAction)

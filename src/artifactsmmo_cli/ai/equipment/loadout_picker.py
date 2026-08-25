@@ -20,6 +20,11 @@ hp). They carry no skill_effects, so the Gather scorer values them at 0 and the
 empty-slot gate discards them — this set routes them through the flat-utility
 term instead. NOT `utility` (consumable/potion slots handled elsewhere).
 
+UNRELATED to `DUPLICATE_SLOT_TYPES`, which also once named "artifact": this set
+is about how an artifact is SCORED, that one about how many slots one code may
+occupy (artifacts: exactly one, HTTP 485 — Lor probe 2026-08-22). Three DISTINCT
+artifacts still fill all three slots through this set.
+
 The differential mirrors this set at ``formal/diff/test_loadout_picker_diff.py``
 (``_UTILITY_FILL_TYPES``) to classify oracle candidates independently; keep the
 two in sync — a divergence trips the bit-exact Gather-artifact binding test."""
@@ -130,7 +135,9 @@ def pick_loadout(
     RESULT, enforcing a per-code OCCUPANCY CAP: an item code C is infeasible for
     slot S once the projected result already holds C at its cap in OTHER slots —
     kept there or newly assigned by an earlier iteration. The cap is 1 for every
-    type EXCEPT duplicate-allowed types (rings, artifacts), whose cap is physical
+    type EXCEPT duplicate-allowed types (RINGS ONLY — artifacts were in that set
+    until the 2026-08-22 Lor probe answered a 2nd-copy artifact equip with HTTP
+    485; see actions/equip.py), whose cap is physical
     `ownership(C)`. So a non-ring code keeps the strict server ONE-SLOT-PER-CODE
     rule (HTTP 485 "This item is already equipped"), while a spare copper_ring
     MAY fill ring2_slot while ring1_slot wears copper_ring — but only when a 2nd

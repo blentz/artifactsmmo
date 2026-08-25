@@ -170,6 +170,7 @@ SLOT_OCCUPANCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "s
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
+ACTION_REJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "action_rejection.py"
 MEANS_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means_worth.py"
 TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "taskmaster_choice.py"
 EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
@@ -6563,20 +6564,61 @@ EQUIP_MUTATIONS = [
      "        if any(\n"
      "            equipped == self.code\n"),
 ]
-# Duplicate-artifact carve-out: OWN group bound to the unit test (bag-slot
-# lesson — a unit-killed mutation needs its own group tied to the unit test, NOT
-# a traversal-diff group). Dropping "artifact" from DUPLICATE_SLOT_TYPES reverts
-# artifacts to the strict one-slot-per-code rule: a 2nd-copy sibling equip
-# 485-blocks (is_applicable False) and pick_loadout's per-code cap falls to 1
-# (only one artifact slot fills). Killed by
-# test_equip_second_copy_into_sibling_slot_applicable,
-# test_pick_loadout_fills_three_artifact_slots_when_three_owned, and
-# test_artifact_is_duplicate_allowed in tests/test_ai/test_duplicate_artifacts.py.
-# Anchor is the full frozenset literal — unique in equip.py.
+# Duplicate-slot membership: OWN group bound to the unit test (bag-slot lesson —
+# a unit-killed mutation needs its own group tied to the unit test, NOT a
+# traversal-diff group). Anchor is the full frozenset literal — unique in
+# equip.py.
+#
+# INVERTED 2026-08-22. This group used to mutate "ring-and-artifact" -> "ring",
+# pinning artifacts as duplicate-allowed. The live probe that membership was
+# waiting on ran (character Lor: a 2nd lich_race_medal into an EMPTY
+# artifact2_slot) and returned HTTP 485, so production is ring-only and the
+# mutant is now the other direction.
+#
+# Re-adding "artifact" restores the 55-cycle livelock: a 2nd-copy sibling equip
+# becomes is_applicable (it 485s on the server), and pick_loadout's per-code cap
+# rises to ownership so all three artifact slots fill with one code. Killed by
+# test_artifact_is_not_duplicate_allowed,
+# test_equip_second_artifact_copy_into_empty_sibling_slot_refused and
+# test_pick_loadout_fills_only_one_artifact_slot_when_three_owned in
+# tests/test_ai/test_duplicate_artifacts.py.
+#
+# The SECOND mutant guards the other side: dropping "ring" would be an
+# over-correction that kills the dual-ring carve-out, which has a real HTTP-200
+# probe. Killed by test_ring_is_still_duplicate_allowed,
+# test_equip_second_ring_copy_into_empty_sibling_slot_offered and
+# test_pick_loadout_fills_both_ring_slots_when_two_owned.
 DUPLICATE_ARTIFACT_MUTATIONS = [
-    ("equip: drop artifact from DUPLICATE_SLOT_TYPES (reverts to ring-only)",
-     'DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring", "artifact"})',
-     'DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring"})'),
+    ("equip: re-add artifact to DUPLICATE_SLOT_TYPES (resurrects the 485 livelock)",
+     'DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring"})',
+     'DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring", "artifact"})'),
+    ("equip: empty DUPLICATE_SLOT_TYPES (over-corrects, kills the dual-ring carve-out)",
+     'DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring"})',
+     'DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset()'),
+]
+# HTTP 485 as a CATEGORICAL rejection (2026-08-22). Two mutants, one per half of
+# the fix, both bound to tests/test_ai/test_action_rejection.py.
+#
+# (1) Drop 485 from the set: the classifier goes back to calling it contingent,
+#     so a refused equip is retried every cycle forever. Killed by
+#     test_already_equipped_is_categorical,
+#     test_the_categorical_set_is_about_item_eligibility and
+#     test_a_485_from_the_server_poisons_the_equip.
+# (2) Re-confine the poisoning to the `else` arm of `_execute`'s error ladder,
+#     where it lived until 2026-08-22. `error:HTTP_` is produced by that arm and
+#     no other, so this is exactly the old scoping — and 485 has its OWN elif,
+#     which is why no amount of classifying it helped before the hoist. Killed by
+#     test_a_485_from_the_server_poisons_the_equip.
+ACTION_REJECTION_MUTATIONS = [
+    ("action_rejection: drop 485 from CATEGORICAL_REJECTIONS (unbounded equip retry)",
+     "    485,  # This item is already equipped\n",
+     ""),
+]
+PLAYER_CATEGORICAL_SCOPE_MUTATIONS = [
+    ("player: confine categorical poisoning to the else arm (485 unreachable again)",
+     "            if is_categorical_rejection(e.code) and self.state is not None:",
+     "            if (is_categorical_rejection(e.code) and self.state is not None\n"
+     "                    and outcome.startswith(\"error:HTTP_\")):"),
 ]
 # Target F: store_warmup_core warmup gates.
 STORE_WARMUP_MUTATIONS = [
@@ -7254,6 +7296,10 @@ def _collect_all_groups() -> None:
               "formal/diff/test_phase7_invariants_diff.py", survivors)
     run_group(EQUIP_SRC, DUPLICATE_ARTIFACT_MUTATIONS,
               "tests/test_ai/test_duplicate_artifacts.py", survivors)
+    run_group(ACTION_REJECTION_SRC, ACTION_REJECTION_MUTATIONS,
+              "tests/test_ai/test_action_rejection.py", survivors)
+    run_group(PLAYER_SRC, PLAYER_CATEGORICAL_SCOPE_MUTATIONS,
+              "tests/test_ai/test_action_rejection.py", survivors)
     run_group(STORE_WARMUP_SRC, STORE_WARMUP_MUTATIONS,
               "formal/diff/test_store_warmup_diff.py", survivors)
     run_group(BANK_EXPANSION_SRC, BANK_EXPANSION_MUTATIONS,

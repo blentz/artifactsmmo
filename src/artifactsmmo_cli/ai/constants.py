@@ -29,9 +29,12 @@ ERROR_CODE_COOLDOWN = 499
 
 # Game API error code 485 ("This item is already equipped"): the equip
 # endpoint rejected the item because the same item code is already worn in
-# another slot. EquipAction.is_applicable gates this at plan time, so a
-# planned equip should never 485 — but any future 485 must remain an
-# ordinary failed-cycle outcome (2026-06-10 Robby utility2 livelock).
+# another slot. EquipAction.is_applicable gates this at plan time, so a planned
+# equip should never 485 — but when the occupancy MODEL behind that gate is
+# wrong it does, and then it does so forever (2026-06-10 Robby utility2;
+# 2026-08-22 Lor artifact2/3, 55 cycles in 50 minutes). It stays an ordinary
+# failed-cycle outcome AND is a CATEGORICAL rejection: see
+# ai/action_rejection.py, which bounds the loop even while the model is wrong.
 ERROR_CODE_ALREADY_EQUIPPED = 485
 
 # Standard HTTP 429 ("Too Many Requests"): the per-IP throttle `play --all`

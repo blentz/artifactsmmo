@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.action_rejection import (
 )
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
+from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
@@ -49,10 +50,18 @@ def test_unknown_codes_default_to_contingent():
     assert is_categorical_rejection(599) is False
 
 
+def test_already_equipped_is_categorical():
+    """485 says the planner's per-code OCCUPANCY model disagrees with the
+    server. Retrying cannot fix a wrong model — live 2026-08-22, Lor sent the
+    same `Equip(lich_race_medal -> artifact2/3_slot)` 55 times in 50 minutes."""
+    assert is_categorical_rejection(485) is True
+
+
 def test_the_categorical_set_is_about_item_eligibility():
-    """Every member says 'this item is not eligible for this action' — a fact
-    about game data, not about character state."""
-    assert frozenset({472, 473, 476, 437, 441, 442}) == CATEGORICAL_REJECTIONS
+    """Every member says 'this action cannot succeed for this item' — six as a
+    pure game-data fact, plus 485, which says our occupancy model is wrong (see
+    the set's docstring for why that belongs and how it heals)."""
+    assert frozenset({472, 473, 476, 485, 437, 441, 442}) == CATEGORICAL_REJECTIONS
 
 
 def test_the_memo_poisons_an_action_repr_like_it_poisons_a_goal():
@@ -232,6 +241,61 @@ def test_a_cooldown_does_not_poison_the_action(monkeypatch, bundle_game_data):
 
     assert player._rejected_actions.is_doomed(
         key, player.state, player._cycle_counter) is False
+
+
+def test_a_485_from_the_server_poisons_the_equip(monkeypatch, bundle_game_data):
+    """THE LOR LIVELOCK, bounded. 485 has its OWN branch in `_execute`, ahead of
+    the `else` the poisoning used to live in, so before this fix a 485 could
+    never be classified however categorical it was.
+
+    Asserts BOTH halves: the outcome label is unchanged (`error:already_equipped`
+    — the branch still completes an ordinary failed cycle, which is what the
+    2026-06-10 comment asked for) AND the action is poisoned, so the planner's
+    refusal filter drops it on the NEXT cycle instead of re-deriving it."""
+    player = GamePlayer(character="Lor")
+    player.game_data = bundle_game_data
+    player.state = make_state(
+        level=20, inventory={"lich_race_medal": 1},
+        equipment={**make_state().equipment, "artifact1_slot": "lich_race_medal"})
+
+    action = EquipAction(code="lich_race_medal", slot="artifact2_slot")
+    key = rejection_key(action)
+    assert key is not None
+    assert player._is_categorically_refused(action) is False
+
+    def _refuse(*_args: object, **_kwargs: object) -> WorldState:
+        raise ApiActionError(485, "This item is already equipped")
+
+    monkeypatch.setattr(EquipAction, "execute", _refuse)
+    monkeypatch.setattr(GamePlayer, "_fetch_world_state",
+                        lambda self, client: self.state)
+
+    _state, outcome = player._execute(action, client=None)
+
+    assert outcome == "error:already_equipped"
+    # Next cycle: the identical step is no longer offered to the search.
+    assert player._is_categorically_refused(action) is True
+    assert player.planner._surviving_actions([action]) == []
+
+
+def test_a_485_poisons_the_code_in_every_slot_it_could_be_offered_for():
+    """Lor's loop rotated the SLOT (artifact2, artifact3) across four goals
+    while the code stayed the same. Poisoning is keyed on (action kind, code),
+    so refusing one slot refuses them all — otherwise the loop just walks to the
+    next empty sibling."""
+    player = GamePlayer(character="Lor")
+    player.state = make_state(level=20, inventory={"lich_race_medal": 1})
+
+    refused = EquipAction(code="lich_race_medal", slot="artifact2_slot")
+    key = rejection_key(refused)
+    assert key is not None
+    player._rejected_actions.mark(key, player.state, player._cycle_counter)
+
+    assert player._is_categorically_refused(
+        EquipAction(code="lich_race_medal", slot="artifact3_slot")) is True
+    # ...and spares a different code entirely.
+    assert player._is_categorically_refused(
+        EquipAction(code="copper_ring", slot="ring2_slot")) is False
 
 
 def test_the_refusal_predicate_is_safe_before_the_world_is_sensed():

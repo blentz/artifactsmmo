@@ -46,4 +46,7 @@ def test_every_slot_field_maps_to_exactly_one_type():
 
 def test_dup_fill_is_single_source():
     assert _DUPLICATE_FILL_TYPES is DUPLICATE_SLOT_TYPES
-    assert frozenset({"ring", "artifact"}) == DUPLICATE_SLOT_TYPES
+    # RING ONLY. "artifact" was in this set 2026-07-03..2026-08-22 on an
+    # assertion; the live probe it asked for returned HTTP 485 (Lor, 2nd
+    # lich_race_medal into an EMPTY artifact2_slot). See equip.py.
+    assert frozenset({"ring"}) == DUPLICATE_SLOT_TYPES

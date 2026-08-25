@@ -202,23 +202,35 @@ ARTIFACT_SLOTS = {"artifact1_slot", "artifact2_slot", "artifact3_slot"}
 EVENT_ONLY_CANDIDATES = {
     "helmet_slot": "corrupted_crown",
     "artifact1_slot": "corrupted_skull",
-    "artifact2_slot": "corrupted_skull",
-    "artifact3_slot": "corrupted_skull",
+    "artifact2_slot": "perfect_pearl",
 }
 """What the corrupted_ogre event adds to l48_event_active's candidate
 surface: the L20 ogre (winnable at this loadout) drops corrupted_gem, and
 the permanent cultist_wizard sells crown + skull for it — with the event
 down those monsters have no known spawn and the currency leaf is closed.
 
-RE-DERIVED 2026-07-08 (Task-3 pursuit_value): the three artifact slots are
-BACK in this table (corrupted_skull), reversing the equip_value-era Task-2
-narrowing below. Under combat-dominant pursuit_value corrupted_skull
-(combat_raw 8 -> pursuit_value 8000) strictly outranks perfect_pearl
-(prospecting-only, combat_raw 0 -> pursuit_value 100) — exactly the class of
-bug being fixed (a combat item must beat an all-efficiency item). So with the
-event UP the artifact slots target corrupted_skull; with it DOWN they fall
-back to perfect_pearl (the best NON-event artifact). The event's candidate
-delta is therefore the helmet PLUS all three artifact slots.
+RE-DERIVED 2026-07-08 (Task-3 pursuit_value): under combat-dominant
+pursuit_value corrupted_skull (combat_raw 8 -> pursuit_value 8000) strictly
+outranks perfect_pearl (prospecting-only, combat_raw 0 -> pursuit_value 100) —
+exactly the class of bug being fixed (a combat item must beat an all-efficiency
+item). So with the event UP artifact1 targets corrupted_skull; with it DOWN it
+falls back to perfect_pearl (the best NON-event artifact).
+
+RE-DERIVED AGAIN 2026-08-22 (artifact duplicate-slot revert): artifacts left
+`DUPLICATE_SLOT_TYPES` when the live probe answered a 2nd-copy artifact equip
+with HTTP 485, so `_slot_assignments` gives artifact slots ranked DISTINCT items
+instead of repeating the best one. The event delta is therefore no longer
+"corrupted_skull three times". It is:
+  * helmet_slot    corrupted_crown  (event item, was white_knight_helmet)
+  * artifact1_slot corrupted_skull  (event item, was perfect_pearl)
+  * artifact2_slot perfect_pearl    (NOT an event item — it is DISPLACED here
+                                    by the skull taking artifact1. Only when the
+                                    event is up are there two distinct
+                                    attainable artifacts at all, so this entry
+                                    really is event-only.)
+artifact3_slot is absent from BOTH states: with the event up the catalogue
+offers exactly two attainable artifacts, and a third distinct one does not
+exist, so the slot is honestly untargeted rather than filled with a duplicate.
 
 HISTORICAL (equip_value era, now superseded by pursuit_value): under the flat
 equip_value ruler perfect_pearl (value 201, all prospecting) outranked
@@ -309,11 +321,11 @@ def test_l48_event_candidates_are_event_gated() -> None:
     """The exact candidate delta the corrupted_ogre event buys, measured on
     the SAME state with only the game-data event overlay toggled (the very
     seeding seed_offline performs from state.active_events): with the event
-    down the event items are absent (artifact slots fall back to
-    perfect_pearl); with it up, corrupted_crown appears at helmet_slot AND
-    corrupted_skull at all three artifact slots (RE-DERIVED 2026-07-08, Task-3
-    pursuit_value: corrupted_skull's combat content now outranks the
-    prospecting-only perfect_pearl — see EVENT_ONLY_CANDIDATES's docstring).
+    down the event items are absent (the ONE attainable artifact, perfect_pearl,
+    sits in artifact1); with it up, corrupted_crown appears at helmet_slot,
+    corrupted_skull takes artifact1, and perfect_pearl is displaced into
+    artifact2 (RE-DERIVED 2026-07-08 for pursuit_value and again 2026-08-22 for
+    the artifact duplicate-slot revert — see EVENT_ONLY_CANDIDATES's docstring).
     This is the attribution test — the full-stack test below can't distinguish
     'event opened the leaf' from 'the leaf was open anyway' on its own."""
     gd = _bundle()
@@ -347,10 +359,13 @@ def test_l48_event_active_pursues_event_gear() -> None:
     WAVE 3a re-derived WHICH event candidate. `corrupted_crown` (helmet) is off
     the sheet: `gear_targets_with_blockers` gears for `gear_target_tier`, which
     is 30 here, and the crown sits above it — the helmet target is
-    `obsidian_helmet`. The event's contribution is now `corrupted_skull` at all
-    three artifact slots, and it is ATTAINABLE (`blocker is None`) precisely
-    because the event opened its corrupted_gem route. The selected goal and the
-    first action are UNCHANGED, which is the pursuit this test exists for.
+    `obsidian_helmet`. The event's contribution is `corrupted_skull` at
+    artifact1_slot, and it is ATTAINABLE (`blocker is None`) precisely because
+    the event opened its corrupted_gem route. RE-DERIVED 2026-08-22: it is the
+    ONE artifact slot, not all three — artifacts are no longer duplicate-allowed
+    (a 2nd copy 485s), so the siblings take blocked distinct artifacts instead.
+    The selected goal and the first action are UNCHANGED, which is the pursuit
+    this test exists for.
 
     (An earlier fix-round draft of this docstring claimed `demon_horn` was
     `corrupted_crown`'s blocker. It is not — it blocks `gold_shield` and
@@ -366,9 +381,16 @@ def test_l48_event_active_pursues_event_gear() -> None:
     targets = overlay._objective.gear_targets_with_blockers(overlay.state, None)
     # THE EVENT'S OWN CONTRIBUTION, by name and by attainability — not "any
     # corrupted-anything root", which the previous form degenerated to.
-    for slot in ("artifact1_slot", "artifact2_slot", "artifact3_slot"):
-        assert targets[slot].code == "corrupted_skull", (slot, targets[slot])
-        assert targets[slot].blocker is None, (slot, targets[slot])
+    assert targets["artifact1_slot"].code == "corrupted_skull", targets["artifact1_slot"]
+    assert targets["artifact1_slot"].blocker is None, targets["artifact1_slot"]
+    # ...and ONLY artifact1. Artifacts left `DUPLICATE_SLOT_TYPES` on 2026-08-22
+    # (2nd-copy equip = HTTP 485), so the sibling slots take the next-ranked
+    # DISTINCT artifacts — both of which are blocked at this tier. That is the
+    # honest sheet: a 2nd corrupted_skull could never be equipped, so naming it
+    # here would have manufactured two unreachable targets that LOOK attainable.
+    for slot in ("artifact2_slot", "artifact3_slot"):
+        assert targets[slot].code != "corrupted_skull", (slot, targets[slot])
+        assert targets[slot].blocker is not None, (slot, targets[slot])
     assert any(r.root_repr == "ObtainItem(code='corrupted_skull', quantity=1, "
                "slot='artifact1_slot')" for r in report.decision.ranking), \
         report.decision.ranking
@@ -581,10 +603,13 @@ def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
     # None of them plans, so the grind still wins; the list is spelled out
     # rather than trimmed so a future change that makes one of them plannable
     # (and silently displaces the grind) fails here.
+    # RE-DERIVED 2026-08-22 (artifact duplicate-slot revert): novice_guide is
+    # walked ONCE, not three times. It is the only artifact on this sheet, and
+    # artifacts are no longer duplicate-allowed, so slots 2 and 3 have no
+    # candidate at all instead of a 2nd and 3rd copy whose equip would 485.
+    # Two doomed goals per cycle, deleted.
     assert [g["goal"] for g in report.goals_tried] == [
         "UpgradeEquipment(novice_guide->artifact1_slot)",
-        "UpgradeEquipment(novice_guide->artifact2_slot)",
-        "UpgradeEquipment(novice_guide->artifact3_slot)",
         "GatherMaterials(backpack, {backpack:1})",
         "GrindCharacterXP(flying_snake)",
     ], report.goals_tried
@@ -677,8 +702,9 @@ def test_l35_artifact_perfect_pearl_targeted_others_closed() -> None:
     trout/bass/salmon fishing-spot drop that `objective._gatherable` used
     to miss (primary-drop-map only); now reading the full drop set
     (`gatherable_drop_items()`), it opens the archaeologist-vendor route.
-    At equip_value 201 (all `prospecting`) perfect_pearl duplicate-fills
-    all three artifact slots (DUPLICATE_SLOT_TYPES). Every OTHER artifact
+    RE-DERIVED 2026-08-22 (artifact duplicate-slot revert): perfect_pearl
+    targets artifact1_slot ONLY. It used to duplicate-fill all three, which was
+    never realizable — the 2nd copy's equip returns HTTP 485. Every OTHER artifact
     in the bundle stays closed at this tier for its own, unrelated reason —
     GAP-2's fix is narrow, opening exactly the one rare-drop route it
     targets, not every artifact: lich/rosenblood/cultist_emperor (their
@@ -691,7 +717,7 @@ def test_l35_artifact_perfect_pearl_targeted_others_closed() -> None:
         assert state.equipment[slot] is None  # scenario construction
     targets = objective.near_term_gear(state)
     assert {slot: targets[slot] for slot in ARTIFACT_SLOTS if slot in targets} == {
-        slot: "perfect_pearl" for slot in ARTIFACT_SLOTS}
+        "artifact1_slot": "perfect_pearl"}
     artifacts = [code for code, stats in gd.all_item_stats.items()
                  if stats.type_ == "artifact"]
     assert artifacts  # the bundle really has artifacts to miss
@@ -719,20 +745,30 @@ def test_l35_artifact_small_pearls_gatherable_via_full_drop_set() -> None:
     assert is_attainable_now("perfect_pearl", state, gd)      # propagates upward
 
 
-def test_l35_artifact_fill_pearl_route_is_off_the_sheet_and_unplanned() -> None:
-    """RENAMED IN WAVE 3a fix-round 1. LOST: `perfect_pearl` is off the gear
-    sheet, the small_pearls route is neither the root nor tried, and the
-    scenario ends in `Wait`. GAP-2's `_gatherable` fix keeps its own direct
-    test (`test_l35_artifact_small_pearls_gatherable_via_full_drop_set`); wave 4
-    owns restoring the end-to-end route — task-6 report, R4.
+def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
+    """RESTORED 2026-08-22 by the artifact duplicate-slot revert. Wave 3a had
+    renamed this test to `..._is_off_the_sheet_and_unplanned` and handed wave 4
+    the job of getting the route back (task-6 report, R4). Removing "artifact"
+    from `DUPLICATE_SLOT_TYPES` did it, as a side effect rather than by design:
+    the three artifact slots used to be filled with three copies of the single
+    best artifact, which at tier 20 is the unattainable `novice_guide`, so
+    `perfect_pearl` never appeared anywhere on the sheet. Ranked-DISTINCT
+    assignment gives artifact1 novice_guide, artifact2 lost_world_map and
+    artifact3 `perfect_pearl` — and perfect_pearl is the only ATTAINABLE one of
+    the three, so it is the chosen root and its route plans end to end again.
+
+    That is the general shape of the duplicate-fill bug, not a lucky accident:
+    duplicating one code across N slots spends all N on a single item's
+    blockers, while distinct assignment lets a lower-ranked but REACHABLE item
+    be discovered. It was only ever justified while a 2nd copy was equippable.
 
     GAP-7 FIXED (2026-07-08) — the former tripwire
     (test_l35_artifact_fill_pure_drop_gear_farms_dropper's nodes==1 /
     plan_len==0 pin), rewritten positive. The derivation up to the step is
     UNCHANGED from the GAP-2/GAP-3/GAP-6 re-derivations:
 
-    - chosen_root is still perfect_pearl (equip_value 201 artifact,
-      duplicate-fills all three empty artifact slots, outranks old_boots —
+    - chosen_root is still perfect_pearl (equip_value 201 artifact, now at
+      artifact3_slot under ranked-distinct assignment, outranks old_boots —
       which stays in the fallback list, now never reached).
 
     NEW: perfect_pearl's step is no longer dead. `recipe_closure` unions
@@ -764,35 +800,27 @@ def test_l35_artifact_fill_pearl_route_is_off_the_sheet_and_unplanned() -> None:
     # root outright — no old_boots demotion chain any more (old_boots is
     # correctly outranked by snakeskin_boots and no longer a candidate; its
     # drop-farm coverage moved to l35_boots_drop_farm's wooden_club re-target).
-    # WAVE 3a: `perfect_pearl` is off the sheet entirely and the artifact-slot
-    # target is `novice_guide`. `gear_targets_with_blockers` gears for
-    # `gear_target_tier` — the rung being CLEARED, capped by character level.
-    # MEASURED here: `next_uncleared_tier` is 20 against a level-35 character,
-    # so the tier is **20** — NOT 1, and `perfect_pearl` sits above it. (A first
-    # draft blamed a "rung-1 collapse"; withdrawn in fix-round 1, and this is
-    # one of the artifacts it had not reached.) An ordinary cap, so this is not
-    # a fixture artefact. GAP-2's fix is NOT reverted: the `objective._gatherable` half is
-    # pinned directly by
-    # `test_l35_artifact_small_pearls_gatherable_via_full_drop_set`. What is no
-    # longer covered is the small_pearls ROUTE being planned end to end, which
-    # is written up in the task-6 report.
+    # `gear_targets_with_blockers` gears for `gear_target_tier` — the rung being
+    # CLEARED, capped by character level. MEASURED here: `next_uncleared_tier`
+    # is 20 against a level-35 character, so the tier is **20** — NOT 1. That
+    # cap is unchanged by the 2026-08-22 revert and is why artifact1/artifact2
+    # still name unattainable items (novice_guide, lost_world_map); what changed
+    # is that the third slot is no longer a THIRD copy of the first, so
+    # perfect_pearl gets a slot and the route reopens.
     report = _run("l35_artifact_fill")
     assert report.decision.chosen_root == ObtainItem(
-        code="novice_guide", quantity=1, slot="artifact1_slot")
-    assert not any("perfect_pearl" in r.root_repr for r in report.decision.ranking), \
-        report.decision.ranking
-    # The pinned outcome, WAVE 3a. With perfect_pearl off the sheet the
-    # small_pearls gather is never tried and no candidate on the sheet plans,
-    # so the arbiter reaches its documented last resort. The BATCHED /
-    # CLOSURE-SIZED node-count pins that stood here measured
-    # `GatherMaterials(small_pearls)`, a goal this scenario no longer produces;
-    # they are not restated against a different goal, because that would be
-    # re-pointing a measurement at something it never measured. The batch
-    # mechanism keeps its own coverage in test_currency_grind.
-    assert repr(report.selected_goal) == "Wait", (
+        code="perfect_pearl", quantity=1, slot="artifact3_slot")
+    # Two nodes, one action: the whole step is a single targeted secondary-drop
+    # gather, as the derivation above says. Pinned as a number because the
+    # dead-search this replaced was 1 node / 0-length.
+    tried = [g for g in report.goals_tried
+             if "small_pearls" in str(g.get("goal", ""))]
+    assert len(tried) == 1, report.goals_tried
+    assert (tried[0]["nodes"], tried[0]["plan_len"]) == (2, 1), tried[0]
+    assert repr(report.selected_goal).startswith("GatherMaterials(small_pearls"), (
         repr(report.selected_goal), report.plan)
-    assert not any("small_pearls" in str(g.get("goal", ""))
-                   for g in report.goals_tried), report.goals_tried
+    assert report.plan and repr(report.plan[0]).startswith(
+        "Gather(bass_spot->small_pearls"), report.plan
 
 
 def test_l35_boots_drop_farm_fights_grey_dropper() -> None:

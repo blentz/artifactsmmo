@@ -43,16 +43,18 @@ its own structural exemption from the directive. Named rather than a bare
 _DUPLICATE_FILL_TYPES = DUPLICATE_SLOT_TYPES
 """Multi-slot equip types whose empty slots are filled by repeating the best
 attainable item. See actions/equip.py's DUPLICATE_SLOT_TYPES comment for which
-types are in the set and why (rings: confirmed by a live HTTP-200 probe
-2026-06-14; artifacts: asserted from the same per-slot equip model, not yet
-probed — see that comment's probe trigger). Types outside the set (e.g. utility
-consumables) stay distinct, so their remaining slots are left untargeted."""
+types are in the set and why: RINGS ONLY, confirmed by a live HTTP-200 probe
+2026-06-14. Artifacts were in the set from 2026-07-03 on an ASSERTION and were
+removed 2026-08-22 when the probe that assertion asked for returned HTTP 485
+(character Lor, 2nd lich_race_medal into an EMPTY artifact2_slot). Types outside
+the set (artifacts now, and utility consumables) stay distinct, so their
+remaining slots are left untargeted."""
 
 
 def _slot_assignments(type_: str, slots: list[str],
                       attainable: list[tuple[int, str]]) -> list[tuple[str, int, str]]:
     """(slot, value, code) for each slot: ranked attainable assigned in order,
-    EXCEPT for duplicate-allowed types (rings, artifacts — DUPLICATE_SLOT_TYPES),
+    EXCEPT for duplicate-allowed types (rings — DUPLICATE_SLOT_TYPES),
     where every slot targets the single BEST attainable item.
 
     GAP-2-review Task 2 (2026-07-08): `attainable` is already sorted
@@ -62,10 +64,10 @@ def _slot_assignments(type_: str, slots: list[str],
     per slot (additive equip_value, no diminishing returns modeled). The
     previous "ranked-distinct-then-duplicate-when-exhausted" rule could
     hand a duplicate-allowed slot a far weaker distinct item (e.g. a
-    value-17 2nd-ranked artifact) when duplicating the value-201 best was
+    value-17 2nd-ranked ring) when duplicating the value-201 best was
     strictly better. Ownership/acquisition caps are NOT enforced here —
     this is the aspirational target-setting layer; the ownership cap lives
-    downstream in `equipment/scoring.py`'s `pick_loadout` (dual-ring
+    downstream in `equipment/loadout_picker.py`'s `pick_loadout` (dual-ring
     carve-out), which already caps a duplicate fill at physical ownership."""
     if not attainable:
         return []

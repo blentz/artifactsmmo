@@ -269,13 +269,22 @@ class TestSiblingSlotTargeting:
 
 
 class TestDuplicateArtifactAcquisition:
-    def test_worn_dup_artifact_does_not_veto_sibling_target(self):
-        """DUPLICATE ARTIFACT (mirrors the dual-ring carve-out, 9db1c78b): a
-        CRAFTABLE artifact worn in artifact1 DOES make artifact2 a craft target
-        for a SECOND copy of the same artifact — `DUPLICATE_SLOT_TYPES` now
-        includes "artifact", so `_worn_in_other_slot` returns False for it and
-        the sibling-slot candidate survives instead of being dropped by the
-        one-slot-per-code rule."""
+    def test_worn_artifact_vetoes_sibling_target_for_a_second_copy(self):
+        """ARTIFACTS ARE NOT DUPLICATE-ALLOWED (revert 2026-08-22). A CRAFTABLE
+        artifact worn in artifact1 must NOT make artifact2 a craft target for a
+        SECOND copy of the same code: `_worn_in_other_slot` returns True for it
+        again, so the sibling-slot candidate is dropped by the one-slot-per-code
+        rule.
+
+        This test asserted the OPPOSITE from 2026-07-03, when artifacts were
+        added to `DUPLICATE_SLOT_TYPES` on an assertion rather than a probe. The
+        probe ran on 2026-08-22 (character Lor, a 2nd lich_race_medal into an
+        EMPTY artifact2_slot) and the server answered HTTP 485. Chasing a second
+        copy is not merely wasted crafting — the equip that would consume it can
+        never land, so the whole target is a dead end.
+
+        The ring case is unaffected and is pinned in
+        tests/test_ai/test_duplicate_artifacts.py."""
         gd = GameData()
         gd._item_stats = {
             "lucky_charm": ItemStats(code="lucky_charm", level=1, type_="artifact",
@@ -290,7 +299,7 @@ class TestDuplicateArtifactAcquisition:
             equipment={"artifact1_slot": "lucky_charm", "artifact2_slot": None,
                        "artifact3_slot": None},
         )
-        assert goal._find_craftable_upgrade_target(state, gd) == ("lucky_charm", "artifact2_slot")
+        assert goal._find_craftable_upgrade_target(state, gd) is None
 
     def test_unacquirable_worn_artifact_not_targeted_no_stall(self):
         """novice_guide (no crafting recipe, 0 spare copies in inventory/bank)
