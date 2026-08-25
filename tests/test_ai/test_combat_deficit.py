@@ -346,6 +346,74 @@ def test_no_target_when_no_gear_closes_the_gap() -> None:
                                   candidates=("cloth_cap",)) is None
 
 
+def test_no_target_for_a_chain_that_improves_the_margin_but_never_closes() -> None:
+    """The gap the empty-chain check could not see: a NON-empty futile chain.
+
+    `bronze_sword` alone moves the boar margin -101 -> -2 and then nothing else
+    is on offer, so the walk names a chain and `closes` stays False. The old
+    guard read `deficit.chain` and committed to it — "build this, it wins the
+    fight" about an item that demonstrably does not. Live on the scenario corpus
+    that was 648 of 895 losing (character, monster) pairs, and its most visible
+    instance was a level-47 character being sent to craft a level-25
+    `emerald_amulet` for +1 of a needed +6.
+
+    The chain itself is still TRUE and still reported — `combat_deficit` names
+    it, and the `combat-deficit` diagnostic prints it as DOES NOT CLOSE. What is
+    withdrawn is only the guard's claim that building it wins this fight; a None
+    here sends `strategy_driver`'s GEAR_REVIEW branch to the generic value scan,
+    which still buys gear.
+    """
+    deficit = combat_deficit(_task_state(), _gd(), "boar",
+                             candidates=("bronze_sword",))
+
+    assert deficit is not None
+    assert [s.code for s in deficit.chain] == ["bronze_sword"]
+    assert deficit.chain[0].margin_after == -2
+    assert deficit.closes is False
+
+    assert deficit_upgrade_target(_task_state(), _gd(),
+                                  candidates=("bronze_sword",)) is None
+
+
+def test_a_target_is_returned_when_a_MULTI_step_chain_closes_the_gap() -> None:
+    """Honouring `closes` must not shrink to "one item wins or nothing".
+
+    `bronze_sword` alone reaches -2 and `hide_vest` alone is useless without a
+    weapon; together they reach +1. The old `max_chain=1` call could not see
+    that pair at all, so this fight read as unclosable — and if `closes` had
+    been honoured at depth 1 it would have gone from a futile target to no
+    target. It gets the first step of a chain that really does close instead.
+    """
+    target = deficit_upgrade_target(_task_state(), _gd(),
+                                    candidates=("bronze_sword", "hide_vest"))
+
+    assert target == ("bronze_sword", "weapon_slot")
+
+
+def test_the_target_does_not_move_when_the_walk_is_given_more_depth() -> None:
+    """Depth buys `closes`, never the ANSWER.
+
+    The walk is greedy and prefix-stable: the chain at depth k is the first k
+    steps of the chain at depth 8, so raising the bound cannot change which item
+    the guard is sent to build. Measured over all 895 losing (scenario, monster)
+    pairs on the committed bundle, `chain[0]` differed between `max_chain=1` and
+    `max_chain=8` in exactly 0 of them. Pinned here on the fixture so a future
+    non-greedy or lookahead ranking cannot quietly acquire that freedom.
+    """
+    gd = _gd()
+    state = _task_state()
+    deep = combat_deficit(state, gd, "boar",
+                          candidates=("bronze_sword", "hide_vest"))
+    shallow = combat_deficit(state, gd, "boar", max_chain=1,
+                             candidates=("bronze_sword", "hide_vest"))
+
+    assert deep is not None and shallow is not None
+    assert deep.closes is True
+    assert shallow.closes is False
+    assert [s.code for s in deep.chain] == ["bronze_sword", "hide_vest"]
+    assert deep.chain[0].code == shallow.chain[0].code
+
+
 def test_the_target_is_PRICED_when_a_cost_is_supplied() -> None:
     """The guard must chase the same item the `combat-deficit` oracle reports.
 

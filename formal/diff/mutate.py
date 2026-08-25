@@ -3979,6 +3979,22 @@ COMBAT_DEFICIT_TIEBREAK_MUTATIONS = [
      "            if best is None or score >= best_score:"),
 ]
 
+# `deficit_upgrade_target` must honour `closes`, not merely `chain`. Reading
+# `chain` commits the guard to gear that provably cannot win the fight — 648 of
+# 895 losing (scenario, monster) pairs on the committed bundle. Killed by
+# tests/test_ai/test_combat_deficit.py. OWN run_group (unit-killed mutant).
+COMBAT_DEFICIT_FUTILE_TARGET_MUTATIONS = [
+    ("deficit_upgrade_target: futile chain committed to as if it closed the gap",
+     "    if deficit is None or not deficit.closes:",
+     "    if deficit is None or not deficit.chain:"),
+    # The bound is load-bearing in the OTHER direction: at max_chain=1 a fight
+    # that two items would close reads as unclosable, so honouring `closes`
+    # would silently narrow GEAR_REVIEW instead of correcting it.
+    ("deficit_upgrade_target: walk bounded at one step, so multi-item chains vanish",
+     "                             candidates=candidates, cost_of=cost_of)",
+     "                             candidates=candidates, max_chain=1, cost_of=cost_of)"),
+]
+
 
 def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
               survivors: list[str]) -> None:
@@ -7574,6 +7590,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_dual_role_currency.py", survivors)
     run_group(COMBAT_DEFICIT_SRC, COMBAT_DEFICIT_TIEBREAK_MUTATIONS,
               "tests/test_ai/test_combat_deficit_ceiling_tie.py", survivors)
+    run_group(COMBAT_DEFICIT_SRC, COMBAT_DEFICIT_FUTILE_TARGET_MUTATIONS,
+              "tests/test_ai/test_combat_deficit.py", survivors)
 def _run_all_groups() -> int:
     survivors: list[str] = []
     _UNITS.clear()

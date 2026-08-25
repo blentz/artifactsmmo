@@ -373,7 +373,14 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
 
             Measured 386ms per firing on live C3P0 (22 priced candidates — cost
             is computed only for the ones that actually improve the margin),
-            against a ~70s cycle.
+            against a ~70s cycle. That was at `max_chain=1`; the walk now runs
+            to `MAX_CHAIN` so it can tell a closing chain from a futile one,
+            which re-prices the improvers once per step. Measured on the
+            scenario bundle the whole walk goes 16.1ms -> 56.2ms mean over 895
+            losing pairs, and on the one held-task scenario that returns a
+            target (`l32_held_task_closable` vs `ogre`, a 5-step chain) 22.0ms
+            -> 60.7ms. Scaled onto the live figure that is under 1.1s against a
+            ~70s cycle, and it is spent only when the gear latch is armed.
             """
             return float(acquisition_actions(code, 1, state, game_data, ctx,
                                              equip=True, store=history))

@@ -95,6 +95,12 @@ class CombatDeficit:
     `closes` distinguishes "unwinnable and I know what to build" from "unwinnable
     and I do not" — a caller that blocks a fight on this fact must be able to tell
     those apart, because only the first one is progress.
+
+    For a while it told them apart only for the reader: the `combat-deficit`
+    diagnostic printed CLOSES / DOES NOT CLOSE and the production consumer,
+    `deficit_upgrade_target`, branched on `chain` instead and committed to gear
+    from the second case as readily as the first. `deficit_upgrade_target` now
+    reads this field, which is the whole reason it exists.
     """
 
     monster: str
@@ -187,6 +193,34 @@ def deficit_upgrade_target(
     finished, a monster already winnable, or a gap no gear closes. The generic
     value scan then decides, unchanged.
 
+    That last clause is `deficit.closes`, and it used to be a lie. The call was
+    pinned at `max_chain=1` and the guard read `deficit.chain`, so ANY item that
+    moved the margin by one point was committed to as "the gear that wins this
+    fight" — over the whole scenario corpus, 648 of 895 losing (character,
+    monster) pairs returned a target that provably could not close. The visible
+    end of it was `l47_depth3_amulet` vs `dusk_beetle`: margin -6, nine
+    candidates all gaining exactly +1 at an identical (ceiling) price, and the
+    walk picked among nine equally futile items by catalogue order — a level-25
+    `emerald_amulet` for a level-47 character. No chain of ANY length closes
+    that fight (measured: -6 -> -4 at depth 2, then nothing improves), so the
+    pick was not a tie-break defect. It was a decision that should never have
+    been taken.
+
+    The bound is now the module's own `MAX_CHAIN` rather than 1, which costs
+    depth but cannot change the ANSWER: the walk is greedy and prefix-stable, so
+    the chain at depth k is the first k steps of the chain at depth 8. Measured
+    over all 895 pairs, `chain[0]` differed between `max_chain=1` and
+    `max_chain=8` in exactly 0 of them. Depth buys `closes` and nothing else —
+    122 of the 648 futile pairs turn out to have a closing chain (30 at depth 2,
+    59 by depth 3, 122 by depth 8) and keep the SAME first target, now honestly
+    justified; the other 526 fall through to the value scan, which is what
+    `strategy_driver`'s GEAR_REVIEW branch does with a None. GEAR_REVIEW still
+    fires and still buys gear — only the monster-scoped claim is withdrawn when
+    the monster cannot be reached by gear at all.
+
+    `closes` subsumes the old `chain` check: it is set only immediately after a
+    step is appended, so `closes` implies a non-empty chain.
+
     The slot is the first in `ITEM_TYPE_TO_SLOTS` order for the item's type, the
     same rule `UpgradeEquipmentGoal` uses, so the guard equips into a slot that
     accepts it.
@@ -195,8 +229,8 @@ def deficit_upgrade_target(
     if monster is None:
         return None
     deficit = combat_deficit(state, game_data, monster,
-                             candidates=candidates, max_chain=1, cost_of=cost_of)
-    if deficit is None or not deficit.chain:
+                             candidates=candidates, cost_of=cost_of)
+    if deficit is None or not deficit.closes:
         return None
     step = deficit.chain[0]
     slots = ITEM_TYPE_TO_SLOTS.get(step.item_type, [])

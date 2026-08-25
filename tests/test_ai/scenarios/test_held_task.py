@@ -185,8 +185,15 @@ def test_the_task_triple_splits_the_deficit_three_ways(gd: GameData) -> None:
     `_blocked_task_monster` is reached in all three (a task is held); what
     differs is only which arm of `has_combat_deficit` / `deficit_upgrade_target`
     the monster lands on. Measured over all 58 catalogue monsters at this
-    loadout: 12 are workable, 37 closable, 9 open — so none of the three values
-    is a lucky single."""
+    loadout: 12 are workable, 8 closable, 38 open — so none of the three values
+    is a lucky single.
+
+    That split was 12 / 37 / 9 while `deficit_upgrade_target` branched on
+    `deficit.chain` instead of `deficit.closes`. Twenty-nine of those thirty-
+    seven "closable" monsters were nothing of the kind: the walk named an item
+    that moved the margin and never reached zero, and the guard committed to it
+    anyway. The middle value is now the monsters a chain really does close, and
+    it is still populated eight times over."""
     workable = _state(TRIPLE_WORKABLE, gd)
     closable = _state(TRIPLE_CLOSABLE, gd)
     open_ = _state(TRIPLE_OPEN, gd)

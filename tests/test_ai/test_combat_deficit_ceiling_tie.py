@@ -169,11 +169,20 @@ def test_a_gain_tie_at_the_ceiling_falls_to_catalogue_order_and_takes_the_first(
     ACCEPTABLE today only because the bundle's item pages are level-monotone (0
     descending steps across all 522 items), so "first in the catalogue" is
     currently "lowest item level" — `emerald_amulet` at level 25 over
-    `greater_emerald_amulet` at level 40, which is the answer a semantic rule
-    would also give. Nothing in the code says that, and a server that reorders
-    its pages changes this decision with no diff. See
+    `greater_emerald_amulet` at level 40. Nothing in the code says that, and a
+    server that reorders its pages changes this ranking with no diff. See
     `.superpowers/sdd/PLAN_wave3b_deletion/pricing-tiebreak-audit-report.md`
     for the proposed semantic key.
+
+    WHAT THIS TEST IS NOW, AND IS NOT. It pins `combat_deficit`'s RANKING and
+    nothing further. It is not vacuous — the nine candidates still tie, and the
+    strict `>` still takes the first — but the decision it once appeared to
+    describe is gone: `deficit_upgrade_target` reads `closes`, and this pair
+    never closes at any depth (see the test below), so the tie decides nothing a
+    character acts on. That is also the answer to the level-25-for-a-level-47
+    objection this pair provoked: it was never a tie-break defect. Both the
+    lower-level key the audit proposed and the higher-level key intuition
+    suggests would have picked among nine items that cannot win the fight.
     """
     state = _rested("l47_depth3_amulet")
     rows = _priced_improvers(state, "dusk_beetle")
@@ -191,6 +200,46 @@ def test_a_gain_tie_at_the_ceiling_falls_to_catalogue_order_and_takes_the_first(
 
     assert deficit is not None
     assert [s.code for s in deficit.chain] == ["emerald_amulet"]
+
+
+def test_the_tied_amulet_pick_closes_nothing_at_any_depth() -> None:
+    """Why the level-25-amulet objection is a FUTILITY finding, not a tie finding.
+
+    `l47_depth3_amulet` vs `dusk_beetle` on the real catalogue: the margin is -6
+    and the best chain the walk can assemble at ANY bound reaches -4 — one
+    amulet and one `enhanced_boost_potion`, after which nothing on offer moves
+    the number at all. So the ranking among the nine tied +1 candidates decides
+    which futile item gets named in a diagnostic, and nothing else. There is no
+    quality floor to add here and no level-aware key that would have helped:
+    every candidate in the set is equally unable to win this fight, whatever its
+    level.
+
+    Also pinned: the answer does not move with the bound. The walk is greedy and
+    prefix-stable, which is what lets `deficit_upgrade_target` pay for `closes`
+    with depth without changing which item it targets.
+    """
+    state = _rested("l47_depth3_amulet")
+
+    by_depth = {
+        depth: combat_deficit(state, _gd(), "dusk_beetle", max_chain=depth,
+                              cost_of=_cost_of(state))
+        for depth in (1, 2, 3, 8)
+    }
+
+    assert all(d is not None for d in by_depth.values())
+    assert {d.baseline_margin for d in by_depth.values() if d is not None} == {-6}
+    # Nothing closes, at any bound the walk is allowed.
+    assert not any(d.closes for d in by_depth.values() if d is not None)
+    deepest = by_depth[8]
+    assert deepest is not None
+    assert [s.code for s in deepest.chain] == ["emerald_amulet",
+                                              "enhanced_boost_potion"]
+    assert deepest.chain[-1].margin_after == -4
+    # Prefix stability: every shallower chain is a prefix of the deepest one.
+    for depth, deficit in by_depth.items():
+        assert deficit is not None
+        assert [s.code for s in deficit.chain] == [
+            s.code for s in deepest.chain][:len(deficit.chain)], depth
 
 
 def test_the_catalogue_is_level_monotone_which_is_why_that_order_reads_sane() -> None:
