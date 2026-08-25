@@ -129,8 +129,14 @@ def plan(
         # loader's default: a GE-populated cell and its quiet control are the
         # same character in two worlds, and reproducing one of them here with
         # the other's order book would print a plan the harness never asserts.
+        # `unlocked_achievements` rides the same rule: an achievement-gated tile
+        # (the `tasks_trader` at (5, 11)) is present or absent depending on the
+        # scenario's declaration, and printing a plan against the wrong one
+        # would show a currency route the harness says this cell does not have.
         scenario_game_data = load_bundle_game_data(
-            bundle_path, with_ge_orders=SCENARIOS[scenario].ge_market)
+            bundle_path, with_ge_orders=SCENARIOS[scenario].ge_market,
+            completed_achievements=frozenset(
+                SCENARIOS[scenario].unlocked_achievements))
         player.seed_offline(
             scenario_state(SCENARIOS[scenario], scenario_game_data),
             scenario_game_data)

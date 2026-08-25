@@ -8,9 +8,9 @@
 >
 > Every field `classify_gap` reads is a column here, so a verdict can be reconstructed from the row alone: `g-in`/`g-above` are the in-range and above-range resource counts and `g-xp+` is whether the HIGHEST in-range resource still pays XP — the three that separate `wall_all_rungs_grey` from `wall_below_first_rung`.
 
-288 cells over 82 distinct (skill, level) pairs; PASS 283; routed 24; walled 5; o1_silent_stall 0; o1_unexplained 0; skill_catalogue_empty 0
+336 cells over 92 distinct (skill, level) pairs; PASS 330; routed 26; walled 6; o1_silent_stall 0; o1_unexplained 0; skill_catalogue_empty 0
 
-residual scope: 24 of 288 cells are ROUTED (3 of 8 skills) — jewelrycrafting 14, gearcrafting 8, weaponcrafting 2. A closure in an unrouted skill can only be an explained wall.
+residual scope: 26 of 336 cells are ROUTED (3 of 8 skills) — jewelrycrafting 15, gearcrafting 9, weaponcrafting 2. A closure in an unrouted skill can only be an explained wall.
 
 | Scenario | Skill | C | Target | Verdict | routed | in-level | xp+ | obtainable | above | g-in | g-above | g-xp+ | gather rung |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -302,4 +302,52 @@ residual scope: 24 of 288 cells are ROUTED (3 of 8 skills) — jewelrycrafting 1
 | l12_ge_book_adequate | mining | 10 | 11 | PASS | - | 2 | 2 | 2 | 12 | 2 | 5 | yes | `iron_ore` |
 | l12_ge_book_adequate | weaponcrafting | 10 | 11 | PASS | - | 18 | 18 | 13 | 51 | 0 | 0 | - | `None` |
 | l12_ge_book_adequate | woodcutting | 10 | 11 | PASS | - | 2 | 2 | 2 | 9 | 2 | 5 | yes | `spruce_wood` |
+| l47_depth3_amulet | alchemy | 20 | 21 | PASS | - | 9 | 7 | 7 | 16 | 2 | 3 | yes | `nettle_leaf` |
+| l47_depth3_amulet | cooking | 20 | 21 | PASS | - | 12 | 8 | 8 | 8 | 0 | 0 | - | `None` |
+| l47_depth3_amulet | fishing | 20 | 21 | PASS | - | 0 | 0 | 0 | 0 | 3 | 4 | yes | `trout` |
+| l47_depth3_amulet | gearcrafting | 40 | 41 | PASS | - | 98 | 51 | 3 | 34 | 0 | 0 | - | `None` |
+| l47_depth3_amulet | jewelrycrafting | 40 | 41 | PASS | - | 44 | 23 | 3 | 6 | 0 | 0 | - | `None` |
+| l47_depth3_amulet | mining | 40 | 41 | PASS | - | 12 | 5 | 5 | 2 | 6 | 1 | yes | `mithril_ore` |
+| l47_depth3_amulet | weaponcrafting | 40 | 41 | **wall_rungs_unobtainable** | - | 56 | 22 | 0 | 13 | 0 | 0 | - | `None` |
+| l47_depth3_amulet | woodcutting | 40 | 41 | PASS | - | 10 | 7 | 7 | 1 | 6 | 1 | yes | `maple_wood` |
+| l20_relief_full_bank | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
+| l20_relief_full_bank | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
+| l20_relief_full_bank | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
+| l20_relief_full_bank | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 13 | 109 | 0 | 0 | - | `None` |
+| l20_relief_full_bank | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
+| l20_relief_full_bank | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
+| l20_relief_full_bank | weaponcrafting | 15 | 16 | PASS | - | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |
+| l20_relief_full_bank | woodcutting | 20 | 21 | PASS | - | 3 | 2 | 2 | 8 | 3 | 4 | yes | `birch_wood` |
+| l20_bag_critical_empty_bank | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
+| l20_bag_critical_empty_bank | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
+| l20_bag_critical_empty_bank | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
+| l20_bag_critical_empty_bank | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 13 | 109 | 0 | 0 | - | `None` |
+| l20_bag_critical_empty_bank | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
+| l20_bag_critical_empty_bank | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
+| l20_bag_critical_empty_bank | weaponcrafting | 15 | 16 | PASS | - | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |
+| l20_bag_critical_empty_bank | woodcutting | 20 | 21 | PASS | - | 3 | 2 | 2 | 8 | 3 | 4 | yes | `birch_wood` |
+| l22_rest_for_combat | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
+| l22_rest_for_combat | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
+| l22_rest_for_combat | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
+| l22_rest_for_combat | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 13 | 109 | 0 | 0 | - | `None` |
+| l22_rest_for_combat | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
+| l22_rest_for_combat | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
+| l22_rest_for_combat | weaponcrafting | 15 | 16 | PASS | - | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |
+| l22_rest_for_combat | woodcutting | 20 | 21 | PASS | - | 3 | 2 | 2 | 8 | 3 | 4 | yes | `birch_wood` |
+| l25_currency_leaf_unfunded | alchemy | 10 | 11 | PASS | - | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
+| l25_currency_leaf_unfunded | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
+| l25_currency_leaf_unfunded | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
+| l25_currency_leaf_unfunded | gearcrafting | 20 | 21 | PASS | - | 38 | 31 | 13 | 94 | 0 | 0 | - | `None` |
+| l25_currency_leaf_unfunded | jewelrycrafting | 20 | 21 | PASS | - | 17 | 15 | 7 | 33 | 0 | 0 | - | `None` |
+| l25_currency_leaf_unfunded | mining | 20 | 21 | PASS | - | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
+| l25_currency_leaf_unfunded | weaponcrafting | 20 | 21 | PASS | - | 31 | 21 | 5 | 38 | 0 | 0 | - | `None` |
+| l25_currency_leaf_unfunded | woodcutting | 20 | 21 | PASS | - | 3 | 2 | 2 | 8 | 3 | 4 | yes | `birch_wood` |
+| l24_fisher_cooking_rung | alchemy | 5 | 6 | PASS | - | 2 | 2 | 2 | 23 | 1 | 4 | yes | `sunflower` |
+| l24_fisher_cooking_rung | cooking | 21 | 22 | PASS | - | 12 | 5 | 3 | 8 | 0 | 0 | - | `None` |
+| l24_fisher_cooking_rung | fishing | 25 | 26 | PASS | - | 0 | 0 | 0 | 0 | 3 | 4 | yes | `trout` |
+| l24_fisher_cooking_rung | gearcrafting | 5 | 6 | PASS | yes | 7 | 7 | 6 | 125 | 0 | 0 | - | `None` |
+| l24_fisher_cooking_rung | jewelrycrafting | 5 | 6 | PASS | yes | 2 | 2 | 2 | 48 | 0 | 0 | - | `None` |
+| l24_fisher_cooking_rung | mining | 5 | 6 | PASS | - | 1 | 1 | 1 | 13 | 1 | 6 | yes | `copper_ore` |
+| l24_fisher_cooking_rung | weaponcrafting | 5 | 6 | PASS | - | 10 | 10 | 9 | 59 | 0 | 0 | - | `None` |
+| l24_fisher_cooking_rung | woodcutting | 5 | 6 | PASS | - | 1 | 1 | 1 | 10 | 1 | 6 | yes | `ash_wood` |
 

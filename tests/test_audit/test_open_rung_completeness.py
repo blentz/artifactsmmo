@@ -11,7 +11,7 @@ things:
   passing;
 * its verdict must be production's — `test_a_cell_is_open_iff_an_arm_offers_a_rung`
   cross-reads `LevelSkill.is_applicable` against the census's own catalogue
-  decomposition on all 288 cells, so the two cannot drift;
+  decomposition on all 336 cells, so the two cannot drift;
 * it must be able to FAIL — `test_the_gate_fires_when_a_routed_skill_loses_its_rung`
   closes one routed skill through the production seam and asserts the residual
   fires, and `test_the_unexplained_residual_can_fire` exhibits the hole the
@@ -20,7 +20,7 @@ things:
 `test_the_zero_stat_harness_would_measure_the_fixture` is the fourth guard and
 the one that caught the census measuring itself: with
 `ScenarioCharacter.derive_combat_stats` at its default the harness makes every
-monster unwinnable, so 14 extra cells wall for a reason that is a property of
+monster unwinnable, so 65 extra cells wall for a reason that is a property of
 the fixture and not of the game.
 """
 
@@ -44,8 +44,8 @@ from artifactsmmo_cli.audit.open_rung_completeness import (
 )
 
 # Floors, not exact counts: a new scenario must not have to touch this file,
-# but a sweep that goes blind must. The committed set is 36 scenarios x 8
-# skills = 288 cells over 82 distinct (skill, level) pairs.
+# but a sweep that goes blind must. The committed set is 42 scenarios x 8
+# skills = 336 cells over 92 distinct (skill, level) pairs.
 #
 # The cell floor is `orc.MIN_CELLS`, NOT a local copy: `gen_open_rung.py
 # --check` enforces the same number, and two floors that could drift would
@@ -63,7 +63,7 @@ def results(bundle_game_data: GameData) -> list[orc.RungResult]:
 
 def _closed_cells(game_data: GameData, *, derive_combat_stats: bool | None) -> int:
     """Cells with no open rung, when the scenario states are built with the
-    given `derive_combat_stats` setting. `None` means AS COMMITTED — 11 of the
+    given `derive_combat_stats` setting. `None` means AS COMMITTED — 32 of the
     scenarios opt the flag on and the rest leave it at its False default,
     which is what a census built straight on `scenario_state` would measure.
     The census forces it True for every cell."""
@@ -137,23 +137,23 @@ def test_the_zero_stat_harness_would_measure_the_fixture(
     then unreachable, so cells wall for a reason that belongs to the harness.
 
     Three counts, pinned exactly because `open_rung_completeness`'s module
-    docstring quotes them: 56 closed with the flag off everywhere, 19 closed
-    on the scenarios AS COMMITTED (26 of the 36 opt in), 5 with the census's
+    docstring quotes them: 71 closed with the flag off everywhere, 20 closed
+    on the scenarios AS COMMITTED (32 of the 42 opt in), 6 with the census's
     forced-on states. The as-committed number is the one that matters — it is
     what this census would report if `census_state` were `scenario_state`.
     """
     all_off = _closed_cells(bundle_game_data, derive_combat_stats=False)
     as_committed = _closed_cells(bundle_game_data, derive_combat_stats=None)
     derived = _closed_cells(bundle_game_data, derive_combat_stats=True)
-    assert (all_off, as_committed, derived) == (56, 19, 5), \
-        "update the module docstring's 56/19/5 note"
+    assert (all_off, as_committed, derived) == (71, 20, 6), \
+        "update the module docstring's 71/20/6 note"
     # The opt-in count is PINNED, not merely restated. Both docstrings quote it,
     # and it silently rotted from 11 to 20 as scenarios were added — caught only
     # by a coverage audit, months later. A quoted number with no assertion behind
     # it is the same defect class the reachability census now gates.
     opted_in = sum(1 for s in SCENARIOS.values() if s.derive_combat_stats)
-    assert opted_in == 26, (
-        "update the '26 of the 36 opt in' count in this docstring AND in "
+    assert opted_in == 32, (
+        "update the '32 of the 42 opt in' count in this docstring AND in "
         "open_rung_completeness's module docstring")
     assert sum(1 for r in results if not r.open_rung) == derived
 
@@ -311,7 +311,7 @@ def test_weaponcrafting_ten_has_an_open_rung(
 def test_the_only_walls_today_are_high_weaponcrafting(
         results: list[orc.RungResult]) -> None:
     """Today's whole residual-free wall set, pinned as a finding rather than a
-    success: five cells, all `weaponcrafting` at 35 or 42, each with
+    success: six cells, all `weaponcrafting` at 35, 40 or 42, each with
     XP-positive rungs in reach and NOT ONE with a reachable material set.
 
     A change that opens them is a fix and should update this test; a change
@@ -319,10 +319,10 @@ def test_the_only_walls_today_are_high_weaponcrafting(
     `test_the_sweep_sees_the_whole_grid`'s floor also catches.
     """
     walls = [r for r in results if not r.passed]
-    assert len(walls) == 5
+    assert len(walls) == 6
     for wall in walls:
         assert wall.skill == "weaponcrafting"
-        assert wall.level in (35, 42)
+        assert wall.level in (35, 40, 42)
         assert wall.gap == OpenRungGap.WALL_RUNGS_UNOBTAINABLE.value
         assert wall.inventory.xp_positive > 0
         assert wall.inventory.obtainable == 0
@@ -365,11 +365,11 @@ def test_the_matrix_renders_every_cell_and_the_summary(
 def test_the_summary_reports_both_residuals_and_the_pair_count(
         results: list[orc.RungResult]) -> None:
     line = orc.summary_line(results)
-    assert f"{len(results)} cells over 82 distinct (skill, level) pairs" in line
+    assert f"{len(results)} cells over 92 distinct (skill, level) pairs" in line
     assert "o1_silent_stall 0" in line
     assert "o1_unexplained 0" in line
     assert "skill_catalogue_empty 0" in line
-    assert "walled 5" in line
+    assert "walled 6" in line
 
 
 def test_the_routing_breakdown_scopes_the_residual(
@@ -378,7 +378,7 @@ def test_the_routing_breakdown_scopes_the_residual(
 
     Five of the eight skills are never routed by any scenario, so a closure in
     one of them can only ever be an explained wall. That is not a defect, but a
-    "0 residuals" headline over 288 cells promises more than it delivers unless
+    "0 residuals" headline over 336 cells promises more than it delivers unless
     the scope is printed beside it.
     """
     line = orc.routing_breakdown(results)

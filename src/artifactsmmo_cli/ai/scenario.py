@@ -151,6 +151,26 @@ class ScenarioCharacter:
 
     Default False so every scenario written before the book existed keeps the
     market it was pinned in."""
+    unlocked_achievements: tuple[str, ...] = ()
+    """Account achievements this scenario's world has COMPLETED, on top of the
+    ones the capture already marks. Forwarded to
+    `load_bundle_game_data(..., completed_achievements=)` by every harness that
+    plans a scenario, `plan --scenario` included — the same seam `ge_market`
+    uses, and for the same reason: it is a property of the WORLD the character
+    plans in, and a control the harness cannot name is a control nobody can run.
+
+    Why a scenario needs it (coverage-matrix cell 11): an `achievement_unlocked`
+    access condition is evaluated at map build, so an unmet one deletes the tile
+    from every location index. The committed bundle's account has `tasks_farmer`
+    incomplete, so `tasks_trader` — the ONLY permanent vendor selling anything
+    for `tasks_coin` — has no location, `currency_demand` finds no fundable
+    vendor, and `CanIAffordTheCurrencyLeaf`'s positive arm is unreachable from
+    every scenario. Declaring the achievement is what makes the D9 currency-leaf
+    value expressible.
+
+    Validated against the bundle's achievement registry by `from_cache_bundle`,
+    which RAISES on a code the capture does not know. Default empty, so every
+    scenario written before this keeps the locked world it was pinned in."""
     description: str = ""
 
 
@@ -269,7 +289,10 @@ def scenario_state(sc: ScenarioCharacter,
     )
 
 
-def load_bundle_game_data(path: Path, *, with_ge_orders: bool = False) -> GameData:
+def load_bundle_game_data(
+    path: Path, *, with_ge_orders: bool = False,
+    completed_achievements: frozenset[str] = frozenset(),
+) -> GameData:
     """The scenario harness's GameData, built from a committed cache bundle.
 
     `with_ge_orders` forwards to `GameData.from_cache_bundle` and picks which
@@ -278,9 +301,15 @@ def load_bundle_game_data(path: Path, *, with_ge_orders: bool = False) -> GameDa
     the order book captured into the bundle, which is the market the live bot
     plans in. See `from_cache_bundle` for the measurement that made this a
     declared argument rather than a default.
+
+    `completed_achievements` forwards the same way and picks which ACCESS-GATED
+    tiles the offline world has open — the capture's account has `tasks_farmer`
+    incomplete, which hides the only permanent `tasks_coin` vendor. Again see
+    `from_cache_bundle` for the measurement.
     """
-    return GameData.from_cache_bundle(json.loads(path.read_text()),
-                                      with_ge_orders=with_ge_orders)
+    return GameData.from_cache_bundle(
+        json.loads(path.read_text()), with_ge_orders=with_ge_orders,
+        completed_achievements=completed_achievements)
 
 
 _COPPER_SET = {
@@ -289,6 +318,40 @@ _COPPER_SET = {
     "boots_slot": "copper_boots", "ring1_slot": "copper_ring",
     "ring2_slot": "copper_ring",
 }
+
+_IRON_SET = {
+    "weapon_slot": "iron_sword", "helmet_slot": "iron_helm",
+    "body_armor_slot": "iron_armor", "leg_armor_slot": "iron_legs_armor",
+    "boots_slot": "iron_boots", "ring1_slot": "iron_ring",
+    "ring2_slot": "iron_ring", "shield_slot": "iron_shield",
+    "amulet_slot": "life_amulet",
+}
+"""The tier-15 loadout the coverage-matrix cells that are NOT about gear wear.
+
+`_COPPER_SET`'s tier-1 pieces leave a level-20 character losing to most of its
+own band, which would put HP_CRITICAL or an unwinnable cascade in front of
+whatever the cell is actually testing. This set is deliberately unremarkable —
+it exists so a bag-pressure or HP cell varies exactly one dimension."""
+
+_FULL_BANK = {code: 1 for code in (
+    "copper_ore", "iron_ore", "coal", "gold_ore", "mithril_ore",
+    "copper_bar", "iron_bar", "steel_bar", "gold_bar", "mithril_bar",
+    "ash_wood", "spruce_wood", "maple_wood", "dead_wood", "magic_wood",
+    "ash_plank", "spruce_plank", "birch_wood", "dead_wood_plank",
+    "hardwood_plank", "cowhide", "feather", "wolf_hair", "wolf_bone",
+    "pig_skin", "snakeskin", "snake_hide", "lizard_skin", "vermin_leather",
+    "yellow_slimeball", "red_slimeball", "blue_slimeball", "green_slimeball",
+    "king_slimeball", "sap", "maple_sap", "mushroom", "sunflower",
+    "nettle_leaf", "glowstem_leaf", "algae", "gudgeon", "shrimp", "trout",
+    "bass", "raw_chicken", "milk_bucket", "egg", "apple", "golden_egg",
+)}
+"""A bank with NO ROOM: exactly `GameData.bank_capacity` (50, from the committed
+bundle's `/my/bank`) distinct codes, so `bank_room.bank_has_room` is False.
+
+The number of DISTINCT codes is what fills a bank — quantities do not — so this
+is 50 stacks of one, the cheapest honest way to say "full". Every code is a real
+catalogue material a level-20 character would plausibly have banked; the
+scenario tests validate them against the bundle like any other item code."""
 
 def _held_task_cell(name: str, task: tuple[str, str, int, int],
                     description: str) -> ScenarioCharacter:
@@ -1418,4 +1481,197 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         description="GE triple, cell 5: busy order book, gearcrafting ADEQUATE "
                     "— outside a grind the standing GE order LEAFS the descent "
                     "and the rung is bought rather than crafted."),
+
+    # --- COVERAGE MATRIX cell 6 (design §5.3): D4 = a DEPTH-3 rung.
+    # Nine catalogue recipes close at depth 3 and NO scenario put one on a
+    # gear sheet, so the deepest closure the harness ever walked was depth 2.
+    # `greater_dreadful_amulet` ({gold_bar:8, dreadful_amulet:1, cyclops_eye:4,
+    # ogre_eye:4, red_cloth:3}) is one of the nine: `dreadful_amulet` is itself
+    # a recipe ({hardwood_plank:6, ogre_eye:4, hard_leather:2, king_slimeball:2})
+    # and `hardwood_plank` is a third ({ash_wood:4, birch_wood:6}).
+    #
+    # Reaching it needs a CHARACTER, not a field (design §4.3). `gear_target_tier`
+    # is the rung being CLEARED, so a level-47 character in the best catalogue
+    # loadout at or below its own level clears through rung 25 and gears for
+    # rung 30 — at which the amulet slot's best candidate IS the depth-3 amulet.
+    # The slot is left EMPTY so it is the one slot behind its target; every other
+    # worn piece already outvalues its rung-30 candidate.
+    # The bag holds every root input EXCEPT `dreadful_amulet`, which is what
+    # forces the descent through the depth-3 leg instead of stopping at a drop.
+    # D1 derived and D8 mid-band (47 sits between rungs 45 and 50) per §5.3.
+    "l47_depth3_amulet": ScenarioCharacter(
+        name="l47_depth3_amulet", level=47,
+        skills={"mining": 40, "woodcutting": 40, "weaponcrafting": 40,
+                "gearcrafting": 40, "jewelrycrafting": 40, "cooking": 20,
+                "alchemy": 20, "fishing": 20},
+        equipment={
+            "helmet_slot": "darkforged_helmet", "weapon_slot": "hell_reaper",
+            "shield_slot": "darkforged_shield", "ring1_slot": "hell_ring",
+            "ring2_slot": "hell_ring", "boots_slot": "darkforged_boots",
+            "leg_armor_slot": "mesh_legs_armor",
+            "body_armor_slot": "darkforged_plate",
+            "utility1_slot": "greater_health_potion",
+            "utility2_slot": "small_health_potion",
+        },
+        inventory={"gold_bar": 8, "cyclops_eye": 4, "ogre_eye": 8,
+                   "red_cloth": 3, "hard_leather": 2, "king_slimeball": 2,
+                   "greater_health_potion": 6},
+        utility_quantities={"utility1_slot": 40, "utility2_slot": 40},
+        inventory_max=150, bank={}, gold=9000, derive_combat_stats=True,
+        description="Cell 6: a DEPTH-3 gear rung (greater_dreadful_amulet) — "
+                    "the descent must walk root -> dreadful_amulet -> "
+                    "hardwood_plank -> ash_wood, two levels deeper than any "
+                    "other scenario reaches."),
+
+    # --- COVERAGE MATRIX cell 8 (design §5.3): D6 >= 75 % x D7 STOCKED.
+    # The three relief guards fired in 0/36 scenarios. All three need bag
+    # pressure; RECYCLE_RELIEF and SELL_RELIEF additionally need the bank to
+    # have NO ROOM (`bank_has_room` is `len(bank_items) < game_data.bank_capacity`,
+    # and the bundle's capacity is 50), which is what "stocked" has to mean for
+    # this cell — a bank with room routes the pressure to DEPOSIT_FULL instead.
+    #
+    # The pressure is on the SLOT axis (16 of 20 slots = 0.80) and NOT the
+    # quantity axis (118 of 200 = 0.59), which is the live Robby 2026-07-10
+    # shape and the reason `_used_fraction` takes the max of the two. Keeping
+    # quantity low is deliberate: both DISCARD guards read the QUANTITY
+    # fraction, so at 0.59 neither can preempt the guards this cell exists to
+    # exercise (design §5.2's masking rule).
+    # `timber_merchant` is declared active because EVERY item-buying NPC in the
+    # game is an event NPC — without an open window `sellable_tradeable_now` is
+    # False by construction and SELL_RELIEF could never fire.
+    # Packs D2 none and D9 mid (1,500 gold) per §5.3.
+    "l20_relief_full_bank": ScenarioCharacter(
+        name="l20_relief_full_bank", level=20,
+        skills={"mining": 20, "woodcutting": 20, "weaponcrafting": 15,
+                "gearcrafting": 15, "jewelrycrafting": 15, "cooking": 10,
+                "alchemy": 10, "fishing": 10},
+        equipment=dict(_IRON_SET),
+        inventory={"ash_wood": 20, "iron_ore": 12, "copper_ore": 10,
+                   "cowhide": 8, "feather": 6, "spruce_wood": 10,
+                   "iron_helm": 2, "sap": 9, "birch_wood": 8,
+                   "yellow_slimeball": 7, "gudgeon": 6, "raw_chicken": 5,
+                   "sunflower": 5, "milk_bucket": 4, "copper_bar": 3,
+                   "mushroom": 3},
+        inventory_max=200, inventory_slots_max=20,
+        bank=dict(_FULL_BANK), gold=1500,
+        active_events=("timber_merchant",), derive_combat_stats=True,
+        description="Cell 8: bag at 80 % of its SLOT cap against a bank with "
+                    "no room — CRAFT_RELIEF, RECYCLE_RELIEF and SELL_RELIEF "
+                    "all fire, and none of them could before."),
+
+    # --- COVERAGE MATRIX cell 9 (design §5.3): D6 >= 90 % (PREEMPTING) x D7 EMPTY.
+    # The mirror image of cell 8, and deliberately so: the pressure is on the
+    # QUANTITY axis (152 of 160 = 0.95, clearing DISCARD_CRITICAL's 0.95 rung)
+    # while only 5 of 20 slots are used, and the bank is EMPTY so it has room.
+    # That combination is what puts DEPOSIT_FULL and DISCARD_CRITICAL up
+    # together — the pair §5.3 names — while cell 8's guards stay silent
+    # (CRAFT_RELIEF reads the same `_used_fraction` max and 0.95 clears it, so
+    # its absence here is `craft_relief_candidates` being empty, not the
+    # watermark).
+    "l20_bag_critical_empty_bank": ScenarioCharacter(
+        name="l20_bag_critical_empty_bank", level=20,
+        skills={"mining": 20, "woodcutting": 20, "weaponcrafting": 15,
+                "gearcrafting": 15, "jewelrycrafting": 15, "cooking": 10,
+                "alchemy": 10, "fishing": 10},
+        equipment=dict(_IRON_SET),
+        inventory={"feather": 60, "sap": 42, "yellow_slimeball": 30,
+                   "raw_chicken": 12, "ash_wood": 8},
+        inventory_max=160, inventory_slots_max=20, bank={}, gold=1500,
+        derive_combat_stats=True,
+        description="Cell 9: bag at 95 % of its QUANTITY cap against an EMPTY "
+                    "bank — DISCARD_CRITICAL and DEPOSIT_FULL both fire."),
+
+    # --- COVERAGE MATRIX cell 10 (design §5.3): D10 = HP 50-99 %, PREEMPTING.
+    # `REST_FOR_COMBAT` fired in 0/36 scenarios while `RestoreHP` is 24.1 % of
+    # live cycles. Its four conjuncts are a combat target, hp < max_hp, a LOSS
+    # at current hp and a WIN at max hp — so the cell is a marginal fight, not
+    # merely a scratch. Measured at this loadout: `flying_snake` is the farm
+    # target and the guard's band is hp 75-85 % of 435, so 348 (0.80) sits in
+    # the middle of it rather than on an edge.
+    #
+    # The band's floor is 75 % because HP_CRITICAL owns everything below
+    # `CRITICAL_HP_FRACTION` and preempts this guard outright — the live 50-99 %
+    # bucket is therefore split between the two, and this cell is the upper half.
+    # D1 derived per §5.3.
+    "l22_rest_for_combat": ScenarioCharacter(
+        name="l22_rest_for_combat", level=22, hp=348,
+        skills={"mining": 20, "woodcutting": 20, "weaponcrafting": 15,
+                "gearcrafting": 15, "jewelrycrafting": 15, "cooking": 10,
+                "alchemy": 10, "fishing": 10},
+        equipment=dict(_IRON_SET), inventory={"cooked_chicken": 6},
+        inventory_max=140, bank={"iron_bar": 4}, gold=900,
+        derive_combat_stats=True,
+        description="Cell 10: 80 % HP against a fight this loadout loses now "
+                    "and wins rested — the REST_FOR_COMBAT guard, which no "
+                    "scenario could fire before."),
+
+    # --- COVERAGE MATRIX cell 11 (design §5.3): D9 = an UNAFFORDABLE CURRENCY LEAF.
+    # `CanIAffordTheCurrencyLeaf`'s positive arm fired in 0/36 scenarios. It
+    # needs `analyze_currency_leaves(...).funding_target`, which is set ONLY for
+    # a leaf priced in `tasks_coin` at a PERMANENT, LOCATED vendor — and the
+    # bundle's four tasks_coin sinks all sit at `tasks_trader`, whose tile is
+    # gated on the `tasks_farmer` achievement the capture has NOT completed.
+    # Hence `unlocked_achievements`; without it the arm is unreachable from
+    # every scenario (see `GameData.from_cache_bundle`).
+    #
+    # `king_slime_sword` ({iron_bar:8, king_slimeball:6, jasper_crystal:1}) is
+    # the only slot behind its target — every other slot is worn at or above its
+    # rung-20 candidate, which is what keeps the walk on this root. The bag
+    # already holds the iron and the slimeballs, so the actionable step IS the
+    # jasper crystal: the exact "stepwise decomposition hands the mapper the
+    # currency item directly" shape `_classify_leaves` documents from the live
+    # satchel stall of 2026-07-06. Pocket gold is 200 — far under any gold
+    # route — so the leaf is unaffordable on both currencies at once.
+    # D1 derived per §5.3.
+    "l25_currency_leaf_unfunded": ScenarioCharacter(
+        name="l25_currency_leaf_unfunded", level=25,
+        skills={"mining": 20, "woodcutting": 20, "weaponcrafting": 20,
+                "gearcrafting": 20, "jewelrycrafting": 20, "cooking": 10,
+                "alchemy": 10, "fishing": 10},
+        equipment={
+            "weapon_slot": "iron_sword", "helmet_slot": "lucky_wizard_hat",
+            "body_armor_slot": "mushmush_jacket",
+            "leg_armor_slot": "adventurer_pants",
+            "boots_slot": "snakeskin_boots", "ring1_slot": "iron_ring",
+            "ring2_slot": "iron_ring", "shield_slot": "slime_shield",
+            "amulet_slot": "dreadful_amulet", "artifact1_slot": "novice_guide",
+            "artifact2_slot": "lost_world_map",
+            "artifact3_slot": "perfect_pearl", "bag_slot": "backpack",
+            "rune_slot": "lifesteal_rune",
+            "utility1_slot": "greater_health_potion",
+            "utility2_slot": "small_health_potion",
+        },
+        inventory={"iron_bar": 8, "king_slimeball": 6,
+                   "greater_health_potion": 6},
+        utility_quantities={"utility1_slot": 40, "utility2_slot": 40},
+        inventory_max=140, bank={}, gold=200,
+        unlocked_achievements=("tasks_farmer",), derive_combat_stats=True,
+        description="Cell 11: a jasper-gated weapon with 0 tasks_coin — the "
+                    "step IS the currency leaf, so the graph routes to "
+                    "ReachCurrency instead of gathering for a craft it cannot "
+                    "pay for."),
+
+    # --- COVERAGE MATRIX cell 12 (design §5.3): D11 = a COOKING rung, on a FISHER.
+    # Cooking, fishing, alchemy, mining and woodcutting are the five skills the
+    # O1 census reports as never ROUTED, and cooking is the one the design named:
+    # 33,840 live cooking XP that no node models. `fisher` is a declared role
+    # (`role_catalog`: gather fishing, craft cooking), so this character carries
+    # its two skills high and everything else at 5.
+    #
+    # At cooking 21 the grind rung is `cooked_trout` ({trout: 1}) — depth-1 and
+    # GATHER-fed, the shape §5.3 packs onto this cell — and with an empty bag and
+    # bank the descent lands on `ObtainItem(trout)`, the first FISHING-fed step
+    # any scenario produces. Fishing 25 clears the trout spot's level-20 gate, so
+    # the flip that makes the cell bite is the ROLE itself: at fishing 5 the same
+    # plan has to grind fishing first.
+    "l24_fisher_cooking_rung": ScenarioCharacter(
+        name="l24_fisher_cooking_rung", level=24,
+        skills={"mining": 5, "woodcutting": 5, "weaponcrafting": 5,
+                "gearcrafting": 5, "jewelrycrafting": 5, "cooking": 21,
+                "alchemy": 5, "fishing": 25},
+        equipment=dict(_IRON_SET), inventory={}, inventory_max=130, bank={},
+        gold=1200, derive_combat_stats=True,
+        description="Cell 12: a fisher-role character standing on a COOKING "
+                    "rung — the first scenario whose skill grind descends into "
+                    "a fishing gather."),
 }

@@ -1526,7 +1526,9 @@ class GameData:
 
     @classmethod
     def from_cache_bundle(cls, raw: dict[str, Any], *,
-                          with_ge_orders: bool = False) -> "GameData":
+                          with_ge_orders: bool = False,
+                          completed_achievements: frozenset[str] = frozenset(),
+                          ) -> "GameData":
         """Build a full GameData OFFLINE from the disk-cache bundle shape
         (`GameDataCache` JSON: maps/items/resources/monsters/npcs/tasks/
         events/effects/bank). This is the scenario harness's loader (spec
@@ -1555,9 +1557,27 @@ class GameData:
         A `True` with no `ge_orders` key raises `KeyError` from the bundle read.
         An absent key must NOT read as an empty book: that is exactly the silent
         default that let the fixture assert a quiet market for weeks while the
-        live bot planned against a busy one."""
+        live bot planned against a busy one.
+
+        `completed_achievements` marks extra achievement codes COMPLETE on top
+        of the capture's own `completed_at` marks, and it is the second declared
+        world property for the same reason the market is. Access conditions are
+        evaluated at map build (`_build_maps`), so an unmet `achievement_unlocked`
+        condition removes the tile from every location index. Measured on the
+        committed bundle: the account snapshot has `tasks_farmer` INCOMPLETE, its
+        gated tile (5, 11) is therefore absent, and `npc_location('tasks_trader')`
+        is None — which empties `currency_demand._classify_leaves`' PERMANENT
+        vendor list for all four `tasks_coin` sinks (`jasper_crystal`,
+        `magical_cure`, `astralyte_crystal`, `prime_fabric`). With no permanent
+        tasks_coin vendor, `funding_target` is None for every closure and
+        `decisions.obtain_item.CanIAffordTheCurrencyLeaf`'s POSITIVE arm cannot
+        fire from any scenario at all. That arm is coverage-matrix cell 11, so
+        the dimension is inexpressible without this argument.
+
+        Default `frozenset()` keeps the fail-closed reading the `achievements`
+        key already documents: absent means nothing is known to be complete."""
         data = cls()
-        data._build_from_objs(cls._hydrate_bundle(raw))
+        data._build_from_objs(cls._hydrate_bundle(raw), completed_achievements)
         if with_ge_orders:
             orders = [GEOrderSchema.from_dict(d) for d in raw["ge_orders"]["orders"]]
             # The capture holds both halves of the book in one list, so the side
@@ -1594,13 +1614,14 @@ class GameData:
                              for d in raw.get("achievements", [])],
         }
 
-    def _build_from_objs(self, objs: dict[str, Any]) -> None:
+    def _build_from_objs(self, objs: dict[str, Any],
+                         also_completed: frozenset[str] = frozenset()) -> None:
         """The shared build pipeline (moved verbatim from `load`'s tail —
         every `_build_*` call in the same order). GE orders NOT fetched here;
         `load` fetches them afterward with its live client."""
         # BEFORE maps: `_build_maps` evaluates access conditions against the
         # completed-achievement set, so it must already be populated.
-        self._build_achievements(objs["achievements"])
+        self._build_achievements(objs["achievements"], also_completed)
         self._build_maps(objs["maps"])
         self._build_items(objs["items"])
         self._build_resources(objs["resources"])
@@ -1654,13 +1675,27 @@ class GameData:
             page += 1
         return out
 
-    def _build_achievements(self, items: list[AccountAchievementSchema]) -> None:
-        """Record the COMPLETED achievement codes (completed_at set)."""
+    def _build_achievements(self, items: list[AccountAchievementSchema],
+                            also_completed: frozenset[str] = frozenset()) -> None:
+        """Record the COMPLETED achievement codes (completed_at set).
+
+        `also_completed` is the OFFLINE-only override `from_cache_bundle`
+        forwards — see its docstring for why a scenario has to be able to
+        declare one. Every code in it must name an achievement the captured
+        registry knows: an unknown code is a typo that would silently model a
+        world the API cannot produce, and this repo fails on missing game data
+        rather than defaulting around it."""
+        known = {a.code for a in items}
+        unknown = sorted(also_completed - known)
+        if unknown:
+            raise ValueError(
+                f"completed_achievements names {unknown!r}, which the bundle's "
+                f"achievement registry does not contain")
         self._completed_achievements = {
             a.code for a in items
             if getattr(a, "completed_at", None) is not None
             and not isinstance(getattr(a, "completed_at", None), Unset)
-        }
+        } | set(also_completed)
 
     def achievement_completed(self, code: str) -> bool:
         """True when the account has completed this achievement."""

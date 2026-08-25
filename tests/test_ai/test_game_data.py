@@ -1913,7 +1913,11 @@ def _stub_fetch_build(monkeypatch):
     no-ops) and _build_*/_load_ge_orders to recorders. Returns the GE counter."""
     for name in _STATIC:
         monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client: [])
-        monkeypatch.setattr(GameData, f"_build_{name}", lambda self, items: None)
+        # `*extra` because `_build_achievements` takes a second, defaulted
+        # argument (`also_completed`, the scenario-declared achievement
+        # override) — a fixed 2-arg stub would refuse the real call.
+        monkeypatch.setattr(GameData, f"_build_{name}",
+                            lambda self, items, *extra: None)
     monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client: None)
     monkeypatch.setattr(GameData, "_build_bank", lambda self, item: None)
     ge = {"n": 0}
