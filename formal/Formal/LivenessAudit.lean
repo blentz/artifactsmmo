@@ -550,7 +550,6 @@ open Formal.Liveness.BlockerQuieting
 #print axioms discardHigh_quiet_after_firing
 #print axioms craftRelief_quiet_after_firing
 #print axioms depositFull_quiet_after_firing
-#print axioms gearReview_quiet_after_firing
 #print axioms claimPending_quiet_after_firing
 #print axioms sellPressured_quiet_after_firing
 #print axioms completeTask_quiet_after_firing

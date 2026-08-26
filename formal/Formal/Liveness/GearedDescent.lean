@@ -108,14 +108,16 @@ theorem ladderE_some_below_fifty (s : State) (hArms : AdequateArmsFightAt s)
         hnone .objectiveStep (by decide)
       rw [if_pos hobj] at h
       cases h
-    · have hgear : fires .gearReview (perceptionRefreshE s) = true := by
-        simp only [fires, ProductionLadder.gearReviewFires]
+    · -- WAVE 4: the inadequate branch arms the OBJECTIVE step (the gear chain
+      -- moved into the graph), so this is the same witness as the adequate one.
+      have hobj : fires .objectiveStep (perceptionRefreshE s) = true := by
+        simp only [fires, ProductionLadder.objectiveStepFires]
         unfold perceptionRefreshE
         rw [if_pos hcondT, if_neg hadq]
-      have h : (if fires .gearReview (perceptionRefreshE s) = true
-          then some MeansKind.gearReview else none) = (none : Option MeansKind) :=
-        hnone .gearReview (by decide)
-      rw [if_pos hgear] at h
+      have h : (if fires .objectiveStep (perceptionRefreshE s) = true
+          then some MeansKind.objectiveStep else none) = (none : Option MeansKind) :=
+        hnone .objectiveStep (by decide)
+      rw [if_pos hobj] at h
       cases h
 
 /-- **Total per-cycle descent for the geared cycle.** -/
@@ -144,12 +146,14 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
             rw [if_pos hcondT, if_pos hadq]
             exact (hArms hlvl hg hadq).1
           exact List.mem_append_left _ (ladder_mem_blockerPrefix hobj hk)
-        · have hgear : fires .gearReview (perceptionRefreshE s) = true := by
-            simp only [fires, ProductionLadder.gearReviewFires]
+        · -- WAVE 4: the inadequate branch arms the OBJECTIVE step, so the
+          -- witness here is the same one the adequate branch uses.
+          have hgear : fires .objectiveStep (perceptionRefreshE s) = true := by
+            simp only [fires, ProductionLadder.objectiveStepFires]
             unfold perceptionRefreshE
             rw [if_pos hcondT, if_neg hadq]
-          -- The gear latch fires and sits in the blocker prefix, so the
-          -- selection resolves there too (same argument, gearReview witness).
+          -- It fires and sits in the blocker prefix, so the selection resolves
+          -- there too (same argument, objectiveStep witness).
           have hkmem : k ∈ Formal.Liveness.UnconditionalDescent.blockerPrefix := by
             unfold productionLadder at hk
             rw [Formal.Liveness.UnconditionalDescent.ladder_split,
@@ -159,10 +163,10 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
             | none =>
               exfalso
               rw [List.findSome?_eq_none_iff] at hpre
-              have h : (if fires .gearReview (perceptionRefreshE s) = true
-                  then some MeansKind.gearReview else none)
+              have h : (if fires .objectiveStep (perceptionRefreshE s) = true
+                  then some MeansKind.objectiveStep else none)
                   = (none : Option MeansKind) :=
-                hpre .gearReview (by decide)
+                hpre .objectiveStep (by decide)
               rw [if_pos hgear] at h
               cases h
             | some k' =>
@@ -189,7 +193,7 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
     | sellRelief      => exact descendsE_sellRelief s hk
     | depositFull     => exact descendsE_depositFull s hk
     | discardHigh     => exact descendsE_discardHigh s hk
-    | gearReview      => exact descendsE_gearReview s hlvl hGear hk
+    | gearReview      => exact descendsE_gearReview s hlvl hk
     | craftPotions    => exact descendsE_craftPotions s hk
     | claimPending    => exact descendsE_claimPending s hk
     | completeTask    => exact descendsE_completeTask s hk
@@ -198,8 +202,8 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
     | taskCancel      => exact descendsE_taskCancel s hk
     | objectiveStep   =>
         by_cases hisF : (perceptionRefreshE s).objectiveStepIsFight = true
-        · exact descendsE_fight s hlvl (Or.inr (Or.inr ⟨hk, hisF⟩))
-        · exact descendsE_placeholder s hArms hk (Bool.eq_false_iff.mpr hisF)
+        · exact descendsE_fight s hlvl (Or.inr (Or.inr (Or.inr ⟨hk, hisF⟩)))
+        · exact descendsE_placeholder s hArms hGear hk (Bool.eq_false_iff.mpr hisF)
     | pursueTask      => exact descendsE_pursueTask s hArms hlvl hk
     | acceptTask      => exact descendsE_acceptTask s hk
     | taskExchange    => exact absurd hmem (by decide)

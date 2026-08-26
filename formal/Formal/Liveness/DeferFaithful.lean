@@ -142,7 +142,7 @@ theorem cycleStepD_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | sellRelief      => exact descendsD_sellRelief s hk
     | depositFull     => exact descendsD_depositFull s hk
     | discardHigh     => exact descendsD_discardHigh s hk
-    | gearReview      => exact descendsD_gearReview s hk
+    | gearReview      => exact descendsD_gearReview s hlvl hk
     | craftPotions    => exact descendsD_craftPotions s hk
     | claimPending    => exact descendsD_claimPending s hk
     | completeTask    => exact descendsD_completeTask s hk
@@ -151,7 +151,7 @@ theorem cycleStepD_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | taskCancel      => exact descendsD_taskCancel s hk
     | objectiveStep   =>
         by_cases hisF : (perceptionRefreshD s).objectiveStepIsFight = true
-        · exact descendsD_fight s hlvl (Or.inr (Or.inr ⟨hk, hisF⟩))
+        · exact descendsD_fight s hlvl (Or.inr (Or.inr (Or.inr ⟨hk, hisF⟩)))
         · exact descendsD_placeholder s hk (Bool.eq_false_iff.mpr hisF)
     | pursueTask      => exact descendsD_pursueTask s hlvl hk
     | acceptTask      => exact descendsD_acceptTask s hk

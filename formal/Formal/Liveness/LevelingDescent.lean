@@ -63,7 +63,8 @@ theorem cycleStepF_fight_descends (s : State) (hlvl : s.level < 50)
   -- cycleStepF shares level/xp with `.fight` applied to the refreshed selection state.
   have hcp : cycleStepP s = applyActionKind .fight (perceptionRefresh s) := by
     show cycleStep (perceptionRefresh s) = applyActionKind .fight (perceptionRefresh s)
-    exact cycleStep_eq_fight_when_fightCycleFires (perceptionRefresh s) hfire
+    exact cycleStep_eq_fight_when_fightCycleFires (perceptionRefresh s)
+      (fightFires_widen hfire)
   have hFl : (cycleStepF s).level = (applyActionKind .fight (perceptionRefresh s)).level := by
     rw [cycleStepF_level, hcp]
   have hFx : (cycleStepF s).xp = (applyActionKind .fight (perceptionRefresh s)).xp := by

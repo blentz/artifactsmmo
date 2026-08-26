@@ -426,7 +426,7 @@ def planForC : MeansKind → State → Plan
   | .sellRelief       , _ => [.npcSell]
   | .depositFull      , _ => [.depositAll]
   | .discardHigh      , _ => [.deleteItem]
-  | .gearReview       , _ => [.optimizeLoadout]
+  | .gearReview       , _ => [.fight]
   | .craftPotions     , _ => [.craft]
   | .claimPending     , _ => [.claimPendingItem]
   | .completeTask     , _ => [.completeTask]

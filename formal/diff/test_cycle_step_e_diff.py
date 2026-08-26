@@ -91,10 +91,15 @@ def test_inadequate_arms_and_discharges_gear() -> None:
     exhausted[38] = 0
     exhausted[39] = 0
     r_open, r_exh = _run([open_gap, exhausted])
-    assert r_open["selected"] == "gearReview"
+    # WAVE 4: inadequate gear arms the OBJECTIVE STEP, not the guard — the
+    # gear chain moved into the resolution graph
+    # (WhichSlotClosesTheFight -> ObtainItem), and the guard now maps to
+    # ReachUnlockLevelGoal. The gear PROGRESS below is unchanged, which is
+    # the point: same behaviour, correctly attributed.
+    assert r_open["selected"] == "objectiveStep"
     assert r_open["gear_gap"] == 2
     assert r_open["loadout_adequate"] is False
-    assert r_exh["selected"] == "gearReview"
+    assert r_exh["selected"] == "objectiveStep"
     assert r_exh["gear_gap"] == 0
     assert r_exh["loadout_adequate"] is True   # exhaustion restores adequacy
     # last gap step restores adequacy too (gap 1 → 0)
@@ -214,6 +219,7 @@ def test_unproductive_gear_cycle_does_not_close_the_gap() -> None:
     v[39] = 3          # open gap
     v[41] = 0          # but the cycle accomplished nothing
     (r,) = _run([v])
-    assert r["selected"] == "gearReview"
+    # WAVE 4: see test_inadequate_arms_and_discharges_gear.
+    assert r["selected"] == "objectiveStep"
     assert r["gear_gap"] == 3            # unchanged: no progress
     assert r["loadout_adequate"] is False

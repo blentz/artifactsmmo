@@ -155,7 +155,7 @@ def AdequateArmsFightAt (s : State) : Prop :=
 def perceptionRefreshE (s : State) : State :=
   if s.level < 50 && !(deferGate s) then
     if s.loadoutAdequate then s
-    else { s with gearReviewFires := true }
+    else { s with objectiveStepFires := true, objectiveStepIsFight := false }
   else s
 
 /-- **RESIDUAL (G2, rate): a gear cycle advances the build, at one state.**
@@ -175,17 +175,30 @@ def GearCycleMakesProgressAt (s : State) : Prop :=
   s.level < 50 → deferGate s = false → s.loadoutAdequate = false →
     s.gearCycleProductive = true
 
-/-- Gear progress: a PRODUCTIVE gear-review cycle with an open gap closes one
-    step and restores adequacy exactly at zero.
+/-- Gear progress: a PRODUCTIVE non-combat OBJECTIVE STEP with an open gap
+    closes one step and restores adequacy exactly at zero.
+
+    RE-HOMED 2026-08-26 (wave 4). This fired on the `.gearReview` RUNG, because
+    that rung mapped to `UpgradeEquipmentGoal` and built gear. Increment 4.2b
+    moved gear acquisition into the resolution graph —
+    `IsAFightBlockingMe -> WhichSlotClosesTheFight -> ObtainItem` — which the bot
+    executes as its OBJECTIVE STEP, while the `.gearReview` rung now maps to
+    `ReachUnlockLevelGoal` and fights. Leaving this on `.gearReview` would have
+    modelled one cycle as both fighting AND closing a gear gap.
+
+    The `objectiveStepIsFight` guard is what keeps the two arms disjoint: a
+    combat objective step grinds XP (it descends at level/xp), a non-combat one
+    is the gear chain.
 
     CORRECTED 2026-07-20 (increment 4). This decremented unconditionally,
-    granting that every `.gearReview` cycle is productive. An unproductive cycle
-    now moves nothing — the honest model of a wasted cycle, and exactly the
-    livelock `GearCycleMakesProgressAt` must rule out. -/
+    granting that every such cycle is productive. An unproductive cycle now
+    moves nothing — the honest model of a wasted cycle, and exactly the livelock
+    `GearCycleMakesProgressAt` must rule out. -/
 def gearProgress (k : MeansKind) (st : State) : State :=
   match k with
-  | .gearReview =>
-      if !st.gearCycleProductive then st
+  | .objectiveStep =>
+      if st.objectiveStepIsFight then st
+      else if !st.gearCycleProductive then st
       else if st.gearGap = 0 then { st with loadoutAdequate := true }
       else { st with gearGap := st.gearGap - 1,
                      loadoutAdequate := decide (st.gearGap - 1 = 0) }
@@ -269,7 +282,9 @@ theorem gearProgress_level (k : MeansKind) (st : State) :
   split
   · split
     · rfl
-    · split <;> rfl
+    · split
+      · rfl
+      · split <;> rfl
   · rfl
 
 theorem gearProgress_xp (k : MeansKind) (st : State) :
@@ -278,7 +293,9 @@ theorem gearProgress_xp (k : MeansKind) (st : State) :
   split
   · split
     · rfl
-    · split <;> rfl
+    · split
+      · rfl
+      · split <;> rfl
   · rfl
 
 theorem fightLoss_level (k : MeansKind) (r st : State) :

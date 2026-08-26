@@ -644,8 +644,11 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
       show (applyActionKind .deleteItem s).level ≥ s.level
       simp [applyActionKind]
     | gearReview =>
-      show (applyActionKind .optimizeLoadout s).level ≥ s.level
-      simp [applyActionKind]
+      -- WAVE 4: witness is `.fight` (same goal class as `reachUnlockLevel`),
+      -- so this is that case's proof, not the flag one.
+      show (applyActionKind .fight s).level ≥ s.level
+      simp only [applyActionKind]
+      split <;> omega
     | craftPotions =>
       show (applyActionKind .craft s).level ≥ s.level
       simp [applyActionKind]

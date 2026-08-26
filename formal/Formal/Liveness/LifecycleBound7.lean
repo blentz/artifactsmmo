@@ -90,7 +90,8 @@ theorem xp_accumulates_when_level_constant
       rw [hno (k₀ + j), hno k₀]
     -- At k₁, fight ladder fires → cycleStep applies .fight.
     have hk₁eq : cycleStep (cycleStepN k₁ s) = applyActionKind .fight (cycleStepN k₁ s) :=
-      cycleStep_eq_fight_when_fightCycleFires (cycleStepN k₁ s) hk₁fire
+      cycleStep_eq_fight_when_fightCycleFires (cycleStepN k₁ s)
+        (fightFires_widen hk₁fire)
     -- cycleStepN (k₁+1) s = cycleStep (cycleStepN k₁ s).
     have hk₁succ : cycleStepN (k₁+1) s = applyActionKind .fight (cycleStepN k₁ s) := by
       rw [cycleStepN_succ_outer k₁ s, hk₁eq]
@@ -199,7 +200,8 @@ theorem lifecycle_progress_from_bounds_proven
   -- cycleStep at k' applies .fight.
   have hk'eq :
       cycleStep (cycleStepN k' s) = applyActionKind .fight (cycleStepN k' s) :=
-    cycleStep_eq_fight_when_fightCycleFires (cycleStepN k' s) hk'fire
+    cycleStep_eq_fight_when_fightCycleFires (cycleStepN k' s)
+      (fightFires_widen hk'fire)
   -- cycleStepN (k'+1) s = applyActionKind .fight (cycleStepN k' s).
   have hk'succ : cycleStepN (k'+1) s = applyActionKind .fight (cycleStepN k' s) := by
     rw [cycleStepN_succ_outer k' s, hk'eq]

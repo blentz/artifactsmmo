@@ -43,6 +43,21 @@ theorem cycleStep_eq_fight_when_reachUnlockLevel (s : State)
   rw [h]
   rfl
 
+/-- When ladder fires `.gearReview`, `cycleStep` applies `.fight`.
+
+    WAVE 4: this rung's witness was `.optimizeLoadout`, because the guard mapped
+    to `UpgradeEquipmentGoal` and that goal's planner output is an equipment
+    swap. Increment 4.2b narrowed the guard to one arm mapping
+    `HORIZON_LEVEL_UP` to `ReachUnlockLevelGoal(level + 1)` — the SAME goal
+    class `.reachUnlockLevel` maps to — so it takes the same witness and the
+    same descent. -/
+theorem cycleStep_eq_fight_when_gearReview (s : State)
+    (h : productionLadder s = some .gearReview) :
+    cycleStep s = applyActionKind .fight s := by
+  unfold cycleStep
+  rw [h]
+  rfl
+
 /-- Combined: when ladder fires either fight-driving means,
     `cycleStep` applies `.fight`. -/
 theorem cycleStep_eq_fight_when_fightFires (s : State)
@@ -73,15 +88,39 @@ theorem cycleStep_eq_fight_when_objectiveStepFight (s : State)
 theorem cycleStep_eq_fight_when_fightCycleFires (s : State)
     (h : productionLadder s = some .bankUnlock
          ∨ productionLadder s = some .reachUnlockLevel
+         ∨ productionLadder s = some .gearReview
          ∨ (productionLadder s = some .objectiveStep
              ∧ s.objectiveStepIsFight = true)) :
     cycleStep s = applyActionKind .fight s := by
-  rcases h with h | h | ⟨h, hf⟩
+  rcases h with h | h | h | ⟨h, hf⟩
   · exact cycleStep_eq_fight_when_bankUnlock s h
   · exact cycleStep_eq_fight_when_reachUnlockLevel s h
+  · exact cycleStep_eq_fight_when_gearReview s h
   · exact cycleStep_eq_fight_when_objectiveStepFight s h hf
 
-/-- When ladder doesn't fire `.bankUnlock`/`.reachUnlockLevel`/`.completeTask`
+/-- The pre-wave-4 three-way fight disjunction implies the four-way one.
+
+    Wave 4 added `.gearReview` to the fight-driving means, which widened
+    `cycleStep_eq_fight_when_fightCycleFires`. Callers that only ever produce the
+    original three (the `hfightFires` hypotheses in the LifecycleBound family,
+    which assert a fight fires infinitely often and do not care WHICH rung
+    drives it) inject through here rather than restating their own hypothesis. -/
+theorem fightFires_widen {s : State}
+    (h : productionLadder s = some .bankUnlock
+         ∨ productionLadder s = some .reachUnlockLevel
+         ∨ (productionLadder s = some .objectiveStep
+             ∧ s.objectiveStepIsFight = true)) :
+    productionLadder s = some .bankUnlock
+    ∨ productionLadder s = some .reachUnlockLevel
+    ∨ productionLadder s = some .gearReview
+    ∨ (productionLadder s = some .objectiveStep
+        ∧ s.objectiveStepIsFight = true) := by
+  rcases h with h | h | h
+  · exact Or.inl h
+  · exact Or.inr (Or.inl h)
+  · exact Or.inr (Or.inr (Or.inr h))
+
+/-- When ladder doesn't fire `.bankUnlock`/`.reachUnlockLevel`/`.gearReview`/`.completeTask`
     (and any firing `.objectiveStep` is NOT a combat step), `cycleStep s`
     preserves both `level` and `xp`. Uses the planFor table: every other ladder
     slot maps to an ActionKind that's not `.fight` and not `.completeTask`.
@@ -92,12 +131,13 @@ theorem cycleStep_eq_fight_when_fightCycleFires (s : State)
 theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
     (h : productionLadder s ≠ some .bankUnlock
          ∧ productionLadder s ≠ some .reachUnlockLevel
+         ∧ productionLadder s ≠ some .gearReview
          ∧ productionLadder s ≠ some .completeTask
          ∧ (productionLadder s = some .objectiveStep →
               s.objectiveStepIsFight = false)) :
     (cycleStep s).level = s.level ∧ (cycleStep s).xp = s.xp := by
   unfold cycleStep
-  obtain ⟨hbu, hru, hct, hof⟩ := h
+  obtain ⟨hbu, hru, hgr, hct, hof⟩ := h
   -- Case-split on productionLadder s; rule out the fight-driving cases.
   cases hpl : productionLadder s with
   | none => exact ⟨rfl, rfl⟩
@@ -174,9 +214,9 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
             ∧ (applyActionKind .deleteItem s).xp = s.xp
       exact ⟨rfl, rfl⟩
     | gearReview =>
-      show (applyActionKind .optimizeLoadout s).level = s.level
-            ∧ (applyActionKind .optimizeLoadout s).xp = s.xp
-      exact ⟨rfl, rfl⟩
+      -- WAVE 4: `.fight` DOES advance level/xp, so this slot is excluded by
+      -- hypothesis now, exactly like `.reachUnlockLevel` above it.
+      exact absurd hpl hgr
     | craftPotions =>
       -- planFor .craftPotions = [.craft], same as craftRelief.
       show (applyActionKind .craft s).level = s.level

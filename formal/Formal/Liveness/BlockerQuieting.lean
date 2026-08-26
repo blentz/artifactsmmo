@@ -10,10 +10,14 @@ The transience mechanism underneath `BlockersQuietInfinitelyOften`: each
 blocker cannot fire two cycles in a row. Proven here per blocker
 (`<blocker>_quiet_after_firing`): `productionLadder s = some b ⇒ fires b (cycleStep s) = false`.
 
-Coverage: 16 of the 17 blockers. `reachUnlockLevel` is excluded — its `.fight`
-does NOT one-step-quiet it (it fires repeatedly until `level` reaches
-`bankRequiredLevel`); its boundedness is the gap argument (`≤ MAX_ACHIEVABLE_GAP_LV2`),
-not one-step quieting.
+Coverage: 15 of the 17 blockers. `reachUnlockLevel` and `gearReview` are excluded —
+their `.fight` does NOT one-step-quiet them, and for the same reason, because since
+wave 4 they map to the SAME production goal (`ReachUnlockLevelGoal`).
+`reachUnlockLevel` fires repeatedly until `level` reaches `bankRequiredLevel`;
+`gearReview` fires while `regear_level_up` holds, which production clears only when
+the level-up changes the horizon reading — a later cycle, not this step. Boundedness
+for both is a DESCENT argument (`descends_fight` at `levelDeficit`/`xpDeficit`), not
+one-step quieting.
 
 These are the building blocks for the full `BlockersQuietInfinitelyOften`: combined
 with flag-monotonicity (no `applyActionKind` re-arms the opaque flags / `hp` / `level`
@@ -79,13 +83,13 @@ theorem depositFull_quiet_after_firing (s : State)
     unfold cycleStep; rw [h]; rfl
   rw [hcs]; simp [fires, depositFullFires, applyActionKind]
 
-/-- `gearReview` dispatches `optimizeLoadout`, clearing `gearReviewFires`. -/
-theorem gearReview_quiet_after_firing (s : State)
-    (h : productionLadder s = some .gearReview) :
-    fires .gearReview (cycleStep s) = false := by
-  have hcs : cycleStep s = applyActionKind .optimizeLoadout s := by
-    unfold cycleStep; rw [h]; rfl
-  rw [hcs]; simp [fires, ProductionLadder.gearReviewFires, applyActionKind]
+-- `gearReview_quiet_after_firing` was DELETED in wave 4 and not replaced. It
+-- claimed the rung clears its own flag by firing, which was true when the
+-- witness was `.optimizeLoadout`. The witness is now `.fight` (the guard maps to
+-- `ReachUnlockLevelGoal`), and a fight does not touch `gearReviewFires` — nor
+-- does production clear `regear_level_up` on the fight itself. The theorem would
+-- now be FALSE, so it is gone rather than restated; `descends_gearReview` in
+-- `BlockerDescent` carries the boundedness instead.
 
 /-- `claimPending` dispatches `claimPendingItem`, clearing `pendingItemsNonempty`. -/
 theorem claimPending_quiet_after_firing (s : State)

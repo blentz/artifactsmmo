@@ -123,7 +123,7 @@ noncomputable def planFor : MeansKind → State → Plan
   | .sellRelief       , _ => [.npcSell]
   | .depositFull      , _ => [.depositAll]
   | .discardHigh      , _ => [.deleteItem]
-  | .gearReview       , _ => [.optimizeLoadout]
+  | .gearReview       , _ => [.fight]
   | .craftPotions     , _ => [.craft]
   | .claimPending     , _ => [.claimPendingItem]
   | .completeTask     , _ => [.completeTask]
@@ -475,17 +475,33 @@ theorem cycleStep_progress_or_waits
       rw [heq] at this; exact this
     rw [hpre] at hpre'; cases hpre'
   | gearReview =>
+    -- WAVE 4: the witness is `.fight`, not `.optimizeLoadout`, so progress is
+    -- the LEVEL/XP argument the sibling fight rungs use rather than a flag
+    -- clear. `.fight` does not touch `gearReviewFires` — production clears the
+    -- flag when the level-up changes the horizon reading, which is a later
+    -- cycle, not this step. Identical to the `reachUnlockLevel` case above,
+    -- which is now the same goal class.
     left
-    have hcs : cycleStep s = applyActionKind .optimizeLoadout s := by
+    have hcs : cycleStep s = applyActionKind .fight s := by
       unfold cycleStep; rw [hk]; rfl
     rw [hcs]
-    simp only [fires, ProductionLadder.gearReviewFires] at hfires
     intro heq
-    have hpost : (applyActionKind .optimizeLoadout s).gearReviewFires = false := by
-      simp [applyActionKind]
-    have hpre' : s.gearReviewFires = false := by
-      rw [heq] at hpost; exact hpost
-    rw [hfires] at hpre'; cases hpre'
+    by_cases hwill : (decide (s.xp + 10 ≥ xpToNextLevel s.level)
+                       && decide (s.level < 50)) = true
+    · have hlvl : (applyActionKind .fight s).level = s.level + 1 := by
+        simp only [applyActionKind]; simp [hwill]
+      have hlvl_eq : (applyActionKind .fight s).level = s.level := by rw [heq]
+      omega
+    · have hwillf : (decide (s.xp + 10 ≥ xpToNextLevel s.level)
+                      && decide (s.level < 50)) = false := by
+        cases hbv : (decide (s.xp + 10 ≥ xpToNextLevel s.level)
+                      && decide (s.level < 50)) with
+        | true  => exact absurd hbv hwill
+        | false => rfl
+      have hxp : (applyActionKind .fight s).xp = s.xp + 10 := by
+        simp only [applyActionKind]; simp [hwillf]
+      have hxp_eq : (applyActionKind .fight s).xp = s.xp := by rw [heq]
+      omega
   | craftPotions =>
     left
     have hcs : cycleStep s = applyActionKind .craft s := by

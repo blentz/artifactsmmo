@@ -140,7 +140,7 @@ theorem cycleStepF_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | sellRelief      => exact descends_sellRelief s hk
     | depositFull     => exact descends_depositFull s hk
     | discardHigh     => exact descends_discardHigh s hk
-    | gearReview      => exact descends_gearReview s hk
+    | gearReview      => exact descends_gearReview s hlvl hk
     | craftPotions    => exact descends_craftPotions s hk
     | claimPending    => exact descends_claimPending s hk
     | completeTask    => exact descends_completeTask s hk
@@ -150,8 +150,8 @@ theorem cycleStepF_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | supplyBank      => exact descends_supplyBank s hk
     | currencyTurnIn  => exact descends_currencyTurnIn s hk
     | objectiveStep   =>
-        exact descends_fight s hlvl (Or.inr (Or.inr
-          ⟨hk, perceptionRefresh_objectiveStepIsFight s hlvl⟩))
+        exact descends_fight s hlvl (Or.inr (Or.inr (Or.inr
+          ⟨hk, perceptionRefresh_objectiveStepIsFight s hlvl⟩)))
     | acceptTask      => exact descends_acceptTask s hk
     | pursueTask      => exact absurd hmem (by decide)
     | taskExchange    => exact absurd hmem (by decide)

@@ -210,6 +210,10 @@ private theorem rearmE_eq_mint_of_no_levelup {k : MeansKind} {r st : State}
   rw [if_neg]
   simp [h]
 
+private theorem rearmOnMint_level (k : MeansKind) (r st : State) :
+    (rearmOnMint k r st).level = st.level := by
+  cases k <;> simp [rearmOnMint, choreRearm, dispatchesFight, apply_ite]
+
 private theorem rearmOnMint_gearGap (k : MeansKind) (r st : State) :
     (rearmOnMint k r st).gearGap = st.gearGap := by
   cases k <;> simp [rearmOnMint, choreRearm, dispatchesFight, apply_ite]
@@ -218,18 +222,80 @@ private theorem rearmOnMint_adequate (k : MeansKind) (r st : State) :
     (rearmOnMint k r st).loadoutAdequate = st.loadoutAdequate := by
   cases k <;> simp [rearmOnMint, choreRearm, dispatchesFight, apply_ite]
 
-private theorem gearProgress_gearGap_of_ne {k : MeansKind} (st : State)
-    (hkne : k ≠ .gearReview) : (gearProgress k st).gearGap = st.gearGap := by
-  cases k <;> first
-    | rfl
-    | exact absurd rfl hkne
+-- WAVE 4 RE-HOME: `gearProgress` moved from the `.gearReview` rung to the
+-- non-combat OBJECTIVE STEP, so "this step makes no gear progress" is no longer
+-- "the rung is not gearReview". It is "the rung is not the objective step, OR it
+-- is and that step is a FIGHT" — the two arms `gearProgress` keeps disjoint.
+private theorem gearProgress_gearGap_of_notGear {k : MeansKind} (st : State)
+    (h : k ≠ .objectiveStep ∨ st.objectiveStepIsFight = true) :
+    (gearProgress k st).gearGap = st.gearGap := by
+  cases k <;> try rfl
+  case objectiveStep =>
+    rcases h with h | h
+    · exact absurd rfl h
+    · unfold gearProgress; simp [h]
 
-private theorem gearProgress_adequate_of_ne {k : MeansKind} (st : State)
-    (hkne : k ≠ .gearReview) :
+private theorem gearProgress_adequate_of_notGear {k : MeansKind} (st : State)
+    (h : k ≠ .objectiveStep ∨ st.objectiveStepIsFight = true) :
     (gearProgress k st).loadoutAdequate = st.loadoutAdequate := by
-  cases k <;> first
-    | rfl
-    | exact absurd rfl hkne
+  cases k <;> try rfl
+  case objectiveStep =>
+    rcases h with h | h
+    · exact absurd rfl h
+    · unfold gearProgress; simp [h]
+
+-- WAVE 4: `gearProgress` now reads `objectiveStepIsFight` off the state it is
+-- applied to, which is the INNER composed state, so the fight-cycle composites
+-- need that field carried through the layers below it. None of them touch it.
+-- WAVE 4: a non-combat objective step is the GEAR step, so `gearProgress` can
+-- move `gearGap` (slot 2) or `loadoutAdequate` (slot 3) — both ABOVE
+-- `objectiveStepFlag`. Every caller therefore needs to know which of the three
+-- things it did, and this is the exhaustive split.
+private theorem gearProgress_objectiveStep_cases (st : State)
+    (hisF : st.objectiveStepIsFight = false) :
+    gearProgress .objectiveStep st = st
+    ∨ (gearProgress .objectiveStep st).gearGap < st.gearGap
+    ∨ ((gearProgress .objectiveStep st).gearGap = st.gearGap
+        ∧ (gearProgress .objectiveStep st).loadoutAdequate = true
+        ∧ st.loadoutAdequate = false) := by
+  unfold gearProgress
+  rw [if_neg (by rw [hisF]; exact Bool.false_ne_true)]
+  by_cases hp : st.gearCycleProductive = true
+  · rw [if_neg (by simp [hp])]
+    by_cases hz : st.gearGap = 0
+    · rw [if_pos hz]
+      -- Already adequate means the update is the IDENTITY, which is arm 1;
+      -- only a genuine false -> true restores adequacy and descends.
+      by_cases ha : st.loadoutAdequate = true
+      · exact Or.inl (by rw [← ha])
+      · exact Or.inr (Or.inr ⟨rfl, rfl, by simpa using ha⟩)
+    · rw [if_neg hz]
+      exact Or.inr (Or.inl (by simp; omega))
+  · rw [if_pos (by simp [Bool.not_eq_true] at hp ⊢; exact hp)]
+    exact Or.inl rfl
+
+-- Only the `.objectiveStep` apply arm is missing; the layer lemmas already exist.
+private theorem apply_objectiveStep_productive (r : State) :
+    (applyActionKind .objectiveStep r).gearCycleProductive = r.gearCycleProductive := rfl
+
+private theorem fightLoss_isFight (k : MeansKind) (r st : State) :
+    (fightLoss k r st).objectiveStepIsFight = st.objectiveStepIsFight := by
+  unfold fightLoss
+  split
+  · split <;> rfl
+  · rfl
+
+private theorem partialClear_isFight (k : MeansKind) (st : State) :
+    (partialClear k st).objectiveStepIsFight = st.objectiveStepIsFight := by
+  cases k <;> simp [partialClear, apply_ite]
+
+private theorem pressureDeltaD_isFight (k : MeansKind) (r st : State) :
+    (pressureDeltaD k r st).objectiveStepIsFight = st.objectiveStepIsFight := by
+  cases k <;> simp [pressureDeltaD, apply_ite]
+
+private theorem apply_fight_isFight (r : State) :
+    (applyActionKind .fight r).objectiveStepIsFight = r.objectiveStepIsFight := by
+  simp only [applyActionKind]
 
 private theorem fightLoss_gearGap (k : MeansKind) (r st : State) :
     (fightLoss k r st).gearGap = st.gearGap := by
@@ -294,6 +360,17 @@ private theorem apply_optimizeLoadout_productive (r : State) :
     (applyActionKind .optimizeLoadout r).gearCycleProductive
       = r.gearCycleProductive := rfl
 
+-- `applyActionKind .objectiveStep` only clears the fires flag, so every slot the
+-- gear branch reasons about passes straight through it.
+private theorem apply_objectiveStep_gearGap (r : State) :
+    (applyActionKind .objectiveStep r).gearGap = r.gearGap := rfl
+
+private theorem apply_objectiveStep_adequate (r : State) :
+    (applyActionKind .objectiveStep r).loadoutAdequate = r.loadoutAdequate := rfl
+
+private theorem apply_objectiveStep_level (r : State) :
+    (applyActionKind .objectiveStep r).level = r.level := rfl
+
 private theorem apply_fight_gearGap (r : State) :
     (applyActionKind .fight r).gearGap = r.gearGap := rfl
 
@@ -303,7 +380,8 @@ private theorem apply_fight_adequate (r : State) :
 /-- Composite gear-gap preservation for a NON-rollover fight cycle. -/
 private theorem cycleStepE_gearGap_fight (s : State) {k : MeansKind}
     (hk : productionLadder (perceptionRefreshE s) = some k)
-    (hkne : k ≠ .gearReview)
+    (hkne : k ≠ .objectiveStep
+        ∨ (perceptionRefreshE s).objectiveStepIsFight = true)
     (hcp : cycleStep (perceptionRefreshE s)
         = applyActionKind .fight (perceptionRefreshE s))
     (hfl : (applyActionKind .fight (perceptionRefreshE s)).level = s.level) :
@@ -312,14 +390,24 @@ private theorem cycleStepE_gearGap_fight (s : State) {k : MeansKind}
   rw [rearmE_eq_mint_of_no_levelup (by
     rw [gearProgress_level, fightLoss_level, partialClear_level,
       pressureDeltaD_level, hfl, perceptionRefreshE_level])]
-  rw [rearmOnMint_gearGap, gearProgress_gearGap_of_ne _ hkne, fightLoss_gearGap,
+  have hinner : (fightLoss k (perceptionRefreshE s)
+      (partialClear k (pressureDeltaD k (perceptionRefreshE s)
+        (applyActionKind .fight (perceptionRefreshE s))))).objectiveStepIsFight
+      = (perceptionRefreshE s).objectiveStepIsFight := by
+    rw [fightLoss_isFight, partialClear_isFight, pressureDeltaD_isFight,
+      apply_fight_isFight]
+  rw [rearmOnMint_gearGap, gearProgress_gearGap_of_notGear _ (by
+      rcases hkne with h | h
+      · exact Or.inl h
+      · exact Or.inr (by rw [hinner]; exact h)), fightLoss_gearGap,
     partialClear_gearGap, pressureDeltaD_gearGap, apply_fight_gearGap,
     refreshE_gearGap]
 
 /-- Composite adequacy preservation for a NON-rollover fight cycle. -/
 private theorem cycleStepE_adequate_fight (s : State) {k : MeansKind}
     (hk : productionLadder (perceptionRefreshE s) = some k)
-    (hkne : k ≠ .gearReview)
+    (hkne : k ≠ .objectiveStep
+        ∨ (perceptionRefreshE s).objectiveStepIsFight = true)
     (hcp : cycleStep (perceptionRefreshE s)
         = applyActionKind .fight (perceptionRefreshE s))
     (hfl : (applyActionKind .fight (perceptionRefreshE s)).level = s.level) :
@@ -328,7 +416,16 @@ private theorem cycleStepE_adequate_fight (s : State) {k : MeansKind}
   rw [rearmE_eq_mint_of_no_levelup (by
     rw [gearProgress_level, fightLoss_level, partialClear_level,
       pressureDeltaD_level, hfl, perceptionRefreshE_level])]
-  rw [rearmOnMint_adequate, gearProgress_adequate_of_ne _ hkne, fightLoss_adequate,
+  have hinner : (fightLoss k (perceptionRefreshE s)
+      (partialClear k (pressureDeltaD k (perceptionRefreshE s)
+        (applyActionKind .fight (perceptionRefreshE s))))).objectiveStepIsFight
+      = (perceptionRefreshE s).objectiveStepIsFight := by
+    rw [fightLoss_isFight, partialClear_isFight, pressureDeltaD_isFight,
+      apply_fight_isFight]
+  rw [rearmOnMint_adequate, gearProgress_adequate_of_notGear _ (by
+      rcases hkne with h | h
+      · exact Or.inl h
+      · exact Or.inr (by rw [hinner]; exact h)), fightLoss_adequate,
     partialClear_adequate, pressureDeltaD_adequate, apply_fight_adequate,
     refreshE_adequate]
 
@@ -872,108 +969,11 @@ theorem descendsE_completeTask (s : State)
 
 /-! ## The gearReview row — three cases: open gap, gap exhausted, stale latch. -/
 
-theorem descendsE_gearReview (s : State) (hlvl : s.level < 50)
-    (hGear : GearCycleMakesProgressAt s)
-    (hk : productionLadder (perceptionRefreshE s) = some .gearReview) :
-    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
-  have hfire := fires_of_ladder hk
-  simp only [fires, ProductionLadder.gearReviewFires] at hfire
-  rw [cycleStepE_some s hk]
-  have hcs : cycleStep (perceptionRefreshE s) =
-      applyActionKind .optimizeLoadout (perceptionRefreshE s) := by
-    unfold cycleStep; rw [hk]; rfl
-  rw [hcs]
-  by_cases hprodc : s.gearCycleProductive = true
-  case neg =>
-    -- UNPRODUCTIVE cycle. `hGear` + `hlvl` force `defer ∨ adequate`, and
-    -- `perceptionRefreshE` is the IDENTITY in both — so the gear latch was
-    -- genuinely already set in `s` (not armed by this cycle's refresh), and the
-    -- optimize apply clears it. Slot `gearReviewFlag` pays.
-    have hprodf : s.gearCycleProductive = false := Bool.eq_false_iff.mpr hprodc
-    have hid : perceptionRefreshE s = s := by
-      by_cases hgate : deferGate s = true
-      · have hc : (decide (s.level < 50) && !(deferGate s)) = false := by
-          simp [hgate]
-        unfold perceptionRefreshE; rw [if_neg (by simp [hc])]
-      · have hgf : deferGate s = false := Bool.eq_false_iff.mpr hgate
-        by_cases hadq : s.loadoutAdequate = true
-        · have hc : (decide (s.level < 50) && !(deferGate s)) = true := by
-            simp [hlvl, hgf]
-          unfold perceptionRefreshE; rw [if_pos hc, if_pos hadq]
-        · exact absurd (hGear hlvl hgf (Bool.eq_false_iff.mpr hadq))
-            (by simp [hprodf])
-    have hlatch : s.gearReviewFires = true := by rw [hid] at hfire; exact hfire
-    apply eLt_of_gearReview_dec <;>
-      simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-        applyActionKind, hlatch, hprodf, hid, refreshE_geCancel, refreshE_currencyTurnIn,
-        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
-      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
-      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
-      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
-      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
-      refreshE_gearGap, refreshE_adequate,
-      perceptionRefreshE_level, perceptionRefreshE_xp]
-  case pos =>
-  by_cases hgap : s.gearGap = 0
-  · by_cases hadq : s.loadoutAdequate = true
-    · -- Stale latch: the refresh only arms when INADEQUATE, so the latch was
-      -- already set in `s`; the optimize apply clears it — slot `gearReviewFlag`.
-      have hlatch : s.gearReviewFires = true := by
-        by_cases hc : (decide (s.level < 50) && !(deferGate s)) = true
-        · have harm : perceptionRefreshE s = s := by
-            unfold perceptionRefreshE
-            rw [if_pos hc, if_pos hadq]
-          rw [harm] at hfire
-          exact hfire
-        · have hid : perceptionRefreshE s = s := by
-            unfold perceptionRefreshE
-            rw [if_neg hc]
-          rw [hid] at hfire
-          exact hfire
-      apply eLt_of_gearReview_dec <;>
-        simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-          applyActionKind, hgap, hadq, hlatch, hprodc, refreshE_geCancel, refreshE_supplyDemand,
-          refreshE_currencyTurnIn,
-          refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
-      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
-      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
-      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
-      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
-      refreshE_gearGap, refreshE_adequate,
-      perceptionRefreshE_level, perceptionRefreshE_xp]
-    · -- Gap exhausted, inadequate: this cycle RESTORES adequacy — slot 3.
-      have hadq' : s.loadoutAdequate = false := Bool.eq_false_iff.mpr hadq
-      apply eLt_of_inadequacy_dec <;>
-        simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-          applyActionKind, hgap, hadq', hprodc, refreshE_productive, fightLoss_productive,
-          partialClear_productive, pressureDeltaD_productive, apply_optimizeLoadout_productive,
-          refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
-      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
-      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
-      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
-      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
-      refreshE_gearGap, refreshE_adequate,
-      perceptionRefreshE_level, perceptionRefreshE_xp]
-  · -- Open gap: one gear step closes — slot 2.
-    apply eLt_of_gearGap_dec <;>
-      simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-        applyActionKind, hgap, hprodc, refreshE_productive, fightLoss_productive,
-        partialClear_productive, pressureDeltaD_productive, apply_optimizeLoadout_productive,
-        refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
-      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
-      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
-      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
-      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
-      refreshE_gearGap, refreshE_adequate,
-      perceptionRefreshE_level, perceptionRefreshE_xp] <;>
-      omega
-
-/-! ## Fight rows — rollover pays slot 1 (dominating the gear re-arm and the
-hp loss); accumulation pays slot 4 with the gear fields provably untouched. -/
 
 theorem descendsE_fight (s : State) (hlvl : s.level < 50)
     (hfire : productionLadder (perceptionRefreshE s) = some .bankUnlock
         ∨ productionLadder (perceptionRefreshE s) = some .reachUnlockLevel
+        ∨ productionLadder (perceptionRefreshE s) = some .gearReview
         ∨ (productionLadder (perceptionRefreshE s) = some .objectiveStep
             ∧ (perceptionRefreshE s).objectiveStepIsFight = true)) :
     eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
@@ -988,12 +988,18 @@ theorem descendsE_fight (s : State) (hlvl : s.level < 50)
     rw [cycleStepE_xp, hcp]
   have hrl : (perceptionRefreshE s).level = s.level := perceptionRefreshE_level s
   have hrx : (perceptionRefreshE s).xp = s.xp := perceptionRefreshE_xp s
-  have hk : ∃ k, k ≠ MeansKind.gearReview
+  -- WAVE 4: the excluded rung is no longer `.gearReview` (which now FIGHTS and
+  -- makes no gear progress) but the GEAR objective step. Every member of the
+  -- fight family is either not the objective step at all, or is one whose
+  -- `objectiveStepIsFight` is true — which is exactly `gearProgress`'s guard.
+  have hk : ∃ k, (k ≠ MeansKind.objectiveStep
+        ∨ (perceptionRefreshE s).objectiveStepIsFight = true)
       ∧ productionLadder (perceptionRefreshE s) = some k := by
-    rcases hfire with h | h | ⟨h, _⟩
-    · exact ⟨.bankUnlock, by decide, h⟩
-    · exact ⟨.reachUnlockLevel, by decide, h⟩
-    · exact ⟨.objectiveStep, by decide, h⟩
+    rcases hfire with h | h | h | ⟨h, hf⟩
+    · exact ⟨.bankUnlock, Or.inl (by decide), h⟩
+    · exact ⟨.reachUnlockLevel, Or.inl (by decide), h⟩
+    · exact ⟨.gearReview, Or.inl (by decide), h⟩
+    · exact ⟨.objectiveStep, Or.inr hf, h⟩
   obtain ⟨k, hkne, hksel⟩ := hk
   by_cases hwill : s.xp + 10 ≥ xpToNextLevel s.level
   · have hcond : (decide ((perceptionRefreshE s).xp + 10 ≥
@@ -1099,52 +1105,141 @@ private theorem gearReview_quiet_of_objectiveStep {r : State}
 
 /-! ## The two refresh-shaped rows: placeholder + pursueTask. -/
 
-/-- A stale-armed objective Bool with `isFight = false` survives only when the
-    refresh was the identity: adequate arming sets `isFight`, inadequate
-    arming sets the gear latch (which would outrank the objective). -/
+/-- A non-combat objective step. TWO ways to reach it since wave 4, and they
+    descend at different slots.
+
+    Before wave 4 there was one: a STALE armed Bool surviving an identity
+    refresh, because the inadequate branch armed the gear LATCH, which would
+    outrank the objective. Increment 4.2b moved gear acquisition into the
+    resolution graph, so `perceptionRefreshE`'s inadequate branch now arms THIS
+    step (non-combat) instead — that is the gear chain, and it is the case the
+    E measure's `gearGap` slot exists for.
+
+      * inadequate refresh -> the GEAR step: `gearProgress` closes one gap
+        (slot 2) or restores adequacy at zero (slot 3).
+      * identity refresh   -> the stale arm: descends at `objectiveStepFlag`. -/
 theorem descendsE_placeholder (s : State) (hArms : AdequateArmsFightAt s)
+    (hGear : GearCycleMakesProgressAt s)
     (hk : productionLadder (perceptionRefreshE s) = some .objectiveStep)
     (hisF : (perceptionRefreshE s).objectiveStepIsFight = false) :
     eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
-  have hquietG : (perceptionRefreshE s).gearReviewFires = false :=
-    gearReview_quiet_of_objectiveStep hk
-  have hcond : (decide (s.level < 50) && !(deferGate s)) = false := by
-    by_cases hc : (decide (s.level < 50) && !(deferGate s)) = true
-    · exfalso
-      by_cases hadq : s.loadoutAdequate = true
-      · have hgd : deferGate s = false := by
-          by_contra hne
-          rw [Bool.not_eq_false] at hne
-          simp [hne] at hc
-        have hlt : s.level < 50 := by
-          by_contra hne
-          simp [hne] at hc
-        have : (perceptionRefreshE s).objectiveStepIsFight = true := by
-          unfold perceptionRefreshE
-          rw [if_pos hc, if_pos hadq]
-          exact (hArms hlt hgd hadq).2
-        rw [this] at hisF; cases hisF
-      · have : (perceptionRefreshE s).gearReviewFires = true := by
-          unfold perceptionRefreshE
-          rw [if_pos hc, if_neg hadq]
-        rw [this] at hquietG; cases hquietG
-    · rwa [Bool.not_eq_true] at hc
-  have heq : perceptionRefreshE s = s := by
-    unfold perceptionRefreshE
-    rw [if_neg (by rw [hcond]; exact Bool.false_ne_true)]
-  have hk0 : productionLadder s = some .objectiveStep := by rwa [heq] at hk
-  have his0 : s.objectiveStepIsFight = false := by rwa [heq] at hisF
-  have hfire := fires_of_ladder hk0
-  simp only [fires, ProductionLadder.objectiveStepFires] at hfire
-  rw [cycleStepE_some s hk, heq]
-  have hcs : cycleStep s = applyActionKind .objectiveStep s := by
-    unfold cycleStep
-    rw [hk0]
-    simp [planFor, his0]
-  rw [hcs]
-  apply eLt_of_objectiveStepFlag_dec <;>
-    simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-      applyActionKind, his0, hfire, refreshE_geCancel]
+  have hcs : cycleStep (perceptionRefreshE s)
+      = applyActionKind .objectiveStep (perceptionRefreshE s) := by
+    unfold cycleStep; rw [hk]; simp [planFor, hisF]
+  -- The state `gearProgress` sees, and the two facts the split needs about it.
+  have hIF : (fightLoss .objectiveStep (perceptionRefreshE s)
+      (partialClear .objectiveStep
+        (pressureDeltaD .objectiveStep (perceptionRefreshE s)
+          (applyActionKind .objectiveStep (perceptionRefreshE s))))).objectiveStepIsFight
+      = false := by
+    rw [fightLoss_isFight, partialClear_isFight, pressureDeltaD_isFight]
+    exact hisF
+  have hGG : (fightLoss .objectiveStep (perceptionRefreshE s)
+      (partialClear .objectiveStep
+        (pressureDeltaD .objectiveStep (perceptionRefreshE s)
+          (applyActionKind .objectiveStep (perceptionRefreshE s))))).gearGap
+      = s.gearGap := by
+    rw [fightLoss_gearGap, partialClear_gearGap, pressureDeltaD_gearGap,
+      apply_objectiveStep_gearGap, refreshE_gearGap]
+  have hAD : (fightLoss .objectiveStep (perceptionRefreshE s)
+      (partialClear .objectiveStep
+        (pressureDeltaD .objectiveStep (perceptionRefreshE s)
+          (applyActionKind .objectiveStep (perceptionRefreshE s))))).loadoutAdequate
+      = s.loadoutAdequate := by
+    rw [fightLoss_adequate, partialClear_adequate, pressureDeltaD_adequate,
+      apply_objectiveStep_adequate, refreshE_adequate]
+  have hLV : (gearProgress .objectiveStep
+      (fightLoss .objectiveStep (perceptionRefreshE s)
+        (partialClear .objectiveStep
+          (pressureDeltaD .objectiveStep (perceptionRefreshE s)
+            (applyActionKind .objectiveStep (perceptionRefreshE s)))))).level
+      = (perceptionRefreshE s).level := by
+    rw [gearProgress_level, fightLoss_level, partialClear_level,
+      pressureDeltaD_level, apply_objectiveStep_level]
+  rcases gearProgress_objectiveStep_cases _ hIF with hid | hlt | ⟨heq, hadq, hpre⟩
+  · -- The gear layer moved nothing. That is only possible on an IDENTITY
+    -- refresh, and proving so is where `GearCycleMakesProgressAt` earns its
+    -- place: an ARMED refresh means `loadoutAdequate = false`, and a productive
+    -- cycle with an open gap or a restorable adequacy always moves something.
+    -- An armed-but-unproductive cycle is precisely the livelock that hypothesis
+    -- rules out — so this branch is the stale arm, and the pre-wave-4 proof
+    -- applies verbatim.
+    have hprod : (fightLoss .objectiveStep (perceptionRefreshE s)
+        (partialClear .objectiveStep
+          (pressureDeltaD .objectiveStep (perceptionRefreshE s)
+            (applyActionKind .objectiveStep
+              (perceptionRefreshE s))))).gearCycleProductive
+        = s.gearCycleProductive := by
+      rw [fightLoss_productive, partialClear_productive, pressureDeltaD_productive,
+        apply_objectiveStep_productive, refreshE_productive]
+    have heq : perceptionRefreshE s = s := by
+      by_cases hc : (decide (s.level < 50) && !(deferGate s)) = true
+      · by_cases hadq : s.loadoutAdequate = true
+        · unfold perceptionRefreshE; rw [if_pos hc, if_pos hadq]
+        · exfalso
+          have hgd : deferGate s = false := by
+            by_contra hne
+            rw [Bool.not_eq_false] at hne
+            simp [hne] at hc
+          have hlt : s.level < 50 := by
+            by_contra hne
+            simp [hne] at hc
+          have hp : s.gearCycleProductive = true :=
+            hGear hlt hgd (by simpa using hadq)
+          -- Unproductive is refuted; so the identity must have come from the
+          -- gap-zero-already-adequate arm, which contradicts `hadq`.
+          have hAdIn : (fightLoss .objectiveStep (perceptionRefreshE s)
+              (partialClear .objectiveStep
+                (pressureDeltaD .objectiveStep (perceptionRefreshE s)
+                  (applyActionKind .objectiveStep
+                    (perceptionRefreshE s))))).loadoutAdequate = false := by
+            rw [hAD]; simpa using hadq
+          rw [hp] at hprod
+          unfold gearProgress at hid
+          rw [if_neg (by rw [hIF]; exact Bool.false_ne_true),
+            if_neg (by simp [hprod])] at hid
+          by_cases hz : (fightLoss .objectiveStep (perceptionRefreshE s)
+              (partialClear .objectiveStep
+                (pressureDeltaD .objectiveStep (perceptionRefreshE s)
+                  (applyActionKind .objectiveStep
+                    (perceptionRefreshE s))))).gearGap = 0
+          · rw [if_pos hz] at hid
+            have := congrArg State.loadoutAdequate hid
+            simp at this
+            rw [this] at hAdIn; cases hAdIn
+          · rw [if_neg hz] at hid
+            have := congrArg State.gearGap hid
+            simp at this
+            omega
+      · unfold perceptionRefreshE
+        rw [if_neg hc]
+    have hk0 : productionLadder s = some .objectiveStep := by rwa [heq] at hk
+    have his0 : s.objectiveStepIsFight = false := by rwa [heq] at hisF
+    have hfire := fires_of_ladder hk0
+    simp only [fires, ProductionLadder.objectiveStepFires] at hfire
+    rw [heq] at hid
+    rw [cycleStepE_some s hk, heq]
+    have hcs0 : cycleStep s = applyActionKind .objectiveStep s := by
+      unfold cycleStep; rw [hk0]; simp [planFor, his0]
+    rw [hcs0, hid]
+    apply eLt_of_objectiveStepFlag_dec <;>
+      simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight,
+        fightLoss, partialClear, pressureDeltaD,
+        applyActionKind, his0, hfire, refreshE_geCancel]
+  · -- A gap closed: slot 2.
+    rw [cycleStepE_some s hk, hcs, rearmE_eq_mint_of_no_levelup hLV]
+    apply eLt_of_gearGap_dec
+    · simp [eMeasure, rearmOnMint_level, hLV, perceptionRefreshE_level]
+    · simp only [eMeasure, rearmOnMint_gearGap]
+      rw [hGG] at hlt; exact hlt
+  · -- Gap was zero and adequacy is restored: slot 3, with slot 2 equal.
+    rw [cycleStepE_some s hk, hcs, rearmE_eq_mint_of_no_levelup hLV]
+    apply eLt_of_inadequacy_dec
+    · simp [eMeasure, rearmOnMint_level, hLV, perceptionRefreshE_level]
+    · simp only [eMeasure, rearmOnMint_gearGap]; rw [heq, hGG]
+    · simp only [eMeasure, rearmOnMint_adequate]
+      rw [hadq, ← hAD, hpre]
+      simp [b2n]
 
 /-- `pursueTask` is selectable only inside the defer window: outside it the
     refresh arms the objective (adequate) or the gear latch (inadequate), and
@@ -1209,10 +1304,13 @@ theorem descendsE_pursueTask (s : State) (hArms : AdequateArmsFightAt s) (hlvl :
           rw [if_pos hc, if_pos hadq]
           exact (hArms hlt hgd hadq).1
         rw [this] at hquietO; cases hquietO
-      · have : (perceptionRefreshE s).gearReviewFires = true := by
+      · -- WAVE 4: the inadequate branch now arms the OBJECTIVE step too (the
+        -- gear chain moved into the graph), so both adequacy cases land on the
+        -- same contradiction and the gear-latch branch is gone.
+        have : (perceptionRefreshE s).objectiveStepFires = true := by
           unfold perceptionRefreshE
           rw [if_pos hc, if_neg hadq]
-        rw [this] at hquietG; cases hquietG
+        rw [this] at hquietO; cases hquietO
     · rwa [Bool.not_eq_true] at hc
   have hgate : deferGate s = true := by
     rcases Bool.and_eq_false_iff.mp hcond with h | h
@@ -1248,5 +1346,16 @@ theorem descendsE_pursueTask (s : State) (hArms : AdequateArmsFightAt s) (hlvl :
   · simp only [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
       if_false, Bool.false_eq_true, Bool.false_and, reduceIte, applyActionKind]
     omega
+
+/-- `gearReview` (→ `.fight`) strictly descends at `levelDeficit`/`xpDeficit`.
+
+    WAVE 4 RE-WITNESS: the guard now maps to `ReachUnlockLevelGoal`, the same
+    goal class `.reachUnlockLevel` maps to, so the witness is `.fight` and this
+    is an instance of the fight descent. It lands ABOVE the old `gearReviewFlag`
+    slot, which is merely unchanged and lex-dominated. -/
+theorem descendsE_gearReview (s : State) (hlvl : s.level < 50)
+    (hk : productionLadder (perceptionRefreshE s) = some .gearReview) :
+    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
+  exact descendsE_fight s hlvl (Or.inr (Or.inr (Or.inl hk)))
 
 end Formal.Liveness.BlockerDescentE
