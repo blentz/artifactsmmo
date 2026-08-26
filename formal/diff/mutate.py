@@ -2853,7 +2853,7 @@ ROOT_DECISION_MUTATIONS = [
     # The mask this graph exists to avoid: a skill-gated target also carries
     # `blocker=None`, so hoisting the attainable arm reports it as buildable
     # and the character chases a craft it cannot perform. Same shape as the
-    # defect `objective._classify_target`'s own docstring warns about, and as
+    # defect `objective.classify_target`'s own docstring warns about, and as
     # the PF-2 hoist in `decisions/obtain_item.py`.
     ("root: IsThisTargetBlocked reads `blocker` before the skill gate, so a"
      " skill-gated target reports as attainable",
@@ -2902,7 +2902,7 @@ ROOT_DECISION_MUTATIONS = [
     ("root: the its-own-blocker arm is deleted, so a target with no recipe"
      " falls through to the material lookup",
      "        if self.target.blocker == self.target.code:\n"
-     "            # `_classify_target`'s LAST arm: the target is its own blocker \u2014\n"
+     "            # `classify_target`'s LAST arm: the target is its own blocker \u2014\n"
      "            # it has no recipe, or every recipe material is reachable and the\n"
      "            # item still is not. There is no material to route to, so the\n"
      "            # root is the item itself and the step graph owns the rest.\n"

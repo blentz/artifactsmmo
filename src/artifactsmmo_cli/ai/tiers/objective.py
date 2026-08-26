@@ -304,7 +304,7 @@ class GearTarget:
 
     The blocker is typed rather than a formatted string a consumer would have
     to parse back apart. `blocking_skill`/`blocking_skill_level` carry the
-    skill gate (`_classify_target`'s first, unconditionally-blocking check);
+    skill gate (`classify_target`'s first, unconditionally-blocking check);
     `blocker` carries the code of the material still out of reach (or the
     target's own code, when it is a leaf with no recipe). Exactly one of
     `blocking_skill` and `blocker` is set when `attainable` is False; both are
@@ -435,10 +435,10 @@ class CharacterObjective:
             for slot, value, code in _slot_assignments(type_, slots, ranked):
                 if value <= self._item_value(state.equipment.get(slot)):
                     continue
-                targets[slot] = self._classify_target(code, state)
+                targets[slot] = self.classify_target(code, state)
         return targets
 
-    def _classify_target(self, code: str, state: WorldState) -> GearTarget:
+    def classify_target(self, code: str, state: WorldState) -> GearTarget:
         """Attainable now, or the first blocker standing in front of it.
 
         The crafting-skill gate is checked BEFORE `is_attainable_now`, not

@@ -10,7 +10,7 @@ gear target could supposedly name it.
 IT COULD NOT. Measured on the committed bundle before the fix: a gear target
 named alchemy in **0 of the 42 scenarios**, and structurally could never name
 it. `objective._gear_candidates_by_type` — the ONLY builder of the gear sheet
-`_classify_target` reads `blocking_skill` off — skips `stats.type_ ==
+`classify_target` reads `blocking_skill` off — skips `stats.type_ ==
 "utility"` outright, because the utility slots are served by
 `objective.utility_potion_targets` rather than by the gear sheet. Alchemy's
 catalogue is 25 recipes: 20 `utility` (refused by that skip) and 5 `consumable`
@@ -107,7 +107,7 @@ def test_alchemys_whole_catalogue_is_utility_or_consumable(
 def test_the_gear_sheet_never_offers_an_alchemy_item(
         bundle_game_data: GameData) -> None:
     """The other half: `_gear_candidates_by_type` is the only builder of the
-    items `_classify_target` reads `blocking_skill` off, and it yields no
+    items `classify_target` reads `blocking_skill` off, and it yields no
     alchemy code at any level cap. Asserted through `_gear_nameable_skills`,
     the production answer, so the two cannot be made to disagree."""
     assert _gear_nameable_skills(bundle_game_data) == GEAR_NAMEABLE

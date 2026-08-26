@@ -4,9 +4,9 @@ Nothing in production calls `resolve_root` yet (the flip is a later task of
 `PLAN_wave3a_cutover`), so these tests ARE the whole consumer. They are built
 on a real `CharacterObjective` over a small real `GameData` rather than on a
 stand-in for `gear_targets_with_blockers`: a double returning the three
-`GearTarget` shapes by hand would agree with `_classify_target` only for as
+`GearTarget` shapes by hand would agree with `classify_target` only for as
 long as somebody kept it in step, and this graph's entire job is to read that
-producer's output correctly. `_classify_target` emits FOUR shapes, not the
+producer's output correctly. `classify_target` emits FOUR shapes, not the
 three spec §5.3 tabulates: skill-gated, attainable, blocked on a material, and
 blocked on ITSELF. There is a test below for each.
 
@@ -56,7 +56,7 @@ from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_strategy_driver import _ctx
 
 # The five gear candidates below are chosen so that ONE slot lands in each of
-# `_classify_target`'s outcomes, and so the tier gaps are not all equal:
+# `classify_target`'s outcomes, and so the tier gaps are not all equal:
 #
 #   shield_slot     iron_shield    gearcrafting 10 vs the character's 1 -> SKILL-gated
 #   weapon_slot     ash_club       ash_plank <- ash_wood <- ash_tree     -> ATTAINABLE
@@ -307,7 +307,7 @@ def test_a_material_gated_target_routes_to_the_material_at_its_recipe_quantity()
 
 
 def test_a_target_that_is_its_own_blocker_routes_to_the_target_itself():
-    """`_classify_target`'s last arm: no recipe (or none of the recipe is out
+    """`classify_target`'s last arm: no recipe (or none of the recipe is out
     of reach) and the item still is not attainable. There is no material to
     route to."""
     result = _blocked(_target(code="copper_helmet", blocker="copper_helmet"),

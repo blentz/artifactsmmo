@@ -265,7 +265,7 @@ def _gear_nameable_skills(game_data: GameData) -> frozenset[str]:
     """Every skill SOME gear target could name.
 
     A gear target names exactly one skill — `GearTarget.blocking_skill`, which
-    `objective._classify_target` reads off the TARGET's own `crafting_skill` —
+    `objective.classify_target` reads off the TARGET's own `crafting_skill` —
     and a gear target is whatever `objective.gear_targets_with_blockers` hands
     that classifier. So this asks the SHEET BUILDER, `_gear_candidates_by_type`,
     which items can become candidates at all, capped at the catalogue's own
@@ -517,7 +517,7 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
     """What actually stands in front of this slot's target.
 
     `GearTarget` carries the blocker as TYPED fields, and its one producer
-    (`objective._classify_target`, objective.py:447-457) emits exactly FOUR
+    (`objective.classify_target`, objective.py:447-457) emits exactly FOUR
     shapes, read here with no guessing and no string parsing:
 
         blocking_skill=S, blocking_skill_level=L, blocker=None -> skill-gated
@@ -526,11 +526,11 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
         blocker=<code> != self.code                            -> material-gated
 
     Spec §5.3's table names only the first three; the fourth is the last arm
-    of `_classify_target` and is handled below.
+    of `classify_target` and is handled below.
 
     The skill test runs FIRST because a skill-gated target also has
     `blocker=None`; testing `blocker is None` first would report it as
-    attainable. That is the same masking defect `_classify_target`'s own
+    attainable. That is the same masking defect `classify_target`'s own
     docstring warns against, one layer up.
 
     `resolve` narrows its return type all the way to `ObtainItem |
@@ -567,7 +567,7 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
         if self.target.blocker is None:
             return ObtainItem(code=self.target.code, quantity=1, slot=self.slot)
         if self.target.blocker == self.target.code:
-            # `_classify_target`'s LAST arm: the target is its own blocker —
+            # `classify_target`'s LAST arm: the target is its own blocker —
             # it has no recipe, or every recipe material is reachable and the
             # item still is not. There is no material to route to, so the
             # root is the item itself and the step graph owns the rest.

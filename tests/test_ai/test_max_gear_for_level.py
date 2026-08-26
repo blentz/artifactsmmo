@@ -59,7 +59,7 @@ def test_tier_cap_bounds_the_candidate_set(bundle_game_data):
 
 
 def test_attainable_target_is_reported_attainable_with_no_blocker(bundle_game_data):
-    """Fix-round-2 (2026-08-23): the happy-path return in `_classify_target`
+    """Fix-round-2 (2026-08-23): the happy-path return in `classify_target`
     (`attainable=True, blocker=None`) had ZERO assertion coverage — a mutant
     that replaced it with `attainable=False, blocker="MUTATION_PROBE"` (every
     attainable target reported as blocked) still passed every existing test,
@@ -125,7 +125,7 @@ def test_skill_blocked_target_names_skill_and_level(bundle_game_data):
     objective = CharacterObjective.from_game_data(gd)
     state = make_state(level=30, skills={"weaponcrafting": 10})
 
-    target = objective._classify_target("copper_legs_armor", state)
+    target = objective.classify_target("copper_legs_armor", state)
 
     assert target.attainable is False
     assert target.blocker is None, \
@@ -135,7 +135,7 @@ def test_skill_blocked_target_names_skill_and_level(bundle_game_data):
 
 
 def test_skill_gate_blocks_even_when_materials_are_reachable(bundle_game_data):
-    """Fix-round-1 (2026-08-23): `_classify_target` consulted
+    """Fix-round-1 (2026-08-23): `classify_target` consulted
     `is_attainable_now` FIRST, and that function is materials-only — it never
     inspects `crafting_skill`/`crafting_level`. So the skill-gate branch was
     unreachable for any target whose materials happened to be reachable: 17
@@ -151,7 +151,7 @@ def test_skill_gate_blocks_even_when_materials_are_reachable(bundle_game_data):
     objective = CharacterObjective.from_game_data(gd)
     state = make_state(level=30, skills={"woodcutting": 30})
 
-    target = objective._classify_target("maple_plank", state)
+    target = objective.classify_target("maple_plank", state)
 
     assert target.attainable is False
     assert target.blocker is None, \
@@ -168,7 +168,7 @@ def test_unattainable_leaf_item_blocks_on_its_own_code(bundle_game_data):
     objective = CharacterObjective.from_game_data(gd)
     state = make_state(level=30, skills={"weaponcrafting": 10})
 
-    target = objective._classify_target("wooden_stick", state)
+    target = objective.classify_target("wooden_stick", state)
 
     assert target.attainable is False
     assert target.blocking_skill is None
