@@ -208,7 +208,7 @@ def discardHighFires (s : State) : Bool :=
   && decide (DISCARD_HIGH_DEN * s.inventoryUsed
               ≥ DISCARD_HIGH_NUM * s.inventoryMax)
 
-/-- GEAR_REVIEW guard. Mirrors `guards.py:137-138`:
+/-- GEAR_REVIEW guard. Mirrors `guards.py:266-267`:
       return ctx.regear_level_up
     Opaque Bool — the Lean state carries production's `ctx.regear_level_up`
     latch; a diff harness asserts agreement. -/

@@ -447,10 +447,22 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- mirror: when equipTarget = some (slot, code), apply equip semantics
   -- (cons-prepend). When unequipTarget = some slot, also filter. The
   -- result composes the swap.
-  -- GEAR_REVIEW guard (guards.py:137) maps to the UpgradeEquipment goal,
-  -- whose planner output is an OptimizeLoadout swap. We model the
-  -- GEAR_REVIEW witness with `.optimizeLoadout`; in addition to the
-  -- equipment swap, applying it clears the `gearReviewFires` latch
+  -- GEAR_REVIEW guard (guards.py:266-267).
+  --
+  -- ⚠ KNOWN MIRROR GAP (wave 4, 2026-08-26). This arm was written when the
+  -- guard mapped to `UpgradeEquipmentGoal`, whose planner output IS an
+  -- OptimizeLoadout swap. Increment 4.2b narrowed the guard to a single arm
+  -- mapping `HORIZON_LEVEL_UP` to `ReachUnlockLevelGoal(level + 1)`, whose
+  -- planner output is Fight/Rest, NOT an equipment swap. The witness below is
+  -- therefore no longer the step production takes.
+  --
+  -- Lean cannot see this: the model is internally consistent and every proof
+  -- still compiles, because what changed is the MIRROR, not the mathematics.
+  -- The citation is the only pin, which is why this note is here rather than
+  -- in a report. Recorded in the wave-4 design §13 with the two ways out.
+  --
+  -- We model the GEAR_REVIEW witness with `.optimizeLoadout`; in addition to
+  -- the equipment swap, applying it clears the `gearReviewFires` latch
   -- (production: once the gear review materializes a swap the
   -- `regear_level_up` flag is cleared when no craftable upgrade
   -- remains — mirrored here as the conservative single-step clear, the

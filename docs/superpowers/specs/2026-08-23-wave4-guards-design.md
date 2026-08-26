@@ -1629,3 +1629,67 @@ live acceptance criterion in §10 also stands, and its PRE-flip baseline
 (R2D2 187, Lor 157, HAL 109, Robby 88, C3P0 37) must be **re-measured** before
 4.2, because `e6a2e37c` and `63533b82` both change exactly the behaviour it
 counts.
+
+---
+
+## 13. `[NEW — RE-DERIVED 2026-08-26]` §7 is void, and what 4.4 actually owes
+
+§7 opens with *"Retiring `GEAR_REVIEW` from `GUARD_ORDER` therefore requires,
+at minimum:"* and everything under it is conditional on that retirement. **The
+user's 2026-08-26 ruling keeps the rung** — the level+1 route stays explicit and
+`RegearEdge` keeps a goal-mapping job — so the entire table is void:
+
+* `FMeasure` slot 10 `gearReviewFlag` is NOT dropped; `EMeasure` slot 19 and the
+  `DMeasure` rows stay.
+* `BlockerDescent.descends_gearReview`, `BlockerMonotone`'s five
+  `gearReviewFires_false_*` theorems, `gearReview_quiet_forever` and
+  `BlockerQuieting`'s dispatch-clears lemma all stay.
+* `DecideKey.lean:50/:113` stays. **The renumber does not happen.** Indices stay
+  stable, the append-only discipline is not violated, and wave 6 §1.1's
+  "oracle index 11" citation for `CRAFT_POTIONS` remains CORRECT — the
+  amendment warning about it is moot.
+
+### 13.1 The real finding: a mirror gap Lean cannot detect
+
+`Formal/Liveness/CycleStepDC.lean` and `Plan.lean` both model the GEAR_REVIEW
+witness as `.optimizeLoadout`, and say why: *"GEAR_REVIEW guard maps to the
+UpgradeEquipment goal, whose planner output is an OptimizeLoadout swap."*
+
+That sentence was true when it was written. Increment 4.2b narrowed the guard to
+ONE arm — `HORIZON_LEVEL_UP` → `ReachUnlockLevelGoal(level + 1)` — whose planner
+output is Fight/Rest. **The modelled witness is no longer the step production
+takes**, and `BlockerDescent.descends_gearReview` names it in the theorem
+statement, with D and E analogues.
+
+Every proof still compiles and `formal/gate.sh` is rc=0, because the Lean model
+is internally consistent. What changed is the mirror, not the mathematics, and
+Lean has no way to see that. This is
+`feedback_gate_green_does_not_pin_a_constant` exactly: the citation is the only
+pin. A note is now in both Lean modules so the next reader meets it there.
+
+### 13.2 Two ways out, and the cost of each
+
+1. **Re-witness.** Give the gearReview rung a witness that mirrors
+   `ReachUnlockLevelGoal` and clears `gearReviewFires`, then re-prove descent in
+   D, E and F. Substantial work on the highest-risk proofs in the repo, and the
+   liveness chain carrying `ai_reaches_fifty_unconditional` runs through it.
+2. **Retire the rung after all**, as §7 originally assumed, and serve the
+   level+1 route from the graph instead. That deletes the theorems rather than
+   re-proving them and restores §7's plan — but it reverses the user ruling and
+   makes the level route implicit again.
+
+**Not decided here.** Option 1 preserves the user's requirement at proof cost;
+option 2 costs the requirement. That trade is the user's, and it is recorded
+rather than taken.
+
+### 13.3 Pre-existing citation rot, out of wave 4's scope
+
+Wave 4 did not cause most of it. Spot-checked against HEAD: `MeansKind.lean`
+cites `guards.py:68-77` for `GUARD_ORDER` (actually `:97`);
+`TaskInfeasibility.lean:115` cites `strategy_driver.py:45` for
+`LEVEL_LOOKAHEAD` (actually `:134`); `StepDispatch.lean:9` cites
+`strategy_driver.py:157-180` for `objective_step_goal` (actually `:599`);
+`ProgressionTree.lean:50` cites `ai/decisions/root.py:348-365` for content that
+has moved. These drifted over many commits and are a separate cleanup — worth a
+generated-and-checked citation harness rather than another hand sweep, since a
+hand sweep is what let them drift.
