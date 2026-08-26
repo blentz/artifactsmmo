@@ -812,3 +812,53 @@ ceiling; credit banked gold via the dormant `WithdrawGoldAction`; or price a
 gold shortfall at the cost of ACQUIRING that gold rather than at the
 no-route sentinel. The first is the smallest and makes the comparison sound
 without claiming the route is cheap.
+
+---
+
+## Addendum 2 — the mechanism behind wave 3a's R3 (2026-08-25)
+
+Wave 3a recorded an accepted loss: *"utility potions left the decision surface
+entirely."* That was true but unexplained. The alchemy work (`c7c3de9f`) and the
+orphan prune (`31c00f50`) together identify the exact chain, and it is worth
+writing down because the loss is NARROWER than R3's wording implies.
+
+### The chain
+
+`CharacterObjective.utility_potion_targets` (`tiers/objective.py:475`) is the
+producer of utility-slot gear targets. Its only caller was
+`progression_tree._utility_candidates`, which was reachable only through
+`objective_candidates` — the gear-branch assembler THE FLIP replaced.
+
+So the flip orphaned the utility target path. `31c00f50` deleted the dead
+callers, which did not break anything: it made the orphaning VISIBLE.
+`utility_potion_targets` now has zero production callers and only test callers.
+
+This is also why `objective._gear_candidates_by_type` skips `type_ == "utility"`
+outright — it defers to a producer that no longer runs. That deferral is what
+`_gear_nameable_skills` then restated and drifted from, which is the alchemy bug
+`c7c3de9f` fixed.
+
+### What is actually lost, measured
+
+NOT "the bot cannot use potions". Live, in the first 45 minutes after the
+2026-08-25T23:18 restart: `CraftPotionsGoal` selected **75** cycles,
+`EquipOwnedGear([('utility1_slot', …)])` **8**. Provisioning via the
+`CRAFT_POTIONS` guard rung and equipping via `EquipOwnedGear` both work.
+
+What is lost is the OBJECTIVE half: nothing proposes *upgrading* to a better
+potion as a gear target. A character keeps whatever the guard provisioned and
+never pursues a better one on the gear sheet.
+
+### Why this is not fixed here
+
+Two designs already own the decision and they point differently:
+- wave 4 §6.3 proposed restoring potions via `WhichSlotClosesTheFight`, measured
+  reachable in at most **19.4%** of cycles (`has_combat_deficit` needs a workable
+  monsters task; 15,240 of 78,552);
+- wave 6 §5.3 declined to demote `CRAFT_POTIONS` (`MAINTAIN_CONSUMABLES` won
+  **3 of 78,552** cycles against `CraftPotionsGoal`'s **2,245**) and instead
+  widens the guard's goal.
+
+Reconciled 2026-08-24, both left unapplied. Restoring the target producer is a
+THIRD option neither design costed. Recording the mechanism so whichever wave
+takes it starts from the chain above rather than rediscovering it.
