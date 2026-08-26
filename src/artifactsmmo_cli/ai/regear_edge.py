@@ -25,7 +25,7 @@ from artifactsmmo_cli.ai.task_horizon import HORIZON_LEVEL_UP, resolve_task_hori
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-class GearLatch:
+class RegearEdge:
     """Boolean latch. SET on level-up or `error:fight_lost` (holding until no
     craftable upgrade remains for any slot), and additionally ACTIVE for as long
     as a held task's monster is unwinnable, a gear chain CLOSES that fight, and

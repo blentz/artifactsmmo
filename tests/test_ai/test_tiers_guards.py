@@ -225,8 +225,8 @@ def test_craft_potions_is_last_guard():
 
 def test_gear_review_fires_only_when_ctx_active(make_planner_gd):
     state = make_state(hp=150, max_hp=150)
-    active_ctx = driver_ctx(gear_review_active=True)
-    inactive_ctx = driver_ctx(gear_review_active=False)
+    active_ctx = driver_ctx(regear_level_up=True)
+    inactive_ctx = driver_ctx(regear_level_up=False)
     assert GuardKind.GEAR_REVIEW in active_guards(state, make_planner_gd, None, active_ctx)
     assert GuardKind.GEAR_REVIEW not in active_guards(state, make_planner_gd, None, inactive_ctx)
 

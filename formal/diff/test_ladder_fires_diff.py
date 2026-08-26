@@ -37,7 +37,7 @@ BOTH sides from one set of fields:
     `SelectionContext` / `GameData` AND the oracle arg array; and
   * the opaque Bools we CAN pass through identically — `objective_step_fires`
     (→ `production_ladder(..., objective_step_fires)` and oracle arg[28]) and
-    `gear_review_active` (→ `ctx.gear_review_active` and oracle arg[26]) — are
+    `regear_level_up` (→ `ctx.regear_level_up` and oracle arg[26]) — are
     handed to both sides verbatim, so `objectiveStep` and `gearReview` are
     genuinely compared, not skipped.
 
@@ -55,7 +55,7 @@ computes from the supplied inputs under an empty-catalog `GameData`:
   * depositFull         — bank_accessible AND fill >= 0.90 AND a non-kept
                           inventory item exists (select_bank_deposits nonempty).
   * discardHigh         — overstock AND fill >= 0.85.
-  * gearReview          — ctx.gear_review_active (passed identically).
+  * gearReview          — ctx.regear_level_up (passed identically).
   * claimPending        — bool(pending_items).
   * completeTask        — task set AND total>0 AND progress>=total
                           (≡ TaskLifecyclePhase.complete).
@@ -384,7 +384,7 @@ def _make_ctx(scn: Scenario) -> SelectionContext:
         gold_reserve=scn.gold_reserve,
         target_gear=frozenset(),
         target_tools=frozenset(),
-        gear_review_active=scn.gear_review,
+        regear_level_up=scn.gear_review,
     )
 
 
@@ -927,7 +927,7 @@ def _rich_oracle_args(
         1 if (task_feasible_projected
               and not prod[LadderMeans.TASK_CANCEL]) else 0,  # 24 taskFeasibleProjected
         1 if prod[LadderMeans.REST_FOR_COMBAT] else 0,   # 25 restForCombatReady
-        1 if ctx.gear_review_active else 0,          # 26 gearReviewFires
+        1 if ctx.regear_level_up else 0,          # 26 gearReviewFires
         1 if prod[LadderMeans.CRAFT_RELIEF] else 0,  # 27 craftReliefFires
         1 if objective_step else 0,                  # 28 objectiveStepFires
         1 if prod[LadderMeans.MAINTAIN_CONSUMABLES] else 0,  # 29 maintainConsumablesFires
@@ -1078,7 +1078,7 @@ def _craft_relief_ctx() -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
-        gear_review_active=False,
+        regear_level_up=False,
         draw_owed=True)
 
 
@@ -1178,7 +1178,7 @@ def _recycle_ctx(*, protect_dagger: bool = False) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
         gear_keep={"dagger": 2} if protect_dagger else {},
-        gear_review_active=False,
+        regear_level_up=False,
         draw_owed=True)
 
 
@@ -1266,7 +1266,7 @@ def _drain_ctx(*, protect_sap: bool = False) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
         gear_keep={"sap": 5} if protect_sap else {},
-        gear_review_active=False,
+        regear_level_up=False,
         draw_owed=True)
 
 
@@ -1480,7 +1480,7 @@ def _rest_combat_ctx() -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
         target_gear=frozenset(), target_tools=frozenset(),
-        gear_review_active=False,
+        regear_level_up=False,
         draw_owed=True)
 
 
@@ -1582,7 +1582,7 @@ def _maintain_ctx() -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
         target_gear=frozenset(), target_tools=frozenset(),
-        gear_review_active=False,
+        regear_level_up=False,
         draw_owed=True)
 
 
@@ -1639,7 +1639,7 @@ def test_maintain_consumables_near_miss_no_combat() -> None:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
-        gear_review_active=False)
+        regear_level_up=False)
     prod, _, lean, _ = drive_and_contest(
         w, gd, ctx, driven=frozenset({LadderMeans.MAINTAIN_CONSUMABLES}))
     assert prod[LadderMeans.MAINTAIN_CONSUMABLES] is False
@@ -1758,7 +1758,7 @@ def _plain_ctx(*, combat_monster: str | None = None,
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=combat_monster,
         target_gear=frozenset(), target_tools=frozenset(),
-        gear_review_active=False, draw_owed=draw_owed)
+        regear_level_up=False, draw_owed=draw_owed)
 
 
 def _monsters_task_world(*, task_code: str, progress: int, total: int,
@@ -2069,7 +2069,7 @@ def _supply_ctx(demand: int) -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
-        gear_review_active=False,
+        regear_level_up=False,
         supply_target=("copper_ore", 999, demand),
         draw_owed=True)
 
@@ -2123,7 +2123,7 @@ def _supply_ctx_asymmetric(demand: int, *, asymmetric: bool) -> SelectionContext
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(), target_tools=frozenset(),
-        gear_review_active=False,
+        regear_level_up=False,
         supply_target=("copper_ore", 999, demand),
         asymmetric_demand=frozenset({"copper_ore"}) if asymmetric else frozenset(),
         draw_owed=True)

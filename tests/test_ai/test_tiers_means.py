@@ -814,7 +814,7 @@ def test_an_out_of_horizon_task_is_carried_inert_without_a_coin():
     USER (2026-08-25): "It is a known condition that Tasks might be uncancelable
     until we get a coin. Tasks can remain inert until that condition is met." So
     the coinless character does not cancel, and does not gear-review for the
-    fight either (`GearLatch`); it carries the task and does other work. USER
+    fight either (`RegearEdge`); it carries the task and does other work. USER
     again: "we can attempt cancel_task iff we have a task_coin, but if we have
     no coins we shouldn't waste the cycles" — a rung that fired here would put a
     goal in front of the planner that `TaskCancelAction.is_applicable` refuses,

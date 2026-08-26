@@ -452,7 +452,7 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- GEAR_REVIEW witness with `.optimizeLoadout`; in addition to the
   -- equipment swap, applying it clears the `gearReviewFires` latch
   -- (production: once the gear review materializes a swap the
-  -- `gear_review_active` flag is cleared when no craftable upgrade
+  -- `regear_level_up` flag is cleared when no craftable upgrade
   -- remains — mirrored here as the conservative single-step clear, the
   -- same pattern as `.objectiveStep` clearing `objectiveStepFires`).
   | .optimizeLoadout, s =>

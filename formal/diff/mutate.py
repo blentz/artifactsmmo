@@ -183,7 +183,7 @@ COMBAT_DEFICIT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_deficit.
 TASK_HORIZON_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_horizon.py"
 ROUTE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
              / "decisions" / "route.py")
-GEAR_LATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_latch.py"
+REGEAR_EDGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "regear_edge.py"
 CATALOGUE_SCOPE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
                        / "catalogue_scope.py")
 
@@ -4051,7 +4051,7 @@ ROUTE_PRICE_MUTATIONS = [
 ]
 
 ROOT_FIGHT_ARM_MUTATIONS = [
-    # The standing arm, re-broadened one layer down from where gear_latch used
+    # The standing arm, re-broadened one layer down from where regear_edge used
     # to hold it. Killed by test_decisions_root.py's re-homed
     # `test_a_futile_deficit_does_not_take_the_fight_arm` /
     # `test_a_level_up_verdict_does_not_take_the_fight_arm`: both verdicts would
@@ -4100,7 +4100,7 @@ TASK_HORIZON_MUTATIONS = [
 
 # The horizon's consumer on the LATCH — the highest-risk edit of the change and,
 # until 2026-08-25, the one with no anchor and no end-to-end witness at all.
-# `GearLatch` has a 981-cycle / 31.6-hour character-XP freeze in its history caused
+# `RegearEdge` has a 981-cycle / 31.6-hour character-XP freeze in its history caused
 # by this arm arming on a STANDING FACT, so a mutation that re-broadens it back to
 # that fact must not survive. `resolve_task_horizon` returns non-None exactly when
 # `has_combat_deficit` does, so dropping the verdict test IS the pre-`63533b82`
@@ -4126,12 +4126,12 @@ CATALOGUE_SCOPE_PURGE_MUTATIONS = [
      "            pass  # finalizer removed"),
 ]
 
-GEAR_LATCH_HORIZON_MUTATIONS = [
+REGEAR_EDGE_HORIZON_MUTATIONS = [
     # RETIRED at wave 4: `_blocked` left this class for
     # `decisions/root.IsAFightBlockingMe`. Its replacement is
     # ROOT_FIGHT_ARM_MUTATIONS below, which re-broadens the same test one
     # layer down. What stays here is the narrow flag the guard now reads.
-    ("gear_latch: the level-up flag re-broadens to the bare edge",
+    ("regear_edge: the level-up flag re-broadens to the bare edge",
      "        self._level_up_pending = (horizon is not None\n"
      "                                  and horizon.verdict == HORIZON_LEVEL_UP)",
      "        self._level_up_pending = horizon is not None"),
@@ -4220,7 +4220,7 @@ _ALL_SRCS = [
     COMBAT_PICKER_SRC,
     COMBAT_DEFICIT_SRC,
     TASK_HORIZON_SRC,
-    GEAR_LATCH_SRC,
+    REGEAR_EDGE_SRC,
     CATALOGUE_SCOPE_SRC,
     PROJECTIONS_SRC,
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
@@ -7815,7 +7815,7 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_decisions_route.py", survivors)
     run_group(ROOT_DECISION_SRC, ROOT_FIGHT_ARM_MUTATIONS,
               "tests/test_ai/test_decisions_root.py", survivors)
-    run_group(GEAR_LATCH_SRC, GEAR_LATCH_HORIZON_MUTATIONS,
+    run_group(REGEAR_EDGE_SRC, REGEAR_EDGE_HORIZON_MUTATIONS,
               "tests/test_ai/scenarios/test_held_task.py", survivors)
     run_group(CATALOGUE_SCOPE_SRC, CATALOGUE_SCOPE_PURGE_MUTATIONS,
               "tests/test_ai/test_catalogue_scope.py", survivors)

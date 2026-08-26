@@ -373,10 +373,10 @@ def _orphan_skill_roots(state: WorldState,
 class IsAFightBlockingMe(Decision[MetaGoal]):
     """Is the character held on a fight it cannot win, with nothing else to fight?
 
-    THE STANDING ARM OF `GearLatch`, ABSORBED (wave 4). `gear_latch.py` computed
+    THE STANDING ARM OF `RegearEdge`, ABSORBED (wave 4). `regear_edge.py` computed
     `craftable and not winnable_alternative` and then
     `resolve_task_horizon(...).verdict == HORIZON_GEAR`, feeding
-    `ctx.gear_review_active`, which fired the GEAR_REVIEW GUARD — and a guard
+    `ctx.regear_level_up`, which fired the GEAR_REVIEW GUARD — and a guard
     preempts the objective step outright, which is what froze R2D2's character
     XP for 981 cycles / 31.6 h in 2026-08-21/22.
 

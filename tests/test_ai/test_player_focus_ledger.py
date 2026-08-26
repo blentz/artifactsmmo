@@ -347,7 +347,7 @@ def test_cache_hit_cycle_still_bumps_committed_gear_root():
     plan = [_FakeAct(), _FakeAct(), _FakeAct()]
     player = _bare_player()
     player.dry_run = True
-    player._gear_latch._active = False
+    player._regear_edge._active = False
 
     def _fake_decide_band(state, game_data, actions, ctx_combat_monster):
         # Mirrors what the real `_decide_band` does to `_last_decision`

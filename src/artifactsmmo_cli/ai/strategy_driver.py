@@ -359,7 +359,7 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         #
         # What is left is the EDGE arm's verdict. The held task's fight is lost,
         # no chain of acquisitions closes it at this level, and one level plus
-        # the gear that level admits does. `GearLatch.level_up_pending` already
+        # the gear that level admits does. `RegearEdge.level_up_pending` already
         # tested `verdict == HORIZON_LEVEL_UP`, so this branch does not re-ask:
         # the guard fires on exactly the condition this arm serves.
         #

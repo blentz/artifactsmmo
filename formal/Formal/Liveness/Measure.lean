@@ -213,9 +213,9 @@ structure State where
   restForCombatReady : Bool
   /-- OPAQUE: production's GEAR_REVIEW guard firing predicate. Mirrors
       `tiers/guards.py::_fires(GuardKind.GEAR_REVIEW, …)`: fires iff
-      `ctx.gear_review_active` (the post-level-up / post-loss gear
+      `ctx.regear_level_up` (the post-level-up / post-loss gear
       prioritization latch). State-carried Bool — a diff harness asserts
-      agreement with `ctx.gear_review_active`. -/
+      agreement with `ctx.regear_level_up`. -/
   gearReviewFires : Bool
   /-- OPAQUE: production's CRAFT_POTIONS guard firing predicate. Mirrors
       `tiers/guards.py::_fires(GuardKind.CRAFT_POTIONS, …)` =

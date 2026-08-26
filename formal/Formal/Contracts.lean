@@ -37,7 +37,7 @@ import Formal.Scalarizer
 import Formal.PlannerAdmissibility
 import Formal.PlannerDepthBound
 import Formal.TieredSelection
-import Formal.GearLatch
+import Formal.RegearEdge
 import Formal.TaskDecision
 import Formal.LowYieldCancel
 import Formal.ObjectiveStepFight
@@ -2433,26 +2433,26 @@ example : ∀ {C : Type} (skip cheapPlans fullPlans : C → Bool),
     ∀ (c : C), skip c = true → ¬ (cheapPlans c = true) ∧ ¬ (fullPlans c = true) :=
   @Formal.TieredSelection.memo_skip_sound
 
--- GearLatch (gear-review latch transition mirroring GearLatch.update):
+-- RegearEdge (gear-review latch transition mirroring RegearEdge.update):
 -- set_on_levelup: level-up + craftable upgrade ⇒ latch ON.
 example : ∀ {leveledUp : Bool} (active loss hasUpgrade : Bool),
     leveledUp = true → hasUpgrade = true →
-    Formal.GearLatch.step active leveledUp loss hasUpgrade = true :=
-  @Formal.GearLatch.set_on_levelup
+    Formal.RegearEdge.step active leveledUp loss hasUpgrade = true :=
+  @Formal.RegearEdge.set_on_levelup
 -- set_on_loss: fight-loss + craftable upgrade ⇒ latch ON.
 example : ∀ (active leveledUp loss hasUpgrade : Bool),
     loss = true → hasUpgrade = true →
-    Formal.GearLatch.step active leveledUp loss hasUpgrade = true :=
-  @Formal.GearLatch.set_on_loss
+    Formal.RegearEdge.step active leveledUp loss hasUpgrade = true :=
+  @Formal.RegearEdge.set_on_loss
 -- clear_iff_no_upgrade: no craftable upgrade ⇒ latch forced OFF this cycle.
 example : ∀ (active leveledUp loss : Bool),
-    Formal.GearLatch.step active leveledUp loss false = false :=
-  @Formal.GearLatch.clear_iff_no_upgrade
+    Formal.RegearEdge.step active leveledUp loss false = false :=
+  @Formal.RegearEdge.clear_iff_no_upgrade
 -- monotone_until_clear: once set, no new trigger, upgrade available ⇒ stays ON.
 example : ∀ (active leveledUp loss hasUpgrade : Bool),
     active = true → leveledUp = false → loss = false → hasUpgrade = true →
-    Formal.GearLatch.step active leveledUp loss hasUpgrade = true :=
-  @Formal.GearLatch.monotone_until_clear
+    Formal.RegearEdge.step active leveledUp loss hasUpgrade = true :=
+  @Formal.RegearEdge.monotone_until_clear
 
 /-! ### GatherSelection role contracts (yield-rate lex-argmin gather-source). -/
 

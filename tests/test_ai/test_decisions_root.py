@@ -687,8 +687,8 @@ def test_the_orphan_roots_sit_behind_the_trunk(bundle_game_data: GameData):
 # ---------------------------------------------------------------------------
 # IsAFightBlockingMe / WhichSlotClosesTheFight (wave 4)
 #
-# These five cases are the STANDING arm of `GearLatch`, re-homed. They were
-# `test_gear_latch.py::test_an_unwinnable_task_arms_the_latch_without_a_loss`
+# These five cases are the STANDING arm of `RegearEdge`, re-homed. They were
+# `test_regear_edge.py::test_an_unwinnable_task_arms_the_latch_without_a_loss`
 # and friends; the arm is now a node, so its coverage lives with the node. The
 # behaviour asserted is the same, one layer down: what used to be "does the
 # latch arm" is now "does the walk take the fight arm".

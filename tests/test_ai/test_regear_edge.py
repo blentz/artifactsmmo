@@ -1,7 +1,7 @@
-"""GearLatch: set on level-up or predicted-winnable fight loss; clear when gear is
+"""RegearEdge: set on level-up or predicted-winnable fight loss; clear when gear is
 level-appropriate; monotone (stays set until clear holds)."""
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.gear_latch import GearLatch
+from artifactsmmo_cli.ai.regear_edge import RegearEdge
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
     TaskHorizon,
@@ -27,25 +27,25 @@ def _gd_with_boots():
 
 
 def test_starts_inactive():
-    assert GearLatch().active is False
+    assert RegearEdge().active is False
 
 
 def test_sets_on_level_up():
-    latch = GearLatch()
+    latch = RegearEdge()
     latch.update(prev_level=4, state=make_state(level=5), last_outcome="ok",
                  game_data=_gd_with_boots())
     assert latch.active is True
 
 
 def test_sets_on_fight_loss():
-    latch = GearLatch()
+    latch = RegearEdge()
     latch.update(prev_level=4, state=make_state(level=4), last_outcome="error:fight_lost",
                  game_data=_gd_with_boots())
     assert latch.active is True
 
 
 def test_clears_when_no_craftable_upgrade():
-    latch = GearLatch()
+    latch = RegearEdge()
     empty_gd = GameData()
     empty_gd._item_stats = {}
     empty_gd._crafting_recipes = {}
@@ -55,7 +55,7 @@ def test_clears_when_no_craftable_upgrade():
 
 
 def test_monotone_stays_set_until_clear():
-    latch = GearLatch()
+    latch = RegearEdge()
     gd = _gd_with_boots()
     latch.update(prev_level=4, state=make_state(level=5), last_outcome="ok",
                  game_data=gd)
@@ -94,10 +94,10 @@ def test_a_lost_fight_arms_the_latch_even_when_another_fight_is_winnable(
     for every character that has anything at all to fight — which is every
     character that ever loses one.
     """
-    import artifactsmmo_cli.ai.gear_latch as mod
+    import artifactsmmo_cli.ai.regear_edge as mod
     monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: None)
     monkeypatch.setattr(mod, "has_craftable_upgrade_any_slot", lambda s, g: True)
-    latch = GearLatch()
+    latch = RegearEdge()
 
     latch.update(5, make_state(level=5), "error:fight_lost", GameData())
 

@@ -153,7 +153,7 @@ def has_combat_deficit(state: WorldState, game_data: GameData) -> bool:
     """Is the held task's monster unwinnable? The CHEAP form of the same fact.
 
     `combat_deficit` walks every candidate to name what closes the gap; this is
-    one `predict_win`. `GearLatch.update` runs every cycle and only needs to know
+    one `predict_win`. `RegearEdge.update` runs every cycle and only needs to know
     THAT a deficit exists, so the walk would be the wrong thing to put there.
 
     Exactly equivalent to `combat_deficit(...) is not None` — pinned by a test,

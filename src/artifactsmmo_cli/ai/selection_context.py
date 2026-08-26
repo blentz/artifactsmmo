@@ -69,8 +69,8 @@ class SelectionContext:
     # never craftable at low char level — using it would make the preference dead).
     near_term_targets: frozenset[str] = field(default_factory=frozenset)
     # Post-level-up / post-fight-loss gear prioritization latch. Set by the
-    # player's GearLatch and cleared when no craftable upgrade remains.
-    gear_review_active: bool = False
+    # player's RegearEdge and cleared when no craftable upgrade remains.
+    regear_level_up: bool = False
     # Active-profile gear-demand KEEP map {code: keep_count} (spec
     # 2026-06-28-gear-loadout-profiles): the deduped per-code demand across the
     # active loadout profiles UNION the in-flight upgrade codes (+1 spare). This

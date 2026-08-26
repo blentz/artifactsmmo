@@ -264,7 +264,7 @@ def test_has_combat_deficit_is_the_cheap_boolean_form() -> None:
     """The LATCH needs "is there a deficit", not "what closes it".
 
     `deficit_upgrade_target` walks every candidate; this is one `predict_win`.
-    It runs every cycle in `GearLatch.update`, so the walk would be the wrong
+    It runs every cycle in `RegearEdge.update`, so the walk would be the wrong
     thing to put there.
     """
     gd = _gd()

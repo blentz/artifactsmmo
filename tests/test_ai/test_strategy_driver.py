@@ -93,7 +93,7 @@ def _ctx(**kw):
     # default is what these fixtures already assumed.
     base = dict(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
                 initial_xp=0, task_exchange_min_coins=1, combat_monster=None,
-                gear_review_active=False, draw_owed=True)
+                regear_level_up=False, draw_owed=True)
     base.update(kw)
     return SelectionContext(**base)
 

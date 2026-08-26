@@ -4,7 +4,7 @@
 file, no scenario set it: 30 of 30 carried `task_code=None`, so
 `combat_deficit.blocked_task_monster` returned `None` in every offline test and
 everything downstream of it — `has_combat_deficit`, `deficit_upgrade_target`,
-`GearLatch`, the `GEAR_REVIEW` guard — was reachable only through hand-built
+`RegearEdge`, the `GEAR_REVIEW` guard — was reachable only through hand-built
 states. Live, 21.1 % of cycles hold a task, and every one of them is a
 `monsters` task.
 
@@ -230,8 +230,8 @@ def test_the_task_triple_splits_the_deficit_three_ways(gd: GameData) -> None:
     assert gd.monster_level("lich") <= SCENARIOS[TRIPLE_OPEN].level
 
 
-def test_the_task_triple_flips_the_gear_latch(gd: GameData) -> None:
-    """`gear_latch.py:79`, the STANDING arm, with the task as the only input moving.
+def test_the_task_triple_flips_the_regear_edge(gd: GameData) -> None:
+    """`regear_edge.py:79`, the STANDING arm, with the task as the only input moving.
 
     The latch's standing arm is a three-way conjunction: a craftable upgrade
     exists, the cascade found nothing else worth fighting, and a combat deficit
@@ -285,7 +285,7 @@ def test_the_task_triple_flips_the_gear_latch(gd: GameData) -> None:
 def test_the_triple_cannot_starve_the_winnable_cascade(gd: GameData) -> None:
     """Why the test above passes `winnable_alternative` instead of measuring it.
 
-    `GearLatch`'s standing arm needs the cascade to find NOTHING worth fighting,
+    `RegearEdge`'s standing arm needs the cascade to find NOTHING worth fighting,
     and for THESE THREE cells it always finds something: `_path_aligned_monster`
     returns a winnable low-level slime for each of them, so `winnable_alternative`
     is True and the standing arm cannot fire from the triple alone.
@@ -307,7 +307,7 @@ def test_the_triple_cannot_starve_the_winnable_cascade(gd: GameData) -> None:
         assert player._winnable_farm_target() is not None
         player.plan_from_state()
         assert player._last_ctx is not None
-        assert player._last_ctx.gear_review_active is False
+        assert player._last_ctx.regear_level_up is False
 
 
 def test_the_task_triple_moves_the_gear_review_target(gd: GameData) -> None:
@@ -365,7 +365,7 @@ def test_the_gear_review_guard_takes_the_level_when_gear_cannot(gd: GameData) ->
         _state(UNWINNABLE_CLOSABLE, gd), task_code="mushmush", task_type="monsters",
         task_progress=0, task_total=10,
         task_lifecycle_phase=TaskLifecyclePhase.IN_PROGRESS)
-    ctx = dataclasses.replace(NO_PROFILE_CONTEXT, gear_review_active=True)
+    ctx = dataclasses.replace(NO_PROFILE_CONTEXT, regear_level_up=True)
 
     assert resolve_task_horizon(state, gd).verdict == HORIZON_LEVEL_UP
     assert repr(map_guard(GuardKind.GEAR_REVIEW, gd, ctx, state=state)) == (
@@ -396,7 +396,7 @@ def test_the_open_task_is_cancelled_end_to_end_with_a_coin(gd: GameData) -> None
 
 # --- the STANDING ARM, end to end -------------------------------------------
 #
-# `GearLatch` has a 981-cycle / 31.6-hour character-XP freeze in its history, and
+# `RegearEdge` has a 981-cycle / 31.6-hour character-XP freeze in its history, and
 # it was caused by exactly the class of edit `63533b82` made to it: the standing
 # arm armed on a STANDING FACT ("this fight is lost"), so `GEAR_REVIEW` — a GUARD,
 # which preempts the objective step outright — held the character for 981
@@ -472,7 +472,7 @@ def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -
     # so it is False on all three rows — including the gear row, which used to
     # be True here. That is the split, not a regression: the gear verdict is
     # served by the graph now, and the assertion below is what says so.
-    active = {m: _starved_run(m, gd)[1]._last_ctx.gear_review_active
+    active = {m: _starved_run(m, gd)[1]._last_ctx.regear_level_up
               for m in (STARVED_GEAR, STARVED_LEVEL_UP, STARVED_OUT_OF_REACH)}
     assert active == {STARVED_GEAR: False,
                       STARVED_LEVEL_UP: False,
@@ -497,7 +497,7 @@ def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(
     cannot reach must not change what it does, and a task gear closes must.
 
     `HORIZON_LEVEL_UP` lands with the out-of-reach row deliberately, and the
-    reason is in `gear_latch.py`: the standing arm's other conjunct is
+    reason is in `regear_edge.py`: the standing arm's other conjunct is
     `not winnable_alternative`, so a level-up verdict reached HERE has no monster
     to fight for the level. Letting the objective's own XP grind run IS the
     level-up being pursued."""

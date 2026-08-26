@@ -1,9 +1,9 @@
 -- @concept: items, characters @property: safety, monotonicity
 /-
 Formal model of the gear-review latch transition mirroring
-`src/artifactsmmo_cli/ai/gear_latch.py::GearLatch.update`:
+`src/artifactsmmo_cli/ai/regear_edge.py::RegearEdge.update`:
 
-THE CODE FACTS this mirrors (gear_latch.py):
+THE CODE FACTS this mirrors (regear_edge.py):
   * `triggered = state.level > prev_level or last_outcome == "error:fight_lost"`
     — the latch is TRIGGERED on a level-up OR a predicted-winnable fight loss.
   * `if triggered: self._active = True` — a trigger forces the latch ON.
@@ -23,11 +23,11 @@ These are finite Bool facts — proved by `decide` / Bool case analysis.
 Lean core only — no mathlib.
 -/
 
-namespace Formal.GearLatch
+namespace Formal.RegearEdge
 
 /-- One latch transition. `t` is the post-trigger intermediate value
 (`active ∨ leveledUp ∨ loss`); if it is set but no craftable upgrade remains the
-latch clears, else it takes `t`. Mirrors `GearLatch.update` exactly. -/
+latch clears, else it takes `t`. Mirrors `RegearEdge.update` exactly. -/
 def step (active leveledUp loss hasUpgrade : Bool) : Bool :=
   let t := active || leveledUp || loss
   if t && !hasUpgrade then false else t
@@ -81,4 +81,4 @@ example : step false true false false = false := by decide
 not "cleared from on"). -/
 example : step false false false false = false := by decide
 
-end Formal.GearLatch
+end Formal.RegearEdge

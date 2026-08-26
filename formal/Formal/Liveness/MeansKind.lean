@@ -88,7 +88,7 @@ inductive MeansKind where
   | discardHigh         -- DISCARD_HIGH,       guards.py:76
   | gearReview          -- GEAR_REVIEW,        guards.py:77 (lowest-priority
                         --                     guard, still above all means;
-                        --                     fires on ctx.gear_review_active)
+                        --                     fires on ctx.regear_level_up)
   | craftPotions        -- CRAFT_POTIONS,      guards.py (LAST guard in
                         --                     GUARD_ORDER; stocks the utility-slot
                         --                     potion baseline before grind;

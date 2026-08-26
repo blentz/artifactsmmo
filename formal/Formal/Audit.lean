@@ -819,10 +819,10 @@ open Formal.PriorityBand
 #print axioms Formal.TieredSelection.escalation_iff_no_cheap
 #print axioms Formal.TieredSelection.wait_only_when_no_full
 #print axioms Formal.TieredSelection.memo_skip_sound
-#print axioms Formal.GearLatch.set_on_levelup
-#print axioms Formal.GearLatch.set_on_loss
-#print axioms Formal.GearLatch.clear_iff_no_upgrade
-#print axioms Formal.GearLatch.monotone_until_clear
+#print axioms Formal.RegearEdge.set_on_levelup
+#print axioms Formal.RegearEdge.set_on_loss
+#print axioms Formal.RegearEdge.clear_iff_no_upgrade
+#print axioms Formal.RegearEdge.monotone_until_clear
 #print axioms Formal.Liveness.ItemsTaskTermination.keepSet_contains_task_item
 #print axioms Formal.Liveness.ItemsTaskTermination.keepSet_contains_recipe_inputs
 #print axioms Formal.Liveness.ItemsTaskTermination.batchK_ge_one

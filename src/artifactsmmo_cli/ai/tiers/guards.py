@@ -264,7 +264,7 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                                          deposit_context(ctx, step_profile)))
                 and _quantity_fraction(state) >= DISCARD_HIGH_FRACTION)
     if kind is GuardKind.GEAR_REVIEW:
-        return ctx.gear_review_active
+        return ctx.regear_level_up
     if kind is GuardKind.CRAFT_POTIONS:
         return craft_potions_fires(state, game_data, history)
     if kind is GuardKind.GE_CANCEL:

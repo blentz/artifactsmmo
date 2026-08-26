@@ -69,7 +69,6 @@ from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_latch import GearLatch
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
 from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
@@ -110,6 +109,7 @@ from artifactsmmo_cli.ai.recovery import (
     StuckExit,
     StuckSignal,
 )
+from artifactsmmo_cli.ai.regear_edge import RegearEdge
 from artifactsmmo_cli.ai.role_catalog import (
     ROLE_CATALOG,
     ROLES_BY_NAME,
@@ -342,7 +342,7 @@ class GamePlayer:
         # predicted-winnable fight loss, cleared when gear is level-appropriate)
         # is updated once per cycle BEFORE selection and read into the
         # SelectionContext to fire the GEAR_REVIEW guard.
-        self._gear_latch = GearLatch()
+        self._regear_edge = RegearEdge()
         # Authoritative aged open-order list, persisted independently of
         # self.state. Non-GE Action.execute() rebuilds reset
         # self.state.open_orders to (), so reconcile must fold against THIS
@@ -808,7 +808,7 @@ class GamePlayer:
         goal_satisfied = cache is not None and cache.selected_goal.is_satisfied(state)
         step_applicable = step is not None and step.is_applicable(state, game_data)
         if should_replan(
-            cache, self._last_outcome, self._gear_latch.active,
+            cache, self._last_outcome, self._regear_edge.active,
             goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL,
         ):
             selected_goal, plan, goals_tried = self._decide_band(
@@ -818,7 +818,7 @@ class GamePlayer:
                     selected_goal=selected_goal,
                     plan=list(plan),
                     crafting_target=self._last_decide_crafting_target,
-                    latch_active=self._gear_latch.active,
+                    latch_active=self._regear_edge.active,
                     goal_repr=repr(selected_goal),
                 )
                 self._plan_cache.arm_step(state.inventory, game_data)
@@ -829,7 +829,7 @@ class GamePlayer:
                         repr(selected_goal), plan_reprs[0], plan_reprs)
                     self.history.save_plan_commitment(
                         repr(selected_goal), goal_json, plan_reprs, 0,
-                        self._last_decide_crafting_target, self._gear_latch.active)
+                        self._last_decide_crafting_target, self._regear_edge.active)
             else:
                 self._plan_cache = None
             self._bump_committed_focus()
@@ -1017,7 +1017,7 @@ class GamePlayer:
         # standing arm needs it: a gear deficit against an unwinnable task
         # monster only blocks when there is nothing else worth fighting.
         combat_monster = self._winnable_farm_target()
-        self._gear_latch.update(prev, state, self._last_outcome, game_data)
+        self._regear_edge.update(prev, state, self._last_outcome, game_data)
         self._prev_level = state.level
         self._arbiter.set_cycle(self._cycle_counter)
         ctx = self._selection_context(combat_monster)
@@ -1128,7 +1128,7 @@ class GamePlayer:
                 # needs it: a gear deficit against an unwinnable task monster
                 # only blocks when there is nothing else worth fighting.
                 combat_monster = self._winnable_farm_target()
-                self._gear_latch.update(prev, state, self._last_outcome, game_data)
+                self._regear_edge.update(prev, state, self._last_outcome, game_data)
                 self._prev_level = state.level
                 # Coordination: renew our lease, publish what we still need,
                 # and re-decide our role. All local SQLite against the shared
@@ -3749,7 +3749,7 @@ class GamePlayer:
             target_gear=target_gear,
             target_tools=target_tools,
             near_term_targets=near_term_targets,
-            gear_review_active=self._gear_latch.level_up_pending,
+            regear_level_up=self._regear_edge.level_up_pending,
             gear_keep=gear_keep,
             # Cross-character coordination (Task 11): None whenever no
             # coordination store is attached (every single-character run),

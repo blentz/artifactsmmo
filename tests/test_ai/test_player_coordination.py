@@ -2,7 +2,7 @@
 (emergent-specialization spec, Task 11).
 
 `GamePlayer._update_coordination` is the seam: called once per cycle in
-`run()` beside `self._gear_latch.update(...)`, it renews this character's
+`run()` beside `self._regear_edge.update(...)`, it renews this character's
 lease, publishes its own unmet closure demand, re-decides its role, and
 recomputes `self._supply_target` — which `_selection_context` threads onto
 `SelectionContext.supply_target` for the SUPPLY_BANK means (Tasks 9/10) to
