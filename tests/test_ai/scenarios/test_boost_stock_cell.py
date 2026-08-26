@@ -9,33 +9,40 @@ invisible too — `cycles.action_repr` records the executed action, not the goal
 arm that chose it, so a `Craft(water_boost_potion)` row cannot be attributed to
 the unlock arm or to this one.
 
-**This cell is a DEFECT WITNESS, not a green confirmation.** Reaching the arm
-deliberately shows it proposing a craft that destroys its own precondition:
+**This cell was built as a DEFECT WITNESS and is now a CONVERGENCE witness.**
+As committed 2026-08-25 (`55063875`) it pinned two live defects, both since
+fixed; the assertions below pin the fix instead, so a regression fails here.
+
+What the cell used to witness:
 
 * The arm fires only when the heal stock is SATISFIED. On this cell that stock
   is 40 `small_health_potion` in `utility1_slot`.
-* `craft_ladder._TARGET_SLOT` is the hard-coded string `"utility1_slot"`, so
-  the boost the arm sizes is equipped into **that same slot**, displacing the
+* `craft_ladder._TARGET_SLOT` was the hard-coded string `"utility1_slot"`, so
+  the boost the arm sized was equipped into **that same slot**, displacing the
   heal stack the arm's precondition depends on — while `utility2_slot`, which
   `EquipAction.is_applicable`'s own comment calls out as legal for "two
-  DIFFERENT consumables across the utility slots", stays empty.
-* After the plan the heal stock is 0, the guard fires again immediately, and
-  the goal has switched to the HEAL arm. That is a two-cycle alternation
-  between arms 2 and 3, not convergence.
-* `EquipAction.apply` returns exactly **one** unit of the displaced code to
+  DIFFERENT consumables across the utility slots", stayed empty. After the plan
+  the heal stock was 0, the guard fired again immediately, and the goal had
+  switched to the HEAL arm asking for the whole 40 back: a two-cycle
+  alternation between arms 2 and 3, not convergence.
+* `EquipAction.apply` returned exactly **one** unit of the displaced code to
   inventory regardless of the utility stack's quantity, so the projection also
-  loses 39 of the 40 heals.
+  lost 39 of the 40 heals.
 
-The tests below pin the arm's reachability AND that behaviour, so the day the
-slot choice is fixed they fail and say which of the two changed.
+What it witnesses now: `craft_ladder` asks `utility_slot.utility_slot_for` —
+the ONE producer of "which utility slot", shared with
+`ProvisionMarginalFightGoal` — which prefers a FREE slot. The boost lands in
+`utility2_slot`, the heal stack survives at 40, and the guard goes SILENT.
+`EquipAction._displaced_qty` returns the whole displaced stack (and 0 for the
+additive same-code utility equip), so no displacement loses units any more.
 """
 
 import dataclasses
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.boost_selection import best_boost_potion
-from artifactsmmo_cli.ai.craft_ladder import _TARGET_SLOT
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
@@ -55,6 +62,7 @@ from artifactsmmo_cli.ai.thresholds import (
 )
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, active_guards
 from artifactsmmo_cli.ai.unlock_boost import unlock_boost_target
+from artifactsmmo_cli.ai.utility_slot import utility_slot_for
 from artifactsmmo_cli.ai.world_state import WorldState
 
 CELL = "l20_boost_stock"
@@ -168,7 +176,7 @@ def test_the_arbiter_selects_it_and_plans_the_boost_craft(
     assert repr(report.selected_goal) == "CraftPotionsGoal"
     assert [repr(a) for a in report.plan] == [
         f"Craft({BOOST}×3)",
-        f"Equip({BOOST}x6->utility1_slot)",
+        f"Equip({BOOST}x6->utility2_slot)",
     ]
 
 
@@ -188,44 +196,87 @@ def test_the_goal_prices_this_arm_at_zero(
     assert goal.is_satisfied(state) is False
 
 
-# --- the defect the cell exists to witness ----------------------------------
+# --- the arm PRESERVES its own precondition ---------------------------------
 
-def test_the_arm_equips_the_boost_over_its_own_precondition(
+def test_the_arm_equips_the_boost_into_the_free_slot(
         bundle_game_data: GameData, state: WorldState) -> None:
-    """DEFECT WITNESS. `_TARGET_SLOT` is hard-coded, so the boost lands in the
-    slot holding the heal stack whose satisfaction gated this arm. Applying the
-    plan takes the heal stock 40 -> 0 with `utility2_slot` still empty, and
-    `EquipAction.apply` credits back ONE unit of a 40-unit stack.
+    """CONVERGENCE, first half — the inversion of the 55063875 witness.
 
-    If a fix moves the ladder to a free utility slot, this test fails and the
-    docstring above says which assertion to retire."""
-    assert _TARGET_SLOT == "utility1_slot"
+    `craft_ladder` no longer hard-codes a slot: it asks `utility_slot_for`,
+    which prefers a FREE slot, so the boost goes to the empty `utility2_slot`
+    and the heal stack that gated this arm is untouched at 40. Before the fix
+    this asserted `utility1_slot` == BOOST, heal 0, slot 2 still empty, and
+    `inventory[HEAL] == 1` (a 40-stack credited back as ONE unit)."""
     assert state.equipment.get("utility2_slot") is None
+    assert utility_slot_for(BOOST, state) == "utility2_slot"
     _player, report = _planned(state, bundle_game_data)
     after = state
     for action in report.plan:
         after = action.apply(after, bundle_game_data)
-    assert after.equipment["utility1_slot"] == BOOST
+    assert after.equipment["utility1_slot"] == HEAL
+    assert after.equipment["utility2_slot"] == BOOST
     assert equipped_potion_qty(after, BOOST) == 6
-    assert equipped_potion_qty(after, HEAL) == 0
-    assert after.equipment.get("utility2_slot") is None
-    assert after.inventory.get(HEAL) == 1
+    assert equipped_potion_qty(after, HEAL) == 40
+    # Nothing was displaced, so nothing returned to the bag.
+    assert after.inventory.get(HEAL) is None
 
 
-def test_the_next_cycle_reverses_the_arm_instead_of_converging(
+def test_the_next_cycle_does_not_reverse_the_arm(
         bundle_game_data: GameData, state: WorldState) -> None:
-    """DEFECT WITNESS, second half. The guard re-fires immediately and the goal
-    is back on the HEAL arm asking for the whole 40-potion stack it just had —
-    a two-cycle alternation between arms 2 and 3, which is what "the arm
-    destroys its own precondition" means operationally."""
+    """CONVERGENCE, second half. The guard goes SILENT after the plan and the
+    goal has NOT flipped back to the heal arm — the alternation is gone.
+
+    Before the fix: `craft_potions_fires(after) is True`, the arm was the HEAL
+    one, and `_active_craft` asked for `(HEAL, 20, 40)` — the whole stack the
+    plan had just destroyed.
+
+    Honest about WHY the guard is quiet: the heal side is satisfied (40, still
+    equipped — the load-bearing change) and the boost side now fails the
+    guard's `_recipe_producible` conjunct because the three runs consumed the
+    held ingredients. The goal alone would still size more boost (asserted
+    below) — it is not gated on materials — but it stays on the SAME arm
+    instead of undoing its own work, which is what "reaches a fixed point"
+    means for an arm whose precondition is the heal stock."""
     _player, report = _planned(state, bundle_game_data)
     after = state
     for action in report.plan:
         after = action.apply(after, bundle_game_data)
-    assert craft_potions_fires(after, bundle_game_data, None) is True
-    assert _arm_is_boost_stock(after, bundle_game_data) is False
+    assert craft_potions_fires(after, bundle_game_data, None) is False
+    assert _arm_is_boost_stock(after, bundle_game_data) is True
     assert _goal(after, bundle_game_data)._active_craft(
-        after, bundle_game_data) == (HEAL, 20, 40)
+        after, bundle_game_data)[0] == BOOST
+    # The heal arm's own gate is still closed — the precondition survived.
+    goal = _goal(after, bundle_game_data)
+    assert (goal._baseline(after.level, after, bundle_game_data, None)
+            - goal._equipped(after, bundle_game_data)) <= 0
+
+
+def test_a_displaced_utility_stack_returns_intact(
+        bundle_game_data: GameData, state: WorldState) -> None:
+    """The second defect, which OUTLIVES the slot choice: when both utility
+    slots are full a displacement is unavoidable, and `EquipAction.apply` used
+    to credit back exactly ONE unit of the displaced stack.
+
+    Both slots full (heal 40 in slot 1, boost 6 in slot 2), equipping a third
+    code: `utility_slot_for` displaces the SMALLER stack (6 < 40, so slot 2),
+    and all 6 displaced units land in the bag. Before the fix: 1."""
+    both_full = dataclasses.replace(
+        state,
+        equipment={**state.equipment, "utility2_slot": BOOST},
+        utility1_slot_quantity=40,
+        utility2_slot_quantity=6,
+        inventory={**state.inventory, "minor_health_potion": 5},
+    )
+    slot = utility_slot_for("minor_health_potion", both_full)
+    assert slot == "utility2_slot"
+    action = EquipAction(code="minor_health_potion", slot=slot, quantity=5)
+    assert action.is_applicable(both_full, bundle_game_data) is True
+    after = action.apply(both_full, bundle_game_data)
+    assert after.inventory.get(BOOST) == 6
+    assert after.equipment["utility1_slot"] == HEAL
+    assert after.utility1_slot_quantity == 40
+    assert after.equipment["utility2_slot"] == "minor_health_potion"
+    assert after.utility2_slot_quantity == 5
 
 
 # --- the cell bites, and it is the only one ---------------------------------

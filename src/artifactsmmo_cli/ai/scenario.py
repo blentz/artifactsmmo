@@ -1712,13 +1712,17 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # ingredient so `_recipe_producible` passes and the ladder sizes 3 runs
     # from held stock rather than a 5-run gather batch.
     #
-    # THE CELL IS A DEFECT WITNESS, not a green confirmation — see
-    # tests/test_ai/scenarios/test_boost_stock_cell.py. The arm plans
-    # `Craft(earth_boost_potion×3)` + `Equip(...→utility1_slot)`, and
-    # `craft_ladder._TARGET_SLOT` is the hard-coded string "utility1_slot", so
-    # the equip DISPLACES the 40-potion heal stack that is the arm's own
-    # precondition while utility2_slot sits empty. The guard re-fires on the
-    # heal arm immediately after.
+    # THE CELL WAS A DEFECT WITNESS when it landed (55063875) and is now a
+    # CONVERGENCE witness — see tests/test_ai/scenarios/test_boost_stock_cell.py.
+    # As committed the arm planned `Craft(earth_boost_potion×3)` +
+    # `Equip(...→utility1_slot)`, because `craft_ladder._TARGET_SLOT` was the
+    # hard-coded string "utility1_slot", so the equip DISPLACED the 40-potion
+    # heal stack that is the arm's own precondition while utility2_slot sat
+    # empty, and the guard re-fired on the heal arm immediately after.
+    # `craft_ladder` now asks `utility_slot.utility_slot_for`, which prefers a
+    # FREE slot: the boost lands in utility2_slot, the heal stack survives at
+    # 40, and the guard goes silent. The cell keeps utility2_slot EMPTY on
+    # purpose — that emptiness is what the free-slot rule is measured against.
     "l20_boost_stock": ScenarioCharacter(
         name="l20_boost_stock", level=20,
         skills={"mining": 20, "woodcutting": 20, "weaponcrafting": 15,

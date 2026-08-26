@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOT as ITEM_TYPE_TO_
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS as ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.inventory_room import has_room
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS, utility_slot_quantity
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Item types whose code may legally occupy MORE THAN ONE slot, up to physical
@@ -57,6 +58,24 @@ class EquipAction(Action):
     slot: str
     quantity: int = 1
 
+    def _displaced_qty(self, state: WorldState) -> int:
+        """Units of the currently-worn code that return to inventory.
+
+        An EQUIPMENT slot holds exactly one item, so a displaced weapon or
+        armour returns exactly 1 — including the degenerate same-code re-equip
+        into the slot it already occupies (-1 then +1, a no-op). A UTILITY slot
+        holds a STACK, and the server returns the WHOLE stack on displacement:
+        crediting 1 unit of a displaced 40-potion stack destroyed 39 potions in
+        the projection (fixed 2026-08-25). The same-code UTILITY equip displaces
+        NOTHING — it is additive (M + q, see `apply`) — so it returns 0.
+        """
+        displaced = state.equipment.get(self.slot)
+        if displaced is None:
+            return 0
+        if self.slot not in UTILITY_SLOTS:
+            return 1
+        return 0 if displaced == self.code else utility_slot_quantity(state, self.slot)
+
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if state.inventory.get(self.code, 0) < self.quantity:
             return False
@@ -91,19 +110,26 @@ class EquipAction(Action):
         ):
             return False
         # NET-SLOT ROOM: equipping C into self.slot displaces the currently
-        # worn item O (state.equipment[self.slot]). Quantity is conserved by
-        # the swap (added_qty=0: -1 C, +1 O). O needs a NEW slot only if it is
-        # a genuinely new stack (not already held elsewhere in inventory); C
-        # frees its own slot only if equipping consumes its ENTIRE held stack.
-        # Net new-slot need = max(0, O_needs_slot - C_frees_slot). Without
-        # this guard a full bag can plan an equip whose displaced item has
-        # nowhere to land, which is non-executable on the server.
+        # worn item O (state.equipment[self.slot]). O needs a NEW slot only if
+        # it is a genuinely new stack (not already held elsewhere in
+        # inventory); C frees its own slot only if equipping consumes its
+        # ENTIRE held stack. Net new-slot need = max(0, O_needs_slot -
+        # C_frees_slot). Without this guard a full bag can plan an equip whose
+        # displaced item has nowhere to land, which is non-executable on the
+        # server.
+        #
+        # QUANTITY is conserved for an equipment swap (-1 C, +1 O) but NOT for
+        # a utility one: displacing a 40-potion stack to equip 6 boosts puts 34
+        # NET units into the bag, and `apply` now models that (see
+        # `_displaced_qty`). The qty term must see the same number the
+        # projection will add, or a full bag plans an equip the server refuses.
         displaced = state.equipment.get(self.slot)
         o_needs_slot = 1 if (displaced is not None
                              and displaced not in state.inventory) else 0
         c_frees_slot = 1 if state.inventory.get(self.code, 0) == self.quantity else 0
         new_stacks = max(0, o_needs_slot - c_frees_slot)
-        if not has_room(new_stacks, added_qty=0,
+        if not has_room(new_stacks,
+                        added_qty=max(0, self._displaced_qty(state) - self.quantity),
                         slots_free=state.inventory_slots_free,
                         qty_free=state.inventory_free):
             return False
@@ -118,22 +144,22 @@ class EquipAction(Action):
         new_equipment = dict(state.equipment)
         old_item = new_equipment.get(self.slot)
         new_equipment[self.slot] = self.code
-        if old_item:
-            new_inventory[old_item] = new_inventory.get(old_item, 0) + 1
+        displaced_qty = self._displaced_qty(state)
+        if old_item and displaced_qty:
+            new_inventory[old_item] = new_inventory.get(old_item, 0) + displaced_qty
 
         # Utility equip is additive for same-code (confirmed by maintainer 2026-06-30).
         # Equipping q of a code into a utility slot that already holds the SAME code
         # ADDS to the stack (M + q); into an empty/different slot it SETS the quantity
         # to q (returning any displaced code to inventory, handled above).
-        if self.slot not in ("utility1_slot", "utility2_slot"):
+        if self.slot not in UTILITY_SLOTS:
             return dataclasses.replace(
                 state,
                 inventory=new_inventory,
                 equipment=new_equipment,
                 cooldown_expires=None,
             )
-        prior_qty = (state.utility1_slot_quantity if self.slot == "utility1_slot"
-                     else state.utility2_slot_quantity) if old_item == self.code else 0
+        prior_qty = utility_slot_quantity(state, self.slot) if old_item == self.code else 0
         qty = prior_qty + self.quantity
         if self.slot == "utility1_slot":
             return dataclasses.replace(

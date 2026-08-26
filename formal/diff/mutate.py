@@ -5509,8 +5509,9 @@ APPLY_MOVE_MUTATIONS = [
 APPLY_EQUIP_MUTATIONS = [
     (
         "apply-baseline-equip: revert EquipAction.apply to explicit WorldState(...) dropping baseline",
-        # Target: the non-utility return path (lines 91-96 of equip.py, inside the
-        # `if self.slot not in ("utility1_slot", "utility2_slot"):` branch).
+        # Target: the non-utility return path of equip.py, inside the
+        # `if self.slot not in UTILITY_SLOTS:` branch (the literal tuple moved
+        # to ai/utility_slot.py on 2026-08-25 — one producer of the slot names).
         # This is the path exercised by test_equip_preserves_baseline_{probe,property}
         # which uses slot="weapon_slot".  Task-2's per-slot restructure added 4 spaces
         # of extra indent vs. the pre-restructure single-return block — the old 8-space

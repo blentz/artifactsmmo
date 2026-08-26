@@ -60,6 +60,25 @@ def test_relevant_actions_constructs_the_scaled_equip() -> None:
     assert (a.code, a.slot, a.quantity) == ("small_health_potion", "utility1_slot", 40)
 
 
+def test_relevant_actions_asks_the_one_slot_producer_not_a_hard_coded_slot() -> None:
+    """This goal used to carry its OWN `_TARGET_SLOT = "utility1_slot"`, a
+    second copy of the answer `craft_ladder` also hard-coded. It now asks
+    `utility_slot.utility_slot_for`, so with slot 1 occupied by a different
+    consumable it targets the FREE slot instead of displacing.
+
+    `is_satisfied` (any utility slot non-empty) means the arbiter never reaches
+    this branch today — the goal only plans with BOTH slots empty, where the
+    answer is slot 1 either way. Pinned directly so the hard-code cannot come
+    back unnoticed if that satisfaction rule ever narrows."""
+    state = make_state(inventory={"small_health_potion": 100},
+                       equipment={"utility1_slot": "earth_boost_potion",
+                                  "utility2_slot": None})
+    gd = _gd_with_consumable("small_health_potion", hp_restore=60)
+    out = _goal().relevant_actions([], state, gd)
+    assert [(a.code, a.slot) for a in out] == [
+        ("small_health_potion", "utility2_slot")]
+
+
 def test_goal_plans_the_equip_end_to_end() -> None:
     """Integration: the goal must actually PLAN its equip (verifies desired_state /
     is_satisfied wiring against the real planner)."""

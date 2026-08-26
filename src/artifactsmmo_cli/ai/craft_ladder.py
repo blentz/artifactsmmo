@@ -2,7 +2,7 @@
 
 craft_utility_ladder builds the gather/buy/withdraw/craft/move/equip action
 filter for ONE utility target, batched to `runs` and equipping `equip_qty`
-into utility1_slot.
+into the utility slot `utility_slot_for` picks for the target code.
 """
 
 import dataclasses
@@ -21,9 +21,8 @@ from artifactsmmo_cli.ai.requirement_projections import (
     demand_set,
     requirement_craftables,
 )
+from artifactsmmo_cli.ai.utility_slot import utility_slot_for
 from artifactsmmo_cli.ai.world_state import WorldState
-
-_TARGET_SLOT = "utility1_slot"
 
 
 def _held(code: str, state: WorldState) -> int:
@@ -42,10 +41,11 @@ def craft_utility_ladder(
     """Gather/buy/withdraw/craft/move/equip action filter for ONE utility target.
 
     Builds the closure of actions needed to craft `runs` batches of
-    `target_code` and equip `equip_qty` into utility1_slot.  Mirrors the
-    recipe-closure action filter from CraftPotionsGoal.relevant_actions,
-    parameterised for reuse by CraftUnlockBoostGoal and other utility-slot
-    craft goals.
+    `target_code` and equip `equip_qty` into the utility slot
+    `utility_slot_for` picks (the slot already holding the code, else a FREE
+    slot, else the smaller stack).  Mirrors the recipe-closure action filter
+    from CraftPotionsGoal.relevant_actions, parameterised for reuse by
+    CraftUnlockBoostGoal and other utility-slot craft goals.
     """
     craftable_mats = requirement_craftables(
         game_data.requirement_graph.graph(), [target_code])
@@ -85,5 +85,6 @@ def craft_utility_ladder(
                           else dataclasses.replace(a, quantity=buy_qty))
         elif (isinstance(a, WithdrawItemAction) and a.code in withdrawable) or isinstance(a, MoveAction):
             result.append(a)
-    result.append(EquipAction(code=target_code, slot=_TARGET_SLOT, quantity=equip_qty))
+    result.append(EquipAction(code=target_code, slot=utility_slot_for(target_code, state),
+                              quantity=equip_qty))
     return result

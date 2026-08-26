@@ -885,6 +885,74 @@ class TestEquipAction:
         out = EquipAction("small_health_potion", "utility2_slot", quantity=30).apply(state, gd)
         assert out.utility2_slot_quantity == 50  # 20 + 30
 
+    def test_equip_utility_same_code_displaces_nothing_back_to_inventory(self):
+        """The additive same-code utility equip displaces NOTHING — the stack
+        just grows (20 + 30 = 50), so the bag simply loses the 30 equipped.
+
+        `apply` credited back `+1` unconditionally until 2026-08-25, which
+        spuriously minted one potion on every same-code top-up. `_displaced_qty`
+        now returns 0 for this case."""
+        state = make_state(inventory={"small_health_potion": 50}, level=1,
+                           equipment={"utility1_slot": "small_health_potion"})
+        state = dataclasses.replace(state, utility1_slot_quantity=20)
+        gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
+        out = EquipAction("small_health_potion", "utility1_slot", quantity=30).apply(state, gd)
+        assert out.utility1_slot_quantity == 50
+        assert out.inventory.get("small_health_potion") == 20  # 50 - 30, no +1
+
+    def test_equip_utility_displaced_stack_returns_WHOLE(self):
+        """A displaced utility stack comes back INTACT. `apply` credited back
+        exactly ONE unit until 2026-08-25, so displacing 40 heals to equip 6
+        boosts destroyed 39 potions in the projection."""
+        state = make_state(inventory={"earth_boost_potion": 6}, level=1,
+                           equipment={"utility1_slot": "small_health_potion"})
+        state = dataclasses.replace(state, utility1_slot_quantity=40)
+        gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
+        gd._item_stats["earth_boost_potion"] = ItemStats(
+            code="earth_boost_potion", level=1, type_="utility")
+        out = EquipAction("earth_boost_potion", "utility1_slot", quantity=6).apply(state, gd)
+        assert out.utility1_slot_quantity == 6
+        assert out.inventory.get("small_health_potion") == 40
+
+    def test_equip_non_utility_displaced_item_returns_exactly_one(self):
+        """An EQUIPMENT slot holds exactly one item, so the one-unit credit is
+        RIGHT there and the utility fix must not widen it. `_displaced_qty`
+        reads no quantity field for a non-utility slot (there is none)."""
+        stats = ItemStats(code="C", level=1, type_="body_armor")
+        state = make_state(
+            inventory={"C": 1}, level=5,
+            equipment={**make_state().equipment, "body_armor_slot": "O"},
+        )
+        state = dataclasses.replace(state, utility1_slot_quantity=40)
+        gd = make_game_data(item_stats={"C": stats})
+        out = EquipAction(code="C", slot="body_armor_slot").apply(state, gd)
+        assert out.inventory.get("O") == 1
+
+    def test_equip_blocked_when_the_displaced_utility_stack_overflows_the_bag(self):
+        """The room gate must see the SAME quantity `apply` will add. Displacing
+        a 40-potion stack to equip 6 boosts puts 34 NET units into the bag; with
+        only 10 units of quantity headroom that equip is not executable.
+
+        Before the displaced-stack fix `added_qty` was hard-coded 0 ("quantity
+        is conserved by the swap"), which is true for armour and false for a
+        utility stack."""
+        state = make_state(
+            inventory={"earth_boost_potion": 6}, inventory_max=16,
+            inventory_slots_max=20, level=5,
+            equipment={**make_state().equipment,
+                       "utility1_slot": "small_health_potion"},
+        )
+        state = dataclasses.replace(state, utility1_slot_quantity=40)
+        gd = make_game_data(item_stats={"earth_boost_potion": ItemStats(
+            code="earth_boost_potion", level=1, type_="utility")})
+        action = EquipAction(code="earth_boost_potion", slot="utility1_slot",
+                             quantity=6)
+        assert state.inventory_free == 10  # 16 - 6 held
+        assert action.is_applicable(state, gd) is False
+        # 34 units of headroom (40 back, 6 out) and it fits.
+        roomy = dataclasses.replace(state, inventory_max=40)
+        assert action.is_applicable(roomy, gd) is True
+
     def test_equip_blocked_when_displaced_item_needs_slot_and_bag_full(self):
         """Full bag (0 slots free), equipping C displaces a NEW item O not held
         and C's stack does NOT empty (qty=2 held, equipping 1) -> O needs a

@@ -109,6 +109,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.objective_needs import objective_needs
 from artifactsmmo_cli.ai.tiers.taskmaster_choice import choose_taskmaster
+from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS
 from artifactsmmo_cli.ai.world_state import WorldState
 
 RECYCLE_HOIST_URGENCY = 2
@@ -643,7 +644,7 @@ def _marginal_provision_goal(ctx: SelectionContext, state: WorldState,
     monster = ctx.combat_monster
     if monster is None or history is None:
         return None
-    if any(state.equipment.get(s) is not None for s in ("utility1_slot", "utility2_slot")):
+    if any(state.equipment.get(s) is not None for s in UTILITY_SLOTS):
         return None  # already provisioned -> grind
     heal_code = best_held_heal(state, game_data)
     if heal_code is None:

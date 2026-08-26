@@ -9,14 +9,12 @@ from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS, utility_slot_for
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Above the grind (GrindCharacterXP ceiling 45) so provisioning runs before the
 # fight, below survival/RestoreHP (110) so healing still preempts.
 PROVISION_MARGINAL_VALUE = 50.0
-
-_TARGET_SLOT = "utility1_slot"
-_UTILITY_SLOTS = ("utility1_slot", "utility2_slot")
 
 
 class ProvisionMarginalFightGoal(Goal):
@@ -32,17 +30,23 @@ class ProvisionMarginalFightGoal(Goal):
         return 0.0 if self.is_satisfied(state) else PROVISION_MARGINAL_VALUE
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return any(state.equipment.get(slot) is not None for slot in _UTILITY_SLOTS)
+        return any(state.equipment.get(slot) is not None for slot in UTILITY_SLOTS)
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         # One-action plan; the planner terminates on is_satisfied after the equip
-        # flips equipment[utility1_slot]. Use the form Step 1 confirmed the planner
-        # honors (return {} if it goal-tests via is_satisfied).
+        # flips one utility slot off None. Use the form Step 1 confirmed the
+        # planner honors (return {} if it goal-tests via is_satisfied).
         return {}
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:
-        return [EquipAction(code=self._heal_code, slot=_TARGET_SLOT,
+        # The slot comes from the ONE producer (`utility_slot_for`), not from a
+        # second hard-coded "utility1_slot" here. `is_satisfied` above means
+        # this goal only ever plans with BOTH slots empty, so the answer is
+        # always slot 1 today — but it is now the same answer craft_ladder gets,
+        # and it stays right if the satisfaction rule ever narrows.
+        return [EquipAction(code=self._heal_code,
+                            slot=utility_slot_for(self._heal_code, state),
                             quantity=self._quantity)]
 
     def serialize(self) -> dict[str, object]:
