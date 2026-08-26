@@ -186,7 +186,7 @@ def test_map_guard_gear_review_prices_the_deficit_target():
     `king_slime_sword`, gated behind a `jasper_crystal` the character has no
     route to.
 
-    The `cost_of` closure is INVOKED here rather than merely constructed: a
+    The `actions_of` closure is INVOKED here rather than merely constructed: a
     closure that is never called is not wired to anything.
     """
     gd = GameData()
@@ -196,8 +196,8 @@ def test_map_guard_gear_review_prices_the_deficit_target():
     state = make_state(level=4, inventory={}, bank_items={})
     seen = {}
 
-    def fake_target(st, game_data, cost_of=None, **k):
-        seen["cost"] = cost_of("copper_boots")
+    def fake_target(st, game_data, actions_of=None, **k):
+        seen["cost"] = actions_of("copper_boots", "boots_slot")
         return "copper_boots", "boots_slot"
 
     with patch.object(strategy_driver, "acquisition_actions", return_value=7):

@@ -67,7 +67,7 @@ CEILING = UNOBTAINABLE_PER_UNIT + EQUIP_ACTIONS
 """What `acquisition_actions(..., equip=True)` returns for a capped answer.
 
 `EQUIP_ACTIONS` is added by the wrapper AFTER `_capped`, so the ceiling a
-`cost_of` consumer actually sees is one action above the cap. It is a constant
+`actions_of` consumer actually sees is one action above the cap. It is a constant
 per call site — `deficit_upgrade_target`'s pricer passes `equip=True` for every
 candidate — so it shifts the whole tied set and cannot reorder it.
 """
@@ -114,12 +114,12 @@ def _priced_improvers(
     return sorted(rows)
 
 
-def _cost_of(state: WorldState) -> Callable[[str], float]:
+def _actions_of(state: WorldState) -> Callable[[str, str], int]:
     """The production pricer, exactly as `strategy_driver`'s GEAR_REVIEW branch
     and the `combat-deficit` diagnostic build it."""
-    def priced(code: str) -> float:
-        return float(acquisition_actions(code, 1, state, _gd(),
-                                         NO_PROFILE_CONTEXT, equip=True))
+    def priced(code: str, slot: str) -> int:
+        return acquisition_actions(code, 1, state, _gd(),
+                                   NO_PROFILE_CONTEXT, equip=slot is not None)
     return priced
 
 
@@ -149,7 +149,7 @@ def test_at_the_ceiling_the_winner_is_the_largest_raw_margin_gain() -> None:
     assert sum(1 for i, _c, _g, _cost in rows if i < first_winner_index) == 15
 
     deficit = combat_deficit(state, _gd(), "king_slime", max_chain=1,
-                             cost_of=_cost_of(state))
+                             actions_of=_actions_of(state))
 
     assert deficit is not None
     assert [s.code for s in deficit.chain] == ["skull_staff"]
@@ -196,7 +196,7 @@ def test_a_gain_tie_at_the_ceiling_falls_to_catalogue_order_and_takes_the_first(
     assert "greater_emerald_amulet" in by_catalogue
 
     deficit = combat_deficit(state, _gd(), "dusk_beetle", max_chain=1,
-                             cost_of=_cost_of(state))
+                             actions_of=_actions_of(state))
 
     assert deficit is not None
     assert [s.code for s in deficit.chain] == ["emerald_amulet"]
@@ -222,7 +222,7 @@ def test_the_tied_amulet_pick_closes_nothing_at_any_depth() -> None:
 
     by_depth = {
         depth: combat_deficit(state, _gd(), "dusk_beetle", max_chain=depth,
-                              cost_of=_cost_of(state))
+                              actions_of=_actions_of(state))
         for depth in (1, 2, 3, 8)
     }
 

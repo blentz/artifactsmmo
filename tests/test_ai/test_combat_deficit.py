@@ -206,7 +206,7 @@ def test_ranking_is_margin_gain_PER_ACTION_when_a_cost_is_supplied() -> None:
     # cheaper to get. Per action, bronze wins.
     cost = {"steel_sword": 400.0, "bronze_sword": 20.0, "hide_vest": 20.0}
 
-    deficit = combat_deficit(_state(), gd, "boar", cost_of=cost.get)
+    deficit = combat_deficit(_state(), gd, "boar", actions_of=lambda code, slot: cost.get(code))
 
     assert deficit.chain[0].code == "bronze_sword", (
         "ranked on raw gain, steel_sword wins; per action it does not")
@@ -221,7 +221,7 @@ def test_cost_ranking_still_requires_a_real_margin_gain() -> None:
 
     deficit = combat_deficit(_state(), gd, "boar",
                              candidates=("cloth_cap", "steel_sword"),
-                             cost_of=cost.get)
+                             actions_of=lambda code, slot: cost.get(code))
 
     assert [s.code for s in deficit.chain] == ["steel_sword"]
 
@@ -232,18 +232,18 @@ def test_a_zero_cost_candidate_cannot_divide_by_zero() -> None:
     ranking must not be able to blow up if one ever is."""
     gd = _gd()
 
-    deficit = combat_deficit(_state(), gd, "boar", cost_of=lambda code: 0.0)
+    deficit = combat_deficit(_state(), gd, "boar", actions_of=lambda code, slot: 0)
 
     assert deficit.closes is True
 
 
 def test_without_a_cost_the_ranking_is_unchanged() -> None:
-    """`cost_of` defaults to None so every existing caller keeps raw-margin
+    """`actions_of` defaults to None so every existing caller keeps raw-margin
     ranking exactly — the same contract `route_options` gives its `store`."""
     gd = _gd()
 
     assert (combat_deficit(_state(), gd, "boar").chain[0].code
-            == combat_deficit(_state(), gd, "boar", cost_of=None).chain[0].code
+            == combat_deficit(_state(), gd, "boar", actions_of=None).chain[0].code
             == "steel_sword")
 
 
@@ -255,7 +255,7 @@ def test_each_step_records_what_it_cost() -> None:
 
     step = combat_deficit(_state(), gd, "boar",
                           candidates=("steel_sword",),
-                          cost_of=lambda code: 37.0).chain[0]
+                          actions_of=lambda code, slot: 37).chain[0]
 
     assert step.acquire_cost == 37.0
 
@@ -426,7 +426,7 @@ def test_the_target_is_PRICED_when_a_cost_is_supplied() -> None:
     cost = {"steel_sword": 400.0, "bronze_sword": 20.0}
 
     assert deficit_upgrade_target(_task_state(), gd) == ("steel_sword", "weapon_slot")
-    assert deficit_upgrade_target(_task_state(), gd, cost_of=cost.get) == (
+    assert deficit_upgrade_target(_task_state(), gd, actions_of=lambda code, slot: cost.get(code)) == (
         "bronze_sword", "weapon_slot")
 
 

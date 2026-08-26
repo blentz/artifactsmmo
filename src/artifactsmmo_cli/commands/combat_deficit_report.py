@@ -72,7 +72,7 @@ def combat_deficit_command(
               f"{state.task_progress}/{state.task_total}")
         print("-" * 70)
 
-        def cost_of(code: str) -> float:
+        def actions_of(code: str, slot: str) -> int:
             """Actions to acquire ONE — the SAME function `J` prices routes with.
 
             This is what makes the chain answer clause (c) without a rule for it:
@@ -80,12 +80,12 @@ def combat_deficit_command(
             measured cost of asking a sibling), so preferring a low skill
             requirement and preferring a cheap acquisition are one ordering.
             """
-            return float(acquisition_actions(code, 1, state, game_data, ctx,
-                                             equip=True, store=store))
+            return acquisition_actions(code, 1, state, game_data, ctx,
+                                       equip=slot is not None, store=store)
 
         _print_deficit(target, combat_deficit(state, game_data, target,
                                               max_chain=max_chain,
-                                              cost_of=cost_of), state.level)
+                                              actions_of=actions_of), state.level)
     finally:
         store.end_session(exit_reason="normal")
         store.close()

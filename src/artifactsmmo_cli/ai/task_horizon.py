@@ -126,7 +126,7 @@ def resolve_task_horizon(state: WorldState, game_data: GameData) -> TaskHorizon 
     reach" get that for free — a verdict exists only where a fight is lost.
 
     UNPRICED — AND THAT IS A COST DECISION, NOT A SOUNDNESS ONE. `combat_deficit`
-    ranks its greedy walk on margin gain PER ACTION when a `cost_of` is supplied,
+    ranks its greedy walk on margin gain PER ACTION when an `actions_of` is supplied,
     which changes WHICH item is picked at each step and can therefore change whether
     the chain closes inside `MAX_CHAIN`. The first version of this docstring
     justified the unpriced call by claiming that maximising raw margin gain per step
@@ -147,7 +147,7 @@ def resolve_task_horizon(state: WorldState, game_data: GameData) -> TaskHorizon 
     is simply the one that is affordable here. It stays for two reasons that are
     about cost and coherence rather than accuracy:
 
-      * The priced call is NOT a function of `(state, game_data)` — `_deficit_cost`
+      * The priced call is NOT a function of `(state, game_data)` — `_deficit_actions`
         closes over a `SelectionContext` and a `LearningStore`
         (`strategy_driver.map_guard`). Asking it here would make the verdict
         ctx-dependent and break the `per_state` identity memo below, which is the

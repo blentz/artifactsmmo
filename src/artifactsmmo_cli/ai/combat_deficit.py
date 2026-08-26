@@ -80,7 +80,7 @@ class DeficitStep:
     crafting_level: int
     margin_after: int
     acquire_cost: float | None = None
-    """Actions to acquire ONE of this step, from the caller's `cost_of`.
+    """Actions to acquire ONE of this step, from the caller's `actions_of`.
 
     None when the caller supplied no pricing. Recorded so the chain reads as a
     PLAN rather than a verdict: four steps costing 20 cycles each is a different
@@ -171,7 +171,7 @@ def deficit_upgrade_target(
     state: WorldState,
     game_data: GameData,
     candidates: tuple[str, ...] | None = None,
-    cost_of: Callable[[str], float] | None = None,
+    actions_of: Callable[[str, str], int] | None = None,
 ) -> tuple[str, str] | None:
     """`(item_code, slot)` to build next to make the HELD TASK's monster winnable.
 
@@ -229,7 +229,7 @@ def deficit_upgrade_target(
     if monster is None:
         return None
     deficit = combat_deficit(state, game_data, monster,
-                             candidates=candidates, cost_of=cost_of)
+                             candidates=candidates, actions_of=actions_of)
     if deficit is None or not deficit.closes:
         return None
     step = deficit.chain[0]
@@ -251,7 +251,7 @@ def combat_deficit(
     monster: str,
     candidates: tuple[str, ...] | None = None,
     max_chain: int = MAX_CHAIN,
-    cost_of: Callable[[str], float] | None = None,
+    actions_of: Callable[[str, str], int] | None = None,
 ) -> CombatDeficit | None:
     """The gear gap against `monster`, or None when the fight is already winnable.
 
@@ -265,7 +265,7 @@ def combat_deficit(
                   narrow it to what is actually acquirable (`obtain_sources`)
                   without this core taking a dependency on the acquisition model.
       max_chain:  bound on the greedy walk.
-      cost_of:    actions to acquire ONE of an item — in production
+      actions_of: actions to acquire ONE of an item INTO A SLOT — in production
                   `acquisition_cost.acquisition_actions`. When supplied the walk
                   ranks on margin gain PER ACTION instead of raw gain, which is
                   what makes clause (c) fall out for free: `acquisition_cost`
@@ -303,7 +303,17 @@ def combat_deficit(
             if margin <= current:
                 continue  # cheap is no reason to acquire something that cannot help
             gain = margin - current
-            cost = None if cost_of is None else cost_of(code)
+            # The slot comes from the SAME rule `deficit_upgrade_target`
+            # returns (`ITEM_TYPE_TO_SLOTS[type_][0]`, :236-245), computed here
+            # because the pricer needs it: an ObtainItem's price includes the
+            # equip action exactly when it carries a slot, and deriving that in
+            # the caller would be a second producer of the slot rule.
+            # `slots` is never empty for a default-pool candidate — `:124`
+            # filters on `ITEM_TYPE_TO_SLOTS` — so this is None only for a
+            # caller-supplied `candidates` set, which nothing supplies today.
+            slots = ITEM_TYPE_TO_SLOTS.get(stats.type_, [])
+            cost = (None if actions_of is None or not slots
+                    else actions_of(code, slots[0]))
             # `max(cost, 1.0)`: an item priced 0 is one already owned, which
             # cannot improve the margin anyway (`pick_loadout` would be wearing
             # it) — but the ranking must not be able to divide by zero if one is.

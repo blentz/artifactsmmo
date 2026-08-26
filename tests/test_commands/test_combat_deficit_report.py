@@ -62,7 +62,7 @@ def test_reports_the_chain_that_closes_a_losing_fight(capsys) -> None:
 
 
 def test_the_command_prices_candidates_with_the_same_function_J_uses(capsys) -> None:
-    """The `cost_of` closure is what makes the chain answer clause (c): a
+    """The `actions_of` closure is what makes the chain answer clause (c): a
     skill-gated craft carries `unlock_actions` (its grind, or the measured cost
     of asking a sibling), so "lowest skill requirement" and "cheapest
     acquisition" become one ordering and neither needs a rule.
@@ -74,8 +74,8 @@ def test_the_command_prices_candidates_with_the_same_function_J_uses(capsys) -> 
     player = _player()
     captured = {}
 
-    def fake_deficit(state, game_data, monster, max_chain=8, cost_of=None):
-        captured["cost"] = cost_of("iron_sword")
+    def fake_deficit(state, game_data, monster, max_chain=8, actions_of=None):
+        captured["cost"] = actions_of("iron_sword", "weapon_slot")
         return None
 
     with (

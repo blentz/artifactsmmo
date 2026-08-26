@@ -366,7 +366,7 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         # while the weapon that moved `rounds_to_kill` went unbuilt. This is the
         # "lose fight -> upgrade gear" link the bot never had; the value scan
         # stays the fallback for every other reason to upgrade.
-        def _deficit_cost(code: str) -> float:
+        def _deficit_actions(code: str, slot: str) -> int:
             """Actions to acquire ONE — the SAME pricing `J` and the
             `combat-deficit` diagnostic use, so the guard cannot chase a
             different item than the oracle reports. Without it the walk ranks on
@@ -385,10 +385,11 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
             -> 60.7ms. Scaled onto the live figure that is under 1.1s against a
             ~70s cycle, and it is spent only when the gear latch is armed.
             """
-            return float(acquisition_actions(code, 1, state, game_data, ctx,
-                                             equip=True, store=history))
+            return acquisition_actions(code, 1, state, game_data, ctx,
+                                       equip=slot is not None, store=history)
 
-        target = deficit_upgrade_target(state, game_data, cost_of=_deficit_cost)
+        target = deficit_upgrade_target(state, game_data,
+                                        actions_of=_deficit_actions)
         # Asked only when the PRICED walk named nothing, so the gear arm above is
         # byte-identical to what it was and the horizon costs nothing on the path
         # that already had an answer. Where the two disagree — the priced walk

@@ -4019,8 +4019,8 @@ COMBAT_DEFICIT_FUTILE_TARGET_MUTATIONS = [
     # that two items would close reads as unclosable, so honouring `closes`
     # would silently narrow GEAR_REVIEW instead of correcting it.
     ("deficit_upgrade_target: walk bounded at one step, so multi-item chains vanish",
-     "                             candidates=candidates, cost_of=cost_of)",
-     "                             candidates=candidates, max_chain=1, cost_of=cost_of)"),
+     "                             candidates=candidates, actions_of=actions_of)",
+     "                             candidates=candidates, max_chain=1, actions_of=actions_of)"),
 ]
 
 # The ONE-LEVEL PLANNING HORIZON (USER 2026-08-25): "cancel tasks that we can't

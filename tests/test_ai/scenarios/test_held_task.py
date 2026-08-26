@@ -303,7 +303,7 @@ def test_the_task_triple_moves_the_gear_review_target(gd: GameData) -> None:
     Measured: the guard prices its candidates with `acquisition_actions`, so the
     deficit target it lands on (`earth_boost_potion`) is the priced answer, not
     the unpriced `perfect_bow` of `test_the_task_triple_splits_the_deficit_three_ways`.
-    Both are `deficit_upgrade_target`; only the `cost_of` differs."""
+    Both are `deficit_upgrade_target`; only the `actions_of` differs."""
     ctx = dataclasses.replace(NO_PROFILE_CONTEXT, gear_review_active=True)
     goals = {name: repr(map_guard(GuardKind.GEAR_REVIEW, gd, ctx,
                                   state=_state(name, gd)))
