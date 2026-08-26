@@ -1538,6 +1538,55 @@ map onto graph outcomes ONE-TO-ONE, with the mapping written down and pinned by
 a test, before the guard rung is removed. If a plan author cannot produce that
 mapping, 4.2 is blocked, not adapted.
 
+### 12.1b `[CORRECTION 2026-08-26]` §12.1 was OVERSTATED — the arm is a nicety, not the requirement
+
+§12.1 says executing 4.2 as written "regresses a user requirement" and blocks
+the increment until the graph houses `HORIZON_LEVEL_UP`. That was written from
+the delete list alone, without reading where the requirement is actually
+enforced. Three checks, all against HEAD, correct it:
+
+1. **The requirement lives in `tiers/means.py`, which 4.2 does not touch.**
+   `means.py:277-278` fires `TASK_CANCEL` iff the verdict is
+   `HORIZON_OUT_OF_REACH`. So a task one level would fix is NOT cancelled —
+   which is exactly the user's rule ("cancel tasks we can't meet through gear
+   upgrade, OR level-up by exactly 1 level and gear upgrade"). Deleting
+   `map_guard`'s LEVEL_UP arm leaves that gate untouched.
+
+2. **The arm exists to dodge a scan that 4.2 deletes anyway.** Its own comment:
+   "Before this the same state fell straight through to the monster-blind value
+   scan below — the scan that spent ten hours on `iron_boots`." 4.2 removes that
+   scan with the rest of the branch, so the arm's purpose is served by
+   construction. `WhichSlotClosesTheFight` returns None on an empty chain and
+   the walk falls through to the tier arm — a principled fallback, not a blind
+   scan.
+
+3. **In production the arm is EDGE-ONLY, and the shipped rationale says the
+   standing case should NOT divert.** `resolve_task_horizon` is `@per_state`
+   memoised specifically so the latch and the guard mapper cannot disagree
+   within a cycle, and `gear_latch.py:119` arms `_blocked` only on
+   `HORIZON_GEAR` — so `_blocked` and a LEVEL_UP reading are mutually exclusive.
+   The arm is reachable only through `GearLatch._active` (post-level-up /
+   `error:fight_lost`). Its scenario test
+   (`test_held_task.py:338-350`) hand-sets `gear_review_active=True`, so it
+   pins the mapping, not the reachability. Meanwhile
+   `test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work` states
+   the deliberate decision for the standing case: "`HORIZON_LEVEL_UP` lands with
+   the out-of-reach row deliberately ... letting the objective's own XP grind
+   run IS the level-up being pursued", asserting
+   `gear_review_active == {GEAR: True, LEVEL_UP: False, OUT_OF_REACH: False}`.
+   `IsAFightBlockingMe` fires only when `ctx.combat_monster is None` — precisely
+   the no-winnable-alternative case that sentence is about.
+
+**REVISED RULING.** `IsAFightBlockingMe` takes its positive arm on
+`HORIZON_GEAR` only; `HORIZON_LEVEL_UP` and `HORIZON_OUT_OF_REACH` both fall
+through to `IsMyGearBehindMyTier`. `map_guard`'s LEVEL_UP arm is DELETED with
+the rest of the branch and gets no graph equivalent. Mapping it to
+`ReachCharLevel(state.level + 1)` — what §12.1 demanded — would convert an
+edge-triggered goal into a standing one and contradict the tested decision in
+point 3.
+
+§12.1's re-derivation of the delete list STANDS; only its ruling is replaced.
+
 ### 12.2 §5.4, re-derived row by row
 
 | item | §5.4 says | actual @ `7c3390fa` |
