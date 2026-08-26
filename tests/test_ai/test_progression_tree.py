@@ -132,6 +132,7 @@ def test_fallbacks_offer_the_other_branch():
 
 
 _ORPHAN_ROWS_AT_FLOOR = [
+    "ReachSkillLevel(skill='alchemy', level=2)",
     "ReachSkillLevel(skill='cooking', level=2)",
     "ReachSkillLevel(skill='fishing', level=2)",
     "ReachSkillLevel(skill='mining', level=2)",
@@ -139,10 +140,18 @@ _ORPHAN_ROWS_AT_FLOOR = [
 ]
 """The tail every pin below grew: the restored standalone skill roots
 (`decisions/root._orphan_skill_roots`) — the skills NO gear target can name,
-because nothing they craft is equippable. They are appended after the trunk, so
-they extend each pinned list rather than reordering it, and the levels are
-`current + 1`; this constant is the all-at-the-floor case and the scenarios
-whose gather skills are higher spell their own tail out.
+because the gear sheet (`objective._gear_candidates_by_type`) ranks nothing they
+craft. They are appended after the trunk, so they extend each pinned list rather
+than reordering it, and the levels are `current + 1`; this constant is the
+all-at-the-floor case and the scenarios whose gather skills are higher spell
+their own tail out.
+
+ALCHEMY was added to this tail after `_gear_nameable_skills` was fixed to ask
+the sheet builder instead of restating its rule: alchemy's 20 `utility` potions
+DO map to `utility1_slot`/`utility2_slot`, which is why it was credited as
+gear-nameable, but the sheet builder skips `utility` outright, so a gear target
+named alchemy in 0 of the 42 scenarios. Five orphans now, not four — see
+`tests/test_ai/scenarios/test_alchemy_rung.py`.
 
 `ef67c1d6` deleted the standalone `ReachSkillLevel` emitters on the premise
 "skills are pure prerequisites now"; cooking is the counter-example the epic
@@ -228,6 +237,7 @@ class TestPerScenarioPins:
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
             "ObtainItem(code='wooden_stick', quantity=1)",
             "ReachCharLevel(level=10)",
+            "ReachSkillLevel(skill='alchemy', level=2)",
             "ReachSkillLevel(skill='cooking', level=2)",
             "ReachSkillLevel(skill='fishing', level=2)",
             "ReachSkillLevel(skill='mining', level=6)",
@@ -264,6 +274,7 @@ class TestPerScenarioPins:
             "ReachCharLevel(level=20)",
             "ReachSkillLevel(skill='cooking', level=2)",
             "ReachSkillLevel(skill='fishing', level=2)",
+            "ReachSkillLevel(skill='alchemy', level=6)",
             "ReachSkillLevel(skill='mining', level=11)",
             "ReachSkillLevel(skill='woodcutting', level=11)"]
 
@@ -289,6 +300,7 @@ class TestPerScenarioPins:
             "ObtainItem(code='blue_slimeball', quantity=2)",
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
             "ReachCharLevel(level=20)",
+            "ReachSkillLevel(skill='alchemy', level=2)",
             "ReachSkillLevel(skill='cooking', level=2)",
             "ReachSkillLevel(skill='fishing', level=2)",
             "ReachSkillLevel(skill='woodcutting', level=2)",
@@ -309,9 +321,11 @@ class TestPerScenarioPins:
         d, _ = _decide("l3_low_hp")
         assert d.chosen_root == ObtainItem(code="wooden_stick", quantity=1)
         assert d.chosen_step == d.chosen_root
-        # 7 gear/trunk rows + the four restored orphan skill roots.
-        assert len(d.ranking) == 11
-        assert [r.root_repr for r in d.ranking[-4:]] == _ORPHAN_ROWS_AT_FLOOR
+        # 7 gear/trunk rows + the FIVE restored orphan skill roots
+        # (alchemy joined them once `_gear_nameable_skills` stopped
+        # crediting the gear sheet with utility potions it never ranks).
+        assert len(d.ranking) == 12
+        assert [r.root_repr for r in d.ranking[-5:]] == _ORPHAN_ROWS_AT_FLOOR
 
     def test_l12_taskgated_bag_pins_iron_boots_branch(self):
         """RE-DERIVED (GAP-1 fix, 2026-07-07): this scenario has zero attack
@@ -411,7 +425,8 @@ class TestServabilityDemotion:
     SHIELD = ObtainItem(code="wooden_shield", quantity=1, slot="shield_slot")
     SHIELD_STEP = ObtainItem(code="ash_wood", quantity=10)
     TRUNK = ReachCharLevel(level=20)
-    ORPHANS = [ReachSkillLevel(skill="cooking", level=2),
+    ORPHANS = [ReachSkillLevel(skill="alchemy", level=2),
+               ReachSkillLevel(skill="cooking", level=2),
                ReachSkillLevel(skill="fishing", level=2),
                ReachSkillLevel(skill="woodcutting", level=2),
                ReachSkillLevel(skill="mining", level=11)]

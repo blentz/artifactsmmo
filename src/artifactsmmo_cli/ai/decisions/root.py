@@ -71,7 +71,6 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.actions import level_skill
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import (
@@ -82,7 +81,11 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     contender_focus_key,
     focus_key_str,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
+from artifactsmmo_cli.ai.tiers.objective import (
+    CharacterObjective,
+    GearTarget,
+    _gear_candidates_by_type,
+)
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     FOCUS_FLAT,
     dhondt_step,
@@ -263,26 +266,46 @@ def _gear_nameable_skills(game_data: GameData) -> frozenset[str]:
 
     A gear target names exactly one skill — `GearTarget.blocking_skill`, which
     `objective._classify_target` reads off the TARGET's own `crafting_skill` —
-    and a gear target is by construction an item some equipment slot accepts:
-    `objective.gear_targets_with_blockers` iterates `ITEM_TYPE_TO_SLOTS` and
-    keeps only the slots `EQUIPMENT_SLOTS` declares. So the skills reachable
-    through `IsThisTargetBlocked` are exactly the crafting skills of items that
-    pass that same filter, read off the same two catalogue facts the sheet is
-    built from rather than from a list anyone maintains.
+    and a gear target is whatever `objective.gear_targets_with_blockers` hands
+    that classifier. So this asks the SHEET BUILDER, `_gear_candidates_by_type`,
+    which items can become candidates at all, capped at the catalogue's own
+    `max_character_level` because the question is about the GAME, not about this
+    cycle's tier. Nothing about the candidate rule is restated here, which is
+    the point: the previous version DID restate it, and drifted.
 
-    Measured on the committed bundle: gearcrafting (132 recipes, all
-    equippable), weaponcrafting (69), jewelrycrafting (50) and ALCHEMY — 20 of
-    its 25 recipes are `utility` potions, which `utility1_slot`/`utility2_slot`
-    accept. Alchemy is therefore NOT an orphan: the cells-6-12 report's "alchemy
-    may already be routable because potions are utility equippables" is correct
-    as a structural claim, and `_orphan_skill_roots` must not admit it.
-    """
-    return frozenset(
-        stats.crafting_skill
-        for stats in game_data.all_item_stats.values()
-        if stats.crafting_skill and any(
-            slot in EQUIPMENT_SLOTS
-            for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, ())))
+    No `EQUIPMENT_SLOTS` re-filter, deliberately. `gear_targets_with_blockers`
+    writes `[s for s in ITEM_TYPE_TO_SLOTS[type_] if s in EQUIPMENT_SLOTS]`, but
+    that filter is a no-op by construction: `gear_taxonomy._derive_type_to_slots`
+    and `world_state.EQUIPMENT_SLOTS` are both built from the SAME
+    `CharacterSchema` `*_slot` fields, so every slot the first names is in the
+    second. Copying it here would be a branch no input can take.
+
+    THE DRIFT, AND WHAT IT COST. This function used to read
+    `ITEM_TYPE_TO_SLOTS` straight off `all_item_stats` and concluded that
+    ALCHEMY is nameable — 20 of its 25 recipes are `utility` potions and
+    `utility1_slot`/`utility2_slot` do accept them — so `_orphan_skill_roots`
+    declined it. But `_gear_candidates_by_type` skips `stats.type_ ==
+    "utility"` outright (the utility slots are served by
+    `objective.utility_potion_targets`, not by the gear sheet), and alchemy's
+    other five recipes are `consumable`, which maps to no slot. Measured on the
+    committed bundle: a gear target named alchemy in 0 of the 42 scenarios, and
+    could not — alchemy was as orphaned as cooking was before `b39705eb`, with
+    the orphan rule refusing it on a nameability claim no code path could
+    honour. The O1 census's routed count moves 194 -> 236 of 336 cells and 7 of
+    8 skills -> 8 of 8 with this fix; residuals stay 0 because the rule's other
+    conjunct is `LevelSkill(S, C+1).is_applicable`, the census's own predicate.
+
+    Measured on the committed bundle after the fix: gearcrafting,
+    weaponcrafting and jewelrycrafting — exactly the three skills whose output
+    the gear sheet ranks."""
+    nameable: set[str] = set()
+    for ranked in _gear_candidates_by_type(
+            game_data, game_data.max_character_level).values():
+        for _value, code in ranked:
+            skill = game_data.all_item_stats[code].crafting_skill
+            if skill:
+                nameable.add(skill)
+    return frozenset(nameable)
 
 
 def _orphan_skill_roots(state: WorldState,

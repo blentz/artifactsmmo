@@ -72,14 +72,22 @@ rows for a skill went missing and `--check` would exit 0 on corrupted input.
 
 WHAT "0 RESIDUALS" DOES AND DOES NOT PROMISE. `O1_SILENT_STALL` is
 `closed AND routed`, so its reach is the ROUTED subset, not all 336 cells.
-Measured on the committed bundle: 26 cells are routed — jewelrycrafting 15,
-gearcrafting 9, weaponcrafting 2 — i.e. 3 of the 8 skills, and weaponcrafting
-only at level 1. Alchemy, cooking, fishing, mining and woodcutting are never
-routed by any scenario, so a closure in one of them can only ever be reported
-as an EXPLAINED wall; and the six real walls this census finds
-(weaponcrafting 35, 40 and 42, the epic's own L38-48 territory) sit outside the
-residual's reach today. The other 310 cells are still swept, still verdicted
-and still walled by name — they just cannot produce the must-be-zero class.
+Measured on the committed bundle: 236 cells are routed — alchemy, cooking,
+fishing, mining and woodcutting 42 each (every scenario, via
+`decisions/root._orphan_skill_roots`), jewelrycrafting 15, gearcrafting 9,
+weaponcrafting 2 — i.e. all 8 skills, though weaponcrafting only at level 1.
+This number has moved twice, both times because a SKILL stopped being invisible
+to the root graph rather than because the census changed: 26 -> 194 when
+`b39705eb` restored the standalone skill root (cooking, fishing, mining,
+woodcutting), and 194 -> 236 when `_gear_nameable_skills` stopped restating
+`objective._gear_candidates_by_type`'s candidate rule and started asking it —
+the restatement had drifted, claiming alchemy's `utility` potions made it
+gear-nameable when the sheet builder skips `utility` outright, so the orphan
+rule declined the one skill it was written for. The six real walls this census
+finds (weaponcrafting 35, 40 and 42, the epic's own L38-48 territory) sit
+outside the residual's reach today. The other 100 cells are still swept, still
+verdicted and still walled by name — they just cannot produce the must-be-zero
+class.
 `routing_breakdown` prints this scope into the matrix on every run, computed
 rather than transcribed, so widening the routed set updates the claim itself.
 

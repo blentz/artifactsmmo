@@ -552,32 +552,41 @@ def test_the_nameable_skills_are_exactly_those_with_an_equippable_recipe(
         bundle_game_data: GameData):
     """The rule's first conjunct, measured on the committed bundle.
 
-    Four skills craft something an equipment slot accepts, so a gear target can
-    name them through `GearTarget.blocking_skill`. ALCHEMY IS ONE OF THEM, and
-    that is why the set is asserted rather than its complement: the
-    coverage-cells report guessed "alchemy may already be routable because
-    potions are utility equippables", and it is right — 20 of alchemy's 25
-    recipes are `utility` items. The rule must NOT admit alchemy, however few
-    scenarios happen to route it today."""
+    THREE skills put something on the gear sheet, so a gear target can name
+    them through `GearTarget.blocking_skill`.
+
+    This assertion used to read `{"alchemy", "gearcrafting", "jewelrycrafting",
+    "weaponcrafting"}`, on the reasoning that 20 of alchemy's 25 recipes are
+    `utility` items and `utility1_slot`/`utility2_slot` accept them. That
+    reasoning restated `ITEM_TYPE_TO_SLOTS` instead of asking the gear sheet,
+    and the gear sheet disagrees: `objective._gear_candidates_by_type` skips
+    `stats.type_ == "utility"` outright (those slots are served by
+    `utility_potion_targets`), so a gear target named alchemy in 0 of the 42
+    scenarios and could never name one. The potion count is still asserted
+    below — it is the fact that made the old reading defensible, and it is
+    exactly what the fix had to look past. See
+    `tests/test_ai/scenarios/test_alchemy_rung.py` for the whole finding."""
     nameable = _gear_nameable_skills(bundle_game_data)
-    assert nameable == {"alchemy", "gearcrafting", "jewelrycrafting",
-                        "weaponcrafting"}
+    assert nameable == {"gearcrafting", "jewelrycrafting", "weaponcrafting"}
     potions = [code for code, stats in bundle_game_data.all_item_stats.items()
                if stats.crafting_skill == "alchemy" and stats.type_ == "utility"]
     assert len(potions) >= 20, potions
 
 
-def test_the_rule_admits_the_four_skills_nothing_equips(
+def test_the_rule_admits_the_five_skills_the_gear_sheet_never_ranks(
         bundle_game_data: GameData):
-    """The rule, end to end, on a real scenario character: cooking, fishing,
-    mining and woodcutting — every one of whose recipes produces a
-    `consumable` or a `resource`. Cooking is the instance the epic named; the
-    other three arrive because the rule is about the catalogue, not about
-    cooking."""
+    """The rule, end to end, on a real scenario character: alchemy, cooking,
+    fishing, mining and woodcutting — the five whose whole output the gear
+    sheet declines (a `consumable`, a `resource`, or a `utility` potion).
+    Cooking is the instance the epic named; the other four arrive because the
+    rule is about the catalogue, not about cooking.
+
+    `l1_fresh` is the tie case (every skill at the floor), so the order is
+    `SKILL_NAMES` and alchemy leads by vocabulary rather than by gap."""
     state = census_state(SCENARIOS["l1_fresh"], bundle_game_data)
     roots = _orphan_skill_roots(state, bundle_game_data)
-    assert [r.skill for r in roots] == ["cooking", "fishing", "mining",
-                                        "woodcutting"]
+    assert [r.skill for r in roots] == ["alchemy", "cooking", "fishing",
+                                        "mining", "woodcutting"]
     assert all(r.level == state.skills[r.skill] + 1 for r in roots)
 
 
@@ -611,12 +620,12 @@ def test_the_orphan_order_is_the_gap_to_the_character_level(
     vocabulary, never `sorted()` as a decision key."""
     base = census_state(SCENARIOS["l1_fresh"], bundle_game_data)
     assert [r.skill for r in _orphan_skill_roots(base, bundle_game_data)] == [
-        "cooking", "fishing", "mining", "woodcutting"]
+        "alchemy", "cooking", "fishing", "mining", "woodcutting"]
 
-    # fishing and woodcutting are parked AT the character level so the contest
-    # is cooking against mining and nothing else: a skill left at the floor
-    # trails by 19 and would win both halves, which would prove nothing.
-    parked = {"fishing": 20, "woodcutting": 20}
+    # alchemy, fishing and woodcutting are parked AT the character level so the
+    # contest is cooking against mining and nothing else: a skill left at the
+    # floor trails by 19 and would win both halves, which would prove nothing.
+    parked = {"alchemy": 20, "fishing": 20, "woodcutting": 20}
     cook_ahead = replace(base, level=20,
                          skills={**base.skills, **parked,
                                  "cooking": 15, "mining": 5})

@@ -350,8 +350,27 @@ bundle's `/my/bank`) distinct codes, so `bank_room.bank_has_room` is False.
 
 The number of DISTINCT codes is what fills a bank — quantities do not — so this
 is 50 stacks of one, the cheapest honest way to say "full". Every code is a real
-catalogue material a level-20 character would plausibly have banked; the
-scenario tests validate them against the bundle like any other item code."""
+catalogue material a level-20 character would plausibly have banked.
+
+THE 50 IS NOT A MAGIC NUMBER SITTING UNPINNED, and this note is where a reader
+finds that out. The literal is hand-listed rather than derived on purpose:
+deriving the set to capacity would change WHICH items are banked, which moves
+cell 8's behaviour for a reason unrelated to bank pressure. What makes the
+coupling loud instead is an EQUALITY against the live capacity, asserted three
+ways, all in `tests/test_ai/scenarios/`:
+
+* `test_bag_pressure_cells.test_cell8_bank_is_stocked_to_capacity` —
+  `len(state.bank_items) == bundle_game_data.bank_capacity`, so a bundle refresh
+  that moves `bank_capacity` in EITHER direction fails here rather than quietly
+  handing cell 8 a bank with room;
+* `test_bag_pressure_cells.test_cell9_each_axis_silences_exactly_the_guard_it_owns`
+  fills cell 9's empty bank from this same set to silence `DEPOSIT_FULL`, so a
+  short list stops silencing it;
+* `test_scenario_builder.test_registry_item_codes_exist_in_live_catalog` walks
+  every scenario's `bank` against the bundle, so a typo'd code — which would
+  still COUNT toward 50 — fails too.
+
+Measured: dropping one code from this tuple fails 6 tests across those files."""
 
 def _held_task_cell(name: str, task: tuple[str, str, int, int],
                     description: str) -> ScenarioCharacter:

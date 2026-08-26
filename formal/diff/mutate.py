@@ -2924,6 +2924,20 @@ ROOT_DECISION_MUTATIONS = [
      " target CAN name gets a standalone root as well",
      "        if skill not in nameable\n",
      "        if skill in nameable or skill not in nameable\n"),
+    # THE DRIFT THIS MUTANT RESTORES was live: `_gear_nameable_skills` read
+    # `ITEM_TYPE_TO_SLOTS` off `all_item_stats` instead of asking the gear
+    # sheet, so alchemy's 20 `utility` potions made it "nameable" — while
+    # `objective._gear_candidates_by_type` skips `utility` outright and a gear
+    # target named alchemy in 0 of the 42 scenarios. The orphan rule declined
+    # the one skill it was written for; the O1 census's routed count was 194 of
+    # 336 instead of 236, 7 skills instead of 8.
+    ("root: _gear_nameable_skills counts utility potions as gear the sheet"
+     " ranks, so alchemy is refused a standalone root again",
+     "    nameable: set[str] = set()\n",
+     "    nameable: set[str] = {stats.crafting_skill\n"
+     "                          for stats in game_data.all_item_stats.values()\n"
+     "                          if stats.crafting_skill\n"
+     "                          and stats.type_ == \"utility\"}\n"),
     ("root: the orphan rule drops the open-rung conjunct, so a skill with no"
      " XP-positive rung is routed anyway (the o1_silent_stall residual)",
      "        and level_skill.LevelSkill(\n"

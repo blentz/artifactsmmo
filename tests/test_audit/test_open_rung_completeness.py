@@ -376,27 +376,35 @@ def test_the_routing_breakdown_scopes_the_residual(
         results: list[orc.RungResult]) -> None:
     """The residual arm reaches only the ROUTED subset, and the matrix says so.
 
-    SEVEN of the eight skills are routed now, up from three: restoring the
-    standalone skill root (`decisions/root._orphan_skill_roots`) put cooking,
-    fishing, mining and woodcutting on the routed side, and the routed cell
-    count moved 26 -> 194 of 336. Before it, `ReachSkillLevel` had exactly one
-    producer — a GEAR target's crafting skill — so a skill nothing equips could
-    not be routed by any scenario and its closures could only ever be explained
-    walls. Alchemy is the one skill still unrouted, and correctly: its potions
-    ARE utility equippables, so it is a prerequisite skill that a gear target
-    can name whenever a utility slot wants one.
+    ALL EIGHT skills are routed now, up from three, in two moves — and both
+    moves were a skill becoming visible to the root graph, never a change to
+    this census:
 
-    The scope line still matters — 142 cells remain unrouted — but it now
+    * 26 -> 194 of 336 cells, 3 -> 7 skills, when `b39705eb` restored the
+      standalone skill root (`decisions/root._orphan_skill_roots`) and put
+      cooking, fishing, mining and woodcutting on the routed side. Before it,
+      `ReachSkillLevel` had exactly one producer — a GEAR target's crafting
+      skill — so a skill nothing equips could not be routed by any scenario and
+      its closures could only ever be explained walls.
+    * 194 -> 236 of 336 cells, 7 -> 8 skills, when `_gear_nameable_skills`
+      stopped restating the gear sheet's candidate rule and started asking
+      `objective._gear_candidates_by_type` for it. The restatement had drifted:
+      it read `ITEM_TYPE_TO_SLOTS` and concluded alchemy's `utility` potions
+      made alchemy gear-nameable, but the sheet builder skips `utility`
+      outright, so a gear target named alchemy in 0 of the 42 scenarios and the
+      orphan rule was declining a genuine orphan. See
+      `tests/test_ai/scenarios/test_alchemy_rung.py`.
+
+    The scope line still matters — 100 cells remain unrouted — but it now
     understates far less than it did.
     """
     line = orc.routing_breakdown(results)
     routed_skills = {r.skill for r in results if r.routed}
-    assert routed_skills == {"jewelrycrafting", "gearcrafting", "weaponcrafting",
-                             "cooking", "fishing", "mining", "woodcutting"}
-    assert "alchemy" not in routed_skills
+    assert routed_skills == set(SKILL_NAMES)
     assert f"{len(routed_skills)} of {len(SKILL_NAMES)} skills" in line
     assert f"{sum(1 for r in results if r.routed)} of {len(results)} cells" in line
     # Ordered by cell count, so the reader sees the widest arm first.
+    assert line.index("alchemy") < line.index("jewelrycrafting")
     assert line.index("cooking") < line.index("jewelrycrafting")
     assert line.index("jewelrycrafting") < line.index("weaponcrafting")
 

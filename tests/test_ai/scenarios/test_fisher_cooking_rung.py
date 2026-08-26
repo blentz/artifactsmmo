@@ -18,9 +18,15 @@ That half is still true and `test_cooking_cannot_be_routed_by_any_GEAR_TARGET`
 still states it over the CATALOGUE. What changed is the conclusion drawn from
 it: a skill no gear target can name needed a producer of its own, which is what
 `ef67c1d6` deleted ("skills are pure prerequisites now") and what
-`decisions.root._orphan_skill_roots` restores. Cooking, fishing, mining and
-woodcutting are routable now; alchemy is not, and correctly so — its potions
-are `utility` equippables, so it really is a prerequisite skill.
+`decisions.root._orphan_skill_roots` restores.
+
+Cooking, fishing, mining and woodcutting became routable here. ALCHEMY did not,
+and this module's original text said that was correct — "its potions are
+`utility` equippables, so it really is a prerequisite skill". That was WRONG,
+and `tests/test_ai/scenarios/test_alchemy_rung.py` is the correction: the gear
+sheet (`objective._gear_candidates_by_type`) skips `utility` outright, so a
+gear target named alchemy in 0 of the 42 scenarios and could never name it. All
+eight skills are routed now.
 
 What the cell DOES close is the D11 value: a cooking rung, walked. `fisher` is
 a declared role (`role_catalog`: gather `fishing`, craft `cooking`), and the
@@ -193,19 +199,27 @@ def test_every_scenario_now_routes_cooking(bundle_game_data: GameData) -> None:
     target's crafting skill.
 
     `decisions/root._orphan_skill_roots` restores the standalone producer for
-    the skills no gear target can name, so all four are routed now and alchemy
-    still is not — alchemy's potions ARE utility equippables, so it is a
-    prerequisite skill and the rule correctly declines it. The O1 census's
-    routed count moves 26 -> 194 of 336 cells with this change; residuals stay
-    at 0 because the rule's second conjunct is `LevelSkill(S, C+1).
-    is_applicable`, the same predicate the census verdicts a cell on."""
+    the skills no gear target can name, so all four are routed now. The O1
+    census's routed count moved 26 -> 194 of 336 cells with that change;
+    residuals stayed at 0 because the rule's second conjunct is
+    `LevelSkill(S, C+1).is_applicable`, the same predicate the census verdicts a
+    cell on.
+
+    This test also used to end `assert "alchemy" not in routed`, on the claim
+    that alchemy's utility potions make it gear-nameable. They do not — see
+    `test_alchemy_rung.py` — and fixing `_gear_nameable_skills` moved the count
+    again, 194 -> 236 and 7 skills -> 8. So the whole-set equality moved out of
+    this cell: cooking and the three skills that arrived WITH it are asserted by
+    name here, and the exact routed set is pinned where it belongs — in
+    `test_alchemy_rung.test_every_scenario_now_routes_alchemy` and in
+    `test_open_rung_completeness.test_the_routing_breakdown_scopes_the_residual`.
+    A cell that restates a global set fails for other cells' reasons."""
     routed: set[str] = set()
     for scenario in SCENARIOS.values():
         routed |= routed_skills(census_state(scenario, bundle_game_data),
                                 bundle_game_data)
-    assert routed == {"jewelrycrafting", "gearcrafting", "weaponcrafting",
-                      "cooking", "fishing", "mining", "woodcutting"}
-    assert "alchemy" not in routed
+    assert SKILL in routed
+    assert routed >= {"cooking", "fishing", "mining", "woodcutting"}
 
 
 def test_the_fishers_cooking_root_plans_a_cooking_grind(
