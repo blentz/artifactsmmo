@@ -29,7 +29,14 @@ executing)."""
 from collections.abc import Callable
 from fractions import Fraction
 
-from artifactsmmo_cli.ai.decisions.root import RootResolution, resolve_root
+# MODULE import, not `from ... import RootResolution, resolve_root`, and for
+# the reason `decisions/root.py:61-70` gives about `level_skill`: the two
+# modules import each other, so whichever is reached first executes while the
+# other is half built and a NAME import raises ImportError. root.py already
+# used the idiom for its side; this is the other side, and it was latent until
+# something imported `decisions.root` FIRST (wave 4 does, from a scenario
+# test). Binding the module defers the lookup to call time.
+from artifactsmmo_cli.ai.decisions import root as _root
 from artifactsmmo_cli.ai.equipment.slot_occupancy import may_displace
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -180,7 +187,7 @@ def _servable_promotion(
 
 
 def _resolution_rows(state: WorldState, game_data: GameData,
-                     resolution: RootResolution,
+                     resolution: "_root.RootResolution",
                      ctx: SelectionContext) -> "list[strategy.RootScore]":
     """One row per resolved node, chosen first, alternatives after.
 
@@ -254,7 +261,7 @@ def decide_tree(state: WorldState, game_data: GameData,
       swallowed the whole gear branch).
     * `promoted_from` — the tree's own pick when promotion displaced it.
     """
-    resolution = resolve_root(state, game_data, objective, ctx, history)
+    resolution = _root.resolve_root(state, game_data, objective, ctx, history)
     chosen_root = resolution.root
     chosen_step = (
         (strategy.actionable_step(chosen_root, state, game_data, ctx)

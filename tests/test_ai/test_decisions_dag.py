@@ -36,8 +36,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 # Floors, not exact counts: a new Decision must not have to touch this file,
 # but a sweep that goes blind must. `decisions/obtain_item.py` holds six
 # classes and five edges; `decisions/root.py` holds five and four.
-_MIN_CLASSES = 11
-_MIN_EDGES = 9
+_MIN_CLASSES = 13
+_MIN_EDGES = 11
 
 
 def _decision_classes() -> list[type]:

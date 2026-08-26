@@ -1,12 +1,10 @@
 import dataclasses
 import json
 from dataclasses import dataclass
-from unittest.mock import patch
 
 import pytest
 
 import artifactsmmo_cli.ai.strategy_driver as sd
-from artifactsmmo_cli.ai import strategy_driver
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
@@ -45,12 +43,15 @@ from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.obtain_item_routing import _equippable_goal, _recipe_has_combat_drop_input
+from artifactsmmo_cli.ai.obtain_item_routing import (
+    _equippable_goal,
+    _gather_goal_for_unreachable_equippable,
+    _recipe_has_combat_drop_input,
+)
 from artifactsmmo_cli.ai.planner import GOAPPlanner, PlanStats
 from artifactsmmo_cli.ai.strategy_driver import (
     LEVEL_LOOKAHEAD,
     StrategyArbiter,
-    _gather_goal_for_unreachable_equippable,
     _task_recipe_inputs,
     map_guard,
     map_means,
@@ -165,64 +166,7 @@ def test_map_guard_returns_craft_potions_goal():
     assert isinstance(map_guard(GuardKind.CRAFT_POTIONS, _gd(), _ctx()), CraftPotionsGoal)
 
 
-def test_map_guard_gear_review_gathers_when_materials_missing():
-    gd = GameData()
-    gd._item_stats = {"copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
-                                                crafting_skill="gearcrafting", crafting_level=1)}
-    gd._crafting_recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
-    state = make_state(level=4, inventory={}, bank_items={})
-    goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
-    assert isinstance(goal, GatherMaterialsGoal)
 
-
-def test_map_guard_gear_review_prices_the_deficit_target():
-    """GEAR_REVIEW asks the DEFICIT first, and prices it with the same function
-    `J` and the `combat-deficit` diagnostic use.
-
-    Both halves matter. Monster-blindness is what let `find_upgrade_target` chase
-    `iron_boots` — already worn, and absent from all 24 items that improved the
-    pig margin — for ten hours. And without PRICING, the deficit walk ranks on
-    raw margin and takes the biggest jump regardless of reach: unpriced it picked
-    `king_slime_sword`, gated behind a `jasper_crystal` the character has no
-    route to.
-
-    The `actions_of` closure is INVOKED here rather than merely constructed: a
-    closure that is never called is not wired to anything.
-    """
-    gd = GameData()
-    gd._item_stats = {"copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
-                                                crafting_skill="gearcrafting", crafting_level=1)}
-    gd._crafting_recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
-    state = make_state(level=4, inventory={}, bank_items={})
-    seen = {}
-
-    def fake_target(st, game_data, actions_of=None, **k):
-        seen["cost"] = actions_of("copper_boots", "boots_slot")
-        return "copper_boots", "boots_slot"
-
-    with patch.object(strategy_driver, "acquisition_actions", return_value=7):
-        with patch.object(strategy_driver, "deficit_upgrade_target", fake_target):
-            goal = map_guard(GuardKind.GEAR_REVIEW, gd,
-                             _ctx(gear_review_active=True), state)
-
-    assert seen["cost"] == 7.0
-    assert isinstance(goal, GatherMaterialsGoal | UpgradeEquipmentGoal)
-
-
-def test_map_guard_gear_review_falls_back_to_the_value_scan():
-    """No deficit (no monsters task, or one already winnable) leaves the generic
-    upgrade scan deciding, exactly as before — the deficit is an ADDITION for the
-    blocked case, not a replacement for every reason to upgrade."""
-    gd = GameData()
-    gd._item_stats = {"copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
-                                                crafting_skill="gearcrafting", crafting_level=1)}
-    gd._crafting_recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
-    state = make_state(level=4, inventory={}, bank_items={})
-
-    with patch.object(strategy_driver, "deficit_upgrade_target", return_value=None):
-        goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
-
-    assert isinstance(goal, GatherMaterialsGoal)
 
 
 def test_map_guard_discard_merges_step_profile():
@@ -374,66 +318,6 @@ def _deep_chain_gd():
     return gd
 
 
-def test_gear_review_deep_chain_routes_to_flat_leaf_not_explosive_recipe():
-    """Piece D: from-scratch deep equippable (steel_boots = 480 raw) is
-    depth-UNREACHABLE. The GEAR_REVIEW guard must NOT build the explosive
-    GatherMaterials(steel_boots, {steel_bar: 6}) (whose plan gathers 480 units
-    through the multi-level recipe — 655k nodes / 90s timeout offline). It routes
-    to the FLAT deepest actionable step (iron_ore), a linear, budget-feasible
-    gather. Pins the macro/micro bound so a regression to the deep goal fails.
-
-    GEAR_REVIEW's guard does not consult `is_plannable` (it branches on
-    `state.inventory`/bank directly — see `map_guard`), so it was untouched by
-    Task 3 (planner-gather-batching) and was, at that point in this repo's
-    history, the ONE place left that still produced a flat-leaf routing for
-    this chain (see the "SECOND RESIDUAL" note in
-    `UpgradeEquipmentGoal.max_depth`'s docstring: the `is_plannable`-driven
-    routing this test used to share a bound with, in the then-deleted
-    `test_deep_chain_flat_leaf_plans_within_budget`, was live-dead on real
-    data and produced no flat-leaf goal at all). That deleted test's
-    node-count bound (`< 5000`, vs. the deep recipe's offline 655k) was
-    restored HERE instead, on the one path that then exercised it, so the
-    performance claim was not lost.
-
-    NO LONGER THE ONE PLACE, as of stop-at-the-achievable-step Task 1:
-    `_equippable_goal` now asks `actionable_step` directly instead of
-    `is_plannable` and produces the SAME `GatherMaterials(iron_ore,
-    {iron_ore: 10})` target for this identical chain — see
-    `test_equippable_goal_deep_chain_routes_to_flat_leaf_again`, which relies
-    on this test having already proved the target plans within budget rather
-    than re-proving it."""
-    from artifactsmmo_cli.ai.actions.crafting import CraftAction
-    from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-    from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-    gd = _deep_chain_gd()
-    gd._workshop_locations = {"gearcrafting": (0, 0)}
-    state = make_state(level=2, inventory={}, bank_items={})
-    goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
-    assert isinstance(goal, GatherMaterialsGoal)
-    # The target is the raw leaf, NOT the equippable root nor its direct recipe.
-    assert goal._needed == {"iron_ore": 10}
-    assert goal._target_item == "iron_ore"
-
-    actions = [
-        DepositAllAction(bank_location=(0, 0), accessible=True, game_data=gd),
-        GatherAction(resource_code="iron_rocks", locations=frozenset({(2, 0)})),
-    ]
-    for code in gd._crafting_recipes:
-        st = gd.item_stats(code)
-        ws = gd.workshop_location(st.crafting_skill) if st.crafting_skill else None
-        actions.append(CraftAction(code=code, quantity=1, workshop_location=ws))
-        actions.append(WithdrawItemAction(code=code, quantity=1, bank_location=(0, 0),
-                                          accessible=True))
-    actions.append(WithdrawItemAction(code="iron_ore", quantity=1, bank_location=(0, 0),
-                                       accessible=True))
-    planner = GOAPPlanner()
-    plan = planner.plan(state, goal, actions, gd, None, budget_seconds=30.0)
-    assert plan  # the flat-leaf goal plans, unlike the root (see the sibling tests)
-    assert not planner.last_stats.timed_out
-    # Linear, tiny node count — the deep recipe goal needed 655k nodes
-    # offline; this stays under a generous 5k ceiling.
-    assert planner.last_stats.nodes_explored < 5000, planner.last_stats.nodes_explored
-
 
 def test_equippable_goal_deep_chain_routes_to_flat_leaf_again():
     """REVERSED by stop-at-the-achievable-step Task 1 — was
@@ -558,27 +442,6 @@ def test_equippable_goal_root_by_name_falls_through_to_upgrade():
     assert isinstance(goal, UpgradeEquipmentGoal)
     assert repr(goal) == "UpgradeEquipment(wooden_staff->weapon_slot)"
 
-
-def test_gear_review_root_by_name_falls_through_to_committed():
-    """Sibling regression pin to `test_equippable_goal_root_by_name_falls_through_to_upgrade`,
-    for the SECOND call site the reviewer found live: `map_guard`'s
-    `GEAR_REVIEW` branch (`:335-348`) returns early only when materials are
-    already in hand (`_materials_in_hand`); with an empty inventory that is
-    False for `wooden_staff` too, so it falls into the same
-    `_gather_goal_for_unreachable_equippable` call, unguarded, before this
-    fix. Same three real items affected (`wooden_staff`, `feather_coat`,
-    `leather_gloves` — level 1/5/10, plausible early-game GEAR_REVIEW picks,
-    so this was reachable, not dead code).
-
-    Proves the fix belongs in the HELPER: this test exercises a DIFFERENT
-    caller than the sibling test above, with no shared code path except
-    `_gather_goal_for_unreachable_equippable` itself, and passes without
-    `GEAR_REVIEW`'s call site needing its own `is None` check duplicated."""
-    gd = _wooden_staff_gd()
-    state = make_state(level=1, inventory={}, bank_items={})
-    goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
-    assert isinstance(goal, UpgradeEquipmentGoal)
-    assert repr(goal) == "UpgradeEquipment(wooden_staff->weapon_slot)"
 
 
 def test_objective_step_root_by_name_falls_through_to_upgrade():
@@ -765,28 +628,12 @@ def test_equippable_non_passive_currency_still_grinds():
     assert goal._target_item == "ticket"     # currency grind fires
 
 
-def test_map_guard_gear_review_upgrades_when_materials_in_hand():
-    gd = GameData()
-    gd._item_stats = {"copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
-                                                crafting_skill="gearcrafting", crafting_level=1)}
-    gd._crafting_recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
-    state = make_state(level=4, inventory={"copper_bar": 8})
-    goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
-    assert isinstance(goal, UpgradeEquipmentGoal)
-
 
 def test_map_guard_gear_review_no_state_raises():
     """map_guard(GEAR_REVIEW) without a state must raise ValueError (line 137)."""
     with pytest.raises(ValueError, match="GEAR_REVIEW guard requires a state"):
         map_guard(GuardKind.GEAR_REVIEW, GameData(), _ctx())
 
-
-def test_map_guard_gear_review_no_upgrade_found_returns_upgrade_goal():
-    """When find_upgrade_target returns None (empty game data, no upgrades),
-    map_guard falls back to a plain UpgradeEquipmentGoal (line 143)."""
-    state = make_state(level=1, inventory={}, equipment={})
-    goal = map_guard(GuardKind.GEAR_REVIEW, GameData(), _ctx(gear_review_active=True), state)
-    assert isinstance(goal, UpgradeEquipmentGoal)
 
 
 def test_map_guard_rest_for_combat_is_restore_hp():

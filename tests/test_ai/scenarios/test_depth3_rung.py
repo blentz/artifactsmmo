@@ -123,7 +123,8 @@ def test_the_walk_resolves_to_the_depth_three_rung(
         CharacterObjective.from_game_data(bundle_game_data),
         NO_PROFILE_CONTEXT, None)
     assert resolution.root == _root_node()
-    assert resolution.trail == ("IsMyGearBehindMyTier",
+    assert resolution.trail == ("IsAFightBlockingMe",
+                                "IsMyGearBehindMyTier",
                                 "WhichSlotIsFurthestBehind",
                                 "IsThisTargetBlocked")
 

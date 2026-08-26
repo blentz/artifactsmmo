@@ -1017,8 +1017,7 @@ class GamePlayer:
         # standing arm needs it: a gear deficit against an unwinnable task
         # monster only blocks when there is nothing else worth fighting.
         combat_monster = self._winnable_farm_target()
-        self._gear_latch.update(prev, state, self._last_outcome, game_data,
-                                winnable_alternative=combat_monster is not None)
+        self._gear_latch.update(prev, state, self._last_outcome, game_data)
         self._prev_level = state.level
         self._arbiter.set_cycle(self._cycle_counter)
         ctx = self._selection_context(combat_monster)
@@ -1129,8 +1128,7 @@ class GamePlayer:
                 # needs it: a gear deficit against an unwinnable task monster
                 # only blocks when there is nothing else worth fighting.
                 combat_monster = self._winnable_farm_target()
-                self._gear_latch.update(prev, state, self._last_outcome, game_data,
-                                        winnable_alternative=combat_monster is not None)
+                self._gear_latch.update(prev, state, self._last_outcome, game_data)
                 self._prev_level = state.level
                 # Coordination: renew our lease, publish what we still need,
                 # and re-decide our role. All local SQLite against the shared
@@ -3751,7 +3749,7 @@ class GamePlayer:
             target_gear=target_gear,
             target_tools=target_tools,
             near_term_targets=near_term_targets,
-            gear_review_active=self._gear_latch.active,
+            gear_review_active=self._gear_latch.level_up_pending,
             gear_keep=gear_keep,
             # Cross-character coordination (Task 11): None whenever no
             # coordination store is attached (every single-character run),

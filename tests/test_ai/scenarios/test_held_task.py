@@ -52,9 +52,14 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.combat_deficit import deficit_upgrade_target, has_combat_deficit
+from artifactsmmo_cli.ai.decisions.root import (
+    IsAFightBlockingMe,
+    RootWalk,
+    WhichSlotClosesTheFight,
+    resolve_root,
+)
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_appropriateness import has_craftable_upgrade_any_slot
-from artifactsmmo_cli.ai.gear_latch import GearLatch
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
@@ -67,6 +72,7 @@ from artifactsmmo_cli.ai.task_horizon import (
 )
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.tiers.guards import GuardKind
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
@@ -86,6 +92,11 @@ TASK_SCENARIOS = (WORKABLE, UNWINNABLE_CLOSABLE, UNWINNABLE_OPEN, *TRIPLE)
 @pytest.fixture(scope="module")
 def gd() -> GameData:
     return GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
+
+
+def _obj(game_data: GameData) -> CharacterObjective:
+    return CharacterObjective(target_char_level=50, target_skill_levels={},
+                              target_gear={}, _game_data=game_data)
 
 
 def _state(name: str, game_data: GameData):
@@ -246,20 +257,29 @@ def test_the_task_triple_flips_the_gear_latch(gd: GameData) -> None:
     Cell 2 still arms it. A fix that quieted cell 3 by deleting the standing arm
     would have deleted the loss->upgrade link with it, and this line is what
     says so."""
-    def _latch(name: str, *, winnable_alternative: bool) -> bool:
+    def _arm(name: str, *, winnable_alternative: bool) -> bool:
+        """Does the WALK take the fight arm? (wave 4: this was the latch.)
+
+        The standing arm is now `decisions/root.IsAFightBlockingMe`, so the
+        question "does this cell arm the gear review" is asked of the node. The
+        rows below are unchanged from the latch era — the behaviour moved, it
+        did not change."""
         state = _state(name, gd)
         assert has_craftable_upgrade_any_slot(state, gd) is True
-        latch = GearLatch()
-        latch.update(state.level, state, None, gd,
-                     winnable_alternative=winnable_alternative)
-        return latch.active
+        monster = "chicken" if winnable_alternative else None
+        child = IsAFightBlockingMe(
+            _obj(gd), RootWalk()).resolve(
+                state, gd,
+                dataclasses.replace(NO_PROFILE_CONTEXT, combat_monster=monster),
+                None)
+        return isinstance(child, WhichSlotClosesTheFight)
 
-    assert _latch(TRIPLE_WORKABLE, winnable_alternative=False) is False
-    assert _latch(TRIPLE_CLOSABLE, winnable_alternative=False) is True
-    assert _latch(TRIPLE_OPEN, winnable_alternative=False) is False
+    assert _arm(TRIPLE_WORKABLE, winnable_alternative=False) is False
+    assert _arm(TRIPLE_CLOSABLE, winnable_alternative=False) is True
+    assert _arm(TRIPLE_OPEN, winnable_alternative=False) is False
     # The other conjunct still binds: an alternative to fight releases all three.
     for name in TRIPLE:
-        assert _latch(name, winnable_alternative=True) is False
+        assert _arm(name, winnable_alternative=True) is False
 
 
 def test_the_triple_cannot_starve_the_winnable_cascade(gd: GameData) -> None:
@@ -291,29 +311,32 @@ def test_the_triple_cannot_starve_the_winnable_cascade(gd: GameData) -> None:
 
 
 def test_the_task_triple_moves_the_gear_review_target(gd: GameData) -> None:
-    """`strategy_driver.py:381` — both arms, reached from the triple.
+    """`WhichSlotClosesTheFight` — both arms, reached from the triple.
 
-    This is where D2 stops being a predicate and becomes a DECISION. The
-    GEAR_REVIEW guard asks `deficit_upgrade_target` FIRST and only falls
-    through to the monster-blind value scan when it names nothing. Cell 2 takes
+    This is where D2 stops being a predicate and becomes a DECISION. The node
+    asks `deficit_upgrade_target` and hands its answer to `IsThisTargetBlocked`;
+    when it names nothing the walk falls through to the tier arm. Cell 2 takes
     the first arm; cells 1 and 3 take the fall-through, and they take it for
     different reasons (no deficit at all vs a deficit no gear closes) — which
     is why the triple needs all three rows and not two.
 
-    Measured: the guard prices its candidates with `acquisition_actions`, so the
+    Measured: the node prices its candidates through `route_price`, so the
     deficit target it lands on (`earth_boost_potion`) is the priced answer, not
     the unpriced `perfect_bow` of `test_the_task_triple_splits_the_deficit_three_ways`.
-    Both are `deficit_upgrade_target`; only the `actions_of` differs."""
-    ctx = dataclasses.replace(NO_PROFILE_CONTEXT, gear_review_active=True)
-    goals = {name: repr(map_guard(GuardKind.GEAR_REVIEW, gd, ctx,
-                                  state=_state(name, gd)))
+    Both are `deficit_upgrade_target`; only the `actions_of` differs.
+
+    WAS `map_guard(GEAR_REVIEW)` until wave 4. The assertions are unchanged: the
+    same cell still names the same priced item, one layer down."""
+    roots = {name: repr(resolve_root(_state(name, gd), gd, _obj(gd),
+                                     NO_PROFILE_CONTEXT, None).root)
              for name in TRIPLE}
-    assert "earth_boost_potion" in goals[TRIPLE_CLOSABLE]
+    assert "earth_boost_potion" in roots[TRIPLE_CLOSABLE]
     # The two fall-through rows agree with each other and DISAGREE with the
-    # deficit-driven one — the generic scan is monster-blind, which is the
-    # whole reason the monster-aware arm was added.
-    assert goals[TRIPLE_WORKABLE] == goals[TRIPLE_OPEN]
-    assert goals[TRIPLE_CLOSABLE] != goals[TRIPLE_WORKABLE]
+    # deficit-driven one. They now fall through to the TIER arm rather than to a
+    # monster-blind value scan — that scan was deleted with the guard branch, so
+    # what they agree on is the objective's own next step.
+    assert roots[TRIPLE_WORKABLE] == roots[TRIPLE_OPEN]
+    assert roots[TRIPLE_CLOSABLE] != roots[TRIPLE_WORKABLE]
 
 
 # --- the ONE-LEVEL PLANNING HORIZON over the same three cells ---------------
@@ -442,11 +465,27 @@ def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -
                         STARVED_LEVEL_UP: HORIZON_LEVEL_UP,
                         STARVED_OUT_OF_REACH: HORIZON_OUT_OF_REACH}
 
+    # WHERE EACH VERDICT IS SERVED, after wave 4 split the two arms.
+    #
+    # The guard flag is now `level_up_pending`, which needs an EDGE. A seeded
+    # player has none (`_last_outcome` is None and `prev_level == state.level`),
+    # so it is False on all three rows — including the gear row, which used to
+    # be True here. That is the split, not a regression: the gear verdict is
+    # served by the graph now, and the assertion below is what says so.
     active = {m: _starved_run(m, gd)[1]._last_ctx.gear_review_active
               for m in (STARVED_GEAR, STARVED_LEVEL_UP, STARVED_OUT_OF_REACH)}
-    assert active == {STARVED_GEAR: True,
+    assert active == {STARVED_GEAR: False,
                       STARVED_LEVEL_UP: False,
                       STARVED_OUT_OF_REACH: False}
+
+    armed = {m: isinstance(
+                 IsAFightBlockingMe(_obj(gd), RootWalk()).resolve(
+                     _starved_state(m, gd), gd, NO_PROFILE_CONTEXT, None),
+                 WhichSlotClosesTheFight)
+             for m in (STARVED_GEAR, STARVED_LEVEL_UP, STARVED_OUT_OF_REACH)}
+    assert armed == {STARVED_GEAR: True,
+                     STARVED_LEVEL_UP: False,
+                     STARVED_OUT_OF_REACH: False}
 
 
 def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(

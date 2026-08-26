@@ -197,7 +197,8 @@ class TestPerScenarioPins:
             "ReachCharLevel(level=10)",
             *_ORPHAN_ROWS_AT_FLOOR]
         assert d.ranking[0].category == (
-            "IsMyGearBehindMyTier → WhichSlotIsFurthestBehind → IsThisTargetBlocked")
+            "IsAFightBlockingMe → IsMyGearBehindMyTier → "
+            "WhichSlotIsFurthestBehind → IsThisTargetBlocked")
 
     def test_l8_overstocked_pins_gear_branch(self):
         """Level 8, full copper set (no shield in _COPPER_SET) + empty

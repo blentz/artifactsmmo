@@ -24,13 +24,16 @@ from dataclasses import replace
 
 import pytest
 
+import artifactsmmo_cli.ai.decisions.root as _root_mod
 import artifactsmmo_cli.ai.tiers.tier_progress as tier_progress
 from artifactsmmo_cli.ai.decisions.root import (
     CanIClearMyTier,
+    IsAFightBlockingMe,
     IsMyGearBehindMyTier,
     IsThereACombatTarget,
     IsThisTargetBlocked,
     RootWalk,
+    WhichSlotClosesTheFight,
     WhichSlotIsFurthestBehind,
     _gear_nameable_skills,
     _next_rung_above,
@@ -41,6 +44,12 @@ from artifactsmmo_cli.ai.decisions.root import (
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.scenario import SCENARIOS
+from artifactsmmo_cli.ai.task_horizon import (
+    HORIZON_GEAR,
+    HORIZON_LEVEL_UP,
+    HORIZON_OUT_OF_REACH,
+    TaskHorizon,
+)
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
@@ -437,7 +446,8 @@ def test_resolve_root_walks_gear_to_the_skill_gate_and_names_the_path():
     gd = _gd()
     resolution = resolve_root(make_state(level=15), gd, _objective(gd), _ctx(), None)
     assert resolution.root == ReachSkillLevel(skill="gearcrafting", level=2)
-    assert resolution.trail == ("IsMyGearBehindMyTier", "WhichSlotIsFurthestBehind",
+    assert resolution.trail == ("IsAFightBlockingMe", "IsMyGearBehindMyTier",
+                                "WhichSlotIsFurthestBehind",
                                 "IsThisTargetBlocked")
 
 
@@ -521,7 +531,8 @@ def test_the_chosen_root_is_never_repeated_as_its_own_alternative(monkeypatch):
     # The trunk is the ROOT here, so it is not repeated as its own alternative;
     # the orphan skill root behind it still is one.
     assert resolution.alternatives == (ReachSkillLevel(skill="woodcutting", level=3),)
-    assert resolution.trail == ("IsMyGearBehindMyTier", "IsThereACombatTarget",
+    assert resolution.trail == ("IsAFightBlockingMe", "IsMyGearBehindMyTier",
+                                "IsThereACombatTarget",
                                 "CanIClearMyTier")
 
 
@@ -671,3 +682,106 @@ def test_the_orphan_roots_sit_behind_the_trunk(bundle_game_data: GameData):
     skills = [i for i, alt in enumerate(alts) if isinstance(alt, ReachSkillLevel)]
     assert skills, alts
     assert min(skills) > trunk
+
+
+# ---------------------------------------------------------------------------
+# IsAFightBlockingMe / WhichSlotClosesTheFight (wave 4)
+#
+# These five cases are the STANDING arm of `GearLatch`, re-homed. They were
+# `test_gear_latch.py::test_an_unwinnable_task_arms_the_latch_without_a_loss`
+# and friends; the arm is now a node, so its coverage lives with the node. The
+# behaviour asserted is the same, one layer down: what used to be "does the
+# latch arm" is now "does the walk take the fight arm".
+# ---------------------------------------------------------------------------
+
+
+
+def _horizon(verdict: str | None):
+    """A `resolve_task_horizon` stand-in. `None` = no reading to take."""
+    def _fake(state, game_data):
+        if verdict is None:
+            return None
+        return TaskHorizon(monster="pig", verdict=verdict, gear_target=None)
+    return _fake
+
+
+def _arm(monkeypatch, verdict, combat_monster, gd=None):
+    """The CHILD `IsAFightBlockingMe` hands the walk to.
+
+    Asserted on the returned node rather than on `walk.trail`: a node appends
+    its own name when ITS `resolve` runs, so one call only ever shows the
+    parent. The child is the decision."""
+    gd = gd or _gd()
+    monkeypatch.setattr(_root_mod, "resolve_task_horizon", _horizon(verdict))
+    node = IsAFightBlockingMe(_objective(gd), RootWalk())
+    return node.resolve(make_state(level=5), gd,
+                        _ctx(combat_monster=combat_monster), None)
+
+
+def test_an_unwinnable_task_takes_the_fight_arm_without_a_loss(monkeypatch):
+    """No edge, no loss — a STANDING condition, which is the whole point: the
+    latch this replaced needed an event, and a frozen character has no events
+    left to produce one."""
+    assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster=None),
+                      WhichSlotClosesTheFight)
+
+
+def test_no_deficit_leaves_the_walk_on_the_tier_arm(monkeypatch):
+    assert isinstance(_arm(monkeypatch, None, combat_monster=None),
+                      IsMyGearBehindMyTier)
+
+
+def test_a_winnable_alternative_keeps_the_walk_on_the_tier_arm(monkeypatch):
+    """USER (2026-08-22): "not being able to win against a pig is fine. but that
+    shouldn't block us from fighting other, winnable monsters." Read off
+    `ctx.combat_monster` — one fact, one reader."""
+    assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster="chicken"),
+                      IsMyGearBehindMyTier)
+
+
+def test_a_futile_deficit_does_not_take_the_fight_arm(monkeypatch):
+    """`HORIZON_OUT_OF_REACH`: nothing closes the fight at this level, so there
+    is nothing to build for it. `means.py` cancels on this verdict; the node
+    must not compete for it."""
+    assert isinstance(_arm(monkeypatch, HORIZON_OUT_OF_REACH, combat_monster=None),
+                      IsMyGearBehindMyTier)
+
+
+def test_a_level_up_verdict_does_not_take_the_fight_arm(monkeypatch):
+    """Served from the EDGE instead (`map_guard`'s surviving arm). Here there is
+    no monster worth fighting, so a level goal would have nothing to grind on;
+    the objective's own XP grind IS the level-up being pursued."""
+    assert isinstance(_arm(monkeypatch, HORIZON_LEVEL_UP, combat_monster=None),
+                      IsMyGearBehindMyTier)
+
+
+def test_the_node_carries_nothing_between_cycles(monkeypatch):
+    """O4, BY EXHIBITION. The freeze was a latch that armed once and held for
+    981 cycles. A fresh node is built per walk, so the same node type asked
+    twice with different answers gives different answers -- there is no state
+    for a stale one to survive in."""
+    gd = _gd()
+    armed = _arm(monkeypatch, HORIZON_GEAR, combat_monster=None, gd=gd)
+    released = _arm(monkeypatch, None, combat_monster=None, gd=gd)
+    assert isinstance(armed, WhichSlotClosesTheFight)
+    assert isinstance(released, IsMyGearBehindMyTier)
+
+
+def test_an_empty_deficit_chain_falls_through_to_the_tier_arm(monkeypatch):
+    """THE HONEST WALL. `IsAFightBlockingMe` routes here on the UNPRICED
+    verdict, but this node re-asks with pricing, and the two orderings can
+    disagree — measured on `l35_artifact_fill` vs `demon`, where the priced walk
+    closes and the unpriced one does not. The reverse is reachable too, and when
+    it happens there is nothing to build for the fight.
+
+    The answer is the objective's own next step, NOT a monster-blind value scan:
+    that scan is what chose `iron_boots` for ten hours and it was deleted with
+    `map_guard`'s branch."""
+    gd = _gd()
+    monkeypatch.setattr(_root_mod, "deficit_upgrade_target",
+                        lambda state, game_data, actions_of=None: None)
+    walk = RootWalk()
+    child = WhichSlotClosesTheFight(_objective(gd), walk).resolve(
+        make_state(level=5), gd, _ctx(), None)
+    assert isinstance(child, IsMyGearBehindMyTier)
+    assert walk.trail == ["WhichSlotClosesTheFight"]

@@ -2873,9 +2873,13 @@ ROOT_DECISION_MUTATIONS = [
      "        return ObtainItem(code=self.target.blocker,\n"
      "                          quantity=recipe[self.target.blocker])\n",
      "        return ObtainItem(code=self.target.blocker, quantity=1)\n"),
+    # Anchored WITH its consequent: `IsAFightBlockingMe` (wave 4) tests the
+    # same fact one node earlier, so the bare line matches twice.
     ("root: IsThereACombatTarget's combat test is inverted",
-     "        if ctx.combat_monster is not None:\n",
-     "        if ctx.combat_monster is None:\n"),
+     "        if ctx.combat_monster is not None:\n"
+     "            return ReachCharLevel(level=_next_rung_above(game_data, state.level))\n",
+     "        if ctx.combat_monster is None:\n"
+     "            return ReachCharLevel(level=_next_rung_above(game_data, state.level))\n"),
     ("root: CanIClearMyTier swaps the finished ladder and the honest wall",
      "        if next_uncleared_tier(state, game_data, history) is None:\n"
      "            return ReachCharLevel(level=milestone_pure(state.level))\n"
@@ -4046,6 +4050,32 @@ ROUTE_PRICE_MUTATIONS = [
      "    return 0\n    raise NotImplementedError("),
 ]
 
+ROOT_FIGHT_ARM_MUTATIONS = [
+    # The standing arm, re-broadened one layer down from where gear_latch used
+    # to hold it. Killed by test_decisions_root.py's re-homed
+    # `test_a_futile_deficit_does_not_take_the_fight_arm` /
+    # `test_a_level_up_verdict_does_not_take_the_fight_arm`: both verdicts would
+    # take the fight arm, which is the 981-cycle freeze's shape.
+    ("root: the fight arm re-broadens to any horizon verdict",
+     "        if horizon is None or horizon.verdict != HORIZON_GEAR:",
+     "        if horizon is None:"),
+    # The winnable-alternative conjunct. USER 2026-08-22: "not being able to win
+    # against a pig is fine. but that shouldn't block us from fighting other,
+    # winnable monsters."
+    ("root: the fight arm ignores a winnable alternative",
+     "        if ctx.combat_monster is not None:\n"
+     "            return IsMyGearBehindMyTier(self.objective, self.walk)\n"
+     "        horizon = resolve_task_horizon(state, game_data)\n",
+     "        horizon = resolve_task_horizon(state, game_data)\n"),
+    # The honest wall: an empty deficit chain must fall through to the tier arm,
+    # not commit to whatever the walk last held.
+    ("root: an empty deficit chain commits instead of falling through",
+     "        if target is None:\n"
+     "            return IsMyGearBehindMyTier(self.objective, self.walk)\n",
+     "        if target is None:\n"
+     "            return WhichSlotIsFurthestBehind({}, self.walk)\n"),
+]
+
 TASK_HORIZON_MUTATIONS = [
     ("task_horizon: the gear arm never fires",
      "    target = deficit_upgrade_target(state, game_data)",
@@ -4097,9 +4127,14 @@ CATALOGUE_SCOPE_PURGE_MUTATIONS = [
 ]
 
 GEAR_LATCH_HORIZON_MUTATIONS = [
-    ("gear_latch: the standing arm re-broadens to the bare fight-lost fact",
-     "        self._blocked = horizon is not None and horizon.verdict == HORIZON_GEAR",
-     "        self._blocked = horizon is not None"),
+    # RETIRED at wave 4: `_blocked` left this class for
+    # `decisions/root.IsAFightBlockingMe`. Its replacement is
+    # ROOT_FIGHT_ARM_MUTATIONS below, which re-broadens the same test one
+    # layer down. What stays here is the narrow flag the guard now reads.
+    ("gear_latch: the level-up flag re-broadens to the bare edge",
+     "        self._level_up_pending = (horizon is not None\n"
+     "                                  and horizon.verdict == HORIZON_LEVEL_UP)",
+     "        self._level_up_pending = horizon is not None"),
 ]
 
 # The horizon's consumer on the discard rung. Killed by
@@ -7778,6 +7813,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_task_horizon.py", survivors)
     run_group(ROUTE_SRC, ROUTE_PRICE_MUTATIONS,
               "tests/test_ai/test_decisions_route.py", survivors)
+    run_group(ROOT_DECISION_SRC, ROOT_FIGHT_ARM_MUTATIONS,
+              "tests/test_ai/test_decisions_root.py", survivors)
     run_group(GEAR_LATCH_SRC, GEAR_LATCH_HORIZON_MUTATIONS,
               "tests/test_ai/scenarios/test_held_task.py", survivors)
     run_group(CATALOGUE_SCOPE_SRC, CATALOGUE_SCOPE_PURGE_MUTATIONS,

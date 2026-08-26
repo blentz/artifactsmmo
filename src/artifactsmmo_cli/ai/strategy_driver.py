@@ -9,7 +9,6 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from artifactsmmo_cli.ai.accumulation_sell import bank_sellable_surplus, sell_targets
-from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.arbiter_select import (
@@ -23,7 +22,6 @@ from artifactsmmo_cli.ai.arbiter_select import (
     select_pure,
 )
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
-from artifactsmmo_cli.ai.combat_deficit import deficit_upgrade_target
 from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.craft_plan_gen import _closure_items, generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
@@ -72,7 +70,6 @@ from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
-from artifactsmmo_cli.ai.obtain_item_routing import _gather_goal_for_unreachable_equippable
 from artifactsmmo_cli.ai.obtain_sources import Source, obtain_source_map
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
@@ -83,7 +80,6 @@ from artifactsmmo_cli.ai.requirement_projections import demand_set
 from artifactsmmo_cli.ai.shed_urgency import bank_shed_hoist, shed_urgency
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
-from artifactsmmo_cli.ai.task_horizon import HORIZON_LEVEL_UP, resolve_task_horizon
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.tiers.guards import (
@@ -242,15 +238,6 @@ def _step_protection_profile(step_goal: Goal | None, state: WorldState,
     return profile
 
 
-def _materials_in_hand(item: str, state: WorldState, game_data: GameData) -> bool:
-    """True if every direct recipe material for `item` is fully covered by
-    inventory + bank (so the craft+equip plan is short and reachable)."""
-    recipe = game_data.crafting_recipe(item) or {}
-    bank = state.bank_items or {}
-    return bool(recipe) and all(
-        state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty for mat, qty in recipe.items())
-
-
 # ---------------------------------------------------------------------------
 # Flat map functions + StrategyArbiter
 # ---------------------------------------------------------------------------
@@ -358,89 +345,33 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
     if kind is GuardKind.GEAR_REVIEW:
         if state is None:
             raise ValueError("GEAR_REVIEW guard requires a state")
-        # The MONSTER-AWARE target first: when a held monsters task cannot be
-        # won, the gear worth building is the gear that closes THAT fight, not
-        # whatever the generic value scan likes. `find_upgrade_target` takes no
-        # monster argument, and live that cost ten hours — it chose `iron_boots`,
-        # already worn and absent from every item that improved the pig margin,
-        # while the weapon that moved `rounds_to_kill` went unbuilt. This is the
-        # "lose fight -> upgrade gear" link the bot never had; the value scan
-        # stays the fallback for every other reason to upgrade.
-        def _deficit_actions(code: str, slot: str) -> int:
-            """Actions to acquire ONE — the SAME pricing `J` and the
-            `combat-deficit` diagnostic use, so the guard cannot chase a
-            different item than the oracle reports. Without it the walk ranks on
-            RAW margin and picks the biggest jump regardless of reach: unpriced
-            it chose `king_slime_sword` (jasper-gated), priced it chooses a
-            cheap partial gain and gets there.
-
-            Measured 386ms per firing on live C3P0 (22 priced candidates — cost
-            is computed only for the ones that actually improve the margin),
-            against a ~70s cycle. That was at `max_chain=1`; the walk now runs
-            to `MAX_CHAIN` so it can tell a closing chain from a futile one,
-            which re-prices the improvers once per step. Measured on the
-            scenario bundle the whole walk goes 16.1ms -> 56.2ms mean over 895
-            losing pairs, and on the one held-task scenario that returns a
-            target (`l32_held_task_closable` vs `ogre`, a 5-step chain) 22.0ms
-            -> 60.7ms. Scaled onto the live figure that is under 1.1s against a
-            ~70s cycle, and it is spent only when the gear latch is armed.
-            """
-            return acquisition_actions(code, 1, state, game_data, ctx,
-                                       equip=slot is not None, store=history)
-
-        target = deficit_upgrade_target(state, game_data,
-                                        actions_of=_deficit_actions)
-        # Asked only when the PRICED walk named nothing, so the gear arm above is
-        # byte-identical to what it was and the horizon costs nothing on the path
-        # that already had an answer. Where the two disagree — the priced walk
-        # closes and the unpriced one does not, measured on `l35_artifact_fill` vs
-        # `demon` — the gear arm wins, which is the right order: an item is faster
-        # than a level.
-        horizon = (None if target is not None
-                   else resolve_task_horizon(state, game_data))
-        if horizon is not None and horizon.verdict == HORIZON_LEVEL_UP:
-            # A LEVEL, NOT AN ITEM. The held task's fight is lost, no chain of
-            # acquisitions closes it at this level, and one level plus the gear
-            # that level admits does. Before this the same state fell straight
-            # through to the monster-blind value scan below, which is exactly
-            # the scan that spent ten hours on `iron_boots` — a guard reviewing
-            # gear for a fight no gear it can name will win.
-            #
-            # `ReachUnlockLevelGoal` rather than a new goal class: it is already
-            # "grind character XP until state.level >= target_level", already
-            # emits Fight over every beatable monster plus HP recovery, and is
-            # already mapped from a guard slot. A second class would be a second
-            # implementation of one sentence. The target is `state.level + 1` and
-            # nothing else — the horizon is a HARD bound, and its own
-            # MAX_ACHIEVABLE_GAP (5) can never bind at a gap of one.
-            return ReachUnlockLevelGoal(target_level=state.level + 1,
-                                        blocker_code=state.task_code or "task")
-        if target is None:
-            probe = UpgradeEquipmentGoal(initial_equipment=state.equipment)
-            target = probe.find_upgrade_target(state, game_data)
-        if target is None:
-            # No upgrade found — defensive fallback (active_guards gates on ctx,
-            # so this branch is only reachable if the latch fired without an upgrade).
-            return UpgradeEquipmentGoal(initial_equipment=state.equipment)
-        item, slot = target
-        if state.inventory.get(item, 0) > 0 or _materials_in_hand(item, state, game_data):
-            return UpgradeEquipmentGoal(initial_equipment=state.equipment,
-                                        committed_target=(item, slot))
-        # Materials not in hand: route to the FLAT deepest actionable step rather
-        # than GatherMaterials(item, DIRECT recipe). For a from-scratch deep chain
-        # the direct-recipe goal must gather through the multi-level recipe and
-        # explodes the GOAP search (655k nodes / 90s timeout at qty 480 offline);
-        # the flat leaf gather is linear and budget-feasible, and the macro chain
-        # is reached by repeated cycle execution. Reuses the proved
-        # gather_step_target core (see _gather_goal_for_unreachable_equippable).
-        committed = UpgradeEquipmentGoal(initial_equipment=state.equipment,
-                                         committed_target=(item, slot))
-        routed = _gather_goal_for_unreachable_equippable(
-            item, state, game_data, committed.max_depth, ctx)
-        # None means gather_step_target decided the root itself fits the
-        # depth budget (see the helper's docstring) -- plan it directly
-        # rather than wrapping it in a second GatherMaterials pass.
-        return routed if routed is not None else committed
+        # ONE ARM, since wave 4: a level, not an item.
+        #
+        # The gear arm that stood here — the priced `deficit_upgrade_target`
+        # walk, then a monster-BLIND `find_upgrade_target` value scan behind it
+        # — is now `decisions/root.WhichSlotClosesTheFight`, reached through
+        # `IsAFightBlockingMe`. The scan went with it, and that is a deletion
+        # rather than a move: it is the scan that chose `iron_boots`, already
+        # worn and absent from every item that improved the pig margin, while
+        # the weapon that moved `rounds_to_kill` went unbuilt for ten hours.
+        # The graph's answer when nothing closes the fight is the objective's
+        # own next step, which is an answer rather than a guess.
+        #
+        # What is left is the EDGE arm's verdict. The held task's fight is lost,
+        # no chain of acquisitions closes it at this level, and one level plus
+        # the gear that level admits does. `GearLatch.level_up_pending` already
+        # tested `verdict == HORIZON_LEVEL_UP`, so this branch does not re-ask:
+        # the guard fires on exactly the condition this arm serves.
+        #
+        # `ReachUnlockLevelGoal` rather than a new goal class: it is already
+        # "grind character XP until state.level >= target_level", already emits
+        # Fight over every beatable monster plus HP recovery, and is already
+        # mapped from a guard slot. A second class would be a second
+        # implementation of one sentence. The target is `state.level + 1` and
+        # nothing else — the horizon is a HARD bound, and its own
+        # MAX_ACHIEVABLE_GAP (5) can never bind at a gap of one.
+        return ReachUnlockLevelGoal(target_level=state.level + 1,
+                                    blocker_code=state.task_code or "task")
     if kind is GuardKind.CRAFT_POTIONS:
         # `state=` seeds the goal's frozen craft target. Without it the goal
         # re-resolves its target per planner node and can demand one its own

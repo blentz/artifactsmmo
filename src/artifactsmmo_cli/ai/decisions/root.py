@@ -69,10 +69,13 @@ from fractions import Fraction
 # point both halves are complete. Exactly the idiom `tiers/strategy.py:13` and
 # `tiers/progression_tree.py:37` already use on each other, for this reason.
 from artifactsmmo_cli.ai.actions import level_skill
+from artifactsmmo_cli.ai.combat_deficit import deficit_upgrade_target
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
+from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.task_horizon import HORIZON_GEAR, resolve_task_horizon
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -367,6 +370,132 @@ def _orphan_skill_roots(state: WorldState,
                  for skill in orphans)
 
 
+class IsAFightBlockingMe(Decision[MetaGoal]):
+    """Is the character held on a fight it cannot win, with nothing else to fight?
+
+    THE STANDING ARM OF `GearLatch`, ABSORBED (wave 4). `gear_latch.py` computed
+    `craftable and not winnable_alternative` and then
+    `resolve_task_horizon(...).verdict == HORIZON_GEAR`, feeding
+    `ctx.gear_review_active`, which fired the GEAR_REVIEW GUARD — and a guard
+    preempts the objective step outright, which is what froze R2D2's character
+    XP for 981 cycles / 31.6 h in 2026-08-21/22.
+
+    IT IS A NODE AND NOT A LATCH, AND THAT IS ENFORCED BY THE TYPE. A `Decision`
+    is constructed fresh by `resolve_root` every cycle and carries nothing across
+    cycles, so this condition cannot become sticky. Do NOT thread `prev_level`,
+    `last_outcome`, or any persisted boolean into this signature: the moment a
+    node's answer depends on an event N cycles ago, this IS the guard again and
+    the freeze is back under a new name.
+
+    ONLY `HORIZON_GEAR` TAKES THE POSITIVE ARM. The other two verdicts fall
+    through to the tier arm, and that is a decision with a reason on each side:
+
+      * `HORIZON_OUT_OF_REACH` — no chain closes the fight at this level, so
+        there is nothing to build for it. `tiers/means.py:277-278` fires
+        `TASK_CANCEL` on exactly this verdict; this node must not compete.
+      * `HORIZON_LEVEL_UP` — one level would close it, and this node only fires
+        when `ctx.combat_monster is None`, i.e. with NO monster worth fighting.
+        A level goal here would have no beatable monster in its
+        `relevant_actions`. That verdict is served from the EDGE instead — a
+        real loss or level-up, where the cascade does find something — by
+        `map_guard`'s surviving LEVEL_UP arm. Pinned by
+        `test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work`:
+        letting the objective's own XP grind run IS the level-up being pursued.
+
+    `ctx.combat_monster`, not a separate `winnable_alternative` parameter.
+    `player.py` computes `_winnable_farm_target()` ONCE and hands the same value
+    to the latch and to `_selection_context`, so this is the same fact today —
+    but as two parameters they could drift, and the sibling node
+    `IsThereACombatTarget` already reads `ctx`. One read.
+
+    `has_craftable_upgrade_any_slot` is NOT re-tested here. In the latch it was
+    the AND-guard that stopped the standing arm firing with nothing to build; in
+    the graph that job belongs to the child — `WhichSlotClosesTheFight` returns
+    the tier arm when the deficit chain is empty. Re-testing it here would be a
+    second, coarser opinion (`find_upgrade_target` is monster-BLIND — the
+    ten-hour `iron_boots` failure) standing in front of the monster-aware one.
+    """
+
+    name = "IsAFightBlockingMe"
+
+    def __init__(self, objective: CharacterObjective, walk: RootWalk) -> None:
+        # `objective` is carried, not used, on the positive arm: both children
+        # need it (`IsMyGearBehindMyTier` directly, `WhichSlotClosesTheFight`
+        # for `classify_target`), and this is the walk's entry so there is
+        # nowhere above it to hold one.
+        self.objective = objective
+        self.walk = walk
+
+    def resolve(self, state: WorldState, game_data: GameData,
+                ctx: SelectionContext, history: LearningStore | None
+                ) -> "Decision[MetaGoal] | MetaGoal | None":
+        self.walk.trail.append(self.name)
+        if ctx.combat_monster is not None:
+            return IsMyGearBehindMyTier(self.objective, self.walk)
+        horizon = resolve_task_horizon(state, game_data)
+        if horizon is None or horizon.verdict != HORIZON_GEAR:
+            return IsMyGearBehindMyTier(self.objective, self.walk)
+        return WhichSlotClosesTheFight(self.objective, self.walk)
+
+
+class WhichSlotClosesTheFight(Decision[MetaGoal]):
+    """The one acquisition that most improves the margin against the held task's
+    monster, per action spent.
+
+    `combat_deficit.deficit_upgrade_target`, ABSORBED (wave 4). It was
+    `map_guard`'s GEAR_REVIEW branch, the only link the bot has between "I cannot
+    win this fight" and "build this". Its predecessor was a monster-BLIND
+    `_best_by_value` scan that chose `iron_boots` — already worn, absent from all
+    24 items that improved the pig margin — while the weapon that moved
+    `rounds_to_kill` went unbuilt for ten hours.
+
+    THIS IS NOT A FIFTH RANKING MULTIPLIER AND NOT A NEW ARGMAX. It adds no
+    scoring surface: `combat_deficit`'s greedy walk already exists, is already
+    called in production, and is already ranked on margin gain per acquisition
+    action. Wave 4 changes WHERE it is called, not WHAT it computes. The wave-3
+    precedent (`WhichSlotIsFurthestBehind`) applies verbatim: no multiplier may
+    be added to this ranking. If a future need appears to weight this against the
+    tier gap, that is a request for a fifth multiplier and must be refused — the
+    two are in DIFFERENT ARMS of a branch, never summed, which is exactly why
+    neither needs a scale.
+
+    Falls through to the tier arm — the honest wall — when the priced walk names
+    nothing. That is `combat_deficit`'s own "unwinnable and I do not know what to
+    build" case, and the graph's answer to it is the objective's own next step,
+    not a monster-blind guess.
+    """
+
+    name = "WhichSlotClosesTheFight"
+
+    def __init__(self, objective: CharacterObjective, walk: RootWalk) -> None:
+        self.objective = objective
+        self.walk = walk
+
+    def resolve(self, state: WorldState, game_data: GameData,
+                ctx: SelectionContext, history: LearningStore | None
+                ) -> "Decision[MetaGoal] | MetaGoal | None":
+        self.walk.trail.append(self.name)
+
+        def actions_of(code: str, slot: str) -> int:
+            # Through `route_price`, not `acquisition_actions` directly: wave 6's
+            # O6 census permits exactly one pricing import under `ai/decisions/`,
+            # and it is `decisions/route.py`. `equip` is derived there from
+            # `goal.slot` — the old hand-written `equip=True` asserted a second
+            # time a fact the slot already carried.
+            return route_price(ObtainItem(code, 1, slot=slot), state,
+                               game_data, ctx, history)
+
+        target = deficit_upgrade_target(state, game_data, actions_of=actions_of)
+        if target is None:
+            return IsMyGearBehindMyTier(self.objective, self.walk)
+        code, slot = target
+        # Reuses `IsThisTargetBlocked` rather than mapping the code to a goal
+        # itself: that node is the one place that reads a `GearTarget`'s four
+        # shapes, and a second reader is a second chance to read them wrong.
+        return IsThisTargetBlocked(
+            slot, self.objective.classify_target(code, state), self.walk)
+
+
 class IsMyGearBehindMyTier(Decision[MetaGoal]):
     """Does the gear-target tier want anything this character does not wear?
 
@@ -647,12 +776,12 @@ class CanIClearMyTier(Decision[MetaGoal]):
 def resolve_root(state: WorldState, game_data: GameData,
                  objective: CharacterObjective, ctx: SelectionContext,
                  history: LearningStore | None) -> RootResolution:
-    """Walk the tier graph from `IsMyGearBehindMyTier` to a root MetaGoal."""
+    """Walk the tier graph from `IsAFightBlockingMe` to a root MetaGoal."""
     walk = RootWalk()
     # Locally annotated, not inlined into the call: mypy 1.18.1 infers
     # `Leaf = Never` for a bare `Decision[X]` argument to `resolve_node` and
     # reports arg-type. Same fix as the `strategy_driver.py` call site.
-    entry: Decision[MetaGoal] | MetaGoal | None = IsMyGearBehindMyTier(
+    entry: Decision[MetaGoal] | MetaGoal | None = IsAFightBlockingMe(
         objective, walk)
     root = resolve_node(entry, state, game_data, ctx, history)
 
