@@ -1693,4 +1693,43 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         description="Cell 12: a fisher-role character standing on a COOKING "
                     "rung — the first scenario whose skill grind descends into "
                     "a fishing gather."),
+
+    # --- COVERAGE MATRIX cell 13 (2026-08-25): the CRAFT_POTIONS guard's
+    # BOOST-STOCK arm. `craft_potions_fires` has three arms (unlock-boost
+    # `potion_supply.py:184-189`, boost-stock `:210-220`, heal-deficit
+    # `:222-225`) and `CraftPotionsGoal._active_craft` has the matching three.
+    # Measured over the 42 committed cells: the guard fires in 5 and EVERY ONE
+    # takes the heal arm. The boost-stock arm was suite-invisible, and live
+    # attribution cannot recover it either (`cycles.action_repr` records the
+    # executed action, not the arm that chose it), so the arm's only evidence
+    # was a code-read.
+    #
+    # Its precondition is the heal stock SATISFIED plus an understocked
+    # beneficial boost, so the cell is `l20_relief_full_bank`'s loadout with
+    # exactly two things changed: utility1_slot carries the level-20 heal
+    # baseline (`potion_baseline_pure(20, 5, 5, 45, 100)` == 40) so the heal
+    # deficit closes, and the bag holds three units of each earth_boost_potion
+    # ingredient so `_recipe_producible` passes and the ladder sizes 3 runs
+    # from held stock rather than a 5-run gather batch.
+    #
+    # THE CELL IS A DEFECT WITNESS, not a green confirmation — see
+    # tests/test_ai/scenarios/test_boost_stock_cell.py. The arm plans
+    # `Craft(earth_boost_potion×3)` + `Equip(...→utility1_slot)`, and
+    # `craft_ladder._TARGET_SLOT` is the hard-coded string "utility1_slot", so
+    # the equip DISPLACES the 40-potion heal stack that is the arm's own
+    # precondition while utility2_slot sits empty. The guard re-fires on the
+    # heal arm immediately after.
+    "l20_boost_stock": ScenarioCharacter(
+        name="l20_boost_stock", level=20,
+        skills={"mining": 20, "woodcutting": 20, "weaponcrafting": 15,
+                "gearcrafting": 15, "jewelrycrafting": 15, "cooking": 10,
+                "alchemy": 10, "fishing": 10},
+        equipment=dict(_IRON_SET) | {"utility1_slot": "small_health_potion"},
+        utility_quantities={"utility1_slot": 40},
+        inventory={"yellow_slimeball": 3, "sunflower": 3, "algae": 3},
+        inventory_max=100, bank={}, gold=1500,
+        derive_combat_stats=True,
+        description="Cell 13: heal stock AT the level-20 baseline with an "
+                    "understocked boost — the only cell that reaches the "
+                    "CRAFT_POTIONS guard's boost-stock arm."),
 }

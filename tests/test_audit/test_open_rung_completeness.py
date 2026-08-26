@@ -11,7 +11,7 @@ things:
   passing;
 * its verdict must be production's — `test_a_cell_is_open_iff_an_arm_offers_a_rung`
   cross-reads `LevelSkill.is_applicable` against the census's own catalogue
-  decomposition on all 336 cells, so the two cannot drift;
+  decomposition on all 344 cells, so the two cannot drift;
 * it must be able to FAIL — `test_the_gate_fires_when_a_routed_skill_loses_its_rung`
   closes one routed skill through the production seam and asserts the residual
   fires, and `test_the_unexplained_residual_can_fire` exhibits the hole the
@@ -44,8 +44,8 @@ from artifactsmmo_cli.audit.open_rung_completeness import (
 )
 
 # Floors, not exact counts: a new scenario must not have to touch this file,
-# but a sweep that goes blind must. The committed set is 42 scenarios x 8
-# skills = 336 cells over 92 distinct (skill, level) pairs.
+# but a sweep that goes blind must. The committed set is 43 scenarios x 8
+# skills = 344 cells over 92 distinct (skill, level) pairs.
 #
 # The cell floor is `orc.MIN_CELLS`, NOT a local copy: `gen_open_rung.py
 # --check` enforces the same number, and two floors that could drift would
@@ -63,7 +63,7 @@ def results(bundle_game_data: GameData) -> list[orc.RungResult]:
 
 def _closed_cells(game_data: GameData, *, derive_combat_stats: bool | None) -> int:
     """Cells with no open rung, when the scenario states are built with the
-    given `derive_combat_stats` setting. `None` means AS COMMITTED — 32 of the
+    given `derive_combat_stats` setting. `None` means AS COMMITTED — 33 of the
     scenarios opt the flag on and the rest leave it at its False default,
     which is what a census built straight on `scenario_state` would measure.
     The census forces it True for every cell."""
@@ -137,23 +137,32 @@ def test_the_zero_stat_harness_would_measure_the_fixture(
     then unreachable, so cells wall for a reason that belongs to the harness.
 
     Three counts, pinned exactly because `open_rung_completeness`'s module
-    docstring quotes them: 71 closed with the flag off everywhere, 20 closed
-    on the scenarios AS COMMITTED (32 of the 42 opt in), 6 with the census's
+    docstring quotes them: 74 closed with the flag off everywhere, 20 closed
+    on the scenarios AS COMMITTED (33 of the 43 opt in), 6 with the census's
     forced-on states. The as-committed number is the one that matters — it is
     what this census would report if `census_state` were `scenario_state`.
+
+    `all_off` moved 71 -> 74 when coverage-matrix cell 13 (`l20_boost_stock`)
+    landed, and the +3 is exactly the number this assertion exists to track:
+    with the flag forced OFF that cell closes gearcrafting, jewelrycrafting
+    and weaponcrafting, because zero attack kills every monster-drop leaf
+    those three rungs descend into. AS COMMITTED and DERIVED both stayed put
+    (20 and 6) — the cell declares the flag, and with combat stats on it
+    closes nothing. A new cell therefore widens the harness's lie without
+    changing what the census reports, which is the intended relationship.
     """
     all_off = _closed_cells(bundle_game_data, derive_combat_stats=False)
     as_committed = _closed_cells(bundle_game_data, derive_combat_stats=None)
     derived = _closed_cells(bundle_game_data, derive_combat_stats=True)
-    assert (all_off, as_committed, derived) == (71, 20, 6), \
-        "update the module docstring's 71/20/6 note"
+    assert (all_off, as_committed, derived) == (74, 20, 6), \
+        "update the module docstring's 74/20/6 note"
     # The opt-in count is PINNED, not merely restated. Both docstrings quote it,
     # and it silently rotted from 11 to 20 as scenarios were added — caught only
     # by a coverage audit, months later. A quoted number with no assertion behind
     # it is the same defect class the reachability census now gates.
     opted_in = sum(1 for s in SCENARIOS.values() if s.derive_combat_stats)
-    assert opted_in == 32, (
-        "update the '32 of the 42 opt in' count in this docstring AND in "
+    assert opted_in == 33, (
+        "update the '33 of the 43 opt in' count in this docstring AND in "
         "open_rung_completeness's module docstring")
     assert sum(1 for r in results if not r.open_rung) == derived
 
@@ -395,7 +404,7 @@ def test_the_routing_breakdown_scopes_the_residual(
       orphan rule was declining a genuine orphan. See
       `tests/test_ai/scenarios/test_alchemy_rung.py`.
 
-    The scope line still matters — 100 cells remain unrouted — but it now
+    The scope line still matters — 103 cells remain unrouted — but it now
     understates far less than it did.
     """
     line = orc.routing_breakdown(results)

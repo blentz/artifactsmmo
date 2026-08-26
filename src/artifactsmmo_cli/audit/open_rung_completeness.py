@@ -46,12 +46,12 @@ zero-stat states "`is_winnable` is False against EVERY monster (predict_win
 sees 0 attack)". A rung's obtainability walk bottoms out in `drop_obtainable`,
 so with the flag off EVERY monster-drop leaf in the catalogue is unreachable
 and the census would report walls that are properties of the fixture. Measured
-on the committed bundle: 71 closed cells with the flag off everywhere, 20 with
-the scenarios AS COMMITTED (32 of the 42 opt the flag on), and 6 with it forced
+on the committed bundle: 74 closed cells with the flag off everywhere, 20 with
+the scenarios AS COMMITTED (33 of the 43 opt the flag on), and 6 with it forced
 on. The flag is therefore forced on for every cell — the census derives the
 combat totals a live character wearing that scenario's declared loadout would
 report. The committed scenarios are NOT modified; `census_state` builds its own
-copy. `test_the_zero_stat_harness_would_measure_the_fixture` pins the 71/20/6
+copy. `test_the_zero_stat_harness_would_measure_the_fixture` pins the 74/20/6
 spread so a later default flip cannot make this note quietly false.
 
 THE RESIDUALS (must be zero)
@@ -71,9 +71,9 @@ nothing at all. Without it `WALL_LADDER_TOPPED` would absorb a bundle whose
 rows for a skill went missing and `--check` would exit 0 on corrupted input.
 
 WHAT "0 RESIDUALS" DOES AND DOES NOT PROMISE. `O1_SILENT_STALL` is
-`closed AND routed`, so its reach is the ROUTED subset, not all 336 cells.
-Measured on the committed bundle: 236 cells are routed — alchemy, cooking,
-fishing, mining and woodcutting 42 each (every scenario, via
+`closed AND routed`, so its reach is the ROUTED subset, not all 344 cells.
+Measured on the committed bundle: 241 cells are routed — alchemy, cooking,
+fishing, mining and woodcutting 43 each (every scenario, via
 `decisions/root._orphan_skill_roots`), jewelrycrafting 15, gearcrafting 9,
 weaponcrafting 2 — i.e. all 8 skills, though weaponcrafting only at level 1.
 This number has moved twice, both times because a SKILL stopped being invisible
