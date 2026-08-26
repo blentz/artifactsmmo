@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Delete the `GEAR_REVIEW` guard rung and the `GearLatch` standing arm, replacing them with two `Decision` nodes in the resolution walk, so "this fight is blocking me" stops being a sticky latch that can preempt the objective indefinitely.
+**Goal:** Delete the `GEAR_REVIEW` guard rung and the `GearLatch` standing arm, replacing them with two `Decision` nodes in the resolution walk, so "this fight is blocking me" is answered in one place instead of two. The latch is already inert live (see "Live premise" — 0 % since 08-23); this wave removes the machinery and the second producer, it does not fix a running freeze.
 
 **Architecture:** Two new `Decision[MetaGoal]` nodes at the head of `resolve_root`'s walk. They read `task_horizon.resolve_task_horizon` — the existing single producer of the three-way verdict — and map its three verdicts one-to-one onto graph outcomes. A `Decision` is constructed fresh each cycle and carries nothing across cycles, which is what makes the freeze unrepresentable rather than merely fixed.
 
@@ -21,6 +21,53 @@
 - Mutation anchors must resolve to exactly one site; refresh them in the SAME commit as the edit.
 - Never `git checkout <path>` to undo a probe — `cp` aside first.
 - Live claims rest on `~/.cache/artifactsmmo/learning.db` only, never on `play-trace-*.jsonl`.
+
+## Live premise, RE-MEASURED 2026-08-26 — read this before task 4.0
+
+**Wave 4 was designed to fix a live freeze that no longer happens.** The design's
+§2.6 firing rates and §10 baseline were measured at `ee2d2d67`, when the
+`GEAR_REVIEW` guard was live. Measured today over `~/.cache/artifactsmmo/learning.db`,
+the `UpgradeEquipment*` share of `selected_goal` by day:
+
+| day | share | what landed |
+|---|---|---|
+| 08-20 | 29.1 % | |
+| 08-21 | 2.1 % | |
+| 08-22 | 10.3 % | gear-latch freeze fix |
+| 08-23 | **0.0 %** | |
+| 08-24 | 0.9 % | |
+| 08-25 | 0.1 % | `e6a2e37c`, `63533b82` (horizon) |
+| 08-26 | **0.0 %** (0 of 441 cycles, 5 characters) | |
+
+Historically `UpgradeEquipment(greater_wooden_staff->weapon_slot)` alone ran
+11,111 cycles. It now runs zero. The cause is not a mystery and is not this
+plan's doing to undo: arming the latch on `HORIZON_GEAR` instead of the bare
+deficit fact, combined with 91.7 % of losing (character, monster) pairs being
+`HORIZON_OUT_OF_REACH`, means the latch almost never arms.
+
+**Three consequences, all binding:**
+
+1. **§10's acceptance criterion is VACUOUS and must not be used as written.**
+   "No character selects an `UpgradeEquipment*` for more than 200 consecutive
+   cycles" is satisfied *today*, before wave 4 ships, and would stay satisfied if
+   wave 4 were abandoned. It cannot distinguish success from failure — this is
+   decorative-test mechanism 3 (an assertion over a collection that is empty for
+   unrelated reasons). The replacement is in Verification below.
+2. **Wave 4's justification changes, and it is still sound.** It is no longer
+   "fix the freeze". It is "delete machinery that is now inert, and remove the
+   second producer of a decision the graph already makes". That is the session's
+   recurring defect class and worth shipping on its own merits — but any task
+   report claiming wave 4 fixed a live freeze is claiming something the data
+   contradicts.
+3. **The risk profile INVERTS.** 4.2 was the dangerous increment because it
+   changed live behaviour; with the guard inert, its live blast radius is now
+   small. The dominant risk becomes the wave-5.3 lesson in reverse — "obviously
+   dead" was wrong three times in this epic, and *inert is not dead*. Something
+   must still arm `HORIZON_GEAR` occasionally, and 4.0's scenarios are now the
+   ONLY witness to the behaviour, because live traffic will not exercise it.
+
+Task 4.0 is therefore promoted from "useful baseline" to **load-bearing**: it is
+the only place the deleted behaviour is observable at all.
 
 ## Pre-flight: what §12 already settled
 
@@ -50,6 +97,13 @@ table. Two substantive corrections bind this plan:
 
 Without this, every 4.2 assertion is vacuous (§0.6). The scenarios assert
 **today's** guard behaviour so the 4.2 diff is against recorded numbers.
+
+**LOAD-BEARING as of the 2026-08-26 re-measurement.** The guard fires 0 % live,
+so these three cells are the only place the behaviour 4.2 deletes can be
+observed at all. If a cell cannot be made to produce its verdict, say so and
+STOP — do not weaken the cell until it passes. A scenario that no longer
+witnesses the deleted behaviour turns the whole wave into an unwitnessed
+deletion, which is how this epic's three "obviously dead" errors happened.
 
 - [ ] **Step 1: Read the three horizon verdicts and pick states that produce them**
 
@@ -315,10 +369,28 @@ that every liveness hypothesis is still satisfiable.
 
 Every task: `bash formal/gate.sh` rc=0, 100% coverage, ruff + mypy --strict clean.
 
-**Live acceptance (§10), re-baselined.** The design's PRE-flip baseline (R2D2 187,
-Lor 157, HAL 109, Robby 88, C3P0 37) was measured before `e6a2e37c` and
-`63533b82`, which change exactly the behaviour it counts. **Re-measure before
-4.2 lands.** Criterion, from `learning.db` only: after the fleet restarts on the
-flipped code, no character selects an `UpgradeEquipment*` for more than 200
-consecutive cycles while holding a monsters task whose monster is unwinnable and
-while a winnable alternative exists.
+**Live acceptance — REPLACED 2026-08-26.** The design's §10 criterion is
+vacuous (see "Live premise" above): its metric already reads 0 fleet-wide, so it
+passes without wave 4 and cannot fail with it. The PRE-flip baseline it cites
+(R2D2 187, Lor 157, HAL 109, Robby 88, C3P0 37) describes a regime that ended on
+08-22.
+
+Use these three instead. The first two can fail; the third is the honest null.
+
+1. **No regression in skill progression.** `LevelSkill` is 67 % of post-restart
+   cycles (297 of 441) and every character is advancing a craft skill. After
+   4.2, that share must not fall and no character may stall a skill it was
+   climbing. This is the property the inert guard would break if 4.2 deletes
+   something still load-bearing.
+2. **`HORIZON_LEVEL_UP` acquires a live consumer.** It currently has exactly one
+   (`map_guard`'s arm at `strategy_driver.py:405-412`) and 4.2 moves it into the
+   graph. After the flip, `ReachCharLevel` must appear in `selected_goal` for at
+   least one character holding a blocked monsters task, OR the trail must show
+   `IsAFightBlockingMe` reaching the LEVEL_UP arm. If neither ever appears, the
+   arm shipped dead and the horizon work is silently regressed — the exact
+   failure §12.1 exists to prevent.
+3. **`UpgradeEquipment*` stays at ~0 %, and that proves nothing.** Record it, do
+   not treat it as acceptance. It was already 0 before the change.
+
+Measure all three from `~/.cache/artifactsmmo/learning.db` only, never from
+`play-trace-*.jsonl`.
