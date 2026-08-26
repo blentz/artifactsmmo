@@ -181,6 +181,8 @@ CURRENCY_TURNIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_turni
 DUAL_ROLE_CURRENCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "dual_role_currency.py"
 COMBAT_DEFICIT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_deficit.py"
 TASK_HORIZON_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_horizon.py"
+ROUTE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
+             / "decisions" / "route.py")
 GEAR_LATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_latch.py"
 CATALOGUE_SCOPE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
                        / "catalogue_scope.py")
@@ -4025,6 +4027,25 @@ COMBAT_DEFICIT_FUTILE_TARGET_MUTATIONS = [
 # meet through gear upgrade, or (level-up by exactly 1 level and gear upgrade)."
 # One mutation per verdict, all killed by tests/test_ai/test_task_horizon.py.
 # OWN run_group (unit-killed mutants).
+ROUTE_PRICE_MUTATIONS = [
+    # `equip` is derived from the slot and from nothing else (wave 4, C11).
+    # Pinned by the delta assertion in
+    # `test_equip_is_derived_from_slot_and_nothing_else`: a slotted goal costs
+    # exactly one action more than a bare one, so forcing either constant
+    # collapses that difference and the test says so.
+    ("route: a slotted ObtainItem stops paying for the equip action",
+     "                                   ctx, equip=goal.slot is not None,",
+     "                                   ctx, equip=False,"),
+    ("route: an unslotted ObtainItem is charged for an equip it never does",
+     "                                   ctx, equip=goal.slot is not None,",
+     "                                   ctx, equip=True,"),
+    # The unpriced variants must FAIL, not default. A silent number here is a
+    # wall: priced 0 a level root outranks every gear root.
+    ("route: an unpriced MetaGoal variant silently returns 0",
+     "    raise NotImplementedError(",
+     "    return 0\n    raise NotImplementedError("),
+]
+
 TASK_HORIZON_MUTATIONS = [
     ("task_horizon: the gear arm never fires",
      "    target = deficit_upgrade_target(state, game_data)",
@@ -7755,6 +7776,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_combat_deficit.py", survivors)
     run_group(TASK_HORIZON_SRC, TASK_HORIZON_MUTATIONS,
               "tests/test_ai/test_task_horizon.py", survivors)
+    run_group(ROUTE_SRC, ROUTE_PRICE_MUTATIONS,
+              "tests/test_ai/test_decisions_route.py", survivors)
     run_group(GEAR_LATCH_SRC, GEAR_LATCH_HORIZON_MUTATIONS,
               "tests/test_ai/scenarios/test_held_task.py", survivors)
     run_group(CATALOGUE_SCOPE_SRC, CATALOGUE_SCOPE_PURGE_MUTATIONS,
