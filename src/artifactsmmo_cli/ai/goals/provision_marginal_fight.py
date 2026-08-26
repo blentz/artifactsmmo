@@ -9,7 +9,7 @@ from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS, utility_slot_for
+from artifactsmmo_cli.ai.utility_slot import already_provisioned, utility_slot_for
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Above the grind (GrindCharacterXP ceiling 45) so provisioning runs before the
@@ -30,7 +30,7 @@ class ProvisionMarginalFightGoal(Goal):
         return 0.0 if self.is_satisfied(state) else PROVISION_MARGINAL_VALUE
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return any(state.equipment.get(slot) is not None for slot in UTILITY_SLOTS)
+        return already_provisioned(state)
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         # One-action plan; the planner terminates on is_satisfied after the equip

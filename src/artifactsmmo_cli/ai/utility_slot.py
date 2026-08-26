@@ -59,3 +59,20 @@ def utility_slot_for(code: str, state: WorldState) -> str:
     if utility_slot_quantity(state, first) < utility_slot_quantity(state, second):
         return first
     return second
+
+
+def already_provisioned(state: WorldState) -> bool:
+    """Whether a utility slot already holds a consumable.
+
+    SOLE definition of "provisioned".  `ProvisionMarginalFightGoal.is_satisfied`
+    is this predicate, and `strategy_driver._marginal_provision_goal` early-exits
+    to the grind on it — the emitter has to answer the question BEFORE it can
+    build the goal that would answer it, so the two ask this function rather
+    than the goal asking itself and the emitter re-deriving it.
+
+    They were byte-identical hand-copies until 2026-08-25, and the suite did not
+    notice: narrowing the emitter to `utility1_slot` alone left all 6040 tests
+    in `tests/test_ai` green, because each site had its own tests and nothing
+    tested that they AGREE.  One definition makes that drift unrepresentable.
+    """
+    return any(state.equipment.get(slot) is not None for slot in UTILITY_SLOTS)

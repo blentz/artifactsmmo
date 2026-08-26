@@ -10,8 +10,11 @@ here, and the arm's convergence is pinned end-to-end in
 
 import dataclasses
 
+import pytest
+
 from artifactsmmo_cli.ai.utility_slot import (
     UTILITY_SLOTS,
+    already_provisioned,
     utility_slot_for,
     utility_slot_quantity,
 )
@@ -101,3 +104,20 @@ def test_rule3_ties_break_to_slot2_keeping_the_primary_slot_stable():
     PRIMARY heal and slot 2 for the secondary, so an equal-sized eviction
     takes the secondary and leaves the heal the character fights with."""
     assert utility_slot_for(OTHER, _state(HEAL, 10, BOOST, 10)) == "utility2_slot"
+
+
+# ---------------------------------------------------------------------------
+# already_provisioned — the predicate the goal and its emitter SHARE
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("slot1,slot2,expected", [
+    (None, None, False),
+    (HEAL, None, True),
+    (None, BOOST, True),
+    (HEAL, BOOST, True),
+])
+def test_already_provisioned_reads_both_slots(slot1, slot2, expected):
+    """EITHER slot counts. A version reading only slot 1 disagrees on the
+    (None, BOOST) row — the row that survived the whole suite while
+    `_marginal_provision_goal` carried its own hand-copy of this predicate."""
+    assert already_provisioned(_state(slot1, 0, slot2, 0)) is expected

@@ -1,12 +1,18 @@
 """Tests for ProvisionMarginalFightGoal."""
 
+
+import pytest
+
+from artifactsmmo_cli.ai import strategy_driver
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goals import provision_marginal_fight
 from artifactsmmo_cli.ai.goals.provision_marginal_fight import (
     PROVISION_MARGINAL_VALUE,
     ProvisionMarginalFightGoal,
 )
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.utility_slot import already_provisioned
 from tests.test_ai.fixtures import make_state
 
 
@@ -132,3 +138,25 @@ def test_serialize_returns_expected_dict() -> None:
 
 def test_repr_format() -> None:
     assert repr(_goal()) == "ProvisionMarginalFight(green_slime,small_health_potionx40)"
+
+
+@pytest.mark.parametrize("slot1,slot2", [
+    (None, None),
+    ("small_health_potion", None),
+    (None, "earth_boost_potion"),
+    ("small_health_potion", "earth_boost_potion"),
+])
+def test_goal_and_emitter_share_one_provisioned_predicate(slot1, slot2):
+    """`is_satisfied` and `strategy_driver._marginal_provision_goal`'s early-exit
+    must never disagree: the emitter skips building this goal exactly when the
+    goal would already be satisfied.
+
+    Pinned by IDENTITY, not by comparing two answers — both names resolve to the
+    one `already_provisioned` function, so a drift like the pre-2026-08-25
+    hand-copy cannot be written.  The behavioural matrix lives in
+    `tests/test_ai/test_utility_slot.py`; this test is what makes the sharing a
+    tested property rather than a convention."""
+    state = make_state(equipment={"utility1_slot": slot1, "utility2_slot": slot2})
+    assert _goal().is_satisfied(state) is already_provisioned(state)
+    assert strategy_driver.already_provisioned is already_provisioned
+    assert provision_marginal_fight.already_provisioned is already_provisioned
