@@ -508,3 +508,56 @@ firing-rate gate, after resolving whether that arm should size to the level ramp
 or the combat-projected target. Do not put potions back on the gear sheet, do not
 revive the family weight, and do not build anything for the eight potions the
 fleet has never been able to craft.
+
+---
+
+## Correction — the guard DOES have a boost-stock arm (2026-08-26)
+
+The section above states that `craft_potions_fires` has no non-heal stock arm,
+and that arm 3's precondition is "exactly the negation of the guard's two arms —
+reachable only when the guard returns False". **That is wrong, and it inverts the
+recommendation.** Verified by reading `potion_supply.py`:
+
+    :190  target = target_potion_pure(...)          # heal target
+    :204  combat_monster = primary_combat_target(...)
+    :207  baseline = potion_stock_target_pure(hp_need, ...)
+    :210  if equipped >= baseline:                  # HEAL STOCK SATISFIED
+    :211      monster = primary_combat_target(...)
+    :213      boost = best_boost_potion(state, game_data, monster)
+    :217      if boost is not None and equipped_potion_qty(state, boost) < boost_baseline:
+    :219          if boost_recipe and _recipe_producible(...):
+    :220              return True                    # <-- THE BOOST-STOCK ARM
+
+The guard has THREE arms, not two: unlock-boost (`:184-189`), boost-stock
+(`:210-220`), and heal-deficit (`:222-225`). The boost-stock arm's precondition —
+heal stock satisfied — is exactly arm 3's `deficit <= 0`, not its negation. And
+the guard's own comment records that the heal baseline was deliberately unified
+with the goal's ("Same core the goal sizes from, so the two cannot diverge").
+
+**So piece A is not a deletion.** Guard and goal are already paired on this arm.
+
+### What IS true, measured
+
+- **Offline: arm 3 never fires.** Across all 42 scenarios the guard fires in 5,
+  and every one takes arm 2 (heal). Arm 3: **0**. So the arm is unexercised by
+  the suite — a coverage gap, which is what the matrix exists to close.
+- **Live: boost potions ARE crafted.** `CraftPotionsGoal` produced
+  `water_boost_potion` (26) and `air_boost_potion` (25 + 18) crafts, the most
+  recent at 2026-08-26T00:35Z. Boost crafting is live behaviour, not theory.
+- **Live attribution is BLOCKED.** Whether those crafts came from arm 1
+  (unlock-boost, `runs=1`) or arm 3 (boost-stock, `runs` from a deficit) cannot
+  be recovered from `learning.db`: `cycles.action_repr` records the executed
+  action, not which goal arm chose it. This is the same observability gap the
+  2026-08-24 Robby investigation hit, where the executed grind leg had to be
+  inferred from map tiles and cooldown durations.
+
+### What this changes about the scoping
+
+The actionable items are now: (a) a scenario that exercises the guard's
+boost-stock arm, so arm 3 stops being suite-invisible; and (b) recording which
+goal arm produced a craft, so live attribution stops requiring inference. (b) is
+the general fix and would have paid for itself twice already.
+
+`potion_type_weight` and `utility_potion_targets` are unaffected — both declines
+above stand on their own measurements (`utility_potion_targets` emits heals only;
+`potion_type_weight` is a fifth multiplier with no classifier in `src/`).
