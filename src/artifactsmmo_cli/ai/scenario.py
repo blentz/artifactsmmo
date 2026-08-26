@@ -1432,8 +1432,21 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # committed set carried one in 26/30) and D7 stocked.
     #
     # The three monsters are catalogue facts at this loadout, not guesses —
-    # measured over all 58 monsters: 12 are workable, 37 unwinnable-with-a-
-    # closing-chain and 9 unwinnable-with-none.
+    # RE-MEASURED 2026-08-26 over all 58 monsters: 12 workable, 8
+    # unwinnable-with-a-closing-chain, 38 unwinnable-with-none.
+    #
+    # THE SPLIT INVERTED, and the old numbers (37 closing / 9 none) are kept
+    # here only to name what changed: `e6a2e37c` taught `deficit_upgrade_target`
+    # to honour `closes`, so the 29 monsters it used to name gear for — gear
+    # that provably could not win — now correctly report no chain. The three
+    # cells below are unaffected: their verdicts were re-measured and each still
+    # sits in the arm its comment claims.
+    #
+    # The `level_up` band is EMPTY at this loadout: 0 of 58 monsters, which is
+    # why the triple has no fourth member. That verdict IS witnessed, on a
+    # different character: `test_held_task.py`'s STARVED triple injects a task
+    # onto `l48_capstone_approach` and drives all three verdicts through
+    # `plan_from_state`.
     # D2 = WORKABLE. `pig` is the monster C3P0 lost 42 straight fights to at
     # level 19; at this loadout it is winnable, so `has_combat_deficit` is
     # False and `deficit_upgrade_target` is None through its FIRST return.
