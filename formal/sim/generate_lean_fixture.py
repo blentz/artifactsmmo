@@ -367,6 +367,13 @@ def generate_lean(snapshot: dict) -> str:
         "  gold := 0",
         "  bankAccessible := true",
         "  bankJunkNonempty := false",
+        # Hand-added to GameDataFixture.lean when the GE rungs landed and never
+        # mirrored here, so regenerating dropped them. `Measure.lean:151` declares
+        # `geBidCandidateNonempty : Bool` with NO default, so the omission broke the
+        # build rather than silently changing a verdict -- loud, but it blocked the
+        # next snapshot refresh. Emitted here so generator and fixture agree.
+                "  geBidCandidateNonempty := false",
+        "  geCancelTargetsNonempty := false",
         "  bankUnlockMonsterPresent := false",
         "  initialXp := 0",
         "  unlockMonsterLevel := 0",
