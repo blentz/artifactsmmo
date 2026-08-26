@@ -1488,3 +1488,95 @@ a reviewer may refuse it, and this document is that refusal.
 **Nothing in this document is authorised for implementation.** It is the design
 task's deliverable; the implementation plan argues from it and the controller
 approves that.
+
+---
+
+## 12. `[NEW — RE-DERIVED 2026-08-25]` The design ages: `task_horizon` landed underneath it
+
+This section was written at execution time, against `7c3390fa`, because wave 3b
+recorded the lesson the hard way: *a deletion list ages against its branch;
+re-derive it at execution time.* 3b's own re-derivation found 7 of 16 rows
+wrong, two of them unrecoverably. Wave 4's list is two days older than the
+branch it targets and the same check was owed before any implementer read it.
+
+**Everything in §5.4 and §5.1 that names `has_combat_deficit` as the standing
+arm's input is now false.** Between the design (2026-08-23) and today, three
+commits landed that the design cannot have known about:
+
+* `e6a2e37c` — `deficit_upgrade_target` honours `closes`, so it stopped naming
+  gear that provably cannot win the held fight.
+* `63533b82` — **`ai/task_horizon.py` is new**, and it is now the single
+  producer of the three-way reading `HORIZON_GEAR` / `HORIZON_LEVEL_UP` /
+  `HORIZON_OUT_OF_REACH`. It rewired `GearLatch`'s standing arm and **added a
+  LEVEL_UP arm to `map_guard(GEAR_REVIEW)`**.
+* `e6635863` — one producer of the firing condition across all 40 goals.
+
+### 12.1 The row that would have destroyed a shipped feature
+
+§5.5 and §10 both direct increment 4.2 to delete `map_guard`'s GEAR_REVIEW
+branch, counted at §5.4 as "51 lines". **That branch is now 85 lines
+(`strategy_driver.py:358-442`), and the 34 new lines are the ONE-LEVEL
+PLANNING HORIZON** — a user requirement stated 2026-08-25:
+
+> "cancel tasks that we can't meet through gear upgrade, or (level-up by
+> exactly 1 level and gear upgrade). anything beyond a 1-level horizon is too
+> far out to be a reasonable near-term planning target."
+
+The arm returns `ReachUnlockLevelGoal(target_level=state.level + 1,
+blocker_code=state.task_code or "task")`, asked only when the priced walk named
+nothing. §5.1's two nodes have **nowhere to put it**: `WhichSlotClosesTheFight`
+answers "which slot", and `IsAFightBlockingMe` is specified as a boolean over
+the gear deficit. Executing 4.2 as written deletes the level-up route silently,
+leaves `HORIZON_LEVEL_UP` with no consumer, and regresses a fight-blocked
+character to the fall-through the horizon work exists to prevent.
+
+**RULING (controller, 2026-08-25): 4.2 does not ship until the graph has a home
+for `HORIZON_LEVEL_UP`.** The walk can already express it — `ReachCharLevel` is
+an existing `MetaGoal` variant — so the cost is a third arm, not a new type.
+The binding requirement on the wave-4 plan is that the horizon's three verdicts
+map onto graph outcomes ONE-TO-ONE, with the mapping written down and pinned by
+a test, before the guard rung is removed. If a plan author cannot produce that
+mapping, 4.2 is blocked, not adapted.
+
+### 12.2 §5.4, re-derived row by row
+
+| item | §5.4 says | actual @ `7c3390fa` |
+|---|---|---|
+| `GuardKind.GEAR_REVIEW` | `guards.py:86`, `:109` | `:92`, `:115` |
+| `_fires` GEAR_REVIEW arm | `guards.py:260-261` | `:266-267` |
+| `map_guard` branch | `strategy_driver.py:355-405`, 51 lines | **`:358-442`, 85 lines** |
+| `_materials_in_hand` | `:242-248`, used `:391` | `:245`, used `:425` |
+| `_gather_goal_for_unreachable_equippable` import | `:75`, used `:402` | `:75` correct, used `:437` |
+| `SelectionContext.gear_review_active` | `:73`, consumer `player.py:3734` | `:73` correct, consumer **`player.py:3754`** |
+| `acquisition_actions` import | `:12`, used `:378` | `:12` correct, used `:388` |
+| `has_combat_deficit` | 1 consumer, `gear_latch.py:79` | 1 consumer, **`task_horizon.py:182`** — `gear_latch` no longer calls it |
+| `deficit_upgrade_target` | 1 consumer, `strategy_driver.py:382` | **2 consumers** — `strategy_driver.py:391` AND `task_horizon.py:184` |
+
+The two bottom rows matter beyond their line numbers: both functions are marked
+"MOVES, does not die", and the module they have moved INTO did not exist when
+that was written. `task_horizon` is now the hub between `combat_deficit` and
+every consumer of the deficit fact, so wave 4's nodes should read the horizon,
+not re-derive it from `combat_deficit` — re-deriving would be a second producer
+of exactly the fact §3.2 warns about.
+
+### 12.3 What §5.1's `IsAFightBlockingMe` docstring must say instead
+
+It currently states that `gear_latch.py:78` computes
+`craftable and not winnable_alternative and has_combat_deficit(...)`. The live
+code (`gear_latch.py:118-119`) computes `craftable and not winnable_alternative`
+and then `horizon.verdict == HORIZON_GEAR`. The design's architectural point —
+that this is a NODE and not a LATCH, and must carry nothing across cycles —
+**stands unchanged and is if anything strengthened**: the horizon is a pure
+function of `(state, game_data)`, so absorbing it into a `Decision` is now a
+smaller step than the design assumed.
+
+### 12.4 What this does NOT change
+
+The §11 wave-6 reconciliation is untouched — none of its 24 contact points
+runs through `task_horizon`. Increments 4.1 (rename), 4.1b (`route.py`), 4.3
+(`RegearEdge`) and 4.4 (Lean + oracle) are unaffected in substance; 4.3's
+citation set needs the same mechanical refresh as §12.2 before dispatch. The
+live acceptance criterion in §10 also stands, and its PRE-flip baseline
+(R2D2 187, Lor 157, HAL 109, Robby 88, C3P0 37) must be **re-measured** before
+4.2, because `e6a2e37c` and `63533b82` both change exactly the behaviour it
+counts.
