@@ -72,6 +72,23 @@ def choose_taskmaster(state: WorldState, game_data: GameData,
     if len(tiles) < 2:
         return None
     gear_demand = _live_gear_demand(game_data, target_gear)
+    if not gear_demand:
+        # NO DEMAND, NO PREFERENCE (wave 6, increment 5.5 / O9a). Falling
+        # through here would score every pool 0 and hand the whole decision to
+        # the distance tie-break — and travel is a legitimate tie-break, never
+        # the decision, as the docstring above says.
+        #
+        # This is reachable BECAUSE of the re-point. Scored against the gear
+        # SHEET the demand was never empty (the sheet always wants something),
+        # so the case could not arise; scored against the ACTIVE LINK it arises
+        # exactly when the link is a `ReachCharLevel` — level up, which no items
+        # task serves. Measured on the committed bundle before this line
+        # existed: the choice was identical in 44/44 cells, because with both
+        # pools at 0 the nearer tile always won.
+        #
+        # `None` means "fall back to today's default master", which is the
+        # honest answer when nothing distinguishes them.
+        return None
     scored: dict[str, tuple[Fraction, tuple[int, int]]] = {}
     for code, tile in tiles.items():
         pool = game_data.tasks_for(code, state.level)
