@@ -13,6 +13,7 @@ unchanged answer proves the memo served.
 """
 
 import gc
+import weakref
 
 import pytest
 
@@ -188,13 +189,31 @@ class TestPickLoadoutCached:
         assert len(_CACHES.cache_for(gd)) == CACHE_MAX_ENTRIES
 
     def test_cache_is_dropped_with_its_gamedata(self) -> None:
+        """The cache must not keep its `GameData` alive.
+
+        ASSERTED AS THE INVARIANT, NOT AS A GLOBAL DELTA. This used to end
+        `assert _CACHES.live_catalogues() == before - 1`, an EXACT count over
+        every catalogue alive in the process — which fails whenever a second,
+        unrelated `GameData` becomes collectable in the same `gc.collect()`,
+        because then the count drops by two. Observed exactly that under xdist:
+        `assert 0 == (2 - 1)` (2026-08-27), and across five full-suite runs it
+        failed 2 and passed 3 on THREE different code states, including one
+        where the diff provably could not touch this cache. It was measuring
+        other tests' garbage.
+
+        A weakref states the real claim directly and cannot be perturbed by
+        anything else on the heap: after dropping the last reference, the
+        `GameData` itself is collectable, and its catalogue went with it."""
         gd = _gd()
         pick_loadout_cached(Gather("woodcutting"), _make_state(inventory={"iron_axe": 1}), gd)
         assert _CACHES.live_catalogues() >= 1
         before = _CACHES.live_catalogues()
+        ref = weakref.ref(gd)
         del gd
         gc.collect()
-        assert _CACHES.live_catalogues() == before - 1
+        assert ref() is None, "the loadout cache pinned its GameData alive"
+        assert _CACHES.live_catalogues() < before, (
+            "the GameData died but its catalogue entry outlived it")
 
     def test_distinct_gamedata_instances_do_not_collide(self) -> None:
         state = _make_state(inventory={"iron_axe": 1})
