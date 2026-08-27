@@ -497,7 +497,27 @@ class CharacterObjective:
         any-slot sum (the churn guard `MaintainConsumables` reads), which
         cannot distinguish "slot 1 stocked" from "slot 2 stocked". Replaces
         the level-based best-in-slot utility roots that armor enumeration
-        (target_gear / near_term_gear) used to emit."""
+        (target_gear / near_term_gear) used to emit.
+
+        NOT WIRED TODAY — this method has NO PRODUCTION CALLER (2026-08-27);
+        every other mention of its name in `src/` is prose, this docstring
+        included. The utility slots are actually served by the potion-supply
+        path, which picks a slot with `utility_slot.utility_slot_for` and emits
+        an `EquipAction` from `craft_ladder.py:140`.
+
+        That sentence is phrased to be MACHINE-CHECKED: the reachability-claims
+        census resolves a claim's subject by containment, so the sentence above
+        is read as a claim about THIS method and is verified on every gate run.
+        It fails the day something calls it, which is the day the note below
+        should be deleted.
+
+        It is KEPT rather than retired — the fate `_utility_candidates` met one
+        paragraph above for the same reason — because a consumer is designed:
+        `docs/superpowers/specs/2026-08-27-potions-in-the-loadout-decision.md`
+        gives it to the OptimizeLoadout path, so that elemental-weakness and
+        cooldown-reduction potions are weighed as loadout, not only as stock.
+        Until that ships, read this as a DESIGNATION nothing consults, and do
+        not cite it as the mechanism that fills a utility slot."""
         targets: dict[str, str] = {}
         primary = bootstrap_potion_target(state, self._game_data)
         if primary is None:

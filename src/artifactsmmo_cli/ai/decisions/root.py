@@ -294,8 +294,11 @@ def _gear_nameable_skills(game_data: GameData) -> frozenset[str]:
     ALCHEMY is nameable — 20 of its 25 recipes are `utility` potions and
     `utility1_slot`/`utility2_slot` do accept them — so `_orphan_skill_roots`
     declined it. But `_gear_candidates_by_type` skips `stats.type_ ==
-    "utility"` outright (the utility slots are served by
-    `objective.utility_potion_targets`, not by the gear sheet), and alchemy's
+    "utility"` outright (the utility slots are served by the potion-supply
+    path — `utility_slot.utility_slot_for` plus the `EquipAction` at
+    `craft_ladder.py:140` — not by the gear sheet; this named
+    `objective.utility_potion_targets` until 2026-08-27, which only DESIGNATES
+    the slots — see its own docstring for what consults it), and alchemy's
     other five recipes are `consumable`, which maps to no slot. Measured on the
     committed bundle: a gear target named alchemy in 0 of the 42 scenarios, and
     could not — alchemy was as orphaned as cooking was before `b39705eb`, with
