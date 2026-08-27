@@ -1169,3 +1169,54 @@ in hand is a `(code, slot)` pair.
   is a judgement inherited from the existing constant;
 * the whole of §2.5's funding rule, which has 0 live firings and 0 offline
   coverage to test against and is therefore DEFERRED in 5.5 rather than built.
+
+---
+
+## 10. `[MEASURED 2026-08-27]` O7 and O9b are NOT SHIPPED, and the numbers say why
+
+Both obligations gate themselves on 5.0's fixtures. 5.0 delivered two of the
+three things it promised — the GE order book and an items-type task cell — but
+not populated step profiles or a currency-reward task. Measured against the
+committed bundle with the order book HYDRATED (a quiet market makes both probes
+vacuous by construction):
+
+### O7 — not shipped. Its reference set is EMPTY.
+
+| | |
+|---|---|
+| task-earnable currencies in the catalogue | 1 (`tasks_coin`) |
+| resolved roots examined | 42 |
+| roots with NON-EMPTY link demand | **12** — the probe is not vacuous |
+| roots with a CURRENCY GAP | **0** |
+| FUNDED-arm exercises | **0** |
+| WALL-arm exercises | **0** |
+
+O7's own text: *"fail if the funded arm is exercised zero times, which is a
+`REFERENCE_SET_EMPTY` residual … **Do not ship O7 before 5.0's fixtures**."*
+Both residuals would be trivially zero over an empty set, and the gate would go
+green while proving nothing — the failure §7 calls "the important one".
+
+**What would unblock it:** a scenario whose resolved root has a currency gap.
+The catalogue supports it — `tasks_coin` is task-earnable and five other
+currencies are not, so both arms exist in principle — but no committed cell
+produces one. That is a FIXTURE gap, not a code gap, and it is the same
+fixture gap 5.0 half-closed.
+
+### O9b — not measurable. `ctx.step_profile` is empty in all 44 cells.
+
+O9b counts step materials clearing `route_price > TTL_CYCLES`. Zero materials
+were examined, because no committed scenario carries a step profile. The
+baseline it wanted to compare against (0/30 today, one material clearing the
+*seconds* gate) therefore cannot be re-taken.
+
+The seconds gate itself is gone (increment 5.4), so the question O9b asks —
+"does the actions gate admit about as few materials, meaning GE_BID stays dormant
+for reasons unrelated to units?" — is still open and still worth asking. It needs
+a scenario with a populated step profile.
+
+### What this does NOT mean
+
+Neither result is evidence that the mechanisms are wrong. O7's classification and
+O9b's comparison are both unexercised, which is a statement about the FIXTURE
+SET. Recording the numbers is what stops a later reader concluding either was
+tried and found unnecessary.
