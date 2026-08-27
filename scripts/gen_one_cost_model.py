@@ -1,4 +1,4 @@
-"""O6 census: no `Decision` prices anything except through `route_price`.
+"""O6/O8 census: how a `Decision` may price, and what it may not branch on.
 
 Prints the residuals and the Decision-class count.
 
@@ -30,7 +30,7 @@ def main() -> None:
     if not check:
         return
     failed = False
-    for key in ("second_pricer", "injected_pricer"):
+    for key in ("second_pricer", "injected_pricer", "route_kind_branch"):
         if results[key]:
             print(f"FAIL: {key} must be zero", file=sys.stderr)
             failed = True

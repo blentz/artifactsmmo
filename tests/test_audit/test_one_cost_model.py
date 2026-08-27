@@ -15,6 +15,8 @@ from artifactsmmo_cli.audit.one_cost_model import (
     FUNNEL,
     MIN_DECISION_CLASSES,
     PRICING_PRODUCERS,
+    ROUTE_KIND_NAMES,
+    ROUTE_KIND_VALUES,
     render,
     sweep,
 )
@@ -164,3 +166,123 @@ def test_odd_annotations_do_not_crash_or_false_positive(
         f"    def resolve(self, state, f: {annotation}) -> None:\n"
         "        return None\n")
     assert sweep(tmp_path)["injected_pricer"] == []
+
+
+# ---------------------------------------------------------------------------
+# O8 — no `Decision` branches on a `SourceKind`
+#
+# A SourceKind names HOW something is obtained. A node branching on one is a
+# second opinion about a question `obtain_sources` has already answered by cost,
+# and it is invisible to the cost model — a second pricer expressed as a branch.
+#
+# The design names TWO evasions, and each has its own control below: an ALIASED
+# import, and comparison by the member's `.value` STRING.
+# ---------------------------------------------------------------------------
+
+def test_production_branches_on_no_route_kind() -> None:
+    """THE OBLIGATION."""
+    assert sweep(PACKAGE)["route_kind_branch"] == []
+
+
+def test_the_route_kind_vocabulary_is_complete() -> None:
+    """The census keeps its own copy of the enum, so it must fail the day the
+    enum grows rather than silently sweeping an incomplete alphabet.
+
+    Checked against the REAL enum, so this is not a restatement of the copy."""
+    from artifactsmmo_cli.ai.source_kind import SourceKind
+    assert {m.name for m in SourceKind} == set(ROUTE_KIND_NAMES)
+    assert {m.value for m in SourceKind} == set(ROUTE_KIND_VALUES)
+
+
+def test_detects_a_plain_route_kind_branch(tmp_path) -> None:
+    """POSITIVE CONTROL, the direct form."""
+    (tmp_path / "rogue.py").write_text(
+        "from artifactsmmo_cli.ai.source_kind import SourceKind\n"
+        "class Rogue(Decision[MetaGoal]):\n"
+        "    def resolve(self, state):\n"
+        "        if self.kind == SourceKind.BUY:\n"
+        "            return None\n")
+    found = sweep(tmp_path)["route_kind_branch"]
+    assert len(found) == 1, found
+    assert "SourceKind.BUY" in found[0]
+
+
+def test_detects_an_ALIASED_route_kind_branch(tmp_path) -> None:
+    """EVASION 1. `import SourceKind as SK` binds a different name, and a scan
+    for the literal string "SourceKind" would miss every use of it."""
+    (tmp_path / "rogue.py").write_text(
+        "from artifactsmmo_cli.ai.source_kind import SourceKind as SK\n"
+        "class Rogue(Decision[MetaGoal]):\n"
+        "    def resolve(self, state):\n"
+        "        if self.kind == SK.CRAFT:\n"
+        "            return None\n")
+    found = sweep(tmp_path)["route_kind_branch"]
+    assert len(found) == 1, found
+    assert "SK.CRAFT" in found[0]
+
+
+def test_detects_a_route_kind_compared_by_its_VALUE_STRING(tmp_path) -> None:
+    """EVASION 2. `kind == "buy"` never mentions the enum at all, so an
+    attribute scan alone would report a green obligation over it."""
+    (tmp_path / "rogue.py").write_text(
+        "class Rogue(Decision[MetaGoal]):\n"
+        "    def resolve(self, state):\n"
+        "        if self.kind == \"ge_fill\":\n"
+        "            return None\n")
+    found = sweep(tmp_path)["route_kind_branch"]
+    assert len(found) == 1, found
+    assert "ge_fill" in found[0]
+
+
+def test_naming_a_route_kind_without_deciding_by_it_is_ALLOWED(tmp_path) -> None:
+    """NOT VACUOUS IN THE OTHER DIRECTION. CONSTRUCTING or ANNOTATING a
+    SourceKind is fine — only a COMPARISON is deciding by route.
+
+    A predicate that flagged every mention would pass all three controls above
+    while banning legitimate code, and `route.py` itself would trip it."""
+    (tmp_path / "ok.py").write_text(
+        "from artifactsmmo_cli.ai.source_kind import SourceKind\n"
+        "class Fine(Decision[MetaGoal]):\n"
+        "    def resolve(self, state) -> SourceKind:\n"
+        "        return SourceKind.CRAFT\n")
+    assert sweep(tmp_path)["route_kind_branch"] == []
+
+
+def test_an_unrelated_string_comparison_is_not_a_route_branch(tmp_path) -> None:
+    """The value scan must not fire on any string that happens to be compared —
+    only on the eight that ARE route kinds."""
+    (tmp_path / "ok.py").write_text(
+        "class Fine(Decision[MetaGoal]):\n"
+        "    def resolve(self, state):\n"
+        "        if state.task_type == \"monsters\":\n"
+        "            return None\n")
+    assert sweep(tmp_path)["route_kind_branch"] == []
+
+
+def test_detects_a_route_kind_reached_through_a_MODULE_import(tmp_path) -> None:
+    """A THIRD form, not named by the design and originally unhandled.
+
+    `import ...source_kind` then `source_kind.SourceKind.BUY` mentions neither a
+    bare `SourceKind` name nor a value string. The first implementation had a
+    branch for this case that returned None — it looked like handling and was
+    giving up, and the coverage gate is what exposed it."""
+    (tmp_path / "rogue.py").write_text(
+        "from artifactsmmo_cli.ai import source_kind\n"
+        "class Rogue(Decision[MetaGoal]):\n"
+        "    def resolve(self, state):\n"
+        "        if self.kind == source_kind.SourceKind.DROP:\n"
+        "            return None\n")
+    found = sweep(tmp_path)["route_kind_branch"]
+    assert len(found) == 1, found
+    assert "SourceKind.DROP" in found[0]
+
+
+def test_an_unrelated_attribute_named_like_a_member_is_not_matched(tmp_path) -> None:
+    """NOT VACUOUS. The attribute form needs a dotted path; a bare name that
+    merely shares a member's spelling is not a route branch."""
+    (tmp_path / "ok.py").write_text(
+        "class Fine(Decision[MetaGoal]):\n"
+        "    def resolve(self, state):\n"
+        "        if BUY == state.mode:\n"
+        "            return None\n")
+    assert sweep(tmp_path)["route_kind_branch"] == []
