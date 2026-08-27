@@ -1,99 +1,98 @@
-"""Tests for `bid_vs_craft`: craft-time estimate + GE-bid gate.
+"""Bid-vs-craft, RE-DENOMINATED IN ACTIONS (wave 6, increment 5.4).
 
-Fixture pattern mirrors `tests/test_ai/test_requirement_graph.py`'s `_gd`
-helper: a bare `GameData()` with its private catalog attributes assigned
-directly (the established construction pattern for these pure `ai/` modules —
-no `catalog_fixtures.make_game_data_with_recipes` helper exists in this repo).
+This module used to test a private seconds model: `estimate_craft_seconds` summed
+hand-set per-action constants over a recipe closure, `closure_leaf_kinds`
+classified that closure's leaves, and `should_bid` compared the total against a
+wall-clock horizon. All three are gone — the estimator was a SECOND cost model
+drifting independently of the one every other route uses, and its comparison put
+seconds against a horizon built by multiplying cycles by an average cycle length.
+
+Their tests are deleted with them rather than adapted: their subject no longer
+exists. What replaces them is thinner on purpose. `should_bid` is now a
+comparison between two action counts, and the walk that produces one of them is
+`decisions/route.route_price`, which has its own tests. Re-testing the closure
+walk here would be a second opinion about a producer this module no longer owns.
 """
 
-from artifactsmmo_cli.ai.bid_vs_craft import (
-    closure_leaf_kinds,
-    estimate_craft_seconds,
-    should_bid,
-)
+import json
+from pathlib import Path
+
+from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
+from artifactsmmo_cli.ai.bid_vs_craft import should_bid
+from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.source_kind import SourceKind
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+
+_BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json")
+CELL = "l32_held_task_closable"
 
 
-def _gd(recipes=None, drops=None, monster_drops=None):
-    gd = GameData()
-    gd._crafting_recipes = recipes or {}
-    gd._resource_drops = drops or {}
-    if monster_drops is not None:
-        gd._monster_drops = monster_drops
-    return gd
+def _gd() -> GameData:
+    return GameData.from_cache_bundle(json.loads(_BUNDLE.read_text()))
 
 
-def test_closure_leaf_kinds_flags_drop_based():
-    # steel <- iron x2; iron has no recipe and no gather resource, only a
-    # monster drop (1-in-5 from "mob") -> the closure bottoms out in DROP.
-    # `_monster_drops` is keyed by MONSTER code (`monster_catalog.drops`):
-    # {monster_code: [(item_code, rate, min_qty, max_qty), ...]}.
-    gd = _gd(
-        recipes={"steel": {"iron": 2}},
-        monster_drops={"mob": [("iron", 5, 1, 1)]},
-    )
-    kinds = closure_leaf_kinds("steel", gd)
-    assert SourceKind.DROP in kinds
+def _state(game_data: GameData):
+    return scenario_state(SCENARIOS[CELL], game_data)
 
 
-def test_closure_leaf_kinds_deterministic_only_when_gathered():
-    # plank <- wood x2; wood is gathered from "tree" (deterministic), never
-    # dropped by a monster -> no DROP leaf.
-    gd = _gd(recipes={"plank": {"wood": 2}}, drops={"tree": "wood"})
-    kinds = closure_leaf_kinds("plank", gd)
-    assert SourceKind.DROP not in kinds
-    assert SourceKind.GATHER in kinds
+def test_should_bid_compares_two_action_counts() -> None:
+    """THE UNIT IS THE POINT. Both sides are planner actions, so the gate is a
+    plain comparison with nothing converted.
+
+    Asserted against `route_price` itself rather than a literal: a hard-coded
+    expectation would pass while the two sides silently diverged, which is
+    exactly what the seconds estimator did."""
+    gd = _gd()
+    state = _state(gd)
+    priced = route_price(ObtainItem("iron_sword", 1), state, gd,
+                         NO_PROFILE_CONTEXT, None)
+    assert should_bid("iron_sword", 1, priced - 1, state, gd,
+                      NO_PROFILE_CONTEXT) is True
+    assert should_bid("iron_sword", 1, priced, state, gd,
+                      NO_PROFILE_CONTEXT) is False
 
 
-def test_drop_recipe_costs_more_than_deterministic():
-    gd = _gd(
-        recipes={"steel": {"iron": 2}},
-        monster_drops={"mob": [("iron", 20, 1, 1)]},  # rare drop -> many fights
-    )
-    drop_cost = estimate_craft_seconds("steel", 1, gd)
-
-    gd2 = _gd(recipes={"plank": {"wood": 2}}, drops={"tree": "wood"})  # deterministic gather
-    det_cost = estimate_craft_seconds("plank", 1, gd2)
-
-    assert drop_cost > det_cost
-
-
-def test_estimate_craft_seconds_scales_with_qty():
-    gd = _gd(recipes={"plank": {"wood": 2}}, drops={"tree": "wood"})
-    one = estimate_craft_seconds("plank", 1, gd)
-    two = estimate_craft_seconds("plank", 2, gd)
-    assert two > one
+def test_the_boundary_is_strictly_greater_than() -> None:
+    """A horizon EQUAL to the acquisition cost does not bid. Kept from the
+    seconds-era suite because the strictness is a real decision: at equality,
+    self-acquiring is already as good and does not depend on a stranger filling
+    an order."""
+    gd = _gd()
+    state = _state(gd)
+    priced = route_price(ObtainItem("iron_ore", 3), state, gd,
+                         NO_PROFILE_CONTEXT, None)
+    assert should_bid("iron_ore", 3, priced, state, gd,
+                      NO_PROFILE_CONTEXT) is False
+    assert should_bid("iron_ore", 3, priced - 1, state, gd,
+                      NO_PROFILE_CONTEXT) is True
 
 
-def test_should_bid_true_when_craft_slower_than_horizon():
-    gd = _gd(
-        recipes={"steel": {"iron": 2}},
-        monster_drops={"mob": [("iron", 50, 1, 1)]},  # very slow to self-craft
-    )
-    assert should_bid("steel", 1, bid_fill_horizon_s=30.0, game_data=gd) is True
+def test_an_unroutable_item_bids() -> None:
+    """`UNOBTAINABLE_PER_UNIT` is far above any horizon, so an item we cannot
+    route to at all bids — and that is right: a standing order is exactly what
+    an unroutable item is for.
+
+    This is the arm the seconds estimator could not express. Its closure walk
+    returned a finite number for an item with no obtainable leaf, so an
+    unroutable item read as CHEAP and the gate declined to bid on the one case
+    a bid serves best."""
+    gd = _gd()
+    state = _state(gd)
+    assert route_price(ObtainItem("no_such_item_xyzzy", 1), state, gd,
+                       NO_PROFILE_CONTEXT, None) == UNOBTAINABLE_PER_UNIT
+    assert should_bid("no_such_item_xyzzy", 1, 20, state, gd,
+                      NO_PROFILE_CONTEXT) is True
 
 
-def test_should_bid_false_when_craft_faster_than_horizon():
-    gd = _gd(recipes={"plank": {"wood": 2}}, drops={"tree": "wood"})
-    assert should_bid("plank", 1, bid_fill_horizon_s=300.0, game_data=gd) is False
-
-
-def test_should_bid_boundary_is_strict_greater_than():
-    gd = _gd(recipes={"plank": {"wood": 2}}, drops={"tree": "wood"})
-    exact = estimate_craft_seconds("plank", 1, gd)
-    assert should_bid("plank", 1, bid_fill_horizon_s=exact, game_data=gd) is False
-
-
-def test_drop_leg_prefers_lowest_expected_kills_monster():
-    # iron drops from two monsters: "rare" (1-in-100) and "common" (1-in-2).
-    # The estimator must pick the cheaper source, not the first/worst one.
-    gd_worst_only = _gd(
-        recipes={"steel": {"iron": 1}},
-        monster_drops={"rare": [("iron", 100, 1, 1)]},
-    )
-    gd_both = _gd(
-        recipes={"steel": {"iron": 1}},
-        monster_drops={"rare": [("iron", 100, 1, 1)], "common": [("iron", 2, 1, 1)]},
-    )
-    assert estimate_craft_seconds("steel", 1, gd_both) < estimate_craft_seconds("steel", 1, gd_worst_only)
+def test_quantity_moves_the_decision() -> None:
+    """NOT VACUOUS on quantity: a bigger ask costs more actions, so a horizon
+    that declines one unit can accept many."""
+    gd = _gd()
+    state = _state(gd)
+    one = route_price(ObtainItem("iron_ore", 1), state, gd, NO_PROFILE_CONTEXT, None)
+    many = route_price(ObtainItem("iron_ore", 40), state, gd, NO_PROFILE_CONTEXT, None)
+    assert many > one, (one, many)
+    assert should_bid("iron_ore", 1, one, state, gd, NO_PROFILE_CONTEXT) is False
+    assert should_bid("iron_ore", 40, one, state, gd, NO_PROFILE_CONTEXT) is True

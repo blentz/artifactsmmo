@@ -10,7 +10,7 @@ the established construction pattern for these pure `ai/` modules (see
 from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
-from artifactsmmo_cli.ai.ge_order_config import BID_FILL_HORIZON_SECONDS
+from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.goals.post_buy_bid import POST_BUY_BID_VALUE, PostBuyBidGoal
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -43,13 +43,28 @@ def _gd(
 
 
 def _steel_gd(**over) -> GameData:
-    """steel <- iron x2; iron is a very-rare monster drop (slow to self-craft,
-    ~1000s >> the 600s bid horizon), sold by an NPC at 100, with a standing GE
-    buy order at 40 to overbid."""
+    """steel <- iron x2 (iron a very-rare monster drop), sold by an NPC at 5000,
+    with a standing GE buy order at 40 to overbid.
+
+    THE NPC PRICE ROSE FROM 100 TO 5000 IN WAVE 6 INCREMENT 5.4, and the reason
+    is the increment itself. `should_bid` used to compare a private SELF-CRAFT
+    seconds estimate against a wall-clock horizon, so it never saw the shop: at
+    100 gold it posted a GE bid for an item the character could simply buy.
+
+    It now prices the CHEAPEST route through `decisions/route`, which includes
+    that buy. Measured on this fixture at gold=1000: route_price is 2 actions
+    with the NPC at 100 (correctly NO bid) and `UNOBTAINABLE_PER_UNIT` with it at
+    5000 (correctly bid). The old fixture could not express "expensive to acquire
+    by ANY route" because its estimator only knew one route.
+
+    5000 rather than a smaller bump: posting the bid must still leave the gold
+    RESERVE floor intact, and there is no gold value that both clears that floor
+    and falls under a 100-gold buy — the two constraints have no overlap at that
+    price. Measured, not guessed."""
     defaults = dict(
         recipes={"steel": {"iron": 2}},
         monster_drops={"mob": [("iron", 50, 1, 1)]},
-        npc_stock={"shop": {"steel": 100}},
+        npc_stock={"shop": {"steel": 5000}},
         ge_buy_orders={"steel": ("b1", 40, 5)},
         ge_sell_orders={},
     )
@@ -65,6 +80,8 @@ def _ctx(step_profile) -> SelectionContext:
 
 
 def _state(**over):
+    """`gold=1000`: enough to POST the bid and keep its reserve, nowhere near
+    enough to buy the item outright. That band is what makes bidding correct."""
     base = dict(gold=1000, inventory={}, x=0, y=0)
     base.update(over)
     return make_state(**base)
@@ -76,7 +93,7 @@ def _state(**over):
 
 def test_candidate_for_slow_to_craft_needed_item():
     gd = _steel_gd()
-    cands = ge_bid_candidates(_state(), gd, _ctx({"steel": 1}), BID_FILL_HORIZON_SECONDS)
+    cands = ge_bid_candidates(_state(), gd, _ctx({"steel": 1}), TTL_CYCLES)
     # overbid best_buy 40 by one tick, ceiling 100-1; 41 < 99 -> 41.
     assert cands == [("steel", 1, 41)]
 
@@ -84,61 +101,61 @@ def test_candidate_for_slow_to_craft_needed_item():
 def test_qty_is_net_of_held():
     gd = _steel_gd()
     st = _state(inventory={"steel": 1})
-    cands = ge_bid_candidates(st, gd, _ctx({"steel": 3}), BID_FILL_HORIZON_SECONDS)
+    cands = ge_bid_candidates(st, gd, _ctx({"steel": 3}), TTL_CYCLES)
     assert cands == [("steel", 2, 41)]
 
 
 def test_no_candidate_when_already_held():
     gd = _steel_gd()
     st = _state(inventory={"steel": 5})
-    assert ge_bid_candidates(st, gd, _ctx({"steel": 3}), BID_FILL_HORIZON_SECONDS) == []
+    assert ge_bid_candidates(st, gd, _ctx({"steel": 3}), TTL_CYCLES) == []
 
 
 def test_held_counts_bank_and_equipped():
     gd = _steel_gd()
     st = _state(bank_items={"steel": 1}, equipment={"weapon_slot": "steel"})
     # wanted 2, held (bank 1 + equipped 1) = 2 -> nothing needed.
-    assert ge_bid_candidates(st, gd, _ctx({"steel": 2}), BID_FILL_HORIZON_SECONDS) == []
+    assert ge_bid_candidates(st, gd, _ctx({"steel": 2}), TTL_CYCLES) == []
 
 
 def test_suppressed_when_open_order_exists():
     gd = _steel_gd()
     st = _state(open_orders=(OpenOrder("x", "steel", 1, 41, OrderSide.BUY, 0),))
-    assert ge_bid_candidates(st, gd, _ctx({"steel": 1}), BID_FILL_HORIZON_SECONDS) == []
+    assert ge_bid_candidates(st, gd, _ctx({"steel": 1}), TTL_CYCLES) == []
 
 
 def test_no_candidate_when_fast_to_craft():
     # plank <- wood x2, deterministic gather (~17s << horizon) -> should_bid False.
     gd = _gd(recipes={"plank": {"wood": 2}}, resource_drops={"tree": "wood"},
              npc_stock={"shop": {"plank": 100}}, ge_buy_orders={"plank": ("b", 40, 5)})
-    assert ge_bid_candidates(_state(), gd, _ctx({"plank": 1}), BID_FILL_HORIZON_SECONDS) == []
+    assert ge_bid_candidates(_state(), gd, _ctx({"plank": 1}), TTL_CYCLES) == []
 
 
 def test_no_candidate_without_npc_alternative():
     gd = _steel_gd(npc_stock={})  # no NPC sells steel -> no alt cost to bound the price
-    assert ge_bid_candidates(_state(), gd, _ctx({"steel": 1}), BID_FILL_HORIZON_SECONDS) == []
+    assert ge_bid_candidates(_state(), gd, _ctx({"steel": 1}), TTL_CYCLES) == []
 
 
 def test_no_candidate_without_live_buy_anchor():
     gd = _steel_gd(ge_buy_orders={})  # no anchor -> buy_post_price None -> fail closed
-    assert ge_bid_candidates(_state(), gd, _ctx({"steel": 1}), BID_FILL_HORIZON_SECONDS) == []
+    assert ge_bid_candidates(_state(), gd, _ctx({"steel": 1}), TTL_CYCLES) == []
 
 
 def test_no_candidate_when_venue_is_ge_fill():
     # A standing sell order at 30 <= post_price 41 -> choose_buy_venue3 == GE (fill),
     # not GE_POST: fill the cheaper standing order instead of posting.
     gd = _steel_gd(ge_sell_orders={"steel": ("s1", 30, 5)})
-    assert ge_bid_candidates(_state(), gd, _ctx({"steel": 1}), BID_FILL_HORIZON_SECONDS) == []
+    assert ge_bid_candidates(_state(), gd, _ctx({"steel": 1}), TTL_CYCLES) == []
 
 
 def test_no_candidate_without_grand_exchange():
     gd = _steel_gd(ge_loc=None)
-    assert ge_bid_candidates(_state(), gd, _ctx({"steel": 1}), BID_FILL_HORIZON_SECONDS) == []
+    assert ge_bid_candidates(_state(), gd, _ctx({"steel": 1}), TTL_CYCLES) == []
 
 
 def test_empty_step_profile_no_candidates():
     gd = _steel_gd()
-    assert ge_bid_candidates(_state(), gd, _ctx({}), BID_FILL_HORIZON_SECONDS) == []
+    assert ge_bid_candidates(_state(), gd, _ctx({}), TTL_CYCLES) == []
 
 
 # --------------------------------------------------------------------------- #

@@ -15,7 +15,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
-from artifactsmmo_cli.ai.ge_order_config import BID_FILL_HORIZON_SECONDS
+from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -48,7 +48,7 @@ class PostBuyBidGoal(Goal):
 
     def is_satisfied(self, state: WorldState) -> bool:
         return not ge_bid_candidates(
-            state, self._gd, self._ctx, BID_FILL_HORIZON_SECONDS)
+            state, self._gd, self._ctx, TTL_CYCLES)
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"ge_bids_posted": True}
@@ -64,7 +64,7 @@ class PostBuyBidGoal(Goal):
             GePostBuyOrderAction(item_code=item, quantity=qty, price=price,
                                  ge_location=ge_loc)
             for item, qty, price in ge_bid_candidates(
-                state, game_data, self._ctx, BID_FILL_HORIZON_SECONDS)
+                state, game_data, self._ctx, TTL_CYCLES)
         ]
 
     def __repr__(self) -> str:

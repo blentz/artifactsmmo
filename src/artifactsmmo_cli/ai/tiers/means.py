@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.bank_expansion_timing import (
 from artifactsmmo_cli.ai.consumable_supply import maintain_consumables_fires
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
-from artifactsmmo_cli.ai.ge_order_config import BID_FILL_HORIZON_SECONDS
+from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
@@ -360,7 +360,7 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # NPC alternative to ceiling-bound the price, no open order, and a
         # three-way venue verdict of GE_POST. Fire-and-lose: posting creates an
         # open order that suppresses the item next cycle.
-        return bool(ge_bid_candidates(state, game_data, ctx, BID_FILL_HORIZON_SECONDS))
+        return bool(ge_bid_candidates(state, game_data, ctx, TTL_CYCLES))
 
     if kind is MeansKind.SUPPLY_BANK:
         # ctx.supply_target is None whenever there is no live sibling demand

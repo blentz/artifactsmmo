@@ -35,7 +35,7 @@ def _owned(code: str, state: WorldState) -> int:
 
 def ge_bid_candidates(
     state: WorldState, game_data: GameData, ctx: SelectionContext,
-    bid_fill_horizon_s: float,
+    bid_horizon_actions: int,
 ) -> list[tuple[str, int, int]]:
     """Return `(item_code, qty, post_price)` for every objective-step material
     that should be acquired by posting a GE buy order this cycle.
@@ -51,7 +51,7 @@ def ge_bid_candidates(
         qty = wanted - _owned(item, state)
         if qty <= 0:
             continue  # already held
-        if not should_bid(item, qty, bid_fill_horizon_s, game_data):
+        if not should_bid(item, qty, bid_horizon_actions, state, game_data, ctx):
             continue  # fast to self-craft — no bid
         sellers = game_data.npcs_selling_item(item)
         if not sellers:
