@@ -1172,51 +1172,106 @@ in hand is a `(code, slot)` pair.
 
 ---
 
-## 10. `[MEASURED 2026-08-27]` O7 and O9b are NOT SHIPPED, and the numbers say why
+## 10. `[RE-MEASURED 2026-08-27]` O7 is UNBLOCKED and O9b is MEASURABLE — the earlier numbers came from a world no scenario declared
 
-Both obligations gate themselves on 5.0's fixtures. 5.0 delivered two of the
-three things it promised — the GE order book and an items-type task cell — but
-not populated step profiles or a currency-reward task. Measured against the
-committed bundle with the order book HYDRATED (a quiet market makes both probes
-vacuous by construction):
+**This section previously reported that O7's reference set was empty and that
+O9b could not be measured, and concluded both were blocked on missing fixtures.
+Both conclusions were wrong, and the fixtures they asked for already existed.**
+The corrected numbers and the defect that produced the old ones are below,
+recorded in full because the retraction is the useful part.
 
-### O7 — not shipped. Its reference set is EMPTY.
+### The defect: one world imposed on forty-four cells
+
+`ScenarioCharacter` declares its own world through two fields, and BOTH change
+what a probe sees:
+
+* `ge_market` — whether the captured GE order book is hydrated or the market is
+  quiet. Three cells declare `True`.
+* `unlocked_achievements` — which access-gated map tiles exist. One cell
+  declares `("tasks_farmer",)`.
+
+`plan.py:138` and `tests/test_ai/scenarios/test_currency_leaf_cell.py` both
+forward these per character. The probes behind the old §10 did not: they built
+ONE `GameData` and planned all 44 cells in it. That is not a small
+approximation for these two obligations — it is fatal to both:
+
+* O7 needs `analyze_currency_leaves(...).funding_target`, which is set only for
+  a leaf priced in `tasks_coin` at a permanent, LOCATED vendor. Every
+  `tasks_coin` sink in the bundle is sold by `tasks_trader`, whose tile at
+  (5, 11) carries an `achievement_unlocked` condition on `tasks_farmer`. With
+  no `completed_achievements` passed, `npc_location('tasks_trader')` is `None`,
+  the permanent-vendor list is empty, and the funded arm cannot fire for ANY
+  cell — including the cell built specifically to fire it.
+* O9b read `ctx.step_profile` off the player's pre-arbiter context. The profile
+  is bound INSIDE the arbiter (`strategy_driver.py:994-1003`,
+  `ctx = replace(ctx, step_profile=...)`), so that field is empty by
+  construction. The producer is `_step_protection_profile(step_goal, state,
+  game_data)`.
+
+Each defect independently forces the exact zero the old section reported, which
+is why "0" looked like agreement between two probes rather than one bug in each.
+
+### O7 — reference set is NOT empty. The funded arm fires.
+
+Measured with each cell in the world it declares:
 
 | | |
 |---|---|
 | task-earnable currencies in the catalogue | 1 (`tasks_coin`) |
-| resolved roots examined | 42 |
-| roots with NON-EMPTY link demand | **12** — the probe is not vacuous |
-| roots with a CURRENCY GAP | **0** |
-| FUNDED-arm exercises | **0** |
-| WALL-arm exercises | **0** |
+| distinct worlds the 44 cells declare | 3 |
+| roots with a CURRENCY GAP | **1** |
+| FUNDED-arm exercises | **1** — O7's ship condition is `> 0` |
+| WALL-arm exercises | 0 |
 
-O7's own text: *"fail if the funded arm is exercised zero times, which is a
-`REFERENCE_SET_EMPTY` residual … **Do not ship O7 before 5.0's fixtures**."*
-Both residuals would be trivially zero over an empty set, and the gate would go
-green while proving nothing — the failure §7 calls "the important one".
+The gap is `l25_currency_leaf_unfunded`: root `king_slime_sword`, funding target
+`('tasks_coin', 8)`, `blocked=True`. That is the same pair
+`test_the_step_graph_routes_to_funding_not_to_gathering` already asserts at the
+decision seam, so the census and the cell's own test agree.
 
-**What would unblock it:** a scenario whose resolved root has a currency gap.
-The catalogue supports it — `tasks_coin` is task-earnable and five other
-currencies are not, so both arms exist in principle — but no committed cell
-produces one. That is a FIXTURE gap, not a code gap, and it is the same
-fixture gap 5.0 half-closed.
+**`REFERENCE_SET_EMPTY` no longer blocks O7.** The reference set is one cell,
+which is thin but non-vacuous, and the residual O7 must drive to zero
+(`O7_SILENT_CURRENCY_STALL`) is now falsifiable rather than trivially satisfied.
+The WALL arm remains unexercised — no committed cell has a gap on a
+non-earnable currency — and O7 must print that as its own residual rather than
+report a clean sweep over an arm nothing reached.
 
-### O9b — not measurable. `ctx.step_profile` is empty in all 44 cells.
+### O9b — measurable. 18 of 44 cells carry a step profile.
 
-O9b counts step materials clearing `route_price > TTL_CYCLES`. Zero materials
-were examined, because no committed scenario carries a step profile. The
-baseline it wanted to compare against (0/30 today, one material clearing the
-*seconds* gate) therefore cannot be re-taken.
+| | |
+|---|---|
+| cells with a non-empty step profile | **18 of 44** |
+| step materials examined | **19** |
+| materials clearing `route_price > TTL_CYCLES` | **9** |
 
-The seconds gate itself is gone (increment 5.4), so the question O9b asks —
-"does the actions gate admit about as few materials, meaning GE_BID stays dormant
-for reasons unrelated to units?" — is still open and still worth asking. It needs
-a scenario with a populated step profile.
+The nine: `wool` (37), `feather` (28), `flying_wing` (175, in each of the four
+`l32_*` task cells), `mithril_bar` (123), `mithril_ore` (110 @ 111), and
+`corrupted_gem` (576).
 
-### What this does NOT mean
+**On the comparison O9b actually asked for.** Its baseline — "one material
+cleared the *seconds* gate" — was taken over a 30-cell set with a gate that
+increment 5.4 deleted, so 9-of-19 is not a like-for-like successor to it and
+must not be quoted as "1 → 9". What the new number does support is the weaker
+claim O9b was built to test: after the re-denomination the gate admits a
+substantial minority of step materials, so GE_BID's dormancy is NOT explained by
+a gate that admits almost nothing. Anyone re-opening this should re-derive the
+baseline rather than difference the two figures.
 
-Neither result is evidence that the mechanisms are wrong. O7's classification and
-O9b's comparison are both unexercised, which is a statement about the FIXTURE
-SET. Recording the numbers is what stops a later reader concluding either was
-tried and found unnecessary.
+### What this changes
+
+The fixtures the old section asked for were already committed. `5.0` delivered
+all three of the things it promised, not two: the GE order book, the items-type
+task cell, and — through `unlocked_achievements`, a surface added for exactly
+this — the currency cell, which ships with a dedicated test file asserting the
+funded arm at production's own seam.
+
+The lesson is the one this epic keeps re-learning in new clothing: a probe that
+reports zero is making a claim about the probe as much as about the code. Both
+zeros here were produced by harness set-up that no scenario asked for, and both
+survived because a second zero looked like corroboration.
+
+**A defect this class would also hit elsewhere was checked and is absent.**
+`scripts/gen_open_rung.py:53` builds a single world and `run_census` iterates
+all 44 scenarios in it — structurally the same mistake. Re-running that census
+with each cell in its declared world changes **0 of 352 rows**, because open-rung
+availability depends on neither the order book nor a vendor tile. The committed
+`OPEN_RUNG_MATRIX.md` is correct as it stands and needs no regeneration.
