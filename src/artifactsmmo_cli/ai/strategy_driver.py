@@ -103,7 +103,11 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.objective_needs import objective_needs
+from artifactsmmo_cli.ai.tiers.objective_needs import (
+    NeedSet,
+    link_demand,
+    objective_needs,
+)
 from artifactsmmo_cli.ai.tiers.taskmaster_choice import choose_taskmaster
 from artifactsmmo_cli.ai.utility_slot import already_provisioned
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -417,8 +421,13 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
 
 
 def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
-              state: WorldState, history: LearningStore | None = None) -> Goal:
-    """Map a MeansKind to a parameterized Goal instance."""
+              state: WorldState, history: LearningStore | None = None,
+              needs: NeedSet | None = None) -> Goal:
+    """Map a MeansKind to a parameterized Goal instance.
+
+    `needs` is the committed objective's unmet demand THIS cycle, computed once
+    by the caller. Only the ACCEPT_TASK arm reads it, to score the task pool
+    against what the active link actually wants."""
     if kind is MeansKind.CLAIM_PENDING:
         return ClaimPendingGoal()
     if kind is MeansKind.COMPLETE_TASK:
@@ -475,7 +484,12 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         # gear demand B available at this site; the choice returns None (no second
         # master, or neither pool has a level-appropriate task), meaning fall back
         # to today's default master.
-        chosen = choose_taskmaster(state, game_data, ctx.target_gear)
+        # THE ACTIVE LINK'S DEMAND, not the whole gear sheet. `ctx.target_gear`
+        # is everything the objective will EVER want; `link_demand(needs)` is
+        # what it is blocked on now. Scoring a task pool against the sheet makes
+        # every master look equally useful, because the sheet always contains
+        # something each one can serve.
+        chosen = choose_taskmaster(state, game_data, link_demand(needs))
         if chosen is None:
             return AcceptTaskGoal()
         code, tile = chosen
@@ -1024,13 +1038,23 @@ class StrategyArbiter:
         # the objective has unmet needs the step competes; when needs are
         # empty, ACCEPT_TASK is not suppressed and still wins.
 
+        # ONE PRODUCER. `objective_needs` walks the requirement closure, and two
+        # consumers want it this cycle: the ACCEPT_TASK arm scores the task pool
+        # against the active link's demand, and the worth gate suppresses
+        # discretionary task means that serve none of it. Computed here, where
+        # both are reached from, rather than once in each — the walk is not
+        # cheap and two copies are two chances to disagree.
+        needs = (objective_needs(chosen_root, state, game_data)
+                 if chosen_root is not None else None)
+
         candidates = self._build_candidates(
             guard_kinds, collect_kinds, discretionary_kinds, step_goal,
             fallback_steps, fallback_roots, state, game_data, ctx, step_profile,
-            chosen_root=chosen_root)
+            chosen_root=chosen_root, needs=needs)
 
         worth_suppressed = self._worth_gate_suppressed(
-            objective, chosen_root, discretionary_kinds, state, game_data, ctx)
+            objective, chosen_root, discretionary_kinds, state, game_data, ctx,
+            needs=needs)
 
         # Captured BEFORE `_committed_repr` is overwritten: the goal this cycle
         # was STICKY on, which `select_pure` probes ahead of the ranked walk.
@@ -1194,6 +1218,7 @@ class StrategyArbiter:
         ctx: SelectionContext,
         step_profile: dict[str, int] | None = None,
         chosen_root: MetaGoal | None = None,
+        needs: NeedSet | None = None,
     ) -> list[Candidate]:
         """Candidate ordering: guards, collect, step + fallback-step chain, discretionary."""
         candidates: list[Candidate] = []
@@ -1201,7 +1226,7 @@ class StrategyArbiter:
             g = map_guard(gk, game_data, ctx, state, step_profile, self._history)
             candidates.append(Candidate(goal=g, is_means=False, repr_=repr(g), band=BAND_GUARD))
         for mk in collect_kinds:
-            g = map_means(mk, game_data, ctx, state, self._history)
+            g = map_means(mk, game_data, ctx, state, self._history, needs)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g), band=BAND_COLLECT))
         # Equip-owned-gear (COLLECT band): a first-class objective that equips
         # already-OWNED positive-Rank gear into currently-EMPTY slots, so free
@@ -1392,7 +1417,7 @@ class StrategyArbiter:
                 # twin is worse than redundant: built without `initial_total` it is
                 # the all-or-nothing goal that can never plan.
                 continue
-            g = map_means(mk, game_data, ctx, state, self._history)
+            g = map_means(mk, game_data, ctx, state, self._history, needs)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g), band=BAND_DISCRETIONARY))
         return candidates
 
@@ -1447,6 +1472,7 @@ class StrategyArbiter:
         state: WorldState,
         game_data: GameData,
         ctx: SelectionContext,
+        needs: NeedSet | None = None,
     ) -> set[str]:
         """Worth gate: reprs of discretionary task means serving none of the committed objective's unmet needs."""
         # ── Worth gate ─────────────────────────────────────────────────────
@@ -1458,7 +1484,16 @@ class StrategyArbiter:
         worth_suppressed: set[str] = set()
         if objective is None or chosen_root is None:
             return worth_suppressed
-        needs = objective_needs(chosen_root, state, game_data)
+        # Supplied by the caller — see the ONE PRODUCER note at its call site,
+        # which computes it exactly when `chosen_root` is not None. The early
+        # return above has already handled the None-root case, so it is present
+        # here by construction.
+        #
+        # An `if needs is None: recompute` fallback stood here briefly and was
+        # UNREACHABLE — the coverage gate said so. A second producer that can
+        # never run is worse than none: it reads as a safety net while being
+        # exactly the drift this parameter exists to remove.
+        assert needs is not None
         if not needs.is_empty:
             # PURSUE_TASK only. ACCEPT_TASK left this gate with its promotion
             # to the collect band on 2026-08-19, and the gate could never have

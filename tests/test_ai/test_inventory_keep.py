@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import Candidate, StrategyArbiter
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
+from artifactsmmo_cli.ai.tiers.objective_needs import NeedSet
 from artifactsmmo_cli.ai.tiers.strategy import MetaGoal, ObtainItem, StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
@@ -574,13 +575,14 @@ class _CtxSpyArbiter(StrategyArbiter):
         ctx: SelectionContext,
         step_profile: dict[str, int] | None = None,
         chosen_root: MetaGoal | None = None,
+        needs: NeedSet | None = None,
     ) -> list[Candidate]:
         self.seen_ctx = ctx
         self.seen_step_goal = step_goal
         return super()._build_candidates(
             guard_kinds, collect_kinds, discretionary_kinds, step_goal,
             fallback_steps, fallback_roots, state, game_data, ctx, step_profile,
-            chosen_root=chosen_root)
+            chosen_root=chosen_root, needs=needs)
 
 
 def _gather_gd() -> GameData:

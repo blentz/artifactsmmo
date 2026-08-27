@@ -51,6 +51,33 @@ class NeedSet:
         return not (self.materials or self.skill_xp or self.buy_only or self.char_xp)
 
 
+def link_demand(needs: NeedSet | None) -> frozenset[str]:
+    """The ACTIVE LINK's unmet demand, as the codes a task pool is scored
+    against. `materials | buy_only`; NEVER `char_xp`.
+
+    `char_xp` is excluded for exactly the reason `taskmaster_choice`'s docstring
+    already gives — "the char-level trunk is deliberately excluded, because it
+    always demands `char_xp` and would make every combat task score a perfect 1,
+    pinning the choice to monsters". EXCLUDING THE TOKEN RATHER THAN THE ROOT is
+    what makes the exclusion hold: the endgame sheet reaches CHAR_XP through its
+    own drop-routed materials, so a root-level exclusion did not bite and
+    monsters won 30/30 scenarios at synergy exactly 1.0.
+
+    `skill_xp` is excluded too, and for a different reason: it names SKILLS, not
+    item codes, and the pool is scored on codes. Mixing the two namespaces is
+    the defect `requirement_parity` exists to catch.
+
+    A `ReachCharLevel` root yields an EMPTY demand here, and that is correct:
+    when the active link IS "level up", no items task serves it and
+    `choose_taskmaster` should return None — fall back to the default master —
+    rather than score every monsters task a perfect 1. `None` (no committed
+    root at all) yields empty for the same reason.
+    """
+    if needs is None:
+        return frozenset()
+    return needs.materials | needs.buy_only
+
+
 def _owned(code: str, state: WorldState) -> int:
     bank = state.bank_items or {}
     equipped = sum(1 for c in state.equipment.values() if c == code)
