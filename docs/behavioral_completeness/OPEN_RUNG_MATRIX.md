@@ -8,9 +8,9 @@
 >
 > Every field `classify_gap` reads is a column here, so a verdict can be reconstructed from the row alone: `g-in`/`g-above` are the in-range and above-range resource counts and `g-xp+` is whether the HIGHEST in-range resource still pays XP — the three that separate `wall_all_rungs_grey` from `wall_below_first_rung`.
 
-344 cells over 92 distinct (skill, level) pairs; PASS 338; routed 241; walled 6; o1_silent_stall 0; o1_unexplained 0; skill_catalogue_empty 0
+352 cells over 92 distinct (skill, level) pairs; PASS 346; routed 246; walled 6; o1_silent_stall 0; o1_unexplained 0; skill_catalogue_empty 0
 
-residual scope: 241 of 344 cells are ROUTED (8 of 8 skills) — alchemy 43, cooking 43, fishing 43, mining 43, woodcutting 43, jewelrycrafting 15, gearcrafting 9, weaponcrafting 2. A closure in an unrouted skill can only be an explained wall.
+residual scope: 246 of 352 cells are ROUTED (8 of 8 skills) — alchemy 44, cooking 44, fishing 44, mining 44, woodcutting 44, jewelrycrafting 15, gearcrafting 9, weaponcrafting 2. A closure in an unrouted skill can only be an explained wall.
 
 | Scenario | Skill | C | Target | Verdict | routed | in-level | xp+ | obtainable | above | g-in | g-above | g-xp+ | gather rung |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -254,6 +254,14 @@ residual scope: 241 of 344 cells are ROUTED (8 of 8 skills) — alchemy 43, cook
 | l11_band_floor | mining | 21 | 22 | PASS | yes | 7 | 5 | 5 | 7 | 3 | 4 | yes | `coal` |
 | l11_band_floor | weaponcrafting | 10 | 11 | PASS | - | 18 | 18 | 13 | 51 | 0 | 0 | - | `None` |
 | l11_band_floor | woodcutting | 15 | 16 | PASS | yes | 2 | 1 | 1 | 9 | 2 | 5 | yes | `spruce_wood` |
+| l32_items_task | alchemy | 10 | 11 | PASS | yes | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
+| l32_items_task | cooking | 10 | 11 | PASS | yes | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
+| l32_items_task | fishing | 10 | 11 | PASS | yes | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
+| l32_items_task | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
+| l32_items_task | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 8 | 39 | 0 | 0 | - | `None` |
+| l32_items_task | mining | 20 | 21 | PASS | yes | 7 | 6 | 6 | 7 | 3 | 4 | yes | `coal` |
+| l32_items_task | weaponcrafting | 15 | 16 | PASS | - | 21 | 15 | 8 | 48 | 0 | 0 | - | `None` |
+| l32_items_task | woodcutting | 20 | 21 | PASS | yes | 3 | 2 | 2 | 8 | 3 | 4 | yes | `birch_wood` |
 | l32_held_task_workable | alchemy | 10 | 11 | PASS | yes | 6 | 6 | 6 | 19 | 1 | 4 | yes | `sunflower` |
 | l32_held_task_workable | cooking | 10 | 11 | PASS | yes | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
 | l32_held_task_workable | fishing | 10 | 11 | PASS | yes | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |

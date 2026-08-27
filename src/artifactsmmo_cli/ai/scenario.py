@@ -1450,6 +1450,40 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # D2 = WORKABLE. `pig` is the monster C3P0 lost 42 straight fights to at
     # level 19; at this loadout it is winnable, so `has_combat_deficit` is
     # False and `deficit_upgrade_target` is None through its FIRST return.
+    # THE ITEMS-TASK CELL, and the only one in the set. Built from the SAME
+    # `_held_task_cell` loadout as the monsters triple below, so the one thing
+    # that differs from `l32_held_task_workable` is the task's TYPE — which is
+    # what makes it a control for every consumer that branches on
+    # `task_type == "items"`.
+    #
+    # FOUR PRODUCTION CONSUMERS were unreachable offline before it, all of them
+    # live code: `craft_relief.py:196` (cap crafting by remaining task units),
+    # `inventory_caps.py:434`, `inventory_keep.py:301` (keep the task item), and
+    # `objective_step_fight_core.py:61` (a >4-level grind stands down for an
+    # in-progress items task). They had unit coverage over hand-built states and
+    # no end-to-end path at all.
+    #
+    # LIVE THIS IS UNOBSERVED: 0 items tasks in 15,240 task-cycles, every one a
+    # `monsters` task. The economy is modelled and never exercised, which is
+    # exactly why the fixture is worth more than another monsters cell.
+    #
+    # `apprentice_gloves` IS MEASURED, NOT CHOSEN FOR PLAUSIBILITY. Swept over
+    # every craftable item in the bundle at this loadout, it is the ONLY task
+    # code that makes `craft_relief_candidates` fire (control, no task: empty).
+    # `copper_bar` was the first pick and produced [] on BOTH arms — the cell
+    # holds `iron_ore`, not copper. Even `iron_bar` fails, for a subtler reason
+    # worth recording: 12 iron_ore covers its 10-ore recipe, but the bar is not
+    # already in the bag, so crafting it ADDS a stack and fails the SLOT gate
+    # that `craft_relief` exists to respect.
+    #
+    # Keep demand moves 0 -> 8 (the remaining units) on the same cell, so the
+    # keep and craft consumers both have work rather than reading a task they
+    # cannot act on.
+    "l32_items_task": _held_task_cell(
+        "l32_items_task", ("apprentice_gloves", "items", 2, 10),
+        "Held ITEMS task, 2/10 apprentice_gloves — the only items-type task in "
+        "the set, and the sole offline witness for the consumers that branch "
+        "on it."),
     "l32_held_task_workable": _held_task_cell(
         "l32_held_task_workable", ("pig", "monsters", 4, 10),
         "Held-task triple, value WORKABLE: a pig task this loadout wins — "

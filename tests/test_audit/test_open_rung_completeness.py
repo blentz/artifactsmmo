@@ -138,7 +138,7 @@ def test_the_zero_stat_harness_would_measure_the_fixture(
 
     Three counts, pinned exactly because `open_rung_completeness`'s module
     docstring quotes them: 74 closed with the flag off everywhere, 20 closed
-    on the scenarios AS COMMITTED (33 of the 43 opt in), 6 with the census's
+    on the scenarios AS COMMITTED (34 of the 44 opt in), 6 with the census's
     forced-on states. The as-committed number is the one that matters — it is
     what this census would report if `census_state` were `scenario_state`.
 
@@ -154,15 +154,15 @@ def test_the_zero_stat_harness_would_measure_the_fixture(
     all_off = _closed_cells(bundle_game_data, derive_combat_stats=False)
     as_committed = _closed_cells(bundle_game_data, derive_combat_stats=None)
     derived = _closed_cells(bundle_game_data, derive_combat_stats=True)
-    assert (all_off, as_committed, derived) == (74, 20, 6), \
+    assert (all_off, as_committed, derived) == (77, 20, 6), \
         "update the module docstring's 74/20/6 note"
     # The opt-in count is PINNED, not merely restated. Both docstrings quote it,
     # and it silently rotted from 11 to 20 as scenarios were added — caught only
     # by a coverage audit, months later. A quoted number with no assertion behind
     # it is the same defect class the reachability census now gates.
     opted_in = sum(1 for s in SCENARIOS.values() if s.derive_combat_stats)
-    assert opted_in == 33, (
-        "update the '33 of the 43 opt in' count in this docstring AND in "
+    assert opted_in == 34, (
+        "update the '34 of the 44 opt in' count in this docstring AND in "
         "open_rung_completeness's module docstring")
     assert sum(1 for r in results if not r.open_rung) == derived
 

@@ -52,6 +52,7 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.combat_deficit import deficit_upgrade_target, has_combat_deficit
+from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.decisions.root import (
     IsAFightBlockingMe,
     RootWalk,
@@ -60,6 +61,8 @@ from artifactsmmo_cli.ai.decisions.root import (
 )
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_appropriateness import has_craftable_upgrade_any_slot
+from artifactsmmo_cli.ai.inventory_keep import keep_in_bag
+from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
@@ -86,7 +89,12 @@ TRIPLE_CLOSABLE = "l32_held_task_closable"
 TRIPLE_OPEN = "l32_held_task_open"
 TRIPLE = (TRIPLE_WORKABLE, TRIPLE_CLOSABLE, TRIPLE_OPEN)
 
-TASK_SCENARIOS = (WORKABLE, UNWINNABLE_CLOSABLE, UNWINNABLE_OPEN, *TRIPLE)
+ITEMS_CELL = "l32_items_task"
+"""The one ITEMS-type task. Everything else in the set is `monsters`,
+which mirrors production (0 items tasks in 15,240 live task-cycles)."""
+
+TASK_SCENARIOS = (WORKABLE, UNWINNABLE_CLOSABLE, UNWINNABLE_OPEN,
+                  ITEMS_CELL, *TRIPLE)
 
 
 @pytest.fixture(scope="module")
@@ -111,10 +119,18 @@ def test_the_held_task_dimension_has_a_populated_side(gd: GameData) -> None:
         code, kind, progress, total = SCENARIOS[name].task
         state = _state(name, gd)
         assert state.task_code == code
-        assert state.task_type == kind == "monsters"
+        assert state.task_type == kind
         assert (state.task_progress, state.task_total) == (progress, total)
         assert state.task_lifecycle_phase is TaskLifecyclePhase.IN_PROGRESS
-        assert gd.monster_level(code) is not None, "the task monster must be real"
+        # The referent must be REAL on both arms — a task naming something the
+        # catalogue does not have would make every consumer downstream vacuous.
+        # This loop asserted `kind == "monsters"` until the items cell landed;
+        # that was true of the whole set and is exactly what the cell widens.
+        if kind == "monsters":
+            assert gd.monster_level(code) is not None, "the task monster must be real"
+        else:
+            assert kind == "items"
+            assert gd.item_stats(code) is not None, "the task item must be real"
 
 
 def test_task_scenarios_are_not_vacuous_on_combat_stats(gd: GameData) -> None:
@@ -512,3 +528,73 @@ def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(
     # ...and the closable row is the one that DOES divert the character.
     _, _, gear = _starved_run(STARVED_GEAR, gd)
     assert repr(gear.selected_goal) != control_goal
+
+
+# ---------------------------------------------------------------------------
+# THE ITEMS-TASK CELL (wave 6, increment 5.0)
+#
+# `ScenarioCharacter.task` had SIX holders before this, every one a `monsters`
+# task — which mirrors production exactly (0 items tasks in 15,240 live
+# task-cycles) and is precisely why the items-task economy was modelled but
+# never exercised end to end.
+#
+# Each test below asserts the consumer DISCRIMINATES: its answer under the
+# items task differs from the same character with no task at all. A test that
+# only asserted "the consumer runs" would pass against a consumer that ignores
+# the task entirely, which is the failure this cell exists to rule out.
+# ---------------------------------------------------------------------------
+
+def _no_task(state):
+    return dataclasses.replace(
+        state, task_code=None, task_type=None, task_progress=0, task_total=0,
+        task_lifecycle_phase=TaskLifecyclePhase.NONE)
+
+
+def test_the_items_cell_is_the_only_items_task_in_the_set(gd: GameData) -> None:
+    """One cell, and it is the ONLY one — so a future edit that turns it into a
+    monsters task silently removes the whole dimension, and this says so."""
+    kinds = {n: sc.task[1] for n, sc in SCENARIOS.items() if sc.task}
+    assert kinds[ITEMS_CELL] == "items"
+    assert [n for n, k in kinds.items() if k == "items"] == [ITEMS_CELL]
+    # ...and it differs from its monsters sibling ONLY in the task.
+    items, monsters = SCENARIOS[ITEMS_CELL], SCENARIOS[TRIPLE_WORKABLE]
+    assert dataclasses.replace(items, name="x", task=None, description="") \
+        == dataclasses.replace(monsters, name="x", task=None, description="")
+
+
+def test_inventory_keep_holds_the_task_item(gd: GameData) -> None:
+    """`inventory_keep.py:301` — the task item is kept for the REMAINING units.
+
+    Measured 0 -> 8 (10 total, 2 done). Asserted against the no-task control so
+    a consumer that ignored the task would fail here."""
+    state = _state(ITEMS_CELL, gd)
+    assert keep_in_bag("apprentice_gloves", state, gd, NO_PROFILE_CONTEXT) \
+        > keep_in_bag("apprentice_gloves", _no_task(state), gd, NO_PROFILE_CONTEXT)
+    assert keep_in_bag("apprentice_gloves", state, gd, NO_PROFILE_CONTEXT) \
+        == state.task_total - state.task_progress
+
+
+def test_craft_relief_caps_by_the_remaining_task_units(gd: GameData) -> None:
+    """`craft_relief.py:196` — an active items task caps the craft at the units
+    still owed, so the bot does not over-craft a task item.
+
+    The cap is the DISCRIMINATOR: without the task the code is not considered at
+    all, so the two answers must differ."""
+    state = _state(ITEMS_CELL, gd)
+    with_task = craft_relief_candidates(state, gd)
+    without = craft_relief_candidates(_no_task(state), gd)
+    assert with_task != without
+    assert any(c.item_code == "apprentice_gloves" for c in with_task)
+
+
+def test_a_long_haul_grind_stands_down_for_the_items_task(gd: GameData) -> None:
+    """`objective_step_fight_core.py:61` — a bootstrap gap of more than four
+    levels DEFERS to an in-progress items task rather than grinding past it.
+
+    Both arms are exercised: the same gap with no task does NOT stand down."""
+    args = dict(is_reach_char_level=True, target=40, level=32,
+                has_combat_monster=True, task_progress=2, task_total=10)
+    assert objective_step_is_fight_pure(
+        task_type="items", task_code="apprentice_gloves", **args) is False
+    assert objective_step_is_fight_pure(
+        task_type="monsters", task_code="cow", **args) is True
