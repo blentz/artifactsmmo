@@ -45,6 +45,7 @@ from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.decisions.root import _gear_nameable_skills
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.role_catalog import ROLES_BY_NAME, role_skills
@@ -241,3 +242,84 @@ def test_the_fishers_cooking_root_plans_a_cooking_grind(
                               bundle_game_data, history=None,
                               budget_seconds=PLAN_BUDGET_SECONDS)
     assert plan and repr(plan[0]).startswith(f"LevelSkill({SKILL}->")
+
+
+# ---------------------------------------------------------------------------
+# THE COOK-THEN-EAT ROUTE, pinned END TO END (wave 6, increment 5.2)
+#
+# `RestoreHPGoal.relevant_actions` admits the `"craft"` tag, and
+# `test_goals.py::TestRestoreHPGoal::test_relevant_actions_restricts_to_recovery_craft_movement`
+# already pins THAT — over a hand-built list of six actions.
+#
+# It does not pin the thing that matters. A filter can admit `craft` while the
+# planner never emits one, which is exactly the failure mode the user reported
+# ("make cooking routable — that used to work and it got broken by another
+# epicycle"): the tag survives, the route does not. 99.6 % of the fleet's
+# cooking XP rides on the planner actually choosing to cook.
+#
+# THE DESIGN'S PREMISE FOR THIS TEST WAS WRONG, and the correction is worth
+# keeping. Wave 6 §5.2 says "today nothing pins that tag; deleting it would
+# silently remove 99.6 % of the fleet's cooking XP and nothing would fail."
+# Measured by removing `"craft"` from the tag set and running the suite:
+# exactly one test failed — the hand-built-list one above. So the TAG is
+# pinned; the ROUTE is what was not, and that is what these two tests add.
+# ---------------------------------------------------------------------------
+
+COOK_CELL = "l20_relief_full_bank"
+"""One of three cells (with `l20_bag_critical_empty_bank` and `l8_overstocked`)
+whose deeply-wounded RestoreHP plan is a Craft followed by a UseConsumable.
+Chosen by sweeping every cell rather than by guessing which would cook."""
+
+
+def _wounded(game_data: GameData) -> WorldState:
+    """`COOK_CELL` at 10 % HP.
+
+    The wound depth is load-bearing: `RestAction`'s cost is dynamic
+    (`max(3, ceil(missing%))/10`, 0.3..10.0), so at a light wound Rest is nearly
+    free and no craft can beat it. Cook-then-eat only wins when the character is
+    badly hurt, which is the regime this test has to be in to mean anything."""
+    base = scenario_state(SCENARIOS[COOK_CELL], game_data)
+    return dataclasses.replace(base, hp=max(1, base.max_hp // 10))
+
+
+def _restore_plan(state: WorldState, game_data: GameData) -> list:
+    player = GamePlayer(character=COOK_CELL, history=None)
+    player.seed_offline(state, game_data)
+    return GOAPPlanner().plan(state, RestoreHPGoal(), list(player._build_actions()),
+                              game_data, history=None,
+                              budget_seconds=PLAN_BUDGET_SECONDS)
+
+
+def test_restore_hp_may_cook(bundle_game_data: GameData) -> None:
+    """The PLANNER emits cook-then-eat, not just the filter admitting it.
+
+    Asserted on the plan's SHAPE — a Craft whose product is then consumed —
+    because that is the route. A plan containing a Craft for some unrelated
+    reason would not restore any HP."""
+    plan = _restore_plan(_wounded(bundle_game_data), bundle_game_data)
+    kinds = [type(a).__name__ for a in plan]
+    assert "CraftAction" in kinds, kinds
+    assert kinds.index("CraftAction") < kinds.index("UseConsumableAction"), kinds
+    # `UseConsumableAction` names NO item — it eats "the best available
+    # consumable from inventory" at execution time, so the craft-to-eat link is
+    # implicit. What makes the route work is therefore that the thing cooked is
+    # FOOD; asserting an item match here is not possible and would be asserting
+    # a model the action does not have.
+    crafted = next(a for a in plan if type(a).__name__ == "CraftAction")
+    stats = bundle_game_data.item_stats(crafted.code)
+    assert stats is not None and stats.type_ == "consumable", \
+        f"cook-then-eat requires the craft to be food, got {crafted.code}"
+
+
+def test_the_cook_route_is_not_what_a_light_wound_takes(
+        bundle_game_data: GameData) -> None:
+    """NOT VACUOUS. The same cell, barely hurt, does NOT cook — Rest is cheap
+    there.
+
+    Without this the test above would pass against a planner that cooked
+    unconditionally, which would be its own bug: cooking to heal 5 HP burns a
+    craft and a cycle for nothing."""
+    base = scenario_state(SCENARIOS[COOK_CELL], bundle_game_data)
+    light = dataclasses.replace(base, hp=base.max_hp - 1)
+    kinds = [type(a).__name__ for a in _restore_plan(light, bundle_game_data)]
+    assert "CraftAction" not in kinds, kinds
