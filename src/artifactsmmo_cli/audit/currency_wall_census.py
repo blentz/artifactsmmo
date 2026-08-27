@@ -124,6 +124,24 @@ class CurrencyGap(Enum):
     model can see was not priced, so the root is a million actions dear for a
     reason nothing in the graph states."""
 
+    WALL_GOLD = "wall_gold"
+    """Charged on GOLD: the root prices as unobtainable now and becomes
+    obtainable once gold is granted, so money is the only thing in its way.
+
+    §7 PROPOSED THIS NAME AND §11 RECORDED THAT IT NAMED NOTHING — correctly, at
+    the time: gold is not a currency ITEM, it lives in `state.gold` and a
+    shortfall is charged through the buy route, so it never appeared as a
+    currency code and the grid could not see it. §2.5's complaint is exactly
+    that blindness: *"the bot can be blocked on 20,000 gold with no node saying
+    so"*. Giving gold its own row is what makes the name real.
+
+    IT IS A WALL AND NOT A FUNDING ROUTE, which §2.5 is emphatic about: gold is
+    not task-earnable, so routing a gold gap to `ReachCurrencyGoal(gold, N)`
+    would chase a goal `AcceptTaskAction` cannot serve. Gold accrues from
+    ordinary play and the sell rungs, neither of which is a route this census
+    can point at — so the honest verdict is a NAMED wall, which is all §2.5
+    asks for."""
+
     O7_MULTI_CURRENCY_WALL = "o7_multi_currency_wall"
     """RESIDUAL. The root prices as unobtainable, granting every currency at
     once makes it obtainable, and NO single currency does — so two or more
@@ -324,6 +342,35 @@ def charged_currencies(root: MetaGoal, state: WorldState, game_data: GameData,
     return out
 
 
+GOLD_ROW = "gold"
+"""The pseudo-currency row. Gold is not in `items.stats`, so it is not returned
+by `catalogue_currencies` and has to be added to the grid deliberately."""
+
+GOLD_GRANT = 10_000_000
+"""Gold handed to the character for the gold differential. Far above any price
+in the catalogue, so a root that is still unobtainable with this much money is
+one gold cannot fix."""
+
+
+def gold_charge(root: MetaGoal, state: WorldState,
+                game_data: GameData) -> tuple[int, int] | None:
+    """`(base_price, granted_price)` when `root` is walled on MONEY, else None.
+
+    The same crossing test `charged_currencies` applies to item currencies —
+    unobtainable as the character stands, obtainable once granted — but on
+    `state.gold`, which is where gold lives. That difference is the entire
+    reason gold needed its own row: it is never an entry in `state.inventory`,
+    so no amount of granting item currencies can reveal it."""
+    base = route_price(root, state, game_data, NO_PROFILE_CONTEXT, None)
+    if base < UNOBTAINABLE_PER_UNIT:
+        return None
+    rich = dataclasses.replace(state, gold=state.gold + GOLD_GRANT)
+    price = route_price(root, rich, game_data, NO_PROFILE_CONTEXT, None)
+    if price >= UNOBTAINABLE_PER_UNIT:
+        return None
+    return (base, price)
+
+
 def unattributed_wall(root: MetaGoal, state: WorldState, game_data: GameData,
                       currencies: tuple[str, ...]) -> bool:
     """Is `root` unobtainable for a CURRENCY reason no single currency explains?
@@ -391,7 +438,7 @@ def run_census(bundle: Path) -> list[CurrencyResult]:
                     scenario=name, currency=code, root="-", base_price=0,
                     granted_price=0, charged=False, evidence=None,
                     gap=CurrencyGap.ROOT_UNRESOLVED.value)
-                for code in currencies)
+                for code in (*currencies, GOLD_ROW))
             continue
         charges = charged_currencies(root, state, game_data, currencies)
         # Only worth asking when NOTHING was attributed: if some currency already
@@ -409,6 +456,20 @@ def run_census(bundle: Path) -> list[CurrencyResult]:
                 scenario=name, currency=code, root=repr(root),
                 base_price=base, granted_price=granted,
                 charged=code in charges, evidence=evidence, gap=gap.value))
+
+        # THE GOLD ROW, added deliberately because nothing else can produce it:
+        # gold is not in `items.stats`, so `catalogue_currencies` never returns
+        # it, and it is not in `state.inventory`, so the item-currency
+        # differential cannot reveal it. Without this row a root blocked purely
+        # on money reads `not_demanded` in every cell — the silence §2.5 names.
+        gold = gold_charge(root, state, game_data)
+        results.append(CurrencyResult(
+            scenario=name, currency=GOLD_ROW, root=repr(root),
+            base_price=gold[0] if gold else 0,
+            granted_price=gold[1] if gold else 0,
+            charged=gold is not None, evidence=None,
+            gap=(CurrencyGap.WALL_GOLD if gold
+                 else CurrencyGap.NOT_DEMANDED).value))
     return results
 
 

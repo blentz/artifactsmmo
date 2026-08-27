@@ -1464,8 +1464,90 @@ Half of that is now covered:
 * **Currency ITEMS** — a gap on any of the six is classified and named by the O7
   census (§11), and `o7_silent_currency_stall` fails the gate if one is neither
   funded nor named.
-* **GOLD is still uncovered, and deliberately so.** Gold is not a currency item;
-  it lives in `state.gold` and a shortfall is charged through the buy route, so
-  it never appears as a currency code and the O7 grid cannot see it. §2.5's
-  gold-wall requirement is therefore NOT discharged by O7 and remains open. This
-  is the same fact that made §7's proposed `WALL_GOLD` name nothing.
+* **GOLD — uncovered when this section was written, DISCHARGED in §13.** Gold is
+  not a currency item; it lives in `state.gold` and a shortfall is charged
+  through the buy route, so it never appeared as a currency code and the O7 grid
+  could not see it. That is the same fact that made §7's proposed `WALL_GOLD`
+  name nothing. §13 gives gold its own row and the name becomes real: **4 of 42
+  resolved roots are gold-walled** on the committed bundle.
+
+---
+
+## 13. `[SHIPPED 2026-08-27]` The gold wall has a name, and the interleave holds runs
+
+Two residuals this design recorded and left open, both closed.
+
+### §2.5's gold wall — 4 of 42 roots, and the graph was silent on all of them
+
+§2.5's complaint was that *"the bot can be blocked on 20,000 gold with no node
+saying so"*. §12 confirmed O7 could not see it and left it open. Measured with
+the census's own differential, run on `state.gold` instead of the bag:
+
+| | |
+|---|---|
+| roots resolved | 42 |
+| priced UNOBTAINABLE | 27 |
+| of those, **GOLD-WALLED** | **4** |
+
+All four are `ObtainItem(lifesteal_rune, rune_slot)` against 100-300 held gold:
+priced `1_000_001`, dropping to `3` once money is granted. The cells are
+`l20_dual_utility`, `l20_dual_utility_one_stocked`, `l35_artifact_fill` and
+`l35_boots_drop_farm`.
+
+**What the graph said about them: `GatherMaterials(lifesteal_rune,
+{lifesteal_rune:1})`** — a GATHER goal for a purchase-only item the character
+cannot afford. Not a wrong wall, no wall at all. That is precisely the silence
+§2.5 named, and it was live in four committed scenarios the whole time.
+
+**The fix is a seventh row.** Gold needs one because nothing else can produce
+it: it is absent from `items.stats`, so `catalogue_currencies` never returns it,
+and absent from `state.inventory`, so the item-currency differential cannot
+reveal it. `run_census` adds the row deliberately and `gold_charge` applies the
+same crossing test to `state.gold`. The grid is now 44 x 7 = **308 cells**, and
+`walled` moves from 0 to 4.
+
+`WALL_GOLD` — §7's name, which §11 correctly recorded as naming nothing — now
+names something. It stays a WALL and not a funding route, exactly as §2.5
+insists: gold is not task-earnable, so routing a gold gap to
+`ReachCurrencyGoal(gold, N)` would chase a goal `AcceptTaskAction` cannot serve.
+Gold accrues from ordinary play and the sell rungs, neither of which is a route
+this census can point at, so a NAMED wall is the honest verdict and is all §2.5
+asks for.
+
+**Still open, deliberately: production behaviour.** The census makes the wall
+visible and gate-enforced; it does not change what the graph emits. Those four
+cells still get a doomed `GatherMaterials`. Whether the walk should promote past
+a gold-walled root to a servable alternative is a behaviour change with its own
+evidence to gather, and is NOT attempted here — the census is what tells us it
+would be worth doing.
+
+**A test did its job on contact.** `test_the_wall_arms_are_unexercised_and_the_matrix_says_so`
+asserted `walled == 0` precisely so that the day a fixture exercised a wall it
+would fail rather than rot. Adding the gold row is that day; it is now
+`test_only_the_gold_wall_is_exercised_and_the_matrix_says_so`, pinning
+`walled == 4` and that the three catalogue-currency walls still have no witness.
+
+### The interleave's decay band — the residual §11 said needed hold state
+
+§11 recorded that `INTERLEAVE_RUN` fixed the thrash past the decay band but not
+inside it, and guessed the band would need "real hold state". **That guess was
+wrong**; the same idea one layer down suffices.
+
+The seat cadence holds the d'Hondt QUOTIENT still between bumps. Inside the band
+the WEIGHT still moved every cycle, because the aged head read `falloff(focus)`
+directly — so the argmax flipped with no seat charged. Measured by reverting
+exactly that one call: **99 flips over 100 in-band cycles**.
+
+`run_falloff` samples the same curve at run boundaries, so the weight is
+constant across a run and the winner holds for the reason it already did past
+the band. In-band flips **81% -> 10%**, median run **1 -> 10**, every candidate
+still elected; past the band it is `falloff` by construction and nothing
+regresses.
+
+**The curve is untouched, only where it is read.** `falloff` keeps its mirrored
+Lean definition and all five proved properties (`falloff_flat`, `_le_one`,
+`_ge_floor`, `_floor_after`, `_antitone`); each survives a monotone
+non-decreasing argument transform, and the staircase is pinned by its own tests
+to start at 1, reach the floor at the same level, stay antitone, and never
+exceed the smooth curve. The hand-off ramp is COARSENED, not cancelled, so a
+stuck root still sheds cycles and both ring2 tests still elect the starved root.

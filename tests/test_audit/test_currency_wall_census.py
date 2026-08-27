@@ -49,6 +49,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.audit import currency_wall_census as cwc
 from artifactsmmo_cli.audit.currency_wall_census import (
+    GOLD_ROW,
     MIN_CELLS,
     RESIDUALS,
     CurrencyEvidence,
@@ -60,6 +61,7 @@ from artifactsmmo_cli.audit.currency_wall_census import (
     currency_evidence,
     declared_world,
     demand_breakdown,
+    gold_charge,
     reference_set_residual,
     render_matrix,
     run_census,
@@ -98,10 +100,15 @@ def test_the_sweep_sees_the_whole_grid(results: list[CurrencyResult]) -> None:
     """A census that discovered nothing reports 0 residuals and exits clean, so
     the floor is asserted here AND in the script (which the suite never runs)."""
     assert len(results) >= MIN_CELLS
-    assert len(results) == len(SCENARIOS) * 6
+    assert len(results) == len(SCENARIOS) * 7
     assert {r.currency for r in results} == {
         "corrupted_gem", "enchanted_coin", "event_ticket", "sandwhisper_coin",
-        "sonnengott_coin", "tasks_coin"}
+        "sonnengott_coin", "tasks_coin",
+        # GOLD IS THE SEVENTH ROW and is not a catalogue currency — it is not in
+        # `items.stats` and not in `state.inventory`, so nothing produces it
+        # except `run_census` adding it deliberately. Without it a root blocked
+        # purely on money reads `not_demanded` everywhere.
+        GOLD_ROW}
     assert all(r.gap in {g.value for g in CurrencyGap} for r in results)
 
 
@@ -122,13 +129,20 @@ def test_the_funded_arm_has_a_witness(results: list[CurrencyResult]) -> None:
     assert reference_set_residual(results) is None
 
 
-def test_the_wall_arms_are_unexercised_and_the_matrix_says_so(
+def test_only_the_gold_wall_is_exercised_and_the_matrix_says_so(
         results: list[CurrencyResult]) -> None:
-    """A wall count of zero is a FINDING, not a success — recorded as an
-    assertion so the day a fixture exercises a wall, this test fails and the
-    claim in the docstring above gets revisited instead of rotting."""
-    assert [r for r in results if r.gap.startswith("wall_")] == []
-    assert "walled 0" in summary_line(results)
+    """A wall count is a FINDING either way, so it is asserted either way.
+
+    THIS TEST DID ITS JOB. It was written asserting `walled == 0` precisely so
+    that the day a fixture exercised a wall it would fail rather than rot — and
+    adding the gold row is that day. `WALL_GOLD` now fires on 4 cells; the three
+    catalogue-currency walls still have no witness and stay pinned by their
+    positive controls."""
+    walls = [r for r in results if r.gap.startswith("wall_")]
+    assert {r.gap for r in walls} == {CurrencyGap.WALL_GOLD.value}
+    assert {r.currency for r in walls} == {GOLD_ROW}
+    assert len(walls) == 4
+    assert "walled 4" in summary_line(results)
 
 
 # --- the detector is production's own answer --------------------------------
@@ -439,7 +453,7 @@ def test_an_unrooted_scenario_still_emits_its_cells(
     unrooted = [r for r in results
                 if r.gap == CurrencyGap.ROOT_UNRESOLVED.value]
     assert unrooted, "the committed set contains scenarios with no root"
-    assert len(unrooted) % 6 == 0
+    assert len(unrooted) % 7 == 0
     assert all(r.evidence is None and not r.charged for r in unrooted)
     assert all(r.passed for r in unrooted)
 
@@ -461,7 +475,7 @@ def test_the_demand_breakdown_states_the_residual_scope(
     """The claim that stops "0 residuals over 264 cells" being read as a sweep:
     only CHARGED cells can ever be a residual, and there is one."""
     line = demand_breakdown(results)
-    assert "1 of 264 cells are CHARGED" in line
+    assert "5 of 308 cells are CHARGED" in line
     assert FUNDED_CURRENCY in line
     assert demand_breakdown([]) .endswith(
         "An uncharged currency can only be not_demanded.")
@@ -495,3 +509,81 @@ def test_a_catalogue_empty_row_renders_without_evidence() -> None:
         gap=CurrencyGap.CURRENCY_CATALOGUE_EMPTY.value)]
     assert "| s | - | **currency_catalogue_empty** | - | - | - |" in \
         render_matrix(empty)
+
+
+# --- the GOLD row: §2.5's "blocked on money with no node saying so" ----------
+
+GOLD_WALLED_CELL = "l20_dual_utility"
+
+
+def test_the_gold_wall_names_what_no_other_row_can_see(
+        results: list[CurrencyResult]) -> None:
+    """§2.5's complaint, discharged: *"the bot can be blocked on 20,000 gold
+    with no node saying so"*.
+
+    §7 proposed `WALL_GOLD` and §11 recorded that it named NOTHING — correctly
+    then, because gold is not a currency ITEM: it is absent from `items.stats`
+    (so `catalogue_currencies` never returns it) and absent from
+    `state.inventory` (so the item-currency differential cannot reveal it). A
+    root blocked purely on money therefore read `not_demanded` in all six rows.
+
+    Four cells are gold-walled on the committed bundle, all of them
+    `lifesteal_rune` for `rune_slot` against 100-300 held gold, priced
+    1_000_001 and dropping to single digits once money is granted."""
+    gold = [r for r in results if r.currency == GOLD_ROW and r.charged]
+    assert len(gold) == 4
+    assert {r.gap for r in gold} == {CurrencyGap.WALL_GOLD.value}
+    assert GOLD_WALLED_CELL in {r.scenario for r in gold}
+    for row in gold:
+        assert "lifesteal_rune" in row.root
+        assert row.base_price >= UNOBTAINABLE_PER_UNIT > row.granted_price
+
+
+def test_a_rich_character_is_not_gold_walled() -> None:
+    """Proof it bites. The SAME scenario with money in pocket prices its root
+    normally, so `WALL_GOLD` tracks the character's purse and not the
+    catalogue — the distinction the whole row exists to draw."""
+    scenario = SCENARIOS[GOLD_WALLED_CELL]
+    game_data = declared_world(scenario, BUNDLE, {})
+    state = scenario_state(scenario, game_data)
+    root = resolve_root(state, game_data,
+                        CharacterObjective.from_game_data(game_data),
+                        NO_PROFILE_CONTEXT, None).root
+    assert root is not None
+    assert gold_charge(root, state, game_data) is not None, "premise: walled"
+
+    rich = dataclasses.replace(state, gold=1_000_000)
+    assert gold_charge(root, rich, game_data) is None
+
+
+def test_an_obtainable_root_is_never_gold_walled() -> None:
+    """The guard against the row firing everywhere: a root already priceable
+    needs no money, so granting gold cannot be what unblocks it."""
+    cache: dict[tuple[bool, tuple[str, ...]], GameData] = {}
+    checked = 0
+    for scenario in SCENARIOS.values():
+        game_data = declared_world(scenario, BUNDLE, cache)
+        state = scenario_state(scenario, game_data)
+        root = resolve_root(state, game_data,
+                            CharacterObjective.from_game_data(game_data),
+                            NO_PROFILE_CONTEXT, None).root
+        if root is None or route_price(root, state, game_data,
+                                       NO_PROFILE_CONTEXT,
+                                       None) >= UNOBTAINABLE_PER_UNIT:
+            continue
+        checked += 1
+        assert gold_charge(root, state, game_data) is None
+    assert checked > 1, "the claim needs obtainable roots to be about"
+
+
+def test_a_root_walled_on_something_other_than_money_is_not_gold_walled(
+        results: list[CurrencyResult]) -> None:
+    """The other half: most walled roots are blocked on a SKILL or an
+    unreachable material, and money does not move them. If `gold_charge` fired
+    on those the row would be noise rather than a name."""
+    unobtainable_but_not_gold = [
+        r for r in results
+        if r.currency == GOLD_ROW and not r.charged
+        and r.gap == CurrencyGap.NOT_DEMANDED.value]
+    assert len(unobtainable_but_not_gold) > 20, (
+        "most roots must NOT be gold-walled, or the row says nothing")
