@@ -71,7 +71,13 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.actions import level_skill
 from artifactsmmo_cli.ai.combat_deficit import deficit_upgrade_target
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
-from artifactsmmo_cli.ai.decisions.route import route_price
+
+# MODULE import, same idiom as `level_skill` above and for the same reason:
+# `route` imports `tiers.meta_goal`, which runs `tiers/__init__` ->
+# `strategy` -> `progression_tree` -> THIS module, so whichever of the two
+# is reached first executes while the other is half built. A NAME import
+# of `route_price` raises ImportError when `decisions.route` is the entry.
+from artifactsmmo_cli.ai.decisions import route as _route
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -482,8 +488,8 @@ class WhichSlotClosesTheFight(Decision[MetaGoal]):
             # and it is `decisions/route.py`. `equip` is derived there from
             # `goal.slot` — the old hand-written `equip=True` asserted a second
             # time a fact the slot already carried.
-            return route_price(ObtainItem(code, 1, slot=slot), state,
-                               game_data, ctx, history)
+            return _route.route_price(ObtainItem(code, 1, slot=slot), state,
+                                      game_data, ctx, history)
 
         target = deficit_upgrade_target(state, game_data, actions_of=actions_of)
         if target is None:

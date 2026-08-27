@@ -4043,11 +4043,23 @@ ROUTE_PRICE_MUTATIONS = [
     ("route: an unslotted ObtainItem is charged for an equip it never does",
      "                                   ctx, equip=goal.slot is not None,",
      "                                   ctx, equip=True,"),
-    # The unpriced variants must FAIL, not default. A silent number here is a
-    # wall: priced 0 a level root outranks every gear root.
-    ("route: an unpriced MetaGoal variant silently returns 0",
-     "    raise NotImplementedError(",
-     "    return 0\n    raise NotImplementedError("),
+    # WAVE 6: the two climbs are priced now, and both must WALL rather than read
+    # free when they cannot be priced. A zero-cost climb outranks every gear root.
+    ("route: an unpriceable skill climb reads FREE instead of walled",
+     "            return UNOBTAINABLE_PER_UNIT\n        return skill_grind_cycles(",
+     "            return 0\n        return skill_grind_cycles("),
+    ("route: a BLOCKED level path reads free instead of walled",
+     "        if plan.blocked:\n            return UNOBTAINABLE_PER_UNIT",
+     "        if plan.blocked:\n            return 0"),
+    # The fleet fallback must be reached only in the ABSENCE of own evidence:
+    # `rate or fleet` would let a stuck character borrow a healthy one's rate.
+    ("route: the skill rate falls back on a FALSY own rate, not a missing one",
+     "        if rate is None:\n            rate = history.fleet_skill_grind_rate(goal.skill)",
+     "        if not rate:\n            rate = history.fleet_skill_grind_rate(goal.skill)"),
+    # `route_exists` must not be re-derived from the price.
+    ("route: route_exists inverted",
+     "    return bool(obtain_sources(code, state, game_data, ctx))",
+     "    return not obtain_sources(code, state, game_data, ctx)"),
 ]
 
 ROOT_FIGHT_ARM_MUTATIONS = [
