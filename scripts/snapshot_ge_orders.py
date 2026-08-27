@@ -37,6 +37,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from artifactsmmo_api_client.models.ge_order_type import GEOrderType
+
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config

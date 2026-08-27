@@ -48,11 +48,12 @@ so with the flag off EVERY monster-drop leaf in the catalogue is unreachable
 and the census would report walls that are properties of the fixture. Measured
 on the committed bundle: 77 closed cells with the flag off everywhere, 20 with
 the scenarios AS COMMITTED (34 of the 44 opt the flag on), and 6 with it forced
-on. The all-off figure moved 74 -> 77 when wave 6 added `l32_items_task`; the
-other two did NOT move, which is the point of keeping all three — the flag-off
-count is the vacuity diagnostic (a zero-stat character reports walls that belong
-to the harness, not the bot), while `as_committed` and the forced-on figure are
-the measure, and a new cell that changed THOSE would be a real finding. The flag is therefore forced on for every cell — the census derives the
+on. The all-off figure moved 74 -> 77 when wave 6 added `l32_items_task`;
+the other two did NOT move, which is the point of keeping all three. The
+flag-off count is the vacuity diagnostic — a zero-stat character reports
+walls that belong to the harness, not the bot — while `as_committed` and
+the forced-on figure are the measure. A new cell that changed THOSE would
+be a real finding rather than a regeneration. The flag is therefore forced on for every cell — the census derives the
 combat totals a live character wearing that scenario's declared loadout would
 report. The committed scenarios are NOT modified; `census_state` builds its own
 copy. `test_the_zero_stat_harness_would_measure_the_fixture` pins the 74/20/6
