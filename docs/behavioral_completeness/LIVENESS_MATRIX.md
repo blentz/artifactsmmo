@@ -9,24 +9,18 @@ observed live or carry a reason in
 `docs/PLAN_priority_ladder_unification.md` for why the `unreachable:`
 rows are a defect being tracked rather than a design.
 
-70 classes; LIVE 41; declared-dormant 31 (of which unreachable 7, unclassified 0); undeclared 0; stale 0; liveness alarms 2
+70 classes; LIVE 48; declared-dormant 24 (of which unreachable 6, unclassified 0); undeclared 0; stale 0; liveness alarms 0
 
 | class | kind | observed | status | reason |
 |---|---|---|---|---|
-| `WaitAction` | action | 98 | **LIVENESS ALARM** | witness: the action WaitGoal emits; same proof obligation |
-| `WaitGoal` | goal | 98 | **LIVENESS ALARM** | witness: MeansKind.WAIT is the unconditional last resort that proves the ladder total (Liveness.NoDeadlockV2) |
 | `BuyBankExpansionAction` | action | 0 | dormant | unreachable: emitted only by ExpandBankGoal |
 | `ExpandBankGoal` | goal | 0 | dormant | unreachable: MeansKind.BANK_EXPAND is in the discretionary band |
 | `GePostBuyOrderAction` | action | 0 | dormant | unreachable: emitted only by PostBuyBidGoal |
-| `ParticipateRaidGoal` | goal | 0 | dormant | unreachable: appended at BAND_DISCRETIONARY, below the objective step, so a raid window closes unused |
+| `ParticipateRaidGoal` | goal | 0 | dormant | unreachable: expected_damage_per_fight prices a SOLO raid-boss kill (pixie: 1,844,857 vs 1,570 hp), so raid_survivable_pure refuses every real loadout |
 | `PostBuyBidGoal` | goal | 0 | dormant | unreachable: MeansKind.GE_BID is in the discretionary band |
 | `ReachCurrencyGoal` | goal | 0 | dormant | unreachable: routed only from a currency-blocked leaf, and it mints only tasks_coin, which requires tasks |
-| `ReachSkillGoal` | goal | 0 | dormant | unreachable: constructed only under MeansKind.PURSUE_TASK, which requires a held task |
-| `CompleteTaskAction` | action | 0 | dormant | conditional: emitted only by CompleteTaskGoal |
-| `CompleteTaskGoal` | goal | 0 | dormant | conditional: requires a task worked to completion |
 | `CurrencyTurnInGoal` | goal | 0 | dormant | conditional: the only sink whose item a loadout can wear (lich_race_trophy) needs 10 medals and the fleet holds 4; every READY sink buys a resource, which _resolve_turn_in rule 3 can never accept |
 | `DepositGoldAction` | action | 0 | dormant | conditional: gold is banked by DepositAll, not as a separate step |
-| `GeFillSellOrderAction` | action | 0 | dormant | subsumed: the fleet posts sell orders and fills buys |
 | `LowYieldCancelGoal` | goal | 0 | dormant | conditional: requires a held task and enough samples to judge it |
 | `MapTransitionAction` | action | 0 | dormant | conditional: needs a layer transition (raid/underground areas) |
 | `MoveAction` | action | 0 | dormant | subsumed: travel is folded into each action's own venue hop |
@@ -34,8 +28,6 @@ rows are a defect being tracked rather than a design.
 | `PursueTaskGoal` | goal | 0 | dormant | conditional: requires a held items-task the projection says to pursue |
 | `ReachUnlockLevelGoal` | goal | 0 | dormant | conditional: fires only below the bank-unlock level |
 | `SurrenderCurrencyGoal` | goal | 0 | dormant | conditional: the holder side of the same election, so it waits on the same turn-in being resolved |
-| `TaskCancelAction` | action | 0 | dormant | conditional: emitted only by TaskCancelGoal |
-| `TaskCancelGoal` | goal | 0 | dormant | conditional: requires a held task AND a pocket tasks_coin to spend on the cancel (S-052 works one it cannot discard) |
 | `TaskExchangeAction` | action | 0 | dormant | conditional: emitted only by TaskExchangeGoal |
 | `TaskExchangeGoal` | goal | 0 | dormant | conditional: requires tasks_coin, earned only by completing tasks |
 | `TaskTradeAction` | action | 0 | dormant | conditional: items-task delivery, requires a held items-task |
@@ -43,43 +35,51 @@ rows are a defect being tracked rather than a design.
 | `UnequipAction` | action | 0 | dormant | subsumed: OptimizeLoadoutAction performs swaps atomically |
 | `UnlockBankGoal` | goal | 0 | dormant | conditional: the bank is already unlocked for every live character |
 | `UseGoldBagAction` | action | 0 | dormant | conditional: no gold bag has dropped |
-| `WithdrawGoldAction` | action | 0 | dormant | conditional: no goal has needed banked gold yet |
-| `AcceptTaskAction` | action | 5 | live |  |
-| `AcceptTaskGoal` | goal | 5 | live |  |
-| `CancelOrdersGoal` | goal | 123 | live |  |
-| `ClaimPendingGoal` | goal | 2 | live |  |
-| `ClaimPendingItemAction` | action | 2 | live |  |
-| `CraftAction` | action | 1093 | live |  |
-| `CraftPotionsGoal` | goal | 1328 | live |  |
-| `CraftReliefGoal` | goal | 556 | live |  |
-| `DeleteItemAction` | action | 746 | live |  |
-| `DepositAllAction` | action | 433 | live |  |
-| `DepositInventoryGoal` | goal | 116 | live |  |
-| `DepositItemAction` | action | 46 | live |  |
-| `DiscardOverstockGoal` | goal | 998 | live |  |
-| `DrainBankJunkGoal` | goal | 114 | live |  |
-| `EquipAction` | action | 627 | live |  |
-| `EquipOwnedGoal` | goal | 70 | live |  |
-| `FightAction` | action | 17879 | live |  |
-| `GatherAction` | action | 6138 | live |  |
-| `GatherMaterialsGoal` | goal | 8037 | live |  |
-| `GeCancelOrderAction` | action | 123 | live |  |
-| `GeFillBuyOrderAction` | action | 120 | live |  |
-| `GePostSellOrderAction` | action | 83 | live |  |
-| `GrindCharacterXPGoal` | goal | 16745 | live |  |
-| `LevelSkill` | action | 22738 | live |  |
+| `WaitAction` | action | 98 | dormant | witness: the action WaitGoal emits; same proof obligation |
+| `WaitGoal` | goal | 98 | dormant | witness: MeansKind.WAIT is the unconditional last resort that proves the ladder total (Liveness.NoDeadlockV2) |
+| `AcceptTaskAction` | action | 7 | live |  |
+| `AcceptTaskGoal` | goal | 7 | live |  |
+| `CancelOrdersGoal` | goal | 135 | live |  |
+| `ClaimPendingGoal` | goal | 5 | live |  |
+| `ClaimPendingItemAction` | action | 5 | live |  |
+| `CompleteTaskAction` | action | 1 | live |  |
+| `CompleteTaskGoal` | goal | 1 | live |  |
+| `CraftAction` | action | 1795 | live |  |
+| `CraftPotionsGoal` | goal | 3286 | live |  |
+| `CraftReliefGoal` | goal | 908 | live |  |
+| `DeleteItemAction` | action | 924 | live |  |
+| `DepositAllAction` | action | 603 | live |  |
+| `DepositInventoryGoal` | goal | 233 | live |  |
+| `DepositItemAction` | action | 51 | live |  |
+| `DiscardOverstockGoal` | goal | 1199 | live |  |
+| `DrainBankJunkGoal` | goal | 141 | live |  |
+| `EquipAction` | action | 1442 | live |  |
+| `EquipOwnedGoal` | goal | 333 | live |  |
+| `FightAction` | action | 21764 | live |  |
+| `GatherAction` | action | 8004 | live |  |
+| `GatherMaterialsGoal` | goal | 11321 | live |  |
+| `GeCancelOrderAction` | action | 135 | live |  |
+| `GeFillBuyOrderAction` | action | 127 | live |  |
+| `GeFillSellOrderAction` | action | 317 | live |  |
+| `GePostSellOrderAction` | action | 93 | live |  |
+| `GrindCharacterXPGoal` | goal | 20635 | live |  |
+| `LevelSkill` | action | 36597 | live |  |
 | `MaintainConsumablesGoal` | goal | 3 | live |  |
-| `NpcBuyAction` | action | 32 | live |  |
-| `NpcSellAction` | action | 6 | live |  |
-| `OptimizeLoadoutAction` | action | 107 | live |  |
+| `NpcBuyAction` | action | 55 | live |  |
+| `NpcSellAction` | action | 21 | live |  |
+| `OptimizeLoadoutAction` | action | 189 | live |  |
 | `ProvisionMarginalFightGoal` | goal | 1 | live |  |
-| `RecycleAction` | action | 227 | live |  |
-| `RecycleSurplusGoal` | goal | 47 | live |  |
-| `RestAction` | action | 14211 | live |  |
-| `RestoreHPGoal` | goal | 15130 | live |  |
-| `SellInventoryGoal` | goal | 14 | live |  |
-| `SupplyBankGoal` | goal | 3553 | live |  |
-| `UpgradeEquipmentGoal` | goal | 20272 | live |  |
-| `UseConsumableAction` | action | 1752 | live |  |
-| `WithdrawItemAction` | action | 792 | live |  |
+| `ReachSkillGoal` | goal | 10991 | live |  |
+| `RecycleAction` | action | 351 | live |  |
+| `RecycleSurplusGoal` | goal | 170 | live |  |
+| `RestAction` | action | 18782 | live |  |
+| `RestoreHPGoal` | goal | 21724 | live |  |
+| `SellInventoryGoal` | goal | 52 | live |  |
+| `SupplyBankGoal` | goal | 3774 | live |  |
+| `TaskCancelAction` | action | 1 | live |  |
+| `TaskCancelGoal` | goal | 1 | live |  |
+| `UpgradeEquipmentGoal` | goal | 20852 | live |  |
+| `UseConsumableAction` | action | 3604 | live |  |
+| `WithdrawGoldAction` | action | 2 | live |  |
+| `WithdrawItemAction` | action | 948 | live |  |
 | `WithdrawToolsGoal` | goal | 46 | live |  |

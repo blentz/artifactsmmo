@@ -124,12 +124,16 @@ DORMANT: dict[str, str] = {
     # because no task could ever be held, and that premise is gone. They are
     # CONDITIONAL now — waiting on a draw the fleet has not yet made in anger,
     # not on a structure that forbids one.
+    # CompleteTask{Goal,Action} and TaskCancel{Goal,Action} LEFT THIS TABLE on
+    # 2026-08-27, for the same reason and by the same rule as the accept pair
+    # above: the store shows each of them running. The task lifecycle now closes
+    # end to end — a task is accepted, worked, and either completed or cancelled
+    # — so "requires a task worked to completion" is no longer a reason nobody
+    # has met. It is a thing the fleet has done.
+    #
+    # `PursueTaskGoal` and `LowYieldCancelGoal` STAY: still 0 cycles, and their
+    # premises are still unmet rather than merely unobserved.
     "PursueTaskGoal": "conditional: requires a held items-task the projection says to pursue",
-    "CompleteTaskGoal": "conditional: requires a task worked to completion",
-    "CompleteTaskAction": "conditional: emitted only by CompleteTaskGoal",
-    "TaskCancelGoal": "conditional: requires a held task AND a pocket tasks_coin "
-                      "to spend on the cancel (S-052 works one it cannot discard)",
-    "TaskCancelAction": "conditional: emitted only by TaskCancelGoal",
     "LowYieldCancelGoal": "conditional: requires a held task and enough samples to judge it",
     "TaskExchangeGoal": "conditional: requires tasks_coin, earned only by "
                         "completing tasks",
