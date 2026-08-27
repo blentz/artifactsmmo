@@ -28,6 +28,7 @@ in their place, pinning what the walk actually does now. Read that test's
 docstring before treating this file as green."""
 
 from dataclasses import replace
+from itertools import pairwise
 from pathlib import Path
 
 from artifactsmmo_cli.ai.combat import is_winnable
@@ -149,23 +150,24 @@ def test_stuck_drop_root_does_not_starve_the_craftable_second_ring() -> None:
     mechanism 5, in the pin written to prevent exactly this class of miss."""
     state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
     engine = StrategyEngine(objective)
-    focus: dict[tuple[str, str], int] = {}
-    seats: dict[str, int] = {}
+    # THE PRODUCTION BUMP, CALLED — not replicated. This loop used to hand-roll
+    # `_charge_focus`'s body, which meant it kept driving the OLD one-seat-per-
+    # cycle cadence after production moved to one seat per `INTERLEAVE_RUN`
+    # (2026-08-27). It would have gone on passing while verifying a schedule
+    # production no longer runs, which is the two-producers trap applied to a
+    # liveness guarantee.
+    player = GamePlayer(character="ring2_repro")
     chosen_ring2 = False
     for _ in range(FOCUS_FLAT + FOCUS_SPAN + 20):
-        ctx = replace(NO_PROFILE_CONTEXT, gear_focus=focus, interleave_seats=seats)
+        ctx = replace(NO_PROFILE_CONTEXT, gear_focus=player._gear_focus,
+                      interleave_seats=player._interleave_seats)
         d = engine.decide(state, gd, ctx=ctx)
         if "ring2_slot" in repr(d.chosen_root):
             chosen_ring2 = True
-        # EXACTLY `GamePlayer._charge_focus`, through the production key.
-        key = GamePlayer._gear_root_key(d.chosen_root)
-        assert key is not None, (
+        assert GamePlayer._gear_root_key(d.chosen_root) is not None, (
             "the committed root must carry a ledger key, or nothing ages: "
             f"{d.chosen_root!r}")
-        focus[key] = focus.get(key, 0) + 1
-        if d.aged_pick:
-            seat = GamePlayer._focus_key_str(key)
-            seats[seat] = seats.get(seat, 0) + 1
+        player._bump_focus(d)
     assert chosen_ring2, "ring2 iron_ring was never chosen — still starved"
 
 
@@ -193,20 +195,18 @@ def test_a_skill_gated_head_carries_a_ledger_key_and_rotates() -> None:
     assert GamePlayer._gear_root_key(first.chosen_root) is not None, (
         "a skill-gated head must key, or it can never age")
 
-    focus: dict[tuple[str, str], int] = {}
-    seats: dict[str, int] = {}
+    # Production's own bump, for the reason given in the test above.
+    player = GamePlayer(character="skill_head_repro")
     seen: set[str] = set()
     for _ in range(FOCUS_FLAT + FOCUS_SPAN + 20):
-        ctx = replace(NO_PROFILE_CONTEXT, gear_focus=focus, interleave_seats=seats)
+        ctx = replace(NO_PROFILE_CONTEXT, gear_focus=player._gear_focus,
+                      interleave_seats=player._interleave_seats)
         d = engine.decide(state, gd, ctx=ctx)
         seen.add(repr(d.chosen_root))
-        key = GamePlayer._gear_root_key(d.chosen_root)
-        assert key is not None, (
+        assert GamePlayer._gear_root_key(d.chosen_root) is not None, (
             f"the committed root must carry a ledger key: {d.chosen_root!r}")
-        focus[key] = focus.get(key, 0) + 1
-        if d.aged_pick:
-            seat = GamePlayer._focus_key_str(key)
-            seats[seat] = seats.get(seat, 0) + 1
+        player._bump_focus(d)
+    focus = player._gear_focus
     assert focus, "the ledger never filled — nothing was charged"
     assert len(seen) > 1, (
         f"the skill-climb head never rotated over a full falloff window: {seen}")
@@ -224,3 +224,48 @@ def test_absent_aging_the_stuck_drop_root_would_starve() -> None:
     assert picks == {"ObtainItem(code='wolf_ears', quantity=1, slot='helmet_slot')"}
     assert ObtainItem(code="iron_ring", quantity=1, slot="ring2_slot") in \
         engine.decide(state, gd).fallback_roots
+
+
+def test_the_interleave_hands_out_RUNS_not_alternating_single_cycles() -> None:
+    """THE THRASH THIS SCHEDULE USED TO PRODUCE, pinned at the real engine.
+
+    `dhondt_step` is a pure argmax of `w/(seats+1)`. While a seat was charged on
+    every aged cycle the winner's quotient fell every cycle, so the argmax
+    alternated — proportional apportionment at one-cycle granularity, which is
+    MAXIMAL interleaving. Measured live on the fleet run ending 2026-08-27:
+    `aged_pick` true in 99% of cycles, 100% of root flips riding it, and Lor
+    changing root in 97% of 1,998 cycles while walking 4,680 tiles across 18
+    DISTINCT ones — roughly half a rate-limited run spent pacing between the
+    same few nodes rather than working at one.
+
+    Charging once per `INTERLEAVE_RUN` cycles instead lets the winner HOLD:
+    between bumps the apportionment's inputs do not move.
+
+    Driven PAST the decay band (seeded focus), because inside the band
+    `falloff` moves the weights every cycle by design and runs stay short there
+    — see `INTERLEAVE_RUN`'s RESIDUAL note. The live fleet sat at focus
+    393-1157, far past it."""
+    state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
+    engine = StrategyEngine(objective)
+    player = GamePlayer(character="run_locality")
+
+    # Past the ramp for every candidate, so `falloff` is flat at FOCUS_FLOOR and
+    # the only thing that can move the argmax is a SEAT.
+    settled = FOCUS_FLAT + FOCUS_SPAN + 1
+    for slot, code in (("helmet_slot", "wolf_ears"), ("ring2_slot", "iron_ring")):
+        player._gear_focus[(slot, code)] = settled
+
+    picks: list[str] = []
+    for _ in range(60):
+        ctx = replace(NO_PROFILE_CONTEXT, gear_focus=player._gear_focus,
+                      interleave_seats=player._interleave_seats)
+        decision = engine.decide(state, gd, ctx=ctx)
+        picks.append(repr(decision.chosen_root))
+        player._bump_focus(decision)
+
+    flips = sum(1 for a, b in pairwise(picks) if a != b)
+    assert len(set(picks)) > 1, (
+        "both roots must still get turns — this is the anti-starvation property")
+    assert flips * 4 < len(picks), (
+        f"the interleave is still thrashing: {flips} flips over {len(picks)} "
+        f"cycles. A seat must be charged once per run, not once per cycle.")

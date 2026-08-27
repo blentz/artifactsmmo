@@ -70,6 +70,43 @@ FOCUS_SPAN = 100
 """Iterations over which a focused root's weight decays from 1 to FOCUS_FLOOR.
 Decay runs on focus levels (FOCUS_FLAT, FOCUS_FLAT + FOCUS_SPAN]."""
 
+INTERLEAVE_RUN = FOCUS_FLAT
+"""Cycles a key HOLDS the interleave before it is charged a d'Hondt seat.
+
+THE INTERLEAVE ALLOCATES IN RUNS, NOT IN SINGLE CYCLES, and this constant is
+the whole of that. `dhondt_step` is a pure argmax of `w/(seats+1)`: between seat
+bumps its inputs do not move, so the same key keeps winning. Charging a seat on
+every aged cycle therefore drops the winner's quotient every cycle and makes the
+argmax alternate — proportional apportionment at one-cycle granularity, which is
+MAXIMAL interleaving and exactly the wrong granularity for work that costs
+travel to start.
+
+Measured on the fleet run ending 2026-08-27: `aged_pick` was true in 99% of
+cycles and 100% of root flips rode it. Lor changed root in 97% of 1,998 cycles
+and walked 4,680 tiles across 18 DISTINCT ones — pacing between the same few
+nodes for roughly half of a rate-limited run. Simulated over the same
+apportionment past the decay band, charging once per run takes flips from 100%
+to 9% with a median run of 10 cycles, and the seat RATIOS are unchanged (5:5:3
+against 49:49:32).
+
+It is `FOCUS_FLAT` deliberately, not a new number: that is already "the farm
+window", the span a FRESH root is allowed before aging starts, so a root that
+has aged gets turns of the same size it originally got for free.
+
+WHAT THIS DOES NOT CHANGE: proportionality (each key still earns one seat per
+`INTERLEAVE_RUN` cycles of its OWN work) and therefore not the anti-starvation
+bound either — `Formal.ProgressionTree.interleaveDue_reaches` is stated over
+SEAT ALLOCATIONS, so the bound in seats is untouched and the bound in cycles
+scales by this constant. `test_ring2_starvation_repro.py` drives the real engine
+and still elects every candidate.
+
+RESIDUAL, stated so it is not mistaken for a full fix: inside the decay band
+(`FOCUS_FLAT < focus <= FOCUS_FLAT + FOCUS_SPAN`) the winner's weight moves every
+cycle as `falloff` decays it, so runs stay short there — simulated 78% flips.
+That band is the deliberate hand-off ramp, each key crosses it once, and the
+live fleet sat far past it (focus 393-1157). Fixing the band too would need real
+hold state rather than a cadence."""
+
 FOCUS_FLOOR = Fraction(1, 9)
 """Minimum weight multiplier (> 0): a stuck drop root is NEVER fully abandoned,
 so if its drop finally lands it resumes. Tuning surface — calibrated live

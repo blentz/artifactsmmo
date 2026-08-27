@@ -3942,6 +3942,18 @@ FOCUS_CHARGE_MUTATIONS = [
      "        self._charge_focus(self._gear_root_key(decision.chosen_root),\n"
      "                           decision.aged_pick)",
      "        self._charge_focus(None, decision.aged_pick)"),
+    # THE INTERLEAVE CADENCE (2026-08-27). Reverting to a seat on every aged
+    # cycle drops the winner's d'Hondt quotient every cycle, so the argmax
+    # alternates and no root is held long enough to do the work it travelled
+    # for: measured live at 100% of root flips riding `aged_pick`, Lor changing
+    # root in 97% of 1,998 cycles across 4,680 tiles of pacing. Killed by
+    # test_a_seat_is_charged_once_per_run_not_once_per_cycle
+    # (tests/test_ai/test_player_focus_ledger.py) and, at the real engine, by
+    # test_the_interleave_hands_out_RUNS_not_alternating_single_cycles.
+    ("focus ledger: a d'Hondt seat is charged EVERY aged cycle again"
+     " (interleave thrashes, one-cycle runs)",
+     "        if aged_pick and self._gear_focus[key] % INTERLEAVE_RUN == 0:",
+     "        if aged_pick:"),
 ]
 
 # _equippable_goal passive-currency gate (obtain_item_routing.py, moved from

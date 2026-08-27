@@ -12,7 +12,7 @@ from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.tiers import ObtainItem, StrategyDecision
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
-from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT
+from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT, INTERLEAVE_RUN
 from tests.test_ai.fixtures import make_state
 
 
@@ -107,9 +107,13 @@ def test_a_displaced_pick_consumes_a_seat_when_interleaved():
     p = _bare_player()
     p._gear_focus = {}
     p._interleave_seats = {}
-    p._bump_focus(_decision_with_root(
-        _obtain_item("life_ring", "ring1_slot"), aged_pick=True,
-        promoted_from=_obtain_item("lich_race_trophy", "artifact3_slot")))
+    # Driven a full RUN, because a seat is charged once per `INTERLEAVE_RUN`
+    # cycles rather than on every aged cycle — the claim under test is that the
+    # DISPLACED root is charged too, not how often either is.
+    for _ in range(INTERLEAVE_RUN):
+        p._bump_focus(_decision_with_root(
+            _obtain_item("life_ring", "ring1_slot"), aged_pick=True,
+            promoted_from=_obtain_item("lich_race_trophy", "artifact3_slot")))
     # KEYED BY THE FULL LEDGER KEY (fix-round 2), not by the slot alone: two
     # roots can share a sentinel slot (`<skill>` for two different skills), and
     # a slot-only seat key would collapse them into one apportionment entry.
@@ -142,16 +146,53 @@ def test_seat_bump_gated_on_aged_pick_false_does_not_touch_seats():
     assert p._interleave_seats == {}  # but no seat consumed on a fast-path cycle
 
 
-def test_seat_bump_advances_on_aged_pick():
-    """Task 12: when the decision's gear pick came from the interleave
-    (`aged_pick` True), `_bump_focus` advances one d'Hondt seat for the
-    committed SLOT in lockstep with the focus bump."""
+def test_a_seat_is_charged_once_per_run_not_once_per_cycle():
+    """THE INTERLEAVE ALLOCATES IN RUNS. A seat is charged every
+    `INTERLEAVE_RUN` charged cycles on a key, not on every aged cycle.
+
+    Why the cadence is the whole mechanism: `dhondt_step` is a pure argmax of
+    `w/(seats+1)`, so between seat bumps its inputs do not move and the SAME key
+    keeps winning. Charging every cycle drops the winner's quotient every cycle,
+    which makes the argmax alternate — proportional apportionment at one-cycle
+    granularity, which is maximal interleaving.
+
+    Live cost (fleet run to 2026-08-27): `aged_pick` true in 99% of cycles and
+    100% of root flips rode it; Lor changed root in 97% of 1,998 cycles and
+    walked 4,680 tiles across 18 distinct ones. Roughly half the fleet's
+    rate-limited cycles went to pacing between the same few nodes.
+
+    Proportionality is untouched — each key still earns one seat per
+    INTERLEAVE_RUN cycles of ITS OWN work, so the seat RATIOS are identical and
+    the anti-starvation bound (`Formal.ProgressionTree.interleaveDue_reaches`,
+    stated over seat allocations) is unchanged. Only locality changes."""
     p = _bare_player()
     p._gear_focus = {}
     p._interleave_seats = {}
-    p._bump_focus(_decision_with_root(_obtain_item("iron_ring", "ring2_slot"),
-                                      aged_pick=True))
+    root = _obtain_item("iron_ring", "ring2_slot")
+
+    for cycle in range(1, INTERLEAVE_RUN):
+        p._bump_focus(_decision_with_root(root, aged_pick=True))
+        assert p._interleave_seats == {}, (
+            f"cycle {cycle}: the key must HOLD the interleave, not be charged")
+
+    p._bump_focus(_decision_with_root(root, aged_pick=True))
     assert p._interleave_seats == {"ring2_slot|iron_ring": 1}  # the full key
+    assert p._gear_focus[("ring2_slot", "iron_ring")] == INTERLEAVE_RUN
+
+
+def test_the_run_repeats_so_seats_stay_proportional():
+    """A second run charges a second seat: the schedule is still proportional,
+    it is just quantised to runs. Without this a key could hold forever after
+    its first seat, which is starvation reintroduced by the fix."""
+    p = _bare_player()
+    p._gear_focus = {}
+    p._interleave_seats = {}
+    root = _obtain_item("iron_ring", "ring2_slot")
+
+    for _ in range(INTERLEAVE_RUN * 3):
+        p._bump_focus(_decision_with_root(root, aged_pick=True))
+
+    assert p._interleave_seats == {"ring2_slot|iron_ring": 3}
 
 
 def test_bump_focus_non_gear_root_is_noop():

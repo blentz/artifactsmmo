@@ -140,6 +140,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     focus_key_str,
 )
 from artifactsmmo_cli.ai.tiers.progression_tree import has_structural_upgrade
+from artifactsmmo_cli.ai.tiers.progression_tree_core import INTERLEAVE_RUN
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -609,7 +610,21 @@ class GamePlayer:
         # and for `jewelrycrafting` — and a slot-only seat key would collapse
         # them into one apportionment entry. `_aged_head` apportions over the
         # same string, so this IS the key `dhondt_step` returns.
-        if aged_pick:
+        #
+        # ONCE PER RUN, NOT ONCE PER CYCLE. `dhondt_step` is a pure argmax of
+        # `w/(seats+1)`, so between seat bumps its inputs do not move and this
+        # key keeps winning — charging every aged cycle dropped the winner's
+        # quotient every cycle and made the argmax alternate. That is
+        # proportional apportionment at one-cycle granularity, and it cost the
+        # fleet roughly half its cycles in travel: 100% of root flips rode
+        # `aged_pick`, and Lor changed root in 97% of 1,998 cycles while walking
+        # 4,680 tiles across 18 distinct ones (measured 2026-08-27).
+        #
+        # The RATIOS are untouched — one seat per `INTERLEAVE_RUN` cycles of
+        # this key's own work — so the schedule stays proportional and
+        # `interleaveDue_reaches` (stated over seat allocations) still bounds
+        # starvation. See `INTERLEAVE_RUN` for the measurement and the residual.
+        if aged_pick and self._gear_focus[key] % INTERLEAVE_RUN == 0:
             seat = self._focus_key_str(key)
             self._interleave_seats[seat] = self._interleave_seats.get(seat, 0) + 1
 
