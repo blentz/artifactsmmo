@@ -16,17 +16,17 @@ from dataclasses import fields
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
-    INTERLEAVE_RUN,
-    run_falloff,
     FOCUS_FLAT,
     FOCUS_FLOOR,
     FOCUS_SPAN,
+    INTERLEAVE_RUN,
     POTION_TYPE_WEIGHTS,
     GearCandidate,
     dhondt_step,
     falloff,
     milestone_pure,
     potion_type_weight,
+    run_falloff,
 )
 
 
