@@ -12,6 +12,8 @@ projects zero need and plans nothing.
 """
 
 import dataclasses
+import json
+from pathlib import Path
 
 from sqlmodel import Session as SqlSession
 
@@ -21,13 +23,19 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.craft_ladder import _ge_fill_for, craft_utility_ladder
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
+
+_BUNDLE_PATH = (Path(__file__).parent / "scenarios" / "fixtures"
+                / "gamedata_bundle.json")
 
 _POTION = "small_health_potion"
 _INGREDIENT = "sunflower"
@@ -629,3 +637,116 @@ def test_is_satisfied_without_game_data_reads_satisfied():
     assert goal.is_satisfied(make_state(level=3, utility1_slot_quantity=99)) is True
     assert goal.is_satisfied(
         make_state(level=3, utility1_slot_quantity=0, utility2_slot_quantity=0)) is True
+
+
+# ---------------------------------------------------------------------------
+# THE GE FILL, restored to the potion ladder (wave 6, increment 5.3)
+#
+# Pre-flip the potion root was an `UpgradeEquipmentGoal`, which carries the
+# GE-fill widening (`goals/gathering.py:600-610`). Wave 3a moved potions behind
+# the CRAFT_POTIONS guard, whose goal plans through `craft_utility_ladder` --
+# and that ladder had no GE edge. 289 live GE fills went with it.
+#
+# EVERY TEST HERE IS A PAIR, because the bundle models a QUIET market by
+# default: `from_cache_bundle(..., with_ge_orders=False)` deliberately hydrates
+# no standing orders, and its own docstring says a populated-book scenario
+# proves nothing without the control. A single-sided assertion here would pass
+# against a ladder that emitted GE fills unconditionally.
+# ---------------------------------------------------------------------------
+
+GE_POTION = "health_potion"
+GE_MATERIAL = "sap"
+"""Swept for, and the first pick was WRONG in an instructive way.
+
+`water_boost_potion`/`blue_slimeball` was the obvious choice — the book carries
+a sell order for the slimeball — but no NPC sells a monster drop, and the GE edge
+is offered only as the CHEAPER OF TWO BUY VENUES. With one venue there is nothing
+to choose between, so `_ge_fill_for` correctly declines. Its sibling in
+`goals/gathering.py` has the same gate (`if not sellers: continue`), so this is
+the widening being faithful rather than incomplete.
+
+Only three potion materials in the captured book have BOTH an NPC seller and a
+standing sell order. `sap` is the starkest: 300 gold from the timber merchant
+against 16 on the GE."""
+
+
+def _bundle(*, with_ge_orders: bool) -> GameData:
+    raw = json.loads(_BUNDLE_PATH.read_text())
+    return GameData.from_cache_bundle(raw, with_ge_orders=with_ge_orders)
+
+
+def _ladder_for(game_data: GameData, state: WorldState) -> list:
+    player = GamePlayer(character="ge_potion", history=None)
+    player.seed_offline(state, game_data)
+    return craft_utility_ladder(GE_POTION, 1, 1, list(player._build_actions()),
+                                state, game_data)
+
+
+def test_the_potion_ladder_fills_a_standing_ge_order() -> None:
+    """THE RESTORATION. With the book hydrated, the ladder offers a GE fill for
+    a closure material the GE sells."""
+    gd = _bundle(with_ge_orders=True)
+    assert gd.ge_best_sell_order(GE_MATERIAL) is not None, \
+        "fixture drift: the chosen material no longer has a standing sell order"
+    state = make_state(level=20, gold=10_000)
+    fills = [a for a in _ladder_for(gd, state)
+             if type(a).__name__ == "GeFillSellOrderAction"]
+    assert fills, "the potion ladder must offer the GE buy edge"
+    assert any(f.item_code == GE_MATERIAL for f in fills)
+
+
+def test_a_quiet_market_offers_no_fill() -> None:
+    """THE CONTROL, and the reason every assertion above is a pair.
+
+    `with_ge_orders=False` is not "the fixture happens to be empty" -- it is a
+    declared world property. A ladder that emitted fills here would be inventing
+    a market, which is the failure `buy_source_venue`'s anti-surrogate guard
+    exists to prevent."""
+    gd = _bundle(with_ge_orders=False)
+    assert gd.ge_best_sell_order(GE_MATERIAL) is None
+    state = make_state(level=20, gold=10_000)
+    assert [a for a in _ladder_for(gd, state)
+            if type(a).__name__ == "GeFillSellOrderAction"] == []
+
+
+def test_the_fill_is_the_dual_of_an_npc_buy_not_a_new_source() -> None:
+    """The GE edge is offered ALONGSIDE the NPC buy it competes with, never
+    instead of a source that does not exist.
+
+    `blue_slimeball` is the real case and the one that corrected my first draft:
+    the book carries a standing sell order for it, but it is a MONSTER DROP that
+    no NPC sells. One venue is not a choice, so the ladder declines -- the same
+    gate `GatherMaterialsGoal` applies by reaching its GE block only after
+    `if not sellers: continue`."""
+    gd = _bundle(with_ge_orders=True)
+    assert gd.ge_best_sell_order("blue_slimeball") is not None
+    assert gd.npcs_selling_item("blue_slimeball") == []
+    assert _ge_fill_for("blue_slimeball", 1, gd) is None
+    # ...and an item with no order at all exits at the earlier guard.
+    assert _ge_fill_for("no_such_item_xyzzy", 1, gd) is None
+
+
+def test_the_cheaper_venue_wins_and_it_is_not_always_the_ge() -> None:
+    """`choose_buy_venue` decides, and the GE does not win by default.
+
+    `shrimp` is the ONLY item in the captured catalogue whose NPC price beats
+    the GE -- 30 against 60 -- which makes it the single available witness that
+    this comparison is a comparison and not a rubber stamp. Without it, a
+    `_ge_fill_for` that ignored price entirely would pass every other test
+    here."""
+    gd = _bundle(with_ge_orders=True)
+    npc = min(p for _n, p in gd.npcs_selling_item("shrimp"))
+    order = gd.ge_best_sell_order("shrimp")
+    assert order is not None and npc < order[1], (npc, order)
+    assert _ge_fill_for("shrimp", 1, gd) is None
+
+
+def test_a_partial_order_cannot_fill_the_requirement() -> None:
+    """The whole-quantity rule is not an optimisation: a partial fill leaves the
+    remainder unsourced inside a plan the planner already costed as complete."""
+    gd = _bundle(with_ge_orders=True)
+    order = gd.ge_best_sell_order(GE_MATERIAL)
+    assert order is not None
+    _oid, _price, available = order
+    assert _ge_fill_for(GE_MATERIAL, available + 1, gd) is None
+    assert _ge_fill_for(GE_MATERIAL, available, gd) is not None

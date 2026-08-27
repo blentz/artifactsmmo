@@ -11,9 +11,11 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.recipe_closure import gather_serves_closure
@@ -28,6 +30,40 @@ from artifactsmmo_cli.ai.world_state import WorldState
 def _held(code: str, state: WorldState) -> int:
     """Units of `code` on hand for crafting: inventory plus bank."""
     return state.inventory.get(code, 0) + (state.bank_items or {}).get(code, 0)
+
+
+def _ge_fill_for(item: str, qty: int,
+                 game_data: GameData) -> GeFillSellOrderAction | None:
+    """A `GeFillSellOrderAction` for `qty` of `item`, or None.
+
+    Extracted rather than inlined because the same three conditions are checked
+    by `GatherMaterialsGoal` and by `UpgradeEquipmentGoal`, and a fourth
+    hand-written copy is how the three would drift. None when the GE has no
+    location, no standing sell order, an order too small to fill the whole
+    quantity in one go, or a price the NPC beats.
+
+    THE WHOLE-QUANTITY RULE IS NOT AN OPTIMISATION. A partial fill leaves the
+    remainder unsourced inside a plan the planner already costed as complete.
+    """
+    ge_loc = game_data.grand_exchange_location()
+    order = game_data.ge_best_sell_order(item)
+    if ge_loc is None or order is None or order[2] < qty:
+        return None
+    sellers = game_data.npcs_selling_item(item)
+    if not sellers:
+        # No NPC sells it, so there is no buy edge for this fill to be the DUAL
+        # of. The ladder offers GE only as the cheaper of two buy venues; with
+        # one venue there is nothing to choose between, and admitting it here
+        # would be a new sourcing rule rather than the restoration of an old
+        # one. Same guard `GatherMaterialsGoal` applies by reaching this code
+        # only after `if not sellers: continue`.
+        return None
+    npc_price = min(p for _n, p in sellers)
+    order_id, price, _order_qty = order
+    if choose_buy_venue(npc_price, price) is not BuyVenue.GE:
+        return None
+    return GeFillSellOrderAction(order_id=order_id, item_code=item, price=price,
+                                 quantity=qty, ge_location=ge_loc)
 
 
 def craft_utility_ladder(
@@ -83,6 +119,22 @@ def craft_utility_ladder(
                           - _held(a.item_code, state))
             result.append(a if a.quantity == buy_qty
                           else dataclasses.replace(a, quantity=buy_qty))
+            # THE GE FILL, the DUAL of the NPC buy above and the route this
+            # ladder lost at the wave-3a flip. Pre-flip the potion root was an
+            # `UpgradeEquipmentGoal`, which carries this widening
+            # (`goals/gathering.py:600-610`, `goals/progression.py`); the
+            # CRAFT_POTIONS guard's goal does not, and 289 live GE fills went
+            # with it.
+            #
+            # Same rule as its sibling, not a new one: fill only an EXISTING
+            # sell order, only when it can supply the whole quantity in one
+            # fill, and only when `choose_buy_venue` prefers GE over the NPC
+            # price — the decision proved in `formal/Formal/BuySourceVenue.lean`.
+            # The least-cost planner then picks between the two edges. We never
+            # POST an order here.
+            _ge_fill = _ge_fill_for(a.item_code, buy_qty, game_data)
+            if _ge_fill is not None:
+                result.append(_ge_fill)
         elif (isinstance(a, WithdrawItemAction) and a.code in withdrawable) or isinstance(a, MoveAction):
             result.append(a)
     result.append(EquipAction(code=target_code, slot=utility_slot_for(target_code, state),
