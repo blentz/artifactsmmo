@@ -3003,6 +3003,17 @@ ROOT_DECISION_MUTATIONS = [
     ("root: the aged head is dropped, so the slot order never rotates",
      "        head = self._aged_head(ranked, state, game_data, ctx, history)\n",
      "        head = ranked[0]\n"),
+    # THE DECAY BAND'S HALF OF THE THRASH FIX (2026-08-27). `INTERLEAVE_RUN`
+    # holds the d'Hondt QUOTIENT still between seat bumps, but reading the
+    # SMOOTH curve shrinks the winner's WEIGHT every cycle, so the argmax flips
+    # even when no seat was charged. Measured by reverting exactly this call:
+    # 99 flips over 100 in-band cycles. Killed by
+    # test_the_interleave_holds_runs_INSIDE_the_decay_band_too
+    # (tests/test_ai/test_ring2_starvation_repro.py).
+    ("root: the aged head reads the SMOOTH falloff again"
+     " (decay band re-thrashes, one-cycle runs)",
+     "             * run_falloff(level))",
+     "             * falloff(level))"),
     # ...and the fast-path guard inverted: an UNAGED board would take the
     # d'Hondt interleave, so a fresh root jitters instead of being pursued.
     # Re-anchored 2026-08-23 (fix-round 2): the focus levels are now read

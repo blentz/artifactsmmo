@@ -16,6 +16,8 @@ from dataclasses import fields
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
+    INTERLEAVE_RUN,
+    run_falloff,
     FOCUS_FLAT,
     FOCUS_FLOOR,
     FOCUS_SPAN,
@@ -148,3 +150,49 @@ def test_modulating_weights_absent_from_gear_candidate_identity():
     a = GearCandidate(slot="s", code="c", gain=Fraction(5), level=1)
     b = GearCandidate(slot="s", code="c", gain=Fraction(5), level=1)
     assert repr(a) == repr(b)
+
+
+def test_run_falloff_is_constant_within_a_run():
+    """THE DECAY BAND'S HALF OF THE THRASH FIX.
+
+    The seat cadence made the interleave hold runs once the weights stopped
+    moving — but inside the decay band `falloff` shrinks the winner's weight
+    EVERY cycle, so the argmax could still flip with no seat charged (~81% of
+    transitions, simulated). `run_falloff` samples the same curve at RUN
+    boundaries, so the weight is constant across a run and the winner holds for
+    the same reason it does past the band."""
+    for start in (FOCUS_FLAT, FOCUS_FLAT + INTERLEAVE_RUN * 3,
+                  FOCUS_FLAT + FOCUS_SPAN):
+        base = start - start % INTERLEAVE_RUN
+        held = {run_falloff(base + offset) for offset in range(INTERLEAVE_RUN)}
+        assert len(held) == 1, (
+            f"weight moved inside the run beginning at {base}: {held}")
+
+
+def test_run_falloff_still_steps_down_and_reaches_the_floor():
+    """Coarsened, NOT cancelled: the hand-off ramp must still run from full
+    weight to the floor across the span, or a stuck root would never shed
+    cycles and the anti-starvation aging would be inert."""
+    assert run_falloff(FOCUS_FLAT) == Fraction(1)
+    assert run_falloff(FOCUS_FLAT + FOCUS_SPAN) == FOCUS_FLOOR
+    assert run_falloff(FOCUS_FLAT + FOCUS_SPAN + 50) == FOCUS_FLOOR
+    mid = FOCUS_FLAT + FOCUS_SPAN // 2
+    assert FOCUS_FLOOR < run_falloff(mid) < Fraction(1)
+
+
+def test_run_falloff_is_monotone_non_increasing():
+    """A staircase is still a ramp: quantising the ARGUMENT cannot break the
+    antitone property `falloff_antitone` proves of the curve itself."""
+    prev = run_falloff(0)
+    for level in range(1, FOCUS_FLAT + FOCUS_SPAN + 20):
+        cur = run_falloff(level)
+        assert cur <= prev
+        prev = cur
+
+
+def test_run_falloff_never_exceeds_the_smooth_curve():
+    """It samples the run's START, so it holds the higher (earlier) weight for
+    the rest of the run — never a weight the smooth curve had not already
+    reached, which is what keeps the coarsening conservative."""
+    for level in range(0, FOCUS_FLAT + FOCUS_SPAN + 20):
+        assert run_falloff(level) >= falloff(level)

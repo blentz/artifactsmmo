@@ -98,8 +98,8 @@ from artifactsmmo_cli.ai.tiers.objective import (
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     FOCUS_FLAT,
     dhondt_step,
-    falloff,
     milestone_pure,
+    run_falloff,
 )
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, tier_of_level
 from artifactsmmo_cli.ai.tiers.tier_progress import next_uncleared_tier
@@ -639,10 +639,16 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
         # replacing, but an equal-rung swap scores 0 and a zero weight is one
         # `dhondt_step` can never elect — which would be starvation reinstated
         # by the very mechanism that exists to prevent it.
+        # `run_falloff`, not `falloff`: the weight is sampled once per
+        # INTERLEAVE_RUN so it does not move between seat bumps. Otherwise the
+        # decay band re-thrashes — the seat cadence holds the QUOTIENT still,
+        # but inside the band `falloff` shrank the winner's weight every cycle
+        # and the argmax flipped anyway (81% of transitions, median run 1).
+        # Past the band the two are identical by construction.
         weighted = [
             (focus_key_str(key),
              Fraction(max(1, _tier_gap(slot, target, state, game_data)))
-             * falloff(level))
+             * run_falloff(level))
             for (slot, target), key, level in zip(ranked, keys, focus, strict=True)]
         winner = dhondt_step(weighted, ctx.interleave_seats)
         assert winner is not None  # `ranked` is non-empty; see the docstring

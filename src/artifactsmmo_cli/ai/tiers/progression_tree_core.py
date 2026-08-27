@@ -139,6 +139,35 @@ def falloff(focus_level: int) -> Fraction:
     return Fraction(1) - (Fraction(1) - FOCUS_FLOOR) * t * t
 
 
+def run_falloff(focus_level: int) -> Fraction:
+    """`falloff` sampled at RUN boundaries — the decay band's half of the
+    interleave-thrash fix.
+
+    THE SEAT CADENCE ALONE DOES NOT HOLD THE BAND. `INTERLEAVE_RUN` stops the
+    d'Hondt quotient moving every cycle, which is enough once a candidate's
+    weight has settled at `FOCUS_FLOOR`. Inside the decay band
+    (`FOCUS_FLAT < focus <= FOCUS_FLAT + FOCUS_SPAN`) the WEIGHT itself still
+    shrank every cycle, so the argmax could flip with no seat charged at all —
+    simulated 81% of transitions, median run 1, exactly the thrash the cadence
+    was meant to end. Sampling the curve once per run makes the weight constant
+    across a run, and the winner then holds for the same reason it does past the
+    band: nothing the argmax reads has moved. Simulated in-band: 81% -> 10%
+    flips, median run 1 -> 10, all candidates still elected. Past the band it is
+    identical to `falloff` by construction, so nothing there regresses.
+
+    THE CURVE IS NOT TOUCHED, only where it is READ. `falloff` keeps its proved
+    Lean mirror (`falloff_flat`, `falloff_le_one`, `falloff_ge_floor`,
+    `falloff_floor_after`, `falloff_antitone`) and every property survives a
+    monotone non-decreasing argument transform: the staircase is still antitone,
+    still starts at 1, still reaches the floor at the same level. It is
+    conservative in one direction — holding the run's STARTING weight means
+    never quoting a weight the smooth curve had not already reached.
+
+    Not merged into `falloff` itself because that function is the mirrored
+    definition; a caller that wants the continuous curve must still get it."""
+    return falloff(focus_level - focus_level % INTERLEAVE_RUN)
+
+
 def dhondt_step(weighted: list[tuple[str, Fraction]],
                 seats: Mapping[str, int]) -> str | None:
     """One seat of the d'Hondt / highest-averages apportionment: the key

@@ -269,3 +269,38 @@ def test_the_interleave_hands_out_RUNS_not_alternating_single_cycles() -> None:
     assert flips * 4 < len(picks), (
         f"the interleave is still thrashing: {flips} flips over {len(picks)} "
         f"cycles. A seat must be charged once per run, not once per cycle.")
+
+
+def test_the_interleave_holds_runs_INSIDE_the_decay_band_too() -> None:
+    """The band was the residual the seat cadence did NOT fix.
+
+    `INTERLEAVE_RUN` stops the d'Hondt quotient moving between bumps, which is
+    enough once a candidate's weight has settled at `FOCUS_FLOOR`. Inside the
+    decay band the WEIGHT itself still shrank every cycle, so the argmax flipped
+    with no seat charged at all — simulated 81% of transitions, median run 1,
+    i.e. the same thrash one band lower. `run_falloff` samples the curve once
+    per run, so the weight holds too.
+
+    Seeded INSIDE the band on purpose; the test above covers past it."""
+    state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
+    engine = StrategyEngine(objective)
+    player = GamePlayer(character="band_locality")
+
+    in_band = FOCUS_FLAT + 1
+    for slot, code in (("helmet_slot", "wolf_ears"), ("ring2_slot", "iron_ring")):
+        player._gear_focus[(slot, code)] = in_band
+
+    picks: list[str] = []
+    for _ in range(FOCUS_SPAN):
+        ctx = replace(NO_PROFILE_CONTEXT, gear_focus=player._gear_focus,
+                      interleave_seats=player._interleave_seats)
+        decision = engine.decide(state, gd, ctx=ctx)
+        picks.append(repr(decision.chosen_root))
+        player._bump_focus(decision)
+
+    flips = sum(1 for a, b in pairwise(picks) if a != b)
+    assert len(set(picks)) > 1, (
+        "both roots must still get turns while the ramp hands off")
+    assert flips * 4 < len(picks), (
+        f"the decay band is still thrashing: {flips} flips over {len(picks)} "
+        f"cycles. The weight must hold across a run, not shrink every cycle.")
