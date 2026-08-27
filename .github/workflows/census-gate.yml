@@ -57,6 +57,8 @@ on:
       - "scripts/gen_requirement_parity.py"
       - "scripts/gen_shed_reachability.py"
       - "scripts/gen_open_rung.py"
+      - "scripts/gen_one_cost_model.py"
+      - "scripts/gen_currency_wall.py"
       - ".github/workflows/census-gate.yml"
   push:
     branches: [main]
@@ -70,6 +72,8 @@ on:
       - "scripts/gen_requirement_parity.py"
       - "scripts/gen_shed_reachability.py"
       - "scripts/gen_open_rung.py"
+      - "scripts/gen_one_cost_model.py"
+      - "scripts/gen_currency_wall.py"
       - ".github/workflows/census-gate.yml"
   workflow_dispatch: {}
 
@@ -133,3 +137,21 @@ jobs:
       # waves is the signal that matters.
       - name: requirement-walk parity — answers unchanged
         run: uv run python scripts/gen_requirement_parity.py --check
+
+      # Obligations O6 and O8 of the wave-6 routes design (§7): no Decision
+      # prices anything except through route_price, and no Decision branches on
+      # a SourceKind. Wired into formal/gate.sh when it shipped but never added
+      # here, so CI could not see it -- the same invisibility this workflow
+      # exists to prevent.
+      - name: one-cost-model census — o6_second_pricer == 0 AND o8_route_kind_branch == 0
+        run: uv run python scripts/gen_one_cost_model.py --check
+
+      # Obligation O7 (§7): every currency the price walk charged at
+      # UNOBTAINABLE_PER_UNIT while pricing a resolved root is task-earnable or
+      # a NAMED wall. The residual is a charged currency with a BEATABLE dropper
+      # on a live tile. --check also fails when the FUNDED arm has no witness:
+      # this census's first run swept a full-sized grid in a single world whose
+      # only tasks_coin vendor had no tile, and proved nothing while looking
+      # clean.
+      - name: currency-wall census — o7_silent_currency_stall == 0 AND the funded arm has a witness
+        run: uv run python scripts/gen_currency_wall.py --check
