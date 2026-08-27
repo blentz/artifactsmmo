@@ -1415,3 +1415,57 @@ mutation anchor in the SAME commit as the edit that moves it.** The novel part
 here is the compounding — a stale anchor MASKS a broken test module behind it,
 so one un-refreshed anchor took a whole group offline rather than turning it
 red.
+
+---
+
+## 12. `[MEASURED 2026-08-27]` §2.5's funding widening stays DEFERRED — now for a reason that was actually measured
+
+§2.5's widening was deferred in 5.5 alongside O7 and O9b, and §10 attributed all
+three to the same missing fixture. That attribution was wrong for the other two,
+so this one had to be re-derived rather than inherited.
+
+**The question.** §2.5 widens the funding trigger from "the step is an
+UNAFFORDABLE purchase-only leaf" — `analyze_currency_leaves`, which requires the
+leaf to have no recipe, no resource drop and no monster drop — to "the price walk
+charged a task-earnable currency anywhere in the step's closure". It is worth
+building iff some cell exists where the walk charges a task-earnable currency and
+`CanIAffordTheCurrencyLeaf` does NOT already route to `ReachCurrencyGoal`.
+
+**Measured at the STEP** (O7's census works on the root), each cell in its
+declared world, using the same differential the census uses:
+
+| | |
+|---|---|
+| steps examined | **24** — the probe is not vacuous |
+| steps charging a TASK-EARNABLE currency | **1** |
+| of those, ALREADY routed to `ReachCurrency` | **1** |
+| of those, the widening WOULD change | **0** |
+
+The one case is `l25_currency_leaf_unfunded`, and the existing node handles it —
+which is what `test_the_step_graph_routes_to_funding_not_to_gathering` has been
+asserting all along.
+
+**Verdict: DEFERRED, and the deferral is now load-bearing rather than
+inherited.** The widening's whole value is the case §2.5 names — a material that
+IS craftable or droppable but whose cheapest route is currency-priced, which
+`analyze_currency_leaves` refuses by construction. No committed cell produces
+one. Building it would be building against nothing, the precise charge §7 levels
+at shipping a census before its fixtures exist.
+
+**What would unblock it:** a scenario whose step is a craftable-or-droppable
+material whose cheapest priced route carries a `tasks_coin` edge. Unlike the gap
+§10 imagined, this one is real — no such cell is committed.
+
+### One part of §2.5's complaint is now answered, and one is not
+
+§2.5 objects that "the bot can be blocked on 20,000 gold with no node saying so".
+Half of that is now covered:
+
+* **Currency ITEMS** — a gap on any of the six is classified and named by the O7
+  census (§11), and `o7_silent_currency_stall` fails the gate if one is neither
+  funded nor named.
+* **GOLD is still uncovered, and deliberately so.** Gold is not a currency item;
+  it lives in `state.gold` and a shortfall is charged through the buy route, so
+  it never appears as a currency code and the O7 grid cannot see it. §2.5's
+  gold-wall requirement is therefore NOT discharged by O7 and remains open. This
+  is the same fact that made §7's proposed `WALL_GOLD` name nothing.
