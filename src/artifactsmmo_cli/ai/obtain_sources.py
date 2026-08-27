@@ -185,6 +185,26 @@ def obtain_source_map(
     return {item: obtain_sources(item, state, game_data, ctx) for item in items}
 
 
+def has_non_craft_source(
+    item: str, state: WorldState, game_data: GameData, ctx: SelectionContext
+) -> bool:
+    """Is there a READY way to get `item` that is not crafting it?
+
+    A withdraw, a licensed recycle, a live gather, a located permanent vendor,
+    a fillable GE order, or a winnable drop — anything but CRAFT.
+
+    THE QUESTION LIVES HERE, NOT AT THE CALL SITE, and that placement is the
+    point rather than tidiness. Obligation O8 (wave-6 routes design §7) forbids
+    a `Decision` from branching on a `SourceKind`: route kinds are the obtain
+    model's vocabulary, and a decision that reads them has quietly grown a
+    second opinion about routing. `decisions/obtain_item` needs the ANSWER —
+    "is crafting the only way?", to decide whether a craft-skill gate is worth
+    grinding for — so it asks this named predicate and the kinds stay in here.
+    The O8 census caught the first version doing the comparison inline."""
+    return any(source.kind is not SourceKind.CRAFT
+               for source in obtain_sources(item, state, game_data, ctx))
+
+
 def _withdraw_sources(
     item: str, state: WorldState, ctx: SelectionContext
 ) -> list[Source]:

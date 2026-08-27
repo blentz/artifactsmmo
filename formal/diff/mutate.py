@@ -3024,13 +3024,41 @@ ROOT_DECISION_MUTATIONS = [
 ]
 
 OBTAIN_ITEM_DECISION_MUTATIONS = [
+    # RE-ANCHORED 2026-08-27 with the edit that moved it: the rule moved into
+    # `craft_skill_gate`, the ONE producer both this node and
+    # `IsTheStepTheEquippableItself` now ask. The mutant is unchanged in
+    # meaning — the skill-gated root reverts to gathering the step's materials.
     ("obtain_item: skill-gated root reverts to gathering the step's materials"
      " instead of raising the skill",
-     "            current = state.skills.get(self.root_stats.crafting_skill, 1)\n"
-     "            return ReachSkillGoal(skill_name=self.root_stats.crafting_skill,\n"
-     "                                  target_level=current + 1)\n",
-     "            return GatherMaterialsGoal(target_item=self.step.code,\n"
-     "                                       needed={self.step.code: self.step.quantity})\n"),
+     "        gate = craft_skill_gate(self.root_stats, state)\n"
+     "        if gate is not None:\n"
+     "            return gate\n",
+     "        return GatherMaterialsGoal(target_item=self.step.code,\n"
+     "                                   needed={self.step.code: self.step.quantity})\n"),
+    # The SECOND path to the same rule, added with it (2026-08-27). The gate
+    # was asked only on the intermediate-on-a-chain path; an equippable step
+    # went straight to `_equippable_goal` and gathered for a craft that could
+    # not run. Deleting the gate here restores that, and costs a fleet 39.6h —
+    # Robby spent 1,677 of 2,030 cycles on LevelSkill(woodcutting->30) for a
+    # staff needing weaponcrafting 30 while holding 11. Killed by
+    # `test_a_skill_gated_step_that_is_itself_the_equippable_raises_the_skill`.
+    ("obtain_item: the equippable-step skill gate is deleted -- gear whose own"
+     " craft cannot run gathers materials instead of raising the skill",
+     "            if owned < self.step.quantity and craft_only:\n"
+     "                gate = craft_skill_gate(stats, state)\n"
+     "                if gate is not None:\n"
+     "                    return gate\n",
+     "            if False:\n"
+     "                gate = craft_skill_gate(stats, state)\n"
+     "                if gate is not None:\n"
+     "                    return gate\n"),
+    # The OWNED guard, mutated on its own: without it a character already
+    # holding the sword is sent to grind for a craft it will never perform.
+    # Killed by `test_a_skill_gated_equippable_ALREADY_OWNED_is_not_ground_for`.
+    ("obtain_item: the owned-gear guard on the equippable skill gate is dropped"
+     " -- held gear is ground for instead of equipped",
+     "            if owned < self.step.quantity and craft_only:\n",
+     "            if craft_only:\n"),
     # PF-2 proved the return-rewire mutant above is a no-op ON ITS OWN --
     # DoesTheRecipeNeedAMonsterDrop returns for every weapon in the game
     # (12/12 checked have a monster-drop recipe input), so the skill gate was

@@ -42,6 +42,7 @@ from artifactsmmo_cli.ai.obtain_item_routing import (
     _gather_step_target_is_root,
     _recipe_has_combat_drop_input,
 )
+from artifactsmmo_cli.ai.obtain_sources import has_non_craft_source
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -80,6 +81,28 @@ class CanIAffordTheCurrencyLeaf(Decision[Goal]):
         return IsTheStepTheEquippableItself(self.step, self.root)
 
 
+def craft_skill_gate(stats: ItemStats, state: WorldState) -> ReachSkillGoal | None:
+    """`ReachSkillGoal(skill, current + 1)` when `stats`' craft cannot run yet,
+    else None.
+
+    THE ONE PRODUCER of "this craft is skill-blocked, raise the skill". Both
+    `CanICraftCurrentTier` (the step is an intermediate on a chain) and
+    `IsTheStepTheEquippableItself` (the step IS the gear) ask it, so the two
+    paths cannot answer differently — they did, and the asymmetry cost a fleet
+    39.6 hours (see `IsTheStepTheEquippableItself`).
+
+    +1, NOT `crafting_level`: the graph re-derives from live state every cycle,
+    so the increment advances on its own and nothing has to plan the whole climb
+    in one shot. Same rule as `decisions/root.IsThisTargetBlocked`."""
+    if not stats.crafting_skill:
+        return None
+    current = state.skills.get(stats.crafting_skill, 1)
+    if current >= stats.crafting_level:
+        return None
+    return ReachSkillGoal(skill_name=stats.crafting_skill,
+                          target_level=current + 1)
+
+
 class IsTheStepTheEquippableItself(Decision[Goal]):
     """strategy_driver.py:903 (originally 901-905)."""
 
@@ -95,6 +118,55 @@ class IsTheStepTheEquippableItself(Decision[Goal]):
         stats = game_data.item_stats(self.step.code)
         slots = ITEM_TYPE_TO_SLOTS.get(stats.type_) if stats is not None else None
         if slots:
+            # THE SKILL GATE, ASKED ON THIS PATH TOO. This node runs BEFORE
+            # `IsThisAnIntermediateOnAChain`, and `CanICraftCurrentTier` — the
+            # only other place the gate is asked — sits behind that node. So an
+            # equippable step went straight to `_equippable_goal` and gathered
+            # materials for a craft that could not run, while the intermediate
+            # path correctly raised the skill. Same rule, same helper, both
+            # paths.
+            #
+            # Live cost: Robby, 39.6h to 2026-08-27. `elderwood_staff` is
+            # weaponcrafting 30 and he held 11; the step resolved to the staff
+            # itself, so this branch gathered for it and the planner spent
+            # 1,677 of 2,030 cycles on `LevelSkill(woodcutting->30)` chasing
+            # `dead_wood_plank`, while weaponcrafting never left 11 and the
+            # character gained 0 xp. `prerequisites` records the same shape one
+            # tier down on 2026-07-13 (ash_plank -> ash_wood, "~56 cycles of
+            # WOODCUTTING xp while the weaponcrafting grind it was serving
+            # stayed frozen").
+            #
+            # Not a policy against feeder-skill grinds: 17 of the 25
+            # weaponcrafting recipes at levels 11-30 consume a wood input, so
+            # climbing the CRAFT skill pays the woodcutting xp as a byproduct.
+            # Ordering is the whole fix.
+            # OWNED GEAR IS NEVER GROUND FOR. Holding the item means the craft
+            # never has to run — the only step left is the equip — so gating on
+            # the craft skill here would send a character who already owns the
+            # sword away to grind for a craft it will never perform. That is a
+            # worse stall than the one this gate fixes. Same inventory-or-bank
+            # shape `_equippable_goal` uses for its own recipe-less arm, kept
+            # identical so the two cannot disagree about what "owned" means.
+            #
+            # AND ONLY WHEN CRAFTING IS THE ROUTE. A ready NON-craft source —
+            # a vendor, a drop, a withdraw — means the skill is irrelevant to
+            # getting this item, so grinding for it is pure delay. Measured on
+            # the bundle: of 271 craftable equippables exactly 2 have one
+            # (`minor_health_potion`, `small_antidote`, both alchemy@20 and
+            # NPC-sold; 0 are monster drops), so this guard is narrow — but a
+            # 19-level alchemy grind for a potion on a shelf is exactly the
+            # shape of stall being fixed, pointed the other way. Asked through
+            # `obtain_sources`, the one obtain model, not a bespoke vendor
+            # lookup.
+            assert stats is not None  # `slots` is derived from `stats.type_`
+            owned = (state.inventory.get(self.step.code, 0)
+                     + (state.bank_items or {}).get(self.step.code, 0))
+            craft_only = not has_non_craft_source(self.step.code, state,
+                                                  game_data, ctx)
+            if owned < self.step.quantity and craft_only:
+                gate = craft_skill_gate(stats, state)
+                if gate is not None:
+                    return gate
             dest_slot = self.step.slot if self.step.slot is not None else slots[0]
             return _equippable_goal(self.step.code, dest_slot, state, game_data, ctx)
         return IsThisAnIntermediateOnAChain(self.step, self.root)
@@ -165,12 +237,13 @@ class CanICraftCurrentTier(Decision[Goal]):
         # `self.root_stats` is never None here (M2): the only constructor
         # call site is `IsThisAnIntermediateOnAChain.resolve`, which only
         # builds this Decision inside `if root_stats is not None:`.
-        if (self.root_stats.crafting_skill
-                and state.skills.get(self.root_stats.crafting_skill, 1)
-                < self.root_stats.crafting_level):
-            current = state.skills.get(self.root_stats.crafting_skill, 1)
-            return ReachSkillGoal(skill_name=self.root_stats.crafting_skill,
-                                  target_level=current + 1)
+        #
+        # The rule itself lives in `craft_skill_gate` because
+        # `IsTheStepTheEquippableItself` asks it too; a second copy here is how
+        # the two paths came to disagree in the first place.
+        gate = craft_skill_gate(self.root_stats, state)
+        if gate is not None:
+            return gate
         # Skill adequate: fall through to the monster-drop / depth-budget
         # chunking exactly as line 924 ran today.
         return DoesTheRecipeNeedAMonsterDrop(
