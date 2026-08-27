@@ -5958,7 +5958,7 @@ LADDER_MEANS_FIRES_MUTATIONS = [
     ),
     (
         "ladder/means: GE_BID drop ge_bid_candidates guard (fires with no biddable item)",
-        "        return bool(ge_bid_candidates(state, game_data, ctx, BID_FILL_HORIZON_SECONDS))",
+        "        return bool(ge_bid_candidates(state, game_data, ctx, TTL_CYCLES))",
         "        return True",
     ),
 ]

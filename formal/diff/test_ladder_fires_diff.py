@@ -167,7 +167,7 @@ from artifactsmmo_cli.ai.cancel_selection import cancel_targets
 from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
-from artifactsmmo_cli.ai.ge_order_config import BID_FILL_HORIZON_SECONDS
+from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
@@ -942,7 +942,7 @@ def _rich_oracle_args(
         # 34: derive from production's REAL ge_bid_candidates helper (like 31),
         # NOT the slot verdict — the helper IS the opaque geBidCandidateNonempty
         # signal, and geBidFires has no extra gate so the two coincide.
-        1 if ge_bid_candidates(w, gd, ctx, BID_FILL_HORIZON_SECONDS) else 0,  # 34 geBidCandidateNonempty
+        1 if ge_bid_candidates(w, gd, ctx, TTL_CYCLES) else 0,  # 34 geBidCandidateNonempty
         # 35: derive from production's REAL cancel_targets helper — the GE_CANCEL
         # guard's `_fires` is `bool(cancel_targets(state, gd, 0, needed_items))` with
         # needed_items = step_profile codes; the ladder call threads no step_profile,
@@ -1341,14 +1341,29 @@ def test_drain_bank_junk_fill_boundary() -> None:
 
 
 def _gebid_gd() -> GameData:
-    # steel <- iron x2; iron is a very-rare monster drop (~1000s >> the 600s bid
-    # horizon), sold by an NPC at 100, with a standing GE buy order at 40 to
-    # overbid. Grand Exchange present so a post can land. bank_capacity large ⇒
+    # RE-DENOMINATED WITH THE GATE ITSELF (increment 5.4). The premise used to be
+    # TIME: "iron is a very-rare monster drop (~1000s >> the 600s bid horizon)".
+    # Actions do not measure rarity that way, and when BID_FILL_HORIZON_SECONDS
+    # was deleted this module stopped IMPORTING — so the whole ladder/means
+    # mutation group went dark rather than red, its 10 mutants unexercised.
+    #
+    # The premise is now the same claim in ACTIONS: steel is sold by an NPC at
+    # 5000, which the character's 1000 gold cannot reach, so the buy route is
+    # walled and self-supply means CRAFTING it — 25 iron bought one action at a
+    # time, 26 actions against a 20-cycle horizon. Dearer than waiting for a
+    # fill, which is exactly what GE_BID is for.
+    #
+    # The NPC must still SELL steel even though we cannot afford it:
+    # `ge_bid_candidates` reads that price only to ceiling-bound the post
+    # (`buy_post_price(best_buy, alt_cost=npc_price)`), so an unaffordable
+    # seller is a price CEILING, not a route. The GE buy order at 40 is the live
+    # anchor to overbid, and the post still lands at 41.
+    #
+    # Grand Exchange present so a post can land. bank_capacity large ⇒
     # RECYCLE_RELIEF / SELL_RELIEF quiet so acceptTask cleanly wins the contest.
     gd = GameData()
-    gd._crafting_recipes = {"steel": {"iron": 2}}
-    gd._monster_drops = {"mob": [("iron", 50, 1, 1)]}
-    gd._npc_stock = {"shop": {"steel": 100}}
+    gd._crafting_recipes = {"steel": {"iron": 25}}
+    gd._npc_stock = {"shop": {"steel": 5000, "iron": 1}}
     gd._npc_locations = {"shop": (1, 0)}
     gd._ge_buy_orders = {"steel": ("b1", 40, 5)}
     gd._grand_exchange_location = (7, 7)
@@ -1365,13 +1380,17 @@ def _gebid_ctx(step_profile: dict[str, int]) -> SelectionContext:
 
 
 def _gebid_world(*, open_steel_order: bool = False) -> WorldState:
-    # No task (phase NONE), empty bag (fill 0 < 0.85), 1000 gold to afford a post.
+    # No task (phase NONE), empty bag (fill 0 < 0.85), 1000 gold to afford a
+    # post but NOT the 5000-gold NPC steel. The bag holds 200 so the 25 iron the
+    # craft route buys actually fit — at the old 20 the craft would be
+    # UNOBTAINABLE rather than merely dear, and the gate would fire for the
+    # wrong reason.
     orders = ((OpenOrder("x", "steel", 1, 41, OrderSide.BUY, 0),)
               if open_steel_order else ())
     return WorldState(
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
-        gold=1000, skills={}, x=0, y=0, inventory={}, inventory_max=20,
-        inventory_slots_max=20,
+        gold=1000, skills={}, x=0, y=0, inventory={}, inventory_max=200,
+        inventory_slots_max=200,
         equipment={}, cooldown_expires=None,
         bank_items={}, bank_gold=None, pending_items=None,
         open_orders=orders,
@@ -1379,8 +1398,9 @@ def _gebid_world(*, open_steel_order: bool = False) -> WorldState:
 
 
 def test_ge_bid_drives_true() -> None:
-    """TRUE fixture: steel is a needed (step_profile), slow-to-craft, unheld
-    material with a live buy-anchor + NPC alt + GE_POST venue -> production GE_BID
+    """TRUE fixture: steel is a needed (step_profile), unheld material that
+    costs MORE ACTIONS to self-craft (26) than the bid horizon (TTL_CYCLES=20),
+    with a live buy-anchor + NPC alt + GE_POST venue -> production GE_BID
     fires. It loses selection to ACCEPT_TASK (phase NONE) on BOTH ladders, binding
     arg[34] per-slot."""
     w = _gebid_world()
