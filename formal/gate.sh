@@ -117,7 +117,8 @@ echo "== (c''') census (--check x11) =="
   && uv run python scripts/gen_obtain_parity.py --check \
   && uv run python scripts/gen_requirement_parity.py --check \
   && uv run python scripts/gen_one_cost_model.py --check \
-  && uv run python scripts/gen_currency_wall.py --check )
+  && uv run python scripts/gen_currency_wall.py --check \
+  && uv run python scripts/gen_drop_wall.py --check )
 # The craft census's `--check` deliberately rewrites MATRIX/BACKLOG (see
 # gen_craft_completeness.py:17-19) and its cell verdicts are wall-clock
 # nondeterministic (~16% of cells hit the 10s budget), so a passing local run

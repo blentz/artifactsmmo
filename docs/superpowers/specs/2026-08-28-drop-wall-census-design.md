@@ -136,3 +136,37 @@ contains. That remains unbuilt here, deliberately.
 
 Audit modules carry no mutation anchors by convention — they are verification
 tooling, not production logic — and are held to 100% statement coverage.
+
+---
+
+## 6. `[SHIPPED 2026-08-28]` What the census measured
+
+`src/artifactsmmo_cli/audit/drop_wall_census.py`, wired into `formal/gate.sh` and
+`census-gate.yml` beside its currency sibling.
+
+```
+438 candidate cells over 44 scenarios; obtainable 77; not_drop_walled 350;
+walled 9 (9 on ALTERNATIVES); closes 9; out_of_reach 0;
+drop_wall_unattributed 0; root_unresolved 2
+argmax blindness: 0 of 9 walls sit on a RESOLVED root.
+```
+
+The design's §2 prediction held exactly: **every** wall in the committed set sits
+on an alternative, so the argmax-only reading every other census takes sees zero
+of them. That line is computed from the grid by `argmax_blindness`, not
+transcribed, so it cannot rot into a claim about a fixture set that has moved.
+
+**Departure from §3: `ROOT_UNRESOLVED` is not a residual.** Two of the 44
+scenarios resolve no root. Failing the gate on that would make this census the
+enforcer of a property it does not measure — the currency census takes the same
+reading of the same class. The class still exists so those scenarios contribute a
+VISIBLE row rather than silently contributing zero cells, and the blind-sweep
+case is covered by `MIN_CELLS` and `witness_residual` instead.
+
+**The `OUT_OF_REACH` arm has no witness and the suite asserts that zero**, so the
+first fixture to exercise it fails rather than letting the arm rot — the guard
+that paid off for the gold row within two days of being written. The arm is kept
+honest meanwhile by a positive control rather than by the grid.
+
+**Production behaviour is unchanged, as designed.** Those nine candidates still
+price at infinity and the promotion walk still skips them.

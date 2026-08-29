@@ -59,6 +59,7 @@ on:
       - "scripts/gen_open_rung.py"
       - "scripts/gen_one_cost_model.py"
       - "scripts/gen_currency_wall.py"
+      - "scripts/gen_drop_wall.py"
       - ".github/workflows/census-gate.yml"
   push:
     branches: [main]
@@ -74,6 +75,7 @@ on:
       - "scripts/gen_open_rung.py"
       - "scripts/gen_one_cost_model.py"
       - "scripts/gen_currency_wall.py"
+      - "scripts/gen_drop_wall.py"
       - ".github/workflows/census-gate.yml"
   workflow_dispatch: {}
 
@@ -155,3 +157,12 @@ jobs:
       # clean.
       - name: currency-wall census — o7_silent_currency_stall == 0 AND the funded arm has a witness
         run: uv run python scripts/gen_currency_wall.py --check
+
+      # The unwinnable-dropper wall (`obtain_sources._drop_sources`), priced over
+      # root + ALTERNATIVES rather than the argmax alone. An infinite price is a
+      # veto, so a drop-walled candidate never becomes the resolved root: on the
+      # argmax this census reports 0 walls, over the candidates it reports 9.
+      # --check also fails when neither wall arm has a witness, which would mean
+      # the fixtures, the pricer or the detector moved.
+      - name: drop-wall census — drop_wall_unattributed == 0 AND a wall arm has a witness
+        run: uv run python scripts/gen_drop_wall.py --check
