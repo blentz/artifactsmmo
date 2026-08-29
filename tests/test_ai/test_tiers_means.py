@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.tiers.means import (
     active_means,
     means_fires,
 )
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -880,3 +881,24 @@ def test_the_rung_and_the_goal_it_emits_report_the_same_answer():
     assert MeansKind.TASK_CANCEL in collect
     goal = map_means(MeansKind.TASK_CANCEL, gd, _ctx(), state, None)
     assert goal.value(state, gd, None) > 0.0
+
+
+def test_the_offline_context_does_not_fire_task_exchange_on_zero_coins():
+    """`NO_PROFILE_CONTEXT` must agree with production about what a coinless
+    character can exchange.
+
+    `_fires(TASK_EXCHANGE)` is `coins >= ctx.task_exchange_min_coins`. The
+    offline stand-in carried 0, so the predicate read `coins >= 0` — TRUE for
+    every character alive, coins or not — while production's own default is 1
+    (`player.py`: `get_learned_int("task_exchange_min_coins", 1)`). Measured on
+    the committed bundle before the fix: the rung fired in 44 of 44 scenarios,
+    all with zero coins, and built a goal that was satisfied on construction.
+
+    The arbiter skips satisfied goals, so nothing was mis-selected — but every
+    offline measurement of the discretionary band carried a rung with nothing to
+    do, which is the shape `_fires`' own TASK_CANCEL comment says this ladder has
+    been bitten by twice.
+    """
+    state = make_state(inventory={}, task_code="t", task_total=10, task_progress=0)
+    _, discretionary = active_means(state, GameData(), None, NO_PROFILE_CONTEXT)
+    assert MeansKind.TASK_EXCHANGE not in discretionary

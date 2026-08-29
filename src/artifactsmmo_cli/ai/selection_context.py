@@ -242,7 +242,17 @@ NO_PROFILE_CONTEXT = SelectionContext(
     bank_required_level=0,
     bank_unlock_monster=None,
     initial_xp=0,
-    task_exchange_min_coins=0,
+    # ONE COIN, matching production's own default
+    # (`player.py`: `get_learned_int("task_exchange_min_coins", 1)`), not zero.
+    # `_fires(TASK_EXCHANGE)` is `coins >= this`, so zero read `coins >= 0` —
+    # true for every character alive — and the rung fired in 44 of 44 offline
+    # scenarios, all of them coinless. The goal it built was satisfied on
+    # construction and the arbiter skips satisfied goals, so nothing was
+    # mis-selected; what it cost was every offline measurement of the
+    # discretionary band carrying a rung with nothing to do. The taskmaster
+    # cannot exchange fewer than one coin under any learned value, so 1 is the
+    # floor rather than a guess.
+    task_exchange_min_coins=1,
     combat_monster=None,
 )
 """The "no active goal profile" stand-in, and the ONLY default any keep/deposit

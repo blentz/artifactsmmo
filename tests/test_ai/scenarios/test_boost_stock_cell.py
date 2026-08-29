@@ -180,19 +180,32 @@ def test_the_arbiter_selects_it_and_plans_the_boost_craft(
     ]
 
 
-def test_the_goal_prices_this_arm_at_zero(
+def test_the_goal_prices_this_arm_at_the_boost_batch(
         bundle_game_data: GameData, state: WorldState) -> None:
-    """`CraftPotionsGoal.value` has no boost-stock arm: `plan` is not None,
-    `unlock_boost_target` is None, so it returns the HEAL deficit — which is
-    <= 0 by this arm's own precondition. Recorded as a fact, NOT as a defect
-    that changes a decision: `select_pure` orders candidates by BAND and skips
-    on `is_satisfied`, never on `value`, and the only two readers of
-    `Goal.priority` (`strategy_driver:866`, `player:1234`) both put it in a log
-    line. The cost is that every live boost-stock cycle records
-    `priority: 0.0`, which is one more reason the arm is hard to attribute."""
+    """`CraftPotionsGoal.value` reports the batch this arm will actually close.
+
+    It used to report 0.0 here, and this test recorded that as a fact rather
+    than a defect: `select_pure` orders candidates by BAND and skips on
+    `is_satisfied`, never on `value`, so nothing was mis-selected. What it cost
+    was attribution — every live boost-stock cycle logged `priority: 0.0`, on an
+    arm the docstring above already calls hard to attribute.
+
+    The cause was a SECOND PRODUCER of the firing rule: `value` re-derived the
+    heal deficit, which this arm's own precondition forces to <= 0. That is R4's
+    defect shape (`TaskCancelGoal.value` re-deriving one of `_fires`' three
+    reasons and reporting 0.0 in 3 of 3 selected cells), and it is fixed the same
+    way — `value` now reads `equip_qty` off the plan `_active_craft` chose, the
+    same quantity `is_satisfied` is stated over.
+
+    The number is not free-floating: it is the boost deficit this cycle, capped
+    by what one sized batch can equip.
+    """
     goal = _goal(state, bundle_game_data)
-    assert goal._active_craft(state, bundle_game_data) is not None
-    assert goal.value(state, bundle_game_data, None) == 0.0
+    plan = goal._active_craft(state, bundle_game_data)
+    assert plan is not None
+    _code, _runs, equip_qty = plan
+    assert goal.value(state, bundle_game_data, None) == float(equip_qty)
+    assert goal.value(state, bundle_game_data, None) > 0.0
     assert goal.is_satisfied(state) is False
 
 

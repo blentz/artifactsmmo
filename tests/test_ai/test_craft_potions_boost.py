@@ -183,3 +183,4 @@ def test_craft_potions_fires_true_when_boost_ingredient_gatherable():
     gd._resource_drops = {"sunflower_field": _INGREDIENT}
     state = _state_stalled(inventory={})  # nothing held, but gatherable
     assert craft_potions_fires(state, gd) is True
+

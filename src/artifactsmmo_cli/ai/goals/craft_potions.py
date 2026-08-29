@@ -220,9 +220,27 @@ class CraftPotionsGoal(Goal):
         # as urgent as a heal deficit; defer to 1.0 since there is no deficit).
         if unlock_boost_target(state, game_data) is not None:
             return 1.0
-        # Heal path: return deficit magnitude (preserves existing behaviour).
-        deficit = self._baseline(state.level, state, game_data, history) - self._equipped(state, game_data)
-        return float(max(0, deficit))
+        # THE BATCH THIS GOAL WILL ACTUALLY CLOSE, read off the plan
+        # `_active_craft` just chose — never re-derived here.
+        #
+        # It used to re-derive the HEAL deficit, which is one of the THREE
+        # conditions `craft_potions_fires` fires on. The third
+        # (`potion_supply.py:210-220`) is a BOOST-stock deficit, reached only
+        # once the heal deficit is closed — so on that arm the re-derivation
+        # computed `<= 0` by construction and a goal the ladder had just fired
+        # reported 0.0 urgency. Measured on the committed bundle: 1 cell,
+        # `l20_boost_stock`, the only one that reaches the arm and the reason
+        # the scenario exists.
+        #
+        # Exactly the defect R4 of the task-horizon residuals found in
+        # `TaskCancelGoal.value` (3 of 3 selected cells reporting 0.0) and fixed
+        # the same way: delete the second producer. `_active_craft` is the ONE
+        # place that decides what this cycle crafts, `is_satisfied` is already
+        # stated over the same batch quantity, and `relevant_actions` sizes its
+        # equip from it — so all three now agree by construction instead of by
+        # inspection.
+        _code, _runs, equip_qty = plan
+        return float(max(1, equip_qty))
 
     def is_satisfied(self, state: WorldState) -> bool:
         # Seeded (production): satisfaction is "this plan's BATCH has landed" —
