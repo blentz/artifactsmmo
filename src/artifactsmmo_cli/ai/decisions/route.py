@@ -70,6 +70,30 @@ def route_exists(code: str, state: WorldState, game_data: GameData,
     return bool(obtain_sources(code, state, game_data, ctx))
 
 
+def route_is_acquirable(goal: MetaGoal, state: WorldState, game_data: GameData,
+                        ctx: SelectionContext,
+                        history: LearningStore | None) -> bool:
+    """Can this goal be obtained at ANY finite cost — counting routes that must
+    first be unlocked?
+
+    NOT `route_exists`, and the difference is the whole reason this exists.
+    `route_exists` asks what the executor can serve THIS CYCLE, so it says no to
+    a skill-gated craft the character could reach by grinding; this asks whether
+    the cost model can price a way there at all, which is the question a node
+    faces before COMMITTING to a target rather than before planning one.
+
+    Use it only when the alternative to committing is a known dead end. A node
+    that merely wants "is this child reachable now" must still ask
+    `route_exists` — the price form spends a full closure walk, and
+    `decisions/route`'s call budget is part of its contract.
+
+    `UNOBTAINABLE_PER_UNIT` is the pricer's own "no route" sentinel, so this is
+    that answer read through the one funnel wave 6's O6 census permits under
+    `ai/decisions/` rather than a second import of the cost model.
+    """
+    return route_price(goal, state, game_data, ctx, history) < UNOBTAINABLE_PER_UNIT
+
+
 def route_price(goal: MetaGoal, state: WorldState, game_data: GameData,
                 ctx: SelectionContext,
                 history: LearningStore | None,

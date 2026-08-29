@@ -230,3 +230,60 @@ STRUCTURAL wall, which stays counted however much of it production learns to
 open — and a `gate_price` column reports which walls the gate opens (2 of 9
 store-less; 3 of 9 live, where a grind rate exists). A census that stops seeing
 its subject when the subject is being handled is a thermometer that melts.
+
+---
+
+## 8. `[SHIPPED 2026-08-29]` The decision-side node — and the reason it still does not fire
+
+`CanIFightWhatDropsThis`, in the `ObtainItem` graph between the currency gate and
+the equippable arm. When nothing serves the step and its only droppers are
+unbeatable, the answer is the GEAR that opens the fight.
+
+**Before it, the graph emitted `GatherMaterials(<the walled material>)` in 10
+cells** — a gather goal for something nothing gathers, unplannable on every cycle
+it is selected, and the same silence the gold wall had one layer up.
+
+**It re-enters the graph at the gear step** rather than choosing a goal:
+`IsTheStepTheEquippableItself` already knows the craft-skill gate, the owned-gear
+check and the chain chunking, and picking a goal here would be a second producer
+of all three — the way the skill gate came to disagree with itself and cost a
+fleet 39.6 hours. The gear step enters BELOW this node, so a gear whose own
+materials are drop-walled cannot bounce back into it: one hop, cut by
+construction, no depth budget.
+
+**Unreachable gear declines, and that guard is the one that matters.** Without
+it, `l35_boots_drop_farm` swapped its doomed gather for a weaponcrafting 30→35
+climb toward `cursed_sceptre` — five of whose six materials are themselves
+unobtainable at that level. **A doomed gather stalls visibly; a doomed grind
+consumes thousands of cycles looking like progress.** The test is
+`route_is_acquirable`, a new predicate on `decisions/route.py` (the one pricing
+funnel O6 permits under `ai/decisions/`) — so this node and
+`_gated_drop_option` cannot disagree about which walls are worth acting on. The
+O6 census caught the first attempt importing the cost model directly.
+
+### It changes no cycle, and now the reason is precise
+
+**0 of 44 scenarios select a different goal, with or without a learning store.**
+
+All ten walled steps are reached as ALTERNATIVES, never as a chosen root.
+`_servable_promotion` walks the alternatives only when the CHOSEN root is
+unservable — and the root walk always has another servable rung, because a
+blocked gear target returns a SKILL CLIMB (`IsThisTargetBlocked`) rather than
+confronting the wall. So the graph never has to answer the drop wall.
+
+I built a scenario cell to force the case — a level-12 character blocked on
+`leather_boots` by `cowhide` alone, both craft gates met — and **it did not
+exercise the node either**: `WhichSlotIsFurthestBehind` picked the jewelry slot
+and the walk returned `ReachSkillLevel(jewelrycrafting, 2)`. The cell was
+removed rather than committed, because a fixture whose description claims a path
+it does not take is worse than no fixture.
+
+**What this says about the fleet.** The drop wall is real, named, priced and now
+answered — but it is not what is costing the fleet time, because the walk always
+finds another rung first. That is worth knowing before anyone spends a session on
+it: the grey wall's cost is the craft-skill climb (fixed @9be46ee1) and the grind
+rate, not this.
+
+`test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it` pins both halves —
+at least ten walled steps reached, none of them on a chosen root — so the day a
+cell does reach it, the test fails and says the docstring needs rewriting.

@@ -26,8 +26,12 @@ for the wiring pin (production forwards to this graph correctly) and
 change itself.
 """
 
+from dataclasses import replace
+
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.combat_deficit import combat_deficit
 from artifactsmmo_cli.ai.decision import Decision
+from artifactsmmo_cli.ai.decisions.route import route_exists, route_is_acquirable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gather_step_target import gather_step_target
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -78,6 +82,99 @@ class CanIAffordTheCurrencyLeaf(Decision[Goal]):
         if analysis.funding_target is not None:
             currency, amount = analysis.funding_target
             return ReachCurrencyGoal(currency=currency, target=amount)
+        return CanIFightWhatDropsThis(self.step, self.root)
+
+
+class CanIFightWhatDropsThis(Decision[Goal]):
+    """The step's only source is a monster this character loses to — so the
+    answer is the GEAR that opens the fight, not a gather that cannot run.
+
+    THE DECISION-SIDE HALF OF THE DROP WALL. `obtain_sources._drop_sources`
+    withholds a DROP route when the dropper is not `is_winnable` at restorable
+    hp, so a pure drop material with an unbeatable dropper has NO source at all
+    and this graph fell through to `GatherMaterials(<material>)` — a gather goal
+    for something nothing gathers, unplannable on every cycle it is selected.
+    Measured on the committed bundle before this node: **10 cells emitting
+    exactly that doomed gather**, the same silence the gold wall had one layer
+    up (`audit/drop_wall_census.py` names the wall; this acts on it).
+
+    IT RE-ENTERS THE GRAPH AT THE GEAR STEP rather than choosing a goal itself.
+    `IsTheStepTheEquippableItself` already knows how to pursue a piece of gear —
+    the craft-skill gate, the owned-gear check, the chunked chain — and picking a
+    goal here would be a second producer of all three, which is how the skill
+    gate came to disagree with itself and cost a fleet 39.6 hours.
+
+    THAT RE-ENTRY IS ALSO WHY THIS CANNOT CYCLE. The gear step enters BELOW this
+    node, so a gear whose own materials are drop-walled cannot bounce back into
+    it: `forest_whip` opens `mushmush`, and its recipe wants `king_slimeball`,
+    which `king_slime` guards — a real cycle in the catalogue, and the reason
+    `acquisition_cost._gated_drop_option` prices its chain one level deep too.
+    One hop, cut by construction, no depth budget to tune.
+
+    THE FIRST CHAIN STEP, NOT THE WHOLE CHAIN, mirroring `craft_skill_gate`'s
+    `current + 1`: the graph re-derives from live state every cycle, so the
+    chain advances on its own and nothing has to plan the whole climb at once.
+
+    Silent — falling through to today's answer — whenever this is not the
+    situation: something already serves the step, the item has no live dropper,
+    every live dropper is beatable (then `obtain_sources` names the DROP route
+    and there is no wall), no dropper's deficit CLOSES, or the closing step is
+    not equippable. `combat_deficit`'s "unwinnable and I do not know what to
+    build" stays an honest wall; inventing a target for it would be worse than
+    the doomed gather, because it would look like progress.
+    """
+
+    name = "CanIFightWhatDropsThis"
+
+    def __init__(self, step: ObtainItem, root: MetaGoal | None) -> None:
+        self.step = step
+        self.root = root
+
+    def resolve(self, state: WorldState, game_data: GameData,
+                ctx: SelectionContext, history: LearningStore | None
+                ) -> "Decision[Goal] | Goal | None":
+        if route_exists(self.step.code, state, game_data, ctx):
+            return IsTheStepTheEquippableItself(self.step, self.root)
+        # AT RESTORABLE HP, in lockstep with `_drop_sources` and with the census:
+        # route existence is not an hp question — being at 20% hp is a reason to
+        # Rest, an action the planner has.
+        rested = replace(state, hp=state.max_hp)
+        for monster, _rate, _min_q, _max_q in game_data.monsters_dropping(
+                self.step.code):
+            if not game_data.all_monster_locations.get(monster):
+                continue  # no live tiles: dormant content, not a gear problem
+            deficit = combat_deficit(rested, game_data, monster)
+            if deficit is None or not deficit.closes:
+                continue
+            # `item_type` comes from `combat_deficit`'s own step, and its
+            # candidate pool is filtered to `stats.type_ in ITEM_TYPE_TO_SLOTS`
+            # — so the lookup cannot miss and a guard for it would be the second
+            # of two guards where one is correct. Reading the type the deficit
+            # already resolved also means the two cannot disagree about what
+            # slot a piece of gear occupies.
+            gear = deficit.chain[0]
+            target = ObtainItem(code=gear.code, quantity=1,
+                                slot=ITEM_TYPE_TO_SLOTS[gear.item_type][0])
+            # UNREACHABLE GEAR DECLINES, and this is the guard that matters most.
+            # `combat_deficit` answers "what would close this fight" from the
+            # catalogue; it does not ask whether this character can GET the
+            # thing. Without the test, `l35_boots_drop_farm` swapped a doomed
+            # gather for a weaponcrafting 30->35 climb toward `cursed_sceptre` —
+            # five of whose six materials are themselves unobtainable at that
+            # level. That is strictly worse than the wall it replaces: a doomed
+            # gather stalls visibly, a doomed grind consumes thousands of cycles
+            # LOOKING like progress. It is the same failure
+            # `_gated_craft_option` records at 4.5 live hours, and the same rule
+            # answers it — an unpriceable target is declined, never charged 0.
+            #
+            # Asked through `route_price`, the one pricing funnel wave 6's O6
+            # census permits under `ai/decisions/`, so this node and
+            # `acquisition_cost._gated_drop_option` cannot disagree about which
+            # walls are worth acting on: the price says a route exists, and the
+            # decision routes to it. One rule, two consumers.
+            if not route_is_acquirable(target, state, game_data, ctx, history):
+                continue
+            return IsTheStepTheEquippableItself(target, self.root)
         return IsTheStepTheEquippableItself(self.step, self.root)
 
 

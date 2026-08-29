@@ -27,23 +27,29 @@ triggered by any (scenario, recipe) pair in
 unrecognized step type, and every `ReachCharLevel` sub-branch) directly --
 those live entirely in `strategy_driver.py` and are never reached by the
 ObtainItem-only Decision graph at all."""
+import dataclasses
 import json
 
 import pytest
 
 from artifactsmmo_cli.ai.decision import resolve_node
 from artifactsmmo_cli.ai.decisions.obtain_item import obtain_item_decision
+from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.provision_marginal_fight import ProvisionMarginalFightGoal
 from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
+from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.strategy import actionable_step
+from artifactsmmo_cli.audit.drop_wall_census import unwinnable_drop_items
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_strategy_driver import (
     _ctx,
@@ -337,3 +343,161 @@ def test_objective_step_goal_provisions_for_reach_char_level(tmp_path):
     goal = objective_step_goal(step, state, gd, ctx, history=history)
     assert isinstance(goal, ProvisionMarginalFightGoal)
     history.close()
+
+
+# --- the unwinnable-dropper wall: gear, not a doomed gather ------------------
+
+def _grind_store(skill: str = "weaponcrafting", xp_per_cycle: int = 40
+                 ) -> LearningStore:
+    """A real store carrying an observed grind rate for `skill`.
+
+    The node prices its gear target through `route_price`, and a skill-gated
+    craft cannot be priced without an observed rate — so without this the node
+    declines every case in the committed set, exactly as
+    `acquisition_cost._gated_drop_option` does. Store-fed is the production
+    shape; `test_without_a_grind_rate_the_node_declines` pins the other half."""
+    store = LearningStore(db_path=":memory:", character="wall_probe")
+    store.start_session()
+    for i in range(5):
+        store.record_cycle(Cycle(
+            ts=f"2026-08-08T00:00:{i:02d}+00:00", session_id="s", cycle_index=i,
+            character="wall_probe", outcome="ok",
+            action_repr=f"LevelSkill({skill}->10)",
+            delta_skill_xp_json=json.dumps({skill: xp_per_cycle})))
+    return store
+
+
+def _with_skill_xp(state):
+    """`scenario_state` leaves `skill_xp`/`skill_max_xp` empty; a real
+    `WorldState` always carries them, and the grind price needs them."""
+    return dataclasses.replace(
+        state, skill_xp={s: 0 for s in state.skills},
+        skill_max_xp={s: 1000 for s in state.skills})
+
+
+def test_a_material_walled_by_an_unbeatable_dropper_routes_to_the_GEAR(
+        bundle_game_data) -> None:
+    """THE DECISION-SIDE HALF of the drop wall, and the whole reason the census
+    was built.
+
+    `cowhide` drops only from `cow`, which this character loses to, so
+    `obtain_sources` serves NOTHING and the graph emitted
+    `GatherMaterials(cowhide, {cowhide:5})` — a gather goal for a material with
+    no gather, which cannot plan on any cycle it is selected. Measured on the
+    committed bundle before this node: 10 such cells, each emitting exactly that.
+    It is the same silence the gold wall had, one layer down.
+
+    `combat_deficit` closes `cow` with `iron_sword`, so the honest answer is the
+    sword. The node re-enters the graph AT the gear step rather than choosing a
+    goal itself, so the craft-skill gate and the chunking arms apply to the sword
+    exactly as if it had been the step all along — which is why the answer here
+    is the weaponcrafting climb the sword needs, not the sword."""
+    gd = bundle_game_data
+    state = _with_skill_xp(scenario_state(SCENARIOS["l12_deep_chain_grind"], gd))
+    step = ObtainItem(code="cowhide", quantity=5)
+    assert not obtain_sources("cowhide", state, gd, NO_PROFILE_CONTEXT)
+    store = _grind_store()
+    try:
+        goal = resolve_node(obtain_item_decision(step, step), state, gd,
+                            NO_PROFILE_CONTEXT, store)
+        assert "cowhide" not in repr(goal), (
+            f"still routing to the walled material itself: {goal!r}")
+        assert "weaponcrafting" in repr(goal) or "iron_sword" in repr(goal), (
+            f"expected the gear that opens the cow, got {goal!r}")
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_without_a_grind_rate_the_node_declines(bundle_game_data) -> None:
+    """UNREACHABLE GEAR DECLINES, and an unpriceable one is unreachable as far as
+    this node can tell.
+
+    Same rule `_gated_craft_option` states and the same live reason: a target
+    that looks free does not merely fail to prune, it CAPTURES the bot. Declining
+    leaves the honest wall in place, which is worse to look at and better to
+    have."""
+    gd = bundle_game_data
+    state = _with_skill_xp(scenario_state(SCENARIOS["l12_deep_chain_grind"], gd))
+    step = ObtainItem(code="cowhide", quantity=5)
+    goal = resolve_node(obtain_item_decision(step, step), state, gd,
+                        NO_PROFILE_CONTEXT, None)
+    assert repr(goal) == "GatherMaterials(cowhide, {cowhide:5})"
+
+
+def test_a_material_with_a_route_is_untouched(bundle_game_data) -> None:
+    """The node must fire ONLY on the wall: an item something can serve keeps
+    today's answer, whatever its drop table says."""
+    gd = bundle_game_data
+    state = scenario_state(SCENARIOS["l12_deep_chain_grind"], gd)
+    step = ObtainItem(code="copper_ore", quantity=5)
+    assert obtain_sources("copper_ore", state, gd, NO_PROFILE_CONTEXT)
+    goal = resolve_node(obtain_item_decision(step, step), state, gd,
+                        NO_PROFILE_CONTEXT, None)
+    assert "copper_ore" in repr(goal)
+
+
+def test_an_unreachable_closing_chain_keeps_the_honest_wall(
+        bundle_game_data) -> None:
+    """`mushroom` is the case, and it is the circularity the 2026-08-09 audit
+    feared rather than a hypothetical: `mushmush` is closed by `forest_whip`,
+    whose recipe wants `king_slimeball` — guarded by `king_slime`, a monster this
+    character also cannot beat. Pricing that needs a FIXED POINT, so the price
+    says unobtainable and the node declines."""
+    gd = bundle_game_data
+    state = _with_skill_xp(scenario_state(SCENARIOS["l20_boost_stock"], gd))
+    step = ObtainItem(code="mushroom", quantity=4)
+    store = _grind_store()
+    try:
+        assert not obtain_sources("mushroom", state, gd, NO_PROFILE_CONTEXT)
+        goal = resolve_node(obtain_item_decision(step, step), state, gd,
+                            NO_PROFILE_CONTEXT, store)
+        assert repr(goal) == "GatherMaterials(mushroom, {mushroom:4})"
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it(
+        bundle_game_data) -> None:
+    """CORPUS-WIDE, and it pins the limit as hard as the feature.
+
+    Ten cells over the committed scenarios reach a drop-walled material as a
+    step. Where the closing gear is priceable the node answers with it; where it
+    is not, the honest wall stays.
+
+    ⚠️ ALL TEN REACH IT AS AN *ALTERNATIVE*, never as the chosen root, so no
+    cycle in the committed corpus acts on this node: `_servable_promotion` walks
+    the alternatives only when the CHOSEN root is unservable, and the root walk
+    always has another servable rung — a blocked gear target returns a skill
+    climb (`IsThisTargetBlocked`) rather than confronting the wall. Measured
+    through `plan_from_state` over all 44 scenarios, with and without the node:
+    **0 cells select a different goal**. The node is the right answer for a state
+    the corpus does not reach, and the second assertion below fails the day one
+    does — which is the day this docstring needs rewriting."""
+    gd = bundle_game_data
+    store = _grind_store()
+    reached: list[tuple[str, bool]] = []
+    try:
+        for name, scenario in SCENARIOS.items():
+            state = _with_skill_xp(scenario_state(scenario, gd))
+            resolution = resolve_root(state, gd,
+                                      CharacterObjective.from_game_data(gd),
+                                      NO_PROFILE_CONTEXT, store)
+            walled = set(unwinnable_drop_items(state, gd))
+            for root in [c for c in (resolution.root, *resolution.alternatives)
+                         if c is not None]:
+                step = actionable_step(root, state, gd, NO_PROFILE_CONTEXT) or root
+                if (not isinstance(step, ObtainItem) or step.code not in walled
+                        or obtain_sources(step.code, state, gd, NO_PROFILE_CONTEXT)):
+                    continue
+                reached.append((name, root is resolution.root))
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+    assert len(reached) >= 10, (
+        f"only {len(reached)} walled steps reached — the fixture set moved and "
+        "this test now measures less than it claims")
+    assert not any(is_chosen for _name, is_chosen in reached), (
+        "a walled step is now on a CHOSEN root's path — this node finally acts "
+        "on a live cycle, and the docstring above needs rewriting")
