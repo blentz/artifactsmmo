@@ -293,6 +293,11 @@ def decide_tree(state: WorldState, game_data: GameData,
         # and two mutation anchors; a single producer cannot drift from itself.
         aged_pick=resolution.aged,
         promoted_from=promoted_from,
+        # PUBLISHED EVEN WHEN PROMOTION MOVED THE ROOT: the demand is a fact
+        # about what this character cannot make, not about what it happens to
+        # be doing this cycle, and a sibling's craft is just as useful either
+        # way.
+        blocked_target=resolution.blocked_target,
     )
 
 

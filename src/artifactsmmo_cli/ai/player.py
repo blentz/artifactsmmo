@@ -355,6 +355,11 @@ class GamePlayer:
         self._last_outcome: str | None = None
         self._plan_cache: PlanCache | None = None
         self._last_decide_crafting_target: str | None = None
+        # The gear a crafting-skill gate blocked this character out of, from
+        # `StrategyDecision.blocked_target`. Published as demand when the
+        # chosen root is a skill climb and therefore names no item — see
+        # `_own_unmet_demand`.
+        self._last_blocked_target: str | None = None
         # Per-cycle SelectionContext, computed ONCE per cycle at the
         # `_selection_context` seam and threaded into `decide`/`next_grind_goal`/
         # `build_plan_tree` so the tier descent stops at a node with any ready
@@ -714,6 +719,31 @@ class GamePlayer:
                 if seat in live_seats
             }  # lockstep with the focus ledger
 
+    def _record_decision_targets(self, decision: "StrategyDecision") -> str | None:
+        """The chosen step's item code, and the blocked target beside it.
+
+        ONE PRODUCER for both. `_decide_band` and `plan_from_state` each carried
+        their own copy of this derivation — `plan_from_state`'s docstring says it
+        "mirrors run()'s per-cycle decide+select", and a mirror is what it was:
+        the copies drifted the moment `blocked_target` was added to one of them,
+        so the diagnostic `plan` command published different demand from the live
+        loop. Same shape as every two-producers defect in this codebase, caught
+        here by a probe that read the wrong path.
+
+        Returns the crafting target (the caller stamps it onto `state`) and
+        records both fields for the coordination publisher.
+        """
+        step = decision.chosen_step
+        crafting_target = step.code if isinstance(step, ObtainItem) else None
+        if crafting_target is None:
+            for alt in getattr(decision, "fallback_steps", []):
+                if isinstance(alt, ObtainItem):
+                    crafting_target = alt.code
+                    break
+        self._last_decide_crafting_target = crafting_target
+        self._last_blocked_target = decision.blocked_target
+        return crafting_target
+
     def _decide_band(
         self,
         state: "WorldState",
@@ -770,20 +800,13 @@ class GamePlayer:
             "promoted": promoted_from is not None,
             "promoted_from": repr(promoted_from) if promoted_from is not None else None,
         }
-        step = decision.chosen_step
-        crafting_target = step.code if isinstance(step, ObtainItem) else None
-        if crafting_target is None:
-            for alt in getattr(decision, "fallback_steps", []):
-                if isinstance(alt, ObtainItem):
-                    crafting_target = alt.code
-                    break
+        crafting_target = self._record_decision_targets(decision)
         self.state = state = replace(state, crafting_target=crafting_target)
         selected_goal, plan, goals_tried = self._arbiter.select(
             decision, state, game_data, actions, ctx,
             suppressed=set(self._suppressed_goals),
             objective=self._objective,
         )
-        self._last_decide_crafting_target = crafting_target
         return selected_goal, plan, goals_tried
 
     def _tree_band_adequate(self) -> bool:
@@ -1051,13 +1074,7 @@ class GamePlayer:
                 history=self.history)
         self._bump_focus(decision)
         self._last_decision = decision
-        step = decision.chosen_step
-        crafting_target = step.code if isinstance(step, ObtainItem) else None
-        if crafting_target is None:
-            for alt in getattr(decision, "fallback_steps", []):
-                if isinstance(alt, ObtainItem):
-                    crafting_target = alt.code
-                    break
+        crafting_target = self._record_decision_targets(decision)
         self.state = state = replace(state, crafting_target=crafting_target)
         actions = self._build_actions()
         # Diagnostic injection (the `plan --doom/--committed` flags): seed the
@@ -3009,11 +3026,33 @@ class GamePlayer:
         `task_reserved_demand` calls for the task-material reservation
         closure — rather than computing demand a second way (one-obtain-model
         discipline)."""
-        root = self._last_decide_crafting_target
-        if root is None:
+        # THE BLOCKED TARGET IS THE FALLBACK, and it is the whole point of
+        # publishing at all. A character whose gear target is skill-gated
+        # resolves to `ReachSkillLevel`, which names no item, so `root` is None
+        # and this returned `{}` — silence, on exactly the cycles where a
+        # sibling holding that skill could have made the thing. Measured on the
+        # live fleet before this: `SupplyBank` executed 0 times in 105,159
+        # cycles and `supply_claims` was empty, while every row the board ever
+        # carried was a quantity-1 vendor good every asker could serve itself.
+        #
+        # `serves_item` then marks the blocked code NOT self-servable (its skill
+        # gate is what blocked it), which is what makes the request ASYMMETRIC
+        # and what `SUPPLY_BANK`'s second arm fires on. Its MATERIALS come along
+        # through the closure and stay self-servable, which is also right: those
+        # the asker can gather.
+        # BOTH ROOTS, not one or the other: "what I am working toward" and
+        # "what I am blocked out of" are different facts and the fleet needs
+        # both. `closure_demand` accumulates the max across roots into one dict
+        # — its documented usage — so two calls is the supported shape, not a
+        # merge invented here.
+        roots = [code for code in (self._last_decide_crafting_target,
+                                   self._last_blocked_target)
+                 if code is not None]
+        if not roots:
             return {}
         demand: dict[str, int] = {}
-        closure_demand(root, 1, game_data, demand, frozenset())
+        for root in roots:
+            closure_demand(root, 1, game_data, demand, frozenset())
         bank = state.bank_items or {}
         return {code: qty - state.inventory.get(code, 0) - bank.get(code, 0)
                 for code, qty in demand.items()

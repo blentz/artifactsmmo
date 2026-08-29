@@ -136,6 +136,12 @@ class RootResolution:
     onto `StrategyDecision.aged_pick`, which is what gates the player's seat
     bump (`GamePlayer._charge_focus`)."""
 
+    blocked_target: str | None = None
+    """The gear code a crafting-skill gate turned into this walk's
+    `ReachSkillLevel` — see `RootWalk.blocked_target`. `decide_tree` copies it
+    onto `StrategyDecision.blocked_target`, and the player publishes it as
+    demand so a sibling holding the skill can make it."""
+
 
 @dataclass
 class RootWalk:
@@ -156,6 +162,15 @@ class RootWalk:
     `IsThisTargetBlocked` once per sibling to turn it into a `MetaGoal`) is
     handed a throwaway `RootWalk`, so those visits never pollute the trail.
 
+    * `blocked_target` — the gear code whose CRAFTING-SKILL GATE turned this
+      walk into a `ReachSkillLevel`. The walk's answer is then a skill climb
+      and the target itself is dropped, which is exactly the item a sibling
+      could have made: measured on the live fleet, `SupplyBank` has run 0 times
+      in 105,159 cycles because a blocked character publishes NO demand at all.
+      Deposited by the ONE node that reads the gate, for the same reason `aged`
+      is — a re-derivation in the player would be a second classifier, and
+      `classify_target`'s own docstring records what masking costs.
+
     * `aged` — whether `WhichSlotIsFurthestBehind` took the d'Hondt
       interleave rather than its unaged fast path. `GamePlayer._charge_focus`
       gates the SEAT bump on it, so the schedule and the ledger advance in
@@ -169,6 +184,7 @@ class RootWalk:
     trail: list[str] = field(default_factory=list)
     sibling_targets: list[tuple[str, GearTarget]] = field(default_factory=list)
     aged: bool = False
+    blocked_target: str | None = None
 
 
 def _target_rung(game_data: GameData, code: str) -> int:
@@ -700,6 +716,13 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
                 ) -> "ObtainItem | ReachSkillLevel":
         self.walk.trail.append(self.name)
         if self.target.blocking_skill is not None:
+            # THE ASK, recorded before the target is dropped. A sibling that
+            # already holds this skill can make this item; nothing else in the
+            # walk carries the code past here, and the demand board is what
+            # turns it into a request. Sibling conversions get a THROWAWAY
+            # `RootWalk` (see `resolve_root`), so this records the CHOSEN
+            # target only.
+            self.walk.blocked_target = self.target.code
             # +1, not `blocking_skill_level`: the graph re-derives from live
             # state every cycle, so the increment advances on its own and
             # nothing has to plan the whole climb in one shot. Same rule as
@@ -833,4 +856,5 @@ def resolve_root(state: WorldState, game_data: GameData,
         if alt != root and alt not in alternatives:
             alternatives.append(alt)
     return RootResolution(root=root, alternatives=tuple(alternatives),
-                          trail=tuple(walk.trail), aged=walk.aged)
+                          trail=tuple(walk.trail), aged=walk.aged,
+                          blocked_target=walk.blocked_target)

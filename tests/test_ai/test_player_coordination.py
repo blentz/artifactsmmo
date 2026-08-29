@@ -2246,3 +2246,51 @@ def test_refresh_sibling_reads_is_a_no_op_without_coordination(tmp_path) -> None
     player._refresh_sibling_reads(datetime.now(tz=timezone.utc))
 
     assert player._sibling_skills == {}
+
+
+# ---------------------------------------------------------------------------
+# The BLOCKED target: what a skill-gated character asks the fleet for
+# ---------------------------------------------------------------------------
+
+def test_a_skill_gated_character_publishes_the_target_it_cannot_make():
+    """THE ASK THAT WAS NEVER MADE.
+
+    Demand is published from the chosen root, and a character blocked by a
+    crafting-skill gate resolves to `ReachSkillLevel` — not an `ObtainItem` — so
+    `_last_decide_crafting_target` is None and the whole board stays silent.
+    Measured on the live fleet: `SupplyBank` has executed **0 times in 105,159
+    cycles**, `supply_claims` is empty, and the only rows the board has ever
+    carried are quantity-1 vendor goods every asker can serve itself.
+
+    The item a sibling could actually help with — the one behind a skill gate —
+    is precisely the one never asked for. So the blocked target is published
+    too, from the walk that classified it, and `serves_item` then marks it NOT
+    self-servable, which is what makes it ASYMMETRIC and what
+    `SUPPLY_BANK`'s second arm fires on."""
+    p = GamePlayer(character="hero")
+    gd = _make_planner_gd()
+    gd._crafting_recipes = {"copper_dagger": {"copper_bar": 2}}
+    p._last_decide_crafting_target = None
+    p._last_blocked_target = "copper_dagger"
+    state = make_state(inventory={"copper_bar": 1})
+    assert p._own_unmet_demand(state, gd) == {"copper_dagger": 1, "copper_bar": 1}
+
+
+def test_both_roots_are_published_not_one_or_the_other():
+    """"What I am working toward" and "what I am blocked out of" are DIFFERENT
+    facts, and the fleet needs both.
+
+    Publishing only the chosen root keeps the board silent about the skill gate
+    — the asymmetric half, and the only half a sibling can act on. Publishing
+    only the blocked target would drop the materials the character is actually
+    collecting. `closure_demand` accumulates the max across roots into one dict,
+    which is its documented usage, so this is two calls rather than a merge
+    invented at the call site."""
+    p = GamePlayer(character="hero")
+    gd = _make_planner_gd()
+    gd._crafting_recipes = {"copper_dagger": {"copper_bar": 2},
+                            "iron_dagger": {"iron_bar": 3}}
+    p._last_decide_crafting_target = "iron_dagger"
+    p._last_blocked_target = "copper_dagger"
+    assert p._own_unmet_demand(make_state(), gd) == {
+        "iron_dagger": 1, "iron_bar": 3, "copper_dagger": 1, "copper_bar": 2}

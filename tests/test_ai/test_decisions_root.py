@@ -43,7 +43,8 @@ from artifactsmmo_cli.ai.decisions.root import (
 )
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemStats
-from artifactsmmo_cli.ai.scenario import SCENARIOS
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
     HORIZON_LEVEL_UP,
@@ -785,3 +786,37 @@ def test_an_empty_deficit_chain_falls_through_to_the_tier_arm(monkeypatch):
         make_state(level=5), gd, _ctx(), None)
     assert isinstance(child, IsMyGearBehindMyTier)
     assert walk.trail == ["WhichSlotClosesTheFight"]
+
+
+# --- the blocked target: what the walk drops, and who needs it ---------------
+
+def test_a_skill_gated_pick_records_the_target_it_could_not_build(
+        bundle_game_data) -> None:
+    """The walk answers a skill-gated slot with a CLIMB, and the target itself
+    is dropped — which is the one item a sibling holding that skill could have
+    made.
+
+    Measured on the live fleet before this field existed: a blocked character
+    publishes no demand at all, `SupplyBank` has executed 0 times in 105,159
+    cycles, and `supply_claims` is empty. Recorded by the ONE node that reads
+    the gate, for the same reason `aged` is — a re-derivation in the player
+    would be a second classifier."""
+    gd = bundle_game_data
+    state = scenario_state(SCENARIOS["l12_deep_chain_grind"], gd)
+    resolution = resolve_root(state, gd, CharacterObjective.from_game_data(gd),
+                              NO_PROFILE_CONTEXT, None)
+    assert isinstance(resolution.root, ReachSkillLevel)
+    assert resolution.root.skill == "jewelrycrafting"
+    assert resolution.blocked_target == "life_amulet"
+
+
+def test_an_unblocked_walk_records_no_blocked_target(bundle_game_data) -> None:
+    """`blocked_target` names a SKILL GATE and nothing else: a walk that ends in
+    an `ObtainItem` leaves it None, so the player publishes exactly what it did
+    before."""
+    gd = bundle_game_data
+    state = scenario_state(SCENARIOS["l1_fresh"], gd)
+    resolution = resolve_root(state, gd, CharacterObjective.from_game_data(gd),
+                              NO_PROFILE_CONTEXT, None)
+    assert not isinstance(resolution.root, ReachSkillLevel)
+    assert resolution.blocked_target is None

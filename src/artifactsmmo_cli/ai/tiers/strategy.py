@@ -278,6 +278,12 @@ class StrategyDecision:
     # be used (planner crafts bars + boots in one chain) rather than
     # GatherMaterials(copper_bar) which only crafts bars and stops.
     fallback_roots: list[MetaGoal] = field(default_factory=list)
+    # The gear code whose CRAFTING-SKILL GATE produced a `ReachSkillLevel` root
+    # (`decisions/root.RootWalk.blocked_target`). Carried so the player can
+    # PUBLISH it as fleet demand: a blocked character's root is a skill climb,
+    # not an `ObtainItem`, so without this it publishes nothing at all and the
+    # one item a sibling could make for it is the one never asked for.
+    blocked_target: str | None = None
     # Whether the committed gear pick went through the focus-aging INTERLEAVE
     # this decision (Task 12): True iff a gear candidate was chosen AND at least
     # one candidate had aged past FOCUS_FLAT. Produced by the ONE node that

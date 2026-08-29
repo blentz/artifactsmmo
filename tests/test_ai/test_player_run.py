@@ -782,6 +782,13 @@ def test_run_derives_crafting_target_from_fallback_obtain_item():
         chosen_step = None            # not an ObtainItem -> crafting_target None
         chosen_root = None
         fallback_steps = [ObtainItem("copper_dagger", 1)]
+        # The real `StrategyDecision` always carries this (a dataclass field
+        # with a default), so a stub without it models a decision that cannot
+        # exist. `_record_decision_targets` reads it straight rather than
+        # through `getattr`: a real decision that somehow lacked it would
+        # publish no fleet demand at all, silently, which is the failure the
+        # field was added to end.
+        blocked_target = None
 
         def to_trace(self):
             return {}
