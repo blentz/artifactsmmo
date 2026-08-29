@@ -170,3 +170,63 @@ honest meanwhile by a positive control rather than by the grid.
 
 **Production behaviour is unchanged, as designed.** Those nine candidates still
 price at infinity and the promotion walk still skips them.
+
+---
+
+## 7. `[SHIPPED 2026-08-28]` Pricing the CLOSES arm — and what it does NOT do
+
+`_gated_drop_option` in `ai/acquisition_cost.py`, the third deferred route
+beside `_gated_craft_option` and `_sibling_craft_option`, using the same
+`RouteOption.unlock` / `unlock_actions` mechanism. Keyed on the MONSTER, so two
+materials behind one unbeatable mob are opened by one gear acquisition.
+
+**The recursion is cut by construction, not by a depth budget.** The chain is
+priced with `gated_drop=False`, so the inner walk sees only what
+`obtain_sources` serves today. One level, terminating, and a strict UNDER-count —
+the safe direction for a bound.
+
+**That cut refuses 6 of the 9, and the reasons are worth reading.** With an
+observed grind rate the gate opens **3 of 9** (`cowhide` x2, `blue_slimeball`,
+all via `iron_sword`). The rest decline:
+
+* `mushroom` <- `mushmush` closes with `forest_whip`, whose recipe wants
+  `king_slimeball` — walled by `king_slime`, a monster this character also cannot
+  beat. **This is the circularity §1 quoted, exhibited rather than argued about**:
+  pricing it needs a FIXED POINT, not a deeper walk.
+* `king_slimeball` <- `king_slime` closes with `cursed_sceptre`, five of whose
+  six materials are themselves unobtainable at that level.
+* `death_knight_sword` has no recipe at all.
+
+**Measured cost: no per-cycle regression.** `plan_from_state` over all 44
+scenarios averages 49ms with the gate off and 40ms with it on — the +43% seen on
+an artificial all-candidates pricing sweep (29s -> 41s over 438 walks) does not
+reach the cycle, because a cycle prices a handful of candidates and stops at the
+first plannable goal.
+
+### The honest part: it changes no decision today
+
+**0 of 44 scenarios select a different goal, or a different plan length, with the
+gate on.** The route is priced and gate-enforced; nothing acts on it.
+
+The reason is structural, and it is in `decisions/route.py`'s own docstring: *"A
+node facing 'is this child reachable at all' asks `route_exists`, never
+`route_price(...) < UNOBTAINABLE_PER_UNIT`."* `route_exists` forwards straight to
+`obtain_sources`, which this gate deliberately does not touch — so every
+REACHABILITY decision still sees the wall, and only RANKERS see the new price.
+`_servable_promotion`, the walk that would reach these alternatives, keys on
+plannability rather than cost for the same reason.
+
+So this increment makes the price honest and leaves the decision untouched.
+Acting on the wall means a DECISION-side change — a node that reads "this
+material is walled behind a monster a known chain would open" and routes to the
+gear — which is a different design from a route price, and is not attempted here.
+
+### The census had to change with it, and its own guard said so
+
+Pricing the arm shrank the census's subject: with the gate on the grid dropped
+from 9 walls to 7 and `witness_residual` began reporting the FIX as a broken
+census. Every price in the census is now taken with `gated_drop=False` — the
+STRUCTURAL wall, which stays counted however much of it production learns to
+open — and a `gate_price` column reports which walls the gate opens (2 of 9
+store-less; 3 of 9 live, where a grind rate exists). A census that stops seeing
+its subject when the subject is being handled is a thermometer that melts.

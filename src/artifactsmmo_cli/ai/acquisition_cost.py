@@ -23,15 +23,18 @@ the divergence the epic exists to remove.
 """
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import datetime, timezone
 from fractions import Fraction
 from math import ceil
 
 from artifactsmmo_cli.ai.acquisition_cost_core import (
+    UNOBTAINABLE_PER_UNIT,
     RouteOption,
     acquisition_cost,
     bundle_acquisition_cost,
 )
+from artifactsmmo_cli.ai.combat_deficit import combat_deficit
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
@@ -424,9 +427,107 @@ def _sibling_craft_option(item: str, state: WorldState, game_data: GameData,
     )
 
 
+def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
+                       ctx: SelectionContext,
+                       store: LearningStore | None) -> RouteOption | None:
+    """The DROP route `obtain_sources` withholds because the dropper is
+    UNWINNABLE — priced with the gear that would open the fight.
+
+    THE SAME SEAM `_gated_craft_option` STATES: `obtain_sources` answers
+    READINESS, and a monster this character loses to genuinely cannot be farmed
+    right now, so excluding it there is correct. This module answers what it
+    would COST, and that answer may include making the route ready. The gate is
+    a price, not a wall.
+
+    The 2026-08-09 exclusion audit ranked this the biggest of its six walls and
+    could not fix it: *"cost to become able to beat monster X has no simple
+    measure and is circular"*. `combat_deficit` is the measure — a gear chain
+    plus a `closes` verdict — and the circularity is handled below rather than
+    reasoned away.
+
+    MEASURED BEFORE IT WAS BUILT (`audit/drop_wall_census.py`, 2026-08-28): 9
+    candidate roots on the committed bundle price at `UNOBTAINABLE_PER_UNIT`
+    purely because their dropper is unbeatable, all nine on ALTERNATIVES rather
+    than on a resolved root, and `combat_deficit` closes 9 of 9 with a ONE-ITEM
+    chain — `cowhide`<-cow needs `iron_sword`, `mushroom`<-mushmush needs
+    `forest_whip`. The wall is real, and it is shallow.
+
+    THE RECURSION IS CUT BY CONSTRUCTION, NOT BY A DEPTH BUDGET. Pricing the
+    chain re-enters this module, and a chain item whose own recipe wants a
+    drop-walled material would re-enter this gate — `cowhide` needs `iron_sword`
+    needs a drop that needs gear, without end. So the chain is priced with
+    `gated_drop=False`: one level of gate, and the inner walk sees exactly the
+    routes `obtain_sources` serves today. That is a strict UNDER-count of what a
+    fully-recursive model would allow, which is the safe direction for a bound,
+    and it terminates without a fuel counter to tune.
+
+    AN UNPRICEABLE CHAIN DECLINES THE ROUTE, exactly as an unpriceable grind does
+    one function up, and for the live reason recorded there: a route that looks
+    free does not merely fail to prune, it CAPTURES the bot (R2D2, 4.5 hours, 207
+    `LevelSkill` actions for zero character xp). A chain step that prices at
+    `UNOBTAINABLE_PER_UNIT` means the gear itself is out of reach, so the fight
+    behind it is too.
+
+    `None` — no route to add — whenever the gate is not this function's business:
+
+      * nothing drops the item, or no dropper stands on a live tile (then there
+        is no DROP route to unlock, and `_drop_sources` is right to be silent);
+      * no live dropper's deficit CLOSES (`combat_deficit`'s own "unwinnable and
+        I do not know what to build" — an honest wall, and the census's
+        `WALL_DROPPER_OUT_OF_REACH` arm);
+      * the closing chain cannot be priced.
+
+    "SOME LIVE DROPPER IS WINNABLE" IS NOT CHECKED HERE, deliberately, though it
+    is the one case that would double-price a route. The caller asks this
+    function only when NOTHING serves the item, and a winnable live dropper IS a
+    served DROP route — so the condition cannot hold at this point, and a guard
+    for it would be the second of two guards where one is correct. This module
+    has been bitten by that shape before: `acquisition_options` once filtered at
+    both push and pop, which made the pop guard unreachable and hid that the
+    other was doing nothing.
+
+    The unlock is keyed on the MONSTER, not the item: two materials behind one
+    unbeatable monster are unlocked by one gear acquisition, and `unlock_actions`
+    is paid once across every route sharing the key. Keying it on the item would
+    charge the sword once per material the cow drops."""
+    rested = replace(state, hp=state.max_hp)
+    live = [monster for monster, _rate, _min_q, _max_q
+            in game_data.monsters_dropping(item)
+            if game_data.all_monster_locations.get(monster)]
+    if not live:
+        return None
+    best: RouteOption | None = None
+    for monster in live:
+        deficit = combat_deficit(rested, game_data, monster)
+        if deficit is None or not deficit.closes:
+            continue
+        unlock_actions = 0
+        for step in deficit.chain:
+            unlock_actions += acquisition_actions(
+                step.code, 1, state, game_data, ctx, equip=True, store=store,
+                gated_drop=False)
+        if unlock_actions >= UNOBTAINABLE_PER_UNIT:
+            continue
+        rate, min_q, max_q = _drop_table(item, monster, game_data)
+        option = RouteOption(
+            kind=SourceKind.DROP.value, venue=monster,
+            actions_per_application=_drop_actions(
+                item, monster, rate, min_q, max_q, state, game_data, store),
+            yield_per=1, capacity=UNBOUNDED_CAPACITY,
+            unlock=f"gear:{monster}", unlock_actions=unlock_actions)
+        # CHEAPEST BY THE WHOLE PRICE, not by the unlock alone: a dear sword that
+        # opens a monster dropping the item every kill beats a cheap one that
+        # opens a 1-in-200 drop. Both terms are what a plan actually pays.
+        if best is None or (option.unlock_actions + option.actions_per_application
+                            < best.unlock_actions + best.actions_per_application):
+            best = option
+    return best
+
+
 def route_options(item: str, state: WorldState, game_data: GameData,
                   ctx: SelectionContext,
-                  store: LearningStore | None = None) -> list[RouteOption]:
+                  store: LearningStore | None = None,
+                  gated_drop: bool = True) -> list[RouteOption]:
     """Every route to `item`, priced: the ones `obtain_sources` names, plus —
     only when a `store` is supplied — the skill-gated craft it withholds.
 
@@ -443,12 +544,43 @@ def route_options(item: str, state: WorldState, game_data: GameData,
         sibling = _sibling_craft_option(item, state, game_data, ctx, store)
         if sibling is not None:
             routes.append(sibling)
+    # OUTSIDE the store gate, unlike its two siblings, and deliberately: their
+    # unlocks are priced from OBSERVATION (a learned grind rate, an observed
+    # fleet request cost) and cannot be sized at all without a store, while this
+    # one reads the catalogue and the combat model, both deterministic.
+    #
+    # THE STORE DEPENDENCY IS TRANSITIVE, NOT DIRECT, and measured: on the
+    # committed bundle every one of the nine walled cells is unlocked by gear
+    # whose own craft is skill-gated, so without a grind rate
+    # `_gated_craft_option` declines the gear, the gear prices at infinity and
+    # this gate declines the fight behind it. A chain that is already craftable
+    # needs no store — which is why the gate belongs here and not behind
+    # `store is not None`, where a store-less caller could never see it fire even
+    # when nothing observational is missing.
+    #
+    # ASKED ONLY WHEN NOTHING SERVES THE ITEM TODAY (`not routes`): "walled"
+    # MEANS the item has no route, so an item that has one is not this gate's
+    # subject and a second, dearer route for it is noise. The cost of the test is
+    # a route that might have undercut an existing expensive one — an UNDER-count,
+    # the safe direction for a bound and the same direction the one-level chain
+    # cut already takes.
+    #
+    # IT IS NOT A SPEED OPTIMISATION, and was measured rather than assumed: the
+    # sweep costs the same either way (29s -> 41s over 438 candidate price walks,
+    # +43%, with or without this test). The items it skips were already exiting
+    # cheaply; the cost lives in the walled items themselves, which are exactly
+    # the ones this test keeps.
+    if gated_drop and not routes:
+        drop = _gated_drop_option(item, state, game_data, ctx, store)
+        if drop is not None:
+            routes.append(drop)
     return routes
 
 
 def acquisition_options(item: str, state: WorldState, game_data: GameData,
                         ctx: SelectionContext,
-                        store: LearningStore | None = None
+                        store: LearningStore | None = None,
+                        gated_drop: bool = True
                         ) -> dict[str, list[RouteOption]]:
     """`route_options` over the whole closure reachable from `item`.
 
@@ -471,7 +603,7 @@ def acquisition_options(item: str, state: WorldState, game_data: GameData,
         code = frontier.pop()
         if code in options:
             continue
-        routes = route_options(code, state, game_data, ctx, store)
+        routes = route_options(code, state, game_data, ctx, store, gated_drop)
         options[code] = routes
         for route in routes:
             frontier.extend(route.inputs)
@@ -503,7 +635,8 @@ def _owned_with_gold(state: WorldState) -> dict[str, int]:
 def acquisition_actions(item: str, qty: int, state: WorldState,
                         game_data: GameData, ctx: SelectionContext,
                         equip: bool,
-                        store: LearningStore | None = None) -> int:
+                        store: LearningStore | None = None,
+                        gated_drop: bool = True) -> int:
     """Lower bound on planner actions to obtain (and optionally equip) `qty` of
     `item`, over every route the executor can currently serve.
 
@@ -521,7 +654,7 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
     which is what it costs."""
     owned: dict[str, int] = _owned_with_gold(state)
     options: Mapping[str, list[RouteOption]] = acquisition_options(
-        item, state, game_data, ctx, store)
+        item, state, game_data, ctx, store, gated_drop)
     return acquisition_cost(item, qty, options, owned) + (
         EQUIP_ACTIONS if equip else 0)
 

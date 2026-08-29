@@ -73,7 +73,8 @@ def _walls(results: list[DropResult]) -> list[DropResult]:
 def _result(**overrides: object) -> DropResult:
     base = DropResult(scenario="s", candidate="c", is_resolved_root=False,
                       base_price=UNOBTAINABLE_PER_UNIT, granted_price=1,
-                      gap=CLOSES, evidence=None)
+                      gate_price=UNOBTAINABLE_PER_UNIT, gap=CLOSES,
+                      evidence=None)
     return dataclasses.replace(base, **overrides)  # type: ignore[arg-type]
 
 
@@ -141,7 +142,13 @@ def test_every_wall_names_an_item_a_dropper_and_a_chain(
 
 def test_the_crossing_is_the_pricers_own_answer(results: list[DropResult]) -> None:
     """Cross-read against `route_price` directly: the census may not claim a
-    crossing the pricer does not make."""
+    crossing the pricer does not make.
+
+    `gated_drop=False` on both walks, because that is the world the census
+    measures — the STRUCTURAL wall, the routes `obtain_sources` serves. The
+    default (gate on) is what production charges, and it is asserted separately
+    below as `gate_price`; conflating the two is what made this census briefly
+    report its own fix as a broken grid."""
     cache: dict[tuple[bool, tuple[str, ...]], GameData] = {}
     wall = _walls(results)[0]
     scenario = SCENARIOS[wall.scenario]
@@ -153,14 +160,19 @@ def test_the_crossing_is_the_pricers_own_answer(results: list[DropResult]) -> No
     candidate = next(c for c in (resolution.root, *resolution.alternatives)
                      if repr(c) == wall.candidate)
     assert wall.evidence is not None
-    base = route_price(candidate, state, game_data, NO_PROFILE_CONTEXT, None)
+    base = route_price(candidate, state, game_data, NO_PROFILE_CONTEXT, None,
+                       gated_drop=False)
     rich = dataclasses.replace(state, inventory={
         **state.inventory,
         wall.evidence.item: state.inventory.get(wall.evidence.item, 0) + GRANT})
-    granted = route_price(candidate, rich, game_data, NO_PROFILE_CONTEXT, None)
+    granted = route_price(candidate, rich, game_data, NO_PROFILE_CONTEXT, None,
+                          gated_drop=False)
     assert base >= UNOBTAINABLE_PER_UNIT
     assert granted < base
     assert (base, granted) == (wall.base_price, wall.granted_price)
+    assert wall.gate_price == route_price(candidate, state, game_data,
+                                          NO_PROFILE_CONTEXT, None,
+                                          gated_drop=True)
 
 
 def test_the_walled_set_negates_the_drop_source_conjuncts() -> None:
@@ -232,13 +244,13 @@ def test_the_unattributed_residual_can_fire(
 
     monkeypatch.setattr("artifactsmmo_cli.audit.drop_wall_census.route_price",
                         fake_price)
-    gap, base, granted, evidence = classify(
+    gap, base, granted, _gate, evidence = classify(
         object(), state, game_data, walled)  # type: ignore[arg-type]
     assert gap == DropGap.DROP_WALL_UNATTRIBUTED.value
     assert base == UNOBTAINABLE_PER_UNIT
     assert granted == 1
     assert evidence is None
-    assert len(calls) == 2 + len(walled)
+    assert len(calls) == 3 + len(walled)
 
 
 def test_a_candidate_with_no_walled_items_is_not_this_censuss_subject(
@@ -258,10 +270,11 @@ def test_a_candidate_with_no_walled_items_is_not_this_censuss_subject(
 
     monkeypatch.setattr("artifactsmmo_cli.audit.drop_wall_census.route_price",
                         fake_price)
-    gap, base, granted, evidence = classify(object(), state, game_data, ())  # type: ignore[arg-type]
+    gap, base, granted, gate, evidence = classify(object(), state, game_data, ())  # type: ignore[arg-type]
     assert gap == DropGap.NOT_DROP_WALLED.value
-    assert (base, granted, evidence) == (UNOBTAINABLE_PER_UNIT,
-                                         UNOBTAINABLE_PER_UNIT, None)
+    assert (base, granted, gate, evidence) == (UNOBTAINABLE_PER_UNIT,
+                                               UNOBTAINABLE_PER_UNIT,
+                                               UNOBTAINABLE_PER_UNIT, None)
     assert len(calls) == 1
 
 
@@ -281,6 +294,7 @@ def test_a_root_the_walk_cannot_resolve_is_a_visible_row(
 def test_the_summary_reports_the_arm_counts(results: list[DropResult]) -> None:
     line = summary_line(results)
     assert "candidate cells" in line
+    assert "gate opens 2 of 9 walls (store-less)" in line
     assert "closes 9" in line
     assert "out_of_reach 0" in line
     assert "on ALTERNATIVES" in line
@@ -319,3 +333,25 @@ def test_the_matrix_carries_the_unwitnessed_alarm_when_no_arm_fires() -> None:
     its sibling."""
     matrix = render_matrix([_result(gap=DropGap.OBTAINABLE.value)])
     assert "drop_wall_unwitnessed" in matrix
+
+
+def test_the_census_keeps_counting_a_wall_the_gate_now_prices(
+        results: list[DropResult]) -> None:
+    """THE GUARD THAT FIRED ON CONTACT, kept as a test.
+
+    `_gated_drop_option` prices part of this census's own subject away. Priced
+    with the gate ON the grid dropped from 9 walls to 7 and `witness_residual`
+    started reporting the FIX as a broken census — a thermometer that melts. So
+    every price here is taken with `gated_drop=False` (the structural wall) and
+    `gate_price` reports separately which walls the gate opens.
+
+    Store-less, so this is the floor rather than the live figure: every unlock in
+    the committed set is gear whose own craft is skill-gated, and with an
+    observed grind rate the gate opens 3 of the 9 rather than 2."""
+    walls = _walls(results)
+    assert len(walls) == 9
+    opened = [w for w in walls if w.gate_price < UNOBTAINABLE_PER_UNIT]
+    assert len(opened) == 2
+    for wall in opened:
+        assert wall.base_price >= UNOBTAINABLE_PER_UNIT
+        assert wall.gate_price < wall.base_price

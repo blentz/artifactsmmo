@@ -1255,3 +1255,157 @@ def test_own_zero_evidence_is_not_overridden_by_the_fleet(
     finally:
         store.end_session(exit_reason="normal")
         store.close()
+
+
+# ── the unwinnable-dropper gate: a price, not a wall ────────────────────────
+
+def test_an_unwinnable_dropper_is_a_PRICE_not_a_wall(gated_state, game_data) -> None:
+    """`cowhide` drops from `cow`, which this character cannot beat — so
+    `obtain_sources` withholds the DROP route and the item priced at infinity,
+    taking every recipe that consumes it with it.
+
+    That is the wall the drop-wall census named (`audit/drop_wall_census.py`, 9
+    walled candidates on the committed bundle, `l12_deep_chain_grind` among
+    them). `combat_deficit` closes this one with a ONE-ITEM chain — `iron_sword`
+    — so the honest answer is not "unobtainable" but "iron_sword, then farm
+    cows". Same seam as `_gated_craft_option`: `obtain_sources` answers
+    READINESS, this module answers COST, and a gate is a price."""
+    rested = replace(gated_state, hp=gated_state.max_hp)
+    assert not any(
+        s.kind is SourceKind.DROP
+        for s in obtain_sources("cowhide", rested, game_data, NO_PROFILE_CONTEXT))
+    store = _store_with_rate("weaponcrafting", 40)
+    try:
+        routes = route_options("cowhide", gated_state, game_data,
+                               NO_PROFILE_CONTEXT, store)
+        gated = [r for r in routes if r.unlock.startswith("gear:")]
+        assert len(gated) == 1
+        assert gated[0].kind == SourceKind.DROP.value
+        assert gated[0].venue == "cow"
+        assert gated[0].unlock == "gear:cow"
+        assert gated[0].unlock_actions > 0
+        assert gated[0].actions_per_application > 0
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_the_gated_drop_makes_the_walled_item_obtainable(
+        gated_state, game_data) -> None:
+    """The point of the route, stated as the price it changes.
+
+    THE CHAIN'S OWN PRICE IS WHY THIS NEEDS A STORE. `cowhide` is unlocked by
+    `iron_sword`, whose CRAFT is itself skill-gated (weaponcrafting 10 against
+    this character's 5) — so without an observed grind rate `_gated_craft_option`
+    declines the sword, the sword prices at infinity, and this gate declines the
+    cow for the same reason it declines any unpriceable chain. The dependency is
+    transitive, not direct: nothing in THIS route reads the store, and a chain
+    that is already craftable prices without one."""
+    without = acquisition_actions("cowhide", 1, gated_state, game_data,
+                                  NO_PROFILE_CONTEXT, equip=False)
+    assert without == UNOBTAINABLE_PER_UNIT
+    store = _store_with_rate("weaponcrafting", 40)
+    try:
+        assert acquisition_actions("cowhide", 1, gated_state, game_data,
+                                   NO_PROFILE_CONTEXT, equip=False,
+                                   store=store) < UNOBTAINABLE_PER_UNIT
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_a_winnable_dropper_adds_NO_second_route(gated_state, game_data) -> None:
+    """`obtain_sources` already names a beatable dropper's DROP route, so the
+    gate must decline — two copies of one route is the double-pricing
+    `_gated_craft_option` refuses for the same reason."""
+    winnable = next(
+        item for item in ("yellow_slimeball", "red_slimeball", "feather")
+        if any(s.kind is SourceKind.DROP for s in obtain_sources(
+            item, replace(gated_state, hp=gated_state.max_hp), game_data,
+            NO_PROFILE_CONTEXT)))
+    routes = route_options(winnable, gated_state, game_data, NO_PROFILE_CONTEXT)
+    assert [r for r in routes if r.kind == SourceKind.DROP.value]
+    assert not [r for r in routes if r.unlock.startswith("gear:")]
+
+
+def test_an_item_with_no_dropper_is_not_this_gates_business(
+        gated_state, game_data) -> None:
+    """`copper_ore` is gathered, not dropped. The gate must not invent a fight."""
+    routes = route_options("copper_ore", gated_state, game_data,
+                           NO_PROFILE_CONTEXT)
+    assert not [r for r in routes if r.unlock.startswith("gear:")]
+
+
+def test_a_chain_that_cannot_be_priced_DECLINES_the_route(
+        gated_state, game_data) -> None:
+    """An unpriceable chain declines, exactly as an unpriceable grind does one
+    function up — and for the live reason recorded there: a route that looks free
+    does not merely fail to prune, it CAPTURES the bot.
+
+    `l20_boost_stock` is the case, and it is the circularity the 2026-08-09 audit
+    feared, exhibited rather than argued about: `mushroom` is walled by
+    `mushmush`, `combat_deficit` closes that with `forest_whip`, and
+    `forest_whip`'s own recipe wants `king_slimeball` — which is walled by
+    `king_slime`, a monster this character also cannot beat. Pricing it would
+    need a FIXED POINT, not a deeper walk, so the gate declines and the wall
+    stays named."""
+    state = replace(scenario_state(SCENARIOS["l20_boost_stock"], game_data),
+                    skill_xp=gated_state.skill_xp,
+                    skill_max_xp=gated_state.skill_max_xp)
+    store = _store_with_rate("weaponcrafting", 40)
+    try:
+        assert "king_slimeball" in (game_data.crafting_recipe("forest_whip") or {})
+        assert acquisition_actions("king_slimeball", 1, state, game_data,
+                                   NO_PROFILE_CONTEXT, equip=False, store=store,
+                                   gated_drop=False) >= UNOBTAINABLE_PER_UNIT
+        routes = route_options("mushroom", state, game_data, NO_PROFILE_CONTEXT,
+                               store)
+        assert not [r for r in routes if r.unlock.startswith("gear:")]
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_the_inner_walk_does_not_re_enter_this_gate(gated_state, game_data) -> None:
+    """The recursion is cut BY CONSTRUCTION: the chain is priced with
+    `gated_drop=False`, so a chain item wanting a drop-walled material sees only
+    the routes `obtain_sources` serves today and the walk terminates without a
+    fuel counter.
+
+    Asserted as the price DIFFERENCE the flag makes, so a future refactor that
+    quietly threads `gated_drop=True` into the inner call fails here rather than
+    hanging."""
+    store = _store_with_rate("weaponcrafting", 40)
+    try:
+        assert acquisition_actions("cowhide", 1, gated_state, game_data,
+                                   NO_PROFILE_CONTEXT, equip=False, store=store,
+                                   gated_drop=False) == UNOBTAINABLE_PER_UNIT
+        assert acquisition_actions("cowhide", 1, gated_state, game_data,
+                                   NO_PROFILE_CONTEXT, equip=False, store=store,
+                                   gated_drop=True) < UNOBTAINABLE_PER_UNIT
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_the_unlock_is_keyed_on_the_MONSTER_not_the_item(
+        gated_state, game_data) -> None:
+    """Two materials behind one unbeatable monster are opened by ONE gear
+    acquisition, so the key must be the monster — keying it on the item would
+    charge the sword once per material the cow drops, which is the per-application
+    error `RouteOption.unlock`'s docstring exists to prevent."""
+    store = _store_with_rate("weaponcrafting", 40)
+    try:
+        drops = [item for item in ("cowhide", "milk_bucket")
+                 if any(m == "cow" for m, _r, _a, _b
+                        in game_data.monsters_dropping(item))]
+        assert len(drops) > 1, "fixture no longer has two cow drops — test vacuous"
+        keys = set()
+        for item in drops:
+            routes = route_options(item, gated_state, game_data,
+                                   NO_PROFILE_CONTEXT, store)
+            keys |= {r.unlock for r in routes if r.unlock.startswith("gear:")}
+        assert keys == {"gear:cow"}
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()

@@ -47,10 +47,15 @@ beat monster X has no simple measure and is circular"*. `combat_deficit` now
 returns a gear chain and a `closes` verdict, so the census can say which walls a
 future `_gated_drop_option` could price and which are terminal.
 
-WHAT THIS CENSUS DOES NOT DO: change production behaviour. Those nine candidates
-still price at infinity and the promotion walk still skips them silently. Naming
-the wall is where §13 stopped for gold, and it stops here for the same reason —
-it is cheaper to be wrong about a name than about a price.
+THE CENSUS MEASURES THE STRUCTURAL WALL, NOT WHAT PRODUCTION CURRENTLY CHARGES,
+and that distinction became load-bearing the day `_gated_drop_option` shipped.
+Every price here is taken with `gated_drop=False` — the routes `obtain_sources`
+serves today — so a wall stays COUNTED after the pricer learns to open it. The
+`gate_price` column then says which of those walls the gate does open. Measuring
+only the gated price makes the census's own subject vanish as the fix lands: it
+did exactly that on contact, dropping 9 walls to 7 and reporting the fix as a
+broken census. A census that stops seeing its subject when the subject is being
+handled is not a census, it is a thermometer that melts.
 """
 
 from __future__ import annotations
@@ -189,6 +194,22 @@ class DropResult:
 
     base_price: int
     granted_price: int
+    gate_price: int
+    """The same candidate priced WITH `_gated_drop_option` — the "beat the
+    monster once you own the gear" route.
+
+    THE CENSUS MEASURES THE STRUCTURAL WALL AND THE FIX SEPARATELY, and it has
+    to. `base_price` is taken with the gate OFF, so a wall stays counted after
+    production starts pricing it; this column says which of those walls the gate
+    now opens. Measuring only the gated price makes the census's own subject
+    disappear as the fix lands — its witness floor fired on exactly that the day
+    the gate shipped, reporting success as a broken census.
+
+    STORE-LESS, like everything else here: the census has no `learning.db`, and
+    every one of these unlocks is gear whose craft is skill-gated, so the gate
+    opens fewer cells here than it does live with an observed grind rate. Both
+    numbers are honest about different worlds; this one is reproducible."""
+
     gap: str
     evidence: DropEvidence | None
 
@@ -271,7 +292,8 @@ def drop_evidence(item: str, state: WorldState, game_data: GameData) -> DropEvid
 
 
 def classify(candidate: MetaGoal, state: WorldState, game_data: GameData,
-             walled: tuple[str, ...]) -> tuple[str, int, int, DropEvidence | None]:
+             walled: tuple[str, ...]
+             ) -> tuple[str, int, int, int, DropEvidence | None]:
     """`(gap, base_price, granted_price, evidence)` for one candidate.
 
     THE ORDER OF THE TWO PROBES IS LOAD-BEARING. The collective grant is asked
@@ -281,25 +303,29 @@ def classify(candidate: MetaGoal, state: WorldState, game_data: GameData,
     Asking the cheap question first is also what makes `DROP_WALL_UNATTRIBUTED`
     expressible — it is precisely "the collective probe crossed and no single one
     did", which a per-item-only sweep could not distinguish from a clean pass."""
-    base = route_price(candidate, state, game_data, NO_PROFILE_CONTEXT, None)
+    base = route_price(candidate, state, game_data, NO_PROFILE_CONTEXT, None,
+                       gated_drop=False)
     if base < UNOBTAINABLE_PER_UNIT:
-        return (DropGap.OBTAINABLE.value, base, base, None)
+        return (DropGap.OBTAINABLE.value, base, base, base, None)
     if not walled:
-        return (DropGap.NOT_DROP_WALLED.value, base, base, None)
+        return (DropGap.NOT_DROP_WALLED.value, base, base, base, None)
     collective = route_price(candidate, _granted(state, walled), game_data,
-                             NO_PROFILE_CONTEXT, None)
+                             NO_PROFILE_CONTEXT, None, gated_drop=False)
     if collective >= base:
-        return (DropGap.NOT_DROP_WALLED.value, base, collective, None)
+        return (DropGap.NOT_DROP_WALLED.value, base, collective, base, None)
+    gate_price = route_price(candidate, state, game_data, NO_PROFILE_CONTEXT,
+                             None, gated_drop=True)
     for item in walled:
         single = route_price(candidate, _granted(state, (item,)), game_data,
-                             NO_PROFILE_CONTEXT, None)
+                             NO_PROFILE_CONTEXT, None, gated_drop=False)
         if single >= base:
             continue
         evidence = drop_evidence(item, state, game_data)
         gap = (DropGap.WALL_DROPPER_UNWINNABLE_CLOSES if evidence.closes
                else DropGap.WALL_DROPPER_OUT_OF_REACH)
-        return (gap.value, base, single, evidence)
-    return (DropGap.DROP_WALL_UNATTRIBUTED.value, base, collective, None)
+        return (gap.value, base, single, gate_price, evidence)
+    return (DropGap.DROP_WALL_UNATTRIBUTED.value, base, collective, gate_price,
+            None)
 
 
 def run_census(bundle: Path) -> list[DropResult]:
@@ -321,18 +347,19 @@ def run_census(bundle: Path) -> list[DropResult]:
         if resolution.root is None:
             results.append(DropResult(
                 scenario=name, candidate="-", is_resolved_root=True,
-                base_price=0, granted_price=0,
+                base_price=0, granted_price=0, gate_price=0,
                 gap=DropGap.ROOT_UNRESOLVED.value, evidence=None))
             continue
         walled = unwinnable_drop_items(state, game_data)
         candidates = (resolution.root, *resolution.alternatives)
         for index, candidate in enumerate(candidates):
-            gap, base, granted, evidence = classify(
+            gap, base, granted, gate_price, evidence = classify(
                 candidate, state, game_data, walled)
             results.append(DropResult(
                 scenario=name, candidate=repr(candidate),
                 is_resolved_root=index == 0, base_price=base,
-                granted_price=granted, gap=gap, evidence=evidence))
+                granted_price=granted, gate_price=gate_price, gap=gap,
+                evidence=evidence))
     return results
 
 
@@ -364,7 +391,10 @@ def summary_line(results: list[DropResult]) -> str:
     walls = sum(1 for r in results if r.gap.startswith("wall_"))
     on_alternatives = sum(1 for r in results
                           if r.gap.startswith("wall_") and not r.is_resolved_root)
+    opened = sum(1 for r in results if r.gap.startswith("wall_")
+                 and r.gate_price < UNOBTAINABLE_PER_UNIT)
     return (f"{len(results)} candidate cells over {len(SCENARIOS)} scenarios; "
+            f"gate opens {opened} of {walls} walls (store-less); "
             f"obtainable {count(DropGap.OBTAINABLE)}; "
             f"not_drop_walled {count(DropGap.NOT_DROP_WALLED)}; "
             f"walled {walls} ({on_alternatives} on ALTERNATIVES); "
@@ -422,9 +452,9 @@ def render_matrix(results: list[DropResult]) -> str:
     if unwitnessed:
         lines.extend([f"**{unwitnessed}**", ""])
     lines.extend([
-        "| Scenario | Candidate | Root? | Verdict | base | granted | item "
-        "| droppers | live tiles | closes | chain |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "| Scenario | Candidate | Root? | Verdict | base | granted | gated "
+        "| item | droppers | live tiles | closes | chain |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ])
     for result in results:
         verdict = "PASS" if result.passed else f"**{result.gap}**"
@@ -434,12 +464,12 @@ def render_matrix(results: list[DropResult]) -> str:
             lines.append(
                 f"| {result.scenario} | {result.candidate} | {root_col} "
                 f"| {verdict} | {result.base_price} | {result.granted_price} "
-                f"| - | - | - | - | - |")
+                f"| {result.gate_price} | - | - | - | - | - |")
             continue
         lines.append(
             f"| {result.scenario} | {result.candidate} | {root_col} "
             f"| {verdict} | {result.base_price} | {result.granted_price} "
-            f"| {evidence.item} | {len(evidence.droppers)} "
+            f"| {result.gate_price} | {evidence.item} | {len(evidence.droppers)} "
             f"| {len(evidence.on_live_tiles)} | {len(evidence.closes)} "
             f"| {', '.join(evidence.chain) or '-'} |")
     lines.append("")

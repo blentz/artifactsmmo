@@ -72,7 +72,8 @@ def route_exists(code: str, state: WorldState, game_data: GameData,
 
 def route_price(goal: MetaGoal, state: WorldState, game_data: GameData,
                 ctx: SelectionContext,
-                history: LearningStore | None) -> int:
+                history: LearningStore | None,
+                gated_drop: bool = True) -> int:
     """Lower bound on planner actions to satisfy `goal` by its cheapest route.
 
     A FORWARDER, not a second cost model. For `ObtainItem` this is
@@ -95,9 +96,16 @@ TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
     guard: a new `MetaGoal` kind fails loudly here instead of pricing as 0.
     """
     if isinstance(goal, ObtainItem):
+        # `gated_drop=False` prices the item as `obtain_sources` serves it
+        # today, WITHOUT `_gated_drop_option`'s "beat the monster once you own
+        # the gear" route. Every decision path takes the default; the flag is
+        # passed only by the drop-wall census, which must keep measuring the
+        # STRUCTURAL wall now that the gate prices part of it away. Without it
+        # that census watches its own subject shrink and its witness floor fires
+        # on success — which is exactly what happened the day the gate landed.
         return acquisition_actions(goal.code, goal.quantity, state, game_data,
                                    ctx, equip=goal.slot is not None,
-                                   store=history)
+                                   store=history, gated_drop=gated_drop)
     if isinstance(goal, ReachSkillLevel):
         # Cycles ARE actions — `skill_grind_cost_core`'s own headline. This is
         # the same term `acquisition_cost._gated_craft_option` charges as
