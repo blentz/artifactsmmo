@@ -177,3 +177,55 @@ and it did not exist before.
 Demand splitting is supposed to make the fifth holder of a role unattractive.
 The wood demand is genuinely large, so it may be legitimate — but 5 of 5 on one
 role is the pile-on shape `role_selection`'s docstring says it defends against.
+
+---
+
+## 8. `[SHIPPED 2026-08-30]` Idle is a RATE, not a run
+
+Investigating why all five characters held `logger` found a structural gap in
+`decide_role`, independent of everything above.
+
+**A held role had exactly two exits, and flickering demand closed both.**
+
+| exit | reachable when |
+|---|---|
+| margin scan (`rival >= own_share x 2`) | **only if own demand > 0** |
+| release-on-idle | only after **100 CONSECUTIVE** zero-demand cycles |
+
+`GamePlayer` reset the consecutive counter to 0 on any single positive
+observation. So a role whose demand blipped positive even once per hundred
+cycles could never be released as idle, while on every zero cycle the margin
+scan could not run at all.
+
+The idle branch's own comment names half of it — *"the margin scan below cannot
+do it because it is only reached on positive own demand"* — and then answers it
+with a release gated on a run that a flickering board never accumulates.
+
+**Measured live 2026-08-30.** Replaying `decide_role` against the live board with
+the dwell satisfied: all five characters returned `keep=logger` with reason
+`idle 0 cycles`, while `miner` carried **64** against their own logger share of
+**2.4** — a 26x rival. The `0` is the tell: a blip had just erased the evidence.
+
+**The change.** `ROLE_IDLE_DWELL_CYCLES` is replaced by `ROLE_IDLE_WINDOW = 100`
+and `ROLE_IDLE_FRACTION = 9/10`: release when at least 90% of a FULL window of
+observations read zero. `GamePlayer` keeps a bounded `deque` of the last 100
+observations instead of a counter, cleared whenever the role changes. A partial
+window never releases — three zeros out of three is 100% and no evidence, which
+is the single-sample failure the dwell was introduced to end.
+
+The constant is **renamed rather than redefined**: its name said "consecutive"
+and its meaning is now "of the last hundred", and a constant that quietly changes
+what it counts is the drift this module documents everywhere else.
+
+**What is pinned:** a 95-of-100 idle role with a positive blip now releases to a
+rival that is asking; a role answering half the time still holds (the anti-churn
+case, unchanged); a partial window never releases; and the 9/10 boundary is
+inclusive, tested exactly, in `Fraction`.
+
+**What is NOT established.** That this trap is what pinned the live fleet for its
+4-hour session. The dwell alone explains the session that was running when I
+looked (12-51 cycles, under the 100-cycle hold), and the earlier session's demand
+board is unrecoverable — coordination tables are live state, not history (§6).
+The trap is real and demonstrable by construction; whether it or the dwell or
+correlated demand froze that particular run is unknown, and saying otherwise
+would be inventing a measurement.

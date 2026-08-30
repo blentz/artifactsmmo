@@ -1,10 +1,12 @@
+from collections import deque
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG
 from artifactsmmo_cli.ai.role_selection import (
     NO_ITEM_LEVELS,
     NO_SKILL_LEVELS,
-    ROLE_IDLE_DWELL_CYCLES,
+    ROLE_IDLE_FRACTION,
+    ROLE_IDLE_WINDOW,
     ROLE_MIN_HOLD_CYCLES,
     ROLE_SWITCH_MARGIN,
     ROLE_UNSERVABLE_CYCLES,
@@ -17,8 +19,8 @@ _ME = "HAL"
 
 
 def _decide(current, held_cycles, leases, demand, idle_released=frozenset(),
-            zero_demand_cycles=ROLE_IDLE_DWELL_CYCLES, **kwargs):
-    """Default the zero-demand RUN to a full dwell window.
+            idle_zeros=ROLE_IDLE_WINDOW, idle_samples=ROLE_IDLE_WINDOW, **kwargs):
+    """Default the idle window to FULLY idle (every observation a zero).
 
     Every pre-existing case here is about the OTHER hysteresis parameters, and
     reads most clearly when the idle run is not what is being varied. Tests
@@ -31,7 +33,7 @@ def _decide(current, held_cycles, leases, demand, idle_released=frozenset(),
                        live_leases=leases, demand_by_role=demand,
                        character=_ME, catalog=ROLE_CATALOG,
                        idle_released=idle_released,
-                       zero_demand_cycles=zero_demand_cycles, **kwargs)
+                       idle_zeros=idle_zeros, idle_samples=idle_samples, **kwargs)
 
 
 def _held(**by_role):
@@ -191,14 +193,14 @@ def test_idle_release_needs_a_full_run_of_zero_observations() -> None:
     # dozens of consecutive cycles live -- releasing on the strength of a
     # single sample drops a role a sibling still needs.
     d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {"miner": 3},
-                zero_demand_cycles=ROLE_IDLE_DWELL_CYCLES - 1)
+                idle_zeros=ROLE_IDLE_WINDOW - 1, idle_samples=ROLE_IDLE_WINDOW - 1)
     assert d.keep == "logger"
     assert d.release is None
 
 
 def test_idle_release_fires_exactly_at_the_dwell_boundary() -> None:
     d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {"miner": 3},
-                zero_demand_cycles=ROLE_IDLE_DWELL_CYCLES)
+                idle_zeros=ROLE_IDLE_WINDOW, idle_samples=ROLE_IDLE_WINDOW)
     assert d.release == "logger"
 
 
@@ -210,7 +212,7 @@ def test_idle_dwell_never_exceeds_the_min_hold() -> None:
     # re-claim can never be the binding constraint; if the dwell were made the
     # longer of the two, a stale run could release a freshly claimed role early
     # and the caller would need an explicit reset.
-    assert ROLE_IDLE_DWELL_CYCLES <= ROLE_MIN_HOLD_CYCLES
+    assert ROLE_IDLE_WINDOW <= ROLE_MIN_HOLD_CYCLES
 
 
 def test_no_zero_demand_run_never_releases_on_idle() -> None:
@@ -229,15 +231,14 @@ def test_a_single_demand_flap_does_not_release_a_needed_role() -> None:
     # released on the first blink after the dwell; under the run rule the role
     # survives the whole run, because every non-blink cycle breaks the run.
     leases = _held(logger=(_ME,))
-    current, zero_run = "logger", 0
+    current = "logger"
+    window: deque[bool] = deque(maxlen=ROLE_IDLE_WINDOW)
     releases = 0
     for held, cycle in enumerate(range(400)):
         demand = {} if cycle % 7 == 0 else {"logger": 12}
-        if demand.get(current, 0) <= 0:
-            zero_run += 1
-        else:
-            zero_run = 0
-        d = _decide(current, held, leases, demand, zero_demand_cycles=zero_run)
+        window.append(demand.get(current, 0) <= 0)
+        d = _decide(current, held, leases, demand,
+                    idle_zeros=sum(window), idle_samples=len(window))
         if d.release is not None:
             releases += 1
             break
@@ -415,25 +416,23 @@ def _run_cycles(sibling_leases, demand, cycles, start_current=None, start_held=0
     held_cycles = start_held
     idle_released = frozenset()
     # Mirrors `GamePlayer._update_coordination` exactly: the caller owns the
-    # zero-demand run, extends or breaks it BEFORE deciding, and resets it on a
-    # successful claim. Simulating it any other way would prove something about
-    # a caller that does not exist.
-    zero_demand_cycles = 0
+    # idle WINDOW, appends this cycle's observation BEFORE deciding, and clears
+    # it on a successful claim. Simulating it any other way would prove
+    # something about a caller that does not exist.
+    idle_window: deque[bool] = deque(maxlen=ROLE_IDLE_WINDOW)
     trajectory = []
     state_changes = 0
     for _ in range(cycles):
-        if current is not None and demand.get(current, 0) <= 0:
-            zero_demand_cycles += 1
-        else:
-            zero_demand_cycles = 0
+        if current is not None:
+            idle_window.append(demand.get(current, 0) <= 0)
         d = _decide(current, held_cycles, leases, demand, idle_released,
-                    zero_demand_cycles=zero_demand_cycles,
+                    idle_zeros=sum(idle_window), idle_samples=len(idle_window),
                     skill_levels=skill_levels)
         if d.claim is not None:
             current = d.claim
             _join(leases, current)
             held_cycles = 0
-            zero_demand_cycles = 0
+            idle_window.clear()
             state_changes += 1
         elif d.release is not None:
             _leave(leases, d.release)
@@ -642,7 +641,7 @@ def test_unservable_release_waits_for_the_min_hold_like_every_other_release() ->
 
 
 def test_unservable_dwell_never_exceeds_the_min_hold() -> None:
-    # Same load-bearing inequality `ROLE_IDLE_DWELL_CYCLES` carries, for the
+    # Same load-bearing inequality `ROLE_IDLE_WINDOW` carries, for the
     # same reason: the run is only consulted once `held_cycles >=
     # ROLE_MIN_HOLD_CYCLES`, and THAT counter restarts on every claim, so a run
     # carried across a re-claim can never be the binding constraint.
@@ -1057,14 +1056,18 @@ def test_the_min_hold_keep_reports_its_progress_through_the_dwell() -> None:
 def test_an_idle_release_reports_the_run_of_silent_cycles() -> None:
     d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {"miner": 3})
     assert d.release == "logger"
-    assert d.reason == f"no demand for {ROLE_IDLE_DWELL_CYCLES} cycles"
+    assert d.reason == f"no demand in {ROLE_IDLE_WINDOW} of {ROLE_IDLE_WINDOW} cycles"
 
 
-def test_an_idle_keep_reports_the_run_so_far() -> None:
+def test_an_idle_keep_reports_the_window_so_far() -> None:
+    """The reason carries BOTH numbers, because one of them is the question the
+    old form could not answer: `idle 0 cycles` was what five live characters
+    reported while pinned to a role at a 26x disadvantage, and it read as "not
+    idle" when the truth was "a blip just erased the evidence"."""
     d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {},
-                zero_demand_cycles=4)
+                idle_zeros=4, idle_samples=7)
     assert d.keep == "logger"
-    assert d.reason == "idle 4 cycles"
+    assert d.reason == "idle 4/7 cycles"
 
 
 def test_an_unservable_release_reports_the_demand_and_the_failed_run() -> None:
@@ -1087,3 +1090,71 @@ def test_a_working_keep_reports_the_demand_it_is_serving() -> None:
     d = _decide("logger", ROLE_MIN_HOLD_CYCLES, _held(logger=(_ME,)), {"logger": 12})
     assert d.keep == "logger"
     assert d.reason == "demand 12"
+
+
+# --- the flicker trap: idle is a RATE, not a run ----------------------------
+
+def test_a_single_positive_blip_does_not_erase_an_idle_role() -> None:
+    """THE TRAP, measured live 2026-08-30: all five characters held `logger`
+    while `miner` carried 64 against their own share of 2.4 — a 26x rival — and
+    `decide_role` answered `keep` with reason `idle 0 cycles`.
+
+    A held role has exactly two exits: the margin scan, reachable ONLY on
+    positive own demand, and release-on-idle. When the idle side counted a
+    CONSECUTIVE run, a role whose demand flickered — zero nearly always, positive
+    once in a while — had no exit at all: on the zero cycles the margin scan was
+    unreachable, and each positive blip reset the run to 0. The idle branch's own
+    comment names the first half of this ("the margin scan below cannot do it
+    because it is only reached on positive own demand") and the consecutive gate
+    quietly reopened it.
+
+    Idle is therefore a RATE over a window. 95 zeros in 100 observations is an
+    idle role whatever the other 5 said, and the character moves to the rival
+    that is actually asking."""
+    decision = _decide("logger", ROLE_MIN_HOLD_CYCLES,
+                       _held(logger=("HAL", "A", "B", "C", "D")),
+                       {"logger": 0, "miner": 64},
+                       idle_zeros=95, idle_samples=100)
+    assert decision.release == "logger"
+    assert decision.keep is None
+
+
+def test_a_role_still_in_real_use_is_not_released_as_idle() -> None:
+    """The anti-churn half, unchanged in intent: a requester momentarily on a
+    level root publishes nothing, and on the traced roster those silences run up
+    to 140 cycles. A role answering half the time is NOT idle, and 50 zeros in
+    100 stays held."""
+    decision = _decide("logger", ROLE_MIN_HOLD_CYCLES,
+                       _held(logger=("HAL",)),
+                       {"logger": 0, "miner": 64},
+                       idle_zeros=50, idle_samples=100)
+    assert decision.release is None
+    assert decision.keep == "logger"
+
+
+def test_a_partial_window_never_releases() -> None:
+    """A fresh hold has no evidence yet. Three zeros out of three is 100% and
+    must not release — otherwise the first quiet cycles after a claim undo it,
+    which is the single-sample failure the dwell was introduced to end."""
+    decision = _decide("logger", ROLE_MIN_HOLD_CYCLES,
+                       _held(logger=("HAL",)),
+                       {"logger": 0, "miner": 64},
+                       idle_zeros=3, idle_samples=3)
+    assert decision.release is None
+    assert decision.keep == "logger"
+
+
+def test_the_idle_fraction_boundary_is_inclusive() -> None:
+    """Exactly `ROLE_IDLE_FRACTION` of the window counts as idle, and one
+    observation less does not.
+
+    The same inclusive reading `test_switches_exactly_at_the_margin_boundary`
+    pins for the switch margin, and pinned for the same reason: this is a
+    decision boundary computed in exact `Fraction`, so the comparison must be
+    reproducible rather than dependent on the last bit of a double."""
+    at = int(ROLE_IDLE_FRACTION * ROLE_IDLE_WINDOW)
+    leases, demand = _held(logger=(_ME,)), {"logger": 0, "miner": 3}
+    assert _decide("logger", ROLE_MIN_HOLD_CYCLES, leases, demand,
+                   idle_zeros=at, idle_samples=ROLE_IDLE_WINDOW).release == "logger"
+    assert _decide("logger", ROLE_MIN_HOLD_CYCLES, leases, demand,
+                   idle_zeros=at - 1, idle_samples=ROLE_IDLE_WINDOW).keep == "logger"

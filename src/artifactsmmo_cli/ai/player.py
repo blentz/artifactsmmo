@@ -3,6 +3,7 @@
 import json
 import re
 import time
+from collections import deque
 from collections.abc import Callable, Mapping
 from contextlib import nullcontext
 from dataclasses import replace
@@ -116,7 +117,12 @@ from artifactsmmo_cli.ai.role_catalog import (
     role_skill_level,
     role_skills,
 )
-from artifactsmmo_cli.ai.role_selection import decide_role, demand_by_role, serves_item
+from artifactsmmo_cli.ai.role_selection import (
+    ROLE_IDLE_WINDOW,
+    decide_role,
+    demand_by_role,
+    serves_item,
+)
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.should_replan import should_replan
 from artifactsmmo_cli.ai.strategy_driver import (
@@ -417,7 +423,14 @@ class GamePlayer:
         # across a re-claim can never be the binding constraint. That
         # inequality is pinned by a test; adding a reset "for safety" would be a
         # second, unobservable guard on the same condition.
-        self._role_zero_demand_cycles: int = 0
+        # The idle WINDOW for the held role: one bool per observation of its own
+        # demand, most recent last, capped at `ROLE_IDLE_WINDOW`. A bounded
+        # deque rather than a counter because idle is a RATE — a consecutive run
+        # is erased by a single positive cycle, which left a role with
+        # flickering demand no exit at all (see `ROLE_IDLE_FRACTION`). Cleared
+        # whenever the role changes: evidence about one role says nothing about
+        # the next.
+        self._role_idle_window: deque[bool] = deque(maxlen=ROLE_IDLE_WINDOW)
         # Consecutive cycles this character's supply goal was ATTEMPTED by the
         # arbiter and came back with no plan — the counter `decide_role`'s
         # release-on-unservable rule consumes, owned here for the same reason
@@ -3480,10 +3493,8 @@ class GamePlayer:
         # is momentarily on a level root publishes no demand at all, and on the
         # traced roster those silences run up to 140 consecutive cycles, so the
         # single-sample release this replaces dropped roles that were needed.
-        if self._role is not None and by_role.get(self._role, 0) <= 0:
-            self._role_zero_demand_cycles += 1
-        else:
-            self._role_zero_demand_cycles = 0
+        if self._role is not None:
+            self._role_idle_window.append(by_role.get(self._role, 0) <= 0)
         # Un-block any role whose "I cannot serve this" verdict this character
         # has since outgrown: the only thing that can change the verdict is its
         # own skill progress, and the role is free on the shared board the whole
@@ -3498,7 +3509,8 @@ class GamePlayer:
                                character=self._coordination.character,
                                catalog=ROLE_CATALOG,
                                idle_released=self._role_idle_released,
-                               zero_demand_cycles=self._role_zero_demand_cycles,
+                               idle_zeros=sum(self._role_idle_window),
+                               idle_samples=len(self._role_idle_window),
                                unservable_released=frozenset(self._role_unservable_released),
                                unservable_cycles=self._role_unservable_cycles,
                                skill_levels=state.skills)
@@ -3517,10 +3529,12 @@ class GamePlayer:
                     ROLES_BY_NAME[decision.release], state.skills)
             self._role = None
             self._role_held_cycles = 0
+            self._role_idle_window.clear()
         elif decision.claim is not None:
             if self._coordination.claim(decision.claim, now):
                 self._role = decision.claim
                 self._role_held_cycles = 0
+                self._role_idle_window.clear()
             else:
                 # The claim did not land. Roles are not exclusive, so this is
                 # no longer a lost race against a sibling — `claim` returns
@@ -3533,6 +3547,7 @@ class GamePlayer:
                 # splitting rule exists to price.
                 self._role = None
                 self._role_held_cycles = 0
+                self._role_idle_window.clear()
         elif decision.keep is not None:
             self._role_held_cycles += 1
 

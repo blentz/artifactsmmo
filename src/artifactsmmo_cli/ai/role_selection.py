@@ -133,9 +133,9 @@ makes joining a crowded role self-limiting rather than a one-way ratchet — a
 character's own share shrinks as siblings pile in behind it, so the margin
 eventually points back out."""
 
-ROLE_IDLE_DWELL_CYCLES = 100
-"""Consecutive cycles a held role's own demand must read ZERO before the role
-is released as idle.
+ROLE_IDLE_WINDOW = 100
+"""Observations of a held role's own demand that must be on record before the
+role can be released as idle, and the window the idle RATE is measured over.
 
 Release-on-idle shipped as a SINGLE-SAMPLE read, which is not what it defends
 against. A character publishes demand from `closure_demand` of its CHOSEN
@@ -150,15 +150,39 @@ one-sample gate fires on every one of those runs, releasing a role a sibling
 genuinely needs.
 
 100 is the same window as `ROLE_MIN_HOLD_CYCLES`, and that is the spec's own
-wording ("stays zero for a full dwell window"): a role must be held for a
-dwell window before it may be released, and its demand must have read zero for
-a dwell window as well. It sits above every observed run but the 140-cycle
-one, and clearing that outlier too would push the release threshold past a
-whole session (519-587 cycles) and make the mechanism dead. The residual is
-benign by construction: a role released during a genuinely long idle stretch
-is re-claimable the instant its demand turns positive again, because
-`_claimable` only skips an `idle_released` role WHILE its demand is
-non-positive."""
+wording ("stays zero for a full dwell window"). A partial window never
+releases: three zeros out of three observations is 100% idle and no evidence at
+all, and releasing on it is the single-sample failure by another name."""
+
+ROLE_IDLE_FRACTION = Fraction(9, 10)
+"""Share of the window that must read ZERO for the role to count as idle.
+
+A RATE, NOT A CONSECUTIVE RUN, and the difference is the whole point. The run
+form left a held role with NO EXIT under flickering demand: the margin scan
+below is reached only on positive own demand, so on a zero cycle it cannot
+run, and any single positive cycle reset the run to zero — so a role whose
+demand blipped positive once per hundred cycles could never be released however
+much better a rival was.
+
+MEASURED LIVE 2026-08-30, which is what this replaces: all five characters held
+`logger` while `miner` carried 64 against their own logger share of 2.4 — a 26x
+rival — and `decide_role` returned `keep` with reason `idle 0 cycles` for every
+one of them. The counter was at 0 because a blip had just reset it. A full
+4-hour session (205-245 cycles per character, twice the dwell) recorded not one
+role change.
+
+9/10 rather than 1: the defence is against a role that is genuinely being asked
+for going quiet, and a role answering one request in ten is not that. It sits
+above the observed silence structure — the longest measured run of publishing
+cycles inside an otherwise idle stretch is far short of a tenth of the window —
+while a role in real use (the anti-churn case, half the window positive) stays
+held. Exact `Fraction`, never a float: this is a decision boundary, and
+`idle_zeros >= 9/10 * idle_samples` must compare reproducibly.
+
+`ROLE_IDLE_DWELL_CYCLES` is GONE rather than redefined. Its name says
+"consecutive" and its meaning is now "of the last hundred", and a constant that
+quietly changes what it counts is the drift this module documents everywhere
+else."""
 
 ROLE_UNSERVABLE_CYCLES = 25
 """Consecutive cycles a held role's POSITIVE demand must go unserved before the
@@ -392,26 +416,34 @@ def decide_role(current: str | None, held_cycles: int,
                 demand_by_role: Mapping[str, int],
                 character: str, catalog: tuple[Role, ...],
                 idle_released: frozenset[str] = frozenset(),
-                zero_demand_cycles: int = 0,
+                idle_zeros: int = 0,
+                idle_samples: int = 0,
                 unservable_released: frozenset[str] = frozenset(),
                 unservable_cycles: int = 0,
                 skill_levels: Mapping[str, int] = NO_SKILL_LEVELS) -> RoleDecision:
     """Decide whether to keep, claim, or release a role this cycle.
 
-    `zero_demand_cycles`: how many CONSECUTIVE cycles — including this one —
-    the caller has observed `demand_by_role[current]` at or below zero.
-    Release-on-idle needs a run, not a sample: a requester that happens to be
-    on a level root this cycle publishes no demand at all, and on the real
-    traced roster that is 4.8% of cycles arriving in runs up to 140 long, so a
-    single-sample release drops a role that is genuinely needed (see
-    `ROLE_IDLE_DWELL_CYCLES`). Like `idle_released`, the COUNTER is the
-    caller's to own — this function stays pure (no I/O, no clock, no
-    module-level state) — and the caller restarts it on any positive
-    observation and while it holds no role at all. The default of 0 means "no
-    run recorded yet", so a caller that does not track it never releases on
-    idle.
+    `idle_zeros` / `idle_samples`: of the last `ROLE_IDLE_WINDOW` observations
+    of `demand_by_role[current]` the caller has taken, how many read at or below
+    zero, and how many observations there are. Release-on-idle needs EVIDENCE,
+    not a sample: a requester that happens to be on a level root this cycle
+    publishes no demand at all, and on the real traced roster that is 4.8% of
+    cycles arriving in runs up to 140 long, so a single-sample release drops a
+    role that is genuinely needed.
 
-    A full run is NECESSARY but not SUFFICIENT: the idle release also requires
+    A RATE, NOT A RUN, and that is a fix rather than a refinement: a
+    consecutive-run gate is reset by one positive cycle, so a role with
+    flickering demand could never be released while the margin scan below —
+    reachable only on POSITIVE own demand — could never run either. Live
+    2026-08-30, five characters held `logger` at a 26x disadvantage to `miner`
+    with the reason `idle 0 cycles`. See `ROLE_IDLE_FRACTION`.
+
+    Like `idle_released`, the WINDOW is the caller's to own — this function
+    stays pure (no I/O, no clock, no module-level state) — and the caller clears
+    it when the role changes. The defaults of 0 mean "nothing observed yet", so
+    a caller that does not track them never releases on idle.
+
+    A full window is NECESSARY but not SUFFICIENT: the idle release also requires
     an eligible rival role carrying positive demand. Exclusivity used to supply
     the other half of the justification (free the role so a sibling may have
     it), and that half is gone -- no sibling is blocked from any role now. What
@@ -521,12 +553,20 @@ def decide_role(current: str | None, held_cycles: int,
         # With no live role anywhere, releasing serves nothing and costs a
         # claim, a hold, and another release per role -- on an all-zero board
         # that walked the entire catalog before settling.
-        if zero_demand_cycles >= ROLE_IDLE_DWELL_CYCLES and rival_best > 0:
-            return RoleDecision(release=current,
-                                reason=f"no demand for {zero_demand_cycles} cycles")
-        # Idle with nowhere better, or idle but not for long enough to be sure:
-        # a requester on a level root is momentarily silent, not finished.
-        return RoleDecision(keep=current, reason=f"idle {zero_demand_cycles} cycles")
+        # A RATE over a full window, never a consecutive run. The run form had
+        # no exit under flickering demand — see `ROLE_IDLE_FRACTION` for the
+        # live measurement that replaced it. A partial window is no evidence
+        # and never releases.
+        if (idle_samples >= ROLE_IDLE_WINDOW
+                and idle_zeros >= ROLE_IDLE_FRACTION * idle_samples
+                and rival_best > 0):
+            return RoleDecision(
+                release=current,
+                reason=f"no demand in {idle_zeros} of {idle_samples} cycles")
+        # Idle with nowhere better, or not idle ENOUGH to be sure: a requester
+        # on a level root is momentarily silent, not finished.
+        return RoleDecision(keep=current,
+                            reason=f"idle {idle_zeros}/{idle_samples} cycles")
 
     # Positive demand from here down. A role whose demand exists but has gone
     # unserved for a full run is worse than an idle one: this character counts

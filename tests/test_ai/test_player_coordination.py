@@ -39,7 +39,7 @@ from artifactsmmo_cli.ai.learning.models import MaterialDemand
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG
 from artifactsmmo_cli.ai.role_selection import (
-    ROLE_IDLE_DWELL_CYCLES,
+    ROLE_IDLE_WINDOW,
     ROLE_MIN_HOLD_CYCLES,
     ROLE_UNSERVABLE_CYCLES,
     decide_role,
@@ -520,8 +520,8 @@ def test_update_coordination_releases_an_idle_role_after_min_hold(tmp_path):
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES  # eligible; own demand is 0
         # One short of the dwell window: `_update_coordination` extends the run
-        # to exactly ROLE_IDLE_DWELL_CYCLES before it decides.
-        p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES - 1
+        # to exactly ROLE_IDLE_WINDOW before it decides.
+        p._role_idle_window.extend([True] * (ROLE_IDLE_WINDOW - 1))
         p._update_coordination(p.state, p.game_data)
         assert "miner" in p._role_idle_released
         assert p._role_held_cycles == 0
@@ -547,7 +547,7 @@ def test_update_coordination_keeps_an_idle_role_when_nothing_else_wants_work(tmp
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
-        p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES - 1
+        p._role_idle_window.extend([True] * (ROLE_IDLE_WINDOW - 1))
         p._update_coordination(p.state, p.game_data)
         assert p._role == "miner"
         assert p._role_idle_released == frozenset()
@@ -585,7 +585,7 @@ def test_update_coordination_idle_release_does_not_immediately_reclaim(tmp_path)
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
-        p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES - 1
+        p._role_idle_window.extend([True] * (ROLE_IDLE_WINDOW - 1))
 
         p._update_coordination(p.state, p.game_data)
         assert p._role is None  # released: own demand is zero
@@ -627,9 +627,9 @@ def _two_role_demand_gd() -> GameData:
     return gd
 
 
-def test_update_coordination_extends_the_zero_demand_run(tmp_path):
-    """The counter `decide_role`'s dwell rule consumes is the caller's, and it
-    has to grow one per consecutive quiet cycle."""
+def test_update_coordination_records_each_quiet_cycle_in_the_window(tmp_path):
+    """The idle WINDOW `decide_role`'s rate rule consumes is the caller's, and
+    it takes one observation per cycle — quiet cycles land as True."""
     p = GamePlayer(character="hero")
     p.state = make_state()
     p.game_data = _mining_demand_gd()
@@ -641,14 +641,20 @@ def test_update_coordination_extends_the_zero_demand_run(tmp_path):
         p._role = "miner"
         p._update_coordination(p.state, p.game_data)
         p._update_coordination(p.state, p.game_data)
-        assert p._role_zero_demand_cycles == 2
+        assert list(p._role_idle_window) == [True, True]
     finally:
         store.close()
 
 
-def test_update_coordination_breaks_the_zero_demand_run_on_real_demand(tmp_path):
-    """One cycle of genuine demand resets the run to zero — the whole point of
-    requiring CONSECUTIVE observations."""
+def test_a_demand_cycle_is_recorded_without_erasing_the_window(tmp_path):
+    """THE FIX, at the caller: a cycle of genuine demand is ONE observation, not
+    an eraser.
+
+    The run form reset the counter to zero here, and that is what pinned five
+    live characters to `logger` — on a board whose demand flickers, a single
+    positive cycle wiped every zero on record and the margin scan (reachable
+    only on positive own demand) could not act either. The window keeps the
+    evidence: 98 zeros and one positive is still an idle role."""
     db = str(tmp_path / "coord.db")
     p = GamePlayer(character="hero")
     p.state = make_state(bank_items={})
@@ -660,28 +666,30 @@ def test_update_coordination_breaks_the_zero_demand_run_on_real_demand(tmp_path)
     try:
         store.claim("miner", now)
         p._role = "miner"
-        p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES - 2
+        p._role_idle_window.extend([True] * (ROLE_IDLE_WINDOW - 2))
         sibling.publish_demand({"copper_ore": 5}, frozenset(), now)
         p._update_coordination(p.state, p.game_data)
-        assert p._role_zero_demand_cycles == 0
+        assert p._role_idle_window[-1] is False, "the demand cycle is recorded"
+        assert sum(p._role_idle_window) == ROLE_IDLE_WINDOW - 2, (
+            "and it must not erase the zeros already on record")
     finally:
         store.close()
         sibling.close()
 
 
-def test_update_coordination_clears_the_zero_demand_run_while_holding_no_role(tmp_path):
-    """The run is about a HELD role, so a character holding none carries no
-    run into the role it claims this cycle."""
+def test_update_coordination_clears_the_window_when_the_role_changes(tmp_path):
+    """The window is about a HELD role, so evidence gathered under one role must
+    not be carried into the next."""
     p = GamePlayer(character="hero")
     p.state = make_state()
     p.game_data = _mining_demand_gd()
     store = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="hero")
     p.set_coordination_store(store)
     try:
-        p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES
+        p._role_idle_window.extend([True] * ROLE_IDLE_WINDOW)
         p._update_coordination(p.state, p.game_data)  # holds none -> claims
         assert p._role is not None
-        assert p._role_zero_demand_cycles == 0
+        assert list(p._role_idle_window) == []
     finally:
         store.close()
 
@@ -872,7 +880,7 @@ def test_update_coordination_does_not_block_an_idle_release(tmp_path):
         store.claim("miner", now)
         p._role = "miner"
         p._role_held_cycles = ROLE_MIN_HOLD_CYCLES
-        p._role_zero_demand_cycles = ROLE_IDLE_DWELL_CYCLES - 1
+        p._role_idle_window.extend([True] * (ROLE_IDLE_WINDOW - 1))
         p._update_coordination(p.state, p.game_data)
         assert "miner" in p._role_idle_released
         assert p._role_unservable_released == {}
