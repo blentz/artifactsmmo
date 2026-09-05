@@ -292,6 +292,64 @@ def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool
     return _attainable_closure(code, game_data, leaf_ok, stock_ok=stock_ok)
 
 
+def is_suppliable(code: str, state: WorldState, game_data: GameData) -> bool:
+    """Can this character EVER come to hold `code`? Two kinds of item, and the
+    difference between them is the whole point.
+
+    PRODUCIBLE — something in the catalogue MINTS the item: a recipe, a resource
+    that drops it, a monster that drops it, a vendor that sells it, or the task
+    board that pays it. Supply is unbounded, so the answer is yes, and it stays
+    yes while every one of those routes is closed today. Whether a route is open
+    RIGHT NOW is `is_attainable_now`'s separate question, and a target that
+    answers no there and yes here is exactly the skill-gated / gear-gated /
+    unaffordable root the walk exists to grind toward. Those must keep being
+    pursued, so this predicate must never be used as a substitute for that one.
+
+    FIXED SUPPLY — nothing mints it. Every copy that will ever exist already
+    exists, so supply is not a route but a COUNT: the copies free for this
+    character to take. A copy in its own inventory is free; a copy in the
+    account-wide bank is free (any sibling may withdraw it). A copy a sibling is
+    WEARING is not free — and needs no special case to exclude, because a worn
+    copy appears in no inventory this character reads and not in the bank, so it
+    can never be counted here. When the count is zero this character goes
+    without, permanently, and a target it can never hold is not a target.
+
+    Live case: `novice_guide`, a level-10 artifact (hp +25, wisdom +25,
+    prospecting +25) whose only supplier is the one-time `novice` achievement,
+    completed 2026-07-03. `craft: null`, `tradeable: false`, and absent from
+    every monster, resource, NPC, task and event table. ONE copy exists on the
+    account and Robby is wearing it. It outranks every artifact the others can
+    reach, so `gear_targets_with_blockers` handed it to every one of the three
+    whose walk reached a gear root at all — C3P0, Lor and R2D2 — for an empty
+    artifact slot, `classify_target` fell to its
+    LAST arm (no recipe and not attainable, therefore its own blocker), and
+    `IsThisTargetBlocked` returned `ObtainItem(novice_guide)` as the chosen
+    root. The step graph then had nothing to plan and the cycle fell through to
+    whatever goal ranked next: `plan C3P0` showed `chosen_root` and
+    `chosen_step` both `ObtainItem(novice_guide)` under `selected_goal:
+    CraftPotionsGoal`. Those three characters ran 6,115 cycles in 24 hours that
+    way, and across 3 days not one cycle carried `novice_guide` in
+    `selected_goal` or `action_repr`.
+
+    The state-free `RequirementGraph` is the right oracle for the first arm and
+    `obtain_sources` is NOT, even though `obtain_sources` is THE obtain model.
+    `obtain_sources` is state-AWARE: it returns empty for an item whose only
+    dropper is unwinnable today, and that item is producible — grinding gear
+    until the dropper falls is precisely the pursuit this must preserve. The
+    graph answers the capability question ("does any route exist, readiness
+    ignored?"), which is the one asked here. `is_task_earnable` joins it because
+    the task board is a mint the graph has no `SourceKind` for: without that arm
+    `tasks_coin` — the ONLY task-earnable item among the ten the live bundle
+    reports routeless — would read as fixed supply and its funding loop would be
+    declared dead."""
+    if game_data.requirement_graph.graph().is_obtainable(code):
+        return True
+    if game_data.is_task_earnable(code):
+        return True
+    bank = state.bank_items or {}
+    return state.inventory.get(code, 0) > 0 or bank.get(code, 0) > 0
+
+
 @dataclass(frozen=True)
 class GearTarget:
     """A per-slot target and, when it cannot be built today, WHY.
@@ -427,12 +485,23 @@ class CharacterObjective:
         self, state: WorldState, history: LearningStore | None
     ) -> dict[str, GearTarget]:
         """Best target per slot up to the gear target tier, each carrying its
-        blocker when it cannot be built now."""
+        blocker when it cannot be built now.
+
+        UNATTAINABLE targets are kept deliberately — that is this walk's whole
+        difference from `structural_targets`, and `IsThisTargetBlocked` needs
+        them to route to the skill or material standing in front of them.
+        UNSUPPLIABLE targets are not the same thing and are dropped here: a
+        fixed-supply item with no free copy has no blocker to route to, so
+        keeping it yields a root that can never plan. Filtering the ranked list
+        rather than the assignment lets the next-best candidate take the slot,
+        which is what makes the slot recover instead of going empty."""
         tier = gear_target_tier(state, self._game_data, history)
         targets: dict[str, GearTarget] = {}
         for type_, ranked in _gear_candidates_by_type(self._game_data, tier).items():
             slots = [s for s in ITEM_TYPE_TO_SLOTS[type_] if s in EQUIPMENT_SLOTS]
-            for slot, value, code in _slot_assignments(type_, slots, ranked):
+            suppliable = [(value, code) for (value, code) in ranked
+                          if is_suppliable(code, state, self._game_data)]
+            for slot, value, code in _slot_assignments(type_, slots, suppliable):
                 if value <= self._item_value(state.equipment.get(slot)):
                     continue
                 targets[slot] = self.classify_target(code, state)

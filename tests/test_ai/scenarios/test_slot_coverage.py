@@ -585,9 +585,16 @@ def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
     # this test is named for, is unaffected and asserted below; the trunk is
     # still offered, so the grind this scenario pins remains reachable and is
     # in fact what the arbiter selects.
-    assert report.decision.chosen_root == ObtainItem(
-        code="novice_guide", quantity=1, slot="artifact1_slot")
-    assert ReachCharLevel(level=20) in report.decision.fallback_roots
+    #
+    # SUPPLIABILITY GATE: the artifact slot's only candidate at this tier was
+    # `novice_guide`, which nothing mints and this character does not hold, so
+    # `objective.is_suppliable` drops it and the slot leaves the sheet. The
+    # trunk — already the arbiter's selection, as the comment above records —
+    # is now the ROOT as well, which is asserted directly here instead of by
+    # membership in the fallbacks. The satchel claim below is untouched.
+    assert report.decision.chosen_root == ReachCharLevel(level=20)
+    assert report.decision.promoted_from == ObtainItem(
+        code="backpack", quantity=1, slot="bag_slot")
     assert not any(r.code == "satchel" for r in report.decision.fallback_roots
                    if isinstance(r, ObtainItem)), report.decision.fallback_roots
     # The grind target moved with the re-converged loadout (2026-08-04): at the
@@ -608,9 +615,19 @@ def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
     # artifacts are no longer duplicate-allowed, so slots 2 and 3 have no
     # candidate at all instead of a 2nd and 3rd copy whose equip would 485.
     # Two doomed goals per cycle, deleted.
+    #
+    # RE-DERIVED 2026-09-05 (suppliability gate): the last two doomed goals are
+    # deleted too, and the grind is now the ONLY goal the planner attempts.
+    # `novice_guide` is minted by nothing and held by nobody, so it leaves the
+    # sheet entirely and `UpgradeEquipment(novice_guide->artifact1_slot)` is
+    # never built. With the artifact slot gone the bag root is the walk's head,
+    # `_servable_promotion` demotes it as unservable, and the trunk is promoted
+    # in its place — so `GatherMaterials(backpack, ...)` is not attempted
+    # either. The VERDICT this test pins is unchanged: the grind still wins and
+    # still plans `Fight(flying_snake)`. What changed is that it wins without
+    # two dead searches in front of it, and backpack stays a fallback root
+    # (asserted via `promoted_from` above) rather than vanishing.
     assert [g["goal"] for g in report.goals_tried] == [
-        "UpgradeEquipment(novice_guide->artifact1_slot)",
-        "GatherMaterials(backpack, {backpack:1})",
         "GrindCharacterXP(flying_snake)",
     ], report.goals_tried
     assert repr(report.selected_goal).startswith("GrindCharacterXP(flying_snake"), (
@@ -753,9 +770,17 @@ def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
     the three artifact slots used to be filled with three copies of the single
     best artifact, which at tier 20 is the unattainable `novice_guide`, so
     `perfect_pearl` never appeared anywhere on the sheet. Ranked-DISTINCT
-    assignment gives artifact1 novice_guide, artifact2 lost_world_map and
+    assignment gave artifact1 novice_guide, artifact2 lost_world_map and
     artifact3 `perfect_pearl` — and perfect_pearl is the only ATTAINABLE one of
     the three, so it is the chosen root and its route plans end to end again.
+
+    SUPPLIABILITY GATE (2026-09-05): `novice_guide` is minted by nothing and
+    held by nobody, so `objective.is_suppliable` drops it and the two survivors
+    shift up — artifact1 lost_world_map, artifact2 `perfect_pearl`. Nothing else
+    about this test moves: the chosen root is the same item by the same
+    reasoning (still the only attainable artifact), and the plan, the node
+    count and the goal are byte-identical. Only the SLOT it is assigned to
+    changed, which is what the equality below now reads.
 
     That is the general shape of the duplicate-fill bug, not a lucky accident:
     duplicating one code across N slots spends all N on a single item's
@@ -768,8 +793,9 @@ def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
     UNCHANGED from the GAP-2/GAP-3/GAP-6 re-derivations:
 
     - chosen_root is still perfect_pearl (equip_value 201 artifact, now at
-      artifact3_slot under ranked-distinct assignment, outranks old_boots —
-      which stays in the fallback list, now never reached).
+      artifact2_slot under ranked-distinct assignment with the unsuppliable
+      novice_guide gone, outranks old_boots — which stays in the fallback
+      list, now never reached).
 
     NEW: perfect_pearl's step is no longer dead. `recipe_closure` unions
     the secondary-drop layers of `resource_drops_full` into
@@ -804,12 +830,13 @@ def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
     # CLEARED, capped by character level. MEASURED here: `next_uncleared_tier`
     # is 20 against a level-35 character, so the tier is **20** — NOT 1. That
     # cap is unchanged by the 2026-08-22 revert and is why artifact1/artifact2
-    # still name unattainable items (novice_guide, lost_world_map); what changed
-    # is that the third slot is no longer a THIRD copy of the first, so
-    # perfect_pearl gets a slot and the route reopens.
+    # still names an unattainable item (lost_world_map — novice_guide left the
+    # sheet with the suppliability gate); what changed is that the slots are no
+    # longer copies of the first, so perfect_pearl gets one and the route
+    # reopens.
     report = _run("l35_artifact_fill")
     assert report.decision.chosen_root == ObtainItem(
-        code="perfect_pearl", quantity=1, slot="artifact3_slot")
+        code="perfect_pearl", quantity=1, slot="artifact2_slot")
     # Two nodes, one action: the whole step is a single targeted secondary-drop
     # gather, as the derivation above says. Pinned as a number because the
     # dead-search this replaced was 1 node / 0-length.

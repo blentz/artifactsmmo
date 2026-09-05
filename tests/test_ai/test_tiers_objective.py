@@ -3,6 +3,7 @@ from artifactsmmo_cli.ai.tiers.objective import (
     CharacterObjective,
     is_attainable,
     is_attainable_now,
+    is_suppliable,
 )
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -294,6 +295,124 @@ def test_is_attainable_now_cycle_safe():
     gd = GameData()
     gd._crafting_recipes = {"a": {"a": 1}}
     assert is_attainable_now("a", make_state(), gd) is False
+
+
+# ---------------------------------------------------------------------------
+# is_suppliable — CAN this character ever hold the code, as opposed to
+# `is_attainable_now`'s can it get one TODAY. Live case: `novice_guide`.
+#
+# Coverage note (this project sets `branch = false`): every arm below is pinned
+# to BOTH outcomes, not merely executed once.
+# ---------------------------------------------------------------------------
+
+def _gd_fixed_supply() -> GameData:
+    """A world with one minted item and one fixed-supply item.
+
+    `relic` is `novice_guide`'s shape: real item stats, so the graph knows it
+    exists and gear ranking will happily rank it, but no recipe, no resource
+    drop, no monster drop and no vendor — nothing that can ever mint one.
+    """
+    gd = _gd_drop_recipes()
+    gd._item_stats["relic"] = ItemStats(code="relic", level=1, type_="artifact",
+                                        hp_bonus=25)
+    return gd
+
+
+def test_is_suppliable_true_for_a_producible_target_that_is_blocked_today():
+    """THE INVARIANT THAT MUST NOT BREAK. `dragon_helm` crafts from a drop off
+    an unbeatable monster: unattainable NOW, but something mints it, so it is
+    suppliable and the walk must keep grinding toward it. If this ever flips to
+    False the gate has become a second `is_attainable_now` and it has silently
+    cancelled every skill-grind and gear-grind root in the game."""
+    gd = _gd_fixed_supply()
+    state = make_state(level=5, attack={"air": 5})
+    assert is_attainable_now("dragon_helm", state, gd) is False
+    assert is_suppliable("dragon_helm", state, gd) is True
+
+
+def test_is_suppliable_false_for_a_fixed_supply_item_with_no_free_copy():
+    """Nothing mints `relic` and this character holds none, so no sequence of
+    actions can ever put one in its hands. A copy a sibling is WEARING is in no
+    inventory this character reads and not in the bank, so it correctly fails to
+    count as supply here — that is the live `novice_guide` case, where one copy
+    exists on the account and a sibling wears it."""
+    gd = _gd_fixed_supply()
+    state = make_state(level=5)
+    assert is_suppliable("relic", state, gd) is False
+
+
+def test_is_suppliable_true_when_the_fixed_supply_copy_is_in_inventory():
+    gd = _gd_fixed_supply()
+    state = make_state(level=5, inventory={"relic": 1})
+    assert is_suppliable("relic", state, gd) is True
+
+
+def test_is_suppliable_true_when_the_fixed_supply_copy_is_in_the_bank():
+    """The bank is ACCOUNT-WIDE, so a banked copy is free for whichever
+    character withdraws it first."""
+    gd = _gd_fixed_supply()
+    state = make_state(level=5, bank_items={"relic": 1})
+    assert is_suppliable("relic", state, gd) is True
+
+
+def test_is_suppliable_true_for_a_task_earnable_item_the_graph_cannot_see():
+    """The task board is a mint `RequirementGraph` has no `SourceKind` for, so
+    the graph alone reports `tasks_coin` routeless. In the live bundle it is the
+    ONLY task-earnable item among the ten the graph calls routeless; without
+    this arm its funding loop would be declared dead."""
+    gd = _gd_fixed_supply()
+    gd._item_stats["coin"] = ItemStats(code="coin", level=1, type_="currency")
+    gd._task_reward_item_codes = {"coin"}
+    state = make_state(level=5)
+    assert gd.is_task_earnable("coin") is True
+    assert is_suppliable("coin", state, gd) is True
+
+
+def test_gear_targets_drop_an_unsuppliable_candidate_and_fall_through():
+    """`relic` outranks nothing else for the artifact slot, so before the gate
+    it took that slot and `classify_target` reached its LAST arm — no recipe and
+    not attainable, therefore its OWN blocker — handing the root walk an
+    `ObtainItem` no step graph could ever plan. The slot must now be absent
+    rather than carry a target the character can never hold."""
+    gd = _gd_fixed_supply()
+    state = make_state(level=5, attack={"air": 5})
+    obj = CharacterObjective.from_game_data(gd)
+    targets = obj.gear_targets_with_blockers(state, None)
+    assert all(t.code != "relic" for t in targets.values())
+
+
+def test_classify_target_still_reports_a_sourceless_code_as_its_own_blocker():
+    """`classify_target`'s FOURTH shape, pinned HERE because the suppliability
+    gate made it unreachable through `gear_targets_with_blockers`.
+
+    That walk used to be the arm's only witness: an item with no recipe and no
+    acquisition source classified `blocker == code`, and `IsThisTargetBlocked`
+    turned it into an `ObtainItem` root with nothing to route to — the
+    `novice_guide` failure. `is_suppliable` now drops such a candidate before it
+    can be classified, so no candidate reaching `classify_target` from that walk
+    can land on this arm any more. The arm itself must stay: the material loop
+    exhausts whenever a recipe's materials are all attainable-now, and
+    `classify_target` is public. Asserting it directly keeps it pinned without
+    pretending the walk can still produce it."""
+    gd = _gd_fixed_supply()
+    state = make_state(level=5, attack={"air": 5})
+    target = CharacterObjective.from_game_data(gd).classify_target("relic", state)
+    assert target.attainable is False
+    assert target.blocking_skill is None
+    assert target.blocker == "relic"
+
+
+def test_gear_targets_keep_an_unattainable_but_producible_candidate():
+    """The other half of the contract: `gear_targets_with_blockers`
+    DELIBERATELY keeps unattainable targets so `IsThisTargetBlocked` can route
+    to the blocker in front of them. The suppliability gate must not touch
+    those. `dragon_helm` is unattainable now and still a target."""
+    gd = _gd_fixed_supply()
+    state = make_state(level=5, attack={"air": 5})
+    obj = CharacterObjective.from_game_data(gd)
+    targets = obj.gear_targets_with_blockers(state, None)
+    assert targets["helmet_slot"].code == "dragon_helm"
+    assert targets["helmet_slot"].attainable is False
 
 
 def test_is_attainable_accepts_known_spawn_monster_drop():

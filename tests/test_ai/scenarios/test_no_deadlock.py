@@ -102,10 +102,21 @@ def test_l10_gearcrafting_gap_chosen_root_is_gear_never_the_trunk() -> None:
     gearcrafting climb `iron_boots` existed to witness has NOT been lost — it
     is `ReachSkillLevel(gearcrafting, 6)` in the alternatives and it is what
     the arbiter actually selects, which
-    `test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind` asserts."""
+    `test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind` asserts.
+
+    THE SUPPLIABILITY GATE moved it again, and this time the golden had been
+    pinning a candidate that contradicted this test's own name. `novice_guide`
+    is not REACHABLE: nothing mints it (`craft: null`, `tradeable: false`, in no
+    monster/resource/NPC/task/event table) and its only supplier was the
+    one-time `novice` achievement, so a character not already holding one never
+    can. `objective.is_suppliable` now drops it from the ranked candidates and
+    the artifact slot falls through, leaving `backpack` — a gear root that can
+    actually be obtained. The property under test is unchanged and the other two
+    assertions are untouched; only the identity of the winning gear candidate
+    moved, exactly as it did in wave 3a."""
     d, _state = _decide(CRITERION_1_MAIN)
-    assert d.chosen_root == ObtainItem(code="novice_guide", quantity=1,
-                                       slot="artifact1_slot")
+    assert d.chosen_root == ObtainItem(code="backpack", quantity=1,
+                                       slot="bag_slot")
     assert not isinstance(d.chosen_root, ReachCharLevel)
     assert ReachSkillLevel(skill="gearcrafting", level=6) in d.fallback_roots
 
@@ -141,10 +152,20 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     # An EQUALITY on chosen_root, as before — only the value moved. A
     # membership test on a different field would be a weaker claim wearing the
     # old test's name.
-    assert report.decision.chosen_root == ObtainItem(
-        code="novice_guide", quantity=1, slot="artifact1_slot")
-    assert ReachSkillLevel(skill="gearcrafting", level=6) in \
-        report.decision.fallback_roots
+    #
+    # THE SUPPLIABILITY GATE moved it a second time, and the same sentence
+    # above still applies: `selected_goal` and `plan` are byte-identical for the
+    # third mechanism running. `novice_guide` won artifact1_slot here only
+    # because nothing else could; it is minted by nothing and held by nobody, so
+    # `objective.is_suppliable` drops it and the walk promotes the gearcrafting
+    # climb to the ROOT instead of carrying it as a fallback behind a root that
+    # could never plan. The climb is therefore asserted on `chosen_root` now —
+    # a STRONGER claim than the old membership test, not a weaker one — and the
+    # slot it was promoted over is pinned so the promotion itself stays visible.
+    assert report.decision.chosen_root == ReachSkillLevel(
+        skill="gearcrafting", level=6)
+    assert report.decision.promoted_from == ObtainItem(
+        code="backpack", quantity=1, slot="bag_slot")
 
 
 def test_l10_gearcrafting_gap_search_bounded() -> None:
@@ -336,13 +357,20 @@ def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
     furthest-behind slot on the tier sheet. The gearcrafting climb is now a
     first-class `ReachSkillLevel` root in the alternatives, which is what the
     arbiter selects — same answer, reached as a root instead of derived from
-    one."""
+    one.
+
+    SUPPLIABILITY GATE: byte-identical goal and plan for the third mechanism
+    running, and the chosen_root moved once more. `novice_guide` held
+    artifact1_slot only because nothing else could reach it, and nothing mints
+    it, so `objective.is_suppliable` drops it and the gearcrafting climb is
+    promoted from the alternatives to the ROOT — asserted directly below, which
+    is stronger than the membership test it replaces."""
     report = _run("l12_gearcrafting_gap")
     # An EQUALITY on chosen_root, as before — only the value moved.
-    assert report.decision.chosen_root == ObtainItem(
-        code="novice_guide", quantity=1, slot="artifact1_slot")
-    assert ReachSkillLevel(skill="gearcrafting", level=6) in \
-        report.decision.fallback_roots, report.decision.fallback_roots
+    assert report.decision.chosen_root == ReachSkillLevel(
+        skill="gearcrafting", level=6)
+    assert report.decision.promoted_from == ObtainItem(
+        code="backpack", quantity=1, slot="bag_slot")
     goal = repr(report.selected_goal)
     assert "GrindCharacterXP" not in goal, goal  # the criterion-1 guarantee
     assert goal == "ReachSkill(gearcrafting->6)", goal

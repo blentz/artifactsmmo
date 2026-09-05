@@ -8,7 +8,10 @@ stand-in for `gear_targets_with_blockers`: a double returning the three
 long as somebody kept it in step, and this graph's entire job is to read that
 producer's output correctly. `classify_target` emits FOUR shapes, not the
 three spec §5.3 tabulates: skill-gated, attainable, blocked on a material, and
-blocked on ITSELF. There is a test below for each.
+blocked on ITSELF. There is a test below for the first three. The fourth is no
+longer reachable through `gear_targets_with_blockers` — `objective.is_suppliable`
+drops an item nothing mints and nobody holds before it can be classified — so it
+is pinned directly on `classify_target` in `test_tiers_objective.py` instead.
 
 The one doubled collaborator is `tier_progress.is_winnable` — a boolean oracle
 over the combat model, monkeypatched so "the ladder is finished" and "a rung is
@@ -70,12 +73,21 @@ from tests.test_ai.test_strategy_driver import _ctx
 #
 #   shield_slot     iron_shield    gearcrafting 10 vs the character's 1 -> SKILL-gated
 #   weapon_slot     ash_club       ash_plank <- ash_wood <- ash_tree     -> ATTAINABLE
-#   helmet_slot     copper_helmet  no recipe, no drop, no vendor         -> its OWN blocker
+#   helmet_slot     copper_helmet  copper_bar <- copper_ore <- rocks     -> ATTAINABLE
 #   leg_armor_slot  leather_legs   leather has no acquisition source     -> MATERIAL-gated
 #   boots_slot      leather_boots  ditto, same material and quantity     -> MATERIAL-gated
 #
 # The last two deliberately collide on `ObtainItem("leather", 2)`, which is
 # what makes the alternatives dedupe observable.
+#
+# `helmet_slot` USED TO WITNESS THE FOURTH SHAPE (its own blocker) by giving
+# copper_helmet no recipe, no drop and no vendor. `objective.is_suppliable` now
+# drops exactly that kind of candidate before `classify_target` ever sees it —
+# an item nothing mints and nobody holds is not a target — so the fourth shape
+# is no longer reachable through `gear_targets_with_blockers` and cannot be
+# witnessed from this fixture at all. The arm still exists (the material loop
+# can exhaust), and it is pinned directly on `classify_target` by
+# `test_tiers_objective.py`. copper_helmet here now carries its REAL recipe.
 _LADDER_RUNGS = (1, 10)
 _HIGH_LADDER_RUNGS = (10, 20)
 
@@ -89,8 +101,23 @@ def _gd() -> GameData:
         "ash_club": ItemStats(code="ash_club", level=1, type_="weapon",
                               attack={"air": 4},
                               crafting_skill="weaponcrafting", crafting_level=1),
+        # THE REAL copper_helmet: gearcrafting@1 from `copper_bar` x6, and
+        # copper_bar is mining@1 from copper_ore x10 — all three read off the
+        # committed bundle, not invented to make a test pass.
+        #
+        # It was the ONE candidate in this fixture with no recipe and no
+        # crafting skill, which made it unsuppliable once
+        # `objective.is_suppliable` began asking whether anything mints a
+        # candidate at all — `helmet_slot` then vanished from
+        # `gear_targets_with_blockers` and silently shortened the gap ladder
+        # these tests measure. The omission was incidental: this fixture exists
+        # for the gap arithmetic, so nothing ever forced it to declare a source.
         "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
-                                   resistance={"water": 4}),
+                                   resistance={"water": 4},
+                                   crafting_skill="gearcrafting", crafting_level=1),
+        "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource",
+                                crafting_skill="mining", crafting_level=1),
+        "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
         "leather_legs": ItemStats(code="leather_legs", level=1, type_="leg_armor",
                                   resistance={"air": 3},
                                   crafting_skill="gearcrafting", crafting_level=1),
@@ -106,11 +133,14 @@ def _gd() -> GameData:
         "iron_shield": {"iron_bar": 6},
         "ash_club": {"ash_plank": 4},
         "ash_plank": {"ash_wood": 1},
+        "copper_helmet": {"copper_bar": 6},
+        "copper_bar": {"copper_ore": 10},
         "leather_legs": {"leather": 2},
         "leather_boots": {"leather": 2},
     }
-    gd._resource_drops = {"ash_tree": "ash_wood"}
-    gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+    gd._resource_drops = {"ash_tree": "ash_wood", "copper_rocks": "copper_ore"}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1),
+                          "copper_rocks": ("mining", 1)}
     return gd
 
 
@@ -470,6 +500,7 @@ def test_the_siblings_become_the_alternatives_then_the_trunk_then_the_orphans():
         ObtainItem(code="leather", quantity=2),
         ReachCharLevel(level=20),
         ReachSkillLevel(skill="woodcutting", level=3),
+        ReachSkillLevel(skill="mining", level=4),
     )
 
 
@@ -531,7 +562,8 @@ def test_the_chosen_root_is_never_repeated_as_its_own_alternative(monkeypatch):
     assert resolution.root == ReachCharLevel(level=20)
     # The trunk is the ROOT here, so it is not repeated as its own alternative;
     # the orphan skill root behind it still is one.
-    assert resolution.alternatives == (ReachSkillLevel(skill="woodcutting", level=3),)
+    assert resolution.alternatives == (ReachSkillLevel(skill="woodcutting", level=3),
+                                       ReachSkillLevel(skill="mining", level=4))
     assert resolution.trail == ("IsAFightBlockingMe", "IsMyGearBehindMyTier",
                                 "IsThereACombatTarget",
                                 "CanIClearMyTier")
@@ -548,7 +580,8 @@ def test_a_wall_still_offers_the_trunk_as_an_alternative(monkeypatch):
     # trunk, they do not replace the wall verdict. `CanIClearMyTier`'s
     # docstring records the measurement that rejected putting them on this arm.
     assert resolution.alternatives == (ReachCharLevel(level=20),
-                                       ReachSkillLevel(skill="woodcutting", level=3))
+                                       ReachSkillLevel(skill="woodcutting", level=3),
+                                       ReachSkillLevel(skill="mining", level=4))
 
 
 # ---------------------------------------------------------------------------
@@ -608,15 +641,23 @@ def test_an_orphan_skill_with_no_open_rung_gets_no_root():
     the exact failure this seam exists to prevent — so a skill with no open,
     XP-positive rung must produce NOTHING.
 
-    This fixture's woodcutting has one rung (`ash_tree` -> `ash_wood`, level
-    1). At woodcutting 50 that rung is deep in the server's zero-xp band and
-    `LevelSkill.is_applicable` refuses, so the orphan tuple is empty even
-    though woodcutting is still un-nameable by any gear target."""
+    This fixture has TWO orphan skills, each with one rung: woodcutting
+    (`ash_tree` -> `ash_wood`) and mining (`copper_rocks` -> `copper_ore`),
+    both level 1. Mining joined them when `copper_helmet` took its real recipe
+    — copper_bar is mining@1 — and it is an orphan for the same reason
+    woodcutting is: no EQUIPPABLE names it as its `crafting_skill`, so no gear
+    target can ever reach it. At skill 50 each rung is deep in the server's
+    zero-xp band and `LevelSkill.is_applicable` refuses, so topping both out
+    empties the tuple.
+
+    Mining leads the grinding case because the order is the gap to the
+    character level and mining (1) trails further than woodcutting (2)."""
     gd = _gd()
     assert "woodcutting" not in _gear_nameable_skills(gd)
+    assert "mining" not in _gear_nameable_skills(gd)
     grinding = make_state(level=15, skills={"woodcutting": 2})
-    assert [r.skill for r in _orphan_skill_roots(grinding, gd)] == ["woodcutting"]
-    topped = make_state(level=15, skills={"woodcutting": 50})
+    assert [r.skill for r in _orphan_skill_roots(grinding, gd)] == ["mining", "woodcutting"]
+    topped = make_state(level=15, skills={"woodcutting": 50, "mining": 50})
     assert _orphan_skill_roots(topped, gd) == ()
 
 

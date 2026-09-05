@@ -8,7 +8,7 @@
 >
 > The crossing is a differential on production's own pricer — the candidate priced as it stands, then again with the walled items granted. No closure is re-derived here; obligation O6 forbids a second cost model and this census must not be one.
 
-438 candidate cells over 44 scenarios; gate opens 2 of 9 walls (store-less); obtainable 77; not_drop_walled 350; walled 9 (9 on ALTERNATIVES); closes 9; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
+414 candidate cells over 44 scenarios; gate opens 2 of 9 walls (store-less); obtainable 77; not_drop_walled 326; walled 9 (9 on ALTERNATIVES); closes 9; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
 
 argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only the argmax sees those 0 and misses 9 — an infinite price is a veto, so a walled candidate never becomes the argmax.
 
@@ -120,7 +120,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l48_event_active | ObtainItem(code='demon_horn', quantity=4) | alt | PASS | 4000000 | 4000000 | 4000000 | - | - | - | - | - |
 | l48_event_active | ObtainItem(code='corrupted_skull', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l48_event_active | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l48_event_active | ObtainItem(code='novice_guide', quantity=1, slot='artifact3_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l48_event_active | ObtainItem(code='lost_world_map', quantity=1, slot='artifact3_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l48_event_active | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l48_event_active | ObtainItem(code='lizard_skin', quantity=5) | alt | PASS | 5000000 | 5000000 | 5000000 | - | - | - | - | - |
 | l48_event_active | ObtainItem(code='full_moon_vampire_cape', quantity=4) | alt | PASS | 4000000 | 4000000 | 4000000 | - | - | - | - | - |
@@ -130,16 +130,14 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l48_event_active | ReachSkillLevel(skill='fishing', level=43) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l48_event_active | ReachSkillLevel(skill='mining', level=47) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l48_event_active | ReachSkillLevel(skill='woodcutting', level=47) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l10_bag_pursuit | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l10_bag_pursuit | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l10_bag_pursuit | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l10_bag_pursuit | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_bag_pursuit | ReachSkillLevel(skill='cooking', level=2) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_bag_pursuit | ReachSkillLevel(skill='fishing', level=2) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_bag_pursuit | ReachSkillLevel(skill='alchemy', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_bag_pursuit | ReachSkillLevel(skill='mining', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_bag_pursuit | ReachSkillLevel(skill='woodcutting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l12_bag_pursuit | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l12_bag_pursuit | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l12_bag_pursuit | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l12_bag_pursuit | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_bag_pursuit | ReachSkillLevel(skill='cooking', level=2) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_bag_pursuit | ReachSkillLevel(skill='fishing', level=2) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -147,9 +145,8 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l12_bag_pursuit | ReachSkillLevel(skill='mining', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_bag_pursuit | ReachSkillLevel(skill='woodcutting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l35_artifact_fill | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l35_artifact_fill | ObtainItem(code='lost_world_map', quantity=1, slot='artifact2_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l35_artifact_fill | ObtainItem(code='perfect_pearl', quantity=1, slot='artifact3_slot') | alt | PASS | 24 | 24 | 24 | - | - | - | - | - |
-| l35_artifact_fill | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l35_artifact_fill | ObtainItem(code='lost_world_map', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l35_artifact_fill | ObtainItem(code='perfect_pearl', quantity=1, slot='artifact2_slot') | alt | PASS | 24 | 24 | 24 | - | - | - | - | - |
 | l35_artifact_fill | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_artifact_fill | ObtainItem(code='astralyte_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l35_artifact_fill | ObtainItem(code='king_slimeball', quantity=2) | alt | PASS | 2000000 | 0 | 2000000 | king_slimeball | 1 | 1 | 1 | cursed_sceptre |
@@ -163,7 +160,6 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l35_boots_drop_farm | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_boots_drop_farm | ObtainItem(code='astralyte_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l35_boots_drop_farm | ObtainItem(code='king_slimeball', quantity=2) | alt | PASS | 2000000 | 0 | 2000000 | king_slimeball | 1 | 1 | 1 | cursed_sceptre |
-| l35_boots_drop_farm | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_boots_drop_farm | ReachCharLevel(level=40) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l35_boots_drop_farm | ReachSkillLevel(skill='alchemy', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l35_boots_drop_farm | ReachSkillLevel(skill='cooking', level=31) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -175,7 +171,6 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l30_rune_fill | ObtainItem(code='astralyte_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l30_rune_fill | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l30_rune_fill | ReachSkillLevel(skill='jewelrycrafting', level=19) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l30_rune_fill | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l30_rune_fill | ReachCharLevel(level=40) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l30_rune_fill | ReachSkillLevel(skill='alchemy', level=26) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l30_rune_fill | ReachSkillLevel(skill='cooking', level=26) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -186,7 +181,6 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l20_dual_utility | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility | ReachSkillLevel(skill='jewelrycrafting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l20_dual_utility | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l20_dual_utility | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility | ReachSkillLevel(skill='cooking', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility | ReachSkillLevel(skill='fishing', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -197,7 +191,6 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l20_dual_utility_one_stocked | ReachSkillLevel(skill='gearcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility_one_stocked | ReachSkillLevel(skill='jewelrycrafting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility_one_stocked | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l20_dual_utility_one_stocked | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l20_dual_utility_one_stocked | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility_one_stocked | ReachSkillLevel(skill='cooking', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility_one_stocked | ReachSkillLevel(skill='fishing', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -211,8 +204,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l13_drop_recipe_grind | ReachSkillLevel(skill='woodcutting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l13_drop_recipe_grind | ReachSkillLevel(skill='mining', level=13) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l13_drop_recipe_grind | ReachSkillLevel(skill='alchemy', level=17) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l10_gearcrafting_gap | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l10_gearcrafting_gap | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l10_gearcrafting_gap | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l10_gearcrafting_gap | ReachSkillLevel(skill='gearcrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_gearcrafting_gap | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_gearcrafting_gap | ReachSkillLevel(skill='alchemy', level=2) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -220,8 +212,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l10_gearcrafting_gap | ReachSkillLevel(skill='fishing', level=2) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_gearcrafting_gap | ReachSkillLevel(skill='woodcutting', level=2) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_gearcrafting_gap | ReachSkillLevel(skill='mining', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l12_gearcrafting_gap | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l12_gearcrafting_gap | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l12_gearcrafting_gap | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l12_gearcrafting_gap | ReachSkillLevel(skill='gearcrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_gearcrafting_gap | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_gearcrafting_gap | ReachSkillLevel(skill='alchemy', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -239,7 +230,6 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l10_gearcrafting_gap_combat_blocked | ReachSkillLevel(skill='mining', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l21_grey_material_grind | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 46 | 46 | 46 | - | - | - | - | - |
 | l21_grey_material_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring2_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
-| l21_grey_material_grind | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l21_grey_material_grind | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l21_grey_material_grind | ObtainItem(code='iron_boots', quantity=1, slot='boots_slot') | alt | PASS | 37 | 37 | 37 | - | - | - | - | - |
 | l21_grey_material_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
@@ -252,7 +242,6 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l21_grey_material_grind | ReachSkillLevel(skill='mining', level=22) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l22_grey_rung_grind | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 97 | 97 | 97 | - | - | - | - | - |
 | l22_grey_rung_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring2_slot') | alt | PASS | 96 | 96 | 96 | - | - | - | - | - |
-| l22_grey_rung_grind | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l22_grey_rung_grind | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l22_grey_rung_grind | ObtainItem(code='iron_boots', quantity=1, slot='boots_slot') | alt | PASS | 88 | 88 | 88 | - | - | - | - | - |
 | l22_grey_rung_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 96 | 96 | 96 | - | - | - | - | - |
@@ -276,7 +265,6 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l12_deep_chain_grind | ReachSkillLevel(skill='mining', level=13) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l19_band_edge | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 46 | 46 | 46 | - | - | - | - | - |
 | l19_band_edge | ObtainItem(code='iron_ring', quantity=1, slot='ring2_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
-| l19_band_edge | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l19_band_edge | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l19_band_edge | ObtainItem(code='iron_boots', quantity=1, slot='boots_slot') | alt | PASS | 37 | 37 | 37 | - | - | - | - | - |
 | l19_band_edge | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
@@ -289,7 +277,6 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l19_band_edge | ReachSkillLevel(skill='mining', level=22) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l11_band_floor | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 46 | 46 | 46 | - | - | - | - | - |
 | l11_band_floor | ObtainItem(code='iron_ring', quantity=1, slot='ring2_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
-| l11_band_floor | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l11_band_floor | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l11_band_floor | ObtainItem(code='iron_boots', quantity=1, slot='boots_slot') | alt | PASS | 37 | 37 | 37 | - | - | - | - | - |
 | l11_band_floor | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
@@ -300,8 +287,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l11_band_floor | ReachSkillLevel(skill='woodcutting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l11_band_floor | ReachSkillLevel(skill='alchemy', level=17) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l11_band_floor | ReachSkillLevel(skill='mining', level=22) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l32_items_task | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l32_items_task | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l32_items_task | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l32_items_task | ObtainItem(code='jasper_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_items_task | ObtainItem(code='lucky_wizard_hat', quantity=1, slot='helmet_slot') | alt | PASS | 621 | 621 | 621 | - | - | - | - | - |
 | l32_items_task | ObtainItem(code='mushmush_jacket', quantity=1, slot='body_armor_slot') | alt | PASS | 387 | 387 | 387 | - | - | - | - | - |
@@ -313,8 +299,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l32_items_task | ReachSkillLevel(skill='fishing', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_items_task | ReachSkillLevel(skill='mining', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_items_task | ReachSkillLevel(skill='woodcutting', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l32_held_task_workable | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l32_held_task_workable | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l32_held_task_workable | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l32_held_task_workable | ObtainItem(code='jasper_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_workable | ObtainItem(code='lucky_wizard_hat', quantity=1, slot='helmet_slot') | alt | PASS | 621 | 621 | 621 | - | - | - | - | - |
 | l32_held_task_workable | ObtainItem(code='mushmush_jacket', quantity=1, slot='body_armor_slot') | alt | PASS | 387 | 387 | 387 | - | - | - | - | - |
@@ -333,8 +318,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l32_held_task_closable | ReachSkillLevel(skill='fishing', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_closable | ReachSkillLevel(skill='mining', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_closable | ReachSkillLevel(skill='woodcutting', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l32_held_task_open | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l32_held_task_open | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l32_held_task_open | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l32_held_task_open | ObtainItem(code='jasper_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_open | ObtainItem(code='lucky_wizard_hat', quantity=1, slot='helmet_slot') | alt | PASS | 621 | 621 | 621 | - | - | - | - | - |
 | l32_held_task_open | ObtainItem(code='mushmush_jacket', quantity=1, slot='body_armor_slot') | alt | PASS | 387 | 387 | 387 | - | - | - | - | - |
@@ -346,8 +330,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l32_held_task_open | ReachSkillLevel(skill='fishing', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_open | ReachSkillLevel(skill='mining', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_held_task_open | ReachSkillLevel(skill='woodcutting', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l12_ge_book_grind | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l12_ge_book_grind | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l12_ge_book_grind | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l12_ge_book_grind | ReachSkillLevel(skill='gearcrafting', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_ge_book_grind | ReachSkillLevel(skill='jewelrycrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_ge_book_grind | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -356,8 +339,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l12_ge_book_grind | ReachSkillLevel(skill='fishing', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_ge_book_grind | ReachSkillLevel(skill='mining', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_ge_book_grind | ReachSkillLevel(skill='woodcutting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l12_quiet_book_grind | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l12_quiet_book_grind | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l12_quiet_book_grind | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l12_quiet_book_grind | ReachSkillLevel(skill='gearcrafting', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_quiet_book_grind | ReachSkillLevel(skill='jewelrycrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_quiet_book_grind | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -366,8 +348,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l12_quiet_book_grind | ReachSkillLevel(skill='fishing', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_quiet_book_grind | ReachSkillLevel(skill='mining', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_quiet_book_grind | ReachSkillLevel(skill='woodcutting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l12_ge_book_adequate | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l12_ge_book_adequate | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l12_ge_book_adequate | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l12_ge_book_adequate | ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot') | alt | PASS | 11 | 11 | 11 | - | - | - | - | - |
 | l12_ge_book_adequate | ReachSkillLevel(skill='jewelrycrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_ge_book_adequate | ObtainItem(code='mushroom', quantity=4) | alt | PASS | 5 | 5 | 5 | - | - | - | - | - |
@@ -382,7 +363,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l47_depth3_amulet | ObtainItem(code='life_crystal', quantity=1, slot='artifact2_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l47_depth3_amulet | ObtainItem(code='corrupted_skull', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l47_depth3_amulet | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l47_depth3_amulet | ObtainItem(code='novice_guide', quantity=1, slot='artifact3_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l47_depth3_amulet | ObtainItem(code='lost_world_map', quantity=1, slot='artifact3_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l47_depth3_amulet | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l47_depth3_amulet | ObtainItem(code='demon_horn', quantity=4) | alt | PASS | 4000000 | 4000000 | 4000000 | - | - | - | - | - |
 | l47_depth3_amulet | ReachCharLevel(level=50) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -391,8 +372,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l47_depth3_amulet | ReachSkillLevel(skill='fishing', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l47_depth3_amulet | ReachSkillLevel(skill='mining', level=41) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l47_depth3_amulet | ReachSkillLevel(skill='woodcutting', level=41) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l20_relief_full_bank | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l20_relief_full_bank | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l20_relief_full_bank | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l20_relief_full_bank | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 12 | 12 | 12 | - | - | - | - | - |
 | l20_relief_full_bank | ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot') | alt | PASS | 8 | 8 | 8 | - | - | - | - | - |
 | l20_relief_full_bank | ObtainItem(code='adventurer_vest', quantity=1, slot='body_armor_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
@@ -402,8 +382,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l20_relief_full_bank | ReachSkillLevel(skill='fishing', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_relief_full_bank | ReachSkillLevel(skill='mining', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_relief_full_bank | ReachSkillLevel(skill='woodcutting', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l20_bag_critical_empty_bank | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l20_bag_critical_empty_bank | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l20_bag_critical_empty_bank | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l20_bag_critical_empty_bank | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 107 | 107 | 107 | - | - | - | - | - |
 | l20_bag_critical_empty_bank | ObtainItem(code='mushroom', quantity=4) | alt | PASS | 4000000 | 0 | 4000000 | mushroom | 1 | 1 | 1 | forest_whip |
 | l20_bag_critical_empty_bank | ObtainItem(code='adventurer_vest', quantity=1, slot='body_armor_slot') | alt | PASS | 149 | 149 | 149 | - | - | - | - | - |
@@ -413,8 +392,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l20_bag_critical_empty_bank | ReachSkillLevel(skill='fishing', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_bag_critical_empty_bank | ReachSkillLevel(skill='mining', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_bag_critical_empty_bank | ReachSkillLevel(skill='woodcutting', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l22_rest_for_combat | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l22_rest_for_combat | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l22_rest_for_combat | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l22_rest_for_combat | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 64 | 64 | 64 | - | - | - | - | - |
 | l22_rest_for_combat | ObtainItem(code='mushroom', quantity=4) | alt | PASS | 4000000 | 0 | 4000000 | mushroom | 1 | 1 | 1 | forest_whip |
 | l22_rest_for_combat | ObtainItem(code='adventurer_vest', quantity=1, slot='body_armor_slot') | alt | PASS | 200 | 200 | 200 | - | - | - | - | - |
@@ -431,8 +409,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l25_currency_leaf_unfunded | ReachSkillLevel(skill='fishing', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l25_currency_leaf_unfunded | ReachSkillLevel(skill='mining', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l25_currency_leaf_unfunded | ReachSkillLevel(skill='woodcutting', level=21) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l24_fisher_cooking_rung | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l24_fisher_cooking_rung | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l24_fisher_cooking_rung | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l24_fisher_cooking_rung | ReachSkillLevel(skill='jewelrycrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l24_fisher_cooking_rung | ReachSkillLevel(skill='gearcrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l24_fisher_cooking_rung | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
@@ -441,8 +418,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l24_fisher_cooking_rung | ReachSkillLevel(skill='woodcutting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l24_fisher_cooking_rung | ReachSkillLevel(skill='cooking', level=22) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l24_fisher_cooking_rung | ReachSkillLevel(skill='fishing', level=26) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l20_boost_stock | ObtainItem(code='novice_guide', quantity=1, slot='artifact1_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l20_boost_stock | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
+| l20_boost_stock | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l20_boost_stock | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 107 | 107 | 107 | - | - | - | - | - |
 | l20_boost_stock | ObtainItem(code='mushroom', quantity=4) | alt | PASS | 4000000 | 0 | 4000000 | mushroom | 1 | 1 | 1 | forest_whip |
 | l20_boost_stock | ObtainItem(code='adventurer_vest', quantity=1, slot='body_armor_slot') | alt | PASS | 163 | 163 | 163 | - | - | - | - | - |

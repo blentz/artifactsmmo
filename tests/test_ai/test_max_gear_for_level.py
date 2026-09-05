@@ -32,10 +32,19 @@ def test_tier_cap_bounds_the_candidate_set(bundle_game_data):
     ever exercised in its degenerate corner (tier 1). `l10_gearcrafting_gap`
     has real derived combat stats and clears through tier 10 -- pins that the
     cap actually EXCLUDES higher-tier items rather than merely defaulting to
-    the lowest possible one. `artifact1_slot` is the witness: uncapped
-    (`target_gear`, the perfect sheet) it is `sandwhisper_codex` (level 50);
-    capped to tier 10 it must be `novice_guide` (level 10), never the
-    level-50 item."""
+    the lowest possible one. `helmet_slot` is the witness: uncapped
+    (`target_gear`, the perfect sheet) it is `desert_wrap` (level 50); capped
+    to tier 10 it must be `adventurer_helmet` (level 10), never the level-50
+    item.
+
+    THE WITNESS WAS `artifact1_slot` (`sandwhisper_codex` 50 vs `novice_guide`
+    10) until `objective.is_suppliable` landed. This bundle holds exactly one
+    artifact at or below tier 10 — `novice_guide` — and nothing mints it, so the
+    slot now has no suppliable candidate and drops out of the sheet entirely.
+    That is the correct answer for that slot in this world and it simply cannot
+    witness the cap any more. `helmet_slot` carries the identical shape (a
+    level-10 capped pick against a level-50 perfect pick), so the claim is
+    unchanged and only the slot it is read from moved."""
     gd = bundle_game_data
     objective = CharacterObjective.from_game_data(gd)
     state = scenario_state(SCENARIOS["l10_gearcrafting_gap"], gd)
@@ -44,14 +53,14 @@ def test_tier_cap_bounds_the_candidate_set(bundle_game_data):
     assert tier == 10, "scenario fixture drifted; re-derive the expected tier"
 
     targets = objective.gear_targets_with_blockers(state, None)
-    assert "artifact1_slot" in targets
-    capped = targets["artifact1_slot"]
-    assert capped.code == "novice_guide"
+    assert "helmet_slot" in targets
+    capped = targets["helmet_slot"]
+    assert capped.code == "adventurer_helmet"
     capped_stats = gd.item_stats(capped.code)
     assert capped_stats is not None and capped_stats.level <= tier
 
-    perfect_code = objective.target_gear.get("artifact1_slot")
-    assert perfect_code == "sandwhisper_codex"
+    perfect_code = objective.target_gear.get("helmet_slot")
+    assert perfect_code == "desert_wrap"
     perfect_stats = gd.item_stats(perfect_code)
     assert perfect_stats is not None and perfect_stats.level > tier, (
         "the perfect-sheet target must be ABOVE the tier cap for this "

@@ -414,31 +414,44 @@ def test_an_objective_and_game_data_that_disagree_is_an_error_not_a_skip():
         StrategyEngine(obj).decide(make_state(level=5), gd_empty)
 
 
-def test_unattainable_gear_is_off_the_target_sheet_but_on_the_blocker_sheet():
-    """WAVE 3a moved the second half of this. `near_term_gear` still drops the
-    unattainable weapon (first two asserts, unchanged), but the resolution walk
-    does not read `near_term_gear` — it reads `gear_targets_with_blockers`, the
-    wave-2 walk built specifically so an unattainable target is reported WITH
-    what stands in front of it instead of dropped on the floor.
+def test_a_sourceless_item_is_off_the_target_sheet_AND_off_the_blocker_sheet():
+    """WAVE 3a moved the second half of this once; the suppliability gate moved
+    it again, and this time the two halves collapsed into one answer.
 
-    So `drop_blade` is now in the ranking, carrying its own code as its blocker,
-    and the walk chose it. That is a real live behaviour change and it is
-    asserted in full rather than trimmed to the part that still passes —
-    see `.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md`, which flags
-    the ordering (a drop-only weapon ahead of a craftable helm) as the flip's
-    largest open question."""
-    gd = _reach_gd()  # drop_blade unattainable; iron_helm craftable-from-gatherables
+    `drop_blade` has no recipe, no gather, no drop and no vendor in this
+    catalogue — the fixture never gave it one. That is not "unattainable today",
+    it is `novice_guide`'s shape: nothing mints it, so no character can ever
+    hold one. `is_attainable` says no (first assert, unchanged) and
+    `objective.is_suppliable` now says no as well, so it is not a candidate and
+    `weapon_slot` has none. The walk therefore chooses `iron_helm`, the one
+    target it can actually pursue.
+
+    THIS TEST USED TO ASSERT THE OPPOSITE: that `gear_targets_with_blockers`
+    reported `drop_blade` as its own blocker and that the walk made it
+    `chosen_root`. That was the live defect, one layer below the `novice_guide`
+    root C3P0/Lor/R2D2 chased every cycle without ever planning an action for
+    it. The test's own docstring had already flagged the ordering (a drop-only
+    weapon ahead of a craftable helm) as the flip's largest open question —
+    see `.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md`.
+
+    The half this test used to carry that is still true — an unattainable but
+    MINTED target stays on the blocker sheet with its blocker — did not go
+    away; it is pinned on the real bundle by
+    `test_max_gear_for_level.py::test_an_unattainable_target_is_kept_and_carries_its_blocker`
+    and on a fixture by
+    `test_tiers_objective.py::test_gear_targets_keep_an_unattainable_but_producible_candidate`.
+    """
+    gd = _reach_gd()  # drop_blade sourceless; iron_helm craftable-from-gatherables
     obj = CharacterObjective.from_game_data(gd)
     assert "weapon_slot" not in obj.target_gear           # drop_blade excluded at build
     assert obj.target_gear.get("helmet_slot") == "iron_helm"
-    assert obj.gear_targets_with_blockers(make_state(level=5), None)[
-        "weapon_slot"].blocker == "drop_blade"
+    assert "weapon_slot" not in obj.gear_targets_with_blockers(make_state(level=5), None)
     d = StrategyEngine(obj).decide(make_state(level=5), gd)
     reprs = [rs.root_repr for rs in d.ranking]
     assert any("iron_helm" in r for r in reprs)            # craftable gear is a candidate
-    assert any("drop_blade" in r for r in reprs)
-    assert d.chosen_root == ObtainItem(code="drop_blade", quantity=1,
-                                       slot="weapon_slot")
+    assert not any("drop_blade" in r for r in reprs)
+    assert d.chosen_root == ObtainItem(code="iron_helm", quantity=1,
+                                       slot="helmet_slot")
 
 
 def _combat_gd() -> GameData:
