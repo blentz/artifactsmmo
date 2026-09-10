@@ -12,6 +12,7 @@ the live caller that makes formal/Formal/LiquidationVenue.lean's proof non-inert
 from artifactsmmo_cli.ai.actions.ge_fill import GeFillBuyOrderAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.ge_order_config import GE_FILL_MAX_QUANTITY
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
@@ -122,3 +123,23 @@ def test_surplus_no_npc_buyer_but_ge_order_emits_ge_fill_not_delete():
 
     assert any(isinstance(a, GeFillBuyOrderAction) for a in emitted)
     assert not any(isinstance(a, DeleteItemAction) for a in emitted)
+
+def test_ge_fill_quantity_is_clamped_to_the_server_payload_cap():
+    """R2D2 2026-09-09: 104 algae overstock emitted GeFill(algae×104), which the
+    server refuses with HTTP 422 ("quantity: Input should be less than or equal
+    to 100") on EVERY cycle — a livelock with no exit, because the emitted
+    quantity never changes. The excess above the cap is liquidated by the NEXT
+    cycle's fill, so the goal must offer a fill the server can actually accept."""
+    gd = _gd(npc_buy=("merchant", 3), ge_order=("ord-9", 9, 1821))
+    state = make_state(inventory={"iron_ore": 104}, inventory_max=110)
+    goal = DiscardOverstockGoal(gd, ctx=NO_PROFILE_CONTEXT)
+
+    emitted = goal.relevant_actions([], state, gd)
+
+    ge_fills = [a for a in emitted if isinstance(a, GeFillBuyOrderAction)]
+    assert len(ge_fills) == 1, f"expected one GeFillBuyOrderAction, got {emitted}"
+    fill = ge_fills[0]
+    assert fill.quantity == GE_FILL_MAX_QUANTITY
+    # A capped fill is still executable, and leaves the remainder for next cycle.
+    assert fill.is_applicable(state, gd) is True
+    assert fill.apply(state, gd).inventory["iron_ore"] == 104 - GE_FILL_MAX_QUANTITY

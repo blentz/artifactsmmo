@@ -6,6 +6,7 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.ge_fill import GeFillBuyOrderAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.ge_order_config import GE_FILL_MAX_QUANTITY
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
@@ -128,3 +129,25 @@ class TestGeFillBuyOrderAction:
                 a.execute(state, client)
         MockMove.assert_not_called()
         mock_fill.assert_called_once()
+
+
+class TestGeFillServerQuantityCap:
+    """Both GE fill routes reject a quantity above `GE_FILL_MAX_QUANTITY` in
+    payload validation, before the order is even looked up (probed 2026-09-09).
+    An action above the cap can therefore NEVER execute, so it must not be
+    applicable — otherwise the planner re-picks it forever (live R2D2 livelock)."""
+
+    def test_not_applicable_above_the_server_fill_cap(self):
+        over = GE_FILL_MAX_QUANTITY + 1
+        a = GeFillBuyOrderAction(order_id="ord-1", item_code="iron_ore", price=9,
+                                 quantity=over, ge_location=(5, 1))
+        gd = make_gd(ge_buy_orders={"iron_ore": ("ord-1", 9, 10_000)})
+        state = make_state(inventory={"iron_ore": over})
+        assert a.is_applicable(state, gd) is False
+
+    def test_applicable_at_the_server_fill_cap(self):
+        a = GeFillBuyOrderAction(order_id="ord-1", item_code="iron_ore", price=9,
+                                 quantity=GE_FILL_MAX_QUANTITY, ge_location=(5, 1))
+        gd = make_gd(ge_buy_orders={"iron_ore": ("ord-1", 9, 10_000)})
+        state = make_state(inventory={"iron_ore": GE_FILL_MAX_QUANTITY})
+        assert a.is_applicable(state, gd) is True

@@ -6,6 +6,7 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.ge_order_config import GE_FILL_MAX_QUANTITY
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
@@ -212,4 +213,26 @@ class TestGeFillSellOrderAction:
                            inventory={}, inventory_max=20)
         a = GeFillSellOrderAction(order_id="ord-w", item_code="widget", price=20, quantity=1,
                                   ge_location=(5, 1))
+        assert a.is_applicable(state, gd) is True
+
+
+class TestGeFillSellServerQuantityCap:
+    """POST /my/{name}/action/grandexchange/buy rejects quantity > 100 in payload
+    validation (probed 2026-09-09), so an over-cap buy can never execute."""
+
+    def test_not_applicable_above_the_server_fill_cap(self):
+        over = GE_FILL_MAX_QUANTITY + 1
+        a = GeFillSellOrderAction(order_id="ord-1", item_code="widget", price=1,
+                                  quantity=over, ge_location=(5, 1))
+        gd = make_gd(ge_sell_orders={"widget": ("ord-1", 1, 10_000)})
+        gd._item_stats = {"widget": ItemStats(code="widget", level=1, type_="resource")}
+        state = make_state(gold=1_000_000, inventory={}, inventory_max=1_000)
+        assert a.is_applicable(state, gd) is False
+
+    def test_applicable_at_the_server_fill_cap(self):
+        a = GeFillSellOrderAction(order_id="ord-1", item_code="widget", price=1,
+                                  quantity=GE_FILL_MAX_QUANTITY, ge_location=(5, 1))
+        gd = make_gd(ge_sell_orders={"widget": ("ord-1", 1, 10_000)})
+        gd._item_stats = {"widget": ItemStats(code="widget", level=1, type_="resource")}
+        state = make_state(gold=1_000_000, inventory={}, inventory_max=1_000)
         assert a.is_applicable(state, gd) is True

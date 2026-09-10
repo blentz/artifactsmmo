@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.disposal_route import overstock_disposal
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.ge_order_config import GE_FILL_MAX_QUANTITY
 from artifactsmmo_cli.ai.ge_post_pricing import sell_post_price
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -133,9 +134,14 @@ class DiscardOverstockGoal(Goal):
             if ge_loc is not None and order is not None and \
                     liquidation_venue(code, excess_qty, state, game_data) is Venue.GE:
                 order_id, price, _order_qty = order
+                # One fill moves at most GE_FILL_MAX_QUANTITY units (server payload
+                # bound). A holding above the cap is liquidated one capped fill per
+                # cycle; emitting the whole excess instead emits a step the server
+                # refuses identically every cycle, which is a livelock, not a slow
+                # path (live R2D2 2026-09-09: 104 algae, HTTP 422, whole run).
                 result.append(GeFillBuyOrderAction(
                     order_id=order_id, item_code=code, price=price,
-                    quantity=excess_qty, ge_location=ge_loc,
+                    quantity=min(excess_qty, GE_FILL_MAX_QUANTITY), ge_location=ge_loc,
                 ))
                 ge_action_available = True
 

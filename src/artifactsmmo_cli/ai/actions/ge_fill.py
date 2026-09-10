@@ -21,6 +21,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.ge_order_config import GE_FILL_MAX_QUANTITY
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -40,6 +41,12 @@ class GeFillBuyOrderAction(Action):
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if self.ge_location is None:
+            return False
+        # One fill moves at most GE_FILL_MAX_QUANTITY units — a server payload
+        # bound, checked before the order is looked up, so an over-cap fill can
+        # never execute. Admitting one plans a step that fails identically every
+        # cycle (live R2D2 2026-09-09: GeFill(algae×104) → HTTP 422, forever).
+        if self.quantity > GE_FILL_MAX_QUANTITY:
             return False
         if state.inventory.get(self.item_code, 0) < self.quantity:
             return False

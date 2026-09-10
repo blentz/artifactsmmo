@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.cost_core import distance_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.ge_order_config import GE_FILL_MAX_QUANTITY
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.progression_reserve import can_spend
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -43,6 +44,11 @@ class GeFillSellOrderAction(Action):
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if self.ge_location is None:
+            return False
+        # One fill moves at most GE_FILL_MAX_QUANTITY units — a server payload
+        # bound, checked before the order is looked up, so an over-cap buy can
+        # never execute (mirrors GeFillBuyOrderAction; same cap, both routes).
+        if self.quantity > GE_FILL_MAX_QUANTITY:
             return False
         # Slot-floor: buying mints +quantity; refuse if it would overflow the cap.
         if state.inventory_free < self.quantity:

@@ -36,3 +36,19 @@ because they are the same fact: how long we are willing to wait for a fill."""
 AVG_CYCLE_SECONDS = 30.0
 """Published actions-to-wall-clock rate. NOT a term in any objective — a caller
 that genuinely needs seconds converts ONCE, here, and says so."""
+
+GE_FILL_MAX_QUANTITY = 100
+"""Units one Grand Exchange fill may move. A SERVER payload bound, not a policy
+knob: both fill endpoints reject a larger quantity before they even look the
+order up.
+
+    POST /my/{name}/action/grandexchange/fill  (GeFillBuyOrderAction)
+    POST /my/{name}/action/grandexchange/buy   (GeFillSellOrderAction)
+    422 {"quantity": ["Input should be less than or equal to 100"]}
+
+Probed 2026-09-09 against a non-existent order id, so payload validation is the
+only thing that can answer: quantity=101 returns the 422 above on both routes,
+quantity=100 gets as far as 404 "Order not found." A bigger holding is
+liquidated one capped fill per cycle, which is why exceeding the cap is a
+LIVELOCK and not a slow path — R2D2 sat on 104 algae re-emitting the same
+refused GeFill(algae×104) every cycle, its whole run."""
