@@ -640,7 +640,28 @@ class UpgradeEquipmentGoal(Goal):
 
     def _committed_upgrade_if_ready(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         assert self._committed_target is not None
-        item_code, _slot = self._committed_target
+        item_code, slot = self._committed_target
+        # OCCUPANCY DEFERRAL (see equipment/slot_occupancy) — the SAME gate
+        # `_find_inventory_upgrade` applies, and for the same reason: the slot's
+        # occupant is `pick_loadout`'s call unless the candidate dominates the
+        # incumbent stat-wise. HOW the target was chosen does not change who
+        # owns the slot, so a committed target is gated identically. Without
+        # this the commitment walked straight past the one occupancy authority
+        # and re-opened the 2026-08-04 loop from a third producer: live HAL
+        # 2026-09-09 equipped `hard_leather_pants` 203 times in 13.5 hours while
+        # the grind's `OptimizeLoadout` put `adventurer_pants` back after each
+        # one, for 0 character XP.
+        #
+        # Gated only when the incumbent's stats resolve: `pick_loadout`
+        # displaces an unknown incumbent unconditionally, so there is no
+        # disagreement to defer to (mirrors `_is_upgrade_over_impl`'s
+        # missing-stats handling rather than inventing a third policy).
+        incumbent = state.equipment.get(slot)
+        incumbent_stats = game_data.item_stats(incumbent) if incumbent else None
+        candidate_stats = game_data.item_stats(item_code)
+        if (incumbent_stats is not None and candidate_stats is not None
+                and not may_displace(candidate_stats, incumbent_stats)):
+            return None
         recipe = game_data.crafting_recipe(item_code) or {}
         bank = state.bank_items or {}
         if recipe and all(

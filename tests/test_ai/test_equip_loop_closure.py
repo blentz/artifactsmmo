@@ -82,6 +82,24 @@ _ROSENBLOOD_RES = {"fire": 10, "earth": 10, "water": 10, "air": 10}
 _BATTLEAXE_ATTACK = {"earth": 40}
 _FOREST_WHIP_ATTACK = {"air": 40}
 
+_HARD_LEATHER_PANTS = ItemStats(
+    code="hard_leather_pants", level=20, type_="leg_armor",
+    hp_bonus=80, haste=2, dmg_elements={"air": 10, "earth": 10},
+    resistance={"air": 6},
+)
+_ADVENTURER_PANTS = ItemStats(
+    code="adventurer_pants", level=15, type_="leg_armor",
+    hp_bonus=60, dmg=5, wisdom=20,
+)
+
+# battlestaff (level 20 weapon): attack_water 40 — HAL's weapon, and the reason
+# `adventurer_pants`' GLOBAL 5% damage outscores `hard_leather_pants`' air/earth
+# 10%: none of the latter applies to a water hit.
+_BATTLESTAFF_ATTACK = {"water": 40}
+# sheep (level 1): what HAL was actually fighting.
+_SHEEP_ATK = {"air": 0, "earth": 14, "fire": 0, "water": 0}
+_SHEEP_RES = {"air": 10, "earth": 10, "fire": 10, "water": 10}
+
 _AMULET = "amulet_slot"
 _BODY = "body_armor_slot"
 
@@ -519,3 +537,57 @@ def test_may_displace_rejects_less_damage_in_any_element() -> None:
     short = ItemStats(code="b", level=1, type_="amulet", dmg=4)
     assert may_displace(short, a) is False
     assert may_displace(replace(short, code="c", dmg=5), a) is True
+
+
+def test_the_committed_upgrade_leg_of_the_loop_also_closes() -> None:
+    """The THIRD producer of a displacing equip, and the one the 2026-08-04 fix
+    missed: a COMMITTED `UpgradeEquipmentGoal`.
+
+    Live 2026-09-09, character HAL (level 20). He wore `adventurer_pants`,
+    carried one `hard_leather_pants`, and ran this pair 203 times over 13.5
+    hours — 0 character XP for the whole run:
+
+        Equip(hard_leather_pants->leg_armor_slot)  goal=UpgradeEquipment(...)
+        (LevelSkill expansion -> OptimizeLoadout)  unequip, adventurer_pants back
+
+    `_find_inventory_upgrade` defers to `pick_loadout` through `may_displace`,
+    but `_committed_upgrade_if_ready` — the path a target committed by
+    `obtain_item_routing._equippable_goal` / `map_guard(GEAR_REVIEW)` takes —
+    did not consult it at all, so a committed target walked straight past the
+    one authority on slot occupancy.
+
+    Neither piece dominates (checked below), so this slot belongs to the picker.
+    """
+    gd = _gd(_HARD_LEATHER_PANTS, _ADVENTURER_PANTS)
+    leg = "leg_armor_slot"
+    state = _state(20, {"hard_leather_pants": 1},
+                   {leg: "adventurer_pants"}, _BATTLESTAFF_ATTACK)
+    goal = UpgradeEquipmentGoal(
+        initial_equipment=state.equipment,
+        committed_target=("hard_leather_pants", leg),
+    )
+
+    # Vacuity guards: the loop is real in BOTH directions, so the assertion
+    # below can only come from the occupancy gate.
+    assert may_displace(_HARD_LEATHER_PANTS, _ADVENTURER_PANTS) is False
+    assert may_displace(_ADVENTURER_PANTS, _HARD_LEATHER_PANTS) is False
+    assert pick_loadout(Combat(_SHEEP_ATK, _SHEEP_RES, _BATTLESTAFF_ATTACK),
+                        _state(20, {"adventurer_pants": 1},
+                               {leg: "hard_leather_pants"},
+                               _BATTLESTAFF_ATTACK), gd)[leg] == "adventurer_pants", (
+        "fixture drift: the picker no longer reverses this equip, so there is "
+        "no loop left for the gate to close"
+    )
+
+    # The committed goal must not name an equip the picker will undo.
+    assert goal.desired_state(state, gd) == {}
+
+    for _ in range(4):
+        desired = goal.desired_state(state, gd)
+        equipment = desired.get("equipment")
+        if equipment:
+            state = replace(state, equipment={**state.equipment, **equipment})
+        picked = pick_loadout(
+            Combat(_SHEEP_ATK, _SHEEP_RES, state.attack), state, gd)
+        state = replace(state, equipment=dict(picked))
+        assert state.equipment[leg] == "adventurer_pants", state.equipment
