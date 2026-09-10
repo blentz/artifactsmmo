@@ -53,7 +53,17 @@ theorem buy_post_fill_escrow (l : Ledger) (qty price : Int) :
   simp [postBuy, fillBuy]
 
 /-- LIVENESS: every posted order has an escape (cancel) that frees its locked
-capital, so no capital is locked forever (paired with the TTL age bound in Python). -/
+capital, so no capital is locked forever (paired with the TTL age bound in Python).
+
+RESIDUAL — this ledger's `items` is an unbounded `Int`, so `cancelSell` here can
+always receive the returned stack. The real bag cannot: the game enforces a slot
+cap and a quantity cap, and a cancel that overflows either is refused with HTTP
+497, leaving the capital locked. The escape is therefore unconditional in THIS
+model and conditional on bag room in the running system, where the gate lives in
+`GeCancelOrderAction.is_applicable` via `inventory_room.has_room`. Live
+2026-09-10 that gap was a livelock: 685 refused cancels, one character to
+`stuck_exit`. Adding a capacity term to this ledger would let the theorem carry
+the precondition itself; until then the bound is Python-side only. -/
 theorem sell_escrow_freed (l : Ledger) (qty price : Int) :
     (cancelSell (postSell l qty price) qty).escrowItems = l.escrowItems := by
   simp [postSell, cancelSell]

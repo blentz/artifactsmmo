@@ -3,6 +3,15 @@ needs now) plus TTL (staleness backstop). Underwrites the liveness guarantee tha
 posted order's capital is locked forever — every posted order either fills or ages
 past `TTL_CYCLES` and is swept, so the cancel-target set a firing GE_CANCEL guard acts
 on provably shrinks toward empty.
+
+SCOPE OF "SHRINKS TOWARD EMPTY": this module decides which orders SHOULD be
+cancelled; it does not and cannot decide which CAN be. A SELL cancel returns the
+escrowed stack to the bag, so `GeCancelOrderAction.is_applicable` refuses one
+the bag cannot receive (HTTP 497) and the id stays a target. The set therefore
+shrinks toward empty given room to receive the returns — an assumption the Lean
+model `Formal/EscrowConservation.lean` makes silently, because its ledger's
+`items` is an unbounded `Int` with no bag cap. Nothing here is proof against a
+full bag; that is the residual, and it is what the 2026-09-10 livelock was.
 """
 
 from artifactsmmo_cli.ai.game_data import GameData
@@ -43,7 +52,8 @@ def cancel_targets(
     (`GE_ORDER_CLAIM_TTL_SECONDS`), so an id hidden by a crashed sibling becomes a
     target again within one TTL. The guarantee weakens from "a stale order is
     cancelled on the next cycle" to "within one claim TTL of it", and never to
-    "never" — the cancel-target set still provably shrinks toward empty.
+    "never" — the cancel-target set still provably shrinks toward empty (under
+    the bag-room assumption stated in the module docstring).
 
     `game_data` is accepted for signature parity with the other selection helpers and
     to leave room for future venue-aware pruning; the current triggers are decided

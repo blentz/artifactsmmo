@@ -115,3 +115,78 @@ class TestExecute:
         assert kept in new_state.open_orders
         assert cancelled not in new_state.open_orders
         assert len(new_state.open_orders) == 1
+
+
+class TestSellCancelNeedsInventoryRoom:
+    """Cancelling a SELL order MINTS the escrowed stack back into the bag, so it
+    needs the same slot+quantity room every other stack-creating action checks
+    (`WithdrawItemAction`, `NpcBuyAction`, `GeFillSellOrderAction`).
+
+    Without the gate the action lies about its applicability: the planner picks
+    it, the server refuses with HTTP 497 ("Character inventory is full"), the
+    order stays open, so `cancel_targets` names it again next cycle and the
+    guard re-picks the SAME id forever. `CancelOrdersGoal`'s fire-and-lose
+    liveness argument assumes the cancel SUCCEEDS; a refused cancel is a
+    livelock with no exit.
+
+    Live 2026-09-09/10: 685 of 4465 cycles across all five characters were
+    HTTP_497 cancels — `GeCancel(6aa2523fa4da349872694fc4)` alone 264 times with
+    HAL pinned at 118/138 — and it is what took Lor to `stuck_exit`, idle for
+    six hours. A SMALLER order cancelled fine mid-burst, which is what proves
+    this is a room fit and not a permanently dead order id.
+    """
+
+    _ORDER = OpenOrder(id="o1", code="iron_ore", qty=10, price=19,
+                       side=OrderSide.SELL, age=2)
+
+    def test_not_applicable_when_returned_quantity_overflows_the_cap(self):
+        a = GeCancelOrderAction(order_id="o1", ge_location=(5, 1))
+        # 15 of 20 quantity used, the stack is already held (so slots are not
+        # the binding term), and the cancel would mint 10 more.
+        state = make_state(inventory={"iron_ore": 15}, inventory_max=20,
+                           inventory_slots_max=20, open_orders=(self._ORDER,))
+        assert state.inventory_free == 5
+        assert a.is_applicable(state, GameData()) is False
+
+    def test_not_applicable_when_a_new_stack_has_no_free_slot(self):
+        a = GeCancelOrderAction(order_id="o1", ge_location=(5, 1))
+        # Quantity headroom is ample; every SLOT is taken by another code, and
+        # iron_ore is not held, so the returned stack has nowhere to land.
+        state = make_state(inventory={f"junk_{i}": 1 for i in range(3)},
+                           inventory_max=100, inventory_slots_max=3,
+                           open_orders=(self._ORDER,))
+        assert state.inventory_free == 97
+        assert state.inventory_slots_free == 0
+        assert a.is_applicable(state, GameData()) is False
+
+    def test_applicable_when_the_returned_stack_fits(self):
+        a = GeCancelOrderAction(order_id="o1", ge_location=(5, 1))
+        state = make_state(inventory={"iron_ore": 5}, inventory_max=20,
+                           inventory_slots_max=20, open_orders=(self._ORDER,))
+        assert a.is_applicable(state, GameData()) is True
+
+    def test_buy_cancel_is_unaffected_by_a_full_bag(self):
+        """A BUY cancel returns GOLD, not items — a full bag cannot refuse it,
+        and gating it would strand the gold-short escape the guard exists for."""
+        buy = OpenOrder(id="o2", code="iron_ore", qty=10, price=9,
+                        side=OrderSide.BUY, age=2)
+        a = GeCancelOrderAction(order_id="o2", ge_location=(5, 1))
+        state = make_state(inventory={"iron_ore": 20}, inventory_max=20,
+                           inventory_slots_max=1, open_orders=(buy,))
+        assert state.inventory_free == 0
+        assert state.inventory_slots_free == 0
+        assert a.is_applicable(state, GameData()) is True
+
+    def test_apply_raises_when_the_returned_stack_does_not_fit(self):
+        """Mirror of the precondition — the chain-safe defense that crashes
+        loudly if a caller bypasses the gate (same shape as
+        `WithdrawItemAction.apply`)."""
+        a = GeCancelOrderAction(order_id="o1", ge_location=(5, 1))
+        state = make_state(inventory={"iron_ore": 15}, inventory_max=20,
+                           inventory_slots_max=20, open_orders=(self._ORDER,))
+        try:
+            a.apply(state, GameData())
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError("expected AssertionError")

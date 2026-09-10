@@ -8,6 +8,18 @@ from `cancel_targets` on the next evaluation — the firing signal falls false a
 guard cannot spin (fire-and-lose, exactly like DRAIN_BANK_JUNK / GE_BID). This is the
 escape that underwrites the liveness guarantee that no posted order's capital is
 locked forever.
+
+FIRE-AND-LOSE HOLDS ONLY FOR A CANCEL THAT SUCCEEDS. A SELL cancel MINTS the
+escrowed stack back into the bag, so a full bag refuses it (HTTP 497) and the
+order stays open — it is a target again next cycle, and the guard re-picks the
+same id. That is a spin, and it is not hypothetical: live 2026-09-09/10 it took
+685 of 4465 cycles across five characters and drove Lor to `stuck_exit`.
+`GeCancelOrderAction.is_applicable` now carries the slot+quantity room gate, so
+an unreceivable cancel is never planned and the guard falls through to the next
+rung instead of burning the cycle. The order is then held — NOT freed — until
+DepositInventory / DiscardOverstock make room, which is the honest weakening of
+the guarantee below: "no capital is locked forever" becomes "no capital is
+locked forever, given the bag can receive it".
 """
 
 from artifactsmmo_cli.ai.actions.base import Action
