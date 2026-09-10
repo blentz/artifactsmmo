@@ -85,20 +85,29 @@ first under every key available. The lever is admission, not order.
 
 ## The design
 
-Add a third admission conjunct for the three gathering skills only:
+Add a third admission conjunct, applied uniformly to every gathering skill:
 
-3. for `S` in {fishing, mining, woodcutting}, some offered root's requirement
+3. for a skill `S` that gates a gathered leaf, some offered root's requirement
    closure must contain an item whose gather gate for `S` exceeds the
    character's current level.
 
-Cooking and alchemy keep unconditional roots. Their recipes produce consumables
-the bot actually spends, so the group is never empty and the anti-`Wait`
-guarantee the seam exists for is preserved without a special case.
+"A skill that gates a gathered leaf" is read from `_gather_skill_by_item`, not
+from a hardcoded set. The rule does not name skills individually: one shape, one
+conjunct, no per-skill arms.
+
+Read off the live catalogue that set is {alchemy, fishing, mining, woodcutting}.
+Alchemy is in it because it gathers herbs, and it takes the gate on exactly the
+same terms — naming it an exception would be the per-skill carve-out this rule
+exists to avoid.
+
+Cooking is the one skill that gathers nothing, so it never enters the conjunct
+and keeps its unconditional root. It is the anti-`Wait` floor: measured across
+`ai/scenario.SCENARIOS`, cooking is admitted as an orphan in 44 of 44 scenarios
+and the orphan group is empty in 0 of 44 after the gate.
 
 An admitted demanded skill emits the **demanded** level, not `C+1`. HAL needs
 fishing@10 and today is offered `fishing->9`, which completes and re-emits — the
-same one-rung churn with no destination. Undemanded skills (cooking, alchemy)
-keep `C+1`.
+same one-rung churn with no destination. Cooking, ungated, keeps `C+1`.
 
 ### The demand predicate
 
@@ -108,10 +117,29 @@ also read the gather leg via `requirement_graph._gather_skill_by_item`, which
 maps all 43 gatherable items to `(skill, level)` — woodcutting 13, mining 13,
 fishing 12, alchemy 5.
 
-This is load-bearing, not a tidy-up. `crafting_skill` is never `fishing`, so
-without the gather leg the predicate could never name fishing and the gate would
-drop it unconditionally — the right answer for R2D2 by accident and the wrong
-rule for HAL.
+This is load-bearing, not a tidy-up, and it is ONE rule covering every gathering
+skill — not a fishing workaround. The gather gate tables are the same shape:
+
+```
+mining       copper_ore@1 topaz_stone@1 ... iron_ore@10 coal@20 gold_ore@30
+             strange_ore@35 mithril_ore@40 adamantite_ore@50        (13 gates)
+woodcutting  ash_wood@1 sap@1 apple@1 ... spruce_wood@10 birch_wood@20
+             dead_wood@30 maple_wood@40 palm_wood@50                (13 gates)
+fishing      gudgeon@1 algae@1 shell@1 shrimp@10 trout@20 bass@30
+             salmon@40 swordfish@50                                 (12 gates)
+```
+
+and the predicate reads them identically. Measured: `iron_boots`' closure carries
+`iron_ore -> mining@10`; `hard_leather_pants` carries `coal -> mining@20` and
+`iron_ore -> mining@10`; `ash_plank` carries `ash_wood -> woodcutting@1`. With
+mining forced to 1, `iron_boots` yields unmet demand `{'mining': 10}` — the same
+answer the same code gives for `trout -> fishing@20`.
+
+Without the gather leg the predicate names none of them from a gathered leaf.
+`crafting_skill` covers mining and woodcutting only through their REFINING
+recipes (ore->bar, wood->plank), which is a different leg answering a different
+question, and it never covers fishing at all because no item is crafted with
+`crafting_skill == "fishing"`.
 
 ### Seeding demand from a skill root
 
@@ -151,32 +179,32 @@ Across the 44-scenario census set (`ai/scenario.SCENARIOS`):
 fishing      admitted_today=44  demanded= 4  would_drop=40
 mining       admitted_today=44  demanded= 0  would_drop=44
 woodcutting  admitted_today=44  demanded= 0  would_drop=44
-orphan HEAD changes: 2 of 44 scenarios
+alchemy      admitted_today=44  demanded= 0  would_drop=44
+cooking      admitted_today=44  ungated (gathers nothing)
+orphan HEAD changes:          2 of 44 scenarios
+orphan group EMPTY after gate: 0 of 44 scenarios
 ```
 
-## Flagged decision: mining and woodcutting
+### Reading the mining and woodcutting zeros
 
-Their demand is zero in all 44 census scenarios and all 5 live characters. For
-them the gate is not a gate — it is a deletion, and it removes the root
-permanently rather than conditionally.
+They are the same rule returning a different answer on different data, NOT
+evidence that mining and woodcutting are a different case. Every character
+measured is already past the gates that would fire: mining 15-21 against
+`iron_ore@10` and `coal@20`, woodcutting 13-24 against `spruce_wood@10` and
+`birch_wood@20`. Demand is zero because it is MET.
 
-That is a stronger change than "stop grinding a skill nothing asks for", and it
-is recorded here rather than buried because it may be wrong. Two readings:
+Held against a state where it is unmet, the same predicate names them. With
+mining forced to 1, `iron_boots` yields `{'mining': 10}` — structurally the same
+answer as `cooked_trout -> trout -> fishing@20` for fishing.
 
-- **Correct.** Mining and woodcutting feed refining recipes (ore->bar,
-  wood->plank) whose `crafting_skill` IS mining/woodcutting, so those levels get
-  pulled through conjunct 1's own path — `classify_target` already sets
-  `blocking_skill` from `crafting_skill`, which is how `maple_plank` reports
-  woodcutting@40. The orphan root is redundant for them.
-- **Premature.** Zero demand across every state measured may mean the demand
-  predicate does not see their demand rather than that none exists. The
-  characters measured all sit at mining 15-21 and woodcutting 13-24 while
-  chasing buy-only or drop-only gear, which is a narrow sample.
+So every gathering skill takes the gate on the same terms, ships in the same
+increment, and gets one rule in the code. There is no fishing-only increment and
+no separate decision for mining and woodcutting: a per-skill carve-out here would
+encode a difference that the catalogue does not have.
 
-The implementation must resolve this before the gate ships for mining and
-woodcutting. If the second reading holds, ship the gate for fishing only. The
-increment is separable and the fishing case is the one with live evidence
-behind it.
+The zeros do mean the gate is near-inert for mining and woodcutting on TODAY's
+fleet. That is the correct behaviour — nothing is asking for those levels right
+now — and it is why the live evidence for the change comes from fishing.
 
 ## Effect on the O1 census
 
@@ -205,14 +233,19 @@ review rather than absorbing the change.
 
 ## Testing
 
-- The demand predicate names fishing for a state needing `trout` at fishing<20,
-  and does not for fishing>=20. Fails today: `_add_skill_gate` cannot name
-  fishing at all.
-- `_orphan_skill_roots` drops fishing with no demand and keeps it with demand,
-  each with a vacuity guard asserting the other conjuncts are satisfied, so the
-  assertion can only come from the new one.
+- The demand predicate names the gating skill from a gathered leaf, PARAMETRISED
+  over the gathering skills rather than written once for fishing: `trout` at
+  fishing<20, `iron_ore` at mining<10, `ash_wood` at woodcutting<1. Each names
+  its skill when short and does not when met. Fails today for every one of them:
+  `_add_skill_gate` reads only `crafting_skill`.
+- `_orphan_skill_roots` drops a gathering skill with no demand and keeps it with
+  demand — same parametrised cases, so a per-skill regression cannot hide behind
+  the fishing case. Each with a vacuity guard asserting the other two conjuncts
+  are satisfied, so the assertion can only come from the new one.
 - An admitted demanded skill emits the demanded level, not `C+1`.
-- Cooking and alchemy are admitted with no demand — the anti-`Wait` floor.
+- Cooking is admitted with no demand — the anti-`Wait` floor. Alchemy is NOT,
+  because it gathers; the pair pins that the split follows the gather map rather
+  than a hand-written list.
 - The R2D2 and Robby states above, driven through the real `resolve_root`, no
   longer offer a fishing root; the HAL, C3P0 and Lor states still do. This is
   the runtime-activation check, and it runs through the real walk rather than
