@@ -61,7 +61,7 @@ def obtainable_inventory_for_level(
 
     Only items that map to at least one equip slot (``ITEM_TYPE_TO_SLOTS``) are
     included — consumables, crafting materials, and resources that do not occupy
-    an equip slot are excluded because ``pick_loadout / _candidates_for_slot``
+    an equip slot are excluded because ``pick_loadout / _candidates_by_slot``
     would ignore them anyway.
 
     SOUNDNESS: the claim "this inventory is obtainable" is the gear-progression

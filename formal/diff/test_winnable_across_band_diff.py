@@ -41,7 +41,7 @@ construct the WorldState as:
   * `inventory = obtainable_inventory_for_level(L)` — every equippable item
     with `item.level <= L` with quantity 1, so `pick_loadout`'s per-slot scan
     finds the strongest item for each slot and equips it;
-  * `level = L` so `state.level >= item.level` (the `_candidates_for_slot`
+  * `level = L` so `state.level >= item.level` (the `_candidates_by_slot`
     gate) — every item in the obtainable inventory is usable by construction;
   * `hp = base_max_hp + obtainable_hp_bonus_ceiling(L)` — an upper bound on
     the total HP bonus any loadout `pick_loadout` could produce, which guarantees

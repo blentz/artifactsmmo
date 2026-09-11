@@ -115,6 +115,43 @@ def rank_adversary() -> Combat:
     )
 
 
+def purpose_key(purpose: object) -> tuple[object, ...]:
+    """Hashable canonical key for the closed purpose set defined ABOVE.
+
+    THE KEY BELONGS WITH THE TYPES IT KEYS. It used to live in
+    `equipment/loadout_cache.py`, which is the TOP of the equipment stack
+    (`loadout_cache` -> `loadout_picker` -> `gear_value` -> `scoring`), so every
+    layer below it that wanted to memoize per purpose had to either re-derive the
+    key or cycle. Here it sits with `Rank`/`Combat`/`Gather` themselves, in a
+    module whose only import is `ai.elements`, so any of those layers may use it.
+
+    INJECTIVE ON THE PURPOSE VALUE, which is the whole reason it is safe as a
+    cache key: `Combat` has exactly three fields and all three are in the tuple,
+    `Gather` has exactly one and it is in the tuple, `Rank` has none. Adding a
+    field to any of them without adding it here is how a memo starts serving one
+    purpose's answer for another — the mappings are declared side by side with
+    the dataclasses above so that stays visible.
+
+    `player_attack` is part of the Combat key: `armor_score` prices a piece's
+    damage-% and crit-% against the fighter's own attack, so two states sharing
+    (level, equipment, inventory) but not attack CAN pick different armor.
+
+    Raises `TypeError` outside the closed set — a `purpose` this does not
+    recognize is one `gear_value` does not either, and silently keying it as
+    "other" would merge two unrelated purposes into one entry.
+    """
+    if isinstance(purpose, Combat):
+        return ("combat",
+                tuple(sorted(purpose.monster_attack.items())),
+                tuple(sorted(purpose.monster_resistance.items())),
+                tuple(sorted(purpose.player_attack.items())))
+    if isinstance(purpose, Gather):
+        return ("gather", purpose.skill)
+    if isinstance(purpose, Rank):
+        return ("rank",)
+    raise TypeError(f"unknown pick_loadout purpose: {purpose!r}")
+
+
 # RETIRED: `combat_raw(attack, resistance, hp_restore, hp_bonus, dmg,
 # critical_strike, lifesteal, combat_buff)` — a flat 8-stat sum that was
 # `strategic_value`/`pursuit_value`'s "how much combat is in this item" scalar.

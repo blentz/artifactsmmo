@@ -21,6 +21,9 @@ but nobody should expect it to carry the rule.
 """
 
 import dataclasses
+import multiprocessing
+import os
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -63,6 +66,64 @@ def gd() -> GameData:
 
 def _state(name: str, game_data: GameData) -> WorldState:
     return scenario_state(SCENARIOS[name], game_data)
+
+
+_CENSUS_WORKERS = min(8, os.process_cpu_count() or 1)
+"""Worker cap for the level-up census sweep.
+
+CAPPED ON PURPOSE, and 8 is not a machine-size heuristic. `formal/gate.sh` runs
+this suite through `scripts/run_tests.sh`, whose lane 1 is already `pytest -n
+auto` — one xdist process per core — so these workers are ADDITIONAL load on a
+box that is by then fully committed. An uncapped pool (`max_workers=None` takes
+every core) would oversubscribe the gate by 2x for the length of this test and
+could make the GATE slower while making the serial hook faster, which is the
+wrong trade: the hook is the thing that needed fixing.
+
+8 is enough to collect the win and small enough not to matter to the gate. The
+sweep is 34 scenarios, so 8 workers is 4-5 rounds and the floor is the SLOWEST
+SINGLE SCENARIO — past 8 more workers buy progressively less while costing the
+rest of the gate progressively more. `os.process_cpu_count()` (not `cpu_count`)
+so a CPU-limited container or a `taskset` run cannot be oversubscribed either."""
+
+_WORKER_GAME_DATA: GameData | None = None
+"""Process-local catalogue, built once per worker by `_init_witness_worker`.
+
+A `GameData` is the whole game — items, monsters, recipes, resources, maps — so
+shipping one through `initargs` would pickle and re-send it per worker where
+each can just read the same committed bundle off disk. One build per WORKER, not
+one per task: the initializer runs at process start, the 34 scenario tasks reuse
+it."""
+
+
+def _init_witness_worker(bundle: str) -> None:
+    global _WORKER_GAME_DATA
+    _WORKER_GAME_DATA = load_bundle_game_data(Path(bundle))
+
+
+def _level_up_witnesses(name: str) -> list[tuple[str, str]]:
+    """Every monster in the catalogue that scenario `name` can beat ONLY after
+    levelling — the per-scenario body of the census, run in a pool worker.
+
+    Identical work to the serial loop it replaced, in the same order: the
+    scenario at full HP, `next_level_state` hoisted out of the monster loop
+    because it does not read the monster, and the same three-step verdict
+    (already winnable -> no; gear closes it here -> no; the level+1 body closes
+    it, or wins outright so there is no chain to ask -> yes)."""
+    game_data = _WORKER_GAME_DATA
+    assert game_data is not None, "pool initializer did not run"
+    state = scenario_state(SCENARIOS[name], game_data)
+    state = dataclasses.replace(state, hp=state.max_hp)
+    at_next_level = next_level_state(state)
+    found: list[tuple[str, str]] = []
+    for monster in sorted(game_data.monster_levels):
+        if predict_win(state, game_data, monster):
+            continue
+        if combat_deficit(state, game_data, monster).closes:
+            continue
+        at_next = combat_deficit(at_next_level, game_data, monster)
+        if at_next is None or at_next.closes:
+            found.append((name, monster))
+    return found
 
 
 def _with_task(state: WorldState, monster: str) -> WorldState:
@@ -209,29 +270,49 @@ def test_the_level_up_evaluation_moves_the_body_not_only_the_pool(gd: GameData) 
     assert combat_deficit(pool_only, gd, LEVEL_UP_MONSTER).closes is False
 
 
-def test_the_level_up_arm_has_real_witnesses(gd: GameData) -> None:
+def test_the_level_up_arm_has_real_witnesses() -> None:
     """Six of 1,375 futile pairs, and the clause is worth exactly that much.
 
     Recorded as a test rather than a comment because "nearly dead weight" and
     "dead weight" are different findings, and only a measurement tells them
     apart. If a catalogue change ever takes this to zero the middle clause has
-    become unreachable and should be deleted, not left as decoration."""
-    def closes_only_at_next_level(state: WorldState, monster: str) -> bool:
-        if predict_win(state, gd, monster):
-            return False
-        if combat_deficit(state, gd, monster).closes:
-            return False
-        at_next = combat_deficit(next_level_state(state), gd, monster)
-        return at_next is None or at_next.closes
+    become unreachable and should be deleted, not left as decoration.
 
-    witnesses = []
-    for name, sc in SCENARIOS.items():
-        if not sc.derive_combat_stats:
-            continue
-        state = scenario_state(sc, gd)
-        state = dataclasses.replace(state, hp=state.max_hp)
-        witnesses += [(name, monster) for monster in sorted(gd.monster_levels)
-                      if closes_only_at_next_level(state, monster)]
+    THE SWEEP IS WHOLE: all 34 `derive_combat_stats` scenarios against all 58
+    catalogue monsters, 1,972 pairs, nothing sampled and nothing memoized at the
+    test level. It is fanned out over processes only because it is the single
+    largest test in the suite (150.4s serial, 39 % of the pre-commit hook) and
+    the scenarios are INDEPENDENT — `_level_up_witnesses` reads one scenario and
+    a read-only catalogue and writes nothing.
+
+    DETERMINISM. `executor.map` yields per-scenario results in the order the
+    scenario names were submitted, and the flattened list is SORTED before it is
+    asserted on, so worker completion order cannot reach the result — not the
+    membership test, not the length, and not the failure message a future
+    catalogue change will print. The sorted order is the one property a reader
+    of that message needs.
+
+    It does NOT use the module `gd` fixture: a GameData cannot cross a process
+    boundary usefully (it is the whole catalogue), so each worker builds its own
+    from the same committed bundle, ONCE, in the pool initializer.
+    """
+    names = sorted(name for name, sc in SCENARIOS.items() if sc.derive_combat_stats)
+    with ProcessPoolExecutor(
+        max_workers=_CENSUS_WORKERS,
+        # SPAWN, not the platform default fork. This test runs inside lane 1 of
+        # `scripts/run_tests.sh`, i.e. inside a pytest-xdist worker, and an xdist
+        # worker is MULTI-THREADED (execnet's receiver thread). `os.fork()` from
+        # a multi-threaded process is a documented deadlock risk and raises a
+        # DeprecationWarning that `-W error` turns into a test failure. Spawn
+        # pays one interpreter start per worker (~1s, once) and owes nothing to
+        # the parent's thread state.
+        mp_context=multiprocessing.get_context("spawn"),
+        initializer=_init_witness_worker,
+        initargs=(str(BUNDLE),),
+    ) as executor:
+        per_scenario = list(executor.map(_level_up_witnesses, names))
+
+    witnesses = sorted(pair for scenario in per_scenario for pair in scenario)
     assert len(witnesses) == 6, witnesses
     assert (LEVEL_UP_CELL, LEVEL_UP_MONSTER) in witnesses
 

@@ -593,12 +593,23 @@ class TestFetchWorldState:
         assert state.bank_items == {"gold": 100}
 
     def test_raises_on_none_response(self):
+        """Three attempts, then RuntimeError — with the 5s/10s backoff stubbed.
+
+        The claim is the RAISE, never the wall clock. Left unpatched this test
+        slept the production backoff for real (5s + 10s) and was 15 of the
+        suite's 587 seconds on its own, which is a measurement of `time.sleep`
+        and not of `_fetch_world_state`. `sleep_mock` is asserted rather than
+        merely swallowed so the retry schedule the test is skipping past stays
+        pinned here: silently patching it out would let the backoff be deleted
+        from production with this test still green."""
         player = GamePlayer(character="hero")
         player.state = None
         client = MagicMock()
         with patch("artifactsmmo_cli.ai.player.get_character", return_value=None):
-            with pytest.raises(RuntimeError):
-                player._fetch_world_state(client)
+            with patch("artifactsmmo_cli.ai.player.time.sleep") as sleep_mock:
+                with pytest.raises(RuntimeError):
+                    player._fetch_world_state(client)
+        assert [c.args[0] for c in sleep_mock.call_args_list] == [5.0, 10.0]
 
 
 def _make_ge_order_row(id, code, quantity, price, side: OrderSide):

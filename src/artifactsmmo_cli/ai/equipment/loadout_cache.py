@@ -13,6 +13,13 @@ The key is exactly pick_loadout's determinants: purpose, `state.level`,
 occupancy cap is physical ownership, so quantities change the answer).
 Entries are scoped per-GameData by `CatalogueScope` — a GameData's cache
 dies with it, and distinct instances (test fixtures) never collide.
+
+`_purpose_key` is `gear_value_core.purpose_key` imported under its historical
+name. It MOVED DOWN to the module that defines Rank/Combat/Gather: this module is
+the TOP of the equipment stack (loadout_cache -> loadout_picker -> gear_value ->
+scoring), so a lower layer that wants to memoize per purpose — loadout_picker's
+cross-call benefit memo does — could not import the key from here without a
+cycle. Same function, same behaviour, one definition.
 """
 
 from collections import OrderedDict
@@ -21,7 +28,7 @@ from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
+from artifactsmmo_cli.ai.gear_value_core import purpose_key as _purpose_key
 from artifactsmmo_cli.ai.world_state import WorldState
 
 CACHE_MAX_ENTRIES = 4096
@@ -55,23 +62,6 @@ def _equippable(code: str, memo: "OrderedDict[str, bool]", game_data: GameData) 
         known = stats is not None and stats.type_ in ITEM_TYPE_TO_SLOTS
         _EQUIPPABLE_MEMO.remember(memo, code, known)
     return known
-
-
-def _purpose_key(purpose: object) -> tuple[object, ...]:
-    """Hashable canonical key for the closed purpose set (gear_value_core)."""
-    if isinstance(purpose, Combat):
-        # player_attack is part of the key: armor_score prices a piece's damage-%
-        # and crit-% against the fighter's own attack, so two states sharing
-        # (level, equipment, inventory) but not attack CAN pick different armor.
-        return ("combat",
-                tuple(sorted(purpose.monster_attack.items())),
-                tuple(sorted(purpose.monster_resistance.items())),
-                tuple(sorted(purpose.player_attack.items())))
-    if isinstance(purpose, Gather):
-        return ("gather", purpose.skill)
-    if isinstance(purpose, Rank):
-        return ("rank",)
-    raise TypeError(f"unknown pick_loadout purpose: {purpose!r}")
 
 
 def pick_loadout_cached(

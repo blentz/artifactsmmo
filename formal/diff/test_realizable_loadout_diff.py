@@ -273,7 +273,7 @@ def test_ownership_counts_inventory_and_equipped():
 def _candidate_pool(state: WorldState, gd: _FakeGameData,
                     type_to_slots: dict[str, list[str]]) -> dict[str, list[str]]:
     """For each slot, the codes that fit by type and pass the level gate.
-    Mirrors `_candidates_for_slot` so we can post-validate optimality."""
+    Mirrors `_candidates_by_slot` so we can post-validate optimality."""
     pool: set[str] = set(c for c, n in state.inventory.items() if n > 0)
     for code in state.equipment.values():
         if code:

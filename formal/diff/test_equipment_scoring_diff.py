@@ -2,7 +2,7 @@
 `pickSlot` on the SCORE of each slot's pick and the no-downgrade guarantee.
 
 `pick_loadout` optimizes each equipment slot independently: it gathers owned items
-that fit the slot AND are level-feasible (`_candidates_for_slot`), takes the
+that fit the slot AND are level-feasible (`_candidates_by_slot`), takes the
 argmax-score candidate, and swaps to it ONLY on a STRICT score improvement over the
 currently-equipped item (ties / downgrades keep the current item; an empty slot is
 filled by any feasible candidate; no candidates leaves the slot as-is).
@@ -26,7 +26,7 @@ and compare against the Python-chosen item's score.
 CONTROLLED STATS. A fake GameData returns crafted `ItemStats` from a fixed table and
 fixed monster attack/resistance dicts. WorldState carries the inventory (owned item
 codes), the equipment map (current per-slot codes), and the player level — exactly
-the inputs `pick_loadout` / `_candidates_for_slot` read.
+the inputs `pick_loadout` / `_candidates_by_slot` read.
 """
 from hypothesis import given, settings
 from hypothesis import strategies as st
