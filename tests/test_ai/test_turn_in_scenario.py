@@ -32,7 +32,6 @@ sibling's deposit and says nothing about this character.
 """
 
 from dataclasses import replace
-from datetime import datetime, timezone
 
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.goals.currency_turnin import CurrencyTurnInGoal
@@ -40,14 +39,8 @@ from artifactsmmo_cli.ai.goals.surrender_currency import SurrenderCurrencyGoal
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import coordination_now, make_state
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
-
-NOW = datetime.now(timezone.utc)
-"""Computed once at import time, not a fixed calendar stamp: `publish_holdings`
-rows expire `DEMAND_TTL_SECONDS` after the `now` passed to it, so a hardcoded
-past timestamp goes stale before `_resolve_turn_in`'s own `datetime.now(utc)`
-read ever sees it (same rationale as `test_player_turn_in.py`'s `NOW`)."""
 
 
 def _bank_gd():
@@ -86,7 +79,7 @@ is in the bank to begin with — the fleet total has to come out of equipment.""
 
 def _publish(db: str, name: str, worn: int) -> None:
     CoordinationStore(db_path=db, character=name).publish_holdings(
-        {"lich_race_medal": worn} if worn else {}, NOW)
+        {"lich_race_medal": worn} if worn else {}, coordination_now())
 
 
 def test_the_live_fleet_of_below_level_medal_wearers_reaches_the_trophy(tmp_path):
@@ -180,7 +173,7 @@ def test_the_buyer_snapshot_carries_the_turn_in_block_with_role_buyer(tmp_path):
     gd = medal_game_data()
     for name, worn in (("HAL", 3), ("R2D2", 3)):
         CoordinationStore(db_path=db, character=name).publish_holdings(
-            {"lich_race_medal": worn}, NOW)
+            {"lich_race_medal": worn}, coordination_now())
 
     robby = _player(db, "Robby", make_state(
         level=27, equipment={"artifact1_slot": "lich_race_medal"},
@@ -210,7 +203,7 @@ def test_the_holder_snapshot_carries_the_turn_in_block_with_role_holder(tmp_path
     gd = medal_game_data()
     for name, worn in (("HAL", 3), ("R2D2", 3)):
         CoordinationStore(db_path=db, character=name).publish_holdings(
-            {"lich_race_medal": worn}, NOW)
+            {"lich_race_medal": worn}, coordination_now())
 
     robby = _player(db, "Robby", make_state(
         level=27, equipment={"artifact1_slot": "lich_race_medal"},

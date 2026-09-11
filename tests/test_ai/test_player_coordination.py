@@ -50,7 +50,7 @@ from artifactsmmo_cli.ai.supply_batch_target import supply_batch_target_pure
 from artifactsmmo_cli.ai.thresholds import SUPPLY_BATCH
 from artifactsmmo_cli.ai.tiers.means import SUPPLY_DEMAND_MIN, MeansKind, _fires
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import coordination_now, make_state
 from tests.test_ai.test_actions_execute import (
     make_api_result,
     make_char_schema,
@@ -60,12 +60,6 @@ from tests.test_ai.test_role_selection import _LOR_SKILLS, _ROBBY_SKILLS
 from tests.test_ai.test_strategy_driver import _make_planner_gd
 
 _T0 = datetime(2026, 8, 1, tzinfo=timezone.utc)
-NOW = datetime.now(tz=timezone.utc)
-"""Module-scope UTC instant for the supply-claim tests (`ai/supply_claim_and_batch`
-Task 3) below — `CoordinationStore` rejects naive datetimes. Real wall-clock
-time, not a fixed literal: `_pick_supply_target` stamps its OWN claim reads
-and writes with `datetime.now(tz=timezone.utc)`, so a fixed past/future `NOW`
-would read as already-expired against `DEMAND_TTL_SECONDS` (600s)."""
 
 
 # ---------------------------------------------------------------------------
@@ -1932,7 +1926,7 @@ def test_an_item_a_sibling_is_already_producing_is_skipped(tmp_path):
     """The measured bug: R2D2 and Robby each spent ~230 gathers on the same
     60-unit spruce_wood request."""
     db = str(tmp_path / "coord.db")
-    CoordinationStore(db_path=db, character="R2D2").claim_supply("spruce_wood", NOW)
+    CoordinationStore(db_path=db, character="R2D2").claim_supply("spruce_wood", coordination_now())
     player, _ = _player_with_coordination(tmp_path, "Robby", db=db)
 
     target = player._pick_supply_target(
@@ -1955,7 +1949,7 @@ def test_a_sibling_held_item_is_never_offered_to_the_claim_election(tmp_path, mo
     `claim_supply` from ever being called with the sibling-held code, even
     though the free code still wins in the end regardless."""
     db = str(tmp_path / "coord.db")
-    CoordinationStore(db_path=db, character="R2D2").claim_supply("spruce_wood", NOW)
+    CoordinationStore(db_path=db, character="R2D2").claim_supply("spruce_wood", coordination_now())
     player, store = _player_with_coordination(tmp_path, "Robby", db=db)
     attempted: list[str] = []
     real_claim_supply = store.claim_supply
@@ -1976,7 +1970,7 @@ def test_a_sibling_held_item_is_never_offered_to_the_claim_election(tmp_path, mo
 def test_my_own_claim_does_not_block_me_from_continuing(tmp_path):
     db = str(tmp_path / "coord.db")
     player, store = _player_with_coordination(tmp_path, "R2D2", db=db)
-    store.claim_supply("spruce_wood", NOW)
+    store.claim_supply("spruce_wood", coordination_now())
 
     # `bank_items={}` (visited, empty) rather than the `make_state()` default
     # of "never visited" — see `test_pick_supply_target_none_when_the_bank_
@@ -1997,7 +1991,7 @@ def test_choosing_an_item_claims_it_for_this_character(tmp_path):
         {"spruce_wood": 60}, {"spruce_wood": "woodcutting"},
         make_state(skills={"woodcutting": 20}), {"spruce_wood": 1})
 
-    assert store.supply_claim_holder("spruce_wood", NOW) == "Robby"
+    assert store.supply_claim_holder("spruce_wood", coordination_now()) == "Robby"
 
 
 def test_the_target_is_one_batch_not_the_whole_demand(tmp_path):
@@ -2019,7 +2013,7 @@ def test_the_target_is_one_batch_not_the_whole_demand(tmp_path):
 def test_switching_items_releases_the_previous_claim(tmp_path):
     db = str(tmp_path / "coord.db")
     player, store = _player_with_coordination(tmp_path, "Robby", db=db)
-    store.claim_supply("spruce_wood", NOW)
+    store.claim_supply("spruce_wood", coordination_now())
     # What Robby was serving as of the END of the previous cycle — the field
     # `_update_coordination` assigns `_pick_supply_target`'s return value into,
     # and the ONLY record (this character keeps no second one) of "stop
@@ -2030,7 +2024,7 @@ def test_switching_items_releases_the_previous_claim(tmp_path):
         {"iron_ore": 80}, {"iron_ore": "mining"},
         make_state(skills={"mining": 20}), {"iron_ore": 1})
 
-    assert store.supply_claim_holder("spruce_wood", NOW) is None
+    assert store.supply_claim_holder("spruce_wood", coordination_now()) is None
 
 
 def _spy_on_claims(monkeypatch, store) -> list[str]:
@@ -2061,7 +2055,7 @@ def test_a_holder_that_did_not_produce_last_cycle_stops_renewing(tmp_path, monke
     which is the whole reason the claim has an expiry."""
     db = str(tmp_path / "coord.db")
     player, store = _player_with_coordination(tmp_path, "Robby", db=db)
-    store.claim_supply("spruce_wood", NOW)
+    store.claim_supply("spruce_wood", coordination_now())
     player._supply_target = ("spruce_wood", SUPPLY_BATCH, 60)
     player._last_goal_name = "RestoreHP()"       # a guard won selection instead
     attempted = _spy_on_claims(monkeypatch, store)
@@ -2083,7 +2077,7 @@ def test_a_holder_that_produced_last_cycle_renews(tmp_path, monkeypatch):
     item to a sibling mid-batch."""
     db = str(tmp_path / "coord.db")
     player, store = _player_with_coordination(tmp_path, "Robby", db=db)
-    store.claim_supply("spruce_wood", NOW)
+    store.claim_supply("spruce_wood", coordination_now())
     player._supply_target = ("spruce_wood", SUPPLY_BATCH, 60)
     player._last_goal_name = f"SupplyBank(spruce_woodx{SUPPLY_BATCH})"
     attempted = _spy_on_claims(monkeypatch, store)
@@ -2093,7 +2087,7 @@ def test_a_holder_that_produced_last_cycle_renews(tmp_path, monkeypatch):
         make_state(skills={"woodcutting": 20}, bank_items={}), {"spruce_wood": 1})
 
     assert attempted == ["spruce_wood"]
-    assert store.supply_claim_holder("spruce_wood", NOW) == "Robby"
+    assert store.supply_claim_holder("spruce_wood", coordination_now()) == "Robby"
 
 
 def test_renewal_matches_the_item_not_the_batch_quantity(tmp_path, monkeypatch):
@@ -2104,7 +2098,7 @@ def test_renewal_matches_the_item_not_the_batch_quantity(tmp_path, monkeypatch):
     served the x10 batch; this cycle's target is the x20 one."""
     db = str(tmp_path / "coord.db")
     player, store = _player_with_coordination(tmp_path, "Robby", db=db)
-    store.claim_supply("spruce_wood", NOW)
+    store.claim_supply("spruce_wood", coordination_now())
     player._supply_target = ("spruce_wood", SUPPLY_BATCH, 60)
     player._last_goal_name = f"SupplyBank(spruce_woodx{SUPPLY_BATCH})"
     attempted = _spy_on_claims(monkeypatch, store)
@@ -2133,7 +2127,7 @@ def test_a_first_pick_claims_without_having_produced_anything_yet(tmp_path, monk
         make_state(skills={"woodcutting": 20}, bank_items={}), {"spruce_wood": 1})
 
     assert attempted == ["spruce_wood"]
-    assert store.supply_claim_holder("spruce_wood", NOW) == "Robby"
+    assert store.supply_claim_holder("spruce_wood", coordination_now()) == "Robby"
 
 
 def test_losing_the_role_hands_the_claim_back(tmp_path):
@@ -2142,14 +2136,14 @@ def test_losing_the_role_hands_the_claim_back(tmp_path):
     exactly like switching items is."""
     db = str(tmp_path / "coord.db")
     player, store = _player_with_coordination(tmp_path, "Robby", db=db)
-    store.claim_supply("spruce_wood", NOW)
+    store.claim_supply("spruce_wood", coordination_now())
     player._supply_target = ("spruce_wood", SUPPLY_BATCH, 60)
     player._role = None
 
     assert player._pick_supply_target(
         {"spruce_wood": 60}, {"spruce_wood": "woodcutting"},
         make_state(skills={"woodcutting": 20}, bank_items={}), {"spruce_wood": 1}) is None
-    assert store.supply_claim_holder("spruce_wood", NOW) is None
+    assert store.supply_claim_holder("spruce_wood", coordination_now()) is None
 
 
 def test_an_unknown_role_hands_the_claim_back(tmp_path):
@@ -2157,14 +2151,14 @@ def test_an_unknown_role_hands_the_claim_back(tmp_path):
     that leaves this character with no owned skills to produce with."""
     db = str(tmp_path / "coord.db")
     player, store = _player_with_coordination(tmp_path, "Robby", db=db)
-    store.claim_supply("spruce_wood", NOW)
+    store.claim_supply("spruce_wood", coordination_now())
     player._supply_target = ("spruce_wood", SUPPLY_BATCH, 60)
     player._role = "no_such_role"
 
     assert player._pick_supply_target(
         {"spruce_wood": 60}, {"spruce_wood": "woodcutting"},
         make_state(skills={"woodcutting": 20}, bank_items={}), {"spruce_wood": 1}) is None
-    assert store.supply_claim_holder("spruce_wood", NOW) is None
+    assert store.supply_claim_holder("spruce_wood", coordination_now()) is None
 
 
 def test_a_lost_supply_claim_falls_through_to_the_next_candidate(tmp_path, monkeypatch):
@@ -2188,7 +2182,7 @@ def test_a_lost_supply_claim_falls_through_to_the_next_candidate(tmp_path, monke
         {"spruce_wood": 1, "ash_wood": 1})
 
     assert target is not None and target[0] == "ash_wood"
-    assert store.supply_claim_holder("ash_wood", NOW) == "Robby"
+    assert store.supply_claim_holder("ash_wood", coordination_now()) == "Robby"
 
 
 # ---------------------------------------------------------------------------

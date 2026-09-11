@@ -1,17 +1,10 @@
 """The fleet notices it is WEARING the trophy's price."""
-from datetime import datetime, timezone
 
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.player import GamePlayer
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import coordination_now, make_state
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
-
-NOW = datetime.now(timezone.utc)
-"""Computed once at import time, not a fixed calendar stamp: `publish_holdings`
-rows expire `DEMAND_TTL_SECONDS` after the `now` passed to it, so a hardcoded
-past timestamp goes stale before `_resolve_turn_in`'s own `datetime.now(utc)`
-read ever sees it."""
 
 
 def _player_with(tmp_path, name):
@@ -70,7 +63,7 @@ def test_turn_in_resolves_when_the_fleet_wears_enough(tmp_path):
     for sibling, worn in (("HAL", 3), ("R2D2", 3), ("C3P0", 2)):
         CoordinationStore(db_path=str(tmp_path / "coord.db"),
                           character=sibling).publish_holdings(
-                              {"lich_race_medal": worn}, NOW)
+                              {"lich_race_medal": worn}, coordination_now())
     state = make_state(level=27, inventory={}, bank_items={"lich_race_medal": 1},
                        equipment={"artifact1_slot": "lich_race_medal"})
 
@@ -90,7 +83,7 @@ def test_turn_in_resolves_when_the_fleet_wears_enough(tmp_path):
 def test_no_turn_in_one_medal_short(tmp_path):
     player, _store = _player_with(tmp_path, "Robby")
     CoordinationStore(db_path=str(tmp_path / "coord.db"),
-                      character="HAL").publish_holdings({"lich_race_medal": 7}, NOW)
+                      character="HAL").publish_holdings({"lich_race_medal": 7}, coordination_now())
     state = make_state(level=27, inventory={}, bank_items={"lich_race_medal": 1},
                        equipment={"artifact1_slot": "lich_race_medal"})
 
@@ -111,7 +104,7 @@ def test_a_character_below_the_item_level_does_not_claim_the_turn_in(tmp_path):
     would also pass for a character that claimed and then dropped the result."""
     player, store = _player_with(tmp_path, "HAL")
     CoordinationStore(db_path=str(tmp_path / "coord.db"),
-                      character="Robby").publish_holdings({"lich_race_medal": 9}, NOW)
+                      character="Robby").publish_holdings({"lich_race_medal": 9}, coordination_now())
     state = make_state(level=15, inventory={"lich_race_medal": 1})
 
     player._resolve_turn_in(state, player.game_data)
@@ -119,7 +112,7 @@ def test_a_character_below_the_item_level_does_not_claim_the_turn_in(tmp_path):
     assert player._turn_in is None
     # No sibling holds a claim either, so there is nothing to surrender toward.
     assert player._recall is None
-    assert store.turn_in_holder("lich_race_trophy", NOW) is None
+    assert store.turn_in_holder("lich_race_trophy", coordination_now()) is None
 
 
 def test_a_below_level_holder_surrenders_to_a_siblings_live_claim(tmp_path):
@@ -137,7 +130,7 @@ def test_a_below_level_holder_surrenders_to_a_siblings_live_claim(tmp_path):
     db_path = str(tmp_path / "coord.db")
     for sibling, worn in (("R2D2", 1), ("HAL", 1), ("C3P0", 8)):
         CoordinationStore(db_path=db_path, character=sibling).publish_holdings(
-            {"lich_race_medal": worn}, NOW)
+            {"lich_race_medal": worn}, coordination_now())
 
     robby, _ = _player_with(tmp_path, "Robby")
     robby._resolve_turn_in(
@@ -165,7 +158,7 @@ def test_the_incumbent_buyer_never_recalls_its_own_holding_from_itself(tmp_path)
     player, _store = _player_with(tmp_path, "Robby")
     gd = player.game_data
     CoordinationStore(db_path=str(tmp_path / "coord.db"),
-                      character="HAL").publish_holdings({"lich_race_medal": 9}, NOW)
+                      character="HAL").publish_holdings({"lich_race_medal": 9}, coordination_now())
     state = make_state(level=27, inventory={"lich_race_medal": 1})
     player._resolve_turn_in(state, gd)
     assert player._turn_in is not None and player._turn_in.buyer == "Robby"
@@ -189,7 +182,7 @@ def test_a_below_level_holder_stands_down_when_no_sibling_holds_a_claim(tmp_path
     storage — `dual_role_currency.py`) rather than pre-emptively banking it."""
     db_path = str(tmp_path / "coord.db")
     CoordinationStore(db_path=db_path, character="C3P0").publish_holdings(
-        {"lich_race_medal": 9}, NOW)
+        {"lich_race_medal": 9}, coordination_now())
 
     hal, _ = _player_with(tmp_path, "HAL")
     hal._resolve_turn_in(
@@ -240,7 +233,7 @@ def test_a_losing_candidate_recalls_its_own_holdings_toward_the_winner(tmp_path)
     db_path = str(tmp_path / "coord.db")
     for sibling, worn in (("R2D2", 3), ("C3P0", 3), ("HAL", 3)):
         CoordinationStore(db_path=db_path, character=sibling).publish_holdings(
-            {"lich_race_medal": worn}, NOW)
+            {"lich_race_medal": worn}, coordination_now())
 
     robby, _ = _player_with(tmp_path, "Robby")
     robby_state = make_state(level=27, inventory={}, bank_items={"lich_race_medal": 1})
@@ -268,7 +261,7 @@ def test_recall_surrenders_the_whole_holding_when_the_fleet_holds_a_surplus(tmp_
     db_path = str(tmp_path / "coord.db")
     for character, worn in (("Robby", 1), ("S1", 5), ("S2", 2), ("S3", 1)):
         CoordinationStore(db_path=db_path, character=character).publish_holdings(
-            {"lich_race_medal": worn}, NOW)
+            {"lich_race_medal": worn}, coordination_now())
 
     robby, _ = _player_with(tmp_path, "Robby")
     robby_state = make_state(level=27, inventory={}, bank_items={"lich_race_medal": 3},
@@ -313,12 +306,12 @@ def test_a_second_dual_role_currency_still_recalls_behind_a_won_election(tmp_pat
     # Currency A ready for Robby, same shape as the single-currency test.
     for sibling, worn in (("HAL", 3), ("R2D2", 3), ("C3P0", 2)):
         CoordinationStore(db_path=db_path, character=sibling).publish_holdings(
-            {"lich_race_medal": worn}, NOW)
+            {"lich_race_medal": worn}, coordination_now())
 
     # Currency B: HAL (above the trophy's level gate) wins its election
     # first, funded by a third character's published units.
     CoordinationStore(db_path=db_path, character="Chewie").publish_holdings(
-        {"second_medal": 5}, NOW)
+        {"second_medal": 5}, coordination_now())
     hal, _ = _player_with_gd(tmp_path, "HAL", gd)
     hal._resolve_turn_in(make_state(level=32, inventory={}, bank_items={}), gd)
     assert hal._turn_in is not None and hal._turn_in.buyer == "HAL"

@@ -1,5 +1,6 @@
 """Shared test fixtures for AI module tests."""
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import attrs
@@ -24,6 +25,39 @@ rung for a catalogue with no equipment. That refusal is correct — the project
 rule is to use API data or fail — so the fixtures stop asserting a world the
 API cannot produce. Any hand-built `GameData` a `StrategyEngine.decide` or
 `decide_tree` call will see needs at least this."""
+
+
+def coordination_now() -> datetime:
+    """The UTC instant to stamp a coordination row with, read at CALL time.
+
+    Every coordination row — `HoldingLedger`, `MaterialDemand`, `SupplyClaim`,
+    `RoleLease`, `SkillLedger` — expires `DEMAND_TTL_SECONDS` (600s) after the
+    `now` it was published with, and every reader under test stamps its own
+    read with `datetime.now(tz=timezone.utc)`. A test therefore has to publish
+    with a timestamp taken from the SAME clock the reader will use, at the
+    moment it publishes.
+
+    A module-level ``NOW = datetime.now(timezone.utc)`` does NOT satisfy that,
+    and four modules had one. pytest imports every test module during
+    COLLECTION, before the first test runs, so such a constant is stamped at t0
+    of the whole session while the test that uses it runs whenever its file's
+    turn comes. A serial `tests/test_ai/` run is ~11.5 minutes and
+    `test_task_horizon.py` alone spends ~5 of them, so every module ordered
+    after it lands past t0+600s: its published rows are ALREADY EXPIRED when
+    the code under test reads them, `sibling_holdings` comes back empty, the
+    fleet total collapses below the vendor price and no buyer is ever elected.
+
+    That is a wall-clock time bomb, not a flake and not a test-order defect:
+    it detonates on WHERE IN THE RUN the file lands. Measured 2026-09-10,
+    `test_turn_in_scenario.py` started at 682.9s and failed three tests, while
+    `test_player_coordination.py` (363.0s) and `test_player_turn_in.py`
+    (365.5s) sat on the same latent constant and passed only because they run
+    before the boundary.
+
+    Calling this at each publish and each read closes the gap by construction —
+    a row is always a full TTL fresh relative to the read that follows it — and
+    no test has to know what the TTL is."""
+    return datetime.now(tz=timezone.utc)
 
 
 def one_equippable_item_page() -> "MagicMock":

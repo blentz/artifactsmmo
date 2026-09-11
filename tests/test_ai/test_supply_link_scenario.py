@@ -33,7 +33,6 @@ that they meet.
 """
 
 from dataclasses import replace
-from datetime import datetime, timezone
 from pathlib import Path
 
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
@@ -47,6 +46,7 @@ from artifactsmmo_cli.ai.scenario import (
 from artifactsmmo_cli.ai.strategy_driver import map_means
 from artifactsmmo_cli.ai.tiers.means import MeansKind, _fires
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import coordination_now
 
 BUNDLE = Path(__file__).resolve().parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
@@ -54,11 +54,6 @@ ASKED = "life_amulet"
 """What the asker cannot make. `l12_deep_chain_grind` holds jewelrycrafting 2
 against this amulet's gate of 5, so the walk answers with a climb and the amulet
 is what it drops — see `test_decisions_root`'s pin on `blocked_target`."""
-
-NOW = datetime.now(timezone.utc)
-"""Computed at import, not a fixed stamp: every coordination row expires
-`DEMAND_TTL_SECONDS` after the `now` it was published with, so a hardcoded past
-timestamp is already stale when the reader's own `datetime.now(utc)` runs."""
 
 
 def _game_data():
@@ -121,8 +116,8 @@ def test_the_blocked_ask_reaches_a_sibling_who_can_serve_it(tmp_path) -> None:
     # asker's own gate, so the code is absent from `self_servable`, which is the
     # only thing that makes `SUPPLY_BANK`'s second arm reachable at quantity 1.
     board = CoordinationStore(db_path=db, character="Reader")
-    assert ASKED in board.sibling_demand(NOW)
-    assert ASKED in board.sibling_demand_asymmetric(NOW)
+    assert ASKED in board.sibling_demand(coordination_now())
+    assert ASKED in board.sibling_demand_asymmetric(coordination_now())
 
     supplier = _supplier(db, gd)
     # LINK 3 — the sibling reads the asymmetry and elects a role that owns the
