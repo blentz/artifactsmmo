@@ -366,6 +366,7 @@ STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_drive
 DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decision.py"
 OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "obtain_item.py"
 ROOT_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "root.py"
+GATHER_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_demand.py"
 # `_equippable_goal` / `_gather_goal_for_unreachable_equippable` /
 # `_gather_step_target_is_root` / `_recipe_has_combat_drop_input` moved here
 # from strategy_driver.py (goal-decision-graph Task 5) so `decisions/
@@ -2924,8 +2925,13 @@ ROOT_DECISION_MUTATIONS = [
     # THE RESTORED STANDALONE SKILL ROOT (`_orphan_skill_roots`). `ef67c1d6`
     # deleted four standalone `ReachSkillLevel` emitters on the premise "skills
     # are pure prerequisites now", which is false for a skill nothing equips —
-    # 33,840 live cooking XP, 99.6% of it a `RestoreHP` side effect. Each of
-    # the rule's three parts gets its own mutant, plus the ordering.
+    # 33,840 live cooking XP, 99.6% of it a `RestoreHP` side effect. The rule
+    # now has THREE conjuncts plus the ordering. Conjuncts 1 and 2 and the
+    # ordering get their mutants HERE, killed by test_decisions_root.py.
+    # Conjunct 3 (the gathering-demand gate) and the two-pass demand seeding
+    # that feeds it are killed by tests/test_ai/test_orphan_gate_scenarios.py,
+    # so they live in `ORPHAN_DEMAND_GATE_MUTATIONS` below rather than in this
+    # list — a unit-killed mutant needs its own run_group.
     ("root: the orphan rule drops the not-nameable filter, so a skill a gear"
      " target CAN name gets a standalone root as well",
      "        if skill not in nameable\n",
@@ -2948,8 +2954,8 @@ ROOT_DECISION_MUTATIONS = [
      " XP-positive rung is routed anyway (the o1_silent_stall residual)",
      "        and level_skill.LevelSkill(\n"
      "            skill=skill, target_level=state.skills.get(skill, 1) + 1\n"
-     "        ).is_applicable(state, game_data)\n",
-     ""),
+     "        ).is_applicable(state, game_data)]\n",
+     "        ]\n"),
     ("root: the orphan order runs from the LEAST-behind skill",
      "    orphans.sort(key=lambda skill: (state.skills.get(skill, 1) - state.level,\n",
      "    orphans.sort(key=lambda skill: (state.level - state.skills.get(skill, 1),\n"),
@@ -3032,6 +3038,63 @@ ROOT_DECISION_MUTATIONS = [
      "        keys = [self._ledger_key(slot, target, state, game_data, ctx, history)\n"
      "                for slot, target in ranked]\n",
      "        keys = [(slot, target.code) for slot, target in ranked]\n"),
+]
+
+# THE GATHERING-DEMAND GATE (the third conjunct of `_orphan_skill_roots`, and
+# the two-pass demand that feeds it). Conjunct 1 admits EVERY gathering skill
+# by construction — gear is crafted by gearcrafting/weaponcrafting/
+# jewelrycrafting, so mining, woodcutting, fishing and alchemy fall out as
+# orphans whether or not anything wants them — and live 2026-09-09/10 that sent
+# R2D2 and Robby to fishing for ~617 cycles each at 0 character XP while
+# neither needed a fish. OWN run_group: these are killed by
+# tests/test_ai/test_orphan_gate_scenarios.py, which drives the gate end to end
+# through the real `resolve_root` over the committed bundle, not by
+# test_decisions_root.py.
+ORPHAN_DEMAND_GATE_MUTATIONS = [
+    # CONJUNCT 3 NEUTERED: every candidate is an orphan again, which is exactly
+    # the pre-gate rule. Killed by `TestGatheringDemandPositiveBranch::
+    # test_once_satisfied_the_demanded_skill_disappears_while_cooking_survives`
+    # and `TestCookingDemandsFishing::
+    # test_raising_fishing_to_the_gate_removes_the_root_and_keeps_cooking` —
+    # both assert a skill NOTHING asks for is absent.
+    ("root: the orphan rule drops the demand conjunct, so every gathering"
+     " skill is routed whether or not anything asks for it",
+     "        if skill not in gathering or skill in demand]\n",
+     "        if True]\n"),
+    # THE TWO-PASS SEEDING. `offered` is `[root, *ordered]`, which by
+    # construction contains no orphan root, so a one-pass demand can never see
+    # one orphan asking for another. That is not a corner case: cooking is
+    # itself an orphan and is the ONLY route to fishing — across all 522 bundle
+    # items the only recipe naming fishing above level 1 is `cooked_shrimp`, a
+    # `consumable`, ineligible for both the gear sheet and the combat deficit,
+    # so NO gear root can ever demand fishing. Collapsing the call to
+    # `[*offered]` restores that blindness and the canonical chain `cooking rung
+    # -> cooked_shrimp -> shrimp -> fishing@10` goes invisible again. Killed by
+    # `TestCookingDemandsFishing::
+    # test_a_cooking_rung_that_needs_a_fish_gets_a_fishing_root`.
+    ("root: the demand pass sees only the gear siblings and the trunk, so an"
+     " orphan rung can never demand another skill",
+     "    demand = _gather_demand.gather_demand(\n"
+     "        [*offered,\n"
+     "         *(ReachSkillLevel(skill=skill, level=state.skills.get(skill, 1) + 1)\n"
+     "           for skill in candidates)],\n"
+     "        state, game_data, ctx)\n",
+     "    demand = _gather_demand.gather_demand(\n"
+     "        [*offered],\n"
+     "        state, game_data, ctx)\n"),
+]
+
+# The demand side's own recursion guard. `_seed` turns a root into the item
+# code whose requirement closure stands in for it; a `ReachSkillLevel` for a
+# GATHERING skill must NOT be seeded, or the root manufactures the very demand
+# that admits it and conjunct 3 is a tautology for every gathering skill. OWN
+# run_group — unit-killed, by tests/test_ai/test_gather_demand.py.
+GATHER_DEMAND_SEED_MUTATIONS = [
+    # Killed by `test_a_gathering_skill_root_does_not_seed_itself`.
+    ("gather_demand: _seed drops the recursion guard, so a gathering-skill root"
+     " seeds its own grind target and admits itself",
+     "    if isinstance(root, ReachSkillLevel) and root.skill not in gathering:\n",
+     "    if isinstance(root, ReachSkillLevel):\n"),
 ]
 
 OBTAIN_ITEM_DECISION_MUTATIONS = [
@@ -4241,7 +4304,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 _ALL_SRCS = [
     DOOMED_MEMO_SRC, STRATEGY_DRIVER_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
-    ROOT_DECISION_SRC,
+    ROOT_DECISION_SRC, GATHER_DEMAND_SRC,
     OBTAIN_ITEM_ROUTING_SRC, EQUIP_VALUE_SRC,
     GEAR_VALUE_CORE_SRC,
     GAME_DATA_PARSE_SRC, LOCATION_CATALOG_SRC,
@@ -7724,6 +7787,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_decisions_obtain_item.py", survivors)
     run_group(ROOT_DECISION_SRC, ROOT_DECISION_MUTATIONS,
               "tests/test_ai/test_decisions_root.py", survivors)
+    run_group(ROOT_DECISION_SRC, ORPHAN_DEMAND_GATE_MUTATIONS,
+              "tests/test_ai/test_orphan_gate_scenarios.py", survivors)
+    run_group(GATHER_DEMAND_SRC, GATHER_DEMAND_SEED_MUTATIONS,
+              "tests/test_ai/test_gather_demand.py", survivors)
     run_group(EMPTY_SLOT_FILLS_SRC, EMPTY_SLOT_FILLS_MUTATIONS,
               "tests/test_ai/test_empty_slot_fills.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, EQUIP_OWNED_BAND_MUTATIONS,
