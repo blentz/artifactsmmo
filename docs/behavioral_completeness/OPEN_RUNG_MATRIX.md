@@ -8,9 +8,9 @@
 >
 > Every field `classify_gap` reads is a column here, so a verdict can be reconstructed from the row alone: `g-in`/`g-above` are the in-range and above-range resource counts and `g-xp+` is whether the HIGHEST in-range resource still pays XP — the three that separate `wall_all_rungs_grey` from `wall_below_first_rung`.
 
-352 cells over 92 distinct (skill, level) pairs; PASS 346; routed 70; walled 6; o1_silent_stall 0; o1_unexplained 0; skill_catalogue_empty 0
+352 cells over 92 distinct (skill, level) pairs; PASS 346; routed 74; walled 6; o1_silent_stall 0; o1_unexplained 0; skill_catalogue_empty 0
 
-residual scope: 70 of 352 cells are ROUTED (4 of 8 skills) — cooking 44, jewelrycrafting 15, gearcrafting 9, weaponcrafting 2. A closure in an unrouted skill can only be an explained wall.
+residual scope: 74 of 352 cells are ROUTED (5 of 8 skills) — cooking 44, jewelrycrafting 15, gearcrafting 9, fishing 4, weaponcrafting 2. A closure in an unrouted skill can only be an explained wall.
 
 | Scenario | Skill | C | Target | Verdict | routed | in-level | xp+ | obtainable | above | g-in | g-above | g-xp+ | gather rung |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -216,7 +216,7 @@ residual scope: 70 of 352 cells are ROUTED (4 of 8 skills) — cooking 44, jewel
 | l10_gearcrafting_gap_combat_blocked | woodcutting | 1 | 2 | PASS | - | 1 | 1 | 1 | 10 | 1 | 6 | yes | `ash_wood` |
 | l21_grey_material_grind | alchemy | 16 | 17 | PASS | - | 6 | 4 | 4 | 19 | 1 | 4 | - | `None` |
 | l21_grey_material_grind | cooking | 12 | 13 | PASS | yes | 7 | 5 | 5 | 13 | 0 | 0 | - | `None` |
-| l21_grey_material_grind | fishing | 5 | 6 | PASS | - | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
+| l21_grey_material_grind | fishing | 5 | 6 | PASS | yes | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
 | l21_grey_material_grind | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
 | l21_grey_material_grind | jewelrycrafting | 14 | 15 | PASS | - | 5 | 4 | 4 | 45 | 0 | 0 | - | `None` |
 | l21_grey_material_grind | mining | 21 | 22 | PASS | - | 7 | 5 | 5 | 7 | 3 | 4 | yes | `coal` |
@@ -224,7 +224,7 @@ residual scope: 70 of 352 cells are ROUTED (4 of 8 skills) — cooking 44, jewel
 | l21_grey_material_grind | woodcutting | 15 | 16 | PASS | - | 2 | 1 | 1 | 9 | 2 | 5 | yes | `spruce_wood` |
 | l22_grey_rung_grind | alchemy | 17 | 18 | PASS | - | 6 | 4 | 4 | 19 | 1 | 4 | - | `None` |
 | l22_grey_rung_grind | cooking | 12 | 13 | PASS | yes | 7 | 5 | 5 | 13 | 0 | 0 | - | `None` |
-| l22_grey_rung_grind | fishing | 5 | 6 | PASS | - | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
+| l22_grey_rung_grind | fishing | 5 | 6 | PASS | yes | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
 | l22_grey_rung_grind | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
 | l22_grey_rung_grind | jewelrycrafting | 15 | 16 | PASS | - | 11 | 10 | 4 | 39 | 0 | 0 | - | `None` |
 | l22_grey_rung_grind | mining | 21 | 22 | PASS | - | 7 | 5 | 5 | 7 | 3 | 4 | yes | `coal` |
@@ -240,7 +240,7 @@ residual scope: 70 of 352 cells are ROUTED (4 of 8 skills) — cooking 44, jewel
 | l12_deep_chain_grind | woodcutting | 11 | 12 | PASS | - | 2 | 2 | 2 | 9 | 2 | 5 | yes | `spruce_wood` |
 | l19_band_edge | alchemy | 16 | 17 | PASS | - | 6 | 4 | 4 | 19 | 1 | 4 | - | `None` |
 | l19_band_edge | cooking | 12 | 13 | PASS | yes | 7 | 5 | 5 | 13 | 0 | 0 | - | `None` |
-| l19_band_edge | fishing | 5 | 6 | PASS | - | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
+| l19_band_edge | fishing | 5 | 6 | PASS | yes | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
 | l19_band_edge | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
 | l19_band_edge | jewelrycrafting | 14 | 15 | PASS | - | 5 | 4 | 4 | 45 | 0 | 0 | - | `None` |
 | l19_band_edge | mining | 21 | 22 | PASS | - | 7 | 5 | 5 | 7 | 3 | 4 | yes | `coal` |
@@ -248,7 +248,7 @@ residual scope: 70 of 352 cells are ROUTED (4 of 8 skills) — cooking 44, jewel
 | l19_band_edge | woodcutting | 15 | 16 | PASS | - | 2 | 1 | 1 | 9 | 2 | 5 | yes | `spruce_wood` |
 | l11_band_floor | alchemy | 16 | 17 | PASS | - | 6 | 4 | 4 | 19 | 1 | 4 | - | `None` |
 | l11_band_floor | cooking | 12 | 13 | PASS | yes | 7 | 5 | 5 | 13 | 0 | 0 | - | `None` |
-| l11_band_floor | fishing | 5 | 6 | PASS | - | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
+| l11_band_floor | fishing | 5 | 6 | PASS | yes | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
 | l11_band_floor | gearcrafting | 15 | 16 | PASS | - | 23 | 20 | 16 | 109 | 0 | 0 | - | `None` |
 | l11_band_floor | jewelrycrafting | 14 | 15 | PASS | - | 5 | 4 | 4 | 45 | 0 | 0 | - | `None` |
 | l11_band_floor | mining | 21 | 22 | PASS | - | 7 | 5 | 5 | 7 | 3 | 4 | yes | `coal` |

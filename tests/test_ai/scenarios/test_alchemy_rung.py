@@ -255,13 +255,22 @@ def test_every_scenario_now_routes_alchemy(bundle_game_data: GameData) -> None:
     that, with real demand supplied. What no longer holds is that
     `resolve_root`'s NATURAL walk (no demand injected) routes alchemy in
     every scenario: measured on the committed 44, it is 0 — no scenario's gear
-    siblings or trunk currently demand alchemy above the floor. `routed`
-    below is therefore the pre-gate three plus cooking (the unconditional
-    floor), not the pre-gate three plus all five gathering skills."""
+    siblings, trunk, or CANDIDATE ORPHAN currently demand alchemy above the
+    floor. `routed` below is therefore the pre-gate three, plus cooking (the
+    unconditional floor), plus FISHING — which the two-pass demand fix put
+    back for the 4 scenarios whose cooking rung needs a fish they cannot
+    catch (`cooking -> cooked_shrimp -> shrimp -> fishing@N`). Cooking is
+    itself an orphan and `resolve_root` builds `offered` BEFORE
+    `_orphan_skill_roots` runs, so a one-pass demand could not see that chain
+    at all; `_orphan_skill_roots` now decides its candidates on conjuncts 1
+    and 2 and lets THEM seed demand as well. ALCHEMY is untouched by that
+    fix, and the per-cell `SKILL not in cell` assertion below is what says
+    so: no candidate orphan's closure bottoms out in an alchemy-gated leaf
+    either."""
     routed: set[str] = set()
     for scenario in SCENARIOS.values():
         cell = routed_skills(census_state(scenario, bundle_game_data),
                              bundle_game_data)
         assert SKILL not in cell, scenario.name
         routed |= cell
-    assert routed == GEAR_NAMEABLE | {"cooking"}
+    assert routed == GEAR_NAMEABLE | {"cooking", "fishing"}

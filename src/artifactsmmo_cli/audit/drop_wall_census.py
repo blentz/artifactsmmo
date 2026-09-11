@@ -106,7 +106,9 @@ alternatives no longer carry a standalone gathering-skill root for a scenario
 whose gear siblings and trunk demand nothing from it, which is most of the 44
 — see `tests/test_audit/test_open_rung_completeness.
 test_the_routing_breakdown_scopes_the_residual` for the same shrink on the
-routing side. 200 against 247: headroom to retire a scenario without
+routing side. The TWO-PASS demand fix (the candidate orphans seed
+`gather_demand` too, so cooking's rung can ask for the fish it needs) put 4
+back: 251 today. 200 against 251: headroom to retire a scenario without
 flapping, far too tight for a collapsed sweep (44, one cell per scenario)."""
 
 

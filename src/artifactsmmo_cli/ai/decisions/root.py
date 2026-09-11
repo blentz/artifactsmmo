@@ -381,6 +381,11 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
       answers whether any root on offer bottoms out in a leaf this character
       cannot gather yet; cooking gathers nothing, never enters this conjunct,
       and is the floor that keeps this group from emptying into `Wait`.
+      The demand is computed in TWO PASSES — conjuncts 1 and 2 decide a
+      candidate set first, and the candidates then seed demand alongside
+      `offered` — because an orphan root is exactly what `offered` cannot
+      contain, and cooking (an orphan) is fishing's only demand route. See the
+      comment on the `demand` call below.
 
     Measured on the live bundle 2026-09-10 the first two conjuncts admit FIVE
     skills: alchemy, cooking, fishing, mining and woodcutting — every skill
@@ -412,13 +417,41 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
     """
     nameable = _gear_nameable_skills(game_data)
     gathering = _gather_demand.gathering_skills(game_data)
-    demand = _gather_demand.gather_demand(offered, state, game_data, ctx)
-    orphans = [
+    # PASS 1 — conjuncts 1 and 2 only. The candidate set, before anything is
+    # asked about demand.
+    candidates = [
         skill for skill in SKILL_NAMES
         if skill not in nameable
         and level_skill.LevelSkill(
             skill=skill, target_level=state.skills.get(skill, 1) + 1
-        ).is_applicable(state, game_data)
+        ).is_applicable(state, game_data)]
+    # PASS 2 — the candidates SEED demand too, not just the gear siblings and
+    # the trunk. `resolve_root` calls this with `offered` = [root, *ordered],
+    # which by construction cannot contain an orphan root, so a one-pass demand
+    # could never see one orphan asking for another. That is not a corner case:
+    # cooking is itself an orphan, and cooking is the ONLY route to fishing —
+    # across all 522 bundle items the only recipe naming fishing above level 1
+    # is `cooked_shrimp`, a `consumable`, which is ineligible for the gear sheet
+    # and for the combat deficit, so NO gear root can ever demand fishing. The
+    # canonical chain `cooking rung -> cooked_shrimp -> shrimp -> fishing@N` was
+    # therefore invisible and the gate removed fishing from every character,
+    # including the three (HAL, C3P0, Lor) whose cooking rung genuinely could
+    # not be served without it.
+    #
+    # This does NOT let a gathering skill admit itself: `gather_demand._seed`
+    # refuses to seed a `ReachSkillLevel` whose skill is a gathering skill
+    # (pinned by `test_a_gathering_skill_root_does_not_seed_itself`), so a
+    # fishing candidate contributes nothing to the dict that would admit it.
+    # Cooking is not a gathering skill, so it seeds legitimately through
+    # `skill_grind_target`. The provisional `C+1` level on a candidate is never
+    # read by `_seed` — `skill_grind_target` takes the SKILL, not the level.
+    demand = _gather_demand.gather_demand(
+        [*offered,
+         *(ReachSkillLevel(skill=skill, level=state.skills.get(skill, 1) + 1)
+           for skill in candidates)],
+        state, game_data, ctx)
+    orphans = [
+        skill for skill in candidates
         # THIRD CONJUNCT: a skill that gates a gathered leaf must be ASKED FOR.
         # Conjunct 1 admits every gathering skill by construction, which is how
         # R2D2 and Robby came to grind fishing ~617 cycles each for 0 character
@@ -426,7 +459,7 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
         # gathered leaf", read from the catalogue, so no skill is named
         # individually — cooking gathers nothing, never enters the conjunct, and
         # is the floor that keeps this group from emptying into `Wait`.
-        and (skill not in gathering or skill in demand)]
+        if skill not in gathering or skill in demand]
     orphans.sort(key=lambda skill: (state.skills.get(skill, 1) - state.level,
                                     SKILL_NAMES.index(skill)))
     # A demanded skill is offered the level that was ASKED FOR. `C+1` is a

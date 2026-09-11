@@ -417,22 +417,57 @@ def test_the_routing_breakdown_scopes_the_residual(
       weaponcrafting) stay routed. This is the fix working as designed — see
       `tests/test_ai/test_orphan_skill_roots_demand.py` for the four rejoining
       the routed side the moment something demands them.
+    * 70 -> 74 of 352 cells, 4 -> 5 skills, when that gate's demand went
+      TWO-PASS. The bullet above is the record of a real over-block: the
+      quoted sentence "`resolve_root`'s own `offered` — the gear siblings and
+      the trunk" is precisely the defect. An ORPHAN root is by construction
+      absent from `offered` (`resolve_root` passes `[root, *ordered]`, computed
+      BEFORE `_orphan_skill_roots` runs), and COOKING is an orphan — so the
+      chain `cooking rung -> cooked_shrimp -> shrimp -> fishing@N` could not be
+      seen. That matters more than it sounds: `cooked_shrimp` is a
+      `consumable`, ineligible for the gear sheet and for the combat deficit,
+      and it is the ONLY item in the 522-item bundle naming fishing above
+      level 1, so NO gear root can EVER demand fishing and the one-pass gate
+      removed fishing outright. `_orphan_skill_roots` now decides its
+      candidate set on conjuncts 1 and 2, lets the candidates seed demand
+      alongside `offered`, and only then applies conjunct 3. Fishing returns
+      in the 4 cells whose cooking rung genuinely needs a fish they cannot
+      catch (`l11_band_floor`, `l19_band_edge`, `l21_grey_material_grind`,
+      `l22_grey_rung_grind`); mining, woodcutting and alchemy stay out,
+      because nothing demands them. `_seed`'s recursion guard is what keeps
+      this honest — a GATHERING-skill root still seeds nothing, so fishing
+      cannot manufacture the demand that admits it. PASS, walled and all
+      three residual counts were unchanged by the two-pass commit, and no
+      cell changed VERDICT — only the `routed` column on those four.
 
-    The scope line still matters — 282 cells remain unrouted — but it now
+    The scope line still matters — 278 cells remain unrouted — but it now
     means something different: an unrouted gathering skill is no longer a
     census blind spot, it is the gate correctly declining to send a character
     to grind a skill nothing needs.
     """
     line = orc.routing_breakdown(results)
     routed_skills = {r.skill for r in results if r.routed}
-    assert routed_skills == {"cooking", "gearcrafting", "jewelrycrafting",
-                             "weaponcrafting"}
+    assert routed_skills == {"cooking", "fishing", "gearcrafting",
+                             "jewelrycrafting", "weaponcrafting"}
     assert f"{len(routed_skills)} of {len(SKILL_NAMES)} skills" in line
     assert f"{sum(1 for r in results if r.routed)} of {len(results)} cells" in line
     # Ordered by cell count, so the reader sees the widest arm first.
     assert line.index("cooking") < line.index("jewelrycrafting")
     assert line.index("jewelrycrafting") < line.index("gearcrafting")
-    assert line.index("gearcrafting") < line.index("weaponcrafting")
+    assert line.index("gearcrafting") < line.index("fishing")
+    assert line.index("fishing") < line.index("weaponcrafting")
+    # Fishing is routed ONLY where cooking is — its sole demand route. A cell
+    # that routes fishing with no cooking rung open would mean some other
+    # producer started naming it, which is the thing the gate is for.
+    by_cell: dict[str, set[str]] = {}
+    for r in results:
+        if r.routed:
+            by_cell.setdefault(r.scenario, set()).add(r.skill)
+    fishing_cells = {name for name, skills in by_cell.items()
+                     if "fishing" in skills}
+    assert fishing_cells == {"l11_band_floor", "l19_band_edge",
+                             "l21_grey_material_grind", "l22_grey_rung_grind"}
+    assert all("cooking" in by_cell[name] for name in fishing_cells)
 
 
 def test_the_committed_matrix_is_the_current_answer(

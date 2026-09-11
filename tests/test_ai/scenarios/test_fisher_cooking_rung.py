@@ -216,21 +216,57 @@ def test_every_scenario_now_routes_cooking(bundle_game_data: GameData) -> None:
     that narrowing is this test's whole point now rather than something it
     happens to have to accommodate: fishing, mining and woodcutting are
     gathering skills, so `resolve_root`'s NATURAL walk (no demand injected)
-    routes them only when a gear sibling or the trunk actually needs one —
-    measured on the committed 44, none of them do. COOKING gathers nothing,
-    is therefore never gated, and is the only one of the four still routed
-    unconditionally — which is exactly what makes it the anti-`Wait` floor
-    `decisions/root.py`'s docstring names. The exact routed set (cooking plus
-    the three skills a real gear target still names) is pinned where it
+    routes them only when some root on offer actually needs one. COOKING
+    gathers nothing, is therefore never gated, and is routed unconditionally
+    — which is exactly what makes it the anti-`Wait` floor
+    `decisions/root.py`'s docstring names.
+
+    THEN THE GATE WENT TWO-PASS, and this cell is the one that had the most
+    to say about why. The claim above used to end "measured on the committed
+    44, none of them do", which was an artefact of WHERE demand was read
+    from: `resolve_root` passes `_orphan_skill_roots` its `offered` list —
+    the gear siblings and the trunk — built BEFORE the orphan group exists,
+    so no orphan could justify another orphan. Cooking IS an orphan, and
+    `cooking -> cooked_shrimp -> shrimp -> fishing@N` is the chain this whole
+    module is named for. `cooked_shrimp` is a `consumable`, so it is
+    ineligible for the gear sheet and for the combat deficit, and it is the
+    only item in the 522-item bundle that names fishing above level 1: no
+    gear root can EVER demand fishing, which is why the one-pass gate did not
+    narrow fishing so much as delete it. `_orphan_skill_roots` now decides
+    its candidate set on conjuncts 1 and 2 and lets the CANDIDATES seed
+    demand alongside `offered`.
+
+    So the two halves below are no longer the same assertion. Mining and
+    woodcutting stay absent — nothing, orphan or otherwise, asks for them —
+    and that is still the R2D2/Robby result this gate exists for. Fishing is
+    present, but only in the cells whose cooking rung genuinely cannot be
+    served without it, and never on its own: `_seed`'s recursion guard means
+    a gathering-skill root seeds nothing, so a fishing root can never
+    manufacture its own demand. The cooking-implication assertion is what
+    pins that — drop the third conjunct entirely and fishing would appear in
+    all 44, cooking-demanded or not. The exact routed set is pinned where it
     belongs — `test_open_rung_completeness.
-    test_the_routing_breakdown_scopes_the_residual`; this cell only needs
-    cooking's own name and fishing/mining/woodcutting's absence."""
+    test_the_routing_breakdown_scopes_the_residual`."""
     routed: set[str] = set()
+    fishing_cells: set[str] = set()
+    cooking_cells: set[str] = set()
     for scenario in SCENARIOS.values():
-        routed |= routed_skills(census_state(scenario, bundle_game_data),
-                                bundle_game_data)
+        cell = routed_skills(census_state(scenario, bundle_game_data),
+                             bundle_game_data)
+        routed |= cell
+        if "fishing" in cell:
+            fishing_cells.add(scenario.name)
+        if SKILL in cell:
+            cooking_cells.add(scenario.name)
     assert SKILL in routed
-    assert routed.isdisjoint({"fishing", "mining", "woodcutting"})
+    # Cooking is the unconditional floor: every scenario, no exceptions.
+    assert cooking_cells == set(SCENARIOS)
+    # Nothing demands mining or woodcutting, so the gate still declines them.
+    assert routed.isdisjoint({"mining", "woodcutting"})
+    # Fishing is back, and ONLY through cooking — a strict, non-empty subset.
+    assert fishing_cells and fishing_cells < cooking_cells
+    assert fishing_cells == {"l11_band_floor", "l19_band_edge",
+                             "l21_grey_material_grind", "l22_grey_rung_grind"}
 
 
 def test_the_fishers_cooking_root_plans_a_cooking_grind(
