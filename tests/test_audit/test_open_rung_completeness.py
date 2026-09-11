@@ -385,9 +385,9 @@ def test_the_routing_breakdown_scopes_the_residual(
         results: list[orc.RungResult]) -> None:
     """The residual arm reaches only the ROUTED subset, and the matrix says so.
 
-    ALL EIGHT skills are routed now, up from three, in two moves — and both
-    moves were a skill becoming visible to the root graph, never a change to
-    this census:
+    THE ROUTED SET HAS MOVED THREE TIMES, and each move was a skill becoming
+    (or ceasing to be) visible to the root graph, never a change to this
+    census:
 
     * 26 -> 194 of 336 cells, 3 -> 7 skills, when `b39705eb` restored the
       standalone skill root (`decisions/root._orphan_skill_roots`) and put
@@ -403,19 +403,36 @@ def test_the_routing_breakdown_scopes_the_residual(
       outright, so a gear target named alchemy in 0 of the 42 scenarios and the
       orphan rule was declining a genuine orphan. See
       `tests/test_ai/scenarios/test_alchemy_rung.py`.
+    * 236 -> 70 of 352 cells (44 scenarios by then), 8 -> 4 skills, when the
+      gathering-demand gate (`gather_demand.gather_demand`,
+      `decisions/root._orphan_skill_roots`'s third conjunct) started asking
+      whether any root's closure actually needs alchemy, fishing, mining or
+      woodcutting before routing to it. `resolve_root`'s own `offered` — the
+      gear siblings and the trunk, never the gathering skill's OWN grind
+      target (`gather_demand._seed`'s recursion guard) — turns out to demand
+      NONE of the four in ANY of the 44 committed scenarios: their gates sit
+      at or below what each scenario's character already holds. Only cooking,
+      which gathers nothing and is therefore never gated, plus the three
+      skills a real gear target still names (gearcrafting, jewelrycrafting,
+      weaponcrafting) stay routed. This is the fix working as designed — see
+      `tests/test_ai/test_orphan_skill_roots_demand.py` for the four rejoining
+      the routed side the moment something demands them.
 
-    The scope line still matters — 103 cells remain unrouted — but it now
-    understates far less than it did.
+    The scope line still matters — 282 cells remain unrouted — but it now
+    means something different: an unrouted gathering skill is no longer a
+    census blind spot, it is the gate correctly declining to send a character
+    to grind a skill nothing needs.
     """
     line = orc.routing_breakdown(results)
     routed_skills = {r.skill for r in results if r.routed}
-    assert routed_skills == set(SKILL_NAMES)
+    assert routed_skills == {"cooking", "gearcrafting", "jewelrycrafting",
+                             "weaponcrafting"}
     assert f"{len(routed_skills)} of {len(SKILL_NAMES)} skills" in line
     assert f"{sum(1 for r in results if r.routed)} of {len(results)} cells" in line
     # Ordered by cell count, so the reader sees the widest arm first.
-    assert line.index("alchemy") < line.index("jewelrycrafting")
     assert line.index("cooking") < line.index("jewelrycrafting")
-    assert line.index("jewelrycrafting") < line.index("weaponcrafting")
+    assert line.index("jewelrycrafting") < line.index("gearcrafting")
+    assert line.index("gearcrafting") < line.index("weaponcrafting")
 
 
 def test_the_committed_matrix_is_the_current_answer(

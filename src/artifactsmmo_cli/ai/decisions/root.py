@@ -55,8 +55,20 @@ and no longer disagrees with this module):
   decided against the spec — see `_next_rung_above`.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from fractions import Fraction
+
+# MODULE import, same idiom as `level_skill` and `_route` above, and for the
+# same reason but the OTHER direction: `gather_demand` imports
+# `tiers.meta_goal` and `tiers.skill_grind_target`, both of which run
+# `ai/tiers/__init__` -> `strategy` -> `progression_tree` -> THIS module. So an
+# entry that imports `gather_demand` FIRST (e.g. `import
+# artifactsmmo_cli.ai.gather_demand` on its own) reaches this line while
+# `gather_demand` is only half built, and a NAME import of `gather_demand`/
+# `gathering_skills` raises ImportError. Binding the module object defers both
+# attribute lookups to CALL time, by which point it is complete.
+from artifactsmmo_cli.ai import gather_demand as _gather_demand
 
 # `level_skill` is imported as a MODULE, not as `from ... import LevelSkill`,
 # and that is load-bearing rather than stylistic. `actions/level_skill.py`
@@ -336,14 +348,16 @@ def _gear_nameable_skills(game_data: GameData) -> frozenset[str]:
     return frozenset(nameable)
 
 
-def _orphan_skill_roots(state: WorldState,
-                        game_data: GameData) -> tuple[ReachSkillLevel, ...]:
+def _orphan_skill_roots(state: WorldState, game_data: GameData,
+                        offered: Sequence[MetaGoal],
+                        ctx: SelectionContext) -> tuple[ReachSkillLevel, ...]:
     """THE RULE, and the whole of it:
 
         a skill with an open, XP-positive rung that NO gear target can name
-        still deserves a root.
+        still deserves a root — UNLESS it is a gathering skill nothing asks
+        for.
 
-    Two conjuncts, each read from production rather than restated:
+    Three conjuncts, each read from production rather than restated:
 
     * "no gear target can name it" is `_gear_nameable_skills` — a property of
       the CATALOGUE, not of this cycle's gear sheet. Deliberately not "no
@@ -358,11 +372,26 @@ def _orphan_skill_roots(state: WorldState,
       `o1_silent_stall` residual — an unplannable root with no node saying why —
       which is the failure this seam is supposed to make impossible, not one it
       may cause.
+    * a skill that gates a gathered leaf must be ASKED FOR. Conjunct 1 admits
+      every gathering skill by construction — gear is crafted by
+      gearcrafting, weaponcrafting and jewelrycrafting, so mining, woodcutting,
+      fishing and alchemy fall out as orphans whether or not anything wants
+      them. Live 2026-09-09/10 sent R2D2 and Robby to fishing for ~617 cycles
+      each at 0 character XP while neither needed a fish. `gather_demand`
+      answers whether any root on offer bottoms out in a leaf this character
+      cannot gather yet; cooking gathers nothing, never enters this conjunct,
+      and is the floor that keeps this group from emptying into `Wait`.
 
-    Measured on the committed bundle the rule admits exactly four skills:
-    cooking, fishing, mining and woodcutting — the four whose every recipe
-    produces a `consumable` or a `resource`. Cooking is the instance the epic
-    named; the other three arrive because the rule is about the catalogue.
+    Measured on the live bundle 2026-09-10 the first two conjuncts admit FIVE
+    skills: alchemy, cooking, fishing, mining and woodcutting — every skill
+    whose recipes produce a `consumable` or a `resource`. (An earlier revision
+    of this docstring said four and omitted alchemy.)
+
+    THE THIRD CONJUNCT then holds the four that gather back until something asks
+    for them, leaving cooking — which gathers nothing — as the unconditional
+    floor. Measured across `ai/scenario.SCENARIOS`, cooking is admitted in 44 of
+    44 scenarios and this group is empty in 0 of 44, so the fall-through to
+    `Wait` this seam exists to prevent stays unreachable.
 
     ORDER: ONE INTEGER, `state.level - skill level` — how far the skill trails
     the character, largest first — with ties broken by `SKILL_NAMES`, the
@@ -382,17 +411,32 @@ def _orphan_skill_roots(state: WorldState,
     follow. If the order is wrong, change WHICH integer it is, not how many.
     """
     nameable = _gear_nameable_skills(game_data)
+    gathering = _gather_demand.gathering_skills(game_data)
+    demand = _gather_demand.gather_demand(offered, state, game_data, ctx)
     orphans = [
         skill for skill in SKILL_NAMES
         if skill not in nameable
         and level_skill.LevelSkill(
             skill=skill, target_level=state.skills.get(skill, 1) + 1
-        ).is_applicable(state, game_data)]
+        ).is_applicable(state, game_data)
+        # THIRD CONJUNCT: a skill that gates a gathered leaf must be ASKED FOR.
+        # Conjunct 1 admits every gathering skill by construction, which is how
+        # R2D2 and Robby came to grind fishing ~617 cycles each for 0 character
+        # XP while neither needed a fish. Keyed on "does this skill gate a
+        # gathered leaf", read from the catalogue, so no skill is named
+        # individually — cooking gathers nothing, never enters the conjunct, and
+        # is the floor that keeps this group from emptying into `Wait`.
+        and (skill not in gathering or skill in demand)]
     orphans.sort(key=lambda skill: (state.skills.get(skill, 1) - state.level,
                                     SKILL_NAMES.index(skill)))
-    return tuple(ReachSkillLevel(skill=skill,
-                                 level=state.skills.get(skill, 1) + 1)
-                 for skill in orphans)
+    # A demanded skill is offered the level that was ASKED FOR. `C+1` is a
+    # one-rung nudge with no destination: it completes and re-emits, which is
+    # the churn this gate exists to stop. An ungated skill keeps `C+1` because
+    # nothing named a level for it.
+    return tuple(ReachSkillLevel(
+        skill=skill,
+        level=demand.get(skill, state.skills.get(skill, 1) + 1))
+        for skill in orphans)
 
 
 class IsAFightBlockingMe(Decision[MetaGoal]):
@@ -849,7 +893,12 @@ def resolve_root(state: WorldState, game_data: GameData,
     # pinned by three suites — and an orphan skill climb unblocks nothing.
     # Behind it, an orphan root is reached exactly when no gear step and no
     # trunk step can be served, which is where the bot used to emit `Wait`.
-    ordered.extend(_orphan_skill_roots(state, game_data))
+    # `root` can be `None` (the wall case, `CanIClearMyTier`'s own docstring),
+    # which `Sequence[MetaGoal]` cannot type — filtered rather than left in,
+    # since `gather_demand._seed` would skip it anyway (neither an `ObtainItem`
+    # nor a `ReachSkillLevel`).
+    offered = [g for g in (root, *ordered) if g is not None]
+    ordered.extend(_orphan_skill_roots(state, game_data, offered, ctx))
 
     alternatives: list[MetaGoal] = []
     for alt in ordered:

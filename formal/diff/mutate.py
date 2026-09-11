@@ -961,9 +961,9 @@ REALIZABLE_LOADOUT_MUTATIONS = [
 # of scoring.py into loadout_picker.py (Task 1 relocation). Killed by the COMBAT
 # differential test_equipment_scoring_diff.py (now routed through Combat purpose).
 LOADOUT_PICKER_COMBAT_MUTATIONS = [
-    # drop the level filter in _candidates_for_slot: below-level items become
+    # drop the level filter in _candidates_by_slot: below-level items become
     # eligible, so an above-level higher-score item can be (wrongly) picked.
-    ("loadout_picker: drop level filter in _candidates_for_slot",
+    ("loadout_picker: drop level filter in _candidates_by_slot",
      "        if stats is None or state.level < stats.level:",
      "        if stats is None:"),
     # drop the no-downgrade guard: force the swap branch so the selector always
@@ -2948,8 +2948,8 @@ ROOT_DECISION_MUTATIONS = [
      " XP-positive rung is routed anyway (the o1_silent_stall residual)",
      "        and level_skill.LevelSkill(\n"
      "            skill=skill, target_level=state.skills.get(skill, 1) + 1\n"
-     "        ).is_applicable(state, game_data)]\n",
-     "    ]\n"),
+     "        ).is_applicable(state, game_data)\n",
+     ""),
     ("root: the orphan order runs from the LEAST-behind skill",
      "    orphans.sort(key=lambda skill: (state.skills.get(skill, 1) - state.level,\n",
      "    orphans.sort(key=lambda skill: (state.level - state.skills.get(skill, 1),\n"),
@@ -2959,7 +2959,7 @@ ROOT_DECISION_MUTATIONS = [
     ("root: the orphan skill roots are offered AHEAD of the trunk, displacing"
      " the trunk's provisioning step",
      "    ordered.append(ReachCharLevel(level=milestone_pure(state.level)))\n",
-     "    ordered.extend(_orphan_skill_roots(state, game_data))\n"
+     "    ordered.extend(_orphan_skill_roots(state, game_data, [root, *ordered], ctx))\n"
      "    ordered.append(ReachCharLevel(level=milestone_pure(state.level)))\n"),
     ("root: the sibling conversion reuses the real walk, so converting an"
      " alternative pollutes the trail",

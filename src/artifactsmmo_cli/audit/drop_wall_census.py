@@ -89,7 +89,7 @@ open — the dearest drop demand in the committed set is 6 — so a price that s
 does not move is one the item genuinely does not gate. A DETECTION grant, never
 a claim the character could get that many."""
 
-MIN_CELLS = 300
+MIN_CELLS = 200
 """Blindness floor on the grid, enforced by `gen_drop_wall.py --check` and not
 only by the suite.
 
@@ -99,8 +99,15 @@ has shipped once already. `scripts/*` is coverage-omitted and the census gate
 runs the scripts without pytest, so the floor lives here where the script and
 the suite read the same number.
 
-300 against a current 448 (root + alternatives over 44 scenarios): headroom to
-retire a scenario without flapping, far too tight for a collapsed sweep."""
+Was 300 against a current 448 (root + alternatives over 44 scenarios). The
+gathering-demand gate (`decisions/root._orphan_skill_roots`'s third conjunct,
+`gather_demand.gather_demand`) dropped that to 247: `resolve_root`'s
+alternatives no longer carry a standalone gathering-skill root for a scenario
+whose gear siblings and trunk demand nothing from it, which is most of the 44
+— see `tests/test_audit/test_open_rung_completeness.
+test_the_routing_breakdown_scopes_the_residual` for the same shrink on the
+routing side. 200 against 247: headroom to retire a scenario without
+flapping, far too tight for a collapsed sweep (44, one cell per scenario)."""
 
 
 class DropGap(Enum):

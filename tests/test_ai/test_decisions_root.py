@@ -489,9 +489,15 @@ def test_the_siblings_become_the_alternatives_then_the_trunk_then_the_orphans():
     THREE ORDERED GROUPS, and the order is the whole contract: every gear
     sibling, then the trunk, then the orphan skill roots
     (`_orphan_skill_roots`). This fixture's catalogue crafts `ash_plank` from
-    woodcutting and nothing woodcutting makes is equippable, so woodcutting is
-    an orphan here — the restored seam is exercised by the unit fixture and not
-    only by the scenario set."""
+    woodcutting and nothing woodcutting makes is equippable, so woodcutting
+    (and mining, off `copper_helmet` -> `copper_bar`) would be ORPHANS by the
+    first two conjuncts alone — but the third conjunct (`gather_demand`) is
+    silent for both here: `ash_tree` and `copper_rocks` gate at woodcutting@1
+    and mining@1, and this character already stands at the floor (1), so
+    nothing UNMET is asked for. The orphan group is therefore EMPTY, which is
+    the gate doing exactly its job — see
+    `tests/test_ai/test_orphan_skill_roots_demand.py` for the group admitting
+    a skill when something genuinely demands it."""
     gd = _gd()
     resolution = resolve_root(make_state(level=15), gd, _objective(gd), _ctx(), None)
     assert resolution.alternatives == (
@@ -499,8 +505,6 @@ def test_the_siblings_become_the_alternatives_then_the_trunk_then_the_orphans():
         ObtainItem(code="copper_helmet", quantity=1, slot="helmet_slot"),
         ObtainItem(code="leather", quantity=2),
         ReachCharLevel(level=20),
-        ReachSkillLevel(skill="woodcutting", level=3),
-        ReachSkillLevel(skill="mining", level=4),
     )
 
 
@@ -560,10 +564,13 @@ def test_the_chosen_root_is_never_repeated_as_its_own_alternative(monkeypatch):
     monkeypatch.setattr(tier_progress, "is_winnable", lambda s, g, c, h: True)
     resolution = resolve_root(_geared_state(), gd, _objective(gd), _ctx(), None)
     assert resolution.root == ReachCharLevel(level=20)
-    # The trunk is the ROOT here, so it is not repeated as its own alternative;
-    # the orphan skill root behind it still is one.
-    assert resolution.alternatives == (ReachSkillLevel(skill="woodcutting", level=3),
-                                       ReachSkillLevel(skill="mining", level=4))
+    # The trunk is the ROOT here, so it is not repeated as its own alternative.
+    # `_geared_state` wears every candidate, so `ordered` carries no gear
+    # sibling, and the demand gate leaves the orphan group empty for the same
+    # reason `test_the_siblings_become_the_alternatives_then_the_trunk_then_
+    # the_orphans` does: woodcutting and mining gate at @1 in this catalogue
+    # and this character already stands at the floor, so nothing is UNMET.
+    assert resolution.alternatives == ()
     assert resolution.trail == ("IsAFightBlockingMe", "IsMyGearBehindMyTier",
                                 "IsThereACombatTarget",
                                 "CanIClearMyTier")
@@ -579,9 +586,10 @@ def test_a_wall_still_offers_the_trunk_as_an_alternative(monkeypatch):
     # The wall is still `None` — the orphan skill roots are OFFERED behind the
     # trunk, they do not replace the wall verdict. `CanIClearMyTier`'s
     # docstring records the measurement that rejected putting them on this arm.
-    assert resolution.alternatives == (ReachCharLevel(level=20),
-                                       ReachSkillLevel(skill="woodcutting", level=3),
-                                       ReachSkillLevel(skill="mining", level=4))
+    # The orphan group itself is empty here for the same reason the sibling
+    # test above is: nobody demands woodcutting or mining past the floor both
+    # gate at in this catalogue.
+    assert resolution.alternatives == (ReachCharLevel(level=20),)
 
 
 # ---------------------------------------------------------------------------
@@ -626,13 +634,33 @@ def test_the_rule_admits_the_five_skills_the_gear_sheet_never_ranks(
     Cooking is the instance the epic named; the other four arrive because the
     rule is about the catalogue, not about cooking.
 
+    THE THIRD CONJUNCT (gather-demand gate): the four gathering skills need
+    something to ASK for them now, or `l1_fresh` (every gathering skill met at
+    its own floor) admits only cooking — see
+    `tests/test_ai/test_orphan_skill_roots_demand.py`. `offered` below is one
+    real item per gathering skill, each chosen off the live bundle's own
+    `RequirementGraph.gather_skill` for a gate ABOVE this character's floor:
+    `birch_wood` (woodcutting@20), `golden_shrimp` (fishing@10), `nettle_leaf`
+    (alchemy@20), and `steel_bar` (mining@20, via its `coal` ingredient) —
+    named directly as the demand ROOT, not routed through any real recipe
+    chain, since the gate under test is `gather_demand`, not acquisition.
+
     `l1_fresh` is the tie case (every skill at the floor), so the order is
     `SKILL_NAMES` and alchemy leads by vocabulary rather than by gap."""
     state = census_state(SCENARIOS["l1_fresh"], bundle_game_data)
-    roots = _orphan_skill_roots(state, bundle_game_data)
+    offered = [ObtainItem(code=code, quantity=1) for code in
+              ("birch_wood", "golden_shrimp", "nettle_leaf", "steel_bar")]
+    roots = _orphan_skill_roots(state, bundle_game_data, offered, NO_PROFILE_CONTEXT)
     assert [r.skill for r in roots] == ["alchemy", "cooking", "fishing",
                                         "mining", "woodcutting"]
-    assert all(r.level == state.skills[r.skill] + 1 for r in roots)
+    # Cooking is UNGATED, so it still gets C+1; the four gathering skills get
+    # the DEMANDED level instead — see
+    # `test_an_admitted_skill_emits_the_demanded_level` in
+    # `test_orphan_skill_roots_demand.py` for why C+1 would be a regression.
+    demanded = {"alchemy": 20, "fishing": 10, "mining": 20, "woodcutting": 20}
+    for root in roots:
+        expected = demanded.get(root.skill, state.skills[root.skill] + 1)
+        assert root.level == expected, root
 
 
 def test_an_orphan_skill_with_no_open_rung_gets_no_root():
@@ -651,14 +679,35 @@ def test_an_orphan_skill_with_no_open_rung_gets_no_root():
     empties the tuple.
 
     Mining leads the grinding case because the order is the gap to the
-    character level and mining (1) trails further than woodcutting (2)."""
+    character level and mining (1) trails further than woodcutting (2).
+
+    THE THIRD CONJUNCT needs its own demand, separate from conjunct 2's own
+    rung: `ash_tree`/`copper_rocks` both gate at level 1, which is already MET
+    at the floor, so a root naming either would demand nothing. `silver_rocks`
+    (mining@5) and `yew_tree` (woodcutting@5) are added ABOVE both fixture
+    levels so `offered` creates real UNMET demand without touching conjunct 1
+    (neither is an equippable) or conjunct 2 (the existing level-1 resources
+    keep the rung open at skill 1 and 2 — this only raises what is DEMANDED).
+    At skill 50 the demand is met too (50 >> 5), so conjunct 2 alone is what
+    empties the topped case, exactly as the docstring above says."""
     gd = _gd()
+    gd._item_stats["silver_ore"] = ItemStats(code="silver_ore", level=5, type_="resource")
+    gd._resource_drops["silver_rocks"] = "silver_ore"
+    gd._resource_drops_full["silver_rocks"] = [("silver_ore", 100, 1, 1)]
+    gd._resource_skill["silver_rocks"] = ("mining", 5)
+    gd._item_stats["yew_wood"] = ItemStats(code="yew_wood", level=5, type_="resource")
+    gd._resource_drops["yew_tree"] = "yew_wood"
+    gd._resource_drops_full["yew_tree"] = [("yew_wood", 100, 1, 1)]
+    gd._resource_skill["yew_tree"] = ("woodcutting", 5)
     assert "woodcutting" not in _gear_nameable_skills(gd)
     assert "mining" not in _gear_nameable_skills(gd)
+    offered = [ObtainItem(code="silver_ore", quantity=1),
+              ObtainItem(code="yew_wood", quantity=1)]
     grinding = make_state(level=15, skills={"woodcutting": 2})
-    assert [r.skill for r in _orphan_skill_roots(grinding, gd)] == ["mining", "woodcutting"]
+    assert [r.skill for r in _orphan_skill_roots(
+        grinding, gd, offered, NO_PROFILE_CONTEXT)] == ["mining", "woodcutting"]
     topped = make_state(level=15, skills={"woodcutting": 50, "mining": 50})
-    assert _orphan_skill_roots(topped, gd) == ()
+    assert _orphan_skill_roots(topped, gd, offered, NO_PROFILE_CONTEXT) == ()
 
 
 def test_the_orphan_order_is_the_gap_to_the_character_level(
@@ -670,23 +719,39 @@ def test_the_orphan_order_is_the_gap_to_the_character_level(
 
     `l1_fresh` is the tie case: every orphan is at the floor, every gap is
     equal, and the order falls to `SKILL_NAMES`, the API schema's own
-    vocabulary, never `sorted()` as a decision key."""
+    vocabulary, never `sorted()` as a decision key.
+
+    `offered` is the same four-item set
+    `test_the_rule_admits_the_five_skills_the_gear_sheet_never_ranks` uses, so
+    all four gathering skills clear the third conjunct here too — without it
+    `mining` would never appear at all and the swap below would prove
+    nothing about the ORDER."""
     base = census_state(SCENARIOS["l1_fresh"], bundle_game_data)
-    assert [r.skill for r in _orphan_skill_roots(base, bundle_game_data)] == [
+    offered = [ObtainItem(code=code, quantity=1) for code in
+              ("birch_wood", "golden_shrimp", "nettle_leaf", "steel_bar")]
+    assert [r.skill for r in _orphan_skill_roots(
+        base, bundle_game_data, offered, NO_PROFILE_CONTEXT)] == [
         "alchemy", "cooking", "fishing", "mining", "woodcutting"]
 
     # alchemy, fishing and woodcutting are parked AT the character level so the
     # contest is cooking against mining and nothing else: a skill left at the
     # floor trails by 19 and would win both halves, which would prove nothing.
+    # Parked at the demanded level itself (20) rather than merely "high", so
+    # the third conjunct drops them from the output entirely instead of
+    # leaving them in as an untested tie.
     parked = {"alchemy": 20, "fishing": 20, "woodcutting": 20}
     cook_ahead = replace(base, level=20,
                          skills={**base.skills, **parked,
                                  "cooking": 15, "mining": 5})
-    assert _orphan_skill_roots(cook_ahead, bundle_game_data)[0].skill == "mining"
+    assert _orphan_skill_roots(
+        cook_ahead, bundle_game_data, offered, NO_PROFILE_CONTEXT
+    )[0].skill == "mining"
     mine_ahead = replace(base, level=20,
                          skills={**base.skills, **parked,
                                  "cooking": 5, "mining": 15})
-    assert _orphan_skill_roots(mine_ahead, bundle_game_data)[0].skill == "cooking"
+    assert _orphan_skill_roots(
+        mine_ahead, bundle_game_data, offered, NO_PROFILE_CONTEXT
+    )[0].skill == "cooking"
 
 
 def test_cooking_is_a_root_the_walk_offers(bundle_game_data: GameData):

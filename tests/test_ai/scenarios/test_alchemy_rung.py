@@ -53,7 +53,7 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
@@ -70,6 +70,17 @@ RUNG = "small_health_potion"
 GEAR_NAMEABLE = frozenset({"gearcrafting", "weaponcrafting", "jewelrycrafting"})
 PLAN_BUDGET_SECONDS = 5.0
 """Measured 0.3 s for the one `LevelSkill` plan below."""
+
+_OFFERED = [ObtainItem(code=code, quantity=1) for code in
+           ("nettle_leaf", "small_pearls", "birch_wood", "steel_bar")]
+"""THE THIRD CONJUNCT'S demand, one item per gathering skill, each gated
+(`RequirementGraph.gather_skill`) ABOVE `l15_midband`'s own level for that
+skill (alchemy 6, fishing 10, woodcutting 12, mining 12): `nettle_leaf`
+(alchemy@20), `small_pearls` (fishing@20), `birch_wood` (woodcutting@20), and
+`steel_bar` (mining@20, via its `coal` ingredient). Without this, `offered=[]`
+would leave every gathering skill silent and this module's whole finding —
+that alchemy joins cooking, fishing, mining and woodcutting as an orphan —
+would be untestable through `_orphan_skill_roots` directly."""
 
 
 @pytest.fixture
@@ -144,10 +155,16 @@ def test_alchemy_heads_the_orphan_list_for_this_cell(
     level` and alchemy at 6 trails a level-15 character further than any other
     skill this scenario carries. That is the same rule cooking, fishing, mining
     and woodcutting are ordered by; alchemy joins the group, it does not get a
-    seat beside it."""
-    orphans = _orphan_skill_roots(state, bundle_game_data)
-    assert orphans[0] == ReachSkillLevel(skill=SKILL,
-                                         level=state.skills[SKILL] + 1)
+    seat beside it.
+
+    THE THIRD CONJUNCT: alchemy, fishing, mining and woodcutting are gathering
+    skills and need `_OFFERED`'s demand to clear the gate at all (see its own
+    docstring) — cooking is the only one of the five admitted unconditionally.
+    Not C+1 either: a demanded skill emits the level `_OFFERED`'s closure
+    asked for, 20 here for all four (`test_orphan_skill_roots_demand.
+    test_an_admitted_skill_emits_the_demanded_level` pins why)."""
+    orphans = _orphan_skill_roots(state, bundle_game_data, _OFFERED, NO_PROFILE_CONTEXT)
+    assert orphans[0] == ReachSkillLevel(skill=SKILL, level=20)
     assert [goal.skill for goal in orphans] == [
         SKILL, "cooking", "fishing", "mining", "woodcutting"]
 
@@ -207,9 +224,11 @@ def test_a_real_alchemy_EQUIPPABLE_would_take_the_root_away(
     assert SKILL in _gear_nameable_skills(flipped)
 
     before = _orphan_skill_roots(
-        scenario_state(SCENARIOS[CELL], bundle_game_data), bundle_game_data)
+        scenario_state(SCENARIOS[CELL], bundle_game_data), bundle_game_data,
+        _OFFERED, NO_PROFILE_CONTEXT)
     after = _orphan_skill_roots(
-        scenario_state(SCENARIOS[CELL], flipped), flipped)
+        scenario_state(SCENARIOS[CELL], flipped), flipped,
+        _OFFERED, NO_PROFILE_CONTEXT)
     assert [goal.skill for goal in before] == [
         SKILL, "cooking", "fishing", "mining", "woodcutting"]
     assert [goal.skill for goal in after] == [
@@ -217,19 +236,32 @@ def test_a_real_alchemy_EQUIPPABLE_would_take_the_root_away(
 
 
 def test_every_scenario_now_routes_alchemy(bundle_game_data: GameData) -> None:
-    """THE FIX AS A NUMBER, and the eighth skill closed.
+    """THE FIX AS A NUMBER, and the eighth skill closed — AS OF THE
+    NAMEABILITY FIX. All eight skills were routed once `_gear_nameable_skills`
+    stopped restating the gear sheet's candidate rule: the O1 census's routed
+    count moved 194 -> 236 of 336 cells, and 7 of 8 skills -> 8 of 8. `routed`
+    widened the reach of the `o1_silent_stall` residual and nothing else,
+    which is why PASS, walled and all three residual counts were unchanged by
+    that commit.
 
-    `test_fisher_cooking_rung.test_every_scenario_now_routes_cooking` used to
-    end `assert "alchemy" not in routed`, on the drifted nameability claim. All
-    eight skills are routed now; the O1 census's routed count moves 194 -> 236
-    of 336 cells, and 7 of 8 skills -> 8 of 8. `routed` widens the reach of the
-    `o1_silent_stall` residual and nothing else, which is why PASS, walled and
-    all three residual counts are unchanged by this commit."""
+    THE GATHERING-DEMAND GATE THEN NARROWED IT AGAIN, and that narrowing is
+    not a regression of this fix — it is a SEPARATE, later one
+    (`decisions/root._orphan_skill_roots`'s third conjunct,
+    `gather_demand.gather_demand`), and this module is not where it is pinned
+    (`test_open_rung_completeness.test_the_routing_breakdown_scopes_the_
+    residual` is). What stays true here: `_orphan_skill_roots` still admits
+    alchemy the moment something demands it —
+    `test_alchemy_heads_the_orphan_list_for_this_cell` above proves exactly
+    that, with real demand supplied. What no longer holds is that
+    `resolve_root`'s NATURAL walk (no demand injected) routes alchemy in
+    every scenario: measured on the committed 44, it is 0 — no scenario's gear
+    siblings or trunk currently demand alchemy above the floor. `routed`
+    below is therefore the pre-gate three plus cooking (the unconditional
+    floor), not the pre-gate three plus all five gathering skills."""
     routed: set[str] = set()
     for scenario in SCENARIOS.values():
         cell = routed_skills(census_state(scenario, bundle_game_data),
                              bundle_game_data)
-        assert SKILL in cell, scenario.name
+        assert SKILL not in cell, scenario.name
         routed |= cell
-    assert routed == GEAR_NAMEABLE | {SKILL, "cooking", "fishing", "mining",
-                                      "woodcutting"}
+    assert routed == GEAR_NAMEABLE | {"cooking"}

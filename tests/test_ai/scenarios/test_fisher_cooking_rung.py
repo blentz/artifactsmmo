@@ -200,7 +200,7 @@ def test_every_scenario_now_routes_cooking(bundle_game_data: GameData) -> None:
     target's crafting skill.
 
     `decisions/root._orphan_skill_roots` restores the standalone producer for
-    the skills no gear target can name, so all four are routed now. The O1
+    the skills no gear target can name, so all four were routed. The O1
     census's routed count moved 26 -> 194 of 336 cells with that change;
     residuals stayed at 0 because the rule's second conjunct is
     `LevelSkill(S, C+1).is_applicable`, the same predicate the census verdicts a
@@ -209,18 +209,28 @@ def test_every_scenario_now_routes_cooking(bundle_game_data: GameData) -> None:
     This test also used to end `assert "alchemy" not in routed`, on the claim
     that alchemy's utility potions make it gear-nameable. They do not — see
     `test_alchemy_rung.py` — and fixing `_gear_nameable_skills` moved the count
-    again, 194 -> 236 and 7 skills -> 8. So the whole-set equality moved out of
-    this cell: cooking and the three skills that arrived WITH it are asserted by
-    name here, and the exact routed set is pinned where it belongs — in
-    `test_alchemy_rung.test_every_scenario_now_routes_alchemy` and in
-    `test_open_rung_completeness.test_the_routing_breakdown_scopes_the_residual`.
-    A cell that restates a global set fails for other cells' reasons."""
+    again, 194 -> 236 and 7 skills -> 8.
+
+    THE GATHERING-DEMAND GATE (`decisions/root._orphan_skill_roots`'s third
+    conjunct, `gather_demand.gather_demand`) then narrowed this AGAIN, and
+    that narrowing is this test's whole point now rather than something it
+    happens to have to accommodate: fishing, mining and woodcutting are
+    gathering skills, so `resolve_root`'s NATURAL walk (no demand injected)
+    routes them only when a gear sibling or the trunk actually needs one —
+    measured on the committed 44, none of them do. COOKING gathers nothing,
+    is therefore never gated, and is the only one of the four still routed
+    unconditionally — which is exactly what makes it the anti-`Wait` floor
+    `decisions/root.py`'s docstring names. The exact routed set (cooking plus
+    the three skills a real gear target still names) is pinned where it
+    belongs — `test_open_rung_completeness.
+    test_the_routing_breakdown_scopes_the_residual`; this cell only needs
+    cooking's own name and fishing/mining/woodcutting's absence."""
     routed: set[str] = set()
     for scenario in SCENARIOS.values():
         routed |= routed_skills(census_state(scenario, bundle_game_data),
                                 bundle_game_data)
     assert SKILL in routed
-    assert routed >= {"cooking", "fishing", "mining", "woodcutting"}
+    assert routed.isdisjoint({"fishing", "mining", "woodcutting"})
 
 
 def test_the_fishers_cooking_root_plans_a_cooking_grind(

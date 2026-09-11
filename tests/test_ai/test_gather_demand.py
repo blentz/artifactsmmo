@@ -12,7 +12,17 @@ def _gd() -> GameData:
 
     `iron_boots` <- `iron_bar` <- `iron_ore`, and `iron_ore` is gathered from
     `iron_rocks` at mining@10 — the live shape, minimised.
-    """
+
+    `iron_nails` is a SECOND mining craft, in-level at mining@1 (unlike
+    `iron_bar`, which is craft_level=10 and so out of level for a mining@1
+    character). Its purpose is entirely for `_seed`'s recursion guard: without
+    it, `skill_grind_target("mining", state{mining: 1}, gd)` has no in-level
+    mining recipe to select at all and returns `None` regardless of whether the
+    guard runs, which is exactly what let the guard's own test pass with the
+    guard deleted (a reviewer's probe). With `iron_nails` in the catalogue,
+    removing the guard lets a mining `ReachSkillLevel` root seed itself with
+    `iron_nails`, whose closure bottoms out at `iron_ore`/mining@10 — real,
+    nonempty demand — so the guard's test now fails without the guard."""
     gd = GameData()
     gd._item_stats = {
         "iron_boots": ItemStats(code="iron_boots", level=10, type_="boots",
@@ -20,9 +30,12 @@ def _gd() -> GameData:
         "iron_bar": ItemStats(code="iron_bar", level=10, type_="resource",
                               crafting_skill="mining", crafting_level=10),
         "iron_ore": ItemStats(code="iron_ore", level=10, type_="resource"),
+        "iron_nails": ItemStats(code="iron_nails", level=1, type_="resource",
+                                crafting_skill="mining", crafting_level=1),
     }
     gd._crafting_recipes = {"iron_boots": {"iron_bar": 6},
-                            "iron_bar": {"iron_ore": 10}}
+                            "iron_bar": {"iron_ore": 10},
+                            "iron_nails": {"iron_ore": 1}}
     gd._resource_drops_full = {"iron_rocks": [("iron_ore", 100, 1, 1)]}
     gd._resource_skill = {"iron_rocks": ("mining", 10)}
     return gd
