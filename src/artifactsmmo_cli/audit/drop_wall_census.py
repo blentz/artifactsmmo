@@ -66,9 +66,9 @@ from pathlib import Path
 
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.combat import is_winnable
-from artifactsmmo_cli.ai.combat_deficit import combat_deficit
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
+from artifactsmmo_cli.ai.drop_evidence import DropEvidence, drop_evidence
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
@@ -171,25 +171,6 @@ subject at all."""
 
 
 @dataclass(frozen=True)
-class DropEvidence:
-    """Why an item has no drop route, decomposed along the exact conjuncts
-    `obtain_sources._drop_sources` gates on.
-
-    Carried per cell so the matrix can show WHY a verdict landed without the
-    reader re-deriving it, and so a wall arm that stops being reachable is
-    visible as a column of zeros rather than as an absent row."""
-
-    item: str
-    droppers: tuple[str, ...]
-    on_live_tiles: tuple[str, ...]
-    closes: tuple[str, ...]
-    """Live droppers whose margin `combat_deficit` closes with a gear chain."""
-    chain: tuple[str, ...]
-    """The chain for the first closing dropper — the acquisitions that would
-    open this route. Empty when nothing closes."""
-
-
-@dataclass(frozen=True)
 class DropResult:
     """One `(scenario, candidate root)` cell."""
 
@@ -275,29 +256,6 @@ def _granted(state: WorldState, items: tuple[str, ...]) -> WorldState:
     for item in items:
         inventory[item] = inventory.get(item, 0) + GRANT
     return replace(state, inventory=inventory)
-
-
-def drop_evidence(item: str, state: WorldState, game_data: GameData) -> DropEvidence:
-    """The three conjuncts plus `combat_deficit`'s verdict, for one item.
-
-    `combat_deficit` is asked at restorable hp for the same reason
-    `unwinnable_drop_items` is: it answers "what gear closes this fight", which is
-    not a question about the character's current hp."""
-    rested = replace(state, hp=state.max_hp)
-    droppers = tuple(monster for monster, _rate, _min_q, _max_q
-                     in game_data.monsters_dropping(item))
-    live = tuple(monster for monster in droppers
-                 if game_data.all_monster_locations.get(monster))
-    closes: list[str] = []
-    chain: tuple[str, ...] = ()
-    for monster in live:
-        deficit = combat_deficit(rested, game_data, monster)
-        if deficit is not None and deficit.closes:
-            closes.append(monster)
-            if not chain:
-                chain = tuple(step.code for step in deficit.chain)
-    return DropEvidence(item=item, droppers=droppers, on_live_tiles=live,
-                        closes=tuple(closes), chain=chain)
 
 
 def classify(candidate: MetaGoal, state: WorldState, game_data: GameData,

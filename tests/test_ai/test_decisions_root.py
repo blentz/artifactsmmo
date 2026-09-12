@@ -42,8 +42,10 @@ from artifactsmmo_cli.ai.decisions.root import (
     _next_rung_above,
     _orphan_skill_roots,
     _tier_gap,
+    dead_target_slots,
     resolve_root,
 )
+from artifactsmmo_cli.ai.drop_evidence import drop_evidence
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
@@ -65,6 +67,7 @@ from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
 from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT, FOCUS_SPAN
 from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, normal_band, tier_of_level
 from artifactsmmo_cli.audit.open_rung_completeness import census_state
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_strategy_driver import _ctx
 
@@ -297,6 +300,247 @@ def test_an_empty_slot_outranks_an_occupied_one_at_the_same_rung():
                       equipment=dict(empty.equipment, boots_slot="leather_boots"))
     assert _tier_gap("boots_slot", target, empty, gd) == 1
     assert _tier_gap("boots_slot", target, worn, gd) == 0
+
+
+# ---------------------------------------------------------------------------
+# WhichSlotIsFurthestBehind — the dead-target demotion
+# ---------------------------------------------------------------------------
+#
+# THE FIXTURE IS HAL'S THREE MEASURED SHAPES, 2026-09-12, level 20:
+#
+#   boots_slot   snakeskin_boots     blocker=spider_leg        live=('spider',)     closes=('spider',)  alive
+#   shield_slot  slime_shield        blocker=king_slimeball    live=('king_slime',) closes=()           DEAD
+#   helmet_slot  hard_leather_helmet blocker=astralyte_crystal live=()              closes=()           alive
+#
+# All three conjuncts of `_is_dead_target` are therefore witnessed BOTH ways by
+# the same three targets, which is what stops any one of them being a branch no
+# input takes. The gear rungs are picked so the dead target is the one the OLD
+# key put FIRST: without the leading term `slime_shield` heads this walk on a
+# gap of 10 against the other two's 1.
+
+
+def _gd_dead_drop() -> GameData:
+    """Two monsters and three blockers: one wall a gear chain opens, one wall
+    nothing opens, and one material no monster drops at all.
+
+    `spider` (200 hp, 10 earth attack, no resistance) is the closing wall — bare
+    the margin is -101, and `bronze_sword` + `hide_vest` carry it positive, so
+    `combat_deficit` returns a chain with `closes` set. `king_slime` (1000 hp,
+    60 earth attack, 50 resistance in every element) is the terminal one: no
+    subset of this catalogue moves it, which is the `MAX_CHAIN` greedy walk
+    returning a deficit that does NOT close rather than no deficit at all.
+    `astralyte_crystal` appears in no `_monster_drops` entry — the SPAWN wall.
+
+    Ladder rungs (1, 10), the same two `_gd()` uses, so `_tier_gap` reads the
+    same arithmetic the rest of this module's ordering tests are calibrated on.
+    """
+    gd = GameData()
+    gd._item_stats = {
+        "slime_shield": ItemStats(code="slime_shield", level=10, type_="shield",
+                                  resistance={"earth": 10}),
+        "snakeskin_boots": ItemStats(code="snakeskin_boots", level=1,
+                                     type_="boots", resistance={"fire": 3}),
+        "hard_leather_helmet": ItemStats(code="hard_leather_helmet", level=1,
+                                         type_="helmet", resistance={"water": 4}),
+        "bronze_sword": ItemStats(code="bronze_sword", level=1, type_="weapon",
+                                  attack={"earth": 16}),
+        "hide_vest": ItemStats(code="hide_vest", level=1, type_="body_armor",
+                               resistance={"earth": 20}, hp_bonus=40),
+        "spider_leg": ItemStats(code="spider_leg", level=1, type_="resource"),
+        "king_slimeball": ItemStats(code="king_slimeball", level=1,
+                                    type_="resource"),
+        "astralyte_crystal": ItemStats(code="astralyte_crystal", level=1,
+                                       type_="resource"),
+    }
+    # `IsThisTargetBlocked` refuses a blocker that is not in the target's own
+    # recipe, so every blocker below is a real ingredient rather than a label.
+    # `snakeskin_boots` takes BOTH materials: that is what lets the same target
+    # witness the closing wall and the terminal one without a second item.
+    gd._crafting_recipes = {
+        "slime_shield": {"king_slimeball": 6},
+        "hard_leather_helmet": {"astralyte_crystal": 1},
+        "snakeskin_boots": {"spider_leg": 2, "king_slimeball": 1},
+    }
+    gd._monster_level = {"spider": 1, "king_slime": 30}
+    gd._monster_hp = {"spider": 200, "king_slime": 1000}
+    gd._monster_attack = {"spider": {"earth": 10}, "king_slime": {"earth": 60}}
+    gd._monster_resistance = {"spider": {},
+                              "king_slime": {"earth": 50, "air": 50,
+                                             "fire": 50, "water": 50}}
+    fill_monster_stat_defaults(gd)
+    gd._monster_locations = {"spider": [(1, 1)], "king_slime": [(3, -1)]}
+    gd._monster_drops = {"spider": [("spider_leg", 10, 1, 1)],
+                         "king_slime": [("king_slimeball", 10, 1, 1)]}
+    return gd
+
+
+def _dead_drop_targets() -> dict[str, GearTarget]:
+    """The three targets, each blocked on its own material.
+
+    Handed in as a dict for the same reason
+    `test_equal_gaps_prefer_the_HIGHER_rung_target` does it: this node's input
+    IS a `dict[str, GearTarget]` and the claim under test is the ORDERING, not
+    how `classify_target` derived the blocker fields.
+    """
+    return {
+        "shield_slot": _target(code="slime_shield", blocker="king_slimeball"),
+        "helmet_slot": _target(code="hard_leather_helmet",
+                               blocker="astralyte_crystal"),
+        "boots_slot": _target(code="snakeskin_boots", blocker="spider_leg"),
+    }
+
+
+def test_the_dead_drop_fixture_is_hals_three_measured_shapes():
+    """Anti-vacuity for every test below: all three `drop_evidence` shapes are
+    DISTINCT here, so a fixture that collapsed two of them — a `king_slime`
+    something could beat, a `spider` nothing could, an `astralyte_crystal` that
+    grew a dropper — would make the conjunct tests agree by accident.
+
+    Also pins the two gaps the ordering depends on: the DEAD target is 10 rungs
+    behind and both live ones 1, so it is the target the pre-demotion key put
+    first and the demotion is the only thing that can move it."""
+    gd = _gd_dead_drop()
+    state = make_state(level=20)
+    targets = _dead_drop_targets()
+
+    closing = drop_evidence("spider_leg", state, gd)
+    assert closing.on_live_tiles == ("spider",) and closing.closes == ("spider",)
+    terminal = drop_evidence("king_slimeball", state, gd)
+    assert terminal.on_live_tiles == ("king_slime",) and terminal.closes == ()
+    spawn = drop_evidence("astralyte_crystal", state, gd)
+    assert spawn.droppers == () and spawn.on_live_tiles == ()
+
+    assert _tier_gap("shield_slot", targets["shield_slot"], state, gd) == 10
+    assert _tier_gap("helmet_slot", targets["helmet_slot"], state, gd) == 1
+    assert _tier_gap("boots_slot", targets["boots_slot"], state, gd) == 1
+
+
+def test_a_target_whose_blocker_no_chain_reaches_is_dead():
+    """The `WALL_DROPPER_OUT_OF_REACH` shape, and ONLY it: `king_slimeball` has
+    a live dropper and no chain closes it.
+
+    Kills the mutant that deletes the leading `dead` term from `_slot_order`
+    (the set would still be right but nothing would read it — see the ordering
+    test), and pins the set that the ordering tests below rest on."""
+    gd = _gd_dead_drop()
+    state = make_state(level=20)
+    assert dead_target_slots(_dead_drop_targets(), state, gd) == {"shield_slot"}
+
+
+def test_a_blocker_with_no_live_droppers_at_all_stays_alive():
+    """HAL's `hard_leather_helmet`/`astralyte_crystal`: a SPAWN wall, not a
+    combat wall. Nothing drops it, so `closes` is empty for a reason that says
+    nothing about any fight, and a rule that read only "closes is empty" would
+    demote every gather-gated target in the catalogue.
+
+    Kills the mutant that drops `_is_dead_target`'s MIDDLE conjunct
+    (`bool(evidence.on_live_tiles)`): without it `helmet_slot` joins the dead
+    set and this equality fails."""
+    gd = _gd_dead_drop()
+    state = make_state(level=20)
+    targets = _dead_drop_targets()
+    assert drop_evidence("astralyte_crystal", state, gd).on_live_tiles == ()
+    assert "helmet_slot" not in dead_target_slots(targets, state, gd)
+
+
+def test_a_target_whose_dropper_a_gear_chain_closes_stays_alive():
+    """HAL's `snakeskin_boots`/`spider_leg`: unbeatable TODAY, and
+    `combat_deficit` names the gear that changes that. The target is expensive,
+    not dead, and demoting it would bury the walk's own route to opening it.
+
+    Kills the mutant that drops `_is_dead_target`'s LAST conjunct (`not
+    evidence.closes`): without it `boots_slot` joins the dead set."""
+    gd = _gd_dead_drop()
+    state = make_state(level=20)
+    targets = _dead_drop_targets()
+    assert drop_evidence("spider_leg", state, gd).closes == ("spider",)
+    assert "boots_slot" not in dead_target_slots(targets, state, gd)
+
+
+def test_an_attainable_target_is_never_dead_however_unbeatable_the_world():
+    """`blocker is None` (attainable, or skill-gated) and `blocker == code` (a
+    leaf with no recipe) are the two shapes that are not a claim about a
+    material at all. Neither may consult `drop_evidence`, and neither may be
+    demoted — a skill-gated target is the one thing the walk can always make
+    progress on.
+
+    Kills the mutant that drops `_is_dead_target`'s FIRST conjunct."""
+    gd = _gd_dead_drop()
+    state = make_state(level=20)
+    targets = {
+        "shield_slot": _target(code="slime_shield", blocker=None,
+                               blocking_skill="gearcrafting",
+                               blocking_skill_level=20),
+        "boots_slot": _target(code="snakeskin_boots", blocker="snakeskin_boots"),
+    }
+    assert dead_target_slots(targets, state, gd) == frozenset()
+
+
+def test_a_dead_target_sorts_below_a_lower_ranked_live_one():
+    """THE FIX. `slime_shield` is 10 rungs behind against the other two's 1, so
+    on the three history-free components it is the argmax and heads the walk —
+    which is what HAL did live: root `ObtainItem(king_slimeball, 6)`, planner
+    `nodes=6 depth=2 plan_len=0 NO PLAN`, every cycle.
+
+    The leading term is the ONLY thing that can move it, and the schema
+    tiebreak decides the two survivors (helmet is index 3, boots index 6).
+
+    THE MUTANT THIS KILLS: delete the `1 if slot in dead else 0` component from
+    `_slot_order`'s tuple. The head reverts to `shield_slot`."""
+    gd = _gd_dead_drop()
+    state = make_state(level=20)
+    walk = RootWalk()
+    child = WhichSlotIsFurthestBehind(_dead_drop_targets(), walk).resolve(
+        state, gd, _ctx(), None)
+    assert isinstance(child, IsThisTargetBlocked)
+    assert child.slot == "helmet_slot"
+    assert [slot for slot, _ in walk.sibling_targets] == ["boots_slot", "shield_slot"]
+
+
+def test_a_dead_target_is_demoted_and_never_dropped():
+    """DEMOTE, NEVER DROP. `slime_shield` is still the best shield this
+    character has and the verdict is a fact about THIS state — a level-30 HAL
+    beats `king_slime` — so a target removed here could never come back.
+
+    It keeps its full place at the TAIL: last among the siblings, and still
+    ranked against any dead peer by the same three components it always was.
+    `_slot_order` is a total order over the whole set either way.
+
+    THE MUTANT THIS KILLS: turn the demotion into a filter (drop dead slots
+    from `targets` before sorting). The head is unchanged, so the test above
+    still passes; this one fails on the missing sibling."""
+    gd = _gd_dead_drop()
+    state = make_state(level=20)
+    targets = _dead_drop_targets()
+    walk = RootWalk()
+    WhichSlotIsFurthestBehind(targets, walk).resolve(state, gd, _ctx(), None)
+    ranked = ["helmet_slot"] + [slot for slot, _ in walk.sibling_targets]
+    assert set(ranked) == set(targets)
+    assert ranked[-1] == "shield_slot"
+
+
+def test_two_dead_targets_keep_the_old_order_between_themselves():
+    """The leading term is 0/1, not a rank: it separates the live from the dead
+    and decides nothing inside either group. Two dead targets are still ordered
+    by gap, then target rung, then the schema — so the demotion cannot smuggle
+    in the alphabetical tiebreak `feedback_no_alphabetical_tiebreak` forbids
+    (alphabetically `boots_slot` precedes `shield_slot`; by gap the shield
+    leads).
+
+    THE MUTANT THIS KILLS: make the leading term the ONLY term for dead slots
+    (e.g. returning early with a constant tail)."""
+    gd = _gd_dead_drop()
+    state = make_state(level=20)
+    targets = dict(_dead_drop_targets())
+    # boots' blocker moved onto the terminal monster: now BOTH are dead.
+    targets["boots_slot"] = _target(code="snakeskin_boots",
+                                    blocker="king_slimeball")
+    dead = dead_target_slots(targets, state, gd)
+    assert dead == {"shield_slot", "boots_slot"}
+    walk = RootWalk()
+    child = WhichSlotIsFurthestBehind(targets, walk).resolve(state, gd, _ctx(), None)
+    assert child.slot == "helmet_slot"
+    assert [slot for slot, _ in walk.sibling_targets] == ["shield_slot", "boots_slot"]
 
 
 def test_a_gear_target_absent_from_game_data_is_an_error_not_a_default_rung():

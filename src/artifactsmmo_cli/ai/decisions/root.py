@@ -90,6 +90,7 @@ from artifactsmmo_cli.ai.decision import Decision, resolve_node
 # is reached first executes while the other is half built. A NAME import
 # of `route_price` raises ImportError when `decisions.route` is the entry.
 from artifactsmmo_cli.ai.decisions import route as _route
+from artifactsmmo_cli.ai.drop_evidence import drop_evidence
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -281,10 +282,82 @@ def _tier_gap(slot: str, target: GearTarget, state: WorldState,
     return _target_rung(game_data, target.code) - worn_rung
 
 
+def _is_dead_target(target: GearTarget, state: WorldState,
+                    game_data: GameData) -> bool:
+    """Is this target's blocker a wall NOTHING IN THE CATALOGUE OPENS?
+
+    Exactly the drop-wall census's `WALL_DROPPER_OUT_OF_REACH` arm, whose own
+    docstring calls it "An honest terminal wall, and the arm a future pricing
+    change must decline rather than charge". Three conjuncts, and the middle one
+    is the whole reason this is not just "the blocker is unreachable":
+
+      * MATERIAL-GATED. `blocker is None` is an attainable target and
+        `blocker == code` is a leaf with no recipe (`GearTarget`'s docstring
+        names both shapes). Neither is a claim about a monster.
+      * IT HAS LIVE DROPPERS. `on_live_tiles` non-empty. Live 2026-09-12, HAL:
+        `hard_leather_helmet` is blocked on `astralyte_crystal`, which NO
+        monster drops at all — a SPAWN wall, a resource node the character has
+        not unlocked, not a fight it cannot win. Dropping that conjunct would
+        demote every gather-gated target in the catalogue on evidence that says
+        nothing about them.
+      * NONE OF THEM CLOSES. `combat_deficit` finds no gear chain that lifts the
+        margin over any live dropper, so the target is not merely expensive —
+        there is no sequence of acquisitions in the catalogue that makes it
+        servable at this level. HAL's `slime_shield` sits here: `king_slimeball`
+        drops from `king_slime` alone, a static 1000-hp spawn, and his best
+        reachable chain gets the margin from -17 to -8.
+
+    DEMOTION, NEVER EXCLUSION — see `_slot_order`. The verdict is a fact about
+    THIS cycle's state (a level-30 HAL closes it), so a target that leaves the
+    sheet here could never come back on its own.
+    """
+    if target.blocker is None or target.blocker == target.code:
+        return False
+    evidence = drop_evidence(target.blocker, state, game_data)
+    return bool(evidence.on_live_tiles) and not evidence.closes
+
+
+def dead_target_slots(targets: dict[str, GearTarget], state: WorldState,
+                      game_data: GameData) -> frozenset[str]:
+    """The slots of `targets` whose target is `_is_dead_target`, computed ONCE.
+
+    THE REASON THIS IS NOT A `_slot_order` CONJUNCT COMPUTED IN PLACE:
+    `_slot_order` is a SORT KEY, and `drop_evidence` walks every dropper of the
+    blocker through `combat_deficit`, which costs tens of milliseconds. A key
+    function runs O(n log n) times per cycle and `sorted` gives no memo, so
+    asking there turns a 74 ms resolution into seconds. `resolve` asks once, for
+    exactly the `len(targets)` distinct targets, and hands the answer down.
+    """
+    return frozenset(slot for slot, target in targets.items()
+                     if _is_dead_target(target, state, game_data))
+
+
 def _slot_order(item: tuple[str, GearTarget], state: WorldState,
-                game_data: GameData) -> tuple[int, int, int]:
-    """Descent key for `WhichSlotIsFurthestBehind`: furthest behind first,
-    then the higher-rung target, then the API schema's own slot order.
+                game_data: GameData, dead: frozenset[str]
+                ) -> tuple[int, int, int, int]:
+    """Descent key for `WhichSlotIsFurthestBehind`: reachable targets first,
+    then furthest behind, then the higher-rung target, then the API schema's
+    own slot order.
+
+    The LEADING component is `dead_target_slots`' verdict as 0/1, so an
+    ascending sort puts every target whose blocker something can open above
+    every target whose blocker nothing can. It is a DEMOTION and the key is
+    total either way: a dead target keeps its full place in
+    `RootResolution.alternatives` and is still ranked against its dead peers by
+    the same three components, it just cannot head the resolution while a
+    servable sibling exists. Live 2026-09-12, HAL at level 20: `slime_shield`
+    (blocked on `king_slimeball`, dropped only by `king_slime`, whose margin
+    closes at no level he can reach) headed the walk, so the planner was handed
+    `ObtainItem(king_slimeball, 6)` and returned `nodes=6 depth=2 plan_len=0 NO
+    PLAN` every cycle. The fall-through cost no cycles; it cost the resolution
+    its meaning.
+
+    NOT A FILTER, and deliberately not. The verdict is state-dependent — HAL at
+    level 30 beats `king_slime` — and `gear_targets_with_blockers` exists
+    precisely to keep unattainable targets visible rather than dropping them on
+    the floor (`near_term_gear` drops them; that is the defect `GearTarget` was
+    introduced for). A removed target is invisible to `_servable_promotion`, to
+    the plan pane and to every census that walks the alternatives.
 
     The last component is `EQUIPMENT_SLOTS.index`, the order the character
     schema declares its slots in — NOT `sorted(slot)`. An alphabetical
@@ -293,7 +366,8 @@ def _slot_order(item: tuple[str, GearTarget], state: WorldState,
     slots this codebase actually publishes.
     """
     slot, target = item
-    return (-_tier_gap(slot, target, state, game_data),
+    return (1 if slot in dead else 0,
+            -_tier_gap(slot, target, state, game_data),
             -_target_rung(game_data, target.code),
             EQUIPMENT_SLOTS.index(slot))
 
@@ -659,6 +733,17 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
     The weight is the TIER GAP, not `pursuit_value`: the gap is what
     `_slot_order` already ranks on, so the aged and unaged arms decay the same
     quantity and a fully-inert ledger cannot reorder anything.
+
+    THE DEAD-TARGET DEMOTION IS A KEY, NOT A GATE, and it is ordered against the
+    aging above rather than layered over it. `dead_target_slots` is asked ONCE
+    here and leads `_slot_order`, so a provably-dead target cannot head the
+    UNAGED arm — and since the player charges focus against the committed root,
+    a target that never commits never ages, so it cannot open the aged arm for
+    itself either. It remains d'Hondt-eligible once some OTHER root has aged,
+    which is the anti-starvation property this node exists for and which the
+    demotion deliberately does not revoke: a dead-today target is dead at THIS
+    state, and a walk that could never revisit it would be a filter wearing a
+    sort key's clothes.
     """
 
     name = "WhichSlotIsFurthestBehind"
@@ -671,8 +756,10 @@ class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
                 ctx: SelectionContext, history: LearningStore | None
                 ) -> "Decision[MetaGoal] | MetaGoal | None":
         self.walk.trail.append(self.name)
+        # ONCE per cycle, NOT inside the key: see `dead_target_slots`.
+        dead = dead_target_slots(self.targets, state, game_data)
         ranked = sorted(self.targets.items(),
-                        key=lambda item: _slot_order(item, state, game_data))
+                        key=lambda item: _slot_order(item, state, game_data, dead))
         head = self._aged_head(ranked, state, game_data, ctx, history)
         self.walk.sibling_targets = [item for item in ranked if item is not head]
         slot, target = head

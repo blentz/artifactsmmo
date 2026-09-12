@@ -214,7 +214,11 @@ def test_the_out_of_reach_arm_fires_on_a_monster_no_chain_closes(
     scenario = SCENARIOS["l10_copper_adequate"]
     game_data = declared_world(scenario, BUNDLE, cache)
     state = scenario_state(scenario, game_data)
-    monkeypatch.setattr("artifactsmmo_cli.audit.drop_wall_census.combat_deficit",
+    # `ai.drop_evidence`, not this census module: `drop_evidence` and its
+    # dataclass moved there so `decisions/root` could read them without
+    # production importing from `audit/`. The census imports the same function
+    # and the control is unchanged — only the module that owns the name moved.
+    monkeypatch.setattr("artifactsmmo_cli.ai.drop_evidence.combat_deficit",
                         lambda *_a, **_kw: None)
     evidence = drop_evidence("cowhide", state, game_data)
     assert evidence.on_live_tiles
