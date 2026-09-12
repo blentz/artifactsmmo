@@ -92,6 +92,7 @@ POTION_BASELINE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_baselin
 MAX_BATCH_FROM_HELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "max_batch_from_held.py"
 OPTIMAL_BUY_MIX_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "optimal_buy_mix.py"
 BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
+DEPOSIT_ALL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "deposit_all.py"
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
 REST_COOLDOWN_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "rest_cooldown_core.py"
@@ -4332,6 +4333,7 @@ _ALL_SRCS = [
     MAX_BATCH_FROM_HELD_SRC,
     OPTIMAL_BUY_MIX_SRC,
     BANK_EXPANSION_TIMING_SRC,
+    DEPOSIT_ALL_SRC,
     EVENT_WINDOW_SRC,
     COST_CORE_SRC,
     NPC_BUY_CORE_SRC,
@@ -5496,6 +5498,68 @@ OPTIMAL_BUY_MIX_MUTATIONS = [
 # or the reserve-safety gate so the Python verdict diverges from the Lean
 # `shouldExpandBank` oracle. Killed by
 # formal/diff/test_bank_expansion_timing_diff.py.
+EXPANSION_FIRES_MUTATIONS = [
+    # `expansion_fires` composes the PROVEN core with a conjunct the Lean model
+    # does not carry, so these are killed by the unit suite, not the
+    # differential — hence their own run_group (a unit-killed mutant in the
+    # differential group would survive and read as a coverage hole).
+    #
+    # Drop the pocket-executability conjunct: BANK_EXPAND then fires on an
+    # account balance the pocket cannot draw from, and
+    # BuyBankExpansionAction.is_applicable refuses the buy — a rung that fires
+    # and plans nothing.
+    ("expansion_fires: pocket-executability conjunct dropped",
+     "    return pocket_gold >= cost and should_expand_bank(",
+     "    return should_expand_bank("),
+    # Feed the core the POCKET instead of the ACCOUNT: the pre-fix reading that
+    # left live Robby refusing an expansion the account could fund, wedged at
+    # 157/158 items against a full bank for 10 hours.
+    ("expansion_fires: reserve gate reads pocket instead of account",
+     "        used, capacity, account_gold, cost, reserve, trigger_num, trigger_den)",
+     "        used, capacity, pocket_gold, cost, reserve, trigger_num, trigger_den)"),
+    # Affordability `>=` -> `>`: a pocket holding EXACTLY the price can pay it,
+    # so this refuses a buy that is executable.
+    ("expansion_fires: affordability >= -> > (off-by-one on exact price)",
+     "    return pocket_gold >= cost and should_expand_bank(",
+     "    return pocket_gold > cost and should_expand_bank("),
+]
+
+DEPOSIT_ALL_ROOM_MUTATIONS = [
+    # Neuter the per-code room filter: DepositAll again offers a full bank
+    # deposits it cannot take, which is what put a silently-failing DepositAll
+    # at the head of live Robby's grind sub-plan for 181 consecutive cycles.
+    ("deposit_all: full-bank room filter neutered (offers unacceptable deposits)",
+     "        if not known or bank_has_room(self.accessible, state.bank_items, capacity):\n"
+     "            return deposits",
+     "        return deposits"),
+    # Filter unconditionally: an unread bank (`bank_items is None`) or unread
+    # capacity (0) then reads as FULL, refusing every deposit before the first
+    # bank visit. UNKNOWN IS NOT FULL.
+    ("deposit_all: unknown bank treated as full (knownness guard dropped)",
+     "        if not known or bank_has_room(self.accessible, state.bank_items, capacity):",
+     "        if False:"),
+    # Drop the per-code exemption: a full bank still accepts more of a stack it
+    # already carries, so keeping nothing sheds less than it could.
+    ("deposit_all: per-code exemption dropped (full bank takes nothing)",
+     "        return [(code, qty) for code, qty in deposits if code in banked]",
+     "        return []"),
+]
+
+DEPOSIT_ALL_ERROR_MUTATIONS = [
+    # Its own group because a different kill-test owns it (run_group takes one
+    # path): the room mutants above are killed by the applicability suite, this
+    # one by the execute-integration suite.
+    #
+    # Swallow the server's rejection again: every documented non-200 arrives as
+    # an ErrorResponseSchema with no `.data`, so skipping it returns the
+    # UNCHANGED state as a success with no cooldown — the silent-failure
+    # livelock itself.
+    ("deposit_all: API rejection swallowed instead of raised",
+     '            result = Action._raise_for_error(result, "DepositAll")',
+     "            if not hasattr(result, \"data\") or result.data is None:\n"
+     "                continue"),
+]
+
 BANK_EXPANSION_TIMING_MUTATIONS = [
     # Flip the fill-threshold boundary `>=` to `>`: at an exact fill tie
     # (used*den == cap*num) the bank should be eligible, but now it spuriously
@@ -6047,8 +6111,8 @@ LADDER_MEANS_FIRES_MUTATIONS = [
         # conjunct, so the differential diverges whenever
         # cost <= gold < cost + reserve.
         "ladder/means: BANK_EXPAND reserve gate dropped (bare gold >= cost)",
-        "            game_data.next_expansion_cost, ctx.gold_reserve,",
-        "            game_data.next_expansion_cost, 0,",
+        "            account_gold(state), game_data.next_expansion_cost, ctx.gold_reserve,",
+        "            account_gold(state), game_data.next_expansion_cost, 0,",
     ),
     (
         # Swapping the trigger pair flips the fill gate to used*95 >= cap*100
@@ -7591,6 +7655,12 @@ def _collect_all_groups() -> None:
               "formal/diff/test_potion_baseline_diff.py", survivors)
     run_group(BANK_EXPANSION_TIMING_SRC, BANK_EXPANSION_TIMING_MUTATIONS,
               "formal/diff/test_bank_expansion_timing_diff.py", survivors)
+    run_group(BANK_EXPANSION_TIMING_SRC, EXPANSION_FIRES_MUTATIONS,
+              "tests/test_ai/test_bank_expansion_timing.py", survivors)
+    run_group(DEPOSIT_ALL_SRC, DEPOSIT_ALL_ROOM_MUTATIONS,
+              "tests/test_ai/test_deposit_all_bank_full.py", survivors)
+    run_group(DEPOSIT_ALL_SRC, DEPOSIT_ALL_ERROR_MUTATIONS,
+              "tests/test_ai/test_actions_execute.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_WINDOW_MUTATIONS,
               "formal/diff/test_event_window_diff.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_PLAN_WINDOW_MUTATIONS,

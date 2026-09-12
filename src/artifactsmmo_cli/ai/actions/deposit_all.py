@@ -13,6 +13,7 @@ from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.cost_core import qty_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.bank_room import bank_has_room
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -70,8 +71,38 @@ class DepositAllAction(Action):
         if cached is not None and cached[0] is state:
             return cached[1]
         out = select_bank_deposits(state, self.game_data, self.ctx)
+        out = self._acceptable(state, out)
         self._last_deposits = (state, out)
         return out
+
+    def _acceptable(self, state: WorldState,
+                    deposits: list[tuple[str, int]]) -> list[tuple[str, int]]:
+        """`deposits` minus the codes a FULL bank cannot take — those needing a
+        new slot it does not have.
+
+        Room is a PER-CODE question. A deposit into a stack the bank already
+        carries merges into that slot and a full bank still accepts it; only a
+        code the bank does not hold needs a slot of its own. Filtering the list
+        every caller reads keeps `is_applicable`, `apply` and `execute` telling
+        the same story — gating only `is_applicable` would leave `apply`
+        projecting a deposit `execute` cannot make.
+
+        UNKNOWN IS NOT FULL, which is why `bank_has_room` cannot answer alone:
+        it folds `bank_items is None` (bank not read this cycle) and
+        `bank_capacity == 0` (capacity not read) into the same False as a
+        genuinely full bank. Treating those as full would refuse every deposit
+        before the first bank visit, so knownness is established first and the
+        shared predicate then answers the room question itself.
+
+        Live Robby 2026-09-12: 50 codes in 50 slots, six held codes, none of
+        them banked. Every deposit 462'd and the skill-grind sub-plan re-emitted
+        `DepositAll` at its head for 181 consecutive cycles."""
+        capacity = self.game_data.bank_capacity if self.game_data is not None else 0
+        known = state.bank_items is not None and capacity > 0
+        if not known or bank_has_room(self.accessible, state.bank_items, capacity):
+            return deposits
+        banked = state.bank_items or {}
+        return [(code, qty) for code, qty in deposits if code in banked]
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         return self.accessible and bool(self._deposits(state))
@@ -115,14 +146,20 @@ class DepositAllAction(Action):
         for code, qty in self._deposits(state):
             body = SimpleItemSchema(code=code, quantity=qty)
             result = deposit_item(client=client, name=state.character, body=[body])
-            if result is not None and hasattr(result, "data") and result.data is not None:
-                last_state = WorldState.from_character_schema(
-                    result.data.character,
-                    bank_items=last_state.bank_items,
-                    bank_gold=last_state.bank_gold,
-                    pending_items=last_state.pending_items,
-                    active_events=last_state.active_events,
-                )
+            # A REJECTION IS NOT A SKIP. Every documented non-200 comes back as
+            # an `ErrorResponseSchema`, which carries no `.data` — so the old
+            # `hasattr(result, "data")` guard swallowed each one and returned
+            # the UNCHANGED state as a success, with no cooldown. Live Robby
+            # 2026-09-12 spent 8.3 hours re-deriving the identical plan that way
+            # against a full bank (462), reporting `ok` on all 181 cycles.
+            result = Action._raise_for_error(result, "DepositAll")
+            last_state = WorldState.from_character_schema(
+                result.data.character,
+                bank_items=last_state.bank_items,
+                bank_gold=last_state.bank_gold,
+                pending_items=last_state.pending_items,
+                active_events=last_state.active_events,
+            )
         return last_state
 
     def __repr__(self) -> str:

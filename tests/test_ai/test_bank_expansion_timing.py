@@ -5,7 +5,7 @@ formal/Formal/BankExpansionTiming.lean. These tests pin both gates (fill
 threshold via exact cross-multiply, reserve safety) and their interaction.
 """
 
-from artifactsmmo_cli.ai.bank_expansion_timing import should_expand_bank
+from artifactsmmo_cli.ai.bank_expansion_timing import expansion_fires, should_expand_bank
 
 
 class TestShouldExpandBank:
@@ -47,3 +47,38 @@ class TestShouldExpandBank:
     def test_both_gates_must_hold(self):
         # below threshold AND below reserve -> False
         assert should_expand_bank(10, 100, 100, 60, 500, 95, 100) is False
+
+
+class TestExpansionFires:
+    """`expansion_fires` composes the proven core with the pocket-executability
+    conjunct the core deliberately does not carry.
+
+    The reserve is an ACCOUNT floor (`progression_reserve.can_spend`: "one
+    reserve governs"), so the core's `gold - cost >= reserve` gate must be fed
+    the account balance. Executability — the gold being in the POCKET, where the
+    buy_expansion endpoint spends it — is the caller's question, and there is no
+    withdraw-gold edge in the action pool, so firing on an account the pocket
+    cannot draw from would emit a rung no plan can serve.
+    """
+
+    def test_fires_when_pocket_pays_and_account_holds_the_reserve(self):
+        """Live Robby 2026-09-12: bank 50/50, cost 3500, pocket 3797, bank 12553,
+        reserve 5100. Pocket-only reads 3797-3500=297 < 5100 and refuses; the
+        account holds 16350, so the buy is reserve-safe and must fire."""
+        assert expansion_fires(50, 50, 3797, 16350, 3500, 5100, 95, 100) is True
+
+    def test_no_fire_when_pocket_cannot_pay_the_cost(self):
+        """Account is reserve-safe but the pocket is short. No withdraw-gold edge
+        exists, so firing here would be a rung the planner cannot serve."""
+        assert expansion_fires(50, 50, 100, 20100, 3500, 0, 95, 100) is False
+
+    def test_no_fire_when_account_falls_below_the_reserve(self):
+        """The core's reserve gate still governs — on the account balance."""
+        assert expansion_fires(50, 50, 3797, 3797, 3500, 5100, 95, 100) is False
+
+    def test_no_fire_below_fill_threshold_even_when_funded(self):
+        assert expansion_fires(10, 50, 3797, 16350, 3500, 0, 95, 100) is False
+
+    def test_pocket_exactly_covering_the_cost_fires(self):
+        """Boundary: `pocket >= cost`, so an exact match is executable."""
+        assert expansion_fires(50, 50, 3500, 16350, 3500, 5100, 95, 100) is True

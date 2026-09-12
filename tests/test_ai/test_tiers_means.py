@@ -902,3 +902,32 @@ def test_the_offline_context_does_not_fire_task_exchange_on_zero_coins():
     state = make_state(inventory={}, task_code="t", task_total=10, task_progress=0)
     _, discretionary = active_means(state, GameData(), None, NO_PROFILE_CONTEXT)
     assert MeansKind.TASK_EXCHANGE not in discretionary
+
+
+def test_bank_expand_fires_on_account_gold_not_pocket_alone():
+    """Live Robby 2026-09-12: bank 50/50, cost 3500, pocket 3797, bank 12553,
+    reserve 5100. The reserve is an ACCOUNT floor, so the buy is reserve-safe
+    (16350-3500=12850 >= 5100) even though the pocket alone reads 297 < 5100.
+    Refusing here left him wedged at 157/158 with no shed route for 10 hours."""
+    gd = GameData()
+    gd._bank_capacity = 50
+    gd._next_expansion_cost = 3500
+    state = make_state(bank_items={f"item{i}": 1 for i in range(50)},
+                       gold=3797, bank_gold=12553)
+    _, discretionary = active_means(state, gd, None,
+                                    _ctx(bank_accessible=True, gold_reserve=5100))
+    assert MeansKind.BANK_EXPAND in discretionary
+
+
+def test_bank_expand_absent_when_pocket_cannot_pay_cost():
+    """The account is reserve-safe but the pocket cannot fund the buy, and no
+    withdraw-gold edge exists, so BuyBankExpansionAction.is_applicable would
+    refuse — firing here emits a rung the planner cannot serve."""
+    gd = GameData()
+    gd._bank_capacity = 50
+    gd._next_expansion_cost = 3500
+    state = make_state(bank_items={f"item{i}": 1 for i in range(50)},
+                       gold=100, bank_gold=20000)
+    _, discretionary = active_means(state, gd, None,
+                                    _ctx(bank_accessible=True, gold_reserve=0))
+    assert MeansKind.BANK_EXPAND not in discretionary

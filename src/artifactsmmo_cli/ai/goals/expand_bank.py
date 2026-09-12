@@ -4,13 +4,13 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.bank_expansion_timing import (
     TRIGGER_FILL_DEN,
     TRIGGER_FILL_NUM,
-    should_expand_bank,
+    expansion_fires,
 )
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import active_bank_space_cost
-from artifactsmmo_cli.ai.progression_reserve import reserve_floor
+from artifactsmmo_cli.ai.progression_reserve import account_gold, reserve_floor
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # value() activates at or above the shared TRIGGER_FILL_NUM/DEN ratio (95/100,
@@ -68,12 +68,17 @@ class ExpandBankGoal(Goal):
                 self._combat_monster, self._gather_skills,
             )
             used = max(used, profile_cost)
-        # Fire only at/above the fill threshold AND when buying keeps gold at or
-        # above the progression reserve floor. A bank expansion is never a
-        # reserved gear code so buying=None applies the full floor.
-        # Exact integer threshold, no float.
-        if not should_expand_bank(
-            used, game_data.bank_capacity, state.gold,
+        # Fire only at/above the fill threshold, when the POCKET can pay the
+        # price, AND when buying keeps the ACCOUNT at or above the progression
+        # reserve floor. A bank expansion is never a reserved gear code so
+        # buying=None applies the full floor. The reserve is account-scoped
+        # (`account_gold`: one bank, one balance) while the buy_expansion
+        # endpoint spends the pocket, so the two balances answer two different
+        # questions — see `bank_expansion_timing`. Exact integer threshold, no
+        # float. Shared with the arbiter's BANK_EXPAND guard so the two cannot
+        # re-type it apart again.
+        if not expansion_fires(
+            used, game_data.bank_capacity, state.gold, account_gold(state),
             game_data.next_expansion_cost, reserve_floor(state, game_data, None),
             TRIGGER_FILL_NUM, TRIGGER_FILL_DEN,
         ):

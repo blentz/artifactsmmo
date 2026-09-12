@@ -195,3 +195,38 @@ class TestExpandBankGoal:
             bank_items={f"item_{i}": 1 for i in range(29)},
         )
         assert goal.priority(state, gd) == 0.0
+
+
+class TestExpandBankGoalAccountReserve:
+    """The goal reads the same account-scoped reserve the BANK_EXPAND guard does.
+
+    The two re-typed the decision independently once before (drift flagged
+    2026-07-06, fixed by routing both through the shared core); they now both
+    call `expansion_fires`, and these tests pin the goal half.
+    """
+
+    def test_value_40_when_banked_gold_keeps_the_account_above_the_reserve(self):
+        """reserve_floor=500 (iron_armor), pocket=520, cost=100, bank_gold=1000.
+        Pocket-only reads 420 < 500 and refuses; the account holds 1520, so
+        post-buy 1420 >= 500 and the goal fires."""
+        gd = make_gd(bank_capacity=30, next_expansion_cost=100)
+        gd._item_stats = {
+            "iron_armor": ItemStats(code="iron_armor", level=5, type_="body_armor", hp_bonus=40),
+            "rags": ItemStats(code="rags", level=1, type_="body_armor", hp_bonus=5),
+        }
+        gd._npc_stock = {"merchant": {"iron_armor": 500}}
+        goal = ExpandBankGoal(bank_accessible=True, game_data=gd)
+        state = make_state(
+            level=5, gold=520, bank_gold=1000, equipment={"body_armor_slot": "rags"},
+            bank_items={f"item_{i}": 1 for i in range(29)},
+        )
+        assert goal.value(state, gd) == 40.0
+
+    def test_value_zero_when_pocket_cannot_pay_the_cost(self):
+        """Account reserve-safe, pocket short. No withdraw-gold edge exists, so a
+        firing goal would plan nothing."""
+        gd = make_gd(bank_capacity=30, next_expansion_cost=1000)
+        goal = ExpandBankGoal(bank_accessible=True, game_data=gd)
+        state = make_state(gold=100, bank_gold=50000,
+                           bank_items={f"item_{i}": 1 for i in range(29)})
+        assert goal.value(state, gd) == 0.0

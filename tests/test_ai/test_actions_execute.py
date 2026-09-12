@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.actions.movement_semantic import MoveTo
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 
@@ -582,3 +583,36 @@ class TestMoveToExecute:
 
         assert new_state.x == 1
         assert new_state.y == 0
+
+
+class TestDepositAllActionSurfacesApiErrors:
+    """A rejected deposit must reach the cycle as an error, not as success.
+
+    Live Robby 2026-09-12: the bank was full (50/50), every deposit 462'd, and
+    `execute` skipped each rejection because an `ErrorResponseSchema` carries no
+    `.data`. It then returned the UNCHANGED state with outcome `ok` and a 0s
+    cooldown, so the planner re-derived the identical plan every cycle — 181
+    consecutive no-op cycles over 8.3 hours, 0 XP, bag pinned at 157/158.
+    """
+
+    def test_raises_when_the_server_rejects_the_deposit(self):
+        from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
+        from artifactsmmo_api_client.models.error_schema import ErrorSchema
+
+        from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
+
+        gd = GameData()
+        gd._item_stats = {"copper_ore": ItemStats(code="copper_ore", level=1, type_="resource")}
+        gd._npc_stock = {"merchant": {"copper_ore": 5}}
+        gd._bank_capacity = 50
+        action = DepositAllAction(bank_location=(4, 0), accessible=True, game_data=gd)
+        state = make_state(x=4, y=0, inventory={"copper_ore": 40}, inventory_max=50,
+                           bank_items={"copper_ore": 1})
+        client = MagicMock()
+        rejection = ErrorResponseSchema(error=ErrorSchema(code=462, message="Bank is full."))
+
+        with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item", return_value=rejection):
+            with pytest.raises(ApiActionError) as excinfo:
+                action.execute(state, client)
+
+        assert excinfo.value.code == 462
