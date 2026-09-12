@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.search_bounds import NO_CLOCK, SEARCH_NODE_BUDGET
 
 
 def _gd_boots() -> GameData:
@@ -73,7 +74,8 @@ def test_is_plannable_admits_from_scratch_copper_boots():
     `min_gather_steps=1 + min_crafts=2 + equip=1 = 4`, well under 32, and
     `is_plannable` correctly flips to True. Not a mechanical rebaseline: the
     REAL `GOAPPlanner` over the REAL `build_actions` pool for this exact
-    scratch state finds a 19-action plan in 14,717 nodes with no timeout, so
+    scratch state finds a 19-action plan in 14,294 explored / 65,145 created
+    nodes with no timeout (re-measured 2026-09-12), so
     the new verdict matches what the planner can actually do."""
     goal = UpgradeEquipmentGoal(committed_target=("copper_boots", "boots_slot"))
     state = make_state(inventory={}, bank_items={})  # boots_slot empty by default
@@ -84,9 +86,11 @@ def test_is_plannable_admits_from_scratch_copper_boots():
     actions = build_actions(gd, state, objective, bank_accessible=True,
                             task_exchange_min_coins=0)
     planner = GOAPPlanner()
-    plan = planner.plan(state, goal, actions, gd, None, budget_seconds=30.0)
+    plan = planner.plan(state, goal, actions, gd, None,
+                        budget_seconds=NO_CLOCK, max_nodes=SEARCH_NODE_BUDGET)
     assert plan, "is_plannable's True verdict must be backed by a real plan"
-    assert not planner.last_stats.timed_out
+    assert not planner.last_stats.timed_out, (
+        "must be a real search, not a budget artifact")
 
 
 def test_plannable_when_materials_in_inventory():
@@ -218,9 +222,11 @@ def test_is_plannable_admits_from_scratch_feather_coat():
     which counts distinct raw leaves still unmet, not units — TWO here, so the
     bound is `min_gather_steps=2 + min_crafts=2 + equip=1 = 5`, well under 32.
     Verified by driving the REAL `GOAPPlanner` over the REAL `build_actions`
-    pool for this exact state: it finds a 10-action plan in 31,846 nodes with
-    no timeout, so the new True verdict matches what the planner can actually
-    do, not just what the formula claims."""
+    pool for this exact state: it finds a 10-action plan in 29,488 explored /
+    160,960 created nodes with no timeout (re-measured 2026-09-12), so the new
+    True verdict matches what the planner can actually do, not just what the
+    formula claims. The search is bounded by NODES, not the clock — see
+    `search_bounds.py`."""
     state = make_state(
         skills={"gearcrafting": 5},
         inventory={"ash_wood": 10},
@@ -236,9 +242,11 @@ def test_is_plannable_admits_from_scratch_feather_coat():
     actions = build_actions(gd, state, objective, bank_accessible=True,
                             task_exchange_min_coins=0)
     planner = GOAPPlanner()
-    plan = planner.plan(state, goal, actions, gd, None, budget_seconds=30.0)
+    plan = planner.plan(state, goal, actions, gd, None,
+                        budget_seconds=NO_CLOCK, max_nodes=SEARCH_NODE_BUDGET)
     assert plan, "is_plannable's True verdict must be backed by a real plan"
-    assert not planner.last_stats.timed_out
+    assert not planner.last_stats.timed_out, (
+        "must be a real search, not a budget artifact")
 
 
 def test_is_plannable_admits_short_chain():

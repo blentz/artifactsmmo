@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.min_plan_length import min_plan_length
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from tests.test_ai.search_bounds import NO_CLOCK, SEARCH_NODE_BUDGET
 
 _ORE = "supply_ore"
 _BAR = "supply_bar"
@@ -276,9 +277,10 @@ def test_reachable_depth_is_admitted_and_the_real_planner_confirms_it() -> None:
     many units that one leaf must supply — comfortably under 100. That is not
     a mechanical rebaseline: I drove the REAL `GOAPPlanner` over the REAL
     `build_actions` pool for this exact scenario (bank={}) and it found an
-    8-action plan in 18,761 nodes with no timeout, so `is_plannable`'s new
-    verdict matches what the planner can actually do, not just what the
-    formula claims.
+    8-action plan in 18,761 explored (93,142 created) nodes with no timeout, so
+    `is_plannable`'s new verdict matches what the planner can actually do, not
+    just what the formula claims. That search is bounded HERE by nodes, not by
+    the clock — see `search_bounds.py`.
 
     This does NOT mean the depth gate is universally sound again — a chain
     with a raw footprint large enough that even BATCHED crafting is bounded
@@ -293,9 +295,11 @@ def test_reachable_depth_is_admitted_and_the_real_planner_confirms_it() -> None:
     assert goal.is_plannable(state, gd) is True
 
     planner = GOAPPlanner()
-    plan = planner.plan(state, goal, _actions(gd, state), gd, None, budget_seconds=30.0)
+    plan = planner.plan(state, goal, _actions(gd, state), gd, None,
+                        budget_seconds=NO_CLOCK, max_nodes=SEARCH_NODE_BUDGET)
     assert plan, "is_plannable's True verdict must be backed by a real plan"
-    assert not planner.last_stats.timed_out
+    assert not planner.last_stats.timed_out, (
+        "must be a real search, not a budget artifact")
 
 
 def test_a_satisfied_goal_is_plannable() -> None:

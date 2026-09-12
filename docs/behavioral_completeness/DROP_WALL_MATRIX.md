@@ -8,7 +8,7 @@
 >
 > The crossing is a differential on production's own pricer — the candidate priced as it stands, then again with the walled items granted. No closure is re-derived here; obligation O6 forbids a second cost model and this census must not be one.
 
-247 candidate cells over 44 scenarios; gate opens 2 of 9 walls (store-less); obtainable 77; not_drop_walled 159; walled 9 (9 on ALTERNATIVES); closes 9; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
+251 candidate cells over 44 scenarios; gate opens 2 of 9 walls (store-less); obtainable 77; not_drop_walled 163; walled 9 (9 on ALTERNATIVES); closes 9; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
 
 argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only the argmax sees those 0 and misses 9 — an infinite price is a veto, so a walled candidate never becomes the argmax.
 
@@ -144,6 +144,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l21_grey_material_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
 | l21_grey_material_grind | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 66 | 66 | 66 | - | - | - | - | - |
 | l21_grey_material_grind | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l21_grey_material_grind | ReachSkillLevel(skill='fishing', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l21_grey_material_grind | ReachSkillLevel(skill='cooking', level=13) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l22_grey_rung_grind | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 97 | 97 | 97 | - | - | - | - | - |
 | l22_grey_rung_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring2_slot') | alt | PASS | 96 | 96 | 96 | - | - | - | - | - |
@@ -152,6 +153,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l22_grey_rung_grind | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 96 | 96 | 96 | - | - | - | - | - |
 | l22_grey_rung_grind | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 107 | 107 | 107 | - | - | - | - | - |
 | l22_grey_rung_grind | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l22_grey_rung_grind | ReachSkillLevel(skill='fishing', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l22_grey_rung_grind | ReachSkillLevel(skill='cooking', level=13) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_deep_chain_grind | ReachSkillLevel(skill='jewelrycrafting', level=3) | argmax | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l12_deep_chain_grind | ObtainItem(code='cowhide', quantity=5) | alt | PASS | 5000000 | 0 | 5000000 | cowhide | 1 | 1 | 1 | iron_sword |
@@ -167,6 +169,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l19_band_edge | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
 | l19_band_edge | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 66 | 66 | 66 | - | - | - | - | - |
 | l19_band_edge | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l19_band_edge | ReachSkillLevel(skill='fishing', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l19_band_edge | ReachSkillLevel(skill='cooking', level=13) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l11_band_floor | ObtainItem(code='iron_shield', quantity=1, slot='shield_slot') | argmax | PASS | 46 | 46 | 46 | - | - | - | - | - |
 | l11_band_floor | ObtainItem(code='iron_ring', quantity=1, slot='ring2_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
@@ -175,6 +178,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l11_band_floor | ObtainItem(code='iron_ring', quantity=1, slot='ring1_slot') | alt | PASS | 35 | 35 | 35 | - | - | - | - | - |
 | l11_band_floor | ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot') | alt | PASS | 66 | 66 | 66 | - | - | - | - | - |
 | l11_band_floor | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
+| l11_band_floor | ReachSkillLevel(skill='fishing', level=10) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l11_band_floor | ReachSkillLevel(skill='cooking', level=13) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l32_items_task | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l32_items_task | ObtainItem(code='jasper_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
