@@ -29,6 +29,7 @@ from artifactsmmo_api_client.types import Unset
 from artifactsmmo_cli.ai.action_kind import action_kind_of
 from artifactsmmo_cli.ai.action_rejection import is_categorical_rejection, rejection_key
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
+from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
@@ -1660,7 +1661,16 @@ class GamePlayer:
             self._acquire_action()
             new_state = action.execute(self.state, client)
             # Re-sync bank state after visiting bank
-            if isinstance(action, (DepositAllAction, DepositItemAction, WithdrawItemAction)):
+            # BuyBankExpansionAction is in this tuple for the SAME reason the
+            # three deposit/withdraw actions are: it changes bank state the
+            # next cycle's gate reads back. Live 2026-09-13, 15 minutes after
+            # the rung became reachable, C3P0 bought twice three seconds apart
+            # for 21,000 gold — after the first buy the fill was ~55% against a
+            # 75% trigger, and it fired again only because `bank_capacity` still
+            # said 70. The rung had never been selected before 68585b6c, so
+            # nothing had ever exercised this path.
+            if isinstance(action, (DepositAllAction, DepositItemAction,
+                                   WithdrawItemAction, BuyBankExpansionAction)):
                 new_state = self._sync_bank(client, new_state)
             # Re-sync pending items after claiming one
             if isinstance(action, ClaimPendingItemAction):
@@ -2024,6 +2034,16 @@ class GamePlayer:
         if details is not None and hasattr(details, "data") and details.data is not None:
             bank_gold = details.data.gold
             bank_capacity = details.data.slots
+            # THE PRICE IS ACCOUNT-WIDE AND MOVES WHENEVER ANY CHARACTER BUYS,
+            # so it cannot be left on each character's session-start snapshot.
+            # Live 2026-09-13: C3P0's two purchases took it 7,000 -> 28,000
+            # while Lor still held the old number, so `expansion_fires`' pocket
+            # test passed on a stale price and Lor spent ten consecutive cycles
+            # on `error:HTTP_492` with 26,698 gold against a real 28,000. This
+            # read already fetches `BankSchema`, which carries the field; it was
+            # being thrown away.
+            if self.game_data is not None:
+                self.game_data._next_expansion_cost = details.data.next_expansion_cost
 
         # `dataclasses.replace` so every untouched field carries over. The old
         # field-by-field WorldState(...) rebuild silently DROPPED every field
