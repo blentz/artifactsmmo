@@ -415,7 +415,16 @@ def bankExpandFires (s : State) : Bool :=
   && decide (s.bankCapacity > 0)
   && decide (BANK_EXPAND_FILL_DEN * s.bankItemsCount
               ≥ BANK_EXPAND_FILL_NUM * s.bankCapacity)
-  && decide (s.gold ≥ s.nextExpansionCost + s.goldReserve)
+  -- EXECUTABILITY, on the POCKET. buy_expansion spends the character's own
+  -- gold and there is no withdraw-gold edge in the action pool, so an account
+  -- that cannot be drawn from here does not make the buy possible.
+  && decide (s.gold ≥ s.nextExpansionCost)
+  -- RESERVE SAFETY, on the ACCOUNT. Mirrors
+  -- `ai/bank_expansion_timing.expansion_fires` feeding the proven core
+  -- `account_gold(state)`; stated as `account ≥ cost + reserve` rather than
+  -- `account - cost ≥ reserve` because Nat subtraction truncates and production
+  -- does the comparison over Python ints.
+  && decide (s.gold + s.bankGold ≥ s.nextExpansionCost + s.goldReserve)
 
 /-- CRAFT_RELIEF. Mirrors `tiers/guards.py::_fires(CRAFT_RELIEF, …)`:
     fires when inv pressure crosses `CRAFT_RELIEF_FRACTION` (0.70) AND a

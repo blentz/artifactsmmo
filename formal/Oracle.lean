@@ -2442,6 +2442,8 @@ ARG LAYOUT (flat ints; index → field):
 * `[30]` bankItemsKnown               (Bool 0/1)
 * `[31]` bankJunkNonempty             (Bool 0/1)
 * `[32]` craftPotionsFires            (Bool 0/1)
+* `[40]` bankGold                     (Nat — WorldState.bank_gold or 0; the
+                                        account balance is `[12] + [40]`)
 * `[33]` goldReserve                  (Nat — reserve_floor(state, gd, None);
                                         the BANK_EXPAND reserve gate. NOTE:
                                         cycle_step_d/e reuse only the 0..32
@@ -2508,7 +2510,11 @@ def runLadder (args : Array Json) : Json :=
     currencyTurnInActive := b 37, supplyAsymmetric := b 38,
     -- [39] drawOwed (2026-08-19): ACCEPT_TASK's gate, and the slot the accept
     -- descends. Appended, so every existing caller keeps its indices.
-    drawOwed := b 39 }
+    drawOwed := b 39,
+    -- [40] bankGold (2026-09-13): the BANKED half of the account balance, for
+    -- BANK_EXPAND's account-scoped reserve gate. Appended, so every existing
+    -- caller keeps its indices.
+    bankGold := n 40 }
   let firesFields : List (String × Json) :=
     allInLadderOrder.map (fun k => (meansKindName k, Json.bool (fires k s)))
   let selected : Json := match productionLadder s with

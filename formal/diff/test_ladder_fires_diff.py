@@ -272,7 +272,8 @@ class Scenario:
     bank_capacity: int
     next_expansion_cost: int
     gold_reserve: int
-    gold: int
+    gold: int                # POCKET gold (WorldState.gold)
+    bank_gold: int           # BANKED gold; account = gold + bank_gold
     item_sellable: bool      # NPC buys JUNK -> sellable
     gear_review: bool        # opaque, passed identically to both sides
     objective_step: bool     # opaque, passed identically to both sides
@@ -363,7 +364,7 @@ def _make_world(scn: Scenario) -> WorldState:
         x=0, y=0, inventory=inv, inventory_max=scn.inventory_max,
         inventory_slots_max=scn.inventory_max,
         equipment={}, cooldown_expires=None,
-        bank_items=bank_items, bank_gold=None,
+        bank_items=bank_items, bank_gold=scn.bank_gold,
         pending_items=(("pid", "pcode"),) if scn.has_pending else None,
         **task_fields,
     )
@@ -512,6 +513,13 @@ def _oracle_args(scn: Scenario, w: WorldState,
         # 39 drawOwed (2026-08-19): ACCEPT_TASK's gate. Read off the SAME
         # ctx production reads, so neither side can drift on it.
         1 if _make_ctx(scn).draw_owed else 0,
+        # 40 bankGold (2026-09-13): the BANKED half of the account balance.
+        # The BANK_EXPAND reserve gate is account-scoped
+        # (`progression_reserve.can_spend`: one bank, one balance) while the
+        # buy_expansion endpoint spends the POCKET, so the two halves have to
+        # reach the oracle separately. Appended, so every existing caller keeps
+        # its indices.
+        scn.bank_gold,
     ]
 
 
@@ -636,6 +644,12 @@ def _scenario(draw) -> Scenario:
         next_expansion_cost=draw(st.integers(min_value=0, max_value=2000)),
         gold_reserve=draw(st.integers(min_value=0, max_value=300)),
         gold=draw(st.integers(min_value=0, max_value=5000)),
+        # DRAWN, not pinned. It was hardcoded `bank_gold=None`, which forced
+        # `account_gold(state) == state.gold` in every example the harness could
+        # ever produce — so the pocket-vs-account reading of the BANK_EXPAND
+        # reserve gate was untestable by construction and a real divergence
+        # (dff7198a) passed 850 differential cases unseen.
+        bank_gold=draw(st.integers(min_value=0, max_value=20000)),
         item_sellable=draw(st.booleans()),
         gear_review=draw(st.booleans()),
         objective_step=draw(st.booleans()),
@@ -690,7 +704,8 @@ def _base_scn(**overrides) -> Scenario:
         inventory_max=20, junk_qty=0, coin_qty=0, bank_coin_qty=0,
         task_exchange_min_coins=5, has_pending=False, task_phase="none",
         bank_known=False, bank_items_count=0, bank_capacity=0,
-        next_expansion_cost=0, gold=0, gold_reserve=0, item_sellable=False,
+        next_expansion_cost=0, gold=0, bank_gold=0, gold_reserve=0,
+        item_sellable=False,
         gear_review=False, objective_step=False,
     )
     defaults.update(overrides)
@@ -799,6 +814,47 @@ def test_bank_expand_witness() -> None:
         bank_accessible=True, bank_known=True, bank_capacity=20,
         bank_items_count=19, gold=100, next_expansion_cost=50,
         # task assigned-complete so acceptTask doesn't outrank in the ladder.
+        task_phase="complete",
+    ))
+
+
+def test_bank_expand_witness_banked_gold_pays_the_reserve() -> None:
+    """Robby's live shape, 2026-09-13: the POCKET alone cannot clear the reserve
+    but the ACCOUNT can, so the rung fires on the account reading and refuses on
+    the pocket reading. Scaled to the Scenario's drawn ranges, ratios preserved.
+
+    This is the case the harness could not express while `bank_gold` was pinned
+    to `None`, and it is the exact divergence `dff7198a` shipped: production said
+    fire, the Lean model said refuse, and 850 differential examples agreed with
+    each other because both were reading the same pocket balance."""
+    _assert_full_agreement(_base_scn(
+        bank_accessible=True, bank_known=True, bank_capacity=20,
+        bank_items_count=19,
+        # pocket 380 >= cost 350, but 380 - 350 = 30 < reserve 200;
+        # account 380 + 1255 = 1635, and 1635 - 350 = 1285 >= 200.
+        gold=380, bank_gold=1255, next_expansion_cost=350, gold_reserve=200,
+        task_phase="complete",
+    ))
+
+
+def test_bank_expand_witness_pocket_too_poor_to_execute() -> None:
+    """The other side of the same split: the ACCOUNT is reserve-safe but the
+    POCKET cannot pay the price. There is no withdraw-gold edge in the action
+    pool, so the rung must NOT fire — an account-only gate would emit a rung no
+    plan can serve.
+
+    The Lean half of this is pinned by the KERNEL rather than by this test:
+    deleting the pocket conjunct from `bankExpandFires` makes
+    `CumulativeProgress`'s gold-descent for `.bankExpand` unprovable, because
+    `gold + bankGold ≥ cost + reserve` does not give `gold ≥ cost` — banked gold
+    can satisfy the reserve while the pocket cannot fund the buy. Verified by
+    doing it: the build fails with an application type mismatch at the descent.
+    So this witness guards the PRODUCTION side and the agreement between them,
+    not the model conjunct."""
+    _assert_full_agreement(_base_scn(
+        bank_accessible=True, bank_known=True, bank_capacity=20,
+        bank_items_count=19,
+        gold=10, bank_gold=20000, next_expansion_cost=350, gold_reserve=0,
         task_phase="complete",
     ))
 

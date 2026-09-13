@@ -1093,10 +1093,13 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
     rw [hcs]
     have hcost : s.nextExpansionCost > 0 := hbe rfl
     simp only [fires, bankExpandFires, Bool.and_eq_true, decide_eq_true_eq] at hfires
-    -- The reserve-gated conjunct is STRONGER than the old bare gold ≥ cost:
-    -- gold ≥ cost + reserve ⇒ gold ≥ cost, so the gold-descent argument holds.
-    have hgold_ge : s.gold ≥ s.nextExpansionCost :=
-      Nat.le_trans (Nat.le_add_right _ _) hfires.2
+    -- 2026-09-13: the gold gate split in two. The ACCOUNT-scoped reserve
+    -- conjunct (`hfires.2`) no longer implies the pocket can pay — banked gold
+    -- can satisfy it while `gold < nextExpansionCost` — so the gold-descent
+    -- argument reads the POCKET executability conjunct directly instead.
+    -- This is the conjunct that makes the descent honest: `buyBankExpansion`
+    -- spends `gold`, so only a pocket that covers the cost can fund it.
+    have hgold_ge : s.gold ≥ s.nextExpansionCost := hfires.1.2
     refine ⟨rfl, ?_⟩
     refine extLt_of_gold_dec ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
     · unfold extMeasure applyActionKind; rfl

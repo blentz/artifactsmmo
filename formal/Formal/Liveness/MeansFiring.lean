@@ -555,7 +555,10 @@ theorem _fires_bankExpand_implies_expandBank_positive (s : State) :
   intro h
   unfold fires bankExpandFires at h
   simp only [Bool.and_eq_true, decide_eq_true_eq] at h
-  obtain ⟨⟨⟨⟨_, _⟩, hcap⟩, hfill⟩, _⟩ := h
+  -- Six conjuncts since 2026-09-13: the reserve gate split into POCKET
+  -- executability and an ACCOUNT-scoped reserve check. Only the capacity and
+  -- fill conjuncts do work here; the two gold conjuncts are discarded.
+  obtain ⟨⟨⟨⟨⟨_, _⟩, hcap⟩, hfill⟩, _⟩, _⟩ := h
   have hcap_ne : s.bankCapacity ≠ 0 := Nat.pos_iff_ne_zero.mp hcap
   have hcap_pos_rat : (0 : Rat) < (s.bankCapacity : Rat) := by exact_mod_cast hcap
   have hfill_ge :
