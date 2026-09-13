@@ -38,7 +38,7 @@ def pursuePrefix : List MeansKind := blockerPrefix ++ [.pursueTask]
 theorem ladder_splitD :
     allInLadderOrder = pursuePrefix ++
       [.taskExchange, .maintainConsumables,
-       .sellIdle, .recycleSurplus, .bankExpand, .geBid, .drainBankJunk, .wait] := rfl
+       .sellIdle, .recycleSurplus, .geBid, .drainBankJunk, .wait] := rfl
 
 private theorem refreshD_phase' (s : State) :
     (perceptionRefreshD s).taskLifecyclePhase = s.taskLifecyclePhase := by
@@ -161,7 +161,7 @@ theorem cycleStepD_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | currencyTurnIn  => exact descendsD_currencyTurnIn s hk
     | sellIdle        => exact absurd hmem (by decide)
     | recycleSurplus  => exact absurd hmem (by decide)
-    | bankExpand      => exact absurd hmem (by decide)
+    | bankExpand      => exact descendsD_bankExpand s hk
     | drainBankJunk   => exact absurd hmem (by decide)
     | geBid           => exact absurd hmem (by decide)
     | wait            => exact absurd hmem (by decide)

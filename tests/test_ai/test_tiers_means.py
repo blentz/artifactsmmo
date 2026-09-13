@@ -493,8 +493,8 @@ def test_bank_expand_fires_when_conditions_met():
     gd._next_expansion_cost = 10
     # 19/20 = 0.95 fill, gold - cost >= ctx reserve (default 0), accessible
     state = make_state(bank_items={f"item{i}": 1 for i in range(19)}, gold=200)
-    _, discretionary = active_means(state, gd, None, _ctx(bank_accessible=True))
-    assert MeansKind.BANK_EXPAND in discretionary
+    collect, _ = active_means(state, gd, None, _ctx(bank_accessible=True))
+    assert MeansKind.BANK_EXPAND in collect
 
 
 def test_bank_expand_absent_when_bank_not_accessible():
@@ -737,24 +737,45 @@ def test_bank_expand_fires_when_reserve_survives_purchase():
     gd._bank_capacity = 20
     gd._next_expansion_cost = 10
     state = make_state(bank_items={f"item{i}": 1 for i in range(19)}, gold=200)
-    _, discretionary = active_means(
+    collect, _ = active_means(
         state, gd, None, _ctx(bank_accessible=True, gold_reserve=100))
-    assert MeansKind.BANK_EXPAND in discretionary
+    assert MeansKind.BANK_EXPAND in collect
 
 
-def test_bank_expand_fill_gate_is_exact_cross_multiply():
-    """37/39 = 0.9487 < 95/100 must NOT fire even though a float rounding of
-    the ratio might; 38/39 crosses. Pins the means guard to the same exact
-    integer compare as should_expand_bank (no float in the decision path)."""
+def test_bank_expand_fill_gate_is_an_exact_integer_boundary():
+    """The gate is `items * DEN >= capacity * NUM`, decided on the exact
+    integers, and the boundary is a TIE-fires `>=`.
+
+    29/39 is 74.36% and 30/39 is 76.92%, straddling the 75% trigger: the exact
+    compare is 2900 < 2925 then 3000 >= 2925.
+
+    HONEST NOTE ON WHAT THIS NO LONGER SHOWS. At the old 95% trigger this test
+    used 37/39 = 0.9487, a ratio a float division can round up across 0.95 —
+    so it pinned exact-vs-float, not merely the boundary. That premise does not
+    survive the 2026-09-13 retrigger: 3/4 is exactly representable in binary, so
+    a float-divergent pair near 75% needs a denominator above ~4.5e15 and no
+    realistic state can exhibit one. The test now pins the BOUNDARY and its
+    tie-inclusive `>=`; the no-float property is still carried by
+    `should_expand_bank`'s own differential and its Lean model."""
     gd = GameData()
     gd._bank_capacity = 39
     gd._next_expansion_cost = 10
-    below = make_state(bank_items={f"item{i}": 1 for i in range(37)}, gold=500)
-    _, disc_below = active_means(below, gd, None, _ctx(bank_accessible=True))
-    assert MeansKind.BANK_EXPAND not in disc_below
-    at = make_state(bank_items={f"item{i}": 1 for i in range(38)}, gold=500)
-    _, disc_at = active_means(at, gd, None, _ctx(bank_accessible=True))
-    assert MeansKind.BANK_EXPAND in disc_at
+    below = make_state(bank_items={f"item{i}": 1 for i in range(29)}, gold=500)
+    collect_below, _ = active_means(below, gd, None, _ctx(bank_accessible=True))
+    assert MeansKind.BANK_EXPAND not in collect_below
+    at = make_state(bank_items={f"item{i}": 1 for i in range(30)}, gold=500)
+    collect_at, _ = active_means(at, gd, None, _ctx(bank_accessible=True))
+    assert MeansKind.BANK_EXPAND in collect_at
+
+
+def test_bank_expand_fill_gate_fires_on_an_exact_tie():
+    """`>=`, not `>`: 3/4 hits the 75/100 trigger exactly and must fire."""
+    gd = GameData()
+    gd._bank_capacity = 4
+    gd._next_expansion_cost = 10
+    state = make_state(bank_items={f"item{i}": 1 for i in range(3)}, gold=500)
+    collect, _ = active_means(state, gd, None, _ctx(bank_accessible=True))
+    assert MeansKind.BANK_EXPAND in collect
 
 
 # ---------------------------------------------------------------------------
@@ -914,9 +935,9 @@ def test_bank_expand_fires_on_account_gold_not_pocket_alone():
     gd._next_expansion_cost = 3500
     state = make_state(bank_items={f"item{i}": 1 for i in range(50)},
                        gold=3797, bank_gold=12553)
-    _, discretionary = active_means(state, gd, None,
-                                    _ctx(bank_accessible=True, gold_reserve=5100))
-    assert MeansKind.BANK_EXPAND in discretionary
+    collect, _ = active_means(state, gd, None,
+                              _ctx(bank_accessible=True, gold_reserve=5100))
+    assert MeansKind.BANK_EXPAND in collect
 
 
 def test_bank_expand_absent_when_pocket_cannot_pay_cost():
@@ -931,3 +952,50 @@ def test_bank_expand_absent_when_pocket_cannot_pay_cost():
     _, discretionary = active_means(state, gd, None,
                                     _ctx(bank_accessible=True, gold_reserve=0))
     assert MeansKind.BANK_EXPAND not in discretionary
+
+
+def test_bank_expand_is_a_collect_rung_not_a_discretionary_one():
+    """BANK_EXPAND sits ABOVE the objective step (2026-09-13).
+
+    Below it the rung was unreachable — a character essentially always has a
+    step, so `audit/liveness_completeness.py` carried it as
+    `unreachable: MeansKind.BANK_EXPAND is in the discretionary band`. Measured
+    live: the rung fired for two characters against a 50/50 bank and was never
+    once selected, while every inventory climbed with no deposit sink.
+    """
+    gd = GameData()
+    gd._bank_capacity = 20
+    gd._next_expansion_cost = 10
+    state = make_state(bank_items={f"item{i}": 1 for i in range(19)}, gold=200)
+    collect, discretionary = active_means(state, gd, None, _ctx(bank_accessible=True))
+    assert MeansKind.BANK_EXPAND in collect
+    assert MeansKind.BANK_EXPAND not in discretionary
+
+
+def test_bank_expand_is_last_in_the_collect_band():
+    """Position, not just membership. A one-action purchase must not preempt a
+    resolved turn-in election, a sibling's supply request, or a task booking —
+    the same argument ACCEPT_TASK, SUPPLY_BANK and CURRENCY_TURNIN each make for
+    their own slots. So it goes last, immediately above the objective step."""
+    assert COLLECT_REWARD_ORDER[-1] is MeansKind.BANK_EXPAND
+
+
+def test_bank_expand_fires_at_the_three_quarter_fill_mark():
+    """USER 2026-09-13: expanding is good to do whenever we have the money, so
+    the trigger moved 95% -> 75%. 15/20 = exactly 0.75 fires (>=)."""
+    gd = GameData()
+    gd._bank_capacity = 20
+    gd._next_expansion_cost = 10
+    state = make_state(bank_items={f"item{i}": 1 for i in range(15)}, gold=200)
+    collect, _ = active_means(state, gd, None, _ctx(bank_accessible=True))
+    assert MeansKind.BANK_EXPAND in collect
+
+
+def test_bank_expand_silent_below_the_three_quarter_mark():
+    """14/20 = 0.70 < 0.75: still nothing to do."""
+    gd = GameData()
+    gd._bank_capacity = 20
+    gd._next_expansion_cost = 10
+    state = make_state(bank_items={f"item{i}": 1 for i in range(14)}, gold=200)
+    collect, _ = active_means(state, gd, None, _ctx(bank_accessible=True))
+    assert MeansKind.BANK_EXPAND not in collect

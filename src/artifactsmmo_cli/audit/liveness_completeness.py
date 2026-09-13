@@ -139,8 +139,17 @@ DORMANT: dict[str, str] = {
                         "completing tasks",
     "TaskExchangeAction": "conditional: emitted only by TaskExchangeGoal",
     "TaskTradeAction": "conditional: items-task delivery, requires a held items-task",
-    "ExpandBankGoal": "unreachable: MeansKind.BANK_EXPAND is in the discretionary band",
-    "BuyBankExpansionAction": "unreachable: emitted only by ExpandBankGoal",
+    # 2026-09-13: BANK_EXPAND was promoted out of the discretionary band into
+    # COLLECT_REWARD_ORDER, so the `unreachable:` reason these two carried is
+    # gone. They stay declared-dormant only until a live buy lands: the bank was
+    # at 50/50 with no character able to fund an expansion under the old
+    # pocket-scoped reserve gate, which is the state the promotion exists to
+    # break. Downgrade to `conditional:` — it fires when a bank crosses the 75%
+    # fill trigger with the price affordable, which is an observable event and
+    # not a structural wall.
+    "ExpandBankGoal": "conditional: fires once a bank crosses the 75% fill "
+                      "trigger with the expansion price affordable",
+    "BuyBankExpansionAction": "conditional: emitted only by ExpandBankGoal",
     "PostBuyBidGoal": "unreachable: MeansKind.GE_BID is in the discretionary band",
     "GePostBuyOrderAction": "unreachable: emitted only by PostBuyBidGoal",
     # --- PROOF WITNESS. Never firing is this rung WORKING, not this rung dead.

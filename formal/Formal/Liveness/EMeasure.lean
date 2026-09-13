@@ -67,6 +67,13 @@ structure EMeasure where
   -- slots `perceptionRefreshE` can RAISE, `gearReviewFlag` and
   -- `objectiveStepFlag`.
   currencyTurnInFlag     : Nat
+  -- 2026-09-13: BANK_EXPAND promoted into COLLECT_REWARD_ORDER, LAST — above
+  -- `.objectiveStep` and so selectable here too. Directly below
+  -- `currencyTurnInFlag` and ABOVE the two perception-raised slots, the same
+  -- placement `supplyDemandSlot` and `currencyTurnInFlag` take. A COUNT, not a
+  -- flag, because the 75% trigger is not cleared by a single buy — see
+  -- `FMeasure.bankExpandSlot`.
+  bankExpandSlot         : Nat
   gearReviewFlag         : Nat
   objectiveStepFlag      : Nat
   deriving DecidableEq, Repr
@@ -95,6 +102,9 @@ noncomputable def eMeasure (s : State) : EMeasure :=
     geCancelFlag           := b2n s.geCancelTargetsNonempty
     supplyDemandSlot       := s.supplyDemand
     currencyTurnInFlag     := b2n s.currencyTurnInActive
+    bankExpandSlot         :=
+      (ProductionLadder.BANK_EXPAND_FILL_DEN * s.bankItemsCount + 1)
+        - ProductionLadder.BANK_EXPAND_FILL_NUM * s.bankCapacity
     gearReviewFlag         := b2n s.gearReviewFires
     objectiveStepFlag      := b2n s.objectiveStepFires }
 
@@ -102,9 +112,10 @@ noncomputable def eMeasure (s : State) : EMeasure :=
 abbrev LexE :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
     Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
-    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
+    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
-/-- Embed an `EMeasure` into the lex 23-tuple. -/
+/-- Embed an `EMeasure` into the lex 24-tuple (widened 2026-09-13 for
+    `bankExpandSlot`). -/
 def toLexE (m : EMeasure) : LexE :=
   toLex (m.levelDeficit,
       toLex (m.gearGap,
@@ -128,7 +139,8 @@ def toLexE (m : EMeasure) : LexE :=
       toLex (m.geCancelFlag,
       toLex (m.supplyDemandSlot,
       toLex (m.currencyTurnInFlag,
-      toLex (m.gearReviewFlag, m.objectiveStepFlag)))))))))))))))))))))))
+      toLex (m.bankExpandSlot,
+      toLex (m.gearReviewFlag, m.objectiveStepFlag))))))))))))))))))))))))
 
 /-- Strict lex order via the Mathlib embedding. -/
 def eMeasureLt (m₁ m₂ : EMeasure) : Prop :=
@@ -430,7 +442,38 @@ theorem eLt_of_gearReview_dec {m₁ m₂ : EMeasure}
     (h19 : m₁.geCancelFlag = m₂.geCancelFlag)
     (h20 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
     (h21 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
+    (h22 : m₁.bankExpandSlot = m₂.bankExpandSlot)
     (h : m₁.gearReviewFlag < m₂.gearReviewFlag) : eMeasureLt m₁ m₂ := by
+  apply lex_intro
+  simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inr ⟨h22, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+
+/-- Slot for `bankExpandSlot` (2026-09-13): decrease with every higher slot
+    equal, directly below `currencyTurnInFlag`. -/
+theorem eLt_of_bankExpand_dec {m₁ m₂ : EMeasure}
+    (h1 : m₁.levelDeficit = m₂.levelDeficit)
+    (h2 : m₁.gearGap = m₂.gearGap)
+    (h3 : m₁.inadequacyFlag = m₂.inadequacyFlag)
+    (h4 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
+    (h5 : m₁.phasePresent = m₂.phasePresent)
+    (h6 : m₁.taskCycles = m₂.taskCycles)
+    (h7 : m₁.pendingFlag = m₂.pendingFlag)
+    (h8 : m₁.overstockDebt = m₂.overstockDebt)
+    (h9 : m₁.overstockFlag = m₂.overstockFlag)
+    (h10 : m₁.depositDebt = m₂.depositDebt)
+    (h11 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
+    (h12 : m₁.sellDebt = m₂.sellDebt)
+    (h13 : m₁.sellableFlag = m₂.sellableFlag)
+    (h14 : m₁.recyclableFlag = m₂.recyclableFlag)
+    (h15 : m₁.craftReliefFlag = m₂.craftReliefFlag)
+    (h16 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
+    (h17 : m₁.bankPressure = m₂.bankPressure)
+    (h18 : m₁.hpDeficit = m₂.hpDeficit)
+    (h19 : m₁.geCancelFlag = m₂.geCancelFlag)
+    (h20 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
+    (h21 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
+    (h : m₁.bankExpandSlot < m₂.bankExpandSlot) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
   exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
@@ -458,11 +501,12 @@ theorem eLt_of_objectiveStepFlag_dec {m₁ m₂ : EMeasure}
     (h19 : m₁.geCancelFlag = m₂.geCancelFlag)
     (h20 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
     (h21 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
+    (hbe : m₁.bankExpandSlot = m₂.bankExpandSlot)
     (h22 : m₁.gearReviewFlag = m₂.gearReviewFlag)
     (h : m₁.objectiveStepFlag < m₂.objectiveStepFlag) : eMeasureLt m₁ m₂ := by
   apply lex_intro
   simp only [toLexE, Prod.Lex.lt_iff, ofLex_toLex]
-  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inr ⟨h22, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4, Or.inr ⟨hd, Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8, Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inr ⟨h16, Or.inr ⟨h17, Or.inr ⟨h18, Or.inr ⟨h19, Or.inr ⟨h20, Or.inr ⟨h21, Or.inr ⟨hbe, Or.inr ⟨h22, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 theorem eLt_of_geCancel_dec {m₁ m₂ : EMeasure}
     (h1 : m₁.levelDeficit = m₂.levelDeficit)

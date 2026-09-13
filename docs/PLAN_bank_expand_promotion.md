@@ -1,6 +1,7 @@
 # PLAN: promote BANK_EXPAND above the objective step
 
-Status: **increment 0 not started**. Written 2026-09-13.
+Status: **increments 0-5 DONE**. Next: increment 7 (live confirmation).
+Written 2026-09-13.
 
 ## Why
 
@@ -94,26 +95,30 @@ constant looks proof-inert.
 
 Each increment ends green on `bash formal/gate.sh` and is committed separately.
 
-- [ ] **0. Close the model divergence.** Add banked gold to the Lean `State`;
+- [x] **0. Close the model divergence.** DONE `c579efeb`. Add banked gold to the Lean `State`;
       make `bankExpandFires` mirror `expansion_fires` (pocket affordability +
       account-scoped reserve). Extend `test_ladder_fires_diff.py` to DRAW
       `bank_gold` instead of pinning it to `None`, and add a non-vacuity witness
       at Robby's live shape. Expect the harness to go RED first — that is the
       point.
+      Outcome: `State.bankGold` already existed and `bankExpandFires` simply
+      never read it, so no new field was needed. The harness went RED in
+      seconds once `bank_gold` was drawn. The pocket conjunct turned out to be
+      KERNEL-load-bearing, not just test-load-bearing — see the commit.
 - [x] ~~**1. Establish `bankItemsCount ≤ bankCapacity`.**~~ DELETED — the
       counted slot in Consequence A does not need it.
-- [ ] **2. Move the rung + retrigger.** `MeansKind.allInLadderOrder` +
+- [x] **2. Move the rung + retrigger.** DONE. `MeansKind.allInLadderOrder` +
       `means.py` band lists + `DeferFaithful` pin + `TRIGGER_FILL_NUM` 95->75 +
       `_SATISFIED_FILL` (Consequence B), with no measure work yet. Ladder proofs go
       RED; that names the exact descent obligation.
-- [ ] **3. `FMeasure` slot** — `bankExpandFlag` at the bottom of the cascade,
+- [x] **3. `FMeasure` slot** DONE. — `bankExpandFlag` at the bottom of the cascade,
       below `currencyTurnInFlag`, + descent lemma.
-- [ ] **4. `DMeasure` slot.**
-- [ ] **5. `EMeasure` slot.**
-- [ ] **6. Scenario fallout.** Re-baseline `test_bag_pressure_cells` and
+- [x] **4. `DMeasure` slot.** DONE.
+- [x] **5. `EMeasure` slot.** DONE.
+- [x] **6. Scenario fallout.** NONE — see note below. Re-baseline `test_bag_pressure_cells` and
       `l30_rune_fill` DELIBERATELY — each change must be argued, never
       "corrected" to ExpandBank to make a golden pass.
-- [ ] **7. Flip `liveness_completeness.py:142`** off `unreachable:` and confirm
+- [~] **7. Flip `liveness_completeness.py:142`** done (`unreachable:` -> `conditional:`); a live buy not yet observed. off `unreachable:` and confirm
       a live `plan <char>` elects `ExpandBank`.
 
 ## Decisions (USER, 2026-09-13)
@@ -163,3 +168,24 @@ must pin the ordering rather than the two numbers independently.
 
 * Raising `WITNESS_BASELINE` as part of this work — unrelated, and it is now
   independently clearable (0 `WaitAction` firings since the restart).
+
+
+## Outcome notes (2026-09-13)
+
+**Increments 2-5 could not be separated.** Moving the rung turns the ladder
+proofs red by construction — that was the plan's intent — but a red kernel must
+not be committed, so the band move and all three measure slots land together.
+
+**Scenario fallout was ZERO, and that is not a silent pass.** Every full-bank
+scenario on hand elects a GUARD before the collect band is reached
+(`l20_relief_full_bank` -> `CraftRelief`; live HAL -> `DiscardOverstock`; live
+C3P0 -> `RestoreHP`), and guards outrank the whole collect band. So no scenario
+exercises the promotion at selection level, and the goldens were right not to
+move. The gap is covered by `tests/test_ai/test_expand_bank_activation.py`,
+which drives the REAL arbiter from a calm no-guard state; it fails when the rung
+is demoted back to the discretionary band.
+
+**Still unobserved live.** No character has yet been caught in a cycle where no
+guard fires AND the bank is over the trigger, so `ExpandBankGoal` has not been
+seen winning on the fleet. That is increment 7 and wants a `plan <char>` at the
+right moment, or a trace once the fleet restarts on this code.

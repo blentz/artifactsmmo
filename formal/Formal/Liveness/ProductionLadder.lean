@@ -113,7 +113,12 @@ def SELL_PRESSURE_NUM : Nat := 85
 def SELL_PRESSURE_DEN : Nat := 100
 
 /-- `BANK_EXPAND_FILL = 0.95` (means.py:18). -/
-def BANK_EXPAND_FILL_NUM : Nat := 95
+-- 2026-09-13, 95 -> 75. Mirrors `ai/bank_expansion_timing.TRIGGER_FILL_NUM`
+-- (USER: "expanding the bank is good to do whenever we have the money for
+-- it"). PROOF-INERT: every theorem here is parametric in the trigger, so this
+-- constant cannot turn the kernel red — it is pinned by behavioural tests and
+-- by the ladder differential instead.
+def BANK_EXPAND_FILL_NUM : Nat := 75
 def BANK_EXPAND_FILL_DEN : Nat := 100
 
 /-! ## Per-MeansKind firing predicate

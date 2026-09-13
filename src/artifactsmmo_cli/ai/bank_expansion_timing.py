@@ -34,11 +34,25 @@ in `expansion_fires` rather than at the two call sites so the goal and the
 arbiter guard cannot drift apart again.
 """
 
-TRIGGER_FILL_NUM = 95
+TRIGGER_FILL_NUM = 75
 TRIGGER_FILL_DEN = 100
-"""The bank-near-full trigger (95%), owned by the decision module so every
+"""The bank-near-full trigger (75%), owned by the decision module so every
 gate on "should the bank expand" — ExpandBankGoal.value and the arbiter's
-BANK_EXPAND means guard — reads the SAME ratio and cannot drift."""
+BANK_EXPAND means guard — reads the SAME ratio and cannot drift.
+
+2026-09-13, 95% -> 75% (USER: "expanding the bank is good to do whenever we
+have the money for it"). Waiting for 95% left no headroom: the bank hit 50/50,
+every deposit 462'd, and the fleet lost its shed route entirely.
+
+COUPLED TO `ExpandBankGoal._SATISFIED_FILL`, which must stay BELOW this ratio.
+`value()` returns 0.0 early when the goal is satisfied, so any fill in
+[trigger, satisfied) would both fire and be already-satisfied and the goal would
+score nothing across that band. `test_satisfaction_mark_sits_below_the_firing
+_trigger` pins the RELATION rather than the two numbers.
+
+NOT the whole gate: the theorems are parametric in `trigger_num`/`trigger_den`,
+so this constant is PROOF-INERT — moving it cannot turn the kernel red. It is
+pinned by behavioural tests instead."""
 
 
 def should_expand_bank(

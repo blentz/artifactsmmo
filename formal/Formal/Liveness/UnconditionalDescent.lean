@@ -58,12 +58,15 @@ def blockerPrefix : List MeansKind :=
    .discardHigh, .gearReview, .craftPotions, .claimPending, .completeTask,
    .sellPressured, .lowYieldCancel, .taskCancel,
    .supplyBank, .currencyTurnIn, .acceptTask,
+   -- 2026-09-13: BANK_EXPAND joined the collect group, LAST, so it is part of
+   -- the prefix `.objectiveStep` terminates rather than part of the tail.
+   .bankExpand,
    .objectiveStep]
 
 /-- The discretionary tail — everything after `.objectiveStep`. -/
 def discretionaryTail : List MeansKind :=
   [.pursueTask, .taskExchange, .maintainConsumables,
-   .sellIdle, .recycleSurplus, .bankExpand, .geBid, .drainBankJunk, .wait]
+   .sellIdle, .recycleSurplus, .geBid, .drainBankJunk, .wait]
 
 /-- `allInLadderOrder` splits at `.objectiveStep`. -/
 theorem ladder_split : allInLadderOrder = blockerPrefix ++ discretionaryTail := rfl
@@ -158,7 +161,7 @@ theorem cycleStepF_descends_below_fifty (s : State) (hlvl : s.level < 50) :
     | maintainConsumables => exact absurd hmem (by decide)
     | sellIdle        => exact absurd hmem (by decide)
     | recycleSurplus  => exact absurd hmem (by decide)
-    | bankExpand      => exact absurd hmem (by decide)
+    | bankExpand      => exact descends_bankExpand s hk
     | drainBankJunk   => exact absurd hmem (by decide)
     | geBid           => exact absurd hmem (by decide)
     | wait            => exact absurd hmem (by decide)

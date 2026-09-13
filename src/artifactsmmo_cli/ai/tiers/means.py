@@ -192,6 +192,20 @@ COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
     # and it is still AFTER both cancel rungs, so a dead draw goes back before
     # a new one is taken.
     MeansKind.ACCEPT_TASK,
+    # 2026-09-13: promoted out of the discretionary group, where it was
+    # unreachable for the same reason ACCEPT_TASK was — a character essentially
+    # always has an objective step, so nothing below the step is ever selected.
+    # `audit/liveness_completeness.py` had carried it as
+    # `unreachable: MeansKind.BANK_EXPAND is in the discretionary band` for
+    # exactly that reason. Measured live 2026-09-13: the rung FIRED for two
+    # characters against a 50/50 bank and was selected zero times, while every
+    # inventory in the fleet climbed with no deposit sink left.
+    #
+    # POSITION: LAST, below ACCEPT_TASK, for the same reason ACCEPT_TASK is last
+    # — a one-action purchase must not preempt a resolved turn-in election or a
+    # sibling's supply request. USER 2026-09-13: "expanding the bank is good to
+    # do whenever we have the money for it."
+    MeansKind.BANK_EXPAND,
 )
 DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.PURSUE_TASK,
@@ -199,13 +213,13 @@ DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.MAINTAIN_CONSUMABLES,  # prep heals for combat before idle housekeeping
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
-    MeansKind.BANK_EXPAND,
     # Opportunistic cheap acquisition: post a GE buy order for a slow-to-craft
     # objective material. Below the housekeeping investments (recycle/expand),
     # above pure junk-drain — acquiring a needed material beats draining junk.
     MeansKind.GE_BID,
-    # Lowest-value housekeeping (15), just above WAIT: drain over-cap bank junk
-    # only when nothing better — incl. a bank-expansion investment — is pending.
+    # Lowest-value housekeeping, just above WAIT: drain over-cap bank junk only
+    # when nothing better is pending. (The bank-expansion investment it used to
+    # rank against left this band on 2026-09-13.)
     MeansKind.DRAIN_BANK_JUNK,
     MeansKind.WAIT,
 )

@@ -212,7 +212,7 @@ theorem cycleStepE_descends_below_fifty (s : State) (hArms : AdequateArmsFightAt
     | currencyTurnIn  => exact descendsE_currencyTurnIn s hk
     | sellIdle        => exact absurd hmem (by decide)
     | recycleSurplus  => exact absurd hmem (by decide)
-    | bankExpand      => exact absurd hmem (by decide)
+    | bankExpand      => exact descendsE_bankExpand s hk
     | drainBankJunk   => exact absurd hmem (by decide)
     | geBid           => exact absurd hmem (by decide)
     | wait            => exact absurd hmem (by decide)

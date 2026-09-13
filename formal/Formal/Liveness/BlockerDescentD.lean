@@ -86,6 +86,14 @@ private theorem refreshD_geCancel (s : State) :
 private theorem refreshD_supplyDemand (s : State) :
     (perceptionRefreshD s).supplyDemand = s.supplyDemand := by
   unfold perceptionRefreshD; split <;> rfl
+private theorem refreshD_bankItemsCount (s : State) :
+    (perceptionRefreshD s).bankItemsCount = s.bankItemsCount := by
+  unfold perceptionRefreshD; split <;> rfl
+
+private theorem refreshD_bankCapacity (s : State) :
+    (perceptionRefreshD s).bankCapacity = s.bankCapacity := by
+  unfold perceptionRefreshD; split <;> rfl
+
 private theorem refreshD_supplyAsymmetric (s : State) :
     (perceptionRefreshD s).supplyAsymmetric = s.supplyAsymmetric := by
   unfold perceptionRefreshD; split <;> rfl
@@ -319,6 +327,41 @@ theorem descendsD_supplyBank (s : State)
       refreshD_hp, refreshD_maxHp,
       refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
       refreshD_geCancel, refreshD_supplyDemand,
+      perceptionRefreshD_level, perceptionRefreshD_xp] <;>
+    omega
+
+set_option maxRecDepth 8000 in
+/-- `bankExpand` (→ `.buyBankExpansion`) strictly descends at `bankExpandSlot`
+    (2026-09-13). Bottom-of-cascade, above `objectiveStepFlag` which
+    `perceptionRefreshD` can RAISE — the same placement `supplyDemandSlot` and
+    `currencyTurnInFlag` take, and for the same reason. -/
+theorem descendsD_bankExpand (s : State)
+    (hk : productionLadder (perceptionRefreshD s) = some .bankExpand) :
+    dMeasureLt (dMeasure (cycleStepD s)) (dMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, bankExpandFires, Bool.and_eq_true, decide_eq_true_eq] at hfire
+  rw [cycleStepD_some s hk]
+  have hcs : cycleStep (perceptionRefreshD s) =
+      applyActionKind .buyBankExpansion (perceptionRefreshD s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  have hfill : 100 * s.bankItemsCount ≥ 75 * s.bankCapacity := by
+    have hd := hfire.1.1.2
+    simpa [ProductionLadder.BANK_EXPAND_FILL_DEN,
+           ProductionLadder.BANK_EXPAND_FILL_NUM,
+           refreshD_bankItemsCount, refreshD_bankCapacity] using hd
+  apply dLt_of_bankExpand_dec <;>
+    simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
+      applyActionKind, bankExpansionSlots,
+      ProductionLadder.BANK_EXPAND_FILL_DEN, ProductionLadder.BANK_EXPAND_FILL_NUM,
+      refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
+      refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
+      refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,
+      refreshD_pending, refreshD_inventoryUsed, refreshD_inventoryMax,
+      refreshD_hp, refreshD_maxHp,
+      refreshD_overstockDebt, refreshD_depositDebt, refreshD_sellDebt,
+      refreshD_geCancel, refreshD_supplyDemand, refreshD_currencyTurnIn,
+      refreshD_bankItemsCount, refreshD_bankCapacity,
       perceptionRefreshD_level, perceptionRefreshD_xp] <;>
     omega
 

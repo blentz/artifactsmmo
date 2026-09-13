@@ -113,6 +113,25 @@ structure FMeasure where
   -- flag sits at the bottom of the cascade, one below `supplyDemandSlot`
   -- since it is the newer of the two collect rungs.
   currencyTurnInFlag     : Nat
+  -- Slot 18 (2026-09-13). BANK_EXPAND was promoted ABOVE `.objectiveStep`
+  -- (LAST in COLLECT_REWARD_ORDER), so a bank-expansion cycle is now selectable
+  -- and must itself descend. `.buyBankExpansion` touches NO higher slot — it
+  -- changes only `gold` (down) and `bankCapacity` (up), neither of which is in
+  -- this tuple — so like `geCancelFlag` this sits at the bottom of the cascade.
+  --
+  -- A COUNT, NOT A FLAG, and that is forced by the 75% trigger. At 95% one buy
+  -- always cleared the threshold, so a fire-and-lose flag would have done; at
+  -- 75% it does not (capacity 70 with 70 items is still 77.8% full after a buy
+  -- and fires again). This slot instead counts how far the fill sits ABOVE the
+  -- trigger, scaled: firing forces `FILL_DEN * items ≥ FILL_NUM * capacity`, so
+  -- the `+ 1` makes it ≥ 1 exactly when the rung fires, and a buy adds
+  -- `bankExpansionSlots` to `capacity` while leaving `items` alone, dropping it
+  -- by `bankExpansionSlots * FILL_NUM > 0`. Saturating `-` floors it at 0.
+  --
+  -- Being a count is what makes it trigger-agnostic: it descends for ANY ratio,
+  -- so retuning the trigger cannot silently invalidate the termination argument
+  -- the way it invalidated the flag shape.
+  bankExpandSlot         : Nat
   deriving DecidableEq, Repr
 
 /-- Extract the FMeasure from a `State`. Slot 3 is "a task is present"
@@ -138,7 +157,10 @@ noncomputable def fMeasure (s : State) : FMeasure :=
     hpDeficit              := s.maxHp - s.hp
     geCancelFlag           := b2n s.geCancelTargetsNonempty
     supplyDemandSlot       := s.supplyDemand
-    currencyTurnInFlag     := b2n s.currencyTurnInActive }
+    currencyTurnInFlag     := b2n s.currencyTurnInActive
+    bankExpandSlot         :=
+      (ProductionLadder.BANK_EXPAND_FILL_DEN * s.bankItemsCount + 1)
+        - ProductionLadder.BANK_EXPAND_FILL_NUM * s.bankCapacity }
 
 /-! ## Strict lex order — hand-rolled 15-way disjunction (the
 `CumulativeProgress.extMeasureLt` pattern). -/
@@ -283,14 +305,33 @@ def fMeasureLt (m₁ m₂ : FMeasure) : Prop :=
      ∧ m₁.geCancelFlag = m₂.geCancelFlag
      ∧ m₁.supplyDemandSlot = m₂.supplyDemandSlot
      ∧ m₁.currencyTurnInFlag < m₂.currencyTurnInFlag)
+  ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.drawOwedFlag = m₂.drawOwedFlag
+     ∧ m₁.phasePresent = m₂.phasePresent
+     ∧ m₁.overstockFlag = m₂.overstockFlag
+     ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
+     ∧ m₁.sellableFlag = m₂.sellableFlag
+     ∧ m₁.recyclableFlag = m₂.recyclableFlag
+     ∧ m₁.craftReliefFlag = m₂.craftReliefFlag
+     ∧ m₁.craftPotionsFlag = m₂.craftPotionsFlag
+     ∧ m₁.gearReviewFlag = m₂.gearReviewFlag
+     ∧ m₁.pendingFlag = m₂.pendingFlag
+     ∧ m₁.bankPressure = m₂.bankPressure
+     ∧ m₁.hpDeficit = m₂.hpDeficit
+     ∧ m₁.geCancelFlag = m₂.geCancelFlag
+     ∧ m₁.supplyDemandSlot = m₂.supplyDemandSlot
+     ∧ m₁.currencyTurnInFlag = m₂.currencyTurnInFlag
+     ∧ m₁.bankExpandSlot < m₂.bankExpandSlot)
 
 /-! ### Well-foundedness via embedding into Mathlib lex. -/
 
-/-- Right-associated 17-tuple of `Nat`. Widened from sixteen on 2026-08-19 for
-    `drawOwedFlag` — the third widening of this tuple, after slots 15 and 16. -/
+/-- Right-associated 18-tuple of `Nat`. Widened on 2026-09-13 for
+    `bankExpandSlot` — the fourth widening, after slots 15, 16 and
+    `drawOwedFlag`. (The name is historical and one widening behind by
+    construction; the arity is the tuple below, not the name.) -/
 abbrev LexSixteen :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
-    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
+    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
 /-- Embed an `FMeasure` into the right-associated lex 16-tuple. -/
 def toLex13 (m : FMeasure) : LexSixteen :=
@@ -309,14 +350,16 @@ def toLex13 (m : FMeasure) : LexSixteen :=
                         toLex (m.bankPressure,
                           toLex (m.hpDeficit,
                             toLex (m.geCancelFlag,
-                              toLex (m.supplyDemandSlot, m.currencyTurnInFlag))))))))))))))))
+                              toLex (m.supplyDemandSlot,
+                                toLex (m.currencyTurnInFlag,
+                                  m.bankExpandSlot)))))))))))))))))
 
 /-- `fMeasureLt` implies the embedded `<` on `LexFifteen`. -/
 theorem toLex13_lt_of_fMeasureLt
     {m₁ m₂ : FMeasure} (h : fMeasureLt m₁ m₂) :
     toLex13 m₁ < toLex13 m₂ := by
   simp only [toLex13, Prod.Lex.lt_iff, ofLex_toLex]
-  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h
+  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h
   · exact Or.inl h
   · obtain ⟨h1, h⟩ := h
     exact Or.inr ⟨h1, Or.inl h⟩
@@ -370,7 +413,14 @@ theorem toLex13_lt_of_fMeasureLt
     exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
             Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
               Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
-                Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+                Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15,
+            h16, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨hd, Or.inr ⟨h3, Or.inr ⟨h4,
+            Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
+              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
+                Or.inr ⟨h13, Or.inr ⟨h14, Or.inr ⟨h15,
+                  Or.inr ⟨h16, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Well-foundedness of `fMeasureLt`, by `InvImage` reduction to Mathlib's
     standard well-founded order on `LexSixteen`. -/
@@ -612,9 +662,36 @@ theorem fLt_of_currencyTurnIn_dec {m₁ m₂ : FMeasure}
     (h15 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
     (h : m₁.currencyTurnInFlag < m₂.currencyTurnInFlag) : fMeasureLt m₁ m₂ :=
   Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl
       ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10,
-       h11, h12, h13, h14, h15, h⟩)))))))))))))))
+       h11, h12, h13, h14, h15, h⟩))))))))))))))))
+
+/-- Slot 18 (`bankExpandSlot`) decrease dominates, with every higher slot
+    equal. The bottom of the cascade, like `geCancelFlag` above it —
+    `.buyBankExpansion` touches no slot in this tuple except this one. -/
+theorem fLt_of_bankExpand_dec {m₁ m₂ : FMeasure}
+    (h1 : m₁.levelDeficit = m₂.levelDeficit)
+    (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (hd : m₁.drawOwedFlag = m₂.drawOwedFlag)
+    (h3 : m₁.phasePresent = m₂.phasePresent)
+    (h4 : m₁.overstockFlag = m₂.overstockFlag)
+    (h5 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
+    (h6 : m₁.sellableFlag = m₂.sellableFlag)
+    (h7 : m₁.recyclableFlag = m₂.recyclableFlag)
+    (h8 : m₁.craftReliefFlag = m₂.craftReliefFlag)
+    (h9 : m₁.craftPotionsFlag = m₂.craftPotionsFlag)
+    (h10 : m₁.gearReviewFlag = m₂.gearReviewFlag)
+    (h11 : m₁.pendingFlag = m₂.pendingFlag)
+    (h12 : m₁.bankPressure = m₂.bankPressure)
+    (h13 : m₁.hpDeficit = m₂.hpDeficit)
+    (h14 : m₁.geCancelFlag = m₂.geCancelFlag)
+    (h15 : m₁.supplyDemandSlot = m₂.supplyDemandSlot)
+    (h16 : m₁.currencyTurnInFlag = m₂.currencyTurnInFlag)
+    (h : m₁.bankExpandSlot < m₂.bankExpandSlot) : fMeasureLt m₁ m₂ :=
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+    (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+      ⟨h1, h2, hd, h3, h4, h5, h6, h7, h8, h9, h10,
+       h11, h12, h13, h14, h15, h16, h⟩))))))))))))))))
 
 /-! ## The engine — reach 50 from per-cycle FMeasure descent (the
 `MeasureDescent.exists_level_ge_of_descent` shape over the richer tuple). -/

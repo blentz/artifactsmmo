@@ -150,17 +150,24 @@ theorem plan_exists_for_taskCancel :
         ProductionLadder.taskCancelFires]
 
 /-- `[.buyBankExpansion]` clears `bankExpand` PROVIDED the added 20
-    slots suffice to drop the fill ratio below the 0.95 threshold.
+    slots suffice to drop the fill ratio below the 0.75 threshold.
 
     Honest disclosure: production's `BuyBankExpansionAction.apply` only
     grows capacity by 20 (it does not free items). The firing predicate is
-    `100 * bankItemsCount ≥ 95 * bankCapacity`; whether the post-state's
-    ratio falls below 0.95 depends on the pre-state `bankItemsCount`. The
-    precondition `100 * bankItemsCount < 95 * (bankCapacity + 20)`
-    formalizes "20 added slots are enough to clear the threshold." -/
+    `100 * bankItemsCount ≥ 75 * bankCapacity`; whether the post-state's
+    ratio falls below 0.75 depends on the pre-state `bankItemsCount`. The
+    precondition `100 * bankItemsCount < 75 * (bankCapacity + 20)`
+    formalizes "20 added slots are enough to clear the threshold."
+
+    2026-09-13: the threshold moved 0.95 -> 0.75, which makes this
+    precondition HARDER to satisfy, not easier — 20 added slots clear a 75%
+    bar less often than a 95% one. That is the same fact Consequence A of
+    docs/PLAN_bank_expand_promotion.md records: at 75% a single buy no longer
+    always extinguishes the rung, which is why the measure slot counts rather
+    than flags. -/
 theorem plan_exists_for_bankExpand :
     ∀ s, fires .bankExpand s = true →
-      100 * s.bankItemsCount < 95 * (s.bankCapacity + bankExpansionSlots) →
+      100 * s.bankItemsCount < 75 * (s.bankCapacity + bankExpansionSlots) →
       ∃ p : Plan, planAchieves p s .bankExpand := by
   intro s hfire henough
   refine ⟨[.buyBankExpansion], ?_⟩

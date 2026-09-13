@@ -570,6 +570,54 @@ theorem descendsE_supplyBank (s : State)
     (2026-08-16) — directly below `supplyBank`, above `gearReviewFlag`/
     `objectiveStepFlag` (the two slots the refresh can raise). Fire-and-lose:
     `.npcBuy` clears only `currencyTurnInActive`. -/
+private theorem refreshE_bankItemsCount (s : State) :
+    (perceptionRefreshE s).bankItemsCount = s.bankItemsCount := by
+  unfold perceptionRefreshE
+  split
+  · split <;> rfl
+  · rfl
+
+private theorem refreshE_bankCapacity (s : State) :
+    (perceptionRefreshE s).bankCapacity = s.bankCapacity := by
+  unfold perceptionRefreshE
+  split
+  · split <;> rfl
+  · rfl
+
+set_option maxRecDepth 8000 in
+/-- `bankExpand` (→ `.buyBankExpansion`) strictly descends at `bankExpandSlot`
+    (2026-09-13). Directly below `currencyTurnInFlag` and above the two
+    perception-raised slots. -/
+theorem descendsE_bankExpand (s : State)
+    (hk : productionLadder (perceptionRefreshE s) = some .bankExpand) :
+    eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, bankExpandFires, Bool.and_eq_true, decide_eq_true_eq] at hfire
+  rw [cycleStepE_some s hk]
+  have hcs : cycleStep (perceptionRefreshE s) =
+      applyActionKind .buyBankExpansion (perceptionRefreshE s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  have hfill : 100 * s.bankItemsCount ≥ 75 * s.bankCapacity := by
+    have hd := hfire.1.1.2
+    simpa [ProductionLadder.BANK_EXPAND_FILL_DEN,
+           ProductionLadder.BANK_EXPAND_FILL_NUM,
+           refreshE_bankItemsCount, refreshE_bankCapacity] using hd
+  apply eLt_of_bankExpand_dec <;>
+    simp [eMeasure, rearmE, rearmOnMint, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
+      applyActionKind, bankExpansionSlots,
+      ProductionLadder.BANK_EXPAND_FILL_DEN, ProductionLadder.BANK_EXPAND_FILL_NUM,
+      refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
+      refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
+      refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,
+      refreshE_inventoryUsed, refreshE_inventoryMax, refreshE_hp, refreshE_maxHp,
+      refreshE_overstockDebt, refreshE_depositDebt, refreshE_sellDebt,
+      refreshE_gearGap, refreshE_adequate, refreshE_geCancel, refreshE_supplyDemand,
+      refreshE_currencyTurnIn,
+      refreshE_bankItemsCount, refreshE_bankCapacity,
+      perceptionRefreshE_level, perceptionRefreshE_xp] <;>
+    omega
+
 theorem descendsE_currencyTurnIn (s : State)
     (hk : productionLadder (perceptionRefreshE s) = some .currencyTurnIn) :
     eMeasureLt (eMeasure (cycleStepE s)) (eMeasure s) := by
@@ -1039,7 +1087,9 @@ private def gearScanPrefix : List MeansKind :=
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull,
    .discardHigh, .gearReview, .craftPotions, .claimPending, .completeTask,
    .sellPressured, .lowYieldCancel, .taskCancel,
-   .supplyBank, .currencyTurnIn, .acceptTask]
+   .supplyBank, .currencyTurnIn, .acceptTask,
+   -- 2026-09-13: BANK_EXPAND promoted, LAST in the collect group.
+   .bankExpand]
 
 private theorem blockerPrefix_split :
     Formal.Liveness.UnconditionalDescent.blockerPrefix

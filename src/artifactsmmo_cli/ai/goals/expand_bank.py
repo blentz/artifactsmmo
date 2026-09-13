@@ -15,7 +15,11 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 # value() activates at or above the shared TRIGGER_FILL_NUM/DEN ratio (95/100,
 # owned by bank_expansion_timing; exact integer cross-multiply — no float).
-_SATISFIED_FILL = 0.90  # is_satisfied is True when below this fill ratio
+_SATISFIED_FILL = 0.70  # is_satisfied is True when below this fill ratio
+# Must stay BELOW TRIGGER_FILL_NUM/TRIGGER_FILL_DEN. `value()` returns 0.0 early
+# when `is_satisfied`, so a satisfaction mark at or above the trigger silences
+# the goal over the whole [trigger, satisfied) band. Held five points under the
+# trigger, which is the hysteresis the 0.95/0.90 pair had.
 
 
 def _bank_fill_known(state: WorldState) -> int | None:

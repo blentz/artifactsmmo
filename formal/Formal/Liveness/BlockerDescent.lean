@@ -276,6 +276,46 @@ theorem descends_currencyTurnIn (s : State)
   apply fLt_of_currencyTurnIn_dec <;>
     simp [fMeasure, pressureDelta, applyActionKind, hfire]
 
+set_option maxRecDepth 8000 in
+/-- `bankExpand` (→ `.buyBankExpansion`) strictly descends at `bankExpandSlot`
+    (2026-09-13). Bottom of the cascade, like `geCancel` and `currencyTurnIn`:
+    `.buyBankExpansion` changes only `gold` (down) and `bankCapacity` (up), and
+    neither appears in the FMeasure tuple above this slot.
+
+    The strictness is arithmetic rather than a flag flip. Firing gives
+    `FILL_DEN * items ≥ FILL_NUM * capacity`, so the slot
+    `(FILL_DEN * items + 1) - FILL_NUM * capacity` is at least 1; the buy leaves
+    `items` alone and adds `bankExpansionSlots` to `capacity`, so the subtrahend
+    grows by `bankExpansionSlots * FILL_NUM` and the saturating difference
+    strictly drops. This holds for ANY trigger ratio, which is the point — at
+    the 75% trigger a single buy no longer always clears the threshold, so the
+    fire-and-lose flag shape the other bottom slots use would not have worked
+    here. -/
+theorem descends_bankExpand (s : State)
+    (hk : productionLadder (perceptionRefresh s) = some .bankExpand) :
+    fMeasureLt (fMeasure (cycleStepF s)) (fMeasure s) := by
+  have hfire := fires_of_ladder hk
+  simp only [fires, bankExpandFires, Bool.and_eq_true, decide_eq_true_eq] at hfire
+  rw [cycleStepF_some s hk, ← fMeasure_perceptionRefresh s]
+  have hcs : cycleStep (perceptionRefresh s) =
+      applyActionKind .buyBankExpansion (perceptionRefresh s) := by
+    unfold cycleStep; rw [hk]; rfl
+  rw [hcs]
+  -- The fill conjunct is what makes the slot non-zero before the buy, and omega
+  -- needs it as a literal inequality in context.
+  have hfill : 100 * (perceptionRefresh s).bankItemsCount
+      ≥ 75 * (perceptionRefresh s).bankCapacity := by
+    have hd := hfire.1.1.2
+    simpa [ProductionLadder.BANK_EXPAND_FILL_DEN,
+           ProductionLadder.BANK_EXPAND_FILL_NUM] using hd
+  apply fLt_of_bankExpand_dec <;>
+    simp only [fMeasure, pressureDelta, applyActionKind, bankExpansionSlots,
+               ProductionLadder.BANK_EXPAND_FILL_DEN,
+               ProductionLadder.BANK_EXPAND_FILL_NUM] <;>
+    first
+      | rfl
+      | omega
+
 /-- `craftRelief` (→ `.craft`) strictly descends at `craftReliefFlag`. -/
 theorem descends_craftRelief (s : State)
     (hk : productionLadder (perceptionRefresh s) = some .craftRelief) :

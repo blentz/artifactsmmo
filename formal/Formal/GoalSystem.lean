@@ -127,7 +127,7 @@ theorem taskCancel_cold_no_pivot_zero :
 
 /-! ### ExpandBankGoal — {0, 40}. -/
 
-def expandBankTriggerFill : Rat := 95 / 100
+def expandBankTriggerFill : Rat := 75 / 100
 
 def expandBankValue
     (accessible : Bool) (satisfied : Bool) (unknown : Bool)

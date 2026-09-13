@@ -13,8 +13,12 @@ from artifactsmmo_cli.ai.actions.bank_expansion import (
     BANK_EXPANSION_SLOTS,
     BuyBankExpansionAction,
 )
+from artifactsmmo_cli.ai.bank_expansion_timing import (
+    TRIGGER_FILL_DEN,
+    TRIGGER_FILL_NUM,
+)
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
+from artifactsmmo_cli.ai.goals.expand_bank import _SATISFIED_FILL, ExpandBankGoal
 from tests.test_ai.fixtures import make_state
 
 
@@ -229,4 +233,37 @@ class TestExpandBankGoalAccountReserve:
         goal = ExpandBankGoal(bank_accessible=True, game_data=gd)
         state = make_state(gold=100, bank_gold=50000,
                            bank_items={f"item_{i}": 1 for i in range(29)})
+        assert goal.value(state, gd) == 0.0
+
+
+class TestExpandBankGoalTriggerAndSatisfactionOrdering:
+    """The firing trigger and the satisfaction mark must not cross.
+
+    `value()` returns 0.0 early when `is_satisfied(state)`, so any fill in
+    [trigger, satisfied) both FIRES and is ALREADY SATISFIED and the goal scores
+    nothing across that whole band. At the 2026-09-13 move to a 75% trigger, a
+    satisfaction mark left at 0.90 would have silenced the goal over exactly the
+    range the move was meant to open.
+    """
+
+    def test_satisfaction_mark_sits_below_the_firing_trigger(self):
+        """The RELATION, not the two numbers — either may be retuned, but the
+        goal is dead the moment they cross."""
+        assert _SATISFIED_FILL < TRIGGER_FILL_NUM / TRIGGER_FILL_DEN
+
+    def test_value_fires_between_the_satisfaction_mark_and_full(self):
+        """24/30 = 0.80: above the 0.75 trigger and above the 0.70 satisfaction
+        mark, so the goal must actually score rather than return 0.0."""
+        gd = make_gd(bank_capacity=30, next_expansion_cost=100)
+        goal = ExpandBankGoal(bank_accessible=True, game_data=gd)
+        state = make_state(gold=2000, bank_items={f"item_{i}": 1 for i in range(24)})
+        assert goal.is_satisfied(state) is False
+        assert goal.value(state, gd) == 40.0
+
+    def test_a_freshly_expanded_bank_stops_firing(self):
+        """21/30 = 0.70 is below the 0.75 trigger, so a bank that has just been
+        expanded does not immediately ask to be expanded again."""
+        gd = make_gd(bank_capacity=30, next_expansion_cost=100)
+        goal = ExpandBankGoal(bank_accessible=True, game_data=gd)
+        state = make_state(gold=2000, bank_items={f"item_{i}": 1 for i in range(21)})
         assert goal.value(state, gd) == 0.0

@@ -97,13 +97,16 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     # 2026-08-19 (S-051): promoted above the objective step, mirroring
     # `Formal.Liveness.MeansKind.allInLadderOrder`. LAST in the collect group.
     LadderMeans.ACCEPT_TASK,
+    # 2026-09-13: promoted above the objective step, same mirror, LAST in the
+    # collect group — a one-action purchase must not preempt a resolved turn-in
+    # election or a sibling's supply request.
+    LadderMeans.BANK_EXPAND,
     LadderMeans.OBJECTIVE_STEP,
     LadderMeans.PURSUE_TASK,
     LadderMeans.TASK_EXCHANGE,
     LadderMeans.MAINTAIN_CONSUMABLES,
     LadderMeans.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS,
-    LadderMeans.BANK_EXPAND,
     LadderMeans.GE_BID,
     LadderMeans.DRAIN_BANK_JUNK,
     LadderMeans.WAIT,
@@ -173,6 +176,7 @@ assert COLLECT_REWARD_ORDER == (
     MeansKind.SUPPLY_BANK,
     MeansKind.CURRENCY_TURNIN,
     MeansKind.ACCEPT_TASK,
+    MeansKind.BANK_EXPAND,
 ), "COLLECT_REWARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 assert DISCRETIONARY_ORDER == (
@@ -181,7 +185,6 @@ assert DISCRETIONARY_ORDER == (
     MeansKind.MAINTAIN_CONSUMABLES,
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
-    MeansKind.BANK_EXPAND,
     MeansKind.GE_BID,
     MeansKind.DRAIN_BANK_JUNK,
     MeansKind.WAIT,

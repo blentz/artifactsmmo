@@ -184,9 +184,17 @@ def allInLadderOrder : List MeansKind :=
    -- turn-in election or a sibling's supply request, which is the same argument
    -- those two make for their own positions.
    .acceptTask,
+   -- 2026-09-13: promoted out of the discretionary group for the same reason
+   -- `.acceptTask` was — below `.objectiveStep` it was unreachable, since a
+   -- character essentially always has a step. Measured live: the rung fired
+   -- against a 50/50 bank and was selected zero times while the fleet lost its
+   -- deposit sink entirely. LAST in the collect group, below `.acceptTask`: a
+   -- one-action purchase must not preempt a resolved turn-in election or a
+   -- sibling's supply request.
+   .bankExpand,
    .objectiveStep,
    .pursueTask, .taskExchange, .maintainConsumables,
-   .sellIdle, .recycleSurplus, .bankExpand, .geBid, .drainBankJunk,
+   .sellIdle, .recycleSurplus, .geBid, .drainBankJunk,
    .wait]
 
 /-- Sanity: 31 rungs (one per constructor). -/

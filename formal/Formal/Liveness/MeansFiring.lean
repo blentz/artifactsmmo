@@ -562,18 +562,18 @@ theorem _fires_bankExpand_implies_expandBank_positive (s : State) :
   have hcap_ne : s.bankCapacity ≠ 0 := Nat.pos_iff_ne_zero.mp hcap
   have hcap_pos_rat : (0 : Rat) < (s.bankCapacity : Rat) := by exact_mod_cast hcap
   have hfill_ge :
-      (s.bankItemsCount : Rat) / (s.bankCapacity : Rat) ≥ 95 / 100 := by
+      (s.bankItemsCount : Rat) / (s.bankCapacity : Rat) ≥ 75 / 100 := by
     rw [ge_iff_le]
     rw [div_le_div_iff₀ (by norm_num : (0 : Rat) < 100) hcap_pos_rat]
     have h1 : BANK_EXPAND_FILL_DEN * s.bankItemsCount ≥ BANK_EXPAND_FILL_NUM * s.bankCapacity := hfill
     unfold BANK_EXPAND_FILL_DEN BANK_EXPAND_FILL_NUM at h1
-    have h2 : 95 * s.bankCapacity ≤ 100 * s.bankItemsCount := by omega
-    have h3 : (95 * s.bankCapacity : Rat) ≤ (100 * s.bankItemsCount : Rat) := by exact_mod_cast h2
+    have h2 : 75 * s.bankCapacity ≤ 100 * s.bankItemsCount := by omega
+    have h3 : (75 * s.bankCapacity : Rat) ≤ (100 * s.bankItemsCount : Rat) := by exact_mod_cast h2
     linarith
   unfold expandBankValue expandBankTriggerFill
   simp
   have hnot_lt :
-      ¬ (s.bankItemsCount : Rat) / (s.bankCapacity : Rat) < 95 / 100 := by linarith
+      ¬ (s.bankItemsCount : Rat) / (s.bankCapacity : Rat) < 75 / 100 := by linarith
   simp [hnot_lt]
 
 end Formal.Liveness.MeansFiring

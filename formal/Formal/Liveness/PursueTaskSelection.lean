@@ -39,7 +39,7 @@ open Formal.Liveness.MeansKind
 open Formal.Liveness.ProductionLadder
 open Formal.Liveness.CycleStep
 
-/-- Item 3a: bundle predicate. None of the 17 ladder slots above
+/-- Item 3a: bundle predicate. None of the ladder slots above
     `.pursueTask` fires (13 original + `.restForCombat` after `.hpCritical`
     + `.gearReview` after `.discardHigh` + `.recycleRelief` after `.craftRelief`
     + `.sellRelief` after `.recycleRelief`). -/
@@ -76,6 +76,11 @@ def pursueSelectionConditions (s : State) : Prop :=
   -- that group. One more rung above `pursueTask` that has to be quiet, not a
   -- weaker claim.
   ∧ acceptTaskFires s = false
+  -- 2026-09-13: BANK_EXPAND promoted into COLLECT_REWARD_ORDER, LAST in that
+  -- group, directly below `acceptTask`. Same reasoning as the three comments
+  -- above — one more rung above `pursueTask` that has to be quiet, which
+  -- STRENGTHENS the hypothesis rather than weakening the claim.
+  ∧ bankExpandFires s = false
   ∧ objectiveStepFires s = false
 
 /-- Item 3b: under `pursueSelectionConditions` plus `pursueTaskFires`,
@@ -95,10 +100,10 @@ theorem productionLadder_eq_pursueTask
         (fun k => if fires k s then some k else none)
       = some .pursueTask
   obtain ⟨h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, h11, hcp, h12, h13, h14, h15, h16,
-          hsb, hct, hat, h17⟩ := hConds
+          hsb, hct, hat, hbe, h17⟩ := hConds
   simp only [MeansKind.allInLadderOrder, List.findSome?,
              fires, h1, h2, h3, h4, hgc, h5, h6, h7, h8, h9, h10, h11, hcp, h12, h13,
-             h14, h15, h16, hsb, hct, hat, h17, hPursue, if_true]
+             h14, h15, h16, hsb, hct, hat, hbe, h17, hPursue, if_true]
   rfl
 
 /-- Item 3 corollary: under the conditions, `cycleStep` applies

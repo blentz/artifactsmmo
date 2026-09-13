@@ -85,11 +85,14 @@ class TestExpandBankGaps:
         assert goal.value(state, gd) == 0.0
 
     def test_value_zero_when_fill_between_satisfied_and_trigger(self):
-        """0.90 <= fill < 0.95 — not satisfied, but below the value trigger."""
+        """_SATISFIED_FILL <= fill < trigger — not satisfied, but below the
+        value trigger. The hysteresis band, rebased from 0.90/0.95 to 0.70/0.75
+        by the 2026-09-13 retrigger; the band's WIDTH is what this pins, and it
+        must stay non-empty or the goal chatters on and off at one ratio."""
         gd = self._gd(capacity=30, cost=1000)
         goal = ExpandBankGoal(bank_accessible=True, game_data=gd)
-        # 28/30 = 0.933 -> not satisfied (>= 0.90) but fill < 0.95 -> value 0.
-        state = make_state(gold=2000, bank_items={f"i{i}": 1 for i in range(28)})
+        # 22/30 = 0.733 -> not satisfied (>= 0.70) but fill < 0.75 -> value 0.
+        state = make_state(gold=2000, bank_items={f"i{i}": 1 for i in range(22)})
         assert goal.is_satisfied(state) is False
         assert goal.value(state, gd) == 0.0
 
