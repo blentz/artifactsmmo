@@ -2934,16 +2934,8 @@ ROOT_DECISION_MUTATIONS = [
     # that feeds it are killed by tests/test_ai/test_orphan_gate_scenarios.py,
     # so they live in `ORPHAN_DEMAND_GATE_MUTATIONS` below rather than in this
     # list — a unit-killed mutant needs its own run_group.
-    # 2026-09-13: conjunct 1 became CONDITIONAL — a gear-nameable skill is
-    # dropped only when a root on offer demands it. The mutant is the same idea
-    # against the new shape: drop the whole conjunct, so a skill something is
-    # ALREADY climbing through the gear seam gets a rival standalone root.
-    ("root: the orphan rule drops the not-nameable filter, so a skill a gear"
-     " target CAN name gets a standalone root as well",
-     "        if (skill not in nameable or skill not in craft_named)\n",
-     "        if True\n"),
-    # The other half of the same conjunct: keep the nameability test but throw
-    # away the demand question, restoring the unconditional drop that left live
+    # The nameability half of conjunct 1: keep the demand question but throw
+    # away the nameability test, restoring the unconditional drop that left live
     # Robby at weaponcrafting 11 against character level 30 for two days.
     ("root: the orphan rule ignores craft demand, restoring the unconditional"
      " gear-nameable drop",
@@ -3063,6 +3055,22 @@ ROOT_DECISION_MUTATIONS = [
 # tests/test_ai/test_orphan_gate_scenarios.py, which drives the gate end to end
 # through the real `resolve_root` over the committed bundle, not by
 # test_decisions_root.py.
+ORPHAN_GEAR_ADMISSION_MUTATIONS = [
+    # 2026-09-13: conjunct 1 became CONDITIONAL — a gear-nameable skill is
+    # dropped only when a root on offer DEMANDS it. Dropping the whole conjunct
+    # gives a skill something is already climbing through the gear seam a rival
+    # standalone root, which is the churn conjunct 1 exists to prevent.
+    #
+    # ITS OWN GROUP because its kill-test is the unit suite for the new
+    # admission rule, not `test_decisions_root.py` where the rest of this
+    # rule's mutants live — bound to the wrong file it SURVIVED, which is how
+    # this group came to exist.
+    ("root: the orphan rule drops the not-nameable filter, so a skill a gear"
+     " target CAN name gets a standalone root as well",
+     "        if (skill not in nameable or skill not in craft_named)\n",
+     "        if True\n"),
+]
+
 CRAFT_DEMAND_MUTATIONS = [
     # `craft_demand` is the projection conjunct 1 now asks. Its own group
     # because its kill-test is the unit suite, not the scenario suite.
@@ -7883,6 +7891,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_decisions_obtain_item.py", survivors)
     run_group(ROOT_DECISION_SRC, ROOT_DECISION_MUTATIONS,
               "tests/test_ai/test_decisions_root.py", survivors)
+    run_group(ROOT_DECISION_SRC, ORPHAN_GEAR_ADMISSION_MUTATIONS,
+              "tests/test_ai/test_orphan_gear_skill_admission.py", survivors)
     run_group(CRAFT_DEMAND_SRC, CRAFT_DEMAND_MUTATIONS,
               "tests/test_ai/test_craft_demand.py", survivors)
     run_group(ROOT_DECISION_SRC, ORPHAN_DEMAND_GATE_MUTATIONS,
