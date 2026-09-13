@@ -133,6 +133,13 @@ def test_fallbacks_offer_the_other_branch():
 
 _ORPHAN_ROWS_AT_FLOOR = [
     "ReachSkillLevel(skill='cooking', level=2)",
+    # 2026-09-13 craft-demand gate: conjunct 1 drops a gear-nameable skill only
+    # when a root on offer DEMANDS it. On an all-at-the-floor board nothing
+    # demands any of the three, so all three are offered a climb — appended
+    # behind the trunk, reordering nothing above it.
+    "ReachSkillLevel(skill='gearcrafting', level=2)",
+    "ReachSkillLevel(skill='jewelrycrafting', level=2)",
+    "ReachSkillLevel(skill='weaponcrafting', level=2)",
 ]
 """The tail every pin below grew: the restored standalone skill roots
 (`decisions/root._orphan_skill_roots`) — the skills NO gear target can name,
@@ -285,7 +292,12 @@ class TestPerScenarioPins:
             "ObtainItem(code='water_bow', quantity=1, slot='weapon_slot')",
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
             "ReachCharLevel(level=20)",
-            *_ORPHAN_ROWS_AT_FLOOR]
+            "ReachSkillLevel(skill='cooking', level=2)",
+            # 2026-09-13 craft-demand gate — undemanded gear-nameable
+            # skills now get a climb, appended behind the trunk.
+            "ReachSkillLevel(skill='gearcrafting', level=11)",
+            "ReachSkillLevel(skill='weaponcrafting', level=11)",
+        ]
 
     def test_l10_weapon_upgrade_pins_the_skill_gating_the_weapon(self):
         """WAVE 3a + FIX-ROUND 1. `copper_dagger` is not on the target sheet:
@@ -315,7 +327,11 @@ class TestPerScenarioPins:
             "ObtainItem(code='blue_slimeball', quantity=2)",
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
             "ReachCharLevel(level=20)",
-            *_ORPHAN_ROWS_AT_FLOOR]
+            "ReachSkillLevel(skill='cooking', level=2)",
+            # 2026-09-13 craft-demand gate — undemanded gear-nameable
+            # skills now get a climb, appended behind the trunk.
+            "ReachSkillLevel(skill='weaponcrafting', level=11)",
+        ]
         # The trunk is no longer last — the orphan skill roots sit behind it —
         # but it is still ahead of every one of them, which is the ordering
         # 2026-07-27 bought and the ordering `l48_band_adequate` re-proved.
@@ -337,8 +353,12 @@ class TestPerScenarioPins:
         # fishing, mining and woodcutting would have joined it at the floor
         # too, but nothing in this scenario demands any of them — see
         # `_ORPHAN_ROWS_AT_FLOOR`.
-        assert len(d.ranking) == 8
-        assert [r.root_repr for r in d.ranking[-1:]] == _ORPHAN_ROWS_AT_FLOOR
+        # 8 -> 11 on 2026-09-13: the craft-demand gate offers a climb for each
+        # of the three gear-nameable skills no root here demands. The count is
+        # spelled against the tail so the two move together.
+        assert len(d.ranking) == 8 - 1 + len(_ORPHAN_ROWS_AT_FLOOR)
+        assert ([r.root_repr for r in d.ranking[-len(_ORPHAN_ROWS_AT_FLOOR):]]
+                == _ORPHAN_ROWS_AT_FLOOR)
 
     def test_l12_taskgated_bag_pins_iron_boots_branch(self):
         """RE-DERIVED (GAP-1 fix, 2026-07-07): this scenario has zero attack
@@ -388,7 +408,11 @@ class TestPerScenarioPins:
             "ReachSkillLevel(skill='weaponcrafting', level=2)",
             "ObtainItem(code='wooden_shield', quantity=1, slot='shield_slot')",
             "ReachCharLevel(level=20)",
-            *_ORPHAN_ROWS_AT_FLOOR]
+            "ReachSkillLevel(skill='cooking', level=2)",
+            # 2026-09-13 craft-demand gate — undemanded gear-nameable
+            # skills now get a climb, appended behind the trunk.
+            "ReachSkillLevel(skill='gearcrafting', level=11)",
+        ]
         assert not any("satchel" in r.root_repr for r in d.ranking), \
             "satchel needs jasper_crystal from an unreachable trader"
 
@@ -438,7 +462,8 @@ class TestServabilityDemotion:
     SHIELD = ObtainItem(code="wooden_shield", quantity=1, slot="shield_slot")
     SHIELD_STEP = ObtainItem(code="ash_wood", quantity=10)
     TRUNK = ReachCharLevel(level=20)
-    ORPHANS = [ReachSkillLevel(skill="cooking", level=2)]
+    ORPHANS = [ReachSkillLevel(skill="cooking", level=2),
+               ReachSkillLevel(skill="weaponcrafting", level=11)]
     """The restored standalone skill roots for this character
     (`decisions/root._orphan_skill_roots`), offered BEHIND the trunk. They
     extend every list below without reordering it, and they widen the
@@ -449,7 +474,16 @@ class TestServabilityDemotion:
     fishing, mining (at 10 here) and woodcutting are gathering skills, and
     nothing in `l10_weapon_upgrade`'s gear siblings or trunk demands any of
     them above the floor, so only cooking — the ungated floor — is still
-    offered."""
+    offered.
+
+    THE CRAFT-DEMAND GATE (2026-09-13) then added weaponcrafting back. Conjunct
+    1 used to drop every gear-nameable skill outright; it now drops one only
+    when a root on offer DEMANDS it. This board's gear siblings are gearcrafted
+    and jewelrycrafted, so both of those skills are demanded and stay suppressed
+    (they are already on the board as tier roots in their own right, which is
+    why they never appear here). Nothing on the board needs a WEAPONCRAFTED
+    item, so weaponcrafting has no other route and is offered one — appended
+    behind the trunk, changing no chosen root and no existing order."""
 
     def _decide_with(self, servable):
         gd = _bundle()

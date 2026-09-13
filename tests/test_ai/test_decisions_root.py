@@ -744,11 +744,17 @@ def test_the_siblings_become_the_alternatives_then_the_trunk_then_the_orphans():
     a skill when something genuinely demands it."""
     gd = _gd()
     resolution = resolve_root(make_state(level=15), gd, _objective(gd), _ctx(), None)
+    # 2026-09-13 craft-demand gate: conjunct 1 drops a gear-nameable skill
+    # only when a root on offer DEMANDS it. This catalogue's roots demand no
+    # weaponcrafted item, so weaponcrafting is offered a climb — behind the
+    # trunk, changing nothing above it. The GATHERING half of the group is
+    # still empty, which is what the surrounding comment is about.
     assert resolution.alternatives == (
         ObtainItem(code="ash_club", quantity=1, slot="weapon_slot"),
         ObtainItem(code="copper_helmet", quantity=1, slot="helmet_slot"),
         ObtainItem(code="leather", quantity=2),
         ReachCharLevel(level=20),
+        ReachSkillLevel(skill="weaponcrafting", level=2),
     )
 
 
@@ -814,7 +820,15 @@ def test_the_chosen_root_is_never_repeated_as_its_own_alternative(monkeypatch):
     # reason `test_the_siblings_become_the_alternatives_then_the_trunk_then_
     # the_orphans` does: woodcutting and mining gate at @1 in this catalogue
     # and this character already stands at the floor, so nothing is UNMET.
-    assert resolution.alternatives == ()
+    # 2026-09-13 craft-demand gate: conjunct 1 drops a gear-nameable skill
+    # only when a root on offer DEMANDS it. This catalogue's roots demand no
+    # weaponcrafted item, so weaponcrafting is offered a climb — behind the
+    # trunk, changing nothing above it. The GATHERING half of the group is
+    # still empty, which is what the surrounding comment is about.
+    assert resolution.alternatives == (
+        ReachSkillLevel(skill="gearcrafting", level=2),
+        ReachSkillLevel(skill="weaponcrafting", level=2),
+    )
     assert resolution.trail == ("IsAFightBlockingMe", "IsMyGearBehindMyTier",
                                 "IsThereACombatTarget",
                                 "CanIClearMyTier")
@@ -833,7 +847,16 @@ def test_a_wall_still_offers_the_trunk_as_an_alternative(monkeypatch):
     # The orphan group itself is empty here for the same reason the sibling
     # test above is: nobody demands woodcutting or mining past the floor both
     # gate at in this catalogue.
-    assert resolution.alternatives == (ReachCharLevel(level=20),)
+    # 2026-09-13 craft-demand gate: conjunct 1 drops a gear-nameable skill
+    # only when a root on offer DEMANDS it. This catalogue's roots demand no
+    # weaponcrafted item, so weaponcrafting is offered a climb — behind the
+    # trunk, changing nothing above it. The GATHERING half of the group is
+    # still empty, which is what the surrounding comment is about.
+    assert resolution.alternatives == (
+        ReachCharLevel(level=20),
+        ReachSkillLevel(skill="gearcrafting", level=2),
+        ReachSkillLevel(skill="weaponcrafting", level=2),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -895,8 +918,12 @@ def test_the_rule_admits_the_five_skills_the_gear_sheet_never_ranks(
     offered = [ObtainItem(code=code, quantity=1) for code in
               ("birch_wood", "golden_shrimp", "nettle_leaf", "steel_bar")]
     roots = _orphan_skill_roots(state, bundle_game_data, offered, NO_PROFILE_CONTEXT)
+    # EIGHT since 2026-09-13, not five: the craft-demand gate offers a climb for
+    # each gear-nameable skill no root on offer demands, and on this
+    # all-at-the-floor board none of the three is demanded.
     assert [r.skill for r in roots] == ["alchemy", "cooking", "fishing",
-                                        "mining", "woodcutting"]
+                                        "gearcrafting", "jewelrycrafting",
+                                        "mining", "weaponcrafting", "woodcutting"]
     # Cooking is UNGATED, so it still gets C+1; the four gathering skills get
     # the DEMANDED level instead — see
     # `test_an_admitted_skill_emits_the_demanded_level` in
@@ -975,7 +1002,8 @@ def test_the_orphan_order_is_the_gap_to_the_character_level(
               ("birch_wood", "golden_shrimp", "nettle_leaf", "steel_bar")]
     assert [r.skill for r in _orphan_skill_roots(
         base, bundle_game_data, offered, NO_PROFILE_CONTEXT)] == [
-        "alchemy", "cooking", "fishing", "mining", "woodcutting"]
+        "alchemy", "cooking", "fishing", "gearcrafting", "jewelrycrafting",
+        "mining", "weaponcrafting", "woodcutting"]
 
     # alchemy, fishing and woodcutting are parked AT the character level so the
     # contest is cooking against mining and nothing else: a skill left at the
@@ -983,7 +1011,13 @@ def test_the_orphan_order_is_the_gap_to_the_character_level(
     # Parked at the demanded level itself (20) rather than merely "high", so
     # the third conjunct drops them from the output entirely instead of
     # leaving them in as an untested tie.
-    parked = {"alchemy": 20, "fishing": 20, "woodcutting": 20}
+    # gearcrafting/jewelrycrafting/weaponcrafting joined this group on
+    # 2026-09-13 (the craft-demand gate admits an undemanded gear-nameable
+    # skill), and at the floor each would trail by 19 and take the head — the
+    # exact "would prove nothing" case the comment above describes. Parked at
+    # the character level for the same reason the other three are.
+    parked = {"alchemy": 20, "fishing": 20, "woodcutting": 20,
+              "gearcrafting": 20, "jewelrycrafting": 20, "weaponcrafting": 20}
     cook_ahead = replace(base, level=20,
                          skills={**base.skills, **parked,
                                  "cooking": 15, "mining": 5})

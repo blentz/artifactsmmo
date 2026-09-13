@@ -368,6 +368,7 @@ DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decision.py"
 OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "obtain_item.py"
 ROOT_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "root.py"
 GATHER_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_demand.py"
+CRAFT_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_demand.py"
 # `_equippable_goal` / `_gather_goal_for_unreachable_equippable` /
 # `_gather_step_target_is_root` / `_recipe_has_combat_drop_input` moved here
 # from strategy_driver.py (goal-decision-graph Task 5) so `decisions/
@@ -2933,10 +2934,21 @@ ROOT_DECISION_MUTATIONS = [
     # that feeds it are killed by tests/test_ai/test_orphan_gate_scenarios.py,
     # so they live in `ORPHAN_DEMAND_GATE_MUTATIONS` below rather than in this
     # list — a unit-killed mutant needs its own run_group.
+    # 2026-09-13: conjunct 1 became CONDITIONAL — a gear-nameable skill is
+    # dropped only when a root on offer demands it. The mutant is the same idea
+    # against the new shape: drop the whole conjunct, so a skill something is
+    # ALREADY climbing through the gear seam gets a rival standalone root.
     ("root: the orphan rule drops the not-nameable filter, so a skill a gear"
      " target CAN name gets a standalone root as well",
-     "        if skill not in nameable\n",
-     "        if skill in nameable or skill not in nameable\n"),
+     "        if (skill not in nameable or skill not in craft_named)\n",
+     "        if True\n"),
+    # The other half of the same conjunct: keep the nameability test but throw
+    # away the demand question, restoring the unconditional drop that left live
+    # Robby at weaponcrafting 11 against character level 30 for two days.
+    ("root: the orphan rule ignores craft demand, restoring the unconditional"
+     " gear-nameable drop",
+     "        if (skill not in nameable or skill not in craft_named)\n",
+     "        if skill not in nameable\n"),
     # THE DRIFT THIS MUTANT RESTORES was live: `_gear_nameable_skills` read
     # `ITEM_TYPE_TO_SLOTS` off `all_item_stats` instead of asking the gear
     # sheet, so alchemy's 20 `utility` potions made it "nameable" — while
@@ -3051,6 +3063,20 @@ ROOT_DECISION_MUTATIONS = [
 # tests/test_ai/test_orphan_gate_scenarios.py, which drives the gate end to end
 # through the real `resolve_root` over the committed bundle, not by
 # test_decisions_root.py.
+CRAFT_DEMAND_MUTATIONS = [
+    # `craft_demand` is the projection conjunct 1 now asks. Its own group
+    # because its kill-test is the unit suite, not the scenario suite.
+    ("craft_demand: unmet test dropped (a met gate still counts as demand)",
+     "            if state.skills.get(skill, 1) < level and level > demand.get(skill, 0):",
+     "            if level > demand.get(skill, 0):"),
+    ("craft_demand: keeps the lowest gate instead of the highest",
+     "            if state.skills.get(skill, 1) < level and level > demand.get(skill, 0):",
+     "            if state.skills.get(skill, 1) < level and level < demand.get(skill, 0):"),
+    ("craft_demand: named item only, closure not walked",
+     "        for item in requirement_closure(graph, [root.code]):",
+     "        for item in [root.code]:"),
+]
+
 ORPHAN_DEMAND_GATE_MUTATIONS = [
     # CONJUNCT 3 NEUTERED: every candidate is an orphan again, which is exactly
     # the pre-gate rule. Killed by `TestGatheringDemandPositiveBranch::
@@ -7857,6 +7883,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_decisions_obtain_item.py", survivors)
     run_group(ROOT_DECISION_SRC, ROOT_DECISION_MUTATIONS,
               "tests/test_ai/test_decisions_root.py", survivors)
+    run_group(CRAFT_DEMAND_SRC, CRAFT_DEMAND_MUTATIONS,
+              "tests/test_ai/test_craft_demand.py", survivors)
     run_group(ROOT_DECISION_SRC, ORPHAN_DEMAND_GATE_MUTATIONS,
               "tests/test_ai/test_orphan_gate_scenarios.py", survivors)
     run_group(GATHER_DEMAND_SRC, GATHER_DEMAND_SEED_MUTATIONS,

@@ -440,7 +440,22 @@ def test_the_routing_breakdown_scopes_the_residual(
       three residual counts were unchanged by the two-pass commit, and no
       cell changed VERDICT — only the `routed` column on those four.
 
-    The scope line still matters — 278 cells remain unrouted — but it now
+    * 74 -> 174 of 352 cells, 5 of 8 skills UNCHANGED, when conjunct 1 stopped
+      assuming and started asking (`craft_demand.craft_demand`). It had dropped
+      every gear-nameable skill outright on the reasoning that a gear root names
+      it through the prerequisite seam — true while some gear root is plannable,
+      and silently wrong otherwise. Live Robby 2026-09-13 was the otherwise:
+      weaponcrafting 11 against character level 30, the widest gap on him by a
+      factor of two, an OPEN rung two chicken fights deep, all five gear roots
+      at `nodes=0, plan_len=0`, and a measured craft demand of `{}` across every
+      root on offer. He ground cooking — 9 levels behind, a 55-craft rung — for
+      two days at 0 character XP. The SKILL count does not move because
+      gearcrafting, jewelrycrafting and weaponcrafting were already routed
+      wherever a gear target named them; what moves is the CELL count, as the
+      scenarios where nothing names them route too. Verdicts unchanged:
+      `o1_silent_stall` and `o1_unexplained` both stay 0.
+
+    The scope line still matters — 178 cells remain unrouted — but it now
     means something different: an unrouted gathering skill is no longer a
     census blind spot, it is the gate correctly declining to send a character
     to grind a skill nothing needs.
@@ -451,11 +466,18 @@ def test_the_routing_breakdown_scopes_the_residual(
                              "jewelrycrafting", "weaponcrafting"}
     assert f"{len(routed_skills)} of {len(SKILL_NAMES)} skills" in line
     assert f"{sum(1 for r in results if r.routed)} of {len(results)} cells" in line
-    # Ordered by cell count, so the reader sees the widest arm first.
-    assert line.index("cooking") < line.index("jewelrycrafting")
-    assert line.index("jewelrycrafting") < line.index("gearcrafting")
-    assert line.index("gearcrafting") < line.index("fishing")
-    assert line.index("fishing") < line.index("weaponcrafting")
+    # Ordered by cell count, so the reader sees the widest arm first. The three
+    # 44-cell arms tie since 2026-09-13 (every scenario routes cooking,
+    # gearcrafting and jewelrycrafting), so the pin is on the COUNTS and on the
+    # arms that do not tie — asserting a fixed order among equals would pin a
+    # tiebreak this line never promised.
+    counts = {skill: sum(1 for r in results if r.routed and r.skill == skill)
+              for skill in routed_skills}
+    assert [line.index(s) for s in sorted(routed_skills, key=lambda k: line.index(k))] == \
+        sorted(line.index(s) for s in routed_skills)
+    ordered = sorted(routed_skills, key=lambda k: line.index(k))
+    assert [counts[k] for k in ordered] == sorted(counts.values(), reverse=True)
+    assert line.index("weaponcrafting") < line.index("fishing")
     # Fishing is routed ONLY where cooking is — its sole demand route. A cell
     # that routes fishing with no cooking rung open would mean some other
     # producer started naming it, which is the thing the gate is for.

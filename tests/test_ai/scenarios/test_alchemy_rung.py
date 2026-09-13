@@ -162,11 +162,18 @@ def test_alchemy_heads_the_orphan_list_for_this_cell(
     docstring) — cooking is the only one of the five admitted unconditionally.
     Not C+1 either: a demanded skill emits the level `_OFFERED`'s closure
     asked for, 20 here for all four (`test_orphan_skill_roots_demand.
-    test_an_admitted_skill_emits_the_demanded_level` pins why)."""
+    test_an_admitted_skill_emits_the_demanded_level` pins why).
+
+    THE CRAFT-DEMAND GATE (2026-09-13) added the three gear-nameable skills:
+    conjunct 1 now drops one only when a root on offer DEMANDS it, and
+    `_OFFERED`'s closure demands none of them here. They sort by the same one
+    integer everything else does — alchemy still heads the list, which is what
+    this test is about."""
     orphans = _orphan_skill_roots(state, bundle_game_data, _OFFERED, NO_PROFILE_CONTEXT)
     assert orphans[0] == ReachSkillLevel(skill=SKILL, level=20)
     assert [goal.skill for goal in orphans] == [
-        SKILL, "cooking", "fishing", "mining", "woodcutting"]
+        SKILL, "jewelrycrafting", "cooking", "fishing", "gearcrafting",
+        "weaponcrafting", "mining", "woodcutting"]
 
 
 def test_the_alchemy_rung_is_open_and_is_a_potion(
@@ -203,21 +210,33 @@ def test_the_alchemy_root_plans_a_levelskill(
 
 # --- flipping the dimension -------------------------------------------------
 
-def test_a_real_alchemy_EQUIPPABLE_would_take_the_root_away(
+def test_a_real_alchemy_EQUIPPABLE_no_longer_takes_the_root_away(
         bundle_game_data: GameData) -> None:
-    """PROOF IT BITES, on the dimension itself.
+    """THE PREMISE THIS TEST WAS BUILT ON WAS RETIRED ON 2026-09-13, and the
+    test is kept — inverted — because the retirement is the point.
 
-    The rule is "a skill NO gear target can name deserves a root". Flip that
-    exact premise — retype one alchemy recipe from `utility` to `ring`, a type
-    the gear sheet does rank, changing nothing else — and alchemy becomes
-    genuinely nameable, so the orphan rule must decline it. It does: the root
-    disappears and the other four orphans are untouched.
+    It used to read: the rule is "a skill NO gear target can name deserves a
+    root", so retyping one alchemy recipe from `utility` to `ring` makes alchemy
+    genuinely nameable and the orphan rule must decline it. It did.
 
-    This is the assertion that fails the day the game ships an alchemy-crafted
-    equippable, which is exactly the day alchemy stops being an orphan. It also
-    fails if anyone deletes the `stats.type_ == "utility"` skip in
-    `_gear_candidates_by_type`, because then the UNFLIPPED catalogue already
-    names alchemy — verified by mutation."""
+    Conjunct 1 no longer asks whether a gear target COULD name the skill; it
+    asks whether a root on offer actually DEMANDS it (`craft_demand`). Being
+    nameable in the abstract turned out to mean nothing on its own — live Robby
+    2026-09-13 sat at weaponcrafting 11 against level 30, the widest gap on him,
+    excluded as gear-nameable while every one of his gear roots resolved to
+    `nodes=0, plan_len=0` and the measured craft demand was `{}`. Two days at 0
+    character XP.
+
+    So the flip still makes alchemy nameable — asserted below, and that half is
+    unchanged — but the orphan root SURVIVES it, because `_OFFERED` still
+    demands no alchemy. The demand half is pinned by
+    `test_orphan_gear_skill_admission.test_dropped_when_a_root_does_demand_it`,
+    which is where "something asks for it, so the seam owns the climb" is now
+    tested.
+
+    Still fails if anyone deletes the `stats.type_ == "utility"` skip in
+    `_gear_candidates_by_type` — the `_gear_nameable_skills` assertion below is
+    unchanged and still carries that."""
     flipped = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
     flipped.all_item_stats[RUNG] = dataclasses.replace(
         flipped.all_item_stats[RUNG], type_="ring")
@@ -230,9 +249,10 @@ def test_a_real_alchemy_EQUIPPABLE_would_take_the_root_away(
         scenario_state(SCENARIOS[CELL], flipped), flipped,
         _OFFERED, NO_PROFILE_CONTEXT)
     assert [goal.skill for goal in before] == [
-        SKILL, "cooking", "fishing", "mining", "woodcutting"]
-    assert [goal.skill for goal in after] == [
-        "cooking", "fishing", "mining", "woodcutting"]
+        SKILL, "jewelrycrafting", "cooking", "fishing", "gearcrafting",
+        "weaponcrafting", "mining", "woodcutting"]
+    # IDENTICAL to `before`: nameability alone no longer removes anything.
+    assert [goal.skill for goal in after] == [goal.skill for goal in before]
 
 
 def test_every_scenario_now_routes_alchemy(bundle_game_data: GameData) -> None:

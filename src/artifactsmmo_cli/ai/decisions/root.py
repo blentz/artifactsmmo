@@ -68,6 +68,7 @@ from fractions import Fraction
 # `gather_demand` is only half built, and a NAME import of `gather_demand`/
 # `gathering_skills` raises ImportError. Binding the module object defers both
 # attribute lookups to CALL time, by which point it is complete.
+from artifactsmmo_cli.ai import craft_demand as _craft_demand
 from artifactsmmo_cli.ai import gather_demand as _gather_demand
 
 # `level_skill` is imported as a MODULE, not as `from ... import LevelSkill`,
@@ -439,6 +440,14 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
       root every cycle the weapon slot happens to be satisfied, which is a
       skill that IS a prerequisite doing prerequisite work. The orphans are the
       skills the prerequisite seam structurally cannot reach.
+    * a gear-nameable skill is admitted only when NO root on offer demands it
+      (`craft_demand`). The exclusion assumes a plannable gear root will name
+      the skill through the prerequisite seam; when none does, the skill is
+      dropped on the strength of a mechanism that is not running. Live Robby
+      2026-09-13 sat at weaponcrafting 11 against level 30 — the widest gap on
+      him, an open rung two fights deep — grinding cooking instead for two days
+      at 0 character XP. Note the MIRRORED polarity against the third conjunct:
+      demand ADMITS a gathering skill and SUPPRESSES a gear-nameable one.
     * "an open, XP-positive rung" is `LevelSkill(S, C+1).is_applicable` — the
       SAME predicate `ReachSkillGoal`'s only action offers and the same one the
       O1 census (`audit/open_rung_completeness`) verdicts a cell on. A skill
@@ -461,10 +470,12 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
       contain, and cooking (an orphan) is fishing's only demand route. See the
       comment on the `demand` call below.
 
-    Measured on the live bundle 2026-09-10 the first two conjuncts admit FIVE
+    Measured on the live bundle 2026-09-10 the first two conjuncts admitted FIVE
     skills: alchemy, cooking, fishing, mining and woodcutting — every skill
     whose recipes produce a `consumable` or a `resource`. (An earlier revision
-    of this docstring said four and omitted alchemy.)
+    of this docstring said four and omitted alchemy.) Since 2026-09-13 conjunct
+    1 is conditional, so a gear-crafting skill joins that set whenever nothing
+    on offer demands it.
 
     THE THIRD CONJUNCT then holds the four that gather back until something asks
     for them, leaving cooking — which gathers nothing — as the unconditional
@@ -491,11 +502,31 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
     """
     nameable = _gear_nameable_skills(game_data)
     gathering = _gather_demand.gathering_skills(game_data)
+    # CONJUNCT 1 ASKS, IT NO LONGER ASSUMES (2026-09-13). Dropping every
+    # gear-nameable skill is right exactly when the gear seam can actually name
+    # one — a plannable gear root carries the climb through the prerequisite
+    # seam, and a rival standalone root would be churn. When NOTHING on offer
+    # demands the skill, that seam has nothing to say and the exclusion rests on
+    # a mechanism that is not running.
+    #
+    # Live Robby 2026-09-13: weaponcrafting 11 against character level 30 — a
+    # gap of -19, twice the next widest — with an OPEN rung two chicken fights
+    # deep, while the cooking rung he actually ran asked for 55 crafted
+    # porkchops. All five of his gear roots resolved to `nodes=0, plan_len=0`
+    # and the measured craft demand across every root on offer was `{}`. Two
+    # days at 0 character XP.
+    #
+    # POLARITY IS THE MIRROR OF CONJUNCT 3, deliberately. A gathering skill
+    # needs demand to be ADMITTED (nothing else will ask, and grinding it
+    # speculatively is the fishing burn). A gear-nameable skill needs the
+    # ABSENCE of demand, because demand means something else already owns the
+    # climb.
+    craft_named = _craft_demand.craft_demand(offered, state, game_data, ctx)
     # PASS 1 — conjuncts 1 and 2 only. The candidate set, before anything is
-    # asked about demand.
+    # asked about GATHER demand.
     candidates = [
         skill for skill in SKILL_NAMES
-        if skill not in nameable
+        if (skill not in nameable or skill not in craft_named)
         and level_skill.LevelSkill(
             skill=skill, target_level=state.skills.get(skill, 1) + 1
         ).is_applicable(state, game_data)]
