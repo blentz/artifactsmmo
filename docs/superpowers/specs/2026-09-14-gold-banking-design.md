@@ -203,14 +203,20 @@ keep = max(progression_reserve(state, game_data), expansion_hold(state, game_dat
 ```
 fill <70%   keep = progression_reserve        -> gold pools freely
 fill >=70%  keep = max(reserve, next_cost)    -> price held back
-fill >=95%  expansion_fires: pocket can pay   -> buys
+fill >=75%  expansion_fires: pocket can pay   -> buys
 ```
 
-The 70%-to-95% band is the runway: the price is held back before the trigger
-arrives, so the pocket is funded by the time `expansion_fires` asks. Holding it
-unconditionally would pin a rising four-figure sum in every pocket forever,
-which is most of what pooling was for; holding only at the 95% trigger risks
-arriving there with the gold already banked and no way to get it back.
+`TRIGGER_FILL_NUM/DEN` is **75/100**, not the 95/100 that `expand_bank.py`'s
+comment claims — a stale comment, corrected as part of this work.
+`_SATISFIED_FILL`'s own note ("Held five points under the trigger") confirms 75.
+
+The 70%-to-75% band is the runway. It is narrow, and it does not need to be
+wide: the hold stays on for as long as fill is at or above 70%, so a pocket that
+cannot yet cover the cost keeps accumulating until it can, and the expansion
+then fires. **Self-correcting, not deadlocking** — it can be slow, never stuck.
+Holding unconditionally would pin a rising four-figure sum in every pocket
+forever, which is most of what pooling was for; holding only at the trigger
+risks arriving there with the gold already banked and no way to get it back.
 
 **This touches no proven expansion logic** — not `should_expand_bank`, not
 `expansion_fires`, not `BANK_EXPANSION_TIMING_MUTATIONS`, not the Lean
