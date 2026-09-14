@@ -46,7 +46,7 @@ def test_execute_waits_out_cooldown_between_unequip_and_equip() -> None:
     client = MagicMock()
     with patch("artifactsmmo_cli.ai.actions.optimize_loadout.UnequipAction") as mock_un, \
          patch("artifactsmmo_cli.ai.actions.optimize_loadout.EquipAction") as mock_eq, \
-         patch("artifactsmmo_cli.ai.actions.optimize_loadout.time.sleep",
+         patch("artifactsmmo_cli.ai.actions.cooldown_wait.time.sleep",
                side_effect=lambda s: calls.append(f"sleep:{s:.1f}")) as mock_sleep:
         mock_un.return_value.execute.side_effect = lambda st, cl: (calls.append("unequip"), unequipped)[1]
         mock_eq.return_value.is_applicable.return_value = True

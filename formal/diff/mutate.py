@@ -3654,7 +3654,7 @@ CRAFT_PLAN_GEN_REARM_SCAN_MUTATIONS = [
 OPTIMIZE_COOLDOWN_MUTATIONS = [
     ("optimize_loadout: drop the unequip-pass cooldown wait (equip leg 499s)",
      "                state = UnequipAction(slot=slot).execute(state, client)\n"
-     "                _wait_out_cooldown(state)",
+     "                wait_out_cooldown(state)",
      "                state = UnequipAction(slot=slot).execute(state, client)"),
 ]
 
@@ -5592,6 +5592,45 @@ DEPOSIT_ALL_ERROR_MUTATIONS = [
      '            result = Action._raise_for_error(result, "DepositAll")',
      "            if not hasattr(result, \"data\") or result.data is None:\n"
      "                continue"),
+]
+
+DEPOSIT_ALL_BATCH_SRC = DEPOSIT_ALL_SRC
+DEPOSIT_ALL_BATCH_MUTATIONS = [
+    # Its own group again: the batching invariants are owned by the batching
+    # suite, not by the room suite or the execute-integration suite.
+    #
+    # Live Robby 2026-09-13, learning.db: one deposit request PER CODE gave
+    # DepositAllAction a 2.07% error:cooldown rate over 1404 executions — 18x
+    # FightAction's — because the second call landed inside the first call's
+    # server cooldown. Every failure left the bag partly emptied.
+    #
+    # Send the whole trip in one request regardless of width: `openapi.json`
+    # caps the deposit body at max_items 20, so a 21-code trip 422s.
+    ("deposit_all: batch cap ignored (body exceeds the server's max_items)",
+     "        for start in range(0, len(deposits), DEPOSIT_BATCH_MAX):\n"
+     "            batch = deposits[start:start + DEPOSIT_BATCH_MAX]",
+     "        for start in range(0, len(deposits), len(deposits) or 1):\n"
+     "            batch = deposits[start:]"),
+    # Widen the cap past what the server accepts — same 422, reached through
+    # the constant rather than the loop.
+    ("deposit_all: batch cap raised above the published server limit",
+     "DEPOSIT_BATCH_MAX = 20",
+     "DEPOSIT_BATCH_MAX = 21"),
+    # Drop the between-batch cooldown wait: batch 2 is issued inside batch 1's
+    # cooldown and 499s — the original bug, restored one batch up.
+    ("deposit_all: between-batch cooldown wait dropped (batch 2 499s)",
+     "            if start:\n"
+     "                # Only BETWEEN batches. The cooldown the final batch sets is the\n"
+     "                # player loop's to sleep out, and waiting on it here would bill\n"
+     "                # the same cooldown twice.\n"
+     "                wait_out_cooldown(last_state)",
+     "            if False:\n"
+     "                wait_out_cooldown(last_state)"),
+    # Wait after EVERY batch, the last one included: the player loop then sleeps
+    # the final cooldown out a second time, billing one cooldown twice.
+    ("deposit_all: cooldown also waited after the last batch (double-billed)",
+     "            if start:",
+     "            if True:"),
 ]
 
 BANK_EXPANSION_TIMING_MUTATIONS = [
@@ -7695,6 +7734,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_deposit_all_bank_full.py", survivors)
     run_group(DEPOSIT_ALL_SRC, DEPOSIT_ALL_ERROR_MUTATIONS,
               "tests/test_ai/test_actions_execute.py", survivors)
+    run_group(DEPOSIT_ALL_BATCH_SRC, DEPOSIT_ALL_BATCH_MUTATIONS,
+              "tests/test_ai/test_deposit_all_batching.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_WINDOW_MUTATIONS,
               "formal/diff/test_event_window_diff.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_PLAN_WINDOW_MUTATIONS,

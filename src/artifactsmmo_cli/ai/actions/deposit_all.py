@@ -11,6 +11,7 @@ from artifactsmmo_api_client.api.my_characters.action_deposit_bank_item_my_name_
 from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cooldown_wait import wait_out_cooldown
 from artifactsmmo_cli.ai.actions.cost_core import qty_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.bank_room import bank_has_room
@@ -19,6 +20,14 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
+
+DEPOSIT_BATCH_MAX = 20
+"""Codes the server accepts in one deposit request.
+
+`openapi.json`, `/my/{name}/action/bank/deposit/item` request body:
+`min_items: 1, max_items: 20`. Exceeding it is a 422 the planner cannot see
+coming, so the trip is split rather than sent whole.
+"""
 
 
 @dataclass
@@ -143,9 +152,25 @@ class DepositAllAction(Action):
         if (state.x, state.y) != self.bank_location:
             state = MoveAction(x=self.bank_location[0], y=self.bank_location[1]).execute(state, client)
         last_state = state
-        for code, qty in self._deposits(state):
-            body = SimpleItemSchema(code=code, quantity=qty)
-            result = deposit_item(client=client, name=state.character, body=[body])
+        deposits = self._deposits(state)
+        # ONE REQUEST PER BATCH, NOT PER CODE. The endpoint takes a list body,
+        # and every accepted deposit — whatever its width — starts exactly one
+        # server cooldown. Sending each code on its own put the second call
+        # inside the first call's cooldown: live Robby 2026-09-13, a 2.07%
+        # `error:cooldown` rate over 1404 executions (18x FightAction's), every
+        # failure a PARTIAL deposit with the items already gone from the bag and
+        # ~1.5s of cooldown left to run. Batching also cuts a 21-code trip from
+        # 21 requests to 2, against a per-IP request budget that is the fleet's
+        # binding constraint.
+        for start in range(0, len(deposits), DEPOSIT_BATCH_MAX):
+            batch = deposits[start:start + DEPOSIT_BATCH_MAX]
+            if start:
+                # Only BETWEEN batches. The cooldown the final batch sets is the
+                # player loop's to sleep out, and waiting on it here would bill
+                # the same cooldown twice.
+                wait_out_cooldown(last_state)
+            body = [SimpleItemSchema(code=code, quantity=qty) for code, qty in batch]
+            result = deposit_item(client=client, name=state.character, body=body)
             # A REJECTION IS NOT A SKIP. Every documented non-200 comes back as
             # an `ErrorResponseSchema`, which carries no `.data` — so the old
             # `hasattr(result, "data")` guard swallowed each one and returned

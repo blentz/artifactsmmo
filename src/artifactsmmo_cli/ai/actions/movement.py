@@ -1,9 +1,7 @@
 """Movement action for GOAP planning."""
 
 import dataclasses
-import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
@@ -11,6 +9,7 @@ from artifactsmmo_api_client.api.my_characters.action_move_my_name_action_move_p
 from artifactsmmo_api_client.models.destination_schema import DestinationSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.cooldown_wait import wait_out_cooldown
 from artifactsmmo_cli.ai.actions.cost_core import learned_cost_pure
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -58,12 +57,8 @@ class MoveAction(Action):
         # Server applies a per-action cooldown to moves. Composite actions
         # (Gather, Fight, NpcBuy, TaskTrade, etc.) call MoveAction.execute then
         # immediately issue their secondary API call; without waiting here the
-        # secondary call gets HTTP 499 because the move cooldown is still
-        # active. Block until the cooldown the server just set has expired.
-        if new_state.cooldown_expires is not None:
-            remaining = (new_state.cooldown_expires - datetime.now(tz=timezone.utc)).total_seconds()
-            if remaining > 0:
-                time.sleep(remaining + 0.1)
+        # secondary call gets HTTP 499 because the move cooldown is still active.
+        wait_out_cooldown(new_state)
         return new_state
 
     def __repr__(self) -> str:

@@ -124,7 +124,7 @@ class TestMoveAction:
             "artifactsmmo_cli.ai.actions.movement.WorldState.from_character_schema",
             return_value=post_state,
         ), patch(
-            "artifactsmmo_cli.ai.actions.movement.time.sleep"
+            "artifactsmmo_cli.ai.actions.cooldown_wait.time.sleep"
         ) as sleep:
             action.execute(state, client)
         assert sleep.called
