@@ -5,19 +5,26 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
+from artifactsmmo_api_client.api.my_characters.action_deposit_bank_gold_my_name_action_bank_deposit_gold_post import (
+    sync as action_deposit_gold,
+)
 from artifactsmmo_api_client.api.my_characters.action_deposit_bank_item_my_name_action_bank_deposit_item_post import (
     sync as deposit_item,
 )
+from artifactsmmo_api_client.models.deposit_withdraw_gold_schema import DepositWithdrawGoldSchema
 from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.cooldown_wait import wait_out_cooldown
 from artifactsmmo_cli.ai.actions.cost_core import qty_cost_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.bank_expansion_timing import HOLD_FILL_DEN, HOLD_FILL_NUM
 from artifactsmmo_cli.ai.bank_room import bank_has_room
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gold_surplus_core import bankable_gold, expansion_hold
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.progression_reserve import progression_reserve
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -113,6 +120,26 @@ class DepositAllAction(Action):
         banked = state.bank_items or {}
         return [(code, qty) for code, qty in deposits if code in banked]
 
+    def _gold_deposit(self, state: WorldState) -> int:
+        """Whole chunks of pocket gold this trip should bank; 0 when none.
+
+        THE KEEP IS THE WIDER OF TWO CLAIMS. `progression_reserve` protects the
+        next item purchase; `expansion_hold` protects the next bank expansion,
+        which `reserved_targets` never covers because an expansion is not an
+        item code. Taking the max means neither can be spent by banking.
+
+        NO GAME DATA, NO BANKING — the same rule `_deposits` follows. The reserve
+        cannot be computed without it, and defaulting it to zero would bank a
+        character dry.
+        """
+        if self.game_data is None:
+            return 0
+        hold = expansion_hold(
+            len(state.bank_items or {}), self.game_data.bank_capacity,
+            self.game_data.next_expansion_cost, HOLD_FILL_NUM, HOLD_FILL_DEN)
+        keep = max(progression_reserve(state, self.game_data), hold)
+        return bankable_gold(state.gold, keep)
+
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         return self.accessible and bool(self._deposits(state))
 
@@ -133,6 +160,7 @@ class DepositAllAction(Action):
                 new_inventory[code] = remaining
             else:
                 new_inventory.pop(code, None)
+        gold_moved = self._gold_deposit(state)
         return dataclasses.replace(
             state,
             x=dest[0],
@@ -140,6 +168,9 @@ class DepositAllAction(Action):
             inventory=new_inventory,
             cooldown_expires=None,
             bank_items=new_bank,
+            gold=state.gold - gold_moved,
+            bank_gold=(None if state.bank_gold is None
+                       else state.bank_gold + gold_moved),
         )
 
     def cost(self, state: WorldState, game_data: GameData,
@@ -180,6 +211,24 @@ class DepositAllAction(Action):
             result = Action._raise_for_error(result, "DepositAll")
             last_state = WorldState.from_character_schema(
                 result.data.character,
+                bank_items=last_state.bank_items,
+                bank_gold=last_state.bank_gold,
+                pending_items=last_state.pending_items,
+                active_events=last_state.active_events,
+            )
+        gold_moved = self._gold_deposit(state)
+        if gold_moved:
+            # AFTER the items, and only when a chunk is actually due. The gold
+            # endpoint starts its own cooldown like every other action, so the
+            # last item batch's cooldown has to be slept out first — the same
+            # composite-action idiom the batch loop above uses.
+            wait_out_cooldown(last_state)
+            gold_result = action_deposit_gold(
+                client=client, name=state.character,
+                body=DepositWithdrawGoldSchema(quantity=gold_moved))
+            gold_result = Action._raise_for_error(gold_result, f"DepositGold {gold_moved}")
+            last_state = WorldState.from_character_schema(
+                gold_result.data.character,
                 bank_items=last_state.bank_items,
                 bank_gold=last_state.bank_gold,
                 pending_items=last_state.pending_items,
