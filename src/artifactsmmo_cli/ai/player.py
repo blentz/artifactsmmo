@@ -2784,6 +2784,7 @@ class GamePlayer:
             ],
             bank_items=(dict(self.state.bank_items)
                         if self.state.bank_items is not None else None),
+            bank_gold=self.state.bank_gold,
             plan_tree=(
                 build_plan_tree(
                     self._last_decision, self.state, self.game_data,

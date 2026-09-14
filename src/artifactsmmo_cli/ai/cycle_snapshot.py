@@ -163,6 +163,18 @@ class CycleSnapshot(BaseModel):
     chosen_root: str | None = None
     strategy_ranking: list[RootScoreView] = Field(default_factory=list)
     bank_items: dict[str, int] | None = None
+    bank_gold: int | None = None
+    """Gold in the BANK, or None when the bank has not been read this cycle.
+
+    Distinct from `gold`, which is the character's pocket. `openapi.json` scopes
+    them differently — "The numbers of gold on this character" versus "Quantity
+    of gold in your bank" — so one is per-character and the other is the
+    account-wide pool every character shares.
+
+    NULLABLE AND NOT DEFAULTED TO 0: a snapshot written before this field
+    existed must still validate, and an unread balance rendered as 0 would claim
+    an observation nobody made.
+    """
     plan_tree: tuple[PlanTreeNode, ...] = ()
 
     # The runtime skill-grind legs captured this cycle when the executed action
