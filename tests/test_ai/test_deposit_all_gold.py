@@ -60,6 +60,19 @@ def test_no_game_data_banks_no_gold():
     assert _action(None)._gold_deposit(_state(gold=28_016)) == 0
 
 
+def test_unread_bank_banks_no_gold():
+    """`bank_items is None` means the bank was never read this cycle, not that
+    it holds nothing. Guessing empty would feed `expansion_hold` a `bank_used`
+    of 0 and bank away gold an imminent expansion needs — this pins the same
+    rule `_deposits` already follows for `game_data is None`."""
+    gd = _gd()
+    action = _action(gd)
+    state = make_state(x=BANK[0], y=BANK[1], gold=28_016,
+                       inventory={"copper_ore": 40}, inventory_max=200,
+                       bank_items=None, bank_gold=0)
+    assert action._gold_deposit(state) == 0
+
+
 def test_an_imminent_expansion_holds_its_price_back():
     """Bank at 70% of capacity: the expansion price stops being bankable."""
     gd = _gd(bank_capacity=100, next_expansion_cost=15_000)

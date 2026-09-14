@@ -11,12 +11,18 @@ GOLD_CHUNK = 10_000
 
 CHUNKING IS HYSTERESIS, NOT TIDINESS. `GatherMaterialsGoal.relevant_actions`
 admits a deficit-sized `WithdrawGold` whenever pocket gold cannot cover a plan's
-gold-priced leaves (the GAP-3 ferry, gathering.py:613). A rule that banked every
-coin above the reserve would let that ferry withdraw gold the same trip banked,
-and the pair would trade one coin forever — the `Withdraw`/`DepositAll`
-oscillation this codebase has already shipped once. Keeping the sub-chunk
-remainder means the ferry must drain a full chunk of slack before another chunk
-is eligible to leave.
+gold-priced leaves (the GAP-3 ferry, gathering.py:613). Banking every coin above
+the reserve would leave the pocket at exactly the reserve, so ANY ferry
+withdrawal at all — however small — would be banked straight back next cycle:
+the `Withdraw`/`DepositAll` oscillation this codebase has already shipped once.
+Keeping the sub-chunk remainder is what stops that.
+
+The genuine round trip — the ferry withdraws what a plan's leaves need, the
+plan SPENDS it, and the pocket returns to a non-bankable state — is an
+INTEGRATION property this pure module cannot assert; the spend that closes the
+loop lives outside it. Unspent, the true bound this module does guarantee is
+the HEADROOM (`GOLD_CHUNK - slack`): a withdrawal strictly below it cannot
+re-trigger a deposit.
 """
 
 

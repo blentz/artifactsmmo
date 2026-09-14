@@ -6,10 +6,15 @@ carried 1,672 on one account. This module decides what moves.
 
 THE KEPT REMAINDER IS THE POINT. `GatherMaterialsGoal` admits a deficit-sized
 `WithdrawGold` (the GAP-3 ferry, gathering.py:613). Banking everything above the
-reserve would let that ferry pull the gold straight back next cycle — the
-`Withdraw`/`DepositAll` oscillation this codebase has already shipped once. Only
-whole chunks move, so the ferry must drain a full chunk of slack before another
-is eligible.
+reserve would leave the pocket at exactly the reserve, so any ferry withdrawal
+at all would be banked straight back next cycle — the `Withdraw`/`DepositAll`
+oscillation this codebase has already shipped once. Keeping the sub-chunk
+remainder is what stops that.
+
+The genuine round trip — the ferry withdraws what a plan needs, the plan
+spends it, and the pocket returns to a non-bankable state — is an
+INTEGRATION property, not one these unit tests can assert; unspent, the true
+bound is the HEADROOM (`GOLD_CHUNK - slack`).
 """
 
 from artifactsmmo_cli.ai.gold_surplus_core import (

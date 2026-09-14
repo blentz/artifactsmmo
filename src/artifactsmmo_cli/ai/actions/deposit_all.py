@@ -131,11 +131,18 @@ class DepositAllAction(Action):
         NO GAME DATA, NO BANKING — the same rule `_deposits` follows. The reserve
         cannot be computed without it, and defaulting it to zero would bank a
         character dry.
+
+        NO BANK READ, NO BANKING either. `state.bank_items is None` means the
+        bank was never read this cycle, not that it holds nothing — the same
+        UNKNOWN IS NOT FULL rule `_acceptable` already defends for
+        `bank_capacity`. Falling back to `{}` would answer the fill question
+        with a guess of empty, hand `expansion_hold` a `bank_used` of 0, and
+        bank away the gold an imminent expansion needs.
         """
-        if self.game_data is None:
+        if self.game_data is None or state.bank_items is None:
             return 0
         hold = expansion_hold(
-            len(state.bank_items or {}), self.game_data.bank_capacity,
+            len(state.bank_items), self.game_data.bank_capacity,
             self.game_data.next_expansion_cost, HOLD_FILL_NUM, HOLD_FILL_DEN)
         keep = max(progression_reserve(state, self.game_data), hold)
         return bankable_gold(state.gold, keep)
