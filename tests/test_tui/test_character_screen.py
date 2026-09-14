@@ -55,6 +55,14 @@ def test_detail_no_task():
     assert "none" in out.lower()
 
 
+class TestCharacterSheetGoldLabel:
+    def test_gold_row_is_labelled_carried(self):
+        assert "Gold (carried)" in _text(build_character_detail(_snap(gold=8_016)))
+
+    def test_carried_gold_is_thousands_separated(self):
+        assert "8,016" in _text(build_character_detail(_snap(gold=8_016)))
+
+
 class TestThreeColumnModal:
     @pytest.mark.asyncio
     async def test_modal_has_three_columns(self):

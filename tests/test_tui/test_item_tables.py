@@ -63,3 +63,30 @@ class TestBuildBankItems:
     def test_empty_dict_zero_items(self):
         out = _text(build_bank_items(_snap(bank_items={})))
         assert "0 items" in out
+
+
+class TestBankGoldInHeader:
+    """The bank's gold is account-wide — one balance every character shares —
+    as against the per-character pocket the status pane shows."""
+
+    def test_header_shows_bank_gold(self):
+        out = _text(build_bank_items(_snap(bank_items={"copper_ore": 3},
+                                           bank_gold=20_000)))
+        assert "20,000 gold" in out
+
+    def test_header_still_shows_the_item_count(self):
+        out = _text(build_bank_items(_snap(bank_items={"copper_ore": 3, "ash_wood": 1},
+                                           bank_gold=20_000)))
+        assert "2 items" in out
+
+    def test_unknown_bank_gold_renders_as_a_dash_not_zero(self):
+        """A SYNCED bank whose gold was never read is unknown. Rendering 0 would
+        claim an observation nobody made."""
+        out = _text(build_bank_items(_snap(bank_items={"copper_ore": 3},
+                                           bank_gold=None)))
+        assert "— gold" in out
+        assert "0 gold" not in out
+
+    def test_unsynced_bank_keeps_its_own_placeholder(self):
+        """bank_items is None is a different unknown from bank_gold is None."""
+        assert "waiting for sync" in _text(build_bank_items(_snap(bank_items=None)))

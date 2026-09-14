@@ -161,7 +161,10 @@ class StatusPane(Static):
         t.add_row("Char", f"[bold]{s.character}[/bold]  L{s.level}")
         t.add_row("HP", Group(Text(f"{s.hp}/{s.max_hp}", style=hp_color), hp_bar))
         t.add_row("XP", Group(Text(f"{s.xp}/{s.max_xp}", style="cyan"), xp_bar))
-        t.add_row("Gold", str(s.gold))
+        # "carried", because the bank holds an account-wide balance of its own
+        # and an unqualified "Gold" on five character panes reads as five
+        # separate totals. The bank figure lives in the bank pane's header.
+        t.add_row("Gold (carried)", f"{s.gold:,}")
         t.add_row("Pos", f"({s.x},{s.y})")
         cd_remaining = self._cooldown_remaining()
         if cd_remaining > 0:

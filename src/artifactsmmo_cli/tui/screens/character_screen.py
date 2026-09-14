@@ -21,7 +21,7 @@ def build_character_detail(snap: CycleSnapshot) -> RenderableType:
     t.add_column("v")
     t.add_row("HP", f"{snap.hp}/{snap.max_hp}")
     t.add_row("XP", f"{snap.xp}/{snap.max_xp}")
-    t.add_row("Gold", str(snap.gold))
+    t.add_row("Gold (carried)", f"{snap.gold:,}")
     t.add_row("Pos", position_text(snap))
     if snap.task_code:
         t.add_row("Task", f"{snap.task_code}  {snap.task_progress}/{snap.task_total}")

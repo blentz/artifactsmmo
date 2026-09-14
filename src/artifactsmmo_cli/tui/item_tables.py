@@ -28,8 +28,15 @@ def build_inventory_items(snap: CycleSnapshot) -> RenderableType:
 
 def build_bank_items(snap: CycleSnapshot) -> RenderableType:
     """Bank header + qty/code table (qty-desc), or a waiting placeholder when
-    the bank has not been synced yet (bank_items is None)."""
+    the bank has not been synced yet (bank_items is None).
+
+    The header carries the BANK's gold, which is account-wide — one balance every
+    character shares — as against the per-character pocket the status pane and
+    character sheet show. An unread balance renders as an em dash: a synced bank
+    whose gold was never read is unknown, and 0 would be a claim.
+    """
     if snap.bank_items is None:
         return Text("Bank — waiting for sync…")
-    header = Text(f"Bank  {len(snap.bank_items)} items", style="bold")
+    gold = "—" if snap.bank_gold is None else f"{snap.bank_gold:,}"
+    header = Text(f"Bank  {len(snap.bank_items)} items · {gold} gold", style="bold")
     return Group(header, _item_table(snap.bank_items))

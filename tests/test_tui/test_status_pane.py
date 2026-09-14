@@ -431,6 +431,20 @@ class TestStatusPaneStaleSnapshotCooldown:
         assert pane._cooldown_remaining() == 30.0
 
 
+class TestGoldLabel:
+    def test_gold_row_is_labelled_carried(self):
+        """Unqualified "Gold" repeated across five character panes reads as five
+        separate balances. The bank's own figure lives in the bank pane."""
+        pane = StatusPane()
+        pane.update_snapshot(_snap(gold=8_016))
+        assert "Gold (carried)" in _render(pane)
+
+    def test_carried_gold_is_thousands_separated(self):
+        pane = StatusPane()
+        pane.update_snapshot(_snap(gold=8_016))
+        assert "8,016" in _render(pane)
+
+
 class TestCooldownExpiryEpoch:
     def test_fresh_snapshot_expires_a_full_cooldown_out(self):
         assert cooldown_expiry_epoch(_ts(), 45.0, NOW) == NOW + 45.0
