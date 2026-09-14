@@ -96,6 +96,12 @@ def test_apply_leaves_gold_alone_when_no_chunk_is_due():
 
 
 def test_execute_issues_the_gold_request_after_the_items():
+    """Ordering, not just occurrence. A shared `manager` records both patched
+    calls (plus the cooldown wait) into ONE ordered call list, so this test
+    goes red if the gold request moves ahead of the item batch — the exact
+    defect class fixed in 8fff7d61 for the item batches themselves: a second
+    request issued inside the first request's server cooldown returns HTTP 499
+    and leaves a PARTIAL deposit."""
     gd = _gd()
     action = _action(gd)
     state = _state(gold=28_016)
@@ -105,18 +111,30 @@ def test_execute_issues_the_gold_request_after_the_items():
     result.data = MagicMock()
     result.data.character = char
 
+    manager = MagicMock()
     with patch("artifactsmmo_cli.ai.actions.deposit_all.WorldState.from_character_schema",
                return_value=state), \
          patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item",
                return_value=result) as items, \
          patch("artifactsmmo_cli.ai.actions.deposit_all.action_deposit_gold",
                return_value=result) as gold, \
-         patch("artifactsmmo_cli.ai.actions.deposit_all.wait_out_cooldown"):
+         patch("artifactsmmo_cli.ai.actions.deposit_all.wait_out_cooldown") as wait:
+        manager.attach_mock(items, "deposit_item")
+        manager.attach_mock(wait, "wait_out_cooldown")
+        manager.attach_mock(gold, "action_deposit_gold")
         action.execute(state, MagicMock())
 
     assert items.called
     assert gold.call_count == 1
     assert gold.call_args.kwargs["body"].quantity == 20_000
+
+    names = [call[0] for call in manager.mock_calls]
+    items_index = names.index("deposit_item")
+    wait_index = names.index("wait_out_cooldown")
+    gold_index = names.index("action_deposit_gold")
+    # The item batch must land before the wait, and the wait — which is what
+    # makes the ordering SAFE, not the ordering alone — before the gold call.
+    assert items_index < wait_index < gold_index
 
 
 def test_execute_issues_no_gold_request_when_no_chunk_is_due():
