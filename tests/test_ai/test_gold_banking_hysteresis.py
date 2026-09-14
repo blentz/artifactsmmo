@@ -25,20 +25,34 @@ RESERVE = 3_000
 
 
 def test_the_kept_remainder_is_never_bankable_on_its_own():
-    """Whatever a deposit leaves behind, a second deposit would move none of it."""
+    """Whatever a deposit leaves behind, a second deposit would move none of it.
+
+    Asserts BOTH sides: `kept >= RESERVE` catches over-banking, which the
+    `bankable_gold(kept, ...) == 0` assertion alone cannot — `max(0, ...)` clamps
+    a negative remainder back to zero and the bug passes.
+    """
     for pocket in range(RESERVE, RESERVE + 5 * GOLD_CHUNK, 313):
         kept = pocket - bankable_gold(pocket, RESERVE)
+        assert kept >= RESERVE, (pocket, kept)
         assert bankable_gold(kept, RESERVE) == 0, (pocket, kept)
 
 
-def test_a_withdrawal_that_is_spent_returns_to_a_non_bankable_pocket():
-    """The round trip: withdraw for a plan, spend it, nothing is bankable again."""
+def test_a_deposit_after_a_withdrawal_never_breaches_the_reserve():
+    """The honest form of "deposit and withdraw cannot trade the same coin".
+
+    A genuine round trip cannot be asserted here: this module has no withdraw and
+    no spend to compose with, so that claim is an INTEGRATION property about the
+    ferry and is documented rather than tested. What IS assertable is the safety
+    bound on the pair — a withdrawal large enough to make a fresh chunk eligible
+    is allowed to trigger another deposit, and that deposit still cannot take the
+    pocket below the reserve. So the two can never ratchet a character dry.
+    """
     for pocket in range(RESERVE, RESERVE + 5 * GOLD_CHUNK, 313):
         kept = pocket - bankable_gold(pocket, RESERVE)
         for withdrawal in (1, 100, GOLD_CHUNK - 1, 5 * GOLD_CHUNK):
-            after_spend = (kept + withdrawal) - withdrawal
-            assert after_spend == kept
-            assert bankable_gold(after_spend, RESERVE) == 0, (pocket, withdrawal)
+            after_ferry = kept + withdrawal
+            after_second_deposit = after_ferry - bankable_gold(after_ferry, RESERVE)
+            assert after_second_deposit >= RESERVE, (pocket, withdrawal)
 
 
 def test_a_withdrawal_below_the_headroom_cannot_re_trigger_a_deposit():
@@ -58,6 +72,19 @@ def test_a_withdrawal_below_the_headroom_cannot_re_trigger_a_deposit():
             assert bankable_gold(kept + withdrawal, RESERVE) == 0, (pocket, withdrawal)
 
 
+def test_a_full_slack_leaves_no_sub_headroom_withdrawal():
+    """The degenerate end of the headroom rule, exercised rather than asserted.
+
+    At slack 9,999 the headroom is 1, so there is no withdrawal below it — and the
+    smallest withdrawal there is, 1, correctly makes a chunk eligible. The previous
+    test's filter skips this case; this one shows why that is right.
+    """
+    pocket = RESERVE + GOLD_CHUNK - 1
+    kept = pocket - bankable_gold(pocket, RESERVE)
+    assert kept - RESERVE == GOLD_CHUNK - 1
+    assert bankable_gold(kept + 1, RESERVE) == GOLD_CHUNK
+
+
 def test_the_kept_remainder_is_always_under_one_chunk_above_the_reserve():
     """The slack the ferry draws on, bounded: never negative, never a whole chunk."""
     for pocket in range(RESERVE, RESERVE + 10 * GOLD_CHUNK, 271):
@@ -66,7 +93,12 @@ def test_the_kept_remainder_is_always_under_one_chunk_above_the_reserve():
 
 
 def test_the_boundary_ends_are_checked_explicitly():
-    """Both ends of the ranges above, named so a range off-by-one cannot hide."""
+    """The exact chunk boundaries, which no other test in this file reaches.
+
+    Neither step (313, 271) divides 10,000, so none of the range-based tests ever
+    lands on a chunk multiple. These four cases are the only place the boundary
+    itself is checked.
+    """
     assert bankable_gold(RESERVE, RESERVE) == 0
     assert bankable_gold(RESERVE + GOLD_CHUNK - 1, RESERVE) == 0
     assert bankable_gold(RESERVE + GOLD_CHUNK, RESERVE) == GOLD_CHUNK
