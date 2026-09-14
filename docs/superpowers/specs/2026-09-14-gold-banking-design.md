@@ -276,9 +276,13 @@ character that earns gold without filling its bag never banks it.
 
 This follows directly from attaching the deposit to the existing bank trip
 rather than giving it a rung of its own, and it is the right first cut: it costs
-no ladder change and no proof work. If it bites, the fix is a gold term on
-`DepositInventoryGoal.value` — which is where the Lean mirror starts mattering,
-and should be its own design.
+no ladder change and no proof work. The fix is a gold term on
+`DepositInventoryGoal.value` — which is where the Lean mirror starts mattering.
+
+**DEFERRED BY DECISION (2026-09-14), not overlooked.** The limitation is
+accepted for this increment and gets its own design in a later session. Lor is
+the case that will force it: 28,016 in pocket, and if it earns gold without
+filling its bag, nothing here moves that gold.
 
 ## 7. Out of scope
 
