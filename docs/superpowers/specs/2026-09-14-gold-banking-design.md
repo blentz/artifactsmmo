@@ -142,11 +142,27 @@ deposit 20,000   (2 x 10k)
 keeps    8,016   <- slack
 ```
 
-**The kept remainder is the hysteresis, and it is the point.** The withdraw
-ferry must drain a full 10,000 of slack before another chunk is eligible, so
-deposit and withdraw cannot trade the same coin. A rule that banked everything
-above the reserve would let the ferry pull gold straight back the next cycle —
-the `Withdraw`↔`DepositAll` oscillation this codebase has already shipped once.
+**The kept remainder is the hysteresis, and it is the point.** A rule that
+banked every coin above the reserve would leave the pocket at exactly the reserve
+every cycle, so any ferry withdrawal at all would be banked straight back — the
+`Withdraw`↔`DepositAll` oscillation this codebase has already shipped once.
+
+⚠️ **CORRECTED 2026-09-14**, found by Task 4's own barrier test reporting BLOCKED
+rather than relaxing its assertion — which is what a regression barrier is for.
+An earlier draft of this section claimed "the withdraw ferry must drain a full
+10,000 of slack before another chunk is eligible". That is backwards: a
+withdrawal moves gold from the bank INTO the pocket, so it RAISES the slack, and
+a withdrawal large enough to cross the next chunk boundary legitimately makes a
+chunk bankable again. Reproduced: pocket 3,313 against a 3,000 reserve leaves
+slack 313; a 9,999 withdrawal gives 13,312, which is 10,312 above the reserve, so
+one chunk IS bankable — correctly.
+
+The property that IS true is the ROUND TRIP: the ferry withdraws a DEFICIT-SIZED
+amount because a plan's gold-priced leaves need it, the plan then SPENDS it, and
+the pocket returns to where the deposit left it with nothing bankable. Churn
+would require the withdrawal to sit unspent, which a deficit-sized ferry does not
+do. Unspent, the weaker true bound holds: a withdrawal strictly below the
+remaining HEADROOM (`GOLD_CHUNK - slack`) cannot re-trigger a deposit.
 
 Stated as the invariant the tests assert:
 
