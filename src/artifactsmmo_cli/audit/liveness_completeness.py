@@ -105,8 +105,33 @@ WITNESS_BASELINE: dict[str, int] = {
     # Robby GrindCharacterXP(pig), R2D2 and C3P0 two-action GE purchases, HAL
     # CraftPotions, Lor GrindCharacterXP(red_slime). Nothing Waits. If a restart
     # disagrees, this number is wrong and the alarm is right.
-    "WaitGoal": 98,
-    "WaitAction": 98,
+    #
+    # 2026-09-13, +25 (98 -> 123). Robby alone, in two clusters, and BOTH are
+    # scars of bugs already fixed — each cluster ENDS at the fix that closed it
+    # (store timestamps are UTC, commit dates -04:00):
+    #   x11, 09-12 13:55-15:44 UTC. Bag pinned at 157/158 with gold flat at
+    #              3,797 and `LevelSkill` reporting `ok` at cooldown 0.0 — the
+    #              full-bank silent-deposit livelock itself. `DepositAll`
+    #              swallowed every 462 and returned the unchanged state as a
+    #              success, so nothing ever shed the bag and the ladder ran out
+    #              of rungs. FIXED by dff7198a (09-12 23:28 UTC), which raises
+    #              the rejection; the last Wait of this cluster is 7h44m before
+    #              it.
+    #   x14, 09-13 09:11-09:23 UTC. `BuyBankExpansionAction` SUCCEEDED at
+    #              09:11:47 — gold 4,640 -> 1,140 — and the very next cycle
+    #              Waits, still at 158/158. The expansion bought slots the bot
+    #              then could not see: the action did not refresh the bank state
+    #              it had just changed, so `_acceptable` kept filtering every
+    #              deposit against the pre-expansion capacity. 14 Waits, then
+    #              `no_plan`. FIXED by 4e565aba (09-13 15:03 UTC), 5h40m after
+    #              the last Wait of the cluster.
+    #
+    # THE FLEET DID RESTART, which is what the note above demands before a
+    # raise. Since 4e565aba: 2,201 cycles across all five characters, still
+    # running at 2026-09-14 00:37 UTC, with ZERO WaitAction and ZERO `no_plan`.
+    # Both causes are flat, not merely quiet.
+    "WaitGoal": 123,
+    "WaitAction": 123,
 }
 
 #: form "unreachable: ..." is a DEFECT that is being tracked, not an excuse —
