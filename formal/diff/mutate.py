@@ -5594,6 +5594,24 @@ DEPOSIT_ALL_ERROR_MUTATIONS = [
      "                continue"),
 ]
 
+CYCLE_ERROR_TEXT_MUTATIONS = [
+    # `cycles.error_text` is the only DURABLE record of WHICH failure a cycle
+    # hit — the message used to ride the JSONL trace alone, and traces are
+    # deleted periodically. Both halves of the gate are load-bearing.
+    #
+    # Write the message on every cycle: `_execute` does not run on a no-plan
+    # cycle, so `_last_error` still holds the PREVIOUS failure's message and an
+    # ungated write blames a cycle that succeeded.
+    ("player: error_text written regardless of outcome (stale blame on an ok cycle)",
+     '            error_text=self._last_error if outcome.startswith("error") else None,',
+     "            error_text=self._last_error,"),
+    # Never write it: the column exists and is always NULL, which reads as
+    # "this cycle recorded no reason" rather than as a missing write.
+    ("player: error_text never written (column always NULL)",
+     '            error_text=self._last_error if outcome.startswith("error") else None,',
+     "            error_text=None,"),
+]
+
 DEPOSIT_ALL_BATCH_SRC = DEPOSIT_ALL_SRC
 DEPOSIT_ALL_BATCH_MUTATIONS = [
     # Its own group again: the batching invariants are owned by the batching
@@ -7736,6 +7754,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_actions_execute.py", survivors)
     run_group(DEPOSIT_ALL_BATCH_SRC, DEPOSIT_ALL_BATCH_MUTATIONS,
               "tests/test_ai/test_deposit_all_batching.py", survivors)
+    run_group(PLAYER_SRC, CYCLE_ERROR_TEXT_MUTATIONS,
+              "tests/test_ai/test_cycle_error_text.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_WINDOW_MUTATIONS,
               "formal/diff/test_event_window_diff.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_PLAN_WINDOW_MUTATIONS,

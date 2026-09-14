@@ -176,6 +176,13 @@ class LearningStore:
             # observation. A consumer excludes NULL rather than defaulting it.
             if cols and "skill_levels_json" not in cols:
                 conn.exec_driver_sql("ALTER TABLE cycles ADD COLUMN skill_levels_json TEXT")
+            # Error-attribution migration (2026-09-14): cycles gains the
+            # message behind a failed outcome. NULLABLE with no DEFAULT — the
+            # rows in the wild were written when the message went only to the
+            # JSONL trace, and traces are not durable, so those failures are
+            # unattributable and must read as "not recorded" rather than "".
+            if cols and "error_text" not in cols:
+                conn.exec_driver_sql("ALTER TABLE cycles ADD COLUMN error_text TEXT")
             # Craft-xp numerator migration (2026-08-15): craft_yield gains the
             # skill level its xp was measured at. NULLABLE with no DEFAULT --
             # the rows already in the wild were measured at a level nobody

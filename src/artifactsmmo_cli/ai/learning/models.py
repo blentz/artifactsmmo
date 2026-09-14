@@ -84,6 +84,31 @@ class CycleBase(SQLModel):
     # to any utility effect (Phase 2 resolves each code's effect).
     consumables_expended_json: str = Field(default="{}")
 
+    error_text: str | None = Field(default=None)
+    """Why the action failed, or None on a cycle that did not fail.
+
+    `outcome` collapses distinct dead-ends onto ONE label, and `error:other` is
+    the worst of them: it covers four separate `_execute_level_skill` raises — a
+    cyclic skill-grind dependency, "no grind rung at execution", a sub-plan that
+    exhausted the planning budget, and a sub-plan that hit a genuine dead end.
+    Those need four different fixes and the label cannot tell them apart.
+
+    The message already rode the JSONL trace. That is not a durable record —
+    traces are deleted periodically — so a claim about a live failure has only
+    `learning.db` to rest on, and until this column it could not answer "which
+    raise". Measured over the live store on 2026-09-14: 246 `error:other` cycles
+    on `LevelSkill`, which `planner_nodes` alone splits three ways (98 at 1-23
+    nodes, 29 at 619-12,214, 119 timed out at 7,464-61,669) — three populations,
+    attributable only by inference.
+
+    WRITTEN UNDER THE OUTCOME GATE, not merely when the field is set: `_execute`
+    does not run on a no-plan cycle, so a prior failure's message survives in
+    `_last_error` and would otherwise be attributed to an unrelated row.
+
+    NULLABLE, NOT BACK-FILLED, like `skill_levels_json`: the rows already in the
+    wild were written without it and inventing one would fabricate an
+    observation."""
+
     # Goal completion tracking
     cycles_to_satisfy: int | None = None
 

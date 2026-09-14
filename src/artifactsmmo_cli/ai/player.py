@@ -4071,6 +4071,11 @@ class GamePlayer:
             actual_cooldown_seconds=actual_cooldown_seconds,
             planner_nodes=planner_nodes, planner_depth=planner_depth,
             planner_timed_out=planner_timed_out, plan_len=plan_len,
+            # Gated on the OUTCOME, exactly as the trace's own `error` key is
+            # (see `_cycle_record`): `_execute` never runs on a no-plan cycle,
+            # so `_last_error` still holds the PREVIOUS failure's message and
+            # writing it unconditionally would blame a cycle that succeeded.
+            error_text=self._last_error if outcome.startswith("error") else None,
             delta_gold=new_state.gold - prev_state.gold,
             # Level-aware: `new.xp - prev.xp` is right only while the level holds.
             # On level-up the server resets xp into the new level, so the naive
