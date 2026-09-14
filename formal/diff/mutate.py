@@ -91,6 +91,7 @@ POTION_PROVISION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_pr
 POTION_BASELINE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_baseline.py"
 MAX_BATCH_FROM_HELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "max_batch_from_held.py"
 OPTIMAL_BUY_MIX_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "optimal_buy_mix.py"
+GOLD_SURPLUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gold_surplus_core.py"
 BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
 DEPOSIT_ALL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "deposit_all.py"
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
@@ -5651,6 +5652,38 @@ DEPOSIT_ALL_BATCH_MUTATIONS = [
      "            if True:"),
 ]
 
+GOLD_SURPLUS_MUTATIONS = [
+    # Bank every coin above the keep instead of whole chunks: the kept remainder
+    # is what stops the live GAP-3 withdraw ferry re-triggering a deposit, so
+    # this restores the Withdraw/DepositAll oscillation.
+    ("gold_surplus: remainder banked too (deposit/withdraw trade one coin)",
+     "    return max(0, (pocket - reserve) // chunk) * chunk",
+     "    return max(0, pocket - reserve)"),
+    # Drop the floor: a reserve above the pocket now banks a NEGATIVE chunk.
+    ("gold_surplus: negative surplus not floored at zero",
+     "    return max(0, (pocket - reserve) // chunk) * chunk",
+     "    return ((pocket - reserve) // chunk) * chunk"),
+    # Halve the chunk: banking becomes twice as eager and the slack the ferry
+    # draws on halves with it.
+    ("gold_surplus: chunk size halved",
+     "GOLD_CHUNK = 10_000",
+     "GOLD_CHUNK = 5_000"),
+    # Hold nothing back for an imminent expansion: the pocket is banked below
+    # `next_expansion_cost` and `expansion_fires` silently stops firing.
+    ("gold_surplus: expansion hold neutered (expansion starves)",
+     "    return next_expansion_cost",
+     "    return 0"),
+    # Treat an unread capacity as a fill ratio: UNKNOWN IS NOT FULL.
+    ("gold_surplus: unknown bank capacity treated as known",
+     "    if bank_capacity <= 0:\n        return 0",
+     "    if False:\n        return 0"),
+    # Strict inequality at the hold boundary: a bank exactly at the threshold
+    # stops holding, which is the one fill where the runway begins.
+    ("gold_surplus: hold boundary excludes the threshold itself",
+     "    if bank_used * hold_den < bank_capacity * hold_num:",
+     "    if bank_used * hold_den <= bank_capacity * hold_num:"),
+]
+
 BANK_EXPANSION_TIMING_MUTATIONS = [
     # Flip the fill-threshold boundary `>=` to `>`: at an exact fill tie
     # (used*den == cap*num) the bank should be eligible, but now it spuriously
@@ -7754,6 +7787,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_actions_execute.py", survivors)
     run_group(DEPOSIT_ALL_BATCH_SRC, DEPOSIT_ALL_BATCH_MUTATIONS,
               "tests/test_ai/test_deposit_all_batching.py", survivors)
+    run_group(GOLD_SURPLUS_SRC, GOLD_SURPLUS_MUTATIONS,
+              "tests/test_ai/test_gold_surplus_core.py", survivors)
     run_group(PLAYER_SRC, CYCLE_ERROR_TEXT_MUTATIONS,
               "tests/test_ai/test_cycle_error_text.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_WINDOW_MUTATIONS,

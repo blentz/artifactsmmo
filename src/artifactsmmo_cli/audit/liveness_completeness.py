@@ -214,7 +214,13 @@ DORMANT: dict[str, str] = {
     # --- Conditional on a character state the fleet has not reached.
     "UnlockBankGoal": "conditional: the bank is already unlocked for every live character",
     "ReachUnlockLevelGoal": "conditional: fires only below the bank-unlock level",
-    "DepositGoldAction": "conditional: gold is banked by DepositAll, not as a separate step",
+    # TRUE SINCE 2026-09-14, AND IT WAS NOT BEFORE. This reason shipped while
+    # `DepositAllAction.execute` called `deposit_item` and nothing else, so it
+    # excused the action with a mechanism that did not exist and no character
+    # banked a coin in 184,010 cycles. `DepositAllAction._gold_deposit` now
+    # issues the gold request on the same trip, which is why the action itself
+    # stays dormant: the planner has no separate gold step to pick.
+    "DepositGoldAction": "conditional: gold is banked inside DepositAllAction.execute, not as a separate planner step",
     "UseGoldBagAction": "conditional: no gold bag has dropped",
     # --- Subsumed: a live sibling does the same work, so these are candidates
     # for DELETION rather than activation. Flagged so the choice is deliberate.
