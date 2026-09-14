@@ -5,7 +5,15 @@ formal/Formal/BankExpansionTiming.lean. These tests pin both gates (fill
 threshold via exact cross-multiply, reserve safety) and their interaction.
 """
 
-from artifactsmmo_cli.ai.bank_expansion_timing import expansion_fires, should_expand_bank
+from artifactsmmo_cli.ai.bank_expansion_timing import (
+    HOLD_FILL_DEN,
+    HOLD_FILL_NUM,
+    TRIGGER_FILL_DEN,
+    TRIGGER_FILL_NUM,
+    expansion_fires,
+    should_expand_bank,
+)
+from artifactsmmo_cli.ai.goals.expand_bank import _SATISFIED_FILL
 
 
 class TestShouldExpandBank:
@@ -82,3 +90,16 @@ class TestExpansionFires:
     def test_pocket_exactly_covering_the_cost_fires(self):
         """Boundary: `pocket >= cost`, so an exact match is executable."""
         assert expansion_fires(50, 50, 3500, 16350, 3500, 5100, 95, 100) is True
+
+
+def test_hold_threshold_sits_below_the_expansion_trigger():
+    """The hold must start BEFORE the expansion wants to fire, or the price is
+    still being banked when `expansion_fires` asks for it."""
+    assert HOLD_FILL_NUM * TRIGGER_FILL_DEN < TRIGGER_FILL_NUM * HOLD_FILL_DEN
+
+
+def test_hold_threshold_equals_the_goal_satisfaction_mark():
+    """One fill ratio, two roles: ExpandBankGoal stops WANTING to expand below
+    it, and the deposit stops banking the price above it. If they drift, a
+    character can be unsatisfied-and-unfunded in the gap between them."""
+    assert HOLD_FILL_NUM / HOLD_FILL_DEN == _SATISFIED_FILL

@@ -54,6 +54,23 @@ NOT the whole gate: the theorems are parametric in `trigger_num`/`trigger_den`,
 so this constant is PROOF-INERT — moving it cannot turn the kernel red. It is
 pinned by behavioural tests instead."""
 
+HOLD_FILL_NUM = 70
+HOLD_FILL_DEN = 100
+"""The fill at which a character stops banking the next expansion's price (70%).
+
+BELOW THE TRIGGER ON PURPOSE. `expansion_fires` requires the POCKET to cover
+`cost`, so gold banked away is gold the expansion cannot use, and there is no
+withdraw-gold edge to fetch it back (see this module's docstring: the
+executability conjunct exists precisely because there is none). Holding the
+price from here gives the pocket a runway to be funded before the trigger
+arrives.
+
+EQUAL TO `ExpandBankGoal._SATISFIED_FILL`, and that is the invariant, not a
+coincidence: below that mark the goal does not want an expansion, so there is
+nothing to save for; at or above it there is. A test pins the two together so
+neither can drift.
+"""
+
 
 def should_expand_bank(
     used: int,

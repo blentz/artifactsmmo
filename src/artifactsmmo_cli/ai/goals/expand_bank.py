@@ -13,8 +13,10 @@ from artifactsmmo_cli.ai.loadout_profiles import active_bank_space_cost
 from artifactsmmo_cli.ai.progression_reserve import account_gold, reserve_floor
 from artifactsmmo_cli.ai.world_state import WorldState
 
-# value() activates at or above the shared TRIGGER_FILL_NUM/DEN ratio (95/100,
+# value() activates at or above the shared TRIGGER_FILL_NUM/DEN ratio (75/100,
 # owned by bank_expansion_timing; exact integer cross-multiply — no float).
+# The 95/100 this comment claimed until 2026-09-14 was never the constant's
+# value; `_SATISFIED_FILL`'s own "five points under the trigger" note is right.
 _SATISFIED_FILL = 0.70  # is_satisfied is True when below this fill ratio
 # Must stay BELOW TRIGGER_FILL_NUM/TRIGGER_FILL_DEN. `value()` returns 0.0 early
 # when `is_satisfied`, so a satisfaction mark at or above the trigger silences
