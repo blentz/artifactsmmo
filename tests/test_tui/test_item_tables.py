@@ -87,6 +87,18 @@ class TestBankGoldInHeader:
         assert "— gold" in out
         assert "0 gold" not in out
 
+    def test_a_genuinely_empty_bank_shows_zero_not_a_dash(self):
+        """0 gold and UNREAD gold are different facts, and the header must say which.
+
+        A falsy check (`if not snap.bank_gold`) passes the unread-renders-as-dash
+        test above while collapsing this case into it — claiming the balance was
+        never read when in fact it was read and is zero. The `not in` half of this
+        assertion is what makes the test bite.
+        """
+        out = _text(build_bank_items(_snap(bank_items={"copper_ore": 3}, bank_gold=0)))
+        assert "0 gold" in out
+        assert "— gold" not in out
+
     def test_unsynced_bank_keeps_its_own_placeholder(self):
         """bank_items is None is a different unknown from bank_gold is None."""
         assert "waiting for sync" in _text(build_bank_items(_snap(bank_items=None)))
