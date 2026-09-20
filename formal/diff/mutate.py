@@ -7352,6 +7352,17 @@ COMPLETE_TASK_GOAL_MUTATIONS = [
      "        return 900.0"),
 ]
 
+# Own group: unit-killed, and bound to the unit file rather than the value
+# diff. At full progress `CompleteTaskAction` and `TaskCancelAction` both
+# clear the task and both cost `distance_cost_pure(1.0, dist)` to the same
+# taskmaster, so this filter is the ONLY thing standing between a turn-in and
+# a forfeit (live HAL 2026-09-19: skeleton 362/362 cancelled).
+COMPLETE_TASK_CANCEL_FILTER_MUTATIONS = [
+    ("complete_task: readmit the cancel to the turn-in goal",
+     "        return [a for a in actions if not isinstance(a, TaskCancelAction)]",
+     "        return actions"),
+]
+
 REACH_UNLOCK_LEVEL_GOAL_MUTATIONS = [
     # Drop the MAX_ACHIEVABLE_GAP unreachable-gap guard — goal fires on any gap.
     ("reach_unlock_level: drop MAX_ACHIEVABLE_GAP guard",
@@ -7962,6 +7973,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_goal_system_value_diff.py", survivors)
     run_group(COMPLETE_TASK_GOAL_SRC, COMPLETE_TASK_GOAL_MUTATIONS,
               "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(COMPLETE_TASK_GOAL_SRC, COMPLETE_TASK_CANCEL_FILTER_MUTATIONS,
+              "tests/test_ai/test_goals.py", survivors)
     run_group(REACH_UNLOCK_LEVEL_GOAL_SRC, REACH_UNLOCK_LEVEL_GOAL_MUTATIONS,
               "formal/diff/test_goal_system_value_diff.py", survivors)
     run_group(LOW_YIELD_CANCEL_GOAL_SRC, LOW_YIELD_CANCEL_GOAL_MUTATIONS,

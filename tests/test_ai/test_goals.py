@@ -4,6 +4,7 @@ import os
 import tempfile
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
@@ -12,6 +13,7 @@ from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
@@ -234,6 +236,51 @@ class TestCompleteTaskGoal:
         goal = CompleteTaskGoal()
         state = make_state(task_code="chicken", task_total=10, task_progress=5)
         assert goal.is_satisfied(state) is False
+
+    def test_a_finished_task_is_turned_in_never_cancelled(self):
+        """Live HAL, 2026-09-19T18:10:10Z: a `skeleton` task reached 362/362 at
+        18:07:10 and three minutes later the store recorded
+        `selected_goal=CompleteTask`, `action_repr=TaskCancel`. A day of
+        grinding forfeited, and a `tasks_coin` spent to forfeit it.
+
+        The goal could not tell the two apart. It asks for the ABSENCE of a
+        task (`desired_state == {"task_code": ""}`), both actions clear the
+        task, and both `cost()` bodies are the same `distance_cost_pure(1.0,
+        dist)` to the same taskmaster -- an exact tie between a reward and a
+        forfeit, with nothing in the target to break it. The turn-in is the
+        only route this goal means, so the cancel must not be in its pool.
+        """
+        goal = CompleteTaskGoal()
+        gd = make_game_data()
+        gd._task_coin_rewards = {"skeleton": 20}
+        state = make_state(task_code="skeleton", task_total=362,
+                           task_progress=362, inventory={"tasks_coin": 1})
+        complete = CompleteTaskAction(taskmaster_location=(1, 2))
+        cancel = TaskCancelAction(taskmaster_location=(1, 2))
+
+        # Vacuity guards: the tie is real, so the filter below is the only
+        # thing that can decide it.
+        assert complete.is_applicable(state, gd) is True
+        assert cancel.is_applicable(state, gd) is True
+        assert complete.cost(state, gd) == cancel.cost(state, gd)
+        assert goal.is_satisfied(complete.apply(state, gd)) is True
+        assert goal.is_satisfied(cancel.apply(state, gd)) is True
+
+        admitted = goal.relevant_actions([complete, cancel], state, gd)
+        assert complete in admitted
+        assert cancel not in admitted
+
+    def test_the_cancel_is_only_dropped_for_this_goal_not_disabled(self):
+        """`TaskCancelGoal` is the authority that cancels a task, and it fires
+        on a task the character cannot progress. Filtering the cancel out of
+        THIS goal's pool must not reach into the action itself -- at 0/362 the
+        cancel is still applicable, which is what keeps the abandon route
+        alive."""
+        gd = make_game_data()
+        stuck = make_state(task_code="skeleton", task_total=362,
+                           task_progress=0, inventory={"tasks_coin": 1})
+        assert TaskCancelAction(
+            taskmaster_location=(1, 2)).is_applicable(stuck, gd) is True
 
 
 def _make_equipment(**overrides):

@@ -1,5 +1,7 @@
 """CompleteTaskGoal: turn in the current task at the taskmaster once finished."""
 
+from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -28,6 +30,32 @@ class CompleteTaskGoal(Goal):
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"task_code": ""}
+
+    def relevant_actions(self, actions: list[Action], state: WorldState,
+                         game_data: GameData) -> list[Action]:
+        """Drop `TaskCancelAction`. THE TURN-IN IS THE ONLY ROUTE THIS GOAL
+        MEANS, and nothing else in the goal says so.
+
+        `desired_state` asks for the ABSENCE of a task, and a cancel clears
+        `task_code`/`task_progress`/`task_total` exactly as a turn-in does. The
+        two `cost()` bodies are the same `distance_cost_pure(1.0, dist)` to the
+        same `taskmaster_location`, so the planner faced an exact tie between a
+        reward and a forfeit with nothing in the target to break it.
+
+        Live HAL, 2026-09-19T18:10:10Z: a `skeleton` task reached 362/362 at
+        18:07:10, and three minutes later the store recorded
+        `selected_goal=CompleteTask`, `action_repr=TaskCancel`. A day of
+        grinding forfeited, and a `tasks_coin` spent to forfeit it.
+
+        Filtered HERE rather than priced, because the cancel is not a worse way
+        to finish a task -- it is a different decision entirely, and the goal
+        that owns it is `TaskCancelGoal` (which fires on a task the character
+        cannot progress). Making the turn-in merely CHEAPER would leave the
+        cancel reachable whenever the arithmetic shifted; making it
+        unreachable from this goal states the intent. The action itself is
+        untouched, so the abandon route stays alive for its own goal.
+        """
+        return [a for a in actions if not isinstance(a, TaskCancelAction)]
 
     def __repr__(self) -> str:
         return "CompleteTask"
