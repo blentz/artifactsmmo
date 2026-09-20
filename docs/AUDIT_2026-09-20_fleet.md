@@ -325,19 +325,146 @@ Not fixed. The change is one predicate (count `error:fight_lost`, not every
 non-`ok` outcome), it has a clean correctness argument, and it has no
 observable effect today.
 
-## F6 — Task handling is dormant fleet-wide
+## F6 — Task handling is dormant fleet-wide: FOUR causes, not one
 
-**Severity: medium.**
+**Severity: medium. Ongoing. Investigated 2026-09-20.**
 
-- No `AcceptTaskAction` has fired since 2026-09-14 (R2D2); before that
-  2026-09-10 (Lor). C3P0 and Robby have accepted exactly one task each, ever.
-- HAL has held **no task at all for 1,403 cycles (~22 hours)** since the F2
-  cancel. `AcceptTaskAction.is_applicable(HAL)` returns **True** — the action is
-  available and simply never selected.
-- The other four hold tasks with **0 progress across the entire 94.7-hour
-  session**: C3P0 `pig 0/104`, Lor `spider 0/206`, R2D2 `ogre 0/327`, Robby
-  `rat 0/107`. In three of the four cases the character is grinding a different
-  monster than the task names, or not fighting at all.
+Fleet state: no `AcceptTaskAction` since 2026-09-14; HAL taskless for 1,403
+cycles; the other four holding tasks at **0 progress for the whole 94.7-hour
+session**. The instinct that this had "epicycle shape" was right — it is four
+separate mechanisms, and fixing any one of them leaves the others standing.
+
+Everything below is measured against live state through the production
+functions, not hand-rolled.
+
+### The winnable cascade is behaving CORRECTLY — that is not the bug
+
+```
+char   L   task           t1 task-aligned   t2 path-aligned   t3 picker    => farm target
+HAL   23   (none)         None              None              pig             pig
+Robby 30   rat    0/107   rat               full_moon_vampire death_knight    rat
+C3P0  29   pig    0/104   None              skeleton          None            skeleton
+Lor   30   spider 0/206   None              pig               None            pig
+R2D2  29   ogre   0/327   None              skeleton          None            skeleton
+```
+
+Three of the four correctly REFUSE their task monster at tier 1 and grind
+something they can actually beat. The task is then simply never let go, and a
+held task blocks `ACCEPT_TASK` outright (`if state.task_code: return False`) —
+so the character can never draw one it could do.
+
+(Note for the record: `task_decision` returns **PURSUE**, not PIVOT, for every
+monster task — `task_requirement` is about SKILL requirements and returns None,
+so `task_decision_pure` takes its `req_is_none` arm. The combat arm is not
+reached from here.)
+
+### Cause 1 — the cancel rung and target selection ask different questions
+
+For a monsters task, `MeansKind.TASK_CANCEL` fires only on
+`resolve_task_horizon(...).verdict == HORIZON_OUT_OF_REACH`, and that walk
+returns `None` unless `has_combat_deficit`. `has_combat_deficit` is
+
+```python
+return not predict_win(dataclasses.replace(state, hp=state.max_hp),
+                       game_data, monster)
+```
+
+a bare `predict_win` — no history, no learned-loss veto. Target selection asks
+`is_winnable`, which has one. They disagree exactly where it matters:
+
+```
+char   task     record   xp/kill  predict_win  is_winnable  deficit  cancel can fire
+Robby  rat        0/0        34       True        True       False      False
+C3P0   pig       0/60        23       True        False      False      False
+Lor    spider     0/0        25       False       False      True       True
+R2D2   ogre       0/0        28       False       False      True       True
+```
+
+**C3P0 has lost 60 of 60 fights against pig.** `is_winnable` vetoes it, so the
+cascade refuses the task; `predict_win` says C3P0 wins, so there is no deficit,
+so there is no horizon, so there is no cancel reason. C3P0 holds a provably
+impossible task indefinitely. This is a real two-authority split — the shape F5
+claimed and did not have, one layer up.
+
+### Cause 2 — `HORIZON_GEAR` carries no distance
+
+Lor and R2D2 DO produce a horizon, and it is not `OUT_OF_REACH`:
+
+```
+Lor   spider -> TaskHorizon(verdict='gear', gear_target=('greater_dreadful_staff', 'weapon_slot'))
+R2D2  ogre   -> TaskHorizon(verdict='gear', gear_target=('skull_wand',            'weapon_slot'))
+```
+
+so the cancel rung correctly declines — the model says gear closes the fight.
+What the verdict does not say is how far away the gear is:
+
+```
+greater_dreadful_staff   weaponcrafting@30   Lor  has 11    19 levels
+skull_wand               weaponcrafting@25   R2D2 has 13    12 levels
+```
+
+Both characters are in fact grinding weaponcrafting, at roughly one level per
+94.7 hours this session. A task blocked behind a 19-level craft reads
+identically to one blocked behind a craft available this hour, and the rung
+declines both. (Nineteen levels is the same number as
+`project_craft_skill_gate_asymmetry`'s 82.6%-of-a-39.6h-run finding.)
+
+### Cause 3 — HAL cannot accept, and it is not the draw flag
+
+HAL is the only character who could accept one. `ACCEPT_TASK` has three
+conjuncts; measured with `draw_owed` forced True to isolate the rest:
+
+```
+HAL    task=None   target_gear=13  deferral_blockers=2   ACCEPT_TASK fires = False
+         DEFER: hard_leather_boots   CRAFTABLE NOW (gearcrafting 20>=20)
+         DEFER: slime_shield         CRAFTABLE NOW (gearcrafting 20>=20)
+```
+
+So the blocker is the **gear-chain deferral**, not `ctx.draw_owed`. The rule is
+"target gear is CRAFTABLE under current skill levels → the fallback walk should
+drive the gather/craft chain rather than accept another task". But HAL's walk is
+not driving those crafts: `chosen_root` is `ObtainItem(lich_race_trophy)` and
+the selected goals are `DrainBankJunk` / `GrindCharacterXP(pig)`. The deferral
+defers to work that never happens, and the standing FACT that some sheet item is
+craftable keeps the rung off permanently — the shape of
+`project_gear_latch_task_deficit_freeze`.
+
+### Cause 4 — the two characters most stuck hold no task coin
+
+`TaskCancelAction.is_applicable` needs `tasks_coin >= 1` (the server charges one,
+HTTP 478 otherwise):
+
+```
+Robby  tasks_coin bag=0 bank=0   is_applicable=False
+C3P0   tasks_coin bag=0 bank=0   is_applicable=False
+Lor    tasks_coin bag=7 bank=0   is_applicable=True
+R2D2   tasks_coin bag=1 bank=0   is_applicable=True
+```
+
+C3P0 — the one character with a provably impossible task — could not cancel it
+even if Cause 1 were fixed. Coins come from turning tasks in, which is the loop
+that is stuck. This is the dormant half recorded in
+`project_task_horizon_residuals`.
+
+### Cause 5 (already fixed) — Robby's `rat` was off-region
+
+`@7fb59b7c`. His horizon reads `None` for the right reason now: rat is winnable
+and, since the transition edge is admitted, reachable.
+
+### What would actually move it
+
+In dependency order, smallest first:
+
+1. **Cause 1** — give `has_combat_deficit` the history, so the learned-loss veto
+   reaches the cancel rung. One argument. Frees C3P0 the moment it has a coin.
+2. **Cause 4** — a coin source that does not require completing a task first,
+   or let the cancel draw one from the bank.
+3. **Cause 3** — arm the gear deferral on the chain actually being PURSUED, not
+   on the standing fact that something is craftable.
+4. **Cause 2** — give `HORIZON_GEAR` a distance and treat "unreachably far" as
+   out of reach. Largest, and the one most likely to need its own design pass.
+
+Not fixed — this was an investigation.
 
 ## F7 — Gold banking is live and working (corrects a stale note)
 
@@ -384,7 +511,9 @@ Bank occupancy is about 50 of 110 slots — no pressure there.
 4. ~~**F5**~~ — RETRACTED, see F5. Optional: stop the own-loss guard counting
    transport errors as combat losses (dormant, 10 pairs, 0 live verdict
    changes).
-5. **F6** — find why a fired, applicable `AcceptTaskAction` is never selected.
+5. **F6** — INVESTIGATED, four independent causes, see F6. Smallest real win
+   is Cause 1: pass the history to `has_combat_deficit` so the learned-loss
+   veto reaches the cancel rung.
 
 Note on method, earned three times in this audit — every one of them a probe
 that bypassed production rather than a bug in production:
