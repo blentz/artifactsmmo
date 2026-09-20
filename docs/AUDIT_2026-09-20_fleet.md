@@ -254,23 +254,76 @@ C3P0 and R2D2 both now plan `WithdrawGold(12373) -> NpcBuy(lifesteal_rune)`, whi
 is new and is a direct consequence of gold reaching the bank (see F7). That is the
 wall starting to move.
 
-## F5 — `is_winnable` contradicts 96.9% observed wins
+## F5 — RETRACTED. `is_winnable` was right; the probe was wrong
 
-**Severity: medium.**
+**Severity: none as filed. One dormant defect found alongside it.**
 
-`is_winnable(HAL, pig, history)` returns **False**. HAL's record against pig is
-**309 wins / 10 losses (96.9%)** and he is fighting and beating pigs for 39 XP
-each right now, this session.
+This section reported that `is_winnable(HAL, "pig", history)` returned False
+against a 309-10 record, and concluded there were two disagreeing beatability
+authorities. Both claims are withdrawn.
 
-The cause is gate 2 of `is_winnable`, the monotonic-win inference, which is
-documented as *"Skipped if we've ourselves lost to this monster (any sub-threshold
-result)"*. A single loss disables the inference permanently, and the verdict then
-falls to the cold, pessimistic `predict_win`, which says no regardless of how many
-hundreds of wins follow.
+The probe passed HAL's LIVE hp, which was 174/520 at the time. Production does
+not: `GamePlayer._is_winnable` projects to `max_hp` before asking, and its
+docstring says exactly why — "Target-selection beatability: can the bot beat
+this monster AFTER a normal HP recovery? … Without projecting to max_hp here, a
+single mid-damage cycle narrows the winnable set" (the 2026-06-06 Robby trace,
+278 cycles parked at 76/130 with 0 fights). Measured:
 
-The fight still happens, so some other authority is deciding beatability on the
-goal path. Two authorities disagreeing about the same question is the defect,
-independent of which one is right.
+```
+hp=174/520  is_winnable(HAL, pig) = False
+hp=250/520  is_winnable(HAL, pig) = False
+hp=350/520  is_winnable(HAL, pig) = False
+hp=400/520  is_winnable(HAL, pig) = False
+hp=520/520  is_winnable(HAL, pig) = True     <- what production reads
+```
+
+So there is one authority and it says True, which is why HAL fights pigs. A
+wounded character being told it would lose is the function working.
+
+The three gates were then measured per character per monster at `max_hp`, and
+gate 1 is doing real work and doing it correctly — `C3P0/pig 60 samples 0 wins`
+and `R2D2/pig 14/0` are vetoed while `Lor/pig 4689/4070` and `HAL/pig 321/311`
+are not. Same monster, different gear, per-character learning.
+
+### What is real: the own-loss guard counts transport errors as combat losses
+
+`_won_at_or_above_level` disables the monotonic-win inference with
+
+```python
+if history.sample_count(target_repr) > history.win_count(target_repr):
+    return False  # at least one loss against this monster
+```
+
+`sample_count` counts EVERY cycle with that `action_repr`, so `error:cooldown`,
+`error:network` and `error:other` all read as "we lost to this monster". A
+cooldown error is the client's own pacing; it is not a combat result.
+
+Ten live pairs have gate 2 switched off by transport errors with **zero**
+recorded `error:fight_lost`:
+
+```
+char   monster       n   wins  lost  transport   g2 now  g2 if combat-only
+HAL    blue_slime    42    39     0          3    False  True
+Robby  blue_slime    73    71     0          2    False  True
+Robby  mushmush      39    35     0          4    False  True
+C3P0   red_slime   1383  1378     0          5    False  True
+Lor    chicken      267   266     0          1    False  True
+Lor    red_slime   1652  1651     0          1    False  True
+Lor    sheep        636   631     0          5    False  True
+R2D2   blue_slime    86    81     0          5    False  True
+R2D2   red_slime   1531  1521     0         10    False  True
+R2D2   sheep        489   487     0          2    False  True
+```
+
+**It is fully dormant: 0 of the 10 change a verdict today**, because
+`predict_win` answers True for every one of them, so the fall-through lands on
+the same answer the inference would have given. It bites only where
+`predict_win` is pessimistic about a monster the character demonstrably beats —
+which is the exact situation gate 2 exists to cover.
+
+Not fixed. The change is one predicate (count `error:fight_lost`, not every
+non-`ok` outcome), it has a clean correctness argument, and it has no
+observable effect today.
 
 ## F6 — Task handling is dormant fleet-wide
 
@@ -325,13 +378,23 @@ Bank occupancy is about 50 of 110 slots — no pressure there.
    return a Goal, so refusing there only yields an unplannable root. Verified
    live.
 2. ~~**F2**~~ — DONE @070777e1.
-3. **F3** — admit `MapTransitionAction` so off-region content is reachable.
-   Unfreezes the fleet's strongest fighter after 26 days and revives the whole
-   region model. Fix shape is an open decision — see F3.
-4. **F5** — reconcile the two beatability authorities.
+3. ~~**F3**~~ — DONE @7fb59b7c. Shared, CONDITIONAL re-add in both plan
+   producers; unconditional cost 41x the search (1,467 -> 60,662 nodes over 44
+   scenarios), gating on the goal's own whitelist restores baseline exactly.
+4. ~~**F5**~~ — RETRACTED, see F5. Optional: stop the own-loss guard counting
+   transport errors as combat losses (dormant, 10 pairs, 0 live verdict
+   changes).
 5. **F6** — find why a fired, applicable `AcceptTaskAction` is never selected.
 
-Note on method, earned twice in this audit: F3's first diagnosis was wrong
-because the probe read a LEGACY index and built its own `FightAction` instead of
-asking `build_actions`. Ask the production factory what it emits, then ask that
-object whether it is applicable.
+Note on method, earned three times in this audit — every one of them a probe
+that bypassed production rather than a bug in production:
+
+* F3 read the LEGACY overworld-only index and hand-built a `FightAction` from
+  it, instead of asking `build_actions` what it emits.
+* F5 called the module-level `is_winnable` with live hp, instead of the
+  `GamePlayer._is_winnable` wrapper that projects to `max_hp` first.
+* F1's own fix was first aimed at `_equippable_goal`, which cannot refuse
+  because it must return a Goal; the gate belonged at the walk that names the
+  root.
+
+Call the function production calls, with the arguments production passes.
