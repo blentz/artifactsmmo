@@ -14,7 +14,7 @@ Fleet state at audit time:
 | R2D2  | 29    | 5,488 / 18,200 | 2026-09-13        | 4,400  | 0                             |
 | C3P0  | 29    | 14 / 18,200    | 2026-09-17        | 4,595  | 0                             |
 | Lor   | 30    | 8 / 19,700     | 2026-09-18        | 4,566  | 0                             |
-| Robby | 30    | 18,757 / 19,700| **2026-08-25**    | 4,260  | **3** (death_knight, vampire, spider) |
+| Robby | 30    | 18,757 / 19,700| **2026-08-25**    | 4,260  | **3** (death_knight, vampire, spider) — plus `rat`, see F3 |
 
 ---
 
@@ -112,35 +112,125 @@ Fix direction: make the goal's target the reward rather than the absence of a
 task — drop `TaskCancelAction` from `CompleteTaskGoal.relevant_actions`, or state
 the desired state in terms of the minted `tasks_coin`.
 
-## F3 — Robby: 26 days without a single character XP point, and it is not the grey wall
+## F3 — Robby: 26 days without a single character XP point
 
-**Severity: high. Ongoing.**
+**Severity: high. Ongoing. CORRECTED 2026-09-20 after investigation — the cause
+below replaces this section's first diagnosis.**
 
 Robby's last fight was 2026-08-26 and his last character-XP gain was
 **2026-08-25**. He sits at 18,757 / 19,700 — 943 XP, 4.8%, short of level 31 —
 and has spent 4,040 of his 4,260 cycles this session (94.8%) on `LevelSkill`.
 Zero `FightAction` in 94.7 hours.
 
-The grind target is `rat`, which is also Robby's held task (`rat 0/107`). `rat`
-has **no mapped spawn location**, so `FightAction._structurally_applicable`
-returns False and `GrindCharacterXP(rat)` dies at 3 nodes with `plan_len=0`. The
-task is unachievable for the same reason.
+### What this section first said, and why it was wrong
 
-Three monsters are applicable *right now* and all are inside the XP band for a
-level-30 character:
+The first pass reported that Robby's grind target `rat` "has no mapped spawn
+location", inferred from `gd.monsters.locations` being empty for it, and
+generalised that to "28 of 58 monsters have no mapped tile".
+
+That measurement was taken through the wrong index. `monsters.locations` is the
+LEGACY index, and `_build_maps` keeps it **overworld-only by design** (P5b, its
+own docstring: "the LEGACY indexes … ingest OVERWORLD tiles only"). The probe
+also built its own `FightAction` from that index rather than asking the action
+factory. Through the factory the same monster looks completely different:
 
 ```
-rat           lvl 25  locs=0  structural=False  applicable=False
-death_knight  lvl 28  locs=2  structural=True   applicable=True
-vampire       lvl 24  locs=2  structural=True   applicable=True
-spider        lvl 20  locs=1  structural=True   applicable=True
+rat in layered_content: [(-3, 12, 'interior'), (-2, 12, 'interior')]
+FightAction(rat) emitted: 1
+   travel_region=interior:-3,12  locations=[(-3,12), (-2,12)]
+   structural=True  applicable=True
 ```
 
-So this is a target-selection stall, not a grey wall: the selector picked an
-unreachable monster and never fell through to the reachable ones.
+The fight is emitted, structural and **applicable right now**. Of the 28
+index-empty monsters, 15 genuinely have no tile anywhere (event-only); the rest
+have real spawns the legacy index cannot see.
 
-28 of 58 monsters in the catalogue have no mapped location. Any of them can be
-handed out as a task or picked as a grind target with the same result.
+### The actual root cause: no goal admits `MapTransitionAction`
+
+`planner.py:293-295` skips any action whose `travel_region` differs from
+`game_data.state_region(node.state)`. Crossing regions is `MapTransitionAction`
+— 30 of them are in the pool — and it carries the tag `"movement"`.
+
+**No goal admits it.** `grep -rn "MapTransitionAction\|'transition'"` over
+`src/artifactsmmo_cli/ai/goals/` returns nothing, and 32 of the 40 goal files
+override `relevant_actions` with a whitelist. Measured on Robby's live pool:
+
+```
+relevant_actions: 4 of 1932
+   FightAction(rat) admitted: 1
+   MapTransitionAction admitted: 0        <-- 30 in the pool
+```
+
+So the planner holds an applicable fight it can never legally step to, and the
+search dies at 3 nodes. That is the `plan_len=0` this section first attributed
+to a missing spawn.
+
+Admitting the transitions — probe only, no production change — resolves it, and
+cheaply:
+
+```
+HEAD (whitelist)   explored=3   created=3   depth=1  plan_len=0
++ transitions      explored=17  created=53  depth=5  plan_len=2
+      1. Transition((-3,12,overworld)->(-3,12,interior))
+      2. Fight(rat)
+```
+
+`rat` is also Robby's held task (`rat 0/107`), so the same two actions unblock
+the task and the character grind together.
+
+### Blast radius
+
+Every piece of off-region content is emitted, applicable and unreachable — 16
+monsters, 8 resources, 4 other:
+
+```
+lvl 25 rat                 interior:-3,12        adamantite_rocks   underground:-5,18
+lvl 30 lich                underground:9,7       enchanted_mushroom restricted:overworld:-5,8
+lvl 35 goblin_guard        underground:3,-5      gold_rocks         underground:3,-5
+lvl 35 goblin_priestess    underground:1,-4      lava_fish_spot     underground:5,0
+lvl 38 bat                 underground:-3,4      mithril_rocks      underground:-3,4
+lvl 40 cultist_alchemist   interior:0,13         palm_tree          overworld:-4,17
+lvl 40 dryad               restricted:ow:-5,8    swordfish_spot     overworld:-4,17
+lvl 40 rosenblood          interior              torch_cactus       overworld:-4,17
+lvl 44 sand_snake          overworld:-4,17
+lvl 47 dusk_beetle         underground:-5,18     other: enchanted_fairy, god_of_the_sun,
+lvl 50 baby_red_dragon     underground:6,4              sandwhisper_trader, sorceress
+lvl 50 desert_scorpion     overworld:-4,17
+lvl 50 sandwarden          overworld:-4,17
+lvl 52 fennec              underground:5,0
+lvl 52 flameche            underground:5,0
+lvl 55 sandwhisper_empress interior:-4,19
+```
+
+Not only other layers: `overworld:-4,17` and `restricted:overworld:-5,8` are
+gated sub-regions of the overworld.
+
+Two consequences worth naming. `god_of_the_sun` is the raid P5b was built for,
+and `ParticipateRaidGoal.relevant_actions` admits `FightAction` only — so the
+raid chain cannot reach its own tile. `sandwhisper_trader` is the vendor behind
+the `sandwhisper_bag` route `_equippable_goal` carries a dedicated branch for.
+
+This is the mechanical reason `project_region_soundness` recorded the region
+model as "region-gated but NEVER fired live (0/21987 cycles)": the edges are
+emitted and then filtered out of every goal's pool before the planner sees them.
+
+### Fix shape is a decision, not a detail
+
+Three options, in increasing scope:
+
+1. Admit `MapTransitionAction` in the goals that target region-bearing content
+   (`GrindCharacterXP`, `ReachUnlockLevel`, `ParticipateRaid`, gathering,
+   `PursueTask`). Smallest diff; the next goal to be written forgets it again.
+2. Admit it in all 32 whitelisting goals. Exhaustive today, same forgetting
+   problem tomorrow, 32 files to review.
+3. Re-add every `"movement"`-tagged action structurally after a goal's
+   whitelist — one locus, in `Goal.relevant_actions`'s caller or the arbiter, so
+   no goal can omit it. This is the shape F1 argues for: an admission rule every
+   producer must remember is one that will be forgotten.
+
+(3) is the recommendation, but it changes the pool for all 32 goals at once and
+the search-cost effect needs measuring across the scenario set before it lands.
+Robby's own case costs 17 nodes against 3.
 
 ## F4 — R2D2, C3P0 and Lor are genuinely grey-walled, one to two levels wide
 
@@ -230,10 +320,18 @@ Bank occupancy is about 50 of 110 slots — no pressure there.
 
 ## Suggested order of work
 
-1. **F1** — gate `_equippable_goal` on `may_displace`. Reclaims 16.5% of HAL's
-   cycles and closes a loop that has survived two prior fixes.
-2. **F3** — make grind-target selection fall through a monster with no mapped
-   location. Unfreezes the fleet's strongest fighter after 26 days.
-3. **F2** — make `CompleteTaskGoal` want the reward, not an empty task slot.
+1. ~~**F1**~~ — DONE @16cddf72. Gated at the walk that NAMES the root
+   (`gear_targets_with_blockers`), not at `_equippable_goal`: that function must
+   return a Goal, so refusing there only yields an unplannable root. Verified
+   live.
+2. ~~**F2**~~ — DONE @070777e1.
+3. **F3** — admit `MapTransitionAction` so off-region content is reachable.
+   Unfreezes the fleet's strongest fighter after 26 days and revives the whole
+   region model. Fix shape is an open decision — see F3.
 4. **F5** — reconcile the two beatability authorities.
 5. **F6** — find why a fired, applicable `AcceptTaskAction` is never selected.
+
+Note on method, earned twice in this audit: F3's first diagnosis was wrong
+because the probe read a LEGACY index and built its own `FightAction` instead of
+asking `build_actions`. Ask the production factory what it emits, then ask that
+object whether it is applicable.
