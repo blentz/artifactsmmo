@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.region_edges import admit_region_edges
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _SEARCH_BUDGET_SECONDS = 15.0
@@ -233,8 +234,14 @@ class GOAPPlanner:
         stats = PlanStats(nodes_created=1)  # the root node below
 
         visited: set[tuple[object, ...]] = set()
+        # The region-crossing edges are re-added AFTER the goal's whitelist and
+        # BEFORE the region filter below rejects on `travel_region` — see
+        # `ai/region_edges`. Without them a goal pool can only reach overworld
+        # content whatever else is in it.
         relevant = self._surviving_actions(
-            goal.relevant_actions(actions, state, game_data))
+            admit_region_edges(
+                goal.relevant_actions(actions, state, game_data),
+                actions, state, game_data))
 
         cache_ctx = history.search_cache() if history is not None else nullcontext()
         with cache_ctx:

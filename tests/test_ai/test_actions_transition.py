@@ -9,7 +9,9 @@ from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.actions.transition_layer_error import TransitionLayerError
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.region_edges import admit_region_edges
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
@@ -190,6 +192,117 @@ class TestRegionAwarePlanning:
         state = make_state(x=0, y=0)
         # The planner's region gate (not is_applicable) rejects it; simulate:
         assert fight.travel_region != gd.state_region(state)
+
+    def test_a_whitelisting_goal_still_reaches_off_region_content(self):
+        """`test_plan_chains_transition_then_fight` above proves the planner CAN
+        chain the edge — but its goal returns `actions` unfiltered, and no
+        production goal does. 32 of the 40 goal files override
+        `relevant_actions` with a whitelist, and not one of them lists
+        `MapTransitionAction` (tag `"movement"`); grep the goals package and it
+        appears nowhere. So the edge was emitted, applicable, and stripped from
+        every real pool before the planner saw it.
+
+        Live Robby, 2026-09-20 — level 30, 943 XP short of 31, 26 days and
+        4,040 of 4,260 cycles on `LevelSkill` with ZERO fights. His grind target
+        `rat` (also his held task) lives at `interior:-3,12`:
+
+            relevant_actions: 4 of 1932
+               FightAction(rat) admitted: 1
+               MapTransitionAction admitted: 0      <- 30 in the pool
+
+            explored=3 created=3 depth=1 plan_len=0
+
+        Admitting the edges turned that into `explored=17 created=53 depth=5`
+        and the two-action plan `Transition -> Fight(rat)`. This test is that
+        case in miniature: a REAL goal with a REAL whitelist.
+        """
+        gd = self._gd()
+        transition = MapTransitionAction(
+            portal_x=2, portal_y=0, dest_x=9, dest_y=7,
+            dest_layer="underground", conditions=(), travel_region="overworld")
+        fight = FightAction(monster_code="lich", locations=frozenset({(9, 8)}),
+                            travel_region="underground")
+        actions = [transition, fight]
+        state = make_state(x=0, y=0, xp=0, max_hp=100, hp=100,
+                           attack={"fire": 30}, initiative=50)
+        goal = GrindCharacterXPGoal(target_monster="lich", initial_xp=0)
+
+        # Vacuity guards: the goal really does whitelist the edge away, and the
+        # fight really is otherwise fine — so a plan can only come from the
+        # producer re-admitting the edge.
+        assert transition not in goal.relevant_actions(actions, state, gd)
+        assert fight.is_applicable(state, gd) is True
+        assert fight.travel_region != gd.state_region(state)
+
+        plan = GOAPPlanner().plan(state, goal, actions, gd)
+        assert [repr(a).split("(")[0] for a in plan] == ["Transition", "Fight"]
+
+    def test_the_other_plan_producer_admits_the_edge_too(self):
+        """`craft_plan_gen` is a nodes=0 FAST PATH that runs BEFORE the A* and
+        filters through the same `goal.relevant_actions`. A re-admission that
+        lives only in the planner leaves this producer blind — the
+        two-plan-producers trap. Assert the shared helper covers both.
+        """
+        gd = self._gd()
+        transition = MapTransitionAction(
+            portal_x=2, portal_y=0, dest_x=9, dest_y=7,
+            dest_layer="underground", conditions=(), travel_region="overworld")
+        fight = FightAction(monster_code="lich", locations=frozenset({(9, 8)}),
+                            travel_region="underground")
+        actions = [transition, fight]
+        state = make_state(x=0, y=0, xp=0, max_hp=100, hp=100,
+                           attack={"fire": 30}, initiative=50)
+        goal = GrindCharacterXPGoal(target_monster="lich", initial_xp=0)
+
+        admitted = admit_region_edges(
+            goal.relevant_actions(actions, state, gd), actions, state, gd)
+        assert transition in admitted
+        assert fight in admitted
+
+    def test_no_edges_when_the_whitelist_has_no_off_region_work(self):
+        """The 41x lesson, pinned. Re-adding the edges UNCONDITIONALLY put the
+        44-scenario total at 60,662 planner nodes against a 1,467 baseline, and
+        `l22_grey_rung_grind` alone at 57,554 against 899 — for a byte-identical
+        71-action plan. 43 of those 44 selected goals have NO off-region action
+        in their whitelist, so every edge was a dead branch expanded at every
+        node, and `test_planner_bounded_by_relevant_actions_filter` failed
+        outright (5 nodes against its ~2 bound).
+
+        An edge is only ever worth a branch when there is something on the far
+        side of it that this goal wants.
+        """
+        gd = self._gd()
+        transition = MapTransitionAction(
+            portal_x=2, portal_y=0, dest_x=9, dest_y=7,
+            dest_layer="underground", conditions=(), travel_region="overworld")
+        here = FightAction(monster_code="lich", locations=frozenset({(1, 1)}),
+                           travel_region="overworld")
+        # The POOL always carries off-region work — 48 actions of it live — so
+        # the gate has to ask the goal's OWN whitelist. Asking `actions` would
+        # gate on nothing and re-add the edges every time.
+        elsewhere = FightAction(monster_code="lich",
+                                locations=frozenset({(9, 8)}),
+                                travel_region="underground")
+        actions = [transition, here, elsewhere]
+        state = make_state(x=0, y=0)
+
+        assert gd.state_region(state) == "overworld"
+        assert admit_region_edges([here], actions, state, gd) == [here]
+
+    def test_re_admission_never_duplicates_an_already_listed_edge(self):
+        """A goal that DOES list the edge (the default `return actions`) must
+        not get it twice — a duplicated action doubles that branch in every
+        expansion.
+        """
+        gd = self._gd()
+        transition = MapTransitionAction(
+            portal_x=2, portal_y=0, dest_x=9, dest_y=7,
+            dest_layer="underground", conditions=(), travel_region="overworld")
+        fight = FightAction(monster_code="lich", locations=frozenset({(9, 8)}),
+                            travel_region="underground")
+        actions = [transition, fight]
+        state = make_state(x=0, y=0)
+        assert admit_region_edges(list(actions), actions, state, gd) == actions
 
 
 class TestPortalLayer:

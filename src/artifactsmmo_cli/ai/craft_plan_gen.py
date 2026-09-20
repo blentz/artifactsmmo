@@ -67,6 +67,7 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.next_craft_core import NextAction
 from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
+from artifactsmmo_cli.ai.region_edges import admit_region_edges
 from artifactsmmo_cli.ai.requirement_projections import demand_set
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -207,7 +208,13 @@ def generate_next_craft_action(
             return None
 
     if relevant is None:
-        relevant = goal.relevant_actions(actions, state, game_data)
+        # Same re-add as the A* producer (`ai/region_edges`): this fast path
+        # runs BEFORE the search and filters through the same whitelist, so a
+        # re-admission that lived only in the planner would leave this producer
+        # blind — the two-plan-producers trap.
+        relevant = admit_region_edges(
+            goal.relevant_actions(actions, state, game_data),
+            actions, state, game_data)
 
     owned: dict[str, int] = dict(state.inventory)
     bank: dict[str, int] = state.bank_items or {}

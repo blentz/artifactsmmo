@@ -169,6 +169,7 @@ POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
 PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
 SLOT_OCCUPANCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "slot_occupancy.py"
+REGION_EDGES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "region_edges.py"
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
@@ -1185,6 +1186,32 @@ TREE_OCCUPANCY_MUTATIONS = [
 # The hole this group exists for: the objective's gear-target walk feeds
 # `IsMyGearBehindMyTier -> WhichSlotIsFurthestBehind`, whose winner
 # `obtain_item_routing._equippable_goal` commits to without asking again.
+# Region-edge admission. No goal admits `MapTransitionAction` (tag "movement")
+# and the planner rejects any action whose `travel_region` differs from the
+# character's, so off-region content was emitted, applicable and unreachable --
+# live Robby, 26 days and 0 character XP. Re-adding the edges UNCONDITIONALLY
+# cost 41x the search (44 scenarios: 1,467 -> 60,662 nodes), so the gate and
+# the re-add are mutated separately: one keeps the bot moving, the other keeps
+# the planner affordable.
+REGION_EDGE_MUTATIONS = [
+    ("region_edges: admit the edges unconditionally (the 41x regression)",
+     "    if not any(a.travel_region != here and REGION_EDGE_TAG not in a.tags\n"
+     "               for a in relevant):\n"
+     "        return relevant",
+     "    if False:\n"
+     "        return relevant"),
+    ("region_edges: gate on the whole pool instead of the goal's whitelist",
+     "               for a in relevant):",
+     "               for a in actions):"),
+    ("region_edges: drop the de-duplication",
+     "    seen = {id(a) for a in relevant}",
+     "    seen = set()"),
+    ("region_edges: never re-add anything",
+     "    return relevant + [a for a in actions\n"
+     "                       if REGION_EDGE_TAG in a.tags and id(a) not in seen]",
+     "    return relevant"),
+]
+
 OBJECTIVE_OCCUPANCY_MUTATIONS = [
     ("objective: drop the gear-target occupancy deferral",
      "                if defers_to_picker(code, slot, state, self._game_data):\n"
@@ -8157,6 +8184,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(OBJECTIVE_SRC, OBJECTIVE_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
+    run_group(REGION_EDGES_SRC, REGION_EDGE_MUTATIONS,
+              "tests/test_ai/test_actions_transition.py", survivors)
     run_group(PROGRESSION_GOAL_SRC, UPGRADE_GOAL_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(PURSUIT_VALUE_SRC, PURSUIT_DOMINANCE_MUTATIONS,
