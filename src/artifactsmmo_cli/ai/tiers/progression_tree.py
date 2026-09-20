@@ -37,7 +37,7 @@ from fractions import Fraction
 # something imported `decisions.root` FIRST (wave 4 does, from a scenario
 # test). Binding the module defers the lookup to call time.
 from artifactsmmo_cli.ai.decisions import root as _root
-from artifactsmmo_cli.ai.equipment.slot_occupancy import may_displace
+from artifactsmmo_cli.ai.equipment.slot_occupancy import defers_to_picker
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
@@ -48,15 +48,6 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import GearCandidate
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.weapon_winnability import marginal_weapon_winnability
 from artifactsmmo_cli.ai.world_state import WorldState
-
-
-def _already_owned(code: str, state: WorldState) -> bool:
-    """The character holds a copy (bag or bank) — so the only work this gear
-    candidate still represents is the EQUIP, which is `pick_loadout`'s call.
-    An UNOWNED candidate is left alone: acquiring it is real work that
-    terminates, and by the time it lands this gate applies."""
-    return (state.inventory.get(code, 0) > 0
-            or (state.bank_items or {}).get(code, 0) > 0)
 
 
 def _structural_candidates(state: WorldState, game_data: GameData,
@@ -79,13 +70,17 @@ def _structural_candidates(state: WorldState, game_data: GameData,
 
     OCCUPANCY DEFERRAL: a candidate the character ALREADY OWNS whose slot is
     already OCCUPIED buys nothing but the equip itself, and that equip is
-    `pick_loadout`'s call, not this ruler's. Admitted only when it
-    `may_displace` the incumbent (see `equipment/slot_occupancy`) — otherwise
-    the tree proposes a swap the combat picker reverses next cycle (live
-    2026-08-04: `life_amulet` +10000 here, `fire_and_earth_amulet` +42000
-    there, alternating forever). Dropping the candidate rather than merely
-    refusing the action also keeps it out of the ranking, so it cannot sit
-    there as a permanently-unservable root starving the interleave."""
+    `pick_loadout`'s call, not this ruler's. `defers_to_picker` (see
+    `equipment/slot_occupancy`) admits it only when it dominates the incumbent
+    — otherwise the tree proposes a swap the combat picker reverses next cycle
+    (live 2026-08-04: `life_amulet` +10000 here, `fire_and_earth_amulet`
+    +42000 there, alternating forever). Dropping the candidate rather than
+    merely refusing the action also keeps it out of the ranking, so it cannot
+    sit there as a permanently-unservable root starving the interleave.
+
+    The predicate is SHARED with `CharacterObjective.gear_targets_with_blockers`
+    — the other walk that names gear roots. It used to be inline here only, and
+    that walk went ungated for a month; see `defers_to_picker`'s docstring."""
     candidates = []
     for slot, code in objective.near_term_gear(state).items():
         stats = game_data.item_stats(code)
@@ -103,10 +98,8 @@ def _structural_candidates(state: WorldState, game_data: GameData,
                 and marginal_weapon_winnability(code, state, game_data) <= 0):
             continue
         incumbent = state.equipment.get(slot)
-        if incumbent is not None and _already_owned(code, state):
-            incumbent_stats = game_data.item_stats(incumbent)
-            if incumbent_stats is not None and not may_displace(stats, incumbent_stats):
-                continue
+        if defers_to_picker(code, slot, state, game_data):
+            continue
         current_value = objective._item_value(incumbent)
         gain = Fraction(pursuit_value(stats) - current_value)
         if gain > 0:

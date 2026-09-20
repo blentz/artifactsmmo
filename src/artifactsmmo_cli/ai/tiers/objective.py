@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
+from artifactsmmo_cli.ai.equipment.slot_occupancy import defers_to_picker
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -503,6 +504,8 @@ class CharacterObjective:
                           if is_suppliable(code, state, self._game_data)]
             for slot, value, code in _slot_assignments(type_, slots, suppliable):
                 if value <= self._item_value(state.equipment.get(slot)):
+                    continue
+                if defers_to_picker(code, slot, state, self._game_data):
                     continue
                 targets[slot] = self.classify_target(code, state)
         return targets

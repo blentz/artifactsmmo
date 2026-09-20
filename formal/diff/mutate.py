@@ -1138,28 +1138,59 @@ SLOT_OCCUPANCY_MUTATIONS = [
 ]
 
 
-# progression_tree gear-branch occupancy mutations -- the deferral that keeps an
-# owned, contested candidate out of the ranking (so it can neither burn a
-# cooldown nor sit there as a permanently-unservable root).
-TREE_OCCUPANCY_MUTATIONS = [
-    ("progression_tree: drop the owned/occupied guard",
-     "        if incumbent is not None and _already_owned(code, state):",
-     "        if False:"),
-    ("progression_tree: drop the occupancy deferral",
-     "            if incumbent_stats is not None and not may_displace(stats, incumbent_stats):",
-     "            if False:"),
+# Target-naming occupancy mutations. The deferral that keeps an owned,
+# contested candidate out of the ranking (so it can neither burn a cooldown nor
+# sit there as a permanently-unservable root) moved into
+# `slot_occupancy.defers_to_picker` on 2026-09-20, when the SECOND walk that
+# names gear roots -- `CharacterObjective.gear_targets_with_blockers` -- was
+# found to have never had it (live HAL: 1,464 equips, 2026-09-08..09-20). The
+# predicate's own clauses are mutated here; each CALL SITE gets its own group
+# below so a survivor names the walk that stopped asking.
+OCCUPANCY_PREDICATE_MUTATIONS = [
+    ("slot_occupancy: defer even an UNOWNED candidate",
+     "    if not owned:\n"
+     "        return False",
+     "    if False:\n"
+     "        return False"),
     # SURVIVED every run from c7f35044 until 2026-08-15, with a test named for
     # the exact property sitting in the bound file the whole time:
     # test_a_banked_copy_counts_as_owned. It was VACUOUS. The board banked a
     # `piggy_armor` against a worn `mushmush_jacket`, and the pursuit_value
-    # unification had since inverted that pair — gain -82_799_980 — so the
+    # unification had since inverted that pair (gain -82_799_980), so the
     # `gain > 0` check dropped the candidate before ownership was consulted and
     # `== []` held with the bank clause deleted. The pair is now the
     # positive-gain one, with vacuity guards on both the gain and may_displace.
-    ("progression_tree: ownership ignores the bank",
-     "    return (state.inventory.get(code, 0) > 0\n"
-     "            or (state.bank_items or {}).get(code, 0) > 0)",
-     "    return state.inventory.get(code, 0) > 0"),
+    ("slot_occupancy: ownership ignores the bank",
+     "    owned = (state.inventory.get(code, 0) > 0\n"
+     "             or (state.bank_items or {}).get(code, 0) > 0)",
+     "    owned = state.inventory.get(code, 0) > 0"),
+    ("slot_occupancy: defer on an EMPTY slot",
+     "    if incumbent is None:\n"
+     "        return False",
+     "    if incumbent is None:\n"
+     "        return True"),
+    ("slot_occupancy: drop the dominance deferral",
+     "    return not may_displace(candidate_stats, incumbent_stats)",
+     "    return False"),
+]
+
+TREE_OCCUPANCY_MUTATIONS = [
+    ("progression_tree: drop the occupancy deferral",
+     "        if defers_to_picker(code, slot, state, game_data):\n"
+     "            continue",
+     "        if False:\n"
+     "            continue"),
+]
+
+# The hole this group exists for: the objective's gear-target walk feeds
+# `IsMyGearBehindMyTier -> WhichSlotIsFurthestBehind`, whose winner
+# `obtain_item_routing._equippable_goal` commits to without asking again.
+OBJECTIVE_OCCUPANCY_MUTATIONS = [
+    ("objective: drop the gear-target occupancy deferral",
+     "                if defers_to_picker(code, slot, state, self._game_data):\n"
+     "                    continue",
+     "                if False:\n"
+     "                    continue"),
 ]
 
 
@@ -8107,7 +8138,11 @@ def _collect_all_groups() -> None:
     # run_group so a survivor names the exact authority that stopped deferring.
     run_group(SLOT_OCCUPANCY_SRC, SLOT_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
+    run_group(SLOT_OCCUPANCY_SRC, OCCUPANCY_PREDICATE_MUTATIONS,
+              "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(PROGRESSION_TREE_IMPURE_SRC, TREE_OCCUPANCY_MUTATIONS,
+              "tests/test_ai/test_equip_loop_closure.py", survivors)
+    run_group(OBJECTIVE_SRC, OBJECTIVE_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(PROGRESSION_GOAL_SRC, UPGRADE_GOAL_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)

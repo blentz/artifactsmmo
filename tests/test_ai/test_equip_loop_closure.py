@@ -38,11 +38,12 @@ from dataclasses import replace
 
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.scoring import RULER_SCALE, armor_score
-from artifactsmmo_cli.ai.equipment.slot_occupancy import may_displace
+from artifactsmmo_cli.ai.equipment.slot_occupancy import defers_to_picker, may_displace
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_suppliable
 from artifactsmmo_cli.ai.tiers.progression_tree import _structural_candidates
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -90,6 +91,11 @@ _HARD_LEATHER_PANTS = ItemStats(
 _ADVENTURER_PANTS = ItemStats(
     code="adventurer_pants", level=15, type_="leg_armor",
     hp_bonus=60, dmg=5, wisdom=20,
+)
+# A strictly worse leg piece: `hard_leather_pants` dominates it on every stat
+# the scorers read, so the picker can never swap it back.
+_OLD_PANTS = ItemStats(
+    code="old_pants", level=1, type_="leg_armor", hp_bonus=5,
 )
 
 # battlestaff (level 20 weapon): attack_water 40 — HAL's weapon, and the reason
@@ -591,3 +597,102 @@ def test_the_committed_upgrade_leg_of_the_loop_also_closes() -> None:
             Combat(_SHEEP_ATK, _SHEEP_RES, state.attack), state, gd)
         state = replace(state, equipment=dict(picked))
         assert state.equipment[leg] == "adventurer_pants", state.equipment
+
+
+def _gd_pants_world() -> GameData:
+    """The HAL board as a world the real `CharacterObjective` can walk.
+
+    Both pants need a route or `is_suppliable` drops them before occupancy is
+    ever consulted, and the assertion below would hold for the wrong reason.
+    """
+    gd = _gd(_HARD_LEATHER_PANTS, _ADVENTURER_PANTS)
+    gd._crafting_recipes = {"hard_leather_pants": {"bar": 1},
+                            "adventurer_pants": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    gd._item_stats["bar"] = ItemStats(code="bar", level=1, type_="resource")
+    return gd
+
+
+def test_the_gear_target_walk_leg_of_the_loop_also_closes() -> None:
+    """The FOURTH producer, and the one still live on 2026-09-20:
+    `CharacterObjective.gear_targets_with_blockers`.
+
+    a1e67887 gated `_committed_upgrade_if_ready`, which only `value()` and
+    `desired_state()` reach. What NAMES the root is this walk — it ranks a slot
+    on the monster-blind `_item_value` alone (`objective.py:505`) and hands the
+    winner to `IsMyGearBehindMyTier -> WhichSlotIsFurthestBehind`, which
+    `obtain_item_routing._equippable_goal` turns into a committed
+    `UpgradeEquipmentGoal` with no occupancy question asked. Live HAL ran
+    `Equip(hard_leather_pants->leg_armor_slot)` 1,464 times between 2026-09-08
+    and 2026-09-20 — 790 of them in one 94.7-hour session, 16.5% of his cycles
+    — with `OptimizeLoadout(pig)` putting `adventurer_pants` back each time.
+
+    The tree's gear branch already defers here (`_structural_candidates`); this
+    walk is the same ruler over the same slot and must defer identically.
+    """
+    gd = _gd_pants_world()
+    leg = "leg_armor_slot"
+    state = _state(20, {"hard_leather_pants": 1},
+                   {leg: "adventurer_pants"}, _BATTLESTAFF_ATTACK)
+    obj = CharacterObjective.from_game_data(gd)
+
+    # Vacuity guards: every OTHER filter must pass the candidate, or the empty
+    # result below says nothing about occupancy.
+    assert may_displace(_HARD_LEATHER_PANTS, _ADVENTURER_PANTS) is False
+    assert is_suppliable("hard_leather_pants", state, gd) is True
+    assert (obj._item_value("hard_leather_pants")
+            > obj._item_value("adventurer_pants")), (
+        "fixture drift: a non-positive gain drops the candidate at "
+        "objective.py:505 before occupancy is consulted"
+    )
+    # The SAME board with no copy held: the walk DOES name the target. This
+    # pins the difference below to ownership + occupancy and nothing else.
+    unowned = replace(state, inventory={})
+    assert unowned.equipment[leg] == "adventurer_pants"
+    assert obj.gear_targets_with_blockers(unowned, None)[leg].code == \
+        "hard_leather_pants"
+
+    assert leg not in obj.gear_targets_with_blockers(state, None)
+
+
+def test_an_empty_slot_is_filled_not_deferred() -> None:
+    """The deferral is about a DISAGREEMENT, and an empty slot has none.
+
+    `pick_loadout` will put the owned piece in an unoccupied slot whatever the
+    acquisition ruler thinks, so naming it as a target costs nothing and skips
+    an idle slot. Over-widening the gate to every owned item would silently
+    switch off the empty-slot fill that `EquipOwnedGoal` and the artifact
+    branch depend on, and no equip-loop assertion would notice — the loop
+    needs two occupants to alternate between.
+    """
+    gd = _gd_pants_world()
+    leg = "leg_armor_slot"
+    state = _state(20, {"hard_leather_pants": 1}, {leg: None},
+                   _BATTLESTAFF_ATTACK)
+    obj = CharacterObjective.from_game_data(gd)
+
+    assert defers_to_picker("hard_leather_pants", leg, state, gd) is False
+    assert obj.gear_targets_with_blockers(state, None)[leg].code == \
+        "hard_leather_pants"
+
+
+def test_a_dominating_owned_candidate_still_reaches_the_gear_target_walk() -> None:
+    """The gate must stay a DEFERRAL, not a ban on owned gear.
+
+    `hard_leather_pants` over `old_pants` is stat-wise dominance, so
+    `pick_loadout` can never swap it back and the walk must keep naming it —
+    otherwise the character never upgrades a slot from anything it already
+    carries.
+    """
+    gd = _gd_pants_world()
+    gd._item_stats["old_pants"] = _OLD_PANTS
+    leg = "leg_armor_slot"
+    state = _state(20, {"hard_leather_pants": 1}, {leg: "old_pants"},
+                   _BATTLESTAFF_ATTACK)
+    obj = CharacterObjective.from_game_data(gd)
+
+    assert may_displace(_HARD_LEATHER_PANTS, _OLD_PANTS) is True
+    assert defers_to_picker("hard_leather_pants", leg, state, gd) is False
+    assert obj.gear_targets_with_blockers(state, None)[leg].code == \
+        "hard_leather_pants"

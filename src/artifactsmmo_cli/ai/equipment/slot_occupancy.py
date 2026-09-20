@@ -39,7 +39,8 @@ authority that can price it per monster, which equips it before the next fight
 """
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
-from artifactsmmo_cli.ai.game_data import ItemStats
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.world_state import WorldState
 
 
 def _flat_utility(stats: ItemStats) -> int:
@@ -94,3 +95,55 @@ def may_displace(candidate: ItemStats, incumbent: ItemStats) -> bool:
                 < incumbent.dmg + incumbent.dmg_elements.get(elem, 0)):
             return False
     return True
+
+
+def defers_to_picker(code: str, slot: str, state: WorldState,
+                     game_data: GameData) -> bool:
+    """True iff the acquisition path must leave `slot` to `pick_loadout`.
+
+    THE TARGET-NAMING GATE, shared by the two walks that name gear roots —
+    `progression_tree._structural_candidates` and
+    `CharacterObjective.gear_targets_with_blockers`. It is stated once here
+    because they had drifted: the 2026-08-04 fix pinned the tree leg, and the
+    objective walk — whose winner `obtain_item_routing._equippable_goal` turns
+    into a COMMITTED `UpgradeEquipmentGoal` with no occupancy question asked —
+    never had the gate at all. Live HAL ran
+    `Equip(hard_leather_pants->leg_armor_slot)` 1,464 times between 2026-09-08
+    and 2026-09-20 through that hole, 790 of them in one 94.7-hour session
+    (16.5% of his cycles), with `OptimizeLoadout(pig)` restoring
+    `adventurer_pants` after every one.
+
+    The two ACTION-side gates in `goals/progression.py`
+    (`_find_inventory_upgrade`, `_committed_upgrade_if_ready`) call
+    `may_displace` directly and deliberately keep their own ownership rules —
+    the first because every pick it makes is owned by construction, the second
+    because it gates an as-yet-UNOWNED committed target too. Folding them in
+    here would widen this predicate's contract, not narrow theirs.
+
+    Three conjuncts, and each one is load-bearing:
+
+    * OWNED (bag or bank). An unowned candidate is real, terminating work —
+      acquiring it — and this gate applies by the time it lands. A BANKED copy
+      is one Withdraw from the same contested equip, so the bank counts.
+    * OCCUPIED. An empty slot has no incumbent to disagree about; whatever the
+      acquisition path names is strictly additive and the picker keeps it.
+    * NOT DOMINATING. `may_displace` is the deferral proper — see this module's
+      docstring for why stat-wise dominance is exactly the condition that makes
+      the swap a fixed point of `pick_loadout` for EVERY monster.
+
+    An incumbent whose stats do not resolve is NOT deferred to: `pick_loadout`
+    displaces an unknown incumbent unconditionally, so there is no disagreement
+    to defer to (same handling as `_is_upgrade_over_impl`, not a third policy).
+    """
+    owned = (state.inventory.get(code, 0) > 0
+             or (state.bank_items or {}).get(code, 0) > 0)
+    if not owned:
+        return False
+    incumbent = state.equipment.get(slot)
+    if incumbent is None:
+        return False
+    incumbent_stats = game_data.item_stats(incumbent)
+    candidate_stats = game_data.item_stats(code)
+    if incumbent_stats is None or candidate_stats is None:
+        return False
+    return not may_displace(candidate_stats, incumbent_stats)
