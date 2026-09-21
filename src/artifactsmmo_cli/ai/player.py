@@ -54,6 +54,7 @@ from artifactsmmo_cli.ai.constants import (
     ERROR_BACKOFF_MAX_SECONDS,
     ERROR_CODE_ALREADY_EQUIPPED,
     ERROR_CODE_COOLDOWN,
+    ERROR_CODE_OFFER_SHORT,
     ERROR_CODE_ORDER_NOT_FOUND,
     ERROR_CODE_RATE_LIMITED,
     GE_ORDER_REFRESH_INTERVAL_SECONDS,
@@ -1820,17 +1821,23 @@ class GamePlayer:
                     refreshed = self._sync_bank(client, refreshed)
                 except httpx.HTTPError:
                     pass  # transient; the periodic refresh retries
-            if e.code == ERROR_CODE_ORDER_NOT_FOUND and isinstance(
-                action, (GeFillBuyOrderAction, GeFillSellOrderAction)
-            ) and self.game_data is not None:
-                # "Order not found": the standing order our GE index named is
-                # gone from the book. The index is loaded once at startup and
-                # nothing else ever retires an entry, so `is_applicable` keeps
-                # matching the ghost and the planner re-emits the identical
-                # fill forever. Re-read THIS item's orders — the same shape as
-                # the bank re-sync above, and for the same reason: a stale view
-                # drove an impossible plan, so correct the view rather than
-                # swallow the cycle.
+            if e.code in (ERROR_CODE_ORDER_NOT_FOUND, ERROR_CODE_OFFER_SHORT) \
+                    and isinstance(action, (GeFillBuyOrderAction, GeFillSellOrderAction)) \
+                    and self.game_data is not None:
+                # Both codes say our GE index is out of date about this order,
+                # and they are the only two that do. 404 "Order not found": the
+                # order is gone from the book. 434 "This offer does not contain
+                # that many items": the order stands but has been drained below
+                # the quantity we recorded. The index is loaded at startup and
+                # re-read only on the refresh interval, so between reads
+                # `is_applicable` keeps matching a snapshot the server has
+                # already moved past and the planner re-emits the identical
+                # impossible fill. Re-read THIS item's orders — the same shape
+                # as the bank re-sync above, and for the same reason: a stale
+                # view drove an impossible plan, so correct the view rather
+                # than swallow the cycle. Scoped to the item, not the order,
+                # which is what lets a 434 promote a sibling order that still
+                # holds what the drained one no longer does.
                 try:  # noqa: SIM105 - keep explicit except to document the transient-retry rationale
                     self.game_data.refresh_ge_orders_for_item(
                         client, action.item_code, acquire=self._acquire_data)

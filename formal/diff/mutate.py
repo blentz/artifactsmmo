@@ -1331,9 +1331,19 @@ GE_ORDER_PAGE_BUDGET_MUTATIONS = [
 ]
 
 GE_ORDER_404_REFRESH_MUTATIONS = [
-    ("player: a 404 on a GE fill no longer refreshes the order index",
-     "            if e.code == ERROR_CODE_ORDER_NOT_FOUND and isinstance(",
-     "            if False and isinstance("),
+    ("player: a GE-fill refusal no longer refreshes the order index",
+     "            if e.code in (ERROR_CODE_ORDER_NOT_FOUND, ERROR_CODE_OFFER_SHORT) \\",
+     "            if False \\"),
+    ("player: only the 404 refreshes, a 434 leaves the drained quantity cached",
+     "            if e.code in (ERROR_CODE_ORDER_NOT_FOUND, ERROR_CODE_OFFER_SHORT) \\",
+     "            if e.code in (ERROR_CODE_ORDER_NOT_FOUND,) \\"),
+    ("player: only the 434 refreshes, a 404 leaves the ghost order cached",
+     "            if e.code in (ERROR_CODE_ORDER_NOT_FOUND, ERROR_CODE_OFFER_SHORT) \\",
+     "            if e.code in (ERROR_CODE_OFFER_SHORT,) \\"),
+    ("player: every structured refusal re-pages the book, not just the two "
+     "that speak about the order",
+     "            if e.code in (ERROR_CODE_ORDER_NOT_FOUND, ERROR_CODE_OFFER_SHORT) \\",
+     "            if True \\"),
 ]
 
 OBJECTIVE_OCCUPANCY_MUTATIONS = [

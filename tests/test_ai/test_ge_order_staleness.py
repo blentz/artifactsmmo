@@ -39,7 +39,9 @@ from artifactsmmo_api_client.models.ge_order_type import GEOrderType
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
-from artifactsmmo_cli.ai.constants import GE_ORDER_REFRESH_INTERVAL_SECONDS
+from artifactsmmo_cli.ai.constants import (
+    GE_ORDER_REFRESH_INTERVAL_SECONDS,
+)
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
@@ -409,3 +411,89 @@ def test_the_run_loop_actually_calls_the_periodic_reload():
             player.run()
 
     assert seen == ["ge"]
+
+
+class TestOfferShortRefresh:
+    """HTTP 434 is the PARTIAL twin of the 404: the order still stands, but
+    other accounts have drained it below what our snapshot recorded.
+
+    Every build site gates on the cached quantity — `craft_ladder.py:50`
+    (`order[2] < qty`), `goals/gathering.py:632` and `goals/progression.py:534`
+    — and none of them clamps the ask, so a 434 can only mean that cached
+    number is wrong. The order id stays perfectly valid while its quantity
+    drains, so the 404 hook never fires and the stale quantity ages forever.
+
+    Live 2026-09-21 (Robby): order 6ab0c9cdc215f6bd0f9d7912 was down to 2 units
+    while Robby asked it for 51, 24, 12, 6, 6, 6 — 8 cycles at cooldown 0.0, on
+    top of 70 404s, for 17.4% of a 448-cycle session.
+    """
+
+    @staticmethod
+    def _run_fill_against(code: int, message: str, gd: GameData | None):
+        player = GamePlayer(character="hero")
+        player.state = make_state(x=5, y=1)
+        player.game_data = gd
+        action = GeFillSellOrderAction(
+            order_id="drained-1", item_code="sunflower", price=5,
+            quantity=51, ge_location=(5, 1),
+        )
+        char = make_char_schema(x=5, y=1)
+        empty = MagicMock()
+        empty.data = []
+        with redirect_stdout(io.StringIO()):
+            with patch("artifactsmmo_cli.ai.actions.ge_fill_sell.action_ge_buy",
+                       side_effect=ApiActionError(code, message)), \
+                 patch("artifactsmmo_cli.ai.player.get_character",
+                       return_value=make_get_character_result(char)), \
+                 patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty), \
+                 patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty):
+                _state, outcome = player._execute(action, MagicMock())
+        return outcome
+
+    def test_a_434_corrects_the_stale_quantity(self, monkeypatch):
+        """The order SURVIVES the refusal — what must change is the quantity we
+        believe it holds, or the identical over-sized buy is planned again."""
+        fake_sync, _calls = _book({
+            (GEOrderType.SELL, "sunflower"): [_order("drained-1", "sunflower", 5, 2)],
+        })
+        monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+        gd = GameData()
+        gd._ge_sell_orders = {"sunflower": ("drained-1", 5, 99)}
+
+        outcome = self._run_fill_against(
+            434, "This offer does not contain that many items.", gd)
+
+        assert outcome == "error:HTTP_434"
+        assert gd.ge_best_sell_order("sunflower") == ("drained-1", 5, 2)
+
+    def test_a_434_can_promote_a_bigger_standing_order(self, monkeypatch):
+        """Re-reading the ITEM, not the one order, is what makes this a repair
+        rather than a retreat: a sibling order may hold what the drained one
+        no longer does (live: 46 units at the same price 5)."""
+        fake_sync, _calls = _book({
+            (GEOrderType.SELL, "sunflower"): [
+                _order("drained-1", "sunflower", 5, 2),
+                _order("roomier-2", "sunflower", 5, 46),
+            ],
+        })
+        monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+        gd = GameData()
+        gd._ge_sell_orders = {"sunflower": ("drained-1", 5, 99)}
+
+        self._run_fill_against(434, "This offer does not contain that many items.", gd)
+
+        assert gd.ge_best_sell_order("sunflower") == ("roomier-2", 5, 46)
+
+    def test_an_unrelated_structured_error_leaves_the_index_alone(self, monkeypatch):
+        """Only the two codes that speak about the ORDER may rewrite the book.
+        A 492 (insufficient gold) says nothing about what the order holds."""
+        fake_sync, calls = _book({})
+        monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+        gd = GameData()
+        gd._ge_sell_orders = {"sunflower": ("drained-1", 5, 99)}
+
+        outcome = self._run_fill_against(492, "Insufficient gold.", gd)
+
+        assert outcome == "error:HTTP_492"
+        assert calls == []
+        assert gd.ge_best_sell_order("sunflower") == ("drained-1", 5, 99)

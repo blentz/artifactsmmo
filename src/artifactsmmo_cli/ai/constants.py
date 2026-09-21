@@ -48,6 +48,20 @@ ERROR_CODE_ALREADY_EQUIPPED = 485
 # (class, item code) — poisoning there would wall the item for the session.
 ERROR_CODE_ORDER_NOT_FOUND = 404
 
+# Game API error code 434 ("This offer does not contain that many items") on a
+# Grand Exchange fill: the PARTIAL twin of 404 above. The order still stands —
+# other accounts have merely drained it below the quantity our index recorded.
+# Every build site gates the ask on that cached quantity (`craft_ladder`'s
+# `order[2] < qty`, and the same test in goals/gathering and goals/progression)
+# and none of them clamps it, so a 434 can only mean the cached number is
+# wrong. Because the order id stays valid the 404 hook never fires, and the
+# stale quantity ages for the whole run.
+#
+# Live 2026-09-21 (Robby): order 6ab0c9cdc215f6bd0f9d7912 was down to 2 units
+# while Robby asked it for 51, 24, 12, 6, 6, 6 — at cooldown 0.0, and with 46
+# units standing in a sibling order at the same price the whole time.
+ERROR_CODE_OFFER_SHORT = 434
+
 # How long the Grand Exchange order index may stand before the run re-reads the
 # whole book. Retiring a ghost on its own 404 (ERROR_CODE_ORDER_NOT_FOUND above)
 # only ever SHRINKS the index; an order posted by another account after startup
