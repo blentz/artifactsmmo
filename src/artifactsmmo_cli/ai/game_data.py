@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Any
+from typing import Any, TypedDict
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.accounts.get_account_achievements_accounts_account_achievements_get import (
@@ -70,6 +70,21 @@ from artifactsmmo_cli.rate_limited_error import RateLimitedError
 from artifactsmmo_cli.utils.retry_after import retry_after_seconds
 
 __all__ = ["_GATHERING_SKILLS", "GameData", "ItemStats"]
+
+
+class _GeOrderFilter(TypedDict, total=False):
+    """The optional `code` argument of `get_ge_orders`, as a splat-able mapping.
+
+    A plain `dict[str, str]` splat is not precise enough for the type checker:
+    `get_ge_orders` also takes `account` and `item_type`, so an untyped splat
+    could be filling any of them. Declaring the one key we ever pass is what
+    lets the whole-book read send NO filter at all — the request it has always
+    sent, and the one every existing fake models — while the per-item read
+    sends exactly `code`.
+    """
+
+    code: str
+
 
 GAME_DATA_LOAD_ATTEMPTS = 6
 """How many times `GameData.load` may attempt the whole load before giving up.
@@ -2180,20 +2195,59 @@ class GameData:
         the best order on either side lives in `ge_order_index` — shared with
         `from_cache_bundle`'s hydrator so the committed fixture's captured book
         and the live book are indexed by the same rule rather than by two copies
-        of it."""
-        self._ge_buy_orders.update(index_best_ge_orders(
-            self._page_ge_orders(client, GEOrderType.BUY), GEOrderType.BUY))
-        self._ge_sell_orders.update(index_best_ge_orders(
-            self._page_ge_orders(client, GEOrderType.SELL), GEOrderType.SELL))
+        of it.
+
+        A reload REPLACES each index rather than merging into it. The book just
+        read is the whole truth about which orders stand, so an item it does not
+        mention has no standing order — merging would keep the previous run's
+        entry for exactly that item and hand the planner an order the API just
+        declined to list.
+        """
+        self._ge_buy_orders = index_best_ge_orders(
+            self._page_ge_orders(client, GEOrderType.BUY), GEOrderType.BUY)
+        self._ge_sell_orders = index_best_ge_orders(
+            self._page_ge_orders(client, GEOrderType.SELL), GEOrderType.SELL)
+
+    def refresh_ge_orders_for_item(self, client: AuthenticatedClient,
+                                   item_code: str) -> None:
+        """Re-read ONE item's orders from the live book and re-index both sides.
+
+        Called when the server answers a GE fill with HTTP 404 "Order not found":
+        the order our index named has been filled or cancelled by someone else.
+        That 404 is the freshest statement anyone will make about the order, and
+        without it nothing ever retires a startup snapshot entry — the planner
+        re-derives the identical impossible fill every cycle at cooldown 0.0
+        (live 2026-09-21 Robby: 64 of 424 cycles on one dead sunflower order).
+
+        Scoped to the item via the API's `code` filter: one request per side,
+        only on failure. Re-paging the whole book would cost more of the per-IP
+        budget than the livelock it repairs. Scoped to the item rather than to
+        the one dead ORDER because the index keeps a single order per item, so
+        evicting it would leave the item with no GE source for the rest of the
+        session even while four other orders for it stand.
+        """
+        for side, index in ((GEOrderType.BUY, self._ge_buy_orders),
+                            (GEOrderType.SELL, self._ge_sell_orders)):
+            best = index_best_ge_orders(
+                self._page_ge_orders(client, side, code=item_code), side)
+            if item_code in best:
+                index[item_code] = best[item_code]
+            else:
+                index.pop(item_code, None)
 
     @staticmethod
-    def _page_ge_orders(client: AuthenticatedClient,
-                        side: GEOrderType) -> list[GEOrderSchema]:
-        """Every open order on one side of the book, paged to exhaustion."""
+    def _page_ge_orders(client: AuthenticatedClient, side: GEOrderType,
+                        code: str | None = None) -> list[GEOrderSchema]:
+        """Every open order on one side of the book, paged to exhaustion.
+
+        `code` narrows the read to one item. Passed to the API only when set, so
+        the whole-book startup read sends the request it always sent."""
+        item_filter: _GeOrderFilter = {} if code is None else {"code": code}
         out: list[GEOrderSchema] = []
         page = 1
         while True:
-            result = get_ge_orders(client=client, type_=side, page=page, size=100)
+            result = get_ge_orders(client=client, type_=side, page=page, size=100,
+                                   **item_filter)
             if result is None or not result.data:
                 break
             out.extend(result.data)

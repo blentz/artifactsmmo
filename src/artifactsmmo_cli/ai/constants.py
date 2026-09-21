@@ -37,6 +37,17 @@ ERROR_CODE_COOLDOWN = 499
 # ai/action_rejection.py, which bounds the loop even while the model is wrong.
 ERROR_CODE_ALREADY_EQUIPPED = 485
 
+# Game API error code 404 ("Order not found") on a Grand Exchange fill: the
+# standing order our index named has been filled or cancelled by another
+# account. The order book is read ONCE at startup, so nothing else ever retires
+# a consumed order — and the planner re-derives the identical impossible fill
+# every cycle at cooldown 0.0, free-spinning against the per-IP budget (live
+# 2026-09-21 Robby: 64 of 424 cycles on one dead sunflower order, in seven
+# bursts over eight hours). NOT a categorical rejection: it is a fact about one
+# order id, not about the item, and `ai/action_rejection.py` keys on
+# (class, item code) — poisoning there would wall the item for the session.
+ERROR_CODE_ORDER_NOT_FOUND = 404
+
 # Standard HTTP 429 ("Too Many Requests"): the per-IP throttle `play --all`
 # children divide between themselves as a soft budget (see utils/rate_governor.py)
 # tripped anyway. Undocumented in the OpenAPI spec this project's client is

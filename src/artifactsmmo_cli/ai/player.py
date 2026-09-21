@@ -39,6 +39,8 @@ from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.ge_cancel_order import GeCancelOrderAction
+from artifactsmmo_cli.ai.actions.ge_fill import GeFillBuyOrderAction
+from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
@@ -52,6 +54,7 @@ from artifactsmmo_cli.ai.constants import (
     ERROR_BACKOFF_MAX_SECONDS,
     ERROR_CODE_ALREADY_EQUIPPED,
     ERROR_CODE_COOLDOWN,
+    ERROR_CODE_ORDER_NOT_FOUND,
     ERROR_CODE_RATE_LIMITED,
     STUCK_DETECTOR_WINDOW,
 )
@@ -1810,6 +1813,21 @@ class GamePlayer:
                     refreshed = self._sync_bank(client, refreshed)
                 except httpx.HTTPError:
                     pass  # transient; the periodic refresh retries
+            if e.code == ERROR_CODE_ORDER_NOT_FOUND and isinstance(
+                action, (GeFillBuyOrderAction, GeFillSellOrderAction)
+            ) and self.game_data is not None:
+                # "Order not found": the standing order our GE index named is
+                # gone from the book. The index is loaded once at startup and
+                # nothing else ever retires an entry, so `is_applicable` keeps
+                # matching the ghost and the planner re-emits the identical
+                # fill forever. Re-read THIS item's orders — the same shape as
+                # the bank re-sync above, and for the same reason: a stale view
+                # drove an impossible plan, so correct the view rather than
+                # swallow the cycle.
+                try:  # noqa: SIM105 - keep explicit except to document the transient-retry rationale
+                    self.game_data.refresh_ge_orders_for_item(client, action.item_code)
+                except httpx.HTTPError:
+                    pass  # transient; the order stays indexed and 404s again
             return refreshed, outcome
         except RuntimeError as e:
             msg = str(e)

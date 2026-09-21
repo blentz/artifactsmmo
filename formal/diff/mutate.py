@@ -1278,6 +1278,34 @@ REGION_EDGE_MUTATIONS = [
      "    return relevant"),
 ]
 
+# GE order-book staleness (live 2026-09-21 Robby: 64 of 424 cycles spent on one
+# dead sunflower order). The book is read once at startup and nothing retired a
+# consumed order, so `is_applicable` kept matching a ghost and the planner
+# re-emitted the identical fill at cooldown 0.0. Each mutant restores one half
+# of that; all four are killed by tests/test_ai/test_ge_order_staleness.py.
+GE_ORDER_STALENESS_MUTATIONS = [
+    ("ge orders: a vanished order is never dropped (restores the 404 livelock)",
+     "                index.pop(item_code, None)",
+     "                pass"),
+    ("ge orders: the re-read result is discarded (the ghost outlives its own refutation)",
+     "                index[item_code] = best[item_code]",
+     "                pass"),
+    ("ge orders: a whole-book reload merges instead of replacing",
+     "        self._ge_sell_orders = index_best_ge_orders(\n"
+     "            self._page_ge_orders(client, GEOrderType.SELL), GEOrderType.SELL)",
+     "        self._ge_sell_orders.update(index_best_ge_orders(\n"
+     "            self._page_ge_orders(client, GEOrderType.SELL), GEOrderType.SELL))"),
+    ("ge orders: the per-item re-read pages the WHOLE book (drops the code filter)",
+     "                self._page_ge_orders(client, side, code=item_code), side)",
+     "                self._page_ge_orders(client, side), side)"),
+]
+
+GE_ORDER_404_REFRESH_MUTATIONS = [
+    ("player: a 404 on a GE fill no longer refreshes the order index",
+     "            if e.code == ERROR_CODE_ORDER_NOT_FOUND and isinstance(",
+     "            if False and isinstance("),
+]
+
 OBJECTIVE_OCCUPANCY_MUTATIONS = [
     ("objective: drop the gear-target occupancy deferral",
      "                if defers_to_picker(code, slot, state, self._game_data):\n"
@@ -8252,6 +8280,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(REGION_EDGES_SRC, REGION_EDGE_MUTATIONS,
               "tests/test_ai/test_actions_transition.py", survivors)
+    run_group(GAME_DATA_PARSE_SRC, GE_ORDER_STALENESS_MUTATIONS,
+              "tests/test_ai/test_ge_order_staleness.py", survivors)
+    run_group(PLAYER_SRC, GE_ORDER_404_REFRESH_MUTATIONS,
+              "tests/test_ai/test_ge_order_staleness.py", survivors)
     run_group(PLANNER_SRC, PLANNER_STATE_KEY_MUTATIONS,
               "tests/test_ai/test_actions_transition.py", survivors)
     run_group(OBTAIN_ITEM_DECISION_SRC, OBTAIN_ITEM_TURNIN_RESERVE_MUTATIONS,
