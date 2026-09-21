@@ -183,6 +183,15 @@ class LearningStore:
             # unattributable and must read as "not recorded" rather than "".
             if cols and "error_text" not in cols:
                 conn.exec_driver_sql("ALTER TABLE cycles ADD COLUMN error_text TEXT")
+            # Root-attribution migration (2026-09-21): cycles gains which branch
+            # of the root walk produced the root, and that root's repr. NULLABLE
+            # with no DEFAULT — the rows in the wild were written before the walk
+            # recorded its group, and back-filling a group would let the T1 audit
+            # count a choice nobody observed. A consumer excludes NULL.
+            if cols and "root_group" not in cols:
+                conn.exec_driver_sql("ALTER TABLE cycles ADD COLUMN root_group TEXT")
+            if cols and "root_repr" not in cols:
+                conn.exec_driver_sql("ALTER TABLE cycles ADD COLUMN root_repr TEXT")
             # Craft-xp numerator migration (2026-08-15): craft_yield gains the
             # skill level its xp was measured at. NULLABLE with no DEFAULT --
             # the rows already in the wild were measured at a level nobody
@@ -573,6 +582,27 @@ class LearningStore:
         except SQLAlchemyError:
             return []
         return attribute_forced_recovery(stream, goal_repr, window)
+
+    def recent_cycles(self, window: int) -> list[Cycle]:
+        """This character's most recent `window` cycles, newest first, UNFILTERED.
+
+        `recent_goal_cycles` narrows to one goal and attributes forced recovery to
+        it; this is the whole stream, which is what a census grouping by root
+        branch needs. Same failure discipline as its sibling: a SQLAlchemyError
+        returns an empty list rather than a partial one, so a caller cannot mistake
+        a broken read for an idle character.
+        """
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle)
+                    .where(col(Cycle.character) == self._character)
+                    .order_by(col(Cycle.id).desc())
+                    .limit(window)
+                )
+                return list(s.exec(stmt))
+        except SQLAlchemyError:
+            return []
 
     def recent_selected_goals(self, window: int) -> list[str]:
         """Return up to `window` most recent non-None Cycle.selected_goal values for

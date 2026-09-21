@@ -153,6 +153,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.progression_tree import has_structural_upgrade
 from artifactsmmo_cli.ai.tiers.progression_tree_core import INTERLEAVE_RUN
+from artifactsmmo_cli.ai.tiers.root_group import root_group_of
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -4146,6 +4147,14 @@ class GamePlayer:
             # so `_last_error` still holds the PREVIOUS failure's message and
             # writing it unconditionally would blame a cycle that succeeded.
             error_text=self._last_error if outcome.startswith("error") else None,
+            root_group=root_group_of(
+                self._last_decision.interrupt if self._last_decision is not None else None,
+                self._last_decision.chosen_root if self._last_decision is not None else None,
+                self._last_decision.blocked_target if self._last_decision is not None else None,
+            ),
+            root_repr=(repr(self._last_decision.chosen_root)
+                       if self._last_decision is not None
+                       and self._last_decision.chosen_root is not None else None),
             delta_gold=new_state.gold - prev_state.gold,
             # Level-aware: `new.xp - prev.xp` is right only while the level holds.
             # On level-up the server resets xp into the new level, so the naive

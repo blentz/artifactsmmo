@@ -109,6 +109,26 @@ class CycleBase(SQLModel):
     wild were written without it and inventing one would fabricate an
     observation."""
 
+    root_group: str | None = Field(default=None, index=True)
+    """Which branch of the root walk produced this cycle's root — one of
+    `tiers/root_group.ROOT_GROUPS`, or None on a row written before this column
+    existed (2026-09-21).
+
+    `selected_goal` records the STEP that ran, which cannot tell an orphan skill
+    climb from a gear gate's skill climb: both are `ReachSkillLevel(...)`. This
+    column is that distinction, recorded by the only component that knows it.
+
+    NULLABLE, NOT BACK-FILLED, like `skill_levels_json` and `error_text`: the
+    rows already in the wild were written without a group and inventing one
+    would fabricate an observation. Consumers exclude NULL."""
+
+    root_repr: str | None = Field(default=None, index=True)
+    """`repr` of the ROOT this cycle's step served, or None on a pre-column row.
+
+    Distinct from `selected_goal`, which is the step. A root of
+    `ObtainItem(iron_sword)` and a step of `GatherMaterials(iron_ore)` are the
+    normal case, not an anomaly."""
+
     # Goal completion tracking
     cycles_to_satisfy: int | None = None
 
