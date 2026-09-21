@@ -170,6 +170,7 @@ PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "pro
 PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
 SLOT_OCCUPANCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "slot_occupancy.py"
 REGION_EDGES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "region_edges.py"
+CURRENCY_BUY_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_buy_batch.py"
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
@@ -1193,6 +1194,51 @@ TREE_OCCUPANCY_MUTATIONS = [
 # cost 41x the search (44 scenarios: 1,467 -> 60,662 nodes), so the gate and
 # the re-add are mutated separately: one keeps the bot moving, the other keeps
 # the planner affordable.
+# Item-currency buy batching. A buy sized to the WHOLE remaining need is
+# unsatisfiable at any moment when its pay stack cannot fit the bag: live HAL,
+# `NpcBuy(lich_race_medal x5)` = 500 event_ticket against a 144-item bag,
+# `plan_len=0` forever, and the fleet-currency turn-in behind it gated on a
+# total that could never rise.
+CURRENCY_BUY_BATCH_MUTATIONS = [
+    ("currency_buy_batch: drop the bag bound entirely",
+     "    return min(needed, inventory_max // (price + 1))",
+     "    return needed"),
+    ("currency_buy_batch: forget the bought item needs a slot too",
+     "    return min(needed, inventory_max // (price + 1))",
+     "    return min(needed, inventory_max // price)"),
+    ("currency_buy_batch: shrink a gold buy as well",
+     "    if price <= 0:\n"
+     "        return needed",
+     "    if False:\n"
+     "        return needed"),
+]
+
+# The two call sites in the gathering goal: the batch on the buy edge, and the
+# ferry cap that must NOT net the pocket a second time.
+GATHERING_CURRENCY_BATCH_MUTATIONS = [
+    ("gathering: emit the buy even when no batch fits the bag",
+     "                    batch = _buy_batch(qty, price, currency, state)\n"
+     "                    if batch <= 0:\n"
+     "                        continue\n"
+     "                    currency_cap[currency] = max(\n"
+     "                        currency_cap.get(currency, 0), batch * price)\n"
+     "                    result.append(NpcBuyAction(npc_code=npc_code, item_code=item,\n"
+     "                                               npc_location=game_data.npc_location(npc_code),\n"
+     "                                               quantity=batch))\n"
+     "                continue",
+     "                    result.append(NpcBuyAction(npc_code=npc_code, item_code=item,\n"
+     "                                               npc_location=game_data.npc_location(npc_code),\n"
+     "                                               quantity=qty))\n"
+     "                continue"),
+    ("gathering: ferry nets the pocket a second time",
+     "                quantity = shortfall if cap is None else min(shortfall, cap)",
+     "                quantity = shortfall if cap is None else min(\n"
+     "                    shortfall, max(0, cap - state.inventory.get(currency, 0)))"),
+    ("gathering: ferry ignores the batch cap",
+     "                quantity = shortfall if cap is None else min(shortfall, cap)",
+     "                quantity = shortfall"),
+]
+
 REGION_EDGE_MUTATIONS = [
     ("region_edges: admit the edges unconditionally (the 41x regression)",
      "    if not any(a.travel_region != here and REGION_EDGE_TAG not in a.tags\n"
@@ -8186,6 +8232,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(REGION_EDGES_SRC, REGION_EDGE_MUTATIONS,
               "tests/test_ai/test_actions_transition.py", survivors)
+    run_group(CURRENCY_BUY_BATCH_SRC, CURRENCY_BUY_BATCH_MUTATIONS,
+              "tests/test_ai/test_currency_buy_batch.py", survivors)
+    run_group(GATHERING_GOAL_SRC, GATHERING_CURRENCY_BATCH_MUTATIONS,
+              "tests/test_ai/test_craft_vs_buy_wiring.py", survivors)
     run_group(PROGRESSION_GOAL_SRC, UPGRADE_GOAL_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(PURSUIT_VALUE_SRC, PURSUIT_DOMINANCE_MUTATIONS,

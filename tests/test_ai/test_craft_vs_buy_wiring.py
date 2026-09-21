@@ -121,7 +121,8 @@ def test_relevant_actions_must_buy_offers_every_vendor_for_affordable_currency()
     gd._npc_buy_currency = {"gold_vendor": {"omni_rune": "gold"},
                             "coin_vendor": {"omni_rune": "rare_coin"}}
     gd._npc_locations = {"gold_vendor": (1, 1), "coin_vendor": (2, 2)}
-    state = make_state(level=20, gold=100000, inventory={}, x=0, y=0)
+    state = make_state(level=20, gold=100000, inventory={}, x=0, y=0,
+                       inventory_max=144)  # live bag; see _medal_state
     goal = GatherMaterialsGoal(target_item="omni_rune", needed={"omni_rune": 1})
     relevant = goal.relevant_actions([], state, gd)
     buys = {a.npc_code for a in relevant if isinstance(a, NpcBuyAction) and a.item_code == "omni_rune"}
@@ -156,7 +157,8 @@ def test_relevant_actions_farms_nongold_currency_for_must_buy(_=None) -> None:
     ]
     goal = GatherMaterialsGoal(target_item="greater_lifesteal_rune",
                               needed={"greater_lifesteal_rune": 1})
-    state = make_state(level=40, attack={"air": 50}, gold=0, x=0, y=0)
+    state = make_state(level=40, attack={"air": 50}, gold=0, x=0, y=0,
+                       inventory_max=144)  # live bag; see _medal_state
     relevant = goal.relevant_actions(actions, state, gd)
     assert any(isinstance(a, FightAction) and a.monster_code == "sea_marauder" for a in relevant), \
         "currency-dropper Fight must be farmed"
@@ -189,7 +191,7 @@ def test_relevant_actions_no_farm_for_passively_earned_currency() -> None:
     # injected) — that is what makes this pin the skip: with the gate the Fight is
     # absent, without it a winnable drop-farm Fight appears.
     state = make_state(level=40, attack={"air": 50}, gold=0, x=0, y=0,
-                       inventory={"ticket": 7})
+                       inventory={"ticket": 7}, inventory_max=144)  # live bag; see _medal_state
     relevant = goal.relevant_actions(actions, state, gd)
     assert not any(isinstance(a, FightAction) for a in relevant), \
         "a passively-earned currency must NOT be dedicate-farmed"
@@ -735,8 +737,16 @@ def _ticket_vendor_gd() -> GameData:
 
 
 def _medal_state():
-    """0 tickets in the bag, 148 in the bank — the live stalled state."""
-    return make_state(inventory={}, bank_items={"event_ticket": 148}, x=0, y=0)
+    """0 tickets in the bag, 148 in the bank — the live stalled state.
+
+    `inventory_max` is set to a LIVE bag (144; the fleet runs 144-158) rather
+    than the fixture default of 20. A 100-ticket price cannot be paid out of a
+    20-item bag at any moment — `currency_buy_batch_pure` refuses it and no
+    edge is emitted — so the default would make these wiring tests assert
+    against a purchase that is physically impossible, which is not what any of
+    them is about."""
+    return make_state(inventory={}, bank_items={"event_ticket": 148},
+                      inventory_max=144, x=0, y=0)
 
 
 def test_item_currency_deficit_sizes_pocket_shortfall() -> None:
@@ -749,6 +759,125 @@ def test_item_currency_deficit_sizes_pocket_shortfall() -> None:
     result = analyze_currency_leaves({"lich_race_medal": 1}, _medal_state(), gd)
     assert result.blocked is False
     assert result.currency_deficits == (("event_ticket", 100),), result.currency_deficits
+
+
+def test_item_currency_batch_fits_the_bag() -> None:
+    """A MULTI-unit item-currency buy must be sized to what one bag-load can
+    carry, not to the whole remaining need.
+
+    Live HAL, 2026-09-20. His only root is `lich_race_trophy`, priced at 10
+    `lich_race_medal`; the fleet holds 6 and 581 `event_ticket` sit in the bank,
+    enough for the 5 more that close it. `GatherMaterials(lich_race_medal, x5)`
+    materialised ONE indivisible buy and ONE withdraw sized to the whole need::
+
+        Withdraw(event_ticket x498)               applicable=False  bag 122/144
+        NpcBuy(lich_race_medal x5@archaeologist)  applicable=False  500 at once
+        NpcBuy(lich_race_medal x1@archaeologist)  applicable=True   (emitted by
+                                  the factory, NOT admitted to the goal's pool)
+
+        GatherMaterials(lich_race_medal, x5)  explored=4  plan_len=0
+
+    500 tickets cannot exist in a 144-item bag at any moment, so the batch is
+    not merely unaffordable now — it is unsatisfiable forever, and the whole
+    fleet-currency turn-in behind it (`SurrenderCurrencyGoal`, which makes the
+    four siblings hand over their worn medals) stays gated on a fleet total
+    that can never rise. The all-or-nothing shape of the jewelry smelt stall.
+
+    The bound is `inventory_max`, NOT current free space: the goal's pool
+    already carries DepositAll, so the planner can clear the bag first — what
+    it can never do is carry more than the bag holds.
+    """
+    gd = _ticket_vendor_gd()
+    state = make_state(inventory={}, bank_items={"event_ticket": 581},
+                       inventory_max=144, x=0, y=0)
+    goal = GatherMaterialsGoal(target_item="lich_race_medal",
+                               needed={"lich_race_medal": 5})
+    template = WithdrawItemAction(code="copper_ore", quantity=7,
+                                  bank_location=(4, 1), accessible=True)
+    relevant = goal.relevant_actions([template], state, gd)
+
+    buys = [a for a in relevant if isinstance(a, NpcBuyAction)
+            and a.item_code == "lich_race_medal"]
+    ferries = [a for a in relevant if isinstance(a, WithdrawItemAction)
+               and a.code == "event_ticket"]
+    assert buys, "no NpcBuy admitted at all — fixture drift"
+    assert ferries, "no item-currency ferry admitted at all — fixture drift"
+
+    # 100 tickets per medal, and the bought medal needs a slot of its own.
+    assert all(a.quantity * 100 < state.inventory_max for a in buys), (
+        [repr(a) for a in buys])
+    assert all(a.quantity <= state.inventory_max for a in ferries), (
+        [repr(a) for a in ferries])
+
+
+def test_item_currency_ferry_survives_the_deposit_that_makes_room() -> None:
+    """The ferry is CAPPED to the batch, never netted against the pocket a
+    second time.
+
+    `analyze_currency_leaves` has already subtracted the pocket stack, so
+    capping with `cap - held` subtracts it twice — and that breaks the very
+    plan the ferry exists for. The plan's own `DepositAll`, the step that MAKES
+    the bag room, banks the pocket stack first, so a withdraw sized
+    `price - held` arrives at the counter `held` units short.
+
+    Caught on live HAL, who carried 2 `event_ticket` against a 100 price: the
+    ferry emitted 98, the DepositAll banked his 2, and he stood at the
+    archaeologist with 98 of 100. With the cap applied correctly the live plan
+    is `DepositAll -> (Withdraw(event_ticket x100) -> NpcBuy(medal x1)) x4`.
+    """
+    gd = _ticket_vendor_gd()
+    state = make_state(inventory={"event_ticket": 2},
+                       bank_items={"event_ticket": 581},
+                       inventory_max=144, x=0, y=0)
+    goal = GatherMaterialsGoal(target_item="lich_race_medal",
+                               needed={"lich_race_medal": 5})
+    template = WithdrawItemAction(code="copper_ore", quantity=7,
+                                  bank_location=(4, 1), accessible=True)
+    relevant = goal.relevant_actions([template], state, gd)
+
+    ferries = [a for a in relevant if isinstance(a, WithdrawItemAction)
+               and a.code == "event_ticket"]
+    buys = [a for a in relevant if isinstance(a, NpcBuyAction)
+            and a.item_code == "lich_race_medal"]
+    assert [b.quantity for b in buys] == [1], buys
+    # The FULL batch price, not 100 - 2. Anything less cannot pay after the
+    # deposit that precedes it.
+    assert [f.quantity for f in ferries] == [100], ferries
+
+
+def test_item_currency_ferry_keeps_a_shortfall_smaller_than_the_batch() -> None:
+    """The cap is a ceiling, not a target: a pocket that already covers most of
+    the price still ferries only the difference. Pins that the fix above did
+    not turn the cap into a flat `batch * price` withdraw."""
+    gd = _ticket_vendor_gd()
+    state = make_state(inventory={"event_ticket": 60},
+                       bank_items={"event_ticket": 88},
+                       inventory_max=144, x=0, y=0)
+    goal = GatherMaterialsGoal(target_item="lich_race_medal",
+                               needed={"lich_race_medal": 1})
+    template = WithdrawItemAction(code="copper_ore", quantity=7,
+                                  bank_location=(4, 1), accessible=True)
+    relevant = goal.relevant_actions([template], state, gd)
+    ferries = [a for a in relevant if isinstance(a, WithdrawItemAction)
+               and a.code == "event_ticket"]
+    assert [f.quantity for f in ferries] == [40], ferries
+
+
+def test_no_buy_edge_when_the_price_cannot_fit_the_bag_at_all() -> None:
+    """A 100-ticket price in a 100-item bag can never be paid — the stack fills
+    the bag and leaves no slot for the bought item. Emit NOTHING rather than an
+    edge that is inapplicable forever, which is what left the old `x5` buy
+    sitting in the pool looking like a route."""
+    gd = _ticket_vendor_gd()
+    state = make_state(inventory={}, bank_items={"event_ticket": 581},
+                       inventory_max=100, x=0, y=0)
+    goal = GatherMaterialsGoal(target_item="lich_race_medal",
+                               needed={"lich_race_medal": 5})
+    template = WithdrawItemAction(code="copper_ore", quantity=7,
+                                  bank_location=(4, 1), accessible=True)
+    relevant = goal.relevant_actions([template], state, gd)
+    assert not [a for a in relevant if isinstance(a, NpcBuyAction)
+                and a.item_code == "lich_race_medal"], relevant
 
 
 def test_item_currency_deficit_zero_when_pocket_covers() -> None:

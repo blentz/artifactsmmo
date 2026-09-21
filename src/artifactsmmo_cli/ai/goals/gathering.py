@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
+from artifactsmmo_cli.ai.currency_buy_batch import currency_buy_batch_pure
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.forced_craft_grind import forced_craft_grind
 from artifactsmmo_cli.ai.game_data import GameData
@@ -51,6 +52,18 @@ PRIORITY_CEILING = 50.0
 """Band ceiling — strictly below SURVIVAL_FLOOR=70. Subsumes the existing
 ramp (which capped at 40.0) plus an above-baseline scalar bonus head-room."""
 
+
+
+def _buy_batch(needed: int, price: int, currency: str, state: WorldState) -> int:
+    """`needed`, shrunk to one bag-load when the vendor is paid in an ITEM.
+
+    Gold costs no bag space, so a gold price passes straight through; an item
+    currency has to be CARRIED to the counter, which is what
+    `currency_buy_batch_pure` bounds. See that module for the live stall.
+    """
+    if currency == "gold":
+        return needed
+    return currency_buy_batch_pure(needed, price, state.inventory_max)
 
 class GatherMaterialsGoal(Goal):
     """Gather resources needed to craft a specific upgrade item."""
@@ -523,6 +536,13 @@ class GatherMaterialsGoal(Goal):
                 result.append(OptimizeLoadoutAction(
                     target_monster_code=fight.monster_code, game_data=game_data))
 
+        # What the item-currency buy edges below will actually SPEND this
+        # trip, per currency — the ferry at the end of this method sizes its
+        # withdraw from it instead of from the whole pocket shortfall. Keyed by
+        # currency rather than by item because one currency can pay for several
+        # leaves and the ferry loop is per currency.
+        currency_cap: dict[str, int] = {}
+
         # C4 Task 1: emit NpcBuy for deep recipe-closure leaves that are
         # currency-bought. A top-level needed item is handled below; a TRANSITIVE
         # ingredient (e.g. jasper_crystal in satchel's recipe) is only in `chain`,
@@ -544,12 +564,17 @@ class GatherMaterialsGoal(Goal):
             if (game_data.crafting_recipe(item) is None
                     and item not in game_data.gatherable_drop_items()
                     and not game_data.monsters_dropping(item)):
-                for npc_code, _price, _currency in game_data.npc_purchases(item):
+                for npc_code, price, currency in game_data.npc_purchases(item):
                     if game_data.is_event_npc(npc_code) or game_data.npc_location(npc_code) is None:
                         continue
+                    batch = _buy_batch(qty, price, currency, state)
+                    if batch <= 0:
+                        continue
+                    currency_cap[currency] = max(
+                        currency_cap.get(currency, 0), batch * price)
                     result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
                                                npc_location=game_data.npc_location(npc_code),
-                                               quantity=qty))
+                                               quantity=batch))
 
         # Craft-vs-buy: offer an NpcBuy alternative for a needed item that is
         # NPC-sold, affordable above the progression reserve floor, and strictly cheaper to buy than
@@ -571,10 +596,15 @@ class GatherMaterialsGoal(Goal):
                 # NpcBuyAction.is_applicable gates each on the right currency (gold
                 # vs sandwhisper_coin etc.). NOT npcs_selling_item: that is gold-only
                 # (#15) and would drop the special-currency vendors this path needs.
-                for npc_code, _price, _currency in game_data.npc_purchases(item):
+                for npc_code, price, currency in game_data.npc_purchases(item):
+                    batch = _buy_batch(qty, price, currency, state)
+                    if batch <= 0:
+                        continue
+                    currency_cap[currency] = max(
+                        currency_cap.get(currency, 0), batch * price)
                     result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
                                                npc_location=game_data.npc_location(npc_code),
-                                               quantity=qty))
+                                               quantity=batch))
                 continue
             # Craftable AND GOLD-sold: only offer NpcBuy when buying beats crafting
             # (proved cheaper_acquisition). npcs_selling_item is gold-only, so the
@@ -649,8 +679,31 @@ class GatherMaterialsGoal(Goal):
             (a for a in actions if isinstance(a, WithdrawItemAction)), None)
         if currency_template is not None:
             for currency, shortfall in analysis.currency_deficits:
+                # SIZED TO THE BATCH THE BUY EDGES WERE EMITTED FOR, not to the
+                # whole pocket shortfall. `currency_cap` is what those edges
+                # will actually spend this trip (`batch * price`); ferrying the
+                # full shortfall instead lands a stack the bag cannot hold and
+                # leaves no free slot for the bought item, so BOTH edges go
+                # inapplicable and the search dies at zero length — the 2026-09-20
+                # HAL stall (`Withdraw(event_ticket x498)` against a 144-item bag).
+                # A currency with no emitted buy keeps the raw shortfall: this
+                # loop is also reached for leaves no buy site above covered.
+                #
+                # CAPPED, NOT NETTED AGAIN. `shortfall` has already subtracted
+                # the pocket stack (`analyze_currency_leaves`), and subtracting
+                # it a second time here breaks the very plan this ferry exists
+                # for: the plan's own `DepositAll` — the step that MAKES the bag
+                # room — banks that pocket stack first, so a withdraw sized
+                # `price - held` lands `held` units short at the counter. Live
+                # HAL carried 2 event_ticket against a 100 price: ferrying 98
+                # left him at 98 of 100 after the deposit and the buy stayed
+                # inapplicable.
+                cap = currency_cap.get(currency)
+                quantity = shortfall if cap is None else min(shortfall, cap)
+                if quantity <= 0:
+                    continue
                 result.append(dataclasses.replace(
-                    currency_template, code=currency, quantity=shortfall))
+                    currency_template, code=currency, quantity=quantity))
 
         return result
 
