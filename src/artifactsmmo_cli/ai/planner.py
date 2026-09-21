@@ -117,9 +117,24 @@ def _state_key(state: WorldState) -> tuple[object, ...]:
     search — the in-search partition is unchanged. This key is also compared
     cross-cycle for StuckSignal.STATE_FROZEN (player.py); there the addition is
     strictly MORE precise: a real skill-level gain re-synced between cycles now
-    correctly counts as state progress instead of reading as frozen."""
+    correctly counts as state progress instead of reading as frozen.
+
+    Includes `state.layer` for exactly the same reason, one region-model later.
+    A portal whose destination shares its source's coordinates --
+    `(-3,12,overworld) <-> (-3,12,interior)`, the Abandoned House sitting on
+    the Forest tile -- changes ONLY the layer, so without it the post-crossing
+    child was byte-identical to its own parent, collided in the visited set and
+    was pruned: `explored=1 created=2 depth=0 plan_len=0`. The door was one-way
+    FOR THE PLANNER, and only for co-located portals, which is why the inbound
+    leg (entered from the bank at (7,13), so x/y changed) planned fine while
+    the way back never could.
+
+    Live Robby, 2026-09-21: stranded in `interior:-3,12` at 179/710 with `Rest`
+    an overworld action and `FightAction`'s HP floor refusing another rat, the
+    arbiter fell to `Wait` at cooldown 0.0 and spun at ~2 requests/second until
+    the process died. Finer dedup only, so PlannerAdmissibility is untouched."""
     return (
-        state.x, state.y,
+        state.x, state.y, state.layer,
         state.hp, state.gold,
         state.xp,
         state.task_code, state.task_type, state.task_progress, state.task_total,

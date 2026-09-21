@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.actions.transition_layer_error import TransitionLayerError
 from artifactsmmo_cli.ai.game_data import GameData
@@ -338,3 +339,81 @@ class TestPortalLayer:
                    return_value=make_api_result(make_char_schema())) as posted:
             edge.execute(state, MagicMock())
         posted.assert_called_once()
+
+
+class TestCoLocatedPortal:
+    """A portal whose destination shares the source tile's coordinates.
+
+    `(-3,12,overworld) <-> (-3,12,interior)` is the live shape: the Abandoned
+    House sits on the Forest tile, so crossing changes ONLY `layer`.
+    """
+
+    def _gd(self) -> GameData:
+        gd = GameData()
+        gd._monster_level = {"rat": 1}
+        gd._monster_locations = {}          # interior: not in the legacy index
+        fill_monster_stat_defaults(gd)
+        gd._monster_hp = {"rat": 10}
+        gd.world.transition_edges = {
+            (-3, 12, "interior"): (-3, 12, "overworld", ()),
+            (-3, 12, "overworld"): (-3, 12, "interior", ()),
+        }
+        return gd
+
+    def test_a_co_located_portal_is_not_pruned_as_already_visited(self) -> None:
+        """THE STRANDING BUG. `_state_key` carried no `layer`, so the state
+        after a co-located transition was byte-identical to the state before
+        it: same x, y, hp, gold, xp, task, inventory, equipment, bank, skills.
+        The child collided with its own parent in the visited set and was
+        pruned, and the search ended one node in::
+
+            explored=1  created=2  depth=0  plan_len=0
+
+        Live Robby, 2026-09-21. He entered `interior:-3,12` from the bank at
+        (7,13) — x,y changed there, so the INBOUND leg planned fine — fought
+        rats down to 179/710, and then could not leave: `Rest` is an overworld
+        action, `FightAction`'s HP floor refused another fight, and the one
+        edge that would have got him out was pruned every cycle. The arbiter
+        fell to `Wait` at cooldown 0.0 and spun at ~2 requests per second until
+        the process died.
+
+        Adding `layer` to the key only makes the dedup FINER, so Dijkstra
+        optimality is untouched — the same argument the key's docstring already
+        makes for `skills`.
+        """
+        gd = self._gd()
+        rest = RestAction()
+        state = make_state(x=-3, y=12, layer="interior", hp=179, max_hp=710)
+        # Region naming comes from the walkable-tile model, which this minimal
+        # fixture does not populate — read it rather than hard-coding a live
+        # label, so the test pins the PRUNE and not the naming scheme.
+        here = gd.state_region(state)
+        out = MapTransitionAction(portal_x=-3, portal_y=12,
+                                  portal_layer="interior",
+                                  dest_x=-3, dest_y=12, dest_layer="overworld",
+                                  conditions=(), travel_region=here)
+
+        class GetHealthy(Goal):
+            def is_satisfied(self, st):
+                return st.hp >= st.max_hp
+            def heuristic(self, st, gd_):
+                return 0.0
+            def relevant_actions(self, actions, st, gd_):
+                return actions
+            def desired_state(self):
+                return {"hp": 710}
+            def value(self):
+                return 1.0
+
+        # Vacuity guards: the crossing really is co-located, and the two legs
+        # really do work in isolation — so an empty plan can only be the prune.
+        assert here != gd.state_region(make_state(x=-3, y=12, layer="overworld")), \
+            "the two layers must be different regions or there is nothing to cross"
+        assert out.is_applicable(state, gd) is True
+        crossed = out.apply(state, gd)
+        assert (crossed.x, crossed.y) == (state.x, state.y), "not co-located"
+        assert gd.state_region(crossed) != here
+        assert rest.is_applicable(crossed, gd) is True
+
+        plan = GOAPPlanner().plan(state, GetHealthy(), [out, rest], gd)
+        assert [repr(a).split("(")[0] for a in plan] == ["Transition", "Rest"], plan

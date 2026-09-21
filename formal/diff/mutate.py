@@ -1199,6 +1199,15 @@ TREE_OCCUPANCY_MUTATIONS = [
 # `NpcBuy(lich_race_medal x5)` = 500 event_ticket against a 144-item bag,
 # `plan_len=0` forever, and the fleet-currency turn-in behind it gated on a
 # total that could never rise.
+# The planner's visited-set key. Every field in it is load-bearing for a
+# different action class: drop one and the action whose ONLY effect is that
+# field produces a child that collides with its own parent and is pruned.
+PLANNER_STATE_KEY_MUTATIONS = [
+    ("planner: drop layer from the visited key (co-located portals prune)",
+     "        state.x, state.y, state.layer,",
+     "        state.x, state.y,"),
+]
+
 CURRENCY_BUY_BATCH_MUTATIONS = [
     ("currency_buy_batch: drop the bag bound entirely",
      "    return min(needed, inventory_max // (price + 1))",
@@ -8231,6 +8240,8 @@ def _collect_all_groups() -> None:
     run_group(OBJECTIVE_SRC, OBJECTIVE_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(REGION_EDGES_SRC, REGION_EDGE_MUTATIONS,
+              "tests/test_ai/test_actions_transition.py", survivors)
+    run_group(PLANNER_SRC, PLANNER_STATE_KEY_MUTATIONS,
               "tests/test_ai/test_actions_transition.py", survivors)
     run_group(CURRENCY_BUY_BATCH_SRC, CURRENCY_BUY_BATCH_MUTATIONS,
               "tests/test_ai/test_currency_buy_batch.py", survivors)
