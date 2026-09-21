@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 from sqlalchemy import create_engine
 from sqlmodel import Session, select
 
@@ -99,3 +100,58 @@ def test_write_site_records_the_chosen_roots_group(tmp_path: Path) -> None:
         assert rows[0].root_repr == repr(ReachCharLevel(level=10))
     finally:
         store.close()
+
+
+# ===== NEW TESTS FOR TASK 4: root_group_counts =====
+
+
+def _grouped(character: str, group: str | None) -> Cycle:
+    return Cycle(
+        ts="2026-09-21T00:00:00+00:00", session_id="s", cycle_index=0,
+        character=character, outcome="ok", root_group=group,
+    )
+
+
+def test_counts_by_group_per_character() -> None:
+    from artifactsmmo_cli.audit.root_group_census import GroupCounts, root_group_counts
+
+    rows = root_group_counts([
+        _grouped("C3P0", "trunk"), _grouped("C3P0", "trunk"), _grouped("C3P0", "gear"),
+        _grouped("R2D2", "orphan_skill"),
+    ])
+    by_char = {r.character: r for r in rows}
+    assert by_char["C3P0"].counts == {"trunk": 2, "gear": 1}
+    assert by_char["R2D2"].counts == {"orphan_skill": 1}
+
+
+def test_pre_migration_rows_are_reported_as_unattributed_not_counted() -> None:
+    from artifactsmmo_cli.audit.root_group_census import root_group_counts
+
+    rows = root_group_counts([_grouped("C3P0", "trunk"), _grouped("C3P0", None)])
+    assert rows[0].attributed == 1
+    assert rows[0].unattributed == 1
+    assert rows[0].counts == {"trunk": 1}
+
+
+def test_an_unknown_group_label_raises() -> None:
+    from artifactsmmo_cli.audit.root_group_census import root_group_counts
+
+    # A label outside ROOT_GROUPS means the classifier and the census have
+    # drifted. Counting it nowhere would hide that silently.
+    with pytest.raises(ValueError, match="unknown root group"):
+        root_group_counts([_grouped("C3P0", "made_up")])
+
+
+def test_characters_are_ordered_by_name() -> None:
+    from artifactsmmo_cli.audit.root_group_census import root_group_counts
+
+    rows = root_group_counts([_grouped("R2D2", "gear"), _grouped("C3P0", "gear")])
+    assert [r.character for r in rows] == ["C3P0", "R2D2"]
+
+
+def test_share_is_denominated_on_attributed_rows_only() -> None:
+    from artifactsmmo_cli.audit.root_group_census import GroupCounts
+
+    counts = GroupCounts(character="C3P0", counts={"trunk": 1}, attributed=1, unattributed=9)
+    assert counts.share("trunk") == 1.0
+    assert counts.share("gear") == 0.0
