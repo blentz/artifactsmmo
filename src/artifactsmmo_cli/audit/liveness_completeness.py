@@ -273,17 +273,14 @@ DORMANT: dict[str, str] = {
     # The one equippable sink IS correctly gated: R2D2 at L20 passes rules 3 and
     # 4 for `lich_race_trophy` (wears it, level-qualified) and waits only on
     # stock. So this rung is genuinely conditional AND carries a scope limit.
-    # The medal count in the old reason ("the fleet holds 4") stopped being
-    # true on 2026-09-21: @3ef1f320 made the medal purchase plannable, the
-    # fleet reached the 10-medal price, and the election resolved — which is
-    # why `SurrenderCurrencyGoal` left this table the same day. The BUYER side
-    # still has not fired: the three surrendering characters livelocked against
-    # the acquisition path (fixed @0b4a9b19) before HAL could reach the
-    # archaeologist. Expect this entry to go next restart.
-    "CurrencyTurnInGoal": "conditional: the fleet reached the 10-medal price on "
-                          "2026-09-21 but the elected buyer has not yet reached "
-                          "the vendor; every OTHER ready sink buys a resource, "
-                          "which _resolve_turn_in rule 3 can never accept",
+    # CurrencyTurnInGoal LEFT THIS TABLE on 2026-09-21, one restart after
+    # SurrenderCurrencyGoal did, and the note there predicted it. Lor was the
+    # elected buyer: `Unequip(artifact1_slot)` ->
+    # `Withdraw(lich_race_medal x9)` -> `NpcBuy(lich_race_trophy x1
+    # @archaeologist)` at 01:50-01:51 UTC, 14 minutes after the restart, then
+    # `Equip(lich_race_trophy->artifact1_slot)`. The whole fleet-currency
+    # mechanism is now live end to end: 10 medals pooled from five characters'
+    # worn artifacts, one trophy bought.
     # --- Provision-marginal-fight. Its gate needs a utility-slot heal already in
     # the bag; measured live, `best_held_heal` is None and both utility slots are
     # empty on all five characters. `UseConsumableAction` fires 1,621 times, so
