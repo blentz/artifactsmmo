@@ -1154,7 +1154,7 @@ def _ge_order(order_id, code, price, quantity):
 
 
 def test_load_ge_orders_keeps_highest_price_buy_order_per_item(monkeypatch):
-    """_load_ge_orders should index the highest-price OPEN BUY order per item."""
+    """load_ge_orders should index the highest-price OPEN BUY order per item."""
     from artifactsmmo_cli.ai.game_data import GameData
 
     class FakeResult:
@@ -1163,7 +1163,7 @@ def test_load_ge_orders_keeps_highest_price_buy_order_per_item(monkeypatch):
 
     def fake_sync(client, type_, page, size):
         from artifactsmmo_api_client.models.ge_order_type import GEOrderType
-        # _load_ge_orders pages BOTH sides; only the BUY side feeds this assertion.
+        # load_ge_orders pages BOTH sides; only the BUY side feeds this assertion.
         if type_ is not GEOrderType.BUY:
             return FakeResult([])
         if page == 1:
@@ -1176,7 +1176,7 @@ def test_load_ge_orders_keeps_highest_price_buy_order_per_item(monkeypatch):
 
     monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
     gd = GameData()
-    gd._load_ge_orders(client=None)
+    gd.load_ge_orders(client=None)
 
     assert gd.ge_best_buy_order("iron_ore") == ("o2", 14, 3)
     assert gd.ge_best_buy_order("copper_ore") == ("o3", 7, 2)
@@ -1202,7 +1202,7 @@ def test_load_ge_orders_breaks_price_ties_by_quantity_then_id(monkeypatch):
 
     monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
     gd = GameData()
-    gd._load_ge_orders(client=None)
+    gd.load_ge_orders(client=None)
 
     assert gd.ge_best_buy_order("gem") == ("c", 20, 9)
 
@@ -1224,13 +1224,13 @@ def test_load_ge_orders_paginates_past_full_page(monkeypatch):
 
     monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
     gd = GameData()
-    gd._load_ge_orders(client=None)
+    gd.load_ge_orders(client=None)
 
     assert gd.ge_best_buy_order("ore") == ("p2", 999, 4)
 
 
 def test_load_ge_orders_keeps_lowest_price_sell_order_per_item(monkeypatch):
-    """_load_ge_orders should index the LOWEST-price OPEN SELL order per item — the
+    """load_ge_orders should index the LOWEST-price OPEN SELL order per item — the
     cheapest fillable BUY source (DUAL of the highest-price buy order)."""
     from artifactsmmo_cli.ai.game_data import GameData
 
@@ -1252,7 +1252,7 @@ def test_load_ge_orders_keeps_lowest_price_sell_order_per_item(monkeypatch):
 
     monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
     gd = GameData()
-    gd._load_ge_orders(client=None)
+    gd.load_ge_orders(client=None)
 
     assert gd.ge_best_sell_order("iron_ore") == ("s2", 6, 3)
     assert gd.ge_best_sell_order("copper_ore") == ("s3", 7, 2)
@@ -1281,7 +1281,7 @@ def test_load_ge_orders_sell_breaks_price_ties_by_quantity_then_id(monkeypatch):
 
     monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
     gd = GameData()
-    gd._load_ge_orders(client=None)
+    gd.load_ge_orders(client=None)
 
     assert gd.ge_best_sell_order("gem") == ("c", 5, 9)
 
@@ -1306,7 +1306,7 @@ def test_load_ge_orders_sell_paginates_past_full_page(monkeypatch):
 
     monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
     gd = GameData()
-    gd._load_ge_orders(client=None)
+    gd.load_ge_orders(client=None)
 
     assert gd.ge_best_sell_order("ore") == ("p2", 3, 4)
 
@@ -1910,7 +1910,7 @@ class _RecordingCache(GameDataCache):
 
 def _stub_fetch_build(monkeypatch):
     """Stub every _fetch_* to return empty (so serialize/deserialize loops are
-    no-ops) and _build_*/_load_ge_orders to recorders. Returns the GE counter."""
+    no-ops) and _build_*/load_ge_orders to recorders. Returns the GE counter."""
     for name in _STATIC:
         monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client: [])
         # `*extra` because `_build_achievements` takes a second, defaulted
@@ -1922,7 +1922,7 @@ def _stub_fetch_build(monkeypatch):
     monkeypatch.setattr(GameData, "_build_bank", lambda self, item: None)
     ge = {"n": 0}
     monkeypatch.setattr(
-        GameData, "_load_ge_orders", lambda self, client: ge.__setitem__("n", ge["n"] + 1)
+        GameData, "load_ge_orders", lambda self, client: ge.__setitem__("n", ge["n"] + 1)
     )
     return ge
 
@@ -2139,7 +2139,7 @@ def test_warm_and_cold_events_build_equal(monkeypatch, tmp_path):
     for name in ("maps", "items", "resources", "monsters", "npcs", "tasks", "achievements"):
         monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client: [])
     monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client: None)
-    monkeypatch.setattr(GameData, "_load_ge_orders", lambda self, client: None)
+    monkeypatch.setattr(GameData, "load_ge_orders", lambda self, client: None)
     cache = _RecordingCache(tmp_path, seeded=None)
     cold = GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)  # writes cache
     warm = GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)  # from_dict path

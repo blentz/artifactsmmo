@@ -133,10 +133,12 @@ class MultiRun:
             ],
             # The children are spaced by the ACCOUNT bucket's own sustainable
             # pace, read from /my/rates -- never a guessed constant. That bucket
-            # is the tightest the API declares and the one every child's
-            # unmetered startup game-data load hammers (`_load_ge_orders` is
-            # live-only, so even a warm-cache child pages it), which is what a
-            # simultaneous launch turns into boot-time 429s. The UNDIVIDED
+            # is the tightest the API declares, and pacing the one bucket every
+            # child shares is what keeps a simultaneous launch from turning the
+            # unmetered startup game-data load into boot-time 429s. (Its
+            # `load_ge_orders` leg is live-only, so even a warm-cache child pages
+            # it -- 17 requests when measured 2026-09-21 -- but that leg bills
+            # DATA, not account: see supervisor_pool's stagger note.) The UNDIVIDED
             # limits are the right input: the stagger paces children against
             # each other in the one bucket they all share, whereas the divided
             # `budget` above is what each child then polices itself with.

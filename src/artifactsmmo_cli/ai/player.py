@@ -56,6 +56,7 @@ from artifactsmmo_cli.ai.constants import (
     ERROR_CODE_COOLDOWN,
     ERROR_CODE_ORDER_NOT_FOUND,
     ERROR_CODE_RATE_LIMITED,
+    GE_ORDER_REFRESH_INTERVAL_SECONDS,
     STUCK_DETECTOR_WINDOW,
 )
 from artifactsmmo_cli.ai.consumable_supply import consumable_craft_quantity
@@ -280,6 +281,11 @@ class GamePlayer:
         # misclassified code self-heals instead of disabling an action forever.
         self._rejected_actions = DoomedMemo()
         self._actions_since_full_refresh: int = 0
+        # `time.monotonic()` of the last whole-book GE order reload, or None
+        # until the first cycle sets the interval's origin. Monotonic because a
+        # wall-clock step (NTP, suspend) must not make the book look fresh for
+        # hours or overdue on every cycle.
+        self._ge_orders_reloaded_at: float | None = None
         # Consecutive no-cooldown action failures, driving the exponential
         # backoff that keeps a persistent error (e.g. a stuck Withdraw→478) from
         # spinning the loop at full CPU. Reset on any ok/cooldown cycle.
@@ -1153,6 +1159,7 @@ class GamePlayer:
                 # goal/map_means later computes K from (else K can diverge on the
                 # ~1-in-20 refresh cycle).
                 self._maybe_periodic_refresh(client)
+                self._maybe_refresh_ge_orders(client)
                 # Reconcile open_orders against API truth AFTER the periodic
                 # refresh (which does not thread open_orders) and every cycle
                 # (non-GE Action.execute() rebuilds default open_orders to ()
@@ -1825,7 +1832,8 @@ class GamePlayer:
                 # drove an impossible plan, so correct the view rather than
                 # swallow the cycle.
                 try:  # noqa: SIM105 - keep explicit except to document the transient-retry rationale
-                    self.game_data.refresh_ge_orders_for_item(client, action.item_code)
+                    self.game_data.refresh_ge_orders_for_item(
+                        client, action.item_code, acquire=self._acquire_data)
                 except httpx.HTTPError:
                     pass  # transient; the order stays indexed and 404s again
             return refreshed, outcome
@@ -2125,6 +2133,42 @@ class GamePlayer:
         """Force a full refresh every BANK_REFRESH_INTERVAL successful actions."""
         if self._actions_since_full_refresh >= BANK_REFRESH_INTERVAL:
             self._full_refresh(client)
+
+    def _maybe_refresh_ge_orders(self, client: AuthenticatedClient) -> None:
+        """Re-read the whole Grand Exchange book every
+        GE_ORDER_REFRESH_INTERVAL_SECONDS of wall clock.
+
+        The 404 hook (`ERROR_CODE_ORDER_NOT_FOUND` in `_execute`) retires an
+        order the server has just refused, which can only ever SHRINK the index.
+        Nothing made it grow: an order another account posted after startup
+        stayed invisible for the whole run, so `obtain_sources` priced the item
+        as though the book held nothing. This is the other half.
+
+        WALL CLOCK, not an action counter like `_maybe_periodic_refresh`: the
+        book ages because other accounts trade, which has nothing to do with how
+        many actions this character managed to take.
+
+        The clock re-arms BEFORE the read and on failure as well as success. A
+        failed reload that left the clock unset would re-page 17 requests every
+        cycle against exactly the endpoint that just refused us; waiting out the
+        interval is the cheaper wrong answer.
+        """
+        if self.game_data is None:
+            return
+        now = time.monotonic()
+        if self._ge_orders_reloaded_at is None:
+            # First cycle: the startup load is seconds old, so nothing is due —
+            # but the interval needs an origin to be measured from.
+            self._ge_orders_reloaded_at = now
+            return
+        if now - self._ge_orders_reloaded_at < GE_ORDER_REFRESH_INTERVAL_SECONDS:
+            return
+        self._ge_orders_reloaded_at = now
+        try:
+            self.game_data.load_ge_orders(client, acquire=self._acquire_data)
+        except httpx.HTTPError as e:
+            print(f"[{self._now()}] GE order refresh network error: {e!r} "
+                  "— keeping the prior order book; retrying next interval")
 
     def _fetch_open_orders(self, client: AuthenticatedClient) -> tuple[OpenOrder, ...] | None:
         """Page through this character's own currently-open GE orders.

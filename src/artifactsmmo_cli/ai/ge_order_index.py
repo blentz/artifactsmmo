@@ -3,7 +3,8 @@ per item, on one side of the book.
 
 Two callers need this rule and they must not each carry a copy:
 
-* `GameData._load_ge_orders` pages the live API every startup, and
+* `GameData.load_ge_orders` pages the live API at startup and again on the
+  run loop's refresh interval, and
 * `GameData.from_cache_bundle(..., with_ge_orders=True)` hydrates the order book
   captured into the committed scenario fixture.
 

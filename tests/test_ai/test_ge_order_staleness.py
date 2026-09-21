@@ -1,7 +1,7 @@
 """A Grand Exchange order that vanished from the book must vanish from our index.
 
-The GE order index is loaded ONCE per run (`GameData._load_ge_orders`, called
-from `GameData.load`). Every order it holds is a snapshot of the book at
+The GE order index used to be loaded ONCE per run (`GameData.load_ge_orders`,
+called from `GameData.load`). Every order it held was a snapshot of the book at
 startup, and orders are filled and cancelled by other accounts continuously.
 Nothing ever told the index that one of its orders was gone, so a consumed
 order stayed the "best" order for its item for the rest of the session:
@@ -21,6 +21,11 @@ about that order, so it drives a re-read of that ONE item's book (the API's
 discovers the next real order for the item, which blind eviction could not do:
 the index keeps one order per item, so dropping it would wall the item for the
 session even with five live orders standing.
+
+That covers orders that GO. `TestPeriodicReload` covers the other direction:
+the 404 hook can only ever shrink the index, so an order another account posts
+after startup was invisible for the rest of the run until the whole book is
+re-read on a wall-clock interval.
 """
 
 import io
@@ -29,10 +34,12 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import httpx
+import pytest
 from artifactsmmo_api_client.models.ge_order_type import GEOrderType
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
+from artifactsmmo_cli.ai.constants import GE_ORDER_REFRESH_INTERVAL_SECONDS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
@@ -40,6 +47,7 @@ from tests.test_ai.test_actions_execute import (
     make_char_schema,
     make_get_character_result,
 )
+from tests.test_ai.test_player_run import _patch_game_data_load
 
 
 def _order(order_id: str, code: str, price: int, quantity: int) -> SimpleNamespace:
@@ -140,7 +148,7 @@ class TestRefreshGeOrdersForItem:
 
 class TestLoadGeOrdersEvicts:
     def test_a_reload_forgets_an_item_the_book_no_longer_lists(self, monkeypatch):
-        """`_load_ge_orders` merged each fresh index into the old one, so an
+        """`load_ge_orders` merged each fresh index into the old one, so an
         item whose every order was gone kept its stale entry forever. Merging is
         indistinguishable from replacing on the startup call (the index starts
         empty), which is why the fault survived: only a SECOND load exposes it."""
@@ -149,12 +157,12 @@ class TestLoadGeOrdersEvicts:
         })
         monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", first)
         gd = GameData()
-        gd._load_ge_orders(client=None)
+        gd.load_ge_orders(client=None)
         assert gd.ge_best_sell_order("sunflower") == ("s-1", 6, 99)
 
         second, _c2 = _book({})
         monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", second)
-        gd._load_ge_orders(client=None)
+        gd.load_ge_orders(client=None)
 
         assert gd.ge_best_sell_order("sunflower") is None
 
@@ -222,3 +230,167 @@ class TestPlayerRefreshesOn404:
 
         assert outcome == "error:HTTP_404"
         assert gd.ge_best_sell_order("sunflower") == ("ghost-1", 6, 99)
+
+
+class TestPeriodicReload:
+    """Retiring a ghost on its 404 only ever SHRINKS the index. Orders posted
+    after startup stayed invisible for the whole run, so a route the book could
+    supply was priced as if no order existed. The book is re-read on a wall-clock
+    interval, which is the only thing that can make the index grow again.
+
+    Measured 2026-09-21 against the live book: 32 buy orders on 1 page, 1575
+    sell orders on 16 — 17 requests per reload, four reloads an hour. The
+    endpoint answers `x-ratelimit-limit-hour: 2000`, i.e. the DATA bucket, so
+    that is ~17% of one child's divided data share at five children, and it is
+    metered through the data governor rather than taken for free.
+    """
+
+    @staticmethod
+    def _player_at(gd: GameData | None, elapsed: float | None):
+        """A player whose GE clock last ticked `elapsed` seconds ago (None = the
+        clock has never been set, i.e. the first cycle of a run)."""
+        player = GamePlayer(character="hero")
+        player.game_data = gd
+        if elapsed is not None:
+            player._ge_orders_reloaded_at = 1000.0 - elapsed
+        return player
+
+    def test_the_first_cycle_only_starts_the_clock(self, monkeypatch):
+        """The startup load happened seconds ago, so cycle 1 owes nothing. What
+        it must do is record WHEN, or the interval has no origin to measure from."""
+        fake_sync, calls = _book({})
+        monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+        monkeypatch.setattr("artifactsmmo_cli.ai.player.time.monotonic", lambda: 1000.0)
+        gd = GameData()
+        player = self._player_at(gd, elapsed=None)
+
+        player._maybe_refresh_ge_orders(MagicMock())
+
+        assert calls == []
+        assert player._ge_orders_reloaded_at == 1000.0
+
+    def test_does_not_reload_before_the_interval(self, monkeypatch):
+        fake_sync, calls = _book({})
+        monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+        monkeypatch.setattr("artifactsmmo_cli.ai.player.time.monotonic", lambda: 1000.0)
+        player = self._player_at(GameData(), elapsed=GE_ORDER_REFRESH_INTERVAL_SECONDS - 1)
+
+        player._maybe_refresh_ge_orders(MagicMock())
+
+        assert calls == []
+
+    def test_reloads_once_the_interval_has_elapsed(self, monkeypatch):
+        """An order posted after startup becomes reachable — the whole point.
+        Before this the index could only ever lose entries."""
+        fake_sync, _calls = _book({
+            (GEOrderType.SELL, None): [_order("posted-later", "sunflower", 5, 60)],
+        })
+        monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+        monkeypatch.setattr("artifactsmmo_cli.ai.player.time.monotonic", lambda: 1000.0)
+        gd = GameData()
+        player = self._player_at(gd, elapsed=GE_ORDER_REFRESH_INTERVAL_SECONDS)
+
+        player._maybe_refresh_ge_orders(MagicMock())
+
+        assert gd.ge_best_sell_order("sunflower") == ("posted-later", 5, 60)
+
+    def test_a_reload_re_arms_the_clock(self, monkeypatch):
+        """Without re-arming, every later cycle is overdue and the book is paged
+        on EVERY cycle — 17 requests a cycle instead of 17 a quarter hour."""
+        fake_sync, calls = _book({})
+        monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+        monkeypatch.setattr("artifactsmmo_cli.ai.player.time.monotonic", lambda: 1000.0)
+        player = self._player_at(GameData(), elapsed=GE_ORDER_REFRESH_INTERVAL_SECONDS)
+
+        player._maybe_refresh_ge_orders(MagicMock())
+        after_first = len(calls)
+        player._maybe_refresh_ge_orders(MagicMock())
+
+        assert player._ge_orders_reloaded_at == 1000.0
+        assert len(calls) == after_first
+
+    def test_does_nothing_before_the_first_game_data_load(self, monkeypatch):
+        """`game_data` is None until the initial load completes."""
+        fake_sync, calls = _book({})
+        monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+        monkeypatch.setattr("artifactsmmo_cli.ai.player.time.monotonic", lambda: 1000.0)
+        player = self._player_at(None, elapsed=GE_ORDER_REFRESH_INTERVAL_SECONDS)
+
+        player._maybe_refresh_ge_orders(MagicMock())
+
+        assert calls == []
+
+    def test_a_transport_failure_keeps_the_previous_book(self, monkeypatch):
+        """A half-read book must not replace a whole one, and a failing endpoint
+        must not be re-paged every cycle — the clock re-arms either way."""
+        def explode(client, type_, page, size, **kwargs):
+            raise httpx.ConnectError("connection reset")
+
+        monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", explode)
+        monkeypatch.setattr("artifactsmmo_cli.ai.player.time.monotonic", lambda: 1000.0)
+        gd = GameData()
+        gd._ge_sell_orders = {"sunflower": ("s-1", 6, 99)}
+        player = self._player_at(gd, elapsed=GE_ORDER_REFRESH_INTERVAL_SECONDS)
+
+        with redirect_stdout(io.StringIO()):
+            player._maybe_refresh_ge_orders(MagicMock())
+
+        assert gd.ge_best_sell_order("sunflower") == ("s-1", 6, 99)
+        assert player._ge_orders_reloaded_at == 1000.0
+
+    def test_every_page_is_charged_to_the_data_bucket(self, monkeypatch):
+        """17 requests taken for free would silently overdraw the budget the
+        whole fleet divides. One acquire per request, not one per reload."""
+        fake_sync, calls = _book({})
+        monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+        monkeypatch.setattr("artifactsmmo_cli.ai.player.time.monotonic", lambda: 1000.0)
+        player = self._player_at(GameData(), elapsed=GE_ORDER_REFRESH_INTERVAL_SECONDS)
+        acquired: list[int] = []
+        player._data_governor = SimpleNamespace(
+            acquire=lambda: acquired.append(1),
+            sustainable_interval=lambda: 0.0,
+        )
+
+        player._maybe_refresh_ge_orders(MagicMock())
+
+        assert len(acquired) == len(calls) > 0
+
+    def test_the_startup_load_is_still_unmetered(self, monkeypatch):
+        """`GameData.load` runs before any governor is wired; charging it would
+        need a bucket that does not exist yet."""
+        fake_sync, calls = _book({})
+        monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+        gd = GameData()
+
+        gd.load_ge_orders(client=None)
+
+        assert len(calls) > 0
+
+
+def test_the_run_loop_actually_calls_the_periodic_reload():
+    """Runtime activation: a timer nothing drives is dead code. The reload must
+    fire from run()'s own cycle, not merely be callable."""
+    player = GamePlayer(character="hero")
+    client = MagicMock()
+    seen: list[str] = []
+
+    def stop_after_one_cycle():
+        raise KeyboardInterrupt
+
+    manager = MagicMock()
+    with patch.object(manager, "client", client), \
+            patch("artifactsmmo_cli.ai.player.ClientManager", return_value=manager), \
+            _patch_game_data_load(), \
+            patch.object(player, "_fetch_world_state", return_value=make_state(hp=100, max_hp=150)), \
+            patch.object(player, "_wait_for_cooldown", side_effect=stop_after_one_cycle), \
+            patch.object(player, "_reconcile_open_orders"), \
+            patch.object(player, "_maybe_periodic_refresh"), \
+            patch.object(player, "_maybe_refresh_ge_orders",
+                         side_effect=lambda c: seen.append("ge")), \
+            patch.object(player, "_build_actions", side_effect=lambda: []), \
+            patch("artifactsmmo_cli.ai.player.time.sleep"), \
+            redirect_stdout(io.StringIO()):
+        with pytest.raises(KeyboardInterrupt):
+            player.run()
+
+    assert seen == ["ge"]

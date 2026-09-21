@@ -1291,13 +1291,43 @@ GE_ORDER_STALENESS_MUTATIONS = [
      "                index[item_code] = best[item_code]",
      "                pass"),
     ("ge orders: a whole-book reload merges instead of replacing",
-     "        self._ge_sell_orders = index_best_ge_orders(\n"
-     "            self._page_ge_orders(client, GEOrderType.SELL), GEOrderType.SELL)",
-     "        self._ge_sell_orders.update(index_best_ge_orders(\n"
-     "            self._page_ge_orders(client, GEOrderType.SELL), GEOrderType.SELL))"),
+     "        self._ge_sell_orders = sell",
+     "        self._ge_sell_orders.update(sell)"),
     ("ge orders: the per-item re-read pages the WHOLE book (drops the code filter)",
-     "                self._page_ge_orders(client, side, code=item_code), side)",
-     "                self._page_ge_orders(client, side), side)"),
+     "                self._page_ge_orders(client, side, code=item_code,\n"
+     "                                     acquire=acquire), side)",
+     "                self._page_ge_orders(client, side, acquire=acquire), side)"),
+]
+
+# Periodic whole-book reload. The 404 hook can only shrink the index; this is
+# the only thing that makes it grow, and it is the leg with a real request cost
+# (17 per reload, measured 2026-09-21). Killed by
+# tests/test_ai/test_ge_order_staleness.py::TestPeriodicReload.
+GE_ORDER_PERIODIC_RELOAD_MUTATIONS = [
+    ("player: the GE reload clock never re-arms (17 requests EVERY cycle)",
+     "        self._ge_orders_reloaded_at = now\n"
+     "        try:",
+     "        try:"),
+    ("player: the interval is ignored, the book is re-paged on every cycle",
+     "        if now - self._ge_orders_reloaded_at < GE_ORDER_REFRESH_INTERVAL_SECONDS:\n"
+     "            return",
+     "        if False:\n"
+     "            return"),
+    ("player: the first cycle reloads instead of starting the clock",
+     "            self._ge_orders_reloaded_at = now\n"
+     "            return",
+     "            self._ge_orders_reloaded_at = now - GE_ORDER_REFRESH_INTERVAL_SECONDS"),
+    ("player: the reload is taken off-budget (17 unmetered requests)",
+     "            self.game_data.load_ge_orders(client, acquire=self._acquire_data)",
+     "            self.game_data.load_ge_orders(client)"),
+]
+
+GE_ORDER_PAGE_BUDGET_MUTATIONS = [
+    ("game_data: only the first page of a side is charged to the rate budget",
+     "            if acquire is not None:\n"
+     "                acquire()",
+     "            if acquire is not None and page == 1:\n"
+     "                acquire()"),
 ]
 
 GE_ORDER_404_REFRESH_MUTATIONS = [
@@ -8283,6 +8313,10 @@ def _collect_all_groups() -> None:
     run_group(GAME_DATA_PARSE_SRC, GE_ORDER_STALENESS_MUTATIONS,
               "tests/test_ai/test_ge_order_staleness.py", survivors)
     run_group(PLAYER_SRC, GE_ORDER_404_REFRESH_MUTATIONS,
+              "tests/test_ai/test_ge_order_staleness.py", survivors)
+    run_group(PLAYER_SRC, GE_ORDER_PERIODIC_RELOAD_MUTATIONS,
+              "tests/test_ai/test_ge_order_staleness.py", survivors)
+    run_group(GAME_DATA_PARSE_SRC, GE_ORDER_PAGE_BUDGET_MUTATIONS,
               "tests/test_ai/test_ge_order_staleness.py", survivors)
     run_group(PLANNER_SRC, PLANNER_STATE_KEY_MUTATIONS,
               "tests/test_ai/test_actions_transition.py", survivors)

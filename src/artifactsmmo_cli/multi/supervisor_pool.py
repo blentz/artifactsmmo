@@ -15,11 +15,14 @@ class SupervisorPool:
 
     Children are STAGGERED into life rather than launched together. Every bot
     process opens with an unmetered game-data load -- `GameData.load` predates
-    the RateGovernor and calls no `_acquire_*` -- whose `_load_ge_orders` leg
+    the RateGovernor and calls no `_acquire_*` -- whose `load_ge_orders` leg
     is live-only (the order book changes constantly, so a warm disk cache does
-    not spare it) and pages the ACCOUNT bucket, the tightest one the API
-    declares. Launched simultaneously, N children present N such bursts to
-    that shared bucket inside the same second and the losers take an HTTP 429;
+    not spare it) and cost 17 requests when measured on 2026-09-21. It pages the
+    DATA bucket, not the account one: `/grandexchange/orders` answers
+    `x-ratelimit-limit-hour: 2000`, which is data's hour limit (account's is
+    300). The burst is what matters here either way -- the per-SECOND limit is
+    10. Launched simultaneously, N children present N such bursts to a shared
+    bucket inside the same second and the losers take an HTTP 429;
     `GameData.load`'s bounded retry then makes them collide again, one backoff
     later, until a child exhausts its budget and dies at boot. Spacing the
     launches by `stagger_seconds` means only one child is ever mid-boot, so

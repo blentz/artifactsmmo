@@ -48,6 +48,21 @@ ERROR_CODE_ALREADY_EQUIPPED = 485
 # (class, item code) — poisoning there would wall the item for the session.
 ERROR_CODE_ORDER_NOT_FOUND = 404
 
+# How long the Grand Exchange order index may stand before the run re-reads the
+# whole book. Retiring a ghost on its own 404 (ERROR_CODE_ORDER_NOT_FOUND above)
+# only ever SHRINKS the index; an order posted by another account after startup
+# stayed invisible for the rest of the run, so a route the book could supply was
+# priced as though no order existed. Only a periodic re-read makes the index
+# grow again.
+#
+# Cost, measured against the live book 2026-09-21: 32 buy orders on 1 page and
+# 1575 sell orders on 16, so 17 requests per reload and 68 per hour per
+# character at this interval. `/grandexchange/orders` answers
+# `x-ratelimit-limit-hour: 2000`, which is the DATA bucket (the account bucket
+# is 300) — about 17% of one child's divided data share at five children, and
+# charged through `_acquire_data` rather than taken for free.
+GE_ORDER_REFRESH_INTERVAL_SECONDS = 900.0
+
 # Standard HTTP 429 ("Too Many Requests"): the per-IP throttle `play --all`
 # children divide between themselves as a soft budget (see utils/rate_governor.py)
 # tripped anyway. Undocumented in the OpenAPI spec this project's client is

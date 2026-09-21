@@ -9,7 +9,7 @@ logic and delegates everything else.
 
 import sys
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -1453,7 +1453,7 @@ class GameData:
         (`rate_limited_error.py`) leans on `RateLimitedError` subclassing
         `httpx.HTTPError` so that every EXISTING transient-retry loop absorbs a
         429 for free — and the game-data load has no such loop: `_fetch_maps`,
-        `_fetch_items`, ... and `_load_ge_orders` call the generated client
+        `_fetch_items`, ... and `load_ge_orders` call the generated client
         with no error handling at all. `GamePlayer._execute`'s
         `except RateLimitedError` covers the per-cycle action-dispatch path
         only, and `_initialize` calls this BEFORE the run loop exists, so a 429
@@ -1536,7 +1536,7 @@ class GameData:
         else:
             objs = cls._hydrate_bundle(raw)
         data._build_from_objs(objs)
-        data._load_ge_orders(client)
+        data.load_ge_orders(client)
         return data
 
     @classmethod
@@ -2182,7 +2182,8 @@ class GameData:
             and t.level <= max_level
         ]
 
-    def _load_ge_orders(self, client: AuthenticatedClient) -> None:
+    def load_ge_orders(self, client: AuthenticatedClient,
+                       acquire: "Callable[[], None] | None" = None) -> None:
         """Index, per item, the highest-price OPEN BUY order and the lowest-price
         OPEN SELL order from the live GE order book. Filling a BUY order sells the
         item for immediate gold (realizable proceeds); filling a SELL order buys the
@@ -2202,14 +2203,29 @@ class GameData:
         mention has no standing order — merging would keep the previous run's
         entry for exactly that item and hand the planner an order the API just
         declined to list.
+
+        PUBLIC because the run loop re-reads the book on a timer
+        (`GamePlayer._maybe_refresh_ge_orders`), not only at startup: retiring a
+        ghost on its own 404 can shrink the index but never grow it, so without
+        a periodic re-read an order posted after startup stays invisible for the
+        whole run. `acquire` is that caller's rate-budget hook, charged once per
+        request; the startup load leaves it None because no governor is wired
+        yet. Both indexes are replaced only after their pages are all in hand,
+        so a read that dies halfway leaves the previous book standing rather
+        than a half-read one.
         """
-        self._ge_buy_orders = index_best_ge_orders(
-            self._page_ge_orders(client, GEOrderType.BUY), GEOrderType.BUY)
-        self._ge_sell_orders = index_best_ge_orders(
-            self._page_ge_orders(client, GEOrderType.SELL), GEOrderType.SELL)
+        buy = index_best_ge_orders(
+            self._page_ge_orders(client, GEOrderType.BUY, acquire=acquire),
+            GEOrderType.BUY)
+        sell = index_best_ge_orders(
+            self._page_ge_orders(client, GEOrderType.SELL, acquire=acquire),
+            GEOrderType.SELL)
+        self._ge_buy_orders = buy
+        self._ge_sell_orders = sell
 
     def refresh_ge_orders_for_item(self, client: AuthenticatedClient,
-                                   item_code: str) -> None:
+                                   item_code: str,
+                                   acquire: "Callable[[], None] | None" = None) -> None:
         """Re-read ONE item's orders from the live book and re-index both sides.
 
         Called when the server answers a GE fill with HTTP 404 "Order not found":
@@ -2229,7 +2245,8 @@ class GameData:
         for side, index in ((GEOrderType.BUY, self._ge_buy_orders),
                             (GEOrderType.SELL, self._ge_sell_orders)):
             best = index_best_ge_orders(
-                self._page_ge_orders(client, side, code=item_code), side)
+                self._page_ge_orders(client, side, code=item_code,
+                                     acquire=acquire), side)
             if item_code in best:
                 index[item_code] = best[item_code]
             else:
@@ -2237,15 +2254,25 @@ class GameData:
 
     @staticmethod
     def _page_ge_orders(client: AuthenticatedClient, side: GEOrderType,
-                        code: str | None = None) -> list[GEOrderSchema]:
+                        code: str | None = None,
+                        acquire: "Callable[[], None] | None" = None,
+                        ) -> list[GEOrderSchema]:
         """Every open order on one side of the book, paged to exhaustion.
 
         `code` narrows the read to one item. Passed to the API only when set, so
-        the whole-book startup read sends the request it always sent."""
+        the whole-book startup read sends the request it always sent.
+
+        `acquire` is charged before EVERY page, not once per call: the sell side
+        alone was 16 pages when this was measured (2026-09-21), and a budget hook
+        that fired once would under-report a reload by a factor of sixteen.
+        `/grandexchange/orders` answers `x-ratelimit-limit-hour: 2000`, so the
+        bucket to charge is DATA."""
         item_filter: _GeOrderFilter = {} if code is None else {"code": code}
         out: list[GEOrderSchema] = []
         page = 1
         while True:
+            if acquire is not None:
+                acquire()
             result = get_ge_orders(client=client, type_=side, page=page, size=100,
                                    **item_filter)
             if result is None or not result.data:
