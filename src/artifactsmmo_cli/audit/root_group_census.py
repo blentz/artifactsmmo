@@ -8,6 +8,13 @@ Whether that ordering costs anything is a measurement, and this is it.
 A NULL `root_group` is a row written before the column existed (2026-09-21). It
 is reported as `unattributed` and counted in no group: treating it as a choice
 would let pre-migration history decide a post-migration verdict.
+
+The string label `"none"` is a MIXED bucket: `root_group_of` returns it when
+`chosen_root is None`, which happens both when the walk found no root AND when
+a session resumed from a plan cache where `_last_decision` was None but a root
+was already executing (see `player.py:670-673`). So `counts["none"]` conflates
+two cases and cannot distinguish them. Callers must not read it as a clean
+"walk resolved no root" count.
 """
 
 from dataclasses import dataclass
@@ -25,10 +32,16 @@ class GroupCounts:
     attributed: int
     unattributed: int
 
-    def share(self, group: str) -> float:
+    def share(self, group: str) -> float | None:
         """Fraction of ATTRIBUTED cycles that chose `group`. Denominated on
         attributed rows only, so a store that is mostly pre-migration reports a
-        share of what it saw rather than one diluted by silence."""
+        share of what it saw rather than one diluted by silence.
+
+        Returns None when `attributed == 0`, meaning nothing was attributed and
+        no share is defined. This is not 0.0 — the distinction between "measured
+        as nothing" and "could not tell" is kept (same rule as `Cycle.delta_xp`)."""
+        if self.attributed == 0:
+            return None
         return self.counts.get(group, 0) / self.attributed
 
 

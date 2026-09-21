@@ -155,3 +155,18 @@ def test_share_is_denominated_on_attributed_rows_only() -> None:
     counts = GroupCounts(character="C3P0", counts={"trunk": 1}, attributed=1, unattributed=9)
     assert counts.share("trunk") == 1.0
     assert counts.share("gear") == 0.0
+
+
+def test_all_pre_migration_character_returns_none_share() -> None:
+    from artifactsmmo_cli.audit.root_group_census import root_group_counts
+
+    # A character whose entire window is pre-migration NULLs (today IS the migration date).
+    rows = root_group_counts([_grouped("C3P0", None), _grouped("C3P0", None)])
+    assert len(rows) == 1
+    assert rows[0].character == "C3P0"
+    assert rows[0].counts == {}
+    assert rows[0].attributed == 0
+    assert rows[0].unattributed == 2
+    # share() returns None when nothing was attributed, not 0.0.
+    assert rows[0].share("trunk") is None
+    assert rows[0].share("gear") is None
