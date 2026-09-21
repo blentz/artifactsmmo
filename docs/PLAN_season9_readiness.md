@@ -137,28 +137,61 @@ before launch; T4 cannot be verified until launch day.
 Ordering constraint: T4's favor multiplier only means something once XP is commensurable,
 so T1 lands first. T2 and T3 are independent of both.
 
-### T1 — Objective: maximize `total_xp`
+### T1 — Realign the capstone with the leaderboard
 
-Move the objective's target from "character level 50, then skills" to "maximize this
-character's `total_xp`", with achievement points as a secondary tiebreak.
+**Correction, 2026-09-21.** An earlier draft of this section described retargeting a scalar
+objective J. There is no objective J in production. Wave 3b deleted the entire ranking
+substrate — `_j_by_identity`, `_synergy_map`, `_achievability_map`, `_role_map`, and the
+modules `tiers/achievability_core`, `ai/role_alignment`, `tiers/branch_objective`,
+`tiers/progression_choice`, `tiers/horizon_contribution` — because each had zero production
+callers. `RootScore.j` survives as a field left `None`, and `progression_tree._resolution_rows`
+sets every row's `score` to a constant `Fraction(1)`. The modules the draft named
+(`pursuit_value`, `strategic_value`, `strategic_weights`, `scalarizer`) rank gear stats and
+price yields; none of them ranks roots.
 
-Affected modules: `ai/tiers/progression_tree.py`, `ai/tiers/strategic_value.py`,
-`ai/tiers/strategic_weights.py`, `ai/learning/scalarizer.py`. The planner itself does not
-change — this is a change to what ranking maximizes, not to how plans are found.
+**What actually decides a root** is a question walk in `ai/decisions/root.py:1009`:
 
-Specific decisions:
+```
+IsAFightBlockingMe → WhichSlotClosesTheFight → IsMyGearBehindMyTier
+  → WhichSlotIsFurthestBehind → IsThisTargetBlocked
+  → IsThereACombatTarget → CanIClearMyTier
+```
 
-- Character XP and skill XP enter the objective on the same ruler. `scalarizer` already
-  carries `CHARACTER_XP_LEVEL_SCALAR` and `SKILL_XP_BASELINE_WEIGHT`; under a `total_xp`
-  objective those weights are no longer free parameters — one point of skill XP and one
-  point of character XP are worth the same on the board.
-- The existing level-50 terminus must not silently cap ranking. Any term that goes flat or
-  undefined above level 50 is a defect under this objective.
-- Achievement points are added as a strictly lower-priority tiebreak, so they can never
-  outrank an XP-bearing root.
+followed by a fixed concatenation of alternatives: gear siblings, then the trunk
+`ReachCharLevel(milestone_pure(state.level))`, then `_orphan_skill_roots`. Within gear,
+`_slot_order` orders on tier gap with dead-target demotion, and focus aging plus d'Hondt
+arbitration decide the interleave.
 
-Verification: the `objective` CLI diagnostic must show the new terms and name what decided
-the ranking, on a live character, before this track is called done.
+**"Level 50 then skills" is structural, not a parameter.** Two places encode it:
+
+1. `tiers/progression_tree_core.milestone_pure` = `min(TRUNK_CAP, (level // BAND + 1) * BAND)`
+   with `TRUNK_CAP = 50` — the L50 capstone is the function's fixed point.
+2. Skills are orphan roots placed *behind* the trunk, and that position was measured: ahead
+   of it, a cooking climb displaced `GatherMaterials(mithril_bar)` at `l48_band_adequate`,
+   the mithril gear that breaks the L38-48 wall, pinned by three suites.
+
+**The currency model.** Character XP is the primary currency. Access to character-XP sources
+is gated behind skill XP as a secondary currency, and skill XP is itself gated behind further
+currencies whose actions differ in efficiency. Resting is the price paid to recover from the
+fights that pay character XP and drop crafting materials; cooking, and by extension fishing,
+produce the food that offsets that resting cost. The objective is therefore a multi-variate
+Pareto frontier over these currencies, not a scalar — and the design must reach it without
+accumulating epicycles.
+
+Season 8's capstone was level 50. Now that the player model is nearly complete, the capstone
+realigns with the game's actual leaderboard.
+
+**T1 is audit-first.** The shape of the change is not decided here. T1.0 measures three
+things and the design decision follows from what it finds:
+
+- what the walk actually chooses, attributed by root group, across the fleet;
+- what each activity actually pays, per currency, per second, with forced recovery attributed
+  to the goal that caused it;
+- what gates what — which character-XP sources are unreachable behind which skill levels.
+
+T1.0's plan is `docs/PLAN_season9_t1_objective_audit.md`. It changes no ranking. Its output
+is measurement, and the frontier it computes has no production consumer until the design
+decision is made against it.
 
 ### T2 — Fleet capability audit and extension
 
@@ -314,9 +347,10 @@ tests live in `tests/`.
 
 Per track:
 
-- **T1** — the `objective` CLI diagnostic on a live character, showing the new terms and what
-  decided the ranking. Green tests are not sufficient: a ranking change must be observed to
-  fire on a live `plan <char>`.
+- **T1** — measurement over the live learning store, plus `uv run artifactsmmo plan <char>`
+  naming the chosen root. The `objective` CLI diagnostic no longer exists: wave 3b retired it
+  along with the ranking substrate it printed. Green tests are not sufficient — a ranking
+  change must be observed to fire on a live decision.
 - **T2** — a census over live data, reported as counts of candidate roots and chosen roots,
   not as a passing test.
 - **T3** — `uv run mypy --strict` clean, the full formal gate (`bash formal/gate.sh`, roughly
