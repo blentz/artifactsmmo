@@ -880,6 +880,44 @@ def test_no_buy_edge_when_the_price_cannot_fit_the_bag_at_all() -> None:
                 and a.item_code == "lich_race_medal"], relevant
 
 
+def test_no_buy_edge_for_a_transitive_leaf_that_cannot_fit_the_bag() -> None:
+    """The batch bound applies to the DEEP closure site too, not just to a
+    top-level needed item.
+
+    `widget` crafts from one `medal`, and `medal` is a recipe-less artifact sold
+    only for 100 `ticket`. `medal` is therefore in the closure but NOT in
+    `_needed`, so it is the transitive-leaf branch that emits its buy. With a
+    100-item bag the 100-ticket stack leaves no slot for the medal, so that
+    branch must emit nothing rather than a permanently-inapplicable edge —
+    exactly as the top-level branch does."""
+    gd = GameData()
+    gd._item_stats = {
+        "widget": ItemStats(code="widget", level=5, type_="artifact"),
+        "medal": ItemStats(code="medal", level=5, type_="artifact"),
+    }
+    gd._crafting_recipes = {"widget": {"medal": 1}}
+    gd._npc_stock = {"vendor": {"medal": 100}}
+    gd._npc_buy_currency = {"vendor": {"medal": "ticket"}}
+    gd._npc_locations = {"vendor": (0, 0)}
+    gd._task_coin_rewards = {"chicken": 1}
+    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
+    template = WithdrawItemAction(code="copper_ore", quantity=7,
+                                  bank_location=(4, 1), accessible=True)
+
+    roomy = make_state(inventory={}, bank_items={"ticket": 581},
+                       inventory_max=144, x=0, y=0)
+    cramped = make_state(inventory={}, bank_items={"ticket": 581},
+                         inventory_max=100, x=0, y=0)
+
+    # Vacuity guard: with a live bag the transitive branch DOES emit the buy,
+    # so the empty result below comes from the bag bound and nothing else.
+    assert [a.quantity for a in goal.relevant_actions([template], roomy, gd)
+            if isinstance(a, NpcBuyAction) and a.item_code == "medal"] == [1]
+
+    assert not [a for a in goal.relevant_actions([template], cramped, gd)
+                if isinstance(a, NpcBuyAction) and a.item_code == "medal"]
+
+
 def test_item_currency_deficit_zero_when_pocket_covers() -> None:
     """Pocket already holds the full price → no shortfall, no ferry (the
     `shortfall > 0` gate)."""

@@ -698,10 +698,13 @@ class GatherMaterialsGoal(Goal):
                 # HAL carried 2 event_ticket against a 100 price: ferrying 98
                 # left him at 98 of 100 after the deposit and the buy stayed
                 # inapplicable.
+                # No `quantity <= 0` guard: `currency_deficits` only yields a
+                # POSITIVE shortfall and `currency_cap` is only ever set to
+                # `batch * price` with both factors >= 1, so the min of the two
+                # cannot reach zero. A guard that cannot fire is a second layer
+                # of handling, not a safeguard.
                 cap = currency_cap.get(currency)
                 quantity = shortfall if cap is None else min(shortfall, cap)
-                if quantity <= 0:
-                    continue
                 result.append(dataclasses.replace(
                     currency_template, code=currency, quantity=quantity))
 
