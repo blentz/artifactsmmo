@@ -59,3 +59,27 @@ def test_goal_rates_is_a_value_object() -> None:
     assert rates.char_xp_per_second == 2.0
     assert rates.skill_xp_per_second == 1.0
     assert rates.gold_per_second == 3.0
+
+
+def test_unmeasured_cycle_currency_is_excluded_not_leaked() -> None:
+    # A single goal with one measured cycle and one unmeasured cycle carrying
+    # significant currency. The unmeasured cycle's currency must not appear in
+    # the totals and must not inflate the rates.
+    rows = currency_rates({"Mixed": [
+        _cycle(10.0, 100, '{"cooking": 50}', 1000),  # measured: 100 char, 50 skill, 1000 gold
+        _cycle(None, 999, '{"cooking": 888}', 9999),  # unmeasured: 999 char, 888 skill, 9999 gold
+    ]})
+    assert len(rows) == 1
+    r = rows[0]
+    # cycles should count only the measured one
+    assert r.cycles == 1
+    # seconds should be only the measured cycle's time
+    assert r.seconds == 10.0
+    # currency totals should exclude the unmeasured cycle entirely
+    assert r.char_xp == 100, "unmeasured cycle's char_xp should not leak into total"
+    assert r.skill_xp == {"cooking": 50}, "unmeasured cycle's skill_xp should not leak into total"
+    assert r.gold == 1000, "unmeasured cycle's gold should not leak into total"
+    # rates should reflect only the measured cycle
+    assert r.char_xp_per_second == 10.0
+    assert r.skill_xp_per_second == 5.0
+    assert r.gold_per_second == 100.0
