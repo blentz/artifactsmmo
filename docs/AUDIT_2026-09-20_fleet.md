@@ -466,6 +466,88 @@ In dependency order, smallest first:
 
 Not fixed — this was an investigation.
 
+## F9 — HAL's trophy: the fleet surrender machinery already works; one purchase blocks it
+
+**Severity: high (HAL's only root). Verified end-to-end 2026-09-20, read-only.**
+
+The premise — "the other players are holding ingredients for the
+lich_race_trophy" — is correct. The chain is all NPC currency, no crafting:
+
+```
+event_ticket  --100-->  lich_race_medal  --10-->  lich_race_trophy   (archaeologist)
+```
+
+`lich_race_medal` is worn by all five characters, one each, plus one banked.
+
+### The release feature already exists
+
+`SurrenderCurrencyGoal` — "unequip every worn copy and deposit every carried
+copy of a dual-role currency this character lost the fleet's `claim_turn_in`
+election for". `dual_role_holdings` already counts WORN copies ("a worn medal
+is still fleet currency, recoverable in one `UnequipAction`"), and the live
+`holding_ledger` already carries all five medals. `_resolve_turn_in`'s docstring
+names this very case from a previous round.
+
+It is gated on one number:
+
+```
+fleet_total = 5 worn + 1 banked = 6      price = 10
+turn_in_ready_pure(6, 10)  = False
+turn_in_ready_pure(11, 10) = True
+```
+
+### Simulated at 11 medals, every stage works
+
+Throwaway coordination DB, real election / goals / planner:
+
+```
+ELECTION
+  HAL    turn_in=TurnIn(..., buyer='HAL', fleet_total=11)  recall=None
+  Robby  turn_in=TurnIn(..., buyer='HAL')  recall=('lich_race_medal', 1)
+  C3P0   ... same        Lor ... same        R2D2 ... same
+
+SURRENDER (each of the four)
+  SurrenderCurrency(lich_race_medalx1)  explored=3  plan_len=2
+     1. Unequip(artifact1_slot)
+     2. DepositItem(lich_race_medal×1)
+
+BUYER (after the four deposits land: bank 5, HAL holds 6)
+  CurrencyTurnIn(lich_race_trophy)  explored=5  plan_len=3
+     1. Unequip(artifact1_slot)
+     2. Withdraw(lich_race_medal×4)
+     3. NpcBuy(lich_race_trophy×1@archaeologist)
+```
+
+All five pass the buyer election's rules 3 and 4 (`level_ok`, `pick_loadout`
+places the trophy), so the election is not fragile either.
+
+NOT covered by the simulation: the live four-process timing — TTL expiry and
+claim renewal while four separate processes each take their two surrender
+actions.
+
+### The one real blocker: an item-currency purchase that cannot fit the bag
+
+The fleet can reach 11 medals — 6 held plus 5 bought with the 581 banked
+`event_ticket`. That purchase never plans:
+
+```
+Withdraw(event_ticket×498)                applicable=False   # HAL bag 122/144, 22 free
+NpcBuy(lich_race_medal×5@archaeologist)   applicable=False   # needs 500 tickets at once
+NpcBuy(lich_race_medal×1@archaeologist)   applicable=True    # with 100 tickets + cleared bag
+                                                             # emitted by the factory,
+                                                             # NOT admitted to the goal's pool
+GatherMaterials(lich_race_medal, x5)      explored=4  plan_len=0
+```
+
+`GatherMaterialsGoal` materializes ONE indivisible buy sized to the whole
+remaining need, and a withdraw sized to its whole price. Neither fits a
+144-item bag. The all-or-nothing shape of `project_jewelry_smelt_stall`.
+
+Fix direction: bound the materialized item-currency buy and its withdraw by
+free inventory — `batch = min(needed, free // price)` — so the chain becomes
+`DepositAll -> Withdraw(event_ticket×100) -> NpcBuy(medal×1)`, repeated. The
+surrender machinery then fires by itself at 10.
+
 ## F7 — Gold banking is live and working (corrects a stale note)
 
 **Severity: none — recorded because a prior note says the opposite.**
