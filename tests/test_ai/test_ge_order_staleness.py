@@ -340,8 +340,22 @@ class TestPeriodicReload:
 
     def test_every_page_is_charged_to_the_data_bucket(self, monkeypatch):
         """17 requests taken for free would silently overdraw the budget the
-        whole fleet divides. One acquire per request, not one per reload."""
-        fake_sync, calls = _book({})
+        whole fleet divides. One acquire per REQUEST, not one per reload.
+
+        The sell side must span more than one page or the two rules are
+        indistinguishable — the real book needed 16 pages when this was
+        measured, and a single-page fake would pass either way.
+        """
+        calls: list[int] = []
+
+        def fake_sync(client, type_, page, size, **kwargs):
+            calls.append(page)
+            if type_ is not GEOrderType.SELL:
+                return _Page([])
+            if page == 1:
+                return _Page([_order(f"s{i}", f"item{i}", 3, 1) for i in range(100)])
+            return _Page([_order("tail", "last_item", 3, 1)])
+
         monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
         monkeypatch.setattr("artifactsmmo_cli.ai.player.time.monotonic", lambda: 1000.0)
         player = self._player_at(GameData(), elapsed=GE_ORDER_REFRESH_INTERVAL_SECONDS)
@@ -353,7 +367,8 @@ class TestPeriodicReload:
 
         player._maybe_refresh_ge_orders(MagicMock())
 
-        assert len(acquired) == len(calls) > 0
+        assert calls == [1, 1, 2], "the sell side must really paginate"
+        assert len(acquired) == len(calls)
 
     def test_the_startup_load_is_still_unmetered(self, monkeypatch):
         """`GameData.load` runs before any governor is wired; charging it would
