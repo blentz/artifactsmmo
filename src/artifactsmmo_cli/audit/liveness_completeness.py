@@ -130,8 +130,27 @@ WITNESS_BASELINE: dict[str, int] = {
     # raise. Since 4e565aba: 2,201 cycles across all five characters, still
     # running at 2026-09-14 00:37 UTC, with ZERO WaitAction and ZERO `no_plan`.
     # Both causes are flat, not merely quiet.
-    "WaitGoal": 123,
-    "WaitAction": 123,
+    # 2026-09-21, +11 (123 -> 134). Robby alone, 00:37:49-00:37:57 UTC, eleven
+    # Waits in EIGHT SECONDS at cooldown 0.0 — a spin, not a pause. One cause,
+    # and it is a scar of the region model going live rather than a new class:
+    #   x11, Robby stranded in `interior:-3,12`. `_state_key` carried no
+    #              `layer`, so a co-located portal — the Abandoned House sits
+    #              ON the Forest tile — produced a child byte-identical to its
+    #              own parent, which collided in the visited set and was
+    #              pruned. The way IN planned (he entered from the bank at
+    #              (7,13), so x/y changed); the way OUT never could. At 179/710
+    #              with `Rest` an overworld action and `FightAction`'s HP floor
+    #              refusing another rat, every rung above the witness genuinely
+    #              had nothing to offer. FIXED by 4a3c9efe.
+    #
+    # NO RESTART YET, and the same justification the 2026-08-19 entry used
+    # applies: the fleet is STOPPED, so the count cannot grow, and Robby was
+    # re-planned from his LIVE stranded state on the fix — `RestoreHP` now
+    # returns `Transition((-3,12,interior)->(-3,12,overworld)) ->
+    # UseConsumable` in 4 nodes where it returned nothing before. If a restart
+    # disagrees, this number is wrong and the alarm is right.
+    "WaitGoal": 134,
+    "WaitAction": 134,
 }
 
 #: form "unreachable: ..." is a DEFECT that is being tracked, not an excuse —
@@ -209,7 +228,6 @@ DORMANT: dict[str, str] = {
                            "raid-boss kill (pixie: 1,844,857 vs 1,570 hp), so "
                            "raid_survivable_pure refuses every real loadout",
     # --- Genuinely conditional on world state the fleet has not met.
-    "MapTransitionAction": "conditional: needs a layer transition (raid/underground areas)",
     "TeleportAction": "conditional: needs an unlocked teleport destination",
     # --- Conditional on a character state the fleet has not reached.
     "UnlockBankGoal": "conditional: the bank is already unlocked for every live character",
@@ -226,7 +244,6 @@ DORMANT: dict[str, str] = {
     # for DELETION rather than activation. Flagged so the choice is deliberate.
     "MoveAction": "subsumed: travel is folded into each action's own venue hop",
     "MoveTo": "subsumed: superseded by the venue model in obtain_sources",
-    "UnequipAction": "subsumed: OptimizeLoadoutAction performs swaps atomically",
     # GeFillSellOrderAction WAS here as "subsumed: the fleet posts sell orders and
     # fills buys". It went LIVE on 2026-08-19: `UpgradeEquipmentGoal` now
     # synthesizes the GE fill for its own target, so a standing sell order is a
@@ -256,12 +273,17 @@ DORMANT: dict[str, str] = {
     # The one equippable sink IS correctly gated: R2D2 at L20 passes rules 3 and
     # 4 for `lich_race_trophy` (wears it, level-qualified) and waits only on
     # stock. So this rung is genuinely conditional AND carries a scope limit.
-    "CurrencyTurnInGoal": "conditional: the only sink whose item a loadout can "
-                          "wear (lich_race_trophy) needs 10 medals and the fleet "
-                          "holds 4; every READY sink buys a resource, which "
-                          "_resolve_turn_in rule 3 can never accept",
-    "SurrenderCurrencyGoal": "conditional: the holder side of the same election, "
-                             "so it waits on the same turn-in being resolved",
+    # The medal count in the old reason ("the fleet holds 4") stopped being
+    # true on 2026-09-21: @3ef1f320 made the medal purchase plannable, the
+    # fleet reached the 10-medal price, and the election resolved — which is
+    # why `SurrenderCurrencyGoal` left this table the same day. The BUYER side
+    # still has not fired: the three surrendering characters livelocked against
+    # the acquisition path (fixed @0b4a9b19) before HAL could reach the
+    # archaeologist. Expect this entry to go next restart.
+    "CurrencyTurnInGoal": "conditional: the fleet reached the 10-medal price on "
+                          "2026-09-21 but the elected buyer has not yet reached "
+                          "the vendor; every OTHER ready sink buys a resource, "
+                          "which _resolve_turn_in rule 3 can never accept",
     # --- Provision-marginal-fight. Its gate needs a utility-slot heal already in
     # the bag; measured live, `best_held_heal` is None and both utility slots are
     # empty on all five characters. `UseConsumableAction` fires 1,621 times, so
