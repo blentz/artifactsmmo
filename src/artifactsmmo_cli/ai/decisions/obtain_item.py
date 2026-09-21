@@ -264,6 +264,22 @@ class IsTheStepTheEquippableItself(Decision[Goal]):
                 gate = craft_skill_gate(stats, state)
                 if gate is not None:
                     return gate
+            # RESERVED BY A LIVE TURN-IN. A dual-role code the fleet has
+            # surrendered is fleet CURRENCY until the claim resolves, not gear
+            # to put back on. `61baa427` already holds it out of
+            # `EquipOwnedGoal`'s empty-slot fills; this is the same
+            # reservation on the acquisition path, which is the producer the
+            # live loop actually ran through -- R2D2/Lor/C3P0, 2026-09-21,
+            # 18 `Withdraw(lich_race_medal x1)` + 18 `Equip(...)` against 21
+            # `SurrenderCurrency` deposits, four API calls per turn of the
+            # loop, until the processes died.
+            #
+            # None rather than a goal that cannot plan: the step has no work
+            # this cycle, and `_step_servable` demotes the root on exactly
+            # that signal. Temporary by construction -- `ctx.turn_in` clears
+            # with the claim and the medal is ordinary gear again.
+            if ctx.turn_in is not None and ctx.turn_in.currency == self.step.code:
+                return None
             dest_slot = self.step.slot if self.step.slot is not None else slots[0]
             return _equippable_goal(self.step.code, dest_slot, state, game_data, ctx)
         return IsThisAnIntermediateOnAChain(self.step, self.root)

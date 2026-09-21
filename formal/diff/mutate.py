@@ -1202,6 +1202,17 @@ TREE_OCCUPANCY_MUTATIONS = [
 # The planner's visited-set key. Every field in it is load-bearing for a
 # different action class: drop one and the action whose ONLY effect is that
 # field produces a child that collides with its own parent and is pruned.
+# The turn-in reservation on the ACQUISITION path. `61baa427` covers
+# EquipOwnedGoal's empty-slot fills; this is the second producer, and the one
+# the live 2026-09-21 livelock actually ran through.
+OBTAIN_ITEM_TURNIN_RESERVE_MUTATIONS = [
+    ("obtain_item: re-equip a currency under a live turn-in claim",
+     "            if ctx.turn_in is not None and ctx.turn_in.currency == self.step.code:\n"
+     "                return None",
+     "            if False:\n"
+     "                return None"),
+]
+
 PLANNER_STATE_KEY_MUTATIONS = [
     ("planner: drop layer from the visited key (co-located portals prune)",
      "        state.x, state.y, state.layer,",
@@ -8243,6 +8254,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_actions_transition.py", survivors)
     run_group(PLANNER_SRC, PLANNER_STATE_KEY_MUTATIONS,
               "tests/test_ai/test_actions_transition.py", survivors)
+    run_group(OBTAIN_ITEM_DECISION_SRC, OBTAIN_ITEM_TURNIN_RESERVE_MUTATIONS,
+              "tests/test_ai/test_decisions_obtain_item.py", survivors)
     run_group(CURRENCY_BUY_BATCH_SRC, CURRENCY_BUY_BATCH_MUTATIONS,
               "tests/test_ai/test_currency_buy_batch.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHERING_CURRENCY_BATCH_MUTATIONS,

@@ -44,7 +44,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, TurnIn
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -501,3 +501,58 @@ def test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it(
     assert not any(is_chosen for _name, is_chosen in reached), (
         "a walled step is now on a CHOSEN root's path — this node finally acts "
         "on a live cycle, and the docstring above needs rewriting")
+
+
+def test_a_currency_under_a_live_turn_in_is_not_routed_to_an_equip(
+        bundle_game_data):
+    """A dual-role item the fleet has SURRENDERED must not be re-equipped.
+
+    `lich_race_medal` is both an artifact and the currency `lich_race_trophy`
+    is priced in, so `SurrenderCurrencyGoal` banks it for the elected buyer
+    while this branch — the step IS the equippable — happily routes it to a
+    committed `UpgradeEquipmentGoal` that withdraws it and puts it straight
+    back on.
+
+    Live 2026-09-21, R2D2 / Lor / C3P0, four API calls per loop::
+
+        SurrenderCurrency(lich_race_medalx1)   Unequip(artifact1_slot)
+        SurrenderCurrency(lich_race_medalx1)   DepositItem(lich_race_medal x1)
+        UpgradeEquipment(lich_race_medal->..)  Withdraw(lich_race_medal x1)
+        UpgradeEquipment(lich_race_medal->..)  Equip(lich_race_medal->..)
+
+    18 withdraws and 18 equips against 21 surrenders before the processes
+    died. `61baa427` already holds a recalled currency out of
+    `EquipOwnedGoal`'s empty-slot fills for exactly this reason; the SAME
+    reservation has to cover the acquisition path, which was the producer the
+    live loop actually ran through.
+
+    The reservation is temporary by construction: `ctx.turn_in` is cleared
+    when the claim resolves, and the medal is ordinary gear again.
+    """
+    # The LIVE shape, built explicitly: the bundle prices this medal
+    # differently and routes it to GatherMaterials, which would make the
+    # assertion below vacuous.
+    code = "lich_race_medal"
+    gd = GameData()
+    gd._item_stats = {code: ItemStats(code=code, level=10, type_="artifact",
+                                      hp_bonus=20)}
+    gd._npc_stock = {"archaeologist": {code: 100}}
+    gd._npc_buy_currency = {"archaeologist": {code: "event_ticket"}}
+    gd._npc_locations = {"archaeologist": (6, 13)}
+    gd._task_coin_rewards = {"chicken": 1}
+    step = ObtainItem(code=code, quantity=1, slot="artifact1_slot")
+    state = make_state(level=30, inventory={code: 1})
+    live = dataclasses.replace(
+        NO_PROFILE_CONTEXT,
+        turn_in=TurnIn(item_code="lich_race_trophy", npc_code="archaeologist",
+                       price=10, currency=code, buyer="HAL", fleet_total=11))
+
+    # Vacuity guard: with no live claim this step DOES route to the equip, so
+    # the difference below is the reservation and nothing else.
+    unreserved = resolve_node(obtain_item_decision(step, step), state, gd,
+                              NO_PROFILE_CONTEXT, None)
+    assert unreserved is not None and "UpgradeEquipment" in repr(unreserved), \
+        f"fixture drift: the unreserved step no longer equips ({unreserved!r})"
+
+    goal = resolve_node(obtain_item_decision(step, step), state, gd, live, None)
+    assert goal is None or "UpgradeEquipment" not in repr(goal), goal
