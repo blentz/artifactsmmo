@@ -64,6 +64,27 @@ undercuts it) can be told apart from "absent" (never priced at all) — a
 report that only showed load-bearing rows made that distinction unreadable by
 omission, so the outpriced items get their own short section instead of
 vanishing into the difference between two counts.
+
+T2.1 (`audit/root_sibling_census.py`) ADDS A SECOND, ROOT-LEVEL SECTION. T2.0
+above answers whether `_sibling_craft_option` ever lowers a catalogue item's
+priced cost; it says nothing about whether `decisions/root.resolve_root` —
+the ONE place `decide_tree` gets its answer from — ever NAMES that item as
+the thing to pursue. `_print_root_section` drives the same walk live and
+classifies its own candidate set (`[resolution.root, *resolution.
+alternatives]`, read off the resolution, never rebuilt), printing the count
+of candidates, how many name an item, how many are sibling-priced, how many
+are load-bearing, and the CHOSEN root's repr either way — because a chosen
+root naming no item (`ReachCharLevel`, `ReachSkillLevel`) means the sibling
+route could not apply this cycle at all, a different finding from the route
+being priced and then outpriced.
+
+NO `--all`: EVERY CHARACTER IS NAMED EXPLICITLY. The spec asks "for each
+character", but the only roster source in this codebase is `GET
+/my/characters` (`MultiRun.run`, `multi/multi_run.py:194`) — a real API
+call, and this command's `_sense` seam exists specifically so a read-only
+diagnostic can never reach one (see that seam's own docstring). Rather than
+add a roster discovery path this command has never needed, `--character`/`-c`
+is repeatable; the positional argument still works for a single character.
 """
 
 from dataclasses import replace
@@ -76,19 +97,24 @@ from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.audit.root_sibling_census import RootSiblingVerdict, root_sibling_verdicts
 from artifactsmmo_cli.audit.sibling_route_census import SiblingVerdict, sibling_route_verdicts
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
 from artifactsmmo_cli.learning_db_path import default_learn_db_path
 
 
-def _sense(character: str) -> tuple[WorldState, GameData, SelectionContext]:
-    """Live state, catalogue, and selection context for CHARACTER, sensed
-    exactly as `objective-audit`/`combat-deficit` do it: a fresh, in-memory
-    `LearningStore` so this read-only command cannot write session rows into
-    the fleet's own database, and `GamePlayer.plan_once()` to populate
-    `state`/`game_data`/`_last_ctx` before any of them is read.
+def _sense(
+    character: str,
+) -> tuple[WorldState, GameData, SelectionContext, CharacterObjective]:
+    """Live state, catalogue, selection context, and root objective for
+    CHARACTER, sensed exactly as `objective-audit`/`combat-deficit` do it: a
+    fresh, in-memory `LearningStore` so this read-only command cannot write
+    session rows into the fleet's own database, and `GamePlayer.plan_once()`
+    to populate `state`/`game_data`/`_last_ctx`/`_objective` before any of
+    them is read.
 
     THE CONTEXT COMES FROM THE PLAYER, NOT `NO_PROFILE_CONTEXT`. This command
     used to price every route against `NO_PROFILE_CONTEXT`, a stand-in whose
@@ -105,6 +131,16 @@ def _sense(character: str) -> tuple[WorldState, GameData, SelectionContext]:
     deliberately never attaches (see the module docstring) -- so the caller
     overrides only that one field, the same `replace`-one-field discipline
     `sibling_route_census.py` already uses for its own baseline arm.
+
+    THE OBJECTIVE COMES FROM THE PLAYER TOO, NOT A SECOND CONSTRUCTION.
+    `GamePlayer._initialize()` (called by `plan_once()`, BEFORE
+    `plan_from_state()` sets `_last_ctx`) sets `self._objective =
+    CharacterObjective.from_game_data(self.game_data)` unconditionally
+    (`player.py:970`) -- the same object `decide_tree`/`resolve_root` use on
+    every live cycle. Building a second `CharacterObjective` here would risk
+    silently drifting from what production actually resolves against; reading
+    the player's own attribute (same access pattern the rest of this test
+    suite already uses for it, e.g. `test_player_strategy_shadow.py`) cannot.
     """
     config = Config.from_token_file()
     ClientManager().initialize(config)
@@ -115,9 +151,10 @@ def _sense(character: str) -> tuple[WorldState, GameData, SelectionContext]:
                             game_data_ttl_minutes=config.game_data_ttl_minutes)
         player.plan_once()
         state, game_data, ctx = player.state, player.game_data, player._last_ctx
-        if state is None or game_data is None:
+        objective = player._objective
+        if state is None or game_data is None or objective is None:
             raise typer.BadParameter(f"could not sense state for {character!r}")
-        return state, game_data, ctx
+        return state, game_data, ctx, objective
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -222,13 +259,71 @@ def _print_outpriced_row(v: SiblingVerdict) -> None:
           f"(saving {v.saving})")
 
 
-def sibling_route_audit_command(
-    character: str = typer.Argument(..., help="Character to audit"),
+def _print_root_section(
+    state: WorldState, game_data: GameData, objective: CharacterObjective,
+    ctx: SelectionContext, store: LearningStore, character: str,
 ) -> None:
+    """T2.1: does the sibling-craft route ever change what the ROOT WALK
+    chooses, not just what a catalogue item costs.
+
+    Drives `root_sibling_census.root_sibling_verdicts`, which runs the SAME
+    `resolve_root` walk `decide_tree` uses on every live cycle
+    (`ai/decisions/root.py`) and classifies every candidate it returns —
+    `[resolution.root, *resolution.alternatives]`, read straight off the
+    walk's own output, never rebuilt from the gate's inputs
+    (`feedback_never_feed_a_walks_own_output_back_in`).
+
+    ALL FOUR COUNTS PRINT, EVEN WHEN THE LOWER THREE ARE ZERO. A root-level
+    count of 0 sibling-priced roots is a real and likely answer — the walk
+    may simply never name an item behind a sibling-clearable gate — and
+    T2.0 shipped a catalogue-level number that read as evidence while being
+    a tautology; printing zero explicitly here is what keeps this section
+    from repeating that shape.
+
+    THE CHOSEN ROOT'S REPR ALWAYS PRINTS, WHETHER OR NOT IT NAMES AN ITEM.
+    `ReachCharLevel`/`ReachSkillLevel` name no item at all, and a chosen
+    root of that shape means the sibling route COULD NOT APPLY this cycle
+    — a different finding from the route being priced and then outpriced by
+    a cheaper existing route. The section says so explicitly so a reader
+    cannot conflate "structurally unreachable" with "measured and rejected".
+    """
+    rows = root_sibling_verdicts(state, game_data, objective, ctx, store)
+    named = [r for r in rows if r.item is not None]
+    priced = [r for r in named if r.verdict is not None and r.verdict.priced]
+    load_bearing = [r for r in named if r.verdict is not None and r.verdict.load_bearing]
+    chosen: RootSiblingVerdict | None = next((r for r in rows if r.chosen), None)
+
+    print(f"\n== root-sibling audit ({character}) ==")
+    print("a CHOSEN root naming no item (ReachCharLevel, ReachSkillLevel) means "
+          "the sibling route COULD NOT APPLY this cycle -- that is a different "
+          "finding from the route being priced and then outpriced by a cheaper "
+          "existing route.")
+    print(f"{len(rows)} candidate root(s) (resolution.root + resolution.alternatives)")
+    print(f"{len(named)} name an item")
+    print(f"{len(priced)} sibling-priced")
+    print(f"{len(load_bearing)} load-bearing")
+    if chosen is None:
+        print("chosen root: None (resolve_root returned no root this cycle -- the "
+              "CanIClearMyTier wall case)")
+        return
+    print(f"chosen root: {chosen.root_repr}")
+    if chosen.item is None:
+        print("chosen root names no item -- the sibling route could not apply "
+              "this cycle")
+        return
+    print(f"chosen root names item: {chosen.item}")
+    chosen_priced = chosen.verdict is not None and chosen.verdict.priced
+    chosen_load_bearing = chosen.verdict is not None and chosen.verdict.load_bearing
+    print(f"chosen root sibling-priced: {chosen_priced}")
+    print(f"chosen root load-bearing: {chosen_load_bearing}")
+
+
+def _run_for_character(character: str) -> None:
     """Print the eligible / priced / load-bearing counts for the sibling-craft
     route, then the load-bearing rows grouped by gate (largest saving first),
-    then the priced-but-not-load-bearing (outpriced) rows."""
-    state, game_data, player_ctx = _sense(character)
+    then the priced-but-not-load-bearing (outpriced) rows, then the T2.1
+    root-level section for this one character."""
+    state, game_data, player_ctx, objective = _sense(character)
 
     db_path = default_learn_db_path()
     coordination = CoordinationStore(db_path=db_path, character=character)
@@ -280,3 +375,32 @@ def sibling_route_audit_command(
               "the sibling craft):")
         for v in sorted(outpriced, key=lambda v: v.item):
             _print_outpriced_row(v)
+
+    _print_root_section(state, game_data, objective, ctx, store, character)
+
+
+def sibling_route_audit_command(
+    character: str | None = typer.Argument(
+        None, help="Character to audit (omit and use --character instead for multiple)"),
+    characters: list[str] = typer.Option(
+        [], "--character", "-c",
+        help="Character to audit; repeat for multiple, e.g. -c C3P0 -c R2D2. "
+             "There is no --all: the only roster source in this codebase is "
+             "GET /my/characters (`MultiRun.run`, `multi/multi_run.py:194`), a "
+             "real API call this read-only command's own `_sense` seam is "
+             "built specifically to keep out of reach -- so every character "
+             "audited is named explicitly rather than discovered."),
+) -> None:
+    """Run the sibling-route audit -- eligible/priced/load-bearing catalogue
+    counts (T2.0) and the T2.1 root-walk section -- for one or more
+    characters, named either as the positional argument or via repeated
+    `--character`/`-c`."""
+    names = list(characters)
+    if character is not None:
+        names.append(character)
+    if not names:
+        print("name a character to audit: the positional argument, or one or "
+              "more --character/-c options")
+        raise typer.Exit(code=2)
+    for name in names:
+        _run_for_character(name)

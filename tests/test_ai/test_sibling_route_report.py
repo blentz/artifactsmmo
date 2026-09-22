@@ -29,6 +29,8 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.audit.root_sibling_census import RootSiblingVerdict
 from artifactsmmo_cli.audit.sibling_route_census import SiblingVerdict
 from artifactsmmo_cli.commands import sibling_route_report as cmd
 from tests.test_ai.fixtures import coordination_now, make_state
@@ -88,11 +90,27 @@ def audit_world() -> tuple[object, object]:
 @pytest.fixture
 def canned_sense(audit_world: tuple[object, object],
                  monkeypatch: pytest.MonkeyPatch) -> None:
-    """`_sense` now returns a THIRD element, the player's `_last_ctx`
-    (I2) — every test that only cares about the world's state/game_data
-    passes `NO_PROFILE_CONTEXT` here unchanged; the tests that pin I2 itself
-    build their own marker context instead of going through this fixture."""
-    monkeypatch.setattr(cmd, "_sense", lambda character: (*audit_world, NO_PROFILE_CONTEXT))
+    """`_sense` now returns a THIRD and FOURTH element, the player's
+    `_last_ctx` (I2) and `_objective` (T2.1) — every test that only cares
+    about the world's state/game_data passes `NO_PROFILE_CONTEXT` and this
+    world's own `CharacterObjective` here unchanged; the tests that pin I2
+    itself build their own marker context instead of going through this
+    fixture.
+
+    ALSO stubs `cmd.root_sibling_verdicts` to an empty list. The T2.1
+    section this stub feeds is not what these T2.0-era tests are pinning —
+    driving the REAL `resolve_root` walk over this module's deliberately
+    minimal, hand-built world (see `audit_world`'s own docstring) is a
+    different module's job (`test_root_sibling_census.py`, and
+    `test_decisions_root.py` for the walk itself); tests that DO care about
+    the root section substitute this stub with their own controlled rows
+    instead."""
+    state, game_data = audit_world
+    objective = CharacterObjective.from_game_data(game_data)
+    monkeypatch.setattr(
+        cmd, "_sense",
+        lambda character: (state, game_data, NO_PROFILE_CONTEXT, objective))
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: [])
 
 
 def _publish_sibling_levels(db: str, sibling: str, levels: dict[str, int]) -> None:
@@ -113,7 +131,7 @@ def test_the_three_counts_always_print(
     "no candidates" instead of "a gate suppresses the route"."""
     _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
 
-    cmd.sibling_route_audit_command(character="C3P0")
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
     out = capsys.readouterr().out
     assert "1 eligible" in out
@@ -130,7 +148,7 @@ def test_an_ineligible_item_is_excluded_from_the_eligible_count(
     _publish_sibling_levels(db_path, "R2D2",
                             {"weaponcrafting": 10, "jewelrycrafting": 5})
 
-    cmd.sibling_route_audit_command(character="C3P0")
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
     out = capsys.readouterr().out
     assert "1 eligible" in out, "only hexstaff is eligible; already_met must not count"
@@ -155,11 +173,14 @@ def test_a_crafting_skill_with_no_recipe_is_excluded_from_eligible(
         recipes_catalog=RecipeCatalog(crafting_recipes={}, craft_yields={}),
     )
     state = make_state(skills={**_ALL_SKILLS, "jewelrycrafting": 1})
-    monkeypatch.setattr(cmd, "_sense",
-                        lambda character: (state, game_data, NO_PROFILE_CONTEXT))
+    objective = CharacterObjective.from_game_data(game_data)
+    monkeypatch.setattr(
+        cmd, "_sense",
+        lambda character: (state, game_data, NO_PROFILE_CONTEXT, objective))
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: [])
     _publish_sibling_levels(db_path, "R2D2", {"jewelrycrafting": 10})
 
-    cmd.sibling_route_audit_command(character="C3P0")
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
     out = capsys.readouterr().out
     assert "0 eligible" in out, "no_recipe_ring names a skill but has no recipe"
@@ -194,7 +215,7 @@ def test_a_load_bearing_row_prints_its_saving(
     _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
     _seed_supply_request(db_path, "R2D2")
 
-    cmd.sibling_route_audit_command(character="C3P0")
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
     out = capsys.readouterr().out
     assert "1 eligible" in out
@@ -223,7 +244,7 @@ def test_header_prints_the_pricing_scalar_and_the_priced_caveat(
     _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
     _seed_supply_request(db_path, "R2D2")
 
-    cmd.sibling_route_audit_command(character="C3P0")
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
     out = capsys.readouterr().out
     assert "fleet_supply_request_cycles: 1.0" in out
@@ -238,7 +259,7 @@ def test_header_prints_none_when_the_fleet_has_never_served_a_request(
     a zero that would misrepresent "never observed" as "observed at zero"."""
     _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
 
-    cmd.sibling_route_audit_command(character="C3P0")
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
     out = capsys.readouterr().out
     assert "fleet_supply_request_cycles: None" in out
@@ -255,7 +276,7 @@ def test_header_states_that_counts_drift_too_not_only_savings(
     say so as well, not just the savings caveat."""
     _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
 
-    cmd.sibling_route_audit_command(character="C3P0")
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
     out = capsys.readouterr().out
     assert "these counts drift between runs too" in out
@@ -276,8 +297,11 @@ def test_command_prices_with_the_players_real_context_not_no_profile(
     state = make_state(skills=_ALL_SKILLS)
     game_data = GameData()
     marker_ctx = replace(NO_PROFILE_CONTEXT, bank_accessible=False)
-    monkeypatch.setattr(cmd, "_sense", lambda character: (state, game_data, marker_ctx))
+    objective = CharacterObjective.from_game_data(game_data)
+    monkeypatch.setattr(
+        cmd, "_sense", lambda character: (state, game_data, marker_ctx, objective))
     monkeypatch.setattr(cmd, "_eligible_candidates", lambda *a, **k: [])
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: [])
 
     captured: dict[str, object] = {}
 
@@ -288,7 +312,7 @@ def test_command_prices_with_the_players_real_context_not_no_profile(
     monkeypatch.setattr(cmd, "sibling_route_verdicts", _capture_ctx)
     _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
 
-    cmd.sibling_route_audit_command(character="C3P0")
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
     ctx = captured["ctx"]
     assert ctx.bank_accessible is False, (
@@ -401,11 +425,15 @@ def test_two_items_behind_the_same_gate_produce_one_gate_line_end_to_end(
         inventory={"ring_wood": 5},
         skill_xp={"jewelrycrafting": 0}, skill_max_xp={"jewelrycrafting": 10},
     )
-    monkeypatch.setattr(cmd, "_sense", lambda character: (state, game_data, NO_PROFILE_CONTEXT))
+    objective = CharacterObjective.from_game_data(game_data)
+    monkeypatch.setattr(
+        cmd, "_sense",
+        lambda character: (state, game_data, NO_PROFILE_CONTEXT, objective))
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: [])
     _publish_sibling_levels(db_path, "R2D2", {"jewelrycrafting": 15})
     _seed_supply_request(db_path, "R2D2")
 
-    cmd.sibling_route_audit_command(character="C3P0")
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
     out = capsys.readouterr().out
     gate_lines = [line for line in out.splitlines() if line.startswith("jewelrycrafting")]
@@ -435,8 +463,10 @@ def test_outpriced_rows_print_in_their_own_section(
         recipes_catalog=RecipeCatalog(
             crafting_recipes={"outpriced_ring": {}}, craft_yields={"outpriced_ring": 1}),
     )
-    monkeypatch.setattr(cmd, "_sense",
-                        lambda character: (state, game_data, NO_PROFILE_CONTEXT))
+    objective = CharacterObjective.from_game_data(game_data)
+    monkeypatch.setattr(
+        cmd, "_sense",
+        lambda character: (state, game_data, NO_PROFILE_CONTEXT, objective))
     monkeypatch.setattr(cmd, "_eligible_candidates", lambda *a, **k: ["outpriced_ring"])
     outpriced_verdict = SiblingVerdict(
         item="outpriced_ring", skill="jewelrycrafting", required_level=15,
@@ -444,9 +474,10 @@ def test_outpriced_rows_print_in_their_own_section(
         actions_with=10, actions_without=10)
     monkeypatch.setattr(cmd, "sibling_route_verdicts",
                         lambda *a, **k: [outpriced_verdict])
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: [])
     _publish_sibling_levels(db_path, "R2D2", {"jewelrycrafting": 15})
 
-    cmd.sibling_route_audit_command(character="C3P0")
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
     out = capsys.readouterr().out
     assert "1 priced" in out
@@ -465,10 +496,166 @@ def test_no_outpriced_section_when_nothing_is_outpriced(
     rows, which only print when there is something to show."""
     _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
 
-    cmd.sibling_route_audit_command(character="C3P0")
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
     out = capsys.readouterr().out
     assert "priced but not load-bearing" not in out
+
+
+def _root_verdict(root_repr: str, item: str | None = None, chosen: bool = False,
+                  verdict: SiblingVerdict | None = None) -> RootSiblingVerdict:
+    return RootSiblingVerdict(root_repr=root_repr, item=item, chosen=chosen, verdict=verdict)
+
+
+def test_root_section_prints_all_four_counts_and_the_chosen_row(
+    db_path: str, canned_sense: None, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """T2.1: the root section must print all four counts (candidates, named,
+    sibling-priced, load-bearing) and the chosen root's line, when the chosen
+    root itself names an item that IS sibling-priced and load-bearing."""
+    chosen_verdict = _verdict("hexstaff", skill="weaponcrafting", required_level=10,
+                              actions_with=4, actions_without=40)  # priced, load-bearing
+    other = _root_verdict("ReachCharLevel(2)")
+    rows = [
+        _root_verdict("ObtainItem(code='hexstaff')", item="hexstaff",
+                      chosen=True, verdict=chosen_verdict),
+        other,
+    ]
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: rows)
+    _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
+
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
+
+    out = capsys.readouterr().out
+    assert "== root-sibling audit (C3P0) ==" in out
+    assert "2 candidate root(s)" in out
+    assert "1 name an item" in out
+    assert "1 sibling-priced" in out
+    assert "1 load-bearing" in out
+    assert "chosen root: ObtainItem(code='hexstaff')" in out
+    assert "chosen root names item: hexstaff" in out
+    assert "chosen root sibling-priced: True" in out
+    assert "chosen root load-bearing: True" in out
+
+
+def test_root_section_prints_explicit_zeros_when_nothing_is_priced(
+    db_path: str, canned_sense: None, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A root-level count of 0 sibling-priced/load-bearing roots is a real
+    and likely answer -- the walk may simply never name an item behind a
+    sibling-clearable gate -- and must print as an explicit 0, not be
+    omitted the way T2.0's catalogue-level report was found to read as
+    evidence while being a tautology."""
+    unpriced_verdict = SiblingVerdict(
+        item="hexstaff", skill="weaponcrafting", required_level=10, held_level=1,
+        best_sibling_level=10, priced=False, actions_with=40, actions_without=40)
+    rows = [_root_verdict("ObtainItem(code='hexstaff')", item="hexstaff",
+                          chosen=True, verdict=unpriced_verdict)]
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: rows)
+    _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
+
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
+
+    out = capsys.readouterr().out
+    assert "1 candidate root(s)" in out
+    assert "1 name an item" in out
+    assert "0 sibling-priced" in out
+    assert "0 load-bearing" in out
+    assert "chosen root sibling-priced: False" in out
+    assert "chosen root load-bearing: False" in out
+
+
+def test_root_section_chosen_root_names_no_item(
+    db_path: str, canned_sense: None, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A chosen root that names no item (`ReachCharLevel`/`ReachSkillLevel`)
+    must print its repr and state explicitly that the sibling route could
+    not apply this cycle -- a different finding from priced-then-outpriced,
+    and the section header must state that distinction too."""
+    rows = [_root_verdict("ReachCharLevel(char_level=6)", chosen=True)]
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: rows)
+    _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
+
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
+
+    out = capsys.readouterr().out
+    assert "1 candidate root(s)" in out
+    assert "0 name an item" in out
+    assert "0 sibling-priced" in out
+    assert "0 load-bearing" in out
+    assert "chosen root: ReachCharLevel(char_level=6)" in out
+    assert "chosen root names no item -- the sibling route could not apply this cycle" in out
+    assert "COULD NOT APPLY this cycle -- that is a different finding from the " \
+        "route being priced and then outpriced" in out
+    assert "chosen root names item" not in out
+
+
+def test_root_section_no_root_resolved(
+    db_path: str, canned_sense: None, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`resolve_root` can return `root=None` (the `CanIClearMyTier` wall
+    case); no row is `chosen=True` then, and the section must say so
+    explicitly rather than silently printing nothing."""
+    rows = [_root_verdict("ReachCharLevel(char_level=6)", chosen=False)]
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: rows)
+    _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
+
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
+
+    out = capsys.readouterr().out
+    assert "chosen root: None (resolve_root returned no root this cycle" in out
+
+
+def test_repeated_character_option_audits_each_character_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """--character/-c is repeatable; every name passed must be audited,
+    in order, exactly once each -- the substitute for a --all flag this
+    command deliberately does not have (see the module docstring)."""
+    seen: list[str] = []
+    monkeypatch.setattr(cmd, "_run_for_character", seen.append)
+
+    cmd.sibling_route_audit_command(character=None, characters=["C3P0", "R2D2"])
+
+    assert seen == ["C3P0", "R2D2"]
+
+
+def test_positional_character_and_repeated_option_combine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The legacy positional argument still names a character, and combines
+    with any `--character`/`-c` options passed alongside it rather than one
+    silently winning over the other."""
+    seen: list[str] = []
+    monkeypatch.setattr(cmd, "_run_for_character", seen.append)
+
+    cmd.sibling_route_audit_command(character="HAL", characters=["C3P0", "R2D2"])
+
+    assert seen == ["C3P0", "R2D2", "HAL"]
+
+
+def test_no_character_named_at_all_exits_with_an_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Naming zero characters (no positional, no --character) must fail
+    loudly with a usage error, not silently audit nothing."""
+    called = False
+
+    def _boom(character: str) -> None:
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(cmd, "_run_for_character", _boom)
+
+    with pytest.raises(typer.Exit) as exc_info:
+        cmd.sibling_route_audit_command(character=None, characters=[])
+
+    assert exc_info.value.exit_code == 2
+    assert not called
 
 
 def test_no_real_api_call_is_reachable(
@@ -483,10 +670,14 @@ def test_no_real_api_call_is_reachable(
     monkeypatch.setattr(cmd.Config, "from_token_file", _boom)
     monkeypatch.setattr(cmd, "ClientManager", _boom)
 
-    cmd.sibling_route_audit_command(character="C3P0")
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
 
-def _sensing_player(state: object, game_data: object, ctx: object = None) -> MagicMock:
+_UNSET = object()
+
+
+def _sensing_player(state: object, game_data: object, ctx: object = None,
+                    objective: object = _UNSET) -> MagicMock:
     player = MagicMock()
     player.state = state
     player.game_data = game_data
@@ -494,10 +685,20 @@ def _sensing_player(state: object, game_data: object, ctx: object = None) -> Mag
     # effect (`player.py:1087`); this mock stands in for that assignment
     # having already happened by the time `_sense` reads it.
     player._last_ctx = ctx if ctx is not None else NO_PROFILE_CONTEXT
+    # `_initialize()` (called by `plan_once()`, BEFORE `plan_from_state()`)
+    # sets `self._objective` unconditionally (`player.py:970`) -- this mock
+    # stands in for that assignment too. `_UNSET` (not `None`) is the
+    # default so a caller testing the "objective never got set" branch can
+    # still pass `objective=None` explicitly and have it mean that, rather
+    # than "use the default".
+    if objective is _UNSET:
+        objective = CharacterObjective.from_game_data(
+            game_data if isinstance(game_data, GameData) else GameData())
+    player._objective = objective
     return player
 
 
-def test_sense_returns_the_players_state_game_data_and_last_ctx() -> None:
+def test_sense_returns_the_players_state_game_data_last_ctx_and_objective() -> None:
     """`_sense` mirrors `objective_audit_report.py`'s construction sequence:
     Config -> ClientManager -> an in-memory LearningStore -> GamePlayer.plan_once().
     Config/ClientManager/GamePlayer are substituted so this never touches the
@@ -508,22 +709,30 @@ def test_sense_returns_the_players_state_game_data_and_last_ctx() -> None:
     `NO_PROFILE_CONTEXT` stand-in the command used to price against. The
     marker context here differs from `NO_PROFILE_CONTEXT` in a field the
     stand-in hard-codes (`bank_accessible`), so returning the wrong object
-    would be visible by identity AND by value."""
+    would be visible by identity AND by value.
+
+    T2.1: `_sense` must ALSO return `player._objective` -- the SAME
+    `CharacterObjective` `_initialize()` builds and `resolve_root` resolves
+    against on every live cycle, not a second one this command constructs
+    itself. Pinned the same way as `_last_ctx`: return-by-identity against a
+    marker object this test controls."""
     state = make_state(level=5)
     game_data = GameData()
     marker_ctx = replace(NO_PROFILE_CONTEXT, bank_accessible=False)
-    player = _sensing_player(state, game_data, marker_ctx)
+    marker_objective = CharacterObjective.from_game_data(game_data)
+    player = _sensing_player(state, game_data, marker_ctx, marker_objective)
     with (
         patch.object(cmd.Config, "from_token_file",
                      return_value=MagicMock(game_data_ttl_minutes=5)),
         patch.object(cmd, "ClientManager"),
         patch.object(cmd, "GamePlayer", return_value=player),
     ):
-        result_state, result_game_data, result_ctx = cmd._sense("C3P0")
+        result_state, result_game_data, result_ctx, result_objective = cmd._sense("C3P0")
 
     assert result_state is state
     assert result_game_data is game_data
     assert result_ctx is marker_ctx
+    assert result_objective is marker_objective
     player.plan_once.assert_called_once()
 
 
@@ -531,6 +740,25 @@ def test_sense_raises_bad_parameter_when_state_could_not_be_sensed() -> None:
     """An unsensed state must fail loudly, not report an empty audit —
     CLAUDE.md: use only API data or fail with an error."""
     player = _sensing_player(None, GameData())
+    with (
+        patch.object(cmd.Config, "from_token_file",
+                     return_value=MagicMock(game_data_ttl_minutes=5)),
+        patch.object(cmd, "ClientManager"),
+        patch.object(cmd, "GamePlayer", return_value=player),
+    ):
+        with pytest.raises(typer.BadParameter, match="could not sense state"):
+            cmd._sense("C3P0")
+
+
+def test_sense_raises_bad_parameter_when_objective_could_not_be_sensed() -> None:
+    """A state and game_data that sensed fine but an objective that never got
+    built (`player._objective` still `None`, its `__init__` default) must
+    also fail loudly -- the same "use only API data or fail" rule as the
+    state/game_data check, extended to the third thing this seam now reads
+    off the player."""
+    state = make_state(level=5)
+    game_data = GameData()
+    player = _sensing_player(state, game_data, objective=None)
     with (
         patch.object(cmd.Config, "from_token_file",
                      return_value=MagicMock(game_data_ttl_minutes=5)),
