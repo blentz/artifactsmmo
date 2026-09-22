@@ -507,6 +507,27 @@ def _root_verdict(root_repr: str, item: str | None = None, chosen: bool = False,
     return RootSiblingVerdict(root_repr=root_repr, item=item, chosen=chosen, verdict=verdict)
 
 
+def test_root_section_qualifier_states_scope(
+    db_path: str, canned_sense: None, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The root section's qualifier must state that it prices each root's own
+    item only and does not walk the acquisition plan — a zero count means no
+    chosen root is itself sibling-craftable, not that a sibling cannot help
+    supply its materials."""
+    rows = [_root_verdict("ObtainItem(code='hexstaff')", item="hexstaff",
+                          chosen=True)]
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: rows)
+    _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
+
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
+
+    out = capsys.readouterr().out
+    assert "this section prices each root's OWN item only and does not walk the " \
+        "root's acquisition plan" in out
+    assert "a zero count means no chosen root is itself sibling-craftable" in out
+
+
 def test_root_section_prints_all_four_counts_and_the_chosen_row(
     db_path: str, canned_sense: None, monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

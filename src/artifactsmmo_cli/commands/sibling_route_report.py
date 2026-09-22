@@ -294,6 +294,10 @@ def _print_root_section(
     chosen: RootSiblingVerdict | None = next((r for r in rows if r.chosen), None)
 
     print(f"\n== root-sibling audit ({character}) ==")
+    print("this section prices each root's OWN item only and does not walk the "
+          "root's acquisition plan -- a zero count means no chosen root is itself "
+          "sibling-craftable, not that a sibling cannot help supply any of its "
+          "materials.")
     print("a CHOSEN root naming no item (ReachCharLevel, ReachSkillLevel) means "
           "the sibling route COULD NOT APPLY this cycle -- that is a different "
           "finding from the route being priced and then outpriced by a cheaper "
