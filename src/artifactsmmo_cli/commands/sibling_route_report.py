@@ -46,6 +46,24 @@ the fleet's db — same discipline as `commands/objective_audit_report.py` and
 this command reads FROM (`sibling_skill_levels`, `fleet_supply_request_cycles`)
 are real, on-disk reads against the fleet's actual database — sensing live
 state, not writing it.
+
+LOAD-BEARING ROWS PRINT ONE LINE PER GATE, NOT ONE PER ITEM. `saving` is a
+per-(skill, required_level) grind quantity, not a per-item one — every item
+behind the same gate reports the same magnitude, because the shared grind
+unlock is what dominates it. A report that printed one row per item let a
+reader sum the savings column and over-credit by roughly the group's size
+(six identical `jewelrycrafting 13->20` rows summed to 6x the real saving of
+clearing that one gate). `_group_by_gate` collapses that back to one line per
+`(skill, required_level)`, listing every item behind it, and the header says
+outright that the number is not additive across the listed items.
+
+PRICED-BUT-NOT-LOAD-BEARING ROWS PRINT TOO. `priced` and `load_bearing` are
+kept separate on purpose (see `audit/sibling_route_census.py`'s module
+docstring) precisely so "outpriced" (priced, but an existing route already
+undercuts it) can be told apart from "absent" (never priced at all) — a
+report that only showed load-bearing rows made that distinction unreadable by
+omission, so the outpriced items get their own short section instead of
+vanishing into the difference between two counts.
 """
 
 from dataclasses import replace
@@ -57,7 +75,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.sibling_route_census import SiblingVerdict, sibling_route_verdicts
 from artifactsmmo_cli.client_manager import ClientManager
@@ -65,12 +83,28 @@ from artifactsmmo_cli.config import Config
 from artifactsmmo_cli.learning_db_path import default_learn_db_path
 
 
-def _sense(character: str) -> tuple[WorldState, GameData]:
-    """Live state and catalogue for CHARACTER, sensed exactly as
-    `objective-audit`/`combat-deficit` do it: a fresh, in-memory
+def _sense(character: str) -> tuple[WorldState, GameData, SelectionContext]:
+    """Live state, catalogue, and selection context for CHARACTER, sensed
+    exactly as `objective-audit`/`combat-deficit` do it: a fresh, in-memory
     `LearningStore` so this read-only command cannot write session rows into
     the fleet's own database, and `GamePlayer.plan_once()` to populate
-    `state`/`game_data` before either is read.
+    `state`/`game_data`/`_last_ctx` before any of them is read.
+
+    THE CONTEXT COMES FROM THE PLAYER, NOT `NO_PROFILE_CONTEXT`. This command
+    used to price every route against `NO_PROFILE_CONTEXT`, a stand-in whose
+    own docstring says it "is NOT a substitute for the player's real context"
+    -- it forces `bank_accessible=True` unconditionally, carries no gear/step
+    profile, no sibling bank/order claims, and no task draw, any one of which
+    can flip a `load_bearing` verdict against what production would actually
+    decide. `plan_once()` -> `plan_from_state()` sets `self._last_ctx = ctx`
+    (`player.py:1087`) using the SAME `_selection_context` call production's
+    own per-cycle decide uses (`commands/combat_deficit_report.py:62` is the
+    working precedent for reading it in exactly this family of commands). The
+    player's own `sibling_skills` is empty here -- `_refresh_sibling_reads`
+    no-ops without an attached coordination store, which this read-only sense
+    deliberately never attaches (see the module docstring) -- so the caller
+    overrides only that one field, the same `replace`-one-field discipline
+    `sibling_route_census.py` already uses for its own baseline arm.
     """
     config = Config.from_token_file()
     ClientManager().initialize(config)
@@ -80,10 +114,10 @@ def _sense(character: str) -> tuple[WorldState, GameData]:
         player = GamePlayer(character=character, history=store,
                             game_data_ttl_minutes=config.game_data_ttl_minutes)
         player.plan_once()
-        state, game_data = player.state, player.game_data
+        state, game_data, ctx = player.state, player.game_data, player._last_ctx
         if state is None or game_data is None:
             raise typer.BadParameter(f"could not sense state for {character!r}")
-        return state, game_data
+        return state, game_data, ctx
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -129,19 +163,72 @@ def _eligible_candidates(
     return candidates
 
 
-def _print_load_bearing_row(v: SiblingVerdict) -> None:
+def _group_by_gate(
+    load_bearing: list[SiblingVerdict],
+) -> list[tuple[str, int, list[SiblingVerdict]]]:
+    """Load-bearing verdicts grouped by the GATE they share, `(skill,
+    required_level)`, sorted largest-saving-first -- the level of granularity
+    the printed magnitude is actually true at (I1).
+
+    `_gated_craft_option`'s unlock key is `skill:{skill}:{level}` and
+    `acquisition_cost_core.py` pays that unlock ONCE PER KEY, so every item
+    behind the same gate shares one grind cost; `_sibling_craft_option`'s key
+    is `sibling:{item}`, paid once PER ITEM. Printing one row per item put a
+    per-gate quantity (the grind saving) on a per-item line, and a reader
+    summing that column over-credited by roughly the group's size -- six
+    `jewelrycrafting 13->20` items each reporting the identical 5,717-action
+    saving summed to 34,302 when the real saving of clearing that one gate is
+    ~5,717, not a multiple of it. Grouping by `(skill, required_level)`
+    (not by item) is what makes that arithmetic honest: one line, one
+    magnitude, the item list stays visible beside it.
+
+    `held_level`/`best_sibling_level` are also gate-level facts, not
+    per-item ones -- both are `state.skills.get(skill, ...)` /
+    `ctx.sibling_skills.get(skill, ...)` reads keyed on the skill alone, so
+    every member of a gate group carries the identical pair; this function
+    does not need to reconcile them.
+    """
+    groups: dict[tuple[str, int], list[SiblingVerdict]] = {}
+    for v in load_bearing:
+        groups.setdefault((v.skill, v.required_level), []).append(v)
+    ordered = sorted(
+        groups.items(),
+        key=lambda kv: max(v.saving for v in kv[1]), reverse=True)
+    return [(skill, level, members) for (skill, level), members in ordered]
+
+
+def _print_gate_line(skill: str, required_level: int, members: list[SiblingVerdict]) -> None:
+    first = members[0]
+    items = ", ".join(sorted(v.item for v in members))
+    # Observed live: every item behind one gate reports the SAME saving,
+    # because the dominant term on both arms is the shared unlock cost (the
+    # grind, or the fleet's flat `fleet_supply_request_cycles` sibling-request
+    # price) and per-item recipe-material costs are comparatively negligible.
+    # Nothing in the pricer GUARANTEES that -- a gate whose members need
+    # materially different quantities of their own recipe's materials could
+    # print a genuine range -- so this prints the range honestly rather than
+    # picking one member's number and hiding the rest.
+    savings = sorted({v.saving for v in members})
+    saving_desc = (f"saving {savings[0]}" if len(savings) == 1
+                   else f"saving {savings[0]}-{savings[-1]} (varies within this gate)")
+    print(f"{skill:<16} lvl {first.held_level}->{required_level} "
+          f"(sibling holds {first.best_sibling_level}) {saving_desc} actions "
+          f"-- {len(members)} item(s): {items}")
+
+
+def _print_outpriced_row(v: SiblingVerdict) -> None:
     print(f"{v.item:<25} {v.skill:<16} lvl {v.held_level}->{v.required_level} "
-          f"(sibling holds {v.best_sibling_level}) "
-          f"saving {v.saving} actions ({v.actions_with} with vs "
-          f"{v.actions_without} without)")
+          f"(sibling holds {v.best_sibling_level}) priced but not cheaper "
+          f"(saving {v.saving})")
 
 
 def sibling_route_audit_command(
     character: str = typer.Argument(..., help="Character to audit"),
 ) -> None:
     """Print the eligible / priced / load-bearing counts for the sibling-craft
-    route, then the load-bearing rows, largest saving first."""
-    state, game_data = _sense(character)
+    route, then the load-bearing rows grouped by gate (largest saving first),
+    then the priced-but-not-load-bearing (outpriced) rows."""
+    state, game_data, player_ctx = _sense(character)
 
     db_path = default_learn_db_path()
     coordination = CoordinationStore(db_path=db_path, character=character)
@@ -149,12 +236,13 @@ def sibling_route_audit_command(
     store = LearningStore(db_path, character=character)
 
     candidates = _eligible_candidates(state, game_data, sibling_skills)
-    ctx = replace(NO_PROFILE_CONTEXT, sibling_skills=sibling_skills)
+    ctx = replace(player_ctx, sibling_skills=sibling_skills)
     verdicts = sibling_route_verdicts(state, game_data, ctx, store, candidates)
 
     priced = [v for v in verdicts if v.priced]
-    load_bearing = sorted((v for v in verdicts if v.load_bearing),
-                          key=lambda v: v.saving, reverse=True)
+    load_bearing = [v for v in verdicts if v.load_bearing]
+    outpriced = [v for v in priced if not v.load_bearing]
+    gates = _group_by_gate(load_bearing)
 
     print(f"== sibling-route audit ({character}) ==")
     # THE ONE SCALAR `priced` ACTUALLY TURNS ON. `_sibling_craft_option` reads
@@ -167,14 +255,28 @@ def sibling_route_audit_command(
     print(f"fleet_supply_request_cycles: {supply_cycles}")
     print(f"{len(candidates)} eligible")
     print(f"{len(priced)} priced")
-    print(f"{len(load_bearing)} load-bearing")
+    print(f"{len(load_bearing)} load-bearing ({len(gates)} gate(s))")
     print("priced can only diverge from eligible when fleet_supply_request_cycles "
           "is None or <= 0 (every route declines at once); priced == eligible is "
           "the expected case, not per-route confirmation.")
-    if load_bearing:
-        print("\nload-bearing routes (largest saving first):")
+    print("these counts drift between runs too, not just the savings below: "
+          "eligible/priced/load-bearing are read off THIS character's live "
+          "skills, so a gate an earlier run reported as eligible drops out the "
+          "moment the character's own level clears it.")
+    if gates:
+        print("\nload-bearing routes, grouped by gate (largest saving first):")
         print("savings are priced off a live-updating skill_grind_rate "
               "observation and will drift between runs -- a different number "
               "on a rerun is not a regression.")
-        for v in load_bearing:
-            _print_load_bearing_row(v)
+        print("EACH LINE IS ONE GATE, NOT ONE ITEM: the grind unlock behind a "
+              "gate is paid ONCE PER (skill, required_level), while the sibling "
+              "unlock is paid once per item, so the saving below is NOT "
+              "additive across the listed items -- do not multiply it by the "
+              "item count.")
+        for skill, required_level, members in gates:
+            _print_gate_line(skill, required_level, members)
+    if outpriced:
+        print("\npriced but not load-bearing (an existing route already undercuts "
+              "the sibling craft):")
+        for v in sorted(outpriced, key=lambda v: v.item):
+            _print_outpriced_row(v)
