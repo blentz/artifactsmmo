@@ -17,6 +17,7 @@ from artifactsmmo_cli.commands.macro_research import macro_research as macro_res
 from artifactsmmo_cli.commands.objective_audit_report import objective_audit_command
 from artifactsmmo_cli.commands.plan import plan as plan_command
 from artifactsmmo_cli.commands.play import play as play_command
+from artifactsmmo_cli.commands.sibling_route_report import sibling_route_audit_command
 from artifactsmmo_cli.config import Config
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 from artifactsmmo_cli.utils.formatters import format_error_message
@@ -75,6 +76,9 @@ app.command("combat-loadout-report",
 app.command("objective-audit",
             help="Read-only: what the root walk chose, what it paid, what it cannot reach")(
     objective_audit_command)
+app.command("sibling-route-audit",
+            help="Read-only: whether a sibling's crafting skill changes any price")(
+    sibling_route_audit_command)
 app.add_typer(stats.app, name="stats", help="Inspect AI session traces (traces.jsonl)")
 
 
