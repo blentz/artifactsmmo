@@ -118,6 +118,12 @@ class CycleBase(SQLModel):
     climb from a gear gate's skill climb: both are `ReachSkillLevel(...)`. This
     column is that distinction, recorded by the only component that knows it.
 
+    IT IS THE WALK'S OWN PICK, not the root that ended up executing. Servability
+    promotion can displace the tree's choice to the trunk, and the census this
+    column feeds exists to measure whether the trunk-first ordering costs
+    anything — so a promoted cycle is grouped by what the walk WANTED. `"guard"`
+    means the arbiter's guard ladder took the cycle away from the walk entirely.
+
     NULLABLE, NOT BACK-FILLED, like `skill_levels_json` and `error_text`: the
     rows already in the wild were written without a group and inventing one
     would fabricate an observation. Consumers exclude NULL."""
@@ -127,7 +133,13 @@ class CycleBase(SQLModel):
 
     Distinct from `selected_goal`, which is the step. A root of
     `ObtainItem(iron_sword)` and a step of `GatherMaterials(iron_ore)` are the
-    normal case, not an anomaly."""
+    normal case, not an anomaly.
+
+    Also distinct from `root_group`, which names the walk's own pick: this is
+    the root that ACTUALLY RAN, promotion included. The pair is what separates
+    "the walk chose the trunk" (`trunk` + a `ReachCharLevel` repr) from "the
+    walk chose gear and promotion moved it to the trunk" (`gear` + a
+    `ReachCharLevel` repr)."""
 
     # Goal completion tracking
     cycles_to_satisfy: int | None = None

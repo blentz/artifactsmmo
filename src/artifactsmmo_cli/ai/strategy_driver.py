@@ -733,6 +733,23 @@ class StrategyArbiter:
         # per-cycle trace so the offline ladder lockstep replays selection
         # against observed fires instead of re-deriving opaque predicates.
         self.last_fires: dict[str, object] = {}
+        # The repr of the GUARD-band goal the most recent `select()` actually
+        # chose, or None when the cycle was won by any other band (or by
+        # nothing). This is the ONLY place the fact exists: a guard preempts the
+        # walk through `active_guards` -> `_build_candidates` -> `select_pure`,
+        # and `StrategyDecision.interrupt` — which looks like it records this —
+        # is hardcoded None by `progression_tree.decide_tree`, its sole
+        # production producer. The learning store's `root_group` column reads
+        # this, so without it every RestoreHP / DepositInventory /
+        # DiscardOverstock / GEAR_REVIEW cycle would be filed under whichever
+        # root the walk last resolved and never ran (~15% of C3P0's rows).
+        #
+        # A `last_fires["guards"]` entry is NOT the same fact: a guard can fire
+        # and still lose the walk (satisfied, suppressed, or no plan), and
+        # crediting the cycle to it would be the same misattribution pointed the
+        # other way. Matched by OBJECT IDENTITY against the candidate list, not
+        # by repr, because one repr can appear in two bands.
+        self.last_selected_guard: str | None = None
         self._memo = DoomedMemo()
         self._cycle = 0
         # Whether the most recent `_plans` call ended in a budget TIMEOUT (vs an
@@ -1063,6 +1080,17 @@ class StrategyArbiter:
             candidates, suppressed, worth_suppressed, state, game_data, actions, ctx)
 
         self._committed_repr = new_committed
+        # WHICH GUARD WON, if one did — set unconditionally so a cycle the walk
+        # won clears the previous cycle's guard instead of inheriting it. The
+        # match is `c.goal is chosen`: `select_pure` returns a candidate's own
+        # goal OBJECT, and identity distinguishes a guard-band RestoreHP from a
+        # same-repr candidate in another band the way a repr comparison could
+        # not. On a plan-cache HIT the player never re-enters `select`, and the
+        # value stays correct there because the reused plan is the same goal
+        # this decision chose (`_plan_or_reuse`).
+        self.last_selected_guard = next(
+            (c.repr_ for c in candidates
+             if c.band == BAND_GUARD and c.goal is chosen), None)
         self.goals_tried = self._dedupe_goals_tried()
         # THE FIRST CANDIDATE ACTUALLY ATTEMPTED, when it produced no plan and
         # something LOWER-ranked ran instead. Not "ranked[0]": `select_pure`

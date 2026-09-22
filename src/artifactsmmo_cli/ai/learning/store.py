@@ -588,9 +588,15 @@ class LearningStore:
 
         `recent_goal_cycles` narrows to one goal and attributes forced recovery to
         it; this is the whole stream, which is what a census grouping by root
-        branch needs. Same failure discipline as its sibling: a SQLAlchemyError
-        returns an empty list rather than a partial one, so a caller cannot mistake
-        a broken read for an idle character.
+        branch needs.
+
+        Same failure discipline as its sibling: a SQLAlchemyError returns an empty
+        list rather than a partial one. THAT EMPTY LIST IS INDISTINGUISHABLE from
+        an idle character's — it is the best-effort store's standing contract
+        (`TestDegradationOnDbError`: every query returns its documented default),
+        and the price of it is that a caller cannot tell a broken read from an
+        empty history. What it does buy is that no caller ever sees a TRUNCATED
+        window and reports a rate over it as if it were the whole thing.
         """
         try:
             with SqlSession(self._engine) as s:

@@ -85,18 +85,37 @@ Four gates result: `troll` -> `copper_axe` (gap 2), `dragon` -> `copper_axe`
 `test_nearest_gate_first` compares real values instead of sorting a
 single-element or all-equal list — and `hydra`, which contributes nothing.
 
+SECOND-ROUND DEFECT: THE UNIT WAS THE STEP. The census emitted one row per
+gated chain step and sorted on that step's own gap, but `combat_deficit` sets
+`closes=True` only after the LAST step wins the fight — so every step is
+required and a monster's cost is its DEEPEST gate, not its shallowest. A
+shallow non-binding step could therefore represent its monster near the top of
+a list the reader treats as a priority order, and the report's `[:20]`
+truncation could cut the step that actually binds. `two_gate_state` below is
+the world that exhibits it: the SAME catalogue, with the character's
+gearcrafting at 0 instead of 1, which turns troll's already-held `leather_vest`
+step into a genuine gate at gap 1 beside its binding `copper_axe` at gap 2.
+Measured: troll's steps become `[leather_vest (gap 1), copper_axe (gap 2)]`,
+its reported gap is 2, and it therefore does NOT outrank `dragon` (gap 2) on a
+step it does not need alone. The chain itself is unchanged by the skill level —
+`combat_deficit`'s pool is levels-and-stats, not craftability — so this varies
+exactly one thing.
+
 Every number and every chain in this docstring was read off a live call to
 `combat_deficit`/`gated_xp_sources` against the exact fixture below during
 development (see `.superpowers/sdd/PLAN_season9_t1_objective_audit/task-5-report.md`,
-fix-round section, for the recorded output), not inferred from the formula or
-carried over from the per-monster calibration that turned out to be wrong.
+fix-round section, for the recorded output, and `final-fix-report.md` for the
+two-gate re-measurement), not inferred from the formula or carried over from the
+per-monster calibration that turned out to be wrong.
 """
 
 import pytest
 
+from artifactsmmo_cli.ai.combat_deficit import CombatDeficit, DeficitStep
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState
-from artifactsmmo_cli.audit.xp_gate_census import GatedSource, gated_xp_sources
+from artifactsmmo_cli.audit import xp_gate_census
+from artifactsmmo_cli.audit.xp_gate_census import GatedSource, GatedStep, gated_xp_sources
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -160,11 +179,38 @@ def gate_state() -> WorldState:
                       skills={"weaponcrafting": 1, "gearcrafting": 1})
 
 
-def test_gap_is_levels_between_held_and_required() -> None:
-    source = GatedSource(monster="wolf", monster_level=15, blocking_item="iron_sword",
-                         item_type="weapon", skill="weaponcrafting",
-                         required_level=20, held_level=6)
-    assert source.gap == 14
+@pytest.fixture
+def two_gate_state() -> WorldState:
+    """`gate_state`, with gearcrafting at 0 instead of 1 — the ONE difference.
+
+    That turns troll's `leather_vest` chain step (gearcrafting 1) from an
+    already-craftable step into a genuine gate at gap 1, standing beside its
+    binding `copper_axe` gate at gap 2. It is the minimal world in which a
+    monster has two gates of DIFFERENT depth, which is the only shape that can
+    tell per-step ranking from per-monster ranking apart."""
+    return make_state(level=5, hp=150, max_hp=150, equipment={},
+                      inventory={"wooden_stick": 1},
+                      skills={"weaponcrafting": 1, "gearcrafting": 0})
+
+
+def test_step_gap_is_levels_between_held_and_required() -> None:
+    step = GatedStep(blocking_item="iron_sword", item_type="weapon",
+                     skill="weaponcrafting", required_level=20, held_level=6)
+    assert step.gap == 14
+
+
+def test_a_monsters_gap_is_its_deepest_gate_not_its_shallowest() -> None:
+    """Every step in a closing chain is required, so the fight opens only once
+    the deepest gate does. Reporting the shallowest would price a monster at a
+    level that does not buy the fight."""
+    source = GatedSource(monster="wolf", monster_level=15, steps=(
+        GatedStep(blocking_item="gold_ring", item_type="ring",
+                  skill="jewelrycrafting", required_level=10, held_level=5),
+        GatedStep(blocking_item="iron_sword", item_type="weapon",
+                  skill="weaponcrafting", required_level=20, held_level=10),
+    ))
+    assert source.gap == 10
+    assert source.binding.blocking_item == "iron_sword"
 
 
 def test_a_winnable_monster_is_not_a_gated_source(gate_state, gate_game_data) -> None:
@@ -177,7 +223,7 @@ def test_a_winnable_monster_is_not_a_gated_source(gate_state, gate_game_data) ->
 def test_an_unwinnable_monster_names_the_skill_that_gates_its_upgrade(
         gate_state, gate_game_data) -> None:
     sources = {s.monster: s for s in gated_xp_sources(gate_state, gate_game_data)}
-    wolf = sources["wolf"]
+    wolf = sources["wolf"].binding
     assert wolf.item_type == "weapon"
     assert wolf.skill == "weaponcrafting"
     assert wolf.required_level > wolf.held_level
@@ -188,12 +234,91 @@ def test_a_step_the_character_can_already_craft_is_not_a_gate(
     # A chain step whose crafting level is already held is not a wall; reporting
     # it would put an open gate in a list of closed ones.
     sources = gated_xp_sources(gate_state, gate_game_data)
-    assert all(s.required_level > s.held_level for s in sources)
+    assert all(step.required_level > step.held_level
+               for s in sources for step in s.steps)
+    # troll's leather_vest step (gearcrafting 1, exactly what gate_state holds)
+    # is the one this excludes, so troll is left with copper_axe alone.
+    troll = {s.monster: s for s in sources}["troll"]
+    assert [step.blocking_item for step in troll.steps] == ["copper_axe"]
 
 
 def test_nearest_gate_first(gate_state, gate_game_data) -> None:
     gaps = [s.gap for s in gated_xp_sources(gate_state, gate_game_data)]
     assert gaps == sorted(gaps)
+
+
+def test_a_multi_gate_monster_is_ranked_on_the_binding_step(
+        two_gate_state, gate_game_data) -> None:
+    """The I1 regression test. troll's chain needs gearcrafting +1 AND
+    weaponcrafting +2; the fight costs +2. Under per-step rows sorted on the
+    step's own gap, the +1 step would put troll at the head of the list — ahead
+    of dragon, which is genuinely the same price — and a reader taking the top
+    of that list as a priority order would conclude gearcrafting +1 unlocks a
+    fight it does not."""
+    sources = {s.monster: s for s in gated_xp_sources(two_gate_state, gate_game_data)}
+    troll = sources["troll"]
+    assert [step.blocking_item for step in troll.steps] == ["leather_vest", "copper_axe"]
+    assert [step.gap for step in troll.steps] == [1, 2]
+    assert troll.gap == 2
+    assert troll.binding.blocking_item == "copper_axe"
+    # And the shallow step does not buy troll a better rank than dragon, whose
+    # single gate is the same copper_axe at the same depth.
+    assert sources["dragon"].gap == 2
+    assert [s.monster for s in gated_xp_sources(two_gate_state, gate_game_data)] == [
+        "dragon", "troll", "wolf"]
+
+
+@pytest.fixture
+def open_gate_state() -> WorldState:
+    """`gate_state`, with weaponcrafting at 3 — enough for `copper_axe`.
+
+    troll and dragon then have closing chains whose every step the character can
+    already craft, so they are unwinnable TODAY but behind no skill gate at all.
+    They must produce no row: a monster in this list is a monster a skill level
+    would unlock, and one with an empty gate list is a different finding
+    (the gear is craftable now; something else is in the way)."""
+    return make_state(level=5, hp=150, max_hp=150, equipment={},
+                      inventory={"wooden_stick": 1},
+                      skills={"weaponcrafting": 3, "gearcrafting": 1})
+
+
+def test_a_closing_chain_with_no_remaining_gate_produces_no_row(
+        open_gate_state, gate_game_data) -> None:
+    sources = {s.monster for s in gated_xp_sources(open_gate_state, gate_game_data)}
+    assert sources == {"wolf"}
+
+
+def test_a_repeated_chain_code_is_one_gate_not_two(monkeypatch, gate_state) -> None:
+    """`combat_deficit.py:326` increments the projected inventory without
+    removing the code from the pool, so one chain can append the same code
+    twice. That is one gate observed twice: counted twice it would double a
+    monster's step list and consume two slots of the report's top 20."""
+    step = DeficitStep(code="iron_sword", item_type="weapon", item_level=1,
+                       crafting_skill="weaponcrafting", crafting_level=20,
+                       margin_after=9)
+    monkeypatch.setattr(xp_gate_census, "combat_deficit",
+                        lambda state, game_data, monster: CombatDeficit(
+                            monster=monster, baseline_margin=-86,
+                            chain=(step, step), closes=True))
+    game_data = GameData()
+    game_data._monster_level = {"wolf": 3}
+
+    sources = gated_xp_sources(gate_state, game_data)
+
+    assert len(sources) == 1
+    assert [s.blocking_item for s in sources[0].steps] == ["iron_sword"]
+
+
+def test_a_missing_skill_level_fails_loudly_rather_than_defaulting(
+        monkeypatch, gate_game_data) -> None:
+    """`world_state` builds `skills` with `_require(...)` for every trainable
+    skill, so an absent key is missing API data. A `.get(skill, 0)` default
+    would silently INFLATE the gap — a phantom wall ranked first — which is
+    exactly what "use only API data, or fail with an error" forbids."""
+    stateless = make_state(level=5, hp=150, max_hp=150, equipment={},
+                           inventory={"wooden_stick": 1}, skills={"gearcrafting": 1})
+    with pytest.raises(KeyError, match="weaponcrafting"):
+        gated_xp_sources(stateless, gate_game_data)
 
 
 def test_an_unclosable_deficit_is_not_a_gated_source(gate_state, gate_game_data) -> None:

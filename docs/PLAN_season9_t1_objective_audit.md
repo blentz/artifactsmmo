@@ -1269,3 +1269,30 @@ runs which found something reports a rate nobody measured.
    this branch has had twice; if it is absent, say so rather than assuming it held.
 4. How many gated sources share one skill. A single skill gating many XP sources is the
    strongest argument for promoting skills out of orphan status.
+
+---
+
+## Fix wave (post-review) — this plan's code snippets are now HISTORY
+
+The whole-branch review found eight defects in the shipped implementation; they are listed
+with file:line in `.superpowers/sdd/PLAN_season9_t1_objective_audit/final-findings.md` and
+the fixes are recorded in `final-fix-report.md` beside it. Four of them changed an API this
+plan quotes verbatim, so read the source, not the snippets above:
+
+- `root_group_of` now takes `(guard, chosen_root, blocked_target, promoted_from)`. The guard
+  argument is `StrategyArbiter.last_selected_guard` — the guard the arbiter actually SELECTED
+  — not `StrategyDecision.interrupt`, which `decide_tree` hardcodes to None and which could
+  therefore never produce the `"guard"` label in production. The classifier also groups on
+  the walk's own pick (`promoted_from or chosen_root`), because servability promotion can
+  walk a gear pick to the trunk and counting that as the trunk winning inverts the census's
+  own question.
+- `gated_xp_sources` returns one `GatedSource` PER MONSTER, carrying a tuple of `GatedStep`.
+  A monster's `gap` is its deepest gate, because `combat_deficit` only sets `closes` after
+  the last step wins; ranking on a per-step gap let a non-binding step represent its monster
+  in a list read as a priority order.
+- `currency_rates` refuses `RECOVERY_GOAL` and excludes any cycle whose cooldown is not a
+  POSITIVE number of seconds (0.0 was previously kept, contributing currency to the numerator
+  and nothing to the denominator).
+- `objective_audit_command` bounds every section to ONE window — the id floor of its single
+  `recent_cycles(window)` read — and prints the row count, id span and timestamp span each
+  section actually used.

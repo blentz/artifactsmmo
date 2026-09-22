@@ -14,12 +14,30 @@ the attribution rule has exactly one implementation and this is not it.
 A cycle whose `actual_cooldown_seconds` is None is EXCLUDED. The server did not
 report a cooldown for it, and denominating a rate on a fabricated zero produces
 an infinite rate — the census would then rank an unmeasured goal first.
+
+SO IS A CYCLE WHOSE COOLDOWN IS 0.0, and for exactly the same reason. The two
+were split for one release: None was dropped while 0.0 contributed its currency
+to the numerator and nothing to the denominator, which is the infinite-rate
+defect wearing a different value (C3P0 carries 1,356 zero-cooldown rows — every
+`<no_plan>` cycle is written with 0.0, and so is every cycle the server answered
+without a cooldown block). A row that reports no elapsed time cannot price
+anything per second, whichever way it says so.
+
+`RECOVERY_GOAL` IS NOT A BUNDLE and is refused outright. Recovery owns its own
+rows by design (`ai/learning/recovery_attribution.py:43-47`) AND those same rows
+sit in the denominator of every grind whose fighting forced them, so scoring it
+beside them double-counts. More basically, it is not choosable: nothing can
+decide to spend a season resting. It is the largest row the census would
+otherwise produce (5,000 cycles / 232,329 s for C3P0) and it is dominated today,
+so the frontier is unchanged by its removal — but nothing guaranteed that, and a
+season-9 design must not be able to read "rest" off a Pareto frontier.
 """
 
 import json
 from dataclasses import dataclass, field
 
 from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.recovery_attribution import RECOVERY_GOAL
 
 
 @dataclass(frozen=True)
@@ -60,10 +78,21 @@ def currency_rates(cycles_by_goal: dict[str, list[Cycle]]) -> list[GoalRates]:
     goal — already carrying the recovery cycles the goal's own fighting forced.
     A goal whose every cycle lacks a measured cooldown is DROPPED, not reported
     as zero: "not measured" and "measured as nothing" are different findings.
+
+    `RECOVERY_GOAL` is skipped entirely (module docstring): it is a forced
+    consequence of fighting, not a bundle anything can choose, and its rows are
+    already counted inside every grind that forced them.
+
+    A cycle is measured only when its cooldown is a POSITIVE number of seconds.
+    `cycles` therefore counts the measured rows, not the rows handed in, and a
+    goal's `seconds` is the time those rows actually report.
     """
     rows: list[GoalRates] = []
     for goal, cycles in cycles_by_goal.items():
-        measured = [c for c in cycles if c.actual_cooldown_seconds is not None]
+        if goal == RECOVERY_GOAL:
+            continue
+        measured = [c for c in cycles if c.actual_cooldown_seconds is not None
+                    and c.actual_cooldown_seconds > 0.0]
         seconds = sum(c.actual_cooldown_seconds or 0.0 for c in measured)
         if seconds <= 0.0:
             continue

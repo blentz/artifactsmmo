@@ -1,6 +1,7 @@
 """Per-goal currency rates over goal-attributed cycle slices."""
 
 from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.recovery_attribution import RECOVERY_GOAL
 from artifactsmmo_cli.audit.currency_rate_census import GoalRates, currency_rates
 
 
@@ -30,6 +31,39 @@ def test_skill_xp_is_summed_per_skill() -> None:
     ]})
     assert rows[0].skill_xp == {"cooking": 20, "fishing": 3}
     assert rows[0].skill_xp_per_second == 2.3
+
+
+def test_recovery_is_not_a_bundle_and_is_refused() -> None:
+    """Forced recovery owns its own rows AND sits in the denominator of every
+    grind that forced them, so scoring it beside them double-counts. It is also
+    not choosable: nothing can decide to spend a season resting. Live it is the
+    largest slice the census would otherwise produce (5,000 cycles / 232,329 s
+    for C3P0), and a season-9 design must not be able to read it off a Pareto
+    frontier just because it happened to stop being dominated."""
+    rows = currency_rates({
+        RECOVERY_GOAL: [_cycle(10.0, 0, '{"cooking": 500}', 500)],
+        "Grind": [_cycle(10.0, 10)],
+    })
+    assert [r.goal for r in rows] == ["Grind"]
+
+
+def test_a_zero_cooldown_cycle_contributes_neither_time_nor_currency() -> None:
+    """A row reporting 0.0 seconds is the infinite-rate defect wearing a
+    different value: keeping its currency in the numerator while it adds nothing
+    to the denominator prices it at infinity. C3P0 carries 1,356 such rows —
+    every `<no_plan>` cycle is written with 0.0 — so this is a live population,
+    not a corner."""
+    rows = currency_rates({"Mixed": [_cycle(10.0, 100), _cycle(0.0, 900, "{}", 900)]})
+    assert len(rows) == 1
+    assert rows[0].cycles == 1
+    assert rows[0].seconds == 10.0
+    assert rows[0].char_xp == 100
+    assert rows[0].gold == 0
+    assert rows[0].char_xp_per_second == 10.0
+
+
+def test_a_goal_with_only_zero_cooldown_cycles_is_dropped() -> None:
+    assert currency_rates({"Idle": [_cycle(0.0, 5)]}) == []
 
 
 def test_a_cycle_with_no_measured_cooldown_is_excluded_not_defaulted() -> None:

@@ -4147,11 +4147,27 @@ class GamePlayer:
             # so `_last_error` still holds the PREVIOUS failure's message and
             # writing it unconditionally would blame a cycle that succeeded.
             error_text=self._last_error if outcome.startswith("error") else None,
+            # THE GUARD FACT COMES FROM THE ARBITER, not from the decision.
+            # `StrategyDecision.interrupt` is hardcoded None by `decide_tree`
+            # (its only production producer), so reading it here recorded the
+            # last-resolved root's group on every guard cycle — RestoreHP,
+            # DepositInventory, DiscardOverstock, CraftRelief, RecycleSurplus
+            # and GEAR_REVIEW alike, ~15% of C3P0's recent rows. The arbiter is
+            # where a guard actually wins, so it is what is asked.
+            #
+            # `promoted_from` rides along for the same reason: it is the tree's
+            # OWN pick when servability promotion displaced it, and this census
+            # measures what the walk chose, not what promotion left running.
             root_group=root_group_of(
-                self._last_decision.interrupt if self._last_decision is not None else None,
+                self._arbiter.last_selected_guard,
                 self._last_decision.chosen_root if self._last_decision is not None else None,
                 self._last_decision.blocked_target if self._last_decision is not None else None,
+                self._last_decision.promoted_from if self._last_decision is not None else None,
             ),
+            # The root that actually EXECUTED, promotion included — deliberately
+            # NOT the pick `root_group` classifies. The pair is what makes a
+            # promoted-to-trunk cycle (`gear` + a `ReachCharLevel` repr) legible
+            # as promotion rather than as the trunk winning on its own.
             root_repr=(repr(self._last_decision.chosen_root)
                        if self._last_decision is not None
                        and self._last_decision.chosen_root is not None else None),

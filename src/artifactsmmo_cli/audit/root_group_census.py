@@ -9,6 +9,18 @@ A NULL `root_group` is a row written before the column existed (2026-09-21). It
 is reported as `unattributed` and counted in no group: treating it as a choice
 would let pre-migration history decide a post-migration verdict.
 
+WHAT EACH LABEL COUNTS (see `ai/tiers/root_group.py` for the rule itself):
+
+* `guard` is a cycle the arbiter's guard ladder took away from the walk — a
+  guard that fired AND won `select_pure`, not one that merely fired. About 15%
+  of C3P0's recent rows are these, and before the fix they would have carried
+  the group of whatever root the walk resolved and then never ran.
+* every other label is the branch of the walk's OWN pick, before servability
+  promotion. A promoted-to-trunk cycle counts as `gear`, not `trunk` —
+  otherwise this census, whose whole question is whether the trunk-first
+  ordering costs anything, would report the trunk winning cycles the tree gave
+  to gear.
+
 The string label `"none"` is a MIXED bucket: `root_group_of` returns it when
 `chosen_root is None`, which happens both when the walk found no root AND when
 a session resumed from a plan cache where `_last_decision` was None but a root

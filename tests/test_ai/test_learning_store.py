@@ -1016,6 +1016,15 @@ class TestDegradationOnDbError:
         _break_engine(store)
         assert store.recent_goal_cycles("ReachCharLevel(5)") == []
 
+    def test_recent_cycles_returns_empty(self, tmp_db_path):
+        """The unfiltered stream degrades like its filtered sibling. A partial
+        window would be worse than none: the objective audit takes its id floor
+        from this read and denominates every other section on it, so a truncated
+        result would silently narrow the whole report's era."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.recent_cycles(window=10) == []
+
     def test_observed_drop_rate_returns_none(self, tmp_db_path):
         """A DB fault yields no rate, so the caller keeps the static table."""
         store = LearningStore(db_path=tmp_db_path, character="x")

@@ -9,6 +9,18 @@ and the design decision is made against that set.
 
 Seconds are the shared denominator, not a fourth axis: every currency here is
 already per second.
+
+IT DOES NOT WEIGHT BY SAMPLE SIZE, and must not be read as if it did. Domination
+is a comparison of three rates and nothing else, so a bundle measured over 3
+cycles and 34.7 seconds (`CraftRelief(apple_pie)`, live, at 50.98 skill-xp/s)
+reaches the frontier beside one measured over 5,000 — and a three-cycle outlier
+is exactly the kind of number that survives domination, because a small sample
+is what an extreme rate is usually made of. There is no floor here on purpose:
+inventing one would be a weight nobody measured, which is the epicycle above.
+Instead `GoalRates.cycles` rides into the frontier's own report line so the
+reader sees n beside every rate and applies their own judgement. A season-9
+design decision taken off this set without reading n is a decision taken on an
+unquantified sample.
 """
 
 from artifactsmmo_cli.audit.currency_rate_census import GoalRates
