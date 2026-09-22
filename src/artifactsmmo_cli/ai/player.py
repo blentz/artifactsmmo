@@ -2688,12 +2688,24 @@ class GamePlayer:
             # goal_name(s) whose records emitted them. Drop "<none>" (the no-plan
             # placeholder, not a suppressible goal).
             #
-            # Keyed on `action_key` (the quantity-free `Action.learning_key()`),
-            # matching the detector rule that fired this signal. Keyed on the
-            # repr, a closure gather re-sized each cycle tallies under a fresh
-            # bucket per batch size and never reaches the threshold — the tally
-            # and the detector would also disagree about what "the same action"
-            # is. See `CycleRecord.action_key`.
+            # Keyed on `action_key` (`Action.learning_key()`), matching the
+            # detector rule that fired this signal. Keyed on the repr, a closure
+            # gather re-sized each cycle tallies under a fresh bucket per batch
+            # size and never reaches the threshold — the tally and the detector
+            # would also disagree about what "the same action" is. See
+            # `CycleRecord.action_key`.
+            #
+            # QUANTITY-FREE ONLY FOR GATHER. This used to claim `learning_key()`
+            # is quantity-free outright; it is not. Only `GatherAction` overrides
+            # it (`actions/gathering.py`) — `CraftAction` inherits the default
+            # `repr(self)`, which is `Craft(code×quantity)`, so a craft re-sized
+            # across cycles DOES fragment this tally, exactly as the paragraph
+            # above warns for gathers. Measured over the whole live store before
+            # writing this: 64 non-ok CraftAction rows, 8 failing streaks, and
+            # ONE streak fragmented (`small_health_potion` ×1 vs ×2). Real, and
+            # far too rare to justify changing a key every learned cost is
+            # already recorded against. Left as a named residual rather than a
+            # silent inaccuracy.
             window = list(self._detector._history)[-REPEATED_ACTION_WINDOW:]
             fail_counts: dict[str, int] = {}
             for r in window:
