@@ -52,6 +52,22 @@ with the FIRST ALTERNATIVE, not with "nothing chosen". A position check
 the walk chose nothing; an identity check against `resolution.root` -- which
 is `None` -- correctly matches no candidate at all, because no `MetaGoal`
 instance is ever `is None`.
+
+A FOURTH OUTCOME LIVES OUTSIDE THE CANDIDATE LIST ENTIRELY:
+`resolution.blocked_target`. `IsThisTargetBlocked` can rewrite a skill-gated
+gear target into a `ReachSkillLevel` root and record the item it erased on
+`RootWalk.blocked_target`; `resolve_root` copies it onto
+`RootResolution.blocked_target`. That erased item is exactly the population
+this module's `sibling_route_verdicts` calls exist to price, and it is
+NEVER a candidate row -- the walk converted it away before it could become
+one, so a census that only read `[resolution.root, *resolution.
+alternatives]` would never see it at all. `root_sibling_verdicts` prices it
+too, through the identical `sibling_route_verdicts` call outcome 3 uses,
+and hands it back as a SECOND return value (`BlockedTargetVerdict | None`)
+rather than a row in the same list -- a candidate count that quietly
+absorbed it would either inflate "N candidate roots" with an item the walk
+never returned as a candidate, or hide it entirely if a caller filtered on
+membership in the returned rows.
 """
 
 from dataclasses import dataclass
@@ -83,11 +99,32 @@ class RootSiblingVerdict:
     verdict: SiblingVerdict | None
 
 
+@dataclass(frozen=True)
+class BlockedTargetVerdict:
+    """The sibling-craft verdict for `RootResolution.blocked_target` -- the
+    gear item `IsThisTargetBlocked` ERASED when it rewrote a skill-gated gear
+    target into the walk's `ReachSkillLevel` root (`ai/decisions/root.py:920`,
+    `RootWalk.blocked_target`'s own docstring).
+
+    That item is exactly the population `sibling_route_verdicts` exists for,
+    and it is NEVER a member of `[resolution.root, *resolution.alternatives]`
+    -- the walk converted it away before it could become a candidate, so it
+    cannot appear as one of `RootSiblingVerdict` rows above. Reported as its
+    own type, not folded into that list, is what keeps "the walk named this
+    item and then erased it" from being silently counted into, or out of,
+    the ObtainItem-candidate counts those rows drive.
+    """
+
+    item: str
+    verdict: SiblingVerdict | None
+
+
 def root_sibling_verdicts(
     state: WorldState, game_data: GameData, objective: CharacterObjective,
     ctx: SelectionContext, store: LearningStore,
-) -> list[RootSiblingVerdict]:
-    """Drive `resolve_root` once and classify every candidate it returns.
+) -> tuple[list[RootSiblingVerdict], BlockedTargetVerdict | None]:
+    """Drive `resolve_root` once and classify every candidate it returns,
+    plus -- separately -- the item the walk named and then erased.
 
     `store` does double duty, exactly as `commands/sibling_route_report.py`'s
     own `store` already does for T2.0: it is `resolve_root`'s `history`
@@ -102,6 +139,18 @@ def root_sibling_verdicts(
     cannot type a `None` member, which is why `resolve_root` itself filters
     it out of `ordered` before building `alternatives`; this function applies
     the identical filter to its own leading `root` slot for the same reason.
+
+    THE SECOND RETURN VALUE IS `resolution.blocked_target`, PRICED THROUGH
+    THE SAME `sibling_route_verdicts` CALL THE CANDIDATE ROWS USE -- never
+    re-derived. `IsThisTargetBlocked` rewrites a skill-gated `ObtainItem`
+    gear target into a `ReachSkillLevel` and records the erased item on
+    `RootWalk.blocked_target` (`ai/decisions/root.py:920`); `resolve_root`
+    copies it onto `RootResolution.blocked_target` (`root.py:1060`). That
+    item is precisely what a live sibling holding the skill could supply --
+    `decide_tree` already publishes it as fleet demand for exactly that
+    reason -- so it gets priced here too, exactly like an `ObtainItem`
+    candidate would be, and handed back separately so a caller can report it
+    on its own line instead of folding it into "N candidate roots".
     """
     resolution = resolve_root(state, game_data, objective, ctx, store)
     candidates = [g for g in (resolution.root, *resolution.alternatives) if g is not None]
@@ -119,4 +168,13 @@ def root_sibling_verdicts(
             chosen=candidate is resolution.root,
             verdict=verdict,
         ))
-    return rows
+
+    blocked: BlockedTargetVerdict | None = None
+    if resolution.blocked_target is not None:
+        blocked_priced = sibling_route_verdicts(
+            state, game_data, ctx, store, [resolution.blocked_target])
+        blocked = BlockedTargetVerdict(
+            item=resolution.blocked_target,
+            verdict=blocked_priced[0] if blocked_priced else None,
+        )
+    return rows, blocked

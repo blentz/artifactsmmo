@@ -58,9 +58,10 @@ class _Store:
         return None
 
 
-def _resolution(root: object, alternatives: tuple = ()) -> RootResolution:
+def _resolution(root: object, alternatives: tuple = (),
+                blocked_target: str | None = None) -> RootResolution:
     return RootResolution(root=root, alternatives=alternatives, trail=(),
-                          aged=False, blocked_target=None)
+                          aged=False, blocked_target=blocked_target)
 
 
 def _empty_world() -> tuple[WorldState, GameData]:
@@ -114,14 +115,27 @@ def test_candidate_order_is_preserved_and_exactly_one_root_is_chosen(monkeypatch
     monkeypatch.setattr(root_sibling_census, "resolve_root",
                         lambda *a, **k: _resolution(root, (alt_a, alt_b)))
 
-    rows = root_sibling_verdicts(state, game_data, CharacterObjective.from_game_data(game_data),
-                                 NO_PROFILE_CONTEXT, _Store())
+    rows, blocked = root_sibling_verdicts(
+        state, game_data, CharacterObjective.from_game_data(game_data),
+        NO_PROFILE_CONTEXT, _Store())
 
     assert [r.root_repr for r in rows] == [repr(root), repr(alt_a), repr(alt_b)], \
         "candidate order must match [root, *alternatives] exactly"
     chosen = [r for r in rows if r.chosen]
     assert len(chosen) == 1
     assert chosen[0].root_repr == repr(root)
+    # Minor finding: this fixture's ObtainItem roots (`x`, `y`) name a code
+    # this empty catalogue has never heard of -- outcome 2 (`item` set,
+    # `verdict=None`, the census's own recipe/crafting_skill skip), the exact
+    # shape every live root row actually takes. Previously exercised here but
+    # never asserted.
+    assert chosen[0].item == "x"
+    assert chosen[0].verdict is None, \
+        "outcome 2: item named, but not a skill-gated craftable in this catalogue"
+    alt_b_row = next(r for r in rows if r.root_repr == repr(alt_b))
+    assert alt_b_row.item == "y"
+    assert alt_b_row.verdict is None
+    assert blocked is None, "this resolution's blocked_target is None"
 
 
 def test_a_wall_resolution_filters_the_none_root_and_chooses_nothing(monkeypatch) -> None:
@@ -142,13 +156,15 @@ def test_a_wall_resolution_filters_the_none_root_and_chooses_nothing(monkeypatch
     monkeypatch.setattr(root_sibling_census, "resolve_root",
                         lambda *a, **k: _resolution(None, (alt_a, alt_b)))
 
-    rows = root_sibling_verdicts(state, game_data, CharacterObjective.from_game_data(game_data),
-                                 NO_PROFILE_CONTEXT, _Store())
+    rows, blocked = root_sibling_verdicts(
+        state, game_data, CharacterObjective.from_game_data(game_data),
+        NO_PROFILE_CONTEXT, _Store())
 
     assert [r.root_repr for r in rows] == [repr(alt_a), repr(alt_b)], \
         "the None root must be filtered, not stand in as a row of its own"
     assert not any(r.chosen for r in rows), \
         "the wall resolved nothing, so no candidate may be marked chosen"
+    assert blocked is None, "this resolution's blocked_target is None"
 
 
 def test_a_root_naming_no_item_is_reported_with_none_item_and_none_verdict(monkeypatch) -> None:
@@ -162,8 +178,9 @@ def test_a_root_naming_no_item_is_reported_with_none_item_and_none_verdict(monke
     monkeypatch.setattr(root_sibling_census, "resolve_root",
                         lambda *a, **k: _resolution(root))
 
-    rows = root_sibling_verdicts(state, game_data, CharacterObjective.from_game_data(game_data),
-                                 NO_PROFILE_CONTEXT, _Store())
+    rows, blocked = root_sibling_verdicts(
+        state, game_data, CharacterObjective.from_game_data(game_data),
+        NO_PROFILE_CONTEXT, _Store())
 
     assert len(rows) == 1
     row = rows[0]
@@ -171,6 +188,7 @@ def test_a_root_naming_no_item_is_reported_with_none_item_and_none_verdict(monke
     assert row.item is None
     assert row.verdict is None
     assert row.chosen is True
+    assert blocked is None, "this resolution's blocked_target is None"
 
 
 def test_a_root_naming_an_item_is_priced_by_the_existing_sibling_census(
@@ -188,7 +206,7 @@ def test_a_root_naming_an_item_is_priced_by_the_existing_sibling_census(
     monkeypatch.setattr(root_sibling_census, "resolve_root",
                         lambda *a, **k: _resolution(root))
 
-    rows = root_sibling_verdicts(
+    rows, blocked = root_sibling_verdicts(
         state, game_data, CharacterObjective.from_game_data(game_data), ctx, store)
 
     assert len(rows) == 1
@@ -201,3 +219,64 @@ def test_a_root_naming_an_item_is_priced_by_the_existing_sibling_census(
     assert row.verdict is not None
     assert row.verdict.priced is True, "ELIGIBLE and PRICED given this fixture's sibling_skills"
     assert row.verdict.load_bearing is True, "the sibling route is this item's ONLY route here"
+    assert blocked is None, "this resolution's blocked_target is None"
+
+
+def test_blocked_target_is_priced_through_the_existing_census_and_returned_separately(
+        monkeypatch, root_census_world: tuple[WorldState, GameData]) -> None:
+    """I3: `resolution.blocked_target` is the item `IsThisTargetBlocked`
+    erased when it rewrote a skill-gated gear target into the walk's
+    `ReachSkillLevel` root -- exactly the population `sibling_route_verdicts`
+    exists to price, and it is NEVER a member of `[root, *alternatives]`
+    because the walk converted it away before it could become a candidate.
+
+    This test's `root` is a `ReachSkillLevel` naming NO item at all (rule 2's
+    own shape) while `resolution.blocked_target` names `sibling_gear` -- the
+    live shape verified on Lor (chosen root `ReachSkillLevel(weaponcrafting,
+    13)`, `blocked_target='elderwood_staff'`): the candidate rows say "no
+    item", and the blocked-target verdict is the only place the erased item
+    shows up at all.
+
+    Proved by equality against an independent direct call to the same
+    census, exactly as rule 3 proves the candidate-row path does not
+    re-derive ELIGIBLE/PRICED/LOAD-BEARING."""
+    state, game_data = root_census_world
+    ctx = replace(NO_PROFILE_CONTEXT, sibling_skills={"weaponcrafting": 10})
+    store = _Store()
+    root = ReachSkillLevel(skill="weaponcrafting", level=10)
+    monkeypatch.setattr(
+        root_sibling_census, "resolve_root",
+        lambda *a, **k: _resolution(root, blocked_target="sibling_gear"))
+
+    rows, blocked = root_sibling_verdicts(
+        state, game_data, CharacterObjective.from_game_data(game_data), ctx, store)
+
+    assert len(rows) == 1
+    assert rows[0].item is None, "the candidate rows must not surface the erased item"
+    assert blocked is not None
+    assert blocked.item == "sibling_gear"
+    expected = sibling_route_verdicts(state, game_data, ctx, store, ["sibling_gear"])
+    assert expected, "fixture must actually name a skill-gated craftable item"
+    assert blocked.verdict == expected[0], \
+        "blocked_target must be priced through the SAME census call, not re-derived"
+    assert blocked.verdict is not None
+    assert blocked.verdict.priced is True
+    assert blocked.verdict.load_bearing is True
+
+
+def test_blocked_target_unset_reports_none_not_a_fabricated_row(monkeypatch) -> None:
+    """I3, the unset case: when `resolution.blocked_target` is `None` (the
+    common case -- most walks never convert a gear target at all), the
+    second return value must be `None` too, not a row standing in for
+    "nothing was blocked" that a caller could mistake for a real,
+    unpriceable item."""
+    state, game_data = _empty_world()
+    root = ObtainItem(code="x")
+    monkeypatch.setattr(root_sibling_census, "resolve_root",
+                        lambda *a, **k: _resolution(root, blocked_target=None))
+
+    _rows, blocked = root_sibling_verdicts(
+        state, game_data, CharacterObjective.from_game_data(game_data),
+        NO_PROFILE_CONTEXT, _Store())
+
+    assert blocked is None

@@ -99,7 +99,11 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
-from artifactsmmo_cli.audit.root_sibling_census import RootSiblingVerdict, root_sibling_verdicts
+from artifactsmmo_cli.audit.root_sibling_census import (
+    BlockedTargetVerdict,
+    RootSiblingVerdict,
+    root_sibling_verdicts,
+)
 from artifactsmmo_cli.audit.sibling_route_census import SiblingVerdict, sibling_route_verdicts
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
@@ -273,12 +277,22 @@ def _print_root_section(
     walk's own output, never rebuilt from the gate's inputs
     (`feedback_never_feed_a_walks_own_output_back_in`).
 
-    ALL FOUR COUNTS PRINT, EVEN WHEN THE LOWER THREE ARE ZERO. A root-level
-    count of 0 sibling-priced roots is a real and likely answer — the walk
-    may simply never name an item behind a sibling-clearable gate — and
-    T2.0 shipped a catalogue-level number that read as evidence while being
-    a tautology; printing zero explicitly here is what keeps this section
-    from repeating that shape.
+    ALL FOUR CANDIDATE COUNTS PRINT, EVEN WHEN THE LOWER THREE ARE ZERO. A
+    root-level count of 0 sibling-priced roots is a real and likely answer —
+    the walk may simply never name an item behind a sibling-clearable gate —
+    and T2.0 shipped a catalogue-level number that read as evidence while
+    being a tautology; printing zero explicitly here is what keeps this
+    section from repeating that shape.
+
+    "NAME AN ITEM" SPLITS INTO "NOT CRAFTABLE AT ALL" AND "CRAFTABLE" BEFORE
+    "SIBLING-PRICED" IS PRINTED (I2). A named item with `verdict=None` never
+    reached `_sibling_craft_option` at all -- `sibling_route_verdicts` skips
+    any item with no recipe or no `crafting_skill` before it prices anything
+    -- which is a different fact from a verdict that WAS computed and came
+    back `priced=False`. Collapsing both into "0 sibling-priced" reads as
+    "measured and declined" even when every named item was never priceable
+    to begin with; the "not craftable at all" count is printed on its own
+    line so that conflation cannot happen silently.
 
     THE CHOSEN ROOT'S REPR ALWAYS PRINTS, WHETHER OR NOT IT NAMES AN ITEM.
     `ReachCharLevel`/`ReachSkillLevel` name no item at all, and a chosen
@@ -286,11 +300,27 @@ def _print_root_section(
     — a different finding from the route being priced and then outpriced by
     a cheaper existing route. The section says so explicitly so a reader
     cannot conflate "structurally unreachable" with "measured and rejected".
+    The same craftable/not-craftable split applies to the chosen root's own
+    line, for the identical reason.
+
+    THE BLOCKED-TARGET LINE IS SEPARATE FROM EVERY COUNT ABOVE (I3).
+    `IsThisTargetBlocked` can rewrite a skill-gated gear target into the
+    walk's `ReachSkillLevel` root and erase the item into `RootResolution.
+    blocked_target` — that item is exactly the population this audit exists
+    to price, and it is NEVER a member of `[resolution.root, *resolution.
+    alternatives]` (the walk converted it away before it could become a
+    candidate), so it cannot be counted by, and must never be folded into,
+    the candidate counts printed above. `root_sibling_verdicts` prices it
+    through the same `sibling_route_verdicts` call the candidate rows use
+    and hands it back separately; this function prints it on its own line
+    for the same reason.
     """
-    rows = root_sibling_verdicts(state, game_data, objective, ctx, store)
+    rows, blocked = root_sibling_verdicts(state, game_data, objective, ctx, store)
     named = [r for r in rows if r.item is not None]
-    priced = [r for r in named if r.verdict is not None and r.verdict.priced]
-    load_bearing = [r for r in named if r.verdict is not None and r.verdict.load_bearing]
+    craftable = [r for r in named if r.verdict is not None]
+    not_craftable = [r for r in named if r.verdict is None]
+    priced = [r for r in craftable if r.verdict is not None and r.verdict.priced]
+    load_bearing = [r for r in craftable if r.verdict is not None and r.verdict.load_bearing]
     chosen: RootSiblingVerdict | None = next((r for r in rows if r.chosen), None)
 
     print(f"\n== root-sibling audit ({character}) ==")
@@ -302,85 +332,138 @@ def _print_root_section(
           "the sibling route COULD NOT APPLY this cycle -- that is a different "
           "finding from the route being priced and then outpriced by a cheaper "
           "existing route.")
+    print("provenance caveat: resolve_root's history argument here is the on-disk "
+          "LearningStore, while the sensed player itself planned against an "
+          "in-memory store -- gear_target_tier reads the on-disk one, so this is "
+          "not a defect, but the two are not the same object.")
+    print("chosen-root caveat: ctx.gear_focus/interleave_seats are the live "
+          "player's near-empty in-memory accumulators in a fresh CLI run, so "
+          "the aged d'Hondt interleave rarely engages here -- this can move WHICH "
+          "candidate is reported as chosen relative to the running fleet, though "
+          "not the candidate SET or the four counts above, which stay robust.")
     print(f"{len(rows)} candidate root(s) (resolution.root + resolution.alternatives)")
     print(f"{len(named)} name an item")
+    print(f"{len(not_craftable)} name an item that is not craftable at all (no recipe "
+          "or no crafting_skill) -- the sibling route has nothing to say about these; "
+          "this is distinct from being priced and then declined")
     print(f"{len(priced)} sibling-priced")
     print(f"{len(load_bearing)} load-bearing")
     if chosen is None:
         print("chosen root: None (resolve_root returned no root this cycle -- the "
               "CanIClearMyTier wall case)")
+        _print_blocked_target_line(blocked)
         return
     print(f"chosen root: {chosen.root_repr}")
     if chosen.item is None:
         print("chosen root names no item -- the sibling route could not apply "
               "this cycle")
+        _print_blocked_target_line(blocked)
         return
     print(f"chosen root names item: {chosen.item}")
+    chosen_craftable = chosen.verdict is not None
+    print(f"chosen root item craftable at all: {chosen_craftable}")
+    if not chosen_craftable:
+        print("chosen root item is not craftable at all (no recipe or no "
+              "crafting_skill) -- the sibling route has nothing to say about it")
+        _print_blocked_target_line(blocked)
+        return
     chosen_priced = chosen.verdict is not None and chosen.verdict.priced
     chosen_load_bearing = chosen.verdict is not None and chosen.verdict.load_bearing
     print(f"chosen root sibling-priced: {chosen_priced}")
     print(f"chosen root load-bearing: {chosen_load_bearing}")
+    _print_blocked_target_line(blocked)
+
+
+def _print_blocked_target_line(blocked: BlockedTargetVerdict | None) -> None:
+    """I3: the item `IsThisTargetBlocked` erased when it rewrote a
+    skill-gated gear target into the walk's `ReachSkillLevel` root — printed
+    on its own line, never merged into the candidate counts above it, because
+    it is never a candidate row (see `_print_root_section`'s docstring)."""
+    if blocked is None:
+        print("blocked_target: None (this cycle's walk was not converted from a "
+              "skill-gated gear target -- see RootResolution.blocked_target)")
+        return
+    print(f"blocked_target: {blocked.item} (IsThisTargetBlocked erased this item "
+          "when it rewrote the chosen root into a skill climb -- this is what the "
+          "walk actually named before the skill gate converted it away)")
+    if blocked.verdict is None:
+        print("blocked_target not craftable at all (no recipe or no crafting_skill)")
+        return
+    print(f"blocked_target sibling-priced: {blocked.verdict.priced}")
+    print(f"blocked_target load-bearing: {blocked.verdict.load_bearing}")
 
 
 def _run_for_character(character: str) -> None:
     """Print the eligible / priced / load-bearing counts for the sibling-craft
     route, then the load-bearing rows grouped by gate (largest saving first),
     then the priced-but-not-load-bearing (outpriced) rows, then the T2.1
-    root-level section for this one character."""
+    root-level section for this one character.
+
+    `coordination`/`store` are opened here and closed in the `finally` below
+    -- `--character`/`-c` is repeatable, so this function runs once per named
+    character, and an unclosed pair of on-disk SQLite connections per
+    character would leak one pair per name in a long `--character` list. Same
+    discipline `objective_audit_report.py`'s `_sense` already uses for its
+    own in-memory store.
+    """
     state, game_data, player_ctx, objective = _sense(character)
 
     db_path = default_learn_db_path()
     coordination = CoordinationStore(db_path=db_path, character=character)
-    sibling_skills = coordination.sibling_skill_levels(datetime.now(UTC))
     store = LearningStore(db_path, character=character)
+    try:
+        sibling_skills = coordination.sibling_skill_levels(datetime.now(UTC))
 
-    candidates = _eligible_candidates(state, game_data, sibling_skills)
-    ctx = replace(player_ctx, sibling_skills=sibling_skills)
-    verdicts = sibling_route_verdicts(state, game_data, ctx, store, candidates)
+        candidates = _eligible_candidates(state, game_data, sibling_skills)
+        ctx = replace(player_ctx, sibling_skills=sibling_skills)
+        verdicts = sibling_route_verdicts(state, game_data, ctx, store, candidates)
 
-    priced = [v for v in verdicts if v.priced]
-    load_bearing = [v for v in verdicts if v.load_bearing]
-    outpriced = [v for v in priced if not v.load_bearing]
-    gates = _group_by_gate(load_bearing)
+        priced = [v for v in verdicts if v.priced]
+        load_bearing = [v for v in verdicts if v.load_bearing]
+        outpriced = [v for v in priced if not v.load_bearing]
+        gates = _group_by_gate(load_bearing)
 
-    print(f"== sibling-route audit ({character}) ==")
-    # THE ONE SCALAR `priced` ACTUALLY TURNS ON. `_sibling_craft_option` reads
-    # this once per run and applies the SAME None-or-<=0 decision to every
-    # eligible item, so `priced` can only land at 0 or at `eligible` -- never
-    # strictly between them. Printing the scalar makes that global bit
-    # explicit instead of letting "N priced" read as N independent
-    # confirmations.
-    supply_cycles = store.fleet_supply_request_cycles()
-    print(f"fleet_supply_request_cycles: {supply_cycles}")
-    print(f"{len(candidates)} eligible")
-    print(f"{len(priced)} priced")
-    print(f"{len(load_bearing)} load-bearing ({len(gates)} gate(s))")
-    print("priced can only diverge from eligible when fleet_supply_request_cycles "
-          "is None or <= 0 (every route declines at once); priced == eligible is "
-          "the expected case, not per-route confirmation.")
-    print("these counts drift between runs too, not just the savings below: "
-          "eligible/priced/load-bearing are read off THIS character's live "
-          "skills, so a gate an earlier run reported as eligible drops out the "
-          "moment the character's own level clears it.")
-    if gates:
-        print("\nload-bearing routes, grouped by gate (largest saving first):")
-        print("savings are priced off a live-updating skill_grind_rate "
-              "observation and will drift between runs -- a different number "
-              "on a rerun is not a regression.")
-        print("EACH LINE IS ONE GATE, NOT ONE ITEM: the grind unlock behind a "
-              "gate is paid ONCE PER (skill, required_level), while the sibling "
-              "unlock is paid once per item, so the saving below is NOT "
-              "additive across the listed items -- do not multiply it by the "
-              "item count.")
-        for skill, required_level, members in gates:
-            _print_gate_line(skill, required_level, members)
-    if outpriced:
-        print("\npriced but not load-bearing (an existing route already undercuts "
-              "the sibling craft):")
-        for v in sorted(outpriced, key=lambda v: v.item):
-            _print_outpriced_row(v)
+        print(f"== sibling-route audit ({character}) ==")
+        # THE ONE SCALAR `priced` ACTUALLY TURNS ON. `_sibling_craft_option`
+        # reads this once per run and applies the SAME None-or-<=0 decision
+        # to every eligible item, so `priced` can only land at 0 or at
+        # `eligible` -- never strictly between them. Printing the scalar
+        # makes that global bit explicit instead of letting "N priced" read
+        # as N independent confirmations.
+        supply_cycles = store.fleet_supply_request_cycles()
+        print(f"fleet_supply_request_cycles: {supply_cycles}")
+        print(f"{len(candidates)} eligible")
+        print(f"{len(priced)} priced")
+        print(f"{len(load_bearing)} load-bearing ({len(gates)} gate(s))")
+        print("priced can only diverge from eligible when fleet_supply_request_cycles "
+              "is None or <= 0 (every route declines at once); priced == eligible is "
+              "the expected case, not per-route confirmation.")
+        print("these counts drift between runs too, not just the savings below: "
+              "eligible/priced/load-bearing are read off THIS character's live "
+              "skills, so a gate an earlier run reported as eligible drops out the "
+              "moment the character's own level clears it.")
+        if gates:
+            print("\nload-bearing routes, grouped by gate (largest saving first):")
+            print("savings are priced off a live-updating skill_grind_rate "
+                  "observation and will drift between runs -- a different number "
+                  "on a rerun is not a regression.")
+            print("EACH LINE IS ONE GATE, NOT ONE ITEM: the grind unlock behind a "
+                  "gate is paid ONCE PER (skill, required_level), while the sibling "
+                  "unlock is paid once per item, so the saving below is NOT "
+                  "additive across the listed items -- do not multiply it by the "
+                  "item count.")
+            for skill, required_level, members in gates:
+                _print_gate_line(skill, required_level, members)
+        if outpriced:
+            print("\npriced but not load-bearing (an existing route already undercuts "
+                  "the sibling craft):")
+            for v in sorted(outpriced, key=lambda v: v.item):
+                _print_outpriced_row(v)
 
-    _print_root_section(state, game_data, objective, ctx, store, character)
+        _print_root_section(state, game_data, objective, ctx, store, character)
+    finally:
+        coordination.close()
+        store.close()
 
 
 def sibling_route_audit_command(

@@ -30,7 +30,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.audit.root_sibling_census import RootSiblingVerdict
+from artifactsmmo_cli.audit.root_sibling_census import BlockedTargetVerdict, RootSiblingVerdict
 from artifactsmmo_cli.audit.sibling_route_census import SiblingVerdict
 from artifactsmmo_cli.commands import sibling_route_report as cmd
 from tests.test_ai.fixtures import coordination_now, make_state
@@ -110,7 +110,7 @@ def canned_sense(audit_world: tuple[object, object],
     monkeypatch.setattr(
         cmd, "_sense",
         lambda character: (state, game_data, NO_PROFILE_CONTEXT, objective))
-    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: [])
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: ([], None))
 
 
 def _publish_sibling_levels(db: str, sibling: str, levels: dict[str, int]) -> None:
@@ -177,7 +177,7 @@ def test_a_crafting_skill_with_no_recipe_is_excluded_from_eligible(
     monkeypatch.setattr(
         cmd, "_sense",
         lambda character: (state, game_data, NO_PROFILE_CONTEXT, objective))
-    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: [])
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: ([], None))
     _publish_sibling_levels(db_path, "R2D2", {"jewelrycrafting": 10})
 
     cmd.sibling_route_audit_command(character="C3P0", characters=[])
@@ -301,7 +301,7 @@ def test_command_prices_with_the_players_real_context_not_no_profile(
     monkeypatch.setattr(
         cmd, "_sense", lambda character: (state, game_data, marker_ctx, objective))
     monkeypatch.setattr(cmd, "_eligible_candidates", lambda *a, **k: [])
-    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: [])
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: ([], None))
 
     captured: dict[str, object] = {}
 
@@ -322,6 +322,60 @@ def test_command_prices_with_the_players_real_context_not_no_profile(
     assert ctx.sibling_skills == {"weaponcrafting": 10}, (
         "sibling_skills must still be overridden with the coordination "
         "store's read, on top of the player's own (empty) copy"
+    )
+
+
+def test_root_section_is_driven_with_the_sensed_objective_and_the_augmented_ctx(
+    db_path: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """I1: the Task-1/Task-2 seam (`_print_root_section`'s call to
+    `root_sibling_verdicts` at the end of `_run_for_character`) had no test
+    capturing its arguments. A mutant that passed a freshly built
+    `CharacterObjective.from_game_data(game_data)` in place of the sensed
+    `objective`, and `player_ctx` (whose `sibling_skills` is EMPTY) in place
+    of the augmented `ctx`, printed the IDENTICAL "0 sibling-priced / 0
+    load-bearing" every correct run also prints -- `_sibling_craft_option`
+    declines at its third guard for every item once `sibling_skills` is
+    empty, so the mutant is silent. All 32 pre-existing tests passed under
+    that mutation.
+
+    Pinned the same way T2.0's own seam test
+    (`test_command_prices_with_the_players_real_context_not_no_profile`)
+    pins `sibling_route_verdicts`' ctx: capture the arguments
+    `root_sibling_verdicts` is actually called with and assert against the
+    sensed objects, not the report's printed counts (a broken seam can print
+    the same counts by coincidence, but it cannot fake object identity or a
+    ctx.sibling_skills that only the coordination-store read produces)."""
+    state = make_state(skills=_ALL_SKILLS)
+    game_data = GameData()
+    marker_ctx = replace(NO_PROFILE_CONTEXT, bank_accessible=False)
+    sensed_objective = CharacterObjective.from_game_data(game_data)
+    monkeypatch.setattr(
+        cmd, "_sense",
+        lambda character: (state, game_data, marker_ctx, sensed_objective))
+    monkeypatch.setattr(cmd, "_eligible_candidates", lambda *a, **k: [])
+    monkeypatch.setattr(cmd, "sibling_route_verdicts", lambda *a, **k: [])
+
+    captured: dict[str, object] = {}
+
+    def _capture_root_args(state_, game_data_, objective, ctx, store):
+        captured["objective"] = objective
+        captured["ctx"] = ctx
+        return [], None
+
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", _capture_root_args)
+    _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
+
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
+
+    assert captured["objective"] is sensed_objective, (
+        "root_sibling_verdicts must be driven with the SAME CharacterObjective "
+        "_sense returned, not a freshly built CharacterObjective.from_game_data"
+    )
+    root_ctx = captured["ctx"]
+    assert root_ctx.sibling_skills == {"weaponcrafting": 10}, (
+        "root_sibling_verdicts must receive the ctx AUGMENTED with the real "
+        "coordination-store read, not the player's own (empty) sibling_skills"
     )
 
 
@@ -429,7 +483,7 @@ def test_two_items_behind_the_same_gate_produce_one_gate_line_end_to_end(
     monkeypatch.setattr(
         cmd, "_sense",
         lambda character: (state, game_data, NO_PROFILE_CONTEXT, objective))
-    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: [])
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: ([], None))
     _publish_sibling_levels(db_path, "R2D2", {"jewelrycrafting": 15})
     _seed_supply_request(db_path, "R2D2")
 
@@ -474,7 +528,7 @@ def test_outpriced_rows_print_in_their_own_section(
         actions_with=10, actions_without=10)
     monkeypatch.setattr(cmd, "sibling_route_verdicts",
                         lambda *a, **k: [outpriced_verdict])
-    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: [])
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: ([], None))
     _publish_sibling_levels(db_path, "R2D2", {"jewelrycrafting": 15})
 
     cmd.sibling_route_audit_command(character="C3P0", characters=[])
@@ -517,7 +571,7 @@ def test_root_section_qualifier_states_scope(
     supply its materials."""
     rows = [_root_verdict("ObtainItem(code='hexstaff')", item="hexstaff",
                           chosen=True)]
-    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: rows)
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: (rows, None))
     _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
 
     cmd.sibling_route_audit_command(character="C3P0", characters=[])
@@ -543,7 +597,7 @@ def test_root_section_prints_all_four_counts_and_the_chosen_row(
                       chosen=True, verdict=chosen_verdict),
         other,
     ]
-    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: rows)
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: (rows, None))
     _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
 
     cmd.sibling_route_audit_command(character="C3P0", characters=[])
@@ -574,7 +628,7 @@ def test_root_section_prints_explicit_zeros_when_nothing_is_priced(
         best_sibling_level=10, priced=False, actions_with=40, actions_without=40)
     rows = [_root_verdict("ObtainItem(code='hexstaff')", item="hexstaff",
                           chosen=True, verdict=unpriced_verdict)]
-    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: rows)
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: (rows, None))
     _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
 
     cmd.sibling_route_audit_command(character="C3P0", characters=[])
@@ -597,7 +651,7 @@ def test_root_section_chosen_root_names_no_item(
     not apply this cycle -- a different finding from priced-then-outpriced,
     and the section header must state that distinction too."""
     rows = [_root_verdict("ReachCharLevel(char_level=6)", chosen=True)]
-    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: rows)
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: (rows, None))
     _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
 
     cmd.sibling_route_audit_command(character="C3P0", characters=[])
@@ -622,13 +676,126 @@ def test_root_section_no_root_resolved(
     case); no row is `chosen=True` then, and the section must say so
     explicitly rather than silently printing nothing."""
     rows = [_root_verdict("ReachCharLevel(char_level=6)", chosen=False)]
-    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: rows)
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: (rows, None))
     _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
 
     cmd.sibling_route_audit_command(character="C3P0", characters=[])
 
     out = capsys.readouterr().out
     assert "chosen root: None (resolve_root returned no root this cycle" in out
+
+
+def test_root_section_distinguishes_not_craftable_from_craftable_but_declined(
+    db_path: str, canned_sense: None, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """I2: "0 sibling-priced" must not read as "measured and declined" when
+    the named item was never craftable at all. `sibling_route_verdicts`
+    silently skips any item with no recipe or no `crafting_skill` BEFORE it
+    computes a verdict at all (`verdict=None`, outcome 2 of `root_sibling_
+    census.py`'s own docstring) -- a different fact from a verdict that WAS
+    computed and came back `priced=False` (outcome 3, declined). Live, this
+    is EVERY named row on the fleet (all 16 item-naming roots have
+    `crafting_skill=None`), so collapsing the two into one zero is not an
+    academic distinction.
+
+    Two not-craftable rows and one craftable-but-declined row must print as
+    "2 name an item that is not craftable at all" and "0 sibling-priced"
+    separately, not as one undifferentiated zero."""
+    declined_verdict = SiblingVerdict(
+        item="declined_ring", skill="jewelrycrafting", required_level=15,
+        held_level=1, best_sibling_level=15, priced=False,
+        actions_with=40, actions_without=40)
+    rows = [
+        _root_verdict("ObtainItem(code='not_craftable_a')", item="not_craftable_a",
+                      chosen=True, verdict=None),
+        _root_verdict("ObtainItem(code='not_craftable_b')", item="not_craftable_b",
+                      verdict=None),
+        _root_verdict("ObtainItem(code='declined_ring')", item="declined_ring",
+                      verdict=declined_verdict),
+    ]
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: (rows, None))
+    _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
+
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
+
+    out = capsys.readouterr().out
+    assert "3 candidate root(s)" in out
+    assert "3 name an item" in out
+    assert "2 name an item that is not craftable at all" in out
+    assert "0 sibling-priced" in out
+    assert "0 load-bearing" in out
+    assert "chosen root item craftable at all: False" in out
+    assert "chosen root item is not craftable at all" in out
+    assert "chosen root sibling-priced" not in out, \
+        "a chosen root with verdict=None must not print a priced/load-bearing line at all"
+
+
+def test_root_section_prints_blocked_target_priced_and_load_bearing(
+    db_path: str, canned_sense: None, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """I3: `resolution.blocked_target` -- the item `IsThisTargetBlocked`
+    erased when it rewrote a skill-gated gear target into the chosen
+    `ReachSkillLevel` root -- must print on its own line, separate from the
+    candidate counts above. This is the live Lor shape: chosen root
+    `ReachSkillLevel(weaponcrafting, 13)` names no item at all (0 candidates
+    name an item), yet the walk DID want `elderwood_staff` before the skill
+    gate converted it away, and that fact must not be lost."""
+    rows = [_root_verdict("ReachSkillLevel(weaponcrafting, 13)", chosen=True)]
+    blocked_verdict = _verdict("elderwood_staff", skill="weaponcrafting",
+                               required_level=13, actions_with=4, actions_without=40)
+    blocked = BlockedTargetVerdict(item="elderwood_staff", verdict=blocked_verdict)
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: (rows, blocked))
+    _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
+
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
+
+    out = capsys.readouterr().out
+    assert "1 candidate root(s)" in out
+    assert "0 name an item" in out, "the candidate rows must not surface the erased item"
+    assert "blocked_target: elderwood_staff" in out
+    assert "blocked_target sibling-priced: True" in out
+    assert "blocked_target load-bearing: True" in out
+
+
+def test_root_section_prints_blocked_target_not_craftable(
+    db_path: str, canned_sense: None, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """I3, the not-craftable case: a `blocked_target` whose item has no
+    recipe or no `crafting_skill` must print as "not craftable at all", the
+    same distinction I2 draws for the candidate rows, not a silently-false
+    "sibling-priced: False"."""
+    rows = [_root_verdict("ReachSkillLevel(mining, 20)", chosen=True)]
+    blocked = BlockedTargetVerdict(item="lost_world_map", verdict=None)
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: (rows, blocked))
+    _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
+
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
+
+    out = capsys.readouterr().out
+    assert "blocked_target: lost_world_map" in out
+    assert "blocked_target not craftable at all" in out
+    assert "blocked_target sibling-priced" not in out
+
+
+def test_root_section_prints_blocked_target_none_when_unset(
+    db_path: str, canned_sense: None, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """I3, the unset case: `resolution.blocked_target` is `None` on most live
+    cycles -- the walk did not convert a gear target this time -- and the
+    report must say so explicitly rather than omitting the line."""
+    rows = [_root_verdict("ObtainItem(code='hexstaff')", item="hexstaff", chosen=True)]
+    monkeypatch.setattr(cmd, "root_sibling_verdicts", lambda *a, **k: (rows, None))
+    _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
+
+    cmd.sibling_route_audit_command(character="C3P0", characters=[])
+
+    out = capsys.readouterr().out
+    assert "blocked_target: None (this cycle's walk was not converted from a " \
+        "skill-gated gear target" in out
 
 
 def test_repeated_character_option_audits_each_character_once(
