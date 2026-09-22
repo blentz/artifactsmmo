@@ -113,7 +113,7 @@ def _grouped(character: str, group: str | None) -> Cycle:
 
 
 def test_counts_by_group_per_character() -> None:
-    from artifactsmmo_cli.audit.root_group_census import GroupCounts, root_group_counts
+    from artifactsmmo_cli.audit.root_group_census import root_group_counts
 
     rows = root_group_counts([
         _grouped("C3P0", "trunk"), _grouped("C3P0", "trunk"), _grouped("C3P0", "gear"),
