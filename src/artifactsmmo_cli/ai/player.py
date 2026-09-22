@@ -1304,8 +1304,9 @@ class GamePlayer:
                 if self.dry_run:
                     new_state = action.apply(state, game_data)
                     outcome = "ok"
+                    executed_action = action
                 else:
-                    new_state, outcome = self._execute(action, client)
+                    new_state, outcome, executed_action = self._execute(action, client)
 
                 # Arbiter anti-starvation epic (Task 6): clear the gear-focus
                 # aging ledger on real progress from THIS action (level-up or
@@ -1343,7 +1344,14 @@ class GamePlayer:
                     )
                     time.sleep(delay)
                     self._error_backoff_n += 1
-                predicted = action.cost(prev_state_for_learning, game_data, self.history)
+                # Predicted cost and the recorded repr/class below are keyed to
+                # `executed_action` — the action `_execute` ACTUALLY ran, which
+                # for a rebatched CraftAction is a different (larger-quantity)
+                # instance than the `action` picked off the plan (see
+                # `_execute`'s docstring). Using `action` here was the
+                # craft-repr-quantity bug: a 73-unit craft recorded a 1-unit
+                # predicted cost and `Craft(cooked_chicken×1)`.
+                predicted = executed_action.cost(prev_state_for_learning, game_data, self.history)
                 cycles_to_satisfy = None
                 self._learn_task_exchange_cost(action, prev_state_for_learning, new_state, outcome)
                 self._record_task_reward_if_completed(
@@ -1354,8 +1362,8 @@ class GamePlayer:
                 self._record_learning_cycle(
                     prev_state=prev_state_for_learning,
                     new_state=new_state,
-                    action_repr=action.learning_key(),
-                    action_class=type(action).__name__,
+                    action_repr=executed_action.learning_key(),
+                    action_class=type(executed_action).__name__,
                     outcome=outcome,
                     selected_goal=repr(selected_goal),
                     predicted_cost=predicted,
@@ -1556,7 +1564,11 @@ class GamePlayer:
         # `last_fight` before raising on a loss, so recording the leg first is
         # what lets a grind-embedded defeat reach the trace too.
         self._last_grind_leg = first
-        return self._execute(first, client)
+        # `_execute_level_skill` reports (state, outcome) only — the LEG's
+        # executed action is discarded here on purpose: the outer LevelSkill
+        # is what gets recorded, never the leg (see `_execute`'s docstring).
+        leg_state, leg_outcome, _leg_executed = self._execute(first, client)
+        return leg_state, leg_outcome
 
     def _mark_grind_failure_doomed(self) -> None:
         """Mark the goal whose plan contains this failing LevelSkill step as
@@ -1623,12 +1635,33 @@ class GamePlayer:
         if self._coordination is not None and isinstance(action, GeCancelOrderAction):
             self._coordination.release_ge_orders()
 
-    def _execute(self, action: Action, client: AuthenticatedClient) -> tuple[WorldState, str]:
-        """Execute an action. Returns (new_state, outcome_str).
+    def _execute(self, action: Action, client: AuthenticatedClient
+                ) -> tuple[WorldState, str, Action]:
+        """Execute an action. Returns (new_state, outcome_str, executed_action).
 
         outcome is "ok" on success, or "error:<kind>" on RuntimeError. Outcome is
         what gets recorded by _record_learning_cycle so learned costs/success rates
         don't conflate wins with losses.
+
+        executed_action is the action that ACTUALLY ran — for the CraftAction
+        rebatching below, this is the REBATCHED (and/or feasibility-clamped)
+        instance, never the caller's original request. `dataclasses.replace`
+        rebinds only the LOCAL `action` name in this function; the caller's own
+        variable is a different object and is never mutated, so the caller MUST
+        use this third value (not its own `action`) for anything that reports
+        what ran — `action_repr`/`predicted_cost` in `_record_learning_cycle`
+        chief among them. A cycle that crafted 73 units once recorded
+        `Craft(cooked_chicken×1)` with a 1-unit predicted cost against a
+        73-unit `actual_cooldown_seconds` because the caller kept its own
+        pre-batch reference; 1733 of 5383 (32.2%) craft rows with drops
+        disagreed this way.
+
+        The LevelSkill dispatch below is the one exception, BY DESIGN: it
+        always hands back the LevelSkill `action` parameter itself, never the
+        grind leg `_execute_level_skill` actually executed. That is deliberate
+        and unrelated to the craft-quantity fix — see `_execute_level_skill`'s
+        docstring and `_fight_of` for why a grind leg must still be reported
+        under its outer LevelSkill.
         """
         assert self.state is not None
         if isinstance(action, CraftAction):
@@ -1653,7 +1686,13 @@ class GamePlayer:
             # `error:*` cycle via `except RuntimeError` below instead of
             # propagating out of run() and crashing the session.
             if isinstance(action, LevelSkill):
-                return self._execute_level_skill(action, client)
+                # Report the outer LevelSkill, not the grind leg it ran — see
+                # this method's docstring. `_execute_level_skill` still
+                # returns a plain (state, outcome) pair; its own internal
+                # recursive calls to `_execute` discard the leg's executed
+                # action for the same reason.
+                skill_state, skill_outcome = self._execute_level_skill(action, client)
+                return skill_state, skill_outcome, action
             # Publish what this withdraw is taking out of the ACCOUNT-SHARED
             # bank BEFORE the request, so a sibling deriving its shed licence
             # in the meantime nets these units out instead of racing us for
@@ -1691,7 +1730,7 @@ class GamePlayer:
             # 429 (or two) earlier in the session must not keep inflating the
             # wait for the rest of it.
             self._rate_limit_attempts = 0
-            return new_state, "ok"
+            return new_state, "ok", action
         except RateLimitedError as e:
             # Per-IP throttle (HTTP 429), not a bad plan: the request was
             # rejected before it reached game logic, so state is unchanged —
@@ -1715,7 +1754,7 @@ class GamePlayer:
             self._rate_limit_attempts += 1
             print(f"[{self._now()}] Rate limited (HTTP 429) — waiting {delay:.0f}s")
             time.sleep(delay)
-            return self.state, self.RATE_LIMITED_OUTCOME
+            return self.state, self.RATE_LIMITED_OUTCOME, action
         except ApiActionError as e:
             self._last_error = _error_text(e)
             # A STRUCTURED server rejection means the withdraw did not happen —
@@ -1844,7 +1883,7 @@ class GamePlayer:
                         client, action.item_code, acquire=self._acquire_data)
                 except httpx.HTTPError:
                     pass  # transient; the order stays indexed and 404s again
-            return refreshed, outcome
+            return refreshed, outcome, action
         except RuntimeError as e:
             msg = str(e)
             self._last_error = _error_text(e)
@@ -1854,14 +1893,14 @@ class GamePlayer:
             else:
                 print(f"[{self._now()}] Action failed: {msg} — refreshing state")
                 outcome = "error:other"
-            return self._fetch_world_state(client), outcome
+            return self._fetch_world_state(client), outcome, action
         except httpx.HTTPError as e:
             # Transport-level failure (DNS, timeout, connection reset). Treat
             # as transient; refetch state (which also retries) and let the
             # next cycle replan with current truth.
             self._last_error = _error_text(e)
             print(f"[{self._now()}] Network error during {action!r}: {e!r} — refreshing state")
-            return self._fetch_world_state(client), "error:network"
+            return self._fetch_world_state(client), "error:network", action
 
     def _fetch_active_events(self, client: AuthenticatedClient) -> dict[str, datetime]:
         """Map of currently-active event code -> expiration. Empty on no/failed data.

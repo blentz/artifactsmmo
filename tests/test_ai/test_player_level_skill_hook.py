@@ -59,6 +59,7 @@ def test_level_skill_step_runs_grind_leg_not_execute() -> None:
                        locations=frozenset({(3, 3)}))
     advanced = replace(player.state, x=3, y=3)
     client = MagicMock()
+    level_skill_action = LevelSkill("gearcrafting", 5)
 
     with patch.object(player, "_build_actions", return_value=[]), \
             patch.object(player.planner, "plan",
@@ -66,8 +67,8 @@ def test_level_skill_step_runs_grind_leg_not_execute() -> None:
             patch.object(GatherAction, "execute",
                          return_value=advanced) as gather_exec, \
             patch.object(LevelSkill, "execute") as level_exec:
-        new_state, outcome = player._execute(
-            LevelSkill("gearcrafting", 5), client)
+        new_state, outcome, executed = player._execute(
+            level_skill_action, client)
 
     assert outcome == "ok"
     assert new_state is advanced
@@ -77,6 +78,13 @@ def test_level_skill_step_runs_grind_leg_not_execute() -> None:
     planned_goal = plan_spy.call_args.args[1]
     assert isinstance(planned_goal, GatherMaterialsGoal)
     assert planned_goal.skill_grind is True
+    # BY DESIGN (see `_execute`'s docstring): the executed action reported
+    # back to the caller for recording is the OUTER LevelSkill itself, not the
+    # GatherAction leg that actually ran the API call. Today a grind leg is
+    # recorded under `LevelSkill(...)` and this fix must not change that —
+    # only the craft-quantity repr was wrong.
+    assert executed is level_skill_action
+    assert executed.learning_key() == "LevelSkill(gearcrafting->5)"
 
 
 def test_level_skill_step_raises_when_no_rung() -> None:
@@ -160,7 +168,7 @@ def test_level_skill_step_degrades_not_crash_when_no_leg() -> None:
             patch.object(player.planner, "plan", return_value=[]), \
             patch.object(player, "_fetch_world_state",
                          return_value=refreshed) as fetch:
-        new_state, outcome = player._execute(
+        new_state, outcome, _executed = player._execute(
             LevelSkill("gearcrafting", 5), client)
 
     assert outcome == "error:other"

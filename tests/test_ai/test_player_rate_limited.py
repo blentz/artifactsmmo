@@ -62,7 +62,7 @@ class TestExecuteHandlesRateLimitedError:
         with patch("artifactsmmo_cli.ai.actions.movement.action_move",
                    side_effect=RateLimitedError({"Retry-After": "5"})):
             with patch("artifactsmmo_cli.ai.player.time.sleep") as sleep_mock:
-                new_state, outcome = player._execute(action, client)
+                new_state, outcome, _executed = player._execute(action, client)
         assert outcome == GamePlayer.RATE_LIMITED_OUTCOME
         # A 429 means the request never reached game logic — no refetch, no
         # state change; the character is still exactly where it started.
@@ -77,7 +77,7 @@ class TestExecuteHandlesRateLimitedError:
         with patch("artifactsmmo_cli.ai.actions.movement.action_move",
                    side_effect=RateLimitedError({})):
             with patch("artifactsmmo_cli.ai.player.time.sleep") as sleep_mock:
-                _new_state, outcome = player._execute(action, client)
+                _new_state, outcome, _executed = player._execute(action, client)
         assert outcome == GamePlayer.RATE_LIMITED_OUTCOME
         sleep_mock.assert_called_once_with(1.0)  # BASE_BACKOFF_SECONDS * 2**0
 
@@ -113,7 +113,7 @@ class TestExecuteHandlesRateLimitedError:
         char = make_char_schema(x=3, y=5)
         with patch("artifactsmmo_cli.ai.actions.movement.action_move",
                    return_value=make_api_result(char)):
-            _new_state, outcome = player._execute(action, client)
+            _new_state, outcome, _executed = player._execute(action, client)
         assert outcome == "ok"
         assert player._rate_limit_attempts == 0
 

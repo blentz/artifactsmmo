@@ -1392,7 +1392,7 @@ def test_execute_publishes_the_claim_before_the_withdraw_request(tmp_path):
                  patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty), \
                  patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty), \
                  items_patch, details_patch:
-                _new_state, outcome = p._execute(action, MagicMock())
+                _new_state, outcome, _executed = p._execute(action, MagicMock())
         assert outcome == "error:HTTP_478"
         assert seen == [{"sap": 111}], "the claim must be visible to siblings before the request"
     finally:
@@ -1424,7 +1424,7 @@ def test_execute_releases_the_claim_when_the_withdraw_is_rejected(tmp_path):
                  patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty), \
                  patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty), \
                  items_patch, details_patch:
-                _new_state, outcome = p._execute(action, MagicMock())
+                _new_state, outcome, _executed = p._execute(action, MagicMock())
         assert outcome == "error:HTTP_478"
         assert observer.sibling_bank_claims(datetime.now(tz=timezone.utc)) == {}
     finally:
@@ -1446,7 +1446,7 @@ def test_execute_releases_the_claim_when_the_withdraw_is_rate_limited(tmp_path):
             with patch("artifactsmmo_cli.ai.actions.withdraw_item.withdraw_item",
                        side_effect=RateLimitedError({"Retry-After": "1"})), \
                  patch("artifactsmmo_cli.ai.player.time.sleep"):
-                _new_state, outcome = p._execute(action, MagicMock())
+                _new_state, outcome, _executed = p._execute(action, MagicMock())
         assert outcome == GamePlayer.RATE_LIMITED_OUTCOME
         assert observer.sibling_bank_claims(datetime.now(tz=timezone.utc)) == {}
     finally:
@@ -1479,7 +1479,7 @@ def test_execute_keeps_the_claim_when_the_withdraw_succeeds(tmp_path):
             with patch("artifactsmmo_cli.ai.actions.withdraw_item.withdraw_item",
                        return_value=make_api_result(char)), \
                  items_patch, details_patch:
-                _new_state, outcome = p._execute(action, MagicMock())
+                _new_state, outcome, _executed = p._execute(action, MagicMock())
         assert outcome == "ok"
         now = datetime.now(tz=timezone.utc)
         assert observer.sibling_bank_claims(now) == {"sap": 5}
@@ -1504,7 +1504,7 @@ def test_execute_claims_nothing_for_a_non_withdraw_action(tmp_path):
         with redirect_stdout(io.StringIO()):
             with patch("artifactsmmo_cli.ai.actions.movement.action_move",
                        return_value=make_api_result(char)):
-                _new_state, outcome = p._execute(MoveAction(x=3, y=5), MagicMock())
+                _new_state, outcome, _executed = p._execute(MoveAction(x=3, y=5), MagicMock())
         assert outcome == "ok"
         assert observer.sibling_bank_claims(datetime.now(tz=timezone.utc)) == {}
     finally:
@@ -1625,7 +1625,7 @@ def test_execute_publishes_the_order_claim_before_the_cancel_request(tmp_path):
                        return_value=make_get_character_result(char)), \
                  patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty), \
                  patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty):
-                _new_state, outcome = p._execute(action, MagicMock())
+                _new_state, outcome, _executed = p._execute(action, MagicMock())
         assert outcome == "error:HTTP_404"
         assert seen == [frozenset({"order-1"})], \
             "the claim must be visible to siblings before the request"
@@ -1655,7 +1655,7 @@ def test_execute_releases_the_order_claim_when_the_cancel_is_rejected(tmp_path):
                        return_value=make_get_character_result(char)), \
                  patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty), \
                  patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty):
-                _new_state, outcome = p._execute(action, MagicMock())
+                _new_state, outcome, _executed = p._execute(action, MagicMock())
         assert outcome == "error:HTTP_404"
         assert observer.sibling_order_claims(datetime.now(tz=timezone.utc)) == frozenset()
     finally:
@@ -1680,7 +1680,7 @@ def test_execute_keeps_the_order_claim_when_the_cancel_succeeds(tmp_path):
         with redirect_stdout(io.StringIO()):
             with patch("artifactsmmo_cli.ai.actions.ge_cancel_order.action_ge_cancel_order",
                        return_value=make_api_result(char)):
-                _new_state, outcome = p._execute(action, MagicMock())
+                _new_state, outcome, _executed = p._execute(action, MagicMock())
         assert outcome == "ok"
         now = datetime.now(tz=timezone.utc)
         assert observer.sibling_order_claims(now) == frozenset({"order-1"})

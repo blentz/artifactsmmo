@@ -288,7 +288,7 @@ class TestGovernorConsultedBeforeActionDispatch:
         action = MoveAction(x=3, y=5)
         char = make_char_schema(x=3, y=5)
         with patch("artifactsmmo_cli.ai.actions.movement.action_move", return_value=make_api_result(char)):
-            _new_state, outcome = player._execute(action, client)
+            _new_state, outcome, _executed = player._execute(action, client)
         assert outcome == "ok"
         assert action_governor.acquire.call_count == 1
         assert data_governor.acquire.call_count == 0

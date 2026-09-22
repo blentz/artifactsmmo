@@ -238,7 +238,7 @@ def test_end_to_end_a_grind_cycle_that_fights_records_the_fight():
         patch.object(player, "_build_actions", return_value=[]),
         patch.object(player.planner, "plan", return_value=[leg]),
     ):
-        _, outcome = player._execute(grind, MagicMock())
+        _, outcome, _executed = player._execute(grind, MagicMock())
 
     assert outcome == "ok"
     assert player._last_grind_leg is leg

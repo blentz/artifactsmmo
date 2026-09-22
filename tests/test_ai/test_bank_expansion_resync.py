@@ -75,7 +75,7 @@ class TestBuyingAnExpansionResyncsTheBank:
             with patch("artifactsmmo_cli.ai.player.get_bank_items", return_value=items):
                 with patch("artifactsmmo_cli.ai.player.get_bank_details",
                            return_value=details):
-                    new_state, outcome = player._execute(action, MagicMock())
+                    new_state, outcome, _executed = player._execute(action, MagicMock())
 
         assert outcome == "ok"
         assert new_state.bank_capacity == 90, (

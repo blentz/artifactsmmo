@@ -537,7 +537,8 @@ def test_run_calls_handle_stuck_after_successful_action():
                                 patch.object(player, "_reconcile_open_orders"):
                             # Return RestAction so a plan can be found; patch _execute to avoid HTTP call
                             with patch.object(player, "_build_actions", return_value=[RestAction()]):
-                                with patch.object(player, "_execute", return_value=(initial_state, "ok")):
+                                with patch.object(player, "_execute",
+                                                  return_value=(initial_state, "ok", RestAction())):
                                     with patch("artifactsmmo_cli.ai.player.time.sleep"):
                                         with pytest.raises(KeyboardInterrupt):
                                             player.run()
@@ -856,7 +857,7 @@ def _run_one_action_with(player, action, new_state, outcome, client):
                 patch.object(player, "_reconcile_open_orders"):
             with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
                 with patch.object(player, "_winnable_farm_target", return_value=None):
-                    with patch.object(player, "_execute", return_value=(new_state, outcome)):
+                    with patch.object(player, "_execute", return_value=(new_state, outcome, action)):
                         with patch("artifactsmmo_cli.ai.player.time.sleep"):
                             with pytest.raises(KeyboardInterrupt):
                                 player.run()
@@ -981,7 +982,8 @@ def test_run_holds_plan_cursor_through_a_batched_gather():
 
     def fake_execute(action, client):
         execute_calls[0] += 1
-        return (state_partial, "ok") if execute_calls[0] == 1 else (state_full, "ok")
+        state = state_partial if execute_calls[0] == 1 else state_full
+        return state, "ok", action
 
     # (cursor, step_target) snapshots of player._plan_cache, taken at the
     # TOP of each loop iteration -- i.e. snapshots[n] reflects the state

@@ -191,7 +191,7 @@ class TestPlayerRefreshesOn404:
                        return_value=make_get_character_result(char)), \
                  patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty), \
                  patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty):
-                _state, outcome = player._execute(action, MagicMock())
+                _state, outcome, _executed = player._execute(action, MagicMock())
         return outcome
 
     def test_a_404_on_a_ge_fill_retires_the_ghost_order(self, monkeypatch):
@@ -447,7 +447,7 @@ class TestOfferShortRefresh:
                        return_value=make_get_character_result(char)), \
                  patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty), \
                  patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty):
-                _state, outcome = player._execute(action, MagicMock())
+                _state, outcome, _executed = player._execute(action, MagicMock())
         return outcome
 
     def test_a_434_corrects_the_stale_quantity(self, monkeypatch):

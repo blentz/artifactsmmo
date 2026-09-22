@@ -923,7 +923,7 @@ class TestExecute:
         char = make_char_schema(x=3, y=5)
 
         with patch("artifactsmmo_cli.ai.actions.movement.action_move", return_value=make_api_result(char)):
-            new_state, outcome = player._execute(action, client)
+            new_state, outcome, _executed = player._execute(action, client)
 
         assert new_state.x == 3
         assert outcome == "ok"
@@ -970,7 +970,7 @@ class TestExecute:
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
-                        new_state, outcome = player._execute(action, client)
+                        new_state, outcome, _executed = player._execute(action, client)
 
         assert isinstance(new_state, WorldState)
         assert outcome == "error:other"
@@ -1012,7 +1012,7 @@ class TestExecute:
                                        return_value=real_bank):
                                 with patch("artifactsmmo_cli.ai.player.get_bank_details",
                                            return_value=bank_details):
-                                    new_state, outcome = player._execute(action, client)
+                                    new_state, outcome, _executed = player._execute(action, client)
 
         assert outcome == "error:HTTP_478"
         assert new_state.bank_items == {}   # re-synced: the stale ash_plank claim is gone
@@ -1042,7 +1042,7 @@ class TestExecute:
                                    return_value=empty_events):
                             with patch("artifactsmmo_cli.ai.player.get_bank_items",
                                        side_effect=httpx.HTTPError("net down")):
-                                new_state, outcome = player._execute(action, client)
+                                new_state, outcome, _executed = player._execute(action, client)
 
         assert outcome == "error:HTTP_478"
         assert isinstance(new_state, WorldState)
@@ -1068,7 +1068,7 @@ class TestExecute:
                 with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                     with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                         with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
-                            new_state, outcome = player._execute(action, client)
+                            new_state, outcome, _executed = player._execute(action, client)
 
         assert isinstance(new_state, WorldState)
         assert outcome == "error:cooldown"
@@ -1095,7 +1095,7 @@ class TestExecute:
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
-                        new_state, outcome = player._execute(action, client)
+                        new_state, outcome, _executed = player._execute(action, client)
 
         assert isinstance(new_state, WorldState)
         assert outcome == "error:already_equipped"
@@ -1121,7 +1121,7 @@ class TestExecute:
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
-                        new_state, outcome = player._execute(action, client)
+                        new_state, outcome, _executed = player._execute(action, client)
 
         assert isinstance(new_state, WorldState)
         assert outcome == "error:network"
@@ -1147,7 +1147,7 @@ class TestExecute:
         with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item", return_value=make_api_result(char)):
             with patch("artifactsmmo_cli.ai.player.get_bank_items", return_value=bank_result):
                 with patch("artifactsmmo_cli.ai.player.get_bank_details", return_value=bank_details_result):
-                    new_state, outcome = player._execute(action, client)
+                    new_state, outcome, _executed = player._execute(action, client)
 
         assert new_state.bank_items is not None
         assert outcome == "ok"
@@ -1169,7 +1169,7 @@ class TestExecute:
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
                     with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
-                        new_state, outcome = player._execute(action, client)
+                        new_state, outcome, _executed = player._execute(action, client)
 
         assert outcome == "error:fight_lost"
         assert isinstance(new_state, WorldState)
@@ -1196,7 +1196,7 @@ class TestExecute:
         result.data.details = details
 
         with patch("artifactsmmo_cli.ai.actions.crafting.action_crafting", return_value=result):
-            _new_state, outcome = player._execute(action, client=MagicMock())
+            _new_state, outcome, _executed = player._execute(action, client=MagicMock())
 
         assert outcome == "ok"
         assert store.observed_craft_yield("copper_dagger") == (1, 10)
@@ -2267,7 +2267,7 @@ class TestGrindExpansionCapture:
         player.state = make_state()
         player._build_actions = lambda: []           # type: ignore[method-assign]
         player.planner = MagicMock()
-        player._execute = lambda action, client: (player.state, "ok")  # type: ignore[method-assign]
+        player._execute = lambda action, client: (player.state, "ok", action)  # type: ignore[method-assign]
         return player
 
     def test_captures_flat_legs(self):
@@ -2434,7 +2434,7 @@ class TestConsumableBatchDispatch:
         cap: list = []
         action = _CapturingCraft(code="cooked_chicken", quantity=1,
                                  workshop_location=(0, 0), captured=cap)
-        _new_state, outcome = player._execute(action, client=None)
+        _new_state, outcome, _executed = player._execute(action, client=None)
         assert outcome == "ok"
         assert cap == [9]   # rewritten from 1 to the held-pile batch
 
@@ -2456,3 +2456,113 @@ class TestConsumableBatchDispatch:
                                  workshop_location=(0, 0), captured=cap)
         player._execute(action, client=None)
         assert cap == [1]   # no game_data → no rewrite
+
+
+def _craft_result_for(quantity: int, xp: int = 45):
+    """A `make_api_result` char response wired with a `.data.details` that
+    `CraftAction.execute` can read — an item drop of `quantity` units of
+    `cooked_chicken` plus the xp the craft paid. Real `CraftAction.execute`
+    reads `result.data.details.items`/`.xp` only when `self.history is not
+    None`, which the craft-repr regression test below sets, so this can't be
+    left as an unconfigured MagicMock (iterating it raises TypeError).
+
+    `make_char_schema` sets every `<skill>_level` but leaves `<skill>_xp`/
+    `<skill>_max_xp` an auto-generated MagicMock attribute; that is harmless
+    for tests that never persist the resulting WorldState, but
+    `_record_learning_cycle` JSON-serializes `skill_xp` deltas, and a
+    MagicMock is not serializable — so pin real ints for every skill here."""
+    char = make_char_schema()
+    for skill in ("mining", "woodcutting", "fishing", "weaponcrafting",
+                 "gearcrafting", "jewelrycrafting", "cooking", "alchemy"):
+        setattr(char, f"{skill}_xp", 0)
+        setattr(char, f"{skill}_max_xp", 100)
+    result = make_api_result(char)
+    dropped = MagicMock()
+    dropped.code = "cooked_chicken"
+    dropped.quantity = quantity
+    result.data.details = MagicMock()
+    result.data.details.items = [dropped]
+    result.data.details.xp = xp
+    return result
+
+
+class TestCraftRebatchRecording:
+    """`_execute` rebatches a CraftAction's quantity to the held pile
+    (`consumable_craft_quantity` / `effective_quantity`, tested above in
+    `TestConsumableBatchDispatch`) but, before this fix, reported only
+    `(state, outcome)` — the caller at player.py:1308 still held the
+    PRE-batch action and recorded `action_repr`/`predicted_cost` against it.
+
+    Live evidence (learning.db): one row `action_repr='Craft(cooked_chicken×1)'`
+    with `actual_cooldown_seconds=364.843333` and `drops_json={"cooked_chicken":
+    73}` — 364.84/73 = 5.0s/unit, so the COOLDOWN was right and only the repr
+    quantity lied. 1733 of 5383 (32.2%) craft rows with drops disagree this
+    way. `Craft(small_health_potion×2)` rows (cooldown 9.92, xp 506) versus
+    `×1` (4.93, 247) confirm the scaling is correct whenever the repr agrees —
+    the repr is the lie, not the record.
+    """
+
+    def test_execute_returns_the_action_it_actually_ran(self):
+        """`_execute` must hand back the REBATCHED action (quantity=9, not the
+        caller's requested quantity=1) as a third return value, so the caller
+        can record what actually happened instead of what was asked for."""
+        gd = _batch_gd()
+        state = make_state(inventory={"raw_chicken": 9})
+        player = GamePlayer(character="hero", dry_run=False)
+        player.game_data = gd
+        player.state = state
+        action = CraftAction(code="cooked_chicken", quantity=1, workshop_location=(0, 0))
+
+        with patch("artifactsmmo_cli.ai.actions.crafting.action_crafting",
+                   return_value=_craft_result_for(9)):
+            new_state, outcome, executed = player._execute(action, MagicMock())
+
+        assert outcome == "ok"
+        assert isinstance(new_state, WorldState)
+        assert executed.quantity == 9
+        assert executed.learning_key() == "Craft(cooked_chicken×9)"
+        # `replace()` builds a NEW instance — the caller's original local
+        # object is never mutated, which is exactly why the old code (using
+        # `action.learning_key()` from the caller's own variable) lied.
+        assert action.quantity == 1
+
+    def test_the_recorded_cycle_carries_the_executed_quantity(self, tmp_path):
+        """Drives the real write site (`_record_learning_cycle`, the same seam
+        `test_cycle_error_text.py` and `test_root_group_census.py` use) with the
+        values the FIXED caller in `player.py` derives from `_execute`'s
+        returned executed action, and asserts the persisted row names the
+        quantity that actually ran, with a predicted_cost that scales with it."""
+        store = LearningStore(db_path=str(tmp_path / "craft_repr.db"), character="hero")
+        try:
+            store.start_session()
+            gd = _batch_gd()
+            state = make_state(inventory={"raw_chicken": 9})
+            player = GamePlayer(character="hero", dry_run=False, history=store)
+            player.game_data = gd
+            player.state = state
+            action = CraftAction(code="cooked_chicken", quantity=1, workshop_location=(0, 0))
+
+            with patch("artifactsmmo_cli.ai.actions.crafting.action_crafting",
+                       return_value=_craft_result_for(9)):
+                new_state, outcome, executed = player._execute(action, MagicMock())
+
+            predicted = executed.cost(state, gd, store)
+            player._record_learning_cycle(
+                prev_state=state, new_state=new_state,
+                action_repr=executed.learning_key(), action_class=type(executed).__name__,
+                outcome=outcome, selected_goal="MaintainConsumables(cooked_chicken)",
+                predicted_cost=predicted, actual_cooldown_seconds=45.0,
+                planner_nodes=1, planner_depth=1, planner_timed_out=False, plan_len=1,
+            )
+            with Session(store._engine) as s:
+                rows = list(s.exec(select(Cycle).where(Cycle.action_class == "CraftAction")))
+
+            assert len(rows) == 1
+            assert rows[0].action_repr == "Craft(cooked_chicken×9)"
+            unbatched_cost = CraftAction(
+                code="cooked_chicken", quantity=1, workshop_location=(0, 0),
+            ).cost(state, gd, store)
+            assert rows[0].predicted_cost == pytest.approx(predicted)
+            assert rows[0].predicted_cost != pytest.approx(unbatched_cost)
+        finally:
+            store.close()

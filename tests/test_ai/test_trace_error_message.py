@@ -33,7 +33,7 @@ def _run(player, exc):
     action = MagicMock()
     action.execute.side_effect = exc
     with patch.object(player, "_fetch_world_state", return_value=player.state):
-        _, outcome = player._execute(action, MagicMock())
+        _, outcome, _executed = player._execute(action, MagicMock())
     player._emit_trace("Act()", "Goal()", outcome, PLANNER_STATS)
     return outcome, player.tracer.write_cycle.call_args[0][0]
 
@@ -86,7 +86,7 @@ def test_successful_cycle_records_no_error():
     action = MagicMock()
     action.execute.return_value = player.state
 
-    _, outcome = player._execute(action, MagicMock())
+    _, outcome, _executed = player._execute(action, MagicMock())
     player._emit_trace("Act()", "Goal()", outcome, PLANNER_STATS)
 
     assert outcome == "ok"
@@ -102,7 +102,7 @@ def test_a_stale_message_never_leaks_onto_a_later_cycle():
 
     good = MagicMock()
     good.execute.return_value = player.state
-    _, outcome = player._execute(good, MagicMock())
+    _, outcome, _executed = player._execute(good, MagicMock())
     player._emit_trace("Act()", "Goal()", outcome, PLANNER_STATS)
 
     assert "error" not in player.tracer.write_cycle.call_args[0][0]

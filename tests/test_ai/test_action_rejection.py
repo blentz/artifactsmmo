@@ -211,7 +211,7 @@ def test_a_473_from_the_server_poisons_the_action(monkeypatch, bundle_game_data)
     monkeypatch.setattr(GamePlayer, "_fetch_world_state",
                         lambda self, client: self.state)
 
-    _state, outcome = player._execute(action, client=None)
+    _state, outcome, _executed = player._execute(action, client=None)
 
     assert outcome == "error:HTTP_473"
     assert player._rejected_actions.is_doomed(
@@ -270,7 +270,7 @@ def test_a_485_from_the_server_poisons_the_equip(monkeypatch, bundle_game_data):
     monkeypatch.setattr(GamePlayer, "_fetch_world_state",
                         lambda self, client: self.state)
 
-    _state, outcome = player._execute(action, client=None)
+    _state, outcome, _executed = player._execute(action, client=None)
 
     assert outcome == "error:already_equipped"
     # Next cycle: the identical step is no longer offered to the search.
