@@ -129,6 +129,34 @@ def test_an_ineligible_item_is_excluded_from_the_eligible_count(
     assert "1 eligible" in out, "only hexstaff is eligible; already_met must not count"
 
 
+def test_a_crafting_skill_with_no_recipe_is_excluded_from_eligible(
+    db_path: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`_eligible_candidates` must match `sibling_route_verdicts`'s own skip
+    condition (recipe is None) exactly, not just the `crafting_skill` half of
+    it. `no_recipe_ring` names a crafting skill a sibling clears but has no
+    entry in `crafting_recipes` -- the census would silently skip it (emit no
+    verdict), so it must not inflate `eligible` here or the
+    priced/load-bearing counts (derived from the verdicts the census DID
+    emit) would be measured against a denominator the census never saw."""
+    game_data = GameData(
+        items=ItemCatalog(stats={
+            "no_recipe_ring": ItemStats(code="no_recipe_ring", level=1, type_="ring",
+                                        crafting_skill="jewelrycrafting",
+                                        crafting_level=1),
+        }),
+        recipes_catalog=RecipeCatalog(crafting_recipes={}, craft_yields={}),
+    )
+    state = make_state(skills={**_ALL_SKILLS, "jewelrycrafting": 1})
+    monkeypatch.setattr(cmd, "_sense", lambda character: (state, game_data))
+    _publish_sibling_levels(db_path, "R2D2", {"jewelrycrafting": 10})
+
+    cmd.sibling_route_audit_command(character="C3P0")
+
+    out = capsys.readouterr().out
+    assert "0 eligible" in out, "no_recipe_ring names a skill but has no recipe"
+
+
 def _seed_supply_request(db: str, character: str) -> None:
     """One `SupplyBank` cycle, so `fleet_supply_request_cycles()` returns a
     real, positive observation and `_sibling_craft_option`'s pricing gate is
@@ -163,11 +191,48 @@ def test_a_load_bearing_row_prints_its_saving(
     assert "1 eligible" in out
     assert "1 priced" in out
     assert "1 load-bearing" in out
+    assert "savings are priced off a live-updating skill_grind_rate" in out, \
+        "the drift caveat must accompany the load-bearing rows"
     row = next(line for line in out.splitlines() if line.startswith("hexstaff"))
     assert "saving" in row
     # saving must be a real positive number, not a zero placeholder
     saving = int(row.split("saving")[1].split()[0])
     assert saving > 0
+
+
+def test_header_prints_the_pricing_scalar_and_the_priced_caveat(
+    db_path: str, canned_sense: None, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`priced` is structurally either 0 or equal to `eligible`: the ONLY gate
+    `_sibling_craft_option` applies is `store.fleet_supply_request_cycles()`,
+    one scalar read once per run and applied identically to every eligible
+    item. The header must print that raw scalar and the caveat explaining
+    why `priced == eligible` is the expected case, not N independent
+    confirmations -- otherwise "N priced" misleadingly reads as per-route
+    evidence."""
+    _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
+    _seed_supply_request(db_path, "R2D2")
+
+    cmd.sibling_route_audit_command(character="C3P0")
+
+    out = capsys.readouterr().out
+    assert "fleet_supply_request_cycles: 1.0" in out
+    assert "priced can only diverge from eligible when fleet_supply_request_cycles" in out
+
+
+def test_header_prints_none_when_the_fleet_has_never_served_a_request(
+    db_path: str, canned_sense: None, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """No `SupplyBank` cycle anywhere in the store -> the scalar itself is
+    `None`, and the header must print that literally rather than a blank or
+    a zero that would misrepresent "never observed" as "observed at zero"."""
+    _publish_sibling_levels(db_path, "R2D2", {"weaponcrafting": 10})
+
+    cmd.sibling_route_audit_command(character="C3P0")
+
+    out = capsys.readouterr().out
+    assert "fleet_supply_request_cycles: None" in out
+    assert "0 priced" in out
 
 
 def test_no_real_api_call_is_reachable(
