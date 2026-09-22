@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
+from artifactsmmo_cli.audit.root_group_census import GroupCounts, root_group_counts
 from tests.test_ai.fixtures import make_state
 
 
@@ -113,8 +114,6 @@ def _grouped(character: str, group: str | None) -> Cycle:
 
 
 def test_counts_by_group_per_character() -> None:
-    from artifactsmmo_cli.audit.root_group_census import root_group_counts
-
     rows = root_group_counts([
         _grouped("C3P0", "trunk"), _grouped("C3P0", "trunk"), _grouped("C3P0", "gear"),
         _grouped("R2D2", "orphan_skill"),
@@ -125,8 +124,6 @@ def test_counts_by_group_per_character() -> None:
 
 
 def test_pre_migration_rows_are_reported_as_unattributed_not_counted() -> None:
-    from artifactsmmo_cli.audit.root_group_census import root_group_counts
-
     rows = root_group_counts([_grouped("C3P0", "trunk"), _grouped("C3P0", None)])
     assert rows[0].attributed == 1
     assert rows[0].unattributed == 1
@@ -134,8 +131,6 @@ def test_pre_migration_rows_are_reported_as_unattributed_not_counted() -> None:
 
 
 def test_an_unknown_group_label_raises() -> None:
-    from artifactsmmo_cli.audit.root_group_census import root_group_counts
-
     # A label outside ROOT_GROUPS means the classifier and the census have
     # drifted. Counting it nowhere would hide that silently.
     with pytest.raises(ValueError, match="unknown root group"):
@@ -143,23 +138,17 @@ def test_an_unknown_group_label_raises() -> None:
 
 
 def test_characters_are_ordered_by_name() -> None:
-    from artifactsmmo_cli.audit.root_group_census import root_group_counts
-
     rows = root_group_counts([_grouped("R2D2", "gear"), _grouped("C3P0", "gear")])
     assert [r.character for r in rows] == ["C3P0", "R2D2"]
 
 
 def test_share_is_denominated_on_attributed_rows_only() -> None:
-    from artifactsmmo_cli.audit.root_group_census import GroupCounts
-
     counts = GroupCounts(character="C3P0", counts={"trunk": 1}, attributed=1, unattributed=9)
     assert counts.share("trunk") == 1.0
     assert counts.share("gear") == 0.0
 
 
 def test_all_pre_migration_character_returns_none_share() -> None:
-    from artifactsmmo_cli.audit.root_group_census import root_group_counts
-
     # A character whose entire window is pre-migration NULLs (today IS the migration date).
     rows = root_group_counts([_grouped("C3P0", None), _grouped("C3P0", None)])
     assert len(rows) == 1
