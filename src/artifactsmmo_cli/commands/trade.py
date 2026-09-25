@@ -22,10 +22,12 @@ from artifactsmmo_api_client.api.my_characters import (
 )
 from artifactsmmo_api_client.errors import UnexpectedStatus
 from artifactsmmo_api_client.models.data_page_ge_order_history_schema import DataPageGEOrderHistorySchema
+from artifactsmmo_api_client.models.data_page_ge_order_schema import DataPageGEOrderSchema
 from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 from artifactsmmo_api_client.models.ge_buy_order_schema import GEBuyOrderSchema
 from artifactsmmo_api_client.models.ge_cancel_order_schema import GECancelOrderSchema
 from artifactsmmo_api_client.models.ge_order_creation_schema import GEOrderCreationSchema
+from artifactsmmo_api_client.models.ge_order_schema import GEOrderSchema
 from artifactsmmo_api_client.types import UNSET
 from rich.console import Console
 from rich.panel import Panel
@@ -272,35 +274,43 @@ def sell_on_ge(
 
 @app.command("ge-orders")
 def list_ge_orders() -> None:
-    """List your current Grand Exchange orders."""
+    """List your current Grand Exchange orders (all characters on the account)."""
     try:
         client = ClientManager().client
 
-        response = get_ge_orders_my_grandexchange_orders_get.sync(client=client)
+        # `/my/grandexchange/orders` is account-scoped and paged. The generated
+        # client returns the page itself: `.data` is the order list and `.pages`
+        # says whether to keep going.
+        orders: list[GEOrderSchema] = []
+        page = 1
+        while True:
+            response = get_ge_orders_my_grandexchange_orders_get.sync(client=client, page=page, size=100)
+            if not isinstance(response, DataPageGEOrderSchema):
+                cli_response = handle_api_response(response)
+                console.print(format_error_message(cli_response.error or "Could not retrieve orders"))
+                raise typer.Exit(1)
+            orders.extend(response.data)
+            if page >= response.pages:
+                break
+            page += 1
 
-        cli_response = handle_api_response(response)
-        if cli_response.success and cli_response.data:
-            # Format orders as a table
-            orders = cli_response.data
-            if hasattr(orders, "data") and orders.data:
-                headers = ["Order ID", "Item", "Quantity", "Price", "Status"]
-                rows = []
-                for order in orders.data:
-                    rows.append(
-                        [
-                            str(display_field(order, "id")),
-                            str(display_field(order, "code")),
-                            str(display_field(order, "quantity")),
-                            str(display_field(order, "price")),
-                            str(display_field(order, "status")),
-                        ]
-                    )
-                output = format_table(headers, rows, title="Grand Exchange Orders")
-                console.print(output)
-            else:
-                console.print(format_error_message("No orders found"))
-        else:
-            console.print(format_error_message(cli_response.error or "Could not retrieve orders"))
+        if not orders:
+            console.print(format_error_message("No orders found"))
+            return
+
+        headers = ["Order ID", "Type", "Item", "Quantity", "Price", "Created"]
+        rows = [
+            [
+                order.id,
+                order.type_.value,
+                order.code,
+                str(order.quantity),
+                str(order.price),
+                order.created_at.strftime("%Y-%m-%d %H:%M"),
+            ]
+            for order in orders
+        ]
+        console.print(format_table(headers, rows, title=f"Grand Exchange Orders ({len(orders)} orders)"))
 
     except (ValueError, UnexpectedStatus, httpx.HTTPError) as e:
         cli_response = handle_api_error(e)

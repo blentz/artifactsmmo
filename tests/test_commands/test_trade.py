@@ -1,7 +1,11 @@
 """Tests for trade commands."""
 
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
+from artifactsmmo_api_client.models.data_page_ge_order_schema import DataPageGEOrderSchema
+from artifactsmmo_api_client.models.ge_order_schema import GEOrderSchema
+from artifactsmmo_api_client.models.ge_order_type import GEOrderType
 from rich.console import Console
 
 from artifactsmmo_cli.commands.trade import (
@@ -56,36 +60,71 @@ class TestTradeCommands:
         result = runner.invoke(app, ["ge-sell", "testchar", "iron_ore", "10", "0"])
         assert result.exit_code == 1
 
+    _MY_GE_ORDERS_SYNC = "artifactsmmo_api_client.api.my_account.get_ge_orders_my_grandexchange_orders_get.sync"
+
+    @staticmethod
+    def _order(id_: str, code: str, type_: GEOrderType = GEOrderType.SELL) -> GEOrderSchema:
+        return GEOrderSchema(id=id_, type_=type_, code=code, quantity=8, price=2,
+                             created_at=datetime(2026, 9, 22, 11, 30, tzinfo=UTC))
+
+    @staticmethod
+    def _page(orders: list[GEOrderSchema], page: int, pages: int, total: int) -> DataPageGEOrderSchema:
+        return DataPageGEOrderSchema(data=orders, total=total, page=page, size=100, pages=pages)
+
     def test_ge_orders_success(self, runner, stub_api):
-        """Test successful GE orders list command."""
-        with patch("artifactsmmo_api_client.api.my_account.get_ge_orders_my_grandexchange_orders_get.sync") as mock_api:
-            mock_order = Mock()
-            mock_order.id = "order123"
-            mock_order.code = "iron_ore"
-            mock_order.quantity = 10
-            mock_order.price = 100
-            mock_order.status = "active"
-
-            mock_data = Mock()
-            mock_data.data = [mock_order]
-
-            mock_api.return_value = api_response(mock_data)
+        """The generated client returns the PAGE itself (`.data` is the order list).
+        The command used to look for `.data` on that list, so every live call
+        printed "No orders found" while the account held 83 orders."""
+        with patch(self._MY_GE_ORDERS_SYNC) as mock_api:
+            mock_api.return_value = self._page(
+                [self._order("order123", "iron_ore"),
+                 self._order("order456", "copper_ore", GEOrderType.BUY)],
+                page=1, pages=1, total=2)
 
             result = runner.invoke(app, ["ge-orders"])
 
             assert result.exit_code == 0
             mock_api.assert_called_once()
             assert "iron_ore" in result.stdout
+            assert "order456" in result.stdout
+            assert "buy" in result.stdout
+            assert "sell" in result.stdout
+            assert "2 orders" in result.stdout
+            assert "No orders found" not in result.stdout
 
-    def test_ge_orders_empty(self, runner, stub_api):
-        """Test GE orders list with no orders."""
-        with patch("artifactsmmo_api_client.api.my_account.get_ge_orders_my_grandexchange_orders_get.sync") as mock_api:
-            mock_api.return_value = api_response(Mock(data=[]))
+    def test_ge_orders_reads_every_page(self, runner, stub_api):
+        with patch(self._MY_GE_ORDERS_SYNC) as mock_api:
+            mock_api.side_effect = [
+                self._page([self._order("first_page", "raw_chicken")], page=1, pages=2, total=2),
+                self._page([self._order("second_page", "shrimp")], page=2, pages=2, total=2),
+            ]
 
             result = runner.invoke(app, ["ge-orders"])
 
             assert result.exit_code == 0
+            assert [c.kwargs["page"] for c in mock_api.call_args_list] == [1, 2]
+            assert "first_page" in result.stdout
+            assert "second_page" in result.stdout
+
+    def test_ge_orders_empty(self, runner, stub_api):
+        """Test GE orders list with no orders."""
+        with patch(self._MY_GE_ORDERS_SYNC) as mock_api:
+            mock_api.return_value = self._page([], page=1, pages=0, total=0)
+
+            result = runner.invoke(app, ["ge-orders"])
+
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
             assert "No orders found" in result.stdout
+
+    def test_ge_orders_api_error_exits_nonzero(self, runner, stub_api):
+        with patch(self._MY_GE_ORDERS_SYNC) as mock_api:
+            mock_api.return_value = api_error(498, "Character not found")
+
+            result = runner.invoke(app, ["ge-orders"])
+
+            assert result.exit_code == 1
+            assert "Character not found" in result.stdout
 
     def test_ge_cancel_success(self, runner, stub_api):
         """Test successful GE cancel command."""
@@ -554,16 +593,6 @@ class TestTradeCommands:
             assert result.exit_code == 1
             assert "connection error" in result.stdout
 
-    def test_ge_orders_error_response(self, runner, stub_api):
-        """Test GE orders list with error response."""
-        with patch("artifactsmmo_api_client.api.my_account.get_ge_orders_my_grandexchange_orders_get.sync") as mock_api:
-            mock_api.return_value = api_error(431, "orders error")
-
-            result = runner.invoke(app, ["ge-orders"])
-
-            assert result.exit_code == 0
-            assert "orders error" in result.stdout
-
     def test_ge_orders_api_exception(self, runner, stub_api):
         """Test GE orders list command with API exception."""
         with patch("artifactsmmo_api_client.api.my_account.get_ge_orders_my_grandexchange_orders_get.sync") as mock_api:
@@ -573,17 +602,6 @@ class TestTradeCommands:
 
             assert result.exit_code == 1
             assert "API failure" in result.stdout
-
-    def test_ge_orders_success_no_data_attr(self, runner, stub_api):
-        """Test GE orders list with data lacking .data attribute."""
-        with patch("artifactsmmo_api_client.api.my_account.get_ge_orders_my_grandexchange_orders_get.sync") as mock_api:
-            # data object has no .data attribute
-            mock_api.return_value = api_response(Mock(spec=[]))
-
-            result = runner.invoke(app, ["ge-orders"])
-
-            assert result.exit_code == 0
-            assert "No orders found" in result.stdout
 
     def test_ge_cancel_api_error_cooldown(self, runner, stub_api):
         """Test GE cancel command exception path with cooldown."""
