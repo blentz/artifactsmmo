@@ -6,7 +6,6 @@ from artifactsmmo_cli.utils.rate_budget import (
     BucketBudgets,
     WindowBudget,
     parse_rate_limits,
-    split_budget,
 )
 
 _PAYLOAD = {
@@ -30,28 +29,18 @@ def test_parse_rejects_a_missing_bucket():
         parse_rate_limits({"data": {"account": {}, "data": {}}})
 
 
-def test_split_divides_every_window():
-    split = split_budget(parse_rate_limits(_PAYLOAD), children=5)
-    assert split.data == WindowBudget(second=2, minute=40, hour=400, day=None)
-    assert split.action == WindowBudget(second=2, minute=20, hour=1000, day=None)
+def test_divided_by_divides_every_window():
+    budgets = parse_rate_limits(_PAYLOAD)
+    assert budgets.data.divided_by(5) == WindowBudget(second=2, minute=40, hour=400, day=None)
+    assert budgets.action.divided_by(5) == WindowBudget(second=2, minute=20, hour=1000, day=None)
 
 
-def test_split_floors_but_never_to_zero():
-    budgets = BucketBudgets(
-        account=WindowBudget(second=1, minute=None, hour=None, day=None),
-        data=WindowBudget(second=1, minute=None, hour=None, day=None),
-        action=WindowBudget(second=1, minute=None, hour=None, day=None),
-    )
-    assert split_budget(budgets, children=5).data.second == 1
-
-
-def test_split_rejects_a_nonpositive_child_count():
-    with pytest.raises(ValueError, match="children must be >= 1"):
-        split_budget(parse_rate_limits(_PAYLOAD), children=0)
+def test_divided_by_floors_but_never_to_zero():
+    assert WindowBudget(second=1, minute=None, hour=None, day=None).divided_by(5).second == 1
 
 
 def test_json_round_trip():
-    budgets = split_budget(parse_rate_limits(_PAYLOAD), children=5)
+    budgets = parse_rate_limits(_PAYLOAD)
     assert BucketBudgets.from_json(budgets.to_json()) == budgets
 
 

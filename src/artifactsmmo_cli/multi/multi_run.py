@@ -20,7 +20,6 @@ from artifactsmmo_cli.tui.app import WatchApp
 from artifactsmmo_cli.utils.rate_budget import (
     BucketBudgets,
     parse_rate_limits,
-    split_budget,
 )
 
 
@@ -92,11 +91,12 @@ class MultiRun:
         for suffix in ("", "-wal", "-shm"):
             Path(f"{self._coordination_db}{suffix}").unlink(missing_ok=True)
 
-    def child_argv(self, character: str, budget: BucketBudgets) -> list[str]:
+    def child_argv(self, character: str, budget: BucketBudgets, fleet_size: int) -> list[str]:
         """The command line for one child. Never `--all` (that would fork-bomb
         the account) and never `--tui` (only the parent owns the terminal)."""
         argv = [sys.executable, "-m", "artifactsmmo_cli.main", "play", character,
                 "--emit-events", "--rate-budget", budget.to_json(),
+                "--fleet-size", str(fleet_size),
                 "--coordination-db", self._coordination_db_path()]
         if self._verbose:
             argv.append("--verbose")
@@ -115,13 +115,18 @@ class MultiRun:
     def build_pool(self, characters: list[str], rates: dict[str, Any]) -> SupervisorPool:
         if not characters:
             raise ValueError("account has no characters to play")
+        # The WHOLE budget goes to every child: the children police it together
+        # through the request log in the shared coordination DB, so an idle
+        # child's share is spendable by a busy one. A static even split left
+        # each child 60 account requests/hour; one GE-order poll per cycle
+        # spent most of that and parked three children for 18 minutes
+        # (2026-09-25).
         limits = parse_rate_limits(rates)
-        budget = split_budget(limits, children=len(characters))
         return SupervisorPool(
             [
                 CharacterSupervisor(
                     character=name,
-                    argv=self.child_argv(name, budget),
+                    argv=self.child_argv(name, limits, len(characters)),
                     on_event=self._on_event,
                     # `partial` binds `name` by VALUE right now, unlike a lambda
                     # closing over the loop variable `name` (which would report
@@ -140,8 +145,7 @@ class MultiRun:
             # it -- 17 requests when measured 2026-09-21 -- but that leg bills
             # DATA, not account: see supervisor_pool's stagger note.) The UNDIVIDED
             # limits are the right input: the stagger paces children against
-            # each other in the one bucket they all share, whereas the divided
-            # `budget` above is what each child then polices itself with.
+            # each other in the one bucket they all share.
             stagger_seconds=limits.account.sustainable_interval(),
             on_stagger=self._on_stagger,
         )

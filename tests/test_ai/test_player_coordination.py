@@ -1273,6 +1273,7 @@ def _bank_sync_patches(bank_rows):
     details = MagicMock()
     details.data = MagicMock()
     details.data.gold = 0
+    details.data.next_expansion_cost = 7000
     details.data.slots = 60
     return (patch("artifactsmmo_cli.ai.player.get_bank_items", return_value=items),
             patch("artifactsmmo_cli.ai.player.get_bank_details", return_value=details))

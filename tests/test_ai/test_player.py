@@ -14,6 +14,7 @@ from artifactsmmo_api_client.models.error_schema import ErrorSchema
 from artifactsmmo_api_client.types import UNSET
 from sqlmodel import Session, select
 
+from artifactsmmo_cli.ai.account_read_cache import AccountReadCache
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
@@ -788,6 +789,7 @@ class TestFullRefreshNetworkResilience:
         bank_details_result = MagicMock()
         bank_details_result.data = MagicMock()
         bank_details_result.data.gold = 0
+        bank_details_result.data.next_expansion_cost = 7000
         bank_details_result.data.slots = 50
         with patch.object(player, "_fetch_world_state", return_value=fetched):
             with patch("artifactsmmo_cli.ai.player.get_bank_items",
@@ -809,6 +811,7 @@ class TestFullRefreshNetworkResilience:
         bank_details_result = MagicMock()
         bank_details_result.data = MagicMock()
         bank_details_result.data.gold = 0
+        bank_details_result.data.next_expansion_cost = 7000
         bank_details_result.data.slots = 50
         pending_result = MagicMock()
         pending_result.data = []
@@ -839,6 +842,8 @@ class TestSyncBank:
         bank_details_result = MagicMock()
         bank_details_result.data = MagicMock()
         bank_details_result.data.gold = 200
+        bank_details_result.data.slots = 50
+        bank_details_result.data.next_expansion_cost = 7000
 
         with patch("artifactsmmo_cli.ai.player.get_bank_items", return_value=bank_items_result):
             with patch("artifactsmmo_cli.ai.player.get_bank_details", return_value=bank_details_result):
@@ -858,6 +863,8 @@ class TestSyncBank:
         bank_details_result = MagicMock()
         bank_details_result.data = MagicMock()
         bank_details_result.data.gold = 0
+        bank_details_result.data.slots = 50
+        bank_details_result.data.next_expansion_cost = 7000
 
         with patch("artifactsmmo_cli.ai.player.get_bank_items", return_value=empty_result):
             with patch("artifactsmmo_cli.ai.player.get_bank_details", return_value=bank_details_result):
@@ -893,6 +900,7 @@ class TestSyncBank:
         bank_details_result = MagicMock()
         bank_details_result.data = MagicMock()
         bank_details_result.data.gold = 200
+        bank_details_result.data.next_expansion_cost = 7000
         bank_details_result.data.slots = 60
 
         with patch("artifactsmmo_cli.ai.player.get_bank_items", return_value=bank_items_result):
@@ -975,14 +983,21 @@ class TestExecute:
         assert isinstance(new_state, WorldState)
         assert outcome == "error:other"
 
-    def test_execute_withdraw_http_478_resyncs_bank(self):
+    def test_execute_withdraw_http_478_resyncs_bank(self, tmp_path):
         """A Withdraw failing on HTTP 478 ("missing items") must RE-SYNC the bank,
         correcting the stale bank_items that drove the impossible withdraw. Without
         this the generator re-emits the identical failing withdraw forever — a
-        no-cooldown CPU-spin livelock (live Robby 2026-06-24: 4502 cycles)."""
+        no-cooldown CPU-spin livelock (live Robby 2026-06-24: 4502 cycles).
+
+        The re-sync BYPASSES the fleet cache: a fresh cached bank that still
+        claims the planks is exactly the stale view that drove the withdraw."""
         player = GamePlayer(character="hero")
         # Stale bank view claims 7 ash_plank are banked; the real bank is empty.
         player.state = make_state(x=4, y=0, bank_items={"ash_plank": 7})
+        cache = AccountReadCache(str(tmp_path / "fleet.db"), "hero", account_interval=12.0)
+        cache.publish("bank", json.dumps({"items": {"ash_plank": 7}, "gold": 0, "slots": 60,
+                                          "next_expansion_cost": 7000}), cost=2)
+        player.set_account_read_cache(cache)
         player.game_data = make_game_data_mock()
         client = MagicMock()
 
@@ -995,6 +1010,7 @@ class TestExecute:
         bank_details = MagicMock()
         bank_details.data = MagicMock()
         bank_details.data.gold = 0
+        bank_details.data.next_expansion_cost = 7000
         bank_details.data.slots = 60
 
         import io
@@ -1013,6 +1029,7 @@ class TestExecute:
                                 with patch("artifactsmmo_cli.ai.player.get_bank_details",
                                            return_value=bank_details):
                                     new_state, outcome, _executed = player._execute(action, client)
+        cache.close()
 
         assert outcome == "error:HTTP_478"
         assert new_state.bank_items == {}   # re-synced: the stale ash_plank claim is gone
@@ -1126,9 +1143,15 @@ class TestExecute:
         assert isinstance(new_state, WorldState)
         assert outcome == "error:network"
 
-    def test_execute_bank_action_syncs_bank(self):
+    def test_execute_bank_action_syncs_bank(self, tmp_path):
+        """The post-deposit sync BYPASSES the fleet cache: the cached bank
+        predates the deposit, so serving it would hide what was just banked."""
         player = GamePlayer(character="hero")
         player.state = make_state(x=4, y=0, inventory={"copper_ore": 5})
+        cache = AccountReadCache(str(tmp_path / "fleet.db"), "hero", account_interval=12.0)
+        cache.publish("bank", json.dumps({"items": {}, "gold": 0, "slots": 50,
+                                          "next_expansion_cost": 7000}), cost=2)
+        player.set_account_read_cache(cache)
         player.game_data = make_game_data_mock()
         client = MagicMock()
 
@@ -1143,13 +1166,16 @@ class TestExecute:
         bank_details_result = MagicMock()
         bank_details_result.data = MagicMock()
         bank_details_result.data.gold = 0
+        bank_details_result.data.slots = 50
+        bank_details_result.data.next_expansion_cost = 7000
 
         with patch("artifactsmmo_cli.ai.actions.deposit_all.deposit_item", return_value=make_api_result(char)):
             with patch("artifactsmmo_cli.ai.player.get_bank_items", return_value=bank_result):
                 with patch("artifactsmmo_cli.ai.player.get_bank_details", return_value=bank_details_result):
                     new_state, outcome, _executed = player._execute(action, client)
+        cache.close()
 
-        assert new_state.bank_items is not None
+        assert new_state.bank_items == {"copper_ore": 5}
         assert outcome == "ok"
 
     def test_execute_fight_lost_outcome(self):
@@ -1717,8 +1743,10 @@ class TestExecuteClaimPendingSync:
 
         sync_calls = []
 
-        def fake_sync(c, s):
-            sync_calls.append(True)
+        def fake_sync(c, s, force):
+            # The claim just changed the account's pending list, so the fleet
+            # cache's copy is known stale and must be bypassed.
+            sync_calls.append(force)
             return s
 
         player._sync_pending = fake_sync  # type: ignore

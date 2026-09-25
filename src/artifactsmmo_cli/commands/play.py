@@ -9,6 +9,7 @@ from datetime import datetime
 import httpx
 import typer
 
+from artifactsmmo_cli.ai.account_read_cache import AccountReadCache
 from artifactsmmo_cli.ai.file_tracer import FileTracer
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
@@ -29,6 +30,7 @@ from artifactsmmo_cli.tui.observer import ThreadSafeBridge
 from artifactsmmo_cli.utils.mutation_lock import check_mutation_lock, default_lock_path
 from artifactsmmo_cli.utils.rate_budget import BucketBudgets
 from artifactsmmo_cli.utils.rate_governor import RateGovernor
+from artifactsmmo_cli.utils.request_log import RequestLog
 
 # `default_learn_db_path` now lives in `learning_db_path.py` so
 # `multi/multi_run.py` can reuse the SAME default without importing
@@ -57,7 +59,12 @@ def play(
         help="Emit JSONL cycle events on stdout; human output moves to stderr"),
     rate_budget: str | None = typer.Option(
         None, "--rate-budget",
-        help="This child's share of the account rate budget, as JSON"),
+        help="The whole per-IP rate budget, as JSON (set by `play --all`'s "
+             "supervisor; the fleet shares it through --coordination-db)"),
+    fleet_size: int | None = typer.Option(
+        None, "--fleet-size",
+        help="How many children share --rate-budget (set by `play --all`'s "
+             "supervisor; not meant to be passed by hand)"),
     coordination_db: str | None = typer.Option(
         None, "--coordination-db",
         help="Cross-character coordination DB path (set by `play --all`'s "
@@ -141,12 +148,30 @@ def play(
         game_data_ttl_minutes=config.game_data_ttl_minutes,
         refresh_game_data=refresh_game_data,
     )
+    # The budget is the WHOLE per-IP budget, and the governors police it
+    # fleet-wide through a request log in the shared coordination DB -- so a
+    # budget without that DB, or without the fleet size its fair share is
+    # priced from, cannot be enforced honestly.
+    request_log: RequestLog | None = None
+    account_cache: AccountReadCache | None = None
     if rate_budget is not None:
+        if coordination_db is None or fleet_size is None:
+            print("--rate-budget needs --coordination-db and --fleet-size "
+                  "(the fleet shares one budget through that DB)")
+            raise typer.Exit(code=2)
         budgets = BucketBudgets.from_json(rate_budget)
+        request_log = RequestLog(coordination_db)
         player.set_rate_governors(
-            data=RateGovernor(budgets.data), action=RateGovernor(budgets.action),
-            account=RateGovernor(budgets.account),
+            data=RateGovernor(budgets.data, fleet_size, request_log, "data"),
+            action=RateGovernor(budgets.action, fleet_size, request_log, "action"),
+            account=RateGovernor(budgets.account, fleet_size, request_log, "account"),
         )
+        # Account-scoped reads return the same answer to every sibling, so the
+        # fleet keeps ONE copy. Its TTL is paced by the WHOLE account bucket,
+        # which is what the fleet's idle refreshes jointly spend.
+        account_cache = AccountReadCache(
+            coordination_db, character, budgets.account.sustainable_interval())
+        player.set_account_read_cache(account_cache)
 
     # Cross-character role coordination (emergent-specialization spec, Task
     # 11). Gated purely on `--coordination-db` being set. `--learn` no
@@ -218,6 +243,10 @@ def play(
         store.close()
         if coordination is not None:
             coordination.close()
+        if request_log is not None:
+            request_log.close()
+        if account_cache is not None:
+            account_cache.close()
 
 
 def _run_with_tui(

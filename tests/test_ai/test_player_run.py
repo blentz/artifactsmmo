@@ -119,6 +119,8 @@ class TestSyncBankPagination:
         bank_details = MagicMock()
         bank_details.data = MagicMock()
         bank_details.data.gold = 0
+        bank_details.data.slots = 50
+        bank_details.data.next_expansion_cost = 7000
 
         with patch("artifactsmmo_cli.ai.player.get_bank_items", side_effect=[page1, page2]):
             with patch("artifactsmmo_cli.ai.player.get_bank_details", return_value=bank_details):

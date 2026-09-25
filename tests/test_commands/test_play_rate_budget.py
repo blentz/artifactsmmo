@@ -14,6 +14,7 @@ needed, and let `RateGovernor`/`BucketBudgets` run for real so the assertion
 is on real objects, not a mocked call log.
 """
 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -21,7 +22,7 @@ import typer
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.commands import play as play_module
-from artifactsmmo_cli.utils.rate_budget import WindowBudget, parse_rate_limits, split_budget
+from artifactsmmo_cli.utils.rate_budget import WindowBudget, parse_rate_limits
 
 app = typer.Typer()
 app.command()(play_module.play)
@@ -32,12 +33,10 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
-def _rate_budget_json(
-    children: int = 2,
-) -> tuple[str, WindowBudget, WindowBudget, WindowBudget]:
+def _rate_budget_json() -> tuple[str, WindowBudget, WindowBudget, WindowBudget]:
     """A real --rate-budget JSON string built the same way MultiRun builds it
-    for a child: parse a /my/rates-shaped payload, then split it. Returns the
-    JSON plus the pre-split account/data/action WindowBudgets so the test can
+    for a child: parse a /my/rates-shaped payload and hand over ALL of it.
+    Returns the JSON plus the account/data/action WindowBudgets so the test can
     assert against real, independently-computed expectations rather than a
     literal.
     """
@@ -52,19 +51,18 @@ def _rate_budget_json(
         }
     }
     budgets = parse_rate_limits(payload)
-    split = split_budget(budgets, children=children)
     # Sanity: the three buckets this test cares about must all differ,
     # otherwise a crossed-wire bug (the same budget handed to two governors)
     # would be indistinguishable from correct wiring.
-    assert split.account.as_windows() != split.data.as_windows()
-    assert split.data.as_windows() != split.action.as_windows()
-    assert split.account.as_windows() != split.action.as_windows()
-    return split.to_json(), split.account, split.data, split.action
+    assert budgets.account.as_windows() != budgets.data.as_windows()
+    assert budgets.data.as_windows() != budgets.action.as_windows()
+    assert budgets.account.as_windows() != budgets.action.as_windows()
+    return budgets.to_json(), budgets.account, budgets.data, budgets.action
 
 
 class TestRateBudgetWiring:
-    def test_rate_budget_governors_get_the_right_half_of_the_split(self, runner: CliRunner) -> None:
-        rate_budget_json, expected_account, expected_data, expected_action = _rate_budget_json(children=2)
+    def test_rate_budget_governors_get_the_right_bucket(self, runner: CliRunner, tmp_path: Path) -> None:
+        rate_budget_json, expected_account, expected_data, expected_action = _rate_budget_json()
         with (
             patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls,
             patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
@@ -73,7 +71,9 @@ class TestRateBudgetWiring:
             mock_player_cls.return_value = mock_player
             mock_store_cls.return_value = Mock()
 
-            result = runner.invoke(app, ["hero", "--rate-budget", rate_budget_json])
+            result = runner.invoke(app, ["hero", "--rate-budget", rate_budget_json,
+                                         "--fleet-size", "2",
+                                         "--coordination-db", str(tmp_path / "fleet.db")])
 
         assert result.exit_code == 0, result.output
         mock_player.set_rate_governors.assert_called_once()
@@ -91,6 +91,34 @@ class TestRateBudgetWiring:
         assert action_governor._windows == expected_action.as_windows()
         assert account_governor._windows != data_governor._windows
         assert data_governor._windows != action_governor._windows
+        # One fleet: every governor polices its own bucket in the SAME log,
+        # and prices the fair share of a 2-child fleet.
+        assert (account_governor._bucket, data_governor._bucket, action_governor._bucket) \
+            == ("account", "data", "action")
+        assert account_governor._log is data_governor._log is action_governor._log
+        assert account_governor.sustainable_interval() == expected_account.divided_by(2).sustainable_interval()
+
+    @pytest.mark.parametrize("extra", [
+        ["--fleet-size", "2"],
+        ["--coordination-db", "fleet.db"],
+    ])
+    def test_a_budget_the_fleet_cannot_share_is_refused(
+            self, runner: CliRunner, extra: list[str]) -> None:
+        """The budget is the whole per-IP budget. Without the shared DB it
+        cannot be policed fleet-wide, and without the fleet size its fair share
+        cannot be priced, so the child refuses to start rather than overspend."""
+        rate_budget_json, _, _, _ = _rate_budget_json()
+        with (
+            patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls,
+            patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
+        ):
+            mock_player_cls.return_value = Mock()
+            mock_store_cls.return_value = Mock()
+
+            result = runner.invoke(app, ["hero", "--rate-budget", rate_budget_json, *extra])
+
+        assert result.exit_code == 2
+        assert "--rate-budget needs --coordination-db and --fleet-size" in result.output
 
     def test_no_rate_budget_leaves_governors_unset(self, runner: CliRunner) -> None:
         """No --rate-budget (the single-character default) must not call

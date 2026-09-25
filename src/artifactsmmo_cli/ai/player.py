@@ -26,6 +26,7 @@ from artifactsmmo_api_client.models.achievement_type import AchievementType
 from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 from artifactsmmo_api_client.types import Unset
 
+from artifactsmmo_cli.ai.account_read_cache import AccountReadCache
 from artifactsmmo_cli.ai.action_kind import action_kind_of
 from artifactsmmo_cli.ai.action_rejection import is_categorical_rejection, rejection_key
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
@@ -41,6 +42,8 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.ge_cancel_order import GeCancelOrderAction
 from artifactsmmo_cli.ai.actions.ge_fill import GeFillBuyOrderAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
+from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
+from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
@@ -369,6 +372,11 @@ class GamePlayer:
         # that age). Settlement (gold, item delivery) is NOT tracked here — it
         # is API-authoritative via the fresh character/pending reads each cycle.
         self._open_orders: tuple[OpenOrder, ...] = ()
+        # Set when this character just cancelled or posted a GE order, so the
+        # next reconcile reads the order list FRESH instead of from the fleet
+        # cache -- a cached list still holding the order it just cancelled
+        # would re-target it for an HTTP 404.
+        self._ge_orders_dirty = False
         self._prev_level: int | None = None
         self._last_outcome: str | None = None
         self._plan_cache: PlanCache | None = None
@@ -405,6 +413,9 @@ class GamePlayer:
         self._data_governor: RateGovernor | None = None
         self._action_governor: RateGovernor | None = None
         self._account_governor: RateGovernor | None = None
+        # The fleet-wide copy of account-scoped reads, set only by `play --all`
+        # children alongside the governors. None reads the API directly.
+        self._account_cache: AccountReadCache | None = None
         # Cross-character role coordination (emergent-specialization spec,
         # Task 11). None disables it entirely — every single-character run,
         # and every `--all` child play.py declines to attach one for (see
@@ -516,15 +527,16 @@ class GamePlayer:
     def set_rate_governors(
         self, data: RateGovernor, action: RateGovernor, account: RateGovernor
     ) -> None:
-        """Wire this child's share of the shared per-IP rate budget, across all
-        three buckets the bot actually calls. Called only by `play --all`
+        """Wire the fleet-wide governors of the shared per-IP rate budget, across
+        all three buckets the bot actually calls. Called only by `play --all`
         children; a lone `play <character>` never calls this, so
         `_acquire_data`/`_acquire_action`/`_acquire_account` stay no-ops for
         it.
 
         ALSO PRICES THE PLANNER'S ACTIONS. Wiring a governor is precisely the
         statement "this process does not get to act whenever a cooldown ends —
-        it gets one action per `sustainable_interval()` seconds", so it is also
+        on average it gets one action per `sustainable_interval()` seconds" --
+        its fair share of the fleet's budget -- so it is also
         the moment the planner must stop pricing actions at their cooldown
         alone. The action bucket is the one that binds: every planner action is
         a `/my/{name}/action/*` call. See `GOAPPlanner.action_floor_seconds`;
@@ -534,6 +546,34 @@ class GamePlayer:
         self._action_governor = action
         self._account_governor = account
         self.planner.set_action_floor(action.sustainable_interval())
+
+    def set_account_read_cache(self, cache: AccountReadCache) -> None:
+        """Attach the fleet-wide cache of account-scoped reads (GE open orders,
+        bank, pending items). Called only by `play --all` children; a lone
+        `play <character>` reads the API directly, exactly as before."""
+        self._account_cache = cache
+
+    def _account_read(self, key: str, fetch: Callable[[], tuple[str, int] | None],
+                      force: bool) -> str | None:
+        """The payload for account read `key`, from the fleet cache when fresh.
+
+        `fetch` hits the API and returns `(payload, requests_made)`, or None on
+        a transient failure (which is not cached, so the next caller retries).
+        `force` skips the cache: the caller just changed the resource, so the
+        cached copy is known stale, and its fresh fetch is published for every
+        sibling."""
+        if self._account_cache is None:
+            fetched = fetch()
+            return None if fetched is None else fetched[0]
+        if not force:
+            cached = self._account_cache.lookup(key)
+            if cached is not None:
+                return cached
+        fetched = fetch()
+        if fetched is None:
+            return None
+        self._account_cache.publish(key, fetched[0], fetched[1])
+        return fetched[0]
 
     def set_coordination_store(self, store: "CoordinationStore | None") -> None:
         """Attach the cross-character coordination store. None (the default)
@@ -554,7 +594,7 @@ class GamePlayer:
         """Block until the account-bucket budget has room. A no-op when unset.
 
         The account bucket (300/hour total, per docs.artifactsmmo.com) is the
-        TIGHTEST of the three -- 60/hour/child at 5 children, versus data's
+        TIGHTEST of the three -- shared by the whole fleet, versus data's
         2000/hour -- and covers `/my/*` reads that are not `/my/{name}/action/*`
         (bank items, bank details, GE orders, ...). Those were previously
         charged against the data bucket, which both starved data's real
@@ -1709,6 +1749,11 @@ class GamePlayer:
             # racing us to it (`cancel_selection.cancel_targets`).
             if isinstance(action, GeCancelOrderAction):
                 self._claim_ge_order(action)
+            # Whatever the outcome, this character's view of the account's
+            # open orders is now suspect: the next reconcile reads it fresh.
+            if isinstance(action, (GeCancelOrderAction, GePostSellOrderAction,
+                                   GePostBuyOrderAction)):
+                self._ge_orders_dirty = True
             self._acquire_action()
             new_state = action.execute(self.state, client)
             # Re-sync bank state after visiting bank
@@ -1722,10 +1767,10 @@ class GamePlayer:
             # nothing had ever exercised this path.
             if isinstance(action, (DepositAllAction, DepositItemAction,
                                    WithdrawItemAction, BuyBankExpansionAction)):
-                new_state = self._sync_bank(client, new_state)
+                new_state = self._sync_bank(client, new_state, force=True)
             # Re-sync pending items after claiming one
             if isinstance(action, ClaimPendingItemAction):
-                new_state = self._sync_pending(client, new_state)
+                new_state = self._sync_pending(client, new_state, force=True)
             # Any successful action clears the throttle history — an isolated
             # 429 (or two) earlier in the session must not keep inflating the
             # wait for the rest of it.
@@ -1858,7 +1903,7 @@ class GamePlayer:
                 # withdraw every cycle — a no-cooldown livelock that spins CPU
                 # (live Robby trace 2026-06-24: 4502 cycles of Withdraw→478).
                 try:  # noqa: SIM105 - keep explicit except to document the transient-retry rationale
-                    refreshed = self._sync_bank(client, refreshed)
+                    refreshed = self._sync_bank(client, refreshed, force=True)
                 except httpx.HTTPError:
                     pass  # transient; the periodic refresh retries
             if e.code in (ERROR_CODE_ORDER_NOT_FOUND, ERROR_CODE_OFFER_SHORT) \
@@ -2081,32 +2126,18 @@ class GamePlayer:
             self.game_data.active_raid_codes = {r.code for r in state.active_raids}
         return state
 
-    def _sync_bank(self, client: AuthenticatedClient, state: WorldState) -> WorldState:
-        """Re-fetch bank contents after a bank interaction.
+    def _sync_bank(self, client: AuthenticatedClient, state: WorldState,
+                   force: bool = False) -> WorldState:
+        """Refresh bank contents, from the fleet cache unless `force`.
 
-        `/my/bank/items` and `/my/bank` are account-scoped reads (they are
-        `/my/*` but not `/my/{name}/action/*`), so they draw from the account
-        bucket, not the data bucket."""
-        bank_items: dict[str, int] = {}
-        page = 1
-        while True:
-            self._acquire_account()
-            result = get_bank_items(client=client, page=page, size=100)
-            if result is None or not result.data:
-                break
-            for slot in result.data:
-                bank_items[slot.code] = bank_items.get(slot.code, 0) + slot.quantity
-            if len(result.data) < 100:
-                break
-            page += 1
-
-        bank_gold: int | None = None
+        `force` is for right after this character changed the bank itself: the
+        cached copy is then known stale."""
+        payload = self._account_read("bank", lambda: self._fetch_bank(client), force)
+        assert payload is not None  # `_fetch_bank` never reports a failure
+        bank = json.loads(payload)
         bank_capacity: int | None = state.bank_capacity
-        self._acquire_account()
-        details = get_bank_details(client=client)
-        if details is not None and hasattr(details, "data") and details.data is not None:
-            bank_gold = details.data.gold
-            bank_capacity = details.data.slots
+        if bank["slots"] is not None:
+            bank_capacity = bank["slots"]
             # THE PRICE IS ACCOUNT-WIDE AND MOVES WHENEVER ANY CHARACTER BUYS,
             # so it cannot be left on each character's session-start snapshot.
             # Live 2026-09-13: C3P0's two purchases took it 7,000 -> 28,000
@@ -2116,7 +2147,7 @@ class GamePlayer:
             # read already fetches `BankSchema`, which carries the field; it was
             # being thrown away.
             if self.game_data is not None:
-                self.game_data._next_expansion_cost = details.data.next_expansion_cost
+                self.game_data._next_expansion_cost = bank["next_expansion_cost"]
 
         # `dataclasses.replace` so every untouched field carries over. The old
         # field-by-field WorldState(...) rebuild silently DROPPED every field
@@ -2126,33 +2157,77 @@ class GamePlayer:
         # planning until the next character fetch.
         return replace(
             state,
-            bank_items=bank_items,
-            bank_gold=bank_gold,
+            bank_items=dict(bank["items"]),
+            bank_gold=bank["gold"],
             bank_capacity=bank_capacity,
         )
 
-    def _sync_pending(self, client: AuthenticatedClient, state: WorldState) -> WorldState:
-        """Re-fetch pending items after claiming one.
+    def _fetch_bank(self, client: AuthenticatedClient) -> tuple[str, int]:
+        """Read the bank from the API: `(payload, requests_made)`.
+
+        `/my/bank/items` and `/my/bank` are account-scoped reads (they are
+        `/my/*` but not `/my/{name}/action/*`), so they draw from the account
+        bucket, not the data bucket."""
+        bank_items: dict[str, int] = {}
+        requests = 0
+        page = 1
+        while True:
+            self._acquire_account()
+            requests += 1
+            result = get_bank_items(client=client, page=page, size=100)
+            if result is None or not result.data:
+                break
+            for slot in result.data:
+                bank_items[slot.code] = bank_items.get(slot.code, 0) + slot.quantity
+            if len(result.data) < 100:
+                break
+            page += 1
+
+        self._acquire_account()
+        requests += 1
+        details = get_bank_details(client=client)
+        gold: int | None = None
+        slots: int | None = None
+        next_expansion_cost: int | None = None
+        if details is not None and hasattr(details, "data") and details.data is not None:
+            gold = details.data.gold
+            slots = details.data.slots
+            next_expansion_cost = details.data.next_expansion_cost
+        return json.dumps({"items": bank_items, "gold": gold, "slots": slots,
+                           "next_expansion_cost": next_expansion_cost}), requests
+
+    def _sync_pending(self, client: AuthenticatedClient, state: WorldState,
+                      force: bool = False) -> WorldState:
+        """Refresh pending items, from the fleet cache unless `force` (right
+        after this character claimed one, when the cached copy is known stale)."""
+        payload = self._account_read("pending_items", lambda: self._fetch_pending(client), force)
+        assert payload is not None  # `_fetch_pending` never reports a failure
+        pairs = json.loads(payload)
+        pending = None if pairs is None else tuple((pid, code) for pid, code in pairs)
+        # `dataclasses.replace`: only pending_items changes; every other field
+        # (combat stats included) carries over. See `_sync_bank` for the
+        # stat-dropping bug the explicit rebuild caused.
+        return replace(state, pending_items=pending)
+
+    def _fetch_pending(self, client: AuthenticatedClient) -> tuple[str, int]:
+        """Read pending items from the API: `(payload, requests_made)`.
 
         `/my/pending_items` is an account-scoped read (tagged "My account" in
         the OpenAPI spec, same as `/my/bank` and `/my/bank/items`), so it
         draws from the account bucket, not the data bucket."""
         self._acquire_account()
         result = get_pending_items(client=client)
-        pending: tuple[tuple[str, str], ...] | None = None
+        pairs: list[tuple[str, str]] | None = None
         if result is not None and result.data:
-            pairs: list[tuple[str, str]] = []
+            found: list[tuple[str, str]] = []
             for pi in result.data:
                 items = pi.items
                 if isinstance(items, Unset) or not items:
                     continue
                 for si in items:
-                    pairs.append((pi.id, si.code))
-            pending = tuple(pairs) if pairs else None
-        # `dataclasses.replace`: only pending_items changes; every other field
-        # (combat stats included) carries over. See `_sync_bank` for the
-        # stat-dropping bug the explicit rebuild caused.
-        return replace(state, pending_items=pending)
+                    found.append((pi.id, si.code))
+            pairs = found if found else None
+        return json.dumps(pairs), 1
 
     def _full_refresh(self, client: AuthenticatedClient) -> None:
         """Force a complete state refresh: character, bank, pending items.
@@ -2217,17 +2292,29 @@ class GamePlayer:
             print(f"[{self._now()}] GE order refresh network error: {e!r} "
                   "— keeping the prior order book; retrying next interval")
 
-    def _fetch_open_orders(self, client: AuthenticatedClient) -> tuple[OpenOrder, ...] | None:
-        """Page through this character's own currently-open GE orders.
+    def _fetch_open_orders(self, client: AuthenticatedClient,
+                           force: bool = False) -> tuple[OpenOrder, ...] | None:
+        """The account's currently-open GE orders, from the fleet cache unless
+        `force`. None (never an empty tuple) on total failure, so the caller
+        cannot mistake a failed poll for every order having filled."""
+        payload = self._account_read(
+            "ge_open_orders", lambda: self._fetch_open_orders_api(client), force)
+        if payload is None:
+            return None
+        return tuple(
+            OpenOrder(id=oid, code=code, qty=qty, price=price, side=OrderSide(side), age=0)
+            for oid, code, qty, price, side in json.loads(payload))
+
+    def _fetch_open_orders_api(self, client: AuthenticatedClient) -> tuple[str, int] | None:
+        """Page through the account's open GE orders: `(payload, requests_made)`.
 
         Retries transient transport errors with the same backoff schedule as
-        `_fetch_active_events`/`_fetch_raids`. Returns None (never an empty
-        tuple) on total failure so the caller cannot mistake a failed poll for
-        every order having filled.
+        `_fetch_active_events`/`_fetch_raids`. Returns None on total failure.
 
         `/my/grandexchange/orders` is an account-scoped read (`/my/*`, not
         `/my/{name}/action/*`), so it draws from the account bucket."""
-        orders: list[OpenOrder] = []
+        orders: list[tuple[str, str, int, int, str]] = []
+        requests = 0
         page = 1
         while True:
             result = None
@@ -2236,6 +2323,7 @@ class GamePlayer:
             for attempt in range(1, 4):  # 3 attempts: immediate, +5s, +10s
                 try:
                     self._acquire_account()
+                    requests += 1
                     result = get_my_ge_orders(client=client, page=page, size=100)
                     fetched = True
                     break
@@ -2250,14 +2338,11 @@ class GamePlayer:
             if result is None or not result.data:
                 break
             for row in result.data:
-                orders.append(OpenOrder(
-                    id=row.id, code=row.code, qty=row.quantity, price=row.price,
-                    side=OrderSide(row.type_.value), age=0,
-                ))
+                orders.append((row.id, row.code, row.quantity, row.price, row.type_.value))
             if len(result.data) < 100:
                 break
             page += 1
-        return tuple(orders)
+        return json.dumps(orders), requests
 
     def _reconcile_open_orders(self, client: AuthenticatedClient) -> None:
         """Keep this character's own GE `open_orders` (with correct per-cycle
@@ -2283,9 +2368,10 @@ class GamePlayer:
         than treating "we could not ask" as "every order filled"."""
         if self.state is None:
             return
-        api_open = self._fetch_open_orders(client)
+        api_open = self._fetch_open_orders(client, force=self._ge_orders_dirty)
         if api_open is None:
-            return  # transient failure; retry next cycle
+            return  # transient failure; retry next cycle (still dirty)
+        self._ge_orders_dirty = False
         result = reconcile_open_orders(self._open_orders, api_open)
         self._open_orders = result.open_orders
         self.state = replace(self.state, open_orders=result.open_orders)

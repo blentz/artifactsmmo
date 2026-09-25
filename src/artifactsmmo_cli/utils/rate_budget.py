@@ -1,9 +1,10 @@
-"""Rate-limit budgets: parse /my/rates and divide it across concurrent children.
+"""Rate-limit budgets: parse /my/rates into per-bucket window limits.
 
 ArtifactsMMO applies standard rate limits PER IP ADDRESS, so every `play --all`
 child draws from one shared budget. The parent reads the live limits once and
-hands each child its share; nothing here hardcodes a limit value, per the
-project's use-only-API-data rule.
+hands every child the whole budget, which the children police together through
+`RequestLog`; nothing here hardcodes a limit value, per the project's
+use-only-API-data rule.
 """
 
 import json
@@ -106,15 +107,3 @@ def parse_rate_limits(payload: dict[str, Any]) -> BucketBudgets:
             window_dict[window] = limit
         parsed[bucket] = WindowBudget(**window_dict)
     return BucketBudgets(**parsed)
-
-
-def split_budget(budgets: BucketBudgets, children: int) -> BucketBudgets:
-    """Each child's share. Floors, but never to zero — a child with a zero
-    allowance would block forever instead of merely being slow."""
-    if children < 1:
-        raise ValueError(f"children must be >= 1, got {children}")
-    return BucketBudgets(
-        account=budgets.account.divided_by(children),
-        data=budgets.data.divided_by(children),
-        action=budgets.action.divided_by(children),
-    )

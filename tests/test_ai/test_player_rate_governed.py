@@ -18,14 +18,17 @@ completely unenforced. The `..._not_data` tests below pin the fix: they
 assert the account governor was consulted AND the data governor was NOT.
 """
 
+from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
 import httpx
+import pytest
 
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.utils.rate_budget import WindowBudget
 from artifactsmmo_cli.utils.rate_governor import RateGovernor
+from artifactsmmo_cli.utils.request_log import RequestLog
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema, make_get_character_result
 
@@ -41,6 +44,23 @@ class _FakeTime:
     def sleep(self, seconds: float) -> None:
         self.slept.append(seconds)
         self.now += seconds
+
+
+_OPEN_LOGS: list[RequestLog] = []
+
+
+def _log() -> RequestLog:
+    """A private in-memory request log, closed by `_close_logs` at teardown."""
+    log = RequestLog(":memory:")
+    _OPEN_LOGS.append(log)
+    return log
+
+
+@pytest.fixture(autouse=True)
+def _close_logs() -> Iterator[None]:
+    yield
+    while _OPEN_LOGS:
+        _OPEN_LOGS.pop().close()
 
 
 def _empty_page() -> MagicMock:
@@ -60,7 +80,7 @@ def test_a_data_read_acquires_from_the_data_governor():
     fake = _FakeTime()
     player = GamePlayer(character="hero")
     governor = RateGovernor(
-        WindowBudget(second=1, minute=None, hour=None, day=None),
+        WindowBudget(second=1, minute=None, hour=None, day=None), sharers=1, log=_log(), bucket="data",
         clock=fake.clock, sleep=fake.sleep,
     )
     player.set_rate_governors(data=governor, action=governor, account=governor)
@@ -78,11 +98,11 @@ def test_wiring_governors_prices_the_planner_in_requests():
     fake = _FakeTime()
     player = GamePlayer(character="hero")
     action_governor = RateGovernor(
-        WindowBudget(second=10, minute=None, hour=300, day=None),
+        WindowBudget(second=10, minute=None, hour=300, day=None), sharers=1, log=_log(), bucket="data",
         clock=fake.clock, sleep=fake.sleep,
     )
     other = RateGovernor(
-        WindowBudget(second=None, minute=None, hour=6000, day=None),
+        WindowBudget(second=None, minute=None, hour=6000, day=None), sharers=1, log=_log(), bucket="data",
         clock=fake.clock, sleep=fake.sleep,
     )
     player.set_rate_governors(data=other, action=action_governor, account=other)
@@ -221,6 +241,7 @@ class TestAccountScopedReadsUseTheAccountGovernor:
         details = MagicMock()
         details.data = MagicMock()
         details.data.gold = 0
+        details.data.next_expansion_cost = 7000
         details.data.slots = 50
         with patch("artifactsmmo_cli.ai.player.get_bank_items", side_effect=[page1, page2]):
             with patch("artifactsmmo_cli.ai.player.get_bank_details", return_value=details):

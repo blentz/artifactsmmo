@@ -69,7 +69,7 @@ window — from the moment this character commits the withdraw until a sibling's
 own `bank_items` catches up — and nothing longer.
 
 LOWER BOUND (must not expire mid-withdraw). Between the claim and the outcome
-the character does: `_acquire_action()` (may block on this child's share of the
+the character does: `_acquire_action()` (may block on the fleet's shared
 per-IP action budget), the withdraw request itself, then `_sync_bank`'s paged
 `/my/bank/items` + `/my/bank` reads on the account bucket. That is bounded by
 one cycle, and a cycle is cooldown-bound — the bot sleeps 15-25s between
@@ -94,7 +94,7 @@ rather than each inventing one.
 
 LOWER BOUND (must outlive the cancel's settlement). Between the claim and a
 sibling being able to see the truth for itself, this character does
-`_acquire_action()` (which may block on its share of the per-IP action budget),
+`_acquire_action()` (which may block on the fleet's shared per-IP action budget),
 then the cancel request. The sibling learns the order is gone from its OWN next
 `_reconcile_open_orders`, which re-reads `/my/grandexchange/orders` every cycle —
 so the window to cover is one cycle, and a cycle is 15-25s when cooldown-bound.
