@@ -7,10 +7,11 @@ metrics, computed the same way, over any window of the durable `cycles` and
 `sessions` history in the learning DB (never trace files, which are deleted
 periodically).
 
-WHAT IT CANNOT SEE. No-plan cycles are not written to `cycles` (the play loop
-records them only in the in-memory stuck detector), and none of the compensating
-mechanisms (doomed memo, suppressions, focus aging, sticky commitment) records
-when it fires. Those gaps are listed in the plan, not papered over here.
+No-plan cycles are ordinary `cycles` rows (`outcome="no_plan"`), so they count
+against `ok_share` and appear as the `no_plan` error class. Compensating
+mechanisms are counted from `decision_events` (Phase 0b): `mechanisms` is empty
+for any window before that table existed, which means "not recorded", not "never
+fired".
 """
 
 import json
@@ -20,7 +21,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import pairwise
 
-from artifactsmmo_cli.ai.learning.models import Cycle, Session
+from artifactsmmo_cli.ai.learning.models import Cycle, DecisionEvent, Session
 
 ERROR_CLASSES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("grind_budget_exhausted", re.compile(r"grind sub-plan EXHAUSTED")),
@@ -56,6 +57,7 @@ class CharacterCensus:
     skill_xp_per_hour: float
     cooldown_share: float
     session_exits: dict[str, int]
+    mechanisms: dict[str, int]
 
 
 def classify_error(outcome: str, error_text: str | None) -> str:
@@ -98,9 +100,10 @@ def _longest_failure_streak(cycles: Sequence[Cycle]) -> int:
 
 
 def census(character: str, cycles: Sequence[Cycle], sessions: Sequence[Session],
-           window_hours: float) -> CharacterCensus:
+           events: Sequence[DecisionEvent], window_hours: float) -> CharacterCensus:
     """Measure one character. `cycles` must be that character's rows inside the
-    window in id order, and `sessions` the sessions that ENDED inside it.
+    window in id order, `sessions` the sessions that ENDED inside it, and
+    `events` its decision events inside it.
     `window_hours` is the wall-clock length of the window, so a character that
     was down for part of it shows the lost throughput instead of hiding it."""
     if window_hours <= 0:
@@ -132,4 +135,5 @@ def census(character: str, cycles: Sequence[Cycle], sessions: Sequence[Session],
         skill_xp_per_hour=skill_xp / window_hours,
         cooldown_share=cooldown / (window_hours * 3600.0),
         session_exits=dict(Counter(s.exit_reason or "running" for s in sessions)),
+        mechanisms=dict(Counter(e.mechanism for e in events)),
     )

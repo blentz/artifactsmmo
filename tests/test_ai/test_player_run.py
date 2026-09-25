@@ -792,6 +792,9 @@ def test_run_derives_crafting_target_from_fallback_obtain_item():
         # publish no fleet demand at all, silently, which is the failure the
         # field was added to end.
         blocked_target = None
+        # Same reasoning: the real decision always carries it, and the
+        # decision-events log reads it straight.
+        aged_pick = False
 
         def to_trace(self):
             return {}

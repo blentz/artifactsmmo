@@ -74,6 +74,8 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
     RoleChange,
     RootScoreView,
 )
+from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog, search_detail
+from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
@@ -244,6 +246,11 @@ class GamePlayer:
         # recycle sailed straight past that filter (live 2026-08-23 12:43Z).
         self.planner.set_refusal_filter(self._is_categorically_refused)
         self._arbiter = StrategyArbiter(self.planner, history)
+        # Per-cycle buffer of compensating-mechanism firings, shared with the
+        # arbiter and written with each `cycles` row (Phase 0b of
+        # docs/PLAN_decision_architecture_redesign.md).
+        self._events = DecisionEventLog()
+        self._arbiter.set_event_log(self._events)
         # active_events and raids are account-GLOBAL: identical for every
         # character, yet re-read every cycle. With five `play --all` children
         # that duplication alone breaches the 2000/hour per-IP data ceiling at
@@ -848,6 +855,10 @@ class GamePlayer:
         self._last_decision = decision
         cr, cs = decision.chosen_root, decision.chosen_step
         promoted_from = getattr(decision, "promoted_from", None)
+        if promoted_from is not None:
+            self._events.note(Mechanism.SERVABLE_PROMOTION, repr(cr), f"from={promoted_from!r}")
+        if decision.aged_pick:
+            self._events.note(Mechanism.AGED_PICK, repr(cr))
         self._last_servability_diag = {
             # NOTE this verdict is computed on the FINAL root, i.e. AFTER any
             # servability promotion — so on a promoted cycle it is necessarily
@@ -914,6 +925,7 @@ class GamePlayer:
             cache, self._last_outcome, self._regear_edge.active,
             goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL,
         ):
+            self._events.note(Mechanism.REPLAN, repr(cache.selected_goal) if cache else "<none>")
             selected_goal, plan, goals_tried = self._decide_band(
                 state, game_data, actions, ctx_combat_monster)
             if plan and selected_goal is not None:
@@ -945,6 +957,7 @@ class GamePlayer:
         # across a long cached plan ages by wall-clock cycles-committed, not
         # by how often the planner happened to re-decide (Fix 2).
         assert cache is not None
+        self._events.note(Mechanism.PLAN_CACHE_HIT, cache.goal_repr)
         self.state = replace(state, crafting_target=cache.crafting_target)
         self._notify_planning(False)
         self._bump_committed_focus()
@@ -1382,6 +1395,8 @@ class GamePlayer:
                         ERROR_BACKOFF_BASE_SECONDS * (2 ** self._error_backoff_n),
                         ERROR_BACKOFF_MAX_SECONDS,
                     )
+                    self._events.note(Mechanism.ERROR_BACKOFF, repr(executed_action),
+                                      f"{outcome} delay={delay:g}s")
                     time.sleep(delay)
                     self._error_backoff_n += 1
                 # Predicted cost and the recorded repr/class below are keyed to
@@ -1571,6 +1586,8 @@ class GamePlayer:
         # used to take the arbiter's separate 10s cheap budget, which no longer
         # exists.
         sub_plan = self.planner.plan(self.state, goal, actions, self.game_data)
+        self._events.note(Mechanism.GRIND_SEARCH, repr(goal),
+                          search_detail(self.planner.last_stats, len(sub_plan)))
         if not sub_plan:
             # Two very different faults land here, and conflating them cost a
             # 9.5h live livelock its diagnosis (C3P0 2026-08-01): the message
@@ -1643,6 +1660,7 @@ class GamePlayer:
         if self._plan_cache is not None:
             self._arbiter._memo.mark(self._plan_cache.goal_repr, self.state,
                                      self._cycle_counter)
+            self._events.note(Mechanism.GRIND_DOOM, self._plan_cache.goal_repr)
 
     def _claim_bank_stock(self, action: WithdrawItemAction) -> None:
         """Announce to siblings that this withdraw is taking `action.quantity`
@@ -1891,6 +1909,7 @@ class GamePlayer:
                           f"(HTTP {e.code}) — routing around it")
                     self._rejected_actions.mark(key, self.state,
                                                 self._cycle_counter)
+                    self._events.note(Mechanism.REFUSAL_POISON, key, f"HTTP {e.code}")
             refreshed = self._fetch_world_state(client)
             if outcome.startswith("error:HTTP_") and isinstance(
                 action, (WithdrawItemAction, DepositAllAction, DepositItemAction)
@@ -2693,6 +2712,21 @@ class GamePlayer:
                 self._healthy_streak[sig] = 0
 
     def _handle_stuck(self, signal: StuckSignal, client: AuthenticatedClient) -> None:
+        """Apply recovery for a stuck signal, noting every goal suppression and
+        action backoff it sets (Phase 0b). The recovery ladder writes those two
+        maps from a dozen branches; diffing them here records all of them
+        without threading the event log through each branch."""
+        goals_before = dict(self._suppressed_goals)
+        actions_before = dict(self._failed_action_backoff)
+        self._apply_stuck_recovery(signal, client)
+        for name, cycles in self._suppressed_goals.items():
+            if goals_before.get(name) != cycles:
+                self._events.note(Mechanism.SUPPRESS, name, f"goal cycles={cycles} signal={signal.name}")
+        for key, cycles in self._failed_action_backoff.items():
+            if actions_before.get(key) != cycles:
+                self._events.note(Mechanism.SUPPRESS, key, f"action cycles={cycles} signal={signal.name}")
+
+    def _apply_stuck_recovery(self, signal: StuckSignal, client: AuthenticatedClient) -> None:
         """Apply recovery action for a stuck signal at its current escalation level."""
         # Escalation decay: N = the signal's own detection window. A full
         # window of CONSECUTIVE counter-evidence since the last fire is
@@ -2709,6 +2743,7 @@ class GamePlayer:
         self._healthy_streak[signal] = 0
         level = self._recovery_level.get(signal, 0) + 1
         self._recovery_level[signal] = level
+        self._events.note(Mechanism.STUCK_SIGNAL, signal.name, f"level={level}")
 
         if signal == StuckSignal.STATE_FROZEN:
             if level == 1:
@@ -4234,6 +4269,9 @@ class GamePlayer:
         zero-cost rows (live Robby 2026-06-12: 29/50 zero-cost green_slime rows
         from dry-run probes out-ranked higher-XP blue_slime). Observed costs
         must come ONLY from real execution."""
+        # Drained unconditionally so the buffer cannot grow across cycles that
+        # write nothing (no history, dry run).
+        events = self._events.drain()
         if self.history is None or self.dry_run:
             return
         drops = self._compute_drops(prev_state, new_state)
@@ -4330,7 +4368,10 @@ class GamePlayer:
             consumables_expended_json=json.dumps(consumables, ensure_ascii=False, sort_keys=True),
             cycles_to_satisfy=cycles_to_satisfy,
         )
+        # Read before `record_cycle`: its commit expires the instance.
+        cycle_index = cycle.cycle_index
         self.history.record_cycle(cycle)
+        self.history.record_decision_events(cycle_index, list(events))
 
     @staticmethod
     def _compute_drops(prev_state: WorldState, new_state: WorldState) -> dict[str, int]:

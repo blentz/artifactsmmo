@@ -2,7 +2,7 @@
 
 import pytest
 
-from artifactsmmo_cli.ai.learning.models import Cycle, Session
+from artifactsmmo_cli.ai.learning.models import Cycle, DecisionEvent, Session
 from artifactsmmo_cli.audit.decision_census import census, classify_error
 
 
@@ -47,7 +47,10 @@ def test_census_measures_throughput_quality_and_progress() -> None:
     sessions = [Session(session_id="a", started_at="x", character="Robby", exit_reason="crash"),
                 Session(session_id="b", started_at="x", character="Robby", exit_reason=None)]
 
-    c = census("Robby", cycles, sessions, window_hours=2.0)
+    events = [DecisionEvent(ts="t", session_id="s", character="Robby", cycle_index=i, mechanism=m, subject="g")
+              for i, m in enumerate(["doomed_mark", "doomed_skip", "doomed_skip"])]
+
+    c = census("Robby", cycles, sessions, events, window_hours=2.0)
 
     assert c.cycles == 4 and c.cycles_per_hour == 2.0
     assert c.ok_share == 0.5
@@ -62,24 +65,26 @@ def test_census_measures_throughput_quality_and_progress() -> None:
     assert c.skill_xp_per_hour == 4.0
     assert c.cooldown_share == 0.25
     assert c.session_exits == {"crash": 1, "running": 1}
+    assert c.mechanisms == {"doomed_mark": 1, "doomed_skip": 2}
 
 
 def test_a_failure_streak_breaks_on_success_and_on_a_different_failure() -> None:
     fail_a = _cycle("error:HTTP_404", action="GeCancel(a)")
     fail_b = _cycle("error:HTTP_404", action="GeCancel(b)")
     cycles = [fail_a, fail_a, _cycle(), fail_a, fail_b, fail_b, fail_b]
-    assert census("Robby", cycles, [], 1.0).longest_failure_streak == 3
+    assert census("Robby", cycles, [], [], 1.0).longest_failure_streak == 3
 
 
 def test_an_empty_window_reports_undefined_shares_not_zeros() -> None:
-    c = census("HAL", [], [], window_hours=24.0)
+    c = census("HAL", [], [], [], window_hours=24.0)
     assert (c.cycles, c.cycles_per_hour) == (0, 0.0)
     assert c.ok_share is None and c.level_skill_share is None and c.timed_out_share is None
     assert c.goal_switch_share is None
     assert (c.nodes_p50, c.nodes_p95, c.nodes_max) == (None, None, None)
     assert c.longest_failure_streak == 0
+    assert c.mechanisms == {}
 
 
 def test_the_window_must_have_length() -> None:
     with pytest.raises(ValueError, match="window_hours must be positive"):
-        census("HAL", [], [], window_hours=0.0)
+        census("HAL", [], [], [], window_hours=0.0)

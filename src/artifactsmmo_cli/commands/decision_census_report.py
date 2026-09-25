@@ -26,6 +26,7 @@ def _num(value: int | None) -> str:
 def _render(c: CharacterCensus) -> str:
     errors = ", ".join(f"{k}={v}" for k, v in sorted(c.error_classes.items(), key=lambda kv: -kv[1]))
     exits = ", ".join(f"{k}={v}" for k, v in sorted(c.session_exits.items()))
+    mechanisms = ", ".join(f"{k}={v}" for k, v in sorted(c.mechanisms.items(), key=lambda kv: -kv[1]))
     return "\n".join([
         f"== {c.character} ==",
         f"  cycles {c.cycles} ({c.cycles_per_hour:.1f}/h)  ok {_pct(c.ok_share)}  "
@@ -37,6 +38,7 @@ def _render(c: CharacterCensus) -> str:
         f"  char xp/h {c.char_xp_per_hour:.0f}  skill xp/h {c.skill_xp_per_hour:.0f}  "
         f"cooldown share {c.cooldown_share:.1%}",
         f"  sessions ended: {exits or 'none'}",
+        f"  mechanisms: {mechanisms or 'none recorded'}",
     ])
 
 
@@ -55,7 +57,8 @@ def decision_census_command(
         store = LearningStore(default_learn_db_path(), character=character)
         try:
             result = census(character, store.cycles_between(since, stop),
-                            store.sessions_ended_between(since, stop), hours)
+                            store.sessions_ended_between(since, stop),
+                            store.decision_events_between(since, stop), hours)
         finally:
             store.close()
         print(_render(result))

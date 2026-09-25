@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.learning.models import (
     CombatLoadoutOutcome,
     CraftYieldObservation,
     Cycle,
+    DecisionEvent,
     LearnedSetting,
     LoadoutProfileObservation,
     PlanBodyLog,
@@ -1325,6 +1326,41 @@ class LearningStore:
                 s.commit()
         except SQLAlchemyError as e:
             print(f"[learning] record_plan_body failed: {e}")
+
+    def record_decision_events(self, cycle_index: int,
+                               events: list[tuple[str, str, str]]) -> None:
+        """Append this cycle's `(mechanism, subject, detail)` notes in ONE
+        transaction. Best-effort like every other write here; a no-op for an
+        empty batch or when no session is running."""
+        if not events or self._session_id is None:
+            return
+        ts = datetime.now(tz=timezone.utc).isoformat()
+        try:
+            with SqlSession(self._engine) as s:
+                for mechanism, subject, detail in events:
+                    s.add(DecisionEvent(
+                        ts=ts, session_id=self._session_id, character=self._character,
+                        cycle_index=cycle_index, mechanism=mechanism, subject=subject,
+                        detail=detail))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] record_decision_events failed: {e}")
+
+    def decision_events_between(self, since: str, until: str) -> list[DecisionEvent]:
+        """This character's decision events with `since <= ts < until`, oldest
+        first. Same failure discipline as `recent_cycles`."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(DecisionEvent)
+                    .where(col(DecisionEvent.character) == self._character)
+                    .where(col(DecisionEvent.ts) >= since)
+                    .where(col(DecisionEvent.ts) < until)
+                    .order_by(col(DecisionEvent.id))
+                )
+                return list(s.exec(stmt))
+        except SQLAlchemyError:
+            return []
 
     def plan_bodies_for_goal(self, goal_repr: str) -> list[PlanBodyLogBase]:
         """All logged plan bodies for a goal repr (Phase-2 macro detector input)."""

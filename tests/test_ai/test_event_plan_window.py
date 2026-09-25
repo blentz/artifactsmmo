@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog
 from artifactsmmo_cli.ai.event_plan_window import (
     _event_only_target,
     plan_fits_event_window,
@@ -158,7 +159,7 @@ def _driver_with_plan(plan, gd, state):
         """Returns a fixed plan; the seam's job is to gate it, not to find it."""
         def __init__(self):
             self.last_stats = type("S", (), {
-                "nodes_explored": 1, "max_depth_reached": 1,
+                "nodes_created": 1, "nodes_explored": 1, "max_depth_reached": 1,
                 "timed_out": False, "node_capped": False})()
 
         def plan(self, *a, **kw):
@@ -169,6 +170,7 @@ def _driver_with_plan(plan, gd, state):
     driver._history = None
     driver.goals_tried = []
     driver._last_timed_out = False
+    driver.events = DecisionEventLog()
     return driver
 
 

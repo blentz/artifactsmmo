@@ -561,6 +561,7 @@ class TestStrategyArbiterIntegration:
         class _SpyPlanner:
             calls = 0
             class last_stats:
+                nodes_created = 0
                 nodes_explored = 0
                 max_depth_reached = 0
                 timed_out = False
@@ -591,6 +592,7 @@ class TestStrategyArbiterIntegration:
         class _SpyPlanner:
             calls = 0
             class last_stats:
+                nodes_created = 5
                 nodes_explored = 5
                 max_depth_reached = 2
                 timed_out = False

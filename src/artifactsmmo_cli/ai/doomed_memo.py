@@ -35,6 +35,11 @@ class DoomedMemo:
         failures = prev[2] + 1 if prev is not None and prev[0] == sig else 1
         self._entries[goal_repr] = (sig, cycle, failures)
 
+    def is_marked(self, goal_repr: str) -> bool:
+        """True while any entry exists for `goal_repr`, doomed or not (telemetry:
+        a clear only means something when there was a mark to clear)."""
+        return goal_repr in self._entries
+
     def clear(self, goal_repr: str) -> None:
         """Forget a goal (called when it plans successfully)."""
         self._entries.pop(goal_repr, None)

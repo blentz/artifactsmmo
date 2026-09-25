@@ -26,6 +26,8 @@ from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.craft_plan_gen import _closure_items, generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
+from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog, search_detail
+from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.decisions.obtain_item import obtain_item_decision
 from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
@@ -766,6 +768,14 @@ class StrategyArbiter:
         # cycle with no cooldown to spend (first cycle, an error cycle), which
         # falls back to the planner's own default budget.
         self._planning_deadline: float | None = None
+        # Where the compensating mechanisms below note their firings (Phase 0b of
+        # docs/PLAN_decision_architecture_redesign.md). The player replaces it
+        # with its own log so arbiter and player events land in one batch.
+        self.events = DecisionEventLog()
+
+    def set_event_log(self, events: DecisionEventLog) -> None:
+        """Share the player's per-cycle decision-event buffer."""
+        self.events = events
 
     def set_cycle(self, cycle: int) -> None:
         """Player calls this each cycle so the memo's re-probe window advances."""
@@ -873,6 +883,7 @@ class StrategyArbiter:
         if not goal.is_plannable(state, game_data, self._history):
             # A proven-unplannable goal is a CONCLUSIVE no-plan, not a timeout.
             self._last_timed_out = False
+            self.events.note(Mechanism.NOT_PLANNABLE, repr(goal))
             self.goals_tried.append({
                 "goal": repr(goal),
                 "nodes": 0,
@@ -900,6 +911,7 @@ class StrategyArbiter:
         gen = generate_next_craft_action(goal, state, game_data, actions, sources)
         if gen is not None:
             self._last_timed_out = False
+            self.events.note(Mechanism.FAST_PATH, repr(goal), f"plan_len={len(gen)}")
             self.goals_tried.append({
                 "goal": repr(goal),
                 "nodes": 0,
@@ -914,6 +926,7 @@ class StrategyArbiter:
                                   budget_seconds=budget_seconds)
         stats = self._planner.last_stats
         self._last_timed_out = stats.timed_out
+        self.events.note(Mechanism.SEARCH, repr(goal), search_detail(stats, len(plan)))
         # P2: a plan that depends on event-ONLY content is worthless if the window
         # shuts before it finishes. Dropped rather than returned, so the candidate
         # is rejected and the arbiter moves on to something reachable. Only plans
@@ -960,9 +973,12 @@ class StrategyArbiter:
         track."""
         r = repr(goal)
         if r in guard_reprs or plan:
+            if self._memo.is_marked(r):
+                self.events.note(Mechanism.DOOMED_CLEAR, r)
             self._memo.clear(r)
         else:
             self._memo.mark(r, state, self._cycle)
+            self.events.note(Mechanism.DOOMED_MARK, r, "timed_out" if timed_out else "")
         return plan
 
     def select(
@@ -1083,6 +1099,9 @@ class StrategyArbiter:
             candidates, suppressed, worth_suppressed, state, game_data, actions, ctx)
 
         self._committed_repr = new_committed
+        if new_committed != prev_committed:
+            self.events.note(Mechanism.COMMITMENT_CHANGE, str(new_committed),
+                             f"from={prev_committed}")
         # WHICH GUARD WON, if one did — set unconditionally so a cycle the walk
         # won clears the previous cycle's guard instead of inheriting it. The
         # match is `c.goal is chosen`: `select_pure` returns a candidate's own
@@ -1094,6 +1113,9 @@ class StrategyArbiter:
         self.last_selected_guard = next(
             (c.repr_ for c in candidates
              if c.band == BAND_GUARD and c.goal is chosen), None)
+        if self.last_selected_guard is not None and prev_committed is not None:
+            self.events.note(Mechanism.GUARD_PREEMPT, self.last_selected_guard,
+                             f"committed={prev_committed}")
         self.goals_tried = self._dedupe_goals_tried()
         # THE FIRST CANDIDATE ACTUALLY ATTEMPTED, when it produced no plan and
         # something LOWER-ranked ran instead. Not "ranked[0]": `select_pure`
@@ -1584,8 +1606,11 @@ class StrategyArbiter:
 
         def _skip(goal: Goal) -> bool:
             # Memo never skips guards or memo-exempt goals.
-            return repr(goal) not in memo_bypass and self._memo.is_doomed(
+            skipped = repr(goal) not in memo_bypass and self._memo.is_doomed(
                 repr(goal), state, self._cycle)
+            if skipped:
+                self.events.note(Mechanism.DOOMED_SKIP, repr(goal))
+            return skipped
 
         def try_plan(goal: Goal) -> list[Action]:
             if _skip(goal):
@@ -1615,6 +1640,7 @@ class StrategyArbiter:
                 try_plan=try_plan, is_satisfied=satisfied,
                 is_suppressed=_is_suppressed_base)
             if chosen is not None:
+                self.events.note(Mechanism.WORTH_GATE_BYPASS, repr(chosen))
                 # A MARKER, not an attempt — the plan it reports was produced by
                 # the re-run walk's own entries. `elapsed_ms` is 0.0 so summing
                 # the column over a cycle still yields the search time and
@@ -1626,6 +1652,7 @@ class StrategyArbiter:
             # Last resort: Wait (special-cased to a single WaitAction).
             wait = next((c for c in candidates if isinstance(c.goal, WaitGoal)), None)
             if wait is not None and not is_suppressed(wait.goal):
+                self.events.note(Mechanism.WAIT_FALLBACK, repr(wait.goal))
                 chosen, plan, new_committed = wait.goal, [WaitAction()], self._committed_repr
         return chosen, plan, new_committed
 

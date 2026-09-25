@@ -1,6 +1,6 @@
 # PLAN: decision architecture redesign (removing the epicycles)
 
-Status: Phase 0 census tool landed + baseline recorded (2026-09-25); Phase 0b instrumentation and Phase 1 design pending review.
+Status: Phase 0 + 0b landed (2026-09-25). Phase 1 design pending review; collect ≥24 h of decision events before Phase 1 code lands so it has a mechanism baseline.
 
 ## Why this exists
 
@@ -232,24 +232,40 @@ What the baseline says:
 - **HAL's 77.6% goal-switch rate** is the thrash that the stability mechanisms
   (sticky, focus aging) exist to damp.
 
-**Instrumentation gaps (Phase 0b, next):**
-1. No-plan cycles are not written to `cycles`; only the in-memory stuck
-   detector sees them. Record them, as `outcome="no_plan"` with
-   `planner_timed_out`.
-2. None of the ~35 compensating mechanisms records when it fires. Add one
-   append-only `decision_events(ts, character, cycle_index, mechanism, subject,
-   detail)` table, written from each mechanism, so phases 3–5 can show each one
-   went to zero before deleting it. Mechanisms to cover:
-   - doomed skip / mark / clear, and the grind-failure doom;
-   - suppression set / expiry, stuck signal + level, and StuckExit;
-   - servable promotion, sticky hold, worth-gate bypass, and a guard preempting
-     a commitment;
-   - fast path vs A* vs A* fallback, plus nodes created per search (not just the
-     last);
-   - error backoff, and refusal poisoning.
-3. Per-search stats: `goals_tried` already carries per-candidate nodes and
-   timeouts, but only in the trace. Persist the arbiter's search count and the
-   total nodes created per cycle into `cycles`.
+**Correction.** No-plan cycles ARE recorded, as `cycles` rows with
+`outcome="no_plan"` and `action_class="NoPlan"` (`player.py`, no-plan branch).
+The baseline window simply contains none. An earlier draft of this section
+claimed otherwise.
+
+### Phase 0b — decision events (landed 2026-09-25)
+
+**The table.** Every compensating mechanism now notes its firing into a
+per-cycle `DecisionEventLog`, which the arbiter shares with the player. The
+player writes the batch in the same transaction window as the `cycles` row,
+keyed by `cycle_index`, into table
+`decision_events(ts, session_id, character, cycle_index, mechanism, subject,
+detail)`.
+
+**Mechanisms recorded** (`ai/decision_mechanism.Mechanism`):
+
+| Group | Mechanisms |
+|---|---|
+| Planning as a feasibility test | `doomed_skip`, `doomed_mark` (detail `timed_out`), `doomed_clear`, `not_plannable`, `grind_doom` |
+| Which producer answered | `fast_path`, `search`, `grind_search`, each with `nodes_created / explored / depth / timed_out / node_capped / plan_len` (so the real search size is visible, not just `cycles.planner_nodes`' last-explored count) |
+| Selection-order compensations | `worth_gate_bypass`, `wait_fallback`, `servable_promotion` |
+| Stability | `commitment_change`, `guard_preempt`, `aged_pick`, `plan_cache_hit`, `replan` |
+| Recovery by countdown | `stuck_signal` (level), `suppress` (goal or action, from the ladder's diff), `error_backoff`, `refusal_poison` |
+
+**Not recorded.** `StuckExit` ends the process before the batch is written;
+`sessions.exit_reason="stuck_exit"` already records it.
+
+**Where to read it.** `decision-census` prints a `mechanisms:` line with the
+per-mechanism counts over the window. Windows before 2026-09-25 show
+"none recorded".
+
+**Volume.** About one `replan` or `plan_cache_hit` per cycle, plus one event per
+search, so roughly 3-5 rows per cycle and ~20k rows/day for the fleet. There is
+no retention policy yet; revisit if the DB grows noticeably.
 
 ## Phase 1 — one obtain model (design)
 

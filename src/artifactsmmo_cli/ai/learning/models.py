@@ -569,6 +569,28 @@ class PlanBodyLog(PlanBodyLogBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
 
 
+class DecisionEventBase(SQLModel):
+    """One firing of a compensating mechanism (Phase 0b of
+    `docs/PLAN_decision_architecture_redesign.md`), written in a batch with the
+    cycle it happened in. `mechanism` is an `ai.decision_mechanism.Mechanism`
+    value; `subject` is what it fired on (a goal repr, action key or signal);
+    `detail` is free text such as search stats or a before->after pair."""
+
+    ts: str = Field(index=True)
+    session_id: str = Field(index=True)
+    character: str = Field(index=True)
+    cycle_index: int
+    mechanism: str = Field(index=True)
+    subject: str
+    detail: str = ""
+
+
+class DecisionEvent(DecisionEventBase, table=True):
+    __tablename__ = "decision_events"
+
+    id: int | None = Field(default=None, primary_key=True)
+
+
 class PlanCommitmentBase(SQLModel):
     """The bot's live plan commitment — one row per character, upserted on each
     re-plan, for restart-resume."""
