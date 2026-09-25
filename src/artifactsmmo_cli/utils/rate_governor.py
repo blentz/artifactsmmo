@@ -19,7 +19,8 @@ class RateGovernor:
     `budget` is the WHOLE per-IP budget, not a slice of it: the request history
     lives in a `RequestLog` every sibling shares, so the window counts are the
     fleet's. `sharers` is how many children share it, which matters only for
-    `sustainable_interval`.
+    `sustainable_interval`. The clock is WALL time, because the shared log
+    persists across reboots (see `RequestLog`).
     """
 
     def __init__(
@@ -28,7 +29,7 @@ class RateGovernor:
         sharers: int,
         log: RequestLog,
         bucket: str,
-        clock: Callable[[], float] = time.monotonic,
+        clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         if sharers < 1:

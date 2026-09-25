@@ -1,6 +1,7 @@
 """RateGovernor: fleet-wide sliding-window throttle that only blocks on a real burst."""
 
 import threading
+import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -207,3 +208,24 @@ def test_racing_siblings_never_overfill_a_window(tmp_path: Path) -> None:
     for thread in threads:
         thread.join()
     assert sum(granted) == 50
+
+
+def test_entries_from_a_previous_boot_do_not_block(tmp_path: Path,
+                                                   make_log: Callable[[str], RequestLog]) -> None:
+    """Live 2026-09-25 17:03Z: after a reboot the log held timestamps from the
+    previous boot's monotonic clock (~255,000) while the new clock read ~680, so
+    every entry lay in the future, counted inside every window, and never aged
+    out. All five children blocked in `_initialize` forever. A timestamp later
+    than now cannot be a real past request; it is dropped."""
+    db = str(tmp_path / "fleet.db")
+    log = make_log(db)
+    assert log.try_record("data", 255_000.0, {3600.0: 1}) == 0.0
+    assert log.try_record("data", 680.0, {3600.0: 1}) == 0.0
+    rows = make_log(db)._conn.execute("SELECT ts FROM rate_requests").fetchall()
+    assert rows == [(680.0,)]
+
+
+def test_the_default_clock_is_wall_time() -> None:
+    """Wall-clock time survives a reboot; the monotonic clock restarts at zero."""
+    assert RateGovernor.__init__.__defaults__ is not None
+    assert time.time in RateGovernor.__init__.__defaults__

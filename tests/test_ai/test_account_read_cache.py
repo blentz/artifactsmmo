@@ -1,5 +1,6 @@
 """AccountReadCache: one fleet-wide copy of each account-scoped read."""
 
+import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -115,3 +116,29 @@ def test_an_unknown_key_is_refused(make_cache: Callable[[str], AccountReadCache]
         cache.lookup("gold")
     with pytest.raises(ValueError, match="unknown account read 'gold'"):
         cache.publish("gold", "1", cost=1)
+
+
+def test_a_future_dated_entry_is_stale_not_fresh_forever(
+        make_cache: Callable[[str], AccountReadCache], clock: _Clock) -> None:
+    """After a reboot (or a backwards clock step) a stored `fetched_at` can lie
+    in the future. `now - fetched_at` is then negative, which read as "fresh"
+    forever and would have served a stale bank to the fleet indefinitely."""
+    alice, bob = make_cache("alice"), make_cache("bob")
+    alice.publish("bank", "{}", cost=1)
+    clock.now -= 100_000.0
+    assert bob.lookup("bank") is None  # refetch, not the ancient payload
+
+
+def test_a_future_dated_lease_does_not_block_the_refresh(
+        make_cache: Callable[[str], AccountReadCache], clock: _Clock) -> None:
+    alice, bob = make_cache("alice"), make_cache("bob")
+    alice.publish("bank", "{}", cost=1)
+    clock.now += alice.ttl(1)
+    assert alice.lookup("bank") is None  # alice leases
+    clock.now -= 100_000.0
+    assert bob.lookup("bank") is None  # the lease is from the old clock: take it over
+
+
+def test_the_default_clock_is_wall_time() -> None:
+    assert AccountReadCache.__init__.__defaults__ is not None
+    assert time.time in AccountReadCache.__init__.__defaults__

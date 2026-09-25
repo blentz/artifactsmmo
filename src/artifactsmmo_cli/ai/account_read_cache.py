@@ -36,6 +36,10 @@ class AccountReadCache:
     what the key's last fetch actually spent, so a bank that grows a second
     page gets a longer TTL on its own.
 
+    WALL CLOCK. The table persists across reboots, so timestamps are wall time,
+    and one from the future (the clock went backwards) counts as stale: a
+    negative age would otherwise read as fresh forever.
+
     SINGLE-FLIGHT. A stale lookup hands the caller a refresh lease and returns
     None ("you fetch"). While that lease runs, siblings are served the stale
     payload instead of fetching too. A cold key (never fetched) has nothing
@@ -43,7 +47,7 @@ class AccountReadCache:
     """
 
     def __init__(self, db_path: str, owner: str, account_interval: float,
-                 clock: Callable[[], float] = time.monotonic) -> None:
+                 clock: Callable[[], float] = time.time) -> None:
         self._owner = owner
         self._interval = account_interval
         self._clock = clock
@@ -74,10 +78,10 @@ class AccountReadCache:
                 "FROM account_reads WHERE key = ?", (key,)).fetchone()
             if row is not None and row[0] is not None:
                 payload, fetched_at, cost, refreshing_until, refresher = row
-                if now - fetched_at < self.ttl(cost):
+                if 0.0 <= now - fetched_at < self.ttl(cost):
                     return str(payload)
-                if (refreshing_until is not None and refreshing_until > now
-                        and refresher != self._owner):
+                if (refreshing_until is not None and refresher != self._owner
+                        and 0.0 < refreshing_until - now <= self.ttl(cost)):
                     return str(payload)
             # The lease lasts one TTL of the last known cost: long enough to
             # cover a fetch that waits on the account governor, and a crashed

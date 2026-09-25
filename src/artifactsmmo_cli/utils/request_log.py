@@ -31,9 +31,13 @@ def longest_wait(history: Sequence[float], now: float, windows: Mapping[float, i
 class RequestLog:
     """Timestamps of recent requests per bucket, shared through one SQLite file.
 
-    Timestamps come from the caller's clock. `time.monotonic` is comparable
-    across processes on one host (CLOCK_MONOTONIC is system-wide), and it does
-    not jump when the wall clock is corrected."""
+    Timestamps come from the caller's clock, which must be WALL time: the log
+    outlives processes AND reboots (it sits in the persistent learning DB).
+    `time.monotonic` restarts at zero on boot, and live 2026-09-25 that left
+    every stored entry in the future, counted in every window forever, and
+    blocked the whole fleet in `_initialize`. A timestamp later than `now`
+    cannot be a real past request (the clock went backwards), so it is dropped
+    with the expired ones."""
 
     def __init__(self, db_path: str) -> None:
         # isolation_level=None: this class issues its own BEGIN IMMEDIATE, which
@@ -54,7 +58,8 @@ class RequestLog:
         self._conn.execute("BEGIN IMMEDIATE")
         try:
             self._conn.execute(
-                "DELETE FROM rate_requests WHERE bucket = ? AND ts <= ?", (bucket, now - longest))
+                "DELETE FROM rate_requests WHERE bucket = ? AND (ts <= ? OR ts > ?)",
+                (bucket, now - longest, now))
             history = [row[0] for row in self._conn.execute(
                 "SELECT ts FROM rate_requests WHERE bucket = ? ORDER BY ts", (bucket,))]
             wait = longest_wait(history, now, windows)
