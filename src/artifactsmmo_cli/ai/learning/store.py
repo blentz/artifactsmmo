@@ -610,6 +610,42 @@ class LearningStore:
         except SQLAlchemyError:
             return []
 
+    def cycles_between(self, since: str, until: str) -> list[Cycle]:
+        """This character's cycles with `since <= ts < until`, oldest first.
+
+        Bounded by TIME rather than row count, so every character in a census
+        is measured over the same wall-clock era (a row-count window reaches back
+        further for a character that cycles slowly). `since`/`until` are ISO
+        timestamps in the same UTC format as `Cycle.ts`, which compare correctly
+        as strings. Same failure discipline as `recent_cycles`."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle)
+                    .where(col(Cycle.character) == self._character)
+                    .where(col(Cycle.ts) >= since)
+                    .where(col(Cycle.ts) < until)
+                    .order_by(col(Cycle.id))
+                )
+                return list(s.exec(stmt))
+        except SQLAlchemyError:
+            return []
+
+    def sessions_ended_between(self, since: str, until: str) -> list[Session]:
+        """This character's sessions that ended with `since <= ended_at < until`.
+        Same failure discipline as `recent_cycles`."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Session)
+                    .where(col(Session.character) == self._character)
+                    .where(col(Session.ended_at) >= since)
+                    .where(col(Session.ended_at) < until)
+                )
+                return list(s.exec(stmt))
+        except SQLAlchemyError:
+            return []
+
     def recent_selected_goals(self, window: int) -> list[str]:
         """Return up to `window` most recent non-None Cycle.selected_goal values for
         this character, newest first.  Used by loadout_profiles._recent_task_keys to

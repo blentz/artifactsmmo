@@ -13,6 +13,7 @@ from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.commands import account, action, bank, character, craft, info, stats, task, trade
 from artifactsmmo_cli.commands.combat_deficit_report import combat_deficit_command
 from artifactsmmo_cli.commands.combat_loadout_report import combat_loadout_report_command
+from artifactsmmo_cli.commands.decision_census_report import decision_census_command
 from artifactsmmo_cli.commands.macro_research import macro_research as macro_research_command
 from artifactsmmo_cli.commands.objective_audit_report import objective_audit_command
 from artifactsmmo_cli.commands.plan import plan as plan_command
@@ -73,6 +74,9 @@ app.command("combat-loadout-report",
             help="Per-task predict_win calibration + which loadouts won (read-only)")(
     combat_loadout_report_command
 )
+app.command("decision-census",
+            help="Read-only: decision-quality yardstick over a window of learning.db")(
+    decision_census_command)
 app.command("objective-audit",
             help="Read-only: what the root walk chose, what it paid, what it cannot reach")(
     objective_audit_command)

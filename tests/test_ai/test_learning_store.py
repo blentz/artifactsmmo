@@ -1025,6 +1025,14 @@ class TestDegradationOnDbError:
         _break_engine(store)
         assert store.recent_cycles(window=10) == []
 
+    def test_window_reads_return_empty(self, tmp_db_path):
+        """The decision census's time-bounded reads degrade to empty, never to a
+        partial window that would understate a character's throughput."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.cycles_between("2026-09-24", "2026-09-25") == []
+        assert store.sessions_ended_between("2026-09-24", "2026-09-25") == []
+
     def test_observed_drop_rate_returns_none(self, tmp_db_path):
         """A DB fault yields no rate, so the caller keeps the static table."""
         store = LearningStore(db_path=tmp_db_path, character="x")
