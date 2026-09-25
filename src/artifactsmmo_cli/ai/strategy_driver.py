@@ -411,11 +411,14 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
                             if state is not None else None),
             game_data=game_data, history=history, state=state)
     if kind is GuardKind.GE_CANCEL:
+        if state is None:
+            raise ValueError("GE_CANCEL guard requires a state")
         # needed_items = the active step's material demand (step_profile codes), the
         # same per-cycle demand the firing predicate used; need_gold=0 (no per-step
         # required-spend is exposed), so the goal cancels on item-need + TTL.
         return CancelOrdersGoal(game_data=game_data, need_gold=0,
                                 needed_items=frozenset(step_profile or ()),
+                                state=state,
                                 sibling_claims=ctx.sibling_order_claims)
     raise ValueError(f"Unknown GuardKind: {kind!r}")
 

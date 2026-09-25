@@ -39,12 +39,12 @@ is all that is required."""
 class CancelOrdersGoal(Goal):
     """Cancel every order `cancel_selection.cancel_targets` reports.
 
-    Each target order id becomes one `GeCancelOrderAction`; the least-cost planner
-    cancels them one at a time, and each cancel removes its order from the target set
-    on the next cycle."""
+    Each target order id becomes one `GeCancelOrderAction`; the goal is satisfied by
+    the first one that lands, so a plan is a single cancel and the next cycle
+    re-fires on the targets that remain."""
 
     def __init__(self, game_data: GameData, need_gold: int,
-                 needed_items: frozenset[str],
+                 needed_items: frozenset[str], state: WorldState,
                  sibling_claims: frozenset[str] = frozenset()) -> None:
         self._gd = game_data
         self._need_gold = need_gold
@@ -55,6 +55,11 @@ class CancelOrdersGoal(Goal):
         # that changed mid-search would make `is_satisfied` non-deterministic
         # across nodes of one plan.
         self._sibling_claims = sibling_claims
+        # The orders the guard fired on, fixed at construction for the same
+        # per-cycle reason as the claims above. Satisfaction is "one of THESE is
+        # no longer open", not "no target remains".
+        self._fired = frozenset(cancel_targets(
+            state, game_data, need_gold, needed_items, sibling_claims))
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -63,9 +68,18 @@ class CancelOrdersGoal(Goal):
         return CANCEL_ORDERS_VALUE
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return not cancel_targets(
-            state, self._gd, self._need_gold, self._needed_items,
-            self._sibling_claims)
+        """True once ONE fired order is no longer open (or none fired).
+
+        Requiring EVERY target cancelled made the goal unplannable whenever the
+        targets outnumbered the planner's depth cap: live 2026-09-24, all 83 of
+        the account's SELL orders (`/my/grandexchange/orders` is account-scoped)
+        were TTL targets for every character. With `h=0` the search enumerated
+        subsets of commuting cancels until its time or node cap on every cycle
+        (~0.5-1 GB transient per character), and no order was ever cancelled.
+        One cancel per cycle is what fire-and-lose already assumes: the next
+        cycle re-fires on whatever targets remain."""
+        open_ids = {o.id for o in state.open_orders}
+        return not self._fired or not self._fired <= open_ids
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"ge_orders_cancelled": True}

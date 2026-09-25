@@ -112,8 +112,14 @@ def test_map_guard_discard_critical():
 
 
 def test_map_guard_ge_cancel():
-    g = map_guard(GuardKind.GE_CANCEL, GameData(), _ctx(), step_profile={"iron": 1})
+    g = map_guard(GuardKind.GE_CANCEL, GameData(), _ctx(), make_state(),
+                  step_profile={"iron": 1})
     assert isinstance(g, CancelOrdersGoal)
+
+
+def test_map_guard_ge_cancel_requires_state():
+    with pytest.raises(ValueError, match="GE_CANCEL guard requires a state"):
+        map_guard(GuardKind.GE_CANCEL, GameData(), _ctx())
 
 
 def test_map_guard_discard_high():
