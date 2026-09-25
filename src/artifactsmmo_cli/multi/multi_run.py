@@ -21,6 +21,8 @@ from artifactsmmo_cli.utils.rate_budget import (
     BucketBudgets,
     parse_rate_limits,
 )
+from artifactsmmo_cli.utils.rate_governor import RateGovernor
+from artifactsmmo_cli.utils.request_log import RequestLog
 
 
 class MultiRun:
@@ -214,9 +216,18 @@ class MultiRun:
                 asyncio.run(self._run_headless(pool))
                 return
 
-            game_data = GameData.load(
-                client, ttl_minutes=config.game_data_ttl_minutes,
-                force_refresh=self._refresh_game_data)
+            # The TUI's map preload bills the same per-IP budget the children
+            # share, so it goes through the same request log as they do.
+            limits = parse_rate_limits(rates)
+            request_log = RequestLog(self._coordination_db_path())
+            try:
+                game_data = GameData.load(
+                    client, ttl_minutes=config.game_data_ttl_minutes,
+                    force_refresh=self._refresh_game_data,
+                    acquire_data=RateGovernor(limits.data, 1, request_log, "data").acquire,
+                    acquire_account=RateGovernor(limits.account, 1, request_log, "account").acquire)
+            finally:
+                request_log.close()
             self._app = WatchApp(characters=characters, game_data=game_data, api=api)
             self._app.attach_pool(pool)
             self._app.run()

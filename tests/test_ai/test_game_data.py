@@ -1912,17 +1912,17 @@ def _stub_fetch_build(monkeypatch):
     """Stub every _fetch_* to return empty (so serialize/deserialize loops are
     no-ops) and _build_*/load_ge_orders to recorders. Returns the GE counter."""
     for name in _STATIC:
-        monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client: [])
+        monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client, *hooks, **kw_hooks: [])
         # `*extra` because `_build_achievements` takes a second, defaulted
         # argument (`also_completed`, the scenario-declared achievement
         # override) — a fixed 2-arg stub would refuse the real call.
         monkeypatch.setattr(GameData, f"_build_{name}",
                             lambda self, items, *extra: None)
-    monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client: None)
+    monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client, *hooks, **kw_hooks: None)
     monkeypatch.setattr(GameData, "_build_bank", lambda self, item: None)
     ge = {"n": 0}
     monkeypatch.setattr(
-        GameData, "load_ge_orders", lambda self, client: ge.__setitem__("n", ge["n"] + 1)
+        GameData, "load_ge_orders", lambda self, client, *hooks, **kw_hooks: ge.__setitem__("n", ge["n"] + 1)
     )
     return ge
 
@@ -1942,7 +1942,7 @@ def test_warm_load_skips_fetch_uses_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(
         GameData,
         "_fetch_maps",
-        lambda self, client: (_ for _ in ()).throw(AssertionError("fetched on warm hit")),
+        lambda self, client, *hooks, **kw_hooks: (_ for _ in ()).throw(AssertionError("fetched on warm hit")),
     )
     GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)
     assert cache.reads == 1 and cache.writes == 0
@@ -1992,7 +1992,7 @@ class TestLoadWaitsOutARateLimit:
         ge = _stub_fetch_build(monkeypatch)
         calls = {"n": 0}
 
-        def flaky_maps(self, client):
+        def flaky_maps(self, client, *hooks):
             calls["n"] += 1
             if calls["n"] == 1:
                 raise RateLimitedError({"Retry-After": "7"})
@@ -2018,7 +2018,7 @@ class TestLoadWaitsOutARateLimit:
         _stub_fetch_build(monkeypatch)
         calls = {"n": 0}
 
-        def flaky_maps(self, client):
+        def flaky_maps(self, client, *hooks):
             calls["n"] += 1
             if calls["n"] <= 3:
                 raise RateLimitedError({})
@@ -2039,7 +2039,7 @@ class TestLoadWaitsOutARateLimit:
         would poison every downstream decision)."""
         _stub_fetch_build(monkeypatch)
 
-        def always_throttled(self, client):
+        def always_throttled(self, client, *hooks):
             raise RateLimitedError({})
 
         monkeypatch.setattr(GameData, "_fetch_maps", always_throttled)
@@ -2074,7 +2074,7 @@ class TestLoadWaitsOutARateLimit:
         cache = _RecordingCache(tmp_path, seeded=None)  # cold: nobody has written yet
         calls = {"n": 0}
 
-        def throttled_while_a_sibling_finishes(self, client):
+        def throttled_while_a_sibling_finishes(self, client, *hooks):
             calls["n"] += 1
             cache._seeded = sibling_bundle  # sibling's write lands during our backoff
             raise RateLimitedError({})
@@ -2134,12 +2134,12 @@ def test_warm_and_cold_events_build_equal(monkeypatch, tmp_path):
     """A real EventSchema fetched cold (built from the object) and warm
     (built from from_dict(to_dict(...))) must index identically."""
     ev = _make_event_npc(code="gold_merchant", npc_code="merchant", x=5, y=6)  # real EventSchema
-    monkeypatch.setattr(GameData, "_fetch_events", lambda self, client: [ev])
-    monkeypatch.setattr(GameData, "_fetch_effects", lambda self, client: [])
+    monkeypatch.setattr(GameData, "_fetch_events", lambda self, client, *hooks, **kw_hooks: [ev])
+    monkeypatch.setattr(GameData, "_fetch_effects", lambda self, client, *hooks, **kw_hooks: [])
     for name in ("maps", "items", "resources", "monsters", "npcs", "tasks", "achievements"):
-        monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client: [])
-    monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client: None)
-    monkeypatch.setattr(GameData, "load_ge_orders", lambda self, client: None)
+        monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client, *hooks, **kw_hooks: [])
+    monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client, *hooks, **kw_hooks: None)
+    monkeypatch.setattr(GameData, "load_ge_orders", lambda self, client, *hooks, **kw_hooks: None)
     cache = _RecordingCache(tmp_path, seeded=None)
     cold = GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)  # writes cache
     warm = GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)  # from_dict path
@@ -2599,3 +2599,44 @@ def test_currency_not_passive_in_a_tiny_catalog():
     assert gd.currency_accrues_passively("tk") is False
     gd.monsters.levels = {}
     assert gd.currency_accrues_passively("tk") is False
+
+
+class TestLoadChargesTheFleetGovernor:
+    """Every request of a cold load is charged, BEFORE it is sent, to the
+    governor of the bucket it bills: `/my/*` reads to account, catalog pages
+    to data. Uncharged, a `play --all` child's startup load bursts past the
+    budget its siblings share, and the live audits hit HTTP 429 whenever the
+    fleet is running."""
+
+    def test_each_request_is_charged_to_its_bucket(self, tmp_path):
+        charged: list[str] = []
+        sent: list[str] = []
+
+        def api(name, data):
+            def call(**kwargs):
+                sent.append(name)
+                assert len(charged) == len(sent), f"{name} sent before it was charged"
+                return MagicMock(data=data)
+            return call
+
+        details = MagicMock(username="acct")
+        cache = GameDataCache(api_base_url="http://x", cache_dir=tmp_path)
+        with patch.multiple(
+            "artifactsmmo_cli.ai.game_data",
+            get_all_maps=api("maps", []), get_all_items=api("items", []),
+            get_all_resources=api("resources", []), get_all_monsters=api("monsters", []),
+            get_all_npc_items=api("npcs", []), get_all_tasks=api("tasks", []),
+            get_all_events=api("events", []), get_all_effects=api("effects", []),
+            get_bank_details=api("bank", None), get_account_details=api("details", details),
+            get_account_achievements=api("achievements", []), get_ge_orders=api("ge", []),
+        ):
+            GameData.load(MagicMock(), cache=cache, force_refresh=True,
+                          acquire_data=lambda: charged.append("data"),
+                          acquire_account=lambda: charged.append("account"))
+
+        buckets = dict(zip(sent, charged, strict=True))
+        assert {n for n, b in buckets.items() if b == "account"} == {"bank", "details"}
+        assert {n for n, b in buckets.items() if b == "data"} == {
+            "maps", "items", "resources", "monsters", "npcs", "tasks", "events",
+            "effects", "achievements", "ge"}
+        assert sent.count("maps") == len(MapLayer)  # one page per layer, each charged

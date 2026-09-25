@@ -74,6 +74,25 @@ def align_results(expected: int, tagged: list[dict], context: str) -> list[dict]
     return [by_rid[i] for i in range(expected)]
 
 
+def process_health(pid: int) -> str:
+    """The oracle's scheduler state, resident and swapped-out memory, and the
+    machine's available memory, as one line. Linux /proc only; a missing entry
+    reads as '?' rather than raising, because this runs on an error path."""
+    fields: dict[str, str] = {}
+    for path, keys in ((f"/proc/{pid}/status", ("State", "VmRSS", "VmSwap")),
+                       ("/proc/meminfo", ("MemAvailable", "SwapFree"))):
+        try:
+            with open(path) as handle:
+                for line in handle:
+                    name, _, value = line.partition(":")
+                    if name in keys:
+                        fields[name] = " ".join(value.split())
+        except OSError:
+            continue
+    return ", ".join(f"{k}={fields.get(k, '?')}" for k in
+                     ("State", "VmRSS", "VmSwap", "MemAvailable", "SwapFree"))
+
+
 class OracleServer:
     """Owns one `oracle --serve` subprocess and the framed exchange with it."""
 
@@ -126,10 +145,17 @@ class OracleServer:
             # instead of blocking the suite indefinitely.
             ready, _, _ = select.select([proc.stdout], [], [], READ_TIMEOUT_SECONDS)
             if not ready:
+                # Read BEFORE the kill: whether the oracle was computing,
+                # blocked, or swapped out is what tells a non-terminating input
+                # from memory pressure, and both have been suspected.
+                health = process_health(proc.pid)
                 self._kill()
+                # The payload is the only way to reproduce a wedge offline: a
+                # Hypothesis example that sends the Lean model into a
+                # non-terminating path is otherwise lost with the process.
                 raise RuntimeError(
                     f"oracle timed out after {READ_TIMEOUT_SECONDS}s on request "
-                    f"{req_id} ({kind}, {len(args_batches)} args)"
+                    f"{req_id} ({kind}, {len(args_batches)} args); {health}; payload: {payload}"
                 )
             line = proc.stdout.readline()
             if not line:

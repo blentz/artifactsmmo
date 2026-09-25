@@ -427,8 +427,17 @@ def test_run_tui_preloads_game_data_attaches_the_pool_and_runs_the_app():
         with patch.object(mrun, "build_pool", return_value=fake_pool):
             mrun.run()
 
-        mock_game_data_cls.load.assert_called_once_with(
-            mock_client, ttl_minutes=30, force_refresh=False)
+        mock_game_data_cls.load.assert_called_once()
+        call = mock_game_data_cls.load.call_args
+        assert call.args == (mock_client,)
+        assert (call.kwargs["ttl_minutes"], call.kwargs["force_refresh"]) == (30, False)
+        # The preload bills the shared per-IP budget, so it is charged to the
+        # fleet's governors for the bucket each request bills.
+        limits = parse_rate_limits(_RATES)
+        data_gov = call.kwargs["acquire_data"].__self__
+        account_gov = call.kwargs["acquire_account"].__self__
+        assert (data_gov._bucket, data_gov._windows) == ("data", limits.data.as_windows())
+        assert (account_gov._bucket, account_gov._windows) == ("account", limits.account.as_windows())
         mock_watch_app_cls.assert_called_once_with(
             characters=["a", "b"], game_data=loaded_data, api=mock_api)
         mock_app.attach_pool.assert_called_once_with(fake_pool)

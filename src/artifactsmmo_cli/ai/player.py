@@ -1014,10 +1014,15 @@ class GamePlayer:
         memory + the cycle-0 full-bank-refresh sentinel. Shared by `run()` and the
         one-shot `plan_once()` so both sense the world identically before planning."""
         print(f"[{self._now()}] Loading game data...")
+        # Charged to the fleet governors a `play --all` child already holds
+        # (no-ops for a lone `play <character>`), so the static load is paced
+        # with every sibling's traffic rather than bursting past it.
         self.game_data = GameData.load(
             client,
             ttl_minutes=self._game_data_ttl_minutes,
             force_refresh=self._refresh_game_data,
+            acquire_data=self._acquire_data,
+            acquire_account=self._acquire_account,
         )
         # Build the Tier-3 strategy engine once (shadow mode — traced only).
         self._objective = CharacterObjective.from_game_data(self.game_data)

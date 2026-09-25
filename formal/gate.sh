@@ -136,7 +136,14 @@ echo "== (c''') census (--check x11) =="
 # either way -- the undeclared/orphan arms read the source, not the store.
 ( cd "$ROOT" && git checkout -- docs/craft_completeness/MATRIX.md docs/craft_completeness/BACKLOG.md \
                                 docs/behavioral_completeness/LIVENESS_MATRIX.md )
-echo "== (d) differential =="; ( cd "$HERE" && lake build oracle ); ( cd "$ROOT" && uv run pytest formal/diff/ -q --no-cov -n auto --ignore=formal/diff/test_game_data_fixture_diff.py )
+# `-n 8`, not `-n auto`: every xdist worker keeps its own ~80 MB Lean oracle
+# alive, so `-n auto` on a 32-thread box held ~2.5 GB of oracles plus 32 Python
+# workers. Five gate runs on 2026-09-25, all made while the fleet was swapping,
+# lost one `ladder_fires` request each to the 120 s oracle timeout; the same
+# suite passed under full CPU load and on an idle box. Eight workers finish in
+# ~14 s against ~11 s. `oracle_server.process_health` rides every timeout from
+# now on, so the next one says whether the oracle was swapped out.
+echo "== (d) differential =="; ( cd "$HERE" && lake build oracle ); ( cd "$ROOT" && uv run pytest formal/diff/ -q --no-cov -n 8 --ignore=formal/diff/test_game_data_fixture_diff.py )
 # Full mutation EXECUTION is deliberately not here. It runs nightly in
 # mutation-gate.yml, where CI moved it: ~36 min, peaks ~22GB, and it was the
 # dominator of this script. Anchor resolution (phase b'''' above) is the part

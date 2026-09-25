@@ -9,12 +9,13 @@ while comparing Python against the wrong questions.
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
 import formal.diff.test_calculate_path_diff as calculate_path_diff
 from formal.diff.oracle_client import _spawn_once, run_oracle
-from formal.diff.oracle_server import OracleServer, align_results
+from formal.diff.oracle_server import OracleServer, align_results, process_health
 
 # A few kinds with distinguishable answers, so parity is a real comparison.
 _CASES = [
@@ -138,3 +139,18 @@ def test_structured_payload_round_trips():
         assert json.loads(json.dumps(results)) == results
     finally:
         server.close()
+
+
+def test_process_health_reports_state_memory_and_swap():
+    """What a timeout needs to tell a non-terminating input (State R, no swap)
+    from memory pressure (swapped out, low MemAvailable)."""
+    health = process_health(os.getpid())
+    for field in ("State=", "VmRSS=", "VmSwap=", "MemAvailable=", "SwapFree="):
+        assert field in health
+    assert "State=?" not in health and "MemAvailable=?" not in health
+
+
+def test_process_health_of_a_vanished_process_still_reports_the_machine():
+    health = process_health(2**22 + 12345)
+    assert "State=?" in health and "VmRSS=?" in health
+    assert "MemAvailable=?" not in health

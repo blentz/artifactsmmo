@@ -165,6 +165,11 @@ _ITEM_EFFECT_CARVEOUTS: frozenset[str] = frozenset({"gems", "christmas_magic"})
 _MIN_MONSTERS_FOR_BREADTH = 10
 
 
+def _no_charge() -> None:
+    """The rate hook of an ungoverned caller (a lone `play <character>`, the
+    offline tools): charges nothing."""
+
+
 @dataclass
 class GameData:
     """Static cache of game world knowledge. Load once at startup, never mutate."""
@@ -1445,8 +1450,17 @@ class GameData:
         ttl_minutes: int = 30,
         force_refresh: bool = False,
         cache: "GameDataCache | None" = None,
+        acquire_data: Callable[[], None] = _no_charge,
+        acquire_account: Callable[[], None] = _no_charge,
     ) -> "GameData":
         """Build GameData, waiting out an HTTP 429 and retrying the whole load.
+
+        `acquire_data` / `acquire_account` are the caller's rate-governor hooks,
+        charged before EVERY request of the load in the bucket that request
+        bills (`/my/*` reads bill account; catalog pages bill data). A
+        `play --all` child passes its fleet governors, so the static load is
+        paced with every sibling's traffic instead of bursting past it; a lone
+        `play <character>` passes none and stays unthrottled.
 
         The load itself is `_load_once`; this wrapper adds the ONLY rate-limit
         handling on the startup path. It is needed because the 429 design
@@ -1472,7 +1486,8 @@ class GameData:
         attempt = 0
         while True:
             try:
-                return cls._load_once(client, ttl_minutes, force_refresh, cache)
+                return cls._load_once(client, ttl_minutes, force_refresh, cache,
+                                      acquire_data, acquire_account)
             except RateLimitedError as e:
                 attempt += 1
                 if attempt >= GAME_DATA_LOAD_ATTEMPTS:
@@ -1489,6 +1504,8 @@ class GameData:
         ttl_minutes: int,
         force_refresh: bool,
         cache: "GameDataCache | None",
+        acquire_data: Callable[[], None] = _no_charge,
+        acquire_account: Callable[[], None] = _no_charge,
     ) -> "GameData":
         """One full load attempt. Reuse the disk cache for the STATIC loaders when
         fresh (< ttl_minutes); else fetch from the API and rewrite it. GE orders are
@@ -1507,16 +1524,16 @@ class GameData:
         objs: dict[str, Any]
         if raw is None:
             fetched: dict[str, Any] = {
-                "maps": data._fetch_maps(client),
-                "items": data._fetch_items(client),
-                "resources": data._fetch_resources(client),
-                "monsters": data._fetch_monsters(client),
-                "npcs": data._fetch_npcs(client),
-                "tasks": data._fetch_tasks(client),
-                "events": data._fetch_events(client),
-                "effects": data._fetch_effects(client),
-                "bank": data._fetch_bank(client),
-                "achievements": data._fetch_achievements(client),
+                "maps": data._fetch_maps(client, acquire_data),
+                "items": data._fetch_items(client, acquire_data),
+                "resources": data._fetch_resources(client, acquire_data),
+                "monsters": data._fetch_monsters(client, acquire_data),
+                "npcs": data._fetch_npcs(client, acquire_data),
+                "tasks": data._fetch_tasks(client, acquire_data),
+                "events": data._fetch_events(client, acquire_data),
+                "effects": data._fetch_effects(client, acquire_data),
+                "bank": data._fetch_bank(client, acquire_account),
+                "achievements": data._fetch_achievements(client, acquire_account, acquire_data),
             }
             raw = {
                 k: (
@@ -1536,7 +1553,7 @@ class GameData:
         else:
             objs = cls._hydrate_bundle(raw)
         data._build_from_objs(objs)
-        data.load_ge_orders(client)
+        data.load_ge_orders(client, acquire=acquire_data)
         return data
 
     @classmethod
@@ -1648,8 +1665,10 @@ class GameData:
         self._audit_effect_coverage()
         self._build_bank(objs["bank"])
 
-    def _fetch_bank(self, client: AuthenticatedClient) -> BankSchema | None:
+    def _fetch_bank(self, client: AuthenticatedClient,
+                    acquire: Callable[[], None] = _no_charge) -> BankSchema | None:
         """Fetch the single bank-details schema object, or None when absent."""
+        acquire()
         result = get_bank_details(client=client)
         if result is None or not hasattr(result, "data") or result.data is None:
             return None
@@ -1666,17 +1685,23 @@ class GameData:
         """Fetch bank capacity and next expansion cost."""
         self._build_bank(self._fetch_bank(client))
 
-    def _fetch_achievements(self, client: AuthenticatedClient) -> list[AccountAchievementSchema]:
+    def _fetch_achievements(
+        self, client: AuthenticatedClient,
+        acquire_account: Callable[[], None] = _no_charge,
+        acquire_data: Callable[[], None] = _no_charge,
+    ) -> list[AccountAchievementSchema]:
         """Page the account's achievements (account name via /my/details).
         Feeds `achievement_unlocked` access-condition evaluation in
         `_build_maps`. Follows the shared pager posture: an absent page
         reads as empty."""
+        acquire_account()
         details = get_account_details(client=client)
         if details is None or getattr(details, "data", None) is None:
             return []
         out: list[AccountAchievementSchema] = []
         page = 1
         while True:
+            acquire_data()
             result = get_account_achievements(
                 account=details.data.username, client=client, page=page, size=100)
             # The generated client types this endpoint as a union with
@@ -1716,7 +1741,8 @@ class GameData:
         """True when the account has completed this achievement."""
         return code in self._completed_achievements
 
-    def _fetch_maps(self, client: AuthenticatedClient) -> list[MapSchema]:
+    def _fetch_maps(self, client: AuthenticatedClient,
+        acquire: Callable[[], None] = _no_charge) -> list[MapSchema]:
         """Page ALL map tiles across every layer (P5b: underground/interior
         carry 4 bosses + god_of_the_sun's raid tiles; the overworld-only
         fetch walled them off). `_build_maps` keeps the legacy indexes
@@ -1725,6 +1751,7 @@ class GameData:
         for layer in MapLayer:
             page = 1
             while True:
+                acquire()
                 result = get_all_maps(client=client, layer=layer, page=page, size=100)
                 if result is None or not result.data:
                     break
@@ -1894,11 +1921,13 @@ class GameData:
         """Fetch all map tiles and build content location indexes."""
         self._build_maps(self._fetch_maps(client))
 
-    def _fetch_items(self, client: AuthenticatedClient) -> list[ItemSchema]:
+    def _fetch_items(self, client: AuthenticatedClient,
+        acquire: Callable[[], None] = _no_charge) -> list[ItemSchema]:
         """Page all items; return the list of schema objects."""
         out: list[ItemSchema] = []
         page = 1
         while True:
+            acquire()
             result = get_all_items(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
@@ -2054,11 +2083,13 @@ class GameData:
         """Fetch all items and build stats + recipe indexes."""
         self._build_items(self._fetch_items(client))
 
-    def _fetch_resources(self, client: AuthenticatedClient) -> list[ResourceSchema]:
+    def _fetch_resources(self, client: AuthenticatedClient,
+        acquire: Callable[[], None] = _no_charge) -> list[ResourceSchema]:
         """Page all resources; return the list of schema objects."""
         out: list[ResourceSchema] = []
         page = 1
         while True:
+            acquire()
             result = get_all_resources(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
@@ -2083,11 +2114,13 @@ class GameData:
         """Fetch all resources and build skill requirement and drop item indexes."""
         self._build_resources(self._fetch_resources(client))
 
-    def _fetch_npcs(self, client: AuthenticatedClient) -> list[NPCItemSchema]:
+    def _fetch_npcs(self, client: AuthenticatedClient,
+        acquire: Callable[[], None] = _no_charge) -> list[NPCItemSchema]:
         """Page all NPC items; return the list of schema objects."""
         out: list[NPCItemSchema] = []
         page = 1
         while True:
+            acquire()
             result = get_all_npc_items(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
@@ -2114,11 +2147,13 @@ class GameData:
         """Fetch all NPC items and build buy and sell stock indexes."""
         self._build_npcs(self._fetch_npcs(client))
 
-    def _fetch_tasks(self, client: AuthenticatedClient) -> list[TaskFullSchema]:
+    def _fetch_tasks(self, client: AuthenticatedClient,
+        acquire: Callable[[], None] = _no_charge) -> list[TaskFullSchema]:
         """Page all task definitions; return the list of schema objects."""
         out: list[TaskFullSchema] = []
         page = 1
         while True:
+            acquire()
             result = get_all_tasks(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
@@ -2283,11 +2318,13 @@ class GameData:
             page += 1
         return out
 
-    def _fetch_effects(self, client: AuthenticatedClient) -> list[EffectSchema]:
+    def _fetch_effects(self, client: AuthenticatedClient,
+        acquire: Callable[[], None] = _no_charge) -> list[EffectSchema]:
         """Page all effect definitions; return the schema list."""
         out: list[EffectSchema] = []
         page = 1
         while True:
+            acquire()
             result = get_all_effects(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
@@ -2330,11 +2367,13 @@ class GameData:
             print(f"[game_data] stale effect carveouts (not in /effects registry): {stale}",
                   file=sys.stderr)
 
-    def _fetch_events(self, client: AuthenticatedClient) -> list[EventSchema]:
+    def _fetch_events(self, client: AuthenticatedClient,
+        acquire: Callable[[], None] = _no_charge) -> list[EventSchema]:
         """Page all events; return the list of schema objects."""
         out: list[EventSchema] = []
         page = 1
         while True:
+            acquire()
             result = get_all_events(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
@@ -2375,11 +2414,13 @@ class GameData:
         """Fetch all events and index event NPCs."""
         self._build_events(self._fetch_events(client))
 
-    def _fetch_monsters(self, client: AuthenticatedClient) -> list[MonsterSchema]:
+    def _fetch_monsters(self, client: AuthenticatedClient,
+        acquire: Callable[[], None] = _no_charge) -> list[MonsterSchema]:
         """Page all monsters; return the list of schema objects."""
         out: list[MonsterSchema] = []
         page = 1
         while True:
+            acquire()
             result = get_all_monsters(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
