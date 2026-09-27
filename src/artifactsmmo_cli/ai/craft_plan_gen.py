@@ -63,12 +63,14 @@ from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.craft_plan_driver_core import craft_plan_full
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.next_craft_core import NextAction
-from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
+from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind, obtain_source_map
 from artifactsmmo_cli.ai.region_edges import admit_region_edges
 from artifactsmmo_cli.ai.requirement_projections import demand_set
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -97,6 +99,25 @@ def _closure_items(
         if recipe:
             stack.extend(recipe)
     return seen
+
+
+def decompose(goal: Goal, state: WorldState, game_data: GameData,
+              actions: list[Action], ctx: SelectionContext) -> list[Action] | None:
+    """The route-driven next-action producer: a plan for `goal` built by
+    decomposing its recipe closure over the obtain model's routes, or None when
+    decomposition cannot serve it (the caller may then search).
+
+    The ONE entry point every caller uses, so the arbiter's candidate planning
+    and a `LevelSkill`'s grind expansion ask the same producer with the same
+    source map (Phase 2 of docs/PLAN_decision_architecture_redesign.md). The
+    map is built once per call, over the goal's recipe closure, and only for a
+    `GatherMaterialsGoal`: every other goal shape short-circuits
+    `generate_next_craft_action` immediately."""
+    sources: dict[str, list[Source]] = {}
+    if isinstance(goal, GatherMaterialsGoal):
+        closure_items = _closure_items(dict(game_data.crafting_recipes), goal.needed)
+        sources = obtain_source_map(closure_items, state, game_data, ctx)
+    return generate_next_craft_action(goal, state, game_data, actions, sources)
 
 
 def generate_next_craft_action(

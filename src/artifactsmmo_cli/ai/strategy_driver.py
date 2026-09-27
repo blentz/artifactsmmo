@@ -23,7 +23,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
 )
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.consumable_supply import best_held_heal
-from artifactsmmo_cli.ai.craft_plan_gen import _closure_items, generate_next_craft_action
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
 from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog, search_detail
@@ -72,7 +72,6 @@ from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
-from artifactsmmo_cli.ai.obtain_sources import Source, obtain_source_map
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.potion_supply import primary_combat_target
@@ -904,11 +903,7 @@ class StrategyArbiter:
         # for a GatherMaterialsGoal — every other goal shape short-circuits
         # generate_next_craft_action immediately) via obtain_source_map, THE
         # shared model every route beyond bare gather/craft/withdraw reads.
-        sources: dict[str, list[Source]] = {}
-        if isinstance(goal, GatherMaterialsGoal):
-            closure_items = _closure_items(dict(game_data.crafting_recipes), goal.needed)
-            sources = obtain_source_map(closure_items, state, game_data, ctx)
-        gen = generate_next_craft_action(goal, state, game_data, actions, sources)
+        gen = decompose(goal, state, game_data, actions, ctx)
         if gen is not None:
             self._last_timed_out = False
             self.events.note(Mechanism.FAST_PATH, repr(goal), f"plan_len={len(gen)}")

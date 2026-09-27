@@ -3080,6 +3080,13 @@ GRIND_PRICING_MUTATIONS = [
      "GRIND_PRICING = replace(LEGACY, gather_skill_gate=False)",
      "GRIND_PRICING = LEGACY"),
 ]
+# Phase 2a: a LevelSkill grind decomposes before it searches. Killed by
+# tests/test_ai/test_decision_events.py.
+GRIND_DECOMPOSE_MUTATIONS = [
+    ("player: the grind never decomposes (always the nested A*)",
+     "        decomposed = decompose(goal, self.state, self.game_data, actions, self._last_ctx)",
+     "        decomposed = None"),
+]
 RESOURCE_SPAWN_KNOWN_MUTATIONS = [
     ("game_data: a resource spawn ignores layered tiles",
      "        return bool(self.all_resource_locations.get(code)) or self._layered_reachable(code)",
@@ -8492,6 +8499,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_PRICING_MUTATIONS,
               "tests/test_ai/scenarios/test_fisher_cooking_rung.py", survivors)
+    run_group(PLAYER_SRC, GRIND_DECOMPOSE_MUTATIONS,
+              "tests/test_ai/test_decision_events.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, RESOURCE_SPAWN_KNOWN_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_OBTAINABLE_MUTATIONS,

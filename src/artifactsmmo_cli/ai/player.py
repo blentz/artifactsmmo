@@ -64,6 +64,7 @@ from artifactsmmo_cli.ai.constants import (
     STUCK_DETECTOR_WINDOW,
 )
 from artifactsmmo_cli.ai.consumable_supply import consumable_craft_quantity
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.currency_turnin import TurnIn, fleet_total_pure, turn_in_ready_pure
 from artifactsmmo_cli.ai.cycle_snapshot import (
     CycleSnapshot,
@@ -1586,13 +1587,25 @@ class GamePlayer:
                 f"LevelSkill({action.skill}) has no grind rung at execution — "
                 "is_applicable should have gated this")
         actions = self._build_actions()
-        # No explicit budget: the grind sub-plan gets the same single budget
-        # (`planner._SEARCH_BUDGET_SECONDS`) every arbiter candidate gets. It
-        # used to take the arbiter's separate 10s cheap budget, which no longer
-        # exists.
-        sub_plan = self.planner.plan(self.state, goal, actions, self.game_data)
-        self._events.note(Mechanism.GRIND_SEARCH, repr(goal),
-                          search_detail(self.planner.last_stats, len(sub_plan)))
+        # DECOMPOSITION FIRST (Phase 2 of docs/PLAN_decision_architecture_redesign.md):
+        # the same route-driven producer the arbiter asks, so a grind no longer
+        # runs a nested A* when the rung's closure decomposes. Measured live
+        # 2026-09-27 over 40 grind goals (5 characters x 8 skills): decomposition
+        # answered every one it served in <= 10 ms, while the nested search
+        # timed out at 15 s with NO plan on four of them (Robby's three
+        # hardwood_plank rungs, 130-173k nodes, which decomposition served with a
+        # withdraw). The search stays, instrumented, for what decomposition
+        # cannot serve yet (a huge-quantity cooking rung, a gate-blocked leaf).
+        decomposed = decompose(goal, self.state, self.game_data, actions, self._last_ctx)
+        if decomposed is not None:
+            sub_plan = decomposed
+            self._events.note(Mechanism.FAST_PATH, repr(goal), f"grind plan_len={len(sub_plan)}")
+        else:
+            # No explicit budget: the grind sub-plan gets the same single budget
+            # (`planner._SEARCH_BUDGET_SECONDS`) every arbiter candidate gets.
+            sub_plan = self.planner.plan(self.state, goal, actions, self.game_data)
+            self._events.note(Mechanism.GRIND_SEARCH, repr(goal),
+                              search_detail(self.planner.last_stats, len(sub_plan)))
         if not sub_plan:
             # Two very different faults land here, and conflating them cost a
             # 9.5h live livelock its diagnosis (C3P0 2026-08-01): the message

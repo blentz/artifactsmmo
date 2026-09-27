@@ -97,7 +97,7 @@ class TestArbiter:
 
     def test_the_fast_path_is_noted(self) -> None:
         arbiter = self._arbiter()
-        with patch("artifactsmmo_cli.ai.strategy_driver.generate_next_craft_action",
+        with patch("artifactsmmo_cli.ai.strategy_driver.decompose",
                    return_value=[MagicMock(), MagicMock()]):
             arbiter._plans(self._goal(True), make_state(), GameData(), [], MagicMock())
         assert arbiter.events.drain() == [(Mechanism.FAST_PATH, "G", "plan_len=2")]
@@ -207,3 +207,25 @@ class TestPlayer:
         assert (search, subject) == (Mechanism.GRIND_SEARCH, "GatherMaterials(skull_staff)")
         assert detail.startswith("nodes_created=233739")
         assert doom == (Mechanism.GRIND_DOOM, "ReachSkill(x->21)", "")
+
+    def test_a_decomposed_grind_is_noted_and_runs_no_nested_search(self) -> None:
+        """Phase 2: the grind asks the route-driven producer first; when it
+        serves the rung, the leg runs with no nested A* at all."""
+        player = GamePlayer(character="hero")
+        player.game_data = GameData()
+        player.state = make_state()
+        player._build_actions = lambda: []  # type: ignore[method-assign]
+        player.planner = MagicMock()
+        grind_goal = MagicMock()
+        grind_goal.__repr__ = lambda self: "GatherMaterials(skull_staff)"  # type: ignore[method-assign,assignment]
+        leg = MagicMock()
+        with (patch("artifactsmmo_cli.ai.player.next_grind_goal", return_value=grind_goal),
+              patch("artifactsmmo_cli.ai.player.decompose", return_value=[leg, MagicMock()]),
+              patch.object(player, "_execute", return_value=("state", "ok", leg)) as execute):
+            result = player._execute_level_skill(LevelSkill(skill="weaponcrafting", target_level=21),
+                                                 MagicMock())
+        assert result == ("state", "ok")
+        assert execute.call_args.args[0] is leg
+        player.planner.plan.assert_not_called()
+        assert player._events.drain() == [
+            (Mechanism.FAST_PATH, "GatherMaterials(skull_staff)", "grind plan_len=2")]

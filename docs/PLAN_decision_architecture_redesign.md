@@ -527,6 +527,36 @@ not add pool patches for them.
   character cannot perform (D-A), and fewer `http_478` "missing items" from
   bank credit while the bank is locked (D-I).
 
+## Phase 2 — decomposition as the next-action producer (started 2026-09-27)
+
+### Baseline (24 h to 2026-09-27 20:44Z, build d819eea1)
+
+| char | cycles/h | LevelSkill share | search/cycle | grind_search/cycle | FAST_PATH | grind budget exhausted | char XP/h |
+|---|---|---|---|---|---|---|---|
+| C3P0 | 150 | 77.8% | 1.75 | 0.78 | 0 | 0 | 0 |
+| R2D2 | 146 | 75.0% | 1.72 | 0.75 | 0 | 0 | 0 |
+| Robby | 122 | 82.0% | 2.05 | 0.82 | 0 | 18 | 0 |
+| Lor | 172 | 85.1% | 1.84 | 0.85 | 0 | 0 | 0 |
+| HAL | 61 | 0% | 1.01 | 0 | 0 | 0 | 747 |
+
+The route-driven producer (`craft_plan_gen`, the "fast path") produced ZERO plans in 24 h. It serves only a `GatherMaterialsGoal`, and live the arbiter's candidates are `ReachSkill`/`ObtainItem` goals whose A* plan is a `LevelSkill` macro. When the macro executes, `_execute_level_skill` expands it with a NESTED A* over the full pool (15 s budget, no fast path).
+
+### Where next actions come from today (inventory, 2026-09-27)
+
+- Arbiter: `_plans` tries the fast path (GatherMaterials only), then A* over the whole pool (budget = the cooldown, floor 15 s; `goal.max_depth`; 1M-node cap). Every other goal family is A*-only, over its `relevant_actions` whitelist.
+- `LevelSkill`: an optimistic macro in the search (`apply` sets the skill). At execution: `next_grind_goal` then a nested A* (`GRIND_SEARCH`), first leg executed, failures marked on the OUTER goal (`GRIND_DOOM`) and raised.
+- The pool: roughly 1,900 statically built actions per cycle, with withdraw quantity ladders (full-chain, per-craft, x1) re-sized by goals and overridden by the fast path.
+
+### Increments
+
+- **2a (landed): `LevelSkill` expands through decomposition first.** One shared producer, `craft_plan_gen.decompose(goal, state, game_data, actions, ctx)`, used by the arbiter and the grind. The nested A* runs only when decomposition returns None (instrumented: `FAST_PATH "grind ..."` vs `GRIND_SEARCH`).
+  - Measured live over 40 grind goals (5 characters x 8 skills): decomposition answered in <= 10 ms whenever it served. The nested A* timed out at 15 s with NO plan on 4 of them (Robby's three `hardwood_plank` rungs and HAL's gearcrafting rung, 130-173k nodes); decomposition served all four. First legs agree on 20 of 40. Most differences are decomposition taking a recycle or withdraw leg where A* fights or gathers, and HAL's A* inserting a Rest/DepositAll first.
+  - Decomposition does not yet serve: huge-quantity cooking rungs (`apple_pie` x173, `cooked_porkchop` x135) and a rung whose leaf is gather-skill-gated (Lor's `bass`, fishing 30). Those still search.
+- **2b:** close the decomposition gaps measured in 2a (the quantity ceiling on cooking rungs; a gate-blocked leaf decomposes into its `LevelSkill`), driving `GRIND_SEARCH` toward 0.
+- **2c:** decomposition over the obtain model's routes directly (drop the `obtain_source_map` / `Source` bridge), including gated routes as sub-tasks.
+- **2d:** the arbiter's `ReachSkill`/`ObtainItem` candidates decompose directly instead of A* planning a `LevelSkill` macro; the macro and its nested planner are deleted once `GRIND_SEARCH` stays at 0.
+- **Witness per increment:** `decision-census` over 24 h: `grind_search` and `search` per cycle down, `grind budget exhausted` to 0, and no drop in ok share, cycles/h or skill XP/h.
+
 ## Risks and open questions
 
 - **Formal surface:** many Lean models and diff harnesses pin components slated
