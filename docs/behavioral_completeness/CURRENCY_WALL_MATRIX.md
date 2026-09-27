@@ -6,7 +6,7 @@
 >
 > `charged` is a differential on production's own pricer: the root is priced as the character stands and again with the currency granted, and a fall in price is the charge. No closure is re-derived here — obligation O6 forbids a second cost model, and this census must not be one.
 >
-> Every field `classify_gap` reads is a column: `droppers`, `live tiles` and `winnable` are the two conjuncts `obtain_sources._drop_sources` gates on, and `event` separates a dormant event from a permanent monster with no tile.
+> Every field `classify_gap` reads is a column: `droppers`, `live tiles` and `winnable` are the two conjuncts `ObtainModel._drop` gates on, and `event` separates a dormant event from a permanent monster with no tile.
 
 308 cells over 7 currencies; charged 5; FUNDED 1; walled 4; not_demanded 289; root_unresolved 14; o7_silent_currency_stall 0; o7_multi_currency_wall 0; o7_unexplained 0; currency_catalogue_empty 0
 

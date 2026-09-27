@@ -438,6 +438,13 @@ Each step is one commit, gated by the full gate, and witnessed by
   - Speed: first measured at 1.31x slower per call. After making the rested-state copy lazy and removing a duplicate drop-table scan, it is 0.85x (faster than legacy).
   - The model's gate mutants moved to a mutation group killed by `test_obtain_sources.py`, which now runs through the model.
   - Behaviour: unchanged. Every consumer still asks LEGACY.
+- Step 4, first consumer: `drop_obtainability` (M8) (landed).
+  - Drop gates live in one function, `obtain_model/drop_routes.py`, used by the model and the oracle, with new gates `SPAWN_KNOWN` and `XP_POSITIVE`.
+  - Two new policy switches: `drop_spawn_known` (D-D) and `allow_grey`.
+  - `fightable_droppers` is now the policy `LEGACY + drop_spawn_known + allow_grey=<caller>` applied to those routes. It matched the old body exactly: 46,024 comparisons, 0 differences, with grey both ways.
+  - The Lean policy gains the two switches (`enforces_drop_spawn`, `enforces_spawn_other`, `enforces_xp_positive`). The exhaustive sweep grows to 32 policies.
+  - Found: forcing `SPAWN_KNOWN` true was never caught by `test_drop_obtainability.py`; only the new model test catches it.
+  - Next consumers: `skill_grind_target._obtainable` and `objective.is_attainable_now`, both toward `ObtainModel.feasible`.
 - 1c: `feasible` / `cost` / `demand` views.
 - Then steps 3-5 as above.
 

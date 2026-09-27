@@ -26,11 +26,18 @@ class Policy:
     or ignore it, as `obtain_sources` did (False; D-A).
     `event_vendors`: a vendor counts when tradeable now, event NPCs included
     (True), or only when it is a permanent NPC, as `obtain_sources` did
-    (False; D-F)."""
+    (False; D-F).
+    `drop_spawn_known`: a DROP route needs a routable spawn,
+    `monster_spawn_known` (True, as `drop_obtainability` asks), or a live tile
+    in `all_monster_locations` (False, as `obtain_sources` asks; D-D).
+    `allow_grey`: a zero-xp dropper counts (True) or not (False). The legacy
+    walk had no grey rule; `drop_obtainability`'s callers choose it."""
 
     all_gather_routes: bool
     gather_skill_gate: bool
     event_vendors: bool
+    drop_spawn_known: bool
+    allow_grey: bool
 
     def admits(self, route: Route) -> bool:
         """Is `route` offered at all under this policy?"""
@@ -44,6 +51,12 @@ class Policy:
             return not self.event_vendors
         if route.kind is SourceKind.BUY and gate.kind is GateKind.VENDOR_TRADEABLE:
             return self.event_vendors
+        if route.kind is SourceKind.DROP and gate.kind is GateKind.SPAWN_LIVE:
+            return not self.drop_spawn_known
+        if route.kind is SourceKind.DROP and gate.kind is GateKind.SPAWN_KNOWN:
+            return self.drop_spawn_known
+        if gate.kind is GateKind.XP_POSITIVE:
+            return not self.allow_grey
         return True
 
     def ready(self, route: Route) -> bool:
@@ -52,7 +65,8 @@ class Policy:
             gate.satisfied for gate in route.gates if self.enforces(gate, route))
 
 
-LEGACY = Policy(all_gather_routes=False, gather_skill_gate=False, event_vendors=False)
+LEGACY = Policy(all_gather_routes=False, gather_skill_gate=False, event_vendors=False,
+                drop_spawn_known=False, allow_grey=True)
 """Exactly what `obtain_sources` answers today. Phase 1 step 1 proves the model
 reproduces it under this policy before any consumer moves or any D-x decision
 changes behaviour."""

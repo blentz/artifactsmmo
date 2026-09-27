@@ -14,6 +14,7 @@ from unittest.mock import patch
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
 from artifactsmmo_cli.ai.obtain_model.feasibility import Feasibility
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
@@ -26,7 +27,8 @@ from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 NOW = datetime(2026, 9, 27, tzinfo=UTC)
-OPEN = Policy(all_gather_routes=True, gather_skill_gate=True, event_vendors=True)
+OPEN = Policy(all_gather_routes=True, gather_skill_gate=True, event_vendors=True,
+              drop_spawn_known=True, allow_grey=False)
 
 
 def census_items(gd: GameData) -> list[str]:
@@ -103,6 +105,23 @@ class TestPolicy:
             Gate(GateKind.VENDOR_TRADEABLE, "npc", False))
         assert LEGACY.ready(permanent_but_closed) and not OPEN.ready(permanent_but_closed)
 
+    def test_a_drop_enforces_one_spawn_predicate_chosen_by_the_policy(self) -> None:
+        """D-D: LEGACY asks for a live tile, OPEN for a routable spawn."""
+        layered_only = self._route(SourceKind.DROP, Gate(GateKind.SPAWN_LIVE, "m", False),
+                                   Gate(GateKind.SPAWN_KNOWN, "m", True))
+        assert not LEGACY.ready(layered_only) and OPEN.ready(layered_only)
+        live_only = self._route(SourceKind.DROP, Gate(GateKind.SPAWN_LIVE, "m", True),
+                                Gate(GateKind.SPAWN_KNOWN, "m", False))
+        assert LEGACY.ready(live_only) and not OPEN.ready(live_only)
+
+    def test_a_grey_dropper_counts_only_when_grey_is_allowed(self) -> None:
+        grey = self._route(SourceKind.DROP, Gate(GateKind.XP_POSITIVE, "m", False))
+        assert LEGACY.ready(grey) and not OPEN.ready(grey)
+
+    def test_spawn_live_still_gates_a_gather_route_under_every_policy(self) -> None:
+        dead = self._route(SourceKind.GATHER, Gate(GateKind.SPAWN_LIVE, "rocks", False))
+        assert not LEGACY.ready(dead) and not OPEN.ready(dead)
+
     def test_every_other_gate_is_always_enforced(self) -> None:
         route = self._route(SourceKind.DROP, Gate(GateKind.WINNABLE, "wolf", False))
         assert not LEGACY.ready(route) and not OPEN.ready(route)
@@ -139,10 +158,13 @@ def test_a_sleeping_monster_is_not_asked_whether_it_is_winnable(
     state, gd = world
     item = next(i for i in sorted(gd.all_item_stats) if gd.monsters_dropping(i))
     with (patch.object(GameData, "all_monster_locations", new={}),
-          patch("artifactsmmo_cli.ai.obtain_model.obtain_model.is_winnable") as winnable):
+          patch.object(GameData, "monster_spawn_known", return_value=False),
+          patch("artifactsmmo_cli.ai.obtain_model.drop_routes.is_winnable") as winnable):
         routes = ObtainModel(state, gd, _ctx(), NOW).routes(item)
     winnable.assert_not_called()
-    assert all(not g.satisfied for r in routes if r.kind is SourceKind.DROP for g in r.gates)
+    spawn_and_combat = (GateKind.SPAWN_LIVE, GateKind.SPAWN_KNOWN, GateKind.WINNABLE)
+    assert all(not g.satisfied for r in routes if r.kind is SourceKind.DROP for g in r.gates
+               if g.kind in spawn_and_combat)
 
 
 def test_recycle_skips_holdings_that_cannot_be_recycled(world: tuple[WorldState, GameData]) -> None:
@@ -242,3 +264,19 @@ def test_feasible_runs_over_the_real_catalogue(world: tuple[WorldState, GameData
     assert any(v.ok for v in verdicts.values()) and any(not v.ok for v in verdicts.values())
     held = model._held()
     assert all(item in held or model.ready(item, LEGACY) for item, v in verdicts.items() if v.ok)
+
+
+def test_drop_routes_evaluate_winnability_only_for_a_monster_that_spawns(
+        world: tuple[WorldState, GameData]) -> None:
+    """A layered monster in a reachable region spawns (`SPAWN_KNOWN`) without a
+    live tile, so its winnability IS asked; one that spawns nowhere is not."""
+    state, gd = world
+    item = next(i for i in sorted(gd.all_item_stats) if gd.monsters_dropping(i))
+    monster = gd.monsters_dropping(item)[0][0]
+    with (patch.object(GameData, "all_monster_locations", new={}),
+          patch.object(GameData, "monster_spawn_known", side_effect=lambda code: code == monster),
+          patch("artifactsmmo_cli.ai.obtain_model.drop_routes.is_winnable", return_value=True) as winnable):
+        routes = drop_routes(item, state, gd)
+    assert [call.args[2] for call in winnable.call_args_list] == [monster]
+    gates = {g.kind: g.satisfied for g in routes[0].gates}
+    assert gates[GateKind.SPAWN_KNOWN] and gates[GateKind.WINNABLE] and not gates[GateKind.SPAWN_LIVE]

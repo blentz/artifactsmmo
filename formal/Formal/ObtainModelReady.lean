@@ -17,8 +17,9 @@ Proved over ALL route lists and policies:
 - completeness: every ready non-SELL route is returned;
 - SELL: returned SELL routes have distinct `via`, every sold item with a ready
   buyer is covered, and the covering route is the first ready one;
-- policy: the three switchable gates behave as named, and every other gate
-  is always enforced.
+- policy: the switchable gates (gather skill, gather routes, event vendors,
+  drop spawn predicate, grey) behave as named, and every other gate is always
+  enforced.
 
 `via` is abstracted to `Nat` (the Python side uses item/NPC code strings;
 the differential harness interns them) — only equality of `via` is ever used.
@@ -35,8 +36,9 @@ inductive SrcKind
 
 /-- `ai/obtain_model/gate.py::GateKind`. -/
 inductive GateKind
-  | bankAccessible | craftSkill | gatherSkill | workshopKnown | spawnLive | winnable
-  | vendorLocated | vendorPermanent | vendorTradeable | geLocated | licensed
+  | bankAccessible | craftSkill | gatherSkill | workshopKnown | spawnLive | spawnKnown
+  | winnable | xpPositive | vendorLocated | vendorPermanent | vendorTradeable | geLocated
+  | licensed
   deriving DecidableEq, Repr
 
 /-- One evaluated gate (`Gate.kind`, `Gate.satisfied`). -/
@@ -53,15 +55,17 @@ structure Route where
   gates : List Gate
   deriving DecidableEq, Repr
 
-/-- `Policy`'s three switches. -/
+/-- `Policy`'s switches. -/
 structure Policy where
   allGather : Bool
   gatherSkill : Bool
   eventVendors : Bool
+  dropSpawnKnown : Bool
+  allowGrey : Bool
   deriving DecidableEq, Repr
 
-/-- `Policy.LEGACY`: exactly what `obtain_sources` answered. -/
-def legacy : Policy := ⟨false, false, false⟩
+/-- `Policy.LEGACY`: exactly what the legacy `obtain_sources` walk answered. -/
+def legacy : Policy := ⟨false, false, false, false, true⟩
 
 /-- `Policy.admits`: a non-primary GATHER route needs `allGather`. -/
 def admits (p : Policy) (r : Route) : Bool :=
@@ -73,6 +77,9 @@ def enforces (p : Policy) (r : Route) (g : Gate) : Bool :=
   | .gatherSkill => p.gatherSkill
   | .vendorPermanent => if r.kind = .buy then !p.eventVendors else true
   | .vendorTradeable => if r.kind = .buy then p.eventVendors else true
+  | .spawnLive => if r.kind = .drop then !p.dropSpawnKnown else true
+  | .spawnKnown => if r.kind = .drop then p.dropSpawnKnown else true
+  | .xpPositive => !p.allowGrey
   | _ => true
 
 /-- `Policy.ready`: admitted, and every enforced gate is satisfied. -/
@@ -265,13 +272,32 @@ theorem readyRoutes_sell_first (p : Policy) (pre post : List Route) (r : Route)
 
 /-! ### Policy -/
 
-/-- **POLICY: FIXED GATES.** Every gate other than the three switchable ones
-is enforced under every policy, on every route. -/
+/-- **POLICY: FIXED GATES.** Every gate other than the switchable ones is
+enforced under every policy, on every route. -/
 theorem enforces_fixed (p : Policy) (r : Route) (g : Gate)
     (h1 : g.kind ≠ .gatherSkill) (h2 : g.kind ≠ .vendorPermanent)
-    (h3 : g.kind ≠ .vendorTradeable) : enforces p r g = true := by
+    (h3 : g.kind ≠ .vendorTradeable) (h4 : g.kind ≠ .spawnLive)
+    (h5 : g.kind ≠ .spawnKnown) (h6 : g.kind ≠ .xpPositive) : enforces p r g = true := by
   unfold enforces
   split <;> simp_all
+
+/-- **POLICY: DROP SPAWN.** On a DROP route, exactly one of the two spawn
+predicates is enforced, chosen by `dropSpawnKnown` (D-D). -/
+theorem enforces_drop_spawn (p : Policy) (r : Route) (s : Bool) (h : r.kind = .drop) :
+    enforces p r ⟨.spawnLive, s⟩ = !p.dropSpawnKnown ∧
+    enforces p r ⟨.spawnKnown, s⟩ = p.dropSpawnKnown := by
+  simp [enforces, h]
+
+/-- **POLICY: SPAWN ELSEWHERE.** On any other route both spawn predicates are
+always enforced (a GATHER route always needs a live resource tile). -/
+theorem enforces_spawn_other (p : Policy) (r : Route) (s : Bool) (h : r.kind ≠ .drop) :
+    enforces p r ⟨.spawnLive, s⟩ = true ∧ enforces p r ⟨.spawnKnown, s⟩ = true := by
+  simp [enforces, h]
+
+/-- **POLICY: GREY.** The xp-positive gate is enforced exactly when grey
+droppers are not allowed. -/
+theorem enforces_xp_positive (p : Policy) (r : Route) (s : Bool) :
+    enforces p r ⟨.xpPositive, s⟩ = !p.allowGrey := rfl
 
 /-- **POLICY: GATHER SKILL.** The gathering-skill gate is enforced exactly when
 the policy asks for it (D-A). -/
@@ -305,10 +331,19 @@ private def eventBuy : Route :=
 example : readyRoutes legacy [sellA, sellB, sellC] = [sellB] := by decide
 -- LEGACY hides a non-primary gatherer and ignores the gather skill; the open policy flips both.
 example : readyRoutes legacy [gatherSecondary, gatherSkilled] = [gatherSkilled] := by decide
-example : readyRoutes ⟨true, true, false⟩ [gatherSecondary, gatherSkilled] = [gatherSecondary] := by
+example : readyRoutes ⟨true, true, false, false, true⟩ [gatherSecondary, gatherSkilled]
+    = [gatherSecondary] := by
   decide
 -- An open event vendor counts only when event vendors are enabled.
 example : readyRoutes legacy [eventBuy] = [] := by decide
-example : readyRoutes ⟨false, false, true⟩ [eventBuy] = [eventBuy] := by decide
+example : readyRoutes ⟨false, false, true, false, true⟩ [eventBuy] = [eventBuy] := by decide
+-- A layered-only dropper counts only under the routable-spawn predicate; a grey one only when allowed.
+private def layeredDrop : Route :=
+  ⟨.drop, 4, true, [⟨.spawnLive, false⟩, ⟨.spawnKnown, true⟩, ⟨.xpPositive, true⟩]⟩
+private def greyDrop : Route :=
+  ⟨.drop, 5, true, [⟨.spawnLive, true⟩, ⟨.spawnKnown, true⟩, ⟨.xpPositive, false⟩]⟩
+example : readyRoutes legacy [layeredDrop, greyDrop] = [greyDrop] := by decide
+example : readyRoutes ⟨false, false, false, true, false⟩ [layeredDrop, greyDrop] = [layeredDrop] := by
+  decide
 
 end Formal.ObtainModelReady

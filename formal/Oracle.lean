@@ -2405,7 +2405,7 @@ def run (args : Array Json) : Json :=
 end ObtainModelFeasibleOracle
 
 -- ObtainModelReady: the unified obtain model's route selection.
--- args = [allGather(0/1), gatherSkill(0/1), eventVendors(0/1),
+-- args = [allGather, gatherSkill, eventVendors, dropSpawnKnown, allowGrey (each 0/1),
 --         routes: [[kindStr, via(Nat), primary(0/1), [[gateKindStr, sat(0/1)], ...]], ...]]
 -- Kind strings are `SourceKind.value`; gate strings are `GateKind.value`.
 namespace ObtainModelReadyOracle
@@ -2425,7 +2425,8 @@ def srcKindStr : SrcKind → String
 def gateKindOf? (s : String) : Option GateKind :=
   if s = "bank_accessible" then some .bankAccessible else if s = "craft_skill" then some .craftSkill
   else if s = "gather_skill" then some .gatherSkill else if s = "workshop_known" then some .workshopKnown
-  else if s = "spawn_live" then some .spawnLive else if s = "winnable" then some .winnable
+  else if s = "spawn_live" then some .spawnLive else if s = "spawn_known" then some .spawnKnown
+  else if s = "winnable" then some .winnable else if s = "xp_positive" then some .xpPositive
   else if s = "vendor_located" then some .vendorLocated
   else if s = "vendor_permanent" then some .vendorPermanent
   else if s = "vendor_tradeable" then some .vendorTradeable
@@ -2435,7 +2436,8 @@ def gateKindOf? (s : String) : Option GateKind :=
 def gateKindStr : GateKind → String
   | .bankAccessible => "bank_accessible" | .craftSkill => "craft_skill"
   | .gatherSkill => "gather_skill" | .workshopKnown => "workshop_known"
-  | .spawnLive => "spawn_live" | .winnable => "winnable" | .vendorLocated => "vendor_located"
+  | .spawnLive => "spawn_live" | .spawnKnown => "spawn_known" | .winnable => "winnable"
+  | .xpPositive => "xp_positive" | .vendorLocated => "vendor_located"
   | .vendorPermanent => "vendor_permanent" | .vendorTradeable => "vendor_tradeable"
   | .geLocated => "ge_located" | .licensed => "licensed"
 
@@ -2463,8 +2465,9 @@ def routeJson (r : Route) : Json :=
       Json.num (if g.sat then 1 else 0)])).toArray]
 
 def run (args : Array Json) : Json :=
-  let p : Policy := ⟨intArg args 0 != 0, intArg args 1 != 0, intArg args 2 != 0⟩
-  match (args[3]!.getArr?).toOption.bind (fun rs => rs.toList.mapM parseRoute) with
+  let p : Policy := ⟨intArg args 0 != 0, intArg args 1 != 0, intArg args 2 != 0,
+    intArg args 3 != 0, intArg args 4 != 0⟩
+  match (args[5]!.getArr?).toOption.bind (fun rs => rs.toList.mapM parseRoute) with
   | none => Json.mkObj [("error", Json.str "bad routes")]
   | some rs => Json.mkObj [("ready", Json.arr ((readyRoutes p rs).map routeJson).toArray)]
 

@@ -25,15 +25,14 @@ Built once per decision from one `(state, game_data, ctx, now)` snapshot, and
 memoised per item for its lifetime. Pure: no I/O.
 """
 
-from dataclasses import replace
 from datetime import datetime
 
 from artifactsmmo_cli.ai import accumulation_sell
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import destroyable
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
 from artifactsmmo_cli.ai.obtain_model.feasibility import Feasibility
 from artifactsmmo_cli.ai.obtain_model.feasible_core import feasible_items
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
@@ -57,9 +56,6 @@ class ObtainModel:
         self._gd = game_data
         self._ctx = ctx
         self._now = now
-        # Built on first use: only DROP routes need it, and copying a WorldState
-        # was over a quarter of the model's per-item cost.
-        self._rested_state: WorldState | None = None
         self._routes: dict[str, tuple[Route, ...]] = {}
 
     def routes(self, item: str) -> tuple[Route, ...]:
@@ -112,13 +108,6 @@ class ObtainModel:
         if self._state.gold > 0:
             held.add(GOLD_CODE)
         return frozenset(held)
-
-    def _rested(self) -> WorldState:
-        """The state at full hp. Winnability is asked at RESTORABLE hp: route
-        existence is not an hp question, and resting is an action the planner has."""
-        if self._rested_state is None:
-            self._rested_state = replace(self._state, hp=self._state.max_hp)
-        return self._rested_state
 
     def _skill(self, skill: str) -> int:
         return self._state.skills.get(skill, DEFAULT_SKILL_LEVEL)
@@ -246,23 +235,9 @@ class ObtainModel:
         return [Route(item, SourceKind.GE_FILL, order_id, 1, quantity, (gate,))]
 
     def _drop(self, item: str) -> list[Route]:
-        """Monsters that drop `item`. `SPAWN_LIVE` reads the same
-        `all_monster_locations` that `factory.py` builds FightActions from (an
-        event monster's tiles are merged only while its event is active);
-        `WINNABLE` asks at restorable hp, since being at 20% hp is a reason to
-        rest, not an absent route."""
-        out: list[Route] = []
-        for monster, _rate, _mn, _mx in self._gd.monsters_dropping(item):
-            live = bool(self._gd.all_monster_locations.get(monster))
-            gates = (
-                Gate(GateKind.SPAWN_LIVE, monster, live),
-                # Asked only for a live monster: a sleeping event monster has no
-                # FightAction to serve it, so its verdict could never be used.
-                Gate(GateKind.WINNABLE, monster,
-                     live and is_winnable(self._rested(), self._gd, monster)),
-            )
-            out.append(Route(item, SourceKind.DROP, monster, 1, UNBOUNDED_CAPACITY, gates))
-        return out
+        """Monsters that drop `item`: see `drop_routes`, the one place drop gates
+        are evaluated (shared with `drop_obtainability`)."""
+        return drop_routes(item, self._state, self._gd)
 
     def _sell(self, item: str) -> list[Route]:
         """GOLD only: selling what the keep authority licenses, one route per

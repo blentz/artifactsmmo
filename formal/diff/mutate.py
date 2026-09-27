@@ -366,6 +366,7 @@ OBTAIN_MODEL_READY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_mode
 OBTAIN_MODEL_POLICY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "policy.py"
 OBTAIN_MODEL_FEASIBLE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "feasible_core.py"
 OBTAIN_MODEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "obtain_model.py"
+OBTAIN_MODEL_DROP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "drop_routes.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
 FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding_core.py"
 CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_afford_core.py"
@@ -2967,15 +2968,30 @@ OBTAIN_MODEL_GATE_MUTATIONS = [
     ("obtain_model: withdraw ignores bank access",
      'Gate(GateKind.BANK_ACCESSIBLE, "bank", self._ctx.bank_accessible)',
      'Gate(GateKind.BANK_ACCESSIBLE, "bank", True)'),
-    ("obtain_model: drop ignores winnability",
-     "live and is_winnable(self._rested(), self._gd, monster)",
-     "live"),
     ("obtain_model: recycle uses the batch yield",
      "max(1, recipe[item] // 2)",
      "max(1, recipe[item])"),
     ("obtain_model: wrong primary gatherer",
      "primary=rank == 0))",
      "primary=rank == 1))"),
+]
+# drop_routes.py: the one place drop gates are evaluated (obtain model +
+# drop_obtainability). Split by the test file that kills each.
+OBTAIN_MODEL_DROP_MUTATIONS = [
+    ("drop_routes: ignore winnability",
+     "            winnable = is_winnable(rested, game_data, monster)",
+     "            winnable = True"),
+    ("drop_routes: every monster has a routable spawn",
+     "Gate(GateKind.SPAWN_KNOWN, monster, known)",
+     "Gate(GateKind.SPAWN_KNOWN, monster, True)"),
+    ("drop_routes: ask winnability only for a live monster",
+     "        if live or known:",
+     "        if live:"),
+]
+OBTAIN_MODEL_DROP_GREY_MUTATIONS = [
+    ("drop_routes: no monster is grey",
+     "Gate(GateKind.XP_POSITIVE, monster, game_data.xp_per_kill(monster, state.level) > 0)",
+     "Gate(GateKind.XP_POSITIVE, monster, True)"),
 ]
 OBTAIN_MODEL_POLICY_MUTATIONS = [
     ("obtain_model policy: admit every gather route",
@@ -2988,8 +3004,17 @@ OBTAIN_MODEL_POLICY_MUTATIONS = [
      "            return not self.event_vendors",
      "            return self.event_vendors"),
     ("obtain_model policy: always enforce tradeability",
-     "            return self.event_vendors\n        return True",
-     "            return True\n        return True"),
+     "            return self.event_vendors\n        if route.kind is SourceKind.DROP",
+     "            return True\n        if route.kind is SourceKind.DROP"),
+    ("obtain_model policy: invert the drop spawn switch",
+     "            return not self.drop_spawn_known",
+     "            return self.drop_spawn_known"),
+    ("obtain_model policy: always enforce the routable spawn on a drop",
+     "            return self.drop_spawn_known\n",
+     "            return True\n"),
+    ("obtain_model policy: ignore the grey switch",
+     "            return not self.allow_grey",
+     "            return False"),
     ("obtain_model policy: any enforced gate suffices",
      "        return self.admits(route) and all(",
      "        return self.admits(route) and any("),
@@ -4678,6 +4703,7 @@ _ALL_SRCS = [
     LEAF_ATTAINABLE_CORE_SRC,
     # Decision-architecture Phase 1 — unified obtain model route selection.
     OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_FEASIBLE_SRC, OBTAIN_MODEL_SRC,
+    OBTAIN_MODEL_DROP_SRC,
     # C2 — complete_task coin-minting pure core.
     COMPLETE_TASK_CORE_SRC,
     # C3 — funding_cycles_pure: cycles to reach a currency target.
@@ -8260,6 +8286,10 @@ def _collect_all_groups() -> None:
               "formal/diff/test_obtain_model_feasible_diff.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_GATE_MUTATIONS,
               "tests/test_ai/test_obtain_sources.py", survivors)
+    run_group(OBTAIN_MODEL_DROP_SRC, OBTAIN_MODEL_DROP_MUTATIONS,
+              "tests/test_ai/test_obtain_model.py", survivors)
+    run_group(OBTAIN_MODEL_DROP_SRC, OBTAIN_MODEL_DROP_GREY_MUTATIONS,
+              "tests/test_ai/test_drop_obtainability.py", survivors)
     run_group(COMPLETE_TASK_CORE_SRC, COMPLETE_TASK_MUTATIONS,
               "formal/diff/test_complete_task_income_diff.py", survivors)
     run_group(FUNDING_CORE_SRC, FUNDING_MUTATIONS,

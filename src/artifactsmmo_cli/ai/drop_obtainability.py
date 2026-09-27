@@ -31,7 +31,14 @@ Before the unification the two sides disagreed on FOUR axes:
                   mask a perfectly fightable xp-positive one).
   4. policy source — `allow_grey` came from a different expression at each site.
 
-All four now resolve here. Liveness is `monster_spawn_known` on both sides. The
+All four now resolve here. Liveness is `monster_spawn_known` on both sides.
+
+ONE SET OF DROP GATES (Phase 1 step 4 of docs/PLAN_decision_architecture_redesign.md).
+The gates themselves are evaluated in `ai/obtain_model/drop_routes.py`, which the
+unified obtain model uses too; this oracle is the `Policy` that enforces the
+routable spawn (`drop_spawn_known`) and the caller's grey rule (`allow_grey`),
+where the obtain model's LEGACY policy asks for a live tile and has no grey rule
+(the D-D difference, now one explicit switch instead of two implementations). The
 grey rule is a FILTER on the candidate set, not a post-choice veto, so the
 proved choice core (`select_monster_for_drop`) only ever ranks droppers this
 oracle has already approved — the choice can no longer change the verdict.
@@ -96,8 +103,9 @@ SITES THAT ASK A NEARBY BUT DIFFERENT QUESTION, and why they stay separate:
 
 from dataclasses import replace
 
-from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -140,14 +148,15 @@ def fightable_droppers(item: str, state: WorldState, game_data: GameData,
     # the ORIGINAL state: the grey gate is about the character's LEVEL, which a
     # rested copy shares, and threading the copy there too would blur two gates
     # that must stay readable as separate things.
-    rested = replace(state, hp=state.max_hp)
-    return [
-        (monster_code, rate, mn, mx)
-        for monster_code, rate, mn, mx in game_data.monsters_dropping(item)
-        if game_data.monster_spawn_known(monster_code)
-        and is_winnable(rested, game_data, monster_code)
-        and (allow_grey or game_data.xp_per_kill(monster_code, state.level) > 0)
-    ]
+    # The gates live in `obtain_model.drop_routes`, shared with the obtain model;
+    # this oracle is the policy that enforces them: a routable spawn
+    # (`SPAWN_KNOWN`), winnable at restorable hp, and xp-positive unless
+    # `allow_grey`. Checked equal to the previous inline body over every item of
+    # all 44 scenario worlds, both grey settings, before the switch (46,024
+    # comparisons, 0 differences).
+    policy = replace(LEGACY, drop_spawn_known=True, allow_grey=allow_grey)
+    ready = {route.via for route in drop_routes(item, state, game_data) if policy.ready(route)}
+    return [row for row in game_data.monsters_dropping(item) if row[0] in ready]
 
 
 def drop_obtainable(item: str, state: WorldState, game_data: GameData,

@@ -27,7 +27,7 @@ _route = st.builds(
                                             primary=primary),
     st.sampled_from(list(SourceKind)), st.integers(0, 3), st.booleans(),
     st.lists(_gate, max_size=4))
-_policy = st.builds(Policy, st.booleans(), st.booleans(), st.booleans())
+_policy = st.builds(Policy, st.booleans(), st.booleans(), st.booleans(), st.booleans(), st.booleans())
 
 
 def _encode(route: Route) -> list:
@@ -35,9 +35,13 @@ def _encode(route: Route) -> list:
             [[g.kind.value, int(g.satisfied)] for g in route.gates]]
 
 
+def _flags(policy: Policy) -> list[int]:
+    return [int(policy.all_gather_routes), int(policy.gather_skill_gate), int(policy.event_vendors),
+            int(policy.drop_spawn_known), int(policy.allow_grey)]
+
+
 def _oracle(policy: Policy, routes: list[Route]) -> list:
-    args = [int(policy.all_gather_routes), int(policy.gather_skill_gate),
-            int(policy.event_vendors), [_encode(r) for r in routes]]
+    args = [*_flags(policy), [_encode(r) for r in routes]]
     return run_oracle("obtain_model_ready", [args])[0]["ready"]
 
 
@@ -54,14 +58,13 @@ def test_every_single_gate_route_matches_oracle() -> None:
     kind x gate kind x verdict x primary, one gate per route. Random lists
     reach a BUY route whose only relevant gate is false too rarely to pin the
     vendor switches (two mutants survived 400 random examples); this does not
-    rely on luck. One oracle batch, 2,816 cases."""
-    policies = [Policy(*flags) for flags in itertools.product((False, True), repeat=3)]
+    rely on luck. One oracle batch: 32 policies x 8 kinds x 13 gates x 2 x 2."""
+    policies = [Policy(*flags) for flags in itertools.product((False, True), repeat=5)]
     cases = [(policy, Route("item", kind, "v0", 1, 1, (Gate(gate, "subject", sat),), primary=primary))
              for policy, kind, gate, sat, primary in itertools.product(
                  policies, SourceKind, GateKind, (False, True), (False, True))]
     lean = run_oracle("obtain_model_ready", [
-        [int(p.all_gather_routes), int(p.gather_skill_gate), int(p.event_vendors), [_encode(r)]]
-        for p, r in cases])
+        [*_flags(p), [_encode(r)]] for p, r in cases])
     for (policy, route), answer in zip(cases, lean, strict=True):
         python = [_encode(r) for r in ready_routes([route], policy)]
         assert python == answer["ready"], f"{policy} {route}: py={python} lean={answer['ready']}"

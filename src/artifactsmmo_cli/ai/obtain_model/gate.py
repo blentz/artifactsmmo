@@ -25,6 +25,12 @@ class GateKind(Enum):
     """A workshop for skill `subject` has a known tile."""
     SPAWN_LIVE = "spawn_live"
     """Resource or monster `subject` has a currently-live tile."""
+    SPAWN_KNOWN = "spawn_known"
+    """Monster `subject` spawns somewhere the movement model can route to
+    (`GameData.monster_spawn_known`: a live tile, or a layered tile in a
+    reachable region)."""
+    XP_POSITIVE = "xp_positive"
+    """Monster `subject` pays experience at the character's level (not grey)."""
     WINNABLE = "winnable"
     """Monster `subject` is predicted beatable at restorable HP."""
     VENDOR_LOCATED = "vendor_located"

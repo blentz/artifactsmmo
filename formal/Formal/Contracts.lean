@@ -3112,8 +3112,22 @@ example : ∀ (p : Policy) (pre post : List Route) (r : Route),
   @Formal.ObtainModelReady.readyRoutes_sell_first
 open Formal.ObtainModelReady in
 example : ∀ (p : Policy) (r : Route) (g : Gate), g.kind ≠ .gatherSkill →
-    g.kind ≠ .vendorPermanent → g.kind ≠ .vendorTradeable → enforces p r g = true :=
+    g.kind ≠ .vendorPermanent → g.kind ≠ .vendorTradeable → g.kind ≠ .spawnLive →
+    g.kind ≠ .spawnKnown → g.kind ≠ .xpPositive → enforces p r g = true :=
   @Formal.ObtainModelReady.enforces_fixed
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route) (s : Bool), r.kind = .drop →
+    enforces p r ⟨.spawnLive, s⟩ = !p.dropSpawnKnown ∧
+    enforces p r ⟨.spawnKnown, s⟩ = p.dropSpawnKnown :=
+  @Formal.ObtainModelReady.enforces_drop_spawn
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route) (s : Bool), r.kind ≠ .drop →
+    enforces p r ⟨.spawnLive, s⟩ = true ∧ enforces p r ⟨.spawnKnown, s⟩ = true :=
+  @Formal.ObtainModelReady.enforces_spawn_other
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route) (s : Bool),
+    enforces p r ⟨.xpPositive, s⟩ = !p.allowGrey :=
+  @Formal.ObtainModelReady.enforces_xp_positive
 open Formal.ObtainModelReady in
 example : ∀ (p : Policy) (r : Route) (sat : Bool),
     enforces p r ⟨.gatherSkill, sat⟩ = p.gatherSkill :=

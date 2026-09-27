@@ -971,6 +971,9 @@ open Formal.PriorityBand
 #print axioms Formal.ObtainModelReady.enforces_gather_skill
 #print axioms Formal.ObtainModelReady.enforces_vendor_buy
 #print axioms Formal.ObtainModelReady.admits_gather
+#print axioms Formal.ObtainModelReady.enforces_drop_spawn
+#print axioms Formal.ObtainModelReady.enforces_spawn_other
+#print axioms Formal.ObtainModelReady.enforces_xp_positive
 #print axioms Formal.ObtainModelFeasible.feasible_sound
 #print axioms Formal.ObtainModelFeasible.feasible_complete
 #print axioms Formal.ObtainModelFeasible.iter_stable
