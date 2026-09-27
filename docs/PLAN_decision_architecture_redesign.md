@@ -1,6 +1,6 @@
 # PLAN: decision architecture redesign (removing the epicycles)
 
-Status: Phase 0 + 0b landed (2026-09-25). Phase 1 design pending review; collect ≥24 h of decision events before Phase 1 code lands so it has a mechanism baseline.
+Status: Phase 0 + 0b landed; 21 h mechanism baseline recorded (2026-09-27). Phase 1 design pending review.
 
 ## Why this exists
 
@@ -266,6 +266,38 @@ per-mechanism counts over the window. Windows before 2026-09-25 show
 **Volume.** About one `replan` or `plan_cache_hit` per cycle, plus one event per
 search, so roughly 3-5 rows per cycle and ~20k rows/day for the fleet. There is
 no retention policy yet; revisit if the DB grows noticeably.
+
+### Phase 0b — mechanism baseline (21 h, 2026-09-26 03:50Z .. 09-27 00:50Z)
+
+This session ran on build 8413a8f4: fleet rate governor, account cache,
+wall-clock fix, decision events. The "per cycle" columns are events divided by
+cycles.
+
+| char | cycles/h | ok | char XP/h | skill XP/h | replan | cache hit | promotion | aged_pick | doomed_skip | search | grind_search | commitment_change | grind budget exhausted |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| C3P0 | 170 | 100.0% | 0 | 644 | 0.98 | 0.02 | 0.98 | 0.98 | 0.82 | 1.81 | 0.83 | 0.28 | 0 |
+| HAL | 59 | 100.0% | 729 | 0 | 1.00 | 0 | 0.90 | 0.99 | 1.46 | 1.01 | 0 | 0.99 | 0 |
+| Lor | 148 | 99.9% | 0 | 501 | 0.99 | 0.01 | 0.99 | 0.99 | 0.79 | 1.79 | 0.80 | 0.37 | 0 |
+| R2D2 | 141 | 99.9% | 0 | 526 | 1.00 | 0.00 | 1.00 | 1.00 | 0.93 | 1.94 | 0.94 | 0.13 | 0 |
+| Robby | 139 | 95.9% | 0 | 1188 | 0.97 | 0.03 | 0.97 | 0.97 | 5.00 | 1.96 | 0.88 | 0.24 | 120 |
+
+**Skill levels gained in 21 h** (character levels unchanged except HAL
+27 -> 28):
+- C3P0: gear 16->17, jewelry 16->17.
+- Lor: fishing 15->16, weapon 14->15.
+- R2D2: cooking 23->24, gear 16->17, jewelry 16->17.
+- Robby: jewelry 20->21.
+
+The four crafters rotate among three `ReachSkill` goals (the
+`commitment_change` column), so no one skill gets sustained effort.
+
+**Targets for later phases** (from the table):
+- `servable_promotion`, `aged_pick` and `doomed_skip` are about 1 per cycle.
+  Phase 3 must drive them to ~0.
+- `grind_search` is about 0.85 per cycle, with 120 of Robby's searches
+  exhausting their budget (Robby RSS ~900 MB). Phase 2 must drive both to 0.
+- `replan` is about 1 per cycle, with a cache hit rate of 0-3%. Phase 4 must
+  replace the cache with a persisted intention.
 
 ## Phase 1 — one obtain model (design)
 
