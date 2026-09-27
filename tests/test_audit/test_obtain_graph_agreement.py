@@ -90,10 +90,11 @@ def test_every_source_kind_is_classified_state_free_or_state_dependent() -> None
     SELL is neither: it obtains GOLD, not an item, so it has no `leaves` counterpart
     to be a subset of. TASK_REWARD is neither too: `obtain_sources` (the LEGACY
     policy) never emits it, so this walk-versus-graph subset check has nothing of
-    it to compare (`objective.is_suppliable` names the task board separately).
+    it to compare. GOLD_DROP is neither for both reasons: it obtains gold, and
+    LEGACY never emits it.
     """
     classified = (_STATE_FREE | _EXCLUDED_AS_STATE_DEPENDENT
-                  | {SourceKind.SELL, SourceKind.TASK_REWARD})
+                  | {SourceKind.SELL, SourceKind.TASK_REWARD, SourceKind.GOLD_DROP})
 
     assert not (_STATE_FREE & _EXCLUDED_AS_STATE_DEPENDENT), "a kind cannot be both"
     unclassified = set(SourceKind) - classified

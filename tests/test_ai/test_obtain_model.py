@@ -30,7 +30,7 @@ NOW = datetime(2026, 9, 27, tzinfo=UTC)
 OPEN = Policy(all_gather_routes=True, gather_skill_gate=True, craft_skill_gate=True,
               event_vendors=True,
               spawn_known=True, allow_grey=False, vendor_routes=True, ge_routes=True,
-              task_rewards=True)
+              task_rewards=True, fight_gold=True)
 
 
 def census_items(gd: GameData) -> list[str]:
@@ -156,10 +156,14 @@ class TestPolicy:
 
     def test_every_other_route_is_offered_under_every_policy(self) -> None:
         closed = replace(LEGACY, all_gather_routes=False, vendor_routes=False, ge_routes=False,
-                         task_rewards=False)
+                         task_rewards=False, fight_gold=False)
         assert all(closed.admits(self._route(kind, primary=False)) for kind in SourceKind
                    if kind not in (SourceKind.GATHER, SourceKind.BUY, SourceKind.GE_FILL,
-                                   SourceKind.TASK_REWARD))
+                                   SourceKind.TASK_REWARD, SourceKind.GOLD_DROP))
+
+    def test_fight_gold_is_offered_only_when_asked_for(self) -> None:
+        route = self._route(SourceKind.GOLD_DROP)
+        assert not LEGACY.admits(route) and OPEN.admits(route)
 
     def test_a_grey_dropper_counts_only_when_grey_is_allowed(self) -> None:
         grey = self._route(SourceKind.DROP, Gate(GateKind.XP_POSITIVE, "m", False))
@@ -189,7 +193,7 @@ def test_only_the_first_usable_buyer_of_a_surplus_item_is_a_ready_sell_route(
           patch("artifactsmmo_cli.ai.obtain_model.obtain_model.event_npc_tradeable",
                 side_effect=lambda npc, *a, **kw: npc != "closed_npc")):
         model = ObtainModel(state, gd, _ctx(), NOW)
-        routes = model.routes(GOLD_CODE)
+        routes = [r for r in model.routes(GOLD_CODE) if r.kind is SourceKind.SELL]
         ready = model.ready(GOLD_CODE, LEGACY)
     assert [r.agent for r in routes] == ["closed_npc", "open_npc", "cheap_npc"]  # price 0 is no route
     assert [(r.via, r.agent, r.yield_per, r.capacity) for r in ready] == [("relic", "open_npc", 20, 60)]
@@ -419,4 +423,28 @@ def test_mints_is_capability_not_stock(world: tuple[WorldState, GameData]) -> No
     assert model.mints(dropped)
     owned_only = ObtainModel(replace(state, bank_items={"novice_guide": 1}), gd, _ctx(), NOW)
     assert owned_only.routes("novice_guide") and not owned_only.mints("novice_guide")
-    assert not model.mints(GOLD_CODE)
+    # Gold is minted by fighting; with no monster paying any, a sale alone is
+    # stock, not a mint.
+    assert model.mints(GOLD_CODE)
+    with patch.object(GameData, "monster_max_gold", return_value=0):
+        assert not ObtainModel(state, gd, _ctx(), NOW).mints(GOLD_CODE)
+
+
+def test_every_monster_that_pays_gold_is_a_gold_route(world: tuple[WorldState, GameData]) -> None:
+    """Gold is earned by winning fights: one GOLD_DROP route per paying
+    monster, yielding the expected (min + max) // 2 per win, with the same
+    fight gates as an item drop. A monster that pays nothing has no route."""
+    state, gd = world
+    routes = [r for r in ObtainModel(state, gd, _ctx(), NOW).routes(GOLD_CODE)
+              if r.kind is SourceKind.GOLD_DROP]
+    paying = [m for m in gd.monsters.levels if gd.monster_max_gold(m) > 0]
+    assert [r.via for r in routes] == paying and len(paying) < len(gd.monsters.levels)
+    for r in routes:
+        assert r.yield_per == max(1, (gd.monster_min_gold(r.via) + gd.monster_max_gold(r.via)) // 2)
+        assert {g.kind for g in r.gates} == {GateKind.SPAWN_LIVE, GateKind.SPAWN_KNOWN,
+                                             GateKind.WINNABLE, GateKind.XP_POSITIVE}
+    # A geared character can earn any amount of gold by fighting; the world
+    # fixture is a zero-stat state (no fight winnable), so it cannot.
+    geared = scenario_state(replace(SCENARIOS["l20_band_entry"], derive_combat_stats=True), gd)
+    assert ObtainModel(replace(geared, gold=0), gd, _ctx(), NOW).feasible(GOLD_CODE, 10**6, OPEN).ok
+    assert not ObtainModel(replace(state, gold=0), gd, _ctx(), NOW).feasible(GOLD_CODE, 1, OPEN).ok

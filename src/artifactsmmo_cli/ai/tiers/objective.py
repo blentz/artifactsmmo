@@ -213,7 +213,7 @@ def is_attainable(code: str, game_data: GameData) -> bool:
 NEAR_TERM_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False, craft_skill_gate=False,
                           event_vendors=False, spawn_known=True,
                           allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=True,
-                          ge_routes=False, task_rewards=True)
+                          ge_routes=False, task_rewards=True, fight_gold=False)
 """What `is_attainable_now` counts, as an obtain-model policy (step 4 of
 docs/PLAN_decision_architecture_redesign.md): every resource that drops an
 item (the FULL drop union: rare secondary drops, e.g. gem stones, are real

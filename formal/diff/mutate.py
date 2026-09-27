@@ -2993,14 +2993,20 @@ OBTAIN_MODEL_GATE_MUTATIONS = [
 # drop_obtainability). Split by the test file that kills each.
 OBTAIN_MODEL_DROP_MUTATIONS = [
     ("drop_routes: ignore winnability",
-     "            winnable = is_winnable(rested, game_data, monster)",
-     "            winnable = True"),
+     "    winnable = (live or known) and is_winnable(rested.get(), game_data, monster)",
+     "    winnable = True"),
     ("drop_routes: every monster has a routable spawn",
      "Gate(GateKind.SPAWN_KNOWN, monster, known)",
      "Gate(GateKind.SPAWN_KNOWN, monster, True)"),
     ("drop_routes: ask winnability only for a live monster",
-     "        if live or known:",
-     "        if live:"),
+     "    winnable = (live or known) and is_winnable(rested.get(), game_data, monster)",
+     "    winnable = live and is_winnable(rested.get(), game_data, monster)"),
+    ("drop_routes: a monster that pays no gold is a gold route",
+     "        if top <= 0:\n            continue",
+     "        if top < 0:\n            continue"),
+    ("drop_routes: fight gold yields the most a win pays",
+     "        paid = max(1, (game_data.monster_min_gold(monster) + top) // 2)",
+     "        paid = max(1, top)"),
 ]
 # The GATHER spawn gate (obtain_model.py) and its predicate (game_data.py),
 # killed by tests/test_ai/test_obtain_model.py and test_game_data.py.
@@ -3029,8 +3035,11 @@ OBTAIN_MODEL_QUANTITY_MUTATIONS = [
 # ObtainModel.mints, killed by tests/test_ai/test_obtain_model.py.
 OBTAIN_MODEL_MINTS_MUTATIONS = [
     ("obtain_model: the task board mints nothing",
-     "          SourceKind.TASK_REWARD)",
-     "          )"),
+     "          SourceKind.TASK_REWARD, SourceKind.GOLD_DROP)",
+     "          SourceKind.GOLD_DROP)"),
+    ("obtain_model: fight gold mints nothing",
+     "          SourceKind.TASK_REWARD, SourceKind.GOLD_DROP)",
+     "          SourceKind.TASK_REWARD)"),
     ("obtain_model: a banked copy is a mint",
      "_MINTS = (SourceKind.CRAFT, SourceKind.GATHER,",
      "_MINTS = (SourceKind.WITHDRAW, SourceKind.CRAFT, SourceKind.GATHER,"),
@@ -3060,8 +3069,8 @@ GRIND_OBTAINABLE_MUTATIONS = [
      "gather_skill_gate=False, craft_skill_gate=False,",
      "gather_skill_gate=False, craft_skill_gate=True,"),
     ("skill_grind_target: the grind counts vendor and GE routes",
-     "                      vendor_routes=False, ge_routes=False, task_rewards=False)",
-     "                      vendor_routes=True, ge_routes=True, task_rewards=False)"),
+     "                      vendor_routes=False, ge_routes=False, task_rewards=False,",
+     "                      vendor_routes=True, ge_routes=True, task_rewards=False,"),
     ("skill_grind_target: a rung input needs one unit, not the recipe's amount",
      "               and all(model.feasible(item, qty, GRIND_POLICY).ok",
      "               and all(model.feasible(item, 1, GRIND_POLICY).ok"),
@@ -3075,11 +3084,14 @@ GRIND_OBTAINABLE_MUTATIONS = [
 # objective.NEAR_TERM_POLICY, killed by tests/test_ai/test_tiers_objective.py.
 NEAR_TERM_POLICY_MUTATIONS = [
     ("objective: near-term attainability counts GE fills",
-     "                          ge_routes=False, task_rewards=True)",
-     "                          ge_routes=True, task_rewards=True)"),
+     "                          ge_routes=False, task_rewards=True, fight_gold=False)",
+     "                          ge_routes=True, task_rewards=True, fight_gold=False)"),
     ("objective: near-term attainability ignores the task board",
-     "                          ge_routes=False, task_rewards=True)",
-     "                          ge_routes=False, task_rewards=False)"),
+     "                          ge_routes=False, task_rewards=True, fight_gold=False)",
+     "                          ge_routes=False, task_rewards=False, fight_gold=False)"),
+    ("objective: near-term attainability earns gold by fighting",
+     "                          ge_routes=False, task_rewards=True, fight_gold=False)",
+     "                          ge_routes=False, task_rewards=True, fight_gold=True)"),
     ("objective: near-term attainability ignores vendors",
      "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=True,",
      "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=False,"),
@@ -3089,6 +3101,15 @@ NEAR_TERM_POLICY_MUTATIONS = [
     ("objective: near-term attainability asks for a live overworld tile",
      "                          event_vendors=False, spawn_known=True,",
      "                          event_vendors=False, spawn_known=False,"),
+]
+# strategy.STEP_POLICY, killed by tests/test_ai/test_producible_gatherable_currency.py.
+STEP_POLICY_MUTATIONS = [
+    ("strategy: the step graph earns no gold by fighting",
+     "                     task_rewards=True, fight_gold=True)",
+     "                     task_rewards=True, fight_gold=False)"),
+    ("strategy: the step graph ignores vendors",
+     "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=True, ge_routes=False,",
+     "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=False, ge_routes=False,"),
 ]
 GRIND_OBTAINABLE_GREY_MUTATIONS = [
     ("skill_grind_target: the grind refuses a grey dropper",
@@ -3120,8 +3141,14 @@ OBTAIN_MODEL_POLICY_MUTATIONS = [
      "            return self.spawn_known\n",
      "            return True\n"),
     ("obtain_model policy: the spawn switch ignores a gather route",
-     "_SPAWNED = (SourceKind.DROP, SourceKind.GATHER)",
-     "_SPAWNED = (SourceKind.DROP,)"),
+     "_SPAWNED = (SourceKind.DROP, SourceKind.GOLD_DROP, SourceKind.GATHER)",
+     "_SPAWNED = (SourceKind.DROP, SourceKind.GOLD_DROP)"),
+    ("obtain_model policy: the spawn switch ignores a fight-gold route",
+     "_SPAWNED = (SourceKind.DROP, SourceKind.GOLD_DROP, SourceKind.GATHER)",
+     "_SPAWNED = (SourceKind.DROP, SourceKind.GATHER)"),
+    ("obtain_model policy: always offer fight gold",
+     "            return self.fight_gold",
+     "            return True"),
     ("obtain_model policy: always offer vendors",
      "            return self.vendor_routes",
      "            return True"),
@@ -8429,6 +8456,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_skill_grind_target.py", survivors)
     run_group(OBJECTIVE_SRC, NEAR_TERM_POLICY_MUTATIONS,
               "tests/test_ai/test_tiers_objective.py", survivors)
+    run_group(STRATEGY_SRC, STEP_POLICY_MUTATIONS,
+              "tests/test_ai/test_producible_gatherable_currency.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_OBTAINABLE_GREY_MUTATIONS,
               "tests/test_ai/scenarios/test_grind_grey_material.py", survivors)
     run_group(COMPLETE_TASK_CORE_SRC, COMPLETE_TASK_MUTATIONS,

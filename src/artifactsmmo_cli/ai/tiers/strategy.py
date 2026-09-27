@@ -4,14 +4,15 @@ actionable subgoal. `decide` delegates to `progression_tree.decide_tree`
 
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from fractions import Fraction
 
-from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
+from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import progression_tree
-from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -20,9 +21,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import (
     ATTAINABILITY_ALLOWS_GREY,
-    GOLD,
     CharacterObjective,
-    _permanent_vendor_purchases,
 )
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -131,71 +130,44 @@ def root_cost(root: MetaGoal, state: WorldState, game_data: GameData,
     return unmet_closure_size(root, state, game_data, ctx)
 
 
+STEP_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False, craft_skill_gate=False,
+                     event_vendors=False, spawn_known=True,
+                     allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=True, ge_routes=False,
+                     task_rewards=True, fight_gold=True)
+"""What the step graph counts as a way to produce a leaf, as an obtain-model
+policy (step 4 of docs/PLAN_decision_architecture_redesign.md): every
+gatherer, a routable spawn, a winnable dropper (grey allowed:
+`ATTAINABILITY_ALLOWS_GREY`), a permanent vendor, the task board, and gold
+earned by fighting. Gold is RENEWABLE here, as it always was for this test
+("gold is producible"): a vendor leaf is a step the character can work toward
+however far the pocket falls short, which is exactly what near-term
+attainability (pocket gold only) must not say. No GE fill: goal emission fills
+an order only as the cheaper venue for an item an NPC also sells (D-E). No
+skill gate: an under-skill craft grinds through `LevelSkill`."""
+
+
 def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
-    """True when the item can be made by known means: craftable (has a recipe),
-    gatherable (some resource drops it), task-earnable (awarded by the task loop),
-    currency-buyable from a permanent vendor for gold or a directly task-earnable
-    currency, or obtainable by FIGHTING — some monster that drops it is WINNABLE
-    with the best on-hand loadout.
+    """Can the step graph treat `code` as a leaf it can produce? A craftable
+    item always can: `prerequisites` decomposes its recipe, so its inputs are
+    the step graph's own business, not this test's. Anything else is
+    `ObtainModel.feasible(code, 1, STEP_POLICY)`: in hand (bag or bank), or a
+    ready route whose inputs can be had.
 
     The winnability gate is load-bearing: a drop from an unwinnable monster must
     NOT read as producible, else the planner would emit an unreachable FightAction
-    plan. The SPAWN-LOCATION gate is equally load-bearing: a winnable dropper with
-    no known `monster_locations` entry yields NO FightAction (the fight-is-None
-    guard in GatherMaterialsGoal.relevant_actions), so the item would read
-    producible yet generate an empty/stuck plan. Requiring a non-empty spawn list
-    makes producible ⇒ a FightAction can actually be emitted (genuinely obtainable).
+    plan. The SPAWN gate is equally load-bearing: a winnable dropper with no
+    routable spawn yields NO FightAction, so the item would read producible yet
+    generate an empty plan. Both are the shared fight gates
+    (`obtain_model/drop_routes.py`), judged at restorable hp.
 
-    The currency-buy check here is FLAT (non-recursive): currency is gold or is
-    directly task-earnable. This is sufficient because tasks_coin (the real
-    use-case) is directly task-earnable. Cross-prerequisite recursion lives in
-    is_reachable, not here. The `known_spawn_drop` flag uses the WINNABLE+spawned
-    drop (state-aware), preserving the winnability gate.
-
-    Routes the leaf decision through leaf_attainable_pure so the Lean proof
-    governs the live behavior (Finding B fix). Craftable short-circuits before
-    the core call to avoid instantiating the four flags when unneeded."""
+    A purchase's currency is asked in the amount the price needs, recursively:
+    currency on hand covering the price counts even when its droppers are
+    currently unwinnable (the incremental accumulation route banks coins across
+    cycles; 2026-07-06), and gold is earned by any winnable fight that pays it."""
     if game_data.crafting_recipe(code) is not None:
         return True
-    # Already IN HAND (inventory or bank): nothing left to produce — the
-    # obtain step is served by withdraw/equip. Without this arm a HELD
-    # recipe-less vendor item (sandwhisper_bag bought a cycle ago) still
-    # read not-producible and actionable_step went dead (2026-07-06).
-    bank = state.bank_items or {}
-    if state.inventory.get(code, 0) > 0 or bank.get(code, 0) > 0:
-        return True
-    # Currency-buy, one level deep: gold, task-earnable (tasks_coin), or a
-    # currency the character can PRODUCE now — gatherable (hides come from
-    # fights but wool/dusts also gather-adjacent items count via the full
-    # drop tables) or dropped by a currently-winnable spawned monster
-    # (P3, docs/PLAN_engagement_expansion.md: tailor leathers @ hides,
-    # archaeologist @ shards, cultist @ corrupted_gem). Currencies are base
-    # items, so one level suffices; is_reachable recurses for the rest.
-    def _currency_producible(currency: str) -> bool:
-        if currency == GOLD or game_data.is_task_earnable(currency):
-            return True
-        if currency in game_data.gatherable_drop_items():
-            return True
-        return drop_obtainable(currency, state, game_data,
-                               allow_grey=ATTAINABILITY_ALLOWS_GREY)
-    # A purchase is producible when the currency can be PRODUCED — or is
-    # ALREADY EARNED: currency on hand (inventory + bank) covering the price
-    # counts even when its droppers are currently unwinnable (the incremental
-    # accumulation route banks coins across cycles; 2026-07-06).
-    buyable = any(
-        state.inventory.get(currency, 0) + bank.get(currency, 0) >= price
-        or _currency_producible(currency)
-        for price, currency in _permanent_vendor_purchases(code, game_data))
-    # Fightable drop: the shared oracle, state-aware (spawn gate plus winnability
-    # AT RESTORABLE HP — `fightable_droppers` decides the hp basis for every
-    # caller so they cannot disagree about what counts as a route).
-    winnable_drop = drop_obtainable(code, state, game_data,
-                                    allow_grey=ATTAINABILITY_ALLOWS_GREY)
-    return leaf_attainable_pure(
-        code in game_data.gatherable_drop_items(),
-        winnable_drop,
-        game_data.is_task_earnable(code),
-        buyable)
+    model = ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
+    return model.feasible(code, 1, STEP_POLICY).ok
 
 
 def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,

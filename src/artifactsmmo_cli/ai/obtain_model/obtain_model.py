@@ -11,7 +11,7 @@ Before that switch, a census compared the two over every item of real game data
 zero differences.
 
 PRIORITY ORDER. `routes` lists routes in the declared order WITHDRAW, RECYCLE,
-CRAFT, GATHER, BUY, GE_FILL, DROP, TASK_REWARD, SELL: routes that consume stock already owned
+CRAFT, GATHER, BUY, GE_FILL, DROP, TASK_REWARD, GOLD_DROP, SELL: routes that consume stock already owned
 before routes that create new work, and GE_FILL (finite, may be taken first)
 directly below BUY at the same gold cost.
 
@@ -32,7 +32,7 @@ from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import destroyable
-from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes, gold_drop_routes
 from artifactsmmo_cli.ai.obtain_model.feasibility import Feasibility
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
@@ -47,7 +47,7 @@ _OWNED = (SourceKind.WITHDRAW, SourceKind.RECYCLE)
 """Route kinds that deliver copies the character already owns."""
 
 _MINTS = (SourceKind.CRAFT, SourceKind.GATHER, SourceKind.BUY, SourceKind.DROP,
-          SourceKind.TASK_REWARD)
+          SourceKind.TASK_REWARD, SourceKind.GOLD_DROP)
 """Route kinds that make new copies, as opposed to moving existing ones."""
 
 DEFAULT_SKILL_LEVEL = 1
@@ -71,13 +71,14 @@ class ObtainModel:
         if cached is None:
             cached = (*self._withdraw(item), *self._recycle(item), *self._craft(item),
                       *self._gather(item), *self._buy(item), *self._ge_fill(item),
-                      *self._drop(item), *self._task_reward(item), *self._sell(item))
+                      *self._drop(item), *self._task_reward(item), *self._gold_drop(item),
+                      *self._sell(item))
             self._routes[item] = cached
         return cached
 
     def mints(self, item: str) -> bool:
         """Does anything make new copies of `item`, readiness ignored? A route
-        that creates (CRAFT, GATHER, BUY, DROP, TASK_REWARD), whatever its gates
+        that creates (CRAFT, GATHER, BUY, DROP, TASK_REWARD, GOLD_DROP), whatever its gates
         say today. WITHDRAW, RECYCLE and GE_FILL only move copies that already
         exist, so an item with no other route is fixed supply: every copy there
         will ever be exists now. SELL is left out with them: it exists only
@@ -278,6 +279,13 @@ class ObtainModel:
         if not self._gd.is_task_earnable(item):
             return []
         return [Route(item, SourceKind.TASK_REWARD, "tasks", 1, UNBOUNDED_CAPACITY, ())]
+
+    def _gold_drop(self, item: str) -> list[Route]:
+        """GOLD only: the gold a won fight pays, one route per paying monster
+        (see `drop_routes.gold_drop_routes`, which shares the fight gates)."""
+        if item != GOLD_CODE:
+            return []
+        return gold_drop_routes(self._state, self._gd)
 
     def _sell(self, item: str) -> list[Route]:
         """GOLD only: selling what the keep authority licenses, one route per

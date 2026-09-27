@@ -42,7 +42,12 @@ class SourceKind(Enum):
     TASK_REWARD is the task board: accept a task, do it, turn it in, and the
     reward is paid (today only `tasks_coin`). It is a mint the recipe, resource,
     monster and vendor tables do not show, so without it `tasks_coin` read as
-    having no route (D-N in docs/PLAN_decision_architecture_redesign.md)."""
+    having no route (D-N in docs/PLAN_decision_architecture_redesign.md).
+
+    GOLD_DROP is the gold a won fight pays (the monster's `min_gold` ..
+    `max_gold`). It obtains exactly one thing, GOLD, and it is what makes gold
+    renewable: without it the model knew gold only as pocket stock and the
+    surplus a SELL can raise."""
 
     WITHDRAW = "withdraw"
     RECYCLE = "recycle"
@@ -52,4 +57,5 @@ class SourceKind(Enum):
     GE_FILL = "ge_fill"
     DROP = "drop"
     TASK_REWARD = "task_reward"
+    GOLD_DROP = "gold_drop"
     SELL = "sell"

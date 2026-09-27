@@ -15,7 +15,7 @@ from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.route import Route
 from artifactsmmo_cli.ai.source_kind import SourceKind
 
-_SPAWNED = (SourceKind.DROP, SourceKind.GATHER)
+_SPAWNED = (SourceKind.DROP, SourceKind.GOLD_DROP, SourceKind.GATHER)
 """The route kinds served at a spawn tile: a monster's or a resource's."""
 
 
@@ -48,7 +48,11 @@ class Policy:
     the cheaper venue for an item an NPC also sells, and building fills from the
     model's routes is Phase 2; D-E).
     `task_rewards`: a TASK_REWARD route is offered (True) or not (False, as
-    `obtain_sources` did: it has no task edge; D-N)."""
+    `obtain_sources` did: it has no task edge; D-N).
+    `fight_gold`: a GOLD_DROP route is offered (True: gold is earned by
+    fighting, so a gold price is a matter of time) or not (False: gold is what
+    the pocket holds or a sale raises, as `obtain_sources` and near-term
+    attainability ask)."""
 
     all_gather_routes: bool
     gather_skill_gate: bool
@@ -59,6 +63,7 @@ class Policy:
     vendor_routes: bool
     ge_routes: bool
     task_rewards: bool
+    fight_gold: bool
 
     def admits(self, route: Route) -> bool:
         """Is `route` offered at all under this policy?"""
@@ -68,6 +73,8 @@ class Policy:
             return self.ge_routes
         if route.kind is SourceKind.TASK_REWARD:
             return self.task_rewards
+        if route.kind is SourceKind.GOLD_DROP:
+            return self.fight_gold
         return route.kind is not SourceKind.GATHER or self.all_gather_routes or route.primary
 
     def enforces(self, gate: Gate, route: Route) -> bool:
@@ -97,7 +104,7 @@ class Policy:
 LEGACY = Policy(all_gather_routes=False, gather_skill_gate=False, craft_skill_gate=True,
                 event_vendors=False,
                 spawn_known=False, allow_grey=True, vendor_routes=True, ge_routes=True,
-                task_rewards=False)
+                task_rewards=False, fight_gold=False)
 """Exactly what `obtain_sources` answers today. Phase 1 step 1 proves the model
 reproduces it under this policy before any consumer moves or any D-x decision
 changes behaviour."""

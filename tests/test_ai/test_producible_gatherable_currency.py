@@ -3,6 +3,7 @@ counts as producible (P3 engagement expansion — tailor leathers @ hides)."""
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.strategy import _producible
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 
@@ -14,6 +15,7 @@ def test_producible_recognizes_currency_buy_with_gatherable_currency() -> None:
     gd._npc_buy_currency = {"tailor": {"leather_boots": "cowhide"}}
     gd._npc_locations = {"tailor": (2, 7)}
     gd._resource_drops = {"cow_field": "cowhide"}
+    gd._resource_locations = {"cow_field": [(3, 3)]}
     gd._item_stats = {
         "leather_boots": ItemStats(code="leather_boots", level=1, type_="boots"),
         "cowhide": ItemStats(code="cowhide", level=1, type_="resource"),
@@ -65,3 +67,25 @@ def test_producible_credits_held_currency_covering_price() -> None:
                        make_state(inventory={"dune_coin": 230}), gd) is True
     assert _producible("dune_bag",
                        make_state(inventory={"dune_coin": 229}), gd) is False
+
+
+def test_a_gold_price_is_producible_by_fighting_for_the_gold() -> None:
+    """Gold is earned by winning fights, so a vendor leaf priced beyond the
+    pocket is still a step the character can work toward, exactly as the step
+    graph always treated gold. With no fight the character can win it is
+    not."""
+    gd = GameData()
+    gd._npc_stock = {"smith": {"big_sword": 5000}}
+    gd._npc_buy_currency = {"smith": {"big_sword": "gold"}}
+    gd._npc_locations = {"smith": (2, 7)}
+    gd._item_stats = {"big_sword": ItemStats(code="big_sword", level=1, type_="weapon")}
+    gd._monster_level = {"chicken": 1}
+    gd._monster_hp = {"chicken": 1}
+    gd._monster_locations = {"chicken": [(1, 1)]}
+    fill_monster_stat_defaults(gd)
+    gd.monsters.min_gold = {"chicken": 1}
+    gd.monsters.max_gold = {"chicken": 3}
+    fighter = make_state(gold=10, attack={"fire": 50})
+    assert _producible("big_sword", fighter, gd) is True
+    gd.monsters.max_gold = {"chicken": 0}
+    assert _producible("big_sword", fighter, gd) is False

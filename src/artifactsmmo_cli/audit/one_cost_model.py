@@ -70,7 +70,7 @@ PRICING_PRODUCERS: frozenset[str] = frozenset({
 cost model unless the importer is the funnel itself."""
 
 ROUTE_KIND_NAMES: frozenset[str] = frozenset({
-    "WITHDRAW", "RECYCLE", "CRAFT", "GATHER", "BUY", "GE_FILL", "DROP", "TASK_REWARD", "SELL",
+    "WITHDRAW", "RECYCLE", "CRAFT", "GATHER", "BUY", "GE_FILL", "DROP", "TASK_REWARD", "GOLD_DROP", "SELL",
 })
 """`SourceKind` members by NAME. Duplicated from the enum deliberately: this
 census must keep working when the enum grows, and
@@ -79,7 +79,7 @@ that silently missed a new member would report a green obligation over an
 incomplete alphabet."""
 
 ROUTE_KIND_VALUES: frozenset[str] = frozenset({
-    "withdraw", "recycle", "craft", "gather", "buy", "ge_fill", "drop", "task_reward", "sell",
+    "withdraw", "recycle", "craft", "gather", "buy", "ge_fill", "drop", "task_reward", "gold_drop", "sell",
 })
 """The same members by VALUE, because `kind == "buy"` evades an attribute scan
 entirely. One of the two evasions the design names."""

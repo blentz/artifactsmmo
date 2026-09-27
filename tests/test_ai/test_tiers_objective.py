@@ -1,4 +1,5 @@
 import dataclasses
+from dataclasses import replace
 from datetime import UTC, datetime
 from unittest.mock import patch
 
@@ -927,3 +928,22 @@ def test_is_attainable_now_counts_a_reachable_underground_resource():
     assert is_attainable_now("copper_armor", state, gd) is False
     with patch.object(GameData, "resource_spawn_known", return_value=True):
         assert is_attainable_now("copper_armor", state, gd) is True
+
+
+def test_is_attainable_now_pays_from_the_pocket_not_from_future_fights():
+    """Near-term attainability is about what the character can afford NOW:
+    a winnable monster that pays gold does not make an unaffordable vendor
+    item attainable (the step graph, which works toward a target over time,
+    does count fight gold)."""
+    gd = _gd_npc_rune()
+    gd._monster_level = {"chicken": 1}
+    gd._monster_hp = {"chicken": 1}
+    gd._monster_locations = {"chicken": [(1, 1)]}
+    fill_monster_stat_defaults(gd)
+    gd.monsters.min_gold = {"chicken": 1}
+    gd.monsters.max_gold = {"chicken": 3}
+    state = make_state(level=20, gold=100, attack={"fire": 50})
+    model = ObtainModel(state, gd, NO_PROFILE_CONTEXT, datetime.now(UTC))
+    assert model.feasible("gold", 20000, replace(LEGACY, fight_gold=True)).ok, \
+        "vacuous: the chicken is no gold route"
+    assert is_attainable_now("lifesteal_rune", state, gd) is False

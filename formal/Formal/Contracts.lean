@@ -3117,12 +3117,14 @@ example : ∀ (p : Policy) (r : Route) (g : Gate), g.kind ≠ .gatherSkill →
     enforces p r g = true :=
   @Formal.ObtainModelReady.enforces_fixed
 open Formal.ObtainModelReady in
-example : ∀ (p : Policy) (r : Route) (s : Bool), (r.kind = .drop ∨ r.kind = .gather) →
+example : ∀ (p : Policy) (r : Route) (s : Bool),
+    (r.kind = .drop ∨ r.kind = .goldDrop ∨ r.kind = .gather) →
     enforces p r ⟨.spawnLive, s⟩ = !p.spawnKnown ∧
     enforces p r ⟨.spawnKnown, s⟩ = p.spawnKnown :=
   @Formal.ObtainModelReady.enforces_spawn_switch
 open Formal.ObtainModelReady in
-example : ∀ (p : Policy) (r : Route) (s : Bool), r.kind ≠ .drop → r.kind ≠ .gather →
+example : ∀ (p : Policy) (r : Route) (s : Bool), r.kind ≠ .drop → r.kind ≠ .goldDrop →
+    r.kind ≠ .gather →
     enforces p r ⟨.spawnLive, s⟩ = true ∧ enforces p r ⟨.spawnKnown, s⟩ = true :=
   @Formal.ObtainModelReady.enforces_spawn_other
 open Formal.ObtainModelReady in
@@ -3156,8 +3158,11 @@ open Formal.ObtainModelReady in
 example : ∀ (p : Policy) (r : Route), r.kind = .taskReward → admits p r = p.tasks :=
   @Formal.ObtainModelReady.admits_task
 open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route), r.kind = .goldDrop → admits p r = p.fightGold :=
+  @Formal.ObtainModelReady.admits_fight_gold
+open Formal.ObtainModelReady in
 example : ∀ (p : Policy) (r : Route), r.kind ≠ .gather → r.kind ≠ .buy → r.kind ≠ .geFill →
-    r.kind ≠ .taskReward → admits p r = true :=
+    r.kind ≠ .taskReward → r.kind ≠ .goldDrop → admits p r = true :=
   @Formal.ObtainModelReady.admits_other
 
 -- ─── ObtainModelSupply (quantity feasibility) anti-weakening pins ───

@@ -1240,6 +1240,7 @@ open Formal.PriorityBand
 #check @Formal.ObtainModelReady.admits_vendor                  -- vendor-routes switch
 #check @Formal.ObtainModelReady.admits_ge                      -- GE-routes switch (D-E)
 #check @Formal.ObtainModelReady.admits_task                    -- task-board switch (D-N)
+#check @Formal.ObtainModelReady.admits_fight_gold              -- fight-gold switch
 #check @Formal.ObtainModelReady.admits_other                   -- other kinds always offered
 #check @Formal.ObtainModelReady.enforces_xp_positive           -- grey switch
 

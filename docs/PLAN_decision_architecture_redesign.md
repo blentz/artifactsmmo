@@ -477,7 +477,14 @@ Each step is one commit, gated by the full gate, and witnessed by
   - `is_suppliable` = `mints` or a free copy in the bag/bank. It no longer reads `RequirementGraph` or `is_task_earnable` (the task board is a TASK_REWARD route now).
   - Equivalence: 23,012 scenario comparisons plus all 5 live characters (524 items each), 0 differences. A first cut counted SELL as a mint and differed only on gold, in the 3 states that held a sellable surplus.
   - Two fixtures had recipes with no crafting skill (never true of real data), so the model had no craft route for them.
-  - Next consumers: `strategy._producible` / `prerequisites._leafs`.
+- Step 4, fifth consumer: `strategy._producible`, the step graph's leaf test (landed). The user chose "model fight gold" over a gold-is-free flag or deferring to Phase 2.
+  - `SourceKind.GOLD_DROP`: one route to GOLD per monster whose win pays gold (API `min_gold`/`max_gold`), yielding the expected `(min + max) // 2`, with the same fight gates as an item drop. `drop_routes` now evaluates fight gates once for both kinds. Gold is RENEWABLE for any character that can win a paying fight.
+  - `Policy.fight_gold`: on for the step graph; off for LEGACY, the grind and near-term attainability (pocket gold only), so none of their answers change.
+  - `_producible(code)` = craftable (the step graph's `prerequisites` owns the recipe's inputs) or `feasible(code, 1, STEP_POLICY)`. The flat one-level currency check is replaced by the recursive, quantity-aware walk.
+  - Behaviour: 185 of 8,844 scenario verdicts change. 130 are spawnless chains (`magic_wood`, `diamond_stone`). 55 are vendor items in zero-attack states, where no fight is winnable, so gold is not renewable there (the old rule called gold always producible).
+  - Live, 5 characters: 4 of 203 flip. `magic_wood`, `strange_ore` and `diamond_stone` go to no (spawnless). `lich_race_trophy` goes to YES: 10 `lich_race_medal`, each 100 `event_ticket`, a rare gather drop. The old flat rule refused it by accident. It is feasible but absurd in time, which is a COST question (the cost view is not built yet). Live `plan_once` chosen root, step and ranking are identical for all 5 characters.
+  - `prerequisites._leafs` already asks the model (through `obtain_sources`, LEGACY). Its descent semantics are Phase 2's decomposition.
+  - Next consumers: `acquisition_cost.route_options` / `shopping_list`, and attaching `cost`.
 - 1c: `feasible` / `cost` / `demand` views.
 - Then steps 3-5 as above.
 

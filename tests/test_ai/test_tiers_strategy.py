@@ -45,6 +45,7 @@ def _gd() -> GameData:
                            "copper_ring": {"copper_bar": 3}}
     gd._resource_drops = {"copper_rocks": "copper_ore"}
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
+    gd._resource_locations = {"copper_rocks": [(2, 0)]}  # the rocks spawn somewhere
     gd._monster_level = {"chicken": 1}
     gd._workshop_locations = {"weaponcrafting": (1, 1)}
     fill_monster_stat_defaults(gd)
@@ -388,6 +389,7 @@ def test_actionable_step_descends_to_material_for_underskill_craftable() -> None
     gd._crafting_recipes = {"widget": {"thread": 3}}
     gd._resource_drops = {"thread_patch": "thread"}
     gd._resource_skill = {"thread_patch": ("gathering", 1)}
+    gd._resource_locations = {"thread_patch": [(2, 0)]}
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
     state = make_state(level=5, skills={"weaving": 1})
