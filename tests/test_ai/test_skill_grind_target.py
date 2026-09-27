@@ -1,6 +1,7 @@
 """Tests for skill_grind_target: the shallow in-skill item to craft now."""
 
 import dataclasses
+from dataclasses import replace
 from unittest.mock import patch
 
 import pytest
@@ -586,7 +587,8 @@ def test_a_material_from_a_reachable_underground_resource_counts():
     gd._resource_drops = {"deep_vein": "gem"}
     with patch.object(GameData, "resource_spawn_known", return_value=True):
         model = grind_model(_jeweller(), gd)
-        assert not model.feasible("gem", 1, LEGACY).ok, "vacuous: the vein has a live tile"
+        assert not model.feasible("gem", 1, replace(LEGACY, spawn_known=False)).ok, \
+            "vacuous: the vein has a live tile"
         assert is_obtainable("ring", model)
 
 

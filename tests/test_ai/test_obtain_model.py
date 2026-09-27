@@ -97,7 +97,7 @@ def test_an_underground_resource_is_a_known_spawn_but_not_a_live_one(
     spawn = {g.kind: g.satisfied for g in route.gates}
     assert spawn[GateKind.SPAWN_KNOWN] and not spawn[GateKind.SPAWN_LIVE]
     ungated = replace(LEGACY, gather_skill_gate=False)  # the fixture's mining is below 30
-    assert replace(ungated, spawn_known=True).ready(route) and not ungated.ready(route)
+    assert ungated.ready(route) and not replace(ungated, spawn_known=False).ready(route)
     # And a resource with no tile on any layer is known to neither predicate.
     [nowhere] = [r for r in ObtainModel(state, gd, _ctx(), NOW).routes("diamond_stone")
                  if r.kind is SourceKind.GATHER and r.via == "strange_rocks"]
@@ -137,14 +137,15 @@ class TestPolicy:
     @pytest.mark.parametrize("kind", [SourceKind.DROP, SourceKind.GATHER])
     def test_a_spawned_route_enforces_one_spawn_predicate_chosen_by_the_policy(
             self, kind: SourceKind) -> None:
-        """D-D: LEGACY asks for a live tile, OPEN for a routable spawn, for a
-        monster and a resource alike."""
+        """D-D: a policy asks either for a live tile or for a routable spawn
+        (LEGACY since D-D), for a monster and a resource alike."""
+        live_tile = replace(LEGACY, spawn_known=False)
         layered_only = self._route(kind, Gate(GateKind.SPAWN_LIVE, "m", False),
                                    Gate(GateKind.SPAWN_KNOWN, "m", True))
-        assert not LEGACY.ready(layered_only) and OPEN.ready(layered_only)
+        assert not live_tile.ready(layered_only) and LEGACY.ready(layered_only)
         live_only = self._route(kind, Gate(GateKind.SPAWN_LIVE, "m", True),
                                 Gate(GateKind.SPAWN_KNOWN, "m", False))
-        assert LEGACY.ready(live_only) and not OPEN.ready(live_only)
+        assert live_tile.ready(live_only) and not LEGACY.ready(live_only)
 
     def test_a_vendor_and_a_ge_order_are_switched_apart(self) -> None:
         buy, fill = self._route(SourceKind.BUY), self._route(SourceKind.GE_FILL)

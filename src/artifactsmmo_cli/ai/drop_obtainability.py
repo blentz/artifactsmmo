@@ -156,7 +156,7 @@ def fightable_droppers(item: str, state: WorldState, game_data: GameData,
     # `allow_grey`. Checked equal to the previous inline body over every item of
     # all 44 scenario worlds, both grey settings, before the switch (46,024
     # comparisons, 0 differences).
-    policy = replace(LEGACY, spawn_known=True, allow_grey=allow_grey)
+    policy = replace(LEGACY, allow_grey=allow_grey)
     ready = {route.via for route in drop_routes(item, state, game_data) if policy.ready(route)}
     return [row for row in game_data.monsters_dropping(item) if row[0] in ready]
 

@@ -3057,11 +3057,14 @@ OBTAIN_MODEL_GATED_MUTATIONS = [
      "            if policy.admits(route)\n            and (unmet :=",
      "            if True\n            and (unmet :="),
 ]
-# D-A: LEGACY enforces the gathering skill. Killed by tests/test_ai/test_obtain_model.py.
+# The D-x flips of LEGACY. Killed by tests/test_ai/test_obtain_model.py.
 LEGACY_GATHER_SKILL_MUTATIONS = [
-    ("policy: LEGACY ignores the gathering skill again",
+    ("policy: LEGACY ignores the gathering skill again (D-A)",
      "LEGACY = Policy(all_gather_routes=False, gather_skill_gate=True,",
      "LEGACY = Policy(all_gather_routes=False, gather_skill_gate=False,"),
+    ("policy: LEGACY asks for a live overworld tile again (D-D)",
+     "                spawn_known=True, allow_grey=True, vendor_routes=True, ge_routes=True,",
+     "                spawn_known=False, allow_grey=True, vendor_routes=True, ge_routes=True,"),
 ]
 # The pricer offers an under-skill gather priced by its grind. Killed by
 # tests/test_ai/test_acquisition_cost_wrapper.py.

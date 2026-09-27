@@ -71,8 +71,8 @@ structure Policy where
   deriving DecidableEq, Repr
 
 /-- `Policy.LEGACY`: what `obtain_sources` answers (the gathering skill
-enforced since D-A). -/
-def legacy : Policy := ⟨false, true, true, false, false, true, true, true, false, false⟩
+enforced since D-A, routable spawns counted since D-D). -/
+def legacy : Policy := ⟨false, true, true, false, true, true, true, true, false, false⟩
 
 /-- A route served at a spawn tile (a monster's or a resource's). -/
 def spawned (k : SrcKind) : Bool := k = .drop || k = .goldDrop || k = .gather
@@ -418,12 +418,18 @@ private def layeredDrop : Route :=
   ⟨.drop, 4, true, [⟨.spawnLive, false⟩, ⟨.spawnKnown, true⟩, ⟨.xpPositive, true⟩]⟩
 private def greyDrop : Route :=
   ⟨.drop, 5, true, [⟨.spawnLive, true⟩, ⟨.spawnKnown, true⟩, ⟨.xpPositive, false⟩]⟩
-example : readyRoutes legacy [layeredDrop, greyDrop] = [greyDrop] := by decide
+example : readyRoutes legacy [layeredDrop, greyDrop] = [layeredDrop, greyDrop] := by decide
+example : readyRoutes ⟨false, true, true, false, false, true, true, true, false, false⟩
+    [layeredDrop, greyDrop] = [greyDrop] := by
+  decide
 example : readyRoutes ⟨false, false, true, false, true, false, true, true, false, false⟩ [layeredDrop, greyDrop]
     = [layeredDrop] := by
   decide
 private def layeredGather : Route := ⟨.gather, 8, true, [⟨.spawnLive, false⟩, ⟨.spawnKnown, true⟩]⟩
-example : readyRoutes legacy [layeredGather] = [] := by decide
+example : readyRoutes legacy [layeredGather] = [layeredGather] := by decide
+example : readyRoutes ⟨false, true, true, false, false, true, true, true, false, false⟩ [layeredGather]
+    = [] := by
+  decide
 example : readyRoutes ⟨false, false, true, false, true, true, true, true, false, false⟩ [layeredGather]
     = [layeredGather] := by
   decide
