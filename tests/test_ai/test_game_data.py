@@ -4,13 +4,16 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from artifactsmmo_api_client.models.condition_schema import ConditionSchema
 from artifactsmmo_api_client.models.craft_skill import CraftSkill
 from artifactsmmo_api_client.models.event_content_schema import EventContentSchema
 from artifactsmmo_api_client.models.event_map_schema import EventMapSchema
 from artifactsmmo_api_client.models.event_schema import EventSchema
+from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
 from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.static_data_page_event_schema import StaticDataPageEventSchema
+from artifactsmmo_api_client.models.transition_schema import TransitionSchema
 from artifactsmmo_api_client.types import UNSET
 
 from artifactsmmo_cli.ai.game_data import GAME_DATA_LOAD_ATTEMPTS, GameData, ItemStats
@@ -2431,6 +2434,36 @@ def test_monster_spawn_known_requires_reachable_region():
     assert gd.monster_spawn_known("goblin_priestess") is False  # achievement edge: unmodeled
     assert gd.monster_spawn_known("ghost") is False
     assert gd.monster_locations("lich") == []
+
+
+def test_resource_spawn_known_counts_a_reachable_underground_tile():
+    """The resource twin of `monster_spawn_known`: the action factory builds a
+    GatherAction for an off-overworld tile, so a keyed underground pocket counts
+    and an achievement-gated one does not."""
+    def rock(code: str) -> MapContentSchema:
+        return MapContentSchema(type_=MapContentType.RESOURCE, code=code)
+
+    def edge(dest_id: int, x: int, condition: ConditionSchema) -> TransitionSchema:
+        return TransitionSchema(map_id=dest_id, x=x, y=0, layer="underground",
+                                conditions=[condition])
+
+    gd = GameData()
+    gd._build_maps([
+        _map_tile(1, 0, 0, "overworld"),
+        _map_tile(2, 0, 1, "overworld", content=rock("copper_rocks")),
+        _map_tile(3, 1, 0, "overworld", transition=edge(
+            4, 1, ConditionSchema(code="mine_key", operator="cost", value=1))),
+        _map_tile(4, 1, 0, "underground"),
+        _map_tile(5, 1, 1, "underground", content=rock("gold_rocks")),
+        _map_tile(6, 2, 0, "overworld", transition=edge(
+            7, 3, ConditionSchema(code="deep_delver", operator="achievement_unlocked", value=1))),
+        _map_tile(7, 3, 0, "underground", content=rock("mithril_rocks")),
+    ])
+    assert gd.resource_spawn_known("copper_rocks") is True     # overworld
+    assert gd.resource_spawn_known("gold_rocks") is True       # keyed pocket: modeled
+    assert gd.resource_spawn_known("mithril_rocks") is False   # achievement edge: unmodeled
+    assert gd.resource_spawn_known("strange_rocks") is False   # no tile anywhere
+    assert not gd.all_resource_locations.get("gold_rocks")
 
 
 class TestTaskmasterKeying:

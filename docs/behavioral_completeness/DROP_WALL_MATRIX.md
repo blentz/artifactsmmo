@@ -8,7 +8,7 @@
 >
 > The crossing is a differential on production's own pricer — the candidate priced as it stands, then again with the walled items granted. No closure is re-derived here; obligation O6 forbids a second cost model and this census must not be one.
 
-344 candidate cells over 44 scenarios; gate opens 2 of 9 walls (store-less); obtainable 77; not_drop_walled 256; walled 9 (9 on ALTERNATIVES); closes 9; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
+343 candidate cells over 44 scenarios; gate opens 2 of 9 walls (store-less); obtainable 77; not_drop_walled 255; walled 9 (9 on ALTERNATIVES); closes 9; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
 
 argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only the argmax sees those 0 and misses 9 — an infinite price is a veto, so a walled candidate never becomes the argmax.
 
@@ -101,7 +101,6 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l48_event_active | ReachCharLevel(level=50) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l48_event_active | ReachSkillLevel(skill='jewelrycrafting', level=36) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l48_event_active | ReachSkillLevel(skill='cooking', level=43) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l48_event_active | ReachSkillLevel(skill='gearcrafting', level=43) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_bag_pursuit | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l10_bag_pursuit | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l10_bag_pursuit | ReachSkillLevel(skill='cooking', level=2) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |

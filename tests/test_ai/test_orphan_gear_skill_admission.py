@@ -59,6 +59,8 @@ def _gd() -> GameData:
     gd._resource_drops_full["shrimp_spot"] = [("shrimp", 100, 1, 1)]
     gd._resource_skill = dict(gd._resource_skill)
     gd._resource_skill["shrimp_spot"] = ("fishing", 1)
+    gd.recipes_catalog.locations["shrimp_spot"] = [(2, 0)]
+    gd.world.workshop_locations.update({"weaponcrafting": (0, 2), "cooking": (0, 3)})
     return gd
 
 

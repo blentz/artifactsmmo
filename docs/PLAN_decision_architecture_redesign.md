@@ -444,7 +444,19 @@ Each step is one commit, gated by the full gate, and witnessed by
   - `fightable_droppers` is now the policy `LEGACY + drop_spawn_known + allow_grey=<caller>` applied to those routes. It matched the old body exactly: 46,024 comparisons, 0 differences, with grey both ways.
   - The Lean policy gains the two switches (`enforces_drop_spawn`, `enforces_spawn_other`, `enforces_xp_positive`). The exhaustive sweep grows to 32 policies.
   - Found: forcing `SPAWN_KNOWN` true was never caught by `test_drop_obtainability.py`; only the new model test catches it.
-  - Next consumers: `skill_grind_target._obtainable` and `objective.is_attainable_now`, both toward `ObtainModel.feasible`.
+- Step 4, second consumer: `skill_grind_target` obtainability (landed).
+  - The recursive `_obtainable` walk is gone. `is_obtainable(rung, model)` asks the model under `GRIND_POLICY`, through the rung's own ready CRAFT route (a held copy of the rung does not serve a grind): every input must be RENEWABLE or ON HAND in the recipe's quantity.
+  - New model views: `renewable(item, policy)` is the same proved fixpoint over unbounded routes with nothing held; `on_hand(item, policy)` is bag + ready WITHDRAW + RECYCLE capacity.
+  - 🔥 Unit feasibility was NOT enough. The first cut used `feasible` and, live, admitted `steel_ring` (needs 2 `hard_leather`), `mushmush_jacket` (3) and `hard_leather_armor` (6) off the bank's ONE `hard_leather`, which nothing makes: rungs that could never be crafted. Caught by explaining every changed live target before merging.
+  - `GRIND_POLICY` matches what the grind's descent can serve: every gatherer, routable spawns, grey allowed, and neither skill gate enforced (a skill gate on the chain is grindable, and `gather_demand` surfaces it). A vendor never makes a rung obtainable: BUY is renewable only if gold is, and gold is not. A `market_routes` switch was built for this and removed when a surviving mutant showed the quantity rule made it inert.
+  - New policy switch: `craft_skill_gate` (LEGACY True). `drop_spawn_known` became `spawn_known` and now covers GATHER routes too, which carry a `SPAWN_KNOWN` gate from the new `GameData.resource_spawn_known` (reachable layered tiles count, as the action factory builds gathers for them).
+  - Found: the obtain model's gather liveness was overworld-only, so underground `gold_rocks`, `mithril_rocks` and `adamantite_rocks` read as unspawned for every consumer. They are now spawned under `spawn_known`; LEGACY is unchanged.
+  - Grind target census, 308 (scenario, skill) pairs: 7 targets change. 5 because a material is held or banked in full, 1 because gold ore comes from reachable underground rocks (`strangold_bar` becomes `gold_bar`), and 1 because the rung's material has no resource tile on any layer (`white_knight_helmet` <- `diamond_stone` <- `strange_rocks`). The old walk called that doomed rung obtainable.
+  - Live, 5 chars x 7 skills: 1 of 35 targets changes (HAL gearcrafting `skeleton_armor` -> `tromatising_mask`, a tie on steps and level now that the 2 banked `cloth` it needs count).
+  - Open-rung census: walled 6 -> 10. The four new walls are gearcrafting 42 in the l48 scenarios (the same `white_knight_helmet`). With combat stats off, 77 -> 63 closed cells because held and banked materials count; with holdings emptied it is 77 again.
+  - `has_grind_target` over 308 calls: 0.06s before, 0.09s after.
+  - Lean: the policy has 6 switches (`enforces_spawn_switch`, `enforces_craft_skill`, `admits_other`), and the exhaustive sweep covers 64 policies. The new mutants (policy, spawn predicate, quantity views, grind policy) are all killed.
+  - Next consumer: `objective.is_attainable_now` / `is_suppliable`.
 - 1c: `feasible` / `cost` / `demand` views.
 - Then steps 3-5 as above.
 

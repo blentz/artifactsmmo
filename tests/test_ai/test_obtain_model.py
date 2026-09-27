@@ -27,8 +27,9 @@ from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 NOW = datetime(2026, 9, 27, tzinfo=UTC)
-OPEN = Policy(all_gather_routes=True, gather_skill_gate=True, event_vendors=True,
-              drop_spawn_known=True, allow_grey=False)
+OPEN = Policy(all_gather_routes=True, gather_skill_gate=True, craft_skill_gate=True,
+              event_vendors=True,
+              spawn_known=True, allow_grey=False)
 
 
 def census_items(gd: GameData) -> list[str]:
@@ -80,7 +81,26 @@ def test_a_primary_only_resource_is_still_offered(world: tuple[WorldState, GameD
           patch.object(GameData, "resource_skill_level", return_value=None)):
         [route] = ObtainModel(state, gd, _ctx(), NOW).routes(item)
     assert (route.kind, route.via, route.primary) == (SourceKind.GATHER, resource, True)
-    assert [g.kind for g in route.gates] == [GateKind.SPAWN_LIVE]
+    assert [g.kind for g in route.gates] == [GateKind.SPAWN_LIVE, GateKind.SPAWN_KNOWN]
+
+
+def test_an_underground_resource_is_a_known_spawn_but_not_a_live_one(
+        world: tuple[WorldState, GameData]) -> None:
+    """The action factory builds a GatherAction for a reachable underground tile,
+    so `gold_rocks` (underground only in this world) is gatherable under the
+    routable-spawn predicate, which the overworld-only live index cannot see."""
+    state, gd = world
+    assert not gd.all_resource_locations.get("gold_rocks")
+    [route] = [r for r in ObtainModel(state, gd, _ctx(), NOW).routes("gold_ore")
+               if r.kind is SourceKind.GATHER and r.via == "gold_rocks"]
+    spawn = {g.kind: g.satisfied for g in route.gates}
+    assert spawn[GateKind.SPAWN_KNOWN] and not spawn[GateKind.SPAWN_LIVE]
+    assert replace(LEGACY, spawn_known=True).ready(route) and not LEGACY.ready(route)
+    # And a resource with no tile on any layer is known to neither predicate.
+    [nowhere] = [r for r in ObtainModel(state, gd, _ctx(), NOW).routes("diamond_stone")
+                 if r.kind is SourceKind.GATHER and r.via == "strange_rocks"]
+    assert not any(g.satisfied for g in nowhere.gates
+                   if g.kind in (GateKind.SPAWN_LIVE, GateKind.SPAWN_KNOWN))
 
 
 class TestPolicy:
@@ -90,6 +110,10 @@ class TestPolicy:
     def test_the_gather_skill_gate_counts_only_when_enforced(self) -> None:
         route = self._route(SourceKind.GATHER, Gate(GateKind.GATHER_SKILL, "mining", False, 10))
         assert LEGACY.ready(route) and not OPEN.ready(route)
+
+    def test_the_craft_skill_gate_counts_only_when_enforced(self) -> None:
+        route = self._route(SourceKind.CRAFT, Gate(GateKind.CRAFT_SKILL, "mining", False, 10))
+        assert not LEGACY.ready(route) and replace(LEGACY, craft_skill_gate=False).ready(route)
 
     def test_a_non_primary_gather_route_needs_all_gather_routes(self) -> None:
         route = self._route(SourceKind.GATHER, primary=False)
@@ -105,22 +129,31 @@ class TestPolicy:
             Gate(GateKind.VENDOR_TRADEABLE, "npc", False))
         assert LEGACY.ready(permanent_but_closed) and not OPEN.ready(permanent_but_closed)
 
-    def test_a_drop_enforces_one_spawn_predicate_chosen_by_the_policy(self) -> None:
-        """D-D: LEGACY asks for a live tile, OPEN for a routable spawn."""
-        layered_only = self._route(SourceKind.DROP, Gate(GateKind.SPAWN_LIVE, "m", False),
+    @pytest.mark.parametrize("kind", [SourceKind.DROP, SourceKind.GATHER])
+    def test_a_spawned_route_enforces_one_spawn_predicate_chosen_by_the_policy(
+            self, kind: SourceKind) -> None:
+        """D-D: LEGACY asks for a live tile, OPEN for a routable spawn, for a
+        monster and a resource alike."""
+        layered_only = self._route(kind, Gate(GateKind.SPAWN_LIVE, "m", False),
                                    Gate(GateKind.SPAWN_KNOWN, "m", True))
         assert not LEGACY.ready(layered_only) and OPEN.ready(layered_only)
-        live_only = self._route(SourceKind.DROP, Gate(GateKind.SPAWN_LIVE, "m", True),
+        live_only = self._route(kind, Gate(GateKind.SPAWN_LIVE, "m", True),
                                 Gate(GateKind.SPAWN_KNOWN, "m", False))
         assert LEGACY.ready(live_only) and not OPEN.ready(live_only)
+
+    def test_every_route_but_a_secondary_gather_is_offered_under_every_policy(self) -> None:
+        closed = replace(LEGACY, all_gather_routes=False)
+        assert all(closed.admits(self._route(kind, primary=False)) for kind in SourceKind
+                   if kind is not SourceKind.GATHER)
 
     def test_a_grey_dropper_counts_only_when_grey_is_allowed(self) -> None:
         grey = self._route(SourceKind.DROP, Gate(GateKind.XP_POSITIVE, "m", False))
         assert LEGACY.ready(grey) and not OPEN.ready(grey)
 
-    def test_spawn_live_still_gates_a_gather_route_under_every_policy(self) -> None:
-        dead = self._route(SourceKind.GATHER, Gate(GateKind.SPAWN_LIVE, "rocks", False))
-        assert not LEGACY.ready(dead) and not OPEN.ready(dead)
+    def test_both_spawn_predicates_gate_any_other_route_under_every_policy(self) -> None:
+        for gate in (Gate(GateKind.SPAWN_LIVE, "x", False), Gate(GateKind.SPAWN_KNOWN, "x", False)):
+            route = self._route(SourceKind.CRAFT, gate)
+            assert not LEGACY.ready(route) and not OPEN.ready(route)
 
     def test_every_other_gate_is_always_enforced(self) -> None:
         route = self._route(SourceKind.DROP, Gate(GateKind.WINNABLE, "wolf", False))
@@ -280,3 +313,48 @@ def test_drop_routes_evaluate_winnability_only_for_a_monster_that_spawns(
     assert [call.args[2] for call in winnable.call_args_list] == [monster]
     gates = {g.kind: g.satisfied for g in routes[0].gates}
     assert gates[GateKind.SPAWN_KNOWN] and gates[GateKind.WINNABLE] and not gates[GateKind.SPAWN_LIVE]
+
+
+class TestQuantity:
+    """`renewable` and `on_hand`: what a unit-feasibility answer cannot say."""
+
+    def test_a_banked_copy_is_on_hand_but_not_renewable(self, world: tuple[WorldState, GameData]) -> None:
+        state, gd = world
+        model = ObtainModel(replace(state, inventory={"hard_leather": 2},
+                                    bank_items={"hard_leather": 3}), gd, _ctx(), NOW)
+        assert model.feasible("hard_leather", OPEN).ok
+        assert not model.renewable("hard_leather", OPEN)
+        assert model.on_hand("hard_leather", OPEN) == 5
+
+    def test_a_locked_bank_is_not_on_hand(self, world: tuple[WorldState, GameData]) -> None:
+        state, gd = world
+        model = ObtainModel(replace(state, bank_items={"hard_leather": 3}), gd,
+                            _ctx(bank_accessible=False), NOW)
+        assert model.on_hand("hard_leather", OPEN) == state.inventory.get("hard_leather", 0)
+
+    def test_worn_gear_and_a_ge_order_are_not_on_hand(
+            self, world: tuple[WorldState, GameData]) -> None:
+        """A worn copy would have to be unequipped, and a GE fill is a purchase."""
+        state, gd = world
+        worn = next(code for code in state.equipment.values() if code)
+        model = ObtainModel(replace(state, inventory={}, bank_items={}), gd, _ctx(), NOW)
+        assert any(r.kind is SourceKind.GE_FILL for r in model.ready(worn, OPEN)), \
+            "vacuous: no GE order for the worn item"
+        assert model.feasible(worn, OPEN).ok and model.on_hand(worn, OPEN) == 0
+
+    def test_a_gathered_item_and_its_crafts_are_renewable(
+            self, world: tuple[WorldState, GameData]) -> None:
+        state, gd = world
+        model = ObtainModel(replace(state, inventory={}, bank_items={}), gd, _ctx(), NOW)
+        assert model.renewable("copper_ore", OPEN) and model.renewable("copper_bar", OPEN)
+
+    def test_a_craft_from_stock_only_is_not_renewable(self, world: tuple[WorldState, GameData]) -> None:
+        """Made from a banked material nothing else yields: feasible once, but
+        not renewable."""
+        state, gd = world
+        with patch.object(GameData, "crafting_recipe",
+                          lambda self, code: {"hard_leather": 1} if code == "copper_bar" else None):
+            model = ObtainModel(replace(state, inventory={}, bank_items={"hard_leather": 1}),
+                                gd, _ctx(), NOW)
+            assert model.feasible("copper_bar", OPEN).ok
+            assert not model.renewable("copper_bar", OPEN)

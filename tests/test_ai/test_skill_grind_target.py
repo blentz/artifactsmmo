@@ -1,19 +1,24 @@
 """Tests for skill_grind_target: the shallow in-skill item to craft now."""
 
 import dataclasses
+from unittest.mock import patch
 
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     _CACHES,
     CACHE_MAX_ENTRIES,
+    GRIND_POLICY,
     build_selectable_grind_candidates,
+    grind_model,
     has_grind_target,
     is_obtainable,
     skill_grind_target,
 )
+from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -157,6 +162,10 @@ def _gd_obtainability() -> GameData:
     }
     # copper_ore + ash_wood are gatherable resource drops; wooden_stick is NOT.
     gd._resource_drops = {"copper_rocks": "copper_ore", "ash_tree": "ash_wood"}
+    # Somewhere to craft and to gather, as in `_gd`: obtainability is the obtain
+    # model's feasibility, which counts only routes the executor can serve.
+    gd.world.workshop_locations = {"weaponcrafting": (0, 0), "mining": (0, 1)}
+    gd.recipes_catalog.locations = {"copper_rocks": [(1, 0)], "ash_tree": [(3, 0)]}
     return gd
 
 
@@ -453,9 +462,9 @@ def test_the_memo_key_may_omit_hp_because_obtainable_no_longer_reads_it():
     # answered — the test would pass while measuring the cache instead of the
     # property that justifies it. Verified: with `fightable_droppers` reverted to
     # current hp, the list comparison still passed and this one does not.
-    assert is_obtainable("hide_vest", healthy, gd, frozenset()), \
+    assert is_obtainable("hide_vest", grind_model(healthy, gd)), \
         "not obtainable even when healthy — this cannot reach the predicate"
-    assert is_obtainable("hide_vest", hurt, gd, frozenset())
+    assert is_obtainable("hide_vest", grind_model(hurt, gd))
 
 
 @pytest.mark.parametrize("skills,inventory,bank", [
@@ -534,3 +543,116 @@ def test_has_grind_target_skips_a_grey_rung_but_finds_a_paying_one():
     del lean._item_stats["iron_dagger"]
     assert has_grind_target("weaponcrafting", grey, lean) is False
     assert skill_grind_target("weaponcrafting", grey, lean) is None
+
+
+# --- the grind's obtain policy ----------------------------------------------
+# `is_obtainable` is `ObtainModel.feasible` under `GRIND_POLICY`. Each test below
+# pins one switch of that policy, or the CRAFT-only reading of a rung, against a
+# world where exactly that switch decides the answer.
+
+def _policy_world() -> GameData:
+    """`ring` (jewelrycrafting 1) <- `gem`. Each test gives `gem` its source."""
+    gd = GameData()
+    gd._item_stats = {
+        "ring": ItemStats(code="ring", level=1, type_="ring",
+                          crafting_skill="jewelrycrafting", crafting_level=1),
+        "gem": ItemStats(code="gem", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"ring": {"gem": 1}}
+    gd._workshop_locations = {"jewelrycrafting": (0, 0)}
+    return gd
+
+
+def _jeweller() -> WorldState:
+    return make_state(skills={"jewelrycrafting": 1, "mining": 1})
+
+
+def test_a_vendor_only_material_does_not_make_a_rung_obtainable():
+    """A BUY route is renewable only if its gold is, and gold is not: a gem only
+    a vendor sells does not make the ring a grind target."""
+    gd = _policy_world()
+    gd._npc_stock = {"jeweller": {"gem": 10}}
+    gd._npc_locations = {"jeweller": (5, 5)}
+    model = grind_model(_jeweller(), gd)
+    assert model.feasible("gem", LEGACY).ok, "vacuous: the vendor route is not even ready"
+    assert not is_obtainable("ring", model)
+
+
+def test_a_material_from_a_reachable_underground_resource_counts():
+    """A resource with no overworld tile but a reachable layered one is
+    gathered by the action pool, so the grind counts it."""
+    gd = _policy_world()
+    gd._resource_drops = {"deep_vein": "gem"}
+    with patch.object(GameData, "resource_spawn_known", return_value=True):
+        model = grind_model(_jeweller(), gd)
+        assert not model.feasible("gem", LEGACY).ok, "vacuous: the vein has a live tile"
+        assert is_obtainable("ring", model)
+
+
+def test_a_secondary_drop_counts_as_a_material():
+    """Every resource that drops the material counts, not only the one whose
+    primary drop it is."""
+    gd = _policy_world()
+    gd._resource_drops = {"rocks": "stone"}
+    gd._resource_drops_full = {"rocks": [("stone", 1, 1, 1), ("gem", 100, 1, 1)],
+                               "gem_rocks": [("gem", 1, 1, 1)]}
+    gd._resource_locations = {"rocks": [(1, 0)]}
+    assert is_obtainable("ring", grind_model(_jeweller(), gd))
+
+
+def test_an_intermediate_above_its_craft_level_still_counts():
+    """A craft-skill gate on the chain is a level the character can grind (and
+    `gather_demand` surfaces it), so it does not wall the rung."""
+    gd = _policy_world()
+    gd._item_stats["cut_gem"] = ItemStats(code="cut_gem", level=10, type_="resource",
+                                          crafting_skill="mining", crafting_level=10)
+    gd._crafting_recipes = {"ring": {"cut_gem": 1}, "cut_gem": {"gem": 1}}
+    gd._workshop_locations["mining"] = (0, 1)
+    gd._resource_drops = {"gem_rocks": "gem"}
+    gd._resource_locations = {"gem_rocks": [(1, 0)]}
+    model = grind_model(_jeweller(), gd)
+    assert not model.feasible("cut_gem", LEGACY).ok, "vacuous: the craft skill is met"
+    assert is_obtainable("ring", model)
+
+
+def test_a_held_copy_of_the_rung_does_not_make_it_obtainable():
+    """A rung is crafted for its xp: a ring already in the bag does not serve
+    the grind when the gem cannot be had."""
+    gd = _policy_world()
+    model = grind_model(dataclasses.replace(_jeweller(), inventory={"ring": 1}), gd)
+    assert model.feasible("ring", GRIND_POLICY).ok, "vacuous: the held ring is not feasible"
+    assert not is_obtainable("ring", model)
+
+
+def test_a_rung_with_no_known_workshop_is_not_obtainable():
+    """The rung's own CRAFT route must be ready: nowhere to craft, no grind."""
+    gd = _policy_world()
+    gd._workshop_locations = {}
+    gd._resource_drops = {"gem_rocks": "gem"}
+    gd._resource_locations = {"gem_rocks": [(1, 0)]}
+    model = grind_model(_jeweller(), gd)
+    assert model.feasible("gem", GRIND_POLICY).ok, "vacuous: the gem is not obtainable"
+    assert not is_obtainable("ring", model)
+
+
+def test_a_banked_material_counts_only_in_the_quantity_the_recipe_needs():
+    """Live 2026-09-27: one banked `hard_leather`, which nothing makes, made
+    rungs needing 2, 3 and 6 of it grind targets that could never be crafted.
+    A material that cannot be made again must be on hand in full."""
+    gd = _policy_world()
+    gd._crafting_recipes = {"ring": {"gem": 2}}
+    one = dataclasses.replace(_jeweller(), bank_items={"gem": 1})
+    model = grind_model(one, gd)
+    assert model.feasible("gem", GRIND_POLICY).ok, "vacuous: the banked gem is not even feasible"
+    assert not is_obtainable("ring", model)
+    assert is_obtainable("ring", grind_model(
+        dataclasses.replace(one, bank_items={"gem": 1}, inventory={"gem": 1}), gd))
+
+
+def test_a_renewable_material_needs_no_stock():
+    """A gem any rock yields counts however many the recipe needs."""
+    gd = _policy_world()
+    gd._crafting_recipes = {"ring": {"gem": 50}}
+    gd._resource_drops = {"gem_rocks": "gem"}
+    gd._resource_locations = {"gem_rocks": [(1, 0)]}
+    assert is_obtainable("ring", grind_model(_jeweller(), gd))

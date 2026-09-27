@@ -36,6 +36,7 @@ def _gd() -> GameData:
     }
     gd._crafting_recipes = {"widget": {"gear_ore": 2}, "trinket": {"gear_ore": 1}}
     gd._resource_drops = {"gear_ore_rocks": "gear_ore"}
+    gd._resource_locations = {"gear_ore_rocks": [(3, 3)]}
     gd._workshop_locations = {"gearcrafting": (2, 2)}
     gd._bank_location = (1, 1)
     gd._taskmaster_location = (0, 0)

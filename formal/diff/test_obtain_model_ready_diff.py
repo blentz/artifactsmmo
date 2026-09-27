@@ -27,7 +27,8 @@ _route = st.builds(
                                             primary=primary),
     st.sampled_from(list(SourceKind)), st.integers(0, 3), st.booleans(),
     st.lists(_gate, max_size=4))
-_policy = st.builds(Policy, st.booleans(), st.booleans(), st.booleans(), st.booleans(), st.booleans())
+_POLICY_FIELDS = 6
+_policy = st.builds(Policy, *[st.booleans()] * _POLICY_FIELDS)
 
 
 def _encode(route: Route) -> list:
@@ -36,8 +37,9 @@ def _encode(route: Route) -> list:
 
 
 def _flags(policy: Policy) -> list[int]:
-    return [int(policy.all_gather_routes), int(policy.gather_skill_gate), int(policy.event_vendors),
-            int(policy.drop_spawn_known), int(policy.allow_grey)]
+    return [int(policy.all_gather_routes), int(policy.gather_skill_gate),
+            int(policy.craft_skill_gate), int(policy.event_vendors), int(policy.spawn_known),
+            int(policy.allow_grey)]
 
 
 def _oracle(policy: Policy, routes: list[Route]) -> list:
@@ -58,8 +60,8 @@ def test_every_single_gate_route_matches_oracle() -> None:
     kind x gate kind x verdict x primary, one gate per route. Random lists
     reach a BUY route whose only relevant gate is false too rarely to pin the
     vendor switches (two mutants survived 400 random examples); this does not
-    rely on luck. One oracle batch: 32 policies x 8 kinds x 13 gates x 2 x 2."""
-    policies = [Policy(*flags) for flags in itertools.product((False, True), repeat=5)]
+    rely on luck. One oracle batch: 64 policies x 8 kinds x 13 gates x 2 x 2."""
+    policies = [Policy(*flags) for flags in itertools.product((False, True), repeat=_POLICY_FIELDS)]
     cases = [(policy, Route("item", kind, "v0", 1, 1, (Gate(gate, "subject", sat),), primary=primary))
              for policy, kind, gate, sat, primary in itertools.product(
                  policies, SourceKind, GateKind, (False, True), (False, True))]

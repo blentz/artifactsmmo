@@ -3113,17 +3113,22 @@ example : ∀ (p : Policy) (pre post : List Route) (r : Route),
 open Formal.ObtainModelReady in
 example : ∀ (p : Policy) (r : Route) (g : Gate), g.kind ≠ .gatherSkill →
     g.kind ≠ .vendorPermanent → g.kind ≠ .vendorTradeable → g.kind ≠ .spawnLive →
-    g.kind ≠ .spawnKnown → g.kind ≠ .xpPositive → enforces p r g = true :=
+    g.kind ≠ .spawnKnown → g.kind ≠ .xpPositive → g.kind ≠ .craftSkill →
+    enforces p r g = true :=
   @Formal.ObtainModelReady.enforces_fixed
 open Formal.ObtainModelReady in
-example : ∀ (p : Policy) (r : Route) (s : Bool), r.kind = .drop →
-    enforces p r ⟨.spawnLive, s⟩ = !p.dropSpawnKnown ∧
-    enforces p r ⟨.spawnKnown, s⟩ = p.dropSpawnKnown :=
-  @Formal.ObtainModelReady.enforces_drop_spawn
+example : ∀ (p : Policy) (r : Route) (s : Bool), (r.kind = .drop ∨ r.kind = .gather) →
+    enforces p r ⟨.spawnLive, s⟩ = !p.spawnKnown ∧
+    enforces p r ⟨.spawnKnown, s⟩ = p.spawnKnown :=
+  @Formal.ObtainModelReady.enforces_spawn_switch
 open Formal.ObtainModelReady in
-example : ∀ (p : Policy) (r : Route) (s : Bool), r.kind ≠ .drop →
+example : ∀ (p : Policy) (r : Route) (s : Bool), r.kind ≠ .drop → r.kind ≠ .gather →
     enforces p r ⟨.spawnLive, s⟩ = true ∧ enforces p r ⟨.spawnKnown, s⟩ = true :=
   @Formal.ObtainModelReady.enforces_spawn_other
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route) (sat : Bool),
+    enforces p r ⟨.craftSkill, sat⟩ = p.craftSkill :=
+  @Formal.ObtainModelReady.enforces_craft_skill
 open Formal.ObtainModelReady in
 example : ∀ (p : Policy) (r : Route) (s : Bool),
     enforces p r ⟨.xpPositive, s⟩ = !p.allowGrey :=
@@ -3141,6 +3146,9 @@ open Formal.ObtainModelReady in
 example : ∀ (p : Policy) (r : Route), r.kind = .gather →
     admits p r = (p.allGather || r.primary) :=
   @Formal.ObtainModelReady.admits_gather
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route), r.kind ≠ .gather → admits p r = true :=
+  @Formal.ObtainModelReady.admits_other
 
 -- ─── ObtainModelFeasible (unit feasibility least fixpoint) anti-weakening pins ───
 open Formal.ObtainModelFeasible in

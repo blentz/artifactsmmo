@@ -2405,7 +2405,7 @@ def run (args : Array Json) : Json :=
 end ObtainModelFeasibleOracle
 
 -- ObtainModelReady: the unified obtain model's route selection.
--- args = [allGather, gatherSkill, eventVendors, dropSpawnKnown, allowGrey (each 0/1),
+-- args = [allGather, gatherSkill, craftSkill, eventVendors, spawnKnown, allowGrey (each 0/1),
 --         routes: [[kindStr, via(Nat), primary(0/1), [[gateKindStr, sat(0/1)], ...]], ...]]
 -- Kind strings are `SourceKind.value`; gate strings are `GateKind.value`.
 namespace ObtainModelReadyOracle
@@ -2466,8 +2466,8 @@ def routeJson (r : Route) : Json :=
 
 def run (args : Array Json) : Json :=
   let p : Policy := ⟨intArg args 0 != 0, intArg args 1 != 0, intArg args 2 != 0,
-    intArg args 3 != 0, intArg args 4 != 0⟩
-  match (args[5]!.getArr?).toOption.bind (fun rs => rs.toList.mapM parseRoute) with
+    intArg args 3 != 0, intArg args 4 != 0, intArg args 5 != 0⟩
+  match (args[6]!.getArr?).toOption.bind (fun rs => rs.toList.mapM parseRoute) with
   | none => Json.mkObj [("error", Json.str "bad routes")]
   | some rs => Json.mkObj [("ready", Json.arr ((readyRoutes p rs).map routeJson).toArray)]
 

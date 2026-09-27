@@ -26,9 +26,12 @@ def _progression_gd() -> GameData:
         for lvl in range(1, 6)
     }
     gd._crafting_recipes = {f"wc_t{lvl}": {"bar": 1} for lvl in range(1, 6)}
-    # `bar` is a gatherable resource drop -> every wc_t* is obtainable (the
-    # grind-target obtainability filter only excludes un-gettable chains).
+    # `bar` is a gatherable resource drop at a spawned tile, and the workshop is
+    # known -> every wc_t* is obtainable (the grind-target obtainability filter
+    # only excludes chains the executor cannot serve).
     gd._resource_drops = {"bar_rocks": "bar"}
+    gd._resource_locations = {"bar_rocks": [(1, 0)]}
+    gd._workshop_locations = {"weaponcrafting": (0, 0)}
     return gd
 
 

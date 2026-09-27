@@ -47,6 +47,7 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
     GRIND_ALLOWS_GREY,
+    grind_model,
     is_obtainable,
     skill_grind_target,
 )
@@ -114,8 +115,8 @@ def test_both_sides_agree_on_wool(player: GamePlayer, game_data: GameData,
     assert GRIND_ALLOWS_GREY is True
     assert drop_obtainable("wool", state, game_data,
                            allow_grey=GRIND_ALLOWS_GREY) is True
-    assert is_obtainable("wool", state, game_data, frozenset()) is True
-    assert is_obtainable("iron_ring", state, game_data, frozenset()) is True
+    assert is_obtainable("wool", grind_model(state, game_data)) is True
+    assert is_obtainable("iron_ring", grind_model(state, game_data)) is True
     fight = select_drop_fight("wool", player._build_actions(), state, game_data,
                               allow_grey=GRIND_ALLOWS_GREY)
     assert fight is not None and fight.monster_code == "sheep"

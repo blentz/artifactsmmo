@@ -38,6 +38,10 @@ def _gd() -> GameData:
                             "iron_nails": {"iron_ore": 1}}
     gd._resource_drops_full = {"iron_rocks": [("iron_ore", 100, 1, 1)]}
     gd._resource_skill = {"iron_rocks": ("mining", 10)}
+    # Somewhere to craft and to gather: a grind rung is obtainable only through
+    # routes the executor can serve (the obtain model's feasibility).
+    gd.world.workshop_locations = {"mining": (0, 0), "gearcrafting": (0, 1)}
+    gd.recipes_catalog.locations = {"iron_rocks": [(1, 0)]}
     return gd
 
 

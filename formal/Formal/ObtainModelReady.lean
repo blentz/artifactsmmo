@@ -17,9 +17,9 @@ Proved over ALL route lists and policies:
 - completeness: every ready non-SELL route is returned;
 - SELL: returned SELL routes have distinct `via`, every sold item with a ready
   buyer is covered, and the covering route is the first ready one;
-- policy: the switchable gates (gather skill, gather routes, event vendors,
-  drop spawn predicate, grey) behave as named, and every other gate is always
-  enforced.
+- policy: the switches (gather skill, craft skill, gather routes, event
+  vendors, spawn predicate, grey) behave as named, every other gate is always
+  enforced, and every route but a secondary GATHER is always offered.
 
 `via` is abstracted to `Nat` (the Python side uses item/NPC code strings;
 the differential harness interns them) — only equality of `via` is ever used.
@@ -59,13 +59,17 @@ structure Route where
 structure Policy where
   allGather : Bool
   gatherSkill : Bool
+  craftSkill : Bool
   eventVendors : Bool
-  dropSpawnKnown : Bool
+  spawnKnown : Bool
   allowGrey : Bool
   deriving DecidableEq, Repr
 
 /-- `Policy.LEGACY`: exactly what the legacy `obtain_sources` walk answered. -/
-def legacy : Policy := ⟨false, false, false, false, true⟩
+def legacy : Policy := ⟨false, false, true, false, false, true⟩
+
+/-- A route served at a spawn tile (a monster's or a resource's). -/
+def spawned (k : SrcKind) : Bool := k = .drop || k = .gather
 
 /-- `Policy.admits`: a non-primary GATHER route needs `allGather`. -/
 def admits (p : Policy) (r : Route) : Bool :=
@@ -75,10 +79,11 @@ def admits (p : Policy) (r : Route) : Bool :=
 def enforces (p : Policy) (r : Route) (g : Gate) : Bool :=
   match g.kind with
   | .gatherSkill => p.gatherSkill
+  | .craftSkill => p.craftSkill
   | .vendorPermanent => if r.kind = .buy then !p.eventVendors else true
   | .vendorTradeable => if r.kind = .buy then p.eventVendors else true
-  | .spawnLive => if r.kind = .drop then !p.dropSpawnKnown else true
-  | .spawnKnown => if r.kind = .drop then p.dropSpawnKnown else true
+  | .spawnLive => if spawned r.kind then !p.spawnKnown else true
+  | .spawnKnown => if spawned r.kind then p.spawnKnown else true
   | .xpPositive => !p.allowGrey
   | _ => true
 
@@ -277,22 +282,30 @@ enforced under every policy, on every route. -/
 theorem enforces_fixed (p : Policy) (r : Route) (g : Gate)
     (h1 : g.kind ≠ .gatherSkill) (h2 : g.kind ≠ .vendorPermanent)
     (h3 : g.kind ≠ .vendorTradeable) (h4 : g.kind ≠ .spawnLive)
-    (h5 : g.kind ≠ .spawnKnown) (h6 : g.kind ≠ .xpPositive) : enforces p r g = true := by
+    (h5 : g.kind ≠ .spawnKnown) (h6 : g.kind ≠ .xpPositive)
+    (h7 : g.kind ≠ .craftSkill) : enforces p r g = true := by
   unfold enforces
   split <;> simp_all
 
-/-- **POLICY: DROP SPAWN.** On a DROP route, exactly one of the two spawn
-predicates is enforced, chosen by `dropSpawnKnown` (D-D). -/
-theorem enforces_drop_spawn (p : Policy) (r : Route) (s : Bool) (h : r.kind = .drop) :
-    enforces p r ⟨.spawnLive, s⟩ = !p.dropSpawnKnown ∧
-    enforces p r ⟨.spawnKnown, s⟩ = p.dropSpawnKnown := by
-  simp [enforces, h]
+/-- **POLICY: SPAWN.** On a DROP or GATHER route, exactly one of the two spawn
+predicates is enforced, chosen by `spawnKnown` (D-D). -/
+theorem enforces_spawn_switch (p : Policy) (r : Route) (s : Bool)
+    (h : r.kind = .drop ∨ r.kind = .gather) :
+    enforces p r ⟨.spawnLive, s⟩ = !p.spawnKnown ∧
+    enforces p r ⟨.spawnKnown, s⟩ = p.spawnKnown := by
+  rcases h with h | h <;> simp [enforces, spawned, h]
 
 /-- **POLICY: SPAWN ELSEWHERE.** On any other route both spawn predicates are
-always enforced (a GATHER route always needs a live resource tile). -/
-theorem enforces_spawn_other (p : Policy) (r : Route) (s : Bool) (h : r.kind ≠ .drop) :
+always enforced. -/
+theorem enforces_spawn_other (p : Policy) (r : Route) (s : Bool)
+    (h1 : r.kind ≠ .drop) (h2 : r.kind ≠ .gather) :
     enforces p r ⟨.spawnLive, s⟩ = true ∧ enforces p r ⟨.spawnKnown, s⟩ = true := by
-  simp [enforces, h]
+  simp [enforces, spawned, h1, h2]
+
+/-- **POLICY: CRAFT SKILL.** The crafting-skill gate is enforced exactly when
+the policy asks for it. -/
+theorem enforces_craft_skill (p : Policy) (r : Route) (sat : Bool) :
+    enforces p r ⟨.craftSkill, sat⟩ = p.craftSkill := rfl
 
 /-- **POLICY: GREY.** The xp-positive gate is enforced exactly when grey
 droppers are not allowed. -/
@@ -317,6 +330,11 @@ theorem admits_gather (p : Policy) (r : Route) (h : r.kind = .gather) :
     admits p r = (p.allGather || r.primary) := by
   simp [admits, h]
 
+/-- **POLICY: ALWAYS OFFERED.** Every route that is not a GATHER route is
+admitted under every policy. -/
+theorem admits_other (p : Policy) (r : Route) (h : r.kind ≠ .gather) : admits p r = true := by
+  simp [admits, h]
+
 /-! ### Non-vacuity witnesses -/
 
 private def sellA : Route := ⟨.sell, 7, true, [⟨.vendorTradeable, false⟩]⟩
@@ -331,19 +349,32 @@ private def eventBuy : Route :=
 example : readyRoutes legacy [sellA, sellB, sellC] = [sellB] := by decide
 -- LEGACY hides a non-primary gatherer and ignores the gather skill; the open policy flips both.
 example : readyRoutes legacy [gatherSecondary, gatherSkilled] = [gatherSkilled] := by decide
-example : readyRoutes ⟨true, true, false, false, true⟩ [gatherSecondary, gatherSkilled]
+example : readyRoutes ⟨true, true, true, false, false, true⟩ [gatherSecondary, gatherSkilled]
     = [gatherSecondary] := by
   decide
 -- An open event vendor counts only when event vendors are enabled.
 example : readyRoutes legacy [eventBuy] = [] := by decide
-example : readyRoutes ⟨false, false, true, false, true⟩ [eventBuy] = [eventBuy] := by decide
--- A layered-only dropper counts only under the routable-spawn predicate; a grey one only when allowed.
+example : readyRoutes ⟨false, false, true, true, false, true⟩ [eventBuy] = [eventBuy] := by decide
+-- A craft below skill counts only when the craft skill is not enforced.
+private def underSkilledCraft : Route := ⟨.craft, 6, true, [⟨.craftSkill, false⟩]⟩
+example : readyRoutes legacy [underSkilledCraft] = [] := by decide
+example : readyRoutes ⟨false, false, false, false, false, true⟩ [underSkilledCraft]
+    = [underSkilledCraft] := by
+  decide
+-- A layered-only dropper or resource counts only under the routable-spawn predicate; a grey
+-- dropper only when allowed.
 private def layeredDrop : Route :=
   ⟨.drop, 4, true, [⟨.spawnLive, false⟩, ⟨.spawnKnown, true⟩, ⟨.xpPositive, true⟩]⟩
 private def greyDrop : Route :=
   ⟨.drop, 5, true, [⟨.spawnLive, true⟩, ⟨.spawnKnown, true⟩, ⟨.xpPositive, false⟩]⟩
 example : readyRoutes legacy [layeredDrop, greyDrop] = [greyDrop] := by decide
-example : readyRoutes ⟨false, false, false, true, false⟩ [layeredDrop, greyDrop] = [layeredDrop] := by
+example : readyRoutes ⟨false, false, true, false, true, false⟩ [layeredDrop, greyDrop]
+    = [layeredDrop] := by
+  decide
+private def layeredGather : Route := ⟨.gather, 8, true, [⟨.spawnLive, false⟩, ⟨.spawnKnown, true⟩]⟩
+example : readyRoutes legacy [layeredGather] = [] := by decide
+example : readyRoutes ⟨false, false, true, false, true, true⟩ [layeredGather]
+    = [layeredGather] := by
   decide
 
 end Formal.ObtainModelReady

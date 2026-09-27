@@ -288,4 +288,3 @@ def test_the_known_true_claims_are_swept_and_verified() -> None:
     subjects = {v.claim.subject: v for v in run_census(_real_sources())}
     assert not subjects["_tree_band_adequate"].is_false
     assert not subjects["potion_type_weight"].is_false
-    assert not subjects["is_obtainable"].is_false

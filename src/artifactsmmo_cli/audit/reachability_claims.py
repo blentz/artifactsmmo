@@ -72,15 +72,16 @@ from dataclasses import dataclass
 # census that reported total success over an empty reference set, and "0 false
 # claims" reads identically whether the matcher is working or broken.
 #
-# The bound is TIGHT ON PURPOSE — it is exactly the population carried on
-# 2026-08-24: `player._tree_band_adequate`, `tiers/skill_grind_target
-# .is_obtainable` and `tiers/progression_tree_core.potion_type_weight`, all
-# three verified true. The decidable population in this repo is small (~20
+# The bound is TIGHT ON PURPOSE — it is exactly the population carried:
+# `player._tree_band_adequate` and `tiers/progression_tree_core
+# .potion_type_weight`, both verified true. (`tiers/skill_grind_target
+# .is_obtainable` was the third until 2026-09-27, when it became the grind's
+# production obtainability walk and its no-caller note was retired.) The decidable population in this repo is small (~20
 # `inert` hits, nearly all CONDITIONAL and undecidable, are deliberately out of
 # scope), so a slack bound would not fail until the matcher was completely
-# dead. Rewording one of the three costs a deliberate edit here, which is the
+# dead. Rewording one of the two costs a deliberate edit here, which is the
 # point: the register is meant to be small enough to read.
-MIN_CLAIMS = 3
+MIN_CLAIMS = 2
 
 _SUBJECT = r"(?:this|it|them)"
 _ROLE = r"(?:caller|consumer|importer|reader)s?"

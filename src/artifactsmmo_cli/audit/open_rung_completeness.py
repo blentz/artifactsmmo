@@ -26,7 +26,7 @@ is satisfied by either arm —
 
 The wall-diagnosis fields below (`rungs_in_level`, `rungs_xp_positive`,
 `rungs_obtainable`, `gather_*`) re-read the SAME catalogue predicates
-(`skill_xp_positive`, `skill_grind_target._obtainable`) to say WHY a closed
+(`skill_xp_positive`, `skill_grind_target.is_obtainable`) to say WHY a closed
 cell is closed. They are a decomposition of the production answer, not a rival
 one: `test_open_rung_completeness` pins that a cell is open iff at least one
 arm's counter is positive, so the two can never drift apart silently.
@@ -43,20 +43,26 @@ COMBAT STATS ARE FORCED ON, AND THAT IS THE WHOLE DIFFERENCE BETWEEN THIS
 CENSUS AND A MEASUREMENT OF THE HARNESS. `ScenarioCharacter.derive_combat_stats`
 defaults False, and its own docstring says why: under the harness's original
 zero-stat states "`is_winnable` is False against EVERY monster (predict_win
-sees 0 attack)". A rung's obtainability walk bottoms out in `drop_obtainable`,
+sees 0 attack)". A rung's obtainability walk asks the shared drop gates,
 so with the flag off EVERY monster-drop leaf in the catalogue is unreachable
 and the census would report walls that are properties of the fixture. Measured
-on the committed bundle: 77 closed cells with the flag off everywhere, 20 with
-the scenarios AS COMMITTED (34 of the 44 opt the flag on), and 6 with it forced
-on. The all-off figure moved 74 -> 77 when wave 6 added `l32_items_task`;
-the other two did NOT move, which is the point of keeping all three. The
+on the committed bundle: 63 closed cells with the flag off everywhere, 21 with
+the scenarios AS COMMITTED (34 of the 44 opt the flag on), and 10 with it forced
+on. The all-off figure moved 74 -> 77 when wave 6 added `l32_items_task` (the
+other two did NOT move, which is the point of keeping all three), and 77 -> 63
+when the walk moved onto the obtain model (2026-09-27), which counts a material
+held or banked in the quantity the rung needs: with every state's bag and bank emptied it is 77
+again. That move also changed the other two, both for real reasons: the four
+`gearcrafting` 42 cells of the l48 scenarios close because their one rung,
+`white_knight_helmet`, needs a `diamond_stone` that only `strange_rocks` drops,
+and `strange_rocks` has no tile on any layer. The
 flag-off count is the vacuity diagnostic — a zero-stat character reports
 walls that belong to the harness, not the bot — while `as_committed` and
 the forced-on figure are the measure. A new cell that changed THOSE would
 be a real finding rather than a regeneration. The flag is therefore forced on for every cell — the census derives the
 combat totals a live character wearing that scenario's declared loadout would
 report. The committed scenarios are NOT modified; `census_state` builds its own
-copy. `test_the_zero_stat_harness_would_measure_the_fixture` pins the 74/20/6
+copy. `test_the_zero_stat_harness_would_measure_the_fixture` pins the 63/21/10
 spread so a later default flip cannot make this note quietly false.
 
 THE RESIDUALS (must be zero)
@@ -88,9 +94,10 @@ woodcutting), and 194 -> 236 when `_gear_nameable_skills` stopped restating
 `objective._gear_candidates_by_type`'s candidate rule and started asking it —
 the restatement had drifted, claiming alchemy's `utility` potions made it
 gear-nameable when the sheet builder skips `utility` outright, so the orphan
-rule declined the one skill it was written for. The six real walls this census
-finds (weaponcrafting 35, 40 and 42, the epic's own L38-48 territory) sit
-outside the residual's reach today. The other 100 cells are still swept, still
+rule declined the one skill it was written for. The ten real walls this census
+finds (weaponcrafting 35, 40 and 42, the epic's own L38-48 territory, and
+gearcrafting 42 in the four l48 scenarios) sit outside the residual's reach
+today. The other 100 cells are still swept, still
 verdicted and still walled by name — they just cannot produce the must-be-zero
 class.
 `routing_breakdown` prints this scope into the matrix on every run, computed
@@ -117,7 +124,7 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.skill_grind_target import _obtainable
+from artifactsmmo_cli.ai.tiers.skill_grind_target import grind_model, is_obtainable
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 
 
@@ -281,12 +288,11 @@ def rung_inventory(skill: str, state: WorldState,
                    game_data: GameData) -> RungInventory:
     """The evidence for one cell, read straight off the catalogue.
 
-    The obtainability walk is `skill_grind_target._obtainable` with the
-    gatherable-drop union hoisted once — the SAME private walk
-    `has_grind_target` runs, deliberately, so the census's decomposition and
-    production's verdict cannot answer differently."""
+    The obtainability walk is `skill_grind_target.is_obtainable` over one
+    `grind_model` — the SAME walk `has_grind_target` runs, deliberately, so the
+    census's decomposition and production's verdict cannot answer differently."""
     level = state.skills[skill]
-    gatherable = game_data.gatherable_drop_items()
+    model = grind_model(state, game_data)
     in_level: list[str] = []
     above = 0
     for code, stats in game_data.all_item_stats.items():
@@ -301,7 +307,7 @@ def rung_inventory(skill: str, state: WorldState,
         if skill_xp_positive(game_data.all_item_stats[code].crafting_level, level)
     ]
     obtainable = [code for code in xp_positive
-                  if _obtainable(code, state, game_data, frozenset(), gatherable)]
+                  if is_obtainable(code, model)]
 
     resource_levels = [res_level
                        for _, (res_skill, res_level) in game_data.resource_skills.items()

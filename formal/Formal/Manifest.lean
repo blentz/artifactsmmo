@@ -1234,8 +1234,10 @@ open Formal.PriorityBand
 #check @Formal.ObtainModelReady.enforces_gather_skill          -- D-A switch
 #check @Formal.ObtainModelReady.enforces_vendor_buy            -- D-F switch
 #check @Formal.ObtainModelReady.admits_gather                  -- D-B switch
-#check @Formal.ObtainModelReady.enforces_drop_spawn            -- D-D switch
-#check @Formal.ObtainModelReady.enforces_spawn_other           -- spawn always enforced off DROP
+#check @Formal.ObtainModelReady.enforces_spawn_switch          -- D-D switch (DROP and GATHER)
+#check @Formal.ObtainModelReady.enforces_spawn_other           -- spawn always enforced elsewhere
+#check @Formal.ObtainModelReady.enforces_craft_skill           -- craft-skill switch
+#check @Formal.ObtainModelReady.admits_other                   -- non-GATHER always offered
 #check @Formal.ObtainModelReady.enforces_xp_positive           -- grey switch
 
 -- ObtainModelFeasible required roles (unit feasibility least fixpoint;

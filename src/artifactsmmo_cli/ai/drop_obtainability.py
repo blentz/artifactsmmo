@@ -36,7 +36,7 @@ All four now resolve here. Liveness is `monster_spawn_known` on both sides.
 ONE SET OF DROP GATES (Phase 1 step 4 of docs/PLAN_decision_architecture_redesign.md).
 The gates themselves are evaluated in `ai/obtain_model/drop_routes.py`, which the
 unified obtain model uses too; this oracle is the `Policy` that enforces the
-routable spawn (`drop_spawn_known`) and the caller's grey rule (`allow_grey`),
+routable spawn (`spawn_known`) and the caller's grey rule (`allow_grey`),
 where the obtain model's LEGACY policy asks for a live tile and has no grey rule
 (the D-D difference, now one explicit switch instead of two implementations). The
 grey rule is a FILTER on the candidate set, not a post-choice veto, so the
@@ -154,7 +154,7 @@ def fightable_droppers(item: str, state: WorldState, game_data: GameData,
     # `allow_grey`. Checked equal to the previous inline body over every item of
     # all 44 scenario worlds, both grey settings, before the switch (46,024
     # comparisons, 0 differences).
-    policy = replace(LEGACY, drop_spawn_known=True, allow_grey=allow_grey)
+    policy = replace(LEGACY, spawn_known=True, allow_grey=allow_grey)
     ready = {route.via for route in drop_routes(item, state, game_data) if policy.ready(route)}
     return [row for row in game_data.monsters_dropping(item) if row[0] in ready]
 

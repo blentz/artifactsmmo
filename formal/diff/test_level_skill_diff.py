@@ -51,6 +51,8 @@ def _gd_with_grind_rung() -> GameData:
     gd._resource_drops = {"gear_rocks": "gear_ore"}
     gd._resource_skill = {"gear_rocks": ("mining", 1)}
     gd._resource_locations = {"gear_rocks": [(3, 3)]}
+    # The rung's own craft route must be servable: somewhere to craft it.
+    gd._workshop_locations = {_SKILL: (0, 0)}
     return gd
 
 

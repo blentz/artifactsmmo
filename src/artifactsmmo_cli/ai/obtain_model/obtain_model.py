@@ -43,6 +43,9 @@ from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
+_OWNED = (SourceKind.WITHDRAW, SourceKind.RECYCLE)
+"""Route kinds that deliver copies the character already owns."""
+
 DEFAULT_SKILL_LEVEL = 1
 """A skill absent from `state.skills` is at the API's starting level (D-Q)."""
 
@@ -81,16 +84,7 @@ class ObtainModel:
         (bag, worn, or pocket gold) or when some ready route has every input
         feasible. A banked copy is not "held": it arrives as a WITHDRAW route,
         gated on bank access. Existence only; quantities are not modelled."""
-        closure: list[str] = []
-        ready_inputs: dict[str, list[list[str]]] = {}
-        pending = [item]
-        while pending:
-            code = pending.pop()
-            if code in ready_inputs:
-                continue
-            closure.append(code)
-            ready_inputs[code] = [list(route.inputs) for route in self.ready(code, policy)]
-            pending.extend(x for inputs in ready_inputs[code] for x in inputs)
+        closure, ready_inputs = self._closure(item, policy, renewable_only=False)
         found = feasible_items(closure, self._held(), ready_inputs)
         if item in found:
             return Feasibility(ok=True)
@@ -101,6 +95,44 @@ class ObtainModel:
         missing = tuple(dict.fromkeys(x for inputs in ready_inputs[item] for x in inputs
                                       if x not in found))
         return Feasibility(ok=False, blocking_gates=gates, missing_inputs=missing)
+
+    def renewable(self, item: str, policy: Policy) -> bool:
+        """Can `item` be made again and again under `policy`, however many
+        units are wanted? True when some ready route that is not stock-limited
+        (a CRAFT, GATHER, DROP or BUY) has every input renewable. Nothing held
+        counts, and no WITHDRAW, RECYCLE or GE_FILL route (each can deliver only
+        its `capacity`).
+
+        The same proved least fixpoint as `feasible` (`feasible_core`), over the
+        unbounded routes only and with nothing held."""
+        closure, ready_inputs = self._closure(item, policy, renewable_only=True)
+        return item in feasible_items(closure, frozenset(), ready_inputs)
+
+    def on_hand(self, item: str, policy: Policy) -> int:
+        """Units of `item` available from what the character already owns: the
+        bag, plus the capacity of every ready WITHDRAW (banked copies) and
+        RECYCLE (licensed copies) route. Not a GE fill, which is a purchase, and
+        not worn copies: using one would mean unequipping it."""
+        return self._state.inventory.get(item, 0) + sum(
+            route.capacity for route in self.ready(item, policy) if route.kind in _OWNED)
+
+    def _closure(self, item: str, policy: Policy, *, renewable_only: bool
+                 ) -> tuple[list[str], dict[str, list[list[str]]]]:
+        """`item` and every input reachable through its ready routes (only the
+        unbounded ones when `renewable_only`), with each item's ready-route
+        input lists: the graph `feasible_core.feasible_items` runs on."""
+        closure: list[str] = []
+        ready_inputs: dict[str, list[list[str]]] = {}
+        pending = [item]
+        while pending:
+            code = pending.pop()
+            if code in ready_inputs:
+                continue
+            closure.append(code)
+            ready_inputs[code] = [list(route.inputs) for route in self.ready(code, policy)
+                                  if not renewable_only or route.capacity >= UNBOUNDED_CAPACITY]
+            pending.extend(x for inputs in ready_inputs[code] for x in inputs)
+        return closure, ready_inputs
 
     def _held(self) -> frozenset[str]:
         held = {code for code, qty in self._state.inventory.items() if qty > 0}
@@ -194,7 +226,8 @@ class ObtainModel:
         out: list[Route] = []
         for rank, (resource, _rate) in enumerate(sorted(droppers, key=lambda pair: pair[1])):
             gates = [Gate(GateKind.SPAWN_LIVE, resource,
-                          bool(self._gd.all_resource_locations.get(resource)))]
+                          bool(self._gd.all_resource_locations.get(resource))),
+                     Gate(GateKind.SPAWN_KNOWN, resource, self._gd.resource_spawn_known(resource))]
             requirement = self._gd.resource_skill_level(resource)
             if requirement is not None:
                 skill, level = requirement

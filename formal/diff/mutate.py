@@ -2988,6 +2988,69 @@ OBTAIN_MODEL_DROP_MUTATIONS = [
      "        if live or known:",
      "        if live:"),
 ]
+# The GATHER spawn gate (obtain_model.py) and its predicate (game_data.py),
+# killed by tests/test_ai/test_obtain_model.py and test_game_data.py.
+OBTAIN_MODEL_GATHER_SPAWN_MUTATIONS = [
+    ("obtain_model: every resource has a routable spawn",
+     "Gate(GateKind.SPAWN_KNOWN, resource, self._gd.resource_spawn_known(resource))",
+     "Gate(GateKind.SPAWN_KNOWN, resource, True)"),
+]
+# ObtainModel.renewable / on_hand, killed by tests/test_ai/test_obtain_model.py
+# (TestQuantity).
+OBTAIN_MODEL_QUANTITY_MUTATIONS = [
+    ("obtain_model: a stock-limited route makes an item renewable",
+     "                                  if not renewable_only or route.capacity >= UNBOUNDED_CAPACITY]",
+     "                                  if True]"),
+    ("obtain_model: holdings make an item renewable",
+     "        return item in feasible_items(closure, frozenset(), ready_inputs)",
+     "        return item in feasible_items(closure, self._held(), ready_inputs)"),
+    ("obtain_model: a GE order is on hand",
+     "            route.capacity for route in self.ready(item, policy) if route.kind in _OWNED)",
+     "            route.capacity for route in self.ready(item, policy)\n"
+     "            if route.capacity < UNBOUNDED_CAPACITY)"),
+    ("obtain_model: the bag is not on hand",
+     "        return self._state.inventory.get(item, 0) + sum(",
+     "        return 0 + sum("),
+]
+RESOURCE_SPAWN_KNOWN_MUTATIONS = [
+    ("game_data: a resource spawn ignores layered tiles",
+     "        return bool(self.all_resource_locations.get(code)) or self._layered_reachable(code)",
+     "        return bool(self.all_resource_locations.get(code))"),
+    ("game_data: any layered tile counts, reachable or not",
+     "        return any(self.world.region_of(x, y, layer) in reach for (x, y, layer) in tiles)",
+     "        return bool(reach)"),
+]
+# skill_grind_target's obtain policy and its CRAFT-only reading of a rung,
+# killed by tests/test_ai/test_skill_grind_target.py ("the grind's obtain
+# policy" section); the grey switch by the grey-material scenario.
+GRIND_OBTAINABLE_MUTATIONS = [
+    ("skill_grind_target: the grind asks for a live overworld tile",
+     "event_vendors=False, spawn_known=True,",
+     "event_vendors=False, spawn_known=False,"),
+    ("skill_grind_target: the grind offers only the primary gatherer",
+     "GRIND_POLICY = Policy(all_gather_routes=True,",
+     "GRIND_POLICY = Policy(all_gather_routes=False,"),
+    ("skill_grind_target: the grind enforces the craft skill",
+     "gather_skill_gate=False, craft_skill_gate=False,",
+     "gather_skill_gate=False, craft_skill_gate=True,"),
+    ("skill_grind_target: one banked unit is enough stock",
+     "                       or model.on_hand(item, GRIND_POLICY) >= qty",
+     "                       or model.on_hand(item, GRIND_POLICY) > 0"),
+    ("skill_grind_target: a rung input needs only unit feasibility",
+     "               and all(model.renewable(item, GRIND_POLICY)\n",
+     "               and all(model.feasible(item, GRIND_POLICY).ok\n"),
+    ("skill_grind_target: a held rung is obtainable",
+     "    if not crafts:\n",
+     "    if True:\n"),
+    ("skill_grind_target: the rung's own craft route need not be ready",
+     "    return any(GRIND_POLICY.ready(route)\n",
+     "    return any(True\n"),
+]
+GRIND_OBTAINABLE_GREY_MUTATIONS = [
+    ("skill_grind_target: the grind refuses a grey dropper",
+     "spawn_known=True, allow_grey=GRIND_ALLOWS_GREY)",
+     "spawn_known=True, allow_grey=False)"),
+]
 OBTAIN_MODEL_DROP_GREY_MUTATIONS = [
     ("drop_routes: no monster is grey",
      "Gate(GateKind.XP_POSITIVE, monster, game_data.xp_per_kill(monster, state.level) > 0)",
@@ -3004,14 +3067,20 @@ OBTAIN_MODEL_POLICY_MUTATIONS = [
      "            return not self.event_vendors",
      "            return self.event_vendors"),
     ("obtain_model policy: always enforce tradeability",
-     "            return self.event_vendors\n        if route.kind is SourceKind.DROP",
-     "            return True\n        if route.kind is SourceKind.DROP"),
-    ("obtain_model policy: invert the drop spawn switch",
-     "            return not self.drop_spawn_known",
-     "            return self.drop_spawn_known"),
-    ("obtain_model policy: always enforce the routable spawn on a drop",
-     "            return self.drop_spawn_known\n",
+     "            return self.event_vendors\n        if route.kind in _SPAWNED",
+     "            return True\n        if route.kind in _SPAWNED"),
+    ("obtain_model policy: invert the spawn switch",
+     "            return not self.spawn_known",
+     "            return self.spawn_known"),
+    ("obtain_model policy: always enforce the routable spawn",
+     "            return self.spawn_known\n",
      "            return True\n"),
+    ("obtain_model policy: the spawn switch ignores a gather route",
+     "_SPAWNED = (SourceKind.DROP, SourceKind.GATHER)",
+     "_SPAWNED = (SourceKind.DROP,)"),
+    ("obtain_model policy: always enforce the craft skill",
+     "            return self.craft_skill_gate",
+     "            return True"),
     ("obtain_model policy: ignore the grey switch",
      "            return not self.allow_grey",
      "            return False"),
@@ -8290,6 +8359,16 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_obtain_model.py", survivors)
     run_group(OBTAIN_MODEL_DROP_SRC, OBTAIN_MODEL_DROP_GREY_MUTATIONS,
               "tests/test_ai/test_drop_obtainability.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_GATHER_SPAWN_MUTATIONS,
+              "tests/test_ai/test_obtain_model.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_QUANTITY_MUTATIONS,
+              "tests/test_ai/test_obtain_model.py", survivors)
+    run_group(GAME_DATA_PARSE_SRC, RESOURCE_SPAWN_KNOWN_MUTATIONS,
+              "tests/test_ai/test_game_data.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, GRIND_OBTAINABLE_MUTATIONS,
+              "tests/test_ai/test_skill_grind_target.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, GRIND_OBTAINABLE_GREY_MUTATIONS,
+              "tests/test_ai/scenarios/test_grind_grey_material.py", survivors)
     run_group(COMPLETE_TASK_CORE_SRC, COMPLETE_TASK_MUTATIONS,
               "formal/diff/test_complete_task_income_diff.py", survivors)
     run_group(FUNDING_CORE_SRC, FUNDING_MUTATIONS,

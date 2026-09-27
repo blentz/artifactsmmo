@@ -127,7 +127,10 @@ def _gd() -> GameData:
         "leather_boots": ItemStats(code="leather_boots", level=1, type_="boots",
                                    resistance={"fire": 3},
                                    crafting_skill="gearcrafting", crafting_level=1),
-        "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource"),
+        # woodcutting@1, as in the committed bundle: a recipe with no crafting
+        # skill has no workshop, so the obtain model has nowhere to craft it.
+        "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
+                               crafting_skill="woodcutting", crafting_level=1),
         "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
         "leather": ItemStats(code="leather", level=1, type_="resource"),
         "iron_bar": ItemStats(code="iron_bar", level=1, type_="resource"),
@@ -144,6 +147,11 @@ def _gd() -> GameData:
     gd._resource_drops = {"ash_tree": "ash_wood", "copper_rocks": "copper_ore"}
     gd._resource_skill = {"ash_tree": ("woodcutting", 1),
                           "copper_rocks": ("mining", 1)}
+    # Somewhere to gather and to craft: a skill root's grind rung is obtainable
+    # only through routes the executor can serve.
+    gd._resource_locations = {"ash_tree": [(1, 0)], "copper_rocks": [(2, 0)]}
+    gd._workshop_locations = {"gearcrafting": (0, 1), "weaponcrafting": (0, 2),
+                              "mining": (0, 3), "woodcutting": (0, 4)}
     return gd
 
 

@@ -70,7 +70,7 @@ class TestGatheringSkillNeedsDemand:
         gd._resource_drops_full["copper_rocks"] = [("copper_ore", 100, 1, 1)]
         # `best_gather_resource_drop`'s last step is `resource_drop_item`,
         # which reads the PRIMARY drop map — `resource_drops_full` alone is
-        # enough for `_obtainable`'s `gatherable_drop_items()` union (how
+        # enough for the grind's obtainability walk (how
         # `iron_ore` clears its own obtainability check in `_gd()`), but not
         # for the gather ARM of `LevelSkill.is_applicable` to name a drop.
         gd._resource_drops["copper_rocks"] = "copper_ore"
@@ -104,12 +104,15 @@ class TestGatheringSkillNeedsDemand:
         gd._item_stats["cooked_gudgeon"] = ItemStats(
             code="cooked_gudgeon", level=1, type_="consumable",
             crafting_skill="cooking", crafting_level=1)
-        # `gudgeon` itself must be a real gatherable leaf (a fishing catch), or
-        # `has_grind_target`'s recursive `_obtainable` walk refuses the recipe
-        # and cooking's conjunct-2 rung is never open — the SAME vacuity this
-        # module's other tests guard against, just on the material side.
+        # `gudgeon` itself must be a real gatherable leaf (a fishing catch) at
+        # a spawned spot, cooked at a known workshop, or `has_grind_target`'s
+        # obtainability walk refuses the recipe and cooking's conjunct-2 rung is
+        # never open — the SAME vacuity this module's other tests guard
+        # against, just on the material side.
         gd._resource_drops_full["fishing_spot"] = [("gudgeon", 100, 1, 1)]
         gd._resource_skill["fishing_spot"] = ("fishing", 1)
+        gd.recipes_catalog.locations["fishing_spot"] = [(2, 0)]
+        gd.world.workshop_locations["cooking"] = (0, 2)
         gd._crafting_recipes["cooked_gudgeon"] = {"gudgeon": 1}
         state = make_state(level=20, skills={"mining": 10, "cooking": 1})
         assert level_skill.LevelSkill(

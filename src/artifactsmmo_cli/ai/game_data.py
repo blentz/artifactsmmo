@@ -693,14 +693,24 @@ class GameData:
         otherwise unmodeled edge does NOT count — claiming it routable would
         re-open the premature-spawn-known bug. Use for spawn-known GATES;
         keep `monster_locations` for same-region distance work."""
-        if self.monster_locations(code):
-            return True
+        return bool(self.monster_locations(code)) or self._layered_reachable(code)
+
+    def resource_spawn_known(self, code: str) -> bool:
+        """`monster_spawn_known` for a resource: a tile in the live index
+        (`all_resource_locations`: overworld, active events, open raids), or an
+        all-layer tile in a REACHABLE region. The action factory builds a
+        GatherAction for both kinds of tile, so an underground `gold_rocks` is as
+        gatherable as an overworld one."""
+        return bool(self.all_resource_locations.get(code)) or self._layered_reachable(code)
+
+    def _layered_reachable(self, code: str) -> bool:
+        """Some all-layer tile of `code` lies in a region the movement model can
+        reach (transition edges whose cost / has_item conditions it satisfies)."""
         tiles = self.world.layered_locations(code)
         if not tiles:
             return False
         reach = self.world.reachable_regions()
-        return any(self.world.region_of(x, y, layer) in reach
-                   for (x, y, layer) in tiles)
+        return any(self.world.region_of(x, y, layer) in reach for (x, y, layer) in tiles)
 
     def layered_locations(self, code: str) -> list[tuple[int, int, str]]:
         """ALL-layer (x, y, layer) tiles for a content code (P5b data)."""

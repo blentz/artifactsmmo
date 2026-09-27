@@ -70,8 +70,9 @@ from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scena
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
+    GRIND_POLICY,
     build_selectable_grind_candidates,
-    is_obtainable,
+    grind_model,
     skill_grind_target,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -322,11 +323,20 @@ def test_a_SECONDARY_drop_is_recognised_as_gatherable(game_data: GameData,
     full = game_data.gatherable_drop_items()
     hidden = sorted(full - primary)
     assert hidden, "fixture drift: no secondary-drop item to test with"
+    model = grind_model(state, game_data)
+    spawned = [code for code in hidden
+               if any(game_data.resource_spawn_known(res)
+                      for res, table in game_data.resource_drops_full.items()
+                      if any(item == code for item, *_ in table))]
+    assert spawned, "fixture drift: no secondary drop off a resource that spawns"
     for code in hidden:
-        assert game_data.crafting_recipe(code) is None or True
-        assert is_obtainable(code, state, game_data, frozenset()), (
-            f"{code} is gatherable but read as unobtainable — the primary-only "
-            "map is back")
+        # A resource with no tile on any layer (e.g. `diamond_rocks` here) has
+        # no GatherAction to serve it, so its drops are rightly not obtainable.
+        # A rung's inputs are asked through `feasible` (a craftable one such as
+        # `maple_sap` counts through its gather even below its craft level).
+        assert model.feasible(code, GRIND_POLICY).ok == (code in spawned), (
+            f"{code}: obtainable must be exactly 'a resource that drops it spawns' "
+            "— a False for a spawned one means the primary-only map is back")
 
 
 def test_the_primary_map_really_is_narrower(game_data: GameData) -> None:

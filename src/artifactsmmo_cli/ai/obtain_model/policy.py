@@ -15,6 +15,9 @@ from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.route import Route
 from artifactsmmo_cli.ai.source_kind import SourceKind
 
+_SPAWNED = (SourceKind.DROP, SourceKind.GATHER)
+"""The route kinds served at a spawn tile: a monster's or a resource's."""
+
 
 @dataclass(frozen=True)
 class Policy:
@@ -24,19 +27,26 @@ class Policy:
     only the most frequent one, as `obtain_sources` did (False; D-B).
     `gather_skill_gate`: enforce the gathering skill on GATHER routes (True)
     or ignore it, as `obtain_sources` did (False; D-A).
+    `craft_skill_gate`: enforce the crafting skill on CRAFT routes (True, as
+    `obtain_sources` did) or ignore it (False, as the skill grind's walk did: a
+    skill gate on a rung's chain is a level the character can grind, and
+    `gather_demand` surfaces it as demand). D-M replaces both skill switches
+    with the gate as a sub-goal: feasible when the grind to it is.
     `event_vendors`: a vendor counts when tradeable now, event NPCs included
     (True), or only when it is a permanent NPC, as `obtain_sources` did
     (False; D-F).
-    `drop_spawn_known`: a DROP route needs a routable spawn,
-    `monster_spawn_known` (True, as `drop_obtainability` asks), or a live tile
-    in `all_monster_locations` (False, as `obtain_sources` asks; D-D).
+    `spawn_known`: a DROP or GATHER route needs a routable spawn, a tile in a
+    reachable region of any layer (True, as `drop_obtainability` asks of a
+    monster), or a live overworld tile (False, as `obtain_sources` asks; D-D).
+    The action pool builds fights and gathers for both kinds of tile.
     `allow_grey`: a zero-xp dropper counts (True) or not (False). The legacy
     walk had no grey rule; `drop_obtainability`'s callers choose it."""
 
     all_gather_routes: bool
     gather_skill_gate: bool
+    craft_skill_gate: bool
     event_vendors: bool
-    drop_spawn_known: bool
+    spawn_known: bool
     allow_grey: bool
 
     def admits(self, route: Route) -> bool:
@@ -47,14 +57,16 @@ class Policy:
         """Does this policy require `gate` to be satisfied on `route`?"""
         if gate.kind is GateKind.GATHER_SKILL:
             return self.gather_skill_gate
+        if gate.kind is GateKind.CRAFT_SKILL:
+            return self.craft_skill_gate
         if route.kind is SourceKind.BUY and gate.kind is GateKind.VENDOR_PERMANENT:
             return not self.event_vendors
         if route.kind is SourceKind.BUY and gate.kind is GateKind.VENDOR_TRADEABLE:
             return self.event_vendors
-        if route.kind is SourceKind.DROP and gate.kind is GateKind.SPAWN_LIVE:
-            return not self.drop_spawn_known
-        if route.kind is SourceKind.DROP and gate.kind is GateKind.SPAWN_KNOWN:
-            return self.drop_spawn_known
+        if route.kind in _SPAWNED and gate.kind is GateKind.SPAWN_LIVE:
+            return not self.spawn_known
+        if route.kind in _SPAWNED and gate.kind is GateKind.SPAWN_KNOWN:
+            return self.spawn_known
         if gate.kind is GateKind.XP_POSITIVE:
             return not self.allow_grey
         return True
@@ -65,8 +77,9 @@ class Policy:
             gate.satisfied for gate in route.gates if self.enforces(gate, route))
 
 
-LEGACY = Policy(all_gather_routes=False, gather_skill_gate=False, event_vendors=False,
-                drop_spawn_known=False, allow_grey=True)
+LEGACY = Policy(all_gather_routes=False, gather_skill_gate=False, craft_skill_gate=True,
+                event_vendors=False,
+                spawn_known=False, allow_grey=True)
 """Exactly what `obtain_sources` answers today. Phase 1 step 1 proves the model
 reproduces it under this policy before any consumer moves or any D-x decision
 changes behaviour."""

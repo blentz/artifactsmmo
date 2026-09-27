@@ -1,7 +1,7 @@
 """Pick the in-skill item to craft NOW to gain XP toward a skill gate.
 
 Among items that are same-skill, in-level, OBTAINABLE (every recipe input
-reachable by gather/craft/winnable-drop) and XP-POSITIVE (the craft is not in the
+feasible under `GRIND_POLICY`) and XP-POSITIVE (the craft is not in the
 server's zero-xp band), prefer the highest XP RATE — `craft_level` per effective
 action, where the effective actions are `acquire_steps` (counted over the whole
 recipe closure) for an ordinary rung and ZERO for a `wanted` one — then `wanted`,
@@ -27,19 +27,22 @@ for copper_legs_armor).
 OBTAINABILITY (Trace 2026-06-13): `skill_grind_target("weaponcrafting")` used to
 pick `wooden_staff` (needs un-gettable `wooden_stick`), whose GatherMaterials
 GOAP-failed; the arbiter then fell CROSS-SKILL to a gearcrafting grind, abandoning
-the committed weaponcrafting objective. The recursive `_obtainable` filter excludes
+the committed weaponcrafting objective. The `is_obtainable` filter excludes
 such items so the reachable `copper_dagger` wins.
 """
 
 import dataclasses
+from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
-from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.grind_probe_state import grind_probe_state
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
+from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.skill_grind_selection import (
     GrindCandidate,
     skill_grind_selection_pure,
@@ -60,68 +63,65 @@ caller — see `ai/grey_farm.py`'s module docstring for the three structural
 exemptions and the directive they bend around."""
 
 
-def is_obtainable(code: str, state: WorldState, game_data: GameData,
-                  visited: frozenset[str]) -> bool:
-    """Recursive reachability: an item is obtainable when it is a gatherable
-    resource drop, a fightable monster drop, OR craftable with EVERY recipe
-    input recursively obtainable. A craftable item whose chain bottoms out in an
-    un-gettable leaf (e.g. wooden_stick) is NOT obtainable. Cycle-safe.
+GRIND_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False, craft_skill_gate=False,
+                      event_vendors=False, spawn_known=True, allow_grey=GRIND_ALLOWS_GREY)
+"""What the grind counts as a way to get a rung's material, as an obtain-model
+policy (step 4 of docs/PLAN_decision_architecture_redesign.md). Each switch
+matches what the grind's descent can actually serve:
 
-    The mob-drop arm is the shared oracle `drop_obtainable`, the SAME verdict
-    `GatherMaterialsGoal` emits fights from. It used to be a private
-    `winnable + spawn_known` walk that never consulted the grey policy, so this
-    function could call a rung buildable while emission refused the only edge
-    that built it — the wool/iron_ring livelock (see the oracle's docstring).
-    Passing the grind's own `allow_grey` keeps the two answers identical.
+- every resource that drops the material (`gatherable_drop_items`, the FULL
+  drop union: the primary map misses every secondary drop, e.g. the gem stones);
+- neither skill gate is enforced, as before: a skill gate on the chain is a
+  level the character can grind, and `gather_demand` reads the grind target to
+  surface exactly that demand (D-M turns such a gate into a sub-goal);
+- a spawn counts when routable, an underground `gold_rocks` included (the
+  action factory builds a gather for it), and grey droppers count
+  (`GRIND_ALLOWS_GREY`, the same rule `drop_obtainable` was given).
 
-    The FULL drop union is hoisted ONCE here and threaded down the recursion by
-    `_obtainable`: `gatherable_drop_items()` rebuilds its frozenset on every
-    call, and the walk asks the same question at every leaf. The set is a
-    function of the static drop tables alone, so it cannot change part-way
-    through one walk — this is the same hoist `goals/currency_demand` already
-    does for the same reason. Profile 2026-08-13 (from-scratch
-    greater_wooden_staff, 23214 nodes): 904800 rebuilds inside this walk, 10.8s
-    of a 67.3s search.
+A vendor never makes a rung obtainable, as before: `is_obtainable` wants a
+material renewable or on hand, a BUY route is renewable only if its currency is,
+and gold is not (its one route, a SELL, is stock-limited). A GE fill is a
+stock-limited purchase, so it is neither.
 
-    NO PRODUCTION CALLER, deliberately, since 2026-08-13. This is the NAME the
-    codebase uses for the selection-side obtainability walk — `drop_obtainability`'s
-    module docstring, `goals/gathering` and `test_drop_obtainability` cite it as
-    `tiers/skill_grind_target.is_obtainable` — so it keeps the name and the
-    contract. (`skill_grind_selection` was listed here too until 2026-08-13; it
-    names the `skill_grind_target` WRAPPER at its line 7 and contains no
-    reference to `is_obtainable` at all.) But it hoists the
-    union per CALL, and the one production consumer
-    (`build_selectable_grind_candidates`) sweeps ~10 candidates per cache miss,
-    so calling this in that loop rebuilds the set ~10x for one sweep: measured
-    13.03s against 10.2s on the search above (both same session). Production
-    therefore hoists once
-    and calls `_obtainable` directly. The two are the same walk — this function
-    is `_obtainable` with the hoist supplied — so a test asserting on this one is
-    asserting on what production runs. Do NOT "fix" the loop to call this."""
-    return _obtainable(code, state, game_data, visited,
-                       game_data.gatherable_drop_items())
+What the model adds over the recursive walk it replaced: a material already in
+the bag or the bank counts when there is enough of it (the descent withdraws
+it), a craft needs a known workshop, and a resource with no spawn anywhere no
+longer counts."""
 
 
-def _obtainable(code: str, state: WorldState, game_data: GameData,
-                visited: frozenset[str], gatherable: frozenset[str]) -> bool:
-    """`is_obtainable`'s recursive body with the gatherable-drop union hoisted."""
-    if code in visited:
-        return False
-    recipe = game_data.crafting_recipe(code)
-    if recipe is None:
-        # The FULL drop union, not `resource_drops.values()`. The primary map
-        # keeps only the rate-best drop per resource, so it sees 26 of the 43
-        # gathered items and misses every SECONDARY drop -- all five gem stones
-        # (topaz/ruby/emerald/diamond/alexandrite, 1-in-100..200 off ordinary
-        # rocks), plus apple, algae, coconut, the saps, and `event_ticket`.
-        # A rung needing one of those fell through to `drop_obtainable`, which
-        # asks about MONSTERS, found none, and judged the rung unobtainable --
-        # filtering out a rung that is a perfectly ordinary gather.
-        if code in gatherable:
-            return True
-        return drop_obtainable(code, state, game_data, allow_grey=GRIND_ALLOWS_GREY)
-    nxt = visited | {code}
-    return all(_obtainable(mat, state, game_data, nxt, gatherable) for mat in recipe)
+def grind_model(state: WorldState, game_data: GameData) -> ObtainModel:
+    """The obtain model the grind asks, built once per sweep over the rungs.
+
+    Context-free on purpose: the candidate list is memoised without a
+    `SelectionContext` (see `_cache_key`), so its verdicts must not read one."""
+    return ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
+
+
+def is_obtainable(code: str, model: ObtainModel) -> bool:
+    """Can the grind make `code`? A rung is crafted for its xp, so a craftable
+    item counts only through its CRAFT route: that route must be ready, and
+    every input must be RENEWABLE or ON HAND in the quantity the recipe needs
+    (a copy of the rung already held does not serve the grind). Any other item
+    is asked directly (`ObtainModel.feasible`).
+
+    QUANTITY, NOT EXISTENCE. Unit feasibility would admit a rung whose material
+    is one banked copy of something nothing makes: live 2026-09-27, the bank's
+    single `hard_leather` (no recipe, no dropper) made `steel_ring` (needs 2),
+    `mushmush_jacket` (3) and `hard_leather_armor` (6) grind targets that could
+    never be crafted.
+
+    The mob-drop arm is the gate set `drop_obtainable` enforces (shared in
+    `obtain_model/drop_routes.py`), so selection cannot call a rung buildable
+    while emission refuses the only fight that builds it: the wool/iron_ring
+    livelock (see `drop_obtainability`'s docstring)."""
+    crafts = [route for route in model.routes(code) if route.kind is SourceKind.CRAFT]
+    if not crafts:
+        return model.feasible(code, GRIND_POLICY).ok
+    return any(GRIND_POLICY.ready(route)
+               and all(model.renewable(item, GRIND_POLICY)
+                       or model.on_hand(item, GRIND_POLICY) >= qty
+                       for item, qty in route.inputs.items())
+               for route in crafts)
 
 
 _CacheKey = tuple[str, int, tuple[tuple[str, str | None], ...],
@@ -144,7 +144,7 @@ def _cache_key(skill: str, state: WorldState) -> "_CacheKey":
     `level` and `equipment` drive `is_winnable` (hence obtainability and the DROP
     route); `inventory` and `bank_items` WITH COUNTS drive holdings, the WITHDRAW
     route's stock and the RECYCLE route's licensed surplus; `skills` drives the
-    craft gates inside `obtain_sources`. Quantities matter, so these are counted
+    craft gates inside `obtain_sources` and the grind's obtain model. Quantities matter, so these are counted
     pairs rather than key sets.
 
     Same shape as `loadout_cache._CacheKey`, for the same reason: within one
@@ -153,14 +153,14 @@ def _cache_key(skill: str, state: WorldState) -> "_CacheKey":
 
     HP IS DELIBERATELY ABSENT, AND THAT IS NOW SOUND. It was a recorded gap
     (noticed while profiling, 2026-08-13): the `obtainable` field this key guards
-    reached `combat.predict_win` through `_obtainable` -> `drop_obtainable` ->
-    `fightable_droppers` -> `is_winnable`, and that predicate reads CURRENT hp, so
+    reached `combat.predict_win` through the rung walk's drop arm ->
+    `is_winnable`, and that predicate reads CURRENT hp, so
     two states differing ONLY in hp could share a candidate list whose verdicts
     differed — exactly the too-coarse-key failure
     `test_the_memo_key_notices_a_changed_inventory` calls "worse than no memo".
-    `fightable_droppers` now evaluates winnability at RESTORABLE hp (2026-08-18),
-    so the chain no longer reads `state.hp` at all and the key is complete as
-    written."""
+    The drop gates (`obtain_model/drop_routes.py`) evaluate winnability at
+    RESTORABLE hp (since 2026-08-18), so the chain no longer reads `state.hp` at
+    all and the key is complete as written."""
     return (
         skill,
         state.level,
@@ -265,12 +265,9 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
         cache.move_to_end(key)
         return _with_wanted(hit, ctx)
     candidates: list[GrindCandidate] = []
-    # One rebuild for the whole sweep instead of one per candidate's walk. Not a
-    # micro-optimisation: routing this loop through the public `is_obtainable`
-    # (which hoists per CALL) instead measures 13.03s against 10.2s on the
-    # from-scratch `greater_wooden_staff` search — the sweep is ~10 candidates
-    # deep, so per-call hoisting still rebuilds the set ~10x per miss.
-    gatherable = game_data.gatherable_drop_items()
+    # One model for the whole sweep: its routes are memoised per item, and the
+    # rungs of one skill share most of their materials.
+    model = grind_model(state, game_data)
     # The SAME `current_level` `skill_grind_target` hands the selection core.
     current_level = state.skills.get(skill, 0)
     for code, stats in game_data.all_item_stats.items():
@@ -299,7 +296,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
             craft_skill=stats.crafting_skill,
             craft_level=stats.crafting_level,
             acquire_steps=acquire_steps,
-            obtainable=_obtainable(code, state, game_data, frozenset(), gatherable),
+            obtainable=is_obtainable(code, model),
             # The context-free default. `_with_wanted` overwrites this from the
             # caller's ctx below; the CACHED list keeps False so a later
             # context-free reader (LevelSkill.is_applicable) is unaffected.
@@ -345,17 +342,17 @@ def has_grind_target(skill: str, state: WorldState,
     A caller that filters reserved materials wants the target itself anyway.
     """
     current = state.skills.get(skill, 0)
-    gatherable = game_data.gatherable_drop_items()
+    model = grind_model(state, game_data)
     for code, stats in game_data.all_item_stats.items():
         if stats.crafting_skill != skill or stats.crafting_level > current:
             continue
         if not game_data.crafting_recipe(code):
             continue
-        # Free arithmetic before the recursive walk: a grey rung pays no craft
+        # Free arithmetic before the feasibility walk: a grey rung pays no craft
         # xp, so it can never open the gate this was invoked to open.
         if not skill_xp_positive(stats.crafting_level, current):
             continue
-        if _obtainable(code, state, game_data, frozenset(), gatherable):
+        if is_obtainable(code, model):
             return True
     return False
 
