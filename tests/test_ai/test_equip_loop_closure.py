@@ -605,7 +605,10 @@ def _gd_pants_world() -> GameData:
     Both pants need a route or `is_suppliable` drops them before occupancy is
     ever consulted, and the assertion below would hold for the wrong reason.
     """
-    gd = _gd(_HARD_LEATHER_PANTS, _ADVENTURER_PANTS)
+    # A recipe item carries its crafting skill, as every real one does: that is
+    # what makes it a craft route (a mint) to the obtain model.
+    gd = _gd(replace(_HARD_LEATHER_PANTS, crafting_skill="gearcrafting", crafting_level=20),
+             replace(_ADVENTURER_PANTS, crafting_skill="gearcrafting", crafting_level=15))
     gd._crafting_recipes = {"hard_leather_pants": {"bar": 1},
                             "adventurer_pants": {"bar": 1}}
     gd._resource_drops = {"rocks": "bar"}

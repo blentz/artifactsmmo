@@ -301,20 +301,18 @@ def is_suppliable(code: str, state: WorldState, game_data: GameData) -> bool:
     way, and across 3 days not one cycle carried `novice_guide` in
     `selected_goal` or `action_repr`.
 
-    The state-free `RequirementGraph` is the right oracle for the first arm and
-    `obtain_sources` is NOT, even though `obtain_sources` is THE obtain model.
-    `obtain_sources` is state-AWARE: it returns empty for an item whose only
-    dropper is unwinnable today, and that item is producible — grinding gear
-    until the dropper falls is precisely the pursuit this must preserve. The
-    graph answers the capability question ("does any route exist, readiness
-    ignored?"), which is the one asked here. `is_task_earnable` joins it because
-    the task board is a mint the graph has no `SourceKind` for: without that arm
-    `tasks_coin` — the ONLY task-earnable item among the ten the live bundle
-    reports routeless — would read as fixed supply and its funding loop would be
-    declared dead."""
-    if game_data.requirement_graph.graph().is_obtainable(code):
-        return True
-    if game_data.is_task_earnable(code):
+    The first arm is `ObtainModel.mints`, the capability question ("does any
+    route that makes new copies exist, readiness ignored?"). NOT `ready` or
+    `feasible`: those are state-aware, and an item whose only dropper is
+    unwinnable today is still producible — grinding gear until the dropper falls
+    is precisely the pursuit this must preserve. The task board is a mint too
+    (`SourceKind.TASK_REWARD`): without it `tasks_coin` — the ONLY task-earnable
+    item among the ten the live bundle reports routeless — would read as fixed
+    supply and its funding loop would be declared dead. (This arm asked the
+    state-free `RequirementGraph` plus `is_task_earnable` until step 4 of
+    docs/PLAN_decision_architecture_redesign.md.)"""
+    model = ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
+    if model.mints(code):
         return True
     bank = state.bank_items or {}
     return state.inventory.get(code, 0) > 0 or bank.get(code, 0) > 0

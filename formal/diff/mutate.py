@@ -3026,6 +3026,18 @@ OBTAIN_MODEL_QUANTITY_MUTATIONS = [
      "                      inputs={GOLD_CODE: price})]",
      "                      inputs={})]"),
 ]
+# ObtainModel.mints, killed by tests/test_ai/test_obtain_model.py.
+OBTAIN_MODEL_MINTS_MUTATIONS = [
+    ("obtain_model: the task board mints nothing",
+     "          SourceKind.TASK_REWARD)",
+     "          )"),
+    ("obtain_model: a banked copy is a mint",
+     "_MINTS = (SourceKind.CRAFT, SourceKind.GATHER,",
+     "_MINTS = (SourceKind.WITHDRAW, SourceKind.CRAFT, SourceKind.GATHER,"),
+    ("obtain_model: a monster drop is no mint",
+     "_MINTS = (SourceKind.CRAFT, SourceKind.GATHER, SourceKind.BUY, SourceKind.DROP,",
+     "_MINTS = (SourceKind.CRAFT, SourceKind.GATHER, SourceKind.BUY,"),
+]
 RESOURCE_SPAWN_KNOWN_MUTATIONS = [
     ("game_data: a resource spawn ignores layered tiles",
      "        return bool(self.all_resource_locations.get(code)) or self._layered_reachable(code)",
@@ -3071,6 +3083,9 @@ NEAR_TERM_POLICY_MUTATIONS = [
     ("objective: near-term attainability ignores vendors",
      "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=True,",
      "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=False,"),
+    ("objective: every candidate is suppliable",
+     "    if model.mints(code):\n        return True\n    bank = state.bank_items or {}",
+     "    if True:\n        return True\n    bank = state.bank_items or {}"),
     ("objective: near-term attainability asks for a live overworld tile",
      "                          event_vendors=False, spawn_known=True,",
      "                          event_vendors=False, spawn_known=False,"),
@@ -8405,6 +8420,8 @@ def _collect_all_groups() -> None:
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_GATHER_SPAWN_MUTATIONS,
               "tests/test_ai/test_obtain_model.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_QUANTITY_MUTATIONS,
+              "tests/test_ai/test_obtain_model.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_MINTS_MUTATIONS,
               "tests/test_ai/test_obtain_model.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, RESOURCE_SPAWN_KNOWN_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)

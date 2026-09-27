@@ -404,3 +404,19 @@ def test_the_task_board_is_a_route_to_what_it_pays(
     assert model.feasible(TASKS_COIN_CODE, 50, OPEN).ok
     assert not model.feasible(TASKS_COIN_CODE, 50, LEGACY).ok
 
+
+
+def test_mints_is_capability_not_stock(world: tuple[WorldState, GameData]) -> None:
+    """A craft, a gather, a drop, a vendor and the task board make new copies
+    whatever their gates say today; a banked copy, a GE order and a sale only
+    move copies that exist."""
+    state, gd = world
+    model = ObtainModel(replace(state, level=1, skills={}), gd, _ctx(), NOW)
+    assert model.mints("copper_bar") and model.mints("copper_ore") and model.mints(TASKS_COIN_CODE)
+    dropped = next(i for i in sorted(gd.all_item_stats) if gd.monsters_dropping(i)
+                   and not gd.crafting_recipe(i) and not gd.npc_purchases(i)
+                   and i not in gd.gatherable_drop_items())
+    assert model.mints(dropped)
+    owned_only = ObtainModel(replace(state, bank_items={"novice_guide": 1}), gd, _ctx(), NOW)
+    assert owned_only.routes("novice_guide") and not owned_only.mints("novice_guide")
+    assert not model.mints(GOLD_CODE)

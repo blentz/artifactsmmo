@@ -46,6 +46,10 @@ from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 _OWNED = (SourceKind.WITHDRAW, SourceKind.RECYCLE)
 """Route kinds that deliver copies the character already owns."""
 
+_MINTS = (SourceKind.CRAFT, SourceKind.GATHER, SourceKind.BUY, SourceKind.DROP,
+          SourceKind.TASK_REWARD)
+"""Route kinds that make new copies, as opposed to moving existing ones."""
+
 DEFAULT_SKILL_LEVEL = 1
 """A skill absent from `state.skills` is at the API's starting level (D-Q)."""
 
@@ -70,6 +74,15 @@ class ObtainModel:
                       *self._drop(item), *self._task_reward(item), *self._sell(item))
             self._routes[item] = cached
         return cached
+
+    def mints(self, item: str) -> bool:
+        """Does anything make new copies of `item`, readiness ignored? A route
+        that creates (CRAFT, GATHER, BUY, DROP, TASK_REWARD), whatever its gates
+        say today. WITHDRAW, RECYCLE and GE_FILL only move copies that already
+        exist, so an item with no other route is fixed supply: every copy there
+        will ever be exists now. SELL is left out with them: it exists only
+        while a licensed surplus does, so it is stock, not a capability."""
+        return any(route.kind in _MINTS for route in self.routes(item))
 
     def ready(self, item: str, policy: Policy) -> tuple[Route, ...]:
         """The routes to `item` usable right now under `policy`, in priority

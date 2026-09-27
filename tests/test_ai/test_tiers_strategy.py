@@ -233,7 +233,8 @@ def test_a_self_blocked_root_is_reported_then_demoted_by_servability():
     gd = GameData()
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
-    gd._item_stats = {"cursed_blade": ItemStats(code="cursed_blade", level=1, type_="weapon", attack={"f": 5})}
+    gd._item_stats = {"cursed_blade": ItemStats(code="cursed_blade", level=1, type_="weapon", attack={"f": 5},
+                                                crafting_skill="weaponcrafting", crafting_level=1)}
     gd._crafting_recipes = {"cursed_blade": {"cursed_blade": 1}}
     obj = CharacterObjective.from_game_data(gd)
     eng = StrategyEngine(obj)

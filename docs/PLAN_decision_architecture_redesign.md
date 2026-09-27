@@ -472,7 +472,12 @@ Each step is one commit, gated by the full gate, and witnessed by
   - Behaviour: 439 of 22,968 scenario verdicts change, all old-yes -> new-no. The causes are resources with no tile anywhere (`strange_rocks`, `magic_tree` and `diamond_rocks` chains) and partial stock (1 of 5 `pig_skin`, 5 of 6 `cowhide`, ...: targets that could not be finished). 3 scenario gear-target changes. Live, 5 characters: `near_term_gear` and the blocker sheet are unchanged.
   - Cost: `near_term_gear` + `gear_targets_with_blockers` take 36 ms per scenario, up from 13 ms. They run once per cycle, not in the search.
   - The bank is still credited without a `SelectionContext` (NO_PROFILE_CONTEXT): D-I is deferred. Bank gold is not counted: D-H is deferred.
-  - Next consumer: `objective.is_suppliable` (the capability question: any route at all, gates ignored).
+- Step 4, fourth consumer: `objective.is_suppliable` (landed).
+  - New view `ObtainModel.mints(item)`: some CRAFT/GATHER/BUY/DROP/TASK_REWARD route exists, gates ignored. WITHDRAW, RECYCLE, GE_FILL and SELL only move existing stock (SELL exists only while a licensed surplus does).
+  - `is_suppliable` = `mints` or a free copy in the bag/bank. It no longer reads `RequirementGraph` or `is_task_earnable` (the task board is a TASK_REWARD route now).
+  - Equivalence: 23,012 scenario comparisons plus all 5 live characters (524 items each), 0 differences. A first cut counted SELL as a mint and differed only on gold, in the 3 states that held a sellable surplus.
+  - Two fixtures had recipes with no crafting skill (never true of real data), so the model had no craft route for them.
+  - Next consumers: `strategy._producible` / `prerequisites._leafs`.
 - 1c: `feasible` / `cost` / `demand` views.
 - Then steps 3-5 as above.
 
