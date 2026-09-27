@@ -493,6 +493,7 @@ Each step is one commit, gated by the full gate, and witnessed by
   - One intentional rule change, fixture-only: a sibling craft now needs a known workshop (a sibling crafts at one too). Three sibling-census fixtures had used "no workshop" to silence the grind route; they now declare it and rely on the missing grind rate.
   - This is the seam `cost` grows from: a gate is a price (grind cycles, gear chain), not a wall.
   - Next consumers: `shopping_list`, and a model `cost` view that folds `route_options` in.
+- `shopping_list` (NOT migrated, measured first). It is a proved pure core over recipes and holdings; the D-I defect is in its callers (`GatherMaterialsGoal`, the progression goal), which credit bank stock even while the bank is locked. But D-I is dormant: 104 `HTTP_478` "missing item" cycles since 2026-08-03 out of 272,108, and ALL 104 had `bank_accessible=1`. They are shared-bank sibling races (64 `WithdrawItemAction`, 36 `LevelSkill`), not locked-bank credit. Threading bank access into ~15 goal-construction sites buys nothing live. It becomes part of Phase 2, where emission is built from model routes and reads `on_hand` directly.
 - 1c: `feasible` / `cost` / `demand` views.
 - Then steps 3-5 as above.
 
