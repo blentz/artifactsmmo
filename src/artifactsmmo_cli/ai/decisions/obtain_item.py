@@ -164,7 +164,7 @@ class CanIFightWhatDropsThis(Decision[Goal]):
             # level. That is strictly worse than the wall it replaces: a doomed
             # gather stalls visibly, a doomed grind consumes thousands of cycles
             # LOOKING like progress. It is the same failure
-            # `_gated_craft_option` records at 4.5 live hours, and the same rule
+            # `_gated_skill_option` records at 4.5 live hours, and the same rule
             # answers it — an unpriceable target is declined, never charged 0.
             #
             # Asked through `route_price`, the one pricing funnel wave 6's O6

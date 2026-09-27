@@ -8,7 +8,7 @@
 >
 > The crossing is a differential on production's own pricer — the candidate priced as it stands, then again with the walled items granted. No closure is re-derived here; obligation O6 forbids a second cost model and this census must not be one.
 
-343 candidate cells over 44 scenarios; gate opens 2 of 9 walls (store-less); obtainable 77; not_drop_walled 255; walled 9 (9 on ALTERNATIVES); closes 9; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
+343 candidate cells over 44 scenarios; gate opens 2 of 9 walls (store-less); obtainable 76; not_drop_walled 256; walled 9 (9 on ALTERNATIVES); closes 9; out_of_reach 0; drop_wall_unattributed 0; root_unresolved 2
 
 argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only the argmax sees those 0 and misses 9 — an infinite price is a veto, so a walled candidate never becomes the argmax.
 
@@ -115,7 +115,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l12_bag_pursuit | ReachSkillLevel(skill='weaponcrafting', level=11) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l35_artifact_fill | ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot') | argmax | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_artifact_fill | ObtainItem(code='lost_world_map', quantity=1, slot='artifact1_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
-| l35_artifact_fill | ObtainItem(code='perfect_pearl', quantity=1, slot='artifact2_slot') | alt | PASS | 24 | 24 | 24 | - | - | - | - | - |
+| l35_artifact_fill | ObtainItem(code='perfect_pearl', quantity=1, slot='artifact2_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_artifact_fill | ObtainItem(code='backpack', quantity=1, slot='bag_slot') | alt | PASS | 1000001 | 1000001 | 1000001 | - | - | - | - | - |
 | l35_artifact_fill | ObtainItem(code='astralyte_crystal', quantity=1) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l35_artifact_fill | ObtainItem(code='king_slimeball', quantity=2) | alt | PASS | 2000000 | 0 | 2000000 | king_slimeball | 1 | 1 | 1 | cursed_sceptre |

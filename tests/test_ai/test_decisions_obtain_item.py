@@ -413,7 +413,7 @@ def test_without_a_grind_rate_the_node_declines(bundle_game_data) -> None:
     """UNREACHABLE GEAR DECLINES, and an unpriceable one is unreachable as far as
     this node can tell.
 
-    Same rule `_gated_craft_option` states and the same live reason: a target
+    Same rule `_gated_skill_option` states and the same live reason: a target
     that looks free does not merely fail to prune, it CAPTURES the bot. Declining
     leaves the honest wall in place, which is worse to look at and better to
     have."""

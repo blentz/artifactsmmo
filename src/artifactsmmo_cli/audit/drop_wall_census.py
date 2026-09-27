@@ -133,7 +133,7 @@ class DropGap(Enum):
 
     The chicken-and-egg the 2026-08-09 audit named: you need the gear to beat the
     mob that drops the material for the gear. This is the priceable arm — the one
-    a `_gated_drop_option` would open, mirroring `_gated_craft_option` — and
+    a `_gated_drop_option` would open, mirroring `_gated_skill_option` — and
     naming it is what turns "the pricer says a million" into a statement the
     model makes on purpose."""
 

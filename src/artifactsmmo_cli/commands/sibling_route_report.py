@@ -31,7 +31,7 @@ confirmed"; it is one global bit, and the header prints the scalar behind it
 so that bit is never implicit.
 
 SAVINGS ARE NOT STABLE ACROSS RUNS, AND THE HEADER SAYS THAT TOO.
-`actions_without` prices the item through `_gated_craft_option`'s own grind
+`actions_without` prices the item through `_gated_skill_option`'s own grind
 route, which reads `store.skill_grind_rate` off recent `LevelSkill` cycles —
 a live, continuously-updated observation the fleet keeps re-measuring. Two
 runs minutes apart can (and do) report the same eligible/priced/load-bearing
@@ -211,7 +211,7 @@ def _group_by_gate(
     required_level)`, sorted largest-saving-first -- the level of granularity
     the printed magnitude is actually true at (I1).
 
-    `_gated_craft_option`'s unlock key is `skill:{skill}:{level}` and
+    `_gated_skill_option`'s unlock key is `skill:{skill}:{level}` and
     `acquisition_cost_core.py` pays that unlock ONCE PER KEY, so every item
     behind the same gate shares one grind cost; `_sibling_craft_option`'s key
     is `sibling:{item}`, paid once PER ITEM. Printing one row per item put a

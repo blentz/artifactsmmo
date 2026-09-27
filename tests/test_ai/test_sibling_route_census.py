@@ -52,14 +52,14 @@ class _FleetStore:
     """This test module's OWN store stand-in: has seen exactly one fleet supply
     request (`fleet_supply_request_cycles` positive, so
     `_sibling_craft_option`'s pricing gate is satisfied) and, optionally, an
-    observed grind rate per skill (`skill_grind_rate`, so `_gated_craft_option`
+    observed grind rate per skill (`skill_grind_rate`, so `_gated_skill_option`
     can compete for the skills the caller names in `grind_rates`). For
     `hexstaff`'s skill (weaponcrafting) this store has no grind rate unless a
-    caller passes one, so `_gated_craft_option` declines it — the sibling route
+    caller passes one, so `_gated_skill_option` declines it — the sibling route
     is the only deferred option `hexstaff` can produce. (A missing WORKSHOP
     would decline both: a sibling crafts at a workshop too.) For
     `gearclasp`'s skill (gearcrafting) a workshop IS known, so a caller that
-    passes `grind_rates={"gearcrafting": ...}` gives `_gated_craft_option` a
+    passes `grind_rates={"gearcrafting": ...}` gives `_gated_skill_option` a
     real, competing route."""
 
     def __init__(self, grind_rates: dict[str, float] | None = None) -> None:
@@ -103,11 +103,11 @@ def census_world() -> tuple[WorldState, GameData]:
     `gearclasp` (gearcrafting 8) is the outpriced case the `hexstaff`-only
     fixture could never exercise: a workshop for gearcrafting IS known, so a
     caller that hands `_FleetStore` a gearcrafting grind rate gives
-    `_gated_craft_option` a real, cheap competing route (one level away, sized
+    `_gated_skill_option` a real, cheap competing route (one level away, sized
     to grind in a single cycle) alongside the sibling route (a 15-cycle fleet
     request). The sibling route is genuinely PRICED (`route_options` returns
     it), but the cost walk picks the cheaper gated-craft route every time, so
-    it is never LOAD-BEARING — and because `_gated_craft_option` does not read
+    it is never LOAD-BEARING — and because `_gated_skill_option` does not read
     `ctx.sibling_skills` at all, a `gearclasp` verdict has a `kind=CRAFT`
     route even when `sibling_skills` is empty. That is what makes it pin the
     matcher: a regression from `unlock.startswith("sibling:")` to

@@ -32,7 +32,7 @@ from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY as UNBOUNDED_CAPACITY
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind as SourceKind
@@ -70,17 +70,20 @@ class Source:
     capacity: int
 
 
-def _sources(model: ObtainModel, item: str) -> list[Source]:
+def _sources(model: ObtainModel, item: str, policy: Policy = LEGACY) -> list[Source]:
     return [Source(route.kind, route.via, route.yield_per, route.capacity)
-            for route in model.ready(item, LEGACY)]
+            for route in model.ready(item, policy)]
 
 
 def obtain_sources(
-    item: str, state: WorldState, game_data: GameData, ctx: SelectionContext
+    item: str, state: WorldState, game_data: GameData, ctx: SelectionContext,
+    *, policy: Policy = LEGACY,
 ) -> list[Source]:
     """Every way `item` can be obtained from the current state, in the declared
-    priority order (WITHDRAW, RECYCLE, CRAFT, GATHER, BUY, GE_FILL, DROP, SELL)."""
-    return _sources(ObtainModel(state, game_data, ctx, datetime.now(UTC)), item)
+    priority order (WITHDRAW, RECYCLE, CRAFT, GATHER, BUY, GE_FILL, DROP, SELL).
+    `policy` is LEGACY, the executor's readiness, unless a caller prices under
+    its own (the skill grind's ranking treats a gathering-skill gate as open)."""
+    return _sources(ObtainModel(state, game_data, ctx, datetime.now(UTC)), item, policy)
 
 
 def obtain_source_map(

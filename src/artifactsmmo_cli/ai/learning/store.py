@@ -800,7 +800,7 @@ class LearningStore:
         That method limits to the last `window` cycles and then measures one skill
         inside them, so a character doing anything else reads 0.0 — measured
         2026-08-17 on the live DB, all five characters read exactly 0.0 for all
-        four crafting skills, which made `acquisition_cost._gated_craft_option`
+        four crafting skills, which made `acquisition_cost._gated_skill_option`
         decline every skill-gated craft and price every iron-tier item at
         `UNOBTAINABLE_PER_UNIT`. That is an absorbing state: the price forbids the
         grind and the absent grind keeps the price. Here the limit falls on rows

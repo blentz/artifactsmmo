@@ -44,7 +44,7 @@ from tests.test_ai.fixtures import make_state
 class _Store:
     """This test module's own store stand-in -- has seen exactly one fleet
     supply request (so `_sibling_craft_option`'s pricing gate is open) and no
-    observed grind rate for any skill, so `_gated_craft_option` never has a
+    observed grind rate for any skill, so `_gated_skill_option` never has a
     competing route to offer. Also stands in for `resolve_root`'s `history`
     parameter, which every test here bypasses by monkeypatching `resolve_root`
     itself -- its shape is never read."""

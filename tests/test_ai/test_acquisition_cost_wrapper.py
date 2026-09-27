@@ -779,7 +779,7 @@ def test_no_skill_max_xp_DECLINES_the_route(state, game_data) -> None:
 
     This briefly charged 0 instead, on the argument that a LOWER bound should
     omit an unknown positive term. That argument is right about pruning and wrong
-    about RANKING — see `_gated_craft_option`, and the 4.5 live hours R2D2 spent
+    about RANKING — see `_gated_skill_option`, and the 4.5 live hours R2D2 spent
     on a grind that looked free."""
     assert not state.skill_max_xp
     store = _store_with_rate("weaponcrafting", 40)
@@ -925,14 +925,16 @@ def test_a_met_gate_adds_no_second_craft_route(gated_state, game_data) -> None:
         store.close()
 
 
-def test_the_pricer_adds_nothing_but_gated_crafts(gated_state, game_data) -> None:
+def test_the_pricer_adds_nothing_but_gated_routes(gated_state, game_data) -> None:
     """THE CENSUS THAT STOPS THIS BECOMING A RIVAL ROUTE MODEL.
 
     `obtain_sources` is meant to be the one enumeration every producer consumes.
-    This module deliberately adds ONE route it does not name — the skill-gated
-    craft — because readiness and cost are different questions. That exception
-    must stay exactly one, or the epic has reintroduced the duplication it
-    exists to remove.
+    This module deliberately adds only routes it does not name because ONE gate
+    keeps them from being ready — a skill-gated craft or gather, a sibling's
+    craft, an unwinnable drop — priced by what opens the gate, because
+    readiness and cost are different questions. Every such route carries its
+    `unlock`; anything else the pricer returns must be a kind `obtain_sources`
+    named, or the epic has reintroduced the duplication it exists to remove.
 
     Same shape as `test_obtain_graph_agreement`, which pins `obtain_sources`
     against `RequirementGraph.leaves`."""
@@ -948,8 +950,8 @@ def test_the_pricer_adds_nothing_but_gated_crafts(gated_state, game_data) -> Non
             extra = [r for r in priced if not r.unlock]
             assert {r.kind for r in extra} <= ready, (
                 f"{code}: pricer invented a route obtain_sources did not name")
-            assert all(r.kind == "craft" for r in priced if r.unlock), (
-                f"{code}: only a gated CRAFT may be added")
+            assert all(r.kind in {"craft", "gather", "drop"} for r in priced if r.unlock), (
+                f"{code}: only a gated craft, gather or drop may be added")
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -1164,7 +1166,7 @@ def test_a_window_of_fighting_no_longer_hides_the_grind(
 
     Measured 2026-08-17: all five live characters read 0.0 from
     `skill_xp_per_cycle_all` for every crafting skill, because their recent cycles
-    are fights — so `_gated_craft_option` declined every skill-gated craft and
+    are fights — so `_gated_skill_option` declined every skill-gated craft and
     `iron_sword` priced at UNOBTAINABLE. The grind cycles that answer the question
     were sitting in the same table the whole time."""
     store = LearningStore(db_path=":memory:", character="fought_recently")
@@ -1268,7 +1270,7 @@ def test_an_unwinnable_dropper_is_a_PRICE_not_a_wall(gated_state, game_data) -> 
     walled candidates on the committed bundle, `l12_deep_chain_grind` among
     them). `combat_deficit` closes this one with a ONE-ITEM chain — `iron_sword`
     — so the honest answer is not "unobtainable" but "iron_sword, then farm
-    cows". Same seam as `_gated_craft_option`: `obtain_sources` answers
+    cows". Same seam as `_gated_skill_option`: `obtain_sources` answers
     READINESS, this module answers COST, and a gate is a price."""
     rested = replace(gated_state, hp=gated_state.max_hp)
     assert not any(
@@ -1296,7 +1298,7 @@ def test_the_gated_drop_makes_the_walled_item_obtainable(
 
     THE CHAIN'S OWN PRICE IS WHY THIS NEEDS A STORE. `cowhide` is unlocked by
     `iron_sword`, whose CRAFT is itself skill-gated (weaponcrafting 10 against
-    this character's 5) — so without an observed grind rate `_gated_craft_option`
+    this character's 5) — so without an observed grind rate `_gated_skill_option`
     declines the sword, the sword prices at infinity, and this gate declines the
     cow for the same reason it declines any unpriceable chain. The dependency is
     transitive, not direct: nothing in THIS route reads the store, and a chain
@@ -1317,7 +1319,7 @@ def test_the_gated_drop_makes_the_walled_item_obtainable(
 def test_a_winnable_dropper_adds_NO_second_route(gated_state, game_data) -> None:
     """`obtain_sources` already names a beatable dropper's DROP route, so the
     gate must decline — two copies of one route is the double-pricing
-    `_gated_craft_option` refuses for the same reason."""
+    `_gated_skill_option` refuses for the same reason."""
     winnable = next(
         item for item in ("yellow_slimeball", "red_slimeball", "feather")
         if any(s.kind is SourceKind.DROP for s in obtain_sources(
@@ -1406,6 +1408,32 @@ def test_the_unlock_is_keyed_on_the_MONSTER_not_the_item(
                                    NO_PROFILE_CONTEXT, store)
             keys |= {r.unlock for r in routes if r.unlock.startswith("gear:")}
         assert keys == {"gear:cow"}
+    finally:
+        store.end_session(exit_reason="normal")
+        store.close()
+
+
+def test_an_under_skill_gather_is_priced_by_its_grind_not_offered_as_ready(
+        gated_state, game_data) -> None:
+    """D-A: `obtain_sources` no longer offers a gather the character cannot
+    perform, and the pricer offers it instead as a route gated by the gathering
+    skill, priced with the grind that opens it (the same rule as a skill-gated
+    craft). No observed rate: no route, as for a craft."""
+    item, resource, (skill, level) = next(
+        (item, res, gd_skill)
+        for res, item in sorted(game_data.resource_drops.items())
+        if (gd_skill := game_data.resource_skill_level(res)) is not None
+        and gated_state.skills.get(gd_skill[0], 1) < gd_skill[1]
+        and game_data.all_resource_locations.get(res))
+    assert not [s for s in obtain_sources(item, gated_state, game_data, NO_PROFILE_CONTEXT)
+                if s.kind is SourceKind.GATHER and s.code == resource]
+    assert not [r for r in route_options(item, gated_state, game_data, NO_PROFILE_CONTEXT)
+                if r.kind == "gather" and r.venue == resource]
+    store = _store_with_rate(skill, 40)
+    try:
+        [gated] = [r for r in route_options(item, gated_state, game_data, NO_PROFILE_CONTEXT, store)
+                   if r.kind == "gather" and r.venue == resource]
+        assert gated.unlock == f"skill:{skill}:{level}" and gated.unlock_actions > 0
     finally:
         store.end_session(exit_reason="normal")
         store.close()

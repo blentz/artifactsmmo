@@ -70,8 +70,9 @@ structure Policy where
   fightGold : Bool
   deriving DecidableEq, Repr
 
-/-- `Policy.LEGACY`: exactly what the legacy `obtain_sources` walk answered. -/
-def legacy : Policy := ⟨false, false, true, false, false, true, true, true, false, false⟩
+/-- `Policy.LEGACY`: what `obtain_sources` answers (the gathering skill
+enforced since D-A). -/
+def legacy : Policy := ⟨false, true, true, false, false, true, true, true, false, false⟩
 
 /-- A route served at a spawn tile (a monster's or a resource's). -/
 def spawned (k : SrcKind) : Bool := k = .drop || k = .goldDrop || k = .gather
@@ -382,8 +383,12 @@ private def eventBuy : Route :=
 
 -- A closed first buyer yields to the next; a third buyer of the same item is dropped.
 example : readyRoutes legacy [sellA, sellB, sellC] = [sellB] := by decide
--- LEGACY hides a non-primary gatherer and ignores the gather skill; the open policy flips both.
-example : readyRoutes legacy [gatherSecondary, gatherSkilled] = [gatherSkilled] := by decide
+-- LEGACY hides a non-primary gatherer and enforces the gather skill (D-A); a policy
+-- ignoring the skill offers the skilled gatherer, one offering all gatherers the secondary.
+example : readyRoutes legacy [gatherSecondary, gatherSkilled] = [] := by decide
+example : readyRoutes ⟨false, false, true, false, false, true, true, true, false, false⟩
+    [gatherSecondary, gatherSkilled] = [gatherSkilled] := by
+  decide
 example : readyRoutes ⟨true, true, true, false, false, true, true, true, false, false⟩ [gatherSecondary, gatherSkilled]
     = [gatherSecondary] := by
   decide

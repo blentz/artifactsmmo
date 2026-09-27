@@ -32,6 +32,7 @@ such items so the reachable `copper_dagger` wins.
 """
 
 import dataclasses
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
@@ -39,7 +40,7 @@ from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.grind_probe_state import grind_probe_state
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import Policy
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.source_kind import SourceKind
@@ -89,6 +90,17 @@ What the model adds over the recursive walk it replaced: a material already in
 the bag or the bank counts when there is enough of it (the descent withdraws
 it), a craft needs a known workshop, and a resource with no spawn anywhere no
 longer counts."""
+
+
+GRIND_PRICING = replace(LEGACY, gather_skill_gate=False)
+"""The policy the grind RANKS its rungs under: the executor's (LEGACY) with the
+gathering-skill gate open, the same stance `GRIND_POLICY` takes on
+obtainability. A rung whose fish needs more fishing than the character has is
+still a candidate priced as "gather the fish": the gate is a level the
+character can grind, and `gather_demand` reads the grind target to surface
+exactly that demand ("a cooking rung that needs a fish gets a fishing root").
+Under LEGACY, which enforces the gate since D-A, that rung prices as
+unreachable and the fishing demand disappears."""
 
 
 def grind_model(state: WorldState, game_data: GameData) -> ObtainModel:
@@ -291,7 +303,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
         # selection did not. Same helper, so the two cannot drift apart.
         acquire_steps = acquisition_actions(
             code, 1, grind_probe_state(state, code), game_data,
-            NO_PROFILE_CONTEXT, equip=False)
+            NO_PROFILE_CONTEXT, equip=False, policy=GRIND_PRICING)
         candidates.append(GrindCandidate(
             code=code,
             craft_skill=stats.crafting_skill,

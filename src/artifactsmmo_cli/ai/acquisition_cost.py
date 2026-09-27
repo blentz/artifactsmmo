@@ -49,7 +49,7 @@ from artifactsmmo_cli.ai.monster_drop_selection import (
 )
 from artifactsmmo_cli.ai.obtain_model.gate import GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.obtain_model.route import Route
 from artifactsmmo_cli.ai.obtain_sources import (
     UNBOUNDED_CAPACITY,
@@ -290,10 +290,15 @@ def _drop_table(item: str, monster_code: str,
     raise KeyError(f"no {monster_code} drop row for {item}")
 
 
-def _gated_craft_option(item: str, state: WorldState, game_data: GameData,
-                        store: LearningStore, model: ObtainModel) -> RouteOption | None:
-    """The CRAFT route `obtain_sources` withholds because the skill gate is
-    unmet — priced with the grind that would open it.
+def _gated_skill_option(item: str, state: WorldState, game_data: GameData,
+                        store: LearningStore, model: ObtainModel,
+                        kind: SourceKind, policy: Policy) -> RouteOption | None:
+    """The CRAFT or GATHER route `obtain_sources` withholds because its skill
+    gate is unmet — priced with the grind that would open it. A CRAFT route's
+    gate is the crafting skill; a GATHER route's is the gathering skill, which
+    `obtain_sources` enforces since D-A (docs/PLAN_decision_architecture_redesign.md):
+    a resource the character cannot yet gather is no ready route, but it is
+    a PRICED one here, by the same grind rule.
 
     THE SEAM, STATED OUT LOUD. `obtain_sources` answers READINESS: what can the
     executor serve *right now*. A skill-gated craft genuinely cannot be served
@@ -302,9 +307,10 @@ def _gated_craft_option(item: str, state: WorldState, game_data: GameData,
     making a route ready. The gate is a price, not a wall.
 
     That distinction is real, but it is also how a second route model creeps
-    back in, which is the thing this epic exists to kill. So this is the ONLY
-    route this module may add that `obtain_sources` did not name, and a census
-    pins that (`test_the_pricer_adds_nothing_but_gated_crafts`).
+    back in, which is the thing this epic exists to kill. So the routes this
+    module adds are only ever the obtain model's OWN routes that one gate keeps
+    closed (`ObtainModel.gated_by`), each carrying its `unlock`, and a census
+    pins that (`test_the_pricer_adds_nothing_but_gated_routes`).
 
     `None` — no route at all — only when a grind could not open the craft anyway.
     The route is the obtain model's CRAFT route that the crafting-skill gate
@@ -345,7 +351,7 @@ def _gated_craft_option(item: str, state: WorldState, game_data: GameData,
     same fact — the price forbade the grind and the absent grind kept the price.
     `skill_grind_rate` limits to cycles whose `action_repr` is this skill's
     `LevelSkill`, so a grind in progress feeds the estimate that prices it."""
-    gated = _skill_gated_craft(item, model)
+    gated = _skill_gated(item, model, kind, policy)
     if gated is None:
         return None
     route, skill, level = gated
@@ -364,6 +370,11 @@ def _gated_craft_option(item: str, state: WorldState, game_data: GameData,
     grind = skill_grind_cycles(
         state.skills.get(skill, 1), state.skill_xp.get(skill, 0),
         max_xp, level, rate)
+    if kind is SourceKind.GATHER:
+        return RouteOption(
+            kind=kind.value, venue=route.via, actions_per_application=1,
+            yield_per=max(1, game_data.max_gather_yield), capacity=UNBOUNDED_CAPACITY,
+            unlock=f"skill:{skill}:{level}", unlock_actions=grind)
     return RouteOption(
         kind=SourceKind.CRAFT.value, venue=_workshop_venue(skill),
         actions_per_application=1, yield_per=route.yield_per,
@@ -373,25 +384,33 @@ def _gated_craft_option(item: str, state: WorldState, game_data: GameData,
     )
 
 
-def _skill_gated_craft(item: str, model: ObtainModel) -> tuple[Route, str, int] | None:
-    """`(route, skill, level)` for the CRAFT route to `item` that its
-    crafting-skill gate alone keeps closed under LEGACY (the policy
-    `obtain_sources` prices), or None."""
-    for route in model.gated_by(item, LEGACY, GateKind.CRAFT_SKILL):
-        if route.kind is SourceKind.CRAFT:
-            [gate] = [g for g in route.gates if g.kind is GateKind.CRAFT_SKILL]
-            assert gate.level is not None, f"{item!r}: a crafting-skill gate carries its level"
+_SKILL_GATE = {SourceKind.CRAFT: GateKind.CRAFT_SKILL, SourceKind.GATHER: GateKind.GATHER_SKILL}
+"""The skill gate on each route kind a grind can open."""
+
+
+def _skill_gated(item: str, model: ObtainModel, kind: SourceKind,
+                 policy: Policy) -> tuple[Route, str, int] | None:
+    """`(route, skill, level)` for the first `kind` route to `item` that its
+    skill gate alone keeps closed under `policy` (the one being priced), or
+    None. A policy that does not enforce the gate has no such route: the craft
+    or gather is then a ready route already."""
+    gate_kind = _SKILL_GATE[kind]
+    for route in model.gated_by(item, policy, gate_kind):
+        if route.kind is kind:
+            [gate] = [g for g in route.gates if g.kind is gate_kind]
+            assert gate.level is not None, f"{item!r}: a skill gate carries its level"
             return route, gate.subject, gate.level
     return None
 
 
 def _sibling_craft_option(item: str, state: WorldState, game_data: GameData,
                           ctx: SelectionContext,
-                          store: LearningStore, model: ObtainModel) -> RouteOption | None:
+                          store: LearningStore, model: ObtainModel,
+                          policy: Policy) -> RouteOption | None:
     """A LIVE SIBLING already clears the crafting gate this character does not.
 
     The third deferred route, and it sits here for the same reason
-    `_gated_craft_option` does: `obtain_sources` answers "what can I do RIGHT
+    `_gated_skill_option` does: `obtain_sources` answers "what can I do RIGHT
     NOW" and its eligibility mirrors the action pool, but no action a character
     can plan this cycle makes a sibling craft something. Modelling it as a
     seventh `SourceKind` — which `PLAN_iron_gear_acquisition.md` increment 4
@@ -419,7 +438,7 @@ def _sibling_craft_option(item: str, state: WorldState, game_data: GameData,
     route sharing the key, which is precisely the batching `SupplyClaim` elects a
     single producer to perform.
     """
-    gated = _skill_gated_craft(item, model)
+    gated = _skill_gated(item, model, SourceKind.CRAFT, policy)
     if gated is None:
         return None  # no craft, or our own CRAFT route already covers it
     route, skill, level = gated
@@ -439,11 +458,12 @@ def _sibling_craft_option(item: str, state: WorldState, game_data: GameData,
 
 def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
                        ctx: SelectionContext,
-                       store: LearningStore | None, model: ObtainModel) -> RouteOption | None:
+                       store: LearningStore | None, model: ObtainModel,
+                       policy: Policy) -> RouteOption | None:
     """The DROP route `obtain_sources` withholds because the dropper is
     UNWINNABLE — priced with the gear that would open the fight.
 
-    THE SAME SEAM `_gated_craft_option` STATES: `obtain_sources` answers
+    THE SAME SEAM `_gated_skill_option` STATES: `obtain_sources` answers
     READINESS, and a monster this character loses to genuinely cannot be farmed
     right now, so excluding it there is correct. This module answers what it
     would COST, and that answer may include making the route ready. The gate is
@@ -503,7 +523,7 @@ def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
     rested = replace(state, hp=state.max_hp)
     # The obtain model's DROP routes that winnability ALONE keeps closed: a
     # live dropper this character cannot beat (`ObtainModel.gated_by`).
-    live = [route.via for route in model.gated_by(item, LEGACY, GateKind.WINNABLE)
+    live = [route.via for route in model.gated_by(item, policy, GateKind.WINNABLE)
             if route.kind is SourceKind.DROP]
     if not live:
         return None
@@ -516,7 +536,7 @@ def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
         for step in deficit.chain:
             unlock_actions += acquisition_actions(
                 step.code, 1, state, game_data, ctx, equip=True, store=store,
-                gated_drop=False)
+                gated_drop=False, policy=policy)
         if unlock_actions >= UNOBTAINABLE_PER_UNIT:
             continue
         rate, min_q, max_q = _drop_table(item, monster, game_data)
@@ -538,7 +558,7 @@ def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
 def route_options(item: str, state: WorldState, game_data: GameData,
                   ctx: SelectionContext,
                   store: LearningStore | None = None,
-                  gated_drop: bool = True) -> list[RouteOption]:
+                  gated_drop: bool = True, *, policy: Policy = LEGACY) -> list[RouteOption]:
     """Every route to `item`, priced: the ones `obtain_sources` names, plus —
     only when a `store` is supplied — the skill-gated craft it withholds.
 
@@ -547,13 +567,14 @@ def route_options(item: str, state: WorldState, game_data: GameData,
     craft needs an observed grind rate, and a sibling craft needs the observed
     cost of a fleet supply request."""
     routes = [_priced(item, s, state, game_data, store)
-              for s in obtain_sources(item, state, game_data, ctx)]
+              for s in obtain_sources(item, state, game_data, ctx, policy=policy)]
     model = ObtainModel(state, game_data, ctx, datetime.now(timezone.utc))
     if store is not None:
-        gated = _gated_craft_option(item, state, game_data, store, model)
-        if gated is not None:
-            routes.append(gated)
-        sibling = _sibling_craft_option(item, state, game_data, ctx, store, model)
+        for kind in (SourceKind.CRAFT, SourceKind.GATHER):
+            gated = _gated_skill_option(item, state, game_data, store, model, kind, policy)
+            if gated is not None:
+                routes.append(gated)
+        sibling = _sibling_craft_option(item, state, game_data, ctx, store, model, policy)
         if sibling is not None:
             routes.append(sibling)
     # OUTSIDE the store gate, unlike its two siblings, and deliberately: their
@@ -564,7 +585,7 @@ def route_options(item: str, state: WorldState, game_data: GameData,
     # THE STORE DEPENDENCY IS TRANSITIVE, NOT DIRECT, and measured: on the
     # committed bundle every one of the nine walled cells is unlocked by gear
     # whose own craft is skill-gated, so without a grind rate
-    # `_gated_craft_option` declines the gear, the gear prices at infinity and
+    # `_gated_skill_option` declines the gear, the gear prices at infinity and
     # this gate declines the fight behind it. A chain that is already craftable
     # needs no store — which is why the gate belongs here and not behind
     # `store is not None`, where a store-less caller could never see it fire even
@@ -583,7 +604,7 @@ def route_options(item: str, state: WorldState, game_data: GameData,
     # cheaply; the cost lives in the walled items themselves, which are exactly
     # the ones this test keeps.
     if gated_drop and not routes:
-        drop = _gated_drop_option(item, state, game_data, ctx, store, model)
+        drop = _gated_drop_option(item, state, game_data, ctx, store, model, policy)
         if drop is not None:
             routes.append(drop)
     return routes
@@ -592,7 +613,7 @@ def route_options(item: str, state: WorldState, game_data: GameData,
 def acquisition_options(item: str, state: WorldState, game_data: GameData,
                         ctx: SelectionContext,
                         store: LearningStore | None = None,
-                        gated_drop: bool = True
+                        gated_drop: bool = True, *, policy: Policy = LEGACY
                         ) -> dict[str, list[RouteOption]]:
     """`route_options` over the whole closure reachable from `item`.
 
@@ -615,7 +636,7 @@ def acquisition_options(item: str, state: WorldState, game_data: GameData,
         code = frontier.pop()
         if code in options:
             continue
-        routes = route_options(code, state, game_data, ctx, store, gated_drop)
+        routes = route_options(code, state, game_data, ctx, store, gated_drop, policy=policy)
         options[code] = routes
         for route in routes:
             frontier.extend(route.inputs)
@@ -648,7 +669,7 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
                         game_data: GameData, ctx: SelectionContext,
                         equip: bool,
                         store: LearningStore | None = None,
-                        gated_drop: bool = True) -> int:
+                        gated_drop: bool = True, *, policy: Policy = LEGACY) -> int:
     """Lower bound on planner actions to obtain (and optionally equip) `qty` of
     `item`, over every route the executor can currently serve.
 
@@ -666,7 +687,7 @@ def acquisition_actions(item: str, qty: int, state: WorldState,
     which is what it costs."""
     owned: dict[str, int] = _owned_with_gold(state)
     options: Mapping[str, list[RouteOption]] = acquisition_options(
-        item, state, game_data, ctx, store, gated_drop)
+        item, state, game_data, ctx, store, gated_drop, policy=policy)
     return acquisition_cost(item, qty, options, owned) + (
         EQUIP_ACTIONS if equip else 0)
 

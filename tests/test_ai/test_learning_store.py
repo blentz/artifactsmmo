@@ -1525,7 +1525,7 @@ class TestSkillGrindRate:
 
     def test_an_empty_store_has_no_rate_under_either_estimator(self, tmp_db_path):
         """No cycles at all is IGNORANCE, not a rate of zero — under both the
-        retired estimator and its replacement. `_gated_craft_option` reads the
+        retired estimator and its replacement. `_gated_skill_option` reads the
         difference: None may fall back to the fleet, 0.0 may not."""
         store = LearningStore(db_path=tmp_db_path, character="c")
         store.start_session()

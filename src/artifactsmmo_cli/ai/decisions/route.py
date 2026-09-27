@@ -132,7 +132,7 @@ TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
                                    store=history, gated_drop=gated_drop)
     if isinstance(goal, ReachSkillLevel):
         # Cycles ARE actions — `skill_grind_cost_core`'s own headline. This is
-        # the same term `acquisition_cost._gated_craft_option` charges as
+        # the same term `acquisition_cost._gated_skill_option` charges as
         # `unlock_actions`, so a skill-gated `ObtainItem` and a bare
         # `ReachSkillLevel` price the same climb identically.
         #

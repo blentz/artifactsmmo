@@ -51,7 +51,7 @@ def skill_grind_cycles(current_level: int, current_xp: int, max_xp: int,
     recorded cycles but gained no xp in this skill. The earlier
     `skill_xp_per_cycle` averaged only positive deltas and so was positive by
     construction; swapping to the honest denominator removed that guarantee, and
-    a division here would have raised. `_gated_craft_option` declines the route
+    a division here would have raised. `_gated_skill_option` declines the route
     on a non-positive rate rather than calling this, because "no evidence of
     progress" is a routing decision, not arithmetic.
 

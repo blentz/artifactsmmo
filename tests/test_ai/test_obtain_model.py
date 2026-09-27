@@ -96,7 +96,8 @@ def test_an_underground_resource_is_a_known_spawn_but_not_a_live_one(
                if r.kind is SourceKind.GATHER and r.via == "gold_rocks"]
     spawn = {g.kind: g.satisfied for g in route.gates}
     assert spawn[GateKind.SPAWN_KNOWN] and not spawn[GateKind.SPAWN_LIVE]
-    assert replace(LEGACY, spawn_known=True).ready(route) and not LEGACY.ready(route)
+    ungated = replace(LEGACY, gather_skill_gate=False)  # the fixture's mining is below 30
+    assert replace(ungated, spawn_known=True).ready(route) and not ungated.ready(route)
     # And a resource with no tile on any layer is known to neither predicate.
     [nowhere] = [r for r in ObtainModel(state, gd, _ctx(), NOW).routes("diamond_stone")
                  if r.kind is SourceKind.GATHER and r.via == "strange_rocks"]
@@ -109,8 +110,11 @@ class TestPolicy:
         return Route("x", kind, "v", 1, 1, gates, primary=primary)
 
     def test_the_gather_skill_gate_counts_only_when_enforced(self) -> None:
+        """D-A: LEGACY (the executor's readiness) enforces it; a policy that
+        treats the gate as grindable does not."""
         route = self._route(SourceKind.GATHER, Gate(GateKind.GATHER_SKILL, "mining", False, 10))
-        assert LEGACY.ready(route) and not OPEN.ready(route)
+        assert not LEGACY.ready(route) and not OPEN.ready(route)
+        assert replace(LEGACY, gather_skill_gate=False).ready(route)
 
     def test_the_craft_skill_gate_counts_only_when_enforced(self) -> None:
         route = self._route(SourceKind.CRAFT, Gate(GateKind.CRAFT_SKILL, "mining", False, 10))
@@ -305,11 +309,11 @@ class TestFeasible:
         assert model.feasible("ore", 4, LEGACY).ok and not model.feasible("ore", 5, LEGACY).ok
 
     def test_an_unmet_gate_is_named(self, world: tuple[WorldState, GameData]) -> None:
-        """The gather skill is ignored under LEGACY and enforced under OPEN; when
-        enforced and unmet, it is the reason reported."""
+        """When the gather skill is enforced and unmet, it is the reason
+        reported; a policy ignoring it finds the gather."""
         table = {"ore": (Route("ore", SourceKind.GATHER, "rocks", 1, 10**9, (self.GATHER_GATE,)),)}
         model = self._model(world, table, inventory={}, equipment={}, gold=0)
-        assert model.feasible("ore", 1, LEGACY).ok
+        assert model.feasible("ore", 1, replace(LEGACY, gather_skill_gate=False)).ok
         assert model.feasible("ore", 1, OPEN) == Feasibility(ok=False, blocking_gates=(self.GATHER_GATE,))
 
     def test_an_unobtainable_input_is_named(self, world: tuple[WorldState, GameData]) -> None:

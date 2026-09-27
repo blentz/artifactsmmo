@@ -364,6 +364,7 @@ EVENT_VISIBILITY_MUTATIONS = [
 LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "leaf_attainable_core.py"
 OBTAIN_MODEL_READY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "ready_core.py"
 OBTAIN_MODEL_POLICY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "policy.py"
+ACQUISITION_COST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "acquisition_cost.py"
 OBTAIN_MODEL_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "supply_core.py"
 OBTAIN_MODEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "obtain_model.py"
 OBTAIN_MODEL_DROP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "drop_routes.py"
@@ -1519,14 +1520,14 @@ SKILL_GRIND_TARGET_MUTATIONS = [
     ("skill_grind_target: acquire_steps back to counting recipe lines",
      "        acquire_steps = acquisition_actions(\n"
      "            code, 1, grind_probe_state(state, code), game_data,\n"
-     "            NO_PROFILE_CONTEXT, equip=False)\n",
+     "            NO_PROFILE_CONTEXT, equip=False, policy=GRIND_PRICING)\n",
      "        acquire_steps = len(recipe)\n"),
     # Cost-blind: every rung ties, so the selection falls through to craft_level
     # and the cheapest chain stops mattering at all.
     ("skill_grind_target: acquire_steps stops costing anything",
      "        acquire_steps = acquisition_actions(\n"
      "            code, 1, grind_probe_state(state, code), game_data,\n"
-     "            NO_PROFILE_CONTEXT, equip=False)\n",
+     "            NO_PROFILE_CONTEXT, equip=False, policy=GRIND_PRICING)\n",
      "        acquire_steps = 0\n"),
     # DELETED 2026-08-15: "acquire_steps caps the unobtainable bound", which
     # replaced the hoist with `min(999, acquisition_actions(...))` on the theory
@@ -3055,6 +3056,26 @@ OBTAIN_MODEL_GATED_MUTATIONS = [
     ("obtain_model: a route the policy does not offer is gated",
      "            if policy.admits(route)\n            and (unmet :=",
      "            if True\n            and (unmet :="),
+]
+# D-A: LEGACY enforces the gathering skill. Killed by tests/test_ai/test_obtain_model.py.
+LEGACY_GATHER_SKILL_MUTATIONS = [
+    ("policy: LEGACY ignores the gathering skill again",
+     "LEGACY = Policy(all_gather_routes=False, gather_skill_gate=True,",
+     "LEGACY = Policy(all_gather_routes=False, gather_skill_gate=False,"),
+]
+# The pricer offers an under-skill gather priced by its grind. Killed by
+# tests/test_ai/test_acquisition_cost_wrapper.py.
+GATED_GATHER_MUTATIONS = [
+    ("acquisition_cost: no gated gather route",
+     "        for kind in (SourceKind.CRAFT, SourceKind.GATHER):",
+     "        for kind in (SourceKind.CRAFT,):"),
+]
+# The grind ranks under its own pricing policy. Killed by
+# tests/test_ai/scenarios/test_fisher_cooking_rung.py.
+GRIND_PRICING_MUTATIONS = [
+    ("skill_grind_target: the grind ranks under the executor's gather gate",
+     "GRIND_PRICING = replace(LEGACY, gather_skill_gate=False)",
+     "GRIND_PRICING = LEGACY"),
 ]
 RESOURCE_SPAWN_KNOWN_MUTATIONS = [
     ("game_data: a resource spawn ignores layered tiles",
@@ -4864,6 +4885,7 @@ _ALL_SRCS = [
     LEAF_ATTAINABLE_CORE_SRC,
     # Decision-architecture Phase 1 — unified obtain model route selection.
     OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_SUPPLY_SRC, OBTAIN_MODEL_SRC,
+    ACQUISITION_COST_SRC,
     OBTAIN_MODEL_DROP_SRC,
     # C2 — complete_task coin-minting pure core.
     COMPLETE_TASK_CORE_SRC,
@@ -8461,6 +8483,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_obtain_model.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_GATED_MUTATIONS,
               "tests/test_ai/test_obtain_model.py", survivors)
+    run_group(OBTAIN_MODEL_POLICY_SRC, LEGACY_GATHER_SKILL_MUTATIONS,
+              "tests/test_ai/test_obtain_model.py", survivors)
+    run_group(ACQUISITION_COST_SRC, GATED_GATHER_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, GRIND_PRICING_MUTATIONS,
+              "tests/test_ai/scenarios/test_fisher_cooking_rung.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, RESOURCE_SPAWN_KNOWN_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_OBTAINABLE_MUTATIONS,
