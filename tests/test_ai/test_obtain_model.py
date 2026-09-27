@@ -29,7 +29,7 @@ BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.jso
 NOW = datetime(2026, 9, 27, tzinfo=UTC)
 OPEN = Policy(all_gather_routes=True, gather_skill_gate=True, craft_skill_gate=True,
               event_vendors=True,
-              spawn_known=True, allow_grey=False)
+              spawn_known=True, allow_grey=False, market_routes=True)
 
 
 def census_items(gd: GameData) -> list[str]:
@@ -141,10 +141,15 @@ class TestPolicy:
                                 Gate(GateKind.SPAWN_KNOWN, "m", False))
         assert LEGACY.ready(live_only) and not OPEN.ready(live_only)
 
-    def test_every_route_but_a_secondary_gather_is_offered_under_every_policy(self) -> None:
-        closed = replace(LEGACY, all_gather_routes=False)
+    @pytest.mark.parametrize("kind", [SourceKind.BUY, SourceKind.GE_FILL])
+    def test_a_market_route_is_offered_only_when_market_routes_are(self, kind: SourceKind) -> None:
+        route = self._route(kind)
+        assert LEGACY.admits(route) and not replace(LEGACY, market_routes=False).admits(route)
+
+    def test_every_other_route_is_offered_under_every_policy(self) -> None:
+        closed = replace(LEGACY, all_gather_routes=False, market_routes=False)
         assert all(closed.admits(self._route(kind, primary=False)) for kind in SourceKind
-                   if kind is not SourceKind.GATHER)
+                   if kind not in (SourceKind.GATHER, SourceKind.BUY, SourceKind.GE_FILL))
 
     def test_a_grey_dropper_counts_only_when_grey_is_allowed(self) -> None:
         grey = self._route(SourceKind.DROP, Gate(GateKind.XP_POSITIVE, "m", False))
@@ -225,9 +230,9 @@ def test_a_recipe_whose_item_names_no_crafting_skill_is_no_craft_route(
 
 class TestFeasible:
     """`ObtainModel.feasible` over hand-made route tables, so each case names
-    exactly what it exercises. The fixpoint itself is pinned by the Lean
-    differential; these cover the model's wiring: holdings, the input closure,
-    and the blockers it reports."""
+    exactly what it exercises. The quantity walk itself is pinned by the Lean
+    differential; these cover the model's wiring: what counts as on hand, the
+    input closure, gold as an input, and the blockers it reports."""
 
     GATHER_GATE = Gate(GateKind.GATHER_SKILL, "mining", False, 10)
 
@@ -236,67 +241,93 @@ class TestFeasible:
         state, gd = world
         model = ObtainModel(replace(state, **state_changes), gd, _ctx(), NOW)
         model._routes = dict(table)
-        for code in ("ore", "bar", "ring", "ghost", "loop_a", "loop_b"):
+        for code in ("ore", "bar", "ring", "ghost", "loop_a", "loop_b", GOLD_CODE):
             model._routes.setdefault(code, ())
         return model
 
     def _craft(self, item: str, **inputs: int) -> Route:
         return Route(item, SourceKind.CRAFT, item, 1, 10**9, (), inputs=inputs)
 
-    def test_a_held_item_is_feasible_with_no_route(self, world: tuple[WorldState, GameData]) -> None:
-        model = self._model(world, {}, inventory={"ghost": 1}, equipment={}, gold=0)
-        assert model.feasible("ghost", LEGACY).ok
+    def test_a_held_item_is_feasible_up_to_the_count_held(
+            self, world: tuple[WorldState, GameData]) -> None:
+        model = self._model(world, {}, inventory={"ghost": 2}, equipment={}, gold=0)
+        assert model.feasible("ghost", 2, LEGACY).ok and not model.feasible("ghost", 3, LEGACY).ok
 
-    def test_worn_gear_and_pocket_gold_count_as_held(self, world: tuple[WorldState, GameData]) -> None:
+    def test_pocket_gold_is_on_hand_and_worn_gear_is_not(
+            self, world: tuple[WorldState, GameData]) -> None:
         model = self._model(world, {}, inventory={}, equipment={"weapon_slot": "ghost"}, gold=5)
-        assert model.feasible("ghost", LEGACY).ok
-        assert model.feasible(GOLD_CODE, LEGACY).ok
+        assert not model.feasible("ghost", 1, LEGACY).ok
+        assert model.feasible(GOLD_CODE, 5, LEGACY).ok and not model.feasible(GOLD_CODE, 6, LEGACY).ok
 
-    def test_a_chain_of_ready_routes_is_feasible(self, world: tuple[WorldState, GameData]) -> None:
+    def test_a_chain_of_unbounded_routes_is_feasible_in_any_amount(
+            self, world: tuple[WorldState, GameData]) -> None:
         table = {"ore": (Route("ore", SourceKind.GATHER, "rocks", 1, 10**9, ()),),
                  "bar": (self._craft("bar", ore=10),),
                  "ring": (self._craft("ring", bar=6),)}
         model = self._model(world, table, inventory={}, equipment={}, gold=0)
-        assert model.feasible("ring", LEGACY) == Feasibility(ok=True)
+        assert model.feasible("ring", 50, LEGACY) == Feasibility(ok=True)
+
+    def test_banked_stock_bounds_the_amount(self, world: tuple[WorldState, GameData]) -> None:
+        """Six banked bars make one ring (six per craft) and not two."""
+        table = {"ring": (self._craft("ring", bar=6),),
+                 "bar": (Route("bar", SourceKind.WITHDRAW, "bar", 1, 6, ()),)}
+        model = self._model(world, table, inventory={}, equipment={}, gold=0)
+        assert model.feasible("ring", 1, LEGACY).ok
+        assert model.feasible("ring", 2, LEGACY) == Feasibility(ok=False, missing_inputs=("bar",))
+
+    def test_a_gold_price_is_an_input(self, world: tuple[WorldState, GameData]) -> None:
+        """A vendor is a route only as far as the pocket pays for it."""
+        table = {"ore": (Route("ore", SourceKind.BUY, "smith", 1, 10**9, (),
+                               inputs={GOLD_CODE: 30}),)}
+        model = self._model(world, table, inventory={}, equipment={}, gold=60)
+        assert model.feasible("ore", 2, LEGACY).ok
+        assert model.feasible("ore", 3, LEGACY) == Feasibility(ok=False, missing_inputs=(GOLD_CODE,))
+
+    def test_a_route_delivers_no_more_than_its_capacity(
+            self, world: tuple[WorldState, GameData]) -> None:
+        table = {"ore": (Route("ore", SourceKind.GE_FILL, "order", 1, 4, (),
+                               inputs={GOLD_CODE: 1}),)}
+        model = self._model(world, table, inventory={}, equipment={}, gold=100)
+        assert model.feasible("ore", 4, LEGACY).ok and not model.feasible("ore", 5, LEGACY).ok
 
     def test_an_unmet_gate_is_named(self, world: tuple[WorldState, GameData]) -> None:
         """The gather skill is ignored under LEGACY and enforced under OPEN; when
         enforced and unmet, it is the reason reported."""
         table = {"ore": (Route("ore", SourceKind.GATHER, "rocks", 1, 10**9, (self.GATHER_GATE,)),)}
         model = self._model(world, table, inventory={}, equipment={}, gold=0)
-        assert model.feasible("ore", LEGACY).ok
-        assert model.feasible("ore", OPEN) == Feasibility(ok=False, blocking_gates=(self.GATHER_GATE,))
+        assert model.feasible("ore", 1, LEGACY).ok
+        assert model.feasible("ore", 1, OPEN) == Feasibility(ok=False, blocking_gates=(self.GATHER_GATE,))
 
     def test_an_unobtainable_input_is_named(self, world: tuple[WorldState, GameData]) -> None:
         table = {"ring": (self._craft("ring", bar=6, ghost=1),),
                  "bar": (Route("bar", SourceKind.WITHDRAW, "bar", 1, 6, ()),)}
         model = self._model(world, table, inventory={}, equipment={}, gold=0)
-        assert model.feasible("ring", LEGACY) == Feasibility(ok=False, missing_inputs=("ghost",))
+        assert model.feasible("ring", 1, LEGACY) == Feasibility(ok=False, missing_inputs=("ghost",))
 
     def test_a_cycle_is_not_its_own_way_in(self, world: tuple[WorldState, GameData]) -> None:
         table = {"loop_a": (self._craft("loop_a", loop_b=1),),
                  "loop_b": (self._craft("loop_b", loop_a=1),)}
         model = self._model(world, table, inventory={}, equipment={}, gold=0)
-        assert not model.feasible("loop_a", LEGACY).ok
+        assert not model.feasible("loop_a", 1, LEGACY).ok
         assert self._model(world, table, inventory={"loop_b": 1}, equipment={},
-                           gold=0).feasible("loop_a", LEGACY).ok
+                           gold=0).feasible("loop_a", 1, LEGACY).ok
 
     def test_an_item_with_no_route_and_no_holding_has_no_reason_to_give(
             self, world: tuple[WorldState, GameData]) -> None:
         model = self._model(world, {}, inventory={}, equipment={}, gold=0)
-        assert model.feasible("ghost", LEGACY) == Feasibility(ok=False)
+        assert model.feasible("ghost", 1, LEGACY) == Feasibility(ok=False)
 
 
 def test_feasible_runs_over_the_real_catalogue(world: tuple[WorldState, GameData]) -> None:
     """Every item of real game data gets an answer, and every feasible verdict
-    is backed by a holding or a ready route (a smoke check that the closure
-    walk terminates on real recipes)."""
+    is backed by stock or a ready route (a smoke check that the closure walk
+    terminates on real recipes)."""
     state, gd = world
     model = ObtainModel(state, gd, _ctx(), NOW)
-    verdicts = {item: model.feasible(item, LEGACY) for item in census_items(gd)}
+    verdicts = {item: model.feasible(item, 1, LEGACY) for item in census_items(gd)}
     assert any(v.ok for v in verdicts.values()) and any(not v.ok for v in verdicts.values())
-    held = model._held()
-    assert all(item in held or model.ready(item, LEGACY) for item, v in verdicts.items() if v.ok)
+    assert all(model.on_hand(item, LEGACY) or model.ready(item, LEGACY)
+               for item, v in verdicts.items() if v.ok)
 
 
 def test_drop_routes_evaluate_winnability_only_for_a_monster_that_spawns(
@@ -315,16 +346,17 @@ def test_drop_routes_evaluate_winnability_only_for_a_monster_that_spawns(
     assert gates[GateKind.SPAWN_KNOWN] and gates[GateKind.WINNABLE] and not gates[GateKind.SPAWN_LIVE]
 
 
-class TestQuantity:
-    """`renewable` and `on_hand`: what a unit-feasibility answer cannot say."""
+class TestOnHand:
+    """What `on_hand` counts: the bag, reachable bank copies and licensed
+    recycles, never a purchase or a worn copy."""
 
-    def test_a_banked_copy_is_on_hand_but_not_renewable(self, world: tuple[WorldState, GameData]) -> None:
+    def test_the_bag_and_the_bank_are_on_hand(self, world: tuple[WorldState, GameData]) -> None:
         state, gd = world
         model = ObtainModel(replace(state, inventory={"hard_leather": 2},
                                     bank_items={"hard_leather": 3}), gd, _ctx(), NOW)
-        assert model.feasible("hard_leather", OPEN).ok
-        assert not model.renewable("hard_leather", OPEN)
         assert model.on_hand("hard_leather", OPEN) == 5
+        assert model.feasible("hard_leather", 5, OPEN).ok
+        assert not model.feasible("hard_leather", 6, OPEN).ok
 
     def test_a_locked_bank_is_not_on_hand(self, world: tuple[WorldState, GameData]) -> None:
         state, gd = world
@@ -340,21 +372,11 @@ class TestQuantity:
         model = ObtainModel(replace(state, inventory={}, bank_items={}), gd, _ctx(), NOW)
         assert any(r.kind is SourceKind.GE_FILL for r in model.ready(worn, OPEN)), \
             "vacuous: no GE order for the worn item"
-        assert model.feasible(worn, OPEN).ok and model.on_hand(worn, OPEN) == 0
+        assert model.on_hand(worn, OPEN) == 0
 
-    def test_a_gathered_item_and_its_crafts_are_renewable(
-            self, world: tuple[WorldState, GameData]) -> None:
+    def test_a_ge_order_costs_its_price_in_gold(self, world: tuple[WorldState, GameData]) -> None:
         state, gd = world
-        model = ObtainModel(replace(state, inventory={}, bank_items={}), gd, _ctx(), NOW)
-        assert model.renewable("copper_ore", OPEN) and model.renewable("copper_bar", OPEN)
-
-    def test_a_craft_from_stock_only_is_not_renewable(self, world: tuple[WorldState, GameData]) -> None:
-        """Made from a banked material nothing else yields: feasible once, but
-        not renewable."""
-        state, gd = world
-        with patch.object(GameData, "crafting_recipe",
-                          lambda self, code: {"hard_leather": 1} if code == "copper_bar" else None):
-            model = ObtainModel(replace(state, inventory={}, bank_items={"hard_leather": 1}),
-                                gd, _ctx(), NOW)
-            assert model.feasible("copper_bar", OPEN).ok
-            assert not model.renewable("copper_bar", OPEN)
+        worn = next(code for code in state.equipment.values() if code)
+        [order] = [r for r in ObtainModel(state, gd, _ctx(), NOW).routes(worn)
+                   if r.kind is SourceKind.GE_FILL]
+        assert order.inputs == {GOLD_CODE: gd.ge_best_sell_order(worn)[1]}

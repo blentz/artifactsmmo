@@ -974,12 +974,13 @@ open Formal.PriorityBand
 #print axioms Formal.ObtainModelReady.enforces_spawn_switch
 #print axioms Formal.ObtainModelReady.enforces_spawn_other
 #print axioms Formal.ObtainModelReady.enforces_craft_skill
+#print axioms Formal.ObtainModelReady.admits_market
 #print axioms Formal.ObtainModelReady.admits_other
 #print axioms Formal.ObtainModelReady.enforces_xp_positive
-#print axioms Formal.ObtainModelFeasible.feasible_sound
-#print axioms Formal.ObtainModelFeasible.feasible_complete
-#print axioms Formal.ObtainModelFeasible.iter_stable
-#print axioms Formal.ObtainModelFeasible.feasible_mono_held
+#print axioms Formal.ObtainModelSupply.can_sound
+#print axioms Formal.ObtainModelSupply.can_mono_onHand
+#print axioms Formal.ObtainModelSupply.can_anti_qty
+#print axioms Formal.ObtainModelSupply.can_fuel_stable
 #print axioms Formal.CompleteTaskIncome.applyComplete_adds
 #print axioms Formal.CompleteTaskIncome.applyComplete_monotone
 #print axioms Formal.Liveness.CurrencyFunding.fundingCycles_sufficient

@@ -137,7 +137,7 @@ def test_the_zero_stat_harness_would_measure_the_fixture(
     then unreachable, so cells wall for a reason that belongs to the harness.
 
     Three counts, pinned exactly because `open_rung_completeness`'s module
-    docstring quotes them: 63 closed with the flag off everywhere, 21 closed
+    docstring quotes them: 62 closed with the flag off everywhere, 21 closed
     on the scenarios AS COMMITTED (34 of the 44 opt in), 10 with the census's
     forced-on states. The as-committed number is the one that matters — it is
     what this census would report if `census_state` were `scenario_state`.
@@ -151,7 +151,7 @@ def test_the_zero_stat_harness_would_measure_the_fixture(
     closes nothing. A new cell therefore widens the harness's lie without
     changing what the census reports, which is the intended relationship.
 
-    77 -> 63 / 20 -> 21 / 6 -> 10 when the obtainability walk moved onto the
+    77 -> 62 / 20 -> 21 / 6 -> 10 when the obtainability walk moved onto the
     obtain model: a material held or banked in full now counts (with bags and banks
     emptied, all-off is 77 again), and the l48 gearcrafting 42 rung needs a
     `diamond_stone` whose only resource has no tile anywhere.
@@ -159,8 +159,8 @@ def test_the_zero_stat_harness_would_measure_the_fixture(
     all_off = _closed_cells(bundle_game_data, derive_combat_stats=False)
     as_committed = _closed_cells(bundle_game_data, derive_combat_stats=None)
     derived = _closed_cells(bundle_game_data, derive_combat_stats=True)
-    assert (all_off, as_committed, derived) == (63, 21, 10), \
-        "update the module docstring's 63/21/10 note"
+    assert (all_off, as_committed, derived) == (62, 21, 10), \
+        "update the module docstring's 62/21/10 note"
     # The opt-in count is PINNED, not merely restated. Both docstrings quote it,
     # and it silently rotted from 11 to 20 as scenarios were added — caught only
     # by a coverage audit, months later. A quoted number with no assertion behind

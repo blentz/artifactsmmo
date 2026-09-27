@@ -568,13 +568,14 @@ def _jeweller() -> WorldState:
 
 
 def test_a_vendor_only_material_does_not_make_a_rung_obtainable():
-    """A BUY route is renewable only if its gold is, and gold is not: a gem only
-    a vendor sells does not make the ring a grind target."""
+    """The grind's descent buys a material only when nothing else yields it,
+    so the grind counts no vendor: an affordable gem does not make the ring a
+    grind target."""
     gd = _policy_world()
     gd._npc_stock = {"jeweller": {"gem": 10}}
     gd._npc_locations = {"jeweller": (5, 5)}
     model = grind_model(_jeweller(), gd)
-    assert model.feasible("gem", LEGACY).ok, "vacuous: the vendor route is not even ready"
+    assert model.feasible("gem", 1, LEGACY).ok, "vacuous: the vendor route is not even ready"
     assert not is_obtainable("ring", model)
 
 
@@ -585,7 +586,7 @@ def test_a_material_from_a_reachable_underground_resource_counts():
     gd._resource_drops = {"deep_vein": "gem"}
     with patch.object(GameData, "resource_spawn_known", return_value=True):
         model = grind_model(_jeweller(), gd)
-        assert not model.feasible("gem", LEGACY).ok, "vacuous: the vein has a live tile"
+        assert not model.feasible("gem", 1, LEGACY).ok, "vacuous: the vein has a live tile"
         assert is_obtainable("ring", model)
 
 
@@ -611,7 +612,7 @@ def test_an_intermediate_above_its_craft_level_still_counts():
     gd._resource_drops = {"gem_rocks": "gem"}
     gd._resource_locations = {"gem_rocks": [(1, 0)]}
     model = grind_model(_jeweller(), gd)
-    assert not model.feasible("cut_gem", LEGACY).ok, "vacuous: the craft skill is met"
+    assert not model.feasible("cut_gem", 1, LEGACY).ok, "vacuous: the craft skill is met"
     assert is_obtainable("ring", model)
 
 
@@ -620,7 +621,7 @@ def test_a_held_copy_of_the_rung_does_not_make_it_obtainable():
     the grind when the gem cannot be had."""
     gd = _policy_world()
     model = grind_model(dataclasses.replace(_jeweller(), inventory={"ring": 1}), gd)
-    assert model.feasible("ring", GRIND_POLICY).ok, "vacuous: the held ring is not feasible"
+    assert model.feasible("ring", 1, GRIND_POLICY).ok, "vacuous: the held ring is not feasible"
     assert not is_obtainable("ring", model)
 
 
@@ -631,7 +632,7 @@ def test_a_rung_with_no_known_workshop_is_not_obtainable():
     gd._resource_drops = {"gem_rocks": "gem"}
     gd._resource_locations = {"gem_rocks": [(1, 0)]}
     model = grind_model(_jeweller(), gd)
-    assert model.feasible("gem", GRIND_POLICY).ok, "vacuous: the gem is not obtainable"
+    assert model.feasible("gem", 1, GRIND_POLICY).ok, "vacuous: the gem is not obtainable"
     assert not is_obtainable("ring", model)
 
 
@@ -643,7 +644,7 @@ def test_a_banked_material_counts_only_in_the_quantity_the_recipe_needs():
     gd._crafting_recipes = {"ring": {"gem": 2}}
     one = dataclasses.replace(_jeweller(), bank_items={"gem": 1})
     model = grind_model(one, gd)
-    assert model.feasible("gem", GRIND_POLICY).ok, "vacuous: the banked gem is not even feasible"
+    assert model.feasible("gem", 1, GRIND_POLICY).ok, "vacuous: the banked gem is not even feasible"
     assert not is_obtainable("ring", model)
     assert is_obtainable("ring", grind_model(
         dataclasses.replace(one, bank_items={"gem": 1}, inventory={"gem": 1}), gd))

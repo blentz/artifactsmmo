@@ -64,7 +64,8 @@ exemptions and the directive they bend around."""
 
 
 GRIND_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False, craft_skill_gate=False,
-                      event_vendors=False, spawn_known=True, allow_grey=GRIND_ALLOWS_GREY)
+                      event_vendors=False, spawn_known=True, allow_grey=GRIND_ALLOWS_GREY,
+                      market_routes=False)
 """What the grind counts as a way to get a rung's material, as an obtain-model
 policy (step 4 of docs/PLAN_decision_architecture_redesign.md). Each switch
 matches what the grind's descent can actually serve:
@@ -76,12 +77,11 @@ matches what the grind's descent can actually serve:
   surface exactly that demand (D-M turns such a gate into a sub-goal);
 - a spawn counts when routable, an underground `gold_rocks` included (the
   action factory builds a gather for it), and grey droppers count
-  (`GRIND_ALLOWS_GREY`, the same rule `drop_obtainable` was given).
-
-A vendor never makes a rung obtainable, as before: `is_obtainable` wants a
-material renewable or on hand, a BUY route is renewable only if its currency is,
-and gold is not (its one route, a SELL, is stock-limited). A GE fill is a
-stock-limited purchase, so it is neither.
+  (`GRIND_ALLOWS_GREY`, the same rule `drop_obtainable` was given);
+- no BUY or GE_FILL route, as before: `GatherMaterialsGoal(skill_grind=True)`
+  buys a material only when no resource and no monster yields it at all, so an
+  affordable vendor for a material a monster also drops would name a rung the
+  descent never buys for.
 
 What the model adds over the recursive walk it replaced: a material already in
 the bag or the bank counts when there is enough of it (the descent withdraws
@@ -100,9 +100,9 @@ def grind_model(state: WorldState, game_data: GameData) -> ObtainModel:
 def is_obtainable(code: str, model: ObtainModel) -> bool:
     """Can the grind make `code`? A rung is crafted for its xp, so a craftable
     item counts only through its CRAFT route: that route must be ready, and
-    every input must be RENEWABLE or ON HAND in the quantity the recipe needs
-    (a copy of the rung already held does not serve the grind). Any other item
-    is asked directly (`ObtainModel.feasible`).
+    every input must be feasible in the quantity the recipe needs (a copy of
+    the rung already held does not serve the grind). Any other item is asked
+    for one unit (`ObtainModel.feasible`).
 
     QUANTITY, NOT EXISTENCE. Unit feasibility would admit a rung whose material
     is one banked copy of something nothing makes: live 2026-09-27, the bank's
@@ -116,10 +116,9 @@ def is_obtainable(code: str, model: ObtainModel) -> bool:
     livelock (see `drop_obtainability`'s docstring)."""
     crafts = [route for route in model.routes(code) if route.kind is SourceKind.CRAFT]
     if not crafts:
-        return model.feasible(code, GRIND_POLICY).ok
+        return model.feasible(code, 1, GRIND_POLICY).ok
     return any(GRIND_POLICY.ready(route)
-               and all(model.renewable(item, GRIND_POLICY)
-                       or model.on_hand(item, GRIND_POLICY) >= qty
+               and all(model.feasible(item, qty, GRIND_POLICY).ok
                        for item, qty in route.inputs.items())
                for route in crafts)
 

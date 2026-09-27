@@ -2378,34 +2378,53 @@ def runLeafAttainable (args : Array Json) : Json :=
     (intArg args 0 != 0) (intArg args 1 != 0) (intArg args 2 != 0) (intArg args 3 != 0)
   Json.mkObj [("attainable", Json.bool a)]
 
--- ObtainModelFeasible: unit feasibility (least fixpoint) of the obtain model.
--- args = [n, held: [0/1 x n], routes: [[[input, ...], ...] x n]] -> feasible: [bool x n]
-namespace ObtainModelFeasibleOracle
-open Formal.ObtainModelFeasible
+-- ObtainModelSupply: quantity feasibility of the obtain model.
+-- args = [n, onHand: [Nat x n], supplies: [[[yield, cap, [[input, amount], ...]], ...] x n],
+--         queries: [[item, qty], ...]] -> can: [bool per query]
+namespace ObtainModelSupplyOracle
+open Formal.ObtainModelSupply
 
 def natList (j : Json) : Option (List Nat) := do
   let a ← (j.getArr?).toOption
   a.toList.mapM (fun e => (e.getInt?).toOption.map Int.toNat)
 
+def parsePair (j : Json) : Option (Nat × Nat) := do
+  let xs ← natList j
+  match xs with
+  | [a, b] => pure (a, b)
+  | _ => none
+
+def parseSupply (j : Json) : Option Supply := do
+  let a ← (j.getArr?).toOption
+  if a.size < 3 then none
+  let y ← (a[0]!.getInt?).toOption
+  let c ← (a[1]!.getInt?).toOption
+  let ins ← (a[2]!.getArr?).toOption
+  let inputs ← ins.toList.mapM parsePair
+  pure ⟨y.toNat, c.toNat, inputs⟩
+
 def run (args : Array Json) : Json :=
   let n := (intArg args 0).toNat
-  let parsed : Option (List Nat × List (List (List Nat))) := do
-    let held ← natList args[1]!
-    let rs ← (args[2]!.getArr?).toOption
-    let routes ← rs.toList.mapM (fun perItem => do
+  let parsed : Option (List Nat × List (List Supply) × List (Nat × Nat)) := do
+    let onHand ← natList args[1]!
+    let ss ← (args[2]!.getArr?).toOption
+    let supplies ← ss.toList.mapM (fun perItem => do
       let a ← (perItem.getArr?).toOption
-      a.toList.mapM natList)
-    pure (held, routes)
+      a.toList.mapM parseSupply)
+    let qs ← (args[3]!.getArr?).toOption
+    let queries ← qs.toList.mapM parsePair
+    pure (onHand, supplies, queries)
   match parsed with
   | none => Json.mkObj [("error", Json.str "bad graph")]
-  | some (held, routes) =>
-    let g : Graph := ⟨n, fun i => held.getD i 0 != 0, fun i => routes.getD i []⟩
-    Json.mkObj [("feasible", Json.arr ((List.range n).map (fun i => Json.bool (feasible g i))).toArray)]
+  | some (onHand, supplies, queries) =>
+    let g : Graph := ⟨n, fun i => onHand.getD i 0, fun i => supplies.getD i []⟩
+    Json.mkObj [("can", Json.arr (queries.map (fun (i, q) => Json.bool (canSupply g i q))).toArray)]
 
-end ObtainModelFeasibleOracle
+end ObtainModelSupplyOracle
 
 -- ObtainModelReady: the unified obtain model's route selection.
--- args = [allGather, gatherSkill, craftSkill, eventVendors, spawnKnown, allowGrey (each 0/1),
+-- args = [allGather, gatherSkill, craftSkill, eventVendors, spawnKnown, allowGrey, market
+--         (each 0/1),
 --         routes: [[kindStr, via(Nat), primary(0/1), [[gateKindStr, sat(0/1)], ...]], ...]]
 -- Kind strings are `SourceKind.value`; gate strings are `GateKind.value`.
 namespace ObtainModelReadyOracle
@@ -2466,8 +2485,8 @@ def routeJson (r : Route) : Json :=
 
 def run (args : Array Json) : Json :=
   let p : Policy := ⟨intArg args 0 != 0, intArg args 1 != 0, intArg args 2 != 0,
-    intArg args 3 != 0, intArg args 4 != 0, intArg args 5 != 0⟩
-  match (args[6]!.getArr?).toOption.bind (fun rs => rs.toList.mapM parseRoute) with
+    intArg args 3 != 0, intArg args 4 != 0, intArg args 5 != 0, intArg args 6 != 0⟩
+  match (args[7]!.getArr?).toOption.bind (fun rs => rs.toList.mapM parseRoute) with
   | none => Json.mkObj [("error", Json.str "bad routes")]
   | some rs => Json.mkObj [("ready", Json.arr ((readyRoutes p rs).map routeJson).toArray)]
 
@@ -3256,8 +3275,8 @@ def runOne (item : Json) : Json :=
     runLeafAttainable args
   else if kind == "obtain_model_ready" then
     ObtainModelReadyOracle.run args
-  else if kind == "obtain_model_feasible" then
-    ObtainModelFeasibleOracle.run args
+  else if kind == "obtain_model_supply" then
+    ObtainModelSupplyOracle.run args
   else if kind == "complete_task_income" then
     runCompleteTaskIncome args
   else if kind == "currency_funding" then

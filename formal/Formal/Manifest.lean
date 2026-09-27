@@ -24,7 +24,7 @@ import Formal.CraftPlanDriver
 import Formal.DoomedMemo
 import Formal.LeafAttainable
 import Formal.ObtainModelReady
-import Formal.ObtainModelFeasible
+import Formal.ObtainModelSupply
 import Formal.CompleteTaskIncome
 import Formal.AccumulationSell
 import Formal.DominancePareto
@@ -1237,15 +1237,16 @@ open Formal.PriorityBand
 #check @Formal.ObtainModelReady.enforces_spawn_switch          -- D-D switch (DROP and GATHER)
 #check @Formal.ObtainModelReady.enforces_spawn_other           -- spawn always enforced elsewhere
 #check @Formal.ObtainModelReady.enforces_craft_skill           -- craft-skill switch
-#check @Formal.ObtainModelReady.admits_other                   -- non-GATHER always offered
+#check @Formal.ObtainModelReady.admits_market                  -- market-routes switch
+#check @Formal.ObtainModelReady.admits_other                   -- other kinds always offered
 #check @Formal.ObtainModelReady.enforces_xp_positive           -- grey switch
 
--- ObtainModelFeasible required roles (unit feasibility least fixpoint;
--- src/artifactsmmo_cli/ai/obtain_model/feasible_core.py):
-#check @Formal.ObtainModelFeasible.feasible_sound        -- validity: every feasible item has a derivation
-#check @Formal.ObtainModelFeasible.feasible_complete     -- sufficiency: every derivable item is found
-#check @Formal.ObtainModelFeasible.iter_stable           -- termination: n + 1 rounds reach the fixpoint
-#check @Formal.ObtainModelFeasible.feasible_mono_held    -- monotone in holdings
+-- ObtainModelSupply required roles (quantity feasibility of the obtain model;
+-- src/artifactsmmo_cli/ai/obtain_model/supply_core.py):
+#check @Formal.ObtainModelSupply.can_sound          -- validity: a yes has a finite supply tree
+#check @Formal.ObtainModelSupply.can_mono_onHand    -- monotone in holdings
+#check @Formal.ObtainModelSupply.can_anti_qty       -- fewer units are never harder
+#check @Formal.ObtainModelSupply.can_fuel_stable    -- termination: n + 1 fuel is the unbounded answer
 
 -- CompleteTaskIncome required roles (CompleteTaskAction.apply coin minting;
 -- src/artifactsmmo_cli/ai/actions/complete_task_core.py):

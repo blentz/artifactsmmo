@@ -34,11 +34,11 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import destroyable
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
 from artifactsmmo_cli.ai.obtain_model.feasibility import Feasibility
-from artifactsmmo_cli.ai.obtain_model.feasible_core import feasible_items
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
+from artifactsmmo_cli.ai.obtain_model.supply_core import Supply, can_supply
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
@@ -76,70 +76,51 @@ class ObtainModel:
         order (see `ready_core.ready_routes`, the proved selection)."""
         return ready_routes(self.routes(item), policy)
 
-    def feasible(self, item: str, policy: Policy) -> Feasibility:
-        """Can at least one unit of `item` be obtained from here under `policy`?
+    def feasible(self, item: str, qty: int, policy: Policy) -> Feasibility:
+        """Can `qty` units of `item` be obtained from here under `policy`?
 
-        The least fixpoint of `feasible_core.feasible_items` over the input
-        closure of `item`'s ready routes: an item is feasible when held
-        (bag, worn, or pocket gold) or when some ready route has every input
-        feasible. A banked copy is not "held": it arrives as a WITHDRAW route,
-        gated on bank access. Existence only; quantities are not modelled."""
-        closure, ready_inputs = self._closure(item, policy, renewable_only=False)
-        found = feasible_items(closure, self._held(), ready_inputs)
-        if item in found:
+        `supply_core.can_supply` over the input closure of `item`'s ready
+        routes: yes when `qty` are `on_hand`, or when some ready route that
+        produces (not an owned-copy route: those are counted as on hand) can
+        deliver `qty` and every input can be had in the amount its applications
+        consume. A gold price is an input like any other, so an unaffordable
+        vendor is no route. When the answer is no, `blocking_gates` names the
+        unmet enforced gates on `item`'s own routes and `missing_inputs` the
+        inputs of its ready routes that cannot be had in the amount needed."""
+        on_hand: dict[str, int] = {}
+        supplies: dict[str, list[Supply]] = {}
+        pending = [item]
+        while pending:
+            code = pending.pop()
+            if code in supplies:
+                continue
+            on_hand[code] = self.on_hand(code, policy)
+            supplies[code] = [Supply(route.yield_per, route.capacity, tuple(route.inputs.items()))
+                              for route in self.ready(code, policy) if route.kind not in _OWNED]
+            pending.extend(x for supply in supplies[code] for x, _k in supply.inputs)
+        if can_supply(item, qty, on_hand, supplies):
             return Feasibility(ok=True)
         gates = tuple(gate for route in self.routes(item)
                       if policy.admits(route) and not policy.ready(route)
                       for gate in route.gates
                       if policy.enforces(gate, route) and not gate.satisfied)
-        missing = tuple(dict.fromkeys(x for inputs in ready_inputs[item] for x in inputs
-                                      if x not in found))
+        missing = tuple(dict.fromkeys(
+            x for supply in supplies[item] if supply.capacity >= qty
+            for x, per_application in supply.inputs
+            if not can_supply(x, -(-qty // supply.yield_per) * per_application, on_hand, supplies)))
         return Feasibility(ok=False, blocking_gates=gates, missing_inputs=missing)
-
-    def renewable(self, item: str, policy: Policy) -> bool:
-        """Can `item` be made again and again under `policy`, however many
-        units are wanted? True when some ready route that is not stock-limited
-        (a CRAFT, GATHER, DROP or BUY) has every input renewable. Nothing held
-        counts, and no WITHDRAW, RECYCLE or GE_FILL route (each can deliver only
-        its `capacity`).
-
-        The same proved least fixpoint as `feasible` (`feasible_core`), over the
-        unbounded routes only and with nothing held."""
-        closure, ready_inputs = self._closure(item, policy, renewable_only=True)
-        return item in feasible_items(closure, frozenset(), ready_inputs)
 
     def on_hand(self, item: str, policy: Policy) -> int:
         """Units of `item` available from what the character already owns: the
         bag, plus the capacity of every ready WITHDRAW (banked copies) and
         RECYCLE (licensed copies) route. Not a GE fill, which is a purchase, and
-        not worn copies: using one would mean unequipping it."""
+        not worn copies: using one would mean unequipping it. Gold is the pocket
+        (`state.gold`; gold is never an inventory item). Bank gold is not counted
+        yet (D-H)."""
+        if item == GOLD_CODE:
+            return self._state.gold
         return self._state.inventory.get(item, 0) + sum(
             route.capacity for route in self.ready(item, policy) if route.kind in _OWNED)
-
-    def _closure(self, item: str, policy: Policy, *, renewable_only: bool
-                 ) -> tuple[list[str], dict[str, list[list[str]]]]:
-        """`item` and every input reachable through its ready routes (only the
-        unbounded ones when `renewable_only`), with each item's ready-route
-        input lists: the graph `feasible_core.feasible_items` runs on."""
-        closure: list[str] = []
-        ready_inputs: dict[str, list[list[str]]] = {}
-        pending = [item]
-        while pending:
-            code = pending.pop()
-            if code in ready_inputs:
-                continue
-            closure.append(code)
-            ready_inputs[code] = [list(route.inputs) for route in self.ready(code, policy)
-                                  if not renewable_only or route.capacity >= UNBOUNDED_CAPACITY]
-            pending.extend(x for inputs in ready_inputs[code] for x in inputs)
-        return closure, ready_inputs
-
-    def _held(self) -> frozenset[str]:
-        held = {code for code, qty in self._state.inventory.items() if qty > 0}
-        held.update(code for code in self._state.equipment.values() if code)
-        if self._state.gold > 0:
-            held.add(GOLD_CODE)
-        return frozenset(held)
 
     def _skill(self, skill: str) -> int:
         return self._state.skills.get(skill, DEFAULT_SKILL_LEVEL)
@@ -262,10 +243,11 @@ class ObtainModel:
         order = self._gd.ge_best_sell_order(item)
         if order is None:
             return []
-        order_id, _price, quantity = order
+        order_id, price, quantity = order
         gate = Gate(GateKind.GE_LOCATED, "grand_exchange",
                     self._gd.grand_exchange_location() is not None)
-        return [Route(item, SourceKind.GE_FILL, order_id, 1, quantity, (gate,))]
+        return [Route(item, SourceKind.GE_FILL, order_id, 1, quantity, (gate,),
+                      inputs={GOLD_CODE: price})]
 
     def _drop(self, item: str) -> list[Route]:
         """Monsters that drop `item`: see `drop_routes`, the one place drop gates

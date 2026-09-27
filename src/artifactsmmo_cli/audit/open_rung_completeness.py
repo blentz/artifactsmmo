@@ -46,10 +46,10 @@ zero-stat states "`is_winnable` is False against EVERY monster (predict_win
 sees 0 attack)". A rung's obtainability walk asks the shared drop gates,
 so with the flag off EVERY monster-drop leaf in the catalogue is unreachable
 and the census would report walls that are properties of the fixture. Measured
-on the committed bundle: 63 closed cells with the flag off everywhere, 21 with
+on the committed bundle: 62 closed cells with the flag off everywhere, 21 with
 the scenarios AS COMMITTED (34 of the 44 opt the flag on), and 10 with it forced
 on. The all-off figure moved 74 -> 77 when wave 6 added `l32_items_task` (the
-other two did NOT move, which is the point of keeping all three), and 77 -> 63
+other two did NOT move, which is the point of keeping all three), and 77 -> 62
 when the walk moved onto the obtain model (2026-09-27), which counts a material
 held or banked in the quantity the rung needs: with every state's bag and bank emptied it is 77
 again. That move also changed the other two, both for real reasons: the four
@@ -62,7 +62,7 @@ the forced-on figure are the measure. A new cell that changed THOSE would
 be a real finding rather than a regeneration. The flag is therefore forced on for every cell — the census derives the
 combat totals a live character wearing that scenario's declared loadout would
 report. The committed scenarios are NOT modified; `census_state` builds its own
-copy. `test_the_zero_stat_harness_would_measure_the_fixture` pins the 63/21/10
+copy. `test_the_zero_stat_harness_would_measure_the_fixture` pins the 62/21/10
 spread so a later default flip cannot make this note quietly false.
 
 THE RESIDUALS (must be zero)

@@ -456,7 +456,16 @@ Each step is one commit, gated by the full gate, and witnessed by
   - Open-rung census: walled 6 -> 10. The four new walls are gearcrafting 42 in the l48 scenarios (the same `white_knight_helmet`). With combat stats off, 77 -> 63 closed cells because held and banked materials count; with holdings emptied it is 77 again.
   - `has_grind_target` over 308 calls: 0.06s before, 0.09s after.
   - Lean: the policy has 6 switches (`enforces_spawn_switch`, `enforces_craft_skill`, `admits_other`), and the exhaustive sweep covers 64 policies. The new mutants (policy, spawn predicate, quantity views, grind policy) are all killed.
-  - Next consumer: `objective.is_attainable_now` / `is_suppliable`.
+- Step 4: `feasible` becomes the plan's `feasible(item, qty, policy)` (landed).
+  - One quantity-aware answer replaces both the unit fixpoint (`feasible_core`, `Formal/ObtainModelFeasible.lean`, retired) and the grind's `renewable`/`on_hand` pair: `supply_core.can_supply`, a path-guarded AND/OR walk. Yes when `qty` are on hand (bag + ready WITHDRAW/RECYCLE; pocket gold for GOLD), or when a ready producing route can deliver `qty` within its capacity and every input can be had in `ceil(qty / yield) * per_application`.
+  - Why: the next consumer, `is_attainable_now`, compares a vendor price with pocket gold. Unit feasibility would call a 20,000-gold rune attainable with 1 gold.
+  - Memo: each (item, qty) answer is stored with the items it visited and the path cuts it hit, and reused only where the path would not change it. Exact (the differential includes cut cases), and linear on shared subtrees (a 40-layer diamond: 2**40 naive, <= 160 expansions).
+  - GE_FILL now carries its gold price as an input. Bank gold is still not counted (D-H).
+  - Lean `Formal/ObtainModelSupply.lean`: sound (a yes has a finite supply tree), monotone in holdings, antitone in quantity, fuel bound (n+1 fuel equals the unbounded recursion). Differential: 500 random graphs with capacity cuts, cycles and shared subtrees.
+  - The grind asks `feasible(input, recipe_qty, GRIND_POLICY)`. That makes affordable vendors count, so `market_routes` is a live switch again (GRIND keeps it off, because its descent buys only materials nothing else yields).
+  - Grind census: 8 of 308 scenario targets change against the original walk. The new one is `greater_dreadful_amulet`, whose intermediate crafts from stock. Live: 2 of 35 (Robby, HAL: `snakeskin_boots` off the account bank's 2 `snakeskin`). ⚠️ Siblings share the bank, so two characters can pick a rung the bank can serve only once. The first craft consumes it and the other's rung drops out: a wasted cycle, not a livelock.
+  - Open-rung all-off count 63 -> 62 (still 77 with holdings emptied).
+  - Next consumer: `objective.is_attainable_now` (needs a TASK_REWARD route kind, D-N) / `is_suppliable`.
 - 1c: `feasible` / `cost` / `demand` views.
 - Then steps 3-5 as above.
 

@@ -364,7 +364,7 @@ EVENT_VISIBILITY_MUTATIONS = [
 LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "leaf_attainable_core.py"
 OBTAIN_MODEL_READY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "ready_core.py"
 OBTAIN_MODEL_POLICY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "policy.py"
-OBTAIN_MODEL_FEASIBLE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "feasible_core.py"
+OBTAIN_MODEL_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "supply_core.py"
 OBTAIN_MODEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "obtain_model.py"
 OBTAIN_MODEL_DROP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "drop_routes.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
@@ -2942,21 +2942,34 @@ OBTAIN_MODEL_READY_MUTATIONS = [
      "            sold.add(route.via)",
      "            pass"),
 ]
-# Killed by formal/diff/test_obtain_model_feasible_diff.py (binds
-# feasible_core.feasible_items to the proved Formal.ObtainModelFeasible.feasible).
-OBTAIN_MODEL_FEASIBLE_MUTATIONS = [
-    ("obtain_model feasible: ignore holdings",
-     "    feasible = {item for item in closure if item in held}",
-     "    feasible: set[str] = set()"),
-    ("obtain_model feasible: require every route, not some route",
-     "            if any(all(x in feasible for x in inputs) for inputs in ready_inputs.get(item, ())):",
-     "            if all(all(x in feasible for x in inputs) for inputs in ready_inputs.get(item, ())):"),
-    ("obtain_model feasible: some input suffices",
-     "            if any(all(x in feasible for x in inputs) for inputs in ready_inputs.get(item, ())):",
-     "            if any(any(x in feasible for x in inputs) for inputs in ready_inputs.get(item, ())):"),
-    ("obtain_model feasible: stop after one pass",
-     "                feasible.add(item)\n                changed = True",
-     "                feasible.add(item)"),
+# Killed by formal/diff/test_obtain_model_supply_diff.py (binds
+# supply_core.can_supply to the proved Formal.ObtainModelSupply.canSupply).
+OBTAIN_MODEL_SUPPLY_MUTATIONS = [
+    ("supply_core: stock never suffices",
+     "    if on_hand.get(item, 0) >= qty:",
+     "    if on_hand.get(item, 0) > qty:"),
+    ("supply_core: capacity is not a limit",
+     "        if supply.capacity < qty:",
+     "        if supply.capacity < 0:"),
+    ("supply_core: one application per ask, whatever the yield",
+     "        runs = -(-qty // supply.yield_per)",
+     "        runs = qty"),
+    ("supply_core: a cycle is its own way in",
+     "        return False, frozenset({item}), frozenset({item})",
+     "        return True, frozenset({item}), frozenset({item})"),
+    ("supply_core: some input suffices",
+     "            if not found:\n                ok = False\n                break",
+     "            if found:\n                break"),
+    ("supply_core: reuse an answer whatever its cuts",
+     "    if cached is not None and cached[2] <= path and not ((cached[1] - cached[2]) & path):",
+     "    if cached is not None:"),
+]
+# The memo's work bound, killed by tests/test_ai/test_supply_core.py (a
+# disabled memo gives the same answers, so no differential can see it).
+OBTAIN_MODEL_SUPPLY_MEMO_MUTATIONS = [
+    ("supply_core: never reuse an answer",
+     "    if cached is not None and cached[2] <= path and not ((cached[1] - cached[2]) & path):",
+     "    if False:"),
 ]
 # Killed by tests/test_ai/test_obtain_sources.py, which exercises the model
 # through `obtain_sources` (a LEGACY-policy view of it since Phase 1 step 3).
@@ -2998,12 +3011,6 @@ OBTAIN_MODEL_GATHER_SPAWN_MUTATIONS = [
 # ObtainModel.renewable / on_hand, killed by tests/test_ai/test_obtain_model.py
 # (TestQuantity).
 OBTAIN_MODEL_QUANTITY_MUTATIONS = [
-    ("obtain_model: a stock-limited route makes an item renewable",
-     "                                  if not renewable_only or route.capacity >= UNBOUNDED_CAPACITY]",
-     "                                  if True]"),
-    ("obtain_model: holdings make an item renewable",
-     "        return item in feasible_items(closure, frozenset(), ready_inputs)",
-     "        return item in feasible_items(closure, self._held(), ready_inputs)"),
     ("obtain_model: a GE order is on hand",
      "            route.capacity for route in self.ready(item, policy) if route.kind in _OWNED)",
      "            route.capacity for route in self.ready(item, policy)\n"
@@ -3011,6 +3018,12 @@ OBTAIN_MODEL_QUANTITY_MUTATIONS = [
     ("obtain_model: the bag is not on hand",
      "        return self._state.inventory.get(item, 0) + sum(",
      "        return 0 + sum("),
+    ("obtain_model: gold is not on hand",
+     "        if item == GOLD_CODE:\n            return self._state.gold\n",
+     "        if item == GOLD_CODE:\n            return 0\n"),
+    ("obtain_model: a GE order is free",
+     "                      inputs={GOLD_CODE: price})]",
+     "                      inputs={})]"),
 ]
 RESOURCE_SPAWN_KNOWN_MUTATIONS = [
     ("game_data: a resource spawn ignores layered tiles",
@@ -3033,12 +3046,12 @@ GRIND_OBTAINABLE_MUTATIONS = [
     ("skill_grind_target: the grind enforces the craft skill",
      "gather_skill_gate=False, craft_skill_gate=False,",
      "gather_skill_gate=False, craft_skill_gate=True,"),
-    ("skill_grind_target: one banked unit is enough stock",
-     "                       or model.on_hand(item, GRIND_POLICY) >= qty",
-     "                       or model.on_hand(item, GRIND_POLICY) > 0"),
-    ("skill_grind_target: a rung input needs only unit feasibility",
-     "               and all(model.renewable(item, GRIND_POLICY)\n",
-     "               and all(model.feasible(item, GRIND_POLICY).ok\n"),
+    ("skill_grind_target: the grind counts vendor and GE routes",
+     "                      market_routes=False)",
+     "                      market_routes=True)"),
+    ("skill_grind_target: a rung input needs one unit, not the recipe's amount",
+     "               and all(model.feasible(item, qty, GRIND_POLICY).ok",
+     "               and all(model.feasible(item, 1, GRIND_POLICY).ok"),
     ("skill_grind_target: a held rung is obtainable",
      "    if not crafts:\n",
      "    if True:\n"),
@@ -3048,8 +3061,8 @@ GRIND_OBTAINABLE_MUTATIONS = [
 ]
 GRIND_OBTAINABLE_GREY_MUTATIONS = [
     ("skill_grind_target: the grind refuses a grey dropper",
-     "spawn_known=True, allow_grey=GRIND_ALLOWS_GREY)",
-     "spawn_known=True, allow_grey=False)"),
+     "spawn_known=True, allow_grey=GRIND_ALLOWS_GREY,",
+     "spawn_known=True, allow_grey=False,"),
 ]
 OBTAIN_MODEL_DROP_GREY_MUTATIONS = [
     ("drop_routes: no monster is grey",
@@ -3078,6 +3091,12 @@ OBTAIN_MODEL_POLICY_MUTATIONS = [
     ("obtain_model policy: the spawn switch ignores a gather route",
      "_SPAWNED = (SourceKind.DROP, SourceKind.GATHER)",
      "_SPAWNED = (SourceKind.DROP,)"),
+    ("obtain_model policy: always offer market routes",
+     "            return self.market_routes",
+     "            return True"),
+    ("obtain_model policy: the market switch also hides crafts",
+     "        if route.kind in (SourceKind.BUY, SourceKind.GE_FILL):",
+     "        if route.kind in (SourceKind.BUY, SourceKind.GE_FILL, SourceKind.CRAFT):"),
     ("obtain_model policy: always enforce the craft skill",
      "            return self.craft_skill_gate",
      "            return True"),
@@ -4771,7 +4790,7 @@ _ALL_SRCS = [
     # C1 — acquisition-leaf attainability (task-earnable + currency-buy disjuncts).
     LEAF_ATTAINABLE_CORE_SRC,
     # Decision-architecture Phase 1 — unified obtain model route selection.
-    OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_FEASIBLE_SRC, OBTAIN_MODEL_SRC,
+    OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_SUPPLY_SRC, OBTAIN_MODEL_SRC,
     OBTAIN_MODEL_DROP_SRC,
     # C2 — complete_task coin-minting pure core.
     COMPLETE_TASK_CORE_SRC,
@@ -8351,8 +8370,10 @@ def _collect_all_groups() -> None:
               "formal/diff/test_obtain_model_ready_diff.py", survivors)
     run_group(OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_POLICY_MUTATIONS,
               "formal/diff/test_obtain_model_ready_diff.py", survivors)
-    run_group(OBTAIN_MODEL_FEASIBLE_SRC, OBTAIN_MODEL_FEASIBLE_MUTATIONS,
-              "formal/diff/test_obtain_model_feasible_diff.py", survivors)
+    run_group(OBTAIN_MODEL_SUPPLY_SRC, OBTAIN_MODEL_SUPPLY_MUTATIONS,
+              "formal/diff/test_obtain_model_supply_diff.py", survivors)
+    run_group(OBTAIN_MODEL_SUPPLY_SRC, OBTAIN_MODEL_SUPPLY_MEMO_MUTATIONS,
+              "tests/test_ai/test_supply_core.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_GATE_MUTATIONS,
               "tests/test_ai/test_obtain_sources.py", survivors)
     run_group(OBTAIN_MODEL_DROP_SRC, OBTAIN_MODEL_DROP_MUTATIONS,

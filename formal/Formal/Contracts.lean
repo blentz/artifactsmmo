@@ -18,7 +18,7 @@ import Formal.CraftPlanDriver
 import Formal.CurrencyAffordFastFail
 import Formal.LeafAttainable
 import Formal.ObtainModelReady
-import Formal.ObtainModelFeasible
+import Formal.ObtainModelSupply
 import Formal.CompleteTaskIncome
 import Formal.Liveness.CurrencyFunding
 import Formal.MonsterDropApply
@@ -3147,24 +3147,33 @@ example : ∀ (p : Policy) (r : Route), r.kind = .gather →
     admits p r = (p.allGather || r.primary) :=
   @Formal.ObtainModelReady.admits_gather
 open Formal.ObtainModelReady in
-example : ∀ (p : Policy) (r : Route), r.kind ≠ .gather → admits p r = true :=
+example : ∀ (p : Policy) (r : Route), (r.kind = .buy ∨ r.kind = .geFill) →
+    admits p r = p.market :=
+  @Formal.ObtainModelReady.admits_market
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route), r.kind ≠ .gather → r.kind ≠ .buy → r.kind ≠ .geFill →
+    admits p r = true :=
   @Formal.ObtainModelReady.admits_other
 
--- ─── ObtainModelFeasible (unit feasibility least fixpoint) anti-weakening pins ───
-open Formal.ObtainModelFeasible in
-example : ∀ (g : Graph) (i : Nat), feasible g i = true → Derivable g i :=
-  @Formal.ObtainModelFeasible.feasible_sound
-open Formal.ObtainModelFeasible in
-example : ∀ (g : Graph), Closed g → ∀ (i : Nat), i < g.n → Derivable g i → feasible g i = true :=
-  @Formal.ObtainModelFeasible.feasible_complete
-open Formal.ObtainModelFeasible in
-example : ∀ (g : Graph), Closed g → Stable g (g.n + 1) :=
-  @Formal.ObtainModelFeasible.iter_stable
-open Formal.ObtainModelFeasible in
-example : ∀ (g : Graph), Closed g → ∀ (held' : Nat → Bool),
-    (∀ i, g.held i = true → held' i = true) → ∀ (i : Nat),
-    feasible g i = true → feasible { g with held := held' } i = true :=
-  @Formal.ObtainModelFeasible.feasible_mono_held
+-- ─── ObtainModelSupply (quantity feasibility) anti-weakening pins ───
+open Formal.ObtainModelSupply in
+example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat),
+    can g fuel path i q = true → Supplied g i q :=
+  @Formal.ObtainModelSupply.can_sound
+open Formal.ObtainModelSupply in
+example : ∀ (g : Graph) (h : Nat → Nat), (∀ i, g.onHand i ≤ h i) →
+    ∀ (fuel : Nat) (path : List Nat) (i q : Nat), can g fuel path i q = true →
+      can { g with onHand := h } fuel path i q = true :=
+  @Formal.ObtainModelSupply.can_mono_onHand
+open Formal.ObtainModelSupply in
+example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q q' : Nat), q' ≤ q →
+    can g fuel path i q = true → can g fuel path i q' = true :=
+  @Formal.ObtainModelSupply.can_anti_qty
+open Formal.ObtainModelSupply in
+example : ∀ (g : Graph), Closed g → ∀ (fuel : Nat) (path : List Nat) (i q : Nat), path.Nodup →
+    (∀ x ∈ path, x < g.n) → i < g.n → g.n + 1 ≤ fuel + path.length →
+      can g (fuel + 1) path i q = can g fuel path i q :=
+  @Formal.ObtainModelSupply.can_fuel_stable
 
 -- ─── CurrencyFunding (ReachCurrencyGoal funding) anti-weakening pins ───
 example : ∀ (onHand target floor : Nat), 1 ≤ floor →

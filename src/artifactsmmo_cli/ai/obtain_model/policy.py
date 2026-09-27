@@ -40,7 +40,10 @@ class Policy:
     monster), or a live overworld tile (False, as `obtain_sources` asks; D-D).
     The action pool builds fights and gathers for both kinds of tile.
     `allow_grey`: a zero-xp dropper counts (True) or not (False). The legacy
-    walk had no grey rule; `drop_obtainability`'s callers choose it."""
+    walk had no grey rule; `drop_obtainability`'s callers choose it.
+    `market_routes`: BUY and GE_FILL routes are offered (True) or not (False,
+    for a caller whose emission cannot serve a purchase, e.g. the skill
+    grind's descent)."""
 
     all_gather_routes: bool
     gather_skill_gate: bool
@@ -48,9 +51,12 @@ class Policy:
     event_vendors: bool
     spawn_known: bool
     allow_grey: bool
+    market_routes: bool
 
     def admits(self, route: Route) -> bool:
         """Is `route` offered at all under this policy?"""
+        if route.kind in (SourceKind.BUY, SourceKind.GE_FILL):
+            return self.market_routes
         return route.kind is not SourceKind.GATHER or self.all_gather_routes or route.primary
 
     def enforces(self, gate: Gate, route: Route) -> bool:
@@ -79,7 +85,7 @@ class Policy:
 
 LEGACY = Policy(all_gather_routes=False, gather_skill_gate=False, craft_skill_gate=True,
                 event_vendors=False,
-                spawn_known=False, allow_grey=True)
+                spawn_known=False, allow_grey=True, market_routes=True)
 """Exactly what `obtain_sources` answers today. Phase 1 step 1 proves the model
 reproduces it under this policy before any consumer moves or any D-x decision
 changes behaviour."""
