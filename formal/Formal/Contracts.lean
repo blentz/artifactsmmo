@@ -3147,12 +3147,17 @@ example : ∀ (p : Policy) (r : Route), r.kind = .gather →
     admits p r = (p.allGather || r.primary) :=
   @Formal.ObtainModelReady.admits_gather
 open Formal.ObtainModelReady in
-example : ∀ (p : Policy) (r : Route), (r.kind = .buy ∨ r.kind = .geFill) →
-    admits p r = p.market :=
-  @Formal.ObtainModelReady.admits_market
+example : ∀ (p : Policy) (r : Route), r.kind = .buy → admits p r = p.vendors :=
+  @Formal.ObtainModelReady.admits_vendor
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route), r.kind = .geFill → admits p r = p.ge :=
+  @Formal.ObtainModelReady.admits_ge
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route), r.kind = .taskReward → admits p r = p.tasks :=
+  @Formal.ObtainModelReady.admits_task
 open Formal.ObtainModelReady in
 example : ∀ (p : Policy) (r : Route), r.kind ≠ .gather → r.kind ≠ .buy → r.kind ≠ .geFill →
-    admits p r = true :=
+    r.kind ≠ .taskReward → admits p r = true :=
   @Formal.ObtainModelReady.admits_other
 
 -- ─── ObtainModelSupply (quantity feasibility) anti-weakening pins ───

@@ -1992,15 +1992,16 @@ OBJECTIVE_MUTATIONS = [
 ]
 
 
-# is_attainable_now task-earnable arm (2026-07-06): a tasks_coin-priced leaf is
-# producible-NOW via the always-available C4 funding loop. Dropping the arm
-# silently removes every task-currency-gated item (satchel) from near_term_gear.
-# Unit-killed group (bag-slot-urgency lesson: unit-bound mutants get their OWN
-# group), bound to tests/test_ai/test_tiers_objective.py.
+# is_attainable_now's task-earnable arm (2026-07-06): a tasks_coin-priced leaf
+# is producible-NOW via the always-available C4 funding loop. Since step 4 of
+# the decision-architecture redesign the arm is the obtain model's TASK_REWARD
+# route (the policy switch is pinned in NEAR_TERM_POLICY_MUTATIONS). Dropping
+# the route silently removes every task-currency-gated item (satchel) from
+# near_term_gear. Bound to tests/test_ai/test_tiers_objective.py.
 OBJECTIVE_NOW_MUTATIONS = [
-    ("objective: drop task-earnable arm in is_attainable_now leaf",
-     "        if game_data.is_task_earnable(leaf):",
-     "        if False and game_data.is_task_earnable(leaf):"),
+    ("obtain_model: the task board pays nothing",
+     "        if not self._gd.is_task_earnable(item):\n            return []",
+     "        if True:\n            return []"),
 ]
 
 
@@ -3047,8 +3048,8 @@ GRIND_OBTAINABLE_MUTATIONS = [
      "gather_skill_gate=False, craft_skill_gate=False,",
      "gather_skill_gate=False, craft_skill_gate=True,"),
     ("skill_grind_target: the grind counts vendor and GE routes",
-     "                      market_routes=False)",
-     "                      market_routes=True)"),
+     "                      vendor_routes=False, ge_routes=False, task_rewards=False)",
+     "                      vendor_routes=True, ge_routes=True, task_rewards=False)"),
     ("skill_grind_target: a rung input needs one unit, not the recipe's amount",
      "               and all(model.feasible(item, qty, GRIND_POLICY).ok",
      "               and all(model.feasible(item, 1, GRIND_POLICY).ok"),
@@ -3058,6 +3059,21 @@ GRIND_OBTAINABLE_MUTATIONS = [
     ("skill_grind_target: the rung's own craft route need not be ready",
      "    return any(GRIND_POLICY.ready(route)\n",
      "    return any(True\n"),
+]
+# objective.NEAR_TERM_POLICY, killed by tests/test_ai/test_tiers_objective.py.
+NEAR_TERM_POLICY_MUTATIONS = [
+    ("objective: near-term attainability counts GE fills",
+     "                          ge_routes=False, task_rewards=True)",
+     "                          ge_routes=True, task_rewards=True)"),
+    ("objective: near-term attainability ignores the task board",
+     "                          ge_routes=False, task_rewards=True)",
+     "                          ge_routes=False, task_rewards=False)"),
+    ("objective: near-term attainability ignores vendors",
+     "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=True,",
+     "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=False,"),
+    ("objective: near-term attainability asks for a live overworld tile",
+     "                          event_vendors=False, spawn_known=True,",
+     "                          event_vendors=False, spawn_known=False,"),
 ]
 GRIND_OBTAINABLE_GREY_MUTATIONS = [
     ("skill_grind_target: the grind refuses a grey dropper",
@@ -3091,12 +3107,18 @@ OBTAIN_MODEL_POLICY_MUTATIONS = [
     ("obtain_model policy: the spawn switch ignores a gather route",
      "_SPAWNED = (SourceKind.DROP, SourceKind.GATHER)",
      "_SPAWNED = (SourceKind.DROP,)"),
-    ("obtain_model policy: always offer market routes",
-     "            return self.market_routes",
+    ("obtain_model policy: always offer vendors",
+     "            return self.vendor_routes",
      "            return True"),
-    ("obtain_model policy: the market switch also hides crafts",
-     "        if route.kind in (SourceKind.BUY, SourceKind.GE_FILL):",
-     "        if route.kind in (SourceKind.BUY, SourceKind.GE_FILL, SourceKind.CRAFT):"),
+    ("obtain_model policy: the GE switch rules vendors too",
+     "        if route.kind is SourceKind.BUY:\n            return self.vendor_routes",
+     "        if route.kind is SourceKind.BUY:\n            return self.ge_routes"),
+    ("obtain_model policy: always offer GE fills",
+     "            return self.ge_routes",
+     "            return True"),
+    ("obtain_model policy: always offer the task board",
+     "            return self.task_rewards",
+     "            return True"),
     ("obtain_model policy: always enforce the craft skill",
      "            return self.craft_skill_gate",
      "            return True"),
@@ -8074,7 +8096,7 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_tiers_prerequisite_graph.py", survivors)
     run_group(OBJECTIVE_SRC, OBJECTIVE_MUTATIONS,
               "formal/diff/test_objective_diff.py", survivors)
-    run_group(OBJECTIVE_SRC, OBJECTIVE_NOW_MUTATIONS,
+    run_group(OBTAIN_MODEL_SRC, OBJECTIVE_NOW_MUTATIONS,
               "tests/test_ai/test_tiers_objective.py", survivors)
     run_group(STRATEGY_SRC, STRATEGY_MUTATIONS,
               "formal/diff/test_strategy_traversal_diff.py", survivors)
@@ -8388,6 +8410,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_game_data.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_OBTAINABLE_MUTATIONS,
               "tests/test_ai/test_skill_grind_target.py", survivors)
+    run_group(OBJECTIVE_SRC, NEAR_TERM_POLICY_MUTATIONS,
+              "tests/test_ai/test_tiers_objective.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_OBTAINABLE_GREY_MUTATIONS,
               "tests/test_ai/scenarios/test_grind_grey_material.py", survivors)
     run_group(COMPLETE_TASK_CORE_SRC, COMPLETE_TASK_MUTATIONS,

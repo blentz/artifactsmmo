@@ -2423,8 +2423,8 @@ def run (args : Array Json) : Json :=
 end ObtainModelSupplyOracle
 
 -- ObtainModelReady: the unified obtain model's route selection.
--- args = [allGather, gatherSkill, craftSkill, eventVendors, spawnKnown, allowGrey, market
---         (each 0/1),
+-- args = [allGather, gatherSkill, craftSkill, eventVendors, spawnKnown, allowGrey, vendors,
+--         ge, tasks (each 0/1),
 --         routes: [[kindStr, via(Nat), primary(0/1), [[gateKindStr, sat(0/1)], ...]], ...]]
 -- Kind strings are `SourceKind.value`; gate strings are `GateKind.value`.
 namespace ObtainModelReadyOracle
@@ -2434,12 +2434,13 @@ def srcKindOf? (s : String) : Option SrcKind :=
   if s = "withdraw" then some .withdraw else if s = "recycle" then some .recycle
   else if s = "craft" then some .craft else if s = "gather" then some .gather
   else if s = "buy" then some .buy else if s = "ge_fill" then some .geFill
-  else if s = "drop" then some .drop else if s = "sell" then some .sell else none
+  else if s = "drop" then some .drop else if s = "task_reward" then some .taskReward
+  else if s = "sell" then some .sell else none
 
 def srcKindStr : SrcKind → String
   | .withdraw => "withdraw" | .recycle => "recycle" | .craft => "craft"
   | .gather => "gather" | .buy => "buy" | .geFill => "ge_fill" | .drop => "drop"
-  | .sell => "sell"
+  | .taskReward => "task_reward" | .sell => "sell"
 
 def gateKindOf? (s : String) : Option GateKind :=
   if s = "bank_accessible" then some .bankAccessible else if s = "craft_skill" then some .craftSkill
@@ -2485,8 +2486,9 @@ def routeJson (r : Route) : Json :=
 
 def run (args : Array Json) : Json :=
   let p : Policy := ⟨intArg args 0 != 0, intArg args 1 != 0, intArg args 2 != 0,
-    intArg args 3 != 0, intArg args 4 != 0, intArg args 5 != 0, intArg args 6 != 0⟩
-  match (args[7]!.getArr?).toOption.bind (fun rs => rs.toList.mapM parseRoute) with
+    intArg args 3 != 0, intArg args 4 != 0, intArg args 5 != 0, intArg args 6 != 0,
+    intArg args 7 != 0, intArg args 8 != 0⟩
+  match (args[9]!.getArr?).toOption.bind (fun rs => rs.toList.mapM parseRoute) with
   | none => Json.mkObj [("error", Json.str "bad routes")]
   | some rs => Json.mkObj [("ready", Json.arr ((readyRoutes p rs).map routeJson).toArray)]
 

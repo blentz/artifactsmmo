@@ -974,7 +974,9 @@ open Formal.PriorityBand
 #print axioms Formal.ObtainModelReady.enforces_spawn_switch
 #print axioms Formal.ObtainModelReady.enforces_spawn_other
 #print axioms Formal.ObtainModelReady.enforces_craft_skill
-#print axioms Formal.ObtainModelReady.admits_market
+#print axioms Formal.ObtainModelReady.admits_vendor
+#print axioms Formal.ObtainModelReady.admits_ge
+#print axioms Formal.ObtainModelReady.admits_task
 #print axioms Formal.ObtainModelReady.admits_other
 #print axioms Formal.ObtainModelReady.enforces_xp_positive
 #print axioms Formal.ObtainModelSupply.can_sound

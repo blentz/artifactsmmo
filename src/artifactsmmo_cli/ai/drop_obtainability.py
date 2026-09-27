@@ -2,10 +2,12 @@
 
 ONE answer, consulted by both sides of the plan pipeline:
 
-  * SELECTION  — the reachability walks that decide WHAT to pursue
-    (`tiers/skill_grind_target.is_obtainable`, `tiers/objective.is_attainable_now`'s
-    leaf walk, `tiers/strategy._producible`). These are pure game-data walks: they
-    run before any action list exists and must not depend on one.
+  * SELECTION  — the reachability walks that decide WHAT to pursue. The
+    obtain model (`tiers/skill_grind_target.is_obtainable`,
+    `tiers/objective.is_attainable_now`) reads the same drop gates through
+    `obtain_model/drop_routes.py`; `tiers/strategy._producible` calls this
+    oracle. These are pure game-data walks: they run before any action list
+    exists and must not depend on one.
   * EMISSION   — `ai/drop_fight_selection.select_drop_fight`, which turns the
     verdict into the single `FightAction` a goal plans with.
 

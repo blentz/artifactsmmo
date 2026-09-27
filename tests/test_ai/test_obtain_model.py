@@ -19,17 +19,18 @@ from artifactsmmo_cli.ai.obtain_model.feasibility import Feasibility
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
-from artifactsmmo_cli.ai.obtain_model.route import Route
+from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
+from artifactsmmo_cli.ai.world_state import GOLD_CODE, TASKS_COIN_CODE, WorldState
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 NOW = datetime(2026, 9, 27, tzinfo=UTC)
 OPEN = Policy(all_gather_routes=True, gather_skill_gate=True, craft_skill_gate=True,
               event_vendors=True,
-              spawn_known=True, allow_grey=False, market_routes=True)
+              spawn_known=True, allow_grey=False, vendor_routes=True, ge_routes=True,
+              task_rewards=True)
 
 
 def census_items(gd: GameData) -> list[str]:
@@ -141,15 +142,24 @@ class TestPolicy:
                                 Gate(GateKind.SPAWN_KNOWN, "m", False))
         assert LEGACY.ready(live_only) and not OPEN.ready(live_only)
 
-    @pytest.mark.parametrize("kind", [SourceKind.BUY, SourceKind.GE_FILL])
-    def test_a_market_route_is_offered_only_when_market_routes_are(self, kind: SourceKind) -> None:
-        route = self._route(kind)
-        assert LEGACY.admits(route) and not replace(LEGACY, market_routes=False).admits(route)
+    def test_a_vendor_and_a_ge_order_are_switched_apart(self) -> None:
+        buy, fill = self._route(SourceKind.BUY), self._route(SourceKind.GE_FILL)
+        assert LEGACY.admits(buy) and LEGACY.admits(fill)
+        no_vendor = replace(LEGACY, vendor_routes=False)
+        no_ge = replace(LEGACY, ge_routes=False)
+        assert not no_vendor.admits(buy) and no_vendor.admits(fill)
+        assert no_ge.admits(buy) and not no_ge.admits(fill)
+
+    def test_the_task_board_is_offered_only_when_task_rewards_are(self) -> None:
+        route = self._route(SourceKind.TASK_REWARD)
+        assert not LEGACY.admits(route) and OPEN.admits(route)
 
     def test_every_other_route_is_offered_under_every_policy(self) -> None:
-        closed = replace(LEGACY, all_gather_routes=False, market_routes=False)
+        closed = replace(LEGACY, all_gather_routes=False, vendor_routes=False, ge_routes=False,
+                         task_rewards=False)
         assert all(closed.admits(self._route(kind, primary=False)) for kind in SourceKind
-                   if kind not in (SourceKind.GATHER, SourceKind.BUY, SourceKind.GE_FILL))
+                   if kind not in (SourceKind.GATHER, SourceKind.BUY, SourceKind.GE_FILL,
+                                   SourceKind.TASK_REWARD))
 
     def test_a_grey_dropper_counts_only_when_grey_is_allowed(self) -> None:
         grey = self._route(SourceKind.DROP, Gate(GateKind.XP_POSITIVE, "m", False))
@@ -380,3 +390,17 @@ class TestOnHand:
         [order] = [r for r in ObtainModel(state, gd, _ctx(), NOW).routes(worn)
                    if r.kind is SourceKind.GE_FILL]
         assert order.inputs == {GOLD_CODE: gd.ge_best_sell_order(worn)[1]}
+
+
+def test_the_task_board_is_a_route_to_what_it_pays(
+        world: tuple[WorldState, GameData]) -> None:
+    """D-N: `tasks_coin` has a route, one task loop per application, with no
+    inputs and no capacity limit, so any amount can be earned."""
+    state, gd = world
+    model = ObtainModel(replace(state, inventory={}, bank_items={}), gd, _ctx(), NOW)
+    [route] = [r for r in model.routes(TASKS_COIN_CODE) if r.kind is SourceKind.TASK_REWARD]
+    assert route.capacity == UNBOUNDED_CAPACITY and not route.inputs
+    assert not [r for r in model.routes("copper_ore") if r.kind is SourceKind.TASK_REWARD]
+    assert model.feasible(TASKS_COIN_CODE, 50, OPEN).ok
+    assert not model.feasible(TASKS_COIN_CODE, 50, LEGACY).ok
+

@@ -41,9 +41,14 @@ class Policy:
     The action pool builds fights and gathers for both kinds of tile.
     `allow_grey`: a zero-xp dropper counts (True) or not (False). The legacy
     walk had no grey rule; `drop_obtainability`'s callers choose it.
-    `market_routes`: BUY and GE_FILL routes are offered (True) or not (False,
-    for a caller whose emission cannot serve a purchase, e.g. the skill
-    grind's descent)."""
+    `vendor_routes`: BUY routes are offered (True) or not (False, for a caller
+    whose emission cannot serve an NPC purchase, e.g. the skill grind's descent).
+    `ge_routes`: GE_FILL routes are offered (True) or not (False, for a caller
+    whose emission cannot fill a GE order: goal emission offers a fill only as
+    the cheaper venue for an item an NPC also sells, and building fills from the
+    model's routes is Phase 2; D-E).
+    `task_rewards`: a TASK_REWARD route is offered (True) or not (False, as
+    `obtain_sources` did: it has no task edge; D-N)."""
 
     all_gather_routes: bool
     gather_skill_gate: bool
@@ -51,12 +56,18 @@ class Policy:
     event_vendors: bool
     spawn_known: bool
     allow_grey: bool
-    market_routes: bool
+    vendor_routes: bool
+    ge_routes: bool
+    task_rewards: bool
 
     def admits(self, route: Route) -> bool:
         """Is `route` offered at all under this policy?"""
-        if route.kind in (SourceKind.BUY, SourceKind.GE_FILL):
-            return self.market_routes
+        if route.kind is SourceKind.BUY:
+            return self.vendor_routes
+        if route.kind is SourceKind.GE_FILL:
+            return self.ge_routes
+        if route.kind is SourceKind.TASK_REWARD:
+            return self.task_rewards
         return route.kind is not SourceKind.GATHER or self.all_gather_routes or route.primary
 
     def enforces(self, gate: Gate, route: Route) -> bool:
@@ -85,7 +96,8 @@ class Policy:
 
 LEGACY = Policy(all_gather_routes=False, gather_skill_gate=False, craft_skill_gate=True,
                 event_vendors=False,
-                spawn_known=False, allow_grey=True, market_routes=True)
+                spawn_known=False, allow_grey=True, vendor_routes=True, ge_routes=True,
+                task_rewards=False)
 """Exactly what `obtain_sources` answers today. Phase 1 step 1 proves the model
 reproduces it under this policy before any consumer moves or any D-x decision
 changes behaviour."""

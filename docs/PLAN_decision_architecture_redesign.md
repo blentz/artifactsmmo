@@ -465,7 +465,14 @@ Each step is one commit, gated by the full gate, and witnessed by
   - The grind asks `feasible(input, recipe_qty, GRIND_POLICY)`. That makes affordable vendors count, so `market_routes` is a live switch again (GRIND keeps it off, because its descent buys only materials nothing else yields).
   - Grind census: 8 of 308 scenario targets change against the original walk. The new one is `greater_dreadful_amulet`, whose intermediate crafts from stock. Live: 2 of 35 (Robby, HAL: `snakeskin_boots` off the account bank's 2 `snakeskin`). ⚠️ Siblings share the bank, so two characters can pick a rung the bank can serve only once. The first craft consumes it and the other's rung drops out: a wasted cycle, not a livelock.
   - Open-rung all-off count 63 -> 62 (still 77 with holdings emptied).
-  - Next consumer: `objective.is_attainable_now` (needs a TASK_REWARD route kind, D-N) / `is_suppliable`.
+- Step 4, third consumer: `objective.is_attainable_now` (landed).
+  - D-N: `SourceKind.TASK_REWARD`. The task board is a route to what it pays (today only `tasks_coin`): one application is one task loop, no inputs, unbounded. A new `Policy.task_rewards` switch is off in LEGACY, so `obtain_sources` is unchanged.
+  - `is_attainable_now(code)` = `feasible(code, 1, NEAR_TERM_POLICY)`. NEAR_TERM counts every gatherer, routable spawns, grey droppers, permanent vendors paid from the pocket, and the task board. It enforces no skill gate (the walk is materials-only; `classify_target` checks the crafting skill first).
+  - 🔥 GE fills had to be split from vendors (`market_routes` became `vendor_routes` + `ge_routes`). With fills counted, the live comparison gave EVERY character 8-10 new near-term targets (`bandit_armor`, `lich_crown`, ...) that only a GE order supplied. Goal emission fills a GE order only as the cheaper venue for an item an NPC also sells (D-E, Phase 2), so each would have been a root nothing plans.
+  - Behaviour: 439 of 22,968 scenario verdicts change, all old-yes -> new-no. The causes are resources with no tile anywhere (`strange_rocks`, `magic_tree` and `diamond_rocks` chains) and partial stock (1 of 5 `pig_skin`, 5 of 6 `cowhide`, ...: targets that could not be finished). 3 scenario gear-target changes. Live, 5 characters: `near_term_gear` and the blocker sheet are unchanged.
+  - Cost: `near_term_gear` + `gear_targets_with_blockers` take 36 ms per scenario, up from 13 ms. They run once per cycle, not in the search.
+  - The bank is still credited without a `SelectionContext` (NO_PROFILE_CONTEXT): D-I is deferred. Bank gold is not counted: D-H is deferred.
+  - Next consumer: `objective.is_suppliable` (the capability question: any route at all, gates ignored).
 - 1c: `feasible` / `cost` / `demand` views.
 - Then steps 3-5 as above.
 

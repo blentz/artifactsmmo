@@ -84,12 +84,16 @@ def _stuck_wolf_ears_plus_craftable_ring2() -> tuple[WorldState, GameData, Chara
     rather than merely asserting it in prose."""
     gd = GameData()
     gd._item_stats = {
-        "iron_ring": ItemStats(code="iron_ring", level=1, type_="ring", hp_bonus=1),
+        "iron_ring": ItemStats(code="iron_ring", level=1, type_="ring", hp_bonus=1,
+                               crafting_skill="jewelrycrafting", crafting_level=1),
         "wolf_ears": ItemStats(code="wolf_ears", level=1, type_="helmet", hp_bonus=100),
     }
     gd._crafting_recipes = {"iron_ring": {"iron_ore": 2}}
     gd._resource_drops = {"iron_rocks": "iron_ore"}
     gd._resource_skill = {"iron_rocks": ("mining", 1)}
+    # Somewhere to gather and to craft: the ring must be genuinely craftable.
+    gd._resource_locations = {"iron_rocks": [(1, 0)]}
+    gd._workshop_locations = {"jewelrycrafting": (0, 1)}
     gd._monster_level = {_UNBEATABLE_MONSTER: 40}
     gd._monster_hp = {_UNBEATABLE_MONSTER: 99999}
     gd._monster_attack = {_UNBEATABLE_MONSTER: {"fire": 9999}}

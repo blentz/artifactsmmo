@@ -10,14 +10,17 @@ progression tree's `gain` on the `pursuit_value` ruler, not by a gap scalar."""
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.equipment.slot_occupancy import defers_to_picker
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
+from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target, target_potion_pure
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
@@ -121,32 +124,22 @@ own attainability must be established by recursion."""
 
 def _attainable_closure(code: str, game_data: GameData,
                         leaf_ok: Callable[[str, frozenset[str]], bool],
-                        _path: frozenset[str] = frozenset(),
-                        stock_ok: Callable[[str], bool] | None = None) -> bool:
-    """Shared cycle-safe producibility walk: an item is attainable iff it has a
-    craft recipe whose materials are all attainable, else its `leaf_ok` holds.
-    The recipe walk is IDENTICAL for the perfect-sheet (`is_attainable`) and the
-    near-term (`is_attainable_now`) gates — they differ ONLY in the leaf rule, so
-    the walk lives here once. `leaf_ok` receives the current `_path` so a
+                        _path: frozenset[str] = frozenset()) -> bool:
+    """The perfect-sheet (`is_attainable`) producibility walk: an item is
+    attainable iff it has a craft recipe whose materials are all attainable,
+    else its `leaf_ok` holds. `leaf_ok` receives the current `_path` so a
     purchase edge can recurse on its currency's attainability under the same
     cycle guard. Mirrors the proved `Formal.Objective.attainAux`, parametric in
     its leaf (`drop`) and purchase (`buys`) relations. Cycle-safe via `_path`.
 
-    `stock_ok` (GAP-1, 2026-07-07) is an OPTIONAL held/banked-stock
-    short-circuit, checked BEFORE the recipe test at every node — a node
-    already in hand needs no acquisition path at all, whether it is a leaf
-    (raw material) or a recipe node (the crafted item itself: a banked
-    satchel makes satchel attainable-now without walking its recipe). `None`
-    for `is_attainable` (the state-independent perfect-sheet gate has no
-    stock to consult)."""
-    if stock_ok is not None and stock_ok(code):
-        return True
+    The near-term gate (`is_attainable_now`) shared this walk, with a
+    held-stock short-circuit, until it moved onto the obtain model."""
     recipe = game_data.crafting_recipe(code)
     if recipe is not None:
         if code in _path:
             return False
         sub_path = _path | {code}
-        return all(_attainable_closure(mat, game_data, leaf_ok, sub_path, stock_ok)
+        return all(_attainable_closure(mat, game_data, leaf_ok, sub_path)
                    for mat in recipe)
     return leaf_ok(code, _path)
 
@@ -217,80 +210,56 @@ def is_attainable(code: str, game_data: GameData) -> bool:
     return _attainable_closure(code, game_data, leaf_ok)
 
 
+NEAR_TERM_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False, craft_skill_gate=False,
+                          event_vendors=False, spawn_known=True,
+                          allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=True,
+                          ge_routes=False, task_rewards=True)
+"""What `is_attainable_now` counts, as an obtain-model policy (step 4 of
+docs/PLAN_decision_architecture_redesign.md): every resource that drops an
+item (the FULL drop union: rare secondary drops, e.g. gem stones, are real
+gathering yields, GAP-2), a routable spawn, grey droppers
+(`ATTAINABILITY_ALLOWS_GREY`), permanent vendors paid from the pocket, and the
+task board (a task-earned currency such as `tasks_coin` is producible from any
+state). No GE fill, as before: goal emission fills a GE order only as the
+cheaper venue for an item an NPC also sells (D-E), so a target reachable only
+through the GE would be a root nothing plans. Measured live 2026-09-27: with
+fills counted, every character gained 8-10 near-term targets (`bandit_armor`,
+`lich_crown`, ...) that only a GE order supplied. Neither skill gate: the walk is materials-only, and `classify_target`
+checks the target's own crafting skill FIRST for exactly that reason."""
+
+
 def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool:
-    """State-aware producibility for NEAR-TERM targets: the same recipe walk as
-    `is_attainable`, but the leaf is gatherable OR a drop from a monster that is
-    winnable NOW (judged at full HP) with a known spawn OR PURCHASABLE-NOW from a
-    permanent vendor (affordable: gold price ≤ current gold, or a non-gold
-    currency that is itself attainable-now). The leaf semantics of the strategy
-    tier's `_producible`, plus affordability.
+    """State-aware producibility for NEAR-TERM targets: can one `code` be had
+    from here? `ObtainModel.feasible(code, 1, NEAR_TERM_POLICY)`.
 
     `is_attainable` is the wrong gate for near-term gear at LOW level: every
     armor a low-level character can wear crafts from monster drops, and a
     low-level character can't yet beat the monsters dropping the BiS materials,
     nor afford a 20000-gold rune. Targets that need more gold/level self-unlock.
 
-    Winnability is judged AT FULL HP: this is a strategic "can the character ever
-    farm this" question and rest is always available, so a transiently-damaged
-    character must not see its gear targets evaporate (predict_win at hp=31/175
-    fails every monster, which flipped chosen_root on every post-fight cycle).
-    Matches the G3 Lean model (`winnable_at_max_hp`). Tactical fight entry keeps
-    current-HP semantics in predict_win itself.
+    Winnability is judged AT FULL HP (`obtain_model/drop_routes.py`): this is a
+    strategic "can the character ever farm this" question and rest is always
+    available, so a transiently-damaged character must not see its gear targets
+    evaporate (predict_win at hp=31/175 fails every monster, which flipped
+    chosen_root on every post-fight cycle). Matches the G3 Lean model
+    (`winnable_at_max_hp`).
 
-    AFFORDABILITY is conservative for v1: a gold purchase needs `state.gold ≥
-    price`; a non-gold (item) currency only needs the currency item attainable-
-    now (quantity is not yet modeled — an over-approximation on quantity, refined
-    when a buy goal lands).
+    AFFORDABILITY: a gold price is an input paid from the pocket
+    (`state.gold`), multiplied by the units the chain needs. Bank gold is not
+    counted (D-H), as before.
 
-    HELD/BANKED STOCK (GAP-1, 2026-07-07): before any acquisition-source
-    check, a node already held (inventory or bank, either alone > 0) is
-    attainable-now outright — mirrors the strategy tier's `_producible`
-    held-stock arm (b6328a3a, "already IN HAND: nothing left to produce").
-    Without this the walk only ever asked "can I produce MORE right now",
-    so a fully-banked recipe leaf whose only acquisition source is
-    currently closed (e.g. cowhide when cow is unwinnable) read as
-    unattainable despite the bank already holding the full recipe demand —
-    and a banked CRAFTED item (a satchel bought/found a cycle ago) still
-    walked its own recipe instead of short-circuiting. `state.bank_items is
-    None` means UNKNOWN, not zero — `bank_items or {}` naturally treats
-    that as no credit, same as `_producible`. Boolean only: partial stock
-    (holding 1 of a 5-needed material) still credits attainable — quantity
-    accounting stays the planner's job, not this gate's."""
-    bank = state.bank_items or {}
+    HELD AND BANKED STOCK (GAP-1) counts, now IN QUANTITY: a node needs the
+    recipe's amount on hand or a way to make it. The old walk credited any
+    single copy ("holding 1 of a 5-needed material still credits attainable"),
+    which is the same over-approximation that made the skill grind pick rungs
+    it could never craft. Banked copies count through the model's WITHDRAW
+    route; there is no `SelectionContext` here, so it is asked under
+    `NO_PROFILE_CONTEXT`, whose bank is accessible (as before; D-I).
 
-    def stock_ok(node: str) -> bool:
-        return state.inventory.get(node, 0) > 0 or bank.get(node, 0) > 0
-
-    def leaf_ok(leaf: str, path: frozenset[str]) -> bool:
-        if _gatherable(leaf, game_data):
-            return True
-        # `state`, not a rested copy: `fightable_droppers` now decides the hp
-        # basis for every caller (2026-08-18), so building one here too would be
-        # a second place that decision is made and the two could drift.
-        if drop_obtainable(leaf, state, game_data,
-                           allow_grey=ATTAINABILITY_ALLOWS_GREY):
-            return True
-        if game_data.is_task_earnable(leaf):
-            # Task-earned currency (tasks_coin) is producible-NOW: the C4
-            # funding loop (accept → fight → complete, activated 2026-07-06)
-            # is always available and ReachCurrencyGoal plans it from any
-            # state. Without this arm a tasks_coin-priced leaf (jasper_crystal
-            # @ tasks_trader) failed the now-walk and satchel silently never
-            # became a near-term bag target. Mirrors the full-progression
-            # leaf's is_task_earnable arm.
-            return True
-        if leaf in path:
-            return False
-        sub = path | {leaf}
-        for price, currency in _permanent_vendor_purchases(leaf, game_data):
-            if currency == GOLD:
-                if state.gold >= price:
-                    return True
-            elif _attainable_closure(currency, game_data, leaf_ok, sub, stock_ok):
-                return True
-        return False
-
-    return _attainable_closure(code, game_data, leaf_ok, stock_ok=stock_ok)
+    A craftable item is no longer asked only through its recipe: a permanent
+    vendor for it counts too."""
+    model = ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
+    return model.feasible(code, 1, NEAR_TERM_POLICY).ok
 
 
 def is_suppliable(code: str, state: WorldState, game_data: GameData) -> bool:

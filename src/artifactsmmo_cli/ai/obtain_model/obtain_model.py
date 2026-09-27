@@ -11,7 +11,7 @@ Before that switch, a census compared the two over every item of real game data
 zero differences.
 
 PRIORITY ORDER. `routes` lists routes in the declared order WITHDRAW, RECYCLE,
-CRAFT, GATHER, BUY, GE_FILL, DROP, SELL: routes that consume stock already owned
+CRAFT, GATHER, BUY, GE_FILL, DROP, TASK_REWARD, SELL: routes that consume stock already owned
 before routes that create new work, and GE_FILL (finite, may be taken first)
 directly below BUY at the same gold cost.
 
@@ -67,7 +67,7 @@ class ObtainModel:
         if cached is None:
             cached = (*self._withdraw(item), *self._recycle(item), *self._craft(item),
                       *self._gather(item), *self._buy(item), *self._ge_fill(item),
-                      *self._drop(item), *self._sell(item))
+                      *self._drop(item), *self._task_reward(item), *self._sell(item))
             self._routes[item] = cached
         return cached
 
@@ -253,6 +253,18 @@ class ObtainModel:
         """Monsters that drop `item`: see `drop_routes`, the one place drop gates
         are evaluated (shared with `drop_obtainability`)."""
         return drop_routes(item, self._state, self._gd)
+
+    def _task_reward(self, item: str) -> list[Route]:
+        """The task board pays `item`: one application is a whole task loop
+        (accept, do, turn in). No gate: the loop runs from any state
+        (`ReachCurrencyGoal` plans it), which is why `is_attainable_now` always
+        counted a task-earned currency. `yield_per` is 1, the least any award
+        pays (the loader enforces >= 1 for coins): with no inputs and no
+        capacity limit, the yield cannot change a feasibility answer, and a cost
+        reads the task tables' real amounts itself."""
+        if not self._gd.is_task_earnable(item):
+            return []
+        return [Route(item, SourceKind.TASK_REWARD, "tasks", 1, UNBOUNDED_CAPACITY, ())]
 
     def _sell(self, item: str) -> list[Route]:
         """GOLD only: selling what the keep authority licenses, one route per

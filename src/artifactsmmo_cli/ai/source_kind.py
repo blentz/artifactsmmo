@@ -37,7 +37,12 @@ class SourceKind(Enum):
 
     Only a standing order counts. A GE order we might POST is speculative and may
     never fill, so it is not a route; `buy_source_venue` calls that the
-    anti-surrogate guard and encodes absence as `None`."""
+    anti-surrogate guard and encodes absence as `None`.
+
+    TASK_REWARD is the task board: accept a task, do it, turn it in, and the
+    reward is paid (today only `tasks_coin`). It is a mint the recipe, resource,
+    monster and vendor tables do not show, so without it `tasks_coin` read as
+    having no route (D-N in docs/PLAN_decision_architecture_redesign.md)."""
 
     WITHDRAW = "withdraw"
     RECYCLE = "recycle"
@@ -46,4 +51,5 @@ class SourceKind(Enum):
     BUY = "buy"
     GE_FILL = "ge_fill"
     DROP = "drop"
+    TASK_REWARD = "task_reward"
     SELL = "sell"

@@ -279,12 +279,16 @@ def _reach_gd():
         "drop_blade": ItemStats(code="drop_blade", level=1, type_="weapon", attack={"f": 50}),
         "iron_helm": ItemStats(code="iron_helm", level=1, type_="helmet", resistance={"fire": 10},
                                crafting_skill="gearcrafting", crafting_level=1),
-        "iron_bar": ItemStats(code="iron_bar", level=1, type_="resource"),
+        "iron_bar": ItemStats(code="iron_bar", level=1, type_="resource",
+                              crafting_skill="mining", crafting_level=1),
         "iron_ore": ItemStats(code="iron_ore", level=1, type_="resource"),
     }
     gd._crafting_recipes = {"iron_helm": {"iron_bar": 5}, "iron_bar": {"iron_ore": 3}}
     gd._resource_drops = {"iron_rocks": "iron_ore"}
     gd._resource_skill = {"iron_rocks": ("mining", 1)}
+    # Somewhere to gather and to craft, as every real recipe has.
+    gd._resource_locations = {"iron_rocks": [(1, 0)]}
+    gd._workshop_locations = {"gearcrafting": (0, 1), "mining": (0, 2)}
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
     return gd

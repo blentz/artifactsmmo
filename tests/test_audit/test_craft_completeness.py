@@ -383,6 +383,7 @@ def test_classify_gap_grey_farm_suppressed_when_only_dropper_is_grey_and_obsolet
     gd._crafting_recipes = {"low_food": {"raw_meat": 1},
                             "mid_food": {"other_mat": 1}}
     gd._resource_drops = {"blade_vein": "iron_blade"}
+    gd._resource_locations = {"blade_vein": [(2, 2)]}  # a gatherable weapon spawns
     gd._monster_locations = {"hen": (0, 1)}
     gd._monster_level = {"hen": 1}
     gd._monster_hp = {"hen": 10}
@@ -757,6 +758,7 @@ def test_census_state_equips_near_term_gear_and_derives_combat_stats() -> None:
                                 subtype="", attack={"fire": 50}),
     }
     gd._resource_drops = {"blade_vein": "iron_blade"}
+    gd._resource_locations = {"blade_vein": [(2, 2)]}  # a gatherable weapon spawns
     cell = _cell(char_level=5, skill_level=1)
     state = census_state("iron_blade", cell, gd)
     assert state.equipment.get("weapon_slot") == "iron_blade"
@@ -787,6 +789,7 @@ def test_census_state_gears_the_cell_and_flips_combat_blocked_to_reachable() -> 
         "basic_gear": {"critter_meat": 1},
     }
     gd._resource_drops = {"blade_vein": "iron_blade"}
+    gd._resource_locations = {"blade_vein": [(2, 2)]}  # a gatherable weapon spawns
     gd._monster_locations = {"critter": (1, 0)}
     gd._monster_level = {"critter": 1}
     gd._monster_hp = {"critter": 5}
@@ -824,6 +827,7 @@ def test_classify_gap_combat_blocked_survives_geared_loadout_against_overleveled
     }
     gd._crafting_recipes = {"beast_armor": {"beast_hide": 2}}
     gd._resource_drops = {"blade_vein": "iron_blade"}
+    gd._resource_locations = {"blade_vein": [(2, 2)]}  # a gatherable weapon spawns
     gd._monster_locations = {"cow": (1, 0)}
     gd._monster_level = {"cow": 30}
     gd._monster_hp = {"cow": 2000}
@@ -850,6 +854,7 @@ def test_near_term_gear_targets_both_ring_slots_for_a_ring() -> None:
                                subtype="", hp_bonus=20),
     }
     gd._resource_drops = {"iron_vein": "iron_ring"}
+    gd._resource_locations = {"iron_vein": [(2, 2)]}
     bare = scenario_state(
         ScenarioCharacter(name="census_bare", level=5, skills={}), gd)
     gear = CharacterObjective.from_game_data(gd).near_term_gear(bare)

@@ -1,4 +1,11 @@
+import dataclasses
+from datetime import UTC, datetime
+from unittest.mock import patch
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import (
     CharacterObjective,
     is_attainable,
@@ -180,9 +187,22 @@ def _gd_near_term() -> GameData:
         for c in ("copper_armor", "iron_armor", "dragon_armor", "copper_helmet",
                   "copper_ring", "silver_ring")
     }
+    _crafted_at(gd, "gearcrafting", "copper_armor", "iron_armor", "dragon_armor", "copper_helmet")
+    _crafted_at(gd, "jewelrycrafting", "copper_ring", "silver_ring")
     gd._resource_drops = {"rocks": "bar"}
     gd._resource_skill = {"rocks": ("mining", 1)}
+    gd._resource_locations = {"rocks": [(1, 0)]}
     return gd
+
+
+def _crafted_at(gd: GameData, skill: str, *codes: str) -> None:
+    """Give each recipe item its crafting skill and the skill a workshop, as
+    every real recipe has: the obtain model counts a craft only where the
+    executor could perform it."""
+    for code in codes:
+        gd._item_stats[code] = dataclasses.replace(gd._item_stats[code], crafting_skill=skill,
+                                                   crafting_level=1)
+    gd._workshop_locations = {**gd._workshop_locations, skill: (0, len(gd._workshop_locations))}
 
 
 def test_near_term_gear_picks_best_usable_at_level():
@@ -246,8 +266,10 @@ def _gd_drop_recipes() -> GameData:
         "feather_coat": {"feather": 5, "bar": 1},
         "dragon_helm": {"dragon_scale": 2},
     }
+    _crafted_at(gd, "gearcrafting", "feather_coat", "dragon_helm")
     gd._resource_drops = {"rocks": "bar"}
     gd._resource_skill = {"rocks": ("mining", 1)}
+    gd._resource_locations = {"rocks": [(1, 0)]}
     gd._monster_level = {"chicken": 1, "dragon": 40}
     gd._monster_hp = {"chicken": 10, "dragon": 99999}
     gd._monster_attack = {"dragon": {"fire": 9999}}
@@ -548,6 +570,7 @@ def test_is_attainable_now_item_currency_recurses():
     gd._npc_buy_currency["dust_trader"] = {"dust_rune": "magic_dust"}
     gd._npc_locations["dust_trader"] = (4, 4)
     gd._resource_drops = {"dust_node": "magic_dust"}  # magic_dust gatherable
+    gd._resource_locations = {"dust_node": [(5, 5)]}
     assert is_attainable_now("dust_rune", make_state(level=20, gold=0), gd) is True
 
 
@@ -614,8 +637,10 @@ def test_near_term_gear_duplicate_fills_empty_second_ring():
     gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
                                                hp_bonus=2)}
     gd._crafting_recipes = {"copper_ring": {"bar": 1}}
+    _crafted_at(gd, "jewelrycrafting", "copper_ring")
     gd._resource_drops = {"rocks": "bar"}
     gd._resource_skill = {"rocks": ("mining", 1)}
+    gd._resource_locations = {"rocks": [(1, 0)]}
     obj = CharacterObjective.from_game_data(gd)
     state = make_state(level=5, equipment={"ring1_slot": "copper_ring"})
     nt = obj.near_term_gear(state)
@@ -823,16 +848,18 @@ def test_is_attainable_now_bank_none_not_credited():
     assert is_attainable_now("dragon_helm", state, gd) is False
 
 
-def test_is_attainable_now_partial_stock_still_credits_boolean():
-    """Attainability is boolean, not quantity-aware: holding only 1 of the
-    2 dragon_scale the recipe needs still credits the leaf (and the
-    material's own attainability doesn't even need to match the FULL
-    recipe count — quantity accounting stays the planner's job, not this
-    gate's)."""
+def test_is_attainable_now_counts_stock_in_the_quantity_the_recipe_needs():
+    """Holding 1 of the 2 dragon_scale the recipe needs, with the dragon
+    unwinnable, makes the scale attainable but NOT the helm. The old walk
+    credited any single copy, and the helm then became a target that could not
+    be finished; quantity is now part of the question (step 4 of
+    docs/PLAN_decision_architecture_redesign.md)."""
     gd = _gd_drop_recipes()
     state = make_state(level=5, attack={"air": 5}, bank_items={"dragon_scale": 1})
     assert is_attainable_now("dragon_scale", state, gd) is True
-    assert is_attainable_now("dragon_helm", state, gd) is True
+    assert is_attainable_now("dragon_helm", state, gd) is False
+    full = make_state(level=5, attack={"air": 5}, bank_items={"dragon_scale": 2})
+    assert is_attainable_now("dragon_helm", full, gd) is True
 
 
 def _gd_item_currency_no_other_source() -> GameData:
@@ -873,3 +900,30 @@ def test_is_attainable_now_bank_none_currency_not_credited():
     state = make_state(level=5, gold=0, bank_items=None)
     assert state.bank_items is None
     assert is_attainable_now("dust_rune", state, gd) is False
+
+
+def test_is_attainable_now_counts_no_ge_order():
+    """Goal emission fills a GE order only as the cheaper venue for an item an
+    NPC also sells, so a target a GE order alone supplies would be a root
+    nothing plans. Live 2026-09-27: counting fills gave every character 8-10
+    such targets. The same order IS a route to the model, under LEGACY."""
+    gd = _gd_npc_rune()
+    gd._npc_stock = {}
+    gd._ge_sell_orders = {"lifesteal_rune": ("order", 100, 3)}
+    gd.world.grand_exchange_tile = (2, 2)
+    state = make_state(level=20, gold=1000)
+    model = ObtainModel(state, gd, NO_PROFILE_CONTEXT, datetime.now(UTC))
+    assert model.feasible("lifesteal_rune", 1, LEGACY).ok, "vacuous: the GE order is no route"
+    assert is_attainable_now("lifesteal_rune", state, gd) is False
+
+
+def test_is_attainable_now_counts_a_reachable_underground_resource():
+    """A resource with no overworld tile but a reachable layered one is
+    gathered by the action pool (an underground `gold_rocks`), so a gear piece
+    made from it is attainable now."""
+    gd = _gd_near_term()
+    gd._resource_locations = {}
+    state = make_state(level=5)
+    assert is_attainable_now("copper_armor", state, gd) is False
+    with patch.object(GameData, "resource_spawn_known", return_value=True):
+        assert is_attainable_now("copper_armor", state, gd) is True

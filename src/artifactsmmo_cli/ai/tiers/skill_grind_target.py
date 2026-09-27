@@ -65,7 +65,7 @@ exemptions and the directive they bend around."""
 
 GRIND_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False, craft_skill_gate=False,
                       event_vendors=False, spawn_known=True, allow_grey=GRIND_ALLOWS_GREY,
-                      market_routes=False)
+                      vendor_routes=False, ge_routes=False, task_rewards=False)
 """What the grind counts as a way to get a rung's material, as an obtain-model
 policy (step 4 of docs/PLAN_decision_architecture_redesign.md). Each switch
 matches what the grind's descent can actually serve:
@@ -81,7 +81,8 @@ matches what the grind's descent can actually serve:
 - no BUY or GE_FILL route, as before: `GatherMaterialsGoal(skill_grind=True)`
   buys a material only when no resource and no monster yields it at all, so an
   affordable vendor for a material a monster also drops would name a rung the
-  descent never buys for.
+  descent never buys for;
+- no TASK_REWARD route: the descent does not run the task loop.
 
 What the model adds over the recursive walk it replaced: a material already in
 the bag or the bank counts when there is enough of it (the descent withdraws
