@@ -365,6 +365,7 @@ LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / 
 OBTAIN_MODEL_READY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "ready_core.py"
 OBTAIN_MODEL_POLICY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "policy.py"
 OBTAIN_MODEL_FEASIBLE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "feasible_core.py"
+OBTAIN_MODEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "obtain_model.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
 FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding_core.py"
 CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_afford_core.py"
@@ -2956,6 +2957,26 @@ OBTAIN_MODEL_FEASIBLE_MUTATIONS = [
      "                feasible.add(item)\n                changed = True",
      "                feasible.add(item)"),
 ]
+# Killed by tests/test_ai/test_obtain_sources.py, which exercises the model
+# through `obtain_sources` (a LEGACY-policy view of it since Phase 1 step 3).
+# These were first killed by the legacy-equality census that step retired.
+OBTAIN_MODEL_GATE_MUTATIONS = [
+    ("obtain_model: recycle ignores the keep authority",
+     "Gate(GateKind.LICENSED, code, copies > 0)",
+     "Gate(GateKind.LICENSED, code, True)"),
+    ("obtain_model: withdraw ignores bank access",
+     'Gate(GateKind.BANK_ACCESSIBLE, "bank", self._ctx.bank_accessible)',
+     'Gate(GateKind.BANK_ACCESSIBLE, "bank", True)'),
+    ("obtain_model: drop ignores winnability",
+     "live and is_winnable(self._rested(), self._gd, monster)",
+     "live"),
+    ("obtain_model: recycle uses the batch yield",
+     "max(1, recipe[item] // 2)",
+     "max(1, recipe[item])"),
+    ("obtain_model: wrong primary gatherer",
+     "primary=rank == 0))",
+     "primary=rank == 1))"),
+]
 OBTAIN_MODEL_POLICY_MUTATIONS = [
     ("obtain_model policy: admit every gather route",
      "        return route.kind is not SourceKind.GATHER or self.all_gather_routes or route.primary",
@@ -4656,7 +4677,7 @@ _ALL_SRCS = [
     # C1 — acquisition-leaf attainability (task-earnable + currency-buy disjuncts).
     LEAF_ATTAINABLE_CORE_SRC,
     # Decision-architecture Phase 1 — unified obtain model route selection.
-    OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_FEASIBLE_SRC,
+    OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_FEASIBLE_SRC, OBTAIN_MODEL_SRC,
     # C2 — complete_task coin-minting pure core.
     COMPLETE_TASK_CORE_SRC,
     # C3 — funding_cycles_pure: cycles to reach a currency target.
@@ -8237,6 +8258,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_obtain_model_ready_diff.py", survivors)
     run_group(OBTAIN_MODEL_FEASIBLE_SRC, OBTAIN_MODEL_FEASIBLE_MUTATIONS,
               "formal/diff/test_obtain_model_feasible_diff.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_GATE_MUTATIONS,
+              "tests/test_ai/test_obtain_sources.py", survivors)
     run_group(COMPLETE_TASK_CORE_SRC, COMPLETE_TASK_MUTATIONS,
               "formal/diff/test_complete_task_income_diff.py", survivors)
     run_group(FUNDING_CORE_SRC, FUNDING_MUTATIONS,

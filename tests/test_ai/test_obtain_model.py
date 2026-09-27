@@ -1,13 +1,11 @@
-"""Phase 1 step 1: the obtain model, built beside `obtain_sources`.
+"""The unified obtain model (Phase 1 of docs/PLAN_decision_architecture_redesign.md).
 
-The pin is `test_legacy_policy_reproduces_obtain_sources_everywhere`: under
-`LEGACY`, `ready(item)` equals `obtain_sources(item)` for every item of real
-game data in every scenario world, with the bank open and locked. The other
-tests cover what that sweep cannot: behaviour the scenario worlds never exhibit
-(two buyers for one surplus item) and the non-legacy policies later steps turn on.
+`obtain_sources` is now a view of this model under `LEGACY`, so
+`tests/test_ai/test_obtain_sources.py` exercises it through that view. These
+tests cover what that suite cannot: routes every scenario world lacks (two
+buyers for one surplus item), the non-legacy policies, and `feasible`.
 """
 
-from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,11 +23,15 @@ from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scena
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
-from artifactsmmo_cli.audit.obtain_model_census import census_items, legacy_differences
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 NOW = datetime(2026, 9, 27, tzinfo=UTC)
 OPEN = Policy(all_gather_routes=True, gather_skill_gate=True, event_vendors=True)
+
+
+def census_items(gd: GameData) -> list[str]:
+    """Every item code in the catalogue, plus gold (the SELL route's target)."""
+    return [*sorted(gd.all_item_stats), GOLD_CODE]
 
 
 def _ctx(bank_accessible: bool = True) -> SelectionContext:
@@ -38,31 +40,10 @@ def _ctx(bank_accessible: bool = True) -> SelectionContext:
                             task_exchange_min_coins=0, combat_monster=None)
 
 
-def _worlds() -> Iterator[tuple[str, WorldState, GameData]]:
-    cache: dict[tuple[bool, frozenset[str]], GameData] = {}
-    for name, sc in SCENARIOS.items():
-        key = (sc.ge_market, frozenset(sc.unlocked_achievements))
-        if key not in cache:
-            cache[key] = load_bundle_game_data(BUNDLE, with_ge_orders=sc.ge_market,
-                                               completed_achievements=key[1])
-        yield name, scenario_state(sc, cache[key]), cache[key]
-
-
 @pytest.fixture(scope="module")
 def world() -> tuple[WorldState, GameData]:
     gd = load_bundle_game_data(BUNDLE, with_ge_orders=True)
     return scenario_state(SCENARIOS["l20_band_entry"], gd), gd
-
-
-def test_legacy_policy_reproduces_obtain_sources_everywhere() -> None:
-    compared = 0
-    for name, state, gd in _worlds():
-        items = census_items(gd)
-        for bank in (True, False):
-            differences = legacy_differences(state, gd, _ctx(bank), NOW, items)
-            assert differences == [], f"{name} bank={bank}: {differences[:3]}"
-            compared += len(items)
-    assert compared > 40_000  # every item of every world, both bank states
 
 
 def test_routes_are_memoised_per_item(world: tuple[WorldState, GameData]) -> None:
@@ -94,7 +75,6 @@ def test_a_primary_only_resource_is_still_offered(world: tuple[WorldState, GameD
     resource, item = "fallback_rocks", "fallback_ore"
     with (patch.object(GameData, "resource_drops_full", new={}),
           patch.object(GameData, "resource_drops", new={resource: item}),
-          patch.object(GameData, "resource_for_drop", return_value=(resource, 1)),
           patch.object(GameData, "resource_skill_level", return_value=None)):
         [route] = ObtainModel(state, gd, _ctx(), NOW).routes(item)
     assert (route.kind, route.via, route.primary) == (SourceKind.GATHER, resource, True)
@@ -186,16 +166,6 @@ def test_a_recipe_whose_item_names_no_crafting_skill_is_no_craft_route(
     with patch.object(GameData, "item_stats", return_value=stats):
         routes = ObtainModel(state, gd, _ctx(), NOW).routes("copper_bar")
     assert not [r for r in routes if r.kind is SourceKind.CRAFT]
-
-
-def test_the_census_reports_a_difference_with_both_answers(
-        world: tuple[WorldState, GameData]) -> None:
-    """Vacuity guard for the pin above: a model that disagrees is reported."""
-    state, gd = world
-    with patch("artifactsmmo_cli.audit.obtain_model_census.obtain_sources", return_value=[]):
-        [difference] = legacy_differences(state, gd, _ctx(), NOW, ["copper_bar"])
-    assert difference.item == "copper_bar"
-    assert difference.legacy == () and difference.model
 
 
 class TestFeasible:

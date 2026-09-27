@@ -75,7 +75,7 @@ PER-NODE COST IS SUPERLINEAR IN HOLDINGS, and that — not SQLite — is why a l
 search is several times dearer per node than any offline harness with an empty
 bag. Same search, varying only the number of banked codes: 0.434 ms/node at 1,
 0.618 at 21, 0.950 at 61, 11.29 at 121. At 121 codes
-`obtain_sources._recycle_sources` is 94% of the search: it walks
+`obtain_sources._recycle_sources` (now `ObtainModel._recycle`) is 94% of the search: it walks
 `set(inventory) | set(bank)` on EVERY `obtain_sources` call (~1.2M per search)
 and calls `destroyable` -> `inventory_caps._is_equippable_dominated` per held
 code, so the cost is O(holdings x holdings) in the innermost loop. Live R2D2 at

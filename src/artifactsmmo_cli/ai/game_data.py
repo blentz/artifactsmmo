@@ -1212,7 +1212,7 @@ class GameData:
         """material -> every craftable code whose recipe consumes it, sorted.
 
         THE REVERSE OF `crafting_recipe`, and the fix for `obtain_sources`'
-        documented hot spot. `_recycle_sources` asked "which HELD code has a
+        documented hot spot. `_recycle_sources` (now `ObtainModel._recycle`) asked "which HELD code has a
         recipe consuming this item" by scanning every held code on every call —
         and `obtain_sources` is called ~1.2M times in one from-scratch search, so
         the cost was O(holdings x holdings) once `destroyable` is counted.
@@ -1221,7 +1221,7 @@ class GameData:
 
         Derived from GAME DATA ALONE, which is why it can be a plain
         `cached_property` and needs no invalidation argument. The earlier note in
-        `_recycle_sources` assumed the index had to be state-keyed — it does not,
+        `_recycle_sources` (now `ObtainModel._recycle`) assumed the index had to be state-keyed — it does not,
         because the question "whose recipe consumes X" has nothing to do with
         what the character is carrying. Holdings then enter as an O(1) membership
         test per candidate instead of a scan.

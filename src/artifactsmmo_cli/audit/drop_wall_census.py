@@ -1,6 +1,6 @@
 """The unwinnable-dropper wall, measured where it actually binds: the CANDIDATES.
 
-`obtain_sources._drop_sources` withholds a DROP route when the dropper is not
+`ObtainModel._drop` withholds a DROP route when the dropper is not
 `is_winnable` at restorable hp. The item then has no drop route; if it has no
 other, the pricer charges `UNOBTAINABLE_PER_UNIT` and every recipe consuming it
 inherits infinity. Nothing in the model says *"you cannot beat the thing that
@@ -28,7 +28,7 @@ price that FALLS was paying an unobtainable charge for one of them. One pricer,
 no rival walk, and the detector is pinned by positive controls in
 `test_drop_wall_census.py` rather than by inspection.
 
-THE GRANT SET IS THE NEGATION OF `_drop_sources`' OWN CONJUNCTS — some monster
+THE GRANT SET IS THE NEGATION OF `ObtainModel._drop`'s OWN CONJUNCTS — some monster
 drops the item, at least one dropper stands on a tile in `all_monster_locations`,
 and none of those is `is_winnable` at restorable hp. Reading the same three facts
 production reads is what keeps the census and the pricer from disagreeing about
@@ -225,7 +225,7 @@ def declared_world(scenario: ScenarioCharacter, bundle: Path,
 
 
 def unwinnable_drop_items(state: WorldState, game_data: GameData) -> tuple[str, ...]:
-    """Items whose ONLY drop route `_drop_sources` withholds on winnability.
+    """Items whose ONLY drop route `ObtainModel._drop` withholds on winnability.
 
     The three conjuncts, in the order that source reads them: some monster drops
     it, at least one of those stands on a tile `factory.py` builds a `FightAction`
@@ -234,7 +234,7 @@ def unwinnable_drop_items(state: WorldState, game_data: GameData) -> tuple[str, 
     Restorable, not current: route EXISTENCE is not an hp question. Being at 20%
     hp is a reason to Rest — an action the planner has — while a fight the
     character cannot win when full is a route that does not exist. This is the
-    same reading `_drop_sources` takes, and taking a different one here would
+    same reading `ObtainModel._drop` takes, and taking a different one here would
     make the census disagree with the pricer about its own subject."""
     rested = replace(state, hp=state.max_hp)
     walled: list[str] = []

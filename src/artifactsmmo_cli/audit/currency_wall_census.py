@@ -36,7 +36,7 @@ bundle, two of those three name nothing: gold is not a currency ITEM (it lives
 in `state.gold`, so a gold shortfall is charged through the buy route and never
 appears as a currency code), and no currency in the catalogue accrues passively.
 The names below are the ones the six real currencies actually need, and each is
-the negation of one conjunct of `obtain_sources._drop_sources` — live tiles, then
+the negation of one conjunct of `ObtainModel._drop` — live tiles, then
 winnability — so the census and production cannot disagree about why a currency
 has no route.
 
@@ -196,7 +196,7 @@ scenario or two without flapping, far too tight for a collapsed sweep."""
 @dataclass(frozen=True)
 class CurrencyEvidence:
     """Why a currency has no route, decomposed along the exact conjuncts
-    `obtain_sources._drop_sources` gates on.
+    `ObtainModel._drop` gates on.
 
     Every field is a COUNT, a flag or a code list, never a verdict:
     `classify_gap` is the only place a judgement is formed, so the evidence and
@@ -207,11 +207,11 @@ class CurrencyEvidence:
     #: Every monster whose drop table lists the code, event-gated or not.
     droppers: tuple[str, ...]
     #: Of those, the ones with a live tile in `all_monster_locations` — the
-    #: first conjunct `_drop_sources` gates on. An event monster appears here
+    #: first conjunct `ObtainModel._drop` gates on. An event monster appears here
     #: only while its event is running.
     on_live_tiles: tuple[str, ...]
     #: Of the live-tiled ones, those `is_winnable` at RESTORABLE hp — the
-    #: second conjunct, asked exactly as `_drop_sources` asks it.
+    #: second conjunct, asked exactly as `ObtainModel._drop` asks it.
     winnable: tuple[str, ...]
     #: Of the droppers, those `game_data.is_event_monster` reports as event
     #: content. Separates a dormant event from a permanent monster with no tile.
@@ -249,7 +249,7 @@ def catalogue_currencies(game_data: GameData) -> tuple[str, ...]:
 
 def currency_evidence(code: str, state: WorldState,
                       game_data: GameData) -> CurrencyEvidence:
-    """The DROP conjuncts for `code`, asked the way `_drop_sources` asks them.
+    """The DROP conjuncts for `code`, asked the way `ObtainModel._drop` asks them.
 
     `replace(state, hp=state.max_hp)` mirrors that function's RESTORABLE-hp
     rule: route existence is not an hp question, and being at 20% hp is a reason
@@ -564,7 +564,7 @@ def render_matrix(results: list[CurrencyResult]) -> str:
         ">",
         "> Every field `classify_gap` reads is a column: `droppers`, "
         "`live tiles` and `winnable` are the two conjuncts "
-        "`obtain_sources._drop_sources` gates on, and `event` separates a "
+        "`ObtainModel._drop` gates on, and `event` separates a "
         "dormant event from a permanent monster with no tile.",
         "",
         summary_line(results),

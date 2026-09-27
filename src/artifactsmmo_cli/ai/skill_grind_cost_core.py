@@ -1,6 +1,6 @@
 """PURE cycles to raise a skill to a level — a gate's PRICE, not its height.
 
-Increment 1b of the unified-acquisition epic. `obtain_sources._craft_sources`
+Increment 1b of the unified-acquisition epic. `ObtainModel._craft`
 returns `[]` when the crafting-skill gate is unmet, so at weaponcrafting 5 an
 `iron_sword` (gate 10) reads as having no craft route at all. Measured on
 scenario `l12_deep_chain_grind`, with the workshop KNOWN: the gate alone excluded

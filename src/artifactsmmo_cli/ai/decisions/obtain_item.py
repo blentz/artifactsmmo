@@ -89,7 +89,7 @@ class CanIFightWhatDropsThis(Decision[Goal]):
     """The step's only source is a monster this character loses to — so the
     answer is the GEAR that opens the fight, not a gather that cannot run.
 
-    THE DECISION-SIDE HALF OF THE DROP WALL. `obtain_sources._drop_sources`
+    THE DECISION-SIDE HALF OF THE DROP WALL. `ObtainModel._drop`
     withholds a DROP route when the dropper is not `is_winnable` at restorable
     hp, so a pure drop material with an unbeatable dropper has NO source at all
     and this graph fell through to `GatherMaterials(<material>)` — a gather goal
@@ -135,7 +135,7 @@ class CanIFightWhatDropsThis(Decision[Goal]):
                 ) -> "Decision[Goal] | Goal | None":
         if route_exists(self.step.code, state, game_data, ctx):
             return IsTheStepTheEquippableItself(self.step, self.root)
-        # AT RESTORABLE HP, in lockstep with `_drop_sources` and with the census:
+        # AT RESTORABLE HP, in lockstep with `ObtainModel._drop` and with the census:
         # route existence is not an hp question — being at 20% hp is a reason to
         # Rest, an action the planner has.
         rested = replace(state, hp=state.max_hp)

@@ -182,7 +182,7 @@ def generate_next_craft_action(
                 return None  # No workshop for this skill → fall back to A*.
             if state.skills.get(stats.crafting_skill, 1) < stats.crafting_level:
                 # Skill gate not met: a skill-gated craft is simply not a CRAFT
-                # source until the gate is met (obtain_sources._craft_sources
+                # source until the gate is met (ObtainModel._craft
                 # would decline it too). Emit the matching LevelSkill leg
                 # instead (one-leg-per-cycle, mirroring the Fight/DROP
                 # truncation) if the caller surfaced one; otherwise fall back

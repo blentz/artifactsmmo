@@ -6,6 +6,11 @@ from dataclasses import dataclass, field
 from artifactsmmo_cli.ai.obtain_model.gate import Gate
 from artifactsmmo_cli.ai.source_kind import SourceKind
 
+UNBOUNDED_CAPACITY = 10**9
+"""Capacity of a route that is never stock-limited (GATHER, BUY, DROP, CRAFT:
+you can always gather, buy, craft or fight again). A plain large int rather
+than None, so every consumer's `min(deficit, capacity)` needs no None branch."""
+
 
 @dataclass(frozen=True)
 class Route:
@@ -18,7 +23,7 @@ class Route:
     and empty otherwise.
 
     `yield_per` units of the item per application; `capacity` the most units
-    it can deliver right now (`obtain_sources.UNBOUNDED_CAPACITY` when not
+    it can deliver right now (`UNBOUNDED_CAPACITY` when not
     stock-limited). `inputs` is what one application consumes: a CRAFT
     route's recipe, or a BUY route's `{currency: price}`.
 

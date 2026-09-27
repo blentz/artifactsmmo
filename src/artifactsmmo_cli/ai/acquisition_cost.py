@@ -257,7 +257,7 @@ def _sale_of(item: str, state: WorldState,
     """`(npc, price)` for the best tradeable buyer of `item`.
 
     Same contract as `_price_of`, and the gates must be the SAME ones
-    `obtain_sources._sell_sources` applied — price, known location, and
+    `ObtainModel._sell` applied — price, known location, and
     `event_npc_tradeable` — or the two would pick different buyers for one
     source and the venue would name an NPC the model never admitted. That is why
     `state` is threaded here rather than the item alone.
@@ -383,7 +383,7 @@ def _sibling_craft_option(item: str, state: WorldState, game_data: GameData,
     can plan this cycle makes a sibling craft something. Modelling it as a
     seventh `SourceKind` — which `PLAN_iron_gear_acquisition.md` increment 4
     recommended — would have produced a source with no action in existence to
-    serve it, exactly what `_withdraw_sources`' `bank_accessible` gate exists to
+    serve it, exactly what `ObtainModel._withdraw`'s `bank_accessible` gate exists to
     prevent, and the obtain-parity census would have been right to reject it.
     `RouteOption.unlock` is already the mechanism for "a prerequisite this route
     must satisfy before its first application", so this is one more instance of
@@ -471,7 +471,7 @@ def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
     `None` — no route to add — whenever the gate is not this function's business:
 
       * nothing drops the item, or no dropper stands on a live tile (then there
-        is no DROP route to unlock, and `_drop_sources` is right to be silent);
+        is no DROP route to unlock, and `ObtainModel._drop` is right to be silent);
       * no live dropper's deficit CLOSES (`combat_deficit`'s own "unwinnable and
         I do not know what to build" — an honest wall, and the census's
         `WALL_DROPPER_OUT_OF_REACH` arm);

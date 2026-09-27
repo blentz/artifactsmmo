@@ -1,132 +1,42 @@
 """THE model of how an item can be obtained — the one source of truth every
-producer of a plan must consume.
+producer of a plan must consume — now a view of `ai/obtain_model`.
 
-The bot has two plan producers: the GOAP action pool (gather, craft,
-withdraw, recycle, NPC-buy, GE-fill, fight-for-drop) and
-`ai/craft_plan_gen`'s recipe-tree chain builder (`ai/next_craft_core.py`'s
-`NextAction.kind`, which can express only THREE — gather, craft, withdraw,
-because it walks recipe edges and nothing else). Every route beyond those
-three was hand-bolted into the generator as a separate special case
-(`_recycle_prefix`, `drop_fights`, a `LevelSkill` early-return, and NPC-buy
-wasn't handled at all) — 578 lines of duplicated modeling. That duplication
-is why the recycle-as-acquisition epic shipped seven green commits that were
-INERT for any roomy bag: it taught the action pool about recycling, and the
-generator — which answers first — could not express it.
+The bot has two plan producers: the GOAP action pool and `ai/craft_plan_gen`'s
+recipe-tree chain builder. Every route beyond gather/craft/withdraw used to be
+hand-bolted into the generator separately (578 lines of duplicated modeling),
+which is why the recycle-as-acquisition epic shipped seven green commits that
+were INERT: it taught the action pool about recycling, and the generator — which
+answers first — could not express it. One pure function answering "how may I
+obtain this item, right now?" for every consumer made that bug class
+unrepresentable.
 
-`obtain_sources` is the fix: ONE pure function answers "how may I obtain this
-item, right now?" for every consumer. Adding a SEVENTH source is one edit to
-this module, and every consumer gains it structurally — the "which of the two
-producers knows this route?" bug class becomes unrepresentable.
+PHASE 1 STEP 3 of docs/PLAN_decision_architecture_redesign.md: this module no
+longer holds the rules. `obtain_sources(item)` is `ObtainModel.ready(item,
+Policy.LEGACY)` converted to `Source`s; the routes, the gates, the priority order
+and the reason behind each eligibility rule live in
+`ai/obtain_model/obtain_model.py`. Before the switch, a census compared this
+module's own rules with the model over every item of real game data (44
+scenario worlds with the bank open and locked, and all five live characters):
+zero differences. The selection is kernel-proved
+(`formal/Formal/ObtainModelReady.lean`).
 
-REQUIREMENT-MODEL UNIFICATION EPIC — Wave 8, R3 deviation: this walk is
-DELIBERATELY NOT migrated onto `RequirementGraph`. It is STATE-AWARE (it returns
-the sources ready RIGHT NOW — bank stock, licensed surplus, met skill gates,
-known workshops, live locations, permanent vendors — in priority order, with
-codes and prices), and it is pinned against the live planner action pool by two
-censuses (`obtain_parity_completeness`, `recycle_source_completeness`) at the
-`StrategyArbiter.select` seam. The graph's `leaves` is its STATE-FREE
-counterpart (capability, no readiness gating); collapsing the two would lose the
-readiness those censuses require. Their relationship IS asserted, so this is a
-documented agreement and not an unchecked survivor: the state-free kinds this
-walk can name are a subset of `graph.leaves`
-(`tests/test_audit/test_obtain_graph_agreement.py`) — proving the graph is never
-blind to a route this walk finds. That invariant is what surfaced the graph's
-gold-only BUY blindness to currency-buyable items, fixed in the same wave.
-
-PRIORITY ORDER (the whole point of this file). `obtain_sources` returns
-sources in this declared order — a descent takes the FIRST applicable one:
-
-    1. WITHDRAW — a copy is already in the bank. Consumes nothing new.
-    2. RECYCLE  — a licensed surplus item's recipe yields it. Turns dead
-                  stock into the material.
-    3. CRAFT    — it has a recipe, the crafting-skill gate is met, and a
-                  workshop is known.
-    4. GATHER   — some resource drops it.
-    5. BUY      — a permanent (non-event) NPC vendor sells it and its
-                  location is known.
-    6. GE_FILL  — a STANDING Grand Exchange sell order can be filled, and the
-                  GE tile is known. Same gold cost as BUY but strictly less
-                  reliable (finite quantity; another player may take it first),
-                  so it ranks directly below.
-    7. DROP     — a winnable monster drops it.
-
-Rationale: prefer sources that consume stock ALREADY OWNED over sources that
-create new work. This generalises the rule `next_craft_core._next` already
-hard-codes (prefer a bank withdraw over descending into a recipe). RECYCLE
-sits with WITHDRAW at the top because it also consumes stock already owned
-(dead equipment) rather than spending a fresh gather/craft/buy/fight cycle.
-
-ELIGIBILITY MIRRORS THE ACTION POOL, NOT MERELY WHAT `is_applicable` WOULD
-SAY IF ASKED. A source the executor cannot actually serve is a LEAF WITH NO
-PLAN — the livelock shape of `3166d390`. In particular:
-
-- RECYCLE reproduces the retired `recoverable_materials`'s gates
-  EXACTLY: the source item must have a recipe, a known `crafting_skill`, the
-  character must meet its `crafting_level`, its workshop must be known, AND
-  it must be EQUIPPABLE (`ITEM_TYPE_TO_SLOTS`) — `RecycleAction` objects are
-  only ever CONSTRUCTED by `actions/factory.py` for equippable codes, so a
-  craftable-but-non-equippable item (bars, planks, cooked food) has NO
-  action in existence to serve the recycle, whatever `is_applicable` would
-  say if asked. The yield term is `max(1, mat_qty // 2)` — the repeated
-  UNIT-recycle yield `actions/factory` actually emits (quantity=1
-  `RecycleAction`s), NOT the batch form `max(1, (mat_qty * n) // 2)`, which
-  differs whenever `mat_qty == 1`.
-- WITHDRAW requires `ctx.bank_accessible` — `WithdrawItemAction.is_applicable`
-  refuses unconditionally when `not accessible`, and every construction site
-  in `factory.py` threads `accessible=ctx.bank_accessible`. `bank_accessible`
-  is a persisted, level-gated blocker that stays False for the whole early
-  game while `state.bank_items` is populated regardless (the bank sync runs
-  unconditionally), so without this gate a pre-unlock character would get a
-  WITHDRAW source with no action in existence to serve it.
-- CRAFT requires the skill gate met AND `workshop_location(skill)` known —
-  a recipe with no workshop on file cannot be executed.
-- BUY requires a PERMANENT vendor (`not is_event_npc`) whose location is
-  known — an event vendor is not reliably reachable, so it cannot anchor a
-  plan.
-- GATHER requires the sourcing resource to have a currently-live tile in
-  `game_data.all_resource_locations` — the same mapping `factory.py` builds
-  `GatherAction`s from, which merges an event resource's tiles only while
-  its event is active.
-- DROP requires the dropper to be `is_winnable` AND have a currently-live
-  tile in `game_data.all_monster_locations` — the same mapping `factory.py`
-  builds `FightAction`s from. `is_winnable` is a pure combat-stat prediction
-  and says nothing about reachability; an event monster whose event is
-  inactive has no `FightAction` in existence, whatever its stats predict.
-
-Pure: reads state/game_data/ctx only, no I/O. LANDED INERT, LONG SINCE LIVE —
-it is now THE shared obtain model, imported by `acquisition_cost`,
-`craft_plan_gen`, `forced_craft_grind`, `next_craft_core`,
-`tiers/prerequisite_graph`, `strategy_driver` and the parity censuses. Do not
-read the staging note below as a dead-code claim.
-
-It landed with no consumer on purpose, because the parity census uses this
-function AS ITS ORACLE: if the GOAP pool can serve a material, this function
-must be able to name a source for it, and vice versa. An oracle and its
-consumer written together are wrong together, so this module was pinned by unit
-tests before any consumer existed.
+REQUIREMENT-MODEL UNIFICATION EPIC — Wave 8, R3 deviation, still true: this walk
+is STATE-AWARE (the sources ready RIGHT NOW), while `RequirementGraph.leaves` is
+its STATE-FREE counterpart, and their relationship is asserted
+(`tests/test_audit/test_obtain_graph_agreement.py`).
 """
 
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
-from artifactsmmo_cli.ai import accumulation_sell
-from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.combat import is_winnable
-from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.inventory_keep import destroyable
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
+from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY as UNBOUNDED_CAPACITY
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind as SourceKind
-from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
-
-# Sentinel capacity for a source kind that is never stock-limited (GATHER,
-# BUY, DROP, CRAFT — you can always gather/buy/craft/fight again). A plain
-# large int rather than `None` so every consumer's `min(deficit, capacity)`
-# needs no None-branch.
-UNBOUNDED_CAPACITY = 10**9
-
-
+from artifactsmmo_cli.ai.world_state import WorldState
 
 
 @dataclass(frozen=True)
@@ -160,29 +70,26 @@ class Source:
     capacity: int
 
 
+def _sources(model: ObtainModel, item: str) -> list[Source]:
+    return [Source(route.kind, route.via, route.yield_per, route.capacity)
+            for route in model.ready(item, LEGACY)]
+
+
 def obtain_sources(
     item: str, state: WorldState, game_data: GameData, ctx: SelectionContext
 ) -> list[Source]:
     """Every way `item` can be obtained from the current state, in the declared
-    priority order (WITHDRAW, RECYCLE, CRAFT, GATHER, BUY, GE_FILL, DROP).
-    THE model — see the module docstring."""
-    sources: list[Source] = []
-    sources.extend(_withdraw_sources(item, state, ctx))
-    sources.extend(_recycle_sources(item, state, game_data, ctx))
-    sources.extend(_craft_sources(item, state, game_data))
-    sources.extend(_gather_sources(item, game_data))
-    sources.extend(_buy_sources(item, game_data))
-    sources.extend(_ge_fill_sources(item, game_data))
-    sources.extend(_drop_sources(item, state, game_data))
-    sources.extend(_sell_sources(item, state, game_data, ctx))
-    return sources
+    priority order (WITHDRAW, RECYCLE, CRAFT, GATHER, BUY, GE_FILL, DROP, SELL)."""
+    return _sources(ObtainModel(state, game_data, ctx, datetime.now(UTC)), item)
 
 
 def obtain_source_map(
     items: Iterable[str], state: WorldState, game_data: GameData, ctx: SelectionContext
 ) -> dict[str, list[Source]]:
-    """`obtain_sources` over a whole closure of items, keyed by item code."""
-    return {item: obtain_sources(item, state, game_data, ctx) for item in items}
+    """`obtain_sources` over a whole closure of items, keyed by item code. One
+    model serves every item, so routes shared along the closure are built once."""
+    model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
+    return {item: _sources(model, item) for item in items}
 
 
 def has_non_craft_source(
@@ -203,255 +110,3 @@ def has_non_craft_source(
     The O8 census caught the first version doing the comparison inline."""
     return any(source.kind is not SourceKind.CRAFT
                for source in obtain_sources(item, state, game_data, ctx))
-
-
-def _withdraw_sources(
-    item: str, state: WorldState, ctx: SelectionContext
-) -> list[Source]:
-    """A copy already sits in the bank AND the bank is currently reachable.
-
-    `WithdrawItemAction.is_applicable` refuses unconditionally when
-    `not self.accessible`, and every construction site in `factory.py`
-    threads `accessible=ctx.bank_accessible`. `bank_accessible` is a
-    persisted, level-gated blocker (`not blockers.is_blocked("bank")`) that
-    stays False for the whole early game — and `state.bank_items` is
-    populated regardless (the bank sync runs unconditionally), so without
-    this gate a pre-unlock character would get a WITHDRAW source with no
-    action in existence to serve it."""
-    if not ctx.bank_accessible:
-        return []
-    bank = state.bank_items or {}
-    stock = bank.get(item, 0)
-    if stock > 0:
-        return [Source(SourceKind.WITHDRAW, item, 1, stock)]
-    return []
-
-
-def _recycle_sources(
-    item: str, state: WorldState, game_data: GameData, ctx: SelectionContext
-) -> list[Source]:
-    """Licensed surplus items (bag + bank) whose recipe consumes `item` —
-    mirrors the retired `recoverable_materials`'s gates exactly (that module was
-    subsumed by this RECYCLE arm and deleted),
-    per-source-item rather than aggregated into a material map.
-
-    THE HOT SPOT, NOW FIXED (profiled 2026-08-13, fixed 2026-08-19). This was why
-    a live planner search cost several times more per node than any offline
-    harness with an empty bag — not the LearningStore, which `planner.py`'s budget
-    docstring used to blame. The loop scanned |inventory ∪ bank| on EVERY call,
-    `obtain_sources` is called ~1.2M times in one from-scratch
-    `greater_wooden_staff` search, and every held code whose recipe consumes
-    `item` then pays `destroyable` -> `inventory_caps._is_equippable_dominated` ->
-    a pairwise gear-value comparison, making the innermost cost O(holdings ×
-    holdings). Same search, varying ONLY the banked-code count: 0.434 ms/node at
-    1, 0.618 at 21, 0.950 at 61, 11.29 at 121 — and at 121 this function was 94%
-    of the search (27.5s of 29.4s).
-
-    `GameData.recipe_consumers` inverts the question: instead of asking every
-    held code whether its recipe consumes `item`, ask `item` which recipes consume
-    it and test those against the holdings. The old note here assumed such an
-    index had to be state-keyed and therefore needed an invalidation argument —
-    it does not. "Whose recipe consumes X" is a fact about GAME DATA, which is
-    immutable for the life of a `GameData`, so it is a plain cached property and
-    the holdings enter as an O(1) membership test.
-
-    ORDER IS PRESERVED EXACTLY: the consumers are sorted, and the old loop walked
-    `sorted(inventory ∪ bank)`, so the surviving candidates come out in the same
-    relative order and no ranking can shift underneath this."""
-    out: list[Source] = []
-    bank = state.bank_items or {}
-    for code in game_data.recipe_consumers.get(item, ()):
-        if code not in state.inventory and code not in bank:
-            continue
-        # No `item in recipe` re-check: the index is BUILT from
-        # `_crafting_recipes`, which is what `crafting_recipe` reads, so a code
-        # listed under `item` has a recipe and that recipe consumes `item`. The
-        # old scan needed the test because it walked holdings and asked; this
-        # walks the answer. `recipe` is still read for `yield_per` below.
-        recipe = game_data.crafting_recipe(code)
-        assert recipe is not None and item in recipe, (
-            f"recipe_consumers[{item!r}] lists {code!r}, whose recipe is "
-            f"{recipe!r} — the index and the recipe table disagree")
-        stats = game_data.item_stats(code)
-        if stats is None or not stats.crafting_skill:
-            continue
-        if not ITEM_TYPE_TO_SLOTS.get(stats.type_):
-            continue  # not equippable -> factory never builds a RecycleAction
-        if state.skills.get(stats.crafting_skill, 1) < stats.crafting_level:
-            continue  # skill gate: the server rejects the recycle
-        if game_data.workshop_location(stats.crafting_skill) is None:
-            continue  # no workshop known -> RecycleAction.is_applicable is False
-        copies = destroyable(code, state, game_data, ctx)
-        if copies <= 0:
-            continue
-        yield_per = max(1, recipe[item] // 2)
-        out.append(Source(SourceKind.RECYCLE, code, yield_per, copies * yield_per))
-    return out
-
-
-def _craft_sources(item: str, state: WorldState, game_data: GameData) -> list[Source]:
-    """`item` has a recipe, the crafting-skill gate is met, and a workshop
-    for that skill is known."""
-    recipe = game_data.crafting_recipe(item)
-    if recipe is None:
-        return []
-    stats = game_data.item_stats(item)
-    if stats is None or not stats.crafting_skill:
-        return []
-    if state.skills.get(stats.crafting_skill, 1) < stats.crafting_level:
-        return []
-    if game_data.workshop_location(stats.crafting_skill) is None:
-        return []
-    return [Source(SourceKind.CRAFT, item, game_data.craft_yield(item), UNBOUNDED_CAPACITY)]
-
-
-def _gather_sources(item: str, game_data: GameData) -> list[Source]:
-    """Some resource drops `item`, and that resource has a currently-live
-    gathering location.
-
-    `GatherAction` is only CONSTRUCTED by `factory.py` from
-    `game_data.all_resource_locations`, which merges an event resource's
-    tiles ONLY while its event is active. Gating on the same mapping (rather
-    than re-deriving event-liveness) keeps this in lockstep with what the
-    executor can actually serve.
-
-    `resource_for_drop(item) is not None` IS the gatherability test — it scans
-    exactly the two tables `gatherable_drop_items()` unions (`resource_drops_full`
-    then `resource_drops`), so it is None precisely when `item` is absent from
-    that union. This function used to ask both, in that order; the membership
-    test was a redundant pre-filter that rebuilt a frozenset on every call and
-    left the `found is None` arm unreachable (`# pragma: no cover`). Profile
-    2026-08-13 (from-scratch greater_wooden_staff): 612013 rebuilds, 7.4s of a
-    67.3s search. `test_obtain_sources.py` pins the equivalence over the whole
-    real catalog so the two can never drift apart unnoticed."""
-    found = game_data.resource_for_drop(item)
-    if found is None:
-        return []
-    resource_code, _rate = found
-    if not game_data.all_resource_locations.get(resource_code):
-        return []  # no live tiles (e.g. event resource, event inactive)
-    return [Source(SourceKind.GATHER, resource_code, 1, UNBOUNDED_CAPACITY)]
-
-
-def _buy_sources(item: str, game_data: GameData) -> list[Source]:
-    """Permanent (non-event) NPC vendors, reachable, selling `item`."""
-    out: list[Source] = []
-    for npc_code, _price, _currency in game_data.npc_purchases(item):
-        if game_data.is_event_npc(npc_code):
-            continue  # not reliably reachable -> cannot anchor a plan
-        if game_data.npc_location(npc_code) is None:
-            continue
-        out.append(Source(SourceKind.BUY, npc_code, 1, UNBOUNDED_CAPACITY))
-    return out
-
-
-def _ge_fill_sources(item: str, game_data: GameData) -> list[Source]:
-    """A STANDING Grand Exchange sell order for `item`, and a reachable GE.
-
-    Route EXISTENCE, not venue CHOICE. `goals/gathering.py` admits a GE fill only
-    when `choose_buy_venue` says it beats the NPC price, which is the right test
-    for "should I buy here"; it is the wrong test for "does a route exist at all",
-    and applying it here is what left an item sold ONLY on the GE with no route
-    and a price of `UNOBTAINABLE_PER_UNIT`. Which venue is cheaper is decided
-    downstream, on the priced options — the same separation the D2 fix made for
-    DROP (route existence asks at restorable hp; engagement asks at current hp).
-
-    Two gates, both existence conditions and neither a preference:
-
-    * a standing order must EXIST. `ge_best_sell_order` returns None when none
-      does — `buy_source_venue` calls that the anti-surrogate guard, and it is
-      what keeps a merely-postable order (which may never fill) from counting.
-    * the GE must have a known tile, exactly as a BUY source needs
-      `npc_location`. No tile, no plan can anchor there.
-
-    The `is_event_npc` gate `_buy_sources` applies is deliberately NOT propagated:
-    the Grand Exchange is not an NPC, and that gate would kill the route outright.
-
-    Capacity is the ORDER's quantity, not `UNBOUNDED_CAPACITY`: unlike a vendor
-    you cannot buy again once the order is exhausted.
-    """
-    order = game_data.ge_best_sell_order(item)
-    if order is None:
-        return []
-    if game_data.grand_exchange_location() is None:
-        return []
-    order_id, _price, quantity = order
-    return [Source(SourceKind.GE_FILL, order_id, 1, quantity)]
-
-
-def _sell_sources(
-    item: str, state: WorldState, game_data: GameData, ctx: SelectionContext
-) -> list[Source]:
-    """GOLD, obtained by selling what the keep authority licenses for sale.
-
-    Fires for one item code and no other. Gold is not a thing that sits in the
-    bag, but it IS an input — a gold-priced vendor route carries
-    `inputs={"gold": price}` — and the walk charges an input with no route
-    `UNOBTAINABLE_PER_UNIT` PER UNIT. Being 430 gold short therefore cost
-    430,000,002 actions, which is not "expensive", it is unreachable.
-
-    THE LICENCE IS `accumulation_sell.sellable_surplus`, NOT a fresh derivation:
-    the same authority the SELL_IDLE means asks, so the route can never price a
-    sale the means would refuse to make. `Source.code` is the item SOLD, exactly
-    as RECYCLE's is the item DESTROYED.
-
-    `npcs_buying_item` returns highest price first, so the first tradeable buyer
-    dominates every other for this code and the rest are not emitted — a second
-    buyer at a lower price is strictly worse at the same one action.
-
-    REACHABILITY IS `event_npc_tradeable`, THE SAME PREDICATE THE EMITTER USES
-    (`NpcSellAction.is_applicable`, `goals/sell_inventory`), and NOT the blunt
-    `is_event_npc` refusal that `_buy_sources` applies. Measured against live
-    game data: **every NPC in the game that buys items is an event NPC** — all
-    five of fish, gemstone, herbal, nomadic and timber merchant, 55 buyer rows
-    and not one non-event. The blunt gate would therefore not be conservative
-    here, it would be a second wall replacing the one this route exists to
-    remove. Buying keeps the blunt gate because it has non-event vendors to fall
-    back on; selling has none.
-
-    That predicate reads the clock, which is why this arm is guarded by the code
-    check first: `obtain_sources` is called over a million times in one search,
-    and a `datetime.now()` per call would be felt. Only a gold lookup gets here."""
-    if item != GOLD_CODE:
-        return []
-    now = datetime.now(timezone.utc)
-    out: list[Source] = []
-    for code, copies in sorted(accumulation_sell.sellable_surplus(
-            state, game_data, ctx).items()):
-        for npc_code, price in game_data.npcs_buying_item(code):
-            if price <= 0 or game_data.npc_location(npc_code) is None:
-                continue
-            if not event_npc_tradeable(npc_code, game_data, x=state.x, y=state.y,
-                                       active_events=state.active_events,
-                                       now=now):
-                continue
-            out.append(Source(SourceKind.SELL, code, price, copies * price))
-            break
-    return out
-
-
-def _drop_sources(item: str, state: WorldState, game_data: GameData) -> list[Source]:
-    """Winnable monsters that drop `item` AND are currently reachable.
-
-    `is_winnable` is a pure combat-stat prediction and says nothing about
-    reachability, and it is asked here at RESTORABLE hp rather than at current
-    hp. `FightAction` is only CONSTRUCTED by `factory.py` from
-    `game_data.all_monster_locations`, which merges an event monster's tiles
-    ONLY while its event is active — `monsters_dropping` reads a static
-    content-drop catalog that is independent of event liveness. Gating on
-    the same mapping factory.py builds from (rather than re-deriving
-    event-liveness via `is_event_monster`) keeps this in lockstep with what
-    the executor can actually serve."""
-    # AT RESTORABLE HP, in lockstep with `drop_obtainability.fightable_droppers`
-    # — see its COMBAT bullet for the measurement and for which call sites still
-    # read current hp. Route EXISTENCE is not an hp question: a closed bank or a
-    # sleeping event are honest reasons for a route to be absent, being at 20% hp
-    # is a reason to REST, and Rest is an action the planner has.
-    rested = replace(state, hp=state.max_hp)
-    out: list[Source] = []
-    for monster_code, _rate, _min_q, _max_q in game_data.monsters_dropping(item):
-        if not game_data.all_monster_locations.get(monster_code):
-            continue  # no live tiles (e.g. event monster, event inactive)
-        if is_winnable(rested, game_data, monster_code):
-            out.append(Source(SourceKind.DROP, monster_code, 1, UNBOUNDED_CAPACITY))
-    return out

@@ -106,14 +106,14 @@ def _capped(total: int, units: int) -> int:
     impossible one.
 
     It is reachable live, not only where a bag is empty. Gold's own route is
-    `SourceKind.SELL` (`obtain_sources._sell_sources`), which needs sellable
+    `SourceKind.SELL` (`ObtainModel._sell`), which needs sellable
     surplus AND `event_npc_tradeable` — and every item-buying NPC in this game is
     an event NPC, all five, 55 buyer rows. During any window with no buyer event
     open, gold has no route and every unaffordable route inverts.
 
     WHY A CAP AND NOT A RICHER PRICE. The shortfall's honest price is what
     ACQUIRING that gold costs, and where gold has a route the walk already
-    charges exactly that — `_sell_sources` is that model, and it is untouched
+    charges exactly that — `ObtainModel._sell` is that model, and it is untouched
     here. This is only the fallback for when it has none, and there the walk has
     no information beyond "cannot". Charging the no-route price says exactly that
     and no more.

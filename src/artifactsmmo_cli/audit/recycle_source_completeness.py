@@ -247,7 +247,7 @@ def _recoverable(material: str, state: WorldState, game_data: GameData,
     of the shared `ai/obtain_sources` model (one-obtain-model epic, Task 5),
     which subsumes the retired `ai/recoverable_materials.recoverable_materials`
     this census used to call directly. A `Source.capacity` for a RECYCLE
-    source IS `copies * yield_per` (see `obtain_sources._recycle_sources`),
+    source IS `copies * yield_per` (see `ObtainModel._recycle`),
     the exact per-source-item term the old aggregate map summed."""
     return sum(s.capacity for s in obtain_sources(material, state, game_data, ctx)
               if s.kind is SourceKind.RECYCLE)

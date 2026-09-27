@@ -5,7 +5,7 @@ several of those reasons answer a question about the WHOLE state: which held
 items are heals, which weapon is best, which tools are best. Each such helper
 rescans the bag, so one `select_bank_deposits` sweep over 120 holdings ran them
 120 times over one unchanged bag — an O(codes x holdings) cost where
-O(holdings) would do. This is the same shape as `obtain_sources._recycle_sources`
+O(holdings) would do. This is the same shape as `ObtainModel._recycle`
 scanning every held code per call, and it is the reason a planner node cost tens
 of milliseconds on a full bag.
 

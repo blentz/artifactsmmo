@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_sources import SourceKind
 from artifactsmmo_cli.audit import obtain_parity_completeness as opc
 from artifactsmmo_cli.audit.obtain_parity_completeness import (
@@ -152,8 +153,7 @@ def test_deleting_the_recycle_arm_turns_the_recycle_cell_red(
     while A* still recycles). That craft+gather-vs-recycle split IS the
     seven-inert-commits divergence this census exists to catch, and RECYCLE
     surviving the deletion PROVES the WITHDRAW carveout does not swallow it."""
-    import artifactsmmo_cli.ai.obtain_sources as osmod
-    monkeypatch.setattr(osmod, "_recycle_sources", lambda *a, **k: [])
+    monkeypatch.setattr(ObtainModel, "_recycle", lambda *a, **k: [])
 
     r = _result(bundle_game_data, ParitySourceKind.RECYCLE)
     assert not r.passed
@@ -173,8 +173,7 @@ def test_deleting_the_gather_arm_turns_the_gather_cell_red(
     gathers copper_ore, the model no longer names GATHER. (The descent gathers via
     `game_data.gatherable_drop_items`, not the source map, so PLAN PARITY still
     holds — proving POOL⊆MODEL bites independently.)"""
-    import artifactsmmo_cli.ai.obtain_sources as osmod
-    monkeypatch.setattr(osmod, "_gather_sources", lambda *a, **k: [])
+    monkeypatch.setattr(ObtainModel, "_gather", lambda *a, **k: [])
 
     r = _result(bundle_game_data, ParitySourceKind.GATHER)
     assert not r.passed

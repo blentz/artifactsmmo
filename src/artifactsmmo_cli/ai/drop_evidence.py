@@ -1,4 +1,4 @@
-"""Why an item's drop route is absent, decomposed along `_drop_sources`' own
+"""Why an item's drop route is absent, decomposed along `ObtainModel._drop`'s own
 conjuncts.
 
 MOVED OUT OF `audit/drop_wall_census.py`, unchanged. It was written there
@@ -24,7 +24,7 @@ from artifactsmmo_cli.ai.world_state import WorldState
 @dataclass(frozen=True)
 class DropEvidence:
     """Why an item has no drop route, decomposed along the exact conjuncts
-    `obtain_sources._drop_sources` gates on.
+    `ObtainModel._drop` gates on.
 
     Carried per cell so the matrix can show WHY a verdict landed without the
     reader re-deriving it, and so a wall arm that stops being reachable is

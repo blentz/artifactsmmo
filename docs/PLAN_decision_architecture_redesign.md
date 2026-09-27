@@ -432,6 +432,12 @@ Each step is one commit, gated by the full gate, and witnessed by
   - Top blockers: craft skill, winnable, spawn_live.
   - Finding for Phase 3: `backpack`, `skull_staff` and `lich_race_trophy`, the roots promoted away every cycle, are all unit-feasible. So that churn comes from step-goal mapping / plannability, not obtainability.
   - `cost` and `demand` attach at step 4 as views over the existing pricer and the Lean-pinned `demand_set`; adding them before any consumer would only be unused surface.
+- Step 3 (landed): `obtain_sources` is now a view, `ObtainModel.ready(item, LEGACY)` converted to `Source`s; the legacy rules module is gone.
+  - The equality census was at zero differences immediately before the switch, and was then retired, because it would only have compared the model with itself.
+  - Each eligibility rule's rationale moved onto the matching `ObtainModel._<kind>` method.
+  - Speed: first measured at 1.31x slower per call. After making the rested-state copy lazy and removing a duplicate drop-table scan, it is 0.85x (faster than legacy).
+  - The model's gate mutants moved to a mutation group killed by `test_obtain_sources.py`, which now runs through the model.
+  - Behaviour: unchanged. Every consumer still asks LEGACY.
 - 1c: `feasible` / `cost` / `demand` views.
 - Then steps 3-5 as above.
 

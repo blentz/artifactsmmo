@@ -27,7 +27,7 @@ THE THREE CHECKS. For a grid of (material, world-state) cells, one per
     executor cannot fire (a Withdraw for a code the bank does not hold, an
     NpcBuy from an event/unlocated vendor — `goals/gathering.relevant_actions`'s
     non-craftable buy arm emits one per vendor without the event/location filter
-    `obtain_sources._buy_sources` applies), and asking the action itself
+    `ObtainModel._buy` applies), and asking the action itself
     `is_applicable` excludes exactly those without re-deriving the model's gates.
   * MODEL ⊆ POOL — every source `obtain_sources(material)` names must EXIST as a
     concrete action of that kind in the pool (existence, not applicability — a
@@ -121,7 +121,7 @@ could not perform one of these would make its cell pass for the wrong reason."""
 
 CENSUS_WEAPON = "copper_dagger"
 """Equipped in `weapon_slot` (with `derive_combat_stats`), so the DROP cell's
-`chicken` is winnable and `obtain_sources._drop_sources` emits the DROP source.
+`chicken` is winnable and `ObtainModel._drop` emits the DROP source.
 Also keeps the weapon slot filled so `EquipOwnedGoal` — a COLLECT-band candidate
 ABOVE the objective step — never preempts the material step (`_check_cell`
 re-asserts the step goal is what actually ran)."""

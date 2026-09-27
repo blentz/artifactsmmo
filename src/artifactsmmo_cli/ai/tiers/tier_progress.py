@@ -27,7 +27,7 @@ def tier_cleared(state: WorldState, game_data: GameData, tier: int,
     """Is every normal monster in `tier`'s band winnable?
 
     Evaluated AT RESTORABLE HP, never current — route existence must not
-    depend on incidental damage. Same idiom as `obtain_sources._drop_sources`,
+    depend on incidental damage. Same idiom as `ObtainModel._drop`,
     `weapon_winnability.marginal_weapon_winnability` and
     `combat_deficit.combat_deficit`: a character resting to full is always an
     option, so "is this rung clearable" must not flip with transient HP."""

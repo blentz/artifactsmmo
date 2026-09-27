@@ -177,7 +177,7 @@ def _leaf_kinds(game_data: _HasRequirementData, item: str,
     # gold. `npcs_selling_item` collapses to gold, so it reported jasper_crystal
     # / cloth / hard_leather (task-coin / wool buys) as UNOBTAINABLE — a
     # capability hole the `obtain_sources` parity invariant surfaced (its
-    # `_buy_sources` reads `npc_purchases`). The graph is the state-free
+    # `ObtainModel._buy` reads `npc_purchases`). The graph is the state-free
     # capability, so it takes the broadest vendor set; event/reachability gating
     # is `obtain_sources`' state-aware job.
     if game_data.npc_purchases(item):
