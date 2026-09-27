@@ -54,10 +54,10 @@ class _FleetStore:
     `_sibling_craft_option`'s pricing gate is satisfied) and, optionally, an
     observed grind rate per skill (`skill_grind_rate`, so `_gated_craft_option`
     can compete for the skills the caller names in `grind_rates`). For
-    `hexstaff`'s skill (weaponcrafting) no workshop is known anywhere in
-    `census_world`'s `GameData`, so `_gated_craft_option` declines before it
-    would ever ask `skill_grind_rate` regardless of what this store returns —
-    the sibling route is the only deferred option `hexstaff` can produce. For
+    `hexstaff`'s skill (weaponcrafting) this store has no grind rate unless a
+    caller passes one, so `_gated_craft_option` declines it — the sibling route
+    is the only deferred option `hexstaff` can produce. (A missing WORKSHOP
+    would decline both: a sibling crafts at a workshop too.) For
     `gearclasp`'s skill (gearcrafting) a workshop IS known, so a caller that
     passes `grind_rates={"gearcrafting": ...}` gives `_gated_craft_option` a
     real, competing route."""
@@ -90,8 +90,9 @@ def census_world() -> tuple[WorldState, GameData]:
 
     `hexstaff` (weaponcrafting 10) has NO route this character can serve on
     its own: no vendor sells it, no resource drops it, no monster drops it,
-    and no workshop for weaponcrafting is known (so even the character's OWN
-    craft route, and the gated-craft deferred route, are both absent). Its
+    and the character is below weaponcrafting 10 with no observed grind rate
+    for it (so its OWN craft route is not ready and the gated-craft deferred
+    route declines). Its
     one recipe material, `hex_wood`, is already fully held — chosen so the
     sibling craft's price is a small, finite number (one craft action, one
     bank hop, one paid-once unlock) while the no-sibling price is the
@@ -129,7 +130,8 @@ def census_world() -> tuple[WorldState, GameData]:
                               "gearclasp": {"gear_bolt": 2}},
             craft_yields={"hexstaff": 1, "gearclasp": 1},
         ),
-        world=LocationCatalog(workshop_locations={"gearcrafting": (2, 2)}),
+        world=LocationCatalog(workshop_locations={"gearcrafting": (2, 2),
+                                                  "weaponcrafting": (3, 2)}),
     )
     state = make_state(
         skills={"weaponcrafting": 1, "gearcrafting": 7, "jewelrycrafting": 1,

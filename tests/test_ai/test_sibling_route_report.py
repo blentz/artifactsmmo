@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.item_catalog import ItemCatalog, ItemStats
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -67,6 +68,7 @@ def audit_world() -> tuple[object, object]:
     count even though it names a crafting skill and a sibling holds a level
     for it too."""
     game_data = GameData(
+        world=LocationCatalog(workshop_locations={"weaponcrafting": (3, 2)}),
         items=ItemCatalog(stats={
             "hexstaff": ItemStats(code="hexstaff", level=10, type_="weapon",
                                   crafting_skill="weaponcrafting", crafting_level=10),
@@ -462,6 +464,7 @@ def test_two_items_behind_the_same_gate_produce_one_gate_line_end_to_end(
     gate (jewelrycrafting 15), both load-bearing, must print as ONE line in
     the load-bearing section, not two."""
     game_data = GameData(
+        world=LocationCatalog(workshop_locations={"jewelrycrafting": (3, 2)}),
         items=ItemCatalog(stats={
             "ring_a": ItemStats(code="ring_a", level=15, type_="ring",
                                 crafting_skill="jewelrycrafting", crafting_level=15),

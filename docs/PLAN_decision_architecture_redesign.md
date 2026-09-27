@@ -484,7 +484,15 @@ Each step is one commit, gated by the full gate, and witnessed by
   - Behaviour: 185 of 8,844 scenario verdicts change. 130 are spawnless chains (`magic_wood`, `diamond_stone`). 55 are vendor items in zero-attack states, where no fight is winnable, so gold is not renewable there (the old rule called gold always producible).
   - Live, 5 characters: 4 of 203 flip. `magic_wood`, `strange_ore` and `diamond_stone` go to no (spawnless). `lich_race_trophy` goes to YES: 10 `lich_race_medal`, each 100 `event_ticket`, a rare gather drop. The old flat rule refused it by accident. It is feasible but absurd in time, which is a COST question (the cost view is not built yet). Live `plan_once` chosen root, step and ranking are identical for all 5 characters.
   - `prerequisites._leafs` already asks the model (through `obtain_sources`, LEGACY). Its descent semantics are Phase 2's decomposition.
-  - Next consumers: `acquisition_cost.route_options` / `shopping_list`, and attaching `cost`.
+- Step 4, sixth consumer: `acquisition_cost.route_options`'s gated options (landed).
+  - New view `ObtainModel.gated_by(item, policy, kind)`: the routes a policy offers that ONE kind of gate alone keeps from being ready.
+  - The pricer's three deferred routes are now model routes priced by what opens their gate. They no longer re-derive existence (recipe, skill, workshop, live dropper) themselves:
+    - `_gated_craft_option` / `_sibling_craft_option`: the CRAFT route gated by CRAFT_SKILL alone;
+    - `_gated_drop_option`: the DROP routes gated by WINNABLE alone.
+  - Equivalence: 45,936 `route_options` comparisons over every scenario item (geared states), store-less and with a copy of the live learning store (7,706 options carrying an unlock), 0 differences, same speed.
+  - One intentional rule change, fixture-only: a sibling craft now needs a known workshop (a sibling crafts at one too). Three sibling-census fixtures had used "no workshop" to silence the grind route; they now declare it and rely on the missing grind rate.
+  - This is the seam `cost` grows from: a gate is a price (grind cycles, gear chain), not a wall.
+  - Next consumers: `shopping_list`, and a model `cost` view that folds `route_options` in.
 - 1c: `feasible` / `cost` / `demand` views.
 - Then steps 3-5 as above.
 

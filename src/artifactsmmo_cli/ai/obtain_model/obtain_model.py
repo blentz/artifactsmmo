@@ -90,6 +90,19 @@ class ObtainModel:
         order (see `ready_core.ready_routes`, the proved selection)."""
         return ready_routes(self.routes(item), policy)
 
+    def gated_by(self, item: str, policy: Policy, kind: GateKind) -> tuple[Route, ...]:
+        """The routes to `item` that `policy` offers and that ONE kind of gate
+        alone keeps from being ready: every enforced gate it does not satisfy is
+        of `kind`. A price-aware caller can pay for that gate (a skill grind for
+        CRAFT_SKILL, a gear chain for WINNABLE) instead of treating the route as
+        a wall; a route also blocked by anything else is still a wall."""
+        return tuple(
+            route for route in self.routes(item)
+            if policy.admits(route)
+            and (unmet := {gate.kind for gate in route.gates
+                           if policy.enforces(gate, route) and not gate.satisfied})
+            and unmet == {kind})
+
     def feasible(self, item: str, qty: int, policy: Policy) -> Feasibility:
         """Can `qty` units of `item` be obtained from here under `policy`?
 

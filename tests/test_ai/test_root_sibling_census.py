@@ -14,7 +14,7 @@ the return value of.
 
 A SEPARATE, DECLARED WORLD backs the one test (rule 3) that needs `route_
 options`/`acquisition_actions` to actually run: a single skill-gated item,
-`sibling_gear`, with no known weaponcrafting workshop and its one recipe
+`sibling_gear`, with a known weaponcrafting workshop but no grind rate and its one recipe
 material fully held, mirroring `test_sibling_route_census.py`'s own
 `hexstaff` fixture so the sibling route is unambiguously the item's ONLY
 route. This module does not import or reuse that fixture --
@@ -30,6 +30,7 @@ import artifactsmmo_cli.audit.root_sibling_census as root_sibling_census
 from artifactsmmo_cli.ai.decisions.root import RootResolution
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemCatalog, ItemStats
+from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
@@ -85,6 +86,7 @@ def root_census_world() -> tuple[WorldState, GameData]:
     `gear_wood`, is already fully held so the sibling craft's own price stays
     a small, finite number of actions."""
     game_data = GameData(
+        world=LocationCatalog(workshop_locations={"weaponcrafting": (3, 2)}),
         items=ItemCatalog(stats={
             "sibling_gear": ItemStats(code="sibling_gear", level=10, type_="weapon",
                                       crafting_skill="weaponcrafting", crafting_level=10),

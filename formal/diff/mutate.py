@@ -3047,6 +3047,15 @@ OBTAIN_MODEL_MINTS_MUTATIONS = [
      "_MINTS = (SourceKind.CRAFT, SourceKind.GATHER, SourceKind.BUY, SourceKind.DROP,",
      "_MINTS = (SourceKind.CRAFT, SourceKind.GATHER, SourceKind.BUY,"),
 ]
+# ObtainModel.gated_by, killed by tests/test_ai/test_obtain_model.py (TestGatedBy).
+OBTAIN_MODEL_GATED_MUTATIONS = [
+    ("obtain_model: a route with a second unmet gate is gated too",
+     "            and unmet == {kind})",
+     "            and kind in unmet)"),
+    ("obtain_model: a route the policy does not offer is gated",
+     "            if policy.admits(route)\n            and (unmet :=",
+     "            if True\n            and (unmet :="),
+]
 RESOURCE_SPAWN_KNOWN_MUTATIONS = [
     ("game_data: a resource spawn ignores layered tiles",
      "        return bool(self.all_resource_locations.get(code)) or self._layered_reachable(code)",
@@ -8449,6 +8458,8 @@ def _collect_all_groups() -> None:
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_QUANTITY_MUTATIONS,
               "tests/test_ai/test_obtain_model.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_MINTS_MUTATIONS,
+              "tests/test_ai/test_obtain_model.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_GATED_MUTATIONS,
               "tests/test_ai/test_obtain_model.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, RESOURCE_SPAWN_KNOWN_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)

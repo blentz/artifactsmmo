@@ -448,3 +448,36 @@ def test_every_monster_that_pays_gold_is_a_gold_route(world: tuple[WorldState, G
     geared = scenario_state(replace(SCENARIOS["l20_band_entry"], derive_combat_stats=True), gd)
     assert ObtainModel(replace(geared, gold=0), gd, _ctx(), NOW).feasible(GOLD_CODE, 10**6, OPEN).ok
     assert not ObtainModel(replace(state, gold=0), gd, _ctx(), NOW).feasible(GOLD_CODE, 1, OPEN).ok
+
+
+class TestGatedBy:
+    """`gated_by`: routes that ONE kind of gate alone keeps closed."""
+
+    def _model(self, world: tuple[WorldState, GameData], *routes: Route) -> ObtainModel:
+        state, gd = world
+        model = ObtainModel(state, gd, _ctx(), NOW)
+        model._routes = {"x": routes}
+        return model
+
+    def test_a_route_blocked_only_by_that_gate_is_named(self, world: tuple[WorldState, GameData]) -> None:
+        skill = Gate(GateKind.CRAFT_SKILL, "mining", False, 10)
+        craft = Route("x", SourceKind.CRAFT, "x", 1, 10**9, (skill, Gate(GateKind.WORKSHOP_KNOWN, "mining", True)))
+        assert self._model(world, craft).gated_by("x", LEGACY, GateKind.CRAFT_SKILL) == (craft,)
+
+    def test_a_second_unmet_gate_makes_it_a_wall(self, world: tuple[WorldState, GameData]) -> None:
+        craft = Route("x", SourceKind.CRAFT, "x", 1, 10**9, (
+            Gate(GateKind.CRAFT_SKILL, "mining", False, 10), Gate(GateKind.WORKSHOP_KNOWN, "mining", False)))
+        assert self._model(world, craft).gated_by("x", LEGACY, GateKind.CRAFT_SKILL) == ()
+
+    def test_a_ready_route_or_an_unenforced_gate_is_not_gated(self, world: tuple[WorldState, GameData]) -> None:
+        ready = Route("x", SourceKind.CRAFT, "x", 1, 10**9, (Gate(GateKind.CRAFT_SKILL, "mining", True, 1),))
+        grey = Route("x", SourceKind.DROP, "m", 1, 10**9, (Gate(GateKind.XP_POSITIVE, "m", False),))
+        model = self._model(world, ready, grey)
+        assert model.gated_by("x", LEGACY, GateKind.CRAFT_SKILL) == ()
+        assert model.gated_by("x", LEGACY, GateKind.XP_POSITIVE) == ()  # LEGACY allows grey
+
+    def test_a_route_the_policy_does_not_offer_is_not_gated(self, world: tuple[WorldState, GameData]) -> None:
+        fill = Route("x", SourceKind.GE_FILL, "o", 1, 5, (Gate(GateKind.GE_LOCATED, "ge", False),))
+        model = self._model(world, fill)
+        assert model.gated_by("x", LEGACY, GateKind.GE_LOCATED) == (fill,)
+        assert model.gated_by("x", replace(LEGACY, ge_routes=False), GateKind.GE_LOCATED) == ()
