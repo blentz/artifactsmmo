@@ -402,6 +402,25 @@ Each step is one commit, gated by the full gate, and witnessed by
    the parity audits it made obsolete, with their Lean pins retired or re-pointed
    at `ObtainModel.lean` in the same commit.
 
+### Progress
+
+**Step 1a landed (2026-09-27):**
+- Package `ai/obtain_model/`: `Gate`/`GateKind`, `Route`, `Policy` (+ `LEGACY`), and `ObtainModel.routes` / `ready`.
+- `audit/obtain_model_census.legacy_differences`.
+- Result: `ready(item, LEGACY) == obtain_sources(item)` for every item in all 44 scenario worlds, with the bank open and with it locked (46,024 comparisons, 0 differences). The same holds for every item of all five live characters (525 each, 0 differences).
+- Mutation check: 7 hand mutants (licensed, bank, winnable, primary, permanent, recycle yield, SELL dedupe) are each caught.
+- No consumers yet.
+
+**Live preview of the first D-x flips** (routes gained or lost against LEGACY):
+- D-A (gather-skill gate): C3P0 loses 17 gather routes and Robby 14. These are routes the character cannot gather today, e.g. C3P0 on birch_wood, which needs woodcutting 20 against his 17.
+- D-B (every dropping resource): +40 alternative gather routes.
+- D-F (event vendors): no change while no event is live.
+
+**Remaining:**
+- 1b: Lean spec + differential for `ready` (soundness, priority) and the coming `feasible`.
+- 1c: `feasible` / `cost` / `demand` views.
+- Then steps 3-5 as above.
+
 ### Out of scope for Phase 1
 
 - The A* action pool: withdraw ladders, event vendors, GE_FILL actions, and
