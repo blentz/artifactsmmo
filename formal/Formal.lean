@@ -210,6 +210,7 @@ import Formal.PlanModel
 import Formal.MinGatherStepsBound
 import Formal.LeafAttainable
 import Formal.ObtainModelReady
+import Formal.ObtainModelFeasible
 import Formal.CompleteTaskIncome
 import Formal.Liveness.CurrencyFunding
 import Formal.GearTaxonomy

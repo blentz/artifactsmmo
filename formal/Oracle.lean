@@ -2378,6 +2378,32 @@ def runLeafAttainable (args : Array Json) : Json :=
     (intArg args 0 != 0) (intArg args 1 != 0) (intArg args 2 != 0) (intArg args 3 != 0)
   Json.mkObj [("attainable", Json.bool a)]
 
+-- ObtainModelFeasible: unit feasibility (least fixpoint) of the obtain model.
+-- args = [n, held: [0/1 x n], routes: [[[input, ...], ...] x n]] -> feasible: [bool x n]
+namespace ObtainModelFeasibleOracle
+open Formal.ObtainModelFeasible
+
+def natList (j : Json) : Option (List Nat) := do
+  let a ← (j.getArr?).toOption
+  a.toList.mapM (fun e => (e.getInt?).toOption.map Int.toNat)
+
+def run (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let parsed : Option (List Nat × List (List (List Nat))) := do
+    let held ← natList args[1]!
+    let rs ← (args[2]!.getArr?).toOption
+    let routes ← rs.toList.mapM (fun perItem => do
+      let a ← (perItem.getArr?).toOption
+      a.toList.mapM natList)
+    pure (held, routes)
+  match parsed with
+  | none => Json.mkObj [("error", Json.str "bad graph")]
+  | some (held, routes) =>
+    let g : Graph := ⟨n, fun i => held.getD i 0 != 0, fun i => routes.getD i []⟩
+    Json.mkObj [("feasible", Json.arr ((List.range n).map (fun i => Json.bool (feasible g i))).toArray)]
+
+end ObtainModelFeasibleOracle
+
 -- ObtainModelReady: the unified obtain model's route selection.
 -- args = [allGather(0/1), gatherSkill(0/1), eventVendors(0/1),
 --         routes: [[kindStr, via(Nat), primary(0/1), [[gateKindStr, sat(0/1)], ...]], ...]]
@@ -3227,6 +3253,8 @@ def runOne (item : Json) : Json :=
     runLeafAttainable args
   else if kind == "obtain_model_ready" then
     ObtainModelReadyOracle.run args
+  else if kind == "obtain_model_feasible" then
+    ObtainModelFeasibleOracle.run args
   else if kind == "complete_task_income" then
     runCompleteTaskIncome args
   else if kind == "currency_funding" then

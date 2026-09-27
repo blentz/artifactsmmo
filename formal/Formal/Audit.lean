@@ -971,6 +971,10 @@ open Formal.PriorityBand
 #print axioms Formal.ObtainModelReady.enforces_gather_skill
 #print axioms Formal.ObtainModelReady.enforces_vendor_buy
 #print axioms Formal.ObtainModelReady.admits_gather
+#print axioms Formal.ObtainModelFeasible.feasible_sound
+#print axioms Formal.ObtainModelFeasible.feasible_complete
+#print axioms Formal.ObtainModelFeasible.iter_stable
+#print axioms Formal.ObtainModelFeasible.feasible_mono_held
 #print axioms Formal.CompleteTaskIncome.applyComplete_adds
 #print axioms Formal.CompleteTaskIncome.applyComplete_monotone
 #print axioms Formal.Liveness.CurrencyFunding.fundingCycles_sufficient

@@ -16,6 +16,7 @@ from unittest.mock import patch
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.obtain_model.feasibility import Feasibility
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
@@ -195,3 +196,79 @@ def test_the_census_reports_a_difference_with_both_answers(
         [difference] = legacy_differences(state, gd, _ctx(), NOW, ["copper_bar"])
     assert difference.item == "copper_bar"
     assert difference.legacy == () and difference.model
+
+
+class TestFeasible:
+    """`ObtainModel.feasible` over hand-made route tables, so each case names
+    exactly what it exercises. The fixpoint itself is pinned by the Lean
+    differential; these cover the model's wiring: holdings, the input closure,
+    and the blockers it reports."""
+
+    GATHER_GATE = Gate(GateKind.GATHER_SKILL, "mining", False, 10)
+
+    def _model(self, world: tuple[WorldState, GameData], table: dict[str, tuple[Route, ...]],
+               **state_changes: object) -> ObtainModel:
+        state, gd = world
+        model = ObtainModel(replace(state, **state_changes), gd, _ctx(), NOW)
+        model._routes = dict(table)
+        for code in ("ore", "bar", "ring", "ghost", "loop_a", "loop_b"):
+            model._routes.setdefault(code, ())
+        return model
+
+    def _craft(self, item: str, **inputs: int) -> Route:
+        return Route(item, SourceKind.CRAFT, item, 1, 10**9, (), inputs=inputs)
+
+    def test_a_held_item_is_feasible_with_no_route(self, world: tuple[WorldState, GameData]) -> None:
+        model = self._model(world, {}, inventory={"ghost": 1}, equipment={}, gold=0)
+        assert model.feasible("ghost", LEGACY).ok
+
+    def test_worn_gear_and_pocket_gold_count_as_held(self, world: tuple[WorldState, GameData]) -> None:
+        model = self._model(world, {}, inventory={}, equipment={"weapon_slot": "ghost"}, gold=5)
+        assert model.feasible("ghost", LEGACY).ok
+        assert model.feasible(GOLD_CODE, LEGACY).ok
+
+    def test_a_chain_of_ready_routes_is_feasible(self, world: tuple[WorldState, GameData]) -> None:
+        table = {"ore": (Route("ore", SourceKind.GATHER, "rocks", 1, 10**9, ()),),
+                 "bar": (self._craft("bar", ore=10),),
+                 "ring": (self._craft("ring", bar=6),)}
+        model = self._model(world, table, inventory={}, equipment={}, gold=0)
+        assert model.feasible("ring", LEGACY) == Feasibility(ok=True)
+
+    def test_an_unmet_gate_is_named(self, world: tuple[WorldState, GameData]) -> None:
+        """The gather skill is ignored under LEGACY and enforced under OPEN; when
+        enforced and unmet, it is the reason reported."""
+        table = {"ore": (Route("ore", SourceKind.GATHER, "rocks", 1, 10**9, (self.GATHER_GATE,)),)}
+        model = self._model(world, table, inventory={}, equipment={}, gold=0)
+        assert model.feasible("ore", LEGACY).ok
+        assert model.feasible("ore", OPEN) == Feasibility(ok=False, blocking_gates=(self.GATHER_GATE,))
+
+    def test_an_unobtainable_input_is_named(self, world: tuple[WorldState, GameData]) -> None:
+        table = {"ring": (self._craft("ring", bar=6, ghost=1),),
+                 "bar": (Route("bar", SourceKind.WITHDRAW, "bar", 1, 6, ()),)}
+        model = self._model(world, table, inventory={}, equipment={}, gold=0)
+        assert model.feasible("ring", LEGACY) == Feasibility(ok=False, missing_inputs=("ghost",))
+
+    def test_a_cycle_is_not_its_own_way_in(self, world: tuple[WorldState, GameData]) -> None:
+        table = {"loop_a": (self._craft("loop_a", loop_b=1),),
+                 "loop_b": (self._craft("loop_b", loop_a=1),)}
+        model = self._model(world, table, inventory={}, equipment={}, gold=0)
+        assert not model.feasible("loop_a", LEGACY).ok
+        assert self._model(world, table, inventory={"loop_b": 1}, equipment={},
+                           gold=0).feasible("loop_a", LEGACY).ok
+
+    def test_an_item_with_no_route_and_no_holding_has_no_reason_to_give(
+            self, world: tuple[WorldState, GameData]) -> None:
+        model = self._model(world, {}, inventory={}, equipment={}, gold=0)
+        assert model.feasible("ghost", LEGACY) == Feasibility(ok=False)
+
+
+def test_feasible_runs_over_the_real_catalogue(world: tuple[WorldState, GameData]) -> None:
+    """Every item of real game data gets an answer, and every feasible verdict
+    is backed by a holding or a ready route (a smoke check that the closure
+    walk terminates on real recipes)."""
+    state, gd = world
+    model = ObtainModel(state, gd, _ctx(), NOW)
+    verdicts = {item: model.feasible(item, LEGACY) for item in census_items(gd)}
+    assert any(v.ok for v in verdicts.values()) and any(not v.ok for v in verdicts.values())
+    held = model._held()
+    assert all(item in held or model.ready(item, LEGACY) for item, v in verdicts.items() if v.ok)

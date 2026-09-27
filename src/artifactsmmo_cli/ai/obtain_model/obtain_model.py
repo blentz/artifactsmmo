@@ -24,6 +24,8 @@ from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import destroyable
+from artifactsmmo_cli.ai.obtain_model.feasibility import Feasibility
+from artifactsmmo_cli.ai.obtain_model.feasible_core import feasible_items
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
@@ -71,6 +73,42 @@ class ObtainModel:
         """The routes to `item` usable right now under `policy`, in priority
         order (see `ready_core.ready_routes`, the proved selection)."""
         return ready_routes(self.routes(item), policy)
+
+    def feasible(self, item: str, policy: Policy) -> Feasibility:
+        """Can at least one unit of `item` be obtained from here under `policy`?
+
+        The least fixpoint of `feasible_core.feasible_items` over the input
+        closure of `item`'s ready routes: an item is feasible when held
+        (bag, worn, or pocket gold) or when some ready route has every input
+        feasible. A banked copy is not "held": it arrives as a WITHDRAW route,
+        gated on bank access. Existence only; quantities are not modelled."""
+        closure: list[str] = []
+        ready_inputs: dict[str, list[list[str]]] = {}
+        pending = [item]
+        while pending:
+            code = pending.pop()
+            if code in ready_inputs:
+                continue
+            closure.append(code)
+            ready_inputs[code] = [list(route.inputs) for route in self.ready(code, policy)]
+            pending.extend(x for inputs in ready_inputs[code] for x in inputs)
+        found = feasible_items(closure, self._held(), ready_inputs)
+        if item in found:
+            return Feasibility(ok=True)
+        gates = tuple(gate for route in self.routes(item)
+                      if policy.admits(route) and not policy.ready(route)
+                      for gate in route.gates
+                      if policy.enforces(gate, route) and not gate.satisfied)
+        missing = tuple(dict.fromkeys(x for inputs in ready_inputs[item] for x in inputs
+                                      if x not in found))
+        return Feasibility(ok=False, blocking_gates=gates, missing_inputs=missing)
+
+    def _held(self) -> frozenset[str]:
+        held = {code for code, qty in self._state.inventory.items() if qty > 0}
+        held.update(code for code in self._state.equipment.values() if code)
+        if self._state.gold > 0:
+            held.add(GOLD_CODE)
+        return frozenset(held)
 
     def _skill(self, skill: str) -> int:
         return self._state.skills.get(skill, DEFAULT_SKILL_LEVEL)

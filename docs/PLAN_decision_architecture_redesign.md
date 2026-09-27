@@ -423,6 +423,15 @@ Each step is one commit, gated by the full gate, and witnessed by
   - Differential: 400 random examples, an exhaustive 2,816-case single-gate sweep, and a SELL witness.
   - 9 mutants over `ready_core.py` and `policy.py`, all killed. Two vendor-switch mutants survived the random harness alone, which is why the exhaustive sweep exists.
   - The Lean pin for `feasible` comes with 1c.
+- 1c (landed with the Lean pin for `feasible`):
+  - `ObtainModel.feasible(item, policy)` answers "can I get at least one unit?" as a least fixpoint over the input closure of ready routes (`feasible_core.feasible_items`). Held = bag, worn, or pocket gold; banked copies arrive as WITHDRAW routes.
+  - It returns `Feasibility(ok, blocking_gates, missing_inputs)`: the unmet enforced gates on the item's own routes, and the infeasible inputs of its ready routes.
+  - Mirrored by `formal/Formal/ObtainModelFeasible.lean`, with soundness, completeness, a termination bound (n+1 rounds) and monotonicity in holdings.
+  - Differential: 500 random graphs + a cycle and a long-chain witness. 4 fixpoint mutants, all killed.
+  - Live (C3P0, Robby): 280 / 292 of 525 items feasible under LEGACY. Under all three D-x flips, 16 / 14 of those flip to infeasible, e.g. bass, birch_wood, dead_wood.
+  - Top blockers: craft skill, winnable, spawn_live.
+  - Finding for Phase 3: `backpack`, `skull_staff` and `lich_race_trophy`, the roots promoted away every cycle, are all unit-feasible. So that churn comes from step-goal mapping / plannability, not obtainability.
+  - `cost` and `demand` attach at step 4 as views over the existing pricer and the Lean-pinned `demand_set`; adding them before any consumer would only be unused surface.
 - 1c: `feasible` / `cost` / `demand` views.
 - Then steps 3-5 as above.
 

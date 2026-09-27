@@ -18,6 +18,7 @@ import Formal.CraftPlanDriver
 import Formal.CurrencyAffordFastFail
 import Formal.LeafAttainable
 import Formal.ObtainModelReady
+import Formal.ObtainModelFeasible
 import Formal.CompleteTaskIncome
 import Formal.Liveness.CurrencyFunding
 import Formal.MonsterDropApply
@@ -3126,6 +3127,22 @@ open Formal.ObtainModelReady in
 example : ∀ (p : Policy) (r : Route), r.kind = .gather →
     admits p r = (p.allGather || r.primary) :=
   @Formal.ObtainModelReady.admits_gather
+
+-- ─── ObtainModelFeasible (unit feasibility least fixpoint) anti-weakening pins ───
+open Formal.ObtainModelFeasible in
+example : ∀ (g : Graph) (i : Nat), feasible g i = true → Derivable g i :=
+  @Formal.ObtainModelFeasible.feasible_sound
+open Formal.ObtainModelFeasible in
+example : ∀ (g : Graph), Closed g → ∀ (i : Nat), i < g.n → Derivable g i → feasible g i = true :=
+  @Formal.ObtainModelFeasible.feasible_complete
+open Formal.ObtainModelFeasible in
+example : ∀ (g : Graph), Closed g → Stable g (g.n + 1) :=
+  @Formal.ObtainModelFeasible.iter_stable
+open Formal.ObtainModelFeasible in
+example : ∀ (g : Graph), Closed g → ∀ (held' : Nat → Bool),
+    (∀ i, g.held i = true → held' i = true) → ∀ (i : Nat),
+    feasible g i = true → feasible { g with held := held' } i = true :=
+  @Formal.ObtainModelFeasible.feasible_mono_held
 
 -- ─── CurrencyFunding (ReachCurrencyGoal funding) anti-weakening pins ───
 example : ∀ (onHand target floor : Nat), 1 ≤ floor →

@@ -364,6 +364,7 @@ EVENT_VISIBILITY_MUTATIONS = [
 LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "leaf_attainable_core.py"
 OBTAIN_MODEL_READY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "ready_core.py"
 OBTAIN_MODEL_POLICY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "policy.py"
+OBTAIN_MODEL_FEASIBLE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "feasible_core.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
 FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding_core.py"
 CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_afford_core.py"
@@ -2939,6 +2940,22 @@ OBTAIN_MODEL_READY_MUTATIONS = [
      "            sold.add(route.via)",
      "            pass"),
 ]
+# Killed by formal/diff/test_obtain_model_feasible_diff.py (binds
+# feasible_core.feasible_items to the proved Formal.ObtainModelFeasible.feasible).
+OBTAIN_MODEL_FEASIBLE_MUTATIONS = [
+    ("obtain_model feasible: ignore holdings",
+     "    feasible = {item for item in closure if item in held}",
+     "    feasible: set[str] = set()"),
+    ("obtain_model feasible: require every route, not some route",
+     "            if any(all(x in feasible for x in inputs) for inputs in ready_inputs.get(item, ())):",
+     "            if all(all(x in feasible for x in inputs) for inputs in ready_inputs.get(item, ())):"),
+    ("obtain_model feasible: some input suffices",
+     "            if any(all(x in feasible for x in inputs) for inputs in ready_inputs.get(item, ())):",
+     "            if any(any(x in feasible for x in inputs) for inputs in ready_inputs.get(item, ())):"),
+    ("obtain_model feasible: stop after one pass",
+     "                feasible.add(item)\n                changed = True",
+     "                feasible.add(item)"),
+]
 OBTAIN_MODEL_POLICY_MUTATIONS = [
     ("obtain_model policy: admit every gather route",
      "        return route.kind is not SourceKind.GATHER or self.all_gather_routes or route.primary",
@@ -4639,7 +4656,7 @@ _ALL_SRCS = [
     # C1 — acquisition-leaf attainability (task-earnable + currency-buy disjuncts).
     LEAF_ATTAINABLE_CORE_SRC,
     # Decision-architecture Phase 1 — unified obtain model route selection.
-    OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_POLICY_SRC,
+    OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_FEASIBLE_SRC,
     # C2 — complete_task coin-minting pure core.
     COMPLETE_TASK_CORE_SRC,
     # C3 — funding_cycles_pure: cycles to reach a currency target.
@@ -8218,6 +8235,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_obtain_model_ready_diff.py", survivors)
     run_group(OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_POLICY_MUTATIONS,
               "formal/diff/test_obtain_model_ready_diff.py", survivors)
+    run_group(OBTAIN_MODEL_FEASIBLE_SRC, OBTAIN_MODEL_FEASIBLE_MUTATIONS,
+              "formal/diff/test_obtain_model_feasible_diff.py", survivors)
     run_group(COMPLETE_TASK_CORE_SRC, COMPLETE_TASK_MUTATIONS,
               "formal/diff/test_complete_task_income_diff.py", survivors)
     run_group(FUNDING_CORE_SRC, FUNDING_MUTATIONS,
