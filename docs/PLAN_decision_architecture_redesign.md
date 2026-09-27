@@ -417,7 +417,12 @@ Each step is one commit, gated by the full gate, and witnessed by
 - D-F (event vendors): no change while no event is live.
 
 **Remaining:**
-- 1b: Lean spec + differential for `ready` (soundness, priority) and the coming `feasible`.
+- 1b (landed with the Lean pin for `ready`):
+  - `ObtainModel.ready` delegates to the pure `ready_core.ready_routes`, mirrored by `formal/Formal/ObtainModelReady.lean::readyRoutes`.
+  - Proved for all policies and route lists: soundness, order (sublist), completeness for non-SELL routes, SELL uniqueness + first-buyer, and the three policy switches (every other gate is always enforced).
+  - Differential: 400 random examples, an exhaustive 2,816-case single-gate sweep, and a SELL witness.
+  - 9 mutants over `ready_core.py` and `policy.py`, all killed. Two vendor-switch mutants survived the random harness alone, which is why the exhaustive sweep exists.
+  - The Lean pin for `feasible` comes with 1c.
 - 1c: `feasible` / `cost` / `demand` views.
 - Then steps 3-5 as above.
 

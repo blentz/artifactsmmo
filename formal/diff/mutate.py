@@ -362,6 +362,8 @@ EVENT_VISIBILITY_MUTATIONS = [
 
 # Doomed-memo (2026-06-15 feather_coat CPU-peg fix).
 LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "leaf_attainable_core.py"
+OBTAIN_MODEL_READY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "ready_core.py"
+OBTAIN_MODEL_POLICY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "policy.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
 FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding_core.py"
 CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_afford_core.py"
@@ -2921,6 +2923,40 @@ LEAF_ATTAINABLE_MUTATIONS = [
      "    return True"),
 ]
 
+# Killed by formal/diff/test_obtain_model_ready_diff.py (binds ready_core.ready_routes
+# and Policy to the proved Formal.ObtainModelReady.readyRoutes / routeReady).
+OBTAIN_MODEL_READY_MUTATIONS = [
+    ("obtain_model ready: keep every ready SELL buyer (drop the dedupe)",
+     "            if route.via in sold:\n                continue",
+     "            if False:\n                continue"),
+    ("obtain_model ready: dedupe every kind, not just SELL",
+     "        if route.kind is SourceKind.SELL:",
+     "        if True:"),
+    ("obtain_model ready: ignore readiness",
+     "        if not policy.ready(route):\n            continue",
+     "        if False:\n            continue"),
+    ("obtain_model ready: never mark an item sold",
+     "            sold.add(route.via)",
+     "            pass"),
+]
+OBTAIN_MODEL_POLICY_MUTATIONS = [
+    ("obtain_model policy: admit every gather route",
+     "        return route.kind is not SourceKind.GATHER or self.all_gather_routes or route.primary",
+     "        return True"),
+    ("obtain_model policy: always enforce the gather skill",
+     "            return self.gather_skill_gate",
+     "            return True"),
+    ("obtain_model policy: invert the permanence switch",
+     "            return not self.event_vendors",
+     "            return self.event_vendors"),
+    ("obtain_model policy: always enforce tradeability",
+     "            return self.event_vendors\n        return True",
+     "            return True\n        return True"),
+    ("obtain_model policy: any enforced gate suffices",
+     "        return self.admits(route) and all(",
+     "        return self.admits(route) and any("),
+]
+
 # Killed by formal/diff/test_complete_task_income_diff.py (binds complete_task_apply_pure
 # to the proved Formal.CompleteTaskIncome.applyComplete).
 COMPLETE_TASK_MUTATIONS = [
@@ -4602,6 +4638,8 @@ _ALL_SRCS = [
     STRATEGIC_VALUE_SRC,
     # C1 — acquisition-leaf attainability (task-earnable + currency-buy disjuncts).
     LEAF_ATTAINABLE_CORE_SRC,
+    # Decision-architecture Phase 1 — unified obtain model route selection.
+    OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_POLICY_SRC,
     # C2 — complete_task coin-minting pure core.
     COMPLETE_TASK_CORE_SRC,
     # C3 — funding_cycles_pure: cycles to reach a currency target.
@@ -8176,6 +8214,10 @@ def _collect_all_groups() -> None:
               "formal/diff/test_task_reservation_diff.py", survivors)
     run_group(LEAF_ATTAINABLE_CORE_SRC, LEAF_ATTAINABLE_MUTATIONS,
               "formal/diff/test_leaf_attainable_diff.py", survivors)
+    run_group(OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_READY_MUTATIONS,
+              "formal/diff/test_obtain_model_ready_diff.py", survivors)
+    run_group(OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_POLICY_MUTATIONS,
+              "formal/diff/test_obtain_model_ready_diff.py", survivors)
     run_group(COMPLETE_TASK_CORE_SRC, COMPLETE_TASK_MUTATIONS,
               "formal/diff/test_complete_task_income_diff.py", survivors)
     run_group(FUNDING_CORE_SRC, FUNDING_MUTATIONS,

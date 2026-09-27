@@ -23,6 +23,7 @@ import Formal.LoadoutProfiles
 import Formal.CraftPlanDriver
 import Formal.DoomedMemo
 import Formal.LeafAttainable
+import Formal.ObtainModelReady
 import Formal.CompleteTaskIncome
 import Formal.AccumulationSell
 import Formal.DominancePareto
@@ -1220,6 +1221,18 @@ open Formal.PriorityBand
 #check @Formal.LeafAttainable.leafAttainable_iff_or          -- validity: decision = disjunction
 #check @Formal.LeafAttainable.leafAttainable_task_earnable   -- task source alone ⇒ attainable
 #check @Formal.LeafAttainable.leafAttainable_monotone_task   -- monotone in the task source
+
+-- ObtainModelReady required roles (unified obtain model route selection;
+-- src/artifactsmmo_cli/ai/obtain_model/ready_core.py + policy.py):
+#check @Formal.ObtainModelReady.readyRoutes_sound              -- validity: returned routes are input routes, ready
+#check @Formal.ObtainModelReady.readyRoutes_sublist            -- priority order preserved
+#check @Formal.ObtainModelReady.readyRoutes_complete_nonsell   -- completeness: every ready non-SELL route returned
+#check @Formal.ObtainModelReady.readyRoutes_sell_nodup         -- safety: one SELL route per item sold
+#check @Formal.ObtainModelReady.readyRoutes_sell_first         -- the kept SELL route is the first ready buyer
+#check @Formal.ObtainModelReady.enforces_fixed                 -- non-switchable gates always enforced
+#check @Formal.ObtainModelReady.enforces_gather_skill          -- D-A switch
+#check @Formal.ObtainModelReady.enforces_vendor_buy            -- D-F switch
+#check @Formal.ObtainModelReady.admits_gather                  -- D-B switch
 
 -- CompleteTaskIncome required roles (CompleteTaskAction.apply coin minting;
 -- src/artifactsmmo_cli/ai/actions/complete_task_core.py):

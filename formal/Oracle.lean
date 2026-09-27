@@ -2378,6 +2378,72 @@ def runLeafAttainable (args : Array Json) : Json :=
     (intArg args 0 != 0) (intArg args 1 != 0) (intArg args 2 != 0) (intArg args 3 != 0)
   Json.mkObj [("attainable", Json.bool a)]
 
+-- ObtainModelReady: the unified obtain model's route selection.
+-- args = [allGather(0/1), gatherSkill(0/1), eventVendors(0/1),
+--         routes: [[kindStr, via(Nat), primary(0/1), [[gateKindStr, sat(0/1)], ...]], ...]]
+-- Kind strings are `SourceKind.value`; gate strings are `GateKind.value`.
+namespace ObtainModelReadyOracle
+open Formal.ObtainModelReady
+
+def srcKindOf? (s : String) : Option SrcKind :=
+  if s = "withdraw" then some .withdraw else if s = "recycle" then some .recycle
+  else if s = "craft" then some .craft else if s = "gather" then some .gather
+  else if s = "buy" then some .buy else if s = "ge_fill" then some .geFill
+  else if s = "drop" then some .drop else if s = "sell" then some .sell else none
+
+def srcKindStr : SrcKind → String
+  | .withdraw => "withdraw" | .recycle => "recycle" | .craft => "craft"
+  | .gather => "gather" | .buy => "buy" | .geFill => "ge_fill" | .drop => "drop"
+  | .sell => "sell"
+
+def gateKindOf? (s : String) : Option GateKind :=
+  if s = "bank_accessible" then some .bankAccessible else if s = "craft_skill" then some .craftSkill
+  else if s = "gather_skill" then some .gatherSkill else if s = "workshop_known" then some .workshopKnown
+  else if s = "spawn_live" then some .spawnLive else if s = "winnable" then some .winnable
+  else if s = "vendor_located" then some .vendorLocated
+  else if s = "vendor_permanent" then some .vendorPermanent
+  else if s = "vendor_tradeable" then some .vendorTradeable
+  else if s = "ge_located" then some .geLocated else if s = "licensed" then some .licensed
+  else none
+
+def gateKindStr : GateKind → String
+  | .bankAccessible => "bank_accessible" | .craftSkill => "craft_skill"
+  | .gatherSkill => "gather_skill" | .workshopKnown => "workshop_known"
+  | .spawnLive => "spawn_live" | .winnable => "winnable" | .vendorLocated => "vendor_located"
+  | .vendorPermanent => "vendor_permanent" | .vendorTradeable => "vendor_tradeable"
+  | .geLocated => "ge_located" | .licensed => "licensed"
+
+def parseGate (j : Json) : Option Gate := do
+  let a ← (j.getArr?).toOption
+  if a.size < 2 then none
+  let k ← gateKindOf? (← (a[0]!.getStr?).toOption)
+  let sat ← (a[1]!.getInt?).toOption
+  pure ⟨k, sat != 0⟩
+
+def parseRoute (j : Json) : Option Route := do
+  let a ← (j.getArr?).toOption
+  if a.size < 4 then none
+  let k ← srcKindOf? (← (a[0]!.getStr?).toOption)
+  let via ← (a[1]!.getInt?).toOption
+  let primary ← (a[2]!.getInt?).toOption
+  let gs ← (a[3]!.getArr?).toOption
+  let gates ← gs.toList.mapM parseGate
+  pure ⟨k, via.toNat, primary != 0, gates⟩
+
+def routeJson (r : Route) : Json :=
+  Json.arr #[Json.str (srcKindStr r.kind), Json.num (Int.ofNat r.via),
+    Json.num (if r.primary then 1 else 0),
+    Json.arr (r.gates.map (fun g => Json.arr #[Json.str (gateKindStr g.kind),
+      Json.num (if g.sat then 1 else 0)])).toArray]
+
+def run (args : Array Json) : Json :=
+  let p : Policy := ⟨intArg args 0 != 0, intArg args 1 != 0, intArg args 2 != 0⟩
+  match (args[3]!.getArr?).toOption.bind (fun rs => rs.toList.mapM parseRoute) with
+  | none => Json.mkObj [("error", Json.str "bad routes")]
+  | some rs => Json.mkObj [("ready", Json.arr ((readyRoutes p rs).map routeJson).toArray)]
+
+end ObtainModelReadyOracle
+
 -- CompleteTaskIncome: post-completion tasks_coin count.
 -- args = [coins, reward]
 def runCompleteTaskIncome (args : Array Json) : Json :=
@@ -3159,6 +3225,8 @@ def runOne (item : Json) : Json :=
     runDoomedIsDoomed args
   else if kind == "leaf_attainable" then
     runLeafAttainable args
+  else if kind == "obtain_model_ready" then
+    ObtainModelReadyOracle.run args
   else if kind == "complete_task_income" then
     runCompleteTaskIncome args
   else if kind == "currency_funding" then

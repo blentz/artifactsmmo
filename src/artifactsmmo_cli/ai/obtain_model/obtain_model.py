@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import destroyable
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
+from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
 from artifactsmmo_cli.ai.obtain_model.route import Route
 from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -68,19 +69,8 @@ class ObtainModel:
 
     def ready(self, item: str, policy: Policy) -> tuple[Route, ...]:
         """The routes to `item` usable right now under `policy`, in priority
-        order. A SELL route keeps only the first usable buyer per item sold:
-        buyers come highest price first, so a later one is strictly worse."""
-        out: list[Route] = []
-        sold: set[str] = set()
-        for route in self.routes(item):
-            if not policy.ready(route):
-                continue
-            if route.kind is SourceKind.SELL:
-                if route.via in sold:
-                    continue
-                sold.add(route.via)
-            out.append(route)
-        return tuple(out)
+        order (see `ready_core.ready_routes`, the proved selection)."""
+        return ready_routes(self.routes(item), policy)
 
     def _skill(self, skill: str) -> int:
         return self._state.skills.get(skill, DEFAULT_SKILL_LEVEL)

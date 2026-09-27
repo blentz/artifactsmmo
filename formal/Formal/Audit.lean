@@ -962,6 +962,15 @@ open Formal.PriorityBand
 #print axioms Formal.LeafAttainable.leafAttainable_iff_or
 #print axioms Formal.LeafAttainable.leafAttainable_task_earnable
 #print axioms Formal.LeafAttainable.leafAttainable_monotone_task
+#print axioms Formal.ObtainModelReady.readyRoutes_sound
+#print axioms Formal.ObtainModelReady.readyRoutes_sublist
+#print axioms Formal.ObtainModelReady.readyRoutes_complete_nonsell
+#print axioms Formal.ObtainModelReady.readyRoutes_sell_nodup
+#print axioms Formal.ObtainModelReady.readyRoutes_sell_first
+#print axioms Formal.ObtainModelReady.enforces_fixed
+#print axioms Formal.ObtainModelReady.enforces_gather_skill
+#print axioms Formal.ObtainModelReady.enforces_vendor_buy
+#print axioms Formal.ObtainModelReady.admits_gather
 #print axioms Formal.CompleteTaskIncome.applyComplete_adds
 #print axioms Formal.CompleteTaskIncome.applyComplete_monotone
 #print axioms Formal.Liveness.CurrencyFunding.fundingCycles_sufficient

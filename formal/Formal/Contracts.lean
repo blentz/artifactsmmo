@@ -17,6 +17,7 @@ import Formal.NextCraftAction
 import Formal.CraftPlanDriver
 import Formal.CurrencyAffordFastFail
 import Formal.LeafAttainable
+import Formal.ObtainModelReady
 import Formal.CompleteTaskIncome
 import Formal.Liveness.CurrencyFunding
 import Formal.MonsterDropApply
@@ -3086,6 +3087,45 @@ example : ∀ (g d t b : Bool),
 -- TASK SOURCE: earned-by-task ⇒ attainable regardless of other sources.
 example : ∀ (g d b : Bool), Formal.LeafAttainable.leafAttainable g d true b = true :=
   @Formal.LeafAttainable.leafAttainable_task_earnable
+
+-- ─── ObtainModelReady (unified obtain model route selection) anti-weakening pins ───
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (rs : List Route) (r : Route),
+    r ∈ readyRoutes p rs → r ∈ rs ∧ routeReady p r = true :=
+  @Formal.ObtainModelReady.readyRoutes_sound
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (rs : List Route), (readyRoutes p rs).Sublist rs :=
+  @Formal.ObtainModelReady.readyRoutes_sublist
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (rs : List Route) (r : Route),
+    r ∈ rs → routeReady p r = true → r.kind ≠ .sell → r ∈ readyRoutes p rs :=
+  @Formal.ObtainModelReady.readyRoutes_complete_nonsell
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (rs : List Route), (sellVias (readyRoutes p rs)).Nodup :=
+  @Formal.ObtainModelReady.readyRoutes_sell_nodup
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (pre post : List Route) (r : Route),
+    routeReady p r = true → r.kind = .sell →
+    (∀ q ∈ pre, routeReady p q = true → q.kind = .sell → q.via ≠ r.via) →
+    r ∈ readyRoutes p (pre ++ r :: post) :=
+  @Formal.ObtainModelReady.readyRoutes_sell_first
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route) (g : Gate), g.kind ≠ .gatherSkill →
+    g.kind ≠ .vendorPermanent → g.kind ≠ .vendorTradeable → enforces p r g = true :=
+  @Formal.ObtainModelReady.enforces_fixed
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route) (sat : Bool),
+    enforces p r ⟨.gatherSkill, sat⟩ = p.gatherSkill :=
+  @Formal.ObtainModelReady.enforces_gather_skill
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route) (s : Bool), r.kind = .buy →
+    enforces p r ⟨.vendorPermanent, s⟩ = !p.eventVendors ∧
+    enforces p r ⟨.vendorTradeable, s⟩ = p.eventVendors :=
+  @Formal.ObtainModelReady.enforces_vendor_buy
+open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route), r.kind = .gather →
+    admits p r = (p.allGather || r.primary) :=
+  @Formal.ObtainModelReady.admits_gather
 
 -- ─── CurrencyFunding (ReachCurrencyGoal funding) anti-weakening pins ───
 example : ∀ (onHand target floor : Nat), 1 ≤ floor →

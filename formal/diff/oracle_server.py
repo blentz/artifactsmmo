@@ -106,11 +106,16 @@ class OracleServer:
     def _start(self) -> subprocess.Popen[str]:
         if not ORACLE.exists():
             raise oracle_missing_error()
-        return subprocess.Popen(
+        proc = subprocess.Popen(
             [str(ORACLE), "--serve"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, bufsize=1,
         )
+        # Non-blocking, so `_stderr_available` can take whatever the oracle has
+        # written without waiting for more (see `request`).
+        assert proc.stderr is not None
+        os.set_blocking(proc.stderr.fileno(), False)
+        return proc
 
     def request(self, kind: str, args_batches: list[list]) -> list[dict]:
         """Send one batch, return its results. Raises rather than returning
@@ -164,6 +169,26 @@ class OracleServer:
                     f"{self._drain_stderr()}"
                 )
 
+            # STDERR IS DRAINED AFTER EVERY REPLY, AND ANY OUTPUT FAILS THE
+            # REQUEST. The oracle writes to stderr only when something went
+            # wrong, e.g. a Lean `xs[i]!` read past the arguments sent, which
+            # prints an out-of-bounds PANIC with a backtrace and then carries on
+            # with a DEFAULT value. That happens during the computation, before
+            # the reply is written, so it is already in the pipe here. Left
+            # unread it did two kinds of damage (2026-09-27): the rich
+            # `ladder_fires` harness sent 40 of the runner's 41 slots, so every
+            # call silently compared production against a Lean model with no
+            # banked gold; and the panics accumulated in the 64 KB pipe until
+            # the oracle blocked on a write, sleeping, which surfaced as the
+            # recurring 120 s timeouts.
+            noise = self._stderr_available()
+            if noise:
+                self._kill()
+                raise RuntimeError(
+                    f"oracle wrote to stderr on request {req_id} ({kind}); the "
+                    f"differential would compare against a defaulted input. "
+                    f"payload: {payload}; stderr: {noise[:2000]}")
+
             reply = json.loads(line)
             if "error" in reply:
                 raise RuntimeError(f"oracle error on request {req_id} ({kind}): {reply['error']}")
@@ -178,15 +203,30 @@ class OracleServer:
             return align_results(
                 len(args_batches), reply["results"], f"id {req_id}, kind {kind}")
 
+    def _stderr_available(self) -> str:
+        """Everything the oracle has written to stderr so far, without waiting."""
+        proc = self._proc
+        if proc is None or proc.stderr is None or proc.stderr.closed:
+            return ""
+        chunks: list[bytes] = []
+        while True:
+            try:
+                chunk = os.read(proc.stderr.fileno(), 65536)
+            except BlockingIOError:
+                break
+            if not chunk:
+                break
+            chunks.append(chunk)
+        return b"".join(chunks).decode(errors="replace")
+
     def _drain_stderr(self) -> str:
         proc = self._proc
         if proc is None or proc.stderr is None:
             return "<no stderr>"
         proc.poll()
-        try:
-            return proc.stderr.read() or "<empty stderr>"
-        except ValueError:
+        if proc.stderr.closed:
             return "<stderr closed>"
+        return self._stderr_available() or "<empty stderr>"
 
     @staticmethod
     def _close_pipes(proc: subprocess.Popen[str]) -> None:

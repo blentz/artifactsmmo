@@ -172,6 +172,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
+from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.means import SUPPLY_DEMAND_MIN
@@ -1022,6 +1023,15 @@ def _rich_oracle_args(
         # unable to catch a Lean/Python disagreement on this arm.
         _supply_asymmetric(ctx),  # 38 supplyAsymmetric
         1 if ctx.draw_owed else 0,               # 39 drawOwed
+        # 40 bankGold: the BANKED half of the account, read through the SAME
+        # `account_gold` production's BANK_EXPAND reserve gate asks. This slot
+        # was missing: the runner reads slot 40, so every rich call made the
+        # Lean side index past the end, print an out-of-bounds PANIC with a
+        # backtrace to the oracle's unread stderr pipe, and silently use 0 —
+        # comparing production's real bank balance against a Lean model with
+        # none. Enough panics filled the 64 KB pipe and wedged the oracle,
+        # which is what the recurring 120 s `ladder_fires` timeouts were.
+        account_gold(w) - w.gold,
     ]
 
 
