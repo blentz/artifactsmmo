@@ -12,6 +12,7 @@ Covers:
 """
 
 import dataclasses
+from unittest.mock import patch
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
@@ -246,8 +247,11 @@ class TestWithdrawsBankedIntermediate:
         assert result[0].code == "copper_bar"
         assert isinstance(result[-1], CraftAction) and result[-1].code == "copper_ring"
 
-    def test_none_when_withdraw_action_absent(self):
-        """Banked bar but no WithdrawItemAction in the list → fall back to A*."""
+    def test_a_withdraw_the_pool_lacks_is_built_at_the_bank(self):
+        """Banked bar but no WithdrawItemAction in the pool: the static pool
+        builds withdraws only for equippable chains, so decomposition builds the
+        one it needs at the bank tile (Phase 2b). A locked bank makes that leg
+        inapplicable, and the generator declines."""
         gd = _gd_copper_ring()
         state = make_state(inventory={}, bank_items={"copper_bar": 5},
                            skills={"mining": 5, "jewelrycrafting": 5})
@@ -256,7 +260,10 @@ class TestWithdrawsBankedIntermediate:
 
         result = generate_next_craft_action(goal, state, gd, actions)
 
-        assert result is None
+        assert result is not None and isinstance(result[0], WithdrawItemAction)
+        assert (result[0].code, result[0].quantity) == ("copper_bar", 1)
+        assert result[0].bank_location == gd.bank_location() and result[0].accessible
+        assert generate_next_craft_action(goal, state, gd, actions, bank_accessible=False) is None
 
 
 class TestWithdrawClampedToBankStock:
@@ -667,14 +674,10 @@ class TestStrategyArbiterIntegration:
         assert isinstance(result[0], CraftAction)
         assert result[0].code == "copper_ring"
 
-    def test_banked_needed_input_inventory_short_falls_back(self) -> None:
-        """Banked INPUT genuinely needed (inventory short) → A* fallback.
-
-        Crash-avoidance + correct deferral: copper_bar is an INPUT that must be
-        withdrawn before CraftAction can use it.  With 0 bars in inventory and
-        the recipe requiring 1 bar per ring, the generator cannot emit a craft
-        without a prior withdraw step.  Returning None lets A* emit Withdraw→Craft.
-        """
+    def test_banked_needed_input_inventory_short_withdraws_then_crafts(self) -> None:
+        """Banked INPUT genuinely needed (inventory short): decomposition emits
+        Withdraw→Craft itself, building the withdraw the pool lacks (Phase 2b).
+        It used to decline here and leave the two-step plan to A*."""
         gd = _gd_copper_ring()
         state = make_state(
             inventory={},              # 0 bars in inventory
@@ -686,10 +689,9 @@ class TestStrategyArbiterIntegration:
 
         result = generate_next_craft_action(goal, state, gd, actions)
 
-        assert result is None, (
-            "Generator must return None (A* fallback) when a banked INPUT is "
-            "genuinely needed — A* will emit Withdraw→Craft correctly"
-        )
+        assert result is not None
+        assert [type(a).__name__ for a in result] == ["WithdrawItemAction", "CraftAction"]
+        assert (result[0].code, result[0].quantity) == ("copper_bar", 1)
 
     def test_inventory_material_does_not_fall_back(self) -> None:
         """Bar in INVENTORY (not bank) → generator fires and emits CraftAction.
@@ -1537,7 +1539,7 @@ class TestMapNextActionMissingConcreteAction:
         → the yield_per lookup fails → None (line: `match is None`)."""
         gd = _gd_recyclable()
         na = NextAction("copper_bar", "recycle", 3, "copper_dagger")
-        assert _map_next_action(na, [], gd, {}) is None
+        assert _map_next_action(na, [], gd, {}, [], True) is None
 
     def test_recycle_step_source_present_but_no_action_returns_none(self):
         """The RECYCLE Source exists (yield_per resolves) but the licensed pool
@@ -1546,16 +1548,67 @@ class TestMapNextActionMissingConcreteAction:
         na = NextAction("copper_bar", "recycle", 3, "copper_dagger")
         sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 9)]}
         # relevant pool has NO RecycleAction(copper_dagger).
-        assert _map_next_action(na, [], gd, sources) is None
+        assert _map_next_action(na, [], gd, sources, [], True) is None
 
     def test_buy_step_with_no_matching_action_returns_none(self):
         """A buy NextAction with no matching NpcBuyAction in the pool → None."""
         gd = _gd_copper_ring()
         na = NextAction("widget_part", "buy", 1, "merchant")
-        assert _map_next_action(na, [], gd, {}) is None
+        assert _map_next_action(na, [], gd, {}, [], True) is None
 
     def test_drop_step_with_no_matching_fight_returns_none(self):
         """A drop NextAction whose dropper has no FightAction in the pool → None."""
         gd = _gd_drop_leaf()  # chicken drops feather
         na = NextAction("feather", "drop", 1, "chicken")
-        assert _map_next_action(na, [], gd, {}) is None
+        assert _map_next_action(na, [], gd, {}, [], True) is None
+
+
+class TestPhase2bDecompositionGaps:
+    """The gaps a live sweep of 40 grind goals found (Phase 2b of
+    docs/PLAN_decision_architecture_redesign.md): each made decomposition
+    decline and hand the goal to a nested A*."""
+
+    def test_an_excluded_recycle_is_no_source(self):
+        """A grind excludes recycling its own rung (a null cycle); the source
+        map must drop that recycle too, or the plan names a step the whitelist
+        cannot serve and decomposition declines."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={"copper_dagger": 2}, bank_items={},
+                           skills={"mining": 5, "weaponcrafting": 5})
+        actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
+                                             workshop_location=(2, 2)))
+        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 3)]}
+        free = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
+        assert isinstance(generate_next_craft_action(free, state, gd, actions, sources)[0],
+                          RecycleAction), "vacuous: the recycle is not the plan's first choice"
+        grind = GatherMaterialsGoal("copper_bar", {"copper_bar": 3},
+                                    exclude_recycle=frozenset({"copper_dagger"}))
+        result = generate_next_craft_action(grind, state, gd, actions, sources)
+        assert result is not None and not any(isinstance(a, RecycleAction) for a in result)
+
+    def test_a_gather_the_whitelist_lacks_is_taken_from_the_pool(self):
+        """Decomposition decided on the gather, so it maps it from the whole
+        pool when the goal's A* whitelist pruned it."""
+        gd = _gd_copper_ring()
+        state = make_state(inventory={}, bank_items={}, skills={"mining": 5, "jewelrycrafting": 5})
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
+        rocks = GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]))
+        with patch.object(GatherMaterialsGoal, "relevant_actions",
+                          lambda self, actions, state, gd: [a for a in actions if a is not rocks]):
+            result = generate_next_craft_action(goal, state, gd, [rocks, *_copper_ring_actions()[1:]])
+        assert result is not None and any(a is rocks for a in result)
+
+    def test_a_gathering_skill_gate_leads_with_its_level_skill(self):
+        """A leaf whose resource needs more gathering skill than the character
+        has opens the plan with the `LevelSkill` that grinds it, exactly as a
+        crafting-skill gate does."""
+        gd = _gd_copper_ring()
+        gd._resource_skill = {"copper_rocks": ("mining", 10)}
+        state = make_state(inventory={}, bank_items={}, skills={"mining": 5, "jewelrycrafting": 5})
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
+        grind = LevelSkill(skill="mining", target_level=10)
+        with patch.object(LevelSkill, "is_applicable", return_value=True):
+            result = generate_next_craft_action(goal, state, gd, [*_copper_ring_actions(), grind])
+        assert result == [grind]
+        # With no LevelSkill to grind it, the gather is refused on applicability.
+        assert generate_next_craft_action(goal, state, gd, _copper_ring_actions()) is None

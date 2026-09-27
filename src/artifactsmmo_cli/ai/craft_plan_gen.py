@@ -113,11 +113,12 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     map is built once per call, over the goal's recipe closure, and only for a
     `GatherMaterialsGoal`: every other goal shape short-circuits
     `generate_next_craft_action` immediately."""
-    sources: dict[str, list[Source]] = {}
-    if isinstance(goal, GatherMaterialsGoal):
-        closure_items = _closure_items(dict(game_data.crafting_recipes), goal.needed)
-        sources = obtain_source_map(closure_items, state, game_data, ctx)
-    return generate_next_craft_action(goal, state, game_data, actions, sources)
+    if not isinstance(goal, GatherMaterialsGoal):
+        return None
+    closure_items = _closure_items(dict(game_data.crafting_recipes), goal.needed)
+    sources = obtain_source_map(closure_items, state, game_data, ctx)
+    return generate_next_craft_action(goal, state, game_data, actions, sources,
+                                      bank_accessible=ctx.bank_accessible)
 
 
 def generate_next_craft_action(
@@ -126,6 +127,8 @@ def generate_next_craft_action(
     game_data: GameData,
     actions: list[Action],
     sources: Mapping[str, list[Source]] | None = None,
+    *,
+    bank_accessible: bool = True,
 ) -> list[Action] | None:
     """Return the next action(s) for a deterministic gather-craft goal, or ``None``.
 
@@ -176,7 +179,13 @@ def generate_next_craft_action(
     # activation is RECYCLE/BUY/DROP; all three are kept. (A proper bank-live
     # WITHDRAW capacity belongs in the shared core + its Lean mirror, out of
     # this task's scope.)
-    sources = {item: [s for s in srcs if s.kind is not SourceKind.WITHDRAW]
+    # A recycle of an item the goal must never destroy is no source: a skill
+    # grind excludes its own rung, since recycling the rung to source its own
+    # material is a null cycle (destroy the bow, remake the bow). The goal's
+    # whitelist already drops that RecycleAction; the source map must agree, or
+    # the plan names a step nothing can serve.
+    sources = {item: [s for s in srcs if s.kind is not SourceKind.WITHDRAW
+                      and not (s.kind is SourceKind.RECYCLE and s.code in goal.exclude_recycle)]
                for item, srcs in (sources or {}).items()}
 
     # Collect every item code in the recipe closure.
@@ -256,9 +265,13 @@ def generate_next_craft_action(
             game_data.requirement_graph.graph(), [item], {item: qty}).quantities)
         mapped: list[Action] = []
         for na in plan:
-            action = _map_next_action(na, relevant, game_data, sources)
+            action = _map_next_action(na, relevant, game_data, sources, actions, bank_accessible)
             if action is None:
                 return None  # a step has no concrete action → fall back to A*
+            if not mapped and isinstance(action, GatherAction):
+                gate = _unmet_gather_gate(action, state, game_data, actions)
+                if gate is not None:
+                    return gate
             if isinstance(action, CraftAction):
                 action = size_intermediate_craft(action, chain, state, game_data)
             mapped.append(action)
@@ -345,21 +358,51 @@ def _with_rearm(mapped: list[Action], state: WorldState,
     return mapped
 
 
+def _unmet_gather_gate(gather: GatherAction, state: WorldState, game_data: GameData,
+                       actions: list[Action]) -> list[Action] | None:
+    """When the plan opens with a gather the character's gathering skill does
+    not yet allow, the leg is the `LevelSkill` that opens it (one leg per cycle,
+    as for a crafting-skill gate), or None when there is no such gate. A gate
+    with no applicable `LevelSkill` in the pool leaves the gather in place for
+    `_finish`'s applicability check to refuse."""
+    requirement = game_data.resource_skill_level(gather.resource_code)
+    if requirement is None:
+        return None
+    skill, level = requirement
+    if state.skills.get(skill, 1) >= level:
+        return None
+    lvl = next((a for a in actions if isinstance(a, LevelSkill)
+                and a.skill == skill and a.target_level == level), None)
+    if lvl is None or not lvl.is_applicable(state, game_data):
+        return None
+    return _finish([lvl], state, game_data)
+
+
 def _map_next_action(
     na: NextAction, relevant: list[Action], game_data: GameData,
-    sources: Mapping[str, list[Source]],
+    sources: Mapping[str, list[Source]], pool: list[Action], bank_accessible: bool,
 ) -> Action | None:
-    """Map one NextAction to a concrete action from `relevant`, or None if absent."""
+    """Map one NextAction to a concrete action, or None if there is none.
+
+    `relevant` (the goal's A* whitelist) is asked first. A GATHER or WITHDRAW
+    step the whitelist lacks is still the step decomposition decided on, so it
+    is taken from the whole `pool`, and a withdraw with no pool action at all is
+    CONSTRUCTED at the bank tile: the static pool builds withdraws only for
+    equippable recipe chains, so a banked cooking ingredient had none (Phase 2b
+    of docs/PLAN_decision_architecture_redesign.md: the task builds the action
+    it needs)."""
     if na.kind == "gather":
-        for action in relevant:
+        for action in (*relevant, *pool):
             if (
                 isinstance(action, GatherAction)
+                and action.drop_item_override is None
                 and game_data.resource_drop_item(action.resource_code) == na.item
+                and (not na.code or action.resource_code == na.code)
             ):
                 return action
         return None
     if na.kind == "withdraw":
-        for action in relevant:
+        for action in (*relevant, *pool):
             if isinstance(action, WithdrawItemAction) and action.code == na.item:
                 # Honor the core's bank-CLAMPED quantity (min(bank_stock, deficit),
                 # next_craft_core._next). The factory pre-builds withdraws at FIXED
@@ -370,7 +413,9 @@ def _map_next_action(
                 # but Withdraw(ash_plank×7)→478 every cycle). Reuse the matched
                 # action's bank_location/accessible, override the quantity.
                 return dataclasses.replace(action, quantity=na.qty)
-        return None
+        return WithdrawItemAction(code=na.item, quantity=na.qty,
+                                  bank_location=game_data.bank_location(),
+                                  accessible=bank_accessible)
     if na.kind == "craft":
         for action in relevant:
             if isinstance(action, CraftAction) and action.code == na.item:

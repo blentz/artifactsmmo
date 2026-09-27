@@ -3087,6 +3087,23 @@ GRIND_DECOMPOSE_MUTATIONS = [
      "        decomposed = decompose(goal, self.state, self.game_data, actions, self._last_ctx)",
      "        decomposed = None"),
 ]
+# Phase 2b: the decomposition gaps a live grind sweep found. Killed by
+# tests/test_ai/test_craft_plan_gen.py (TestPhase2bDecompositionGaps and the
+# withdraw tests).
+DECOMPOSE_GAP_MUTATIONS = [
+    ("craft_plan_gen: an excluded recycle stays a source",
+     "                      and not (s.kind is SourceKind.RECYCLE and s.code in goal.exclude_recycle)]",
+     "                      ]"),
+    ("craft_plan_gen: a gather is mapped from the whitelist only",
+     "        for action in (*relevant, *pool):\n            if (\n                isinstance(action, GatherAction)",
+     "        for action in relevant:\n            if (\n                isinstance(action, GatherAction)"),
+    ("craft_plan_gen: a withdraw the pool lacks is not built",
+     "        return WithdrawItemAction(code=na.item, quantity=na.qty,",
+     "        return None and WithdrawItemAction(code=na.item, quantity=na.qty,"),
+    ("craft_plan_gen: a gathering-skill gate is not led by its LevelSkill",
+     "                gate = _unmet_gather_gate(action, state, game_data, actions)",
+     "                gate = None"),
+]
 RESOURCE_SPAWN_KNOWN_MUTATIONS = [
     ("game_data: a resource spawn ignores layered tiles",
      "        return bool(self.all_resource_locations.get(code)) or self._layered_reachable(code)",
@@ -8501,6 +8518,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/scenarios/test_fisher_cooking_rung.py", survivors)
     run_group(PLAYER_SRC, GRIND_DECOMPOSE_MUTATIONS,
               "tests/test_ai/test_decision_events.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, DECOMPOSE_GAP_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, RESOURCE_SPAWN_KNOWN_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_OBTAINABLE_MUTATIONS,
