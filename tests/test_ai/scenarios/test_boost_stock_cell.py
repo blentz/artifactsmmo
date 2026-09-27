@@ -244,20 +244,19 @@ def test_the_next_cycle_does_not_reverse_the_arm(
     plan had just destroyed.
 
     Honest about WHY the guard is quiet: the heal side is satisfied (40, still
-    equipped — the load-bearing change) and the boost side now fails the
-    guard's `_recipe_producible` conjunct because the three runs consumed the
-    held ingredients. The goal alone would still size more boost (asserted
-    below) — it is not gated on materials — but it stays on the SAME arm
-    instead of undoing its own work, which is what "reaches a fixed point"
-    means for an arm whose precondition is the heal stock."""
+    equipped — the load-bearing change) and the boost batch the ladder could
+    supply was just crafted: the runs consumed the held ingredients, and the
+    boost's remaining sources are ones the ladder cannot serve. Guard and goal
+    now ask the SAME question (`potion_supply.potion_batch`), so the goal has
+    nothing to craft either: it used to keep sizing boost it could not supply,
+    which is how the guard and the goal disagreed live (Robby, 821 no-plan
+    searches in 24 h). Neither side flips back to the heal arm."""
     _player, report = _planned(state, bundle_game_data)
     after = state
     for action in report.plan:
         after = action.apply(after, bundle_game_data)
     assert craft_potions_fires(after, bundle_game_data, None) is False
-    assert _arm_is_boost_stock(after, bundle_game_data) is True
-    assert _goal(after, bundle_game_data)._active_craft(
-        after, bundle_game_data)[0] == BOOST
+    assert _goal(after, bundle_game_data)._active_craft(after, bundle_game_data) is None
     # The heal arm's own gate is still closed — the precondition survived.
     goal = _goal(after, bundle_game_data)
     assert (goal._baseline(after.level, after, bundle_game_data, None)

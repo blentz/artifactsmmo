@@ -52,7 +52,10 @@ class Policy:
     `fight_gold`: a GOLD_DROP route is offered (True: gold is earned by
     fighting, so a gold price is a matter of time) or not (False: gold is what
     the pocket holds or a sale raises, as `obtain_sources` and near-term
-    attainability ask)."""
+    attainability ask).
+    `drop_routes`: a DROP route is offered (True) or not (False, for a caller
+    whose emission cannot fight: the potion supply ladder, `craft_utility_ladder`,
+    emits no FightAction)."""
 
     all_gather_routes: bool
     gather_skill_gate: bool
@@ -64,6 +67,7 @@ class Policy:
     ge_routes: bool
     task_rewards: bool
     fight_gold: bool
+    drop_routes: bool
 
     def admits(self, route: Route) -> bool:
         """Is `route` offered at all under this policy?"""
@@ -75,6 +79,8 @@ class Policy:
             return self.task_rewards
         if route.kind is SourceKind.GOLD_DROP:
             return self.fight_gold
+        if route.kind is SourceKind.DROP:
+            return self.drop_routes
         return route.kind is not SourceKind.GATHER or self.all_gather_routes or route.primary
 
     def enforces(self, gate: Gate, route: Route) -> bool:
@@ -104,7 +110,7 @@ class Policy:
 LEGACY = Policy(all_gather_routes=False, gather_skill_gate=True, craft_skill_gate=True,
                 event_vendors=False,
                 spawn_known=True, allow_grey=True, vendor_routes=True, ge_routes=True,
-                task_rewards=False, fight_gold=False)
+                task_rewards=False, fight_gold=False, drop_routes=True)
 """What `obtain_sources` answers: the routes the executor can serve now.
 Phase 1 step 1 proved the model reproduced the old walk under this policy
 before any consumer moved; each D-x decision since then changes it one switch

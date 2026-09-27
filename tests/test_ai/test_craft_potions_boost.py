@@ -181,6 +181,7 @@ def test_craft_potions_fires_true_when_boost_ingredient_gatherable():
     gd = _gd_stalled()
     # Wire sunflower as a gatherable resource drop so the recipe is producible.
     gd._resource_drops = {"sunflower_field": _INGREDIENT}
+    gd._resource_locations = {"sunflower_field": [(2, 0)]}  # a field that spawns
     state = _state_stalled(inventory={})  # nothing held, but gatherable
     assert craft_potions_fires(state, gd) is True
 

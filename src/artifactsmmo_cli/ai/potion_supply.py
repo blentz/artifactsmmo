@@ -5,18 +5,27 @@ for the CRAFT_POTIONS guard tier (guards.py) and CraftPotionsGoal.
 — both the guard and the goal call it so they always agree on the target.
 ``craft_potions_fires`` is the guard predicate imported by guards.py."""
 
+from datetime import UTC, datetime
+
 from artifactsmmo_cli.ai.boost_selection import best_boost_potion
 from artifactsmmo_cli.ai.combat_targets import combat_target_monsters
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.held_for_crafting import held_for_crafting
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.max_batch_from_held import max_batch_from_held_pure
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
+from artifactsmmo_cli.ai.obtain_model.policy import Policy
+from artifactsmmo_cli.ai.optimal_buy_mix import optimal_buy_mix_pure
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
 from artifactsmmo_cli.ai.potion_stock_target import (
     fight_is_marginal_pure,
     potion_stock_target_pure,
 )
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.thresholds import (
+    POTION_GATHER_BATCH,
     POTION_HIGH_LEVEL,
     POTION_HIGH_QTY,
     POTION_LOW_LEVEL,
@@ -116,26 +125,38 @@ def bootstrap_potion_target(
     return _cheapest_heal_potion(game_data, effect)
 
 
-def _recipe_producible(recipe: dict[str, int], state: WorldState, game_data: GameData) -> bool:
-    """True when EVERY ingredient is obtainable by some tier: available in
-    inventory+bank, OR fully buyable from an NPC for gold, OR gatherable from a
-    resource node. This is a ONE-LEVEL check — it does NOT recurse into an
-    ingredient that is itself craftable from obtainables, so a recipe containing a
-    crafted intermediate reads non-producible. That is a SAFE false-negative (the
-    guard under-fires rather than spinning) and is exact for the real potion
-    recipes, whose ingredients are all direct gathers. Serves the guard's
-    exclusive-gating invariant (avoid firing when the goal has no plannable path).
-    Previously used a per-tier any() on gatherable, which admitted recipes the
-    planner could not complete (149-node no-plan spin)."""
-    bank = state.bank_items or {}
-    drop_items = set(game_data.gatherable_drop_items())
-    def obtainable(mat: str, qty: int) -> bool:
-        if state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty:
-            return True
-        if any(currency == "gold" for _npc, _price, currency in game_data.npc_purchases(mat)):
-            return True
-        return mat in drop_items
-    return all(obtainable(mat, qty) for mat, qty in recipe.items())
+POTION_POLICY = Policy(all_gather_routes=True, gather_skill_gate=True, craft_skill_gate=True,
+                       event_vendors=False, spawn_known=True, allow_grey=True,
+                       vendor_routes=True, ge_routes=False, task_rewards=False,
+                       fight_gold=False, drop_routes=False)
+"""What the potion supply ladder (`craft_utility_ladder`) can serve, as an
+obtain-model policy: the recipe's crafts, every gatherer of an ingredient (the
+gather must be performable: skill and spawn), permanent vendors paid from the
+pocket, and what the bag and bank already hold. NO drops: the ladder emits no
+FightAction. NO GE-only route: the ladder adds a GE fill only beside an NPC buy.
+
+This replaces `_recipe_producible`, a one-level private walk that counted any
+gatherable ingredient (skill ignored), any gold vendor (price ignored) and ONE
+batch against holdings while the goal sized FIVE: live Robby 2026-09-27,
+`earth_boost_potion` x5 needed 5 `yellow_slimeball`, the bank held 1 and the
+only other source was a drop, so the guard fired and the goal found no plan
+821 times in 24 h (up to 98k nodes a search)."""
+
+
+def feasible_runs(code: str, runs: int, state: WorldState, game_data: GameData) -> int:
+    """The largest run count <= `runs` whose ingredients can ALL be had in full
+    (`ObtainModel.feasible` under `POTION_POLICY`), or 0 (always 0 for an item
+    with no recipe). Fewer runs are never
+    harder (the proved `can_anti_qty`), so the answer is the first that holds
+    counting down."""
+    recipe = game_data.crafting_recipes.get(code, {})
+    if not recipe:
+        return 0  # nothing to craft it from: no batch at all
+    model = ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
+    for candidate in range(runs, 0, -1):
+        if all(model.feasible(mat, per * candidate, POTION_POLICY).ok for mat, per in recipe.items()):
+            return candidate
+    return 0
 
 
 def projected_heal_need_per_fight(state: WorldState, game_data: GameData,
@@ -164,62 +185,113 @@ def projected_heal_need_per_fight(state: WorldState, game_data: GameData,
     return damage
 
 
+def potion_batch(state: WorldState, game_data: GameData,
+                 history: LearningStore | None = None,
+                 combat_monster: str | None = None,
+                 effect: str = "hp_restore") -> tuple[str, int, int] | None:
+    """`(target_code, runs, equip_qty)`: the potion batch to craft this cycle,
+    or None when there is nothing to craft that the ladder can supply.
+
+    THE ONE PLACE this is decided: the CRAFT_POTIONS guard fires exactly when
+    this returns a batch, and `CraftPotionsGoal` plans exactly this batch. They
+    used to decide separately (the guard checked ONE batch, the goal sized up to
+    five) and disagreed live for 821 cycles.
+
+    In precedence order:
+    - an unlock boost that would flip a bare-unwinnable in-band monster
+      (stall-breaker): one run;
+    - else the heal potion, while the equipped stack is below the
+      combat-projected target (capped by the level ramp);
+    - else, once the heal stack is met, the best boost potion for the primary
+      combat monster while its stack is below the level ramp.
+    Each batch is sized by the supply ladder (`_ladder_runs`: held first, then
+    an affordable buy mix, then a gather batch) and then cut to the runs the
+    ladder can actually supply (`feasible_runs`). `combat_monster` defaults to
+    `primary_combat_target`, the monster the guard fires on."""
+    pair = unlock_boost_target(state, game_data)
+    if pair is not None and feasible_runs(pair[0], 1, state, game_data):
+        boost = pair[0]
+        return (boost, 1, game_data.craft_yield(boost))
+    code = target_potion_pure(state, game_data, effect)
+    if code is None:
+        return None
+    monster = combat_monster or primary_combat_target(state, game_data)
+    deficit = heal_stock_target(state, game_data, history, monster, code) \
+        - equipped_potion_qty(state, code)
+    if deficit > 0:
+        return _sized(code, deficit, state, game_data)
+    if monster is None:
+        return None
+    best_boost = best_boost_potion(state, game_data, monster)
+    if best_boost is None:
+        return None
+    boost_deficit = _level_ramp(state.level) - equipped_potion_qty(state, best_boost)
+    if boost_deficit <= 0 or not game_data.crafting_recipes.get(best_boost):
+        return None
+    return _sized(best_boost, boost_deficit, state, game_data)
+
+
 def craft_potions_fires(state: WorldState, game_data: GameData,
                         history: LearningStore | None = None) -> bool:
-    """True when the CRAFT_POTIONS guard should preempt the grind.
+    """True when the CRAFT_POTIONS guard should preempt the grind: exactly when
+    `potion_batch` names a batch the ladder can supply. The exclusive gating
+    truth for `CraftPotionsGoal`, by construction rather than by a parallel
+    re-derivation."""
+    return potion_batch(state, game_data, history) is not None
 
-    Fires when:
-    - A craftable unlock boost exists that would flip a bare-unwinnable in-band
-      monster to winnable (stall-breaker path) AND the boost recipe is producible
-      (each ingredient individually obtainable: in inventory+bank, NPC-buyable for gold,
-      or gatherable), OR
-    - A craftable utility heal exists at the character's current skill, AND
-      the equipped quantity of that potion is below the level-scaled baseline, AND
-      a batch is producible: each ingredient individually obtainable: in inventory+bank,
-      NPC-buyable for gold, or gatherable.
 
-    This predicate is the exclusive gating truth for CraftPotionsGoal — the
-    guard never fires when the goal would have no plannable path (no target →
-    ``relevant_actions`` returns ``[]``)."""
-    pair = unlock_boost_target(state, game_data)
-    if pair is not None:
-        boost_code = pair[0]
-        boost_recipe = dict(game_data.crafting_recipes.get(boost_code, {}))
-        if boost_recipe and _recipe_producible(boost_recipe, state, game_data):
-            return True
-    target = target_potion_pure(state, game_data)
-    if target is None:
-        return False
-    equipped = equipped_potion_qty(state, target)
-    level_baseline = potion_baseline_pure(
-        state.level, POTION_LOW_LEVEL, POTION_LOW_QTY, POTION_HIGH_LEVEL, POTION_HIGH_QTY,
-    )
-    # Combat-justified target: projected in-combat consumption over the lead-time
-    # window, CAPPED by the level ramp. Was the bare ramp, which fired on a stock
-    # deficit with no HP or consumption term at all -- so a full-HP bot that wins
-    # without drinking still routed to gather/craft, which since Rest went dynamic
-    # is never a time saving. Same core the goal sizes from, so the two cannot
-    # diverge (they used to: the goal already had a consumption term, the guard
-    # did not).
-    combat_monster = primary_combat_target(state, game_data)
-    hp_need = projected_heal_need_per_fight(state, game_data, combat_monster, history) \
-        if combat_monster is not None else 0
-    baseline = potion_stock_target_pure(
-        hp_need, game_data.hp_restore_of(target), level_baseline,
-    )
-    if equipped >= baseline:
-        monster = primary_combat_target(state, game_data)
-        if monster is not None:
-            boost = best_boost_potion(state, game_data, monster)
-            boost_baseline = potion_baseline_pure(
-                state.level, POTION_LOW_LEVEL, POTION_LOW_QTY, POTION_HIGH_LEVEL, POTION_HIGH_QTY,
-            )
-            if boost is not None and equipped_potion_qty(state, boost) < boost_baseline:
-                boost_recipe = dict(game_data.crafting_recipes.get(boost, {}))
-                if boost_recipe and _recipe_producible(boost_recipe, state, game_data):
-                    return True
-        return False
-    recipe = dict(game_data.crafting_recipes.get(target, {}))
-    if not recipe:
-        return False
-    return _recipe_producible(recipe, state, game_data)
+def _level_ramp(level: int) -> int:
+    return potion_baseline_pure(level, POTION_LOW_LEVEL, POTION_LOW_QTY,
+                                POTION_HIGH_LEVEL, POTION_HIGH_QTY)
+
+
+def heal_stock_target(state: WorldState, game_data: GameData, history: LearningStore | None,
+                       monster: str | None, code: str) -> int:
+    """Combat-projected heal stock, capped by the level ramp; 0 with no combat
+    monster (no in-combat consumption to stock for)."""
+    if monster is None:
+        return 0
+    hp_need = projected_heal_need_per_fight(state, game_data, monster, history)
+    return potion_stock_target_pure(hp_need, game_data.hp_restore_of(code), _level_ramp(state.level))
+
+
+def _sized(code: str, deficit: int, state: WorldState,
+           game_data: GameData) -> tuple[str, int, int] | None:
+    """The ladder's batch for `deficit` more of `code`, cut to what can be
+    supplied; None when not even one run can be."""
+    recipe = dict(game_data.crafting_recipes.get(code, {}))
+    craft_yield = game_data.craft_yield(code)
+    runs_needed = -(-deficit // craft_yield)
+    runs = feasible_runs(code, max(1, _ladder_runs(state, game_data, recipe, runs_needed, craft_yield)),
+                         state, game_data)
+    if runs == 0:
+        return None
+    return (code, runs, min(deficit, runs * craft_yield))
+
+
+def _ladder_runs(state: WorldState, game_data: GameData, recipe: dict[str, int],
+                 runs_needed: int, craft_yield: int) -> int:
+    """Craft RUNS to attempt this cycle, chosen by the supply ladder:
+    (1) the most this many craft-runs held ingredients already cover, else
+    (2) the largest buyable batch affordable in gold, else
+    (3) a single gather-and-replan batch bounded to POTION_GATHER_BATCH."""
+    ingredients = list(recipe.items())
+    needs = [qty for _code, qty in ingredients]
+    held = [held_for_crafting(code, state) for code, _qty in ingredients]
+    from_held = max_batch_from_held_pure(needs, held, craft_yield)
+    if from_held > 0:
+        return min(runs_needed, from_held // craft_yield)
+    prices = [_gold_price(code, game_data) for code, _qty in ingredients]
+    if all(p is not None for p in prices):
+        bought = optimal_buy_mix_pure(needs, held, [p for p in prices if p is not None],
+                                      state.gold, runs_needed)
+        if bought > 0:
+            return bought
+    return min(runs_needed, POTION_GATHER_BATCH)
+
+
+def _gold_price(code: str, game_data: GameData) -> int | None:
+    """Cheapest gold buy price for `code`, or None when no NPC sells it for gold."""
+    gold = [price for _npc, price, currency in game_data.npc_purchases(code)
+            if currency == "gold"]
+    return min(gold) if gold else None

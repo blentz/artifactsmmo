@@ -1,9 +1,10 @@
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.potion_supply import (
     _cheapest_heal_potion,
-    _recipe_producible,
     bootstrap_potion_target,
+    feasible_runs,
 )
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 
@@ -67,22 +68,46 @@ def test_bootstrap_target_climbs_with_skill():
     assert bootstrap_potion_target(state, gd) == "enhanced_health_potion"
 
 
-def _gd_sunflower_only() -> GameData:
-    """sunflower is gatherable; nothing else is obtainable (not in drops, not NPC-bought)."""
+def _gd_brew(**recipe: int) -> GameData:
+    """`brew` (alchemy 1) from `recipe`. `sunflower` is gathered at a field that
+    spawns; `slimeball` drops only from `slime`; `rare_crystal` has no source."""
     gd = GameData()
+    gd._item_stats = {
+        "brew": ItemStats(code="brew", level=1, type_="utility", hp_restore=30,
+                          crafting_skill="alchemy", crafting_level=1),
+        **{code: ItemStats(code=code, level=1, type_="resource")
+           for code in ("sunflower", "slimeball", "rare_crystal")},
+    }
+    gd._crafting_recipes = {"brew": dict(recipe)}
+    gd._workshop_locations = {"alchemy": (3, 0)}
     gd._resource_drops = {"sunflower_field": "sunflower"}
-    gd._npc_stock = {}
+    gd._resource_locations = {"sunflower_field": [(2, 0)]}
+    gd._monster_level = {"slime": 1}
+    gd._monster_drops = {"slime": [("slimeball", 1, 1, 1)]}
+    gd._monster_locations = {"slime": [(1, 1)]}
+    fill_monster_stat_defaults(gd)
     return gd
 
 
-def test_recipe_not_producible_when_one_ingredient_unobtainable():
-    # recipe {gatherable_mat:1, unobtainable_mat:1}: old any() said True, new all() says False
-    gd = _gd_sunflower_only()
-    state = make_state(level=10)
-    assert _recipe_producible({"sunflower": 1, "rare_crystal": 1}, state, gd) is False
+def test_no_run_when_one_ingredient_has_no_source():
+    gd = _gd_brew(sunflower=1, rare_crystal=1)
+    assert feasible_runs("brew", 5, make_state(level=10), gd) == 0
 
 
-def test_recipe_producible_when_all_ingredients_obtainable():
-    gd = _gd_sunflower_only()
-    state = make_state(level=10)
-    assert _recipe_producible({"sunflower": 3}, state, gd) is True
+def test_a_gathered_ingredient_supplies_every_run():
+    assert feasible_runs("brew", 5, make_state(level=10), _gd_brew(sunflower=3)) == 5
+
+
+def test_held_stock_bounds_the_runs_and_a_drop_does_not_count():
+    """Robby's shape (2026-09-27): one banked slimeball, whose only other
+    source is a drop the potion ladder cannot fight for. One run can be
+    supplied, not five."""
+    gd = _gd_brew(sunflower=1, slimeball=1)
+    state = make_state(level=10, attack={"fire": 50}, bank_items={"slimeball": 1})
+    assert feasible_runs("brew", 5, state, gd) == 1
+    assert feasible_runs("brew", 5, make_state(level=10, attack={"fire": 50}), gd) == 0
+
+
+def test_an_item_with_no_recipe_has_no_run():
+    gd = _gd_brew(sunflower=1)
+    assert feasible_runs("sunflower", 3, make_state(level=10), gd) == 0

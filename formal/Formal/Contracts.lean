@@ -3161,8 +3161,11 @@ open Formal.ObtainModelReady in
 example : ∀ (p : Policy) (r : Route), r.kind = .goldDrop → admits p r = p.fightGold :=
   @Formal.ObtainModelReady.admits_fight_gold
 open Formal.ObtainModelReady in
+example : ∀ (p : Policy) (r : Route), r.kind = .drop → admits p r = p.drops :=
+  @Formal.ObtainModelReady.admits_drop
+open Formal.ObtainModelReady in
 example : ∀ (p : Policy) (r : Route), r.kind ≠ .gather → r.kind ≠ .buy → r.kind ≠ .geFill →
-    r.kind ≠ .taskReward → r.kind ≠ .goldDrop → admits p r = true :=
+    r.kind ≠ .taskReward → r.kind ≠ .goldDrop → r.kind ≠ .drop → admits p r = true :=
   @Formal.ObtainModelReady.admits_other
 
 -- ─── ObtainModelSupply (quantity feasibility) anti-weakening pins ───

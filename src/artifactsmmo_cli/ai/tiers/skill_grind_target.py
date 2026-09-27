@@ -67,7 +67,7 @@ exemptions and the directive they bend around."""
 GRIND_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False, craft_skill_gate=False,
                       event_vendors=False, spawn_known=True, allow_grey=GRIND_ALLOWS_GREY,
                       vendor_routes=False, ge_routes=False, task_rewards=False,
-                      fight_gold=False)
+                      fight_gold=False, drop_routes=True)
 """What the grind counts as a way to get a rung's material, as an obtain-model
 policy (step 4 of docs/PLAN_decision_architecture_redesign.md). Each switch
 matches what the grind's descent can actually serve:

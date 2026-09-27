@@ -30,7 +30,7 @@ NOW = datetime(2026, 9, 27, tzinfo=UTC)
 OPEN = Policy(all_gather_routes=True, gather_skill_gate=True, craft_skill_gate=True,
               event_vendors=True,
               spawn_known=True, allow_grey=False, vendor_routes=True, ge_routes=True,
-              task_rewards=True, fight_gold=True)
+              task_rewards=True, fight_gold=True, drop_routes=True)
 
 
 def census_items(gd: GameData) -> list[str]:
@@ -161,10 +161,14 @@ class TestPolicy:
 
     def test_every_other_route_is_offered_under_every_policy(self) -> None:
         closed = replace(LEGACY, all_gather_routes=False, vendor_routes=False, ge_routes=False,
-                         task_rewards=False, fight_gold=False)
+                         task_rewards=False, fight_gold=False, drop_routes=False)
         assert all(closed.admits(self._route(kind, primary=False)) for kind in SourceKind
                    if kind not in (SourceKind.GATHER, SourceKind.BUY, SourceKind.GE_FILL,
-                                   SourceKind.TASK_REWARD, SourceKind.GOLD_DROP))
+                                   SourceKind.TASK_REWARD, SourceKind.GOLD_DROP, SourceKind.DROP))
+
+    def test_a_drop_is_offered_only_when_drop_routes_are(self) -> None:
+        route = self._route(SourceKind.DROP)
+        assert LEGACY.admits(route) and not replace(LEGACY, drop_routes=False).admits(route)
 
     def test_fight_gold_is_offered_only_when_asked_for(self) -> None:
         route = self._route(SourceKind.GOLD_DROP)

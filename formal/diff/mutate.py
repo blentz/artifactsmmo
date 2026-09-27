@@ -3104,6 +3104,19 @@ DECOMPOSE_GAP_MUTATIONS = [
      "                gate = _unmet_gather_gate(action, state, game_data, actions)",
      "                gate = None"),
 ]
+# The potion batch the guard and the goal share. Killed by
+# tests/test_ai/test_potion_supply.py.
+POTION_BATCH_MUTATIONS = [
+    ("potion_supply: the potion ladder counts drops",
+     "                       fight_gold=False, drop_routes=False)",
+     "                       fight_gold=False, drop_routes=True)"),
+    ("potion_supply: only the full batch is tried, never fewer runs",
+     "    for candidate in range(runs, 0, -1):",
+     "    for candidate in range(runs, runs - 1, -1):"),
+    ("potion_supply: an item with no recipe has every run",
+     "    if not recipe:\n        return 0  # nothing to craft it from: no batch at all",
+     "    if False:\n        return 0  # nothing to craft it from: no batch at all"),
+]
 RESOURCE_SPAWN_KNOWN_MUTATIONS = [
     ("game_data: a resource spawn ignores layered tiles",
      "        return bool(self.all_resource_locations.get(code)) or self._layered_reachable(code)",
@@ -3141,14 +3154,14 @@ GRIND_OBTAINABLE_MUTATIONS = [
 # objective.NEAR_TERM_POLICY, killed by tests/test_ai/test_tiers_objective.py.
 NEAR_TERM_POLICY_MUTATIONS = [
     ("objective: near-term attainability counts GE fills",
-     "                          ge_routes=False, task_rewards=True, fight_gold=False)",
-     "                          ge_routes=True, task_rewards=True, fight_gold=False)"),
+     "                          ge_routes=False, task_rewards=True, fight_gold=False, drop_routes=True)",
+     "                          ge_routes=True, task_rewards=True, fight_gold=False, drop_routes=True)"),
     ("objective: near-term attainability ignores the task board",
-     "                          ge_routes=False, task_rewards=True, fight_gold=False)",
-     "                          ge_routes=False, task_rewards=False, fight_gold=False)"),
+     "                          ge_routes=False, task_rewards=True, fight_gold=False, drop_routes=True)",
+     "                          ge_routes=False, task_rewards=False, fight_gold=False, drop_routes=True)"),
     ("objective: near-term attainability earns gold by fighting",
-     "                          ge_routes=False, task_rewards=True, fight_gold=False)",
-     "                          ge_routes=False, task_rewards=True, fight_gold=True)"),
+     "                          ge_routes=False, task_rewards=True, fight_gold=False, drop_routes=True)",
+     "                          ge_routes=False, task_rewards=True, fight_gold=True, drop_routes=True)"),
     ("objective: near-term attainability ignores vendors",
      "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=True,",
      "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=False,"),
@@ -3162,8 +3175,8 @@ NEAR_TERM_POLICY_MUTATIONS = [
 # strategy.STEP_POLICY, killed by tests/test_ai/test_producible_gatherable_currency.py.
 STEP_POLICY_MUTATIONS = [
     ("strategy: the step graph earns no gold by fighting",
-     "                     task_rewards=True, fight_gold=True)",
-     "                     task_rewards=True, fight_gold=False)"),
+     "                     task_rewards=True, fight_gold=True, drop_routes=True)",
+     "                     task_rewards=True, fight_gold=False, drop_routes=True)"),
     ("strategy: the step graph ignores vendors",
      "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=True, ge_routes=False,",
      "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=False, ge_routes=False,"),
@@ -4319,9 +4332,9 @@ BOOST_SELECTION_MUTATIONS = [
 ]
 
 RECIPE_PRODUCIBLE_MUTATIONS = [
-    ("potion_supply: recipe producible all -> any",
-     "    return all(obtainable(mat, qty) for mat, qty in recipe.items())",
-     "    return any(obtainable(mat, qty) for mat, qty in recipe.items())"),
+    ("potion_supply: one supplied ingredient is enough for a run (all -> any)",
+     "        if all(model.feasible(mat, per * candidate, POTION_POLICY).ok for mat, per in recipe.items()):",
+     "        if any(model.feasible(mat, per * candidate, POTION_POLICY).ok for mat, per in recipe.items()):"),
 ]
 
 
@@ -8520,6 +8533,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_decision_events.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, DECOMPOSE_GAP_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(POTION_SUPPLY_SRC, POTION_BATCH_MUTATIONS,
+              "tests/test_ai/test_potion_supply.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, RESOURCE_SPAWN_KNOWN_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_OBTAINABLE_MUTATIONS,

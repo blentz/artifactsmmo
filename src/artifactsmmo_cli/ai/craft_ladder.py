@@ -17,6 +17,7 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.held_for_crafting import held_for_crafting
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.recipe_closure import gather_serves_closure
 from artifactsmmo_cli.ai.requirement_projections import (
@@ -25,11 +26,6 @@ from artifactsmmo_cli.ai.requirement_projections import (
 )
 from artifactsmmo_cli.ai.utility_slot import utility_slot_for
 from artifactsmmo_cli.ai.world_state import WorldState
-
-
-def _held(code: str, state: WorldState) -> int:
-    """Units of `code` on hand for crafting: inventory plus bank."""
-    return state.inventory.get(code, 0) + (state.bank_items or {}).get(code, 0)
 
 
 def _ge_fill_for(item: str, qty: int,
@@ -116,7 +112,7 @@ def craft_utility_ladder(
             result.append(a)
         elif isinstance(a, NpcBuyAction) and a.item_code in chain:
             buy_qty = max(1, buy_chain.get(a.item_code, 0)
-                          - _held(a.item_code, state))
+                          - held_for_crafting(a.item_code, state))
             result.append(a if a.quantity == buy_qty
                           else dataclasses.replace(a, quantity=buy_qty))
             # THE GE FILL, the DUAL of the NPC buy above and the route this

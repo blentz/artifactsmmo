@@ -133,7 +133,7 @@ def root_cost(root: MetaGoal, state: WorldState, game_data: GameData,
 STEP_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False, craft_skill_gate=False,
                      event_vendors=False, spawn_known=True,
                      allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=True, ge_routes=False,
-                     task_rewards=True, fight_gold=True)
+                     task_rewards=True, fight_gold=True, drop_routes=True)
 """What the step graph counts as a way to produce a leaf, as an obtain-model
 policy (step 4 of docs/PLAN_decision_architecture_redesign.md): every
 gatherer, a routable spawn, a winnable dropper (grey allowed:

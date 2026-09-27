@@ -560,6 +560,11 @@ The route-driven producer (`craft_plan_gen`, the "fast path") produced ZERO plan
   - Live, same 40 grind goals: decomposition serves 40 of 40, where 2a served 20 and declined the rest. None needs the nested search. Two 15 s A* timeouts that recurred (HAL's gearcrafting rung here, Robby's `hardwood_plank` before) are served in <= 10 ms.
   - The first legs that differ from A*'s follow the producer's route order: withdraw a banked copy first, recycle a licensed surplus before crafting, gather before crafting held ore.
   - Two producer tests that pinned "no withdraw action, so decline to A*" now pin the built withdraw (and a locked bank still declines).
+- **Potion guard (landed, measured waste found while sizing 2c).** The arbiter's own searches are cheap per family (GrindCharacterXP ~3 nodes, ReachSkill ~8, RestoreHP ~441) except one. Robby's `CraftPotionsGoal` searched 836 times in 24 h, found no plan 821 times, and explored up to 98k nodes.
+  - Cause: the guard used its own one-level, one-batch obtain walk (`_recipe_producible`) while the goal sized FIVE runs. `earth_boost_potion` x5 needed 5 `yellow_slimeball`; the bank held 1, and the only other source was a drop the potion ladder cannot fight for.
+  - Fix: one decision, `potion_supply.potion_batch`, used by BOTH the guard (fires iff it names a batch) and the goal (`_active_craft`). The supply ladder's runs are cut to what the ladder can supply (`feasible_runs`: `ObtainModel.feasible` under `POTION_POLICY`: gathers with skill and spawn, permanent vendors from the pocket, holdings, crafts; NO drops, NO GE-only).
+  - New `Policy.drop_routes` switch (on everywhere else; Lean `admits_drop`).
+  - Live Robby after: the guard is quiet (nothing the ladder can supply), so `CraftPotionsGoal` no longer enters the arbiter.
 - **2c:** decomposition over the obtain model's routes directly (drop the `obtain_source_map` / `Source` bridge), including gated routes as sub-tasks.
 - **2d:** the arbiter's `ReachSkill`/`ObtainItem` candidates decompose directly instead of A* planning a `LevelSkill` macro; the macro and its nested planner are deleted once `GRIND_SEARCH` stays at 0.
 - **Witness per increment:** `decision-census` over 24 h: `grind_search` and `search` per cycle down, `grind budget exhausted` to 0, and no drop in ok share, cycles/h or skill XP/h.

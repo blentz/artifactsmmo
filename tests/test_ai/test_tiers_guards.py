@@ -714,6 +714,10 @@ def _potion_gd() -> GameData:
     gd._monster_attack = {"red_slime": {"fire": 40}}
     gd._monster_resistance = {"red_slime": {}}
     gd._monster_locations = {"red_slime": [(1, 0)]}
+    # Somewhere to craft and to gather: the guard asks the obtain model, which
+    # counts only routes the potion ladder can serve.
+    gd._workshop_locations = {"alchemy": (3, 0)}
+    gd._resource_locations = {"red_slime": [(2, 0)]}
     fill_monster_stat_defaults(gd)
     return gd
 
@@ -780,6 +784,7 @@ def test_craft_potions_guard_fires_when_ingredients_buyable_for_gold():
     gd = _potion_gd()
     gd._resource_drops = {}  # not gatherable — force the buyable path
     gd._npc_stock = {"alchemist": {"red_slimeball": 3}}  # gold currency by default
+    gd._npc_locations = {"alchemist": (4, 4)}
     state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0,
                        inventory={}, attack={"fire": 20})
     assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, _ctx(), None) is True
