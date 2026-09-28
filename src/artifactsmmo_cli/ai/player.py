@@ -63,7 +63,6 @@ from artifactsmmo_cli.ai.constants import (
     GE_ORDER_REFRESH_INTERVAL_SECONDS,
     STUCK_DETECTOR_WINDOW,
 )
-from artifactsmmo_cli.ai.consumable_supply import consumable_craft_quantity
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.currency_turnin import TurnIn, fleet_total_pure, turn_in_ready_pure
 from artifactsmmo_cli.ai.cycle_snapshot import (
@@ -1408,8 +1407,8 @@ class GamePlayer:
                     self._error_backoff_n += 1
                 # Predicted cost and the recorded repr/class below are keyed to
                 # `executed_action` — the action `_execute` ACTUALLY ran, which
-                # for a rebatched CraftAction is a different (larger-quantity)
-                # instance than the `action` picked off the plan (see
+                # for a feasibility-clamped CraftAction is a different (smaller-
+                # quantity) instance than the `action` picked off the plan (see
                 # `_execute`'s docstring). Using `action` here was the
                 # craft-repr-quantity bug: a 73-unit craft recorded a 1-unit
                 # predicted cost and `Craft(cooked_chicken×1)`.
@@ -1721,8 +1720,8 @@ class GamePlayer:
         don't conflate wins with losses.
 
         executed_action is the action that ACTUALLY ran — for the CraftAction
-        rebatching below, this is the REBATCHED (and/or feasibility-clamped)
-        instance, never the caller's original request. `dataclasses.replace`
+        clamp below, this is the feasibility-clamped instance, never the
+        caller's original request. `dataclasses.replace`
         rebinds only the LOCAL `action` name in this function; the caller's own
         variable is a different object and is never mutated, so the caller MUST
         use this third value (not its own `action`) for anything that reports
@@ -1744,13 +1743,16 @@ class GamePlayer:
         if isinstance(action, CraftAction):
             action.history = self.history
             if self.game_data is not None:
-                batched = consumable_craft_quantity(
-                    action.code, action.quantity, self.state, self.game_data)
-                if batched != action.quantity:
-                    action = replace(action, quantity=batched)
-                # Clamp to the batch the on-hand inputs actually cover so the
-                # server never 400s on an unaffordable quantity (partial crafts
-                # are valid — craft what we can, >= 1). See CraftAction.
+                # The planned quantity is the quantity: the goal that emitted
+                # the craft sized it, and the planner priced exactly that.
+                # Raising it here to the whole held pile (removed 2026-09-28)
+                # was a second authority: RestoreHP planned Craft(cooked_
+                # gudgeon×1) + eat as cheaper than Rest, and Robby ran ×102,
+                # 510 s, for 178 missing hp.
+                #
+                # Clamp DOWN to the batch the on-hand inputs actually cover so
+                # the server never 400s on an unaffordable quantity (partial
+                # crafts are valid — craft what we can, >= 1). See CraftAction.
                 feasible = action.effective_quantity(self.state, self.game_data)
                 if feasible >= 1 and feasible != action.quantity:
                     action = replace(action, quantity=feasible)

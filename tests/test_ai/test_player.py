@@ -2511,7 +2511,11 @@ class TestConsumableBatchDispatch:
         player.state = state
         return player
 
-    def test_cooking_batches_the_held_pile(self):
+    def test_a_consumable_craft_runs_the_planned_quantity(self):
+        """The goal sized the craft and the planner priced it: the executor
+        must not raise it to the held pile. It did, and Robby's RestoreHP plan
+        `Craft(cooked_gudgeon×1)` ran as ×102, a 510 s cooldown for 178 missing
+        hp (2026-09-28)."""
         gd = _batch_gd()
         player = self._player(gd, make_state(inventory={"raw_chicken": 9}))
         cap: list = []
@@ -2519,7 +2523,7 @@ class TestConsumableBatchDispatch:
                                  workshop_location=(0, 0), captured=cap)
         _new_state, outcome, _executed = player._execute(action, client=None)
         assert outcome == "ok"
-        assert cap == [9]   # rewritten from 1 to the held-pile batch
+        assert cap == [1]
 
     def test_non_consumable_not_batched(self):
         gd = _batch_gd()
@@ -2570,9 +2574,9 @@ def _craft_result_for(quantity: int, xp: int = 45):
 
 
 class TestCraftRebatchRecording:
-    """`_execute` rebatches a CraftAction's quantity to the held pile
-    (`consumable_craft_quantity` / `effective_quantity`, tested above in
-    `TestConsumableBatchDispatch`) but, before this fix, reported only
+    """`_execute` clamps a CraftAction's quantity to what the held inputs
+    cover (`effective_quantity`; it once also raised it to the held pile) but,
+    before this fix, reported only
     `(state, outcome)` — the caller at player.py:1308 still held the
     PRE-batch action and recorded `action_repr`/`predicted_cost` against it.
 
@@ -2586,15 +2590,15 @@ class TestCraftRebatchRecording:
     """
 
     def test_execute_returns_the_action_it_actually_ran(self):
-        """`_execute` must hand back the REBATCHED action (quantity=9, not the
-        caller's requested quantity=1) as a third return value, so the caller
+        """`_execute` must hand back the CLAMPED action (quantity=9, not the
+        caller's requested quantity=12) as a third return value, so the caller
         can record what actually happened instead of what was asked for."""
         gd = _batch_gd()
         state = make_state(inventory={"raw_chicken": 9})
         player = GamePlayer(character="hero", dry_run=False)
         player.game_data = gd
         player.state = state
-        action = CraftAction(code="cooked_chicken", quantity=1, workshop_location=(0, 0))
+        action = CraftAction(code="cooked_chicken", quantity=12, workshop_location=(0, 0))
 
         with patch("artifactsmmo_cli.ai.actions.crafting.action_crafting",
                    return_value=_craft_result_for(9)):
@@ -2607,7 +2611,7 @@ class TestCraftRebatchRecording:
         # `replace()` builds a NEW instance — the caller's original local
         # object is never mutated, which is exactly why the old code (using
         # `action.learning_key()` from the caller's own variable) lied.
-        assert action.quantity == 1
+        assert action.quantity == 12
 
     def test_the_recorded_cycle_carries_the_executed_quantity(self, tmp_path):
         """Drives the real write site (`_record_learning_cycle`, the same seam
@@ -2623,7 +2627,7 @@ class TestCraftRebatchRecording:
             player = GamePlayer(character="hero", dry_run=False, history=store)
             player.game_data = gd
             player.state = state
-            action = CraftAction(code="cooked_chicken", quantity=1, workshop_location=(0, 0))
+            action = CraftAction(code="cooked_chicken", quantity=12, workshop_location=(0, 0))
 
             with patch("artifactsmmo_cli.ai.actions.crafting.action_crafting",
                        return_value=_craft_result_for(9)):
@@ -2642,10 +2646,10 @@ class TestCraftRebatchRecording:
 
             assert len(rows) == 1
             assert rows[0].action_repr == "Craft(cooked_chicken×9)"
-            unbatched_cost = CraftAction(
-                code="cooked_chicken", quantity=1, workshop_location=(0, 0),
+            requested_cost = CraftAction(
+                code="cooked_chicken", quantity=12, workshop_location=(0, 0),
             ).cost(state, gd, store)
             assert rows[0].predicted_cost == pytest.approx(predicted)
-            assert rows[0].predicted_cost != pytest.approx(unbatched_cost)
+            assert rows[0].predicted_cost != pytest.approx(requested_cost)
         finally:
             store.close()
