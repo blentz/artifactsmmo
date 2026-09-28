@@ -1,6 +1,7 @@
 """CharacterSupervisor: spawn, read, reap, and conditionally restart one bot child."""
 
 import asyncio
+import time
 from collections import deque
 from collections.abc import Awaitable, Callable
 
@@ -18,6 +19,11 @@ for a 300-node plan_tree + grind_expansion with 200 bank_items measured
 51,725 bytes -- 79% of the default -- at plausible late-game values. Past the
 configured limit, `StreamReader.readline()` raises `ValueError` rather than
 returning the line; 8 MiB leaves generous headroom for growth."""
+
+HEALTHY_LIFETIME_SECONDS = 600.0
+"""A child that ran this long before dying earned a fresh restart budget. The
+attempt count is for a child that cannot stay up; without the reset, transient
+deaths days apart added up until the policy refused one for good."""
 
 TERMINATE_TIMEOUT_SECONDS = 5.0
 """How long to wait for a graceful SIGTERM before escalating to SIGKILL."""
@@ -41,6 +47,7 @@ class CharacterSupervisor:
         on_stderr: Callable[[str], None] | None = None,
         stream_limit: int = DEFAULT_STREAM_LIMIT,
         terminate_timeout: float = TERMINATE_TIMEOUT_SECONDS,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.character = character
         self._argv = argv
@@ -50,8 +57,12 @@ class CharacterSupervisor:
         self._on_stderr = on_stderr
         self._stream_limit = stream_limit
         self._terminate_timeout = terminate_timeout
+        self._clock = clock
         self.alive = False
         self.restarts = 0
+        # Restarts since the last healthy lifetime: what the policy judges.
+        # `restarts` keeps the whole history for the roster.
+        self._attempts = 0
         self.last_reason: str | None = None
         # Set only while a child is actually running. Diagnostics / tests use
         # this to prove the OS process is really gone after termination, not
@@ -66,11 +77,15 @@ class CharacterSupervisor:
     async def run(self) -> None:
         """Run the child, restarting while the policy allows it."""
         while True:
+            started = self._clock()
             reason = await self._run_once()
             self.last_reason = reason
-            decision = self._policy.decide(reason, self.restarts)
+            if self._clock() - started >= HEALTHY_LIFETIME_SECONDS:
+                self._attempts = 0
+            decision = self._policy.decide(reason, self._attempts)
             if not decision.restart:
                 return
+            self._attempts += 1
             self.restarts += 1
             await self._sleep(decision.delay_seconds)
 

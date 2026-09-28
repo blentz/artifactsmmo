@@ -35,3 +35,17 @@ def test_a_flapping_child_stops_being_restarted():
 def test_an_unknown_reason_stays_dead():
     """Fail closed: a reason the policy does not recognise is not restarted."""
     assert RestartPolicy().decide("reason_from_the_future", attempts=0).restart is False
+
+
+def test_an_outage_is_restarted_however_long_it_lasts():
+    """The API being down says nothing about the bot: a cap on
+    server_unavailable left HAL and Robby dead after the server came back."""
+    decision = RestartPolicy().decide("server_unavailable", attempts=MAX_ATTEMPTS * 100)
+    assert decision.restart is True
+    assert decision.delay_seconds == 300.0
+
+
+def test_the_outage_delay_still_backs_off_from_five_seconds():
+    policy = RestartPolicy()
+    delays = [policy.decide("server_unavailable", attempts=n).delay_seconds for n in range(3)]
+    assert delays == [5.0, 10.0, 20.0]

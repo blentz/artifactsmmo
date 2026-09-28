@@ -86,6 +86,62 @@ async def test_a_transient_exit_restarts_then_gives_up():
     assert supervisor.alive is False
 
 
+_NETWORK_CRASH = (
+    "import sys\n"
+    "sys.stdout.write('{\"kind\":\"exit\",\"character\":\"hero\","
+    "\"reason\":\"crash:network\"}\\n')\n"
+    "sys.stdout.flush()\n"
+)
+
+
+class _SteppingClock:
+    """Each read advances by `step` seconds: every child lifetime measures
+    exactly `step`, whatever the real subprocess took."""
+
+    def __init__(self, step: float) -> None:
+        self._now = 0.0
+        self._step = step
+
+    def __call__(self) -> float:
+        self._now += self._step
+        return self._now
+
+
+@pytest.mark.asyncio
+async def test_a_healthy_lifetime_resets_the_restart_budget():
+    """A child that stayed up before dying earns a fresh budget, so transient
+    deaths days apart never add up to a permanent stop. The roster count
+    keeps the whole history. Bounded by stopping the supervisor after twice
+    the budget: without the reset it would give up at MAX_ATTEMPTS."""
+    naps: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        naps.append(seconds)
+        if len(naps) == 10:
+            raise asyncio.CancelledError
+        await asyncio.sleep(0)
+
+    supervisor = CharacterSupervisor(
+        character="hero", argv=_child_argv(_NETWORK_CRASH), on_event=lambda _e: None,
+        policy=RestartPolicy(), sleep=sleep, clock=_SteppingClock(600.0),
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await _run_with_timeout(supervisor)
+    assert supervisor.restarts == 10
+    assert naps == [5.0] * 10
+
+
+@pytest.mark.asyncio
+async def test_a_short_lifetime_keeps_counting_toward_the_budget():
+    supervisor = CharacterSupervisor(
+        character="hero", argv=_child_argv(_NETWORK_CRASH), on_event=lambda _e: None,
+        policy=RestartPolicy(), sleep=lambda _s: asyncio.sleep(0),
+        clock=_SteppingClock(299.0),
+    )
+    await _run_with_timeout(supervisor)
+    assert supervisor.restarts == 5
+
+
 @pytest.mark.asyncio
 async def test_a_child_that_dies_without_an_exit_event_is_treated_as_a_crash():
     supervisor = CharacterSupervisor(

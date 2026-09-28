@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
+from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode, RootScoreView
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -32,6 +33,7 @@ from artifactsmmo_cli.ai.tiers import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions import make_game_data
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema, make_get_character_result
@@ -608,9 +610,43 @@ class TestFetchWorldState:
         client = MagicMock()
         with patch("artifactsmmo_cli.ai.player.get_character", return_value=None):
             with patch("artifactsmmo_cli.ai.player.time.sleep") as sleep_mock:
-                with pytest.raises(RuntimeError):
+                with pytest.raises(ServerUnavailableError):
                     player._fetch_world_state(client)
         assert [c.args[0] for c in sleep_mock.call_args_list] == [5.0, 10.0]
+
+    @pytest.mark.parametrize("answer", [
+        ErrorResponseSchema(error=ErrorSchema(code=502, message="Bad gateway")),
+        httpx.ConnectError("refused"),
+    ])
+    def test_an_outage_is_raised_as_server_unavailable(self, answer):
+        """A 5xx or a transport failure on every attempt is the server being
+        down: `play` exits `server_unavailable`, which the supervisor restarts.
+        Raised as a plain RuntimeError from the refetch in `_execute`'s except
+        handlers, it stopped HAL and Robby for good (2026-09-28)."""
+        player = GamePlayer(character="hero")
+        player.state = None
+        client = MagicMock()
+        mock = MagicMock(side_effect=answer) if isinstance(answer, Exception) else MagicMock(return_value=answer)
+        with patch("artifactsmmo_cli.ai.player.get_character", mock):
+            with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                with pytest.raises(ServerUnavailableError) as raised:
+                    player._fetch_world_state(client)
+        assert raised.value.url.endswith("/characters/hero")
+        assert mock.call_count == 3
+
+    def test_a_client_error_stays_a_plain_runtime_error(self):
+        """A 4xx is the request being wrong (no such character, a token for
+        another account), which a restart cannot fix."""
+        player = GamePlayer(character="hero")
+        player.state = None
+        client = MagicMock()
+        missing = ErrorResponseSchema(error=ErrorSchema(code=498, message="Character not found."))
+        with patch("artifactsmmo_cli.ai.player.get_character", return_value=missing):
+            with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                with pytest.raises(RuntimeError) as raised:
+                    player._fetch_world_state(client)
+        assert not isinstance(raised.value, ServerUnavailableError)
+        assert "HTTP 498 - Character not found." in str(raised.value)
 
 
 def _make_ge_order_row(id, code, quantity, price, side: OrderSide):
@@ -982,6 +1018,24 @@ class TestExecute:
 
         assert isinstance(new_state, WorldState)
         assert outcome == "error:other"
+
+    @pytest.mark.parametrize("failure", [RuntimeError("no response data"), httpx.ReadTimeout("slow")])
+    def test_an_outage_during_the_refetch_escapes_as_server_unavailable(self, failure):
+        """The HAL/Robby path: the action fails in an outage, and the refetch
+        in the except handler finds the server still down. The outage must
+        leave `_execute` as ServerUnavailableError, the restartable exit, not
+        be recorded as one more error cycle or turned into a plain crash."""
+        player = GamePlayer(character="hero")
+        player.state = make_state()
+        player.game_data = make_game_data_mock()
+        client = MagicMock()
+        action = MoveAction(x=3, y=5)
+
+        with patch("artifactsmmo_cli.ai.actions.movement.action_move", side_effect=failure):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=None):
+                with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                    with pytest.raises(ServerUnavailableError):
+                        player._execute(action, client)
 
     def test_execute_withdraw_http_478_resyncs_bank(self, tmp_path):
         """A Withdraw failing on HTTP 478 ("missing items") must RE-SYNC the bank,
@@ -2174,7 +2228,8 @@ def test_fetch_world_state_retries_on_404(monkeypatch):
 
 
 def test_fetch_world_state_retries_on_httperror(monkeypatch):
-    """_fetch_world_state retries on httpx.HTTPError, then raises after 3 attempts."""
+    """_fetch_world_state retries on httpx.HTTPError, then raises the outage
+    type after 3 attempts."""
     attempts = []
 
     def fake_get_character(client, name):
@@ -2185,8 +2240,8 @@ def test_fetch_world_state_retries_on_httperror(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _: None)
 
     player = GamePlayer(character="NetChar")
-    with pytest.raises(RuntimeError) as exc:
-        player._fetch_world_state(client=None)
+    with pytest.raises(ServerUnavailableError) as exc:
+        player._fetch_world_state(client=MagicMock())
     assert len(attempts) == 3
     assert "NetChar" in str(exc.value)
 

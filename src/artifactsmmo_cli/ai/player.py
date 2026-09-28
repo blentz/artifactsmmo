@@ -165,6 +165,7 @@ from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_ta
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
+from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 from artifactsmmo_cli.utils.rate_governor import RateGovernor
 from artifactsmmo_cli.utils.retry_after import retry_after_seconds
 
@@ -2119,13 +2120,25 @@ class GamePlayer:
             code = "?"
             msg = "no data"
             if isinstance(last_result, ErrorResponseSchema):
+                if last_result.error.code < 500:
+                    raise RuntimeError(
+                        f"Could not fetch character '{self.character}' after 3 attempts "
+                        f"(last response: HTTP {last_result.error.code} - {last_result.error.message}). "
+                        f"Verify the character exists at https://artifactsmmo.com/account and that "
+                        f"your API token belongs to the same account."
+                    )
                 code = str(last_result.error.code)
                 msg = last_result.error.message
-            raise RuntimeError(
+            # No answer, a transport failure or a 5xx on every attempt: the
+            # server is down, not the request wrong. Raised as the outage type
+            # so `play` exits `server_unavailable` and the supervisor restarts
+            # the character (2026-09-23 and 2026-09-28: a plain RuntimeError
+            # here, raised from the refetch inside `_execute`'s except
+            # handlers, stopped HAL and Robby for good).
+            raise ServerUnavailableError(
                 f"Could not fetch character '{self.character}' after 3 attempts "
-                f"(last response: HTTP {code} - {msg}). "
-                f"Verify the character exists at https://artifactsmmo.com/account and that "
-                f"your API token belongs to the same account."
+                f"(last response: HTTP {code} - {msg}); the game API is unavailable.",
+                url=f"{client._base_url}/characters/{self.character}",
             )
 
         bank_items = self.state.bank_items if self.state else None
