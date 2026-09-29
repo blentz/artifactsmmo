@@ -837,13 +837,16 @@ def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
     report = _run("l35_artifact_fill")
     assert report.decision.chosen_root == ObtainItem(
         code="perfect_pearl", quantity=1, slot="artifact2_slot")
-    # Two nodes, one action: the whole step is a single targeted secondary-drop
-    # gather, as the derivation above says. Pinned as a number because the
-    # dead-search this replaced was 1 node / 0-length.
+    # One action: the whole step is a single targeted secondary-drop gather, as
+    # the derivation above says. It was a 2-node search; since 2026-09-29
+    # decomposition maps a gather step onto the gather's EFFECTIVE drop, so the
+    # same plan comes from the fast path with no search at all (0 nodes).
+    # Pinned as numbers because the dead-search this replaced was 1 node /
+    # 0-length.
     tried = [g for g in report.goals_tried
              if "small_pearls" in str(g.get("goal", ""))]
     assert len(tried) == 1, report.goals_tried
-    assert (tried[0]["nodes"], tried[0]["plan_len"]) == (2, 1), tried[0]
+    assert (tried[0]["nodes"], tried[0]["plan_len"]) == (0, 1), tried[0]
     assert repr(report.selected_goal).startswith("GatherMaterials(small_pearls"), (
         repr(report.selected_goal), report.plan)
     assert report.plan and repr(report.plan[0]).startswith(

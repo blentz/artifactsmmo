@@ -23,12 +23,13 @@ from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import is_winnable
-from artifactsmmo_cli.ai.craft_plan_gen import _map_next_action, generate_next_craft_action
+from artifactsmmo_cli.ai.craft_plan_gen import _map_next_action, decompose, generate_next_craft_action
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.next_craft_core import NextAction
 from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -1651,3 +1652,47 @@ class TestPhase2bDecompositionGaps:
         assert result == [grind]
         # With no LevelSkill to grind it, the gather is refused on applicability.
         assert generate_next_craft_action(goal, state, gd, _copper_ring_actions()) is None
+
+
+class TestSecondaryDropGather:
+    """A leaf whose only gather is a SECONDARY drop is served by the targeted
+    gather variant (live Robby 2026-09-29: `algae`, a secondary drop of
+    `gudgeon_spot`, left `minor_health_potion` undecomposable and its search
+    timed out every cycle)."""
+
+    @staticmethod
+    def _gd() -> GameData:
+        gd = GameData()
+        gd._item_stats = {
+            "pearl_ring": ItemStats(code="pearl_ring", level=1, type_="ring",
+                                    crafting_skill="jewelrycrafting", crafting_level=1),
+            "small_pearls": ItemStats(code="small_pearls", level=1, type_="resource"),
+            "bass": ItemStats(code="bass", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {"pearl_ring": {"small_pearls": 2}}
+        gd._resource_drops = {"bass_spot": "bass"}
+        gd._resource_drops_full = {"bass_spot": [("bass", 1, 1, 1), ("small_pearls", 300, 1, 1)]}
+        gd._resource_skill = {"bass_spot": ("fishing", 1)}
+        gd._resource_locations = {"bass_spot": [(0, 1)]}
+        gd._workshop_locations = {"jewelrycrafting": (3, 1)}
+        gd._bank_location = (4, 0)
+        gd._taskmaster_location = (1, 2)
+        return gd
+
+    def test_the_targeted_secondary_gather_serves_the_leaf(self):
+        gd = self._gd()
+        state = make_state(inventory={}, bank_items={}, skills={"fishing": 1, "jewelrycrafting": 1})
+        goal = GatherMaterialsGoal("pearl_ring", {"pearl_ring": 1})
+        actions = [
+            GatherAction(resource_code="bass_spot", locations=frozenset({(0, 1)})),
+            GatherAction(resource_code="bass_spot", locations=frozenset({(0, 1)}),
+                         drop_item_override="small_pearls"),
+            CraftAction(code="pearl_ring", workshop_location=(3, 1)),
+        ]
+
+        result = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
+
+        assert result is not None
+        first = result[0]
+        assert isinstance(first, GatherAction)
+        assert (first.resource_code, first.drop_item_override) == ("bass_spot", "small_pearls")

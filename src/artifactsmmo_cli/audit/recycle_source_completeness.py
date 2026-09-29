@@ -100,6 +100,15 @@ CENSUS_POTION_QTY = 100
 utility heal exists at this skill and the slot is below baseline) and preempts the
 objective step — a guard is not what any of these cells is about."""
 
+CENSUS_BOOST = "water_boost_potion"
+"""A stocked second utility slot, for the same reason. With the heal slot
+stocked, the guard's third arm fires on a BOOST-stock deficit (`potion_batch`
+names `water_boost_potion` in three of the five cells). It went unseen until
+2026-09-29: the goal's search always failed there, so the arbiter fell through to
+the objective step by accident. Once decomposition served the potion batch, the
+guard preempted the step, and the census caught its own world not being what it
+declared."""
+
 CENSUS_BAG_QUANTITY_MAX = 100
 CENSUS_BAG_SLOTS_MAX = 20
 """A ROOMY bag on both axes. Deliberate: pressure would arm the relief guards
@@ -311,7 +320,8 @@ def census_state(cell: RecycleSourceCell, game_data: GameData) -> WorldState:
     `cell.equip_slot` (when set) wears one copy of the source, keeping the
     COLLECT-band `EquipOwnedGoal` from preempting the objective step."""
     equipment: dict[str, str] = {"weapon_slot": CENSUS_WEAPON,
-                                 "utility1_slot": CENSUS_POTION}
+                                 "utility1_slot": CENSUS_POTION,
+                                 "utility2_slot": CENSUS_BOOST}
     if cell.equip_slot is not None:
         equipment[cell.equip_slot] = cell.source
     return scenario_state(
@@ -320,7 +330,8 @@ def census_state(cell: RecycleSourceCell, game_data: GameData) -> WorldState:
             level=CENSUS_LEVEL,
             skills={skill: CENSUS_SKILL_LEVEL for skill in SKILL_NAMES},
             equipment=equipment,
-            utility_quantities={"utility1_slot": CENSUS_POTION_QTY},
+            utility_quantities={"utility1_slot": CENSUS_POTION_QTY,
+                                "utility2_slot": CENSUS_POTION_QTY},
             inventory=({cell.source: cell.bag_copies} if cell.bag_copies else {}),
             inventory_max=CENSUS_BAG_QUANTITY_MAX,
             inventory_slots_max=CENSUS_BAG_SLOTS_MAX,

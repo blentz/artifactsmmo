@@ -442,11 +442,16 @@ def _map_next_action(
     of docs/PLAN_decision_architecture_redesign.md: the task builds the action
     it needs)."""
     if na.kind == "gather":
+        # Matched on the gather's EFFECTIVE drop (a targeted secondary drop,
+        # else the primary). Matching only primary drops refused a leaf whose
+        # only gather is a secondary drop, although the pool holds the targeted
+        # variant: live Robby's `minor_health_potion` needed `algae`, a
+        # secondary drop of `gudgeon_spot`, and the whole batch fell back to a
+        # search that timed out every cycle (2026-09-29).
         for action in (*relevant, *pool):
             if (
                 isinstance(action, GatherAction)
-                and action.drop_item_override is None
-                and game_data.resource_drop_item(action.resource_code) == na.item
+                and action.drop_item(game_data) == na.item
                 and (not na.code or action.resource_code == na.code)
             ):
                 return action
