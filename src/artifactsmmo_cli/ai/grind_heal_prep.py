@@ -14,6 +14,7 @@ strongest heal the character can actually supply, through the same
 decomposition every grind leg uses.
 """
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.consumable_supply import (
@@ -25,9 +26,15 @@ from artifactsmmo_cli.ai.consumable_supply import (
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
+
+HEAL_PREP_POLICY: Policy = replace(LEGACY, drop_routes=False)
+"""What a heal stock may be made from: everything LEGACY serves except a fight.
+The stock exists to spare hp in the grind's fights; fighting another monster for
+its ingredients spends what it is meant to save (the potion ladder excludes
+drops for the same reason, `POTION_POLICY`)."""
 
 
 def heal_prep_goal(state: WorldState, game_data: GameData,
@@ -36,7 +43,7 @@ def heal_prep_goal(state: WorldState, game_data: GameData,
     is met or no craftable heal can be supplied in the batch.
 
     The heal is the strongest craftable one whose batch the obtain model finds
-    feasible under LEGACY, the readiness the grind's decomposition serves: the
+    feasible under `HEAL_PREP_POLICY` (no fights): the
     strongest heal on skill alone is often unsuppliable (live C3P0: `apple_pie`
     while holding milk for `cheese`), and a prep that cannot decompose would
     never run.
@@ -53,6 +60,6 @@ def heal_prep_goal(state: WorldState, game_data: GameData,
     model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
     for code in heals:
         want = state.inventory.get(code, 0) + deficit
-        if model.feasible(code, want, LEGACY).ok:
+        if model.feasible(code, want, HEAL_PREP_POLICY).ok:
             return GatherMaterialsGoal(target_item=code, needed={code: want})
     return None

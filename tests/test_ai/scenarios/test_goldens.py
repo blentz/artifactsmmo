@@ -59,8 +59,11 @@ EXPECTATIONS: dict[str, Golden] = {
     # is not on that sheet at all. This golden and `l12_taskgated_bag` are the
     # one pair that still cannot be told apart (same slot, same skill, same
     # level); their RANKINGS differ, which the per-scenario pins assert.
+    # PHASE 2d-a: the first action is the jewelrycrafting grind's first REAL
+    # leg (banked ore withdrawn toward the copper_bar rung), not the
+    # `LevelSkill` macro a second planner expanded at execution.
     "l10_weapon_upgrade": Golden(
-        goal_class="ReachSkill(jewelrycrafting", first_action="LevelSkill(jewelrycrafting"),
+        goal_class="ReachSkill(jewelrycrafting", first_action="Withdraw(copper_ore"),
 
     # l1_fresh: the legacy golden pinned GrindCharacterXP (starter-monster xp
     # grind) for a bare L1 character, but the TREE's rules differ by design:
@@ -130,8 +133,9 @@ EXPECTATIONS: dict[str, Golden] = {
     # reachable post-flip — `plan Lor` resolves ReachSkillLevel(gearcrafting,
     # 10) against the live catalogue, recorded in the task-6 report — it is
     # this FIXTURE that can no longer exhibit it.
+    # PHASE 2d-a: the grind's first real leg (see l10_weapon_upgrade).
     "l12_taskgated_bag": Golden(
-        goal_class="ReachSkill(jewelrycrafting", first_action="LevelSkill(jewelrycrafting"),
+        goal_class="ReachSkill(jewelrycrafting", first_action="Gather(copper_rocks"),
 }
 
 

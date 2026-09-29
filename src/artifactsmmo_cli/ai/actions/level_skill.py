@@ -22,10 +22,9 @@ from artifactsmmo_api_client import AuthenticatedClient
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.tiers.skill_grind_target import has_grind_target
+from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.world_state import WorldState
 
 PER_LEVEL_COST = 50.0
@@ -55,23 +54,8 @@ class LevelSkill(Action):
     xp_curve: SkillXpCurve | None = field(default=None, repr=False, compare=False)
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
-        if state.skills.get(self.skill, 1) >= self.target_level:
-            return False
-        # A skill is grindable from here via EITHER a craftable in-skill rung
-        # (skill_grind_target) OR — for a gather skill (alchemy/mining/woodcutting
-        # /fishing, whose gather skill name is reused as the tier-1 craft skill) —
-        # a gatherable resource usable now (best_gather_resource_drop): gathering
-        # it grants skill xp. Without the gather arm an under-skill gather-skill
-        # craft (e.g. small_health_potion at alchemy 1, whose lowest craftable
-        # rung is level 5) could never grind and was an unplannable residual.
-        # CHEAP ARM FIRST. `best_gather_resource_drop` reads game data and the
-        # current level; `has_grind_target` walks recipes and recursive
-        # obtainability. The two used to be the other way round, so the
-        # expensive one ran even when the gather arm would have answered — and
-        # for a gather skill it almost always does.
-        current = state.skills.get(self.skill, 1)
-        return (best_gather_resource_drop(self.skill, current, game_data) is not None
-                or has_grind_target(self.skill, state, game_data))
+        """Is there an open rung toward `target_level` (`skill_is_grindable`)?"""
+        return skill_is_grindable(self.skill, self.target_level, state, game_data)
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         new_skills = dict(state.skills)

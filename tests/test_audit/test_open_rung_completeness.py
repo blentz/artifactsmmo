@@ -31,7 +31,7 @@ from pathlib import Path
 
 import pytest
 
-from artifactsmmo_cli.ai.actions import level_skill as level_skill_module
+from artifactsmmo_cli.ai import skill_grindable as skill_grindable_module
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
@@ -180,13 +180,14 @@ def test_the_gate_fires_when_a_routed_skill_loses_its_rung(
     census must report `o1_silent_stall` — a root the graph routes to and the
     planner cannot serve.
 
-    The seam is `level_skill.has_grind_target`, the name
-    `LevelSkill.is_applicable` actually calls. Only jewelrycrafting is closed,
+    The seam is `skill_grindable.has_grind_target`, the name
+    `skill_is_grindable` (the one open-rung predicate, which
+    `LevelSkill.is_applicable` and the walk's skill sub-task both ask) calls. Only jewelrycrafting is closed,
     so the other seven skills keep answering normally and the residual cannot
     come from a blanket outage. Jewelrycrafting is not a gathering skill, so
     the gather arm is already None and this one patch closes the cell.
     """
-    real = level_skill_module.has_grind_target
+    real = skill_grindable_module.has_grind_target
 
     def closed_for_jewelry(skill: str, state: WorldState,
                            game_data: GameData) -> bool:
@@ -194,7 +195,7 @@ def test_the_gate_fires_when_a_routed_skill_loses_its_rung(
             return False
         return real(skill, state, game_data)
 
-    monkeypatch.setattr(level_skill_module, "has_grind_target",
+    monkeypatch.setattr(skill_grindable_module, "has_grind_target",
                         closed_for_jewelry)
     broken = orc.run_census(bundle_game_data)
     stalls = [r for r in broken

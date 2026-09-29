@@ -3,6 +3,7 @@ REAL planner at one recipe via the production obtain-X path."""
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
@@ -16,11 +17,13 @@ from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.audit import craft_completeness
 from artifactsmmo_cli.audit.craft_completeness import (
     CraftCell,
     CraftVerdict,
     GapClass,
     _leaf_status,
+    advances_a_closure_grind,
     census_state,
     classify_gap,
     craft_cell_verdict,
@@ -66,13 +69,52 @@ def test_classify_gap_real_bundle_new_classes_regression_pin() -> None:
     assert not gd.achievement_completed("tasks_farmer")
     assert classify_gap("cooked_chicken", CraftCell(12, "cooking", 1),
                         gd) is GapClass.GREY_FARM_SUPPRESSED
-    # iron_bar under-skill (mining 5 < craft 10): plans [LevelSkill(mining->10)]
-    # and PASSES on that leg — no SKILL_PREREQUISITE classification.
+    # iron_bar under-skill (mining 5 < craft 10): the skill gate is a sub-task,
+    # so the plan opens with the mining grind's first real leg (copper ore for
+    # its copper_bar rung; Phase 2d-a, where it used to be the LevelSkill
+    # macro) and PASSES on it — no SKILL_PREREQUISITE classification.
     cell = CraftCell(8, "mining", 5)
     state = census_state("iron_bar", cell, gd)
     plan = plan_craft("iron_bar", state, gd)
-    assert plan and isinstance(plan[0], LevelSkill), [repr(a) for a in plan]
+    assert [repr(a) for a in plan] == ["Gather(copper_rocks×10)"]
     assert craft_cell_verdict("iron_bar", plan, gd).passed
+
+
+def test_a_grind_leg_for_a_missing_closure_skill_is_directional() -> None:
+    """fried_eggs at cooking 1 needs cooking 5. Since Phase 2d-a the plan is
+    the cooking grind's own leg (gudgeon for its rung), which is off the
+    recipe's closure but advances the rung's; a leg that advances neither is
+    not directional."""
+    gd = _gd()
+    state = census_state("fried_eggs", CraftCell(1, "cooking", 1), gd)
+    plan = plan_craft("fried_eggs", state, gd)
+    assert [repr(a) for a in plan] == ["Gather(gudgeon_spot×1)"]
+    assert not craft_cell_verdict("fried_eggs", plan, gd).passed
+    assert advances_a_closure_grind("fried_eggs", plan[0], state, gd)
+    assert not advances_a_closure_grind("fried_eggs", RestAction(), state, gd)
+    # A gathering-skill gate counts too: iron_bar's iron_rocks need mining 10.
+    state = census_state("iron_bar", CraftCell(8, "mining", 5), gd)
+    assert gd.resource_skill_level("iron_rocks") == ("mining", 10)
+    assert advances_a_closure_grind("iron_bar", plan_craft("iron_bar", state, gd)[0], state, gd)
+
+
+def test_a_leg_of_the_grind_that_opens_a_rung_is_directional() -> None:
+    """maple_syrup at cooking 35: the cooking rung is cooked_bass, and bass
+    needs fishing 30 the census character lacks, so the leg is the fishing
+    grind's gudgeon, two grinds down."""
+    gd = _gd()
+    state = census_state("maple_syrup", CraftCell(38, "cooking", 35), gd)
+    plan = plan_craft("maple_syrup", state, gd)
+    assert [repr(a) for a in plan] == ["Gather(gudgeon_spot×1)"]
+    assert advances_a_closure_grind("maple_syrup", plan[0], state, gd)
+
+
+def test_no_grind_rung_means_no_grind_leg() -> None:
+    gd = _gd()
+    state = census_state("fried_eggs", CraftCell(1, "cooking", 1), gd)
+    leg = GatherAction(resource_code="gudgeon_spot", locations=frozenset({(0, 0)}))
+    with patch.object(craft_completeness, "next_grind_goal", return_value=None):
+        assert not advances_a_closure_grind("fried_eggs", leg, state, gd)
 
 
 def test_plan_craft_plans_a_simple_smelt() -> None:
@@ -220,6 +262,15 @@ def test_craft_cell_verdict_passes_skill_grind_craft() -> None:
     plan = [CraftAction(code="copper_helmet")]
     verdict = craft_cell_verdict("iron_boots", plan, gd)
     assert verdict == CraftVerdict(True, "")
+
+
+def test_craft_cell_verdict_passes_a_level_skill_leg_for_a_closure_craft_skill() -> None:
+    """The A* fallback can still plan the LevelSkill macro (until Phase 2d-b
+    drops it from the pool): a grind of a closure craftable's skill advances
+    the cell, a grind of any other skill does not."""
+    gd = _gd()
+    assert craft_cell_verdict("iron_boots", [LevelSkill("gearcrafting", 10)], gd).passed
+    assert not craft_cell_verdict("iron_boots", [LevelSkill("fishing", 10)], gd).passed
 
 
 def test_craft_cell_verdict_passes_npc_buy_of_closure_material() -> None:

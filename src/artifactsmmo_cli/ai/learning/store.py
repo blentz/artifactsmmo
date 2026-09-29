@@ -13,7 +13,7 @@ from typing import TypeVar
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
-from sqlmodel import SQLModel, col, create_engine, select
+from sqlmodel import SQLModel, col, create_engine, or_, select
 
 from artifactsmmo_cli.ai.learning.models import (
     Blocker,
@@ -62,6 +62,15 @@ class CombatLoadoutOutcomeRow:
     loadout: dict[str, str]
     predicted_win: bool
     actual_win: bool
+
+
+def grind_goal_prefix(skill: str) -> str:
+    """The `selected_goal` prefix every grind cycle for `skill` carries since
+    Phase 2d-a: the arbiter plans a ReachSkill goal's real legs, so the cycle
+    records the leg that ran (a Gather, a Craft, a Fight) under the goal
+    `ReachSkill({skill}->{target})`. As with the legacy action prefix, the
+    target is the only part that varies."""
+    return f"ReachSkill({skill}->"
 
 
 def grind_action_prefix(skill: str) -> str:
@@ -889,11 +898,14 @@ class LearningStore:
         """Shared body of the two grind-rate estimators — ONE query, so the
         per-character and fleet answers cannot drift into disagreeing about what a
         grind cycle is."""
-        prefix = grind_action_prefix(skill)
+        # A grind cycle is one whose GOAL is a ReachSkill for the skill (2d-a
+        # onward) or, in the history before it, whose ACTION was the LevelSkill
+        # macro: both read, so the evidence carries over the change.
         try:
             with SqlSession(self._engine) as s:
-                stmt = select(Cycle.delta_skill_xp_json).where(
-                    col(Cycle.action_repr).startswith(prefix, autoescape=True))
+                stmt = select(Cycle.delta_skill_xp_json).where(or_(
+                    col(Cycle.selected_goal).startswith(grind_goal_prefix(skill), autoescape=True),
+                    col(Cycle.action_repr).startswith(grind_action_prefix(skill), autoescape=True)))
                 if character is not None:
                     stmt = stmt.where(col(Cycle.character) == character)
                 stmt = stmt.order_by(col(Cycle.id).desc()).limit(window)

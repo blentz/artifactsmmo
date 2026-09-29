@@ -1,5 +1,5 @@
 """A grind's fight leg stocks heals first (`grind_heal_prep`, and its hook in
-`GamePlayer._execute_level_skill`).
+`craft_plan_gen._decompose_grind`).
 
 Live C3P0 2026-09-28: a gearcrafting grind fed by fights cost 120 hp a fight,
 and RestoreHP bought the food back one unit at a time, `Craft(cheese×1)` + eat
@@ -7,22 +7,25 @@ before every fight. The fight leg now obtains a batch sized to the stock target
 first, through the same decomposition every grind leg uses."""
 
 from dataclasses import replace
-from unittest.mock import MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import patch
 
+from artifactsmmo_cli.ai import craft_plan_gen
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.consumable_supply import HEAL_STOCK_FLOOR
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
-from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
-from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 
 
 def _gd() -> GameData:
@@ -62,6 +65,21 @@ class TestHealPrepGoal:
         """Milk has no route: with none held, no cheese batch can be made."""
         gd = _gd()
         assert heal_prep_goal(_state(gd, {}), gd, NO_PROFILE_CONTEXT) is None
+
+    def test_no_goal_when_the_heal_needs_a_fight(self):
+        """Milk drops from a cow the character can beat, but the prep never
+        fights for its ingredients: the fight costs the hp the stock saves."""
+        gd = _gd()
+        gd._monster_level = {"cow": 1}
+        gd._monster_hp = {"cow": 60}
+        gd._monster_attack = {"cow": {"air": 4}}
+        gd._monster_drops = {"cow": [("milk", 1, 1, 1)]}
+        gd._monster_locations = {"cow": [(0, 1)]}
+        fill_monster_stat_defaults(gd)
+        state = replace(_state(gd, {}), hp=165, max_hp=165, attack={"air": 5}, dmg=18)
+        assert ObtainModel(state, gd, NO_PROFILE_CONTEXT, datetime.now(UTC)).feasible(
+            "cheese", HEAL_STOCK_FLOOR, LEGACY).ok
+        assert heal_prep_goal(state, gd, NO_PROFILE_CONTEXT) is None
 
     def test_the_strongest_heal_that_can_be_supplied_wins(self):
         """Live C3P0: the strongest heal on skill alone (`apple_pie`) could not
@@ -106,88 +124,65 @@ class TestHealPrepGoal:
         ]
 
 
-def _player(inventory: dict[str, int]) -> GamePlayer:
-    gd = _gd()
-    player = GamePlayer(character="hero")
-    player.game_data = gd
-    player.state = _state(gd, inventory)
-    return player
-
-
 _FIGHT = FightAction(monster_code="wolf", locations=frozenset({(1, 1)}))
 _GRIND_GOAL = GatherMaterialsGoal(target_item="pelt", needed={"pelt": 1}, skill_grind=True)
+_CHEESE = CraftAction(code="cheese", workshop_location=(4, 4))
 
 
-def _run_grind(player: GamePlayer, grind_leg, prep_plan):
-    """Expand one LevelSkill whose grind leg is `grind_leg`; the grind goal's
-    decomposition declines (so the planner supplies the leg) and the prep's
-    returns `prep_plan`. Returns the leg that was executed."""
-    executed = []
+def _grind(inventory: dict[str, int], grind_leg, prep=None) -> tuple[list | None, list[str]]:
+    """Decompose one gearcrafting grind whose rung walk yields `grind_leg`.
+    The heal prep runs the real walk over a craftable cheese unless `prep`
+    stands in for its decomposition. Returns (legs, declines)."""
+    gd = _gd()
+    state = _state(gd, inventory)
+    real_walk = craft_plan_gen._walk_plan
 
-    def fake_execute(leg, _client):
-        executed.append(leg)
-        return player.state, "ok", leg
+    def walk(goal, *args):
+        return [grind_leg] if goal is _GRIND_GOAL else real_walk(goal, *args)
 
-    decompose_answers = iter([None, prep_plan])
-    with patch.object(player, "_build_actions", return_value=[]), \
-            patch("artifactsmmo_cli.ai.player.next_grind_goal", return_value=_GRIND_GOAL), \
-            patch("artifactsmmo_cli.ai.player.decompose",
-                  side_effect=lambda *_a: next(decompose_answers)), \
-            patch.object(player.planner, "plan", return_value=[grind_leg]), \
-            patch.object(player, "_execute", side_effect=fake_execute):
-        player._execute_level_skill(LevelSkill("gearcrafting", 5), MagicMock())
-    return executed
+    declined: list[str] = []
+    with patch.object(craft_plan_gen, "next_grind_goal", return_value=_GRIND_GOAL), \
+            patch.object(craft_plan_gen, "_walk_plan", side_effect=walk):
+        if prep is None:
+            legs = decompose(ReachSkillGoal("gearcrafting", 5), state, gd, [_CHEESE],
+                             NO_PROFILE_CONTEXT, declined)
+        else:
+            with patch.object(craft_plan_gen, "decompose", side_effect=prep):
+                legs = craft_plan_gen._decompose_grind("gearcrafting", 5, state, gd, [_CHEESE],
+                                                       NO_PROFILE_CONTEXT, declined, frozenset())
+    return legs, declined
 
 
 class TestGrindFightLegPreps:
+    """The prep lives in the grind's decomposition (Phase 2d-a), so the arbiter's
+    ReachSkill candidate and the LevelSkill expansion both get it."""
+
     def test_an_understocked_fight_leg_crafts_the_heal_batch_first(self):
-        player = _player({"milk": 10})
-        craft = CraftAction(code="cheese", quantity=HEAL_STOCK_FLOOR, workshop_location=(4, 4))
-        executed = _run_grind(player, _FIGHT, [craft])
-        assert executed == [craft]
-        assert player._last_grind_leg is craft
-        noted = player._events.drain()
-        prep = heal_prep_goal(player.state, player.game_data, NO_PROFILE_CONTEXT)
-        assert (Mechanism.FAST_PATH, repr(prep),
-                "grind heal prep plan_len=1") in noted
+        legs, declined = _grind({"milk": 10}, _FIGHT)
+        assert legs is not None
+        assert [(type(a).__name__, getattr(a, "quantity", None)) for a in legs] == [
+            ("CraftAction", HEAL_STOCK_FLOOR), ("FightAction", None)]
+        assert declined == []
 
     def test_a_prep_decline_is_noted_and_the_fight_goes_ahead(self):
-        player = _player({"milk": 10})
-        executed = []
-
-        def declines(goal, state, game_data, actions, ctx, declined=None):
-            if declined is not None and isinstance(goal, GatherMaterialsGoal) and "cheese" in goal.needed:
-                declined.append("no_source:milk")
-                return None
+        def declines(_goal, _state, _gd, _actions, _ctx, declined, subtasks):
+            declined.append("unmapped_step:milk")
             return None
 
-        with patch.object(player, "_build_actions", return_value=[]), \
-                patch("artifactsmmo_cli.ai.player.next_grind_goal", return_value=_GRIND_GOAL), \
-                patch("artifactsmmo_cli.ai.player.decompose", side_effect=declines), \
-                patch.object(player.planner, "plan", return_value=[_FIGHT]), \
-                patch.object(player, "_execute",
-                             side_effect=lambda leg, _c: executed.append(leg) or (player.state, "ok", leg)):
-            player._execute_level_skill(LevelSkill("gearcrafting", 5), MagicMock())
-        assert executed == [_FIGHT]
-        prep = heal_prep_goal(player.state, player.game_data, NO_PROFILE_CONTEXT)
-        assert (Mechanism.DECOMPOSE_DECLINE, repr(prep), "no_source:milk") in player._events.drain()
+        legs, declined = _grind({"milk": 10}, _FIGHT, prep=declines)
+        assert legs == [_FIGHT]
+        assert declined == ["heal_prep:unmapped_step:milk"]
 
     def test_a_stocked_fight_leg_fights(self):
-        player = _player({"cheese": HEAL_STOCK_FLOOR})
-        assert _run_grind(player, _FIGHT, None) == [_FIGHT]
+        assert _grind({"cheese": HEAL_STOCK_FLOOR}, _FIGHT) == ([_FIGHT], [])
 
-    def test_the_fight_goes_ahead_when_the_prep_cannot_be_decomposed(self):
-        """A heal stock saves requests; it must never block the grind it serves."""
-        player = _player({"milk": 10})
-        assert _run_grind(player, _FIGHT, None) == [_FIGHT]
-
-    def test_the_fight_goes_ahead_when_the_prep_would_open_another_grind(self):
-        player = _player({"milk": 10})
-        assert _run_grind(player, _FIGHT, [LevelSkill("cooking", 2)]) == [_FIGHT]
+    def test_the_fight_goes_ahead_when_the_prep_would_fight(self):
+        """The prep never fights for its ingredients: the fight it would add
+        costs the hp the stock is meant to save."""
+        other = FightAction(monster_code="cow", locations=frozenset({(6, 6)}))
+        assert _grind({"milk": 10}, _FIGHT, prep=lambda *_a, **_k: [other])[0] == [_FIGHT]
 
     def test_a_gather_leg_is_not_prepped(self):
         """Only a fight costs hp; a gather leg runs as planned."""
-        player = _player({"milk": 10})
         gather = GatherAction(resource_code="milk_rocks", locations=frozenset({(3, 3)}))
-        craft = CraftAction(code="cheese", quantity=HEAL_STOCK_FLOOR, workshop_location=(4, 4))
-        assert _run_grind(player, gather, [craft]) == [gather]
+        assert _grind({"milk": 10}, gather) == ([gather], [])

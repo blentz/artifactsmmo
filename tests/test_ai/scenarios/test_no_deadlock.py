@@ -148,7 +148,10 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "ReachSkill(gearcrafting->6)"
-    assert [repr(a) for a in report.plan] == ["LevelSkill(gearcrafting->10)"]
+    # PHASE 2d-a: the plan is the grind's first REAL leg (ash wood for the
+    # gearcrafting rung), not the opaque `LevelSkill(gearcrafting->10)` macro a
+    # second planner used to expand at execution.
+    assert [repr(a) for a in report.plan] == ["Gather(ash_tree×10)"]
     # An EQUALITY on chosen_root, as before — only the value moved. A
     # membership test on a different field would be a weaker claim wearing the
     # old test's name.
@@ -277,7 +280,11 @@ def test_l20_dual_utility_climbs_the_blocking_skill_not_the_char_level() -> None
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "ReachSkill(gearcrafting->16)"
-    assert [repr(a) for a in report.plan] == ["LevelSkill(gearcrafting->20)"]
+    # PHASE 2d-a: the grind's real legs. Its next leg is a fight (chicken, for
+    # the gearcrafting rung's feather), and the heal stock is short, so the leg
+    # first stocks heals it can make without fighting (shrimp, cooked).
+    assert [repr(a) for a in report.plan] == [
+        "Gather(shrimp_spot×5)", "Craft(cooked_shrimp×5)", "Fight(chicken)"]
     # The climb is bounded (current + 1, not the whole gate) and the trunk is
     # still offered, so this is a re-targeting, not a deadlock.
     assert report.decision.chosen_root.level == 16
@@ -374,5 +381,6 @@ def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
     goal = repr(report.selected_goal)
     assert "GrindCharacterXP" not in goal, goal  # the criterion-1 guarantee
     assert goal == "ReachSkill(gearcrafting->6)", goal
-    assert report.plan and repr(report.plan[0]) == "LevelSkill(gearcrafting->10)", report.plan
+    # PHASE 2d-a: the grind's first real leg, not the `LevelSkill` macro.
+    assert report.plan and repr(report.plan[0]) == "Gather(ash_tree×10)", report.plan
     assert_search_bounded(report, "l12_gearcrafting_gap")

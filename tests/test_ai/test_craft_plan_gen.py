@@ -400,12 +400,10 @@ class TestUnmetSkillGateFallsBack:
         assert result is None, "Unmet skill gate must fall back to A*"
 
     def test_skill_gate_not_met_emits_applicable_levelskill(self):
-        """Unmet skill gate WITH an applicable LevelSkill in the pool → the
-        generator emits the grind leg (one-leg-per-cycle), NOT a fall-back to A*.
-        Mirror of `test_skill_gate_not_met_returns_none`: same under-skill state,
-        but the caller surfaced a LevelSkill whose grind rung is reachable (a
-        mining resource gatherable now grants mining xp), so `_finish([lvl])`
-        fires."""
+        """Unmet skill gate the character CAN grind open → the plan opens with
+        the grind's own first leg (Phase 2d-a: a sub-task, not the LevelSkill
+        macro), NOT a fall-back to A*. A mining resource gatherable now grants
+        mining xp, so the mining grind's first leg is that gather."""
         gd = _gd_copper_ring()
         # Wire copper_rocks as a mining resource gatherable NOW, so
         # best_gather_resource_drop makes the LevelSkill applicable.
@@ -424,13 +422,11 @@ class TestUnmetSkillGateFallsBack:
         state = make_state(inventory={}, bank_items={},
                            skills={"mining": 1, "jewelrycrafting": 5})
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
-        lvl = LevelSkill(skill="mining", target_level=2)
-        assert lvl.is_applicable(state, gd)
-        actions = [*_copper_ring_actions(), lvl]
+        assert LevelSkill(skill="mining", target_level=2).is_applicable(state, gd)
 
-        result = decompose(goal, state, gd, actions, _ctx())
+        result = decompose(goal, state, gd, _copper_ring_actions(), _ctx())
 
-        assert result == [lvl], "Unmet gate + applicable grind must emit the LevelSkill leg"
+        assert [repr(a) for a in (result or [])] == ["Gather(copper_rocks×1)"], result
 
     def test_skill_gate_met_does_not_fall_back(self):
         """Exact skill level equal to required → gate is met, generator fires."""
@@ -1618,20 +1614,31 @@ class TestPhase2bDecompositionGaps:
         assert result is not None and any(
             isinstance(a, GatherAction) and a.resource_code == "copper_rocks" for a in result)
 
-    def test_a_gathering_skill_gate_leads_with_its_level_skill(self):
+    def test_a_gathering_skill_gate_leads_with_its_grind(self):
         """A leaf whose resource needs more gathering skill than the character
-        has opens the plan with the `LevelSkill` that grinds it, exactly as a
-        crafting-skill gate does."""
+        has opens the plan with the grind that raises it (a sub-task, as a
+        crafting-skill gate is): here mining grinds on tin, which mining 5
+        already works. Without a way to grind mining the gate stays shut and
+        the goal is infeasible (named)."""
         gd = _gd_copper_ring()
-        gd._resource_skill = {"copper_rocks": ("mining", 10)}
+        gd._resource_skill = {"copper_rocks": ("mining", 10), "tin_rocks": ("mining", 1)}
+        gd._resource_drops = {"copper_rocks": "copper_ore", "tin_rocks": "tin_ore"}
+        gd._resource_locations = {"copper_rocks": [(0, 1)], "tin_rocks": [(0, 2)]}
+        gd._item_stats["tin_ore"] = ItemStats(code="tin_ore", level=1, type_="resource")
+        # The bar is out of reach too, so the grind rung is the tin gather.
+        gd._item_stats["copper_bar"] = ItemStats(code="copper_bar", level=1, type_="resource",
+                                                 crafting_skill="mining", crafting_level=10)
         state = make_state(inventory={}, bank_items={}, skills={"mining": 5, "jewelrycrafting": 5})
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
-        grind = LevelSkill(skill="mining", target_level=10)
-        with patch.object(LevelSkill, "is_applicable", return_value=True):
-            result = decompose(goal, state, gd, [*_copper_ring_actions(), grind], _ctx())
-        assert result == [grind]
-        # With no LevelSkill to grind it, the gather is refused on applicability.
-        assert decompose(goal, state, gd, _copper_ring_actions(), _ctx()) is None
+        tin = GatherAction(resource_code="tin_rocks", locations=frozenset([(0, 2)]))
+        result = decompose(goal, state, gd, [*_copper_ring_actions(), tin], _ctx())
+        assert result is not None and isinstance(result[0], GatherAction)
+        assert result[0].resource_code == "tin_rocks"
+        declined: list[str] = []
+        shut = _gd_copper_ring()
+        shut._resource_skill = {"copper_rocks": ("mining", 10)}
+        assert decompose(goal, state, shut, _copper_ring_actions(), _ctx(), declined) is None
+        assert declined == ["infeasible:copper_ore:no_route:copper_ore"]
 
 
 class TestSecondaryDropGather:

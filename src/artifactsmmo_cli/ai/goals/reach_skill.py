@@ -28,6 +28,14 @@ class ReachSkillGoal(Goal):
         self._skill_name = skill_name
         self._target_level = target_level
 
+    @property
+    def skill(self) -> str:
+        return self._skill_name
+
+    @property
+    def target_level(self) -> int:
+        return self._target_level
+
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):

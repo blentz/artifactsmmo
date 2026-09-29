@@ -36,17 +36,19 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-from artifactsmmo_cli.ai.decompose_core import OpenGate, Step
+from artifactsmmo_cli.ai.decompose_core import Act, OpenGate, Step
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
+from artifactsmmo_cli.ai.level_skill_expand import next_grind_goal
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
@@ -54,6 +56,7 @@ from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkGraph
 from artifactsmmo_cli.ai.obtain_sources import SourceKind
 from artifactsmmo_cli.ai.region_edges import admit_region_edges
 from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -68,7 +71,8 @@ def _decline(declined: list[str] | None, reason: str) -> list[Action] | None:
 
 def decompose(goal: Goal, state: WorldState, game_data: GameData,
               actions: list[Action], ctx: SelectionContext,
-              declined: list[str] | None = None) -> list[Action] | None:
+              declined: list[str] | None = None, *,
+              subtasks: bool = True) -> list[Action] | None:
     """The route-driven next-action producer: a plan for `goal` built by
     decomposing its recipe closure over the obtain model's routes, or None when
     decomposition cannot serve it (the caller may then search).
@@ -81,13 +85,58 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     `generate_next_craft_action` immediately. A `CraftPotionsGoal` is served
     as the obtain goal it is (`_decompose_potions`).
 
+    A `ReachSkillGoal` is served by its grind (`_decompose_grind`, Phase 2d-a):
+    the arbiter plans the grind's real legs instead of an opaque `LevelSkill`
+    macro that a second planner expanded at execution.
+
     `declined`, when given, receives a named reason for every decline of a goal
-    this producer serves (not for a goal shape it does not serve at all)."""
+    this producer serves (not for a goal shape it does not serve at all).
+    `subtasks=False` forbids opening a skill gate as a sub-task (a potion batch
+    or a heal stock must not turn into a grind)."""
     if isinstance(goal, CraftPotionsGoal):
         return _decompose_potions(goal, state, game_data, actions, ctx, declined)
+    if isinstance(goal, ReachSkillGoal):
+        return _decompose_grind(goal.skill, goal.target_level, state, game_data, actions, ctx,
+                                declined, frozenset())
     if not isinstance(goal, GatherMaterialsGoal):
         return None
-    return _walk_plan(goal, state, game_data, actions, ctx, declined)
+    return _walk_plan(goal, state, game_data, actions, ctx, declined, subtasks, frozenset())
+
+
+def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data: GameData,
+                     actions: list[Action], ctx: SelectionContext, declined: list[str] | None,
+                     grinding: frozenset[str]) -> list[Action] | None:
+    """The legs of one grind cycle toward `target_level` in `skill` (Phase 2d-a):
+    the rung `next_grind_goal` picks, served by the one walk, whose own skill
+    gates open as sub-tasks in turn. `grinding` holds the skills already being
+    ground further up; the walk never opens their gates again, so a cyclic
+    dependency is infeasible rather than a loop.
+
+    When the grind's next leg is a fight and the heal stock is under target,
+    the legs that stock heals come first (`grind_heal_prep`): the leaf task
+    builds what it needs. The prep never opens a grind of its own and is
+    skipped when it cannot be served, since it saves requests and must never
+    block the grind (live C3P0 2026-09-28: `Craft(cheese×1)` + eat before every
+    fight)."""
+    if state.skills.get(skill, 1) >= target_level:
+        return _decline(declined, "satisfied")
+    rung = next_grind_goal(skill, state, game_data, ctx)
+    if rung is None:
+        return _decline(declined, f"no_grind_rung:{skill}")
+    legs = _walk_plan(rung, state, game_data, actions, ctx, declined, True, grinding | {skill})
+    if legs is None:
+        return None
+    first = next(a for a in legs if not isinstance(a, OptimizeLoadoutAction))
+    if isinstance(first, FightAction):
+        prep = heal_prep_goal(state, game_data, ctx)
+        if prep is not None:
+            prep_declined: list[str] = []
+            prep_legs = decompose(prep, state, game_data, actions, ctx, prep_declined, subtasks=False)
+            if declined is not None:
+                declined.extend(f"heal_prep:{reason}" for reason in prep_declined)
+            if prep_legs and not any(isinstance(a, FightAction) for a in prep_legs):
+                return [*prep_legs, *legs]
+    return legs
 
 
 DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False)
@@ -113,7 +162,8 @@ step stays applicable), never a commitment."""
 
 def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData,
                actions: list[Action], ctx: SelectionContext,
-               declined: list[str] | None) -> list[Action] | None:
+               declined: list[str] | None, subtasks: bool,
+               grinding: frozenset[str]) -> list[Action] | None:
     """The goal's plan from THE ONE WALK (Phase 2c-2b of
     docs/PLAN_decision_architecture_redesign.md): the next step of
     `ObtainModel.walk` under `DECOMPOSE_POLICY`, as a concrete action, simulated
@@ -128,21 +178,21 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
     The goal's rung (`exclude_recycle`, a skill grind's) is PRODUCED: its
     banked or recyclable copies do not count toward it, since the XP is in the
     craft. No goal target is ever destroyed to source its own parts. A skill
-    gate is a sub-task when the pool holds an applicable `LevelSkill` for it."""
-    grinds: dict[tuple[str, int | None], LevelSkill] = {
-        (a.skill, a.target_level): a for a in actions if isinstance(a, LevelSkill)}
+    gate is a sub-task (when `subtasks` allows it) when the skill can be ground
+    from here and is not already being ground further up (`grinding`); the
+    sub-task's legs are that grind's (`_decompose_grind`), and the plan stops
+    after them."""
     verdicts: dict[tuple[str, int | None], bool] = {}
 
     def openable(gate: Gate) -> bool:
-        """A skill gate the pool has an APPLICABLE `LevelSkill` for, asked only
-        for the gates the walk meets (a grind's applicability walks its own
-        rung, so asking it of the whole pool up front cost more than the walk)."""
-        if gate.kind not in (GateKind.GATHER_SKILL, GateKind.CRAFT_SKILL):
+        """A skill gate the character can grind open, asked only for the gates
+        the walk meets (a grind's openness walks its own rung)."""
+        if (not subtasks or gate.kind not in (GateKind.GATHER_SKILL, GateKind.CRAFT_SKILL)
+                or gate.level is None or gate.subject in grinding):
             return False
         key = (gate.subject, gate.level)
         if key not in verdicts:
-            grind = grinds.get(key)
-            verdicts[key] = grind is not None and grind.is_applicable(state, game_data)
+            verdicts[key] = skill_is_grindable(gate.subject, gate.level, state, game_data)
         return verdicts[key]
 
     relevant = admit_region_edges(goal.relevant_actions(actions, state, game_data),
@@ -161,6 +211,17 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
                                   if not routes and not graph.on_hand.get(code, 0))
                     return _decline(declined, f"infeasible:{item}:no_route:{','.join(dead)}")
                 break
+            if isinstance(answer.step, OpenGate):
+                gate = answer.step.gate
+                assert isinstance(gate, Gate) and gate.level is not None
+                sub = _decompose_grind(gate.subject, gate.level, sim, game_data, actions, ctx,
+                                       declined, grinding)
+                if sub is None:
+                    if legs:
+                        break
+                    return None
+                legs.extend(sub)
+                break
             action = _action_for(answer.step, answer.graph, relevant, actions,
                                  sim, game_data, ctx.bank_accessible)
             if action is None:
@@ -168,7 +229,7 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
                     break
                 return _decline(declined, f"unmapped_step:{answer.step!r}")
             legs.append(action)
-            if isinstance(action, (FightAction, LevelSkill)) or not action.is_applicable(sim, game_data):
+            if isinstance(action, FightAction) or not action.is_applicable(sim, game_data):
                 break
             sim = action.apply(sim, game_data)
         if legs:
@@ -197,11 +258,7 @@ def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool:
     tile when neither has one. None for a route no action serves yet (GE fill,
     sale, fight gold, task reward: 2c-2d constructs them)."""
     candidates = (*relevant, *pool)
-    if isinstance(step, OpenGate):
-        gate = step.gate
-        assert isinstance(gate, Gate)
-        return next((a for a in candidates if isinstance(a, LevelSkill)
-                     and a.skill == gate.subject and a.target_level == gate.level), None)
+    assert isinstance(step, Act), "an open gate is expanded by `_walk_plan`"
     route = graph.sources[step.item][step.route]
     if route.kind is SourceKind.WITHDRAW:
         found = next((a for a in candidates
@@ -264,11 +321,11 @@ def _decompose_potions(goal: CraftPotionsGoal, state: WorldState, game_data: Gam
         if equip.is_applicable(state, game_data):
             return [equip]
         return _decline(declined, f"potion:equip_inapplicable:{equip!r}")
-    legs = decompose(obtain, state, game_data, actions, ctx, declined)
+    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False)
     if legs is None:
         return None
-    if any(isinstance(a, (FightAction, LevelSkill)) for a in legs):
-        errand = next(a for a in legs if isinstance(a, (FightAction, LevelSkill)))
+    if any(isinstance(a, FightAction) for a in legs):
+        errand = next(a for a in legs if isinstance(a, FightAction))
         return _decline(declined, f"potion:off_ladder_leg:{errand!r}")
     # A leg is sized to a bounded batch (`size_intermediate_craft`), so the legs
     # can be a PREFIX of the batch: the equip joins the plan only when they

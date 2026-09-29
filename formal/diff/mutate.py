@@ -31,6 +31,7 @@ COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
 PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "projection.py"
 GATHERING_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gathering.py"
 LEVEL_SKILL_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "level_skill.py"
+SKILL_GRINDABLE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "skill_grindable.py"
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 LOADOUT_PICKER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "loadout_picker.py"
 EMPTY_SLOT_FILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "empty_slot_fills.py"
@@ -173,6 +174,7 @@ CURRENCY_BUY_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_bu
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
+GRIND_HEAL_PREP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grind_heal_prep.py"
 ACTION_REJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "action_rejection.py"
 MEANS_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means_worth.py"
 TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "taskmaster_choice.py"
@@ -1659,6 +1661,32 @@ SKILL_GRIND_SELECTION_MUTATIONS = [
 ]
 
 
+# The applicability predicate LevelSkill.is_applicable delegates to
+# (`skill_grindable`, Phase 2d-a), killed by the same differential.
+SKILL_GRINDABLE_MUTATIONS = [
+    # flip the under-target guard >= -> > : at exactly-at-target the action
+    # becomes applicable, violating levelSkillApplicable (current < target).
+    # Killed by the at-target case (_check(_RUNG_GD, 5, 5)).
+    ("skill_grindable: under-target guard >= to >",
+     "    if current >= target_level:\n",
+     "    if current > target_level:\n"),
+    # drop the grind-rung feasibility conjunct -- always applicable when
+    # under-target, violating the hasGrindRung conjunct. Killed by the no-rung
+    # fixture (under-target but no feasible rung).
+    ("skill_grindable: drop grind-rung conjunct",
+     "    return (best_gather_resource_drop(skill, current, game_data) is not None\n"
+     "            or has_grind_target(skill, state, game_data))\n",
+     "    return True\n"),
+    # drop the GATHER arm of the rung conjunct -- a gather skill with no craft
+    # rung (alchemy @ 1) becomes not-applicable, violating hasGrindRung. Killed
+    # by the gather-skill fixture (skill_grind_target None, best_gather present).
+    ("skill_grindable: drop gather arm of grind-rung conjunct",
+     "    return (best_gather_resource_drop(skill, current, game_data) is not None\n"
+     "            or has_grind_target(skill, state, game_data))\n",
+     "    return has_grind_target(skill, state, game_data)\n"),
+]
+
+
 # level_skill action mutations -- anchors for the REAL LevelSkill.apply /
 # is_applicable, bound to formal/diff/test_level_skill_diff.py, which encodes the
 # proved Lean mirror Formal.ActionApplicability.levelSkillApply / levelSkillApplicable
@@ -1667,26 +1695,6 @@ SKILL_GRIND_SELECTION_MUTATIONS = [
 # oracle, so a mutation to EITHER the under-target guard or the rung conjunct
 # diverges from the Lean model.
 LEVEL_SKILL_ACTION_MUTATIONS = [
-    # flip the under-target guard >= -> > : at exactly-at-target the action
-    # becomes applicable, violating levelSkillApplicable (current < target).
-    # Killed by the at-target case (_check(_RUNG_GD, 5, 5)).
-    ("level_skill: under-target guard >= to >",
-     "        if state.skills.get(self.skill, 1) >= self.target_level:\n",
-     "        if state.skills.get(self.skill, 1) > self.target_level:\n"),
-    # drop the grind-rung feasibility conjunct -- always applicable when
-    # under-target, violating the hasGrindRung conjunct. Killed by the no-rung
-    # fixture (under-target but no feasible rung).
-    ("level_skill: drop grind-rung conjunct",
-     "        return (best_gather_resource_drop(self.skill, current, game_data) is not None\n"
-     "                or has_grind_target(self.skill, state, game_data))\n",
-     "        return True\n"),
-    # drop the GATHER arm of the rung conjunct -- a gather skill with no craft
-    # rung (alchemy @ 1) becomes not-applicable, violating hasGrindRung. Killed
-    # by the gather-skill fixture (skill_grind_target None, best_gather present).
-    ("level_skill: drop gather arm of grind-rung conjunct",
-     "        return (best_gather_resource_drop(self.skill, current, game_data) is not None\n"
-     "                or has_grind_target(self.skill, state, game_data))\n",
-     "        return has_grind_target(self.skill, state, game_data)\n"),
     # off-by-one on the optimistic apply -- sets skills[skill] := target + 1,
     # diverging from levelSkillApply (:= target). Killed by every apply case.
     ("level_skill: apply off-by-one (target -> target + 1)",
@@ -3035,8 +3043,8 @@ GRIND_PRICING_MUTATIONS = [
 # tests/test_ai/test_decision_events.py.
 GRIND_DECOMPOSE_MUTATIONS = [
     ("player: the grind never decomposes (always the nested A*)",
-     "        decomposed = decompose(goal, self.state, self.game_data, actions, self._last_ctx, declined)",
-     "        decomposed = None"),
+     "        decomposed = decompose(ReachSkillGoal(action.skill, action.target_level), self.state,",
+     "        decomposed = None and decompose(ReachSkillGoal(action.skill, action.target_level), self.state,"),
 ]
 # The route-driven producer on the one walk (Phase 2b gaps, restated for 2c-2b).
 # Killed by tests/test_ai/test_craft_plan_gen.py.
@@ -3048,11 +3056,32 @@ DECOMPOSE_GAP_MUTATIONS = [
      "            return WithdrawItemAction(code=step.item, quantity=step.amount,",
      "            return None and WithdrawItemAction(code=step.item, quantity=step.amount,"),
     ("craft_plan_gen: a skill gate is never a sub-task",
-     "            verdicts[key] = grind is not None and grind.is_applicable(state, game_data)",
+     "            verdicts[key] = skill_is_grindable(gate.subject, gate.level, state, game_data)",
      "            verdicts[key] = False"),
+    ("craft_plan_gen: a skill already being ground is opened again inside itself",
+     "                or gate.level is None or gate.subject in grinding):",
+     "                or gate.level is None):"),
     ("craft_plan_gen: a grind rung is a bag refill, not the copies still to make",
      "    return bag + max(0, needed - bag - banked)",
      "    return needed"),
+]
+# A grind's fight leg stocks heals first, inside the grind's decomposition
+# (Phase 2d-a). Killed by tests/test_ai/test_grind_heal_prep.py.
+GRIND_PREP_MUTATIONS = [
+    ("craft_plan_gen: a grind's fight leg is never prepped",
+     "    if isinstance(first, FightAction):\n        prep = heal_prep_goal(",
+     "    if False:\n        prep = heal_prep_goal("),
+    ("craft_plan_gen: the heal prep may fight for its ingredients",
+     "            if prep_legs and not any(isinstance(a, FightAction) for a in prep_legs):",
+     "            if prep_legs:"),
+    ("craft_plan_gen: a prep decline is not noted",
+     "                declined.extend(f\"heal_prep:{reason}\" for reason in prep_declined)",
+     "                pass"),
+]
+GRIND_HEAL_PREP_POLICY_MUTATIONS = [
+    ("grind_heal_prep: the heal prep counts drops as supply",
+     "HEAL_PREP_POLICY: Policy = replace(LEGACY, drop_routes=False)",
+     "HEAL_PREP_POLICY: Policy = LEGACY"),
 ]
 # The walk adapter (`ObtainModel.walk_graph`). Killed by
 # tests/test_ai/test_craft_plan_gen.py.
@@ -8167,6 +8196,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/scenarios/test_grind_deep_chain.py", survivors)
     run_group(LEVEL_SKILL_ACTION_SRC, LEVEL_SKILL_ACTION_MUTATIONS,
               "formal/diff/test_level_skill_diff.py", survivors)
+    run_group(SKILL_GRINDABLE_SRC, SKILL_GRINDABLE_MUTATIONS,
+              "formal/diff/test_level_skill_diff.py", survivors)
     run_group(STRATEGIC_VALUE_SRC, STRATEGIC_VALUE_MUTATIONS,
               "formal/diff/test_strategic_value_diff.py", survivors)
     run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS + RECIPE_CLOSURE_YIELD_MUTATIONS,
@@ -8503,6 +8534,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_decision_events.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, DECOMPOSE_GAP_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, GRIND_PREP_MUTATIONS,
+              "tests/test_ai/test_grind_heal_prep.py", survivors)
+    run_group(GRIND_HEAL_PREP_SRC, GRIND_HEAL_PREP_POLICY_MUTATIONS,
+              "tests/test_ai/test_grind_heal_prep.py", survivors)
     run_group(OBTAIN_MODEL_SRC, WALK_ADAPTER_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(OBTAIN_MODEL_SRC, WALK_GATHER_RANK_MUTATIONS,

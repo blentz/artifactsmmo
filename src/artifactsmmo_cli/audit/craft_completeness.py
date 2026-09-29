@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
+from artifactsmmo_cli.ai.level_skill_expand import next_grind_goal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
@@ -276,6 +277,51 @@ def craft_cell_verdict(recipe: str, plan: list[Action],
     if _advances_closure(first, closure_items, skill, skill_ceiling, game_data):
         return CraftVerdict(True, "")
     return CraftVerdict(False, f"unrelated:{first!r}")
+
+
+def advances_a_closure_grind(recipe: str, first: Action, state: WorldState,
+                             game_data: GameData) -> bool:
+    """True iff `first` advances the grind of a skill `recipe`'s closure still
+    lacks: a closure craftable whose crafting level, or a closure resource whose
+    gathering level, is above the character's skill.
+
+    Since Phase 2d-a the one walk opens such a gate as a sub-task and plans the
+    grind's own legs (a gather or craft toward the rung `next_grind_goal`
+    picks) where it used to emit the opaque `LevelSkill` macro. A leg is
+    directional when it advances that rung's closure, judged by the same
+    `_advances_closure` rules as the recipe itself, or, when the rung is gated
+    in turn, the grind that opens it (maple_syrup at cooking 35: the cooking
+    rung is cooked_bass, bass needs fishing 30, so the leg is the fishing
+    grind's gudgeon)."""
+    return _advances_grind_of(recipe, first, state, game_data, frozenset())
+
+
+def _advances_grind_of(item: str, first: Action, state: WorldState, game_data: GameData,
+                       grinding: frozenset[str]) -> bool:
+    """`advances_a_closure_grind` for `item`, never re-entering a skill
+    already being ground further up (`grinding`), as the walk does not."""
+    needed_resources, craftable_mats = recipe_closure(game_data, [item])
+    gated: set[str] = set()
+    for mat in craftable_mats:
+        stats = game_data.item_stats(mat)
+        if (stats is not None and stats.crafting_skill
+                and stats.crafting_level > state.skills.get(stats.crafting_skill, 1)):
+            gated.add(stats.crafting_skill)
+    for res in needed_resources:
+        gate = game_data.resource_skill_level(res)
+        if gate is not None and gate[1] > state.skills.get(gate[0], 1):
+            gated.add(gate[0])
+    for skill in sorted(gated - grinding):
+        rung = next_grind_goal(skill, state, game_data)
+        if rung is None:
+            continue
+        for rung_item in rung.needed:
+            rung_resources, rung_mats = recipe_closure(game_data, [rung_item])
+            items = _closure_item_set(rung_item, rung_resources, rung_mats, game_data)
+            if (_advances_closure(first, items, skill, state.skills.get(skill, 1), game_data)
+                    or _advances_grind_of(rung_item, first, state, game_data, grinding | {skill})):
+                return True
+    return False
 
 
 class GapClass(Enum):

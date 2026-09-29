@@ -215,6 +215,7 @@ class TestPlayer:
         grind_goal = MagicMock()
         grind_goal.__repr__ = lambda self: "GatherMaterials(skull_staff)"  # type: ignore[method-assign,assignment]
         with (patch("artifactsmmo_cli.ai.player.next_grind_goal", return_value=grind_goal),
+              patch("artifactsmmo_cli.ai.player.decompose", return_value=None),
               pytest.raises(RuntimeError, match="EXHAUSTED")):
             player._execute_level_skill(LevelSkill(skill="weaponcrafting", target_level=21), MagicMock())
         [(search, subject, detail), doom] = player._events.drain()

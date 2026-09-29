@@ -1,20 +1,20 @@
-"""Task 4 of the LevelSkill epic (Phase 2): the directed craft generator
-(`generate_next_craft_action`) emits a `LevelSkill` leg at the skill gate
-instead of falling back to A* — one leg per cycle, mirroring the Fight
-truncation. Still LIVE-INERT: `strategy_driver.py`'s is_plannable fast-fail
-(retired in Task 5) prunes under-skill GatherMaterials goals BEFORE the
-generator ever runs, so this changes no live behavior yet, only the
-generator's own unit-level contract."""
+"""A skill gate on a closure is a SUB-TASK (Phase 2d-a of
+docs/PLAN_decision_architecture_redesign.md): decomposition expands it into the
+grind's own first real legs, not a `LevelSkill` macro leg that a second planner
+expanded at execution. The walk opens a gate only when the skill can be ground
+from here (`skill_is_grindable`), and declines, naming the item, when it
+cannot."""
 
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_craft_plan_gen import _ctx
+from tests.test_ai.test_craft_plan_gen import _copper_ring_actions, _ctx, _gd_copper_ring
 
 
 def _gd() -> GameData:
@@ -45,90 +45,56 @@ def _gd() -> GameData:
     return gd
 
 
-class TestDirectedGeneratorEmitsLevelSkillLeg:
-    """Under-skill craft closure with a matching LevelSkill present in
-    `actions` (Task 2's build_actions emits one per distinct craft level) →
-    the generator returns [LevelSkill] instead of None (A* fallback)."""
-
-    def test_returns_level_skill_leg_at_skill_gate(self) -> None:
+class TestASkillGateIsASubTask:
+    def test_the_gate_expands_into_the_grinds_first_leg(self) -> None:
+        """widget needs gearcrafting 5; the character has 1. The gearcrafting
+        grind's rung is trinket (1 gear_ore), so the plan opens with the gather
+        that feeds it, and stops there: the grind is a sub-task of its own."""
         gd = _gd()
-        state = make_state(inventory={}, bank_items={},
-                           skills={"gearcrafting": 1})
-        objective = CharacterObjective.from_game_data(gd)
-        actions = build_actions(gd, state, objective, bank_accessible=True,
-                                task_exchange_min_coins=0)
-        goal = GatherMaterialsGoal("widget", {"widget": 1})
+        state = make_state(inventory={}, bank_items={}, skills={"gearcrafting": 1})
+        actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
+                                bank_accessible=True, task_exchange_min_coins=0)
 
-        result = decompose(goal, state, gd, actions, _ctx())
+        result = decompose(GatherMaterialsGoal("widget", {"widget": 1}), state, gd, actions, _ctx())
 
-        assert result == [LevelSkill(skill="gearcrafting", target_level=5)], result
+        assert [repr(a) for a in (result or [])] == ["Gather(gear_ore_rocks×1)"], result
+        assert not any(isinstance(a, LevelSkill) for a in result or [])
 
-    def test_no_matching_level_skill_falls_back_to_none(self) -> None:
-        """Regression guard for the pre-existing behavior: if no matching
-        LevelSkill is present in `actions`, the generator still returns None
-        (A* fallback), same as before this task."""
+    def test_a_gate_no_grind_can_open_is_infeasible(self) -> None:
+        """Without a craftable in-skill rung (trinket gone) and no gather arm
+        (gearcrafting is not a gathering skill), the gate cannot open: the goal
+        is infeasible and the decline names it."""
         gd = _gd()
-        state = make_state(inventory={}, bank_items={},
-                           skills={"gearcrafting": 1})
-        goal = GatherMaterialsGoal("widget", {"widget": 1})
-        # No LevelSkill in this hand-rolled list — build_actions is skipped.
-        actions = [
-            action for action in build_actions(
-                gd, state, CharacterObjective.from_game_data(gd),
-                bank_accessible=True, task_exchange_min_coins=0,
-            )
-            if not isinstance(action, LevelSkill)
-        ]
+        del gd._crafting_recipes["trinket"]
+        del gd._item_stats["trinket"]
+        state = make_state(inventory={}, bank_items={}, skills={"gearcrafting": 1})
+        actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
+                                bank_accessible=True, task_exchange_min_coins=0)
+        declined: list[str] = []
 
-        result = decompose(goal, state, gd, actions, _ctx())
-
-        assert result is None
+        assert decompose(GatherMaterialsGoal("widget", {"widget": 1}), state, gd, actions,
+                         _ctx(), declined) is None
+        assert declined == ["infeasible:widget:no_route:widget"]
 
 
-def _gd_no_rung() -> GameData:
-    """widget (gearcrafting lv5) made from gear_ore (a gatherable raw), but NO
-    in-level gearcrafting grind rung: widget itself is the only gearcrafting
-    recipe and it is above the character's current level, so
-    `skill_grind_target(gearcrafting, ...)` returns None → the LevelSkill
-    build_actions emits is present-but-NOT-applicable. Fix A must gate the emit
-    on `is_applicable` and fall back to A* (None), never emit the dead rung."""
-    gd = GameData()
-    gd._item_stats = {
-        "widget": ItemStats(code="widget", level=5, type_="resource",
-                            subtype="craft", crafting_skill="gearcrafting",
-                            crafting_level=5),
-        "gear_ore": ItemStats(code="gear_ore", level=1, type_="resource",
-                              subtype="mob"),
-    }
-    gd._crafting_recipes = {"widget": {"gear_ore": 2}}
-    gd._resource_drops = {"gear_ore_rocks": "gear_ore"}
-    gd._workshop_locations = {"gearcrafting": (2, 2)}
-    gd._bank_location = (1, 1)
-    gd._taskmaster_location = (0, 0)
-    fill_monster_stat_defaults(gd)
-    return gd
+class TestTheGrindDecomposition:
+    def test_a_skill_at_its_target_is_satisfied(self) -> None:
+        declined: list[str] = []
+        state = make_state(skills={"gearcrafting": 5})
+        assert decompose(ReachSkillGoal("gearcrafting", 5), state, _gd(), [], _ctx(), declined) is None
+        assert declined == ["satisfied"]
 
-
-class TestDirectedGeneratorGatesLevelSkillOnApplicable:
-    """Fix A: the matching LevelSkill is present in `actions` but its
-    `is_applicable` is False (no obtainable in-level grind rung) → the
-    generator must fall back to A* (None), NOT emit the inapplicable rung
-    (which, at execution, would hit the grind dead-end guard)."""
-
-    def test_inapplicable_level_skill_falls_back_to_none(self) -> None:
-        gd = _gd_no_rung()
-        state = make_state(inventory={}, bank_items={},
-                           skills={"gearcrafting": 1})
-        objective = CharacterObjective.from_game_data(gd)
-        actions = build_actions(gd, state, objective, bank_accessible=True,
-                                task_exchange_min_coins=0)
-        # Sanity: build_actions DID emit the (now-inapplicable) LevelSkill, so
-        # this test exercises the is_applicable gate, not a missing-action path.
-        lvl = next(a for a in actions if isinstance(a, LevelSkill))
-        assert lvl == LevelSkill(skill="gearcrafting", target_level=5)
-        assert lvl.is_applicable(state, gd) is False
-        goal = GatherMaterialsGoal("widget", {"widget": 1})
-
-        result = decompose(goal, state, gd, actions, _ctx())
-
-        assert result is None, result
+    def test_the_legs_before_a_gate_whose_grind_declines_still_run(self) -> None:
+        """Five banked ore cover half the goal; the rest needs mining 10,
+        and the mining grind's own rung (the bar) needs that same ore, so the
+        sub-task declines. The withdraw is still progress and runs; the next
+        cycle replans from there."""
+        gd = _gd_copper_ring()
+        gd._resource_skill = {"copper_rocks": ("mining", 10)}
+        state = make_state(inventory={}, bank_items={"copper_ore": 5},
+                           skills={"mining": 5, "jewelrycrafting": 5})
+        declined: list[str] = []
+        legs = decompose(GatherMaterialsGoal("copper_ore", {"copper_ore": 10}), state, gd,
+                         _copper_ring_actions(), _ctx(), declined)
+        assert [repr(a) for a in legs or []] == ["Withdraw(copper_ore×5)"]
+        assert declined == ["infeasible:copper_ore:no_route:"]
