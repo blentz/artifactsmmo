@@ -102,6 +102,20 @@ class TestArbiter:
             arbiter._plans(self._goal(True), make_state(), GameData(), [], MagicMock())
         assert arbiter.events.drain() == [(Mechanism.FAST_PATH, "G", "plan_len=2")]
 
+    def test_a_decline_is_noted_with_its_reason_before_the_search(self) -> None:
+        """Phase 2c-2.0: a decline was silent (the arbiter just searched). Its
+        named reason is noted, then the search it falls back to."""
+        arbiter = self._arbiter()
+
+        def declines(goal, state, game_data, actions, ctx, declined):
+            declined.append("no_source:feather")
+
+        with patch("artifactsmmo_cli.ai.strategy_driver.decompose", side_effect=declines):
+            arbiter._plans(self._goal(True), make_state(), GameData(), [], MagicMock())
+        [decline, (search, _subject, _detail)] = arbiter.events.drain()
+        assert decline == (Mechanism.DECOMPOSE_DECLINE, "G", "no_source:feather")
+        assert search is Mechanism.SEARCH
+
     def test_a_mark_is_noted_and_a_clear_only_when_something_was_marked(self) -> None:
         arbiter = self._arbiter()
         goal, state = self._goal(True), make_state()
@@ -207,6 +221,30 @@ class TestPlayer:
         assert (search, subject) == (Mechanism.GRIND_SEARCH, "GatherMaterials(skull_staff)")
         assert detail.startswith("nodes_created=233739")
         assert doom == (Mechanism.GRIND_DOOM, "ReachSkill(x->21)", "")
+
+    def test_a_grind_decline_is_noted_before_the_nested_search(self) -> None:
+        player = GamePlayer(character="hero")
+        player.game_data = GameData()
+        player.state = make_state()
+        player._build_actions = lambda: []  # type: ignore[method-assign]
+        player.planner = MagicMock()
+        leg = MagicMock()
+        player.planner.plan.return_value = [leg]
+        player.planner.last_stats = _stats(nodes_created=5, nodes_explored=2, timed_out=False)
+        grind_goal = MagicMock()
+        grind_goal.__repr__ = lambda self: "GatherMaterials(skull_staff)"  # type: ignore[method-assign,assignment]
+
+        def declines(goal, state, game_data, actions, ctx, declined):
+            declined.append("unmapped_step:gather:algae:gudgeon_spot")
+
+        with (patch("artifactsmmo_cli.ai.player.next_grind_goal", return_value=grind_goal),
+              patch("artifactsmmo_cli.ai.player.decompose", side_effect=declines),
+              patch.object(player, "_execute", return_value=("state", "ok", leg))):
+            player._execute_level_skill(LevelSkill(skill="weaponcrafting", target_level=21), MagicMock())
+        [decline, (search, _subject, _detail)] = player._events.drain()
+        assert decline == (Mechanism.DECOMPOSE_DECLINE, "GatherMaterials(skull_staff)",
+                           "unmapped_step:gather:algae:gudgeon_spot")
+        assert search is Mechanism.GRIND_SEARCH
 
     def test_a_decomposed_grind_is_noted_and_runs_no_nested_search(self) -> None:
         """Phase 2: the grind asks the route-driven producer first; when it

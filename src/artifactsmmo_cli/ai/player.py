@@ -1597,7 +1597,10 @@ class GamePlayer:
         # hardwood_plank rungs, 130-173k nodes, which decomposition served with a
         # withdraw). The search stays, instrumented, for what decomposition
         # cannot serve yet (a huge-quantity cooking rung, a gate-blocked leaf).
-        decomposed = decompose(goal, self.state, self.game_data, actions, self._last_ctx)
+        declined: list[str] = []
+        decomposed = decompose(goal, self.state, self.game_data, actions, self._last_ctx, declined)
+        for reason in declined:
+            self._events.note(Mechanism.DECOMPOSE_DECLINE, repr(goal), reason)
         if decomposed is not None:
             sub_plan = decomposed
             self._events.note(Mechanism.FAST_PATH, repr(goal), f"grind plan_len={len(sub_plan)}")
@@ -1661,7 +1664,10 @@ class GamePlayer:
         prep = heal_prep_goal(self.state, self.game_data, self._last_ctx)
         if prep is None:
             return sub_plan
-        prep_plan = decompose(prep, self.state, self.game_data, actions, self._last_ctx)
+        declined: list[str] = []
+        prep_plan = decompose(prep, self.state, self.game_data, actions, self._last_ctx, declined)
+        for reason in declined:
+            self._events.note(Mechanism.DECOMPOSE_DECLINE, repr(prep), reason)
         if not prep_plan or isinstance(prep_plan[0], LevelSkill):
             return sub_plan
         self._events.note(Mechanism.FAST_PATH, repr(prep),

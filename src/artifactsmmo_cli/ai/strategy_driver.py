@@ -903,7 +903,10 @@ class StrategyArbiter:
         # for a GatherMaterialsGoal — every other goal shape short-circuits
         # generate_next_craft_action immediately) via obtain_source_map, THE
         # shared model every route beyond bare gather/craft/withdraw reads.
-        gen = decompose(goal, state, game_data, actions, ctx)
+        declined: list[str] = []
+        gen = decompose(goal, state, game_data, actions, ctx, declined)
+        for reason in declined:
+            self.events.note(Mechanism.DECOMPOSE_DECLINE, repr(goal), reason)
         if gen is not None:
             self._last_timed_out = False
             self.events.note(Mechanism.FAST_PATH, repr(goal), f"plan_len={len(gen)}")

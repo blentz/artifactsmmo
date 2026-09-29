@@ -3093,7 +3093,7 @@ GRIND_PRICING_MUTATIONS = [
 # tests/test_ai/test_decision_events.py.
 GRIND_DECOMPOSE_MUTATIONS = [
     ("player: the grind never decomposes (always the nested A*)",
-     "        decomposed = decompose(goal, self.state, self.game_data, actions, self._last_ctx)",
+     "        decomposed = decompose(goal, self.state, self.game_data, actions, self._last_ctx, declined)",
      "        decomposed = None"),
 ]
 # Phase 2b: the decomposition gaps a live grind sweep found. Killed by

@@ -158,3 +158,52 @@ def test_the_gather_the_plan_opens_with_is_the_ingredients():
     plan = decompose(goal, state, gd, _actions(gd), NO_PROFILE_CONTEXT)
     assert plan is not None
     assert plan[0].resource_code == _RESOURCE
+
+
+def test_decline_reasons_are_named(monkeypatch):
+    """Phase 2c-2.0: each potion decline names why."""
+    gd = _gd(with_boost=False, monster_level=18)
+    state = _state()
+    goal = CraftPotionsGoal(game_data=gd, state=state)
+
+    done, _ran = _drive(goal, state, gd, _actions(gd))
+    declined: list[str] = []
+    assert decompose(goal, done, gd, _actions(gd), NO_PROFILE_CONTEXT, declined) is None
+    assert declined == ["potion:no_batch"]
+
+    equip = goal.batch_equip(state)
+    assert equip is not None
+    stocked = replace(state, inventory={**state.inventory, _HEAL: equip.quantity})
+    declined = []
+    monkeypatch.setattr(EquipAction, "is_applicable", lambda *_a: False)
+    assert decompose(goal, stocked, gd, _actions(gd), NO_PROFILE_CONTEXT, declined) is None
+    assert declined == [f"potion:equip_inapplicable:{equip!r}"]
+
+
+def test_an_off_ladder_leg_is_named(monkeypatch):
+    gd = _gd(with_boost=False, monster_level=18)
+    gd._resource_drops = {}
+    gd._monster_drops = {"biting_slime": [(_INGREDIENT, 1, 1, 1)]}
+    monkeypatch.setattr("artifactsmmo_cli.ai.goals.craft_potions.potion_batch",
+                        lambda *_a: (_HEAL, 2, 2))
+    state = _state(inventory={})
+    goal = CraftPotionsGoal(game_data=gd, state=state)
+    actions = [a for a in _actions(gd) if not isinstance(a, GatherAction)]
+    actions.append(FightAction(monster_code="biting_slime", locations=frozenset({(1, 0)})))
+    declined: list[str] = []
+    assert decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT, declined) is None
+    assert declined == ["potion:off_ladder_leg:Fight(biting_slime)"]
+
+
+def test_an_undecomposable_batch_reports_the_inner_reason(monkeypatch):
+    """The batch's own decline names what it lacks (no route to the
+    ingredient), not just that the potion goal declined."""
+    gd = _gd(with_boost=False, monster_level=18)
+    gd._resource_drops = {}
+    monkeypatch.setattr("artifactsmmo_cli.ai.goals.craft_potions.potion_batch",
+                        lambda *_a: (_HEAL, 2, 2))
+    state = _state(inventory={})
+    goal = CraftPotionsGoal(game_data=gd, state=state)
+    declined: list[str] = []
+    assert decompose(goal, state, gd, _actions(gd), NO_PROFILE_CONTEXT, declined) is None
+    assert declined == [f"no_source:{_INGREDIENT}"]

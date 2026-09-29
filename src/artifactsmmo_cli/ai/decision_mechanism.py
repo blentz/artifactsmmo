@@ -27,6 +27,11 @@ class Mechanism(StrEnum):
     FAST_PATH = "fast_path"
     SEARCH = "search"
     GRIND_SEARCH = "grind_search"
+    # Why the route-driven producer declined an obtain goal it serves
+    # (subject: goal repr; detail: the named reason, e.g. `no_source:<item>`,
+    # `unmapped_step:<kind>:<item>:<via>`, `first_leg_inapplicable:<action>`).
+    # Phase 2c-2.0: before it, a decline was silent and the caller searched.
+    DECOMPOSE_DECLINE = "decompose_decline"
     # Selection-order compensations (subject: goal repr).
     WORTH_GATE_BYPASS = "worth_gate_bypass"
     WAIT_FALLBACK = "wait_fallback"

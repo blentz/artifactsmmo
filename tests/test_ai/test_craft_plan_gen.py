@@ -1696,3 +1696,70 @@ class TestSecondaryDropGather:
         first = result[0]
         assert isinstance(first, GatherAction)
         assert (first.resource_code, first.drop_item_override) == ("bass_spot", "small_pearls")
+
+
+class TestDeclineReasons:
+    """Phase 2c-2.0: every decline names why, so declines stop being silent
+    (the caller used to search with no record of what decomposition lacked)."""
+
+    @staticmethod
+    def _declined(goal, state, gd, actions) -> list[str]:
+        declined: list[str] = []
+        assert generate_next_craft_action(goal, state, gd, actions, declined=declined) is None
+        return declined
+
+    def test_satisfied(self):
+        state = make_state(inventory={"copper_ring": 1}, skills={"mining": 5, "jewelrycrafting": 5})
+        assert self._declined(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}), state,
+                              _gd_copper_ring(), _copper_ring_actions()) == ["satisfied"]
+
+    def test_no_source(self):
+        state = make_state(inventory={}, bank_items={}, skills={"gearcrafting": 5})
+        assert self._declined(GatherMaterialsGoal("feather_coat", {"feather_coat": 1}), state,
+                              _gd_monster_drop(),
+                              [CraftAction(code="feather_coat", workshop_location=(3, 1))]
+                              ) == ["no_source:feather"]
+
+    def test_unmapped_step(self):
+        state = make_state(inventory={"feather": 7}, bank_items={}, skills={"gearcrafting": 5})
+        assert self._declined(GatherMaterialsGoal("feather_coat", {"feather_coat": 1}), state,
+                              _gd_monster_drop(),
+                              [CraftAction(code="feather_coat", workshop_location=(3, 1))]
+                              ) == ["unmapped_step:gather:feather:"]
+
+    def test_no_workshop(self):
+        gd = _gd_copper_ring()
+        gd._workshop_locations = {}
+        state = make_state(inventory={}, skills={"mining": 5, "jewelrycrafting": 5})
+        [reason] = self._declined(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}), state,
+                                  gd, _copper_ring_actions())
+        assert reason.startswith("no_workshop:")
+
+    def test_craft_unknown(self):
+        gd = _gd_copper_ring()
+        del gd._item_stats["copper_ring"]
+        state = make_state(inventory={}, skills={"mining": 5, "jewelrycrafting": 5})
+        assert self._declined(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}), state,
+                              gd, _copper_ring_actions()) == ["craft_unknown:copper_ring"]
+
+    def test_craft_skill_without_a_grind(self):
+        gd = _gd_copper_ring()
+        gd._item_stats["copper_ring"] = ItemStats(code="copper_ring", level=1, type_="ring",
+                                                  crafting_skill="jewelrycrafting", crafting_level=5)
+        state = make_state(inventory={}, skills={"mining": 5, "jewelrycrafting": 1})
+        assert self._declined(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}), state,
+                              gd, _copper_ring_actions()
+                              ) == ["craft_skill:copper_ring:jewelrycrafting<5:no_grind"]
+
+    def test_first_leg_inapplicable(self):
+        state = make_state(inventory={}, skills={"mining": 5, "jewelrycrafting": 5})
+        with patch.object(GatherAction, "is_applicable", return_value=False):
+            [reason] = self._declined(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}), state,
+                                      _gd_copper_ring(), _copper_ring_actions())
+        assert reason.startswith("first_leg_inapplicable:Gather(copper_rocks")
+
+    def test_no_sink_still_declines(self):
+        """Without a listener the decline is unchanged: plain None."""
+        state = make_state(inventory={"copper_ring": 1}, skills={"mining": 5, "jewelrycrafting": 5})
+        assert generate_next_craft_action(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}),
+                                          state, _gd_copper_ring(), _copper_ring_actions()) is None

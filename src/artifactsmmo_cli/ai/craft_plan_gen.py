@@ -102,8 +102,18 @@ def _closure_items(
     return seen
 
 
+def _decline(declined: list[str] | None, reason: str) -> list[Action] | None:
+    """Record why decomposition declines (Phase 2c-2.0), then decline. Declines
+    were invisible: the caller silently searched instead. `declined` is the
+    caller's sink, None when nobody is listening."""
+    if declined is not None:
+        declined.append(reason)
+    return None
+
+
 def decompose(goal: Goal, state: WorldState, game_data: GameData,
-              actions: list[Action], ctx: SelectionContext) -> list[Action] | None:
+              actions: list[Action], ctx: SelectionContext,
+              declined: list[str] | None = None) -> list[Action] | None:
     """The route-driven next-action producer: a plan for `goal` built by
     decomposing its recipe closure over the obtain model's routes, or None when
     decomposition cannot serve it (the caller may then search).
@@ -114,19 +124,23 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     map is built once per call, over the goal's recipe closure, and only for a
     `GatherMaterialsGoal`: every other goal shape short-circuits
     `generate_next_craft_action` immediately. A `CraftPotionsGoal` is served
-    as the obtain goal it is (`_decompose_potions`)."""
+    as the obtain goal it is (`_decompose_potions`).
+
+    `declined`, when given, receives a named reason for every decline of a goal
+    this producer serves (not for a goal shape it does not serve at all)."""
     if isinstance(goal, CraftPotionsGoal):
-        return _decompose_potions(goal, state, game_data, actions, ctx)
+        return _decompose_potions(goal, state, game_data, actions, ctx, declined)
     if not isinstance(goal, GatherMaterialsGoal):
         return None
     closure_items = _closure_items(dict(game_data.crafting_recipes), goal.needed)
     sources = obtain_source_map(closure_items, state, game_data, ctx)
     return generate_next_craft_action(goal, state, game_data, actions, sources,
-                                      bank_accessible=ctx.bank_accessible)
+                                      bank_accessible=ctx.bank_accessible, declined=declined)
 
 
 def _decompose_potions(goal: CraftPotionsGoal, state: WorldState, game_data: GameData,
-                       actions: list[Action], ctx: SelectionContext) -> list[Action] | None:
+                       actions: list[Action], ctx: SelectionContext,
+                       declined: list[str] | None = None) -> list[Action] | None:
     """The potion batch as an obtain plan: the legs that put the batch in the
     bag, then the equip that lands it (Phase 2c-1 of
     docs/PLAN_decision_architecture_redesign.md).
@@ -146,13 +160,18 @@ def _decompose_potions(goal: CraftPotionsGoal, state: WorldState, game_data: Gam
     into a different errand."""
     equip = goal.batch_equip(state)
     if equip is None:
-        return None
+        return _decline(declined, "potion:no_batch")
     obtain = goal.batch_obtain(state)
     if obtain is None:
-        return [equip] if equip.is_applicable(state, game_data) else None
-    legs = decompose(obtain, state, game_data, actions, ctx)
-    if legs is None or any(isinstance(a, (FightAction, LevelSkill)) for a in legs):
+        if equip.is_applicable(state, game_data):
+            return [equip]
+        return _decline(declined, f"potion:equip_inapplicable:{equip!r}")
+    legs = decompose(obtain, state, game_data, actions, ctx, declined)
+    if legs is None:
         return None
+    if any(isinstance(a, (FightAction, LevelSkill)) for a in legs):
+        errand = next(a for a in legs if isinstance(a, (FightAction, LevelSkill)))
+        return _decline(declined, f"potion:off_ladder_leg:{errand!r}")
     # A leg is sized to a bounded batch (`size_intermediate_craft`), so the legs
     # can be a PREFIX of the batch: the equip joins the plan only when they
     # land the whole batch, and otherwise the next cycle decomposes the rest.
@@ -170,6 +189,7 @@ def generate_next_craft_action(
     sources: Mapping[str, list[Source]] | None = None,
     *,
     bank_accessible: bool = True,
+    declined: list[str] | None = None,
 ) -> list[Action] | None:
     """Return the next action(s) for a deterministic gather-craft goal, or ``None``.
 
@@ -248,9 +268,11 @@ def generate_next_craft_action(
             # Craftable: check skill gate and workshop availability.
             stats = game_data.item_stats(item)
             if stats is None or stats.crafting_skill is None:
-                return None  # Unknown craft requirements → fall back to A*.
+                # Unknown craft requirements → fall back to A*.
+                return _decline(declined, f"craft_unknown:{item}")
             if game_data.workshop_location(stats.crafting_skill) is None:
-                return None  # No workshop for this skill → fall back to A*.
+                # No workshop for this skill → fall back to A*.
+                return _decline(declined, f"no_workshop:{stats.crafting_skill}")
             if state.skills.get(stats.crafting_skill, 1) < stats.crafting_level:
                 # Skill gate not met: a skill-gated craft is simply not a CRAFT
                 # source until the gate is met (ObtainModel._craft
@@ -269,8 +291,9 @@ def generate_next_craft_action(
                 # honest no-plan) instead. Restores the safety net that
                 # build_actions' emit-per-(skill,level) otherwise bypasses.
                 if lvl is None or not lvl.is_applicable(state, game_data):
-                    return None
-                return _finish([lvl], state, game_data)
+                    return _decline(declined, f"craft_skill:{item}:{stats.crafting_skill}"
+                                              f"<{stats.crafting_level}:no_grind")
+                return _finish([lvl], state, game_data, declined)
         elif (item not in gatherable_items and not sources.get(item)
               and not state.inventory.get(item, 0) and not (state.bank_items or {}).get(item, 0)):
             # Raw leaf that no resource drops AND the shared obtain model has
@@ -284,7 +307,7 @@ def generate_next_craft_action(
             # `milk_bucket`, which no route mints, was refused outright). A
             # leaf held SHORT still falls back, at the mapping below: its
             # missing units get a step no action serves.
-            return None
+            return _decline(declined, f"no_source:{item}")
 
     if relevant is None:
         # Same re-add as the A* producer (`ai/region_edges`): this fast path
@@ -317,7 +340,8 @@ def generate_next_craft_action(
         for na in plan:
             action = _map_next_action(na, relevant, game_data, sources, actions, bank_accessible)
             if action is None:
-                return None  # a step has no concrete action → fall back to A*
+                # a step has no concrete action → fall back to A*
+                return _decline(declined, f"unmapped_step:{na.kind}:{na.item}:{na.code}")
             if not mapped and isinstance(action, GatherAction):
                 gate = _unmet_gather_gate(action, state, game_data, actions)
                 if gate is not None:
@@ -333,12 +357,12 @@ def generate_next_craft_action(
                 # remaining legs from the REAL post-fight inventory (the
                 # same grind-one-replan idiom the skill dispatch uses).
                 break
-        return _finish(mapped, state, game_data)
-    return None  # every needed item already satisfied
+        return _finish(mapped, state, game_data, declined)
+    return _decline(declined, "satisfied")  # every needed item already satisfied
 
 
-def _finish(mapped: list[Action], state: WorldState,
-            game_data: GameData) -> list[Action] | None:
+def _finish(mapped: list[Action], state: WorldState, game_data: GameData,
+            declined: list[str] | None = None) -> list[Action] | None:
     """Front an optimal-loadout re-arm when the plan opens with a suboptimal
     Gather/Fight, then gate the whole plan on the first leg's applicability NOW.
 
@@ -354,7 +378,7 @@ def _finish(mapped: list[Action], state: WorldState,
     non-empty `craft_plan_full` plan)."""
     result = _with_rearm(mapped, state, game_data)
     if not result[0].is_applicable(state, game_data):
-        return None
+        return _decline(declined, f"first_leg_inapplicable:{result[0]!r}")
     return result
 
 

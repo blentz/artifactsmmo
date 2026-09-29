@@ -152,6 +152,27 @@ class TestGrindFightLegPreps:
         assert (Mechanism.FAST_PATH, repr(prep),
                 "grind heal prep plan_len=1") in noted
 
+    def test_a_prep_decline_is_noted_and_the_fight_goes_ahead(self):
+        player = _player({"milk": 10})
+        executed = []
+
+        def declines(goal, state, game_data, actions, ctx, declined=None):
+            if declined is not None and isinstance(goal, GatherMaterialsGoal) and "cheese" in goal.needed:
+                declined.append("no_source:milk")
+                return None
+            return None
+
+        with patch.object(player, "_build_actions", return_value=[]), \
+                patch("artifactsmmo_cli.ai.player.next_grind_goal", return_value=_GRIND_GOAL), \
+                patch("artifactsmmo_cli.ai.player.decompose", side_effect=declines), \
+                patch.object(player.planner, "plan", return_value=[_FIGHT]), \
+                patch.object(player, "_execute",
+                             side_effect=lambda leg, _c: executed.append(leg) or (player.state, "ok", leg)):
+            player._execute_level_skill(LevelSkill("gearcrafting", 5), MagicMock())
+        assert executed == [_FIGHT]
+        prep = heal_prep_goal(player.state, player.game_data, NO_PROFILE_CONTEXT)
+        assert (Mechanism.DECOMPOSE_DECLINE, repr(prep), "no_source:milk") in player._events.drain()
+
     def test_a_stocked_fight_leg_fights(self):
         player = _player({"cheese": HEAL_STOCK_FLOOR})
         assert _run_grind(player, _FIGHT, None) == [_FIGHT]

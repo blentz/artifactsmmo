@@ -131,6 +131,13 @@ CENSUS_POTION_QTY = 100
 """A stocked utility slot, so the CRAFT_POTIONS guard does not preempt the
 objective step (a guard is not what any of these cells is about)."""
 
+CENSUS_BOOST = "water_boost_potion"
+"""A stocked second utility slot. With only the heal slot stocked, the potion
+guard's boost-stock arm fires in this census's recycle cell and preempts the
+objective step. Found 2026-09-29, when decomposition started serving the potion
+batch whose search used to fail; the failure had let the step run by accident.
+Same fix as `recycle_source_completeness.CENSUS_BOOST`."""
+
 CENSUS_GOLD = 1_000_000
 """A full pocket. Deliberate: no cell's obtainability question is about
 affordability — the pool's gold-gated buy/withdraw edges must all clear so the
@@ -361,8 +368,10 @@ def census_state(cell: ParityCell, game_data: GameData) -> WorldState:
             level=CENSUS_LEVEL,
             gold=CENSUS_GOLD,
             skills={skill: CENSUS_SKILL_LEVEL for skill in SKILL_NAMES},
-            equipment={"weapon_slot": CENSUS_WEAPON, "utility1_slot": CENSUS_POTION},
-            utility_quantities={"utility1_slot": CENSUS_POTION_QTY},
+            equipment={"weapon_slot": CENSUS_WEAPON, "utility1_slot": CENSUS_POTION,
+                       "utility2_slot": CENSUS_BOOST},
+            utility_quantities={"utility1_slot": CENSUS_POTION_QTY,
+                                "utility2_slot": CENSUS_POTION_QTY},
             inventory=dict(cell.bag),
             inventory_max=CENSUS_BAG_QUANTITY_MAX,
             inventory_slots_max=CENSUS_BAG_SLOTS_MAX,
