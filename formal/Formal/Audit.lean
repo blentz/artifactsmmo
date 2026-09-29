@@ -985,6 +985,15 @@ open Formal.PriorityBand
 #print axioms Formal.ObtainModelSupply.can_mono_onHand
 #print axioms Formal.ObtainModelSupply.can_anti_qty
 #print axioms Formal.ObtainModelSupply.can_fuel_stable
+#print axioms Formal.Decompose.step_complete
+#print axioms Formal.Decompose.step_sound
+#print axioms Formal.Decompose.step_none_iff
+#print axioms Formal.Decompose.step_act_spec
+#print axioms Formal.Decompose.step_open_spec
+#print axioms Formal.Decompose.can_sound
+#print axioms Formal.Decompose.can_mono
+#print axioms Formal.Decompose.can_fuel_stable
+#print axioms Formal.Decompose.step_fuel_stable
 #print axioms Formal.CompleteTaskIncome.applyComplete_adds
 #print axioms Formal.CompleteTaskIncome.applyComplete_monotone
 #print axioms Formal.Liveness.CurrencyFunding.fundingCycles_sufficient

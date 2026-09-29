@@ -163,6 +163,7 @@ LOCATION_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_cata
 PROGRESSION_RESERVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression_reserve_core.py"
 NEXT_CRAFT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "next_craft_core.py"
 CRAFT_PLAN_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_driver_core.py"
+DECOMPOSE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decompose_core.py"
 GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxonomy_core.py"
 BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selection.py"
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
@@ -269,6 +270,36 @@ NEXT_CRAFT_MUTATIONS = [
 # `sources` map (7th oracle arg) and cycles all six kinds, so the recycle
 # capacity-cap drop and the CRAFT-break→continue mutant both diverge from the
 # widened Lean model. Still ALSO unit-killed by tests/test_ai/test_next_craft_core.py.
+# decompose_core (Phase 2c-2a, THE ONE WALK) -- killed by
+# formal/diff/test_decompose_diff.py (random graphs with cycles, gates, yields,
+# capacities and holdings, feasibility AND step against the Lean oracle).
+DECOMPOSE_CORE_MUTATIONS = [
+    ("decompose: runs rounded down (a partial run leaves the deficit short)",
+     "    return -(-deficit // max(1, yield_per))",
+     "    return deficit // max(1, yield_per)"),
+    ("decompose: all-or-nothing, not the deficit (holdings do not shrink the need)",
+     "        deficit = qty - have\n        visited = {item}",
+     "        deficit = qty\n        visited = {item}"),
+    ("decompose: capacity boundary off by one",
+     "        if route.capacity < deficit:",
+     "        if route.capacity <= deficit:"),
+    ("decompose: yield ignored in the input sizing",
+     "        n = runs(deficit, route.yield_per)\n        visited: set[Hashable] = set()",
+     "        n = deficit\n        visited: set[Hashable] = set()"),
+    ("decompose: a gate-blocked route acts instead of opening its gate",
+     "            if route.gates:",
+     "            if False:"),
+    ("decompose: the step descends into an input already on hand",
+     "                if self._on_hand.get(material, 0) < n * per:",
+     "                if self._on_hand.get(material, 0) <= n * per:"),
+    ("decompose: the memo is reused under any path (a cut answer leaks)",
+     "        if cached is not None and cached[2] <= path and not ((cached[1] - cached[2]) & path):",
+     "        if cached is not None:"),
+    ("decompose: the path guard is dropped (an item obtainable through itself)",
+     "        if item in path:\n            return False, frozenset({item}), frozenset({item})",
+     "        if False:\n            return False, frozenset({item}), frozenset({item})"),
+]
+
 NEXT_CRAFT_SOURCE_MUTATIONS = [
     ("next_craft: recycle bag/deficit cap dropped (re-admits the full uncapped deficit)",
      "    qty = min(deficit, remaining, bag_copies * src.yield_per)",
@@ -4946,6 +4977,8 @@ _ALL_SRCS = [
     CURRENCY_AFFORD_CORE_SRC,
     # C5 — next_craft_target_pure: churn fix (replaces 52K-node A* re-run).
     NEXT_CRAFT_CORE_SRC,
+    # Phase 2c-2a — THE ONE WALK (feasibility + next step).
+    DECOMPOSE_CORE_SRC,
     # Gear taxonomy: proved gear-classification core.
     GEAR_TAXONOMY_CORE_SRC,
     # Progression-tree cores (2026-07-06): unit-killed group.
@@ -8646,6 +8679,9 @@ def _collect_all_groups() -> None:
     run_group(LOCATION_CATALOG_SRC, EVENT_VISIBILITY_MUTATIONS,
               "tests/test_ai/test_event_content_visibility.py", survivors)
     # C5 — next_craft_target_pure: churn fix differential.
+    # Phase 2c-2a — THE ONE WALK differential.
+    run_group(DECOMPOSE_CORE_SRC, DECOMPOSE_CORE_MUTATIONS,
+              "formal/diff/test_decompose_diff.py", survivors)
     run_group(NEXT_CRAFT_CORE_SRC, NEXT_CRAFT_MUTATIONS,
               "formal/diff/test_next_craft_diff.py", survivors)
     # One-obtain-model review fix (CRITICAL 1/2): widened-source-model behaviour

@@ -25,6 +25,7 @@ import Formal.DoomedMemo
 import Formal.LeafAttainable
 import Formal.ObtainModelReady
 import Formal.ObtainModelSupply
+import Formal.Decompose
 import Formal.CompleteTaskIncome
 import Formal.AccumulationSell
 import Formal.DominancePareto
@@ -1251,6 +1252,18 @@ open Formal.PriorityBand
 #check @Formal.ObtainModelSupply.can_mono_onHand    -- monotone in holdings
 #check @Formal.ObtainModelSupply.can_anti_qty       -- fewer units are never harder
 #check @Formal.ObtainModelSupply.can_fuel_stable    -- termination: n + 1 fuel is the unbounded answer
+
+-- Decompose required roles (THE ONE WALK: feasibility + next step;
+-- src/artifactsmmo_cli/ai/decompose_core.py):
+#check @Formal.Decompose.step_complete        -- completeness: a feasible unmet goal always has a next step
+#check @Formal.Decompose.step_sound           -- validity: a step only for a feasible goal
+#check @Formal.Decompose.step_none_iff        -- validity: no step ⇔ satisfied or infeasible
+#check @Formal.Decompose.step_act_spec        -- safety: act only on a ready route delivering the deficit, inputs on hand, runs = ⌈need/yield⌉
+#check @Formal.Decompose.step_open_spec       -- safety: open only the first gate of the route it blocks
+#check @Formal.Decompose.can_sound            -- validity: a yes has a finite supply tree
+#check @Formal.Decompose.can_mono             -- monotone: more held / fewer wanted never harder
+#check @Formal.Decompose.can_fuel_stable      -- termination: n + 1 fuel is the unbounded feasibility answer
+#check @Formal.Decompose.step_fuel_stable     -- termination: n + 1 fuel is the unbounded next step
 
 -- CompleteTaskIncome required roles (CompleteTaskAction.apply coin minting;
 -- src/artifactsmmo_cli/ai/actions/complete_task_core.py):

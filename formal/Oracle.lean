@@ -2422,6 +2422,50 @@ def run (args : Array Json) : Json :=
 
 end ObtainModelSupplyOracle
 
+-- Decompose: THE ONE WALK (feasibility + next step).
+-- args = [n, onHand: [Nat x n],
+--         routes: [[[tag, yield, cap, [[input, per], ...], [gate, ...]], ...] x n],
+--         queries: [[item, qty], ...]]
+-- -> [{"can": bool, "step": null | {"act": [item, route, need, runs]} | {"open": [item, route, gate]}}]
+namespace DecomposeOracle
+open Formal.Decompose
+
+def parseRoute (j : Json) : Option Route := do
+  let a ← (j.getArr?).toOption
+  if a.size < 5 then none
+  let tag ← (a[0]!.getInt?).toOption
+  let y ← (a[1]!.getInt?).toOption
+  let c ← (a[2]!.getInt?).toOption
+  let ins ← (a[3]!.getArr?).toOption
+  let inputs ← ins.toList.mapM ObtainModelSupplyOracle.parsePair
+  let gates ← ObtainModelSupplyOracle.natList a[4]!
+  pure ⟨tag.toNat, y.toNat, c.toNat, inputs, gates⟩
+
+def stepJson : Option Step → Json
+  | none => Json.null
+  | some (.act i k d r) => Json.mkObj [("act", Json.arr #[Json.num i, Json.num k, Json.num d, Json.num r])]
+  | some (.openGate i k gt) => Json.mkObj [("open", Json.arr #[Json.num i, Json.num k, Json.num gt])]
+
+def run (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let parsed : Option (List Nat × List (List Route) × List (Nat × Nat)) := do
+    let onHand ← ObtainModelSupplyOracle.natList args[1]!
+    let rs ← (args[2]!.getArr?).toOption
+    let routes ← rs.toList.mapM (fun perItem => do
+      let a ← (perItem.getArr?).toOption
+      a.toList.mapM parseRoute)
+    let qs ← (args[3]!.getArr?).toOption
+    let queries ← qs.toList.mapM ObtainModelSupplyOracle.parsePair
+    pure (onHand, routes, queries)
+  match parsed with
+  | none => Json.mkObj [("error", Json.str "bad graph")]
+  | some (onHand, routes, queries) =>
+    let g : Graph := ⟨n, fun i => onHand.getD i 0, fun i => routes.getD i []⟩
+    Json.arr (queries.map (fun (i, q) =>
+      Json.mkObj [("can", Json.bool (can g (n + 1) [] i q)), ("step", stepJson (nextStep g i q))])).toArray
+
+end DecomposeOracle
+
 -- ObtainModelReady: the unified obtain model's route selection.
 -- args = [allGather, gatherSkill, craftSkill, eventVendors, spawnKnown, allowGrey, vendors,
 --         ge, tasks, fightGold, drops (each 0/1),
@@ -3299,6 +3343,8 @@ def runOne (item : Json) : Json :=
     ObtainModelReadyOracle.run args
   else if kind == "obtain_model_supply" then
     ObtainModelSupplyOracle.run args
+  else if kind == "decompose" then
+    DecomposeOracle.run args
   else if kind == "complete_task_income" then
     runCompleteTaskIncome args
   else if kind == "currency_funding" then
