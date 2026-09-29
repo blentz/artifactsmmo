@@ -587,6 +587,15 @@ The route-driven producer (`craft_plan_gen`, the "fast path") produced ZERO plan
     - Known residual: `cheese` yields 2 per craft, but the goal's craft is sized in units (×5 runs for 5 units), so a batch makes 10. This is the D-list "craft yield ignored by the sizing" defect, not new; harmless here (the stock caps below a utility stack).
     - Witness: C3P0's RestoreHP `CraftAction` count per fight should fall from about 1 to about 1/5 (one batch per stock), and requests per grind fight from 3 toward 2, with no drop in gearcrafting XP/h.
   - Food batching belongs to the fight leaf task in 2c/2d ("fight until N" sizes the food for N fights); the fix above is the interim, witnessed version.
+- **Witness of 2a/2b: PASSED (recorded 2026-09-29).** About 31 h on 2a/2b code over three sessions (09-27 22:58Z, 09-28 13:10Z, 09-28 19:51Z; the last one, 17 h, also carries @e360a3f1 and @2c31ef46). Baseline: the 24 h ending 09-27 22:10Z, before 2a.
+  - `grind_search` 2,337-3,565 per character-day to **0**; `grind_doom` and `grind budget exhausted` 18 to 0 (Robby); planner timeouts 0.6% to 0%; nodes p95 491-2,441 to 2-128; ok share 99.0-100% to 99.6-99.9%.
+  - Fleet cycles/h 650 to 614 (-5.5%). Cooldown share rose (Lor 85% to 91%): more time in longer target crafts, not more planning overhead.
+  - Skill XP/h 4,292 to 3,274, but TARGET-skill XP rose: C3P0 gearcrafting 233 to 345 and jewelrycrafting 66 to 247; Robby jewelrycrafting 45 to 282; Lor weaponcrafting 186 to 295; R2D2 gearcrafting 251 to 278 and jewelrycrafting 125 to 149. The loss is side XP:
+    - cooking about 900/h to 0, all of it from RestoreHP cooking whole food piles through the rebatching @e360a3f1 removed (baseline day: Robby 8,688, C3P0 6,335, R2D2 5,940 cooking XP);
+    - side gathering XP (Robby mining 409, Lor woodcutting 460 to 152), with goal switches 25-42% down to 5-24%.
+  - HAL reached level 30 at 09-29 00:21Z and moved from the pig grind (char XP) to a weaponcrafting grind: an objective change, not a fault.
+  - Residuals seen: one Robby `CraftPotionsGoal` search of 115k nodes (1 of 603, no timeout); C3P0's 227 RestoreHP crafts, which @2972d481 (grind fight-leg heal prep, deployed with the 09-29 restart) addresses under its own witness.
+  - The `GRIND_SEARCH = 0` condition that gates 2d has held for the whole 31 h.
 - **2c:** decomposition over the obtain model's routes directly (drop the `obtain_source_map` / `Source` bridge), including gated routes as sub-tasks.
 - **2d:** the arbiter's `ReachSkill`/`ObtainItem` candidates decompose directly instead of A* planning a `LevelSkill` macro; the macro and its nested planner are deleted once `GRIND_SEARCH` stays at 0.
 - **Witness per increment:** `decision-census` over 24 h: `grind_search` and `search` per cycle down, `grind budget exhausted` to 0, and no drop in ok share, cycles/h or skill XP/h.
