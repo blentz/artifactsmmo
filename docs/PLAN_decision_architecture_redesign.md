@@ -615,7 +615,55 @@ The route-driven producer (`craft_plan_gen`, the "fast path") produced ZERO plan
       - Found with it: `size_intermediate_craft` passed `craft_batch_size_pure`'s UNITS through as RUNS, so a yield-2 craft made twice its batch (`Craft(earth_boost_potion×6)` for 6 potions). It now converts, rounding up when demand is the bound and down when space or the cap is (never below one run). The old unit test had pinned the mix-up (3 runs, i.e. 30 ore, against 15 usable slots).
     - Heal prep correction: `heal_prep_goal` asks for bank + bag + deficit, and now says why truly. Decomposition credits a banked copy of the TARGET without withdrawing it (the WITHDRAW source is dropped for the target; only banked INPUTS are withdrawn), so bag + deficit would leave the bag short by the bank's copies. A live bank-aware target withdraw is 2c-2's.
   - **2c-2 (was 2c): decomposition over the obtain model's routes directly** (drop the `Source` bridge), with gated routes as sub-tasks. No measured live payoff by itself; it is the prerequisite for 2d's deletion of the `LevelSkill` macro, since a skill gate must then be a sub-task rather than a macro leg.
-- **2c-2:** decomposition over the obtain model's routes directly (drop the `obtain_source_map` / `Source` bridge), including gated routes as sub-tasks.
+- **2c-2 design (drafted 2026-09-29; user decisions: maximize sub-tasking; fix the banked-target discrepancy; refactor the formal core).**
+
+  **The design principle: the next action is the first leaf of the feasibility witness.** Today two computations answer "can I get N of X" and "what do I do next": `ObtainModel.feasible` (`supply_core.can_supply`, proved in `ObtainModelSupply.lean`) and decomposition (`next_craft_core` + `craft_plan_driver_core`, proved in `NextCraftAction.lean` / `CraftPlanDriver.lean`, fed a lossy `Source` projection plus a separate `recipes` map). They disagree, and every disagreement surfaced this week as "the model says yes, decomposition declines, A* times out": craft yield (the descent ignored it), a secondary-drop gather (the mapping ignored it), a banked copy of the target (credited, never withdrawn). Each was patched where it bit. 2c-2 removes the class: ONE walk over the route graph returns a supply tree when one exists, and the next action is that tree's first leaf. By construction, and by theorem: feasible ⇒ a next action exists, and a decline ⇒ infeasible with named blockers.
+
+  **Gates become sub-tasks wherever an action can open them (maximal sub-tasking).** A route blocked only by openable gates is a route whose first step is opening them, and the gate's sub-task is a goal the same decomposition serves:
+
+  | Gate | Sub-task | Opens when | Notes |
+  |---|---|---|---|
+  | GATHER_SKILL(s, L) | ReachSkill(s, L), the grind's decomposition | skill s ≥ L | replaces `_unmet_gather_gate` and the craft-skill LevelSkill emission in `generate_next_craft_action` |
+  | CRAFT_SKILL(s, L) | ReachSkill(s, L) | skill s ≥ L | same |
+  | BANK_ACCESSIBLE | UnlockBank | the bank unlocks | the existing unlock goal, reached from the obtain walk instead of from a band |
+  | WINNABLE(m) | BecomeWinnable(m): the gear (ObtainItem) or character level that makes `predict_win` true | the prediction flips | the combat-deficit machinery becomes a sub-task of the drop route that needs it; the C1 two-authority split (`has_combat_deficit` vs `task_decision`) closes because both read this one gate. Its own increment (largest) |
+  | inputs: gold, currency | the input's own routes (GOLD_DROP, SELL, TASK_REWARD, ...) | held | already sub-tasking by construction: a price is an input like any other |
+  | SPAWN_KNOWN in another region | movement (region transition) | reachable | already an action-level edge; no sub-task |
+  | SPAWN_LIVE / VENDOR_TRADEABLE on event content | WaitForEvent when the start time is known (raids carry `next_start_at`) | the event starts | otherwise a time-gated BLOCKER that reopens on the fact (Phase 3), never a countdown |
+  | VENDOR_LOCATED, GE_LOCATED, WORKSHOP_KNOWN, LICENSED | none | data or policy change | hard blockers, named |
+  | XP_POSITIVE | none (a policy, not an obtain gate) | | stays a `Policy` switch |
+
+  A sub-task's feasibility is its own model's (the grind's rung walk for ReachSkill, the combat model for WINNABLE). The core takes it as an input verdict per gate, `openable : Gate → Bool`, so the core stays pure and decidable while the recursion lives where each model already lives.
+
+  **What the one walk does** (Lean-first, `Formal/Decompose.lean`, extending `ObtainModelSupply`):
+  - Graph: items; per item, routes in priority order, each `{kind, via, yieldPer, capacity, inputs, gates}`. A CRAFT route's inputs ARE the recipe, so the separate `recipes` map disappears, and with it the "a CRAFT source defers to the recipe descent" special case. WITHDRAW is an ordinary route whose capacity is the bank's stock; `onHand` is the BAG only. That fixes the banked-target discrepancy by construction: a banked copy of the target is withdrawn like any banked input, and the heal-prep and potion quantities go back to plain bag + deficit.
+  - `can` (existing, proved sound, monotone, antitone, fuel-bounded) is extended with sub-task nodes: a route whose unmet gates are all `openable` is usable, with the gates as prerequisite leaves.
+  - `step`: the first leaf of the witness `can` builds, in route-priority order: `gather | craft(runs) | withdraw | recycle | buy | fill | fight | open(gate)`.
+  - Theorems (roles): SOUND (a step is a leaf of a finite supply tree), COMPLETE (`can = true ↔ step ≠ none`: decomposition never declines a feasible goal), PROGRESS (executing a non-`open` step strictly decreases a well-founded deficit measure; `open` hands off to a sub-task whose success strictly shrinks the set of unmet gates), ORDERING (craft only with every input on hand), BANK/RECYCLE caps (withdraw ≤ bank, recycle ≤ remaining licence), YIELD (runs = ⌈deficit / yield⌉). `NextCraftAction` and `CraftPlanDriver` retire explicitly with their manifest, contract, audit and mutant entries (the formal-surface risk below).
+  - Python `decompose_core.py` mirrors it; the differential drives random route graphs (six kinds, gates, capacities, yields, bag and bank) through both.
+
+  **What it deletes** (the epicycles this removes, each a patch where a disagreement bit):
+  - the `Source` bridge in decomposition (`obtain_source_map`; other consumers migrate separately);
+  - in `generate_next_craft_action`: the craft-skill LevelSkill emission, `_unmet_gather_gate`, the WITHDRAW-source filter, the held-leaf exemption, the excluded-recycle filter (becomes an exclusion input to the walk), the "no source" pre-check;
+  - `_map_next_action`'s pool matching (2c-2d below): actions are CONSTRUCTED from the step (§3: "actions are constructed by the task that needs them, sized to that need"), so a step can never lack an action (the 2b withdraw gap and today's secondary-drop gap);
+  - `size_intermediate_craft` inside decomposition (the walk sizes runs itself; the unit/run conversion lives in one proved place);
+  - the bank-inclusive quantity fudges in `grind_heal_prep` and `CraftPotionsGoal.batch_obtain`.
+
+  **Kept deliberately:** one leg per cycle after a fight (drops are stochastic; the replan reads the real yield, the D-R expected-yield model is separate); the loadout re-arm before a gather or fight (a local problem, §3); `_finish`'s applicability check becomes a debug assertion once construction guarantees it.
+
+  **Increments** (each shippable, each witnessed):
+  - **2c-2.0 measure first:** a `DECOMPOSE_DECLINE` event naming the blocking gate(s) or missing input, for every decline, so each later increment has a before/after (live today, declines are invisible: the caller silently searches).
+  - **2c-2a formal core:** `Formal/Decompose.lean` + `decompose_core.py` + differential + contracts + mutants; not yet wired.
+  - **2c-2b wire it:** `decompose` builds the route graph from `ObtainModel` (LEGACY readiness) and asks the core; delete the `generate_next_craft_action` patches listed above; retire the two old Lean modules. Parity check first, offline over every scenario world and grind goal: the new walk serves a superset of what the old one served, and every difference is named.
+  - **2c-2c skill and bank sub-tasks:** `open(GATHER_SKILL | CRAFT_SKILL)` emits the ReachSkill sub-task and `open(BANK_ACCESSIBLE)` the unlock. This is what lets 2d delete the `LevelSkill` macro: a skill gate is a sub-task, not a macro leg.
+  - **2c-2d construct actions:** the step builds its action (gather at the nearest tile of the resource, craft at the workshop, withdraw at the bank, buy at the NPC, fill the GE order, fight the monster) from game data; the pool mapping goes.
+  - **2c-2e WINNABLE sub-task:** BecomeWinnable(m) through the gear and level models, closing C1.
+  - Event WaitForEvent is Phase 3's (blockers that reopen on facts); 2c-2 only names them.
+  - **Witness:** `DECOMPOSE_DECLINE` by blocker (only hard or time blockers should remain), arbiter `search` share for obtain-shaped goals toward 0, A* timeouts 0, ok share, cycles/h, target-skill XP/h.
+
+  **How this fits the original concept.** GOAP with A* and provable functional properties stays the architecture. The obtain decomposition becomes a proved hierarchical planner whose leaves are GOAP primitive actions: sound, complete relative to the model, terminating. A* keeps the local, bounded problems it is good at (rest vs consume, bag management, loadout), each with a small closed action set and an admissible heuristic.
+
+- **2c-2 (original line):** decomposition over the obtain model's routes directly (drop the `obtain_source_map` / `Source` bridge), including gated routes as sub-tasks. Superseded by the design above.
 - **2d:** the arbiter's `ReachSkill`/`ObtainItem` candidates decompose directly instead of A* planning a `LevelSkill` macro; the macro and its nested planner are deleted once `GRIND_SEARCH` stays at 0.
 - **Witness per increment:** `decision-census` over 24 h: `grind_search` and `search` per cycle down, `grind budget exhausted` to 0, and no drop in ok share, cycles/h or skill XP/h.
   - For the window that starts with the @e360a3f1 deploy, also check: cooking and alchemy XP/h, and crafts per request (grind crafts no longer get the whole held pile for free); consumable craft cooldowns never far above `predicted_cost`; and `action_repr` quantities that match the plan.
