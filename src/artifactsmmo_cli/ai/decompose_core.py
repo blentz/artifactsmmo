@@ -14,13 +14,15 @@ on hand (ordering); a gate-blocked route yields "open its first gate"; a route
 runs `ceil(deficit / yield)` times; monotone in holdings and quantity; and the
 fuel bound under which the Lean walk equals this unbounded one.
 
-DEFICIT semantics: `qty` of `item` can be had when that many are on hand, or
-when some route can deliver the deficit `qty - on_hand[item]` (its capacity
-allows it) and every input can be had in the amount its runs consume. A CRAFT
-route's inputs are its recipe; a WITHDRAW route's capacity is the bank's stock,
-and `on_hand` is the bag. Routes are tried in the order given (the adapter puts
-ready routes before gate-blocked ones). An item already asked about further up
-the same path is not obtainable through itself.
+DEFICIT semantics, filled GREEDILY across routes: `qty` of `item` can be had when
+the bag holds that many, or when the routes, in the order given, fill the deficit
+`qty - bag[item]`: each usable route takes as much of what is left as its
+capacity allows, provided every input can be had in the amount its runs consume.
+A WITHDRAW route's capacity is the bank's stock, so banked stock mixes with
+production (21 banked, 33 needed: withdraw 21, gather 12), and a licensed RECYCLE
+covers what it can while a gather covers the rest. A CRAFT route's inputs are its
+recipe. The adapter puts ready routes before gate-blocked ones. An item already
+asked about further up the same path is not obtainable through itself.
 """
 
 from collections.abc import Hashable, Mapping, Sequence
@@ -28,7 +30,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class Route:
+class Route[K: Hashable]:
     """One route to an item as the walk sees it. `tag` names the concrete
     action that serves it (opaque to the walk); `gates` are the openable gates
     that still block it (empty when it is ready)."""
@@ -36,33 +38,33 @@ class Route:
     tag: Hashable
     yield_per: int
     capacity: int
-    inputs: tuple[tuple[Hashable, int], ...]
+    inputs: tuple[tuple[K, int], ...]
     gates: tuple[Hashable, ...] = ()
 
 
 @dataclass(frozen=True)
-class Act:
-    """Run route `route` (its index in `item`'s list) `runs` times, serving a
-    deficit of `need` units."""
+class Act[K: Hashable]:
+    """Run route `route` (its index in `item`'s list) `runs` times, delivering
+    `amount` units."""
 
-    item: Hashable
+    item: K
     route: int
-    need: int
+    amount: int
     runs: int
 
 
 @dataclass(frozen=True)
-class OpenGate:
+class OpenGate[K: Hashable]:
     """Open `gate`, which blocks route `route` of `item`: a sub-task."""
 
-    item: Hashable
+    item: K
     route: int
     gate: Hashable
 
 
-Step = Act | OpenGate
+type Step[K: Hashable] = Act[K] | OpenGate[K]
 
-_Walk = tuple[bool, frozenset[Hashable], frozenset[Hashable]]
+type _Walk[K: Hashable] = tuple[bool, frozenset[K], frozenset[K]]
 """(answer, items visited, visited items found on the path)."""
 
 
@@ -72,17 +74,16 @@ def runs(deficit: int, yield_per: int) -> int:
     return -(-deficit // max(1, yield_per))
 
 
-class _Walker:
+class _Walker[K: Hashable]:
     """One question's walk: the graph plus the feasibility memo, shared by the
     feasibility answer and the step so both read the same verdicts."""
 
-    def __init__(self, on_hand: Mapping[Hashable, int],
-                 routes: Mapping[Hashable, Sequence[Route]]) -> None:
+    def __init__(self, on_hand: Mapping[K, int], routes: Mapping[K, Sequence[Route[K]]]) -> None:
         self._on_hand = on_hand
         self._routes = routes
-        self._memo: dict[tuple[Hashable, int], _Walk] = {}
+        self._memo: dict[tuple[K, int], _Walk[K]] = {}
 
-    def can(self, item: Hashable, qty: int, path: frozenset[Hashable]) -> _Walk:
+    def can(self, item: K, qty: int, path: frozenset[K]) -> _Walk[K]:
         """The feasibility walk (`Decompose.can`). Each (item, qty) answer is
         memoised with the items its walk visited and, among them, the ones it
         found on the path (a cut); it is reused only under a path that holds
@@ -97,31 +98,38 @@ class _Walker:
         cached = self._memo.get((item, qty))
         if cached is not None and cached[2] <= path and not ((cached[1] - cached[2]) & path):
             return cached
-        inner = path | {item}
-        deficit = qty - have
-        visited = {item}
-        cuts: set[Hashable] = set()
-        answer = False
-        for route in self._routes.get(item, ()):
-            ok, seen, hit = self._usable(route, deficit, inner)
-            visited |= seen
-            cuts |= hit - {item}
-            if ok:
-                answer = True
-                break
-        result = (answer, frozenset(visited), frozenset(cuts))
+        answer, visited, cuts = self._fill(item, qty - have, path | {item})
+        result = (answer, visited | {item}, cuts - {item})
         self._memo[(item, qty)] = result
         return result
 
-    def _usable(self, route: Route, deficit: int, inner: frozenset[Hashable]) -> _Walk:
-        """`Decompose.usable`: the route can deliver the deficit and every input
-        can be had in the amount its runs consume (checked in order, stopping
-        at the first that cannot, as `List.all` does)."""
-        if route.capacity < deficit:
-            return False, frozenset(), frozenset()
+    def _fill(self, item: K, deficit: int, inner: frozenset[K]) -> _Walk[K]:
+        """`Decompose.fill`: `item`'s routes, in order, cover `deficit`; each
+        contributing route takes `min(capacity, what is left)`."""
+        visited: set[K] = set()
+        cuts: set[K] = set()
+        remaining = deficit
+        for route in self._routes.get(item, ()):
+            if remaining == 0:
+                break
+            take = min(route.capacity, remaining)
+            if take <= 0:
+                continue
+            ok, seen, hit = self._usable(route, take, inner)
+            visited |= seen
+            cuts |= hit
+            if ok:
+                remaining -= take
+        return remaining == 0, frozenset(visited), frozenset(cuts)
+
+    def _usable(self, route: Route[K], deficit: int, inner: frozenset[K]) -> _Walk[K]:
+        """`Decompose.usable`: every input can be had in the amount the runs for
+        `deficit` consume (checked in order, stopping at the first that cannot,
+        as `List.all` does). Callers pass an amount within the route's capacity
+        (`take`), so the capacity conjunct of the Lean `usable` always holds."""
         n = runs(deficit, route.yield_per)
-        visited: set[Hashable] = set()
-        cuts: set[Hashable] = set()
+        visited: set[K] = set()
+        cuts: set[K] = set()
         for material, per in route.inputs:
             found, seen, hit = self.can(material, n * per, inner)
             visited |= seen
@@ -130,34 +138,40 @@ class _Walker:
                 return False, frozenset(visited), frozenset(cuts)
         return True, frozenset(visited), frozenset(cuts)
 
-    def step(self, item: Hashable, qty: int, path: frozenset[Hashable]) -> Step | None:
-        """The first leaf of the supply tree (`Decompose.step`)."""
+    def step(self, item: K, qty: int, path: frozenset[K]) -> Step[K] | None:
+        """The first leaf of the supply the walk finds (`Decompose.step`): the
+        first route that contributes to the fill, its gate, its first input the
+        bag lacks, or the route itself."""
         have = self._on_hand.get(item, 0)
         if have >= qty or item in path:
             return None
         deficit = qty - have
         inner = path | {item}
+        if not self._fill(item, deficit, inner)[0]:
+            return None
         for index, route in enumerate(self._routes.get(item, ())):
-            if not self._usable(route, deficit, inner)[0]:
+            take = min(route.capacity, deficit)
+            if take <= 0 or not self._usable(route, take, inner)[0]:
                 continue
             if route.gates:
                 return OpenGate(item, index, route.gates[0])
-            n = runs(deficit, route.yield_per)
+            n = runs(take, route.yield_per)
             for material, per in route.inputs:
                 if self._on_hand.get(material, 0) < n * per:
                     return self.step(material, n * per, inner)
-            return Act(item, index, deficit, n)
-        return None
+            return Act(item, index, take, n)
+        return None  # pragma: no cover - a fill of a positive deficit has a contributor
 
 
-def can_obtain(item: Hashable, qty: int, on_hand: Mapping[Hashable, int],
-               routes: Mapping[Hashable, Sequence[Route]]) -> bool:
+def can_obtain[K: Hashable](item: K, qty: int, on_hand: Mapping[K, int],
+                           routes: Mapping[K, Sequence[Route[K]]]) -> bool:
     """Can `qty` of `item` be had (`Decompose.can` at fuel n + 1)?"""
     return _Walker(on_hand, routes).can(item, qty, frozenset())[0]
 
 
-def next_step(item: Hashable, qty: int, on_hand: Mapping[Hashable, int],
-              routes: Mapping[Hashable, Sequence[Route]]) -> Step | None:
-    """The next step toward `qty` of `item` (`Decompose.nextStep`): None when
-    satisfied or infeasible, and never None for a feasible unmet goal."""
+def next_step[K: Hashable](item: K, qty: int, on_hand: Mapping[K, int],
+                          routes: Mapping[K, Sequence[Route[K]]]) -> Step[K] | None:
+    """The next step toward `qty` of `item` in the bag (`Decompose.nextStep`):
+    None when the bag holds it or it is infeasible, and never None for a
+    feasible goal the bag does not hold."""
     return _Walker(on_hand, routes).step(item, qty, frozenset())

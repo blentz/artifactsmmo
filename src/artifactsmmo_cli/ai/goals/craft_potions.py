@@ -207,16 +207,12 @@ class CraftPotionsGoal(Goal):
         """The potions the bag still lacks for `batch_equip`, as an obtain goal,
         or None when the bag already holds them (or there is nothing to equip).
 
-        The bag, not the bank: an equip takes from the inventory. The quantity
-        adds the bank's copies because decomposition credits a banked copy of
-        the target as held without withdrawing it (the recipe descent withdraws
-        only banked INPUTS), so the plan crafts exactly what the bag lacks."""
+        The bag, not the bank: an equip takes from the inventory, and the walk
+        withdraws a banked copy of the potion before it crafts more."""
         equip = self.batch_equip(state)
         if equip is None or state.inventory.get(equip.code, 0) >= equip.quantity:
             return None
-        banked = (state.bank_items or {}).get(equip.code, 0)
-        return GatherMaterialsGoal(target_item=equip.code,
-                                   needed={equip.code: banked + equip.quantity})
+        return GatherMaterialsGoal(target_item=equip.code, needed={equip.code: equip.quantity})
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         pair = unlock_boost_target(state, game_data)

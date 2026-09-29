@@ -8,12 +8,13 @@ generator's own unit-level contract."""
 
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
-from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_craft_plan_gen import _ctx
 
 
 def _gd() -> GameData:
@@ -58,7 +59,7 @@ class TestDirectedGeneratorEmitsLevelSkillLeg:
                                 task_exchange_min_coins=0)
         goal = GatherMaterialsGoal("widget", {"widget": 1})
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result == [LevelSkill(skill="gearcrafting", target_level=5)], result
 
@@ -79,7 +80,7 @@ class TestDirectedGeneratorEmitsLevelSkillLeg:
             if not isinstance(action, LevelSkill)
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is None
 
@@ -128,6 +129,6 @@ class TestDirectedGeneratorGatesLevelSkillOnApplicable:
         assert lvl.is_applicable(state, gd) is False
         goal = GatherMaterialsGoal("widget", {"widget": 1})
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is None, result

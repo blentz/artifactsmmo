@@ -69,19 +69,30 @@ def test_held_ingredients_craft_then_equip_and_satisfy_the_goal():
     assert isinstance(ran[-1], EquipAction)
 
 
-def test_a_prefix_plan_ends_before_the_equip():
-    """One craft leg is a bounded batch: when it does not land the whole
-    batch, the plan stops there instead of naming an equip it cannot reach."""
+def test_held_ingredients_craft_the_whole_batch_in_one_action():
+    """The walk crafts every run the bag's ingredients cover in one action
+    (one request), and the equip then lands the batch."""
     gd = _gd(with_boost=False, monster_level=18)
     state = _state()
     goal = CraftPotionsGoal(game_data=gd, state=state)
-    plan = decompose(goal, state, gd, _actions(gd), NO_PROFILE_CONTEXT)
-    assert plan is not None
     equip = goal.batch_equip(state)
     assert equip is not None
-    landed = _apply_all(plan, state, gd)
-    assert landed.inventory.get(_HEAL, 0) < equip.quantity, "fixture: one leg is a partial batch"
-    assert not any(isinstance(a, EquipAction) for a in plan)
+    plan = decompose(goal, state, gd, _actions(gd), NO_PROFILE_CONTEXT)
+    assert plan is not None
+    assert [type(a).__name__ for a in plan] == ["CraftAction", "EquipAction"]
+    assert plan[-1] == equip
+
+
+def test_a_prefix_plan_ends_before_the_equip(monkeypatch):
+    """When the simulated legs stop short of the batch (here one leg: the
+    gather), the plan stops there instead of naming an equip it cannot reach."""
+    monkeypatch.setattr("artifactsmmo_cli.ai.craft_plan_gen._MAX_LEGS", 1)
+    gd = _gd(with_boost=False, monster_level=18)
+    state = _state(inventory={})
+    goal = CraftPotionsGoal(game_data=gd, state=state)
+    plan = decompose(goal, state, gd, _actions(gd), NO_PROFILE_CONTEXT)
+    assert plan is not None
+    assert [type(a).__name__ for a in plan] == ["GatherAction"]
 
 
 def test_potions_already_in_the_bag_are_just_equipped():
@@ -206,4 +217,4 @@ def test_an_undecomposable_batch_reports_the_inner_reason(monkeypatch):
     goal = CraftPotionsGoal(game_data=gd, state=state)
     declined: list[str] = []
     assert decompose(goal, state, gd, _actions(gd), NO_PROFILE_CONTEXT, declined) is None
-    assert declined == [f"no_source:{_INGREDIENT}"]
+    assert declined == [f"infeasible:{_HEAL}:no_route:{_INGREDIENT}"]

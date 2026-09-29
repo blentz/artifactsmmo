@@ -20,7 +20,6 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.obtain_sources import (
     UNBOUNDED_CAPACITY,
     SourceKind,
-    obtain_source_map,
     obtain_sources,
 )
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -291,12 +290,6 @@ def test_raw_resource_has_exactly_one_gather_source(game_data, ctx):
     assert [s.kind for s in srcs] == [SourceKind.GATHER]
     assert srcs[0].code == "ash_tree"
     assert srcs[0].capacity == UNBOUNDED_CAPACITY
-
-
-def test_source_map_covers_a_whole_closure(game_data, ctx):
-    state = make_state()
-    m = obtain_source_map(["ash_plank", "ash_wood"], state, game_data, ctx)
-    assert set(m) == {"ash_plank", "ash_wood"}
 
 
 def test_resource_for_drop_IS_the_gatherability_test_on_the_real_catalog():

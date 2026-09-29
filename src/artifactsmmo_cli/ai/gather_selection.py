@@ -35,3 +35,10 @@ def select_gather_source(item: str, candidates: list[GatherCandidate]) -> str | 
     if not candidates:
         return None
     return min(candidates, key=_key).resource_code
+
+
+def rank_gather_sources(candidates: list[GatherCandidate]) -> list[str]:
+    """Every candidate's resource_code, best first, by the same total order
+    `select_gather_source` minimises: its head IS that function's answer. The
+    one walk takes an item's gather routes in this order (Phase 2c-2b)."""
+    return [c.resource_code for c in sorted(candidates, key=_key)]

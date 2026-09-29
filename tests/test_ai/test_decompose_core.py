@@ -8,14 +8,14 @@ from artifactsmmo_cli.ai.decompose_core import Act, OpenGate, Route, can_obtain,
 UNBOUNDED = 10**9
 
 
-def _ring(on_hand: dict[str, int], bar_gates: tuple[str, ...] = ()) -> tuple[dict, dict]:
+def _ring(bag: dict[str, int], bar_gates: tuple[str, ...] = ()) -> tuple[dict, dict]:
     """copper_ring = 1 bar; copper_bar = 10 ore, yields 2; ore is gathered."""
     routes = {
         "ring": [Route("craft", 1, UNBOUNDED, (("bar", 1),))],
         "bar": [Route("craft", 2, UNBOUNDED, (("ore", 10),), bar_gates)],
         "ore": [Route("gather", 1, UNBOUNDED, ())],
     }
-    return on_hand, routes
+    return bag, routes
 
 
 def test_runs_round_up_and_read_a_zero_yield_as_one():
@@ -41,16 +41,20 @@ def test_a_gated_route_opens_its_gate_first():
 
 def test_satisfied_and_infeasible_have_no_step():
     assert next_step("ring", 3, *_ring({"ring": 3})) is None
-    on_hand, routes = _ring({})
+    bag, routes = _ring({})
     del routes["ore"]
-    assert next_step("ring", 1, on_hand, routes) is None
-    assert can_obtain("ring", 1, on_hand, routes) is False
+    assert next_step("ring", 1, bag, routes) is None
+    assert can_obtain("ring", 1, bag, routes) is False
 
 
-def test_capacity_binds_and_the_next_route_serves():
+def test_a_capped_route_covers_what_it_can_and_the_next_the_rest():
+    """GREEDY FILL: a capped route (a bank's WITHDRAW, a licensed recycle) is
+    used for its share and the next route covers the rest."""
     routes = {"x": [Route("withdraw", 1, 4, ()), Route("gather", 1, UNBOUNDED, ())]}
     assert next_step("x", 4, {}, routes) == Act("x", 0, 4, 4)
-    assert next_step("x", 5, {}, routes) == Act("x", 1, 5, 5)
+    assert next_step("x", 5, {}, routes) == Act("x", 0, 4, 4)
+    assert next_step("x", 5, {"x": 4}, routes) == Act("x", 0, 1, 1)
+    assert can_obtain("x", 5, {}, {"x": [Route("withdraw", 1, 4, ())]}) is False
 
 
 def test_an_item_is_not_obtainable_through_itself():
@@ -69,3 +73,15 @@ def test_a_cut_answer_is_not_reused_where_the_path_differs():
               3: [Route("g", 1, UNBOUNDED, ())]}
     assert can_obtain(0, 1, {}, routes) is True
     assert next_step(0, 1, {}, routes) == Act(3, 0, 1, 1)
+
+
+def test_banked_stock_mixes_with_production():
+    """21 algae banked (a WITHDRAW route of capacity 21), 33 needed by the
+    potion: withdraw the 21, then gather the other 12 (the old descent's mixed
+    plan, now proved)."""
+    routes = {"potion": [Route("craft", 1, UNBOUNDED, (("algae", 1),))],
+              "algae": [Route("withdraw", 1, 21, ()), Route("gather", 1, UNBOUNDED, ())]}
+    assert next_step("potion", 33, {}, routes) == Act("algae", 0, 21, 21)
+    emptied = {**routes, "algae": [Route("withdraw", 1, 0, ()), Route("gather", 1, UNBOUNDED, ())]}
+    assert next_step("potion", 33, {"algae": 21}, emptied) == Act("algae", 1, 12, 12)
+    assert can_obtain("potion", 33, {}, routes) is True

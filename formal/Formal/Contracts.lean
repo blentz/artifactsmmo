@@ -13,8 +13,6 @@ import Formal.EquipmentScoring
 import Formal.SkillGrindSelection
 import Formal.SkillXpPositive
 import Formal.DoomedMemo
-import Formal.NextCraftAction
-import Formal.CraftPlanDriver
 import Formal.CurrencyAffordFastFail
 import Formal.LeafAttainable
 import Formal.ObtainModelReady
@@ -2977,110 +2975,6 @@ example : ∀ {σ : Type} [inst : DecidableEq σ] (base maxR : Nat) (sig0 : σ)
     Formal.DoomedMemo.isDoomed base maxR sig0 setAt failures sig cycle = false :=
   @Formal.DoomedMemo.isDoomed_expires
 
--- ─── NextCraftAction (next_craft_target_pure; SIX-source obtain model) anti-weakening pins ───
--- Widened over the six-source model: every pin threads `sources`; the withdraw
--- pins carry the obtain-model well-formedness `WFWithdraw` (non-vacuous — the
--- empty map and every real `obtain_sources` output satisfy it).
--- VALIDITY: none iff already satisfied (weakening ↔ to → would still compile, but ↔ is exact)
-example : ∀ (recipes : String → Option (List (String × Nat)))
-    (sources : String → List Formal.NextCraftAction.Source) (owned bank consumed yields : String → Nat)
-    (target : String) (qty fuel : Nat),
-    Formal.NextCraftAction.nextCraftTarget recipes sources owned bank consumed yields target qty fuel = none ↔
-    qty ≤ owned target :=
-  @Formal.NextCraftAction.nextCraftTarget_none_iff
--- ORDERING: craft returned ⇒ recipe inputs exist and none is short (a source never emits craft)
-example : ∀ (recipes : String → Option (List (String × Nat)))
-    (sources : String → List Formal.NextCraftAction.Source) (owned bank consumed yields : String → Nat)
-    (item : String) (need fuel : Nat) (result : Formal.NextCraftAction.NextAction),
-      Formal.NextCraftAction.nextHelper recipes sources owned bank consumed yields item need fuel = result →
-      result.kind = Formal.NextCraftAction.Kind.craft →
-      ∃ inputs,
-        recipes result.item = some inputs ∧
-        inputs.find? (fun p => decide (owned p.1 < p.2 * result.qty)) = none :=
-  @Formal.NextCraftAction.nextHelper_craft_inputs_satisfied
--- SHORTNESS: returned action always has qty ≥ 1 (genuine positive deficit)
-example : ∀ (recipes : String → Option (List (String × Nat)))
-    (sources : String → List Formal.NextCraftAction.Source) (owned bank consumed yields : String → Nat)
-    (target : String) (qty fuel : Nat) (result : Formal.NextCraftAction.NextAction),
-    Formal.NextCraftAction.nextCraftTarget recipes sources owned bank consumed yields target qty fuel = some result →
-    1 ≤ result.qty :=
-  @Formal.NextCraftAction.nextCraftTarget_qty_pos
--- RECYCLE-CAP: a recycle source never delivers more than its remaining licensed
--- capacity (the cumulative cap that stops a protected copy being dismantled)
-example : ∀ (src : Formal.NextCraftAction.Source) (deficit : Nat) (owned consumed : String → Nat),
-    src.kind = Formal.NextCraftAction.Kind.recycle →
-    Formal.NextCraftAction.sourceQty src deficit owned consumed ≤ src.capacity - consumed src.code :=
-  @Formal.NextCraftAction.sourceQty_recycle_le_remaining
--- WITHDRAW-BANKED: a withdraw action is emitted only for a genuinely banked item
-example : ∀ (recipes : String → Option (List (String × Nat)))
-    (sources : String → List Formal.NextCraftAction.Source) (owned bank consumed yields : String → Nat),
-      Formal.NextCraftAction.WFWithdraw sources bank →
-    ∀ (item : String) (need fuel : Nat) (result : Formal.NextCraftAction.NextAction),
-      Formal.NextCraftAction.nextHelper recipes sources owned bank consumed yields item need fuel = result →
-      result.kind = Formal.NextCraftAction.Kind.withdraw →
-      0 < bank result.item :=
-  @Formal.NextCraftAction.nextHelper_withdraw_banked
--- WITHDRAW-LE-BANK: a withdraw never asks for more than the bank holds
-example : ∀ (recipes : String → Option (List (String × Nat)))
-    (sources : String → List Formal.NextCraftAction.Source) (owned bank consumed yields : String → Nat),
-      Formal.NextCraftAction.WFWithdraw sources bank →
-    ∀ (item : String) (need fuel : Nat) (result : Formal.NextCraftAction.NextAction),
-      Formal.NextCraftAction.nextHelper recipes sources owned bank consumed yields item need fuel = result →
-      result.kind = Formal.NextCraftAction.Kind.withdraw →
-      result.qty ≤ bank result.item :=
-  @Formal.NextCraftAction.nextHelper_withdraw_le_bank
--- ENTRY-LEVEL WITHDRAW-BANKED: lifted to the public nextCraftTarget API
-example : ∀ (recipes : String → Option (List (String × Nat)))
-    (sources : String → List Formal.NextCraftAction.Source) (owned bank consumed yields : String → Nat),
-      Formal.NextCraftAction.WFWithdraw sources bank →
-    ∀ (target : String) (qty fuel : Nat) (result : Formal.NextCraftAction.NextAction),
-      Formal.NextCraftAction.nextCraftTarget recipes sources owned bank consumed yields target qty fuel = some result →
-      result.kind = Formal.NextCraftAction.Kind.withdraw →
-      0 < bank result.item :=
-  @Formal.NextCraftAction.nextCraftTarget_withdraw_banked
-
--- ─── CraftPlanDriver (full-plan driver; craft_plan_driver_core.py) anti-weakening pins ───
--- Widened over the six-source model: `applyState` threads `sources` (the recycle
--- arm debits its source item), and `craftPlan`/`foldPlan` carry `sources` too.
--- `yields` (2026-09-29): a craft step is RUNS; `applyState` credits `runs * yield`.
--- HEAD: the plan's first action is exactly the proven single-step result
-example : ∀ (recipes : String → Option (List (String × Nat)))
-    (sources : String → List Formal.NextCraftAction.Source) (yields : String → Nat) (owned bank consumed : String → Nat)
-    (target : String) (qty innerFuel fuel : Nat) (na : Formal.NextCraftAction.NextAction),
-      Formal.NextCraftAction.nextCraftTarget recipes sources owned bank consumed yields target qty innerFuel = some na →
-      Formal.CraftPlanDriver.craftPlan recipes sources yields target qty innerFuel owned bank consumed (fuel + 1) =
-        na :: Formal.CraftPlanDriver.craftPlan recipes sources yields target qty innerFuel
-                (Formal.CraftPlanDriver.applyState recipes sources yields owned bank na).1
-                (Formal.CraftPlanDriver.applyState recipes sources yields owned bank na).2
-                (if na.kind = Formal.NextCraftAction.Kind.recycle
-                 then (fun s => if s = na.code then consumed s + na.qty else consumed s)
-                 else consumed) fuel :=
-  @Formal.CraftPlanDriver.craftPlan_head
--- NIL-IFF: empty plan ⇔ already satisfied (↔ is exact; → would be a weakening)
-example : ∀ (recipes : String → Option (List (String × Nat)))
-    (sources : String → List Formal.NextCraftAction.Source) (yields : String → Nat) (owned bank consumed : String → Nat)
-    (target : String) (qty innerFuel fuel : Nat),
-      Formal.CraftPlanDriver.craftPlan recipes sources yields target qty innerFuel owned bank consumed (fuel + 1) = [] ↔
-        qty ≤ owned target :=
-  @Formal.CraftPlanDriver.craftPlan_nil_iff
--- STEPS-VALID: every action in the plan is a genuine nextCraftTarget output
-example : ∀ (recipes : String → Option (List (String × Nat)))
-    (sources : String → List Formal.NextCraftAction.Source) (yields : String → Nat)
-    (target : String) (qty innerFuel : Nat)
-    (fuel : Nat) (owned bank consumed : String → Nat) (na : Formal.NextCraftAction.NextAction),
-      na ∈ Formal.CraftPlanDriver.craftPlan recipes sources yields target qty innerFuel owned bank consumed fuel →
-      ∃ (o b c : String → Nat),
-        Formal.NextCraftAction.nextCraftTarget recipes sources o b c yields target qty innerFuel = some na :=
-  @Formal.CraftPlanDriver.craftPlan_steps_valid
--- COMPLETION-CORRECTNESS: a complete plan, executed, reaches the target (recycle arm included)
-example : ∀ (recipes : String → Option (List (String × Nat)))
-    (sources : String → List Formal.NextCraftAction.Source) (yields : String → Nat)
-    (target : String) (qty innerFuel : Nat) (fuel : Nat) (owned bank consumed : String → Nat),
-      (Formal.CraftPlanDriver.craftPlan recipes sources yields target qty innerFuel owned bank consumed fuel).length < fuel →
-      qty ≤ (Formal.CraftPlanDriver.foldPlan recipes sources yields (owned, bank)
-              (Formal.CraftPlanDriver.craftPlan recipes sources yields target qty innerFuel owned bank consumed fuel)).1 target :=
-  @Formal.CraftPlanDriver.craftPlan_reaches
-
 -- ─── LeafAttainable (acquisition-leaf attainability) anti-weakening pins ───
 -- VALIDITY: the decision is EXACTLY the 4-way source disjunction (weakening any
 -- term — e.g. dropping taskEarnable — fails to elaborate against this rfl).
@@ -3190,7 +3084,7 @@ example : ∀ (g : Graph), Closed g → ∀ (fuel : Nat) (path : List Nat) (i q 
       can g (fuel + 1) path i q = can g fuel path i q :=
   @Formal.ObtainModelSupply.can_fuel_stable
 
--- ─── Decompose (THE ONE WALK: feasibility + next step) anti-weakening pins ───
+-- ─── Decompose (THE ONE WALK: feasibility + next step, greedy fill) anti-weakening pins ───
 open Formal.Decompose in
 example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat),
     can g fuel path i q = true → ¬ q ≤ g.onHand i → (step g fuel path i q).isSome = true :=
@@ -3204,20 +3098,16 @@ example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat),
     step g fuel path i q = none ↔ (q ≤ g.onHand i ∨ can g fuel path i q = false) :=
   @Formal.Decompose.step_none_iff
 open Formal.Decompose in
-example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q j k d rn : Nat),
-    step g fuel path i q = some (.act j k d rn) →
-      ∃ r, (g.routes j)[k]? = some r ∧ r.gates = [] ∧ d ≤ r.cap ∧ 1 ≤ d ∧
-        rn = runs d r.yieldPer ∧ ∀ p ∈ r.inputs, rn * p.2 ≤ g.onHand p.1 :=
+example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q j k c rn : Nat),
+    step g fuel path i q = some (.act j k c rn) →
+      ∃ r, (g.routes j)[k]? = some r ∧ r.gates = [] ∧ 1 ≤ c ∧ c ≤ r.cap ∧
+        rn = runs c r.yieldPer ∧ ∀ p ∈ r.inputs, rn * p.2 ≤ g.onHand p.1 :=
   @Formal.Decompose.step_act_spec
 open Formal.Decompose in
 example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q j k gt : Nat),
     step g fuel path i q = some (.openGate j k gt) →
       ∃ r, (g.routes j)[k]? = some r ∧ r.gates.head? = some gt :=
   @Formal.Decompose.step_open_spec
-open Formal.Decompose in
-example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat),
-    can g fuel path i q = true → Supplied g i q :=
-  @Formal.Decompose.can_sound
 open Formal.Decompose in
 example : ∀ (g : Graph) (h : Nat → Nat), (∀ i, g.onHand i ≤ h i) →
     ∀ (fuel : Nat) (path : List Nat) (i q q' : Nat), q' ≤ q → can g fuel path i q = true →

@@ -62,10 +62,9 @@ class RecycleAction(Action):
     THE BOUND IS INVARIANT UNDER REPEATED APPLICATION, which is the whole point:
     `owned` (bag+bank) is unchanged by Withdraw/Deposit and drops by exactly
     `quantity` under `apply`, so N applications require `owned - N*quantity >=
-    owned_floor` — enforced step by step, in A*, in the shared craft-plan descent
-    (`craft_plan_driver_core` / `next_craft_core`, whose per-source `consumed` ledger
-    caps recycle cumulatively by the licensed budget) and across a cached multi-step
-    plan. `destroyable` bounds HOW MANY copies may
+    owned_floor` — enforced step by step, in A*, in the one walk (a RECYCLE
+    route's capacity is the licensed budget, capped at the copies held) and
+    across a cached multi-step plan. `destroyable` bounds HOW MANY copies may
     cease to exist; `bag_floor` bounds WHICH copies are reachable. Stamped at
     licence time (`destructive_license`) and at the two goal-side batch sites
     (`goals/recycle_surplus`, `disposal_route`). Default 0 = no floor."""

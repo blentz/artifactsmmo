@@ -203,8 +203,6 @@ import Formal.Liveness.GearTierLeveling
 import Formal.Liveness.WinnableGrounded
 import Formal.Liveness.WitnessAcquirable
 import Formal.DoomedMemo
-import Formal.NextCraftAction
-import Formal.CraftPlanDriver
 import Formal.CurrencyAffordFastFail
 import Formal.PlanModel
 import Formal.MinGatherStepsBound

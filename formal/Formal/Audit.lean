@@ -948,17 +948,6 @@ open Formal.PriorityBand
 #print axioms Formal.DoomedMemo.isDoomed_window
 #print axioms Formal.DoomedMemo.isDoomed_expires
 #print axioms Formal.DoomedMemo.escalation_grows_window
-#print axioms Formal.NextCraftAction.nextCraftTarget_none_iff
-#print axioms Formal.NextCraftAction.nextHelper_craft_inputs_satisfied
-#print axioms Formal.NextCraftAction.nextCraftTarget_qty_pos
-#print axioms Formal.NextCraftAction.nextHelper_withdraw_banked
-#print axioms Formal.NextCraftAction.nextHelper_withdraw_le_bank
-#print axioms Formal.NextCraftAction.nextCraftTarget_withdraw_banked
-#print axioms Formal.NextCraftAction.sourceQty_recycle_le_remaining
-#print axioms Formal.CraftPlanDriver.craftPlan_head
-#print axioms Formal.CraftPlanDriver.craftPlan_nil_iff
-#print axioms Formal.CraftPlanDriver.craftPlan_steps_valid
-#print axioms Formal.CraftPlanDriver.craftPlan_reaches
 #print axioms Formal.LeafAttainable.leafAttainable_iff_or
 #print axioms Formal.LeafAttainable.leafAttainable_task_earnable
 #print axioms Formal.LeafAttainable.leafAttainable_monotone_task
@@ -990,7 +979,6 @@ open Formal.PriorityBand
 #print axioms Formal.Decompose.step_none_iff
 #print axioms Formal.Decompose.step_act_spec
 #print axioms Formal.Decompose.step_open_spec
-#print axioms Formal.Decompose.can_sound
 #print axioms Formal.Decompose.can_mono
 #print axioms Formal.Decompose.can_fuel_stable
 #print axioms Formal.Decompose.step_fuel_stable

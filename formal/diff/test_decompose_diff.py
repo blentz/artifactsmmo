@@ -21,6 +21,8 @@ UNBOUNDED = 10**9
 
 _RouteT = tuple[int, int, int, list[tuple[int, int]], list[int]]
 _Graph = tuple[int, list[int], list[list[_RouteT]]]
+"""(n, bag, routes). A capped route plays a bank's WITHDRAW (or a licensed
+recycle): the greedy fill mixes it with the routes after it."""
 
 
 @st.composite
@@ -36,19 +38,18 @@ def _graph(draw: st.DrawFn) -> _Graph:
     return n, stock, routes
 
 
-def _table(graph: _Graph) -> tuple[dict[int, int], dict[int, list[Route]]]:
+def _table(graph: _Graph) -> tuple[dict[int, int], dict[int, list[Route[int]]]]:
     n, stock, routes = graph
-    on_hand = {i: stock[i] for i in range(n)}
     table = {i: [Route(tag, y, c, tuple(ins), tuple(gates)) for tag, y, c, ins, gates in routes[i]]
              for i in range(n)}
-    return on_hand, table
+    return {i: stock[i] for i in range(n)}, table
 
 
 def _encode(step: Step | None) -> object:
     if step is None:
         return None
     if isinstance(step, Act):
-        return {"act": [step.item, step.route, step.need, step.runs]}
+        return {"act": [step.item, step.route, step.amount, step.runs]}
     assert isinstance(step, OpenGate)
     return {"open": [step.item, step.route, step.gate]}
 
@@ -103,9 +104,11 @@ def test_the_differential_is_not_vacuous() -> None:
                     shapes.add("open")
                 elif step["act"][0] != i:
                     shapes.add("descended")
+                elif step["act"][2] < q - stock[i]:
+                    shapes.add("partial")
                 else:
                     shapes.add("act")
-    assert shapes == {"satisfied", "infeasible", "open", "descended", "act"}, shapes
+    assert shapes == {"satisfied", "infeasible", "open", "partial", "descended", "act"}, shapes
 
 
 def test_a_cut_answer_is_not_reused_on_both_sides() -> None:

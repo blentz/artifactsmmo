@@ -40,10 +40,9 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.combat import is_winnable
-from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.obtain_sources import obtain_source_map
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
@@ -222,14 +221,10 @@ def test_drop_leaf_recipe_generates_plan(
     craftable-with-drop-leaf recipe. Before GAP-8 every one of these
     returned None and rode the A* flood.
 
-    THE ACTIVATION (Task 4): the DROP leg now comes from the shared obtain
-    model, so the sweep builds the SAME `obtain_source_map` the live
-    `StrategyArbiter._plans` seam builds and threads it in — a 4-arg call
-    (no map) would lose exactly DROP/RECYCLE/BUY and regress every one of
-    these to None (the pre-GAP-8 A* flood)."""
+    The DROP leg comes from the shared obtain model through the one walk,
+    with the player's own per-cycle ctx, exactly as the live
+    `StrategyArbiter._plans` seam asks it."""
     bare, gd, actions, ctx = bare_sweep_env
     goal = GatherMaterialsGoal(code, {code: 1})
-    closure = _closure_items(dict(gd.crafting_recipes), code)
-    sources = obtain_source_map(closure, bare, gd, ctx)
-    plan = generate_next_craft_action(goal, bare, gd, actions, sources)
+    plan = decompose(goal, bare, gd, actions, ctx)
     assert plan, (code, plan)

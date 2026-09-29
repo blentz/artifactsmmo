@@ -12,12 +12,12 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
-from artifactsmmo_cli.ai.craft_plan_gen import _with_rearm, generate_next_craft_action
+from artifactsmmo_cli.ai.craft_plan_gen import _with_rearm, decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_craft_plan_gen import _ctx
 
 
 def _gd() -> GameData:
@@ -95,7 +95,7 @@ def test_generator_plan_prepends_rearm_when_tool_in_bag() -> None:
     state = make_state(x=2, y=0, inventory={"copper_pickaxe": 1},
                        equipment={"weapon_slot": "copper_dagger"},
                        skills={"mining": 12})
-    plan = generate_next_craft_action(goal, state, gd, _actions())
+    plan = decompose(goal, state, gd, _actions(), _ctx())
     assert plan is not None
     assert isinstance(plan[0], OptimizeLoadoutAction), [type(a).__name__ for a in plan]
     assert plan[0].target_skill == "mining"
@@ -121,18 +121,17 @@ def test_generator_rearms_AFTER_a_recycle_leg() -> None:
     gd._workshop_locations = {"mining": (5, 0), "gearcrafting": (6, 0)}
     goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 4})
     state = make_state(x=2, y=0,
-                       inventory={"copper_pickaxe": 1, "copper_helmet": 1},
+                       inventory={"copper_pickaxe": 1, "copper_helmet": 2},
                        equipment={"weapon_slot": "copper_dagger"},
                        skills={"mining": 12, "gearcrafting": 5})
     actions = [*_actions(),
                RecycleAction(code="copper_helmet", quantity=1,
                              workshop_location=(6, 0))]
-    # One copper_helmet recycle recovers max(1, 6 // 2) = 3 bars — a licensed
-    # RECYCLE source for copper_bar, standing in for what
-    # `obtain_source_map` would derive from the licensed pool.
-    sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_helmet", 3, 3)]}
+    # One copper_helmet recycle recovers max(1, 6 // 2) = 3 bars. Two copies:
+    # the keep authority keeps one for the empty helmet slot and licenses the
+    # other, the licence the walk reads.
 
-    plan = generate_next_craft_action(goal, state, gd, actions, sources)
+    plan = decompose(goal, state, gd, actions, _ctx())
 
     assert plan is not None
     kinds = [type(a).__name__ for a in plan]
@@ -147,7 +146,6 @@ def test_generator_rearms_AFTER_a_recycle_leg() -> None:
 
 
 def test_generator_plan_unchanged_when_loadout_already_optimal() -> None:
-    from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
     gd = _gd()
     gd._item_stats["copper_bar"] = ItemStats(
         code="copper_bar", level=1, type_="resource",
@@ -157,7 +155,7 @@ def test_generator_plan_unchanged_when_loadout_already_optimal() -> None:
     goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
     state = make_state(x=2, y=0, equipment={"weapon_slot": "copper_pickaxe"},
                        skills={"mining": 12})
-    plan = generate_next_craft_action(goal, state, gd, _actions())
+    plan = decompose(goal, state, gd, _actions(), _ctx())
     assert plan is not None
     assert isinstance(plan[0], GatherAction), [type(a).__name__ for a in plan]
 

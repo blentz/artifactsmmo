@@ -170,15 +170,16 @@ def test_deleting_the_gather_arm_turns_the_gather_cell_red(
         bundle_game_data: GameData, monkeypatch: pytest.MonkeyPatch) -> None:
     """A SECOND witness, biting a different check arm and a different kind: delete
     the GATHER arm and the GATHER cell fails POOL⊆MODEL — the applicable pool still
-    gathers copper_ore, the model no longer names GATHER. (The descent gathers via
-    `game_data.gatherable_drop_items`, not the source map, so PLAN PARITY still
-    holds — proving POOL⊆MODEL bites independently.)"""
+    gathers copper_ore, the model no longer names GATHER. PLAN PARITY fails with
+    it now: the old descent gathered via `game_data.gatherable_drop_items`, a
+    second authority beside the model, so it kept gathering; the one walk
+    (Phase 2c-2b) reads only the model, so without the arm there is no plan."""
     monkeypatch.setattr(ObtainModel, "_gather", lambda *a, **k: [])
 
     r = _result(bundle_game_data, ParitySourceKind.GATHER)
     assert not r.passed
     assert r.pool_subset_model is False
-    assert r.plan_parity is True
+    assert r.plan_parity is False
     assert r.model_kinds == ()
     assert r.pool_applicable_kinds == ("gather",)
 

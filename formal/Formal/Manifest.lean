@@ -20,7 +20,6 @@ import Formal.WithdrawSetExpansion
 import Formal.RecycleProtection
 import Formal.BankExpansionTiming
 import Formal.LoadoutProfiles
-import Formal.CraftPlanDriver
 import Formal.DoomedMemo
 import Formal.LeafAttainable
 import Formal.ObtainModelReady
@@ -1202,22 +1201,6 @@ open Formal.PriorityBand
 #check @Formal.DoomedMemo.isDoomed_expires         -- liveness: window elapsed ⇒ not doomed
 #check @Formal.DoomedMemo.escalation_grows_window  -- same-sig re-mark never shrinks window
 
--- NextCraftAction required roles (next_craft_target_pure; churn fix;
--- src/artifactsmmo_cli/ai/next_craft_core.py):
-#check @Formal.NextCraftAction.nextCraftTarget_none_iff        -- validity: none ↔ qty ≤ owned target
-#check @Formal.NextCraftAction.nextHelper_craft_inputs_satisfied -- ordering: craft ⇒ all inputs on hand
-#check @Formal.NextCraftAction.nextCraftTarget_qty_pos          -- shortness: returned qty ≥ 1
-#check @Formal.NextCraftAction.nextHelper_withdraw_banked       -- withdraw ⇒ item genuinely banked
-#check @Formal.NextCraftAction.nextHelper_withdraw_le_bank      -- withdraw ⇒ qty ≤ bank held
-#check @Formal.NextCraftAction.nextCraftTarget_withdraw_banked  -- entry-level: withdraw ⇒ item banked
-#check @Formal.NextCraftAction.sourceQty_recycle_le_remaining   -- recycle-cap: qty ≤ remaining licensed capacity (cumulative)
-
--- CraftPlanDriver required roles (full-plan driver; craft_plan_driver_core.py):
-#check @Formal.CraftPlanDriver.craftPlan_head          -- head = proven single step (B1)
-#check @Formal.CraftPlanDriver.craftPlan_nil_iff       -- empty plan ⇔ target already satisfied
-#check @Formal.CraftPlanDriver.craftPlan_steps_valid   -- every step is a genuine nextCraftTarget output
-#check @Formal.CraftPlanDriver.craftPlan_reaches       -- completion-correctness: complete plan reaches target
-
 -- LeafAttainable required roles (acquisition-leaf attainability;
 -- src/artifactsmmo_cli/ai/tiers/leaf_attainable_core.py + tiers/objective.py is_attainable):
 #check @Formal.LeafAttainable.leafAttainable_iff_or          -- validity: decision = disjunction
@@ -1260,7 +1243,6 @@ open Formal.PriorityBand
 #check @Formal.Decompose.step_none_iff        -- validity: no step ⇔ satisfied or infeasible
 #check @Formal.Decompose.step_act_spec        -- safety: act only on a ready route delivering the deficit, inputs on hand, runs = ⌈need/yield⌉
 #check @Formal.Decompose.step_open_spec       -- safety: open only the first gate of the route it blocks
-#check @Formal.Decompose.can_sound            -- validity: a yes has a finite supply tree
 #check @Formal.Decompose.can_mono             -- monotone: more held / fewer wanted never harder
 #check @Formal.Decompose.can_fuel_stable      -- termination: n + 1 fuel is the unbounded feasibility answer
 #check @Formal.Decompose.step_fuel_stable     -- termination: n + 1 fuel is the unbounded next step

@@ -2,8 +2,7 @@
 gate).
 
 THE LOAD-BEARING GATE. The bot has TWO plan producers: the O(closure) descent
-(`craft_plan_gen.generate_next_craft_action` → `craft_plan_driver_core.
-craft_plan_full`) and the GOAP A* search (`planner.GOAPPlanner`). They used to
+(`craft_plan_gen.decompose`, the one walk) and the GOAP A* search (`planner.GOAPPlanner`). They used to
 carry TWO different models of how a material can be obtained, and that divergence
 shipped SEVEN GREEN COMMITS that were INERT in production — the recycle route
 reached A* but not the descent, so for any roomy bag the descent answered first
@@ -36,14 +35,12 @@ THE THREE CHECKS. For a grid of (material, world-state) cells, one per
   * PLAN PARITY — for a goal both producers can serve, the descent's plan and
     A*'s plan must use the SAME SET of source KINDS.
 
-THE WITHDRAW CARVEOUT (a KNOWN, LEGITIMATE asymmetry from Task 4 — NOT a bug).
-The descent DELIBERATELY does not consume WITHDRAW `Source`s from the shared map
-(`craft_plan_gen` strips them): a WITHDRAW `Source` carries a STATIC capacity
-(the bank count at snapshot) that would over-withdraw a banked recipe-LESS target
-past what the bank holds, so the proven descent instead withdraws recipe INPUTS
-with LIVE-bank accounting (`next_craft_core._next`). So `obtain_sources` EMITS a
-WITHDRAW source that the descent serves via a DIFFERENT mechanism (its own
-recipe-input withdraw), not via a map WITHDRAW leg. Consequently WITHDRAW cannot
+THE WITHDRAW CARVEOUT (historical; a follow-up now that the one walk landed).
+The OLD descent did not consume WITHDRAW sources (it withdrew recipe inputs
+through its own recipe descent instead), so WITHDRAW could not be compared
+kind-for-kind. The one walk (Phase 2c-2b) withdraws through the model's
+WITHDRAW route like any other, so the carveout's reason is gone; removing it is
+a follow-up measured on its own, since it changes what the census compares. Consequently WITHDRAW cannot
 be compared kind-for-kind across the producers and is EXCLUDED from all three
 checks (pool kinds, model kinds, and both plans). THE CARVEOUT IS NARROW —
 WITHDRAW ONLY. Every other kind (RECYCLE/BUY/DROP/GATHER/CRAFT) is compared in
@@ -82,14 +79,13 @@ from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-from artifactsmmo_cli.ai.craft_plan_gen import _closure_items, generate_next_craft_action
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.obtain_sources import (
     SourceKind,
-    obtain_source_map,
     obtain_sources,
 )
 from artifactsmmo_cli.ai.planner import GOAPPlanner
@@ -165,9 +161,9 @@ WITHDRAW_MATERIAL = "copper_bar"
 WITHDRAW_NEEDED = 3
 WITHDRAW_BANK = {"copper_ore": 30}
 """THE WITHDRAW-CARVEOUT CELL. The recipe INPUT `copper_ore` sits in the bank, so
-`obtain_sources(copper_ore)` names a WITHDRAW source — which the descent serves
-via its OWN recipe-input withdraw (`next_craft_core._next`), NOT via the stripped
-map WITHDRAW source. Both producers emit `[Withdraw(copper_ore), Craft(copper_bar)]`;
+`obtain_sources(copper_ore)` names a WITHDRAW source, which the one walk serves
+through that same WITHDRAW route (the old descent used its own input withdraw).
+Both producers emit `[Withdraw(copper_ore), Craft(copper_bar)]`;
 after WITHDRAW is carved out of both, the compared kind-sets are {CRAFT} == {CRAFT}.
 This is the exact scenario the carveout exists for."""
 
@@ -525,14 +521,11 @@ def pool_kinds(material: str, goal: Goal, licensed: list[Action],
 def descent_plan(goal: GatherMaterialsGoal, licensed: list[Action],
                  ctx: SelectionContext, state: WorldState,
                  game_data: GameData) -> list[Action]:
-    """The O(closure) descent's plan for `goal` — production's first producer,
-    driven on the LICENSED pool and the bound-ctx source map exactly as
-    `StrategyArbiter._plans` drives it. Empty when the descent declines (returns
-    None)."""
-    closure = _closure_items(dict(game_data.crafting_recipes), goal.needed)
-    sources = obtain_source_map(closure, state, game_data, ctx)
-    return generate_next_craft_action(
-        goal, state, game_data, licensed, sources) or []
+    """The route-driven producer's plan for `goal` — production's first
+    producer (`craft_plan_gen.decompose`, the one walk), driven on the LICENSED
+    pool with the bound ctx exactly as `StrategyArbiter._plans` drives it. Empty
+    when it declines (returns None)."""
+    return decompose(goal, state, game_data, licensed, ctx) or []
 
 
 def astar_plan(goal: Goal, licensed: list[Action], state: WorldState,

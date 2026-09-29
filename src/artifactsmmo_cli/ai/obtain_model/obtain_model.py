@@ -25,12 +25,16 @@ Built once per decision from one `(state, game_data, ctx, now)` snapshot, and
 memoised per item for its lifetime. Pure: no I/O.
 """
 
+from collections.abc import Callable
 from datetime import datetime
 
 from artifactsmmo_cli.ai import accumulation_sell
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.decompose_core import Route as WalkRoute
+from artifactsmmo_cli.ai.decompose_core import can_obtain, next_step
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_selection import GatherCandidate, rank_gather_sources
 from artifactsmmo_cli.ai.inventory_keep import destroyable
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes, gold_drop_routes
 from artifactsmmo_cli.ai.obtain_model.feasibility import Feasibility
@@ -39,6 +43,7 @@ from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.obtain_model.supply_core import Supply, can_supply
+from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
@@ -136,6 +141,106 @@ class ObtainModel:
             for x, per_application in supply.inputs
             if not can_supply(x, -(-qty // supply.yield_per) * per_application, on_hand, supplies)))
         return Feasibility(ok=False, blocking_gates=gates, missing_inputs=missing)
+
+    def walk_graph(self, item: str, policy: Policy,
+                   produce: frozenset[str] = frozenset(),
+                   openable: Callable[[Gate], bool] = lambda _gate: False,
+                   keep: frozenset[str] = frozenset()) -> WalkGraph:
+        """`item`'s closure as the one walk's graph (Phase 2c-2b).
+
+        On hand is the bag (the inventory, with gold as the pocket). Every ready
+        route under `policy` is a walk route, in priority order, the walk's
+        greedy fill mixing them: a WITHDRAW route's capacity is the bank's
+        stock, so banked copies are withdrawn and the rest produced. A RECYCLE
+        or SELL route consumes one copy of the item it destroys or sells per
+        application, so that copy is its input (a banked copy is withdrawn
+        first), and its capacity is capped at the copies held, so the walk never
+        makes a copy in order to destroy it.
+
+        `produce` names items the goal must MAKE, not merely hold: a skill
+        grind's rung, whose XP is in the craft. Their owned-copy routes
+        (WITHDRAW, RECYCLE) are dropped wherever they occur: withdrawing a
+        banked rung would satisfy the count and earn nothing (the held-rung
+        livelock). `keep` names items no RECYCLE or SELL may destroy as a
+        source: the goal's own target (recycling a held copper_ring for the bar
+        to craft a copper_ring is a null cycle) and every `produce` item.
+
+        `openable` says which unmet gates an action can open (a skill gate a
+        grind can raise). A route `policy` offers whose every unmet enforced
+        gate is openable joins the walk AFTER the ready routes, carrying those
+        gates: the walk then opens them first, as a sub-task, and only when
+        nothing ready serves (Phase 2c-2c)."""
+        bag: dict[str, int] = dict(self._state.inventory)
+        bag[GOLD_CODE] = self._state.gold
+        bank = self._state.bank_items or {}
+        routes: dict[str, tuple[WalkRoute[str], ...]] = {}
+        sources: dict[str, tuple[Route, ...]] = {}
+        pending = [item]
+        while pending:
+            code = pending.pop()
+            if code in routes:
+                continue
+            walk: list[WalkRoute[str]] = []
+            behind: list[Route] = []
+            ready = self.ready(code, policy)
+            gated: list[tuple[Route, tuple[Gate, ...]]] = []
+            for route in self.routes(code):
+                if not policy.admits(route) or route in ready:
+                    continue
+                unmet = tuple(gate for gate in route.gates
+                              if policy.enforces(gate, route) and not gate.satisfied)
+                if unmet and all(openable(gate) for gate in unmet):
+                    gated.append((route, unmet))
+            candidates = [(route, ()) for route in self._ranked_gathers(code, ready)] + gated
+            for route, gates in candidates:
+                if code in produce and route.kind in (SourceKind.WITHDRAW, SourceKind.RECYCLE):
+                    continue
+                if route.kind in (SourceKind.RECYCLE, SourceKind.SELL) and route.via in (keep | produce):
+                    continue
+                inputs = tuple(route.inputs.items())
+                capacity = route.capacity
+                if route.kind in (SourceKind.RECYCLE, SourceKind.SELL):
+                    inputs = ((route.via, 1),)
+                    copies = bag.get(route.via, 0) + bank.get(route.via, 0)
+                    capacity = min(capacity, copies * route.yield_per)
+                walk.append(WalkRoute(len(walk), route.yield_per, capacity, inputs, gates))
+                behind.append(route)
+            routes[code] = tuple(walk)
+            sources[code] = tuple(behind)
+            pending.extend(x for w in walk for x, _per in w.inputs)
+        return WalkGraph(bag, routes, sources)
+
+    def _ranked_gathers(self, item: str, ready: tuple[Route, ...]) -> list[Route]:
+        """`ready` with its GATHER routes (contiguous in priority order) ranked
+        by the proved gather-source order (`gather_selection`, expected gathers
+        per unit, then distance to the nearest tile, then code), so the walk's
+        first gather is the one `select_gather_source` picks; every other route
+        keeps its place."""
+        gathers = [route for route in ready if route.kind is SourceKind.GATHER]
+        if len(gathers) < 2:
+            return list(ready)
+        candidates: list[GatherCandidate] = []
+        for route in gathers:
+            # A resource known only from the primary-drop map has no drop-table
+            # row; `_gather` rates it 1 (a sure drop), so the candidate does too.
+            row = next((r for r in self._gd.resource_drop_table(route.via) if r[0] == item),
+                       (item, 1, 1, 1))
+            tiles = self._gd.all_resource_locations.get(route.via) or []
+            distance = min((abs(x - self._state.x) + abs(y - self._state.y) for x, y in tiles), default=0)
+            candidates.append(GatherCandidate(route.via, row[1], row[2], row[3], distance))
+        by_resource = {route.via: route for route in gathers}
+        ranked = iter([by_resource[code] for code in rank_gather_sources(candidates)])
+        return [next(ranked) if route.kind is SourceKind.GATHER else route for route in ready]
+
+    def walk(self, item: str, qty: int, policy: Policy,
+             produce: frozenset[str] = frozenset(),
+             openable: Callable[[Gate], bool] = lambda _gate: False,
+             keep: frozenset[str] = frozenset()) -> WalkAnswer:
+        """The one walk over `item`'s closure: can `qty` be had, and the next
+        step toward it (`decompose_core`)."""
+        graph = self.walk_graph(item, policy, produce, openable, keep)
+        return WalkAnswer(can_obtain(item, qty, graph.on_hand, graph.routes),
+                          next_step(item, qty, graph.on_hand, graph.routes), graph)
 
     def on_hand(self, item: str, policy: Policy) -> int:
         """Units of `item` available from what the character already owns: the

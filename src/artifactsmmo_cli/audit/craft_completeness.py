@@ -97,8 +97,8 @@ def plan_craft(recipe: str, state: WorldState,
     from `state`.
 
     Drives `StrategyArbiter._plans` — the EXACT per-goal planning seam the live
-    bot runs: the `is_plannable` reachability gate, the directed craft generator
-    fast path (`generate_next_craft_action`, nodes=0), AND the A* fallback, in
+    bot runs: the `is_plannable` reachability gate, the route-driven fast path
+    (`craft_plan_gen.decompose`, the one walk, nodes=0), AND the A* fallback, in
     that order. It deliberately does NOT call the raw `GOAPPlanner` (a
     sub-component the live bot never invokes directly): a census that re-planned
     through a lower layer, or re-implemented the generator/A* ordering itself,

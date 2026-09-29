@@ -26,7 +26,6 @@ its STATE-FREE counterpart, and their relationship is asserted
 (`tests/test_audit/test_obtain_graph_agreement.py`).
 """
 
-from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -84,15 +83,6 @@ def obtain_sources(
     `policy` is LEGACY, the executor's readiness, unless a caller prices under
     its own (the skill grind's ranking treats a gathering-skill gate as open)."""
     return _sources(ObtainModel(state, game_data, ctx, datetime.now(UTC)), item, policy)
-
-
-def obtain_source_map(
-    items: Iterable[str], state: WorldState, game_data: GameData, ctx: SelectionContext
-) -> dict[str, list[Source]]:
-    """`obtain_sources` over a whole closure of items, keyed by item code. One
-    model serves every item, so routes shared along the closure are built once."""
-    model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
-    return {item: _sources(model, item) for item in items}
 
 
 def has_non_craft_source(

@@ -12,8 +12,10 @@ Covers:
 """
 
 import dataclasses
+from datetime import UTC, datetime
 from unittest.mock import patch
 
+from artifactsmmo_cli.ai import craft_plan_gen
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -23,11 +25,14 @@ from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import is_winnable
-from artifactsmmo_cli.ai.craft_plan_gen import _map_next_action, decompose, generate_next_craft_action
+from artifactsmmo_cli.ai.craft_plan_gen import DECOMPOSE_POLICY, decompose
+from artifactsmmo_cli.ai.decompose_core import Act
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
-from artifactsmmo_cli.ai.next_craft_core import NextAction
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
+from artifactsmmo_cli.ai.obtain_model.route import Route
+from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkGraph
 from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
@@ -70,6 +75,9 @@ def _gd_copper_ring() -> GameData:
         "copper_ring": {"copper_bar": 1},
     }
     gd._resource_drops = {"copper_rocks": "copper_ore"}
+    # The tile the pool's gather stands on: a gather with no known tile is no
+    # ready route for the one walk (the old descent never asked).
+    gd._resource_locations = {"copper_rocks": [(0, 1)]}
     gd._workshop_locations = {"mining": (1, 5), "jewelrycrafting": (3, 1)}
     gd._bank_location = (4, 0)
     gd._taskmaster_location = (1, 2)
@@ -122,7 +130,7 @@ class TestCopperRingGatherPhase:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = _copper_ring_actions()
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None, "Expected a plan, not None (A* fallback)"
         assert isinstance(result[0], GatherAction)
@@ -137,7 +145,7 @@ class TestCopperRingGatherPhase:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = _copper_ring_actions()
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert isinstance(result[0], CraftAction)
@@ -152,7 +160,7 @@ class TestCopperRingGatherPhase:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = _copper_ring_actions()
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert len(result) == 1
@@ -196,7 +204,7 @@ class TestFullSlotsDefersToAStar:
         assert isinstance(gather, GatherAction)
         assert gather.is_applicable(state, gd) is False
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is None, (
             "a full-slot state whose first leg (new-stack gather) is not "
@@ -219,7 +227,7 @@ class TestFullSlotsDefersToAStar:
 
         assert state.inventory_slots_free == 1
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None, "room for the new stack → generator must fire"
         assert isinstance(result[0], GatherAction)
@@ -241,7 +249,7 @@ class TestWithdrawsBankedIntermediate:
             WithdrawItemAction(code="copper_bar", quantity=1, bank_location=(4, 0)),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert isinstance(result[0], WithdrawItemAction)
@@ -251,20 +259,21 @@ class TestWithdrawsBankedIntermediate:
     def test_a_withdraw_the_pool_lacks_is_built_at_the_bank(self):
         """Banked bar but no WithdrawItemAction in the pool: the static pool
         builds withdraws only for equippable chains, so decomposition builds the
-        one it needs at the bank tile (Phase 2b). A locked bank makes that leg
-        inapplicable, and the generator declines."""
+        one it needs at the bank tile (Phase 2b). With the bank locked the
+        banked bar is out of reach: the walk produces the bar instead."""
         gd = _gd_copper_ring()
         state = make_state(inventory={}, bank_items={"copper_bar": 5},
                            skills={"mining": 5, "jewelrycrafting": 5})
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = _copper_ring_actions()  # no WithdrawItemAction surfaced
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None and isinstance(result[0], WithdrawItemAction)
         assert (result[0].code, result[0].quantity) == ("copper_bar", 1)
         assert result[0].bank_location == gd.bank_location() and result[0].accessible
-        assert generate_next_craft_action(goal, state, gd, actions, bank_accessible=False) is None
+        locked = decompose(goal, state, gd, actions, _ctx(bank_accessible=False))
+        assert locked is not None and isinstance(locked[0], GatherAction)
 
 
 class TestWithdrawClampedToBankStock:
@@ -290,7 +299,7 @@ class TestWithdrawClampedToBankStock:
             WithdrawItemAction(code="copper_bar", quantity=1, bank_location=(4, 0)),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         first = result[0]
@@ -315,7 +324,7 @@ class TestSatisfiedGoalReturnsNone:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = _copper_ring_actions()
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is None
 
@@ -331,7 +340,7 @@ class TestMonsterDropLeafFallsBack:
         # No GatherAction for feather (there is no resource node for it).
         actions = [CraftAction(code="feather_coat", workshop_location=(3, 1))]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is None, "Monster-drop leaf must fall back to A*"
 
@@ -345,7 +354,7 @@ class TestMonsterDropLeafFallsBack:
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
         actions = [CraftAction(code="feather_coat", workshop_location=(3, 1))]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert [(type(a).__name__, a.code) for a in result] == [("CraftAction", "feather_coat")]
@@ -360,7 +369,7 @@ class TestMonsterDropLeafFallsBack:
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
         actions = [CraftAction(code="feather_coat", workshop_location=(3, 1))]
 
-        assert generate_next_craft_action(goal, state, gd, actions) is None
+        assert decompose(goal, state, gd, actions, _ctx()) is None
 
     def test_a_sourceless_leaf_held_in_the_bank_withdraws(self):
         gd = _gd_monster_drop()
@@ -369,7 +378,7 @@ class TestMonsterDropLeafFallsBack:
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
         actions = [CraftAction(code="feather_coat", workshop_location=(3, 1))]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert [type(a).__name__ for a in result] == ["WithdrawItemAction", "CraftAction"]
@@ -386,7 +395,7 @@ class TestUnmetSkillGateFallsBack:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = _copper_ring_actions()
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is None, "Unmet skill gate must fall back to A*"
 
@@ -419,7 +428,7 @@ class TestUnmetSkillGateFallsBack:
         assert lvl.is_applicable(state, gd)
         actions = [*_copper_ring_actions(), lvl]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result == [lvl], "Unmet gate + applicable grind must emit the LevelSkill leg"
 
@@ -432,7 +441,7 @@ class TestUnmetSkillGateFallsBack:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = _copper_ring_actions()
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None, "Exactly-met skill gate should not fall back to A*"
 
@@ -446,6 +455,7 @@ class TestMissingItemStatsOrWorkshopFallsBack:
         gd._item_stats = {}  # No stats for copper_ring.
         gd._crafting_recipes = {"copper_ring": {"copper_ore": 6}}
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_locations = {"copper_rocks": [(0, 1)]}
         gd._workshop_locations = {"jewelrycrafting": (3, 1)}
         gd._bank_location = (4, 0)
         gd._taskmaster_location = (1, 2)
@@ -459,7 +469,7 @@ class TestMissingItemStatsOrWorkshopFallsBack:
             CraftAction(code="copper_ring", workshop_location=(3, 1)),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is None, "Missing ItemStats must fall back to A*"
 
@@ -474,7 +484,7 @@ class TestMissingItemStatsOrWorkshopFallsBack:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = _copper_ring_actions()
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is None, "Missing workshop must fall back to A*"
 
@@ -485,13 +495,13 @@ class TestNonGatherMaterialsGoalReturnsNone:
     def test_wait_goal_returns_none(self):
         gd = _gd_copper_ring()
         state = make_state(inventory={}, bank_items={})
-        result = generate_next_craft_action(WaitGoal(), state, gd, [])
+        result = decompose(WaitGoal(), state, gd, [], _ctx())
         assert result is None
 
     def test_plain_object_returns_none(self):
         gd = _gd_copper_ring()
         state = make_state(inventory={}, bank_items={})
-        result = generate_next_craft_action(object(), state, gd, [])
+        result = decompose(object(), state, gd, [], _ctx())
         assert result is None
 
 
@@ -525,6 +535,7 @@ class TestSharedIntermediateClosure:
             "copper_amulet": {"copper_bar": 2},  # copper_ore reachable via TWO paths
         }
         gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_locations = {"copper_rocks": [(0, 1)]}
         gd._workshop_locations = {"mining": (1, 5), "jewelrycrafting": (3, 1)}
         gd._bank_location = (4, 0)
         gd._taskmaster_location = (1, 2)
@@ -544,7 +555,7 @@ class TestSharedIntermediateClosure:
             CraftAction(code="copper_amulet", workshop_location=(3, 1)),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         # Should generate a gather action (ore needed), not fall back to A*.
         assert result is not None
@@ -567,7 +578,7 @@ class TestNoMatchingActionFallsBack:
             CraftAction(code="copper_ring", workshop_location=(3, 1)),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is None
 
@@ -584,7 +595,7 @@ class TestNoMatchingActionFallsBack:
             CraftAction(code="copper_ring", workshop_location=(3, 1)),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is None
 
@@ -655,15 +666,15 @@ class TestStrategyArbiterIntegration:
         assert _SpyPlanner.calls == 1, "Planner must be invoked for monster-drop goal"
 
     def test_banked_target_still_generates(self) -> None:
-        """Banked TARGET (finished output) → generator fires, does NOT fall back.
+        """Banked TARGET → the walk WITHDRAWS it and makes only the rest.
 
-        Issue #1 regression guard: the old blanket gate fired when copper_ring was
-        in the bank, even though copper_ring is the OUTPUT (not an input needing
-        withdraw).  The precise gate skips top-level needed keys.
+        Issue #1 regression guard (the generator must not fall back), restated
+        for the one walk (Phase 2c-2b): the banked copy of the target itself is
+        withdrawn, like any banked copy (the old descent credited it and left it
+        in the bank, the banked-target discrepancy), and the rest is made.
 
-        Setup: needed={copper_ring:2}, bank has copper_ring:1 (one already banked),
-        inventory has no ore → generator should emit GatherAction(copper_rocks) to
-        make the remaining ring from scratch.
+        Setup: needed={copper_ring:2}, bank has copper_ring:1, no ore → withdraw
+        the ring, then gather ore for the second.
         """
         gd = _gd_copper_ring()
         state = make_state(
@@ -674,15 +685,15 @@ class TestStrategyArbiterIntegration:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 2})
         actions = _copper_ring_actions()
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None, (
             "Banked target (output) must NOT cause A* fallback — "
             "generator should make the remaining quantity from scratch"
         )
-        # Full plan re-makes the remaining ring: gather ore first, craft ring last.
-        assert isinstance(result[0], GatherAction)
-        assert result[0].resource_code == "copper_rocks"
+        assert isinstance(result[0], WithdrawItemAction)
+        assert (result[0].code, result[0].quantity) == ("copper_ring", 1)
+        assert isinstance(result[1], GatherAction) and result[1].resource_code == "copper_rocks"
         assert isinstance(result[-1], CraftAction) and result[-1].code == "copper_ring"
 
     def test_surplus_banked_input_inventory_covers_generates(self) -> None:
@@ -704,7 +715,7 @@ class TestStrategyArbiterIntegration:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = _copper_ring_actions()
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None, (
             "Surplus banked input (inventory covers requirement) must NOT cause "
@@ -727,7 +738,7 @@ class TestStrategyArbiterIntegration:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = _copper_ring_actions()
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert [type(a).__name__ for a in result] == ["WithdrawItemAction", "CraftAction"]
@@ -745,7 +756,7 @@ class TestStrategyArbiterIntegration:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = _copper_ring_actions()
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         # Bar is in inventory → generator can directly emit CraftAction(copper_ring).
         assert result is not None, "Inventory-held bar must not trigger A* fallback"
@@ -781,6 +792,7 @@ def _gd_copper_dagger() -> GameData:
         "copper_dagger": {"copper_bar": 6},
     }
     gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_locations = {"copper_rocks": [(0, 1)]}
     gd._workshop_locations = {"mining": (1, 5), "weaponcrafting": (3, 1)}
     gd._bank_location = (4, 0)
     gd._taskmaster_location = (1, 2)
@@ -807,7 +819,7 @@ class TestIntermediateCraftSizedInGenerator:
             CraftAction(code="copper_dagger", workshop_location=(3, 1)),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None, "expected a plan, not None (A* fallback)"
         assert isinstance(result[0], CraftAction) and result[0].code == "copper_bar", (
@@ -936,8 +948,7 @@ class TestDropLeafFightLeg:
         state = _fighter_state()
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
 
-        result = generate_next_craft_action(goal, state, gd, _drop_leaf_actions(),
-                                           _FEATHER_DROP_SOURCES)
+        result = decompose(goal, state, gd, _drop_leaf_actions(), _ctx())
 
         assert result is not None, "winnable dropper must not fall back to A*"
         assert len(result) == 1, result
@@ -958,6 +969,7 @@ class TestDropLeafFightLeg:
             "feather_coat": {"ash_wood": 2, "feather": 1},
         }
         gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._resource_locations = {"ash_tree": [(0, 2)]}
         state = _fighter_state(skills={"gearcrafting": 5, "woodcutting": 1})
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
         actions = [
@@ -965,8 +977,7 @@ class TestDropLeafFightLeg:
             *_drop_leaf_actions(),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions,
-                                           _FEATHER_DROP_SOURCES)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert [type(a).__name__ for a in result] == \
@@ -989,8 +1000,7 @@ class TestDropLeafFightLeg:
         state = _fighter_state(level=12)
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
 
-        result = generate_next_craft_action(goal, state, gd, _drop_leaf_actions(),
-                                           _FEATHER_DROP_SOURCES)
+        result = decompose(goal, state, gd, _drop_leaf_actions(), _ctx())
 
         assert result is not None, "grey-farm-allowed dropper must generate"
         assert isinstance(result[0], FightAction)
@@ -1004,7 +1014,7 @@ class TestDropLeafFightLeg:
         state = _fighter_state()
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
 
-        result = generate_next_craft_action(goal, state, gd, _drop_leaf_actions())
+        result = decompose(goal, state, gd, _drop_leaf_actions(), _ctx())
 
         assert result is None, "unwinnable dropper must fall back to A*"
 
@@ -1031,7 +1041,7 @@ class TestDropLeafFightLeg:
         assert gd.xp_per_kill("chicken", state.level) > 0
         assert fight.is_applicable(state, gd) is False
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is None, (
             "a stat-winnable dropper that violates the level+2 suicide "
@@ -1052,8 +1062,7 @@ class TestDropLeafFightLeg:
                                bank_location=(4, 0)),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions,
-                                           _FEATHER_DROP_SOURCES)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert [type(a).__name__ for a in result] == \
@@ -1090,8 +1099,7 @@ class TestDropLeafSuboptimalLoadoutRearm:
         assert fight._structurally_applicable(state, gd) is True
         assert fight.is_applicable(state, gd) is False
 
-        result = generate_next_craft_action(goal, state, gd, actions,
-                                           _FEATHER_DROP_SOURCES)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None, (
             "a structurally-fine dropper with only a loadout mismatch must "
@@ -1122,8 +1130,7 @@ class TestDropLeafSuboptimalLoadoutRearm:
         assert isinstance(fight, FightAction)
         assert fight.is_applicable(state, gd) is True
 
-        result = generate_next_craft_action(goal, state, gd, actions,
-                                           _FEATHER_DROP_SOURCES)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert [type(a).__name__ for a in result] == ["FightAction"], result
@@ -1178,17 +1185,16 @@ class TestRecycleAsASource:
     def test_bag_surplus_is_recycled_instead_of_gathered(self):
         """3 copper_bar needed, a spare copper_dagger in the bag: ONE recycle
         recovers exactly 3 bars, so the plan must dismantle it rather than mine
-        30 copper_ore. `sources` stands in for what `obtain_source_map` would
-        derive from the licensed RecycleAction pool."""
+        30 copper_ore. Two daggers: the keep authority protects the last weapon
+        and licenses the other, which is the licence the walk reads."""
         gd = _gd_recyclable()
-        state = make_state(inventory={"copper_dagger": 1}, bank_items={},
+        state = make_state(inventory={"copper_dagger": 2}, bank_items={},
                            skills={"mining": 5, "weaponcrafting": 5})
         goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2)))
-        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 3)]}
 
-        result = generate_next_craft_action(goal, state, gd, actions, sources)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert [type(a).__name__ for a in result] == ["RecycleAction"], result
@@ -1203,7 +1209,7 @@ class TestRecycleAsASource:
                            skills={"mining": 5, "weaponcrafting": 5})
         goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
 
-        result = generate_next_craft_action(goal, state, gd, _bar_actions())
+        result = decompose(goal, state, gd, _bar_actions(), _ctx())
 
         assert result is not None
         assert isinstance(result[0], GatherAction)
@@ -1223,9 +1229,8 @@ class TestRecycleAsASource:
         goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2)))
-        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 6)]}
 
-        result = generate_next_craft_action(goal, state, gd, actions, sources)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         # Withdraw(copper_dagger) staged strictly before Recycle(copper_dagger).
@@ -1255,9 +1260,8 @@ class TestRecycleAsASource:
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2),
                                              bag_floor=1))
-        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 9)]}
 
-        result = generate_next_craft_action(goal, state, gd, actions, sources)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is None, (
             "the bag-floor-protected copy must never be recycled; the "
@@ -1296,9 +1300,8 @@ class TestRecycleAsASource:
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2),
                                              owned_floor=1))
-        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 3)]}
 
-        result = generate_next_craft_action(goal, state, gd, actions, sources)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert isinstance(result[0], RecycleAction)
@@ -1339,7 +1342,7 @@ class TestRecycleAsASource:
                           workshop_location=(3, 1)),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert not any(isinstance(a, RecycleAction) for a in result), result
@@ -1349,15 +1352,14 @@ class TestRecycleAsASource:
         """6 bars needed, one dagger recovers 3: the plan recycles for what it
         can and GATHERS the rest — the mixed plan A* cannot find within budget."""
         gd = _gd_recyclable()
-        state = make_state(inventory={"copper_dagger": 1}, bank_items={},
+        state = make_state(inventory={"copper_dagger": 2}, bank_items={},
                            skills={"mining": 5, "weaponcrafting": 5},
                            inventory_max=200, inventory_slots_max=30)
         goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 6})
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2)))
-        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 3)]}
 
-        result = generate_next_craft_action(goal, state, gd, actions, sources)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         kinds = [type(a).__name__ for a in result]
@@ -1376,22 +1378,20 @@ class TestRecycleAsASource:
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2)))
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert not any(isinstance(a, RecycleAction) for a in result), result
 
     def test_the_generator_takes_the_first_source_the_model_offers(self):
-        """Two sources could each serve the 3-bar deficit; the generator
-        itself applies NO ranking of its own — it takes the FIRST applicable
-        source in `sources`' priority order (next_craft_core._next), exactly
-        the order `obtain_source_map` built it in. Semantic ranking of WHICH
-        source is cheapest to sacrifice (yield, level, waste — never a name
-        sort, per feedback_no_alphabetical_tiebreak) is `obtain_sources`'
-        responsibility (Tasks 1-3), not this generator's; this test pins
-        only the generator's own contract: first-in-list wins."""
+        """Two sources could each serve the 3-bar deficit; decomposition
+        applies NO ranking of its own — the walk takes the FIRST route in the
+        obtain model's priority order. Semantic ranking of WHICH source is
+        cheapest to sacrifice is the model's (never a name sort, per
+        feedback_no_alphabetical_tiebreak); this pins decomposition's own
+        contract: the model's first ready recycle route wins."""
         gd = _gd_recyclable()
-        state = make_state(inventory={"iron_dagger": 1, "copper_dagger": 1},
+        state = make_state(inventory={"iron_dagger": 2, "copper_dagger": 2},
                            bank_items={},
                            skills={"mining": 5, "weaponcrafting": 15})
         goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
@@ -1400,19 +1400,18 @@ class TestRecycleAsASource:
                           workshop_location=(2, 2)),
             RecycleAction(code="copper_dagger", quantity=1,
                           workshop_location=(2, 2)))
-        sources = {"copper_bar": [
-            Source(SourceKind.RECYCLE, "copper_dagger", 3, 3),
-            Source(SourceKind.RECYCLE, "iron_dagger", 3, 3),
-        ]}
 
-        result = generate_next_craft_action(goal, state, gd, actions, sources)
+        result = decompose(goal, state, gd, actions, _ctx())
 
+        first_recycle = next(r for r in ObtainModel(state, gd, _ctx(), datetime.now(UTC))
+                             .ready("copper_bar", DECOMPOSE_POLICY) if r.kind is SourceKind.RECYCLE)
         assert result is not None
-        assert result[0].code == "copper_dagger", result
+        assert result[0].code == first_recycle.via, result
 
-    def test_a_bank_source_with_no_withdraw_leg_falls_back_to_gathering(self):
-        """No Withdraw for the source in the menu → the recycle has no first leg,
-        so the prefix stops and the recipe descent answers alone."""
+    def test_a_bank_only_source_is_withdrawn_even_without_a_withdraw_in_the_pool(self):
+        """No Withdraw for the source in the menu: decomposition builds it at
+        the bank tile (the step names what it needs), then recycles. The old
+        descent had no leg and gathered around a licensed banked source."""
         gd = _gd_recyclable()
         state = make_state(inventory={}, bank_items={"copper_dagger": 2},
                            skills={"mining": 5, "weaponcrafting": 5})
@@ -1425,10 +1424,11 @@ class TestRecycleAsASource:
                           workshop_location=(2, 2)),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
-        assert isinstance(result[0], GatherAction)
+        assert [type(a).__name__ for a in result[:2]] == ["WithdrawItemAction", "RecycleAction"], result
+        assert (result[0].code, result[0].bank_location) == ("copper_dagger", gd.bank_location())
 
     def test_a_source_that_serves_no_deficit_is_left_alone(self):
         """The dagger's only output (copper_bar) is already covered by the bank,
@@ -1451,7 +1451,7 @@ class TestRecycleAsASource:
                           workshop_location=(2, 2)),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
         assert not any(isinstance(a, RecycleAction) for a in result), result
@@ -1486,6 +1486,7 @@ def _gd_fire_staff() -> GameData:
         "fishing_net": {"ash_plank": 6},
     }
     gd._resource_drops = {"ash_tree": "ash_plank"}
+    gd._resource_locations = {"ash_tree": [(0, 1)]}
     gd._workshop_locations = {"weaponcrafting": (2, 2)}
     gd._bank_location = (4, 0)
     gd._taskmaster_location = (1, 2)
@@ -1510,9 +1511,8 @@ class TestTheActivationRecycleBug:
             CraftAction(code="fire_staff", workshop_location=(2, 2)),
             RecycleAction(code="fishing_net", quantity=1, workshop_location=(2, 2)),
         ]
-        sources = {"ash_plank": [Source(SourceKind.RECYCLE, "fishing_net", 3, 21)]}
 
-        plan = generate_next_craft_action(goal, state, gd, pool, sources)
+        plan = decompose(goal, state, gd, pool, _ctx())
 
         assert plan is not None
         assert any(isinstance(a, RecycleAction) for a in plan), plan
@@ -1557,50 +1557,11 @@ class TestTheActivationNpcBuy:
             NpcBuyAction(npc_code="merchant", item_code="widget_part",
                         quantity=1, npc_location=(3, 3)),
         ]
-        sources = {"widget_part": [Source(SourceKind.BUY, "merchant", 1, 10**9)]}
 
-        plan = generate_next_craft_action(goal, state, gd, pool, sources)
+        plan = decompose(goal, state, gd, pool, _ctx())
 
         assert plan is not None
         assert any(isinstance(a, NpcBuyAction) for a in plan), plan
-
-
-class TestMapNextActionMissingConcreteAction:
-    """`_map_next_action`'s per-kind "the model named a source but the licensed
-    pool has no concrete action to serve it" → None branches. These are the
-    admit/emit divergence the parity census targets: the source map may name a
-    RECYCLE/BUY/DROP route the goal's own `relevant_actions` (licence-filtered)
-    did not surface an action for, and the generator must decline (→ A*), never
-    fabricate a leg. Exercised directly since through the full generator the
-    same map drives both the step and the mapping, so they never disagree."""
-
-    def test_recycle_step_with_no_matching_source_returns_none(self):
-        """A recycle NextAction whose `code` names no RECYCLE Source in the map
-        → the yield_per lookup fails → None (line: `match is None`)."""
-        gd = _gd_recyclable()
-        na = NextAction("copper_bar", "recycle", 3, "copper_dagger")
-        assert _map_next_action(na, [], gd, {}, [], True) is None
-
-    def test_recycle_step_source_present_but_no_action_returns_none(self):
-        """The RECYCLE Source exists (yield_per resolves) but the licensed pool
-        has no matching RecycleAction → None (the licence stripped it)."""
-        gd = _gd_recyclable()
-        na = NextAction("copper_bar", "recycle", 3, "copper_dagger")
-        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 9)]}
-        # relevant pool has NO RecycleAction(copper_dagger).
-        assert _map_next_action(na, [], gd, sources, [], True) is None
-
-    def test_buy_step_with_no_matching_action_returns_none(self):
-        """A buy NextAction with no matching NpcBuyAction in the pool → None."""
-        gd = _gd_copper_ring()
-        na = NextAction("widget_part", "buy", 1, "merchant")
-        assert _map_next_action(na, [], gd, {}, [], True) is None
-
-    def test_drop_step_with_no_matching_fight_returns_none(self):
-        """A drop NextAction whose dropper has no FightAction in the pool → None."""
-        gd = _gd_drop_leaf()  # chicken drops feather
-        na = NextAction("feather", "drop", 1, "chicken")
-        assert _map_next_action(na, [], gd, {}, [], True) is None
 
 
 class TestPhase2bDecompositionGaps:
@@ -1617,14 +1578,32 @@ class TestPhase2bDecompositionGaps:
                            skills={"mining": 5, "weaponcrafting": 5})
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2)))
-        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 3)]}
         free = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
-        assert isinstance(generate_next_craft_action(free, state, gd, actions, sources)[0],
+        assert isinstance(decompose(free, state, gd, actions, _ctx())[0],
                           RecycleAction), "vacuous: the recycle is not the plan's first choice"
         grind = GatherMaterialsGoal("copper_bar", {"copper_bar": 3},
                                     exclude_recycle=frozenset({"copper_dagger"}))
-        result = generate_next_craft_action(grind, state, gd, actions, sources)
+        result = decompose(grind, state, gd, actions, _ctx())
         assert result is not None and not any(isinstance(a, RecycleAction) for a in result)
+
+    def test_a_grind_rung_is_made_not_withdrawn(self):
+        """The held-rung livelock (memory: a BANKED copy is a ready WITHDRAW):
+        a skill grind's rung is PRODUCED, its XP is in the making. The grind
+        asks for `held + 1`; with 2 rungs banked the walk must make ONE more,
+        not withdraw the banked two. A plain goal for the same item withdraws
+        them, which is right when the goal is to hold them."""
+        gd = _gd_copper_ring()
+        state = make_state(inventory={"copper_bar": 1}, bank_items={"copper_ring": 2},
+                           skills={"mining": 5, "jewelrycrafting": 5})
+        grind = GatherMaterialsGoal("copper_ring", {"copper_ring": 3}, skill_grind=True,
+                                    exclude_recycle=frozenset({"copper_ring"}))
+        result = decompose(grind, state, gd, _copper_ring_actions(), _ctx())
+        assert result is not None
+        assert [(type(a).__name__, a.code, a.quantity) for a in result[:1]] == [
+            ("CraftAction", "copper_ring", 1)]
+        hold = GatherMaterialsGoal("copper_ring", {"copper_ring": 3})
+        plan = decompose(hold, state, gd, _copper_ring_actions(), _ctx())
+        assert plan is not None and isinstance(plan[0], WithdrawItemAction)
 
     def test_a_gather_the_whitelist_lacks_is_taken_from_the_pool(self):
         """Decomposition decided on the gather, so it maps it from the whole
@@ -1635,8 +1614,9 @@ class TestPhase2bDecompositionGaps:
         rocks = GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]))
         with patch.object(GatherMaterialsGoal, "relevant_actions",
                           lambda self, actions, state, gd: [a for a in actions if a is not rocks]):
-            result = generate_next_craft_action(goal, state, gd, [rocks, *_copper_ring_actions()[1:]])
-        assert result is not None and any(a is rocks for a in result)
+            result = decompose(goal, state, gd, [rocks, *_copper_ring_actions()[1:]], _ctx())
+        assert result is not None and any(
+            isinstance(a, GatherAction) and a.resource_code == "copper_rocks" for a in result)
 
     def test_a_gathering_skill_gate_leads_with_its_level_skill(self):
         """A leaf whose resource needs more gathering skill than the character
@@ -1648,10 +1628,10 @@ class TestPhase2bDecompositionGaps:
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         grind = LevelSkill(skill="mining", target_level=10)
         with patch.object(LevelSkill, "is_applicable", return_value=True):
-            result = generate_next_craft_action(goal, state, gd, [*_copper_ring_actions(), grind])
+            result = decompose(goal, state, gd, [*_copper_ring_actions(), grind], _ctx())
         assert result == [grind]
         # With no LevelSkill to grind it, the gather is refused on applicability.
-        assert generate_next_craft_action(goal, state, gd, _copper_ring_actions()) is None
+        assert decompose(goal, state, gd, _copper_ring_actions(), _ctx()) is None
 
 
 class TestSecondaryDropGather:
@@ -1699,13 +1679,15 @@ class TestSecondaryDropGather:
 
 
 class TestDeclineReasons:
-    """Phase 2c-2.0: every decline names why, so declines stop being silent
-    (the caller used to search with no record of what decomposition lacked)."""
+    """Phase 2c-2.0, restated for the one walk (2c-2b): every decline names why.
+    The walk is proved COMPLETE, so a decline is either an infeasible goal
+    (named with the items no route supplies) or a step no concrete action
+    serves; `satisfied` is the bag already holding the goal."""
 
     @staticmethod
-    def _declined(goal, state, gd, actions) -> list[str]:
+    def _declined(goal, state, gd, actions, ctx=None) -> list[str]:
         declined: list[str] = []
-        assert generate_next_craft_action(goal, state, gd, actions, declined=declined) is None
+        assert decompose(goal, state, gd, actions, ctx or _ctx(), declined) is None
         return declined
 
     def test_satisfied(self):
@@ -1713,43 +1695,37 @@ class TestDeclineReasons:
         assert self._declined(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}), state,
                               _gd_copper_ring(), _copper_ring_actions()) == ["satisfied"]
 
-    def test_no_source(self):
+    def test_infeasible_names_the_items_no_route_supplies(self):
         state = make_state(inventory={}, bank_items={}, skills={"gearcrafting": 5})
         assert self._declined(GatherMaterialsGoal("feather_coat", {"feather_coat": 1}), state,
                               _gd_monster_drop(),
                               [CraftAction(code="feather_coat", workshop_location=(3, 1))]
-                              ) == ["no_source:feather"]
+                              ) == ["infeasible:feather_coat:no_route:feather"]
 
-    def test_unmapped_step(self):
-        state = make_state(inventory={"feather": 7}, bank_items={}, skills={"gearcrafting": 5})
-        assert self._declined(GatherMaterialsGoal("feather_coat", {"feather_coat": 1}), state,
-                              _gd_monster_drop(),
-                              [CraftAction(code="feather_coat", workshop_location=(3, 1))]
-                              ) == ["unmapped_step:gather:feather:"]
+    def test_a_route_no_action_serves_is_unmapped(self):
+        """The model offers a gather, but the pool has no GatherAction for it."""
+        state = make_state(inventory={}, skills={"mining": 5, "jewelrycrafting": 5})
+        actions = [a for a in _copper_ring_actions() if not isinstance(a, GatherAction)]
+        [reason] = self._declined(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}), state,
+                                  _gd_copper_ring(), actions)
+        assert reason.startswith("unmapped_step:Act(item='copper_ore'")
 
-    def test_no_workshop(self):
+    def test_a_workshopless_craft_is_no_route(self):
         gd = _gd_copper_ring()
         gd._workshop_locations = {}
         state = make_state(inventory={}, skills={"mining": 5, "jewelrycrafting": 5})
         [reason] = self._declined(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}), state,
                                   gd, _copper_ring_actions())
-        assert reason.startswith("no_workshop:")
+        assert reason.startswith("infeasible:copper_ring:no_route:")
 
-    def test_craft_unknown(self):
-        gd = _gd_copper_ring()
-        del gd._item_stats["copper_ring"]
-        state = make_state(inventory={}, skills={"mining": 5, "jewelrycrafting": 5})
-        assert self._declined(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}), state,
-                              gd, _copper_ring_actions()) == ["craft_unknown:copper_ring"]
-
-    def test_craft_skill_without_a_grind(self):
+    def test_a_skill_gate_without_a_grind_is_infeasible(self):
         gd = _gd_copper_ring()
         gd._item_stats["copper_ring"] = ItemStats(code="copper_ring", level=1, type_="ring",
                                                   crafting_skill="jewelrycrafting", crafting_level=5)
         state = make_state(inventory={}, skills={"mining": 5, "jewelrycrafting": 1})
-        assert self._declined(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}), state,
-                              gd, _copper_ring_actions()
-                              ) == ["craft_skill:copper_ring:jewelrycrafting<5:no_grind"]
+        [reason] = self._declined(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}), state,
+                                  gd, _copper_ring_actions())
+        assert reason.startswith("infeasible:copper_ring")
 
     def test_first_leg_inapplicable(self):
         state = make_state(inventory={}, skills={"mining": 5, "jewelrycrafting": 5})
@@ -1761,5 +1737,33 @@ class TestDeclineReasons:
     def test_no_sink_still_declines(self):
         """Without a listener the decline is unchanged: plain None."""
         state = make_state(inventory={"copper_ring": 1}, skills={"mining": 5, "jewelrycrafting": 5})
-        assert generate_next_craft_action(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}),
-                                          state, _gd_copper_ring(), _copper_ring_actions()) is None
+        assert decompose(GatherMaterialsGoal("copper_ring", {"copper_ring": 1}),
+                         state, _gd_copper_ring(), _copper_ring_actions(), _ctx()) is None
+
+
+class TestWalkPlanEdges:
+    def test_the_forecast_stops_at_a_later_step_no_action_serves(self):
+        """The first leg maps; a later step does not: the plan is the legs so
+        far (the next cycle replans), not a decline."""
+        gd = _gd_copper_ring()
+        state = make_state(inventory={}, skills={"mining": 5, "jewelrycrafting": 5})
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
+        real = craft_plan_gen._action_for
+        calls = {"n": 0}
+
+        def first_only(*args, **kwargs):
+            calls["n"] += 1
+            return real(*args, **kwargs) if calls["n"] == 1 else None
+
+        with patch.object(craft_plan_gen, "_action_for", side_effect=first_only):
+            result = decompose(goal, state, gd, _copper_ring_actions(), _ctx())
+        assert result is not None and [type(a).__name__ for a in result] == ["GatherAction"]
+
+    def test_a_route_kind_no_action_serves_maps_to_nothing(self):
+        """A SELL (or task-reward, or fight-gold) route has no action here yet:
+        2c-2d constructs them."""
+        sell = Route("gold", SourceKind.SELL, "copper_ring", 5, 10, (), agent="merchant")
+        graph = WalkGraph({}, {"gold": ()}, {"gold": (sell,)})
+        step = Act("gold", 0, 5, 1)
+        assert craft_plan_gen._action_for(step, graph, [], [], make_state(), _gd_copper_ring(),
+                                          True) is None

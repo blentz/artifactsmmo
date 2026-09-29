@@ -893,16 +893,10 @@ class StrategyArbiter:
                 "elapsed_ms": _elapsed_ms(),
             })
             return []
-        # Fast-path: for a deterministic gather-craft closure (all leaves are
-        # gatherable raws, skill-gated-met craftables, or served by THE ONE
-        # OBTAIN MODEL) skip A* entirely. O(closure) vs 52K-node search for
-        # copper_ring-style chains. Falls back to None for genuinely
-        # unmodeled leaves / unmet-skill-gate goals with no grind rung.
-        #
-        # The source map is built ONCE here (not per closure item, and only
-        # for a GatherMaterialsGoal — every other goal shape short-circuits
-        # generate_next_craft_action immediately) via obtain_source_map, THE
-        # shared model every route beyond bare gather/craft/withdraw reads.
+        # Fast path: an obtain-shaped goal (GatherMaterials, a potion batch)
+        # is served by the one walk (`craft_plan_gen.decompose`) and skips A*
+        # entirely. It declines only an infeasible goal or a step no action
+        # serves, and names why (DECOMPOSE_DECLINE); then the search runs.
         declined: list[str] = []
         gen = decompose(goal, state, game_data, actions, ctx, declined)
         for reason in declined:

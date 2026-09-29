@@ -161,8 +161,6 @@ GEAR_VALUE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value_cor
 GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 LOCATION_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 PROGRESSION_RESERVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression_reserve_core.py"
-NEXT_CRAFT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "next_craft_core.py"
-CRAFT_PLAN_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_driver_core.py"
 DECOMPOSE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decompose_core.py"
 GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxonomy_core.py"
 BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selection.py"
@@ -191,85 +189,6 @@ ROUTE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
 REGEAR_EDGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "regear_edge.py"
 CATALOGUE_SCOPE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai"
                        / "catalogue_scope.py")
-
-# craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
-# model is the soundness-critical part; killed by
-# formal/diff/test_craft_plan_driver_diff.py (plan-agreement + reaches-target).
-CRAFT_PLAN_DRIVER_MUTATIONS = [
-    ("craft_plan_driver: drop craft input consumption",
-     "                new_owned[inp] = new_owned.get(inp, 0) - per * na.qty",
-     "                new_owned[inp] = new_owned.get(inp, 0)"),
-    ("craft_plan_driver: craft consumption sign flip (- -> +)",
-     "                new_owned[inp] = new_owned.get(inp, 0) - per * na.qty",
-     "                new_owned[inp] = new_owned.get(inp, 0) + per * na.qty"),
-    ("craft_plan_driver: withdraw skips bank debit",
-     "        new_bank[na.item] = new_bank.get(na.item, 0) - na.qty",
-     "        new_bank[na.item] = new_bank.get(na.item, 0)"),
-    ("craft_plan_driver: craft credits runs, not runs * yield (the plan crafts again for units it made)",
-     "        new_owned[na.item] = new_owned.get(na.item, 0) + na.qty * craft_yield",
-     "        new_owned[na.item] = new_owned.get(na.item, 0) + na.qty"),
-]
-
-# craft_plan_driver_core recycle-branch mutations (CRITICAL 1/2: the recycle-
-# epic-review fix). NOW covered by the differential: test_craft_plan_driver_diff.py
-# `test_craft_plan_all_six_kinds_agree_and_reach` drives a `recycle` NextAction
-# through the widened Lean oracle (`applyState` mirrors the ⌈qty/yield⌉ source
-# debit), so both the sign-flip and the floor-vs-ceil mutant diverge from Lean.
-# Still ALSO unit-killed by tests/test_ai/test_craft_plan_driver_core.py.
-CRAFT_PLAN_DRIVER_RECYCLE_MUTATIONS = [
-    ("craft_plan_driver: recycle debit sign flip (- -> +, re-introduces the double-spend)",
-     "        new_owned[na.code] = new_owned.get(na.code, 0) - consumed",
-     "        new_owned[na.code] = new_owned.get(na.code, 0) + consumed"),
-    ("craft_plan_driver: recycle consumed uses truncating floor-div, not ceil (under-counts consumption)",
-     "        consumed = math.ceil(na.qty / match.yield_per)",
-     "        consumed = na.qty // match.yield_per"),
-    ("craft_plan_driver: cumulative-cap ledger not advanced "
-     "(consumed never accumulates → over-recycles protected copies)",
-     "            cur_consumed[na.code] = cur_consumed.get(na.code, 0) + na.qty",
-     "            cur_consumed[na.code] = cur_consumed.get(na.code, 0)"),
-]
-
-# next_craft_target_pure mutations -- anchors for the deterministic craft-action
-# generator (churn fix). Each breaks one of the four load-bearing decisions;
-# killed by formal/diff/test_next_craft_diff.py (300-example property over random
-# DAGs + spot-checks).
-NEXT_CRAFT_MUTATIONS = [
-    ("next_craft: drop per-scaling on required inputs",
-     "        required = per * runs",
-     "        required = runs"),
-    ("next_craft: craft sized in units, not runs (ignores yield: a yield-2 potion asks double)",
-     "    runs = -(-deficit // max(1, yields.get(item, 1)))",
-     "    runs = deficit"),
-    ("next_craft: runs rounded down, not up (a partial run leaves the deficit short)",
-     "    runs = -(-deficit // max(1, yields.get(item, 1)))",
-     "    runs = max(1, deficit // max(1, yields.get(item, 1)))"),
-    ("next_craft: short-input off-by-one (< -> <=)",
-     "        if owned.get(inp, 0) < required:",
-     "        if owned.get(inp, 0) <= required:"),
-    ("next_craft: None-boundary off-by-one (>= -> >)",
-     "    if owned.get(target, 0) >= qty:",
-     "    if owned.get(target, 0) > qty:"),
-    ("next_craft: craft result emits gather kind",
-     '    return NextAction(item, "craft", runs)  # all inputs on hand → craft `runs` times',
-     '    return NextAction(item, "gather", runs)  # all inputs on hand → craft `runs` times'),
-    # withdraw branch (banked-intermediate fix): banked short input → withdraw.
-    ("next_craft: withdraw bank-check flip (== 0 -> != 0)",
-     "            if bank.get(inp, 0) == 0:",
-     "            if bank.get(inp, 0) != 0:"),
-    ("next_craft: withdraw emits gather kind",
-     '            return NextAction(inp, "withdraw", min(bank.get(inp, 0), required - owned.get(inp, 0)))',
-     '            return NextAction(inp, "gather", min(bank.get(inp, 0), required - owned.get(inp, 0)))'),
-    ("next_craft: withdraw qty min -> max (over-withdraw)",
-     '            return NextAction(inp, "withdraw", min(bank.get(inp, 0), required - owned.get(inp, 0)))',
-     '            return NextAction(inp, "withdraw", max(bank.get(inp, 0), required - owned.get(inp, 0)))'),
-]
-
-# next_craft_target_pure widened-obtain-model mutations (CRITICAL 1/2: the
-# recycle-epic-review fix). NOW covered by the differential:
-# test_next_craft_diff.py `test_next_craft_all_six_kinds_agree` passes a real
-# `sources` map (7th oracle arg) and cycles all six kinds, so the recycle
-# capacity-cap drop and the CRAFT-break→continue mutant both diverge from the
-# widened Lean model. Still ALSO unit-killed by tests/test_ai/test_next_craft_core.py.
 # decompose_core (Phase 2c-2a, THE ONE WALK) -- killed by
 # formal/diff/test_decompose_diff.py (random graphs with cycles, gates, yields,
 # capacities and holdings, feasibility AND step against the Lean oracle).
@@ -278,20 +197,26 @@ DECOMPOSE_CORE_MUTATIONS = [
      "    return -(-deficit // max(1, yield_per))",
      "    return deficit // max(1, yield_per)"),
     ("decompose: all-or-nothing, not the deficit (holdings do not shrink the need)",
-     "        deficit = qty - have\n        visited = {item}",
-     "        deficit = qty\n        visited = {item}"),
-    ("decompose: capacity boundary off by one",
-     "        if route.capacity < deficit:",
-     "        if route.capacity <= deficit:"),
+     "        answer, visited, cuts = self._fill(item, qty - have, path | {item})",
+     "        answer, visited, cuts = self._fill(item, qty, path | {item})"),
+    ("decompose: a route takes the whole remainder, ignoring its capacity",
+     "            take = min(route.capacity, remaining)",
+     "            take = remaining"),
+    ("decompose: the fill stops at the first contributor (no mixing across routes)",
+     "            if ok:\n                remaining -= take",
+     "            if ok:\n                remaining -= take\n                break"),
     ("decompose: yield ignored in the input sizing",
-     "        n = runs(deficit, route.yield_per)\n        visited: set[Hashable] = set()",
-     "        n = deficit\n        visited: set[Hashable] = set()"),
+     "        n = runs(deficit, route.yield_per)\n        visited: set[K] = set()",
+     "        n = deficit\n        visited: set[K] = set()"),
     ("decompose: a gate-blocked route acts instead of opening its gate",
      "            if route.gates:",
      "            if False:"),
-    ("decompose: the step descends into an input already on hand",
+    ("decompose: the step descends into an input already in the bag",
      "                if self._on_hand.get(material, 0) < n * per:",
      "                if self._on_hand.get(material, 0) <= n * per:"),
+    ("decompose: the step ignores capacity (acts for the whole deficit)",
+     "            take = min(route.capacity, deficit)",
+     "            take = deficit"),
     ("decompose: the memo is reused under any path (a cut answer leaks)",
      "        if cached is not None and cached[2] <= path and not ((cached[1] - cached[2]) & path):",
      "        if cached is not None:"),
@@ -300,20 +225,6 @@ DECOMPOSE_CORE_MUTATIONS = [
      "        if False:\n            return False, frozenset({item}), frozenset({item})"),
 ]
 
-NEXT_CRAFT_SOURCE_MUTATIONS = [
-    ("next_craft: recycle bag/deficit cap dropped (re-admits the full uncapped deficit)",
-     "    qty = min(deficit, remaining, bag_copies * src.yield_per)",
-     "    qty = deficit"),
-    ("next_craft: recycle CUMULATIVE cap dropped (re-reads STATIC capacity, over-recycles the protected copy)",
-     "    remaining = max(0, src.capacity - consumed.get(src.code, 0))",
-     "    remaining = src.capacity"),
-    ("next_craft: banked recycle staging dropped (gathers around the banked source instead of Withdraw→Recycle)",
-     "    if want > 0 and bank_copies > 0 and bag_copies * src.yield_per < want:",
-     "    if False:"),
-    ("next_craft: CRAFT priority break replaced with continue (falls through to a lower-priority source)",
-     "        if src.kind is SourceKind.CRAFT:\n            break",
-     "        if src.kind is SourceKind.CRAFT:\n            continue"),
-]
 
 # gear_taxonomy_core mutations -- the proved gear-classification core.
 # The is_combat_bearing disjunct drops + the consumable-family drops are killed
@@ -3127,22 +3038,41 @@ GRIND_DECOMPOSE_MUTATIONS = [
      "        decomposed = decompose(goal, self.state, self.game_data, actions, self._last_ctx, declined)",
      "        decomposed = None"),
 ]
-# Phase 2b: the decomposition gaps a live grind sweep found. Killed by
-# tests/test_ai/test_craft_plan_gen.py (TestPhase2bDecompositionGaps and the
-# withdraw tests).
+# The route-driven producer on the one walk (Phase 2b gaps, restated for 2c-2b).
+# Killed by tests/test_ai/test_craft_plan_gen.py.
 DECOMPOSE_GAP_MUTATIONS = [
-    ("craft_plan_gen: an excluded recycle stays a source",
-     "                      and not (s.kind is SourceKind.RECYCLE and s.code in goal.exclude_recycle)]",
-     "                      ]"),
-    ("craft_plan_gen: a gather is mapped from the whitelist only",
-     "        for action in (*relevant, *pool):\n            if (\n                isinstance(action, GatherAction)",
-     "        for action in relevant:\n            if (\n                isinstance(action, GatherAction)"),
+    ("craft_plan_gen: a step is mapped from the goal's whitelist only",
+     "    candidates = (*relevant, *pool)",
+     "    candidates = (*relevant,)"),
     ("craft_plan_gen: a withdraw the pool lacks is not built",
-     "        return WithdrawItemAction(code=na.item, quantity=na.qty,",
-     "        return None and WithdrawItemAction(code=na.item, quantity=na.qty,"),
-    ("craft_plan_gen: a gathering-skill gate is not led by its LevelSkill",
-     "                gate = _unmet_gather_gate(action, state, game_data, actions)",
-     "                gate = None"),
+     "            return WithdrawItemAction(code=step.item, quantity=step.amount,",
+     "            return None and WithdrawItemAction(code=step.item, quantity=step.amount,"),
+    ("craft_plan_gen: a skill gate is never a sub-task",
+     "            verdicts[key] = grind is not None and grind.is_applicable(state, game_data)",
+     "            verdicts[key] = False"),
+    ("craft_plan_gen: a grind rung is a bag refill, not the copies still to make",
+     "    return bag + max(0, needed - bag - banked)",
+     "    return needed"),
+]
+# The walk adapter (`ObtainModel.walk_graph`). Killed by
+# tests/test_ai/test_craft_plan_gen.py.
+WALK_ADAPTER_MUTATIONS = [
+    ("obtain_model: a goal's own target may be recycled for its parts",
+     "                if route.kind in (SourceKind.RECYCLE, SourceKind.SELL) and route.via in (keep | produce):",
+     "                if route.kind in (SourceKind.RECYCLE, SourceKind.SELL) and route.via in produce:"),
+    ("obtain_model: a grind rung's banked copies are withdrawn (the held-rung livelock)",
+     "                if code in produce and route.kind in (SourceKind.WITHDRAW, SourceKind.RECYCLE):",
+     "                if False:"),
+    ("obtain_model: a gate-blocked route never joins the walk",
+     "                if unmet and all(openable(gate) for gate in unmet):",
+     "                if False:"),
+]
+# The gather ranking the walk shares with the proved selection. Killed by the
+# l35 pearl scenario (bass over trout on distance).
+WALK_GATHER_RANK_MUTATIONS = [
+    ("obtain_model: gather routes in table order, not the proved ranking",
+     "            candidates = [(route, ()) for route in self._ranked_gathers(code, ready)] + gated",
+     "            candidates = [(route, ()) for route in ready] + gated"),
 ]
 # The potion batch the guard and the goal share. Killed by
 # tests/test_ai/test_potion_supply.py.
@@ -4975,8 +4905,6 @@ _ALL_SRCS = [
     CURRENCY_TURNIN_SRC, DUAL_ROLE_CURRENCY_SRC,
     # C4 — currency_afford_plannable_pure: fast-fail for unaffordable currency-buy leaves.
     CURRENCY_AFFORD_CORE_SRC,
-    # C5 — next_craft_target_pure: churn fix (replaces 52K-node A* re-run).
-    NEXT_CRAFT_CORE_SRC,
     # Phase 2c-2a — THE ONE WALK (feasibility + next step).
     DECOMPOSE_CORE_SRC,
     # Gear taxonomy: proved gear-classification core.
@@ -8575,6 +8503,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_decision_events.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, DECOMPOSE_GAP_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, WALK_ADAPTER_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, WALK_GATHER_RANK_MUTATIONS,
+              "tests/test_ai/scenarios/test_slot_coverage.py", survivors)
     run_group(POTION_SUPPLY_SRC, POTION_BATCH_MUTATIONS,
               "tests/test_ai/test_potion_supply.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, RESOURCE_SPAWN_KNOWN_MUTATIONS,
@@ -8678,23 +8610,9 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_game_data.py", survivors)
     run_group(LOCATION_CATALOG_SRC, EVENT_VISIBILITY_MUTATIONS,
               "tests/test_ai/test_event_content_visibility.py", survivors)
-    # C5 — next_craft_target_pure: churn fix differential.
     # Phase 2c-2a — THE ONE WALK differential.
     run_group(DECOMPOSE_CORE_SRC, DECOMPOSE_CORE_MUTATIONS,
               "formal/diff/test_decompose_diff.py", survivors)
-    run_group(NEXT_CRAFT_CORE_SRC, NEXT_CRAFT_MUTATIONS,
-              "formal/diff/test_next_craft_diff.py", survivors)
-    # One-obtain-model review fix (CRITICAL 1/2): widened-source-model behaviour
-    # the differential never exercises -- unit-killed instead.
-    run_group(NEXT_CRAFT_CORE_SRC, NEXT_CRAFT_SOURCE_MUTATIONS,
-              "tests/test_ai/test_next_craft_core.py", survivors)
-    # B2 — craft_plan_full full-plan driver (consuming model) differential.
-    run_group(CRAFT_PLAN_DRIVER_SRC, CRAFT_PLAN_DRIVER_MUTATIONS,
-              "formal/diff/test_craft_plan_driver_diff.py", survivors)
-    # One-obtain-model review fix (CRITICAL 1/2): recycle-branch behaviour the
-    # differential never exercises -- unit-killed instead.
-    run_group(CRAFT_PLAN_DRIVER_SRC, CRAFT_PLAN_DRIVER_RECYCLE_MUTATIONS,
-              "tests/test_ai/test_craft_plan_driver_core.py", survivors)
     # Gear taxonomy: field/family drops killed by the unit test; the
     # combat-minus-consumable set difference killed by the differential.
     run_group(GEAR_TAXONOMY_CORE_SRC, GEAR_TAXONOMY_CORE_MUTATIONS,

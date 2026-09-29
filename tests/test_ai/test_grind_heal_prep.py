@@ -80,20 +80,18 @@ class TestHealPrepGoal:
         assert isinstance(goal, GatherMaterialsGoal)
         assert list(goal.needed) == ["pie"]
 
-    def test_the_batch_counts_the_banks_copies(self):
-        """Two in the bag, one in the bank: the goal asks for bank + bag +
-        deficit, because decomposition credits the banked copy of the target
-        without withdrawing it (next test)."""
+    def test_the_batch_is_the_deficit_on_top_of_the_bag(self):
+        """Two in the bag: the goal asks for the bag's two plus the deficit."""
         gd = _gd()
         goal = heal_prep_goal(_state(gd, {"cheese": 2, "milk": 10}, bank={"cheese": 1}), gd,
                               NO_PROFILE_CONTEXT)
         assert isinstance(goal, GatherMaterialsGoal)
-        assert goal.needed == {"cheese": 1 + 2 + (HEAL_STOCK_FLOOR - 2)}
+        assert goal.needed == {"cheese": 2 + (HEAL_STOCK_FLOOR - 2)}
 
-    def test_the_plan_crafts_exactly_what_the_bag_lacks(self):
-        """Real decomposition: a banked copy is credited, not withdrawn, so
-        the craft must still cover the whole deficit for the bag to reach the
-        stock target."""
+    def test_a_banked_heal_is_withdrawn_before_crafting(self):
+        """Real decomposition (the one walk): the banked cheese is withdrawn into
+        the bag and only the rest is crafted, so the bag reaches the stock
+        target exactly."""
         gd = _gd()
         gd._bank_location = (5, 5)
         state = _state(gd, {"cheese": 2, "milk": 10}, bank={"cheese": 1})
@@ -103,7 +101,8 @@ class TestHealPrepGoal:
         plan = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
         assert plan is not None
         assert [(type(a).__name__, a.code, a.quantity) for a in plan] == [
-            ("CraftAction", "cheese", HEAL_STOCK_FLOOR - 2),
+            ("WithdrawItemAction", "cheese", 1),
+            ("CraftAction", "cheese", HEAL_STOCK_FLOOR - 2 - 1),
         ]
 
 
