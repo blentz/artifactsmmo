@@ -61,6 +61,7 @@ def next_craft_target_pure(
     qty: int,
     sources: Mapping[str, list[Source]] | None = None,
     consumed: Mapping[str, int] | None = None,
+    yields: Mapping[str, int] | None = None,
 ) -> NextAction | None:
     """Return the next action needed to produce ``qty`` of ``target``, or ``None``.
 
@@ -93,6 +94,11 @@ def next_craft_target_pure(
                  Defaults to empty (all-zero), which is the correct seed for a
                  single-step call and keeps the byte-identical single-step
                  behaviour every direct caller relies on.
+        yields:  Units of each craftable item one craft produces (API data,
+                 `GameData.craft_yields`). A craft step is sized in RUNS,
+                 ``ceil(deficit / yield)``, and its inputs are ``per * runs``.
+                 Absent items (and the default, empty) yield 1, where runs
+                 equal units: the original walk, byte-identical.
 
     Returns:
         A :class:`NextAction` describing the immediate next step, or ``None`` if
@@ -100,7 +106,8 @@ def next_craft_target_pure(
     """
     if owned.get(target, 0) >= qty:
         return None
-    return _next(recipes, sources or {}, owned, bank, consumed or {}, target, qty, len(recipes) + 1)
+    return _next(recipes, sources or {}, owned, bank, consumed or {}, yields or {},
+                 target, qty, len(recipes) + 1)
 
 
 def _next(
@@ -109,6 +116,7 @@ def _next(
     owned: Mapping[str, int],
     bank: Mapping[str, int],
     consumed: Mapping[str, int],
+    yields: Mapping[str, int],
     item: str,
     need: int,
     fuel: int,
@@ -156,17 +164,21 @@ def _next(
         # len(recipes) items before hitting a raw leaf with no recipe).  The guard
         # exists only to keep the function total for hypothetically cyclic inputs.
         return NextAction(item, "gather", deficit)
-    # To craft `deficit` more of `item`, each input is needed `per * deficit`.
+    # To craft `deficit` more of `item` takes `runs` crafts of `yield` units
+    # each, and each input is needed `per * runs`. Sizing by units instead
+    # asked a yield-2 potion for twice its ingredients, and the descent then
+    # went looking for a fight (live Robby's `earth_boost_potion`, 2026-09-29).
+    runs = -(-deficit // max(1, yields.get(item, 1)))
     for inp, per in recipe.items():
-        required = per * deficit
+        required = per * runs
         if owned.get(inp, 0) < required:
             # First short input. If it is in the bank, withdraw what's there
             # (capped at the shortfall) rather than re-gathering/re-crafting it;
             # otherwise descend to make it. Mirrors Lean `nextHelper` withdraw arm.
             if bank.get(inp, 0) == 0:
-                return _next(recipes, sources, owned, bank, consumed, inp, required, fuel - 1)
+                return _next(recipes, sources, owned, bank, consumed, yields, inp, required, fuel - 1)
             return NextAction(inp, "withdraw", min(bank.get(inp, 0), required - owned.get(inp, 0)))
-    return NextAction(item, "craft", deficit)  # all inputs on hand → craft
+    return NextAction(item, "craft", runs)  # all inputs on hand → craft `runs` times
 
 
 def _step_for(

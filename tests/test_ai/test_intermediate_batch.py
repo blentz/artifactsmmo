@@ -46,9 +46,10 @@ def test_size_intermediate_threads_craft_yields():
     # copper_bar <- copper_ore x10; drops copper_rocks->copper_ore (held_recipe=0).
     # inventory_max=18, empty -> usable = 18 - _MIN_FREE_SLOTS(3) = 15; chain demand = 10.
     #   yield 1 (default):        mats_per_unit = ceil(10/1) = 10 -> fit = 15//10 = 1 -> batch = 1
-    #   yield 2 ({copper_bar:2}): mats_per_unit = ceil(10/2) = 5  -> fit = 15//5  = 3 -> batch = min(10,3,10) = 3
-    # The yield-2 result (3) differs from the yield-agnostic result (1), proving
-    # size_intermediate_craft threads game_data.craft_yields into the fit.
+    #   yield 2 ({copper_bar:2}): mats_per_unit = ceil(10/2) = 5  -> fit = 15//5  = 3 UNITS
+    #     -> space-bound, so the RUNS round down: 3 // 2 = 1 run (2 bars, 10 ore fit).
+    #     It used to return the 3 units as 3 runs: 30 ore against 15 usable slots.
+    # Demand-bound (next test) rounds up instead.
     a = CraftAction(code="copper_bar", quantity=1, workshop_location=(0, 0))
     state = make_state(inventory={}, inventory_max=18)
 
@@ -59,7 +60,17 @@ def test_size_intermediate_threads_craft_yields():
     gd_y2 = _gd()
     gd_y2._craft_yields = {"copper_bar": 2}
     out_y2 = size_intermediate_craft(a, {"copper_bar": 10}, state, gd_y2)
-    assert out_y2.quantity == 3
+    assert out_y2.quantity == 1
+
+
+def test_a_demand_bound_yield_batch_rounds_up_to_cover_the_demand():
+    """Demand 3 bars at yield 2 with room to spare: 2 runs (4 bars), not the
+    3 units as 3 runs, and not 1 run that leaves the demand short."""
+    a = CraftAction(code="copper_bar", quantity=1, workshop_location=(0, 0))
+    state = make_state(inventory={}, inventory_max=200)
+    gd = _gd()
+    gd._craft_yields = {"copper_bar": 2}
+    assert size_intermediate_craft(a, {"copper_bar": 3}, state, gd).quantity == 2
 
 
 def _gd_gem_chain() -> GameData:

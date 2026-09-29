@@ -64,6 +64,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.craft_plan_driver_core import craft_plan_full
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.next_craft_core import NextAction
@@ -112,13 +113,53 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     source map (Phase 2 of docs/PLAN_decision_architecture_redesign.md). The
     map is built once per call, over the goal's recipe closure, and only for a
     `GatherMaterialsGoal`: every other goal shape short-circuits
-    `generate_next_craft_action` immediately."""
+    `generate_next_craft_action` immediately. A `CraftPotionsGoal` is served
+    as the obtain goal it is (`_decompose_potions`)."""
+    if isinstance(goal, CraftPotionsGoal):
+        return _decompose_potions(goal, state, game_data, actions, ctx)
     if not isinstance(goal, GatherMaterialsGoal):
         return None
     closure_items = _closure_items(dict(game_data.crafting_recipes), goal.needed)
     sources = obtain_source_map(closure_items, state, game_data, ctx)
     return generate_next_craft_action(goal, state, game_data, actions, sources,
                                       bank_accessible=ctx.bank_accessible)
+
+
+def _decompose_potions(goal: CraftPotionsGoal, state: WorldState, game_data: GameData,
+                       actions: list[Action], ctx: SelectionContext) -> list[Action] | None:
+    """The potion batch as an obtain plan: the legs that put the batch in the
+    bag, then the equip that lands it (Phase 2c-1 of
+    docs/PLAN_decision_architecture_redesign.md).
+
+    Live Robby 2026-09-29: A* searched this goal about 70 times an hour and
+    timed out at ~200k nodes, depth 92, with no plan, because the batch the
+    guard judged suppliable was longer than the search could reach.
+
+    The plan may stop short of the equip: each leg is a bounded batch, and the
+    plan cache replans from the real state after every step, as it does for
+    the grind's one-leg plans.
+
+    None (the caller may search) when the goal is unseeded or satisfied, when
+    the batch cannot be decomposed, or when its plan would fight or open a
+    skill grind: the potion supply ladder serves neither (`POTION_POLICY` has
+    no drops and gates gathers on skill), and a guard's batch must not turn
+    into a different errand."""
+    equip = goal.batch_equip(state)
+    if equip is None:
+        return None
+    obtain = goal.batch_obtain(state)
+    if obtain is None:
+        return [equip] if equip.is_applicable(state, game_data) else None
+    legs = decompose(obtain, state, game_data, actions, ctx)
+    if legs is None or any(isinstance(a, (FightAction, LevelSkill)) for a in legs):
+        return None
+    # A leg is sized to a bounded batch (`size_intermediate_craft`), so the legs
+    # can be a PREFIX of the batch: the equip joins the plan only when they
+    # land the whole batch, and otherwise the next cycle decomposes the rest.
+    landed = state
+    for leg in legs:
+        landed = leg.apply(landed, game_data)
+    return [*legs, equip] if equip.is_applicable(landed, game_data) else legs
 
 
 def generate_next_craft_action(
@@ -266,7 +307,8 @@ def generate_next_craft_action(
     # genuine next move (craftPlan_steps_valid) and a complete plan reaches the
     # target (craftPlan_reaches).
     for item, qty in needed.items():
-        plan = craft_plan_full(recipes, owned, bank, item, qty, sources)
+        plan = craft_plan_full(recipes, owned, bank, item, qty, sources,
+                               dict(game_data.craft_yields))
         if not plan:
             continue  # this item already satisfied; try the next needed item
         chain = dict(demand_set(

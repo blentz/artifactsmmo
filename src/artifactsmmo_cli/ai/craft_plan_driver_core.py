@@ -57,13 +57,16 @@ def _apply_state(
     bank: dict[str, int],
     na: NextAction,
     sources: Mapping[str, list[Source]] | None = None,
+    yields: Mapping[str, int] | None = None,
 ) -> tuple[dict[str, int], dict[str, int]]:
     """Return (owned', bank') after applying one action's effect (with consumption).
 
     Mirrors Lean `applyState` on the 3-kind path. Returns fresh dicts; inputs
     are not mutated. `sources` is only consulted for a "recycle" `na` (to look
     up the consumed source item's `yield_per`); it is unused, and may be
-    omitted, for every other kind.
+    omitted, for every other kind. `yields` is only consulted for a "craft"
+    `na`, whose `qty` is RUNS: it adds `runs * yield` of the item (yield 1 when
+    absent, the original model).
     """
     new_owned = dict(owned)
     new_bank = dict(bank)
@@ -72,8 +75,9 @@ def _apply_state(
     elif na.kind == "withdraw":
         new_owned[na.item] = new_owned.get(na.item, 0) + na.qty
         new_bank[na.item] = new_bank.get(na.item, 0) - na.qty
-    elif na.kind == "craft":  # add the output, consume per*qty of each recipe input
-        new_owned[na.item] = new_owned.get(na.item, 0) + na.qty
+    elif na.kind == "craft":  # add runs*yield of the output, consume per*runs of each input
+        craft_yield = max(1, (yields or {}).get(na.item, 1))
+        new_owned[na.item] = new_owned.get(na.item, 0) + na.qty * craft_yield
         recipe = recipes.get(na.item)
         if recipe is not None:
             for inp, per in recipe.items():
@@ -107,6 +111,7 @@ def craft_plan_full(
     target: str,
     qty: int,
     sources: Mapping[str, list[Source]] | None = None,
+    yields: Mapping[str, int] | None = None,
 ) -> list[NextAction]:
     """The full ordered remaining plan to obtain ``qty`` of ``target``.
 
@@ -132,13 +137,14 @@ def craft_plan_full(
     # bound keeps the loop total without ever truncating a reachable plan.
     fuel = (len(recipes) + 1) * (qty + 1) + 1
     for _ in range(fuel):
-        na = next_craft_target_pure(recipes, cur_owned, cur_bank, target, qty, sources, cur_consumed)
+        na = next_craft_target_pure(recipes, cur_owned, cur_bank, target, qty, sources, cur_consumed,
+                                    yields)
         if na is None:
             return plan
         plan.append(na)
         if na.kind == "recycle":
             cur_consumed[na.code] = cur_consumed.get(na.code, 0) + na.qty
-        cur_owned, cur_bank = _apply_state(recipes, cur_owned, cur_bank, na, sources)
+        cur_owned, cur_bank = _apply_state(recipes, cur_owned, cur_bank, na, sources, yields)
     return plan  # pragma: no cover
     # Unreachable via this API: `fuel` is the closure-bounded worst case and each
     # step reduces the total remaining deficit by >= 1 (qty_pos), so the loop

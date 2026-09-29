@@ -16,12 +16,24 @@ def size_intermediate_craft(action: CraftAction, chain: Mapping[str, int],
                             state: WorldState, game_data: GameData) -> CraftAction:
     """Return `action` with its quantity set to the inventory-bounded batch for
     its net closure demand (chain demand minus what is already held in
-    inventory+bank). Unchanged when the sized quantity already matches."""
+    inventory+bank). Unchanged when the sized quantity already matches.
+
+    `craft_batch_size_pure` bounds a batch in UNITS of the item (its `demand`
+    is units); `CraftAction.quantity` is RUNS, each yielding
+    `craft_yield(code)` units. Passing the units through as runs made a yield-2
+    craft twice the batch: `Craft(earth_boost_potion×6)` for 6 potions, 12
+    made (2026-09-29). Identical for yield 1.
+
+    The rounding follows the bound that won: a batch bounded by DEMAND rounds
+    up (the runs that cover it), one bounded by SPACE or the cap rounds down
+    (the runs that fit), never below one run."""
     held = state.inventory.get(action.code, 0) + (state.bank_items or {}).get(action.code, 0)
     demand = max(0, chain.get(action.code, 0) - held)
-    qty = craft_batch_size_pure(action.code, demand, state.inventory,
-                                state.inventory_free, game_data.crafting_recipes,
-                                game_data.resource_drops, game_data.craft_yields)
+    units = craft_batch_size_pure(action.code, demand, state.inventory,
+                                  state.inventory_free, game_data.crafting_recipes,
+                                  game_data.resource_drops, game_data.craft_yields)
+    craft_yield = max(1, game_data.craft_yield(action.code))
+    qty = -(-units // craft_yield) if units >= demand else max(1, units // craft_yield)
     return action if action.quantity == qty else dataclasses.replace(action, quantity=qty)
 
 

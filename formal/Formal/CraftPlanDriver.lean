@@ -58,6 +58,7 @@ it is ignored for every other kind. -/
 def applyState
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
+    (yields : String → Nat)
     (owned bank : String → Nat)
     (na : NextAction) : (String → Nat) × (String → Nat) :=
   match na.kind with
@@ -67,7 +68,9 @@ def applyState
       (fun s => if s = na.item then owned s + na.qty else owned s,
        fun s => if s = na.item then bank s - na.qty else bank s)
   | .craft =>
-      let bumped : String → Nat := fun s => if s = na.item then owned s + na.qty else owned s
+      -- `na.qty` is RUNS: the item gains `runs * yield`, each input loses `per * runs`.
+      let bumped : String → Nat :=
+        fun s => if s = na.item then owned s + na.qty * max 1 (yields na.item) else owned s
       let consumed : String → Nat :=
         match recipes na.item with
         | none        => bumped
@@ -94,14 +97,15 @@ the number of actions for totality. Stops when the target is satisfied
 def craftPlan
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
+    (yields : String → Nat)
     (target : String) (qty innerFuel : Nat)
     : (String → Nat) → (String → Nat) → (String → Nat) → Nat → List NextAction
   | _,     _,    _,        0        => []
   | owned, bank, consumed, fuel + 1 =>
-      match nextCraftTarget recipes sources owned bank consumed target qty innerFuel with
+      match nextCraftTarget recipes sources owned bank consumed yields target qty innerFuel with
       | none    => []
       | some na =>
-          let st := applyState recipes sources owned bank na
+          let st := applyState recipes sources yields owned bank na
           -- accumulate the target units recycled from `na.code` (the cumulative
           -- capacity ledger `nextCraftTarget` reads via `sourceQty`); a
           -- non-recycle step leaves the ledger untouched.
@@ -109,7 +113,7 @@ def craftPlan
             if na.kind = Kind.recycle
             then (fun s => if s = na.code then consumed s + na.qty else consumed s)
             else consumed
-          na :: craftPlan recipes sources target qty innerFuel st.1 st.2 consumed' fuel
+          na :: craftPlan recipes sources yields target qty innerFuel st.1 st.2 consumed' fuel
 
 /-! ## Theorem 1: head matches the proven single step -/
 
@@ -119,14 +123,15 @@ the plan's first action is exactly the kernel-proved single-step
 theorem craftPlan_head
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
+    (yields : String → Nat)
     (owned bank consumed : String → Nat)
     (target : String) (qty innerFuel fuel : Nat)
     (na : NextAction)
-    (h : nextCraftTarget recipes sources owned bank consumed target qty innerFuel = some na) :
-    craftPlan recipes sources target qty innerFuel owned bank consumed (fuel + 1) =
-      na :: craftPlan recipes sources target qty innerFuel
-              (applyState recipes sources owned bank na).1
-              (applyState recipes sources owned bank na).2
+    (h : nextCraftTarget recipes sources owned bank consumed yields target qty innerFuel = some na) :
+    craftPlan recipes sources yields target qty innerFuel owned bank consumed (fuel + 1) =
+      na :: craftPlan recipes sources yields target qty innerFuel
+              (applyState recipes sources yields owned bank na).1
+              (applyState recipes sources yields owned bank na).2
               (if na.kind = Kind.recycle
                then (fun s => if s = na.code then consumed s + na.qty else consumed s)
                else consumed) fuel := by
@@ -139,13 +144,14 @@ is already satisfied (`qty ≤ owned target`). -/
 theorem craftPlan_nil_iff
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
+    (yields : String → Nat)
     (owned bank consumed : String → Nat)
     (target : String) (qty innerFuel fuel : Nat) :
-    craftPlan recipes sources target qty innerFuel owned bank consumed (fuel + 1) = [] ↔
+    craftPlan recipes sources yields target qty innerFuel owned bank consumed (fuel + 1) = [] ↔
       qty ≤ owned target := by
-  rw [← nextCraftTarget_none_iff recipes sources owned bank consumed target qty innerFuel]
+  rw [← nextCraftTarget_none_iff recipes sources owned bank consumed yields target qty innerFuel]
   simp only [craftPlan]
-  cases nextCraftTarget recipes sources owned bank consumed target qty innerFuel with
+  cases nextCraftTarget recipes sources owned bank consumed yields target qty innerFuel with
   | none => simp
   | some na => simp
 
@@ -157,11 +163,12 @@ fabricates no steps. -/
 theorem craftPlan_steps_valid
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
+    (yields : String → Nat)
     (target : String) (qty innerFuel : Nat) :
     ∀ (fuel : Nat) (owned bank consumed : String → Nat) (na : NextAction),
-      na ∈ craftPlan recipes sources target qty innerFuel owned bank consumed fuel →
+      na ∈ craftPlan recipes sources yields target qty innerFuel owned bank consumed fuel →
       ∃ (o b c : String → Nat),
-        nextCraftTarget recipes sources o b c target qty innerFuel = some na := by
+        nextCraftTarget recipes sources o b c yields target qty innerFuel = some na := by
   intro fuel
   induction fuel with
   | zero =>
@@ -170,7 +177,7 @@ theorem craftPlan_steps_valid
   | succ n ih =>
     intro owned bank consumed na hmem
     simp only [craftPlan] at hmem
-    cases hnc : nextCraftTarget recipes sources owned bank consumed target qty innerFuel with
+    cases hnc : nextCraftTarget recipes sources owned bank consumed yields target qty innerFuel with
     | none => simp [hnc] at hmem
     | some na0 =>
       rw [hnc] at hmem
@@ -178,8 +185,8 @@ theorem craftPlan_steps_valid
       cases hmem with
       | inl heq => exact ⟨owned, bank, consumed, heq ▸ hnc⟩
       | inr htail =>
-        exact ih (applyState recipes sources owned bank na0).1
-                 (applyState recipes sources owned bank na0).2
+        exact ih (applyState recipes sources yields owned bank na0).1
+                 (applyState recipes sources yields owned bank na0).2
                  (if na0.kind = Kind.recycle
                   then (fun s => if s = na0.code then consumed s + na0.qty else consumed s)
                   else consumed) na htail
@@ -190,9 +197,10 @@ theorem craftPlan_steps_valid
 def foldPlan
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
+    (yields : String → Nat)
     : (String → Nat) × (String → Nat) → List NextAction → (String → Nat) × (String → Nat)
   | st, []          => st
-  | st, na :: rest  => foldPlan recipes sources (applyState recipes sources st.1 st.2 na) rest
+  | st, na :: rest  => foldPlan recipes sources yields (applyState recipes sources yields st.1 st.2 na) rest
 
 /-- **COMPLETION-CORRECTNESS.** When the plan stopped because the target became
 satisfied (rather than running out of fuel — captured by `length < fuel`),
@@ -209,11 +217,12 @@ witnesses below + the differential, NOT by this theorem. -/
 theorem craftPlan_reaches
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
+    (yields : String → Nat)
     (target : String) (qty innerFuel : Nat) :
     ∀ (fuel : Nat) (owned bank consumed : String → Nat),
-      (craftPlan recipes sources target qty innerFuel owned bank consumed fuel).length < fuel →
-      qty ≤ (foldPlan recipes sources (owned, bank)
-              (craftPlan recipes sources target qty innerFuel owned bank consumed fuel)).1 target := by
+      (craftPlan recipes sources yields target qty innerFuel owned bank consumed fuel).length < fuel →
+      qty ≤ (foldPlan recipes sources yields (owned, bank)
+              (craftPlan recipes sources yields target qty innerFuel owned bank consumed fuel)).1 target := by
   intro fuel
   induction fuel with
   | zero =>
@@ -221,25 +230,25 @@ theorem craftPlan_reaches
     simp [craftPlan] at hlen
   | succ n ih =>
     intro owned bank consumed hlen
-    cases hnc : nextCraftTarget recipes sources owned bank consumed target qty innerFuel with
+    cases hnc : nextCraftTarget recipes sources owned bank consumed yields target qty innerFuel with
     | none =>
       have hsat : qty ≤ owned target :=
-        (nextCraftTarget_none_iff recipes sources owned bank consumed target qty innerFuel).mp hnc
+        (nextCraftTarget_none_iff recipes sources owned bank consumed yields target qty innerFuel).mp hnc
       simp only [craftPlan, hnc, foldPlan]
       exact hsat
     | some na0 =>
-      have hstep := craftPlan_head recipes sources owned bank consumed target qty innerFuel n na0 hnc
+      have hstep := craftPlan_head recipes sources yields owned bank consumed target qty innerFuel n na0 hnc
       rw [hstep] at hlen ⊢
       simp only [List.length_cons, foldPlan] at hlen ⊢
-      have hlen' : (craftPlan recipes sources target qty innerFuel
-                      (applyState recipes sources owned bank na0).1
-                      (applyState recipes sources owned bank na0).2
+      have hlen' : (craftPlan recipes sources yields target qty innerFuel
+                      (applyState recipes sources yields owned bank na0).1
+                      (applyState recipes sources yields owned bank na0).2
                       (if na0.kind = Kind.recycle
                        then (fun s => if s = na0.code then consumed s + na0.qty else consumed s)
                        else consumed) n).length < n := by
         omega
-      exact ih (applyState recipes sources owned bank na0).1
-               (applyState recipes sources owned bank na0).2
+      exact ih (applyState recipes sources yields owned bank na0).1
+               (applyState recipes sources yields owned bank na0).2
                (if na0.kind = Kind.recycle
                 then (fun s => if s = na0.code then consumed s + na0.qty else consumed s)
                 else consumed) hlen'
@@ -253,11 +262,12 @@ private def copperRecipes : String → Option (List (String × Nat))
 
 private def noSources : String → List Source := fun _ => []
 private def zero : String → Nat := fun _ => 0
+private def yieldsOne : String → Nat := fun _ => 1
 
 -- From 0 owned / 0 bank, the full plan for 1 copper_ring is the 3-step chain:
 -- gather 10 ore → craft 1 bar → craft 1 ring.
 example :
-    craftPlan copperRecipes noSources "copper_ring" 1 10 zero zero zero 10 =
+    craftPlan copperRecipes noSources yieldsOne "copper_ring" 1 10 zero zero zero 10 =
       [⟨"copper_ore", .gather, 10, ""⟩, ⟨"copper_bar", .craft, 1, ""⟩,
        ⟨"copper_ring", .craft, 1, ""⟩] := by decide
 
@@ -267,7 +277,7 @@ private def bankBar : String → Nat
   | _ => 0
 
 example :
-    craftPlan copperRecipes noSources "copper_ring" 1 10 zero bankBar zero 10 =
+    craftPlan copperRecipes noSources yieldsOne "copper_ring" 1 10 zero bankBar zero 10 =
       [⟨"copper_bar", .withdraw, 1, ""⟩, ⟨"copper_ring", .craft, 1, ""⟩] := by decide
 
 -- Already satisfied → empty plan.
@@ -275,7 +285,7 @@ private def haveRing : String → Nat
   | "copper_ring" => 1
   | _ => 0
 
-example : craftPlan copperRecipes noSources "copper_ring" 1 10 haveRing zero zero 10 = [] := by decide
+example : craftPlan copperRecipes noSources yieldsOne "copper_ring" 1 10 haveRing zero zero 10 = [] := by decide
 
 /-! ### RECYCLE non-vacuity — the widened arm genuinely fires and reaches. -/
 
@@ -291,19 +301,19 @@ private def owned5dagger : String → Nat
   | _ => 0
 
 example :
-    craftPlan copperRecipes recycleBarSources "copper_ring" 1 10 owned5dagger zero zero 10 =
+    craftPlan copperRecipes recycleBarSources yieldsOne "copper_ring" 1 10 owned5dagger zero zero 10 =
       [⟨"copper_bar", .recycle, 1, "copper_dagger"⟩, ⟨"copper_ring", .craft, 1, ""⟩] := by decide
 
 -- COMPLETION-CORRECTNESS non-vacuity on the RECYCLE plan: executed, it reaches
 -- the target (1 copper_ring owned), and the source debit brought daggers to 4.
 example :
-    1 ≤ (foldPlan copperRecipes recycleBarSources (owned5dagger, zero)
-          (craftPlan copperRecipes recycleBarSources "copper_ring" 1 10 owned5dagger zero zero 10)).1
+    1 ≤ (foldPlan copperRecipes recycleBarSources yieldsOne (owned5dagger, zero)
+          (craftPlan copperRecipes recycleBarSources yieldsOne "copper_ring" 1 10 owned5dagger zero zero 10)).1
         "copper_ring" := by decide
 
 example :
-    (foldPlan copperRecipes recycleBarSources (owned5dagger, zero)
-      (craftPlan copperRecipes recycleBarSources "copper_ring" 1 10 owned5dagger zero zero 10)).1
+    (foldPlan copperRecipes recycleBarSources yieldsOne (owned5dagger, zero)
+      (craftPlan copperRecipes recycleBarSources yieldsOne "copper_ring" 1 10 owned5dagger zero zero 10)).1
       "copper_dagger" = 4 := by decide
 
 /-! ### CEIL-PINNING witness (Finding 2) — ⌈·⌉ debit, NOT a truncating ⌊·⌋.
@@ -328,20 +338,40 @@ private def owned2dagger : String → Nat
 -- The plan itself is ceil/floor-agnostic (step qtys come from `sourceQty`, not
 -- the debit): recycle 3 bars, then craft 3 rings.
 example :
-    craftPlan copperRecipes recycleY2Sources "copper_ring" 3 10 owned2dagger zero zero 20 =
+    craftPlan copperRecipes recycleY2Sources yieldsOne "copper_ring" 3 10 owned2dagger zero zero 20 =
       [⟨"copper_bar", .recycle, 3, "copper_dagger"⟩, ⟨"copper_ring", .craft, 3, ""⟩] := by decide
 
 -- THE PIN: executed, the source item is debited by ⌈3/2⌉ = 2 → daggers reach 0.
 -- Under a truncating ⌊3/2⌋ = 1 this would be 1, so this witness fails on floor.
 example :
-    (foldPlan copperRecipes recycleY2Sources (owned2dagger, zero)
-      (craftPlan copperRecipes recycleY2Sources "copper_ring" 3 10 owned2dagger zero zero 20)).1
+    (foldPlan copperRecipes recycleY2Sources yieldsOne (owned2dagger, zero)
+      (craftPlan copperRecipes recycleY2Sources yieldsOne "copper_ring" 3 10 owned2dagger zero zero 20)).1
       "copper_dagger" = 0 := by decide
 
 -- Completion-correctness still holds on this plan (reaches 3 rings).
 example :
-    3 ≤ (foldPlan copperRecipes recycleY2Sources (owned2dagger, zero)
-          (craftPlan copperRecipes recycleY2Sources "copper_ring" 3 10 owned2dagger zero zero 20)).1
+    3 ≤ (foldPlan copperRecipes recycleY2Sources yieldsOne (owned2dagger, zero)
+          (craftPlan copperRecipes recycleY2Sources yieldsOne "copper_ring" 3 10 owned2dagger zero zero 20)).1
         "copper_ring" := by decide
+
+/-! ### Yield witness — a craft step is RUNS, and the fold credits `runs * yield`.
+
+`copper_bar` yields 2. Three rings from nothing: gather 20 ore (2 runs × 10),
+craft 2 bar-runs (4 bars), craft 3 rings. The fold leaves 1 spare bar and 0 ore:
+the per-run input debit and the `runs * yield` credit are both pinned. -/
+
+private def yieldsBar2 : String → Nat
+  | "copper_bar" => 2
+  | _ => 1
+
+example :
+    craftPlan copperRecipes noSources yieldsBar2 "copper_ring" 3 10 zero zero zero 10 =
+      [⟨"copper_ore", .gather, 20, ""⟩, ⟨"copper_bar", .craft, 2, ""⟩,
+       ⟨"copper_ring", .craft, 3, ""⟩] := by decide
+
+example :
+    let fin := (foldPlan copperRecipes noSources yieldsBar2 (zero, zero)
+      (craftPlan copperRecipes noSources yieldsBar2 "copper_ring" 3 10 zero zero zero 10)).1
+    fin "copper_ring" = 3 ∧ fin "copper_bar" = 1 ∧ fin "copper_ore" = 0 := by decide
 
 end Formal.CraftPlanDriver

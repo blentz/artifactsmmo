@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.consumable_supply import HEAL_STOCK_FLOOR
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -79,15 +80,31 @@ class TestHealPrepGoal:
         assert isinstance(goal, GatherMaterialsGoal)
         assert list(goal.needed) == ["pie"]
 
-    def test_the_batch_is_the_deficit_beyond_bag_and_bank(self):
-        """Two in the bag, one in the bank: the goal asks for three NEW copies
-        (bank + bag + deficit), because `GatherMaterialsGoal` counts the bank
-        as held while the stock is what the bag carries into the fight."""
+    def test_the_batch_counts_the_banks_copies(self):
+        """Two in the bag, one in the bank: the goal asks for bank + bag +
+        deficit, because decomposition credits the banked copy of the target
+        without withdrawing it (next test)."""
         gd = _gd()
         goal = heal_prep_goal(_state(gd, {"cheese": 2, "milk": 10}, bank={"cheese": 1}), gd,
                               NO_PROFILE_CONTEXT)
         assert isinstance(goal, GatherMaterialsGoal)
         assert goal.needed == {"cheese": 1 + 2 + (HEAL_STOCK_FLOOR - 2)}
+
+    def test_the_plan_crafts_exactly_what_the_bag_lacks(self):
+        """Real decomposition: a banked copy is credited, not withdrawn, so
+        the craft must still cover the whole deficit for the bag to reach the
+        stock target."""
+        gd = _gd()
+        gd._bank_location = (5, 5)
+        state = _state(gd, {"cheese": 2, "milk": 10}, bank={"cheese": 1})
+        goal = heal_prep_goal(state, gd, NO_PROFILE_CONTEXT)
+        assert goal is not None
+        actions = [CraftAction(code="cheese", workshop_location=(4, 4))]
+        plan = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
+        assert plan is not None
+        assert [(type(a).__name__, a.code, a.quantity) for a in plan] == [
+            ("CraftAction", "cheese", HEAL_STOCK_FLOOR - 2),
+        ]
 
 
 def _player(inventory: dict[str, int]) -> GamePlayer:

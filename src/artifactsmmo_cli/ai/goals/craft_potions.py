@@ -11,10 +11,12 @@ GameData. The guard not firing == the goal effectively satisfied for the cycle.
 """
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.craft_ladder import craft_utility_ladder
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.potion_supply import (
     heal_stock_target,
@@ -23,6 +25,7 @@ from artifactsmmo_cli.ai.potion_supply import (
     target_potion_pure,
 )
 from artifactsmmo_cli.ai.unlock_boost import unlock_boost_target
+from artifactsmmo_cli.ai.utility_slot import utility_slot_for
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -183,6 +186,37 @@ class CraftPotionsGoal(Goal):
         baseline = self._baseline(state.level, state, self._game_data, self._history)
         return (state.utility1_slot_quantity >= baseline
                 or state.utility2_slot_quantity >= baseline)
+
+    def batch_equip(self, state: WorldState) -> EquipAction | None:
+        """The equip that lands this plan's batch, sized to what is still
+        unequipped, or None when the goal is unseeded or already satisfied.
+
+        What decomposition serves (Phase 2c-1 of
+        docs/PLAN_decision_architecture_redesign.md): the frozen batch is
+        `equip_qty` of the target in the utility slot, so the goal is the
+        potions in the bag, then this one equip."""
+        if self._seed_target is None:
+            return None
+        code, _runs, equip_qty = self._seed_target
+        remaining = self._seed_equipped + equip_qty - equipped_potion_qty(state, code)
+        if remaining <= 0:
+            return None
+        return EquipAction(code=code, slot=utility_slot_for(code, state), quantity=remaining)
+
+    def batch_obtain(self, state: WorldState) -> GatherMaterialsGoal | None:
+        """The potions the bag still lacks for `batch_equip`, as an obtain goal,
+        or None when the bag already holds them (or there is nothing to equip).
+
+        The bag, not the bank: an equip takes from the inventory. The quantity
+        adds the bank's copies because decomposition credits a banked copy of
+        the target as held without withdrawing it (the recipe descent withdraws
+        only banked INPUTS), so the plan crafts exactly what the bag lacks."""
+        equip = self.batch_equip(state)
+        if equip is None or state.inventory.get(equip.code, 0) >= equip.quantity:
+            return None
+        banked = (state.bank_items or {}).get(equip.code, 0)
+        return GatherMaterialsGoal(target_item=equip.code,
+                                   needed={equip.code: banked + equip.quantity})
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         pair = unlock_boost_target(state, game_data)

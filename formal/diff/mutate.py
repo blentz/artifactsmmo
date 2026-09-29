@@ -204,6 +204,9 @@ CRAFT_PLAN_DRIVER_MUTATIONS = [
     ("craft_plan_driver: withdraw skips bank debit",
      "        new_bank[na.item] = new_bank.get(na.item, 0) - na.qty",
      "        new_bank[na.item] = new_bank.get(na.item, 0)"),
+    ("craft_plan_driver: craft credits runs, not runs * yield (the plan crafts again for units it made)",
+     "        new_owned[na.item] = new_owned.get(na.item, 0) + na.qty * craft_yield",
+     "        new_owned[na.item] = new_owned.get(na.item, 0) + na.qty"),
 ]
 
 # craft_plan_driver_core recycle-branch mutations (CRITICAL 1/2: the recycle-
@@ -231,8 +234,14 @@ CRAFT_PLAN_DRIVER_RECYCLE_MUTATIONS = [
 # DAGs + spot-checks).
 NEXT_CRAFT_MUTATIONS = [
     ("next_craft: drop per-scaling on required inputs",
-     "        required = per * deficit",
-     "        required = deficit"),
+     "        required = per * runs",
+     "        required = runs"),
+    ("next_craft: craft sized in units, not runs (ignores yield: a yield-2 potion asks double)",
+     "    runs = -(-deficit // max(1, yields.get(item, 1)))",
+     "    runs = deficit"),
+    ("next_craft: runs rounded down, not up (a partial run leaves the deficit short)",
+     "    runs = -(-deficit // max(1, yields.get(item, 1)))",
+     "    runs = max(1, deficit // max(1, yields.get(item, 1)))"),
     ("next_craft: short-input off-by-one (< -> <=)",
      "        if owned.get(inp, 0) < required:",
      "        if owned.get(inp, 0) <= required:"),
@@ -240,8 +249,8 @@ NEXT_CRAFT_MUTATIONS = [
      "    if owned.get(target, 0) >= qty:",
      "    if owned.get(target, 0) > qty:"),
     ("next_craft: craft result emits gather kind",
-     '    return NextAction(item, "craft", deficit)  # all inputs on hand → craft',
-     '    return NextAction(item, "gather", deficit)  # all inputs on hand → craft'),
+     '    return NextAction(item, "craft", runs)  # all inputs on hand → craft `runs` times',
+     '    return NextAction(item, "gather", runs)  # all inputs on hand → craft `runs` times'),
     # withdraw branch (banked-intermediate fix): banked short input → withdraw.
     ("next_craft: withdraw bank-check flip (== 0 -> != 0)",
      "            if bank.get(inp, 0) == 0:",

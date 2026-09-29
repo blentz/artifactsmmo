@@ -267,3 +267,73 @@ def test_next_craft_all_six_kinds_agree() -> None:
         assert py is not None, f"trial {t} ({featured}) produced no action"
         seen.add(py.kind)
     assert seen == set(SIX_KINDS), f"kinds not all exercised: {seen}"
+
+
+# ---------------------------------------------------------------------------
+# Craft YIELD: a craft step is sized in RUNS, ⌈deficit / yield⌉ (2026-09-29).
+# ---------------------------------------------------------------------------
+
+
+def _random_yields(rng: random.Random, recipes: dict[str, dict[str, int]]) -> dict[str, int]:
+    """Yields 0-3 for some craftable items; the rest absent. 0 and absent both
+    read as 1 on both sides (`max(1, ...)` / `yields.get(item, 1)`), so they are
+    kept in the draw on purpose."""
+    return {item: rng.randint(0, 3) for item in recipes if rng.random() < 0.7}
+
+
+def _call_lean_yields(recipes, owned, bank, target, qty, sources, yields) -> dict | None:
+    fuel = len(recipes) + 1
+    return run_oracle_structured(
+        "next_craft",
+        [[_recipes_to_json(recipes), dict(owned), dict(bank), target, qty, fuel,
+          sources_to_json(sources), dict(yields)]],
+    )[0]
+
+
+@settings(max_examples=400, deadline=None)
+@given(
+    recipe_seed=st.integers(min_value=0, max_value=10_000),
+    state_seed=st.integers(min_value=0, max_value=10_000),
+    qty=st.integers(min_value=0, max_value=10),
+)
+def test_next_craft_agrees_with_yields(recipe_seed: int, state_seed: int, qty: int) -> None:
+    """Python ≡ Lean when crafts yield more than one unit: the descent sizes a
+    craft in runs and each input as `per * runs`."""
+    recipes = _make_recipes(recipe_seed)
+    rng = random.Random(state_seed)
+    owned = {f"item{i}": rng.randint(0, 20) for i in range(_N) if rng.random() < 0.5}
+    bank = {f"item{i}": rng.randint(0, 20) for i in range(_N) if rng.random() < 0.3}
+    yields = _random_yields(rng, recipes)
+    py = next_craft_target_pure(recipes, owned, bank, "item0", qty, None, None, yields)
+    lean = _call_lean_yields(recipes, owned, bank, "item0", qty, {}, yields)
+    _assert_agree(py, lean, (recipe_seed, state_seed, qty, yields))
+
+
+def test_next_craft_yields_with_all_six_kinds_agree() -> None:
+    """Yields on top of the six-source scenarios: Python ≡ Lean, and a yield
+    above 1 genuinely changes some answer (the run would agree vacuously if the
+    yield never reached a craft or an input size)."""
+    rng = random.Random(20260929)
+    changed = 0
+    for t in range(300):
+        featured = SIX_KINDS[t % len(SIX_KINDS)]
+        recipes, owned, bank, sources, target, qty = scenario(rng, featured)
+        yields = {item: rng.randint(1, 3) for item in recipes}
+        py = next_craft_target_pure(recipes, owned, bank, target, qty, sources, None, yields)
+        lean = _call_lean_yields(recipes, owned, bank, target, qty, sources, yields)
+        _assert_agree(py, lean, (t, featured, yields))
+        changed += py != next_craft_target_pure(recipes, owned, bank, target, qty, sources)
+    assert changed > 0, "no trial's answer depended on a yield"
+
+
+def test_copper_ring_yield_two_sizes_runs() -> None:
+    """copper_bar yields 2: three rings need two bar-crafts, so 20 ore, and the
+    craft step names 2 runs, not 3 bars."""
+    yields = {"copper_bar": 2}
+    py = next_craft_target_pure(_COPPER_RECIPES, {}, _NO_BANK, "copper_ring", 3, None, None, yields)
+    assert py == NextAction("copper_ore", "gather", 20)
+    py = next_craft_target_pure(_COPPER_RECIPES, {"copper_ore": 20}, _NO_BANK, "copper_ring", 3,
+                                None, None, yields)
+    assert py == NextAction("copper_bar", "craft", 2)
+    lean = _call_lean_yields(_COPPER_RECIPES, {"copper_ore": 20}, _NO_BANK, "copper_ring", 3, {}, yields)
+    _assert_agree(py, lean, "copper yield 2")

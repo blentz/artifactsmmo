@@ -160,3 +160,73 @@ def test_craft_plan_all_six_kinds_agree_and_reach() -> None:
         for na in py:
             seen.add(na.kind)
     assert seen == set(SIX_KINDS), f"kinds not all exercised: {seen}"
+
+
+# ---------------------------------------------------------------------------
+# Craft YIELD: a craft step is RUNS and the fold credits `runs * yield`.
+# ---------------------------------------------------------------------------
+
+
+def _call_lean_yields(recipes, owned, bank, target, qty, sources, yields) -> list[dict]:
+    return run_oracle_structured(
+        "craft_plan",
+        [[_recipes_to_json(recipes), dict(owned), dict(bank), target, qty, _fuel(recipes, qty),
+          sources_to_json(sources), dict(yields)]],
+    )[0]
+
+
+@settings(max_examples=300, deadline=None)
+@given(
+    recipe_seed=st.integers(min_value=0, max_value=10_000),
+    state_seed=st.integers(min_value=0, max_value=10_000),
+    qty=st.integers(min_value=0, max_value=6),
+)
+def test_craft_plan_agrees_and_reaches_with_yields(recipe_seed, state_seed, qty) -> None:
+    """Python ≡ Lean step for step with random yields, and executing the plan
+    with the same yields reaches the target."""
+    recipes = _make_recipes(recipe_seed)
+    rng = random.Random(state_seed)
+    owned = {f"item{i}": rng.randint(0, 12) for i in range(_N) if rng.random() < 0.5}
+    bank = {f"item{i}": rng.randint(0, 12) for i in range(_N) if rng.random() < 0.3}
+    yields = {item: rng.randint(0, 3) for item in recipes if rng.random() < 0.7}
+    py = craft_plan_full(recipes, owned, bank, "item0", qty, None, yields)
+    lean = _call_lean_yields(recipes, owned, bank, "item0", qty, {}, yields)
+    _assert_agree(py, lean, (recipe_seed, state_seed, qty, yields))
+    cur_o, cur_b = dict(owned), dict(bank)
+    for na in py:
+        cur_o, cur_b = _apply_state(recipes, cur_o, cur_b, na, None, yields)
+    assert cur_o.get("item0", 0) >= qty
+
+
+def test_craft_plan_yields_with_all_six_kinds_agree_and_reach() -> None:
+    rng = random.Random(20260930)
+    changed = 0
+    for t in range(300):
+        featured = SIX_KINDS[t % len(SIX_KINDS)]
+        recipes, owned, bank, sources, target, qty = scenario(rng, featured)
+        yields = {item: rng.randint(1, 3) for item in recipes}
+        py = craft_plan_full(recipes, owned, bank, target, qty, sources, yields)
+        lean = _call_lean_yields(recipes, owned, bank, target, qty, sources, yields)
+        _assert_agree(py, lean, (t, featured, yields))
+        cur_o, cur_b = dict(owned), dict(bank)
+        for na in py:
+            cur_o, cur_b = _apply_state(recipes, cur_o, cur_b, na, sources, yields)
+        assert cur_o.get(target, 0) >= qty, (t, featured, yields)
+        changed += py != craft_plan_full(recipes, owned, bank, target, qty, sources)
+    assert changed > 0, "no trial's plan depended on a yield"
+
+
+def test_copper_ring_yield_two_plan() -> None:
+    """Three rings, copper_bar yields 2: gather 20 ore, 2 bar-runs, 3 rings;
+    the fold leaves 1 spare bar (the Lean witness, on the Python side)."""
+    recipes = {"copper_ring": {"copper_bar": 1}, "copper_bar": {"copper_ore": 10}}
+    yields = {"copper_bar": 2}
+    py = craft_plan_full(recipes, {}, {}, "copper_ring", 3, None, yields)
+    assert [(na.item, na.kind, na.qty) for na in py] == [
+        ("copper_ore", "gather", 20), ("copper_bar", "craft", 2), ("copper_ring", "craft", 3)]
+    cur_o: dict[str, int] = {}
+    cur_b: dict[str, int] = {}
+    for na in py:
+        cur_o, cur_b = _apply_state(recipes, cur_o, cur_b, na, None, yields)
+    assert (cur_o["copper_ring"], cur_o["copper_bar"], cur_o["copper_ore"]) == (3, 1, 0)
+    _assert_agree(py, _call_lean_yields(recipes, {}, {}, "copper_ring", 3, {}, yields), "copper y2")

@@ -2819,6 +2819,20 @@ def parseSources (j? : Option Json) : String → List Source :=
       | .ok kv => kv.toList.map (fun (item, sj) => (item, parseSourceList sj))
   fun s => match assoc.find? (fun p => p.1 == s) with | some p => p.2 | none => []
 
+/-- Parse the OPTIONAL craft-yield object (`args[7]` of the craft handlers):
+item code → units one craft produces. Absent object or absent item ⇒ 1, exactly
+Python's `yields.get(item, 1)` (the core then reads `max 1`). -/
+def parseYields (j? : Option Json) : String → Nat :=
+  let assoc : List (String × Nat) :=
+    match j? with
+    | none => []
+    | some j =>
+      match j.getObj? with
+      | .error _ => []
+      | .ok kv => kv.toList.filterMap (fun (n, qj) =>
+          match qj.getInt? with | .error _ => none | .ok v => some (n, v.toNat))
+  fun s => match assoc.find? (fun p => p.1 == s) with | some p => p.2 | none => 1
+
 /-- Compute one next_craft_target result using the proved `nextCraftTarget`.
 
 args layout (mixed JSON):
@@ -2834,6 +2848,8 @@ args layout (mixed JSON):
 * `[6]` sources_obj : OPTIONAL JSON OBJECT mapping item → array of
         `[kindStr, code, yieldPer, capacity]` (THE obtain model). Absent ⇒ the
         3-kind recipe-tree walk.
+* `[7]` yields_obj : OPTIONAL JSON OBJECT mapping item → craft yield (units per
+        craft). Absent ⇒ every yield 1 (`parseYields`).
 
 Emits `null` when none (target already satisfied); otherwise:
 `{"item": str, "kind": <one of the six>, "qty": int, "code": str}`. -/
@@ -2896,7 +2912,8 @@ def runNextCraft (args : Array Json) : Json :=
   let qty    := (intArg args 4).toNat
   let fuel   := (intArg args 5).toNat
   let sources := parseSources args[6]?
-  match nextCraftTarget recipes sources owned bank (fun _ => 0) target qty fuel with
+  let yields := parseYields args[7]?
+  match nextCraftTarget recipes sources owned bank (fun _ => 0) yields target qty fuel with
   | none    => Json.null
   | some na =>
       Json.mkObj [("item", Json.str na.item), ("kind", Json.str (kindToStr na.kind)),
@@ -2908,6 +2925,7 @@ args layout matches `runNextCraft` plus an outer fuel:
 * `[0]` recipes_obj, `[1]` owned_obj, `[2]` bank_obj, `[3]` target, `[4]` qty,
 * `[5]` fuel (outer step budget; caller passes a generous closure bound),
 * `[6]` sources_obj (OPTIONAL — THE obtain model, same shape as `runNextCraft`).
+* `[7]` yields_obj (OPTIONAL — craft yields, same shape as `runNextCraft`).
 
 Emits a JSON ARRAY of `{"item","kind","qty","code"}` objects (the ordered plan). -/
 def runCraftPlan (args : Array Json) : Json :=
@@ -2949,8 +2967,9 @@ def runCraftPlan (args : Array Json) : Json :=
   let qty    := (intArg args 4).toNat
   let fuel   := (intArg args 5).toNat
   let sources := parseSources args[6]?
+  let yields := parseYields args[7]?
   let innerFuel := recipeAssoc.length + 1
-  let plan := Formal.CraftPlanDriver.craftPlan recipes sources target qty innerFuel owned bank (fun _ => 0) fuel
+  let plan := Formal.CraftPlanDriver.craftPlan recipes sources yields target qty innerFuel owned bank (fun _ => 0) fuel
   let naJson : NextAction → Json := fun na =>
     Json.mkObj [("item", Json.str na.item), ("kind", Json.str (kindToStr na.kind)),
                 ("qty", Json.num (Int.ofNat na.qty)), ("code", Json.str na.code)]

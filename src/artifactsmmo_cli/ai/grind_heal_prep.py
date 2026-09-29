@@ -41,12 +41,13 @@ def heal_prep_goal(state: WorldState, game_data: GameData,
     while holding milk for `cheese`), and a prep that cannot decompose would
     never run.
 
-    The batch is the deficit to the stock target. It counts NEW copies beyond
-    the bank's: `GatherMaterialsGoal` (and `feasible`) count bank copies as
-    held, while the stock is what the bag carries into the fight. Asking for
-    bank + bag + deficit makes the goal produce the deficit instead of reading a
-    banked copy it would never withdraw as satisfied. The deposit keep-set holds
-    the stock target in the bag, so only surplus above it reaches the bank."""
+    The batch is the deficit to the stock target, asked for as bank + bag +
+    deficit. Decomposition credits a banked copy of the TARGET itself as held
+    without withdrawing it (`generate_next_craft_action` drops the WITHDRAW
+    source; the recipe descent withdraws only banked INPUTS), so asking for
+    bag + deficit would craft the deficit minus the bank's copies and leave the
+    bag short. A live bank-aware withdraw of the target is 2c-2's (the obtain
+    model's routes carry the bank's capacity)."""
     deficit = heal_stock_target(HEAL_STOCK_FLOOR) - heal_stock(state, game_data)
     if deficit <= 0:
         return None
