@@ -88,6 +88,7 @@ from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.grind_expansion import grind_leg_nodes
+from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
@@ -1634,6 +1635,9 @@ class GamePlayer:
             self._last_grind_expansion = grind_leg_nodes(
                 action.skill, sub_plan, self._last_grind_expansion)
             return result
+        if isinstance(first, FightAction):
+            sub_plan = self._with_heal_prep(sub_plan, actions)
+            first = sub_plan[0]
         self._last_grind_expansion = grind_leg_nodes(action.skill, sub_plan)
         # Stash the leg BEFORE executing it: a Fight leg sets its own
         # `last_fight` before raising on a loss, so recording the leg first is
@@ -1644,6 +1648,25 @@ class GamePlayer:
         # is what gets recorded, never the leg (see `_execute`'s docstring).
         leg_state, leg_outcome, _leg_executed = self._execute(first, client)
         return leg_state, leg_outcome
+
+    def _with_heal_prep(self, sub_plan: list[Action], actions: list[Action]) -> list[Action]:
+        """`sub_plan` (whose first leg is a fight), led by the legs that stock
+        heals first when the stock is under target (`grind_heal_prep`).
+
+        The prep is decomposed like every grind leg, and is skipped (the fight
+        goes ahead) when decomposition cannot serve it or would open with
+        another skill grind: a heal stock saves requests, it is not worth a
+        second grind, and it must never block the one it serves."""
+        assert self.state is not None and self.game_data is not None
+        prep = heal_prep_goal(self.state, self.game_data, self._last_ctx)
+        if prep is None:
+            return sub_plan
+        prep_plan = decompose(prep, self.state, self.game_data, actions, self._last_ctx)
+        if not prep_plan or isinstance(prep_plan[0], LevelSkill):
+            return sub_plan
+        self._events.note(Mechanism.FAST_PATH, repr(prep),
+                          f"grind heal prep plan_len={len(prep_plan)}")
+        return [*prep_plan, *sub_plan]
 
     def _mark_grind_failure_doomed(self) -> None:
         """Mark the goal whose plan contains this failing LevelSkill step as

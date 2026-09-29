@@ -334,6 +334,45 @@ class TestMonsterDropLeafFallsBack:
 
         assert result is None, "Monster-drop leaf must fall back to A*"
 
+    def test_a_sourceless_leaf_held_in_full_crafts(self):
+        """Holdings are what the plan is built from: a leaf no route mints but
+        held in full needs no step (live C3P0 2026-09-28: `cheese` from 20 held
+        `milk_bucket` was refused outright)."""
+        gd = _gd_monster_drop()
+        state = make_state(inventory={"feather": 8}, bank_items={},
+                           skills={"gearcrafting": 5})
+        goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+        actions = [CraftAction(code="feather_coat", workshop_location=(3, 1))]
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert [(type(a).__name__, a.code) for a in result] == [("CraftAction", "feather_coat")]
+
+    def test_a_sourceless_leaf_held_short_still_falls_back(self):
+        """Seven of eight held: the missing feather has no route and no action,
+        so decomposition declines at the mapping instead of planning a craft
+        it cannot feed."""
+        gd = _gd_monster_drop()
+        state = make_state(inventory={"feather": 7}, bank_items={},
+                           skills={"gearcrafting": 5})
+        goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+        actions = [CraftAction(code="feather_coat", workshop_location=(3, 1))]
+
+        assert generate_next_craft_action(goal, state, gd, actions) is None
+
+    def test_a_sourceless_leaf_held_in_the_bank_withdraws(self):
+        gd = _gd_monster_drop()
+        state = make_state(inventory={}, bank_items={"feather": 8},
+                           skills={"gearcrafting": 5})
+        goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+        actions = [CraftAction(code="feather_coat", workshop_location=(3, 1))]
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert [type(a).__name__ for a in result] == ["WithdrawItemAction", "CraftAction"]
+
 
 class TestUnmetSkillGateFallsBack:
     """Closure has a craftable whose skill gate the character hasn't met → None."""

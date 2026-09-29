@@ -230,11 +230,19 @@ def generate_next_craft_action(
                 if lvl is None or not lvl.is_applicable(state, game_data):
                     return None
                 return _finish([lvl], state, game_data)
-        elif item not in gatherable_items and not sources.get(item):
+        elif (item not in gatherable_items and not sources.get(item)
+              and not state.inventory.get(item, 0) and not (state.bank_items or {}).get(item, 0)):
             # Raw leaf that no resource drops AND the shared obtain model has
             # no RECYCLE/BUY/DROP source for it either (an unmodeled monster
             # drop, an NPC-buy leaf the model declined, or a genuinely
             # unreachable/unwinnable route) → fall back to A* honestly.
+            #
+            # A HELD leaf is not refused here: holdings are what
+            # `craft_plan_full` plans from, so a leaf held in full needs no
+            # step at all (live C3P0 2026-09-28: `cheese` from 20 held
+            # `milk_bucket`, which no route mints, was refused outright). A
+            # leaf held SHORT still falls back, at the mapping below: its
+            # missing units get a step no action serves.
             return None
 
     if relevant is None:

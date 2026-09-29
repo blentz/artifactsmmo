@@ -80,19 +80,17 @@ def heal_stock_target(desired: int) -> int:
     return max(HEAL_STOCK_FLOOR, min(desired, UTILITY_SLOT_MAX_STACK))
 
 
-def best_craftable_heal(state: WorldState, game_data: GameData) -> str | None:
-    """The craftable-now heal consumable with the highest hp_restore that is at
-    least as strong as the best heal already held (so restocking a good heal
-    counts), or None when the bot's skills can make nothing worthwhile.
+def craftable_heals(state: WorldState, game_data: GameData) -> list[str]:
+    """Every craftable-now heal consumable at least as strong as the best heal
+    already held (so restocking a good heal counts), strongest first.
 
     "Craftable now" = the item has a recipe and the player meets the crafting
     skill level. Materials are NOT required on hand — the goal's recipe-closure
-    actions let the planner gather/withdraw them. Selection is deterministic
-    (highest restore, then lowest code) so the predicate and goal agree."""
+    actions let the planner gather/withdraw them. Ordered by hp_restore
+    descending, then code, so every caller reads the same ranking."""
     floor_restore = best_held_heal_restore(state, game_data)
-    best_code: str | None = None
-    best_restore = -1
-    for code in sorted(game_data.crafting_recipes):
+    ranked: list[tuple[int, str]] = []
+    for code in game_data.crafting_recipes:
         stats = game_data.item_stats(code)
         if stats is None or stats.hp_restore <= 0:
             continue
@@ -102,9 +100,16 @@ def best_craftable_heal(state: WorldState, game_data: GameData) -> str | None:
             continue
         if state.skills.get(stats.crafting_skill, 1) < stats.crafting_level:
             continue  # skill gate not met
-        if stats.hp_restore > best_restore:
-            best_code, best_restore = code, stats.hp_restore
-    return best_code
+        ranked.append((-stats.hp_restore, code))
+    return [code for _restore, code in sorted(ranked)]
+
+
+def best_craftable_heal(state: WorldState, game_data: GameData) -> str | None:
+    """The strongest of `craftable_heals`, or None when the bot's skills can
+    make nothing worthwhile. The predicate and the goal both read it, so they
+    agree."""
+    heals = craftable_heals(state, game_data)
+    return heals[0] if heals else None
 
 
 def maintain_consumables_fires(state: WorldState, game_data: GameData,
