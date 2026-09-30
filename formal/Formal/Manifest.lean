@@ -27,6 +27,7 @@ import Formal.ObtainModelSupply
 import Formal.Decompose
 import Formal.DecomposeWitness
 import Formal.CommittedLoop
+import Formal.Liveness.GrindCycles
 import Formal.CompleteTaskIncome
 import Formal.AccumulationSell
 import Formal.DominancePareto
@@ -1259,6 +1260,10 @@ open Formal.PriorityBand
 #check @Formal.CommittedLoop.execAll_dom              -- monotonicity: a world at least as full runs at least as far
 #check @Formal.CommittedLoop.committed_loop_delivers  -- termination/sufficiency: under any fair tick schedule the committed loop delivers the goal
 #check @Formal.CommittedLoop.schedule_exists          -- non-vacuity: a fair schedule exists for every plan
+
+-- GrindCycles required roles (Phase 2d-L2b: the grind as legs, paying skill XP):
+#check @Formal.Liveness.GrindCycles.prep_keeps_skill           -- safety: no preparatory leg touches the skill
+#check @Formal.Liveness.GrindCycles.grind_cycles_reach_target  -- termination: skillDeficit cycles reach the target level
 
 -- CompleteTaskIncome required roles (CompleteTaskAction.apply coin minting;
 -- src/artifactsmmo_cli/ai/actions/complete_task_core.py):

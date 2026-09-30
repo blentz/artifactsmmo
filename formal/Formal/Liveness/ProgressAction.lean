@@ -27,8 +27,9 @@
       — the perception invariant disclosed in `FightProgress`. Discharge:
         Phase 22 cycle model.
     * `gather skillReq minFree drop skill`:
-        `s.targetSkillLevel > s.trackedSkillLevel ∧ skill.isSome`
-      — productivity guard. Discharge: planner-side (a LevelSkillGoal is
+        `0 < s.skillDeficit ∧ 0 < s.skillLegXp ∧ skill.isSome`
+      — productivity guard (XP still owed; the leg earns, the
+      `SkillXpPositive` gate). Discharge: planner-side (a ReachSkill goal is
         active and a skill-bearing resource was selected).
     * `deposit accessible nonempty depositCount`:
         `depositCount > 0 ∧ s.inventoryUsed ≥ depositCount ∧
@@ -87,7 +88,7 @@ def actionIsApplicable (s : State) : ProgressAction → Bool
     concrete proposition whose discharge is documented above. -/
 def validInvariants (s : State) : ProgressAction → Prop
   | .fight _ _           => s.level < 50 ∧ s.xp < xpToNextLevel s.level
-  | .gather _ _ _ skill  => s.targetSkillLevel > s.trackedSkillLevel
+  | .gather _ _ _ skill  => 0 < s.skillDeficit ∧ 0 < s.skillLegXp
                             ∧ skill.isSome
   | .deposit _ _ n       => n > 0 ∧ s.inventoryUsed ≥ n
                             ∧ s.inventoryUsed > bankPressureThreshold s.inventoryMax
@@ -124,10 +125,10 @@ theorem step_decreases_measure
     obtain ⟨hlvl, hxpInv⟩ := hinv
     exact fight_decreases_measure s ml matchesTask happ hlvl hxpInv
   | gather skillReq minFree drop skill =>
-    -- hinv : s.targetSkillLevel > s.trackedSkillLevel ∧ skill.isSome
-    obtain ⟨hprog, hskill⟩ := hinv
+    -- hinv : 0 < s.skillDeficit ∧ 0 < s.skillLegXp ∧ skill.isSome
+    obtain ⟨hprog, hleg, hskill⟩ := hinv
     exact gather_decreases_measure s skillReq minFree drop skill
-            happ hprog hskill
+            happ hprog hleg hskill
   | deposit accessible nonempty depositCount =>
     -- hinv : depositCount > 0 ∧ s.inventoryUsed ≥ depositCount
     --        ∧ s.inventoryUsed > bankPressureThreshold s.inventoryMax

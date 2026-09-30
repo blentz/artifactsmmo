@@ -319,7 +319,7 @@ theorem descendsD_supplyBank (s : State)
   rw [hcs]
   apply dLt_of_supplyDemand_dec <;>
     simp [dMeasure, rearmOnMint, dispatchesFight, partialClear, pressureDeltaD,
-      applyActionKind, refreshD_supplyDemand,
+      applyActionKind, grantSkillXp, refreshD_supplyDemand,
       refreshD_phase, refreshD_drawOwed, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
       refreshD_craftRelief, refreshD_craftPotions, refreshD_gearReview,

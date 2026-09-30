@@ -633,7 +633,7 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
       simp [applyActionKind]
     | supplyBank =>
       show (applyActionKind .gather s).level ≥ s.level
-      simp [applyActionKind]
+      simp [applyActionKind, grantSkillXp]
     | currencyTurnIn =>
       show (applyActionKind .npcBuy s).level ≥ s.level
       simp [applyActionKind]

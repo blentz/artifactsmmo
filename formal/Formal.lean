@@ -212,6 +212,7 @@ import Formal.ObtainModelSupply
 import Formal.Decompose
 import Formal.DecomposeWitness
 import Formal.CommittedLoop
+import Formal.Liveness.GrindCycles
 import Formal.CompleteTaskIncome
 import Formal.Liveness.CurrencyFunding
 import Formal.GearTaxonomy

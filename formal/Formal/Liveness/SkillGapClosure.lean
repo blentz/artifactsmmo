@@ -3,6 +3,7 @@ import Formal.Liveness.PlanAction
 import Formal.Liveness.Measure
 import Formal.Liveness.TaskLifecyclePhase
 import Formal.Liveness.TaskCompleteReachable
+import Formal.Liveness.LadderEval
 import Mathlib.Tactic
 
 /-! # Skill-gap closure — Phase 23d-7 (hand-written)
@@ -14,19 +15,24 @@ User mandate (2026-06-01):
 > skill or level required to progress the task.
 
 Closes Part C of Phase 23d-6: when a task's prerequisites are NOT met
-(`trackedSkillLevel < targetSkillLevel`), the planner can chain
-`.gather` actions to close the skill gap, then chain `.taskTrade`
+(`trackedSkillLevel < targetSkillLevel`), the planner can chain the grind's
+earning legs (`.gather`) to close the skill gap, then chain `.taskTrade`
 actions to complete the task.
 
-Two-stage K-step plan:
-  K_skill   = `targetSkillLevel - trackedSkillLevel` `.gather` steps
-  K_complete = `taskTotal - taskProgress`             `.taskTrade` steps
+Phase 2d-L2: a leg pays skill XP, not a level. `.gather` pays `skillLegXp`
+(≥ 1, the `SkillXpPositive` gate) against the per-level needs
+(`Measure.grantSkillXp`), so the gap closes after at most the XP owed
+(`skillDeficit`) earning legs, and the band invariant (`SkillBand`) turns
+"nothing owed" into "the target level is reached".
 
-Total K = K_skill + K_complete. Finite under the precondition that
-both gaps are bounded.
+Two-stage K-step plan:
+  K_skill   = `skillDeficit`            `.gather` steps (earning legs)
+  K_complete = `taskTotal - taskProgress` `.taskTrade` steps
+
+Total K = K_skill + K_complete, finite.
 
 NO new axioms. Pure structural composition of:
-- Phase 23d-7's `.gather` apply (advances `trackedSkillLevel` by 1).
+- `.gather`'s apply (`grantSkillXp`: pays `skillLegXp`, rolls levels over).
 - Phase 23d-6's `taskComplete_reachable` (`.taskTrade` chain).
 -/
 
@@ -40,10 +46,20 @@ open Formal.Liveness.TaskCompleteReachable
 
 /-! ## Per-step preservation under `.gather` -/
 
-/-- `.gather` advances `trackedSkillLevel` by 1. -/
-theorem gather_skill_succ (s : State) :
-    (applyActionKind .gather s).trackedSkillLevel
-      = s.trackedSkillLevel + 1 := by
+/-- `.gather` pays `skillLegXp`: the XP owed falls by that much. -/
+theorem gather_skill_pays (s : State) :
+    (applyActionKind .gather s).skillDeficit = s.skillDeficit - s.skillLegXp := by
+  show (grantSkillXp s s.skillLegXp).skillDeficit = _
+  exact grantSkillXp_deficit s s.skillLegXp
+
+/-- `.gather` keeps the skill fields in band. -/
+theorem gather_band (s : State) (h : s.SkillBand) : (applyActionKind .gather s).SkillBand := by
+  show (grantSkillXp s s.skillLegXp).SkillBand
+  exact grantSkillXp_band s s.skillLegXp h
+
+/-- `.gather` keeps what a leg pays. -/
+theorem gather_legXp_preserved (s : State) :
+    (applyActionKind .gather s).skillLegXp = s.skillLegXp := by
   rfl
 
 /-- `.gather` preserves `targetSkillLevel`. -/
@@ -73,11 +89,13 @@ theorem gather_phase_preserved (s : State) :
 
 /-! ## Replicate-application lemmas -/
 
-/-- K `.gather` steps advance `trackedSkillLevel` by exactly K. -/
+/-- K `.gather` steps lower the XP owed by K legs' pay, keep the band and
+    keep what a leg pays. -/
 theorem replicate_gather_skill_progress :
     ∀ (n : Nat) (s : State),
-      (applyPlan (List.replicate n .gather) s).trackedSkillLevel
-        = s.trackedSkillLevel + n := by
+      (applyPlan (List.replicate n .gather) s).skillDeficit = s.skillDeficit - n * s.skillLegXp ∧
+      (applyPlan (List.replicate n .gather) s).skillLegXp = s.skillLegXp ∧
+      (s.SkillBand → (applyPlan (List.replicate n .gather) s).SkillBand) := by
   intro n
   induction n with
   | zero =>
@@ -85,12 +103,14 @@ theorem replicate_gather_skill_progress :
     simp [applyPlan]
   | succ k ih =>
     intro s
-    show (applyPlan (.gather :: List.replicate k .gather) s).trackedSkillLevel
-           = s.trackedSkillLevel + (k + 1)
+    show (applyPlan (.gather :: List.replicate k .gather) s).skillDeficit = _ ∧
+      (applyPlan (.gather :: List.replicate k .gather) s).skillLegXp = _ ∧
+      (s.SkillBand → (applyPlan (.gather :: List.replicate k .gather) s).SkillBand)
     rw [applyPlan_cons]
-    rw [ih (applyActionKind .gather s)]
-    rw [gather_skill_succ]
-    omega
+    obtain ⟨hd, hl, hb⟩ := ih (applyActionKind .gather s)
+    refine ⟨?_, ?_, fun h => hb (gather_band s h)⟩
+    · rw [hd, gather_legXp_preserved, gather_skill_pays, Nat.add_mul, Nat.one_mul]; omega
+    · rw [hl, gather_legXp_preserved]
 
 /-- K `.gather` steps preserve `targetSkillLevel`. -/
 theorem replicate_gather_targetSkillLevel :
@@ -164,25 +184,29 @@ theorem replicate_gather_taskTotal :
 
 /-- **Skill prerequisite closable**.
 
-    Applying `K_skill = targetSkillLevel - trackedSkillLevel`
-    `.gather` steps brings `trackedSkillLevel` to at least
-    `targetSkillLevel` (skill prerequisite satisfied), while preserving
-    all task fields and `targetSkillLevel`. -/
+    With the skill fields in band and a leg that earns, applying
+    `K_skill = skillDeficit` earning legs (`.gather`) brings
+    `trackedSkillLevel` to at least `targetSkillLevel` (skill prerequisite
+    satisfied), while preserving all task fields and `targetSkillLevel`. -/
 theorem skill_prerequisite_reachable (s : State)
-    (hSkillGap : s.trackedSkillLevel < s.targetSkillLevel) :
-    let s' := applyPlan (List.replicate (s.targetSkillLevel - s.trackedSkillLevel) .gather) s
+    (hband : s.SkillBand) (hleg : 0 < s.skillLegXp) :
+    let s' := applyPlan (List.replicate s.skillDeficit .gather) s
     s'.trackedSkillLevel ≥ s.targetSkillLevel ∧
     s'.targetSkillLevel = s.targetSkillLevel ∧
     s'.taskCode = s.taskCode ∧
     s'.taskProgress = s.taskProgress ∧
     s'.taskTotal = s.taskTotal := by
-  set K_skill := s.targetSkillLevel - s.trackedSkillLevel with hKdef
-  refine ⟨?_, ?_, ?_, ?_, ?_⟩
-  · -- trackedSkillLevel after K_skill gathers = original + K_skill
-    rw [replicate_gather_skill_progress K_skill s]
-    -- K_skill = targetSkillLevel - trackedSkillLevel, and gap > 0, so sum ≥ targetSkillLevel
-    omega
-  · exact replicate_gather_targetSkillLevel K_skill s
+  set K_skill := s.skillDeficit with hKdef
+  have htarget := replicate_gather_targetSkillLevel K_skill s
+  refine ⟨?_, htarget, ?_, ?_, ?_⟩
+  · obtain ⟨hd, _, hb⟩ := replicate_gather_skill_progress K_skill s
+    have hzero : (applyPlan (List.replicate K_skill .gather) s).skillDeficit = 0 := by
+      rw [hd]
+      have : K_skill ≤ K_skill * s.skillLegXp := Nat.le_mul_of_pos_right _ hleg
+      omega
+    have := (skillDeficit_zero_iff _ (hb hband)).mp hzero
+    rw [htarget] at this
+    exact this
   · exact replicate_gather_taskCode K_skill s
   · exact replicate_gather_taskProgress K_skill s
   · exact replicate_gather_taskTotal K_skill s
@@ -195,7 +219,7 @@ theorem skill_prerequisite_reachable (s : State)
     work and (2) a skill prerequisite gap, the K-step plan
     `K_skill .gather` ++ `K_complete .taskTrade` reaches `phase = .complete`.
 
-    Witness: K_skill = `targetSkillLevel - trackedSkillLevel`,
+    Witness: K_skill = `skillDeficit` (the earning legs),
              K_complete = `taskTotal - taskProgress`.
     Total K = K_skill + K_complete, finite. -/
 theorem skill_gap_then_complete_reachable (s : State)
@@ -208,7 +232,7 @@ theorem skill_gap_then_complete_reachable (s : State)
         ((List.replicate K_skill .gather) ++ (List.replicate K_complete .taskTrade))
         s).taskLifecyclePhase = TaskLifecyclePhase.complete := by
   -- Build the two stages.
-  set K_skill := s.targetSkillLevel - s.trackedSkillLevel with hSkillDef
+  set K_skill := s.skillDeficit with hSkillDef
   set K_complete := s.taskTotal - s.taskProgress with hCompleteDef
   refine ⟨K_skill, K_complete, ?_⟩
   -- Split applyPlan over append: applyPlan (xs ++ ys) s = applyPlan ys (applyPlan xs s).
@@ -239,5 +263,28 @@ theorem skill_gap_then_complete_reachable (s : State)
   rw [hKEq]
   -- Apply taskComplete_reachable to s'.
   exact taskComplete_reachable s' hCode' hTot' hLT'
+
+/-! ## Non-vacuity: the band and a paying leg are satisfiable -/
+
+-- Level 3 toward 5, 4 XP into level 3 whose need is 10, level 4 needs 12,
+-- a leg pays 3: 18 XP owed, so six legs close the gap.
+private def grindWitness : State :=
+  { Formal.Liveness.LadderEval.inertLadderState with
+    trackedSkillLevel := 3
+    targetSkillLevel := 5
+    trackedSkillXp := 4
+    skillXpNeeds := [10, 12]
+    skillLegXp := 3 }
+
+example : grindWitness.skillDeficit = 18 := by rfl
+example : grindWitness.SkillBand := by
+  refine ⟨rfl, ?_, ?_⟩
+  · intro n hn
+    simp only [grindWitness, List.mem_cons, List.not_mem_nil, or_false] at hn
+    rcases hn with rfl | rfl <;> decide
+  · intro n h
+    simp only [grindWitness, List.head?_cons, Option.some.injEq] at h
+    subst h; decide
+example : (applyPlan (List.replicate 6 .gather) grindWitness).trackedSkillLevel = 5 := by rfl
 
 end Formal.Liveness.SkillGapClosure

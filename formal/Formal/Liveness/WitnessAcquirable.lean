@@ -25,7 +25,7 @@ residual). This module discharges that residual against the live fixture:
   theorem-breaking change.
 
 Skill gates (gather/craft levels) are deliberately outside the closure: the
-proven skill-grind liveness (the LevelSkill action path, `SkillGapClosure`)
+proven skill-grind liveness (the grind's earning legs, `SkillGapClosure`)
 makes any skill level eventually reachable, so they gate TIME, not
 acquirability. Drop RATES
 likewise (eventual acquirability; `MonsterDropApply` covers the loop's drop

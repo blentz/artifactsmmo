@@ -34,6 +34,7 @@ import Formal.Liveness.CumulativeProgress
 import Formal.Liveness.TaskInfeasibility
 import Formal.Liveness.TaskCompleteReachable
 import Formal.Liveness.SkillGapClosure
+import Formal.Liveness.GrindCycles
 import Formal.Liveness.RecipeChainClosure
 import Formal.Liveness.ItemsTaskTermination
 import Formal.Liveness.ItemsTaskRun
@@ -261,10 +262,16 @@ open Formal.Liveness.TaskCompleteReachable
 -- Phase 23d-7: SkillGapClosure — chain .gather to satisfy skill prerequisite,
 -- then .taskTrade to reach .complete. Closes Part C of Phase 23d-6.
 open Formal.Liveness.SkillGapClosure
-#print axioms gather_skill_succ
+#print axioms gather_skill_pays
 #print axioms replicate_gather_skill_progress
 #print axioms skill_prerequisite_reachable
 #print axioms skill_gap_then_complete_reachable
+-- Phase 2d-L2: a leg pays skill XP against the per-level needs.
+#print axioms Formal.Liveness.Measure.grantSkillXp_deficit
+#print axioms Formal.Liveness.Measure.grantSkillXp_band
+#print axioms Formal.Liveness.Measure.skillDeficit_zero_iff
+#print axioms Formal.Liveness.GrindCycles.prep_keeps_skill
+#print axioms Formal.Liveness.GrindCycles.grind_cycles_reach_target
 
 -- Phase 23d-8: RecipeChainClosure — chain .gather + .craft + .taskTrade
 -- reaches .complete for items tasks needing crafted output. Closes the
@@ -473,7 +480,7 @@ open Formal.Liveness.RichApplyConsistency
 #print axioms equip_inventoryUsed_invariant
 #print axioms unequip_inventoryUsed_invariant
 #print axioms move_inventoryUsed_invariant
-#print axioms gather_trackedSkillLevel_advances
+#print axioms gather_pays_skill_xp
 #print axioms completeTask_inventoryUsed_invariant
 #print axioms npcSell_inventoryUsed_invariant
 

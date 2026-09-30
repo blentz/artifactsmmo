@@ -355,11 +355,12 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- abstraction level. Phase 22 (Cycle Loop) will compose the actual
   -- planner output through the sub-goal.
   | .objectiveStep, s => { s with objectiveStepFires := false }
-  -- Phase 23d-7: .gather is the modeled grind rung — it raises the tracked
-  -- skill LEVEL by 1 (single-level abstraction of the planner-native
-  -- LevelSkill action grind). The Lean model carries a single scalar
-  -- (trackedSkillLevel); advancing it by 1 per .gather suffices for the
-  -- skill-gap closure proof (Phase 23d-7). All task fields are preserved
+  -- Phase 2d-L2: .gather is the grind's EARNING leg — it pays the tracked
+  -- skill `skillLegXp` XP (the rung's gather or craft) and rolls levels over
+  -- against the per-level needs (`grantSkillXp`). It used to raise the level
+  -- by one per step, a fiction no production action matched (a grind is its
+  -- decomposition's legs; `CommittedLoop` proves they deliver the rung, and
+  -- the rung's leg is what earns). All task fields are preserved
   -- (gather is task-agnostic; it never touches taskCode/Progress/Total
   -- or phase).
   | .gather, s =>
@@ -372,7 +373,7 @@ noncomputable def applyActionKind : ActionKind → State → State
         | some code => (code, 1) :: s.inventoryItems
         | none => s.inventoryItems
       -- Item 4e: bump per-skill XP delta map for gatherSkill (distinct from
-      -- the scalar trackedSkillLevel, which the grind rung raises by 1).
+      -- the tracked skill's XP, which `grantSkillXp` pays).
       let newSkillXp : List (Skill × Nat) :=
         match s.gatherSkill with
         | some sk => (sk, 1) :: s.skillXpDelta
@@ -391,7 +392,7 @@ noncomputable def applyActionKind : ActionKind → State → State
       -- advance their own roots; this model, like every other opaque flag it
       -- carries, does not re-arm the field, so it says a FIXED outstanding
       -- request is finite — not that the board ever empties for good.
-      { s with trackedSkillLevel := s.trackedSkillLevel + 1,
+      { grantSkillXp s s.skillLegXp with
                inventoryItems := newInv,
                skillXpDelta := newSkillXp,
                supplyDemand := s.supplyDemand - 1 }

@@ -69,12 +69,13 @@ theorem move_inventoryUsed_invariant (s : State) :
         | none => s).inventoryUsed = s.inventoryUsed
   cases s.moveTarget <;> rfl
 
-/-- `.gather` (the modeled grind rung) advances the scalar `trackedSkillLevel`
-    by 1 — Item 4e added the per-skill map alongside, not replacing it. -/
-theorem gather_trackedSkillLevel_advances (s : State) :
-    (applyActionKind .gather s).trackedSkillLevel
-    = s.trackedSkillLevel + 1 := by
-  rfl
+/-- `.gather` (the grind's earning leg) pays `skillLegXp`: the XP owed
+    before the target level falls by that much (Phase 2d-L2) — Item 4e's
+    per-skill map sits alongside, not replacing it. -/
+theorem gather_pays_skill_xp (s : State) :
+    (applyActionKind .gather s).skillDeficit = s.skillDeficit - s.skillLegXp := by
+  show (grantSkillXp s s.skillLegXp).skillDeficit = _
+  exact grantSkillXp_deficit s s.skillLegXp
 
 /-- `.completeTask` preserves scalar `inventoryUsed` (Item 4d added
     gold credit but no inventory change). -/

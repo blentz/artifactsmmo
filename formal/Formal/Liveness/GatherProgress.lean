@@ -1,13 +1,13 @@
 /-
   Formal.Liveness.GatherProgress
 
-  Models the abstract grind rung `.gather` (a single skill-raising step) and
-  proves that, on every productive Gather (one with a skill requirement, where
-  the target skill LEVEL strictly exceeds the currently-tracked skill level),
-  the lex measure strictly decreases. The rung raises the tracked skill LEVEL
-  by one — the single-level abstraction of the planner-native `LevelSkill`
-  action grind. (Production `GatherAction.apply` itself does not level a skill
-  per action; this liveness lemma pins the modeled grind's monotone descent.)
+  Models the grind's earning leg `.gather` and proves that, on every
+  productive Gather (one with a skill requirement, while skill XP is still
+  owed before the target level, with a leg that earns), the lex measure
+  strictly decreases. Phase 2d-L2: the leg pays `skillLegXp` XP against the
+  per-level needs (`Measure.grantSkillXp`), rolling levels over; it used to
+  raise the level by one per step, the abstraction of the retired
+  `LevelSkill` macro, which no production action matched.
 
   ## Production reference (verified 2026-05-30 against gathering.py:40)
 
@@ -20,7 +20,8 @@
   `apply` (modeled grind rung):
     * inventory[drop_item] += 1                  (inventoryUsed += 1)
     * if `skill_req` present:
-        trackedSkillLevel += 1  (single-level abstraction of the grind)
+        the tracked skill earns `skillLegXp` XP, levels rolled over
+        (`grantSkillXp`)
     * (x, y), cooldown_expires updated — irrelevant to the measure
 
   Note `apply` does NOT increment `task_progress`. See the production
@@ -34,10 +35,9 @@
     * `happ`  — `gatherIsApplicable s skillReq minFree = true`. Carried
        for caller parity; the proof body uses the measure-arithmetic
        hypotheses directly.
-    * `hprog` — `s.targetSkillLevel > s.trackedSkillLevel`. The grind is
-       PRODUCTIVE: the tracked skill level is still below its target.
-       Without this, `targetSkillLevel - (tracked + 1)` and `targetSkillLevel -
-       tracked` are both zero (Nat saturation) and the measure does not
+    * `hprog` — `0 < s.skillDeficit`. The grind is PRODUCTIVE: skill XP is
+       still owed before the target level. Without this, the XP owed before
+       and after are both zero (Nat saturation) and the measure does not
        decrease.
     * `hskill` — `skill.isSome`. When no skill requirement exists (e.g.
        the tutorial resource at L1), Gather only grows inventory and the
@@ -77,7 +77,15 @@ def gatherApply (s : State) (_drop : String) (skill : Option String) : State :=
       trackedSkillLevel :=
         match skill with
         | none   => s.trackedSkillLevel
-        | some _ => s.trackedSkillLevel + 1 }
+        | some _ => (grantSkillXp s s.skillLegXp).trackedSkillLevel
+      trackedSkillXp :=
+        match skill with
+        | none   => s.trackedSkillXp
+        | some _ => (grantSkillXp s s.skillLegXp).trackedSkillXp
+      skillXpNeeds :=
+        match skill with
+        | none   => s.skillXpNeeds
+        | some _ => (grantSkillXp s s.skillLegXp).skillXpNeeds }
 
 /-! ## Aux: `gatherApply` preserves higher-priority slots -/
 
@@ -110,8 +118,10 @@ set_option linter.unusedVariables false
 
   Load-bearing hypotheses (honest disclosure — see module docstring):
     * `happ`   — applicability guard, carried for parity.
-    * `hprog`  — `s.targetSkillLevel > s.trackedSkillLevel` — the
-       LevelSkillGoal still has room. Without this, slot 4 saturates.
+    * `hprog`  — `0 < s.skillDeficit` — skill XP is still owed before the
+       target level. Without this, slot 4 saturates.
+    * `hleg`   — `0 < s.skillLegXp` — the leg earns (the `SkillXpPositive`
+       gate on the rung).
     * `hskill` — `skill.isSome`. Skill-less resources don't witness
        progress (out of scope).
 
@@ -124,7 +134,8 @@ theorem gather_decreases_measure
     (s : State) (skillReq : Option (String × Nat)) (minFree : Nat)
     (drop : String) (skill : Option String)
     (happ   : gatherIsApplicable s skillReq minFree = true)
-    (hprog  : s.targetSkillLevel > s.trackedSkillLevel)
+    (hprog  : 0 < s.skillDeficit)
+    (hleg   : 0 < s.skillLegXp)
     (hskill : skill.isSome) :
     measureLt (Measure.measure (gatherApply s drop skill))
               (Measure.measure s) := by
@@ -146,14 +157,12 @@ theorem gather_decreases_measure
         (Measure.measure (gatherApply s drop (some name))).taskCycles
           = (Measure.measure s).taskCycles := by
       unfold Measure.measure; rfl
-    -- Slot 4: skillXpDeficitProjected = targetSkillLevel - (delta + 1) <
-    --                                   targetSkillLevel - delta
+    -- Slot 4: the XP owed falls by the leg's pay (`grantSkillXp_deficit`).
     have hSkill :
         (Measure.measure (gatherApply s drop (some name))).skillXpDeficitProjected
           < (Measure.measure s).skillXpDeficitProjected := by
-      show s.targetSkillLevel - (s.trackedSkillLevel + 1)
-            < s.targetSkillLevel - s.trackedSkillLevel
-      omega
+      show (grantSkillXp s s.skillLegXp).skillDeficit < s.skillDeficit
+      rw [grantSkillXp_deficit]; omega
     exact measureLt_of_skillXpDeficit_dec hLevel hXp hTask hSkill
 
 end Formal.Liveness.GatherProgress

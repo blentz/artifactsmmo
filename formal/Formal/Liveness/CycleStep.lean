@@ -418,18 +418,24 @@ theorem cycleStep_progress_or_waits
     -- asked for). Unlike the fire-and-lose means this does NOT quiet its own
     -- firing flag — production's supply target persists until the BANKED
     -- quantity is met — so progress is witnessed by the gather itself:
-    -- `trackedSkillLevel` advances by +1, so the state changes.
+    -- it discharges one unit of the outstanding demand, which firing
+    -- requires to be positive, so the state changes. (It used to witness
+    -- progress by the skill level rising by one per gather, a fiction retired
+    -- in Phase 2d-L2: a leg pays XP.)
     left
     have hcs : cycleStep s = applyActionKind .gather s := by
       unfold cycleStep; rw [hk]; rfl
     rw [hcs]
     intro heq
-    have hpost : (applyActionKind .gather s).trackedSkillLevel
-                  = s.trackedSkillLevel + 1 := by
-      simp [applyActionKind]
-    have hpre' : s.trackedSkillLevel = s.trackedSkillLevel + 1 := by
-      rw [heq] at hpost; exact hpost
-    exact Nat.succ_ne_self _ hpre'.symm
+    have hdem : 0 < s.supplyDemand := by
+      simp only [fires, supplyBankFires, Bool.or_eq_true, decide_eq_true_eq, Bool.and_eq_true] at hfires
+      rcases hfires with h | ⟨_, h⟩
+      · have : 0 < SUPPLY_DEMAND_MIN := by decide
+        omega
+      · exact h
+    have hpost : (applyActionKind .gather s).supplyDemand = s.supplyDemand - 1 := rfl
+    rw [heq] at hpost
+    omega
   | currencyTurnIn =>
     -- CURRENCY_TURNIN (2026-08-16) plans `.npcBuy`, which clears
     -- `currencyTurnInActive`. Fire-and-lose, like geCancel/discardCritical:

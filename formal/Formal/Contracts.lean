@@ -20,6 +20,8 @@ import Formal.ObtainModelSupply
 import Formal.Decompose
 import Formal.DecomposeWitness
 import Formal.CommittedLoop
+import Formal.Liveness.SkillGapClosure
+import Formal.Liveness.GrindCycles
 import Formal.CompleteTaskIncome
 import Formal.Liveness.CurrencyFunding
 import Formal.MonsterDropApply
@@ -3154,6 +3156,25 @@ example : ∀ (g : Graph) (i q : Nat), feasible g i q = true → ∀ (sched : Li
     Fair g (plan g i q) sched →
       ∃ w', run g (plan g i q) sched ⟨St.init g, []⟩ = some w' ∧ q ≤ w'.st.bag i :=
   @Formal.CommittedLoop.committed_loop_delivers
+
+-- ─── Phase 2d-L2: the grind pays skill XP (liveness) anti-weakening pins ───
+open Formal.Liveness.Measure in
+example : ∀ (s : State) (g : Nat), (grantSkillXp s g).skillDeficit = s.skillDeficit - g :=
+  @Formal.Liveness.Measure.grantSkillXp_deficit
+open Formal.Liveness.Measure in
+example : ∀ (s : State) (g : Nat), s.SkillBand → (grantSkillXp s g).SkillBand :=
+  @Formal.Liveness.Measure.grantSkillXp_band
+open Formal.Liveness.Measure Formal.Liveness.Plan in
+example : ∀ (s : State), s.SkillBand → 0 < s.skillLegXp →
+    let s' := applyPlan (List.replicate s.skillDeficit .gather) s
+    s'.trackedSkillLevel ≥ s.targetSkillLevel ∧ s'.targetSkillLevel = s.targetSkillLevel ∧
+    s'.taskCode = s.taskCode ∧ s'.taskProgress = s.taskProgress ∧ s'.taskTotal = s.taskTotal :=
+  @Formal.Liveness.SkillGapClosure.skill_prerequisite_reachable
+open Formal.Liveness.Measure Formal.Liveness.Plan Formal.Liveness.PlanAction Formal.Liveness.GrindCycles in
+example : ∀ (s : State), s.SkillBand → 0 < s.skillLegXp → ∀ (ps : List (List ActionKind)),
+    ps.length = s.skillDeficit → (∀ p ∈ ps, ∀ a ∈ p, a ≠ .gather) →
+    (applyPlan (cycles ps) s).targetSkillLevel ≤ (applyPlan (cycles ps) s).trackedSkillLevel :=
+  @Formal.Liveness.GrindCycles.grind_cycles_reach_target
 
 -- ─── CurrencyFunding (ReachCurrencyGoal funding) anti-weakening pins ───
 example : ∀ (onHand target floor : Nat), 1 ≤ floor →

@@ -20,9 +20,9 @@
     (1) levelDeficit             : 50 - state.level
     (2) xpDeficit                : xpToNext - state.xp
     (3) taskCycles               : taskTotal - taskProgress
-    (4) skillXpDeficitProjected  : targetSkillLevel - trackedSkillLevel
-        (skill-level deficit — decreases on the modeled grind rung `.gather`,
-         which raises the tracked skill level by one)
+    (4) skillXpDeficitProjected  : sum skillXpNeeds - trackedSkillXp
+        (the skill XP still owed before the target level — decreases on the
+         grind's earning leg `.gather`, which pays `skillLegXp`; Phase 2d-L2)
     (5) bankPressure             : max(0, inventoryUsed - 4 * inventoryMax / 5)
         (decreases on Deposit; Gather may INCREASE it, dominated by slot 4)
     (6) hpDeficit                : maxHp - hp
@@ -55,9 +55,10 @@ cooldown — those are irrelevant to the local-progress measure.
 Field names use Lean conventions (camelCase). Each maps one-to-one onto a
 `WorldState` field (snake_case), documented inline.
 
-Two scalar fields model the single-skill grind toward a target skill LEVEL
-(`ReachSkillGoal.is_satisfied` reads `state.skills`; the planner-native
-skill grind is the `LevelSkill` action, which raises the tracked level):
+Scalar fields model the single-skill grind toward a target skill LEVEL
+(`ReachSkillGoal.is_satisfied` reads `state.skills`; the grind is the legs its
+decomposition emits, and the earning leg pays skill XP, Phase 2d-L2 — see
+`trackedSkillXp`, `skillXpNeeds`, `skillLegXp` and `SkillBand`):
 
   * `trackedSkillLevel` — single-skill scalar of `WorldState.skills[skill]`
     (the current LEVEL) for the currently-tracked skill. The dict is
@@ -98,6 +99,17 @@ structure State where
   /-- Target skill LEVEL for the tracked skill. Pass `0` when no skill grind
       is active (slot becomes a no-op). -/
   targetSkillLevel : Nat
+  /-- Phase 2d-L2: XP into the tracked skill's current level
+      (`WorldState.skills[skill].xp`). -/
+  trackedSkillXp : Nat := 0
+  /-- Phase 2d-L2: the XP each level from the tracked one up to the target
+      needs, one entry per level (the skill's curve, which the bot observes
+      and records per level in `skill_xp_observations`). Kept consistent with
+      the levels by `SkillBand`. -/
+  skillXpNeeds : List Nat := []
+  /-- Phase 2d-L2: the skill XP one earning leg of the grind pays (the rung's
+      gather or craft); at least 1 by the `SkillXpPositive` gate. -/
+  skillLegXp : Nat := 1
   -- Phase 20a-v2 extensions — fields read by the production ladder.
   -- These fields exist solely to let `Formal.Liveness.ProductionLadder.fires`
   -- mirror the production `_fires_*` predicates in `tiers/guards.py` /
@@ -540,6 +552,16 @@ namespace State
 /-- Mirrors `WorldState.inventory_free` (Nat sub saturates at 0). -/
 def inventoryFree (s : State) : Nat := s.inventoryMax - s.inventoryUsed
 
+/-- Phase 2d-L2: the skill XP still owed before the target level. -/
+def skillDeficit (s : State) : Nat := s.skillXpNeeds.sum - s.trackedSkillXp
+
+/-- Phase 2d-L2: the skill fields agree: one need per level still to climb,
+    every need positive, and the XP short of the current level's need. -/
+def SkillBand (s : State) : Prop :=
+  s.skillXpNeeds.length = s.targetSkillLevel - s.trackedSkillLevel ∧
+    (∀ n ∈ s.skillXpNeeds, 0 < n) ∧
+    (∀ n, s.skillXpNeeds.head? = some n → s.trackedSkillXp < n)
+
 /-- HP-percent comparison expressed without floats, matching
     `state.hp_percent > 3 / 10` (the `_MIN_FIGHT_HP_FRACTION = 0.3` test in
     `combat.py`). With `max_hp == 0` we treat HP as zero (Python returns
@@ -549,6 +571,115 @@ def hpAboveMinFightFraction (s : State) : Bool :=
   decide (s.maxHp > 0) && decide (10 * s.hp > 3 * s.maxHp)
 
 end State
+
+/-! ## Phase 2d-L2: skill XP against the per-level needs -/
+
+/-- XP `x` against the remaining needs: every need it covers is paid and its
+    level gained. Returns (levels gained, XP left, needs left). -/
+def rollSkill : Nat → List Nat → Nat × Nat × List Nat
+  | x, [] => (0, x, [])
+  | x, n :: ns =>
+    if n ≤ x then
+      let r := rollSkill (x - n) ns
+      (r.1 + 1, r.2.1, r.2.2)
+    else (0, x, n :: ns)
+
+/-- An earning leg: `g` skill XP, levels rolled over. -/
+def grantSkillXp (s : State) (g : Nat) : State :=
+  let r := rollSkill (s.trackedSkillXp + g) s.skillXpNeeds
+  { s with trackedSkillLevel := s.trackedSkillLevel + r.1,
+           trackedSkillXp := r.2.1, skillXpNeeds := r.2.2 }
+
+/-- Rolling moves XP into paid levels without changing what is owed. -/
+theorem rollSkill_owed : ∀ (ns : List Nat) (x : Nat),
+    (rollSkill x ns).2.2.sum - (rollSkill x ns).2.1 = ns.sum - x := by
+  intro ns
+  induction ns with
+  | nil => intro x; simp [rollSkill]
+  | cons n ns ih =>
+    intro x
+    by_cases h : n ≤ x
+    · simp only [rollSkill, h, if_true, List.sum_cons]
+      rw [ih]; omega
+    · simp [rollSkill, h]
+
+/-- Each level gained pays one need. -/
+theorem rollSkill_levels : ∀ (ns : List Nat) (x : Nat),
+    (rollSkill x ns).1 + (rollSkill x ns).2.2.length = ns.length := by
+  intro ns
+  induction ns with
+  | nil => intro x; simp [rollSkill]
+  | cons n ns ih =>
+    intro x
+    by_cases h : n ≤ x
+    · simp only [rollSkill, h, if_true, List.length_cons]
+      have := ih (x - n); omega
+    · simp [rollSkill, h]
+
+/-- Rolled needs are a suffix of the old ones. -/
+theorem rollSkill_suffix : ∀ (ns : List Nat) (x : Nat), (rollSkill x ns).2.2 <:+ ns := by
+  intro ns
+  induction ns with
+  | nil => intro x; simp [rollSkill]
+  | cons n ns ih =>
+    intro x
+    by_cases h : n ≤ x
+    · simp only [rollSkill, h, if_true]
+      exact (ih (x - n)).trans (List.suffix_cons n ns)
+    · simp [rollSkill, h]
+
+/-- After a roll the XP left is short of the next need. -/
+theorem rollSkill_band : ∀ (ns : List Nat) (x : Nat) (n : Nat),
+    (rollSkill x ns).2.2.head? = some n → (rollSkill x ns).2.1 < n := by
+  intro ns
+  induction ns with
+  | nil => intro x n h; simp [rollSkill] at h
+  | cons m ns ih =>
+    intro x n h
+    by_cases hm : m ≤ x
+    · simp only [rollSkill, hm, if_true] at h ⊢
+      exact ih (x - m) n h
+    · simp only [rollSkill, hm, if_false, List.head?_cons, Option.some.injEq] at h ⊢
+      omega
+
+/-- XP covering every need pays them all. -/
+theorem rollSkill_clears : ∀ (ns : List Nat) (x : Nat), ns.sum ≤ x → (rollSkill x ns).2.2 = [] := by
+  intro ns
+  induction ns with
+  | nil => intro x _; simp [rollSkill]
+  | cons n ns ih =>
+    intro x h
+    simp only [List.sum_cons] at h
+    have hn : n ≤ x := by omega
+    simp only [rollSkill, hn, if_true]
+    exact ih (x - n) (by omega)
+
+/-- **An earning leg lowers the XP owed by what it pays** (saturating). -/
+theorem grantSkillXp_deficit (s : State) (g : Nat) :
+    (grantSkillXp s g).skillDeficit = s.skillDeficit - g := by
+  simp only [grantSkillXp, State.skillDeficit]
+  rw [rollSkill_owed]; omega
+
+/-- An earning leg keeps the skill fields in band. -/
+theorem grantSkillXp_band (s : State) (g : Nat) (h : s.SkillBand) : (grantSkillXp s g).SkillBand := by
+  obtain ⟨hlen, hpos, _⟩ := h
+  have hl := rollSkill_levels s.skillXpNeeds (s.trackedSkillXp + g)
+  refine ⟨?_, fun n hn => hpos n ((rollSkill_suffix _ _).subset hn), rollSkill_band _ _⟩
+  simp only [grantSkillXp]; omega
+
+/-- With the skill fields in band, nothing is owed exactly when the target
+    level is reached. -/
+theorem skillDeficit_zero_iff (s : State) (h : s.SkillBand) :
+    s.skillDeficit = 0 ↔ s.targetSkillLevel ≤ s.trackedSkillLevel := by
+  obtain ⟨hlen, hpos, hband⟩ := h
+  simp only [State.skillDeficit]
+  cases hn : s.skillXpNeeds with
+  | nil => rw [hn] at hlen; simp at hlen; simp; omega
+  | cons n ns =>
+    rw [hn] at hlen hpos hband
+    have := hband n (by simp)
+    simp only [List.sum_cons, List.length_cons] at hlen ⊢
+    omega
 
 /-! ## Server-curve axiom
 
@@ -664,7 +795,7 @@ structure Measure where
   xpDeficit    : Nat
   /-- `state.taskTotal - state.taskProgress`. -/
   taskCycles   : Nat
-  /-- Skill-level deficit: `state.targetSkillLevel - state.trackedSkillLevel`. -/
+  /-- The skill XP still owed: `state.skillDeficit` (Phase 2d-L2). -/
   skillXpDeficitProjected : Nat
   /-- `max 0 (state.inventoryUsed - state.inventoryMax * 4 / 5)`. -/
   bankPressure : Nat
@@ -683,7 +814,7 @@ noncomputable def measure (s : State) : Measure :=
   { levelDeficit := 50 - s.level
     xpDeficit    := xpToNextLevel s.level - s.xp
     taskCycles   := s.taskTotal - s.taskProgress
-    skillXpDeficitProjected := s.targetSkillLevel - s.trackedSkillLevel
+    skillXpDeficitProjected := s.skillDeficit
     bankPressure := s.inventoryUsed - bankPressureThreshold s.inventoryMax
     hpDeficit    := s.maxHp - s.hp }
 

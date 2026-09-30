@@ -556,7 +556,7 @@ theorem descendsE_supplyBank (s : State)
   rw [hcs]
   apply eLt_of_supplyDemand_dec <;>
     simp [eMeasure, rearmE, rearmOnMint, choreRearm, dispatchesFight, gearProgress, fightLoss, partialClear, pressureDeltaD,
-      applyActionKind,
+      applyActionKind, grantSkillXp,
       refreshE_phase, refreshE_drawOwed, refreshE_progress, refreshE_total, refreshE_overstock,
       refreshE_selectBankDeposits, refreshE_sellable, refreshE_recyclable,
       refreshE_craftRelief, refreshE_craftPotions, refreshE_pending,

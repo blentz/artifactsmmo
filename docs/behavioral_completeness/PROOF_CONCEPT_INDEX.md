@@ -57,6 +57,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | LiquidationVenue | grandexchange | dominance, totality, safety, monotonicity |
 | Liveness.CurrencyFunding | liveness, tasks | termination, sufficiency |
 | Liveness.GearBuildTermination | liveness, planner | liveness |
+| Liveness.GrindCycles | liveness | termination, sufficiency |
 | Liveness.ItemsTaskRun | tasks | safety, totality, reachability |
 | Liveness.ItemsTaskTermination | tasks, crafting, bank | safety, totality |
 | LivenessChain | combat, monsters | reachability, no-deadlock |
