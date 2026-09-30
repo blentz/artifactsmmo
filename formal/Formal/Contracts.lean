@@ -18,6 +18,7 @@ import Formal.LeafAttainable
 import Formal.ObtainModelReady
 import Formal.ObtainModelSupply
 import Formal.Decompose
+import Formal.DecomposeWitness
 import Formal.CompleteTaskIncome
 import Formal.Liveness.CurrencyFunding
 import Formal.MonsterDropApply
@@ -3121,6 +3122,26 @@ example : ∀ (g : Graph), Closed g → ∀ (fuel : Nat) (path : List Nat) (i q 
     (∀ x ∈ path, x < g.n) → i < g.n → g.n + 1 ≤ fuel + path.length →
       step g (fuel + 1) path i q s = step g fuel path i q s :=
   @Formal.Decompose.step_fuel_stable
+
+-- ─── DecomposeWitness (a yes is backed by executable legs; the step is the first) anti-weakening pins ───
+open Formal.Decompose Formal.DecomposeWitness in
+example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat) (s : St),
+    (canP g fuel path i q s).map Prod.fst = can g fuel path i q s :=
+  @Formal.DecomposeWitness.canP_state
+open Formal.Decompose Formal.DecomposeWitness in
+example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat) (s t : St),
+    can g fuel path i q s = some t → CapOk g s →
+      ∃ l, canP g fuel path i q s = some (t, l) ∧ ∀ w x y, Covers w s x y →
+        ∃ w', execAll g l w = some w' ∧ Covers w' t (fun z => x z + e i q z) y :=
+  @Formal.DecomposeWitness.witness
+open Formal.Decompose Formal.DecomposeWitness in
+example : ∀ (g : Graph) (i q : Nat), feasible g i q = true →
+    ∃ w', execAll g (plan g i q) ⟨St.init g, []⟩ = some w' ∧ q ≤ w'.st.bag i :=
+  @Formal.DecomposeWitness.feasible_witness
+open Formal.Decompose Formal.DecomposeWitness in
+example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat) (s : St) (a : Step),
+    step g fuel path i q s = some a → ∃ t l, canP g fuel path i q s = some (t, l) ∧ l.head? = some a :=
+  @Formal.DecomposeWitness.step_is_first_leg
 
 -- ─── CurrencyFunding (ReachCurrencyGoal funding) anti-weakening pins ───
 example : ∀ (onHand target floor : Nat), 1 ≤ floor →

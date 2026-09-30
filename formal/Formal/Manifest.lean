@@ -25,6 +25,7 @@ import Formal.LeafAttainable
 import Formal.ObtainModelReady
 import Formal.ObtainModelSupply
 import Formal.Decompose
+import Formal.DecomposeWitness
 import Formal.CompleteTaskIncome
 import Formal.AccumulationSell
 import Formal.DominancePareto
@@ -1246,6 +1247,12 @@ open Formal.PriorityBand
 #check @Formal.Decompose.can_shrinks          -- safety: a yes only ever spends the bag, never grows it
 #check @Formal.Decompose.can_fuel_stable      -- termination: n + 1 fuel is the unbounded feasibility answer
 #check @Formal.Decompose.step_fuel_stable     -- termination: n + 1 fuel is the unbounded next step
+
+-- DecomposeWitness required roles (Phase 2d-L1b: a yes is backed by executable legs):
+#check @Formal.DecomposeWitness.canP_state          -- validity: extraction answers exactly as the walk does
+#check @Formal.DecomposeWitness.witness             -- sufficiency: the extracted legs execute and deliver what the walk promised
+#check @Formal.DecomposeWitness.feasible_witness    -- sufficiency: from the real bag, a yes means the legs deliver the goal
+#check @Formal.DecomposeWitness.step_is_first_leg   -- validity: the walk's next step is the first of those legs
 
 -- CompleteTaskIncome required roles (CompleteTaskAction.apply coin minting;
 -- src/artifactsmmo_cli/ai/actions/complete_task_core.py):

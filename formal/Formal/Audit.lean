@@ -982,6 +982,10 @@ open Formal.PriorityBand
 #print axioms Formal.Decompose.can_shrinks
 #print axioms Formal.Decompose.can_fuel_stable
 #print axioms Formal.Decompose.step_fuel_stable
+#print axioms Formal.DecomposeWitness.canP_state
+#print axioms Formal.DecomposeWitness.witness
+#print axioms Formal.DecomposeWitness.feasible_witness
+#print axioms Formal.DecomposeWitness.step_is_first_leg
 #print axioms Formal.CompleteTaskIncome.applyComplete_adds
 #print axioms Formal.CompleteTaskIncome.applyComplete_monotone
 #print axioms Formal.Liveness.CurrencyFunding.fundingCycles_sufficient
