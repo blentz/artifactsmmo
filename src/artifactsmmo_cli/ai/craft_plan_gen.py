@@ -48,7 +48,7 @@ from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
-from artifactsmmo_cli.ai.level_skill_expand import next_grind_goal
+from artifactsmmo_cli.ai.level_skill_expand import grind_rung_goal
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
@@ -107,27 +107,28 @@ def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data
                      actions: list[Action], ctx: SelectionContext, declined: list[str] | None,
                      grinding: frozenset[str]) -> list[Action] | None:
     """The legs of one grind cycle toward `target_level` in `skill` (Phase 2d-a):
-    the rung `next_grind_goal` picks, served by the one walk, whose own skill
+    rung `grind_rung_goal` names (another rung, whose committed plan ends in the
+    leg that earns), served by the one walk, whose own skill
     gates open as sub-tasks in turn. `grinding` holds the skills already being
     ground further up; the walk never opens their gates again, so a cyclic
     dependency is infeasible rather than a loop.
 
-    When the grind's next leg is a fight and the heal stock is under target,
-    the legs that stock heals come first (`grind_heal_prep`): the leaf task
+    When the grind's plan holds a fight (anywhere: the plan is committed, so a
+    fight after a gather still runs this cycle) and the heal stock is under
+    target, the legs that stock heals come first (`grind_heal_prep`): the leaf task
     builds what it needs. The prep never opens a grind of its own and is
     skipped when it cannot be served, since it saves requests and must never
     block the grind (live C3P0 2026-09-28: `Craft(cheese×1)` + eat before every
     fight)."""
     if state.skills.get(skill, 1) >= target_level:
         return _decline(declined, "satisfied")
-    rung = next_grind_goal(skill, state, game_data, ctx)
+    rung = grind_rung_goal(skill, state, game_data, ctx)
     if rung is None:
         return _decline(declined, f"no_grind_rung:{skill}")
     legs = _walk_plan(rung, state, game_data, actions, ctx, declined, True, grinding | {skill})
     if legs is None:
         return None
-    first = next(a for a in legs if not isinstance(a, OptimizeLoadoutAction))
-    if isinstance(first, FightAction):
+    if any(isinstance(a, FightAction) for a in legs):
         prep = heal_prep_goal(state, game_data, ctx)
         if prep is not None:
             prep_declined: list[str] = []

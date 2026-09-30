@@ -158,10 +158,12 @@ class ObtainModel:
         makes a copy in order to destroy it.
 
         `produce` names items the goal must MAKE, not merely hold: a skill
-        grind's rung, whose XP is in the craft. Their owned-copy routes
-        (WITHDRAW, RECYCLE) are dropped wherever they occur: withdrawing a
+        grind's rung, whose XP is in the craft (or the gather). Only their
+        CRAFT and GATHER routes are kept, wherever they occur: withdrawing a
         banked rung would satisfy the count and earn nothing (the held-rung
-        livelock). `keep` names items no RECYCLE or SELL may destroy as a
+        livelock), and so would buying one, filling it on the GE or taking it
+        as a drop (Phase 2d-L3: the grind now asks for the rung itself).
+        `keep` names items no RECYCLE or SELL may destroy as a
         source: the goal's own target (recycling a held copper_ring for the bar
         to craft a copper_ring is a null cycle) and every `produce` item.
 
@@ -193,7 +195,7 @@ class ObtainModel:
                     gated.append((route, unmet))
             candidates = [(route, ()) for route in self._ranked_gathers(code, ready)] + gated
             for route, gates in candidates:
-                if code in produce and route.kind in (SourceKind.WITHDRAW, SourceKind.RECYCLE):
+                if code in produce and route.kind not in (SourceKind.CRAFT, SourceKind.GATHER):
                     continue
                 if route.kind in (SourceKind.RECYCLE, SourceKind.SELL) and route.via in (keep | produce):
                     continue

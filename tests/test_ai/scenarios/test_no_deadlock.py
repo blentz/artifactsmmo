@@ -148,10 +148,13 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "ReachSkill(gearcrafting->6)"
-    # PHASE 2d-a: the plan is the grind's first REAL leg (ash wood for the
-    # gearcrafting rung), not the opaque `LevelSkill(gearcrafting->10)` macro a
-    # second planner used to expand at execution.
-    assert [repr(a) for a in report.plan] == ["Gather(ash_tree×10)"]
+    # PHASE 2d-L3: the plan is one whole grind cycle, committed — heals for
+    # the fight, the chicken's feathers, the ash planks, then the feather_coat
+    # that earns the gearcrafting XP — not the opaque LevelSkill macro (2d-a
+    # stopped at the first gather of a descended intermediate).
+    assert [repr(a) for a in report.plan] == [
+        "Gather(gudgeon_spot×5)", "Craft(cooked_gudgeon×5)", "Fight(chicken)",
+        "Gather(ash_tree×20)", "Craft(ash_plank×2)", "Craft(feather_coat×1)"]
     # An EQUALITY on chosen_root, as before — only the value moved. A
     # membership test on a different field would be a weaker claim wearing the
     # old test's name.
@@ -280,11 +283,12 @@ def test_l20_dual_utility_climbs_the_blocking_skill_not_the_char_level() -> None
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "ReachSkill(gearcrafting->16)"
-    # PHASE 2d-a: the grind's real legs. Its next leg is a fight (chicken, for
-    # the gearcrafting rung's feather), and the heal stock is short, so the leg
-    # first stocks heals it can make without fighting (shrimp, cooked).
+    # PHASE 2d-L3: one whole committed grind cycle ending in the iron_boots that
+    # earn. It holds a fight (chicken, for the feather) and the heal stock is
+    # short, so it first stocks heals it can make without fighting.
     assert [repr(a) for a in report.plan] == [
-        "Gather(shrimp_spot×5)", "Craft(cooked_shrimp×5)", "Fight(chicken)"]
+        "Gather(shrimp_spot×5)", "Craft(cooked_shrimp×5)", "Gather(iron_rocks×50)",
+        "Craft(iron_bar×5)", "Fight(chicken)", "Craft(iron_boots×1)"]
     # The climb is bounded (current + 1, not the whole gate) and the trunk is
     # still offered, so this is a re-targeting, not a deadlock.
     assert report.decision.chosen_root.level == 16
@@ -381,6 +385,7 @@ def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
     goal = repr(report.selected_goal)
     assert "GrindCharacterXP" not in goal, goal  # the criterion-1 guarantee
     assert goal == "ReachSkill(gearcrafting->6)", goal
-    # PHASE 2d-a: the grind's first real leg, not the `LevelSkill` macro.
-    assert report.plan and repr(report.plan[0]) == "Gather(ash_tree×10)", report.plan
+    # PHASE 2d-L3: one whole grind cycle, not the `LevelSkill` macro; it ends
+    # in the feather_coat that earns.
+    assert report.plan and repr(report.plan[-1]) == "Craft(feather_coat×1)", report.plan
     assert_search_bounded(report, "l12_gearcrafting_gap")

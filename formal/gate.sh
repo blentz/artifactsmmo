@@ -105,7 +105,7 @@ echo "== (c'') openapi conformance (strict) =="; ( cd "$ROOT" && uv run python f
 # worst on `ai/obtain_sources`, which ELEVEN production modules import and both
 # plan producers run through. Those comments were true when written and were
 # never revisited, which is what makes it a class rather than two incidents.
-echo "== (c''') census (--check x11, + joint-walk report) =="
+echo "== (c''') census (--check x12, + joint-walk report) =="
 ( cd "$ROOT" \
   && uv run python scripts/gen_reachability_claims.py --check \
   && uv run python scripts/gen_liveness.py --check \
@@ -119,7 +119,8 @@ echo "== (c''') census (--check x11, + joint-walk report) =="
   && uv run python scripts/gen_one_cost_model.py --check \
   && uv run python scripts/gen_currency_wall.py --check \
   && uv run python scripts/gen_drop_wall.py --check \
-  && uv run python scripts/gen_joint_walk.py )
+  && uv run python scripts/gen_joint_walk.py \
+  && uv run python scripts/gen_grind_cycle.py --check )
 # The craft census's `--check` deliberately rewrites MATRIX/BACKLOG (see
 # gen_craft_completeness.py:17-19) and its cell verdicts are wall-clock
 # nondeterministic (~16% of cells hit the 10s budget), so a passing local run

@@ -5,12 +5,16 @@ expanded at execution. The walk opens a gate only when the skill can be ground
 from here (`skill_is_grindable`), and declines, naming the item, when it
 cannot."""
 
+from datetime import UTC, datetime
+
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
-from artifactsmmo_cli.ai.craft_plan_gen import decompose
+from artifactsmmo_cli.ai.craft_plan_gen import DECOMPOSE_POLICY, decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -48,8 +52,9 @@ def _gd() -> GameData:
 class TestASkillGateIsASubTask:
     def test_the_gate_expands_into_the_grinds_first_leg(self) -> None:
         """widget needs gearcrafting 5; the character has 1. The gearcrafting
-        grind's rung is trinket (1 gear_ore), so the plan opens with the gather
-        that feeds it, and stops there: the grind is a sub-task of its own."""
+        grind's rung is trinket (1 gear_ore), so the plan is that grind's cycle
+        — the gather that feeds it, then the trinket that earns — and stops
+        there: the grind is a sub-task of its own."""
         gd = _gd()
         state = make_state(inventory={}, bank_items={}, skills={"gearcrafting": 1})
         actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
@@ -57,7 +62,7 @@ class TestASkillGateIsASubTask:
 
         result = decompose(GatherMaterialsGoal("widget", {"widget": 1}), state, gd, actions, _ctx())
 
-        assert [repr(a) for a in (result or [])] == ["Gather(gear_ore_rocks×1)"], result
+        assert [repr(a) for a in (result or [])] == ["Gather(gear_ore_rocks×1)", "Craft(trinket×1)"], result
         assert not any(isinstance(a, LevelSkill) for a in result or [])
 
     def test_a_gate_no_grind_can_open_is_infeasible(self) -> None:
@@ -97,4 +102,31 @@ class TestTheGrindDecomposition:
         legs = decompose(GatherMaterialsGoal("copper_ore", {"copper_ore": 10}), state, gd,
                          _copper_ring_actions(), _ctx(), declined)
         assert [repr(a) for a in legs or []] == ["Withdraw(copper_ore×5)"]
-        assert declined == ["infeasible:copper_ore:no_route:"]
+        assert declined == ["infeasible:copper_bar:no_route:"]
+
+
+class TestAGrindCycleEndsInItsEarningLeg:
+    def test_the_grind_plans_its_rung_through_the_craft_that_earns(self) -> None:
+        """Phase 2d-L3: one grind cycle is the whole committed plan for ANOTHER
+        rung, ending in the craft that pays the skill's XP."""
+        gd = _gd()
+        state = make_state(inventory={}, bank_items={}, skills={"gearcrafting": 1})
+        actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
+                                bank_accessible=True, task_exchange_min_coins=0)
+        legs = decompose(ReachSkillGoal("gearcrafting", 2), state, gd, actions, _ctx())
+        assert [repr(a) for a in legs or []] == ["Gather(gear_ore_rocks×1)", "Craft(trinket×1)"]
+
+    def test_a_produced_rung_keeps_only_the_routes_that_earn(self, monkeypatch) -> None:
+        """A rung a vendor sells would count toward the goal and earn nothing:
+        produced, it keeps its CRAFT (or GATHER) routes only."""
+        gd = _gd()
+        monkeypatch.setattr(gd, "npc_purchases",
+                            lambda code: [("vendor", 1, "gold")] if code == "trinket" else [])
+        monkeypatch.setattr(gd, "npc_location", lambda npc: (5, 5))
+        state = make_state(inventory={}, bank_items={"trinket": 3}, skills={"gearcrafting": 1},
+                           gold=1000)
+        model = ObtainModel(state, gd, _ctx(), datetime.now(UTC))
+        held = model.walk_graph("trinket", DECOMPOSE_POLICY)
+        assert {r.kind for r in held.sources["trinket"]} >= {SourceKind.CRAFT, SourceKind.BUY}
+        made = model.walk_graph("trinket", DECOMPOSE_POLICY, produce=frozenset({"trinket"}))
+        assert {r.kind for r in made.sources["trinket"]} == {SourceKind.CRAFT}

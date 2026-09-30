@@ -1584,6 +1584,19 @@ class TestPhase2bDecompositionGaps:
         result = decompose(grind, state, gd, actions, _ctx())
         assert result is not None and not any(isinstance(a, RecycleAction) for a in result)
 
+    def test_a_kept_item_is_no_recycle_source(self):
+        """No goal destroys its own target to source its parts: a `keep` item
+        (the goal's target) offers no RECYCLE route to anything, even when
+        nothing is being produced (not a grind)."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={"copper_dagger": 2}, bank_items={},
+                           skills={"mining": 5, "weaponcrafting": 5})
+        model = ObtainModel(state, gd, _ctx(), datetime.now(UTC))
+        free = model.walk_graph("copper_bar", DECOMPOSE_POLICY)
+        assert SourceKind.RECYCLE in {r.kind for r in free.sources["copper_bar"]}
+        kept = model.walk_graph("copper_bar", DECOMPOSE_POLICY, keep=frozenset({"copper_dagger"}))
+        assert SourceKind.RECYCLE not in {r.kind for r in kept.sources["copper_bar"]}
+
     def test_a_grind_rung_is_made_not_withdrawn(self):
         """The held-rung livelock (memory: a BANKED copy is a ready WITHDRAW):
         a skill grind's rung is PRODUCED, its XP is in the making. The grind
@@ -1640,7 +1653,7 @@ class TestPhase2bDecompositionGaps:
         shut = _gd_copper_ring()
         shut._resource_skill = {"copper_rocks": ("mining", 10)}
         assert decompose(goal, state, shut, _copper_ring_actions(), _ctx(), declined) is None
-        assert declined == ["infeasible:copper_ore:no_route:copper_ore"]
+        assert declined == ["infeasible:copper_bar:no_route:copper_ore"]
 
 
 class TestSecondaryDropGather:

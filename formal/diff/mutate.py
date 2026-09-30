@@ -175,6 +175,8 @@ CURRENCY_BUY_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_bu
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
+LEVEL_SKILL_EXPAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "level_skill_expand.py"
+GRIND_CYCLE_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "grind_cycle_census.py"
 PLAN_CACHE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "plan_cache.py"
 SHOULD_REPLAN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "should_replan.py"
 GRIND_HEAL_PREP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grind_heal_prep.py"
@@ -3090,8 +3092,11 @@ DECOMPOSE_GAP_MUTATIONS = [
 # (Phase 2d-a). Killed by tests/test_ai/test_grind_heal_prep.py.
 GRIND_PREP_MUTATIONS = [
     ("craft_plan_gen: a grind's fight leg is never prepped",
-     "    if isinstance(first, FightAction):\n        prep = heal_prep_goal(",
+     "    if any(isinstance(a, FightAction) for a in legs):\n        prep = heal_prep_goal(",
      "    if False:\n        prep = heal_prep_goal("),
+    ("craft_plan_gen: only a leading fight is prepped (a later one runs short)",
+     "    if any(isinstance(a, FightAction) for a in legs):\n        prep = heal_prep_goal(",
+     "    if isinstance(legs[0], FightAction):\n        prep = heal_prep_goal("),
     ("craft_plan_gen: the heal prep may fight for its ingredients",
      "            if prep_legs and not any(isinstance(a, FightAction) for a in prep_legs):",
      "            if prep_legs:"),
@@ -3138,6 +3143,23 @@ PLAYER_COMMITMENT_MUTATIONS = [
      "            if refreshing and cache is not None and selected_goal is not None \\",
      "            if False and cache is not None and selected_goal is not None \\"),
 ]
+# A grind cycle ends in its earning leg (Phase 2d-L3). Killed by
+# tests/test_ai/test_craft_plan_gen_level_skill.py.
+GRIND_RUNG_MUTATIONS = [
+    ("level_skill_expand: the grind never crafts its rung (gather rungs only)",
+     "    rung = craft_rung(skill, state, game_data, ctx)\n    if rung is None:\n        rung = best_gather",
+     "    rung = None\n    if rung is None:\n        rung = best_gather"),
+]
+GRIND_PRODUCE_MUTATIONS = [
+    ("obtain_model: a produced rung may be bought or dropped (no XP)",
+     "                if code in produce and route.kind not in (SourceKind.CRAFT, SourceKind.GATHER):",
+     "                if code in produce and route.kind in (SourceKind.WITHDRAW, SourceKind.RECYCLE):"),
+]
+GRIND_CYCLE_CENSUS_MUTATIONS = [
+    ("grind_cycle_census: a cycle is judged by its first leg",
+     "    earned = earned_skill(plan[-1], game_data)",
+     "    earned = earned_skill(plan[0], game_data)"),
+]
 # The walk adapter (`ObtainModel.walk_graph`). Killed by
 # tests/test_ai/test_craft_plan_gen.py.
 WALK_ADAPTER_MUTATIONS = [
@@ -3145,7 +3167,7 @@ WALK_ADAPTER_MUTATIONS = [
      "                if route.kind in (SourceKind.RECYCLE, SourceKind.SELL) and route.via in (keep | produce):",
      "                if route.kind in (SourceKind.RECYCLE, SourceKind.SELL) and route.via in produce:"),
     ("obtain_model: a grind rung's banked copies are withdrawn (the held-rung livelock)",
-     "                if code in produce and route.kind in (SourceKind.WITHDRAW, SourceKind.RECYCLE):",
+     "                if code in produce and route.kind not in (SourceKind.CRAFT, SourceKind.GATHER):",
      "                if False:"),
     ("obtain_model: a gate-blocked route never joins the walk",
      "                if unmet and all(openable(gate) for gate in unmet):",
@@ -8616,6 +8638,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_grind_heal_prep.py", survivors)
     run_group(GRIND_HEAL_PREP_SRC, GRIND_HEAL_PREP_POLICY_MUTATIONS,
               "tests/test_ai/test_grind_heal_prep.py", survivors)
+    run_group(LEVEL_SKILL_EXPAND_SRC, GRIND_RUNG_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen_level_skill.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, GRIND_PRODUCE_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen_level_skill.py", survivors)
+    run_group(GRIND_CYCLE_CENSUS_SRC, GRIND_CYCLE_CENSUS_MUTATIONS,
+              "tests/test_audit/test_grind_cycle_census.py", survivors)
     run_group(OBTAIN_MODEL_SRC, WALK_ADAPTER_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(OBTAIN_MODEL_SRC, WALK_GATHER_RANK_MUTATIONS,

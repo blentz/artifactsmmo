@@ -22,10 +22,12 @@ from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
-from artifactsmmo_cli.ai.level_skill_expand import next_grind_goal
+from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
+from artifactsmmo_cli.ai.level_skill_expand import grind_rung_goal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import (
@@ -286,7 +288,7 @@ def advances_a_closure_grind(recipe: str, first: Action, state: WorldState,
     gathering level, is above the character's skill.
 
     Since Phase 2d-a the one walk opens such a gate as a sub-task and plans the
-    grind's own legs (a gather or craft toward the rung `next_grind_goal`
+    grind's own legs (a gather or craft toward the rung `grind_rung_goal`
     picks) where it used to emit the opaque `LevelSkill` macro. A leg is
     directional when it advances that rung's closure, judged by the same
     `_advances_closure` rules as the recipe itself, or, when the rung is gated
@@ -312,7 +314,7 @@ def _advances_grind_of(item: str, first: Action, state: WorldState, game_data: G
         if gate is not None and gate[1] > state.skills.get(gate[0], 1):
             gated.add(gate[0])
     for skill in sorted(gated - grinding):
-        rung = next_grind_goal(skill, state, game_data)
+        rung = grind_rung_goal(skill, state, game_data)
         if rung is None:
             continue
         for rung_item in rung.needed:
@@ -321,6 +323,26 @@ def _advances_grind_of(item: str, first: Action, state: WorldState, game_data: G
             if (_advances_closure(first, items, skill, state.skills.get(skill, 1), game_data)
                     or _advances_grind_of(rung_item, first, state, game_data, grinding | {skill})):
                 return True
+    return False
+
+
+def advances_a_heal_prep(first: Action, plan: list[Action], state: WorldState,
+                         game_data: GameData) -> bool:
+    """True iff `first` stocks the heals a fight in `plan` will need: the plan
+    holds a fight, and `first` advances the closure of the heal batch
+    `grind_heal_prep.heal_prep_goal` asks for. The grind's decomposition puts
+    that batch ahead of its legs (Phase 2d-a; since 2d-L3 for a fight anywhere
+    in the committed plan), so it is the first step of a directional plan."""
+    if not any(isinstance(a, FightAction) for a in plan):
+        return False
+    prep = heal_prep_goal(state, game_data, NO_PROFILE_CONTEXT)
+    if prep is None:
+        return False
+    for item in prep.needed:
+        resources, mats = recipe_closure(game_data, [item])
+        items = _closure_item_set(item, resources, mats, game_data)
+        if _advances_closure(first, items, None, 0, game_data):
+            return True
     return False
 
 

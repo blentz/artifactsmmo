@@ -130,7 +130,8 @@ _CHEESE = CraftAction(code="cheese", workshop_location=(4, 4))
 
 
 def _grind(inventory: dict[str, int], grind_leg, prep=None) -> tuple[list | None, list[str]]:
-    """Decompose one gearcrafting grind whose rung walk yields `grind_leg`.
+    """Decompose one gearcrafting grind whose rung walk yields `grind_leg`
+    (one leg, or a list of them).
     The heal prep runs the real walk over a craftable cheese unless `prep`
     stands in for its decomposition. Returns (legs, declines)."""
     gd = _gd()
@@ -138,10 +139,12 @@ def _grind(inventory: dict[str, int], grind_leg, prep=None) -> tuple[list | None
     real_walk = craft_plan_gen._walk_plan
 
     def walk(goal, *args):
-        return [grind_leg] if goal is _GRIND_GOAL else real_walk(goal, *args)
+        if goal is not _GRIND_GOAL:
+            return real_walk(goal, *args)
+        return list(grind_leg) if isinstance(grind_leg, list) else [grind_leg]
 
     declined: list[str] = []
-    with patch.object(craft_plan_gen, "next_grind_goal", return_value=_GRIND_GOAL), \
+    with patch.object(craft_plan_gen, "grind_rung_goal", return_value=_GRIND_GOAL), \
             patch.object(craft_plan_gen, "_walk_plan", side_effect=walk):
         if prep is None:
             legs = decompose(ReachSkillGoal("gearcrafting", 5), state, gd, [_CHEESE],
@@ -181,6 +184,15 @@ class TestGrindFightLegPreps:
         costs the hp the stock is meant to save."""
         other = FightAction(monster_code="cow", locations=frozenset({(6, 6)}))
         assert _grind({"milk": 10}, _FIGHT, prep=lambda *_a, **_k: [other])[0] == [_FIGHT]
+
+    def test_a_fight_after_a_gather_is_prepped_too(self):
+        """The plan is committed (Phase 2d-L1c), so a fight later in it runs
+        this cycle and the heal stock is made first."""
+        gather = GatherAction(resource_code="milk_rocks", locations=frozenset({(3, 3)}))
+        legs, declined = _grind({"milk": 10}, [gather, _FIGHT])
+        assert legs is not None
+        assert [type(a).__name__ for a in legs] == ["CraftAction", "GatherAction", "FightAction"]
+        assert declined == []
 
     def test_a_gather_leg_is_not_prepped(self):
         """Only a fight costs hp; a gather leg runs as planned."""

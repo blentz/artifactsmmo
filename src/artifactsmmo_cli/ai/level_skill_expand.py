@@ -79,9 +79,7 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
     wool livelock. So: prefer a rung that leaves the objective's materials alone,
     and fall back to the unreserved choice when every rung would consume them.
     Liveness is unchanged; only the tie is."""
-    rung = (skill_grind_target(skill, state, game_data,
-                               frozenset(ctx.step_profile), ctx)
-            or skill_grind_target(skill, state, game_data, ctx=ctx))
+    rung = craft_rung(skill, state, game_data, ctx)
     if rung is not None:
         bank = state.bank_items or {}
         held = state.inventory.get(rung, 0) + bank.get(rung, 0)
@@ -163,3 +161,36 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
     return GatherMaterialsGoal(target_item=rung, needed={rung: held + 1},
                                skill_grind=True,
                                exclude_recycle=frozenset({rung}))
+
+
+def craft_rung(skill: str, state: WorldState, game_data: GameData,
+               ctx: SelectionContext = NO_PROFILE_CONTEXT) -> str | None:
+    """The craftable in-skill rung a grind of `skill` makes: one that leaves
+    the committed step's materials alone when there is one
+    (`ctx.step_profile`, the RESERVATION of `next_grind_goal`), else any."""
+    return (skill_grind_target(skill, state, game_data, frozenset(ctx.step_profile), ctx)
+            or skill_grind_target(skill, state, game_data, ctx=ctx))
+
+
+def grind_rung_goal(skill: str, state: WorldState, game_data: GameData,
+                    ctx: SelectionContext = NO_PROFILE_CONTEXT) -> GatherMaterialsGoal | None:
+    """One grind cycle of `skill` as the one walk serves it (Phase 2d-L3): make
+    ANOTHER rung — the craftable in-skill rung, else the gatherable in-skill
+    resource — so the cycle's committed plan ends in the leg that earns the
+    skill's XP (`Formal.Liveness.GrindCycles`: a cycle is preparatory legs,
+    then the earning leg). None when the skill has no rung from here.
+
+    No descent: `next_grind_goal` aims at the deepest actionable material so
+    the A* search stays small, and a cycle then earns nothing in the skill
+    (live C3P0 2026-09-30: a weaponcrafting cycle was `Gather(iron_rocks×47) →
+    Craft(iron_bar×6)`, mining XP only). The walk plans the whole chain, and
+    `produce={rung}` keeps the rung to the routes that earn."""
+    rung = craft_rung(skill, state, game_data, ctx)
+    if rung is None:
+        rung = best_gather_resource_drop(skill, state.skills.get(skill, 1), game_data)
+    if rung is None:
+        return None
+    bank = state.bank_items or {}
+    held = state.inventory.get(rung, 0) + bank.get(rung, 0)
+    return GatherMaterialsGoal(target_item=rung, needed={rung: held + 1},
+                               skill_grind=True, exclude_recycle=frozenset({rung}))

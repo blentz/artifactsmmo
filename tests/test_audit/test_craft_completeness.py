@@ -18,12 +18,14 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.audit import craft_completeness
+from artifactsmmo_cli.audit.craft_census import run_cell
 from artifactsmmo_cli.audit.craft_completeness import (
     CraftCell,
     CraftVerdict,
     GapClass,
     _leaf_status,
     advances_a_closure_grind,
+    advances_a_heal_prep,
     census_state,
     classify_gap,
     craft_cell_verdict,
@@ -70,13 +72,13 @@ def test_classify_gap_real_bundle_new_classes_regression_pin() -> None:
     assert classify_gap("cooked_chicken", CraftCell(12, "cooking", 1),
                         gd) is GapClass.GREY_FARM_SUPPRESSED
     # iron_bar under-skill (mining 5 < craft 10): the skill gate is a sub-task,
-    # so the plan opens with the mining grind's first real leg (copper ore for
-    # its copper_bar rung; Phase 2d-a, where it used to be the LevelSkill
-    # macro) and PASSES on it — no SKILL_PREREQUISITE classification.
+    # so the plan is the mining grind's cycle — the copper ore, then the
+    # copper_bar that earns (Phase 2d-L3; it used to be the LevelSkill macro)
+    # — and PASSES on its first leg: no SKILL_PREREQUISITE classification.
     cell = CraftCell(8, "mining", 5)
     state = census_state("iron_bar", cell, gd)
     plan = plan_craft("iron_bar", state, gd)
-    assert [repr(a) for a in plan] == ["Gather(copper_rocks×10)"]
+    assert [repr(a) for a in plan] == ["Gather(copper_rocks×10)", "Craft(copper_bar×1)"]
     assert craft_cell_verdict("iron_bar", plan, gd).passed
 
 
@@ -88,7 +90,7 @@ def test_a_grind_leg_for_a_missing_closure_skill_is_directional() -> None:
     gd = _gd()
     state = census_state("fried_eggs", CraftCell(1, "cooking", 1), gd)
     plan = plan_craft("fried_eggs", state, gd)
-    assert [repr(a) for a in plan] == ["Gather(gudgeon_spot×1)"]
+    assert [repr(a) for a in plan] == ["Gather(gudgeon_spot×1)", "Craft(cooked_gudgeon×1)"]
     assert not craft_cell_verdict("fried_eggs", plan, gd).passed
     assert advances_a_closure_grind("fried_eggs", plan[0], state, gd)
     assert not advances_a_closure_grind("fried_eggs", RestAction(), state, gd)
@@ -101,7 +103,8 @@ def test_a_grind_leg_for_a_missing_closure_skill_is_directional() -> None:
 def test_a_leg_of_the_grind_that_opens_a_rung_is_directional() -> None:
     """maple_syrup at cooking 35: the cooking rung is cooked_bass, and bass
     needs fishing 30 the census character lacks, so the leg is the fishing
-    grind's gudgeon, two grinds down."""
+    grind's gudgeon, two grinds down (a gather rung: the gather IS the leg that
+    earns)."""
     gd = _gd()
     state = census_state("maple_syrup", CraftCell(38, "cooking", 35), gd)
     plan = plan_craft("maple_syrup", state, gd)
@@ -113,7 +116,7 @@ def test_no_grind_rung_means_no_grind_leg() -> None:
     gd = _gd()
     state = census_state("fried_eggs", CraftCell(1, "cooking", 1), gd)
     leg = GatherAction(resource_code="gudgeon_spot", locations=frozenset({(0, 0)}))
-    with patch.object(craft_completeness, "next_grind_goal", return_value=None):
+    with patch.object(craft_completeness, "grind_rung_goal", return_value=None):
         assert not advances_a_closure_grind("fried_eggs", leg, state, gd)
 
 
@@ -911,3 +914,20 @@ def test_near_term_gear_targets_both_ring_slots_for_a_ring() -> None:
     gear = CharacterObjective.from_game_data(gd).near_term_gear(bare)
     assert gear.get("ring1_slot") == "iron_ring"
     assert gear.get("ring2_slot") == "iron_ring"
+
+
+def test_a_heal_prep_leg_before_a_grind_fight_is_directional() -> None:
+    """iron_boots at gearcrafting 5: the grind's committed plan holds a fight,
+    so the heal batch comes first (a gudgeon gather for cooked gudgeon); that
+    first leg is part of the cycle, not unrelated."""
+    gd = _gd()
+    state = census_state("iron_boots", CraftCell(8, "gearcrafting", 5), gd)
+    plan = plan_craft("iron_boots", state, gd)
+    assert repr(plan[0]) == "Gather(gudgeon_spot×5)"
+    assert any(isinstance(a, FightAction) for a in plan)
+    assert advances_a_heal_prep(plan[0], plan, state, gd)
+    assert not advances_a_heal_prep(plan[0], [plan[0]], state, gd)  # no fight: no prep
+    assert not advances_a_heal_prep(RestAction(), plan, state, gd)
+    with patch.object(craft_completeness, "heal_prep_goal", return_value=None):
+        assert not advances_a_heal_prep(plan[0], plan, state, gd)
+    assert run_cell("iron_boots", CraftCell(8, "gearcrafting", 5), gd).passed
