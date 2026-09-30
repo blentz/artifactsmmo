@@ -1,5 +1,5 @@
-"""Differential: the real `decompose_core` (feasibility AND next step, with its
-memo) must agree with the kernel-proved `Formal.Decompose` on random graphs.
+"""Differential: the real `decompose_core` (joint feasibility AND next step) must
+agree with the kernel-proved `Formal.Decompose` on random graphs.
 
 Graphs have up to 7 items with random bag stock (0-4), each with up to 3 routes
 of yield 0-3 (0 reads as 1 on both sides), capacity 0-12 (small, so it binds)
@@ -111,11 +111,10 @@ def test_the_differential_is_not_vacuous() -> None:
     assert shapes == {"satisfied", "infeasible", "open", "partial", "descended", "act"}, shapes
 
 
-def test_a_cut_answer_is_not_reused_on_both_sides() -> None:
+def test_an_answer_cut_by_the_path_is_not_the_answer_elsewhere() -> None:
     """Item 1 is first reached under a path holding 2 (its only way in, cut),
     then directly from 0, where 2 is open through ore 3: the answer is yes, and
-    the step descends to the ore. A memo reused regardless of the path answers
-    no here."""
+    the step descends to the ore."""
     graph: _Graph = (4, [0, 0, 0, 0], [[(0, 1, UNBOUNDED, [(2, 1), (1, 1)], [])],
                                         [(0, 1, UNBOUNDED, [(2, 1)], [])],
                                         [(0, 1, UNBOUNDED, [(1, 1)], []),
@@ -125,3 +124,31 @@ def test_a_cut_answer_is_not_reused_on_both_sides() -> None:
     got = _python(graph, queries)
     assert got == _lean(graph, queries)
     assert got == [{"can": True, "step": {"act": [3, 0, 1, 1]}}]
+
+
+def test_siblings_sharing_a_material_cannot_both_count_it() -> None:
+    """JOINT: 0 needs 2 of item 2 and one 1; 1 needs 2 of item 2; item 2 has no
+    route. Two in the bag cover one ask, not both; four cover both, and the
+    first leaf is the 1. The same holds for a bank's capacity (item 4: two asks
+    of 2 from a bank of 3)."""
+    shared: _Graph = (3, [0, 0, 2], [[(0, 1, UNBOUNDED, [(2, 2), (1, 1)], [])],
+                                     [(1, 1, UNBOUNDED, [(2, 2)], [])], []])
+    assert _python(shared, [(0, 1)]) == _lean(shared, [(0, 1)]) == [{"can": False, "step": None}]
+    richer: _Graph = (3, [0, 0, 4], shared[2])
+    assert _python(richer, [(0, 1)]) == _lean(richer, [(0, 1)]) == [
+        {"can": True, "step": {"act": [1, 0, 1, 1]}}]
+    bank: _Graph = (2, [0, 0], [[(0, 1, UNBOUNDED, [(1, 2), (1, 2)], [])], [(1, 1, 3, [], [])]])
+    assert _python(bank, [(0, 1)]) == _lean(bank, [(0, 1)]) == [{"can": False, "step": None}]
+
+
+def test_the_walk_is_greedy_so_holding_more_can_turn_yes_into_no() -> None:
+    """The contract decided 2026-09-30: X's first route (M + Z) is taken as soon
+    as a Z is held, spending the one M its sibling Y needed."""
+    def greedy(z: int) -> _Graph:
+        return (5, [0, 0, 0, 1, z], [[(0, 1, UNBOUNDED, [(1, 1), (2, 1)], [])],
+                                     [(1, 1, UNBOUNDED, [(3, 1), (4, 1)], []), (2, 1, UNBOUNDED, [], [])],
+                                     [(3, 1, UNBOUNDED, [(3, 1)], [])], [], []])
+    for z, expected in ((0, True), (1, False)):
+        got = _python(greedy(z), [(0, 1)])
+        assert got == _lean(greedy(z), [(0, 1)])
+        assert got[0]["can"] is expected

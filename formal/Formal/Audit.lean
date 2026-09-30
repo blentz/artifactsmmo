@@ -979,7 +979,7 @@ open Formal.PriorityBand
 #print axioms Formal.Decompose.step_none_iff
 #print axioms Formal.Decompose.step_act_spec
 #print axioms Formal.Decompose.step_open_spec
-#print axioms Formal.Decompose.can_mono
+#print axioms Formal.Decompose.can_shrinks
 #print axioms Formal.Decompose.can_fuel_stable
 #print axioms Formal.Decompose.step_fuel_stable
 #print axioms Formal.CompleteTaskIncome.applyComplete_adds

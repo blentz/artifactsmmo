@@ -1243,7 +1243,7 @@ open Formal.PriorityBand
 #check @Formal.Decompose.step_none_iff        -- validity: no step ⇔ satisfied or infeasible
 #check @Formal.Decompose.step_act_spec        -- safety: act only on a ready route delivering the deficit, inputs on hand, runs = ⌈need/yield⌉
 #check @Formal.Decompose.step_open_spec       -- safety: open only the first gate of the route it blocks
-#check @Formal.Decompose.can_mono             -- monotone: more held / fewer wanted never harder
+#check @Formal.Decompose.can_shrinks          -- safety: a yes only ever spends the bag, never grows it
 #check @Formal.Decompose.can_fuel_stable      -- termination: n + 1 fuel is the unbounded feasibility answer
 #check @Formal.Decompose.step_fuel_stable     -- termination: n + 1 fuel is the unbounded next step
 

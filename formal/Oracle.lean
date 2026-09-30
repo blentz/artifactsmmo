@@ -2460,7 +2460,7 @@ def run (args : Array Json) : Json :=
   | some (onHand, routes, queries) =>
     let g : Graph := ⟨n, fun i => onHand.getD i 0, fun i => routes.getD i []⟩
     Json.arr (queries.map (fun (i, q) =>
-      Json.mkObj [("can", Json.bool (can g (n + 1) [] i q)), ("step", stepJson (nextStep g i q))])).toArray
+      Json.mkObj [("can", Json.bool (feasible g i q)), ("step", stepJson (nextStep g i q))])).toArray
 
 end DecomposeOracle
 

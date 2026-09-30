@@ -11,18 +11,25 @@ Kernel-checked properties of the Lean mirror: a feasible unmet goal always has a
 step (complete); a step is only emitted when feasible (sound); an action is
 emitted only for a ready route that can deliver the deficit, with every input
 on hand (ordering); a gate-blocked route yields "open its first gate"; a route
-runs `ceil(deficit / yield)` times; monotone in holdings and quantity; and the
-fuel bound under which the Lean walk equals this unbounded one.
+runs `ceil(deficit / yield)` times; a yes only ever spends the bag; and the fuel
+bound under which the Lean walk equals this unbounded one.
 
 DEFICIT semantics, filled GREEDILY across routes: `qty` of `item` can be had when
 the bag holds that many, or when the routes, in the order given, fill the deficit
 `qty - bag[item]`: each usable route takes as much of what is left as its
-capacity allows, provided every input can be had in the amount its runs consume.
-A WITHDRAW route's capacity is the bank's stock, so banked stock mixes with
-production (21 banked, 33 needed: withdraw 21, gather 12), and a licensed RECYCLE
-covers what it can while a gather covers the rest. A CRAFT route's inputs are its
-recipe. The adapter puts ready routes before gate-blocked ones. An item already
-asked about further up the same path is not obtainable through itself.
+remaining capacity allows, provided every input can be had in the amount its runs
+consume. A WITHDRAW route's capacity is the bank's stock, so banked stock mixes
+with production (21 banked, 33 needed: withdraw 21, gather 12), and a licensed
+RECYCLE covers what it can while a gather covers the rest. A CRAFT route's inputs
+are its recipe. The adapter puts ready routes before gate-blocked ones. An item
+already asked about further up the same path is not obtainable through itself.
+
+JOINT (Phase 2d-L1): the walk threads what is left of the bag and of each
+route's capacity through every question it asks, so sibling inputs that share a
+material cannot both count the same stock. GREEDY: a usable route is taken even
+when a later sibling then goes short, so a yes is sound but holding more can
+turn a yes into a no (decided 2026-09-30; exact answers need a search
+exponential in fan-out).
 """
 
 from collections.abc import Hashable, Mapping, Sequence
@@ -64,109 +71,111 @@ class OpenGate[K: Hashable]:
 
 type Step[K: Hashable] = Act[K] | OpenGate[K]
 
-type _Walk[K: Hashable] = tuple[bool, frozenset[K], frozenset[K]]
-"""(answer, items visited, visited items found on the path)."""
-
-
 def runs(deficit: int, yield_per: int) -> int:
     """Applications that deliver `deficit` units at `yield_per` each; a yield of
     0 in the data reads as 1."""
     return -(-deficit // max(1, yield_per))
 
 
+@dataclass(frozen=True)
+class _State[K: Hashable]:
+    """What the walk has left (`Decompose.St`): the bag, and the capacity spent
+    on each (item, route index)."""
+
+    bag: Mapping[K, int]
+    used: Mapping[tuple[K, int], int]
+
+    def reserve(self, item: K, qty: int) -> "_State[K]":
+        bag = dict(self.bag)
+        bag[item] = self.bag.get(item, 0) - qty
+        return _State(bag, self.used)
+
+    def use(self, item: K, index: int, amount: int) -> "_State[K]":
+        used = dict(self.used)
+        used[(item, index)] = self.used.get((item, index), 0) + amount
+        return _State(self.bag, used)
+
+
 class _Walker[K: Hashable]:
-    """One question's walk: the graph plus the feasibility memo, shared by the
-    feasibility answer and the step so both read the same verdicts."""
+    """One question's walk over its graph (`Decompose.can` / `Decompose.step`)."""
 
-    def __init__(self, on_hand: Mapping[K, int], routes: Mapping[K, Sequence[Route[K]]]) -> None:
-        self._on_hand = on_hand
+    def __init__(self, routes: Mapping[K, Sequence[Route[K]]]) -> None:
         self._routes = routes
-        self._memo: dict[tuple[K, int], _Walk[K]] = {}
 
-    def can(self, item: K, qty: int, path: frozenset[K]) -> _Walk[K]:
-        """The feasibility walk (`Decompose.can`). Each (item, qty) answer is
-        memoised with the items its walk visited and, among them, the ones it
-        found on the path (a cut); it is reused only under a path that holds
-        exactly those cuts and no other visited item, where the walk would run
-        identically (the `supply_core` memo, whose soundness argument carries
-        over unchanged)."""
-        have = self._on_hand.get(item, 0)
+    @staticmethod
+    def _take(st: _State[K], item: K, index: int, route: Route[K], deficit: int) -> int:
+        return min(route.capacity - st.used.get((item, index), 0), deficit)
+
+    def can(self, item: K, qty: int, st: _State[K], path: frozenset[K]) -> _State[K] | None:
+        """`Decompose.can`: the state left once `qty` of `item` is had, or None."""
+        have = st.bag.get(item, 0)
         if have >= qty:
-            return True, frozenset({item}), frozenset()
+            return st.reserve(item, qty)
         if item in path:
-            return False, frozenset({item}), frozenset({item})
-        cached = self._memo.get((item, qty))
-        if cached is not None and cached[2] <= path and not ((cached[1] - cached[2]) & path):
-            return cached
-        answer, visited, cuts = self._fill(item, qty - have, path | {item})
-        result = (answer, visited | {item}, cuts - {item})
-        self._memo[(item, qty)] = result
-        return result
+            return None
+        return self._fill(item, qty - have, st.reserve(item, have), path | {item})
 
-    def _fill(self, item: K, deficit: int, inner: frozenset[K]) -> _Walk[K]:
-        """`Decompose.fill`: `item`'s routes, in order, cover `deficit`; each
-        contributing route takes `min(capacity, what is left)`."""
-        visited: set[K] = set()
-        cuts: set[K] = set()
-        remaining = deficit
-        for route in self._routes.get(item, ()):
-            if remaining == 0:
-                break
-            take = min(route.capacity, remaining)
-            if take <= 0:
-                continue
-            ok, seen, hit = self._usable(route, take, inner)
-            visited |= seen
-            cuts |= hit
-            if ok:
-                remaining -= take
-        return remaining == 0, frozenset(visited), frozenset(cuts)
+    def _fill(self, item: K, deficit: int, st: _State[K], inner: frozenset[K]) -> _State[K] | None:
+        """`Decompose.fill`: `item`'s routes, in order, cover `deficit`; a route
+        that contributes takes its share, one that fails changes nothing."""
+        for index, route in enumerate(self._routes.get(item, ())):
+            if deficit == 0:
+                return st
+            after = self._use(item, index, route, deficit, st, inner)
+            if after is not None:
+                deficit -= self._take(st, item, index, route, deficit)
+                st = after
+        return st if deficit == 0 else None
 
-    def _usable(self, route: Route[K], deficit: int, inner: frozenset[K]) -> _Walk[K]:
-        """`Decompose.usable`: every input can be had in the amount the runs for
-        `deficit` consume (checked in order, stopping at the first that cannot,
-        as `List.all` does). Callers pass an amount within the route's capacity
-        (`take`), so the capacity conjunct of the Lean `usable` always holds."""
-        n = runs(deficit, route.yield_per)
-        visited: set[K] = set()
-        cuts: set[K] = set()
+    def _use(self, item: K, index: int, route: Route[K], deficit: int, st: _State[K],
+             inner: frozenset[K]) -> _State[K] | None:
+        """`Decompose.useRoute`: the state after the route's share of its
+        capacity and its inputs are spent, or None when it takes nothing or an
+        input fails."""
+        take = self._take(st, item, index, route, deficit)
+        if take <= 0:
+            return None
+        n = runs(take, route.yield_per)
+        cur: _State[K] | None = st.use(item, index, take)
         for material, per in route.inputs:
-            found, seen, hit = self.can(material, n * per, inner)
-            visited |= seen
-            cuts |= hit
-            if not found:
-                return False, frozenset(visited), frozenset(cuts)
-        return True, frozenset(visited), frozenset(cuts)
+            assert cur is not None
+            cur = self.can(material, n * per, cur, inner)
+            if cur is None:
+                return None
+        return cur
 
-    def step(self, item: K, qty: int, path: frozenset[K]) -> Step[K] | None:
-        """The first leaf of the supply the walk finds (`Decompose.step`): the
-        first route that contributes to the fill, its gate, its first input the
-        bag lacks, or the route itself."""
-        have = self._on_hand.get(item, 0)
+    def step(self, item: K, qty: int, st: _State[K], path: frozenset[K]) -> Step[K] | None:
+        """`Decompose.step`: the first leaf of the supply the walk finds: the
+        first contributing route's gate, its first input the state lacks, or
+        the route itself."""
+        have = st.bag.get(item, 0)
         if have >= qty or item in path:
             return None
         deficit = qty - have
+        start = st.reserve(item, have)
         inner = path | {item}
-        if not self._fill(item, deficit, inner)[0]:
+        if self._fill(item, deficit, start, inner) is None:
             return None
         for index, route in enumerate(self._routes.get(item, ())):
-            take = min(route.capacity, deficit)
-            if take <= 0 or not self._usable(route, take, inner)[0]:
+            if self._use(item, index, route, deficit, start, inner) is None:
                 continue
             if route.gates:
                 return OpenGate(item, index, route.gates[0])
+            take = self._take(start, item, index, route, deficit)
             n = runs(take, route.yield_per)
+            cur = start.use(item, index, take)
             for material, per in route.inputs:
-                if self._on_hand.get(material, 0) < n * per:
-                    return self.step(material, n * per, inner)
+                if cur.bag.get(material, 0) < n * per:
+                    return self.step(material, n * per, cur, inner)
+                cur = cur.reserve(material, n * per)
             return Act(item, index, take, n)
         return None  # pragma: no cover - a fill of a positive deficit has a contributor
 
 
 def can_obtain[K: Hashable](item: K, qty: int, on_hand: Mapping[K, int],
                            routes: Mapping[K, Sequence[Route[K]]]) -> bool:
-    """Can `qty` of `item` be had (`Decompose.can` at fuel n + 1)?"""
-    return _Walker(on_hand, routes).can(item, qty, frozenset())[0]
+    """Can `qty` of `item` be had, jointly (`Decompose.feasible`)?"""
+    return _Walker(routes).can(item, qty, _State(on_hand, {}), frozenset()) is not None
 
 
 def next_step[K: Hashable](item: K, qty: int, on_hand: Mapping[K, int],
@@ -174,4 +183,4 @@ def next_step[K: Hashable](item: K, qty: int, on_hand: Mapping[K, int],
     """The next step toward `qty` of `item` in the bag (`Decompose.nextStep`):
     None when the bag holds it or it is infeasible, and never None for a
     feasible goal the bag does not hold."""
-    return _Walker(on_hand, routes).step(item, qty, frozenset())
+    return _Walker(routes).step(item, qty, _State(on_hand, {}), frozenset())

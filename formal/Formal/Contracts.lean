@@ -3084,44 +3084,42 @@ example : ∀ (g : Graph), Closed g → ∀ (fuel : Nat) (path : List Nat) (i q 
       can g (fuel + 1) path i q = can g fuel path i q :=
   @Formal.ObtainModelSupply.can_fuel_stable
 
--- ─── Decompose (THE ONE WALK: feasibility + next step, greedy fill) anti-weakening pins ───
+-- ─── Decompose (THE ONE WALK: joint feasibility + next step, greedy fill) anti-weakening pins ───
 open Formal.Decompose in
-example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat),
-    can g fuel path i q = true → ¬ q ≤ g.onHand i → (step g fuel path i q).isSome = true :=
+example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat) (s t : St),
+    can g fuel path i q s = some t → ¬ q ≤ s.bag i → (step g fuel path i q s).isSome = true :=
   @Formal.Decompose.step_complete
 open Formal.Decompose in
-example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat) (s : Step),
-    step g fuel path i q = some s → can g fuel path i q = true :=
+example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat) (s : St) (x : Step),
+    step g fuel path i q s = some x → (can g fuel path i q s).isSome = true :=
   @Formal.Decompose.step_sound
 open Formal.Decompose in
-example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat),
-    step g fuel path i q = none ↔ (q ≤ g.onHand i ∨ can g fuel path i q = false) :=
+example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat) (s : St),
+    step g fuel path i q s = none ↔ (q ≤ s.bag i ∨ can g fuel path i q s = none) :=
   @Formal.Decompose.step_none_iff
 open Formal.Decompose in
-example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q j k c rn : Nat),
-    step g fuel path i q = some (.act j k c rn) →
+example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat) (s : St) (j k c rn : Nat),
+    step g fuel path i q s = some (.act j k c rn) →
       ∃ r, (g.routes j)[k]? = some r ∧ r.gates = [] ∧ 1 ≤ c ∧ c ≤ r.cap ∧
-        rn = runs c r.yieldPer ∧ ∀ p ∈ r.inputs, rn * p.2 ≤ g.onHand p.1 :=
+        rn = runs c r.yieldPer ∧ ∀ p ∈ r.inputs, rn * p.2 ≤ s.bag p.1 :=
   @Formal.Decompose.step_act_spec
 open Formal.Decompose in
-example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q j k gt : Nat),
-    step g fuel path i q = some (.openGate j k gt) →
+example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat) (s : St) (j k gt : Nat),
+    step g fuel path i q s = some (.openGate j k gt) →
       ∃ r, (g.routes j)[k]? = some r ∧ r.gates.head? = some gt :=
   @Formal.Decompose.step_open_spec
 open Formal.Decompose in
-example : ∀ (g : Graph) (h : Nat → Nat), (∀ i, g.onHand i ≤ h i) →
-    ∀ (fuel : Nat) (path : List Nat) (i q q' : Nat), q' ≤ q → can g fuel path i q = true →
-      can { g with onHand := h } fuel path i q' = true :=
-  @Formal.Decompose.can_mono
+example : ∀ (g : Graph) (fuel : Nat) (path : List Nat), Shrinks (can g fuel path) :=
+  @Formal.Decompose.can_shrinks
 open Formal.Decompose in
-example : ∀ (g : Graph), Closed g → ∀ (fuel : Nat) (path : List Nat) (i q : Nat), path.Nodup →
+example : ∀ (g : Graph), Closed g → ∀ (fuel : Nat) (path : List Nat) (i q : Nat) (s : St), path.Nodup →
     (∀ x ∈ path, x < g.n) → i < g.n → g.n + 1 ≤ fuel + path.length →
-      can g (fuel + 1) path i q = can g fuel path i q :=
+      can g (fuel + 1) path i q s = can g fuel path i q s :=
   @Formal.Decompose.can_fuel_stable
 open Formal.Decompose in
-example : ∀ (g : Graph), Closed g → ∀ (fuel : Nat) (path : List Nat) (i q : Nat), path.Nodup →
+example : ∀ (g : Graph), Closed g → ∀ (fuel : Nat) (path : List Nat) (i q : Nat) (s : St), path.Nodup →
     (∀ x ∈ path, x < g.n) → i < g.n → g.n + 1 ≤ fuel + path.length →
-      step g (fuel + 1) path i q = step g fuel path i q :=
+      step g (fuel + 1) path i q s = step g fuel path i q s :=
   @Formal.Decompose.step_fuel_stable
 
 -- ─── CurrencyFunding (ReachCurrencyGoal funding) anti-weakening pins ───
