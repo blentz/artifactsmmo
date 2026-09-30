@@ -109,7 +109,7 @@ def _slot_delta(item_code: str, recipe: dict[str, int], quantity: int,
     `item_code` out of the current bag. Negative/zero = the craft consolidates.
 
     The bag is SLOT-limited (20 stacks) long before it is QUANTITY-limited
-    (~124 units) — `guards._used_fraction` already models pressure as
+    (~124 units) — `guards.used_fraction` already models pressure as
     `max(quantity_fraction, slot_fraction)` for exactly that reason. A craft
     that frees units can still ADD a stack:
 

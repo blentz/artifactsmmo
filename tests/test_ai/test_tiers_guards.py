@@ -20,8 +20,8 @@ from artifactsmmo_cli.ai.tiers.guards import (
     SelectionContext,
     _fires,
     _quantity_fraction,
-    _used_fraction,
     active_guards,
+    used_fraction,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -139,8 +139,8 @@ def test_space_pressure_is_slot_aware_but_delete_stays_quantity_only():
         inv[f"j{i}"] = 1
     state = make_state(inventory=inv, inventory_max=124, inventory_slots_max=20)
     assert state.inventory_slots_free == 0            # slot-full
-    assert _used_fraction(state) == 1.0               # space pressure is slot-driven
-    assert _used_fraction(state) >= DEPOSIT_FULL_FRACTION  # crosses the deposit gate
+    assert used_fraction(state) == 1.0               # space pressure is slot-driven
+    assert used_fraction(state) >= DEPOSIT_FULL_FRACTION  # crosses the deposit gate
     assert _quantity_fraction(state) < 0.85           # delete metric stays low → no delete
 
 
@@ -150,11 +150,11 @@ def test_space_pressure_uses_quantity_when_slots_have_headroom():
     that is quantity-full but not slot-full."""
     state = make_state(inventory={"ore": 90}, inventory_max=100, inventory_slots_max=20)
     assert state.inventory_slots_free > 0
-    assert _used_fraction(state) == _quantity_fraction(state) == 0.9
+    assert used_fraction(state) == _quantity_fraction(state) == 0.9
 
 
 def test_used_fraction_zero_when_inventory_max_zero():
-    # Covers the inventory_max <= 0 branch in _used_fraction.
+    # Covers the inventory_max <= 0 branch in used_fraction.
     # With inventory_max=0 no guard that checks fraction should fire.
     state = make_state(hp=100, max_hp=100, inventory={}, inventory_max=0)
     guards = active_guards(state, GameData(), None, _ctx(bank_accessible=True))
@@ -844,7 +844,7 @@ def test_deposit_full_never_fires_on_a_goal_that_reports_zero_value():
     that makes it true (DEPOSIT_FULL_FRACTION 0.90 strictly above the goal's
     ramp start 0.85) is spelled out at `DISCARD_HIGH_FRACTION`'s comment in
     tiers/guards.py. The model has ONE `usedFractionRat`; production had TWO —
-    the guard's `_used_fraction` is max(QUANTITY, SLOT) while the goal read the
+    the guard's `used_fraction` is max(QUANTITY, SLOT) while the goal read the
     quantity fraction alone with a binary `slots_free == 0 -> 1.0` override.
 
     18 singleton stacks in a 20-slot / 124-quantity bag is 0.90 of the SLOTS and

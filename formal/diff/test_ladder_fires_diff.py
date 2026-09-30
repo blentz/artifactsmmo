@@ -1108,7 +1108,7 @@ def drive_and_contest(
 
 # ---------------------------------------------------------------------------
 # Slot 1 — craftRelief (arg[27]).  Production CRAFT_RELIEF guard fires iff
-# `_used_fraction >= 0.70` AND `craft_relief_candidates(...)` non-empty
+# `used_fraction >= 0.70` AND `craft_relief_candidates(...)` non-empty
 # (tiers/guards.py + craft_relief.py). Net-relief gate requires a multi-input
 # recipe (input units consumed > 1 output). The items-task deliverable is the
 # priority-0 relief candidate; the production ladder reaches CRAFT_RELIEF via
@@ -1199,7 +1199,7 @@ def test_craft_relief_near_miss_zero_net_relief() -> None:
 
 # ---------------------------------------------------------------------------
 # Slot 2 — recycleSurplus (arg[23]).  Production RECYCLE_SURPLUS means fires
-# iff `_used_fraction < 0.85` AND `recyclable_surplus(...)` non-empty
+# iff `used_fraction < 0.85` AND `recyclable_surplus(...)` non-empty
 # (tiers/means.py + recycle_surplus.py): a craftable EQUIPPABLE the keep
 # authority licenses for destruction (held above BOTH `keep_in_bag` and
 # `keep_owned` — for a bare weapon that is EQUIPPABLE_KEEP=1), skill at recipe
@@ -1303,7 +1303,7 @@ def test_recycle_surplus_near_miss_at_cap() -> None:
 
 # ---------------------------------------------------------------------------
 # Slot 3 — drainBankJunk (arg[31]).  Production DRAIN_BANK_JUNK fires iff
-# `_used_fraction < 0.85` AND `bank_drain_excess(...)` non-empty (tiers/means.py
+# `used_fraction < 0.85` AND `bank_drain_excess(...)` non-empty (tiers/means.py
 # + bank_drain.py): a non-objective code held in the BANK above its useful cap.
 # Like recycleSurplus it sits below the lifecycle slots and can only fire-and-
 # lose; the contest drives it TRUE under phase=none where BOTH ladders select

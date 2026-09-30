@@ -26,7 +26,7 @@ from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.arbiter_select import BAND_COLLECT, BAND_STEP
-from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
+from artifactsmmo_cli.ai.bank_drain import bank_drain_excess, drain_snapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
@@ -191,41 +191,33 @@ def test_bank_hoist_rule_is_pure_and_refuses_a_zero_capacity_bag() -> None:
 
 # ── the snapshot: the drain was UNPLANNABLE, not merely outranked ────────────
 
-def test_all_or_nothing_drain_cannot_plan_a_deep_pile(gd: GameData) -> None:
-    """Regression pin for the second half of the starvation. `initial_total=None`
-    is the pre-part-2 goal, and the planner refuses STRUCTURALLY — not on a
-    timeout — because emptying the licence needs every copy in the bag at once."""
-    state = _state(gd, bank=LIVE_BANK)
-    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True)
-    objective = CharacterObjective.from_game_data(gd)
-    actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0)
-    planner = GOAPPlanner()
-    assert planner.plan(state, goal, actions, gd, budget_seconds=10.0) == []
-    assert planner.last_stats is not None and not planner.last_stats.timed_out
-
-
 def test_snapshot_makes_one_batch_a_complete_plan(gd: GameData) -> None:
+    """One bag-load withdrawn and shed is a complete episode: the plan is the
+    withdraw and the shed of exactly what it withdrew."""
     state = _state(gd, bank=LIVE_BANK)
-    total = sum(bank_drain_excess(state, gd, _ctx()).values())
     goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True,
-                             initial_total=total)
+                             snapshot=drain_snapshot(state, gd, _ctx()))
     objective = CharacterObjective.from_game_data(gd)
     actions = build_actions(gd, state, objective, bank_accessible=True,
                             task_exchange_min_coins=0)
     plan = GOAPPlanner().plan(state, goal, actions, gd, budget_seconds=10.0)
-    assert len(plan) == 1 and isinstance(plan[0], WithdrawItemAction)
+    assert len(plan) == 2 and isinstance(plan[0], WithdrawItemAction)
+    assert plan[1].quantity == plan[0].quantity
 
 
-def test_snapshot_satisfies_on_any_reduction(gd: GameData) -> None:
+def test_snapshot_satisfies_on_any_disposal(gd: GameData) -> None:
+    """Any fall in the owned total of the licensed codes ends the episode; a
+    snapshot that licensed nothing is satisfied from the start."""
     state = _state(gd, bank=LIVE_BANK)
-    total = sum(bank_drain_excess(state, gd, _ctx()).values())
     goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True,
-                             initial_total=total)
+                             snapshot=drain_snapshot(state, gd, _ctx()))
     assert not goal.is_satisfied(state)
     smaller = _state(gd, bank={**LIVE_BANK, "sap": 500})
     assert goal.is_satisfied(smaller)
-    assert goal.is_satisfied(_state(gd, bank={}))  # nothing licensed at all
+    empty = _state(gd, bank={})
+    nothing = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True,
+                                snapshot=drain_snapshot(empty, gd, _ctx()))
+    assert nothing.is_satisfied(empty)
 
 
 # ── the per-cycle bound ──────────────────────────────────────────────────────

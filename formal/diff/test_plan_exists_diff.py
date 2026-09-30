@@ -34,7 +34,7 @@ scope; the Lean lemmas cover them separately):
     Phase-21c `.fight` apply with xp/level rollover. Not faithfully
     reproducible at the operational granularity.
   * DISCARD_CRITICAL / DISCARD_HIGH — firing requires
-    `overstocked_items(...)` non-empty AND `_used_fraction(...) >= 0.95/0.85`.
+    `overstocked_items(...)` non-empty AND `used_fraction(...) >= 0.95/0.85`.
     Constructible, but `DiscardOverstockGoal` requires DeleteItemAction to
     be present in the menu, which in `_build_actions` only happens when the
     bank is INACCESSIBLE (player.py:876). The bank-locked branch is a

@@ -146,6 +146,7 @@ COMPLETE_TASK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "c
 REACH_UNLOCK_LEVEL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "reach_unlock_level.py"
 LOW_YIELD_CANCEL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "low_yield_cancel.py"
 UNLOCK_BANK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "unlock_bank.py"
+SHED_ACTIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "shed_actions.py"
 DISCARD_OVERSTOCK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "discard_overstock.py"
 PROGRESSION_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "progression.py"
 RESTORE_HP_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "restore_hp.py"
@@ -3891,7 +3892,7 @@ RECYCLE_HOIST_MUTATIONS = [
      "        hoist_recycle = (shed_urgency(recycle_surplus_map) > RECYCLE_HOIST_URGENCY"),
     ("strategy_driver: drop the pressure gate on the recycle hoist",
      "        hoist_recycle = (shed_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY\n"
-     "                         and _used_fraction(state) < SELL_PRESSURE_FRACTION)",
+     "                         and used_fraction(state) < SELL_PRESSURE_FRACTION)",
      "        hoist_recycle = (shed_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY)"),
     ("strategy_driver: hoisted recycle band COLLECT->DISCRETIONARY",
      "                                        repr_=repr(rs_goal), band=BAND_COLLECT))",
@@ -3919,11 +3920,14 @@ SHED_HOIST_MUTATIONS = [
      "                       and ctx.bank_accessible"),
     ("strategy_driver: drop the pressure gate on the drain hoist",
      "                       and ctx.bank_accessible\n"
-     "                       and _used_fraction(state) < SELL_PRESSURE_FRACTION)",
+     "                       and used_fraction(state) < SELL_PRESSURE_FRACTION)",
      "                       and ctx.bank_accessible)"),
     ("strategy_driver: hoisted drain drops the snapshot (unplannable again)",
-     "                                        initial_total=sum(drain_excess_map.values()))",
-     "                                        initial_total=None)"),
+     "                                        snapshot=drain_snapshot(state, game_data, ctx))\n"
+     "            candidates.append(",
+     "                                        snapshot=replace(drain_snapshot(state, game_data, ctx),\n"
+     "                                                         owned=0))\n"
+     "            candidates.append("),
     ("strategy_driver: hoisted drain band COLLECT->DISCRETIONARY",
      "                                        repr_=repr(db_goal), band=BAND_COLLECT))",
      "                                        repr_=repr(db_goal), band=BAND_DISCRETIONARY))"),
@@ -3936,8 +3940,8 @@ SHED_HOIST_MUTATIONS = [
     ("strategy_driver: sell hoist ignores every threshold (always hoists)",
      "        hoist_sell = ((shed_urgency(sell_bag) >= SHED_HOIST_URGENCY\n"
      "                       or bank_shed_hoist(sell_bank, state.inventory_max))\n"
-     "                      and _used_fraction(state) < SELL_PRESSURE_FRACTION)",
-     "        hoist_sell = (_used_fraction(state) < SELL_PRESSURE_FRACTION)"),
+     "                      and used_fraction(state) < SELL_PRESSURE_FRACTION)",
+     "        hoist_sell = (used_fraction(state) < SELL_PRESSURE_FRACTION)"),
     ("strategy_driver: hoisted sell band COLLECT->DISCRETIONARY",
      "                                        repr_=repr(si_goal), band=BAND_COLLECT))",
      "                                        repr_=repr(si_goal), band=BAND_DISCRETIONARY))"),
@@ -3956,16 +3960,28 @@ SHED_HOIST_MUTATIONS = [
 # and needs every licensed copy in a 120-quantity bag at once, so the goal
 # refuses STRUCTURALLY — the half of the starvation a band-only fix would miss.
 # Killed by tests/test_ai/test_shed_hoists.py.
+# The drain sheds what it withdraws, in one plan (2026-09-30 DrainBankJunk
+# livelock). Killed by tests/test_ai/test_bank_drain.py.
+DRAIN_SHED_MUTATIONS = [
+    ("drain_bank_junk: a withdraw alone counts (the bank total, not the owned total)",
+     "                or owned_total(state, self._snapshot.codes) < self._snapshot.owned)",
+     "                or not bank_drain_excess(state, self._gd, self._ctx))"),
+    ("drain_bank_junk: the withdraw fills the bag past the deposit guard",
+     "                if used_fraction(after) >= DEPOSIT_FULL_FRACTION:\n                    continue",
+     "                if False:\n                    continue"),
+    ("drain_bank_junk: the plan withdraws but never sheds",
+     "                    result.extend(shed_actions(code, shed, after, game_data, self._ctx,\n"
+     "                                               self._accessible))",
+     "                    pass"),
+    ("drain_bank_junk: the shed ignores the bag's keep (a kept heal deleted)",
+     "                shed = min(bankable(code, after, game_data, self._ctx),\n"
+     "                           destroyable(code, after, game_data, self._ctx))",
+     "                shed = destroyable(code, after, game_data, self._ctx)"),
+]
 DRAIN_SNAPSHOT_MUTATIONS = [
     ("drain_bank_junk: snapshot progress < -> <= (no-progress counts satisfied)",
-     "        return (self._initial_total is not None\n"
-     "                and sum(excess.values()) < self._initial_total)",
-     "        return (self._initial_total is not None\n"
-     "                and sum(excess.values()) <= self._initial_total)"),
-    ("drain_bank_junk: ignore the snapshot (all-or-nothing, unplannable again)",
-     "        return (self._initial_total is not None\n"
-     "                and sum(excess.values()) < self._initial_total)",
-     "        return False"),
+     "                or owned_total(state, self._snapshot.codes) < self._snapshot.owned)",
+     "                or owned_total(state, self._snapshot.codes) <= self._snapshot.owned)"),
     # NEITHER THE `min` NOR THE `is_applicable` PROBE IS MUTATED HERE, and the
     # reason is the zero-vacuousness rule rather than an oversight. Both were
     # tried and both SURVIVED as genuinely equivalent mutants:
@@ -3978,8 +3994,8 @@ DRAIN_SNAPSHOT_MUTATIONS = [
     # per-cycle QUANTITY bound is `inventory_room.has_room` (the server's HTTP
     # 497), mutated in INVENTORY_ROOM_MUTATIONS, and its structural assertion is
     # the census's `within_bag_bound` — mutated in SHED_CENSUS_MUTATIONS. What is
-    # NOT redundant, and is mutated here, is the SNAPSHOT: without it the goal
-    # has no reachable satisfaction at all.
+    # NOT redundant, and is mutated here, is the SNAPSHOT: it measures a
+    # DISPOSAL (the owned total), so a withdraw alone never ends the episode.
 ]
 
 # The SELL route's BANK arm (2026-08-05). `sellable_surplus` iterates the BAG,
@@ -5878,12 +5894,12 @@ KEEP_VALUATION_ADAPTER_MUTATIONS = [
 # delete. Killed by TestDiscardOverstockRouting.test_fallback_deposits_recipe_demanded_material.
 DISCARD_OVERSTOCK_ROUTING_MUTATIONS = [
     ("discard_overstock: bank_accessible not threaded (deposit arm dead)",
-     "                result.append(overstock_disposal(\n"
-     "                    code, excess_qty, state, game_data, self._bank_accessible,\n"
-     "                    self._ctx))",
-     "                result.append(overstock_disposal(\n"
-     "                    code, excess_qty, state, game_data, False,\n"
-     "                    self._ctx))"),
+     "        result.append(overstock_disposal(\n"
+     "            code, excess_qty, state, game_data, bank_accessible,\n"
+     "            ctx))",
+     "        result.append(overstock_disposal(\n"
+     "            code, excess_qty, state, game_data, False,\n"
+     "            ctx))"),
 ]
 
 # buy_source_venue mutations (DUAL of liquidation_venue) -- old strings matched to
@@ -6656,9 +6672,9 @@ LADDER_GUARD_FIRES_MUTATIONS = [
     ),
     (
         "ladder/guards: DEPOSIT_FULL fill comparator >= -> > (boundary 0.90 leaks)",
-        "                and _used_fraction(state) >= DEPOSIT_FULL_FRACTION\n"
+        "                and used_fraction(state) >= DEPOSIT_FULL_FRACTION\n"
         "                and bool(select_bank_deposits(",
-        "                and _used_fraction(state) > DEPOSIT_FULL_FRACTION\n"
+        "                and used_fraction(state) > DEPOSIT_FULL_FRACTION\n"
         "                and bool(select_bank_deposits(",
     ),
     (
@@ -6668,7 +6684,7 @@ LADDER_GUARD_FIRES_MUTATIONS = [
     ),
 ]
 
-# Slot-aware SPACE pressure (2026-07-11): guards._used_fraction is
+# Slot-aware SPACE pressure (2026-07-11): guards.used_fraction is
 # max(quantity_fraction, slot_fraction) so the space-relief guards fire when the
 # per-slot cap is hit at low quantity (live Robby 20/20 slots, 0.61 quantity,
 # doomed Craft 497). Killed by tests/test_ai/test_tiers_guards.py.
@@ -6688,7 +6704,7 @@ GUARD_DISCARD_QUANTITY_MUTATIONS = [
     (
         "guards: DISCARD_CRITICAL on slot-aware pressure (deletes at slot-full instead of banking)",
         "                and _quantity_fraction(state) >= DISCARD_CRITICAL_FRACTION)",
-        "                and _used_fraction(state) >= DISCARD_CRITICAL_FRACTION)",
+        "                and used_fraction(state) >= DISCARD_CRITICAL_FRACTION)",
     ),
 ]
 
@@ -6777,8 +6793,8 @@ LADDER_MEANS_FIRES_MUTATIONS = [
     ),
     (
         "ladder/means: SELL_PRESSURED fill comparator >= -> > (boundary 0.85 leaks)",
-        "        return (_used_fraction(state) >= SELL_PRESSURE_FRACTION",
-        "        return (_used_fraction(state) > SELL_PRESSURE_FRACTION",
+        "        return (used_fraction(state) >= SELL_PRESSURE_FRACTION",
+        "        return (used_fraction(state) > SELL_PRESSURE_FRACTION",
     ),
     (
         "ladder/means: SELL_PRESSURE_FRACTION 0.85 -> 0.95 (pressure boundary shifts)",
@@ -6792,9 +6808,9 @@ LADDER_MEANS_FIRES_MUTATIONS = [
     ),
     (
         "ladder/means: SELL_IDLE fill comparator < -> <= (boundary 0.85 leaks vs sellPressured)",
-        "        return (_used_fraction(state) < SELL_PRESSURE_FRACTION\n"
+        "        return (used_fraction(state) < SELL_PRESSURE_FRACTION\n"
         "                and sellable_tradeable_now(state, game_data))",
-        "        return (_used_fraction(state) <= SELL_PRESSURE_FRACTION\n"
+        "        return (used_fraction(state) <= SELL_PRESSURE_FRACTION\n"
         "                and sellable_tradeable_now(state, game_data))",
     ),
     (
@@ -6818,9 +6834,9 @@ LADDER_MEANS_FIRES_MUTATIONS = [
     ),
     (
         "ladder/means: DRAIN_BANK_JUNK fill comparator < -> <= (boundary 0.85 leaks)",
-        "        return (_used_fraction(state) < SELL_PRESSURE_FRACTION\n"
+        "        return (used_fraction(state) < SELL_PRESSURE_FRACTION\n"
         "                and bool(bank_drain_excess(",
-        "        return (_used_fraction(state) <= SELL_PRESSURE_FRACTION\n"
+        "        return (used_fraction(state) <= SELL_PRESSURE_FRACTION\n"
         "                and bool(bank_drain_excess(",
     ),
     (
@@ -7985,8 +8001,8 @@ DEPOSIT_INVENTORY_GOAL_MUTATIONS = [
 # goal it selects reports 0.0.
 DEPOSIT_INVENTORY_SPACE_FRACTION_MUTATIONS = [
     ("deposit_inventory: value() reads the QUANTITY fraction, not the guard's max",
-     "        used_fraction = _used_fraction(state)",
-     "        used_fraction = state.inventory_used / state.inventory_max"),
+     "        fraction = used_fraction(state)",
+     "        fraction = state.inventory_used / state.inventory_max"),
 ]
 
 # UNIT-KILLED, own run_group (same reason). `map_guard(CRAFT_POTIONS)` must seed
@@ -8344,7 +8360,7 @@ def _collect_all_groups() -> None:
               "formal/diff/test_keep_valuation_diff.py", survivors)
     run_group(KEEP_VALUATION_SRC, KEEP_VALUATION_ADAPTER_MUTATIONS,
               "tests/test_ai/test_keep_valuation.py", survivors)
-    run_group(DISCARD_OVERSTOCK_GOAL_SRC, DISCARD_OVERSTOCK_ROUTING_MUTATIONS,
+    run_group(SHED_ACTIONS_SRC, DISCARD_OVERSTOCK_ROUTING_MUTATIONS,
               "tests/test_ai/test_disposal_route.py", survivors)
     run_group(BUY_SOURCE_VENUE_SRC, BUY_SOURCE_VENUE_MUTATIONS,
               "formal/diff/test_buy_source_venue_diff.py", survivors)
@@ -8667,6 +8683,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_shed_hoists.py", survivors)
     run_group(DRAIN_BANK_JUNK_GOAL_SRC, DRAIN_SNAPSHOT_MUTATIONS,
               "tests/test_ai/test_shed_hoists.py", survivors)
+    run_group(DRAIN_BANK_JUNK_GOAL_SRC, DRAIN_SHED_MUTATIONS,
+              "tests/test_ai/test_bank_drain.py", survivors)
     run_group(ACCUMULATION_SELL_SRC, SELL_BANK_ARM_MUTATIONS[:1],
               "tests/test_ai/test_shed_hoists.py", survivors)
     run_group(SELL_INVENTORY_GOAL_SRC, SELL_BANK_ARM_MUTATIONS[1:],

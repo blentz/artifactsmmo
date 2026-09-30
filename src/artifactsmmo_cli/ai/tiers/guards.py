@@ -127,7 +127,7 @@ def _quantity_fraction(state: WorldState) -> float:
     return state.inventory_used / state.inventory_max
 
 
-def _used_fraction(state: WorldState) -> float:
+def used_fraction(state: WorldState) -> float:
     """SPACE pressure = max of the quantity-fraction and the SLOT-fraction. The
     bag is "full" when EITHER the total-quantity cap OR the per-slot cap is hit,
     and in practice the 20 slots fill long before the ~124 quantity cap — live
@@ -225,7 +225,7 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                                          deposit_context(ctx, step_profile)))
                 and _quantity_fraction(state) >= DISCARD_CRITICAL_FRACTION)
     if kind is GuardKind.CRAFT_RELIEF:
-        if _used_fraction(state) < CRAFT_RELIEF_FRACTION:
+        if used_fraction(state) < CRAFT_RELIEF_FRACTION:
             return False
         return bool(craft_relief_candidates(
             state, game_data,
@@ -251,7 +251,7 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
         return (ctx.bank_accessible
                 and bank_has_room(ctx.bank_accessible, state.bank_items,
                                   game_data.bank_capacity)
-                and _used_fraction(state) >= DEPOSIT_FULL_FRACTION
+                and used_fraction(state) >= DEPOSIT_FULL_FRACTION
                 and bool(select_bank_deposits(
                     state, game_data, deposit_context(ctx, step_profile))))
     if kind is GuardKind.DISCARD_HIGH:

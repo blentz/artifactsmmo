@@ -10,7 +10,7 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
-from artifactsmmo_cli.ai.tiers.guards import _used_fraction
+from artifactsmmo_cli.ai.tiers.guards import used_fraction
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MIN_FREE_SLOTS = 5
@@ -49,7 +49,7 @@ class DepositInventoryGoal(Goal):
             return 0.0
         if self.is_satisfied(state):
             return 0.0
-        # ONE SPACE-PRESSURE FRACTION, AND THE GUARD OWNS IT. `_used_fraction`
+        # ONE SPACE-PRESSURE FRACTION, AND THE GUARD OWNS IT. `used_fraction`
         # is `max(QUANTITY fraction, SLOT fraction)` — the same call
         # `_fires(DEPOSIT_FULL)` makes — so the guard can no longer fire on a
         # goal that reports zero. It used to: the guard read the max while this
@@ -72,11 +72,11 @@ class DepositInventoryGoal(Goal):
         # `depositInventoryValue` (formal/Formal/GoalSystem.lean) proves this
         # EXACT ramp formula for every `usedFraction` in `[0, 1]`, so no Lean
         # mirror changes.
-        used_fraction = _used_fraction(state)
-        if used_fraction < self._RAMP_START:
+        fraction = used_fraction(state)
+        if fraction < self._RAMP_START:
             return 0.0
         # Linear ramp from _RAMP_START → 1.0 mapped onto 0 → _MAX_VALUE.
-        return (used_fraction - self._RAMP_START) / (1.0 - self._RAMP_START) * self._MAX_VALUE
+        return (fraction - self._RAMP_START) / (1.0 - self._RAMP_START) * self._MAX_VALUE
 
     def is_satisfied(self, state: WorldState) -> bool:
         if state.inventory_max == 0 or self._game_data is None:

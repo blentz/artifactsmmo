@@ -13,7 +13,7 @@ opposite corners, and they are opposite on BOTH axes on purpose:
 | 9 `l20_bag_critical_empty_bank` | **0.95** | 0.25 | EMPTY | DISCARD_CRITICAL, DEPOSIT_FULL |
 
 The split matters because the ladder reads TWO different measures.
-`_used_fraction` (the SPACE measure, max of quantity and slot) drives the
+`used_fraction` (the SPACE measure, max of quantity and slot) drives the
 relief guards and DEPOSIT_FULL; `_quantity_fraction` drives both DISCARD
 guards. Cell 8 puts pressure only on the slot axis, which is the live Robby
 2026-07-10 shape (20/20 slots at 76/124 quantity) and is exactly what keeps the

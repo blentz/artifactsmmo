@@ -31,7 +31,7 @@ cells only — the single DECLARED liveness exemption (`KEEP_ALL_SENTINEL`).
 
 PRESSURE IS SPLIT slot-vs-quantity because that distinction is where the HTTP 497
 livelock lived (a live bag sat at 68/124 QUANTITY while 20/20 SLOTS): the relief
-guards read `max(quantity_fraction, slot_fraction)` (`tiers.guards._used_fraction`)
+guards read `max(quantity_fraction, slot_fraction)` (`tiers.guards.used_fraction`)
 while the DESTRUCTIVE discard guards deliberately stay quantity-only, so a
 slot-pressured bag and a quantity-pressured bag reach DIFFERENT production routes.
 A census with one "full" state would be blind to half of them.
@@ -170,7 +170,7 @@ QUANTITY dimension alone."""
 
 PRESSURE_STATES: tuple[str, ...] = ("slot_full", "qty_full", "below_threshold")
 """The three bag states every reason is exercised in. `slot_full` and `qty_full`
-are separate because production treats them differently — `guards._used_fraction`
+are separate because production treats them differently — `guards.used_fraction`
 maxes the two fractions for the NON-destructive relief (deposit/craft) while the
 DESTRUCTIVE discard guards stay quantity-only, so slot pressure never deletes what
 banking could have saved. A single "full" state would conflate the two routes."""

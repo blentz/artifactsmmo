@@ -81,7 +81,7 @@ open Formal.GoalSystem
 def hpPercentRat (s : State) : Rat :=
   if s.maxHp = 0 then 1 else (s.hp : Rat) / (s.maxHp : Rat)
 
-/-- The QUANTITY component of production `guards._used_fraction`
+/-- The QUANTITY component of production `guards.used_fraction`
     (`inventory_used / inventory_max`, `inventory_max == 0 ⇒ 0`). This `State`
     has no slot dimension, so it models the quantity term only. Production
     (2026-07-11) takes `max(quantity_fraction, slot_fraction)` so the space-relief

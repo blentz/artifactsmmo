@@ -100,6 +100,8 @@ on `ctx` (the same seam as `supply_target` / `role_skills`) — this module read
 no store and no clock.
 """
 
+from dataclasses import dataclass
+
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import destroyable
 from artifactsmmo_cli.ai.keep_valuation import drain_licensed_pure, worth_keeping
@@ -141,3 +143,26 @@ def bank_drain_excess(state: WorldState, game_data: GameData,
         if excess > 0:
             out[code] = excess
     return out
+
+
+@dataclass(frozen=True)
+class DrainSnapshot:
+    """What a drain episode starts from: the licensed codes, and how many copies
+    of them the character OWNS (bag + bank). The episode is done when that
+    total falls: a withdraw only MOVES copies, a sale, recycle or delete
+    removes them."""
+
+    codes: frozenset[str]
+    owned: int
+
+
+def owned_total(state: WorldState, codes: frozenset[str]) -> int:
+    """Copies of `codes` held in the bag and the bank together."""
+    bank = state.bank_items or {}
+    return sum(state.inventory.get(code, 0) + bank.get(code, 0) for code in codes)
+
+
+def drain_snapshot(state: WorldState, game_data: GameData, ctx: SelectionContext) -> DrainSnapshot:
+    """The snapshot a drain episode is measured against."""
+    codes = frozenset(bank_drain_excess(state, game_data, ctx))
+    return DrainSnapshot(codes, owned_total(state, codes))

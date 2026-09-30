@@ -81,7 +81,7 @@ def _state(helmets: int, inventory_max: int = 118) -> WorldState:
         inventory={"copper_helmet": helmets}, inventory_max=inventory_max,
         # A realistic 20-slot bag: the single copper_helmet stack is NOT
         # slot-full, so these quantity-driven recycle-urgency cases exercise
-        # QUANTITY pressure (the slot-aware _used_fraction split, 2026-07-11,
+        # QUANTITY pressure (the slot-aware used_fraction split, 2026-07-11,
         # would otherwise read a 1-slot bag as 100% full and suppress the hoist).
         inventory_slots_max=20,
         equipment=eq, cooldown_expires=None, task_code=None, task_type=None,

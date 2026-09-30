@@ -1598,7 +1598,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     #
     # The pressure is on the SLOT axis (16 of 20 slots = 0.80) and NOT the
     # quantity axis (118 of 200 = 0.59), which is the live Robby 2026-07-10
-    # shape and the reason `_used_fraction` takes the max of the two. Keeping
+    # shape and the reason `used_fraction` takes the max of the two. Keeping
     # quantity low is deliberate: both DISCARD guards read the QUANTITY
     # fraction, so at 0.59 neither can preempt the guards this cell exists to
     # exercise (design §5.2's masking rule).
@@ -1631,7 +1631,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # while only 5 of 20 slots are used, and the bank is EMPTY so it has room.
     # That combination is what puts DEPOSIT_FULL and DISCARD_CRITICAL up
     # together — the pair §5.3 names — while cell 8's guards stay silent
-    # (CRAFT_RELIEF reads the same `_used_fraction` max and 0.95 clears it, so
+    # (CRAFT_RELIEF reads the same `used_fraction` max and 0.95 clears it, so
     # its absence here is `craft_relief_candidates` being empty, not the
     # watermark).
     "l20_bag_critical_empty_bank": ScenarioCharacter(

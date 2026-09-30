@@ -19,10 +19,11 @@ from pathlib import Path
 
 import artifactsmmo_cli.ai.bank_drain as bank_drain_module
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
+from artifactsmmo_cli.ai.bank_drain import bank_drain_excess, drain_snapshot
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
 from artifactsmmo_cli.ai.keep_valuation import MAX_ATTAINABLE_SKILL_LEVEL
+from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import map_means
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind, _fires
@@ -312,12 +313,14 @@ def test_excess_never_drains_the_active_task_item_below_its_demand():
 
 def test_goal_relevant_actions_withdraws_excess_sized_to_free_space():
     """DrainBankJunkGoal emits a WithdrawItemAction pulling the licensed excess
-    into the bag, sized to fit free slots."""
+    into the bag, sized to fit free slots, and the action that sheds exactly
+    what it withdraws (no NPC buys sap here, so a delete)."""
     gd = _gd()
     state = make_state(level=5, bank_items={"sap": 50}, inventory_max=200)
-    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True)
+    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True,
+                             snapshot=drain_snapshot(state, gd, _ctx()))
     actions = goal.relevant_actions([], state, gd)
-    assert len(actions) == 1
+    assert [repr(x) for x in actions] == ["Withdraw(sap×50)", "Delete(sap×50)"]
     a = actions[0]
     assert isinstance(a, WithdrawItemAction)
     assert a.code == "sap"
@@ -327,22 +330,26 @@ def test_goal_relevant_actions_withdraws_excess_sized_to_free_space():
 
 
 def test_goal_relevant_actions_caps_quantity_at_free_slots():
-    """Free slots smaller than the excess clamp the withdraw quantity."""
+    """Free space smaller than the excess clamps the withdraw, and so does the
+    deposit guard: the bag must stay below DEPOSIT_FULL_FRACTION (0.9), or the
+    guard banks the junk before its shed runs (live R2D2/HAL 2026-09-30,
+    `Withdraw ×4 → DepositAll` laps). inventory_max 10, 6 used, 4 free: 3 more
+    would reach 9/10, so the drain takes 2."""
     gd = _gd()
-    # inventory_max 10, 6 slots used -> 4 free; excess sap is 50 -> withdraw 4.
     state = make_state(level=5, inventory={"filler": 6},
                        bank_items={"sap": 50}, inventory_max=10)
-    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True)
+    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True,
+                             snapshot=drain_snapshot(state, gd, _ctx()))
     actions = goal.relevant_actions([], state, gd)
-    assert len(actions) == 1
-    assert actions[0].quantity == 4
+    assert [repr(x) for x in actions] == ["Withdraw(sap×2)", "Delete(sap×2)"]
 
 
 def test_goal_no_actions_when_bank_location_unknown():
     gd = _gd()
     gd._bank_location = None
     state = make_state(level=5, bank_items={"sap": 50}, inventory_max=200)
-    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True)
+    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True,
+                             snapshot=drain_snapshot(state, gd, _ctx()))
     assert goal.relevant_actions([], state, gd) == []
 
 
@@ -369,10 +376,13 @@ def test_map_means_returns_drain_goal():
 def test_goal_satisfied_and_metadata():
     gd = _gd()
     empty = make_state(level=5, bank_items={"copper_helmet": 1})
-    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True)
+    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True,
+                             snapshot=drain_snapshot(empty, gd, _ctx()))
     assert goal.is_satisfied(empty) is True
     assert goal.value(empty, gd) == 0.0
     surplus = make_state(level=5, bank_items={"sap": 50}, inventory_max=200)
+    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True,
+                             snapshot=drain_snapshot(surplus, gd, _ctx()))
     assert goal.is_satisfied(surplus) is False
     assert goal.value(surplus, gd) == 15.0
     assert goal.desired_state(surplus, gd) == {"bank_junk_drained": True}
@@ -492,12 +502,62 @@ def test_the_pure_core_reaches_no_store_no_clock_and_no_io():
                  "artifactsmmo_cli.ai.player"}
     assert imported & forbidden == set(), f"bank_drain must stay pure; got {imported}"
     # And nothing reaches them transitively through a module attribute either:
-    # the ONLY names the module binds from outside are the four pure helpers
-    # plus the three type carriers.
+    # the ONLY names the module binds from outside are the four pure helpers,
+    # the three type carriers, and `dataclass` for the drain snapshot.
     assert imported == {
+        "dataclasses",
         "artifactsmmo_cli.ai.game_data",
         "artifactsmmo_cli.ai.inventory_keep",
         "artifactsmmo_cli.ai.keep_valuation",
         "artifactsmmo_cli.ai.selection_context",
         "artifactsmmo_cli.ai.world_state",
     }
+
+
+def test_a_withdraw_alone_does_not_finish_the_episode():
+    """The episode ends on a disposal: the OWNED total of the licensed codes
+    falls. A withdraw only moves copies, so the plan that stopped there left
+    the junk for the deposit guard to bank again."""
+    gd = _gd()
+    state = make_state(level=5, bank_items={"sap": 50}, inventory_max=200)
+    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True,
+                             snapshot=drain_snapshot(state, gd, _ctx()))
+    assert not goal.is_satisfied(state)
+    withdraw, shed = goal.relevant_actions([], state, gd)
+    moved = withdraw.apply(state, gd)
+    assert not goal.is_satisfied(moved)
+    assert goal.is_satisfied(shed.apply(moved, gd))
+
+
+def test_the_planner_withdraws_and_sheds_in_one_plan():
+    gd = _gd()
+    state = make_state(level=5, bank_items={"sap": 50}, inventory_max=200)
+    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True,
+                             snapshot=drain_snapshot(state, gd, _ctx()))
+    plan = GOAPPlanner().plan(state, goal, [], gd)
+    assert [repr(a) for a in plan] == ["Withdraw(sap×50)", "Delete(sap×50)"]
+
+
+def test_the_shed_never_crosses_the_bags_keep(monkeypatch):
+    """The shed is the discard guard's own licence, min(bankable, destroyable),
+    read after the withdraw: when the bag keeps every copy (a heal, say), the
+    drain withdraws but offers nothing to shed, rather than deleting a kept
+    copy the ownership cap alone would allow."""
+    gd = _gd()
+    state = make_state(level=5, bank_items={"sap": 50}, inventory_max=200)
+    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True,
+                             snapshot=drain_snapshot(state, gd, _ctx()))
+    monkeypatch.setattr("artifactsmmo_cli.ai.goals.drain_bank_junk.bankable",
+                        lambda code, st, g, c: 0)
+    assert [repr(a) for a in goal.relevant_actions([], state, gd)] == ["Withdraw(sap×50)"]
+
+
+def test_no_withdraw_when_no_quantity_is_applicable():
+    """Every slot holds another stack: a withdraw of a new code fits at no
+    quantity, so the drain offers nothing."""
+    gd = _gd()
+    full = {f"filler{i}": 1 for i in range(20)}
+    state = make_state(level=5, inventory=full, bank_items={"sap": 50}, inventory_max=200)
+    goal = DrainBankJunkGoal(game_data=gd, ctx=_ctx(), bank_accessible=True,
+                             snapshot=drain_snapshot(state, gd, _ctx()))
+    assert goal.relevant_actions([], state, gd) == []

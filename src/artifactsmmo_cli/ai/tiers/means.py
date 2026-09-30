@@ -28,7 +28,7 @@ from artifactsmmo_cli.ai.task_horizon import HORIZON_OUT_OF_REACH, resolve_task_
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import (
     SelectionContext,
-    _used_fraction,
+    used_fraction,
 )
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
@@ -241,7 +241,7 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
     if kind is MeansKind.SELL_PRESSURED:
         # A buyer that can take it NOW — never the window-blind "some held code
         # has a located buyer" test. See `sellable_tradeable_now`.
-        return (_used_fraction(state) >= SELL_PRESSURE_FRACTION
+        return (used_fraction(state) >= SELL_PRESSURE_FRACTION
                 and sellable_tradeable_now(state, game_data))
 
     if kind is MeansKind.LOW_YIELD_CANCEL:
@@ -344,7 +344,7 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         return _tasks_coin_total(state) >= ctx.task_exchange_min_coins
 
     if kind is MeansKind.SELL_IDLE:
-        return (_used_fraction(state) < SELL_PRESSURE_FRACTION
+        return (used_fraction(state) < SELL_PRESSURE_FRACTION
                 and sellable_tradeable_now(state, game_data))
 
     if kind is MeansKind.RECYCLE_SURPLUS:
@@ -353,7 +353,7 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # authority (`ai/inventory_keep`) licenses the destruction of surplus
         # craftable gear — copies above BOTH keep_in_bag and keep_owned, so the
         # equipped copy, the profile's demand and the working tool are never it.
-        return (_used_fraction(state) < SELL_PRESSURE_FRACTION
+        return (used_fraction(state) < SELL_PRESSURE_FRACTION
                 and bool(recyclable_surplus(state, game_data, ctx)))
 
     if kind is MeansKind.DRAIN_BANK_JUNK:
@@ -363,7 +363,7 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # licenses the destruction of over-cap BANK junk — copies above
         # `keep_owned`, so the last tool, the last weapon and the profile's gear
         # demand are never withdrawn into the discard ladder's mouth.
-        return (_used_fraction(state) < SELL_PRESSURE_FRACTION
+        return (used_fraction(state) < SELL_PRESSURE_FRACTION
                 and bool(bank_drain_excess(state, game_data, ctx)))
 
     if kind is MeansKind.GE_BID:

@@ -21,7 +21,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
     Candidate,
     select_pure,
 )
-from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
+from artifactsmmo_cli.ai.bank_drain import bank_drain_excess, drain_snapshot
 from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
@@ -86,9 +86,9 @@ from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.tiers.guards import (
     GuardKind,
     SelectionContext,
-    _used_fraction,
     active_guards,
     deposit_context,
+    used_fraction,
 )
 from artifactsmmo_cli.ai.tiers.means import (
     SELL_PRESSURE_FRACTION,
@@ -461,8 +461,7 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         # discretionary rung would be dead even on the cycles it wins.
         return DrainBankJunkGoal(game_data=game_data, ctx=ctx,
                                  bank_accessible=ctx.bank_accessible,
-                                 initial_total=sum(bank_drain_excess(
-                                     state, game_data, ctx).values()))
+                                 snapshot=drain_snapshot(state, game_data, ctx))
     if kind is MeansKind.GE_BID:
         return PostBuyBidGoal(game_data=game_data, ctx=ctx)
     if kind is MeansKind.LOW_YIELD_CANCEL:
@@ -1329,7 +1328,7 @@ class StrategyArbiter:
         # deposit/discard guards own the bag instead.
         recycle_surplus_map = recyclable_surplus(state, game_data, ctx)
         hoist_recycle = (shed_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY
-                         and _used_fraction(state) < SELL_PRESSURE_FRACTION)
+                         and used_fraction(state) < SELL_PRESSURE_FRACTION)
         if hoist_recycle:
             rs_goal = RecycleSurplusGoal(
                 game_data=game_data, ctx=ctx,
@@ -1371,7 +1370,7 @@ class StrategyArbiter:
         sell_bank = bank_sellable_surplus(state, game_data, ctx)
         hoist_sell = ((shed_urgency(sell_bag) >= SHED_HOIST_URGENCY
                        or bank_shed_hoist(sell_bank, state.inventory_max))
-                      and _used_fraction(state) < SELL_PRESSURE_FRACTION)
+                      and used_fraction(state) < SELL_PRESSURE_FRACTION)
         if hoist_sell:
             # `state=` arms AND bounds the bank arm (SellInventoryGoal.__init__):
             # without the snapshot the arm has no termination bound and the goal
@@ -1384,7 +1383,7 @@ class StrategyArbiter:
         drain_excess_map = bank_drain_excess(state, game_data, ctx)
         hoist_drain = (bank_shed_hoist(drain_excess_map, state.inventory_max)
                        and ctx.bank_accessible
-                       and _used_fraction(state) < SELL_PRESSURE_FRACTION)
+                       and used_fraction(state) < SELL_PRESSURE_FRACTION)
         if hoist_drain:
             # `initial_total` is what makes the rung plannable AT ALL: the
             # all-or-nothing form is unreachable for a pile deeper than the bag
@@ -1392,7 +1391,7 @@ class StrategyArbiter:
             # plan_len=0, no timeout). See DrainBankJunkGoal.is_satisfied.
             db_goal = DrainBankJunkGoal(game_data=game_data, ctx=ctx,
                                         bank_accessible=ctx.bank_accessible,
-                                        initial_total=sum(drain_excess_map.values()))
+                                        snapshot=drain_snapshot(state, game_data, ctx))
             candidates.append(Candidate(goal=db_goal, is_means=True,
                                         repr_=repr(db_goal), band=BAND_COLLECT))
         # Append step_goal + every fallback-step goal in ranking order so
