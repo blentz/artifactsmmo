@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
+from artifactsmmo_cli.ai.constants import BANK_REFRESH_INTERVAL
 from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog, search_detail
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.game_data import GameData
@@ -201,6 +202,36 @@ class TestPlayer:
             player._plan_or_reuse(state, GameData(), [], None)
         assert player._events.drain() == [(Mechanism.REPLAN, "<none>", ""),
                                           (Mechanism.PLAN_CACHE_HIT, "Goal(x)", "")]
+
+    def test_a_refresh_that_reselects_the_goal_keeps_the_commitment(self) -> None:
+        """Phase 2d-L1c: at the staleness bound the goal is re-decided, and when
+        the arbiter picks the same goal the committed plan stays (its cursor
+        too); a different goal replaces it."""
+        player = GamePlayer(character="hero")
+        goal = MagicMock()
+        goal.__repr__ = lambda self: "Goal(x)"  # type: ignore[method-assign,assignment]
+        goal.is_satisfied.return_value = False
+        state = make_state()
+        first, second = MagicMock(), MagicMock()
+        player._plan_cache = PlanCache(selected_goal=goal, plan=[first, second], crafting_target=None,
+                                       latch_active=player._regear_edge.active, goal_repr="Goal(x)",
+                                       cursor=1, cycles_since_replan=BANK_REFRESH_INTERVAL)
+        player._last_outcome = "ok"
+        fresh = MagicMock()
+        with (patch.object(second, "is_applicable", return_value=True),
+              patch.object(player, "_decide_band", return_value=(goal, [fresh], []))):
+            chosen, plan, _tried, replanned = player._plan_or_reuse(state, GameData(), [], None)
+        assert (chosen, plan, replanned) == (goal, [second], True)
+        assert player._plan_cache.cycles_since_replan == 0
+        assert player._events.drain() == [(Mechanism.REPLAN, "Goal(x)", ""),
+                                          (Mechanism.COMMITMENT_KEPT, "Goal(x)", "")]
+        other = MagicMock()
+        other.__repr__ = lambda self: "Goal(y)"  # type: ignore[method-assign,assignment]
+        player._plan_cache.cycles_since_replan = BANK_REFRESH_INTERVAL
+        with (patch.object(second, "is_applicable", return_value=True),
+              patch.object(player, "_decide_band", return_value=(other, [fresh], []))):
+            chosen, plan, _tried, _replanned = player._plan_or_reuse(state, GameData(), [], None)
+        assert (chosen, plan) == (other, [fresh])
 
     def test_the_nested_grind_search_and_its_doom_are_noted(self) -> None:
         player = GamePlayer(character="hero")

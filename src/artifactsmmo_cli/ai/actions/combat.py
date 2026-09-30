@@ -73,6 +73,11 @@ class FightAction(Action):
     # learned-cost history keys and action identity don't fork. Mirrored in
     # Formal/ActionApplicability.lean (dropFarm arm).
     drop_farm: bool = field(default=False, compare=False, repr=False)
+    # The drop this fight is planned to collect, as (item, units), when it is a
+    # leg of a decomposed plan (Phase 2d-L1c). The plan cache repeats the fight
+    # until the bag holds that many more, as it does for a batched gather.
+    # Excluded from compare/repr like `drop_farm`.
+    drop_target: tuple[str, int] | None = field(default=None, compare=False, repr=False)
     # The transcript of the fight this instance most recently executed, for the
     # TUI. Excluded from compare so a fought action stays equal to its freshly
     # planned twin (otherwise the planner reads its cached plan as invalidated

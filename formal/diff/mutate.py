@@ -174,6 +174,8 @@ CURRENCY_BUY_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_bu
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
+PLAN_CACHE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "plan_cache.py"
+SHOULD_REPLAN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "should_replan.py"
 GRIND_HEAL_PREP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grind_heal_prep.py"
 ACTION_REJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "action_rejection.py"
 MEANS_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means_worth.py"
@@ -208,25 +210,20 @@ DECOMPOSE_CORE_MUTATIONS = [
      "        return min(route.capacity - st.used.get((item, index), 0), deficit)",
      "        return min(route.capacity, deficit)"),
     ("decompose: the fill stops at the first contributor (no mixing across routes)",
-     "                deficit -= self._take(st, item, index, route, deficit)\n"
-     "                st = after",
-     "                deficit -= self._take(st, item, index, route, deficit)\n"
-     "                st = after\n                break"),
+     "                st = after[0]\n                legs.extend(after[1])\n",
+     "                st = after[0]\n                legs.extend(after[1])\n                break\n"),
     ("decompose: a failed input is ignored (the route still delivers)",
-     "            cur = self.can(material, n * per, cur, inner)\n            if cur is None:\n"
-     "                return None\n        return cur",
-     "            nxt = self.can(material, n * per, cur, inner)\n            if nxt is None:\n"
-     "                continue\n            cur = nxt\n        return cur"),
+     "            if answer is None:\n                return None\n            cur = answer[0]",
+     "            if answer is None:\n                continue\n            cur = answer[0]"),
     ("decompose: siblings are asked independently (the whole bag each)",
-     "            cur = self.can(material, n * per, cur, inner)\n            if cur is None:",
-     "            cur = cur if self.can(material, n * per, cur, inner) is not None else None\n"
-     "            if cur is None:"),
+     "            cur = answer[0]\n            legs.extend(answer[1])",
+     "            legs.extend(answer[1])"),
     ("decompose: a held input is not reserved (asked again at full stock)",
      "            return st.reserve(item, qty)",
      "            return st"),
     ("decompose: yield ignored in the input sizing",
-     "        n = runs(take, route.yield_per)\n        cur: _State[K] | None",
-     "        n = take\n        cur: _State[K] | None"),
+     "        n = runs(take, route.yield_per)\n        cur = st.use(item, index, take)",
+     "        n = take\n        cur = st.use(item, index, take)"),
     ("decompose: a gate-blocked route acts instead of opening its gate",
      "            if route.gates:",
      "            if False:"),
@@ -236,6 +233,15 @@ DECOMPOSE_CORE_MUTATIONS = [
     ("decompose: the step does not reserve an input it finds in the bag",
      "                cur = cur.reserve(material, n * per)",
      "                cur = cur"),
+    ("decompose: a gated route's gate legs are not recorded",
+     "        legs: list[Step[K]] = [OpenGate(item, index, gate) for gate in route.gates]",
+     "        legs: list[Step[K]] = []"),
+    ("decompose: a route's own leg comes before its inputs' legs",
+     "        legs.append(Act(item, index, take, n))",
+     "        legs.insert(len(route.gates), Act(item, index, take, n))"),
+    ("decompose: a contributing route's legs are dropped from the fill",
+     "                st = after[0]\n                legs.extend(after[1])",
+     "                st = after[0]"),
     ("decompose: the path guard is dropped (an item obtainable through itself)",
      "        if item in path:\n            return None\n        return self._fill(",
      "        if False:\n            return None\n        return self._fill("),
@@ -3096,6 +3102,40 @@ GRIND_HEAL_PREP_POLICY_MUTATIONS = [
     ("grind_heal_prep: the heal prep counts drops as supply",
      "HEAL_PREP_POLICY: Policy = replace(LEGACY, drop_routes=False)",
      "HEAL_PREP_POLICY: Policy = LEGACY"),
+]
+# The committed plan (Phase 2d-L1c). Killed by tests/test_ai/test_craft_plan_gen.py.
+COMMITTED_PLAN_MUTATIONS = [
+    ("craft_plan_gen: the plan stops after a fight again (a forecast, re-walked)",
+     "            legs.append(action)\n            if action.is_applicable(sim, game_data):",
+     "            legs.append(action)\n            if isinstance(action, FightAction):\n                break\n"
+     "            if action.is_applicable(sim, game_data):"),
+    ("craft_plan_gen: a drop fight carries no drop target",
+     "        return None if fight is None else dataclasses.replace(fight, drop_target=(step.item, step.amount))",
+     "        return fight"),
+]
+# A committed leg repeats until it delivers. Killed by tests/test_ai/test_plan_cache.py.
+PLAN_CACHE_TARGET_MUTATIONS = [
+    ("plan_cache: a planned fight advances after one win (its drop not awaited)",
+     "    if isinstance(action, FightAction):\n        return action.drop_target",
+     "    if False:\n        return action.drop_target"),
+    ("plan_cache: a single gather is not armed (an empty secondary drop advances)",
+     "    if isinstance(action, GatherAction):",
+     "    if isinstance(action, GatherAction) and action.quantity > 1:"),
+]
+# The periodic re-decide keeps a committed plan. Killed by
+# tests/test_ai/test_should_replan.py and tests/test_ai/test_decision_events.py.
+REFRESH_ONLY_MUTATIONS = [
+    ("should_replan: any stale plan counts as a refresh (a failed leg kept)",
+     "            and (last_outcome is None or last_outcome == \"ok\")",
+     "            and True"),
+    ("should_replan: a refresh keeps a plan whose next leg no longer applies",
+     "            and cache.cycles_since_replan >= replan_interval\n            and step_applicable)",
+     "            and cache.cycles_since_replan >= replan_interval)"),
+]
+PLAYER_COMMITMENT_MUTATIONS = [
+    ("player: the refresh never keeps the committed plan (re-walks mid-plan)",
+     "            if refreshing and cache is not None and selected_goal is not None \\",
+     "            if False and cache is not None and selected_goal is not None \\"),
 ]
 # The walk adapter (`ObtainModel.walk_graph`). Killed by
 # tests/test_ai/test_craft_plan_gen.py.
@@ -8545,6 +8585,14 @@ def _collect_all_groups() -> None:
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_PRICING_MUTATIONS,
               "tests/test_ai/scenarios/test_fisher_cooking_rung.py", survivors)
     run_group(PLAYER_SRC, GRIND_DECOMPOSE_MUTATIONS,
+              "tests/test_ai/test_decision_events.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, COMMITTED_PLAN_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(PLAN_CACHE_SRC, PLAN_CACHE_TARGET_MUTATIONS,
+              "tests/test_ai/test_plan_cache.py", survivors)
+    run_group(SHOULD_REPLAN_SRC, REFRESH_ONLY_MUTATIONS,
+              "tests/test_ai/test_should_replan.py", survivors)
+    run_group(PLAYER_SRC, PLAYER_COMMITMENT_MUTATIONS,
               "tests/test_ai/test_decision_events.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, DECOMPOSE_GAP_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)

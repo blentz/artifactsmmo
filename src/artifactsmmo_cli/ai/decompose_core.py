@@ -96,8 +96,13 @@ class _State[K: Hashable]:
         return _State(self.bag, used)
 
 
+type _Answer[K: Hashable] = tuple[_State[K], list[Step[K]]]
+"""A yes: the state left, and the legs that deliver it (`DecomposeWitness.canP`)."""
+
+
 class _Walker[K: Hashable]:
-    """One question's walk over its graph (`Decompose.can` / `Decompose.step`)."""
+    """One question's walk over its graph (`Decompose.can` / `Decompose.step`),
+    recording the legs behind every yes (`DecomposeWitness.canP`)."""
 
     def __init__(self, routes: Mapping[K, Sequence[Route[K]]]) -> None:
         self._routes = routes
@@ -106,43 +111,50 @@ class _Walker[K: Hashable]:
     def _take(st: _State[K], item: K, index: int, route: Route[K], deficit: int) -> int:
         return min(route.capacity - st.used.get((item, index), 0), deficit)
 
-    def can(self, item: K, qty: int, st: _State[K], path: frozenset[K]) -> _State[K] | None:
-        """`Decompose.can`: the state left once `qty` of `item` is had, or None."""
+    def can(self, item: K, qty: int, st: _State[K], path: frozenset[K]) -> _Answer[K] | None:
+        """`Decompose.can`: the state left once `qty` of `item` is had, with
+        the legs that deliver it, or None."""
         have = st.bag.get(item, 0)
         if have >= qty:
-            return st.reserve(item, qty)
+            return st.reserve(item, qty), []
         if item in path:
             return None
         return self._fill(item, qty - have, st.reserve(item, have), path | {item})
 
-    def _fill(self, item: K, deficit: int, st: _State[K], inner: frozenset[K]) -> _State[K] | None:
+    def _fill(self, item: K, deficit: int, st: _State[K], inner: frozenset[K]) -> _Answer[K] | None:
         """`Decompose.fill`: `item`'s routes, in order, cover `deficit`; a route
         that contributes takes its share, one that fails changes nothing."""
+        legs: list[Step[K]] = []
         for index, route in enumerate(self._routes.get(item, ())):
             if deficit == 0:
-                return st
+                return st, legs
             after = self._use(item, index, route, deficit, st, inner)
             if after is not None:
                 deficit -= self._take(st, item, index, route, deficit)
-                st = after
-        return st if deficit == 0 else None
+                st = after[0]
+                legs.extend(after[1])
+        return (st, legs) if deficit == 0 else None
 
     def _use(self, item: K, index: int, route: Route[K], deficit: int, st: _State[K],
-             inner: frozenset[K]) -> _State[K] | None:
+             inner: frozenset[K]) -> _Answer[K] | None:
         """`Decompose.useRoute`: the state after the route's share of its
-        capacity and its inputs are spent, or None when it takes nothing or an
-        input fails."""
+        capacity and its inputs are spent, with its legs (its gates to open,
+        its inputs' legs in order, then the route itself), or None when it
+        takes nothing or an input fails."""
         take = self._take(st, item, index, route, deficit)
         if take <= 0:
             return None
         n = runs(take, route.yield_per)
-        cur: _State[K] | None = st.use(item, index, take)
+        cur = st.use(item, index, take)
+        legs: list[Step[K]] = [OpenGate(item, index, gate) for gate in route.gates]
         for material, per in route.inputs:
-            assert cur is not None
-            cur = self.can(material, n * per, cur, inner)
-            if cur is None:
+            answer = self.can(material, n * per, cur, inner)
+            if answer is None:
                 return None
-        return cur
+            cur = answer[0]
+            legs.extend(answer[1])
+        legs.append(Act(item, index, take, n))
+        return cur, legs
 
     def step(self, item: K, qty: int, st: _State[K], path: frozenset[K]) -> Step[K] | None:
         """`Decompose.step`: the first leaf of the supply the walk finds: the
@@ -184,3 +196,13 @@ def next_step[K: Hashable](item: K, qty: int, on_hand: Mapping[K, int],
     None when the bag holds it or it is infeasible, and never None for a
     feasible goal the bag does not hold."""
     return _Walker(routes).step(item, qty, _State(on_hand, {}), frozenset())
+
+
+def plan_legs[K: Hashable](item: K, qty: int, on_hand: Mapping[K, int],
+                          routes: Mapping[K, Sequence[Route[K]]]) -> list[Step[K]]:
+    """The legs behind a yes (`DecomposeWitness.plan`): for every route the walk
+    takes, its gates to open, its inputs' legs in order, then the route; empty
+    when the bag holds the goal or it cannot be had. Proved: executed from the
+    bag they deliver `qty` of `item`, and the first is `next_step`."""
+    answer = _Walker(routes).can(item, qty, _State(on_hand, {}), frozenset())
+    return [] if answer is None else answer[1]

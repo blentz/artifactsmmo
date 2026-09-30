@@ -26,6 +26,7 @@ import Formal.ObtainModelReady
 import Formal.ObtainModelSupply
 import Formal.Decompose
 import Formal.DecomposeWitness
+import Formal.CommittedLoop
 import Formal.CompleteTaskIncome
 import Formal.AccumulationSell
 import Formal.DominancePareto
@@ -1253,6 +1254,11 @@ open Formal.PriorityBand
 #check @Formal.DecomposeWitness.witness             -- sufficiency: the extracted legs execute and deliver what the walk promised
 #check @Formal.DecomposeWitness.feasible_witness    -- sufficiency: from the real bag, a yes means the legs deliver the goal
 #check @Formal.DecomposeWitness.step_is_first_leg   -- validity: the walk's next step is the first of those legs
+
+-- CommittedLoop required roles (Phase 2d-L1c: follow the witness, repeat short stochastic legs):
+#check @Formal.CommittedLoop.execAll_dom              -- monotonicity: a world at least as full runs at least as far
+#check @Formal.CommittedLoop.committed_loop_delivers  -- termination/sufficiency: under any fair tick schedule the committed loop delivers the goal
+#check @Formal.CommittedLoop.schedule_exists          -- non-vacuity: a fair schedule exists for every plan
 
 -- CompleteTaskIncome required roles (CompleteTaskAction.apply coin minting;
 -- src/artifactsmmo_cli/ai/actions/complete_task_core.py):

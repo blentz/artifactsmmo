@@ -5,10 +5,10 @@ Phase 2c-2 of docs/PLAN_decision_architecture_redesign.md. A plan is built from
 THE ONE WALK (`ObtainModel.walk` over `decompose_core`, proved in
 `formal/Formal/Decompose.lean`): feasibility and the next step are one
 computation, so decomposition never declines a goal the model judges feasible
-(the walk's COMPLETE theorem). Each step becomes a concrete action, is
-simulated with that action's own `apply`, and the walk runs again, for a
-forecast of up to `_MAX_LEGS` legs; the plan cache replans from the real state
-after every step.
+(the walk's COMPLETE theorem). The plan is the walk's whole witness, each leg
+a concrete action (Phase 2d-L1c): executed from the bag it delivers the goal
+(`formal/Formal/DecomposeWitness.lean`), and the plan cache follows it leg by
+leg, repeating a leg that comes up short.
 
 This replaces the old descent (`next_craft_core` + `craft_plan_driver_core` over
 a separate recipe map and a `Source` projection of the model), which disagreed
@@ -154,22 +154,25 @@ switches.
   emission makes beside an NPC buy (`choose_buy_venue`). The old descent never
   used them either: its "ge_fill" step fell through the mapping into a fight."""
 
-_MAX_LEGS = 8
-"""Legs simulated ahead. The plan cache replans from the real state after every
-step, so the tail is a forecast (the TUI shows it; the cache keeps it while each
-step stays applicable), never a commitment."""
-
 
 def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData,
                actions: list[Action], ctx: SelectionContext,
                declined: list[str] | None, subtasks: bool,
                grinding: frozenset[str]) -> list[Action] | None:
     """The goal's plan from THE ONE WALK (Phase 2c-2b of
-    docs/PLAN_decision_architecture_redesign.md): the next step of
-    `ObtainModel.walk` under `DECOMPOSE_POLICY`, as a concrete action, simulated
-    with the action's own `apply`, and walked again, up to `_MAX_LEGS` legs. It
-    stops after a fight (its drops are stochastic) and after a skill sub-task
-    (a grind of its own); the next cycle replans from the real state.
+    docs/PLAN_decision_architecture_redesign.md): the legs `ObtainModel.walk`
+    extracts under `DECOMPOSE_POLICY`, each as a concrete action.
+
+    COMMITTED (Phase 2d-L1c): the plan is the whole witness of the walk's yes,
+    proved to deliver the goal when executed from the bag
+    (`DecomposeWitness.feasible_witness`), not a forecast re-walked after each
+    leg. Re-walking does not converge: a leg that shrinks a deficit can make an
+    earlier route usable that spends a scarce unit a later leg needed, and the
+    re-walk declines a goal the plan would have reached. A leg that comes up
+    short (a gather or a drop below its average) is repeated by the plan cache
+    until it delivers. The plan stops at a skill gate: the grind that opens it
+    (`_decompose_grind`) is the plan's tail, and the next cycle continues from
+    there.
 
     The walk is proved complete: a feasible goal the bag does not hold always
     has a step, so a decline here names either an infeasible goal (with the
@@ -179,9 +182,7 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
     banked or recyclable copies do not count toward it, since the XP is in the
     craft. No goal target is ever destroyed to source its own parts. A skill
     gate is a sub-task (when `subtasks` allows it) when the skill can be ground
-    from here and is not already being ground further up (`grinding`); the
-    sub-task's legs are that grind's (`_decompose_grind`), and the plan stops
-    after them."""
+    from here and is not already being ground further up (`grinding`)."""
     verdicts: dict[tuple[str, int | None], bool] = {}
 
     def openable(gate: Gate) -> bool:
@@ -199,20 +200,18 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
                                   actions, state, game_data)
     for item, needed in goal.needed.items():
         qty = _bag_target(item, needed, goal.exclude_recycle, state)
+        answer = ObtainModel(state, game_data, ctx, datetime.now(UTC)).walk(
+            item, qty, DECOMPOSE_POLICY, goal.exclude_recycle, openable, frozenset(goal.needed))
+        if not answer.feasible:
+            graph = answer.graph
+            dead = sorted(code for code, routes in graph.routes.items()
+                          if not routes and not graph.on_hand.get(code, 0))
+            return _decline(declined, f"infeasible:{item}:no_route:{','.join(dead)}")
         legs: list[Action] = []
         sim = state
-        for _ in range(_MAX_LEGS):
-            answer = ObtainModel(sim, game_data, ctx, datetime.now(UTC)).walk(
-                item, qty, DECOMPOSE_POLICY, goal.exclude_recycle, openable, frozenset(goal.needed))
-            if answer.step is None:
-                if not legs and not answer.feasible:
-                    graph = answer.graph
-                    dead = sorted(code for code, routes in graph.routes.items()
-                                  if not routes and not graph.on_hand.get(code, 0))
-                    return _decline(declined, f"infeasible:{item}:no_route:{','.join(dead)}")
-                break
-            if isinstance(answer.step, OpenGate):
-                gate = answer.step.gate
+        for leg in answer.plan:
+            if isinstance(leg, OpenGate):
+                gate = leg.gate
                 assert isinstance(gate, Gate) and gate.level is not None
                 sub = _decompose_grind(gate.subject, gate.level, sim, game_data, actions, ctx,
                                        declined, grinding)
@@ -222,16 +221,15 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
                     return None
                 legs.extend(sub)
                 break
-            action = _action_for(answer.step, answer.graph, relevant, actions,
-                                 sim, game_data, ctx.bank_accessible)
+            action = _action_for(leg, answer.graph, relevant, actions, state, game_data,
+                                 ctx.bank_accessible)
             if action is None:
                 if legs:
                     break
-                return _decline(declined, f"unmapped_step:{answer.step!r}")
+                return _decline(declined, f"unmapped_step:{leg!r}")
             legs.append(action)
-            if isinstance(action, FightAction) or not action.is_applicable(sim, game_data):
-                break
-            sim = action.apply(sim, game_data)
+            if action.is_applicable(sim, game_data):
+                sim = action.apply(sim, game_data)
         if legs:
             return _finish(legs, state, game_data, declined)
     return _decline(declined, "satisfied")
@@ -288,8 +286,9 @@ def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool:
         # fight can serve the item.
         # The goal's own actions come last so their fight (possibly the
         # synthesized drop_farm variant the static pool lacks) wins per monster.
-        return select_drop_fight(step.item, [*pool, *relevant], state, game_data,
-                                 allow_grey=DECOMPOSE_POLICY.allow_grey)
+        fight = select_drop_fight(step.item, [*pool, *relevant], state, game_data,
+                                  allow_grey=DECOMPOSE_POLICY.allow_grey)
+        return None if fight is None else dataclasses.replace(fight, drop_target=(step.item, step.amount))
     return None
 
 
@@ -304,9 +303,8 @@ def _decompose_potions(goal: CraftPotionsGoal, state: WorldState, game_data: Gam
     timed out at ~200k nodes, depth 92, with no plan, because the batch the
     guard judged suppliable was longer than the search could reach.
 
-    The plan may stop short of the equip: each leg is a bounded batch, and the
-    plan cache replans from the real state after every step, as it does for
-    the grind's one-leg plans.
+    The plan may stop short of the equip, when a later leg has no concrete
+    action yet; the next cycle decomposes the rest.
 
     None (the caller may search) when the goal is unseeded or satisfied, when
     the batch cannot be decomposed, or when its plan would fight or open a
@@ -327,9 +325,8 @@ def _decompose_potions(goal: CraftPotionsGoal, state: WorldState, game_data: Gam
     if any(isinstance(a, FightAction) for a in legs):
         errand = next(a for a in legs if isinstance(a, FightAction))
         return _decline(declined, f"potion:off_ladder_leg:{errand!r}")
-    # A leg is sized to a bounded batch (`size_intermediate_craft`), so the legs
-    # can be a PREFIX of the batch: the equip joins the plan only when they
-    # land the whole batch, and otherwise the next cycle decomposes the rest.
+    # The legs can be a PREFIX of the batch (a later leg with no action): the
+    # equip joins the plan only when they land the whole batch.
     landed = state
     for leg in legs:
         landed = leg.apply(landed, game_data)

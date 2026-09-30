@@ -2424,7 +2424,8 @@ end ObtainModelSupplyOracle
 -- args = [n, onHand: [Nat x n],
 --         routes: [[[tag, yield, cap, [[input, per], ...], [gate, ...]], ...] x n],
 --         queries: [[item, qty], ...]]
--- -> [{"can": bool, "step": null | {"act": [item, route, amount, runs]} | {"open": [item, route, gate]}}]
+-- -> [{"can": bool, "step": null | {"act": [item, route, amount, runs]} | {"open": [item, route, gate]},
+--      "plan": [step, ...]}]
 namespace DecomposeOracle
 open Formal.Decompose
 
@@ -2460,7 +2461,8 @@ def run (args : Array Json) : Json :=
   | some (onHand, routes, queries) =>
     let g : Graph := ⟨n, fun i => onHand.getD i 0, fun i => routes.getD i []⟩
     Json.arr (queries.map (fun (i, q) =>
-      Json.mkObj [("can", Json.bool (feasible g i q)), ("step", stepJson (nextStep g i q))])).toArray
+      Json.mkObj [("can", Json.bool (feasible g i q)), ("step", stepJson (nextStep g i q)),
+        ("plan", Json.arr ((Formal.DecomposeWitness.plan g i q).map (fun a => stepJson (some a))).toArray)])).toArray
 
 end DecomposeOracle
 

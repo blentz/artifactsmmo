@@ -937,9 +937,10 @@ class TestDropLeafFightLeg:
     38K nodes/timeout/plan_len 0, 65 cycles of red_slime grinding)."""
 
     def test_winnable_dropper_returns_fight_leg(self):
-        """Empty holdings → the first (and only, one-leg-per-cycle) action
-        is the dropper Fight; xp-positive at L5 → the PLAIN fight, not the
-        drop_farm variant."""
+        """Empty holdings → the plan is the dropper Fight, planned for the 8
+        feathers, then the craft (Phase 2d-L1c: the plan is committed, the
+        cache repeats the fight until the feathers are in); xp-positive at L5
+        → the PLAIN fight, not the drop_farm variant."""
         gd = _gd_drop_leaf()
         state = _fighter_state()
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
@@ -947,17 +948,19 @@ class TestDropLeafFightLeg:
         result = decompose(goal, state, gd, _drop_leaf_actions(), _ctx())
 
         assert result is not None, "winnable dropper must not fall back to A*"
-        assert len(result) == 1, result
+        assert [repr(a) for a in result] == ["Fight(chicken)", "Craft(feather_coat×1)"], result
         assert isinstance(result[0], FightAction)
+        assert result[0].drop_target == ("feather", 8)
         assert result[0].monster_code == "chicken"
         assert result[0].drop_farm is False
 
-    def test_fight_leg_truncates_plan(self):
+    def test_a_fight_leg_is_committed_with_its_drop_target(self):
         """A recipe whose FIRST short input is gatherable and whose second
-        is a monster drop: the generated plan keeps the deterministic
-        gather leg and TRUNCATES at the Fight — a kill's yield is
-        stochastic, so the steps after it (the craft) are the next cycle's
-        replan, never simulated optimism."""
+        is a monster drop: the plan is the gather, the Fight planned for the
+        one feather, then the craft. A kill's yield is stochastic, so the
+        fight carries the drop the plan counts on, and the plan cache repeats
+        it until that drop is in (Phase 2d-L1c); re-walking after it instead
+        does not converge."""
         gd = _gd_drop_leaf()
         gd._item_stats["ash_wood"] = ItemStats(
             code="ash_wood", level=1, type_="resource")
@@ -977,9 +980,8 @@ class TestDropLeafFightLeg:
 
         assert result is not None
         assert [type(a).__name__ for a in result] == \
-            ["GatherAction", "FightAction"], result
-        assert not any(isinstance(a, CraftAction) for a in result), (
-            "no step may be planned past the stochastic Fight leg", result)
+            ["GatherAction", "FightAction", "CraftAction"], result
+        assert result[1].drop_target == ("feather", 1)
 
     def test_grey_dropper_reuses_drop_farm_variant(self):
         """At L12 the L1 chicken is GREY (xp_per_kill 0, diff >= 11). The
@@ -1102,8 +1104,8 @@ class TestDropLeafSuboptimalLoadoutRearm:
             "not fall back to A*"
         )
         assert [type(a).__name__ for a in result] == \
-            ["OptimizeLoadoutAction", "FightAction"], result
-        rearm, fought = result
+            ["OptimizeLoadoutAction", "FightAction", "CraftAction"], result
+        rearm, fought, _craft = result
         assert isinstance(rearm, OptimizeLoadoutAction)
         assert rearm.target_monster_code == "chicken"
         assert fought.monster_code == "chicken"
@@ -1129,7 +1131,7 @@ class TestDropLeafSuboptimalLoadoutRearm:
         result = decompose(goal, state, gd, actions, _ctx())
 
         assert result is not None
-        assert [type(a).__name__ for a in result] == ["FightAction"], result
+        assert [type(a).__name__ for a in result] == ["FightAction", "CraftAction"], result
         assert result[0].monster_code == "chicken"
 
 

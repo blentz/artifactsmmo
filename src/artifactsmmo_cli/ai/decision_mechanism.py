@@ -41,6 +41,7 @@ class Mechanism(StrEnum):
     GUARD_PREEMPT = "guard_preempt"
     AGED_PICK = "aged_pick"
     PLAN_CACHE_HIT = "plan_cache_hit"
+    COMMITMENT_KEPT = "commitment_kept"
     REPLAN = "replan"
     # Recovery by countdown (subject: signal, goal or action key).
     STUCK_SIGNAL = "stuck_signal"

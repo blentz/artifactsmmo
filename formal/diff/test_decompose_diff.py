@@ -14,7 +14,7 @@ import random
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.decompose_core import Act, OpenGate, Route, Step, can_obtain, next_step
+from artifactsmmo_cli.ai.decompose_core import Act, OpenGate, Route, Step, can_obtain, next_step, plan_legs
 from formal.diff.oracle_client import run_oracle
 
 UNBOUNDED = 10**9
@@ -56,7 +56,8 @@ def _encode(step: Step | None) -> object:
 
 def _python(graph: _Graph, queries: list[tuple[int, int]]) -> list[dict]:
     on_hand, table = _table(graph)
-    return [{"can": can_obtain(i, q, on_hand, table), "step": _encode(next_step(i, q, on_hand, table))}
+    return [{"can": can_obtain(i, q, on_hand, table), "step": _encode(next_step(i, q, on_hand, table)),
+             "plan": [_encode(a) for a in plan_legs(i, q, on_hand, table)]}
             for i, q in queries]
 
 
@@ -123,7 +124,9 @@ def test_an_answer_cut_by_the_path_is_not_the_answer_elsewhere() -> None:
     queries = [(0, 1)]
     got = _python(graph, queries)
     assert got == _lean(graph, queries)
-    assert got == [{"can": True, "step": {"act": [3, 0, 1, 1]}}]
+    assert got == [{"can": True, "step": {"act": [3, 0, 1, 1]},
+                    "plan": [{"act": [3, 0, 1, 1]}, {"act": [2, 1, 1, 1]}, {"act": [3, 0, 1, 1]},
+                             {"act": [2, 1, 1, 1]}, {"act": [1, 0, 1, 1]}, {"act": [0, 0, 1, 1]}]}]
 
 
 def test_siblings_sharing_a_material_cannot_both_count_it() -> None:
@@ -133,12 +136,12 @@ def test_siblings_sharing_a_material_cannot_both_count_it() -> None:
     of 2 from a bank of 3)."""
     shared: _Graph = (3, [0, 0, 2], [[(0, 1, UNBOUNDED, [(2, 2), (1, 1)], [])],
                                      [(1, 1, UNBOUNDED, [(2, 2)], [])], []])
-    assert _python(shared, [(0, 1)]) == _lean(shared, [(0, 1)]) == [{"can": False, "step": None}]
+    assert _python(shared, [(0, 1)]) == _lean(shared, [(0, 1)]) == [{"can": False, "step": None, "plan": []}]
     richer: _Graph = (3, [0, 0, 4], shared[2])
     assert _python(richer, [(0, 1)]) == _lean(richer, [(0, 1)]) == [
-        {"can": True, "step": {"act": [1, 0, 1, 1]}}]
+        {"can": True, "step": {"act": [1, 0, 1, 1]}, "plan": [{"act": [1, 0, 1, 1]}, {"act": [0, 0, 1, 1]}]}]
     bank: _Graph = (2, [0, 0], [[(0, 1, UNBOUNDED, [(1, 2), (1, 2)], [])], [(1, 1, 3, [], [])]])
-    assert _python(bank, [(0, 1)]) == _lean(bank, [(0, 1)]) == [{"can": False, "step": None}]
+    assert _python(bank, [(0, 1)]) == _lean(bank, [(0, 1)]) == [{"can": False, "step": None, "plan": []}]
 
 
 def test_the_walk_is_greedy_so_holding_more_can_turn_yes_into_no() -> None:

@@ -1,7 +1,7 @@
 import pytest
 
 from artifactsmmo_cli.ai.plan_cache import PlanCache
-from artifactsmmo_cli.ai.should_replan import should_replan
+from artifactsmmo_cli.ai.should_replan import refresh_only, should_replan
 
 
 def _cache(cursor=0, plan_len=3, latch=False, cycles=0):
@@ -74,3 +74,30 @@ def test_inapplicable_step_replans():
     args = _ok_hit_args()
     args["step_applicable"] = False
     assert should_replan(**args) is True
+
+
+def _refresh_args(**over):
+    args = dict(_ok_hit_args(), cache=_cache(cycles=20))
+    args.update(over)
+    return args
+
+
+def test_the_staleness_bound_alone_is_a_refresh():
+    assert should_replan(**_refresh_args()) is True
+    assert refresh_only(**_refresh_args()) is True
+    assert refresh_only(**_refresh_args(last_outcome=None)) is True
+
+
+@pytest.mark.parametrize("over", [
+    dict(cache=None),
+    dict(last_outcome="error:cooldown"),
+    dict(goal_satisfied=True),
+    dict(cache=_cache(cursor=3, cycles=20)),
+    dict(latch_active=True),
+    dict(cache=_cache(cycles=19)),
+    dict(step_applicable=False),
+])
+def test_any_other_trigger_is_not_a_refresh(over):
+    """A committed plan survives the periodic re-decide only when nothing but
+    the staleness bound asks for it (Phase 2d-L1c)."""
+    assert refresh_only(**_refresh_args(**over)) is False

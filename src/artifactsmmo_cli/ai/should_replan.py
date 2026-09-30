@@ -32,3 +32,24 @@ def should_replan(
     if cache.cycles_since_replan >= replan_interval:
         return True
     return not step_applicable
+
+
+def refresh_only(
+    cache: PlanCache | None,
+    last_outcome: str | None,
+    latch_active: bool,
+    goal_satisfied: bool,
+    step_applicable: bool,
+    replan_interval: int,
+) -> bool:
+    """True when the ONLY reason to re-decide is the staleness bound (trigger 5):
+    the plan is live, its last step succeeded and its next step still applies.
+    Then a re-decide that picks the same goal keeps the committed plan (Phase
+    2d-L1c): re-walking mid-plan does not converge, since a shrunken deficit can
+    make an earlier route usable that spends a scarce unit the plan needed."""
+    return (cache is not None
+            and (last_outcome is None or last_outcome == "ok")
+            and not goal_satisfied and not cache.exhausted()
+            and latch_active == cache.latch_active
+            and cache.cycles_since_replan >= replan_interval
+            and step_applicable)

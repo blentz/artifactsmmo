@@ -11,6 +11,6 @@
 | liveness | water_bow | ash_plank | 4 | 4 | 2 | PASS | `GatherMaterials(ash_plank, {ash_plank:4})` | `Recycle(water_bow×2)` |
 | safety | copper_axe | copper_bar | 6 | 0 | 0 | PASS | `GatherMaterials(copper_bar, {copper_bar:6})` | `Gather(copper_rocks×60) → Craft(copper_bar×6)` |
 | banked | water_bow | ash_plank | 4 | 4 | 2 | PASS | `GatherMaterials(ash_plank, {ash_plank:4})` | `Withdraw(water_bow×2) → Recycle(water_bow×2)` |
-| partial | water_bow | ash_plank | 8 | 4 | 2 | PASS | `GatherMaterials(ash_plank, {ash_plank:8})` | `Recycle(water_bow×2) → Gather(ash_tree×30) → Craft(ash_plank×3)` |
+| partial | water_bow | ash_plank | 8 | 4 | 2 | PASS | `GatherMaterials(ash_plank, {ash_plank:8})` | `Recycle(water_bow×2) → Gather(ash_tree×40) → Craft(ash_plank×4)` |
 | partial_protection | copper_helmet | copper_bar | 6 | 3 | 1 | PASS | `GatherMaterials(copper_bar, {copper_bar:6})` | `Recycle(copper_helmet×1) → Gather(copper_rocks×30) → Craft(copper_bar×3)` |
 

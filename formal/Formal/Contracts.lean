@@ -19,6 +19,7 @@ import Formal.ObtainModelReady
 import Formal.ObtainModelSupply
 import Formal.Decompose
 import Formal.DecomposeWitness
+import Formal.CommittedLoop
 import Formal.CompleteTaskIncome
 import Formal.Liveness.CurrencyFunding
 import Formal.MonsterDropApply
@@ -3142,6 +3143,17 @@ open Formal.Decompose Formal.DecomposeWitness in
 example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat) (s : St) (a : Step),
     step g fuel path i q s = some a → ∃ t l, canP g fuel path i q s = some (t, l) ∧ l.head? = some a :=
   @Formal.DecomposeWitness.step_is_first_leg
+
+-- ─── CommittedLoop (follow the witness; repeat a short stochastic leg) anti-weakening pins ───
+open Formal.Decompose Formal.DecomposeWitness Formal.CommittedLoop in
+example : ∀ (g : Graph) (l : List Step) (w v v' : World), Dom w v → execAll g l v = some v' →
+    ∃ w', execAll g l w = some w' ∧ Dom w' v' :=
+  @Formal.CommittedLoop.execAll_dom
+open Formal.Decompose Formal.DecomposeWitness Formal.CommittedLoop in
+example : ∀ (g : Graph) (i q : Nat), feasible g i q = true → ∀ (sched : List (List Nat)),
+    Fair g (plan g i q) sched →
+      ∃ w', run g (plan g i q) sched ⟨St.init g, []⟩ = some w' ∧ q ≤ w'.st.bag i :=
+  @Formal.CommittedLoop.committed_loop_delivers
 
 -- ─── CurrencyFunding (ReachCurrencyGoal funding) anti-weakening pins ───
 example : ∀ (onHand target floor : Nat), 1 ≤ floor →

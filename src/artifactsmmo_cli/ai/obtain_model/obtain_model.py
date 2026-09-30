@@ -31,7 +31,7 @@ from datetime import datetime
 from artifactsmmo_cli.ai import accumulation_sell
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.decompose_core import Route as WalkRoute
-from artifactsmmo_cli.ai.decompose_core import can_obtain, next_step
+from artifactsmmo_cli.ai.decompose_core import can_obtain, next_step, plan_legs
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, rank_gather_sources
@@ -240,7 +240,8 @@ class ObtainModel:
         step toward it (`decompose_core`)."""
         graph = self.walk_graph(item, policy, produce, openable, keep)
         return WalkAnswer(can_obtain(item, qty, graph.on_hand, graph.routes),
-                          next_step(item, qty, graph.on_hand, graph.routes), graph)
+                          next_step(item, qty, graph.on_hand, graph.routes), graph,
+                          tuple(plan_legs(item, qty, graph.on_hand, graph.routes)))
 
     def on_hand(self, item: str, policy: Policy) -> int:
         """Units of `item` available from what the character already owns: the

@@ -13,6 +13,7 @@ import pytest
 
 from artifactsmmo_cli.ai import unlock_boost as _unlock_boost_module
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
@@ -83,14 +84,15 @@ def test_held_ingredients_craft_the_whole_batch_in_one_action():
     assert plan[-1] == equip
 
 
-def test_a_prefix_plan_ends_before_the_equip(monkeypatch):
-    """When the simulated legs stop short of the batch (here one leg: the
-    gather), the plan stops there instead of naming an equip it cannot reach."""
-    monkeypatch.setattr("artifactsmmo_cli.ai.craft_plan_gen._MAX_LEGS", 1)
+def test_a_prefix_plan_ends_before_the_equip():
+    """When the legs stop short of the batch (here the craft has no action in
+    the pool, so the plan is the gather alone), the plan stops there instead
+    of naming an equip it cannot reach."""
     gd = _gd(with_boost=False, monster_level=18)
     state = _state(inventory={})
     goal = CraftPotionsGoal(game_data=gd, state=state)
-    plan = decompose(goal, state, gd, _actions(gd), NO_PROFILE_CONTEXT)
+    actions = [a for a in _actions(gd) if not isinstance(a, CraftAction)]
+    plan = decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT)
     assert plan is not None
     assert [type(a).__name__ for a in plan] == ["GatherAction"]
 

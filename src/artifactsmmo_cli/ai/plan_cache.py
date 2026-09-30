@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -32,7 +33,12 @@ class PlanCache:
     bag that fills mid-batch all resolve without bookkeeping, and no mutable
     progress lives on the shared Action instance.
 
-    None for every non-batched step, which is then trivially satisfied.
+    A fight planned for a drop (`FightAction.drop_target`, Phase 2d-L1c) is
+    armed the same way on the drop item: a drop is stochastic, so the fight
+    repeats until the bag holds the units the plan counted on, and the legs
+    after it find their inputs.
+
+    None for every other step, which is then trivially satisfied.
     """
 
     def current(self) -> Action | None:
@@ -50,21 +56,28 @@ class PlanCache:
     def arm_step(self, inventory: Mapping[str, int], game_data: GameData) -> None:
         """Snapshot the current step's completion target. Call on every advance
         and on every plan install (fresh decide or resumed commitment)."""
-        action = self.current()
-        qty = getattr(action, "quantity", 1)
-        if not isinstance(action, GatherAction) or qty <= 1:
-            self.step_target = None
-            return
-        drop = action.drop_item(game_data)
-        self.step_target = inventory.get(drop, 0) + qty
+        output = _output(self.current(), game_data)
+        self.step_target = None if output is None else inventory.get(output[0], 0) + output[1]
 
     def batch_satisfied(self, inventory: Mapping[str, int], game_data: GameData) -> bool:
         """True when the armed step's target holding has been reached. Always
-        True for a non-batched step (step_target is None), so an unbatched
+        True for a step with no target (step_target is None), so such an
         advance behaves exactly as it did before batching existed."""
-        if self.step_target is None:
+        output = _output(self.current(), game_data)
+        if self.step_target is None or output is None:
             return True
-        action = self.current()
-        if not isinstance(action, GatherAction):
-            return True
-        return inventory.get(action.drop_item(game_data), 0) >= self.step_target
+        return inventory.get(output[0], 0) >= self.step_target
+
+
+def _output(action: Action | None, game_data: GameData) -> tuple[str, int] | None:
+    """The (item, units) a step must add before the cursor moves on: a gather's
+    drop, or a planned fight's drop; None for any other step. A single gather
+    is armed too: a secondary drop (algae from a gudgeon spot) can come up
+    empty, and the leg after it needs what it was planned to deliver. The
+    walk's gather and drop routes yield one per application, so a gather's
+    quantity IS the units its leg was planned for (`CommittedLoop`)."""
+    if isinstance(action, GatherAction):
+        return action.drop_item(game_data), action.quantity
+    if isinstance(action, FightAction):
+        return action.drop_target
+    return None

@@ -23,9 +23,11 @@ class WalkGraph:
 
 @dataclass(frozen=True)
 class WalkAnswer:
-    """The one walk's answer: can `qty` be had, and the next step toward it
-    (None when the bag holds it or it cannot be had)."""
+    """The one walk's answer: can `qty` be had, the next step toward it (None
+    when the bag holds it or it cannot be had), and the legs behind a yes
+    (`decompose_core.plan_legs`; proved to deliver, the step first)."""
 
     feasible: bool
     step: Step[str] | None
     graph: WalkGraph
+    plan: tuple[Step[str], ...]

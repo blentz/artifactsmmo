@@ -136,7 +136,7 @@ from artifactsmmo_cli.ai.role_selection import (
     serves_item,
 )
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.should_replan import should_replan
+from artifactsmmo_cli.ai.should_replan import refresh_only, should_replan
 from artifactsmmo_cli.ai.strategy_driver import (
     StrategyArbiter,
     monster_drop_inputs,
@@ -928,8 +928,20 @@ class GamePlayer:
             goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL,
         ):
             self._events.note(Mechanism.REPLAN, repr(cache.selected_goal) if cache else "<none>")
+            refreshing = refresh_only(
+                cache, self._last_outcome, self._regear_edge.active,
+                goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL)
             selected_goal, plan, goals_tried = self._decide_band(
                 state, game_data, actions, ctx_combat_monster)
+            if refreshing and cache is not None and selected_goal is not None \
+                    and repr(selected_goal) == cache.goal_repr:
+                # The same goal again: keep the committed plan (its legs are
+                # proved to deliver), and restart the staleness count.
+                cache.cycles_since_replan = 0
+                self._events.note(Mechanism.COMMITMENT_KEPT, cache.goal_repr)
+                self.state = replace(state, crafting_target=cache.crafting_target)
+                self._bump_committed_focus()
+                return cache.selected_goal, cache.plan[cache.cursor:], goals_tried, True
             if plan and selected_goal is not None:
                 self._plan_cache = PlanCache(
                     selected_goal=selected_goal,
