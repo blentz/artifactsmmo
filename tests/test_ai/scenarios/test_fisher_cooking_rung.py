@@ -32,8 +32,8 @@ What the cell DOES close is the D11 value: a cooking rung, walked. `fisher` is
 a declared role (`role_catalog`: gather `fishing`, craft `cooking`), and the
 flip that makes the cell bite is the role itself — the same cooking rung
 descends to the same fishing gather either way, but only a real fisher can
-perform it, and the planner says so by inserting `LevelSkill(fishing->20)`
-ahead of the gather when the role is taken away.
+perform it, and the planner says so by planning the fishing grind that opens
+the trout spot when the role is taken away.
 """
 
 import dataclasses
@@ -42,7 +42,6 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.decisions.root import _gear_nameable_skills
 from artifactsmmo_cli.ai.game_data import GameData
@@ -53,6 +52,7 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.role_catalog import ROLES_BY_NAME, role_skills
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
@@ -69,7 +69,7 @@ RUNG = "cooked_trout"
 RAW = "trout"
 RAW_GATHER_LEVEL = 20
 """The fishing level the trout spot demands — the gate the role exists to
-clear, and the number the flip below turns into a `LevelSkill` edge."""
+clear, and the number the flip below turns into a fishing sub-grind."""
 
 PLAN_BUDGET_SECONDS = 2.0
 """Measured 0.003 s for both halves of the flip."""
@@ -115,8 +115,8 @@ def test_the_scenario_is_the_declared_fisher_role(state: WorldState) -> None:
 def test_the_grind_stands_on_a_cooking_rung(
         bundle_game_data: GameData, state: WorldState) -> None:
     """`skill_grind_target` — production's own rung picker — names a cooking
-    recipe this character can craft, and `LevelSkill(cooking, C+1)` is
-    applicable through it. Cooking has no gather arm (`GatheringSkill` does not
+    recipe this character can craft, and `skill_is_grindable(cooking, C+1)`
+    holds through it. Cooking has no gather arm (`GatheringSkill` does not
     contain it), so the craftable rung is the ONLY thing that can open the
     skill: this is the cooking-rung dimension, undiluted."""
     rung = skill_grind_target(SKILL, state, bundle_game_data)
@@ -126,8 +126,7 @@ def test_the_grind_stands_on_a_cooking_rung(
     assert stats.crafting_skill == SKILL
     assert stats.crafting_level <= state.skills[SKILL]
     assert bundle_game_data.crafting_recipes[RUNG] == {RAW: 1}
-    assert LevelSkill(skill=SKILL, target_level=state.skills[SKILL] + 1
-                      ).is_applicable(state, bundle_game_data)
+    assert skill_is_grindable(SKILL, state.skills[SKILL] + 1, state, bundle_game_data)
 
 
 def test_the_descent_lands_on_the_fishing_gather(
@@ -206,7 +205,7 @@ def test_every_scenario_now_routes_cooking(bundle_game_data: GameData) -> None:
     the skills no gear target can name, so all four were routed. The O1
     census's routed count moved 26 -> 194 of 336 cells with that change;
     residuals stayed at 0 because the rule's second conjunct is
-    `LevelSkill(S, C+1).is_applicable`, the same predicate the census verdicts a
+    `skill_is_grindable(S, C+1)`, the same predicate the census verdicts a
     cell on.
 
     This test also used to end `assert "alchemy" not in routed`, on the claim

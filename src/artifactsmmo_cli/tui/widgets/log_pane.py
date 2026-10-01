@@ -8,7 +8,6 @@ from textual.widgets import RichLog
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RoleChange
 from artifactsmmo_cli.tui.fight_format import fight_summary_line
 from artifactsmmo_cli.tui.plan_format import (
-    grind_chain_lines,
     parse_supply_target,
     short_root,
     supply_progress,
@@ -84,11 +83,9 @@ def _supply_line(snap: CycleSnapshot) -> list[str]:
 def build_log_lines(snap: CycleSnapshot) -> list[str]:
     """Rich-markup lines for one cycle: the compact decision line, an optional
     dim 'why' line (chosen root's resolution reason + top-2 alternatives) when
-    a strategy ranking is present, and — on a LevelSkill cycle — the captured
-    grind chain
-    (the concrete gather/craft legs the step expands into), and — on a fight
-    cycle — a structured one-line fight summary. Discretionary cycles (no
-    chosen_root / empty ranking) get the single line plus any grind chain.
+    a strategy ranking is present, and — on a fight cycle — a structured
+    one-line fight summary. Discretionary cycles (no chosen_root / empty
+    ranking) get the single line.
 
     Cross-character specialization adds two more, both silent unless something
     profile-related actually happened this cycle: a role transition is a peer
@@ -129,7 +126,6 @@ def build_log_lines(snap: CycleSnapshot) -> list[str]:
             why = f"{why}  alt: {alt_text}"
         lines.append(f"[dim]{why}[/dim]")
     lines.extend(_supply_line(snap))
-    lines.extend(grind_chain_lines(snap.grind_expansion))
     if snap.fight is not None:
         lines.append(fight_summary_line(snap.fight))
     return lines

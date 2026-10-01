@@ -1,8 +1,8 @@
 """Decide whether the active task is feasible for the character right now.
 
 Returns the gating skill requirement (or None when already feasible). Pure — no
-API calls, no learning. Used by TaskCancelGoal, the LevelSkill prerequisite
-wiring, and the cost-analysis decision.
+API calls, no learning. Used by TaskCancelGoal and the cost-analysis
+decision.
 """
 
 from dataclasses import dataclass

@@ -21,12 +21,10 @@ class Mechanism(StrEnum):
     DOOMED_MARK = "doomed_mark"
     DOOMED_CLEAR = "doomed_clear"
     NOT_PLANNABLE = "not_plannable"
-    GRIND_DOOM = "grind_doom"
     # Which producer answered a planning request (subject: goal repr;
     # detail: nodes_created/explored/timed_out/node_capped/plan_len).
     FAST_PATH = "fast_path"
     SEARCH = "search"
-    GRIND_SEARCH = "grind_search"
     # Why the route-driven producer declined an obtain goal it serves
     # (subject: goal repr; detail: the named reason, e.g. `no_source:<item>`,
     # `unmapped_step:<kind>:<item>:<via>`, `first_leg_inapplicable:<action>`).

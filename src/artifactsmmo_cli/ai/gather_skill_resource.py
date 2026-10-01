@@ -17,7 +17,7 @@ def best_gather_resource_drop(skill: str, current_level: int,
     has nothing between it and the character's 17, so every gather paid nothing
     and the grind could never advance. Because this picks the HIGHEST resource
     in range, a grey best means every candidate is grey, so the honest answer is
-    None: the caller (`next_grind_goal`) then reports "cannot grind from here"
+    None: the caller (`grind_rung_goal`) then reports "cannot grind from here"
     and the arbiter spends the cycle on a goal that can actually progress,
     instead of burning it on a gather with no xp behind it."""
     best_code: str | None = None

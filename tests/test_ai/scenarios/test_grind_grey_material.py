@@ -21,8 +21,8 @@ at all — hence `nodes=4 depth=2`, a search that gave up immediately.
 
 Meanwhile `skill_grind_target.is_obtainable` called that same rung obtainable
 (it asked only winnable + spawn-known, on its own private walk that never
-consulted the grey policy), so `LevelSkill` stayed applicable and the arbiter
-re-picked it forever. `890966e1` fixed the symptom with the skill-grind
+consulted the grey policy), so the `LevelSkill` macro (retired in Phase 2d-c)
+stayed applicable and the arbiter re-picked it forever. `890966e1` fixed the symptom with the skill-grind
 exemption in `GatherMaterialsGoal.relevant_actions`; the two walks were then
 merged onto the shared oracle `ai/drop_obtainability`, which is what makes them
 structurally unable to disagree again (`test_drop_obtainability.py` carries the
@@ -37,12 +37,14 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.drop_obtainability import drop_obtainable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
-from artifactsmmo_cli.ai.level_skill_expand import next_grind_goal
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.tiers.skill_grind_target import (
@@ -93,13 +95,12 @@ def test_wool_really_is_a_grey_mob_drop_only(game_data: GameData,
     assert game_data.xp_per_kill("sheep", state.level) == 0
 
 
-def test_grind_descends_to_the_live_wool_goal(game_data: GameData,
+def test_the_grind_rung_is_the_live_iron_ring(game_data: GameData,
                                               state: WorldState) -> None:
-    """The scenario reproduces the live decision exactly: rung iron_ring, and
-    the descent lands on its mob-drop material."""
+    """The scenario reproduces the live decision: rung iron_ring, whose recipe
+    holds the mob-drop wool."""
     assert skill_grind_target(SKILL, state, game_data) == "iron_ring"
-    goal = next_grind_goal(SKILL, state, game_data)
-    assert repr(goal) == "GatherMaterials(wool, {wool:2})"
+    assert "wool" in game_data.crafting_recipes["iron_ring"]
 
 
 def test_both_sides_agree_on_wool(player: GamePlayer, game_data: GameData,
@@ -145,14 +146,16 @@ def test_real_planner_finds_a_plan_for_wool(player: GamePlayer,
 def test_full_grind_cycle_produces_a_leg(player: GamePlayer,
                                          game_data: GameData,
                                          state: WorldState) -> None:
-    """End to end through the production seam: the goal `_execute_level_skill`
-    builds must plan, and its first step is the leg the player executes."""
-    goal = next_grind_goal(SKILL, state, game_data, player._last_ctx)
-    assert goal is not None
-    plan = player.planner.plan(state, goal, player._build_actions(),
-                               game_data, budget_seconds=BUDGET)
-    assert plan, "LevelSkill(jewelrycrafting) grind produced no leg"
-    assert isinstance(plan[0], FightAction)
+    """End to end through the production seam: the arbiter decomposes
+    `ReachSkillLevel(jewelrycrafting, C+1)` into one committed grind cycle. It
+    must exist, farm the wool off the grey sheep, and end in the iron_ring
+    craft that earns jewelrycrafting."""
+    goal = ReachSkillGoal(SKILL, state.skills[SKILL] + 1)
+    plan = decompose(goal, state, game_data, player._build_actions(), player._last_ctx)
+    assert plan, "the jewelrycrafting grind produced no cycle"
+    fights = [a for a in plan if isinstance(a, FightAction)]
+    assert [(f.monster_code, f.drop_farm) for f in fights] == [("sheep", True)]
+    assert isinstance(plan[-1], CraftAction) and plan[-1].code == "iron_ring"
 
 
 def test_ordinary_gather_still_obeys_the_suppression(player: GamePlayer,

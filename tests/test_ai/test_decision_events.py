@@ -4,9 +4,6 @@ decision-events log, and the player persists the batch with the cycle row."""
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.constants import BANK_REFRESH_INTERVAL
 from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog, search_detail
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
@@ -233,69 +230,5 @@ class TestPlayer:
             chosen, plan, _tried, _replanned = player._plan_or_reuse(state, GameData(), [], None)
         assert (chosen, plan) == (other, [fresh])
 
-    def test_the_nested_grind_search_and_its_doom_are_noted(self) -> None:
-        player = GamePlayer(character="hero")
-        player.game_data = GameData()
-        player.state = make_state()
-        player._build_actions = lambda: []  # type: ignore[method-assign]
-        player.planner = MagicMock()
-        player.planner.plan.return_value = []
-        player.planner.last_stats = _stats(nodes_created=233739, nodes_explored=13748, timed_out=True)
-        player._plan_cache = PlanCache(selected_goal=MagicMock(), plan=[], crafting_target=None,
-                                       latch_active=False, goal_repr="ReachSkill(x->21)")
-        grind_goal = MagicMock()
-        grind_goal.__repr__ = lambda self: "GatherMaterials(skull_staff)"  # type: ignore[method-assign,assignment]
-        with (patch("artifactsmmo_cli.ai.player.next_grind_goal", return_value=grind_goal),
-              patch("artifactsmmo_cli.ai.player.decompose", return_value=None),
-              pytest.raises(RuntimeError, match="EXHAUSTED")):
-            player._execute_level_skill(LevelSkill(skill="weaponcrafting", target_level=21), MagicMock())
-        [(search, subject, detail), doom] = player._events.drain()
-        assert (search, subject) == (Mechanism.GRIND_SEARCH, "GatherMaterials(skull_staff)")
-        assert detail.startswith("nodes_created=233739")
-        assert doom == (Mechanism.GRIND_DOOM, "ReachSkill(x->21)", "")
 
-    def test_a_grind_decline_is_noted_before_the_nested_search(self) -> None:
-        player = GamePlayer(character="hero")
-        player.game_data = GameData()
-        player.state = make_state()
-        player._build_actions = lambda: []  # type: ignore[method-assign]
-        player.planner = MagicMock()
-        leg = MagicMock()
-        player.planner.plan.return_value = [leg]
-        player.planner.last_stats = _stats(nodes_created=5, nodes_explored=2, timed_out=False)
-        grind_goal = MagicMock()
-        grind_goal.__repr__ = lambda self: "GatherMaterials(skull_staff)"  # type: ignore[method-assign,assignment]
 
-        def declines(goal, state, game_data, actions, ctx, declined):
-            declined.append("unmapped_step:gather:algae:gudgeon_spot")
-
-        with (patch("artifactsmmo_cli.ai.player.next_grind_goal", return_value=grind_goal),
-              patch("artifactsmmo_cli.ai.player.decompose", side_effect=declines),
-              patch.object(player, "_execute", return_value=("state", "ok", leg))):
-            player._execute_level_skill(LevelSkill(skill="weaponcrafting", target_level=21), MagicMock())
-        [decline, (search, _subject, _detail)] = player._events.drain()
-        assert decline == (Mechanism.DECOMPOSE_DECLINE, "GatherMaterials(skull_staff)",
-                           "unmapped_step:gather:algae:gudgeon_spot")
-        assert search is Mechanism.GRIND_SEARCH
-
-    def test_a_decomposed_grind_is_noted_and_runs_no_nested_search(self) -> None:
-        """Phase 2: the grind asks the route-driven producer first; when it
-        serves the rung, the leg runs with no nested A* at all."""
-        player = GamePlayer(character="hero")
-        player.game_data = GameData()
-        player.state = make_state()
-        player._build_actions = lambda: []  # type: ignore[method-assign]
-        player.planner = MagicMock()
-        grind_goal = MagicMock()
-        grind_goal.__repr__ = lambda self: "GatherMaterials(skull_staff)"  # type: ignore[method-assign,assignment]
-        leg = MagicMock()
-        with (patch("artifactsmmo_cli.ai.player.next_grind_goal", return_value=grind_goal),
-              patch("artifactsmmo_cli.ai.player.decompose", return_value=[leg, MagicMock()]),
-              patch.object(player, "_execute", return_value=("state", "ok", leg)) as execute):
-            result = player._execute_level_skill(LevelSkill(skill="weaponcrafting", target_level=21),
-                                                 MagicMock())
-        assert result == ("state", "ok")
-        assert execute.call_args.args[0] is leg
-        player.planner.plan.assert_not_called()
-        assert player._events.drain() == [
-            (Mechanism.FAST_PATH, "GatherMaterials(skull_staff)", "grind plan_len=2")]

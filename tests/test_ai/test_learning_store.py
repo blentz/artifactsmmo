@@ -12,7 +12,6 @@ from sqlalchemy import text
 from sqlmodel import Session as SqlSession
 from sqlmodel import create_engine, select
 
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.learning.models import Cycle, Session
 from artifactsmmo_cli.ai.learning.store import (
     MIN_DROP_KILLS,
@@ -1741,12 +1740,11 @@ class TestSkillGrindRate:
             store.close()
 
 
-def test_grind_action_prefix_is_the_repr_LevelSkill_writes():
-    """Matching on the prefix is only sound if it is the prefix the action
-    actually renders. `LevelSkill.__repr__` is `LevelSkill({skill}->{target})`."""
+def test_grind_action_prefix_matches_the_legacy_LevelSkill_rows():
+    """Matching on the prefix is only sound if it is the prefix the retired
+    macro wrote: its rows read `LevelSkill({skill}->{target})`."""
     assert grind_action_prefix("gearcrafting") == "LevelSkill(gearcrafting->"
-    assert repr(LevelSkill(skill="gearcrafting", target_level=10)).startswith(
-        grind_action_prefix("gearcrafting"))
+    assert "LevelSkill(gearcrafting->10)".startswith(grind_action_prefix("gearcrafting"))
 
 
 class TestFleetSupplyRequestCycles:

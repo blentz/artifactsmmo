@@ -41,7 +41,7 @@ Tasks, gold, and skill-XP are means to that end, not first-class goals.
   an equipment slot requires the item to actually be EQUIPPED, not just
   owned. Crafting a `wooden_shield` without equipping it no longer satisfies
   the root; the arbiter plans the `EquipAction` to close the loop.
-- **Bank-stock reuse**: PursueTask / GatherMaterials / LevelSkill /
+- **Bank-stock reuse**: PursueTask / GatherMaterials / ReachSkill grind /
   CraftRelief all consider `WithdrawItemAction` for their recipe-chain
   inputs, so banked materials get withdrawn instead of re-gathered when a
   goal needs them.
@@ -51,11 +51,10 @@ Tasks, gold, and skill-XP are means to that end, not first-class goals.
   competitor for skill XP and the gear-craft loop can start.
 - **HP critical floor**: `RestoreHP` priority jumps to 110 below 25% HP to
   preempt any combat goal.
-- **Skill-up driver**: `LevelSkillGoal` interrupts gathering to craft for
-  skill XP when a near-future upgrade is gated. Action scope is bounded to
-  the skill's recipe closure (gathers + withdraws for items the skill's
-  recipes consume) so the planner doesn't blow up exploring unrelated gather
-  chains.
+- **Skill-up driver**: a skill gate is a sub-task of the decomposition
+  walk. `ReachSkillGoal` is served by one committed grind cycle: the walk's
+  plan for another copy of the skill's rung, ending in the leg that earns
+  the skill's XP (`craft_plan_gen._decompose_grind`).
 - **Survival recovery**: stuck-state detector with escalating recovery
   (state refresh → goal suppression → wildcard mode).
 

@@ -2,11 +2,8 @@
 LevelSkill action so the PURSUE_TASK skill grind routes through LevelSkill instead
 of the old LevelSkillGoal (retired in P3b)."""
 
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
-from artifactsmmo_cli.ai.planner import GOAPPlanner
-from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from tests.test_ai.fixtures import make_state
 
 
@@ -56,14 +53,6 @@ class TestValue:
         assert goal.value(make_state(skills={"alchemy": 5}), gd) == 0.0
 
 
-class TestRelevantActions:
-    def test_admits_nothing_to_the_search(self):
-        """Phase 2d-b2: the grind is decomposition's; the LevelSkill macro this
-        goal used to admit left the action pool."""
-        goal = ReachSkillGoal("alchemy", 5)
-        gd = _gd_with_alchemy_resource()
-        actions = [LevelSkill(skill="alchemy", target_level=5)]
-        assert goal.relevant_actions(actions, make_state(skills={"alchemy": 1}), gd) == []
 
 
 class TestDesiredStateAndDepth:
@@ -89,13 +78,3 @@ class TestSerialize:
                      "target_level": 5}
 
 
-class TestPlannerIntegration:
-    def test_the_search_finds_nothing_to_grind_with(self):
-        """When decomposition declines, the search gives up at once rather than
-        exploring a pool it has no admitted action from."""
-        gd = _gd_with_alchemy_resource()
-        state = scenario_state(
-            ScenarioCharacter(name="t", level=5, skills={"alchemy": 1}), gd)
-        goal = ReachSkillGoal("alchemy", 5)
-        assert GOAPPlanner().plan(state, goal, [LevelSkill(skill="alchemy", target_level=5)], gd,
-                                  budget_seconds=10.0) == []

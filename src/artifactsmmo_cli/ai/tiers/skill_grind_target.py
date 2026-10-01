@@ -15,8 +15,8 @@ caller's `SelectionContext` (`ctx.near_term_targets`, the usable-now gear ∪ to
 SET, or `ctx.supply_target`, a sibling's published demand), so the same catalog
 ranks differently under a different objective and identically — every `wanted`
 False — under `NO_PROFILE_CONTEXT`. Returns None when no such in-skill recipe
-exists — the caller (the LevelSkill action's is_applicable / grind expansion,
-always same-skill, never cross-skill) then has no craftable rung. Inclusion is a
+exists — the caller (`skill_is_grindable` / `grind_rung.craft_rung`, always
+same-skill, never cross-skill) then has no craftable rung. Inclusion is a
 recipe-table + reachability fact, free of bank-freshness false positives (only
 `acquire_steps` ordering reads holdings).
 

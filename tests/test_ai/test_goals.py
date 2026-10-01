@@ -9,7 +9,6 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
@@ -32,7 +31,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
-from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -478,80 +477,6 @@ class TestUpgradeEquipmentGoal:
         assert goal.value(state, gd) == 35.0
 
 
-def _fire_bow_gd() -> GameData:
-    """Craft-only, skill-gated, unowned target (mirrors
-    `test_forced_craft_grind._gd`): fire_bow needs weaponcrafting 10, built
-    from a gatherable spruce_plank leaf + a red_slimeball leaf. Adds a
-    weaponcrafting workshop + a spruce_plank resource so a Craft/Gather action
-    for this target is buildable and `UpgradeEquipmentGoal.relevant_actions`
-    (find_upgrade_target/is_satisfied) behaves; the goal is pinned via
-    `committed_target`, so no arbiter ranking over these picks is exercised."""
-    gd = GameData()
-    gd._item_stats = {
-        "fire_bow": ItemStats(code="fire_bow", level=10, type_="weapon",
-                              crafting_skill="weaponcrafting", crafting_level=10),
-        "spruce_plank": ItemStats(code="spruce_plank", level=1, type_="resource",
-                                  subtype="craft"),
-        "red_slimeball": ItemStats(code="red_slimeball", level=1, type_="resource",
-                                   subtype="mob"),
-        # In-skill, in-level, obtainable rung (crafting_level 1 <= the fixture's
-        # weaponcrafting 7): LevelSkill.is_applicable delegates to
-        # skill_grind_target, which requires a same-skill craftable at or below
-        # the CURRENT skill level to justify the grind — fire_bow itself (level
-        # 10) can never serve as its own rung. Mirrors the "trinket" rung in
-        # test_upgrade_equipment_level_skill.py's _gd().
-        "practice_bow": ItemStats(code="practice_bow", level=1, type_="weapon",
-                                  crafting_skill="weaponcrafting", crafting_level=1),
-    }
-    gd._crafting_recipes = {
-        "fire_bow": {"spruce_plank": 6, "red_slimeball": 2},
-        "practice_bow": {"spruce_plank": 1},
-    }
-    gd._resource_drops = {"spruce_tree": "spruce_plank"}
-    gd._resource_skill = {"spruce_tree": ("woodcutting", 1)}
-    gd._resource_locations = {"spruce_tree": [(3, 3)]}
-    gd._workshop_locations = {"weaponcrafting": (2, 2)}
-    # Distance 3 from the default make_state x=0,y=0 -> WithdrawItemAction.cost
-    # (2.0 + dist) = 5.0, cheap next to LevelSkill's 150 grind cost.
-    gd._bank_location = (3, 0)
-    gd._taskmaster_location = (1, 1)
-    return gd
-
-
-def _fire_bow_actions(gd: GameData) -> list:
-    """The LevelSkill/Craft/Equip triple that solves the committed fire_bow
-    target, plus cheap decoys that actually SURVIVE
-    `UpgradeEquipmentGoal.relevant_actions`: RestAction (one-shot HP-full dead
-    end) and a WithdrawItemAction(spruce_plank) — spruce_plank is a closure
-    material, so the withdraw passes the goal's withdrawable-set filter (a
-    GatherAction decoy does not: with mats already in hand the gather's drop
-    is fully covered and gets pruned, so it never reaches the planner — see
-    the vacuous-test finding this replaced). The withdraw is a genuine
-    off-optimal-path decoy: mats are already in hand, so it never contributes
-    to the plan, but at cost 5.0 (vs. LevelSkill's 150.0) a Dijkstra (h=0)
-    search pops it — repeatedly, while bank stock lasts — before the forced
-    grind edge, while the admissible heuristic-guided search does not."""
-    return [
-        LevelSkill(skill="weaponcrafting", target_level=10),
-        CraftAction(code="fire_bow", quantity=1,
-                    workshop_location=gd._workshop_locations["weaponcrafting"]),
-        EquipAction(code="fire_bow", slot="weapon_slot"),
-        RestAction(),
-        WithdrawItemAction(code="spruce_plank", quantity=1,
-                           bank_location=gd._bank_location),
-    ]
-
-
-class _ZeroHeuristicUpgradeGoal(UpgradeEquipmentGoal):
-    """Test-only Dijkstra control: identical goal, `heuristic` forced to 0.0.
-    NOT a monkeypatch of the unit under test — a distinct subclass so the same
-    state/actions/game_data can be planned twice, once with the real
-    admissible heuristic and once with h=0, to compare node counts."""
-
-    def heuristic(self, state: WorldState, game_data: GameData) -> float:
-        return 0.0
-
-
 class TestUpgradeEquipmentGoalToolBias:
     """A craftable upgrade whose stats bonus an active gathering skill must
     outrank generic gear and bump value() above FarmItems (35)."""
@@ -690,7 +615,6 @@ class TestUpgradeEquipmentGoalPriority:
         (copper_axe → fishing_net, both owned) since that also makes the slot
         differ. relevant_actions must drop UnequipActions and every EquipAction
         except the one for the current upgrade target."""
-        from artifactsmmo_cli.ai.actions.equip import EquipAction
         from artifactsmmo_cli.ai.actions.unequip import UnequipAction
         gd = make_game_data(item_stats={
             "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon"),
@@ -958,21 +882,6 @@ class TestGatherMaterialsGoal:
         goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
         state = make_state(inventory={"copper_ore": 4}, bank_items={"copper_ore": 6})
         assert goal.is_satisfied(state) is True
-
-    def test_plannable_when_target_craft_skill_gated(self):
-        """LevelSkill epic P2: an under-skill craft target is NO LONGER pruned
-        by is_plannable. The planner admits a LevelSkill action, so
-        GatherMaterials(feather_coat) with gearcrafting 2 < 5 is reachable via a
-        grind->craft sequence — the former skill-gate fast-fail is retired. The
-        remaining fast-fail (currency-leaf affordability) does not fire here (no
-        currency-buy leaves in the feather_coat closure)."""
-        gd = make_game_data()
-        gd._item_stats["feather_coat"] = ItemStats(
-            code="feather_coat", level=5, type_="body_armor",
-            crafting_skill="gearcrafting", crafting_level=5)
-        goal = GatherMaterialsGoal(target_item="feather_coat", needed={"feather_coat": 1})
-        state = make_state(skills={"gearcrafting": 2}, inventory={}, bank_items={})
-        assert goal.is_plannable(state, gd) is True
 
     def test_plannable_when_target_craft_skill_met(self):
         gd = make_game_data()

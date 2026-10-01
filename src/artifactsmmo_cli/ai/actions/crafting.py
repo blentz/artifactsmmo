@@ -98,8 +98,8 @@ class CraftAction(Action):
         # skill_xp is a server-snapshot baseline field (see WorldState docstring);
         # the planner never simulates it locally — apply preserves it. The next
         # real API call returns the updated server values. Crafting does NOT
-        # raise skill levels in-search either; the planner-native skill grind is
-        # a separate LevelSkill action leg.
+        # raise skill levels in-search either; a skill grind is the walk's
+        # committed cycle (craft_plan_gen._decompose_grind).
         return dataclasses.replace(
             state,
             x=dest[0],

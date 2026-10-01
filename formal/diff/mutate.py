@@ -30,7 +30,6 @@ DOMINANCE_PARETO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "dominance_par
 COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
 PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "projection.py"
 GATHERING_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gathering.py"
-LEVEL_SKILL_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "level_skill.py"
 SKILL_GRINDABLE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "skill_grindable.py"
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 LOADOUT_PICKER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "loadout_picker.py"
@@ -175,7 +174,7 @@ CURRENCY_BUY_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_bu
 SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
-LEVEL_SKILL_EXPAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "level_skill_expand.py"
+LEVEL_SKILL_EXPAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grind_rung.py"
 GRIND_CYCLE_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "grind_cycle_census.py"
 PLAN_CACHE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "plan_cache.py"
 SHOULD_REPLAN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "should_replan.py"
@@ -1684,8 +1683,9 @@ SKILL_GRIND_SELECTION_MUTATIONS = [
 ]
 
 
-# The applicability predicate LevelSkill.is_applicable delegates to
-# (`skill_grindable`, Phase 2d-a), killed by the same differential.
+# The "an open rung exists" predicate (`skill_grindable`, Phase 2d). Killed by
+# tests/test_ai/test_skill_grindable.py (the LevelSkill differential that
+# used to kill them went with the macro, Phase 2d-c).
 SKILL_GRINDABLE_MUTATIONS = [
     # flip the under-target guard >= -> > : at exactly-at-target the action
     # becomes applicable, violating levelSkillApplicable (current < target).
@@ -1710,20 +1710,6 @@ SKILL_GRINDABLE_MUTATIONS = [
 ]
 
 
-# level_skill action mutations -- anchors for the REAL LevelSkill.apply /
-# is_applicable, bound to formal/diff/test_level_skill_diff.py, which encodes the
-# proved Lean mirror Formal.ActionApplicability.levelSkillApply / levelSkillApplicable
-# (Oracle keys level_skill_apply / level_skill_applicable). The diff test derives
-# the opaque grind-rung flag from the REAL skill_grind_target and feeds it to the
-# oracle, so a mutation to EITHER the under-target guard or the rung conjunct
-# diverges from the Lean model.
-LEVEL_SKILL_ACTION_MUTATIONS = [
-    # off-by-one on the optimistic apply -- sets skills[skill] := target + 1,
-    # diverging from levelSkillApply (:= target). Killed by every apply case.
-    ("level_skill: apply off-by-one (target -> target + 1)",
-     "        new_skills[self.skill] = self.target_level\n",
-     "        new_skills[self.skill] = self.target_level + 1\n"),
-]
 
 STRATEGIC_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategic_value.py"
 PURSUIT_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "pursuit_value.py"
@@ -3062,13 +3048,6 @@ GRIND_PRICING_MUTATIONS = [
      "GRIND_PRICING = replace(LEGACY, gather_skill_gate=False)",
      "GRIND_PRICING = LEGACY"),
 ]
-# Phase 2a: a LevelSkill grind decomposes before it searches. Killed by
-# tests/test_ai/test_decision_events.py.
-GRIND_DECOMPOSE_MUTATIONS = [
-    ("player: the grind never decomposes (always the nested A*)",
-     "        decomposed = decompose(ReachSkillGoal(action.skill, action.target_level), self.state,",
-     "        decomposed = None and decompose(ReachSkillGoal(action.skill, action.target_level), self.state,"),
-]
 # The route-driven producer on the one walk (Phase 2b gaps, restated for 2c-2b).
 # Killed by tests/test_ai/test_craft_plan_gen.py.
 DECOMPOSE_GAP_MUTATIONS = [
@@ -3146,7 +3125,7 @@ PLAYER_COMMITMENT_MUTATIONS = [
 # A grind cycle ends in its earning leg (Phase 2d-L3). Killed by
 # tests/test_ai/test_craft_plan_gen_level_skill.py.
 GRIND_RUNG_MUTATIONS = [
-    ("level_skill_expand: the grind never crafts its rung (gather rungs only)",
+    ("grind_rung: the grind never crafts its rung (gather rungs only)",
      "    rung = craft_rung(skill, state, game_data, ctx)\n    if rung is None:\n        rung = best_gather",
      "    rung = None\n    if rung is None:\n        rung = best_gather"),
 ]
@@ -8301,10 +8280,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_skill_grind_selection_diff.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, SKILL_GRIND_TARGET_MUTATIONS,
               "tests/test_ai/scenarios/test_grind_deep_chain.py", survivors)
-    run_group(LEVEL_SKILL_ACTION_SRC, LEVEL_SKILL_ACTION_MUTATIONS,
-              "formal/diff/test_level_skill_diff.py", survivors)
     run_group(SKILL_GRINDABLE_SRC, SKILL_GRINDABLE_MUTATIONS,
-              "formal/diff/test_level_skill_diff.py", survivors)
+              "tests/test_ai/test_skill_grindable.py", survivors)
     run_group(STRATEGIC_VALUE_SRC, STRATEGIC_VALUE_MUTATIONS,
               "formal/diff/test_strategic_value_diff.py", survivors)
     run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS + RECIPE_CLOSURE_YIELD_MUTATIONS,
@@ -8637,8 +8614,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_PRICING_MUTATIONS,
               "tests/test_ai/scenarios/test_fisher_cooking_rung.py", survivors)
-    run_group(PLAYER_SRC, GRIND_DECOMPOSE_MUTATIONS,
-              "tests/test_ai/test_decision_events.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, UPGRADE_DECOMPOSE_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, COMMITTED_PLAN_MUTATIONS,

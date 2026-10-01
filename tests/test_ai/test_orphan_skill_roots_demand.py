@@ -8,11 +8,11 @@ gathering skill (`gather_demand.gathering_skills`) is admitted only when
 `gather_demand` names it as UNMET demand from the roots already on offer.
 """
 
-from artifactsmmo_cli.ai.actions import level_skill
 from artifactsmmo_cli.ai.decisions.root import _gear_nameable_skills, _orphan_skill_roots
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.gather_demand import gather_demand
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_gather_demand import _gd
@@ -48,8 +48,7 @@ class TestGatheringSkillNeedsDemand:
         # Vacuity guard, conjunct 2: mining has a genuinely open, XP-positive
         # rung at 10->11 — `iron_rocks` gathers at mining@10, right at the
         # character's current level.
-        assert level_skill.LevelSkill(
-            skill="mining", target_level=11).is_applicable(state, gd) is True
+        assert skill_is_grindable("mining", 11, state, gd) is True
         # THE THIRD CONJUNCT: nothing demands mining, so `gather_demand` is
         # silent for it even with a root on offer (`iron_boots` needs
         # gearcrafting, not mining, at this character's level).
@@ -72,7 +71,7 @@ class TestGatheringSkillNeedsDemand:
         # which reads the PRIMARY drop map — `resource_drops_full` alone is
         # enough for the grind's obtainability walk (how
         # `iron_ore` clears its own obtainability check in `_gd()`), but not
-        # for the gather ARM of `LevelSkill.is_applicable` to name a drop.
+        # for the gather ARM of `skill_is_grindable` to name a drop.
         gd._resource_drops["copper_rocks"] = "copper_ore"
         gd._resource_skill["copper_rocks"] = ("mining", 1)
         return gd
@@ -81,8 +80,7 @@ class TestGatheringSkillNeedsDemand:
         """HAL's shape: a root's closure bottoms out in a leaf out of reach."""
         gd = self._gd_with_open_mining_floor()
         state = make_state(level=20, skills={"mining": 1, "cooking": 1})
-        assert level_skill.LevelSkill(
-            skill="mining", target_level=2).is_applicable(state, gd) is True
+        assert skill_is_grindable("mining", 2, state, gd) is True
         assert "mining" in _skills(state, gd, [_BOOTS])
 
     def test_an_admitted_skill_emits_the_demanded_level(self):
@@ -115,7 +113,6 @@ class TestGatheringSkillNeedsDemand:
         gd.world.workshop_locations["cooking"] = (0, 2)
         gd._crafting_recipes["cooked_gudgeon"] = {"gudgeon": 1}
         state = make_state(level=20, skills={"mining": 10, "cooking": 1})
-        assert level_skill.LevelSkill(
-            skill="cooking", target_level=2).is_applicable(state, gd) is True
+        assert skill_is_grindable("cooking", 2, state, gd) is True
         assert _orphan_demand(state, gd, []) == {}
         assert "cooking" in _skills(state, gd, [])

@@ -20,7 +20,6 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
@@ -401,34 +400,6 @@ class TestUnmetSkillGateFallsBack:
 
         assert result is None, "Unmet skill gate must fall back to A*"
 
-    def test_skill_gate_not_met_emits_applicable_levelskill(self):
-        """Unmet skill gate the character CAN grind open → the plan opens with
-        the grind's own first leg (Phase 2d-a: a sub-task, not the LevelSkill
-        macro), NOT a fall-back to A*. A mining resource gatherable now grants
-        mining xp, so the mining grind's first leg is that gather."""
-        gd = _gd_copper_ring()
-        # Wire copper_rocks as a mining resource gatherable NOW, so
-        # best_gather_resource_drop makes the LevelSkill applicable.
-        #
-        # Both levels are catalog-legal (2026-08-06): every real resource is
-        # level >= 1 and every real skill starts at 1, and `skill_xp_positive`
-        # treats level-0 content as "no level on file" and refuses it — the same
-        # unknown-content guard the combat gate carries. The old fixture used a
-        # level-0 resource at skill 0, a state the server cannot produce, and it
-        # became unreachable once the grind started requiring its content to pay
-        # xp. Raising copper_bar's requirement to mining 2 keeps the SKILL GATE
-        # UNMET (the point of the test) with a character at the real floor.
-        gd._resource_skill = {"copper_rocks": ("mining", 1)}
-        gd._item_stats["copper_bar"] = dataclasses.replace(
-            gd._item_stats["copper_bar"], crafting_level=2)
-        state = make_state(inventory={}, bank_items={},
-                           skills={"mining": 1, "jewelrycrafting": 5})
-        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
-        assert LevelSkill(skill="mining", target_level=2).is_applicable(state, gd)
-
-        result = decompose(goal, state, gd, _copper_ring_actions(), _ctx())
-
-        assert [repr(a) for a in (result or [])] == ["Gather(copper_rocks×1)"], result
 
     def test_skill_gate_met_does_not_fall_back(self):
         """Exact skill level equal to required → gate is met, generator fires."""

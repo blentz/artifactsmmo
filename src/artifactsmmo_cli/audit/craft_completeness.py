@@ -14,7 +14,6 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
@@ -23,7 +22,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
-from artifactsmmo_cli.ai.level_skill_expand import grind_rung_goal
+from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
@@ -241,19 +240,6 @@ def _advances_closure(action: Action, closure_items: frozenset[str],
         return action.item_code in closure_items
     if isinstance(action, WithdrawItemAction):
         return action.code in closure_items
-    if isinstance(action, LevelSkill):
-        # A skill-grind leg (the planner-native LevelSkill action) is
-        # directional iff it levels the crafting skill of SOME closure
-        # craftable — `recipe` itself or an intermediate whose own craft gate
-        # blocks the chain. That is exactly the gate the craft needs; executing
-        # the LevelSkill grinds toward it (one grind cycle per player expansion,
-        # LevelSkill epic P2). The 108 formerly-SKILL_PREREQUISITE under-skill
-        # cells now PASS on this leg instead of being classified.
-        return any(
-            (stats := game_data.item_stats(code)) is not None
-            and stats.crafting_skill == action.skill
-            for code in closure_items
-        )
     return False
 
 
@@ -289,7 +275,8 @@ def advances_a_closure_grind(recipe: str, first: Action, state: WorldState,
 
     Since Phase 2d-a the one walk opens such a gate as a sub-task and plans the
     grind's own legs (a gather or craft toward the rung `grind_rung_goal`
-    picks) where it used to emit the opaque `LevelSkill` macro. A leg is
+    picks) where it used to emit the opaque `LevelSkill` macro (deleted in
+    Phase 2d-c). A leg is
     directional when it advances that rung's closure, judged by the same
     `_advances_closure` rules as the recipe itself, or, when the rung is gated
     in turn, the grind that opens it (maple_syrup at cooking 35: the cooking
@@ -626,9 +613,9 @@ def classify_gap(recipe: str, cell: CraftCell,
     specific closure leaf blocks); SKILL_UNREACHABLE is recipe-level (the
     crafting skill is below level AND cannot be bootstrapped from here);
     PLANNER_BUG is the residual. A GRINDABLE under-skill cell is NOT a gap class:
-    the planner-native LevelSkill action (epic P2) plans grind→craft, so
-    `craft_cell_verdict` PASSes it on the LevelSkill first leg — it never reaches
-    this cascade (a grindable under-skill FAIL would be an actionable PLANNER_BUG,
+    the one walk opens the skill gate as a sub-grind, and the census PASSes the
+    grind's first leg (`advances_a_closure_grind`) — it never reaches this
+    cascade (a grindable under-skill FAIL would be an actionable PLANNER_BUG,
     not an expected limit):
 
     - EVENT_GATED is the most specific and most EXPECTED limit (a leaf whose
@@ -664,11 +651,11 @@ def classify_gap(recipe: str, cell: CraftCell,
             and not _skill_grindable(recipe, skill, cell.skill_level, game_data)):
         # Under-skill AND the skill cannot be bootstrapped from here (no in-band
         # rung to grind on) — a genuine skill dead end, SKILL_UNREACHABLE.
-        # A GRINDABLE under-skill cell is NOT classified here: the planner-native
-        # LevelSkill action (epic P2) plans grind→craft, so `craft_cell_verdict`
-        # PASSes it on the LevelSkill first leg and it never reaches classify. If
-        # a grindable under-skill cell DOES fail, the planner had LevelSkill in
-        # reach and should have used it — that is the actionable PLANNER_BUG
-        # residual (the fall-through below), not an expected skill gap.
+        # A GRINDABLE under-skill cell is NOT classified here: the walk opens
+        # the gate as a sub-grind and the census PASSes the grind's leg, so it
+        # never reaches classify. If a grindable under-skill cell DOES fail, the
+        # grind was in reach and should have been planned — that is the
+        # actionable PLANNER_BUG residual (the fall-through below), not an
+        # expected skill gap.
         return GapClass.SKILL_UNREACHABLE
     return GapClass.PLANNER_BUG

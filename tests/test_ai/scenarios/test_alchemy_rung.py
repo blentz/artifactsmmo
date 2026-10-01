@@ -45,13 +45,13 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.decisions.root import _gear_nameable_skills, _orphan_skill_roots
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -70,7 +70,7 @@ skill furthest behind the character, so it heads the orphan list."""
 RUNG = "small_health_potion"
 GEAR_NAMEABLE = frozenset({"gearcrafting", "weaponcrafting", "jewelrycrafting"})
 PLAN_BUDGET_SECONDS = 5.0
-"""Measured 0.3 s for the one `LevelSkill` plan below."""
+"""Measured 0.3 s for the one grind plan below."""
 
 _OFFERED = [ObtainItem(code=code, quantity=1) for code in
            ("nettle_leaf", "small_pearls", "birch_wood", "steel_bar")]
@@ -180,19 +180,18 @@ def test_alchemy_heads_the_orphan_list_for_this_cell(
 def test_the_alchemy_rung_is_open_and_is_a_potion(
         bundle_game_data: GameData, state: WorldState) -> None:
     """The rung the root stands on: production's own picker names an alchemy
-    recipe at or below the current level, and `LevelSkill(alchemy, C+1)` — the
-    orphan rule's second conjunct and the O1 census's verdict predicate — is
-    applicable through it."""
+    recipe at or below the current level, and `skill_is_grindable(alchemy, C+1)` —
+    the orphan rule's second conjunct and the O1 census's verdict predicate —
+    holds through it."""
     assert skill_grind_target(SKILL, state, bundle_game_data) == RUNG
     stats = bundle_game_data.item_stats(RUNG)
     assert stats is not None
     assert (stats.crafting_skill, stats.type_) == (SKILL, "utility")
     assert stats.crafting_level <= state.skills[SKILL]
-    assert LevelSkill(skill=SKILL, target_level=state.skills[SKILL] + 1
-                      ).is_applicable(state, bundle_game_data)
+    assert skill_is_grindable(SKILL, state.skills[SKILL] + 1, state, bundle_game_data)
 
 
-def test_the_alchemy_root_plans_a_levelskill(
+def test_the_alchemy_root_plans_a_grind_cycle(
         bundle_game_data: GameData, state: WorldState) -> None:
     """The root reaches an ACTION, which is what "routable" has to mean:
     `ReachSkillLevel(alchemy, C+1)` -> `objective_step_goal`'s skill arm ->

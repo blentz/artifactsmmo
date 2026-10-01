@@ -26,8 +26,7 @@ class PlanCache:
     """Holding of the current step's drop item at which the cursor may advance.
 
     A batched gather is a planner abstraction: the API gathers one unit per
-    call with a cooldown, so N units are N cycles (the LevelSkill
-    planner-abstraction / player-expansion idiom). The advance condition is a
+    call with a cooldown, so N units are N cycles. The advance condition is a
     STATE PREDICATE, not an execution counter, and that choice is load-bearing:
     a lucky multi-unit drop, another character draining the shared bank, or a
     bag that fills mid-batch all resolve without bookkeeping, and no mutable

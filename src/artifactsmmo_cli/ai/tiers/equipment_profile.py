@@ -58,7 +58,7 @@ def score_for_profile(stats: ItemStats, kind: ProfileKind) -> int:
 def is_utility_objective(root: MetaGoal) -> bool:
     """True iff pursuing `root` is a UTILITY-axis objective. Skill-level roots
     (the sole former utility-axis pursuit) were retired in epic P3 — under-skill
-    gear now grinds planner-natively via the LevelSkill action rather than a
+    gear's skill gate is now a sub-task the walk opens by a grind rather than a
     tree-level skill root — so no strategy root is utility-axis anymore. Every
     pursuit is COMBAT-axis; an item's own combat/utility nature is decided by
     the scorer, not the selector."""

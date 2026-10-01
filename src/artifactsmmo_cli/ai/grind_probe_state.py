@@ -6,12 +6,9 @@ weaponcrafting xp by owning a dagger, only by making another one. Every
 question a grind asks about a rung must be asked against a state where those
 copies do not exist.
 
-This lives in its own module because BOTH halves of the grind ask it and they
-import in opposite directions: `level_skill_expand` (the descent) already
-imported `tiers.skill_grind_target` (the selection), so the selection cannot
-import the descent back. Mirroring the projection into both would be the
-failure `ai/gather_skill_gate.py` exists to document — one predicate, two call
-sites, drift. One definition, two consumers.
+It lives in its own module because the grind's descent once asked it too (the
+`next_grind_goal` descent, retired in Phase 2d, imported the selection and
+could not be imported back); the selection is its one consumer now.
 
 WHY THE SELECTION NEEDS IT (live Lor + HAL, 2026-08-14): `skill_grind_target`
 ranked candidates by `acquire_steps` computed against ACTUAL holdings, so a

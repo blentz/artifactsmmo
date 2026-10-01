@@ -1,8 +1,8 @@
 """Differential lockstep: Python profile_for <-> Lean profileFor.
 
 Skill-level roots — the only former utility-axis pursuit — were retired in epic
-P3 (under-skill gear grinds planner-natively via the LevelSkill action, not a
-tree-level skill root), so `profile_for` is now a constant COMBAT for every root
+P3 (an under-skill gear's skill gate is a sub-task the walk opens by a grind,
+not a tree-level skill root), so `profile_for` is now a constant COMBAT for every root
 and adequacy. The mirror stays: the harness imports the REAL profile_for from
 src and checks it agrees with Lean profileFor over the remaining root kinds."""
 

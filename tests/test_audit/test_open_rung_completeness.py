@@ -10,7 +10,7 @@ things:
   WALLED cells, so a sweep that quietly discovered nothing fails instead of
   passing;
 * its verdict must be production's — `test_a_cell_is_open_iff_an_arm_offers_a_rung`
-  cross-reads `LevelSkill.is_applicable` against the census's own catalogue
+  cross-reads `skill_is_grindable` against the census's own catalogue
   decomposition on all 344 cells, so the two cannot drift;
 * it must be able to FAIL — `test_the_gate_fires_when_a_routed_skill_loses_its_rung`
   closes one routed skill through the production seam and asserts the residual
@@ -32,9 +32,9 @@ from pathlib import Path
 import pytest
 
 from artifactsmmo_cli.ai import skill_grindable as skill_grindable_module
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 from artifactsmmo_cli.audit import open_rung_completeness as orc
 from artifactsmmo_cli.audit.open_rung_completeness import (
@@ -76,8 +76,7 @@ def _closed_cells(game_data: GameData, *, derive_combat_stats: bool | None) -> i
             game_data)
         for skill in SKILL_NAMES:
             level = state.skills[skill]
-            if not LevelSkill(skill=skill, target_level=level + 1
-                              ).is_applicable(state, game_data):
+            if not skill_is_grindable(skill, level + 1, state, game_data):
                 closed += 1
     return closed
 
@@ -111,7 +110,7 @@ def test_a_cell_is_open_iff_an_arm_offers_a_rung(
     SAME answer, on every cell.
 
     ONLY THE `obtainable` HALF IS A REAL PARITY CHECK, and the docstring says
-    so rather than implying more. `LevelSkill.is_applicable` is
+    so rather than implying more. `skill_is_grindable` is
     `best_gather_resource_drop(...) is not None or has_grind_target(...)`, and
     `RungInventory.gather_rung` is literally that same
     `best_gather_resource_drop` call — that disjunct cannot disagree by
@@ -181,8 +180,8 @@ def test_the_gate_fires_when_a_routed_skill_loses_its_rung(
     planner cannot serve.
 
     The seam is `skill_grindable.has_grind_target`, the name
-    `skill_is_grindable` (the one open-rung predicate, which
-    `LevelSkill.is_applicable` and the walk's skill sub-task both ask) calls. Only jewelrycrafting is closed,
+    `skill_is_grindable` (the one open-rung predicate, which the walk's skill
+    sub-task and the root walk both ask) calls. Only jewelrycrafting is closed,
     so the other seven skills keep answering normally and the residual cannot
     come from a blanket outage. Jewelrycrafting is not a gathering skill, so
     the gather arm is already None and this one patch closes the cell.

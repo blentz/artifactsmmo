@@ -281,9 +281,7 @@ open Formal.PriorityBand
 #check @Formal.PlannerAdmissibility.fScore_monotone_along_edge_of_consistent -- LOAD-BEARING: consistency ⇒ f does not drop across a successor edge (false without hcon)
 #check @Formal.PlannerAdmissibility.fScore_monotone_along_path -- consistency ⇒ f non-decreasing along any path from the start
 #check @Formal.PlannerAdmissibility.consistent_closedSet_preserves_optimal -- admissible+consistent ⇒ A*-with-visited optimal on both fronts (front 2 via path-monotonicity)
-#check @Formal.PlannerAdmissibility.skillGrind_h_admissible      -- skill-grind landmark heuristic IS admissible
-#check @Formal.PlannerAdmissibility.skillGrind_h_consistent      -- skill-grind landmark heuristic IS consistent
-#check @Formal.PlannerAdmissibility.skillGrind_closedSet_preserves_optimal -- whole closed-set contract discharged on skill-grind instance
+#check @Formal.PlannerAdmissibility.RHP_closedSet_preserves_optimal -- whole closed-set contract discharged on the RestoreHP instance with the planner's real h ≡ 0
 -- ArbiterSelect required roles:
 #check @Formal.ArbiterSelect.select_pure_guard_wins              -- sticky-safety: head-guard plannable ⇒ guard returned regardless of committed
 #check @Formal.ArbiterSelect.select_pure_sticky_idempotent       -- sticky-idempotence: no guards ∧ committed plans ⇒ committed returned
@@ -798,13 +796,6 @@ open Formal.PriorityBand
 #check @Formal.ActionApplicability.winnable_inWindow_imp_fightApplicable_nonvacuous
 #check @Formal.ActionApplicability.restApplicable_iff_subfull
 #check @Formal.ActionApplicability.equipApplicable_iff
--- LevelSkill apply/applicability (LevelSkill epic Phase 1):
-#check @Formal.ActionApplicability.levelSkillApplicable_iff
-#check @Formal.ActionApplicability.levelSkillApplicable_false_of_at_target
-#check @Formal.ActionApplicability.levelSkillApplicable_false_of_no_rung
-#check @Formal.ActionApplicability.levelSkillApply_sets_target
-#check @Formal.ActionApplicability.levelSkillApply_preserves_other
-#check @Formal.ActionApplicability.levelSkillApplicable_under_with_rung_witness
 
 -- StepDispatch (Phase G5):
 #check @Formal.StepDispatch.stepDispatch_total

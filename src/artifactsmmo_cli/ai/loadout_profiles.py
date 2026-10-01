@@ -6,7 +6,7 @@ Parse contract for _recent_task_keys
 Only two goal-repr patterns are recognised (narrow on purpose):
 
   ``GrindCharacterXP(<monster>)``  →  ``combat:<monster>``
-  ``LevelSkill(<skill>-><n>)``     →  ``gather:<skill>``
+  ``ReachSkill(<skill>-><n>)``     →  ``gather:<skill>``
 
 All other selected_goal reprs (PursueTask, GatherMaterials, …) are silently
 skipped: they do not reliably encode a task_key without game_data (PursueTask
@@ -25,7 +25,7 @@ from artifactsmmo_cli.ai.world_state import WorldState
 RECENT_PROFILE_WINDOW = 50  # cycles; mirrors the learning windows in LearningStore
 
 _GRIND_RE = re.compile(r"^GrindCharacterXP\((.+)\)$")
-_SKILL_RE = re.compile(r"^LevelSkill\((\w+)->")
+_SKILL_RE = re.compile(r"^ReachSkill\((\w+)->")
 
 
 def combat_key(monster_code: str) -> str:

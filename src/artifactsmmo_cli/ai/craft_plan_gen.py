@@ -1,5 +1,5 @@
 """The route-driven next-action producer: `decompose(goal, ...)`, used by the
-arbiter and by a `LevelSkill`'s grind expansion alike.
+arbiter.
 
 Phase 2c-2 of docs/PLAN_decision_architecture_redesign.md. A plan is built from
 THE ONE WALK (`ObtainModel.walk` over `decompose_core`, proved in
@@ -50,7 +50,7 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
-from artifactsmmo_cli.ai.level_skill_expand import grind_rung_goal
+from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
@@ -79,9 +79,8 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     decomposing its recipe closure over the obtain model's routes, or None when
     decomposition cannot serve it (the caller may then search).
 
-    The ONE entry point every caller uses, so the arbiter's candidate planning
-    and a `LevelSkill`'s grind expansion ask the same producer with the same
-    source map (Phase 2 of docs/PLAN_decision_architecture_redesign.md). The
+    The ONE entry point every caller uses, so every candidate the arbiter
+    plans asks the same producer with the same source map (Phase 2 of docs/PLAN_decision_architecture_redesign.md). The
     map is built once per call, over the goal's recipe closure, and only for a
     `GatherMaterialsGoal`: every other goal shape short-circuits
     `generate_next_craft_action` immediately. A `CraftPotionsGoal` is served
@@ -393,8 +392,8 @@ def _finish(mapped: list[Action], state: WorldState, game_data: GameData,
     A*, which sequences the slot-freeing relief (DepositAll/Recycle/Sell)
     before the leg, or finds no plan honestly.
 
-    `mapped` is always non-empty at both call sites (a LevelSkill leg, or a
-    non-empty `craft_plan_full` plan)."""
+    `mapped` is always non-empty at every call site (a non-empty walk or
+    `craft_plan_full` plan)."""
     result = _with_rearm(mapped, state, game_data)
     if not result[0].is_applicable(state, game_data):
         return _decline(declined, f"first_leg_inapplicable:{result[0]!r}")

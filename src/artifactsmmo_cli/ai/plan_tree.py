@@ -1,9 +1,8 @@
 """Pure builder: the chosen strategy root's prerequisite tree for the TUI plan
 screen. Recurses prerequisites() (material ObtainItem edges down to raw gathers;
-skill grinds are planner-native LevelSkill legs, not prerequisite nodes, since
-epic P3); non-chosen ranked roots are leaf stubs; the current step gets a
-synthetic serve child sourced from the running goal + action. No planning or
-I/O."""
+a skill grind is a goal of its own, not a prerequisite node); non-chosen
+ranked roots are leaf stubs; the current step gets a synthetic serve child
+sourced from the running goal + action. No planning or I/O."""
 
 from artifactsmmo_cli.ai.cycle_snapshot import PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData
@@ -79,8 +78,7 @@ def _label(node: MetaGoal) -> tuple[str, str]:
 def _expand(node: MetaGoal, decision: StrategyDecision, state: WorldState,
             game_data: GameData, serve_step: str | None,
             visited: frozenset[MetaGoal], depth: int,
-            ctx: SelectionContext = NO_PROFILE_CONTEXT,
-            grind_children: tuple[PlanTreeNode, ...] = ()) -> PlanTreeNode:
+            ctx: SelectionContext = NO_PROFILE_CONTEXT) -> PlanTreeNode:
     label, kind = _label(node)
     is_current = node == decision.chosen_step
     status = "current" if is_current else (
@@ -97,11 +95,10 @@ def _expand(node: MetaGoal, decision: StrategyDecision, state: WorldState,
         for prereq in prerequisites(node, state, game_data, ctx):
             children.append(
                 _expand(prereq, decision, state, game_data, serve_step, nxt,
-                       depth + 1, ctx, grind_children))
+                       depth + 1, ctx))
     if is_current and serve_step:
         children.append(PlanTreeNode(
-            key=f"step:{node!r}", label=serve_step, kind="step", status="current",
-            children=grind_children))
+            key=f"step:{node!r}", label=serve_step, kind="step", status="current"))
     return PlanTreeNode(key=repr(node), label=label, kind=kind, status=status,
                         children=tuple(children))
 
@@ -131,7 +128,6 @@ def _supply_node(supply_target: tuple[str, int, int] | None,
 def build_plan_tree(decision: StrategyDecision, state: WorldState,
                     game_data: GameData, serve_step: str | None,
                     ctx: SelectionContext = NO_PROFILE_CONTEXT,
-                    grind_children: tuple[PlanTreeNode, ...] = (),
                     role: str | None = None,
                     supply_target: tuple[str, int, int] | None = None,
                     ) -> tuple[PlanTreeNode, ...]:
@@ -143,11 +139,6 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
     `prerequisites` so the TUI tree shows the SAME descent the planner
     actually takes (one-obtain-model epic, Task 5) rather than a stale
     from-scratch recipe descent.
-
-    `grind_children` are the runtime skill-grind legs the player captured this
-    cycle (empty unless the executed action was a LevelSkill); they graft onto
-    the current step's synthetic serve child so the tree shows the whole action
-    chain below a LevelSkill step instead of stopping at it.
 
     `role` and `supply_target` are this character's cross-character
     specialization state (`GamePlayer._role` / `._supply_target`, the same two
@@ -162,7 +153,7 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
     if decision.chosen_root is None:
         return ()
     chosen_node = _expand(decision.chosen_root, decision, state, game_data,
-                          serve_step, frozenset(), 0, ctx, grind_children)
+                          serve_step, frozenset(), 0, ctx)
     chosen_repr = repr(decision.chosen_root)
     # Show the chosen root's OWN resolution reason — alternatives already show
     # theirs, so without this the chosen root is the only node with no

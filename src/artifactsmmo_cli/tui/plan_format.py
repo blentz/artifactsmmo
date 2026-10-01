@@ -2,8 +2,6 @@
 
 import re
 
-from artifactsmmo_cli.ai.cycle_snapshot import PlanTreeNode
-
 _OBTAIN_RE = re.compile(r"ObtainItem\(code='([^']+)', quantity=(\d+)\)")
 
 _SUPPLY_RE = re.compile(r"\('([^']+)', (\d+), (\d+)\)")
@@ -12,18 +10,6 @@ _SUPPLY_RE = re.compile(r"\('([^']+)', (\d+), (\d+)\)")
 The same idiom `_OBTAIN_RE` already uses on `chosen_root`: the snapshot carries
 a `repr` (its trace twin is JSON and must stay a string), and the one reader
 that needs the parts takes them back out here rather than in a widget."""
-
-
-def grind_chain_lines(nodes: tuple[PlanTreeNode, ...], indent: int = 0) -> list[str]:
-    """Flatten a grind-expansion node tuple into dim, indented Rich-markup log
-    lines — one per leg, each leg's children nested a level deeper — so the log
-    shows the whole action chain a LevelSkill step expands into."""
-    lines: list[str] = []
-    for node in nodes:
-        prefix = "  " * (indent + 1)
-        lines.append(f"[dim]{prefix}↳ {node.label}[/dim]")
-        lines.extend(grind_chain_lines(node.children, indent + 1))
-    return lines
 
 
 def parse_supply_target(target_repr: str) -> tuple[str, int, int] | None:

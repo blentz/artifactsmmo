@@ -9,9 +9,9 @@ inapplicable (currency_on_hand < price·qty) and GatherMaterials' action set has
 task-earning action, so the currency cannot rise mid-search. Affordability is
 therefore CONSTANT across the plan. Pruning loses no satisfiable plan. (This is
 now the ONLY fast-fail arm of `is_plannable`: the former crafting-skill gate was
-retired in the LevelSkill epic P2, since the planner can now grind the skill
-mid-plan via a `LevelSkill` action — a crafting skill level is NOT constant
-across the plan the way a currency balance is.)
+retired in the LevelSkill epic P2, since a skill gate is a sub-task the plan
+opens by a grind (since Phase 2d, the decomposition walk's) — a crafting skill
+level is NOT constant across the plan the way a currency balance is.)
 
 Lean core only — no mathlib.
 -/

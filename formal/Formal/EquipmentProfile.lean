@@ -13,7 +13,7 @@ inductive ProfileKind | combat | utility
 deriving DecidableEq, Repr
 
 /-- Utility axis retired in epic P3: skill-level roots — the only former
-utility-axis pursuit — grind planner-natively via the LevelSkill action, so no
+utility-axis pursuit — are a sub-task the walk opens by a grind, so no
 strategy root is utility-axis anymore. `is_utility_objective` is a constant
 `false`. -/
 def isUtilityObjective : RootCategory → Bool

@@ -8,7 +8,6 @@ cannot."""
 from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.actions.factory import build_actions
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.craft_plan_gen import DECOMPOSE_POLICY, decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -50,20 +49,6 @@ def _gd() -> GameData:
 
 
 class TestASkillGateIsASubTask:
-    def test_the_gate_expands_into_the_grinds_first_leg(self) -> None:
-        """widget needs gearcrafting 5; the character has 1. The gearcrafting
-        grind's rung is trinket (1 gear_ore), so the plan is that grind's cycle
-        — the gather that feeds it, then the trinket that earns — and stops
-        there: the grind is a sub-task of its own."""
-        gd = _gd()
-        state = make_state(inventory={}, bank_items={}, skills={"gearcrafting": 1})
-        actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
-                                bank_accessible=True, task_exchange_min_coins=0)
-
-        result = decompose(GatherMaterialsGoal("widget", {"widget": 1}), state, gd, actions, _ctx())
-
-        assert [repr(a) for a in (result or [])] == ["Gather(gear_ore_rocks×1)", "Craft(trinket×1)"], result
-        assert not any(isinstance(a, LevelSkill) for a in result or [])
 
     def test_a_gate_no_grind_can_open_is_infeasible(self) -> None:
         """Without a craftable in-skill rung (trinket gone) and no gather arm

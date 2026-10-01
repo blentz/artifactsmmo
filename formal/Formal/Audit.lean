@@ -223,9 +223,7 @@ open Formal.PriorityBand
 #print axioms Formal.PlannerAdmissibility.fScore_monotone_along_edge_of_consistent
 #print axioms Formal.PlannerAdmissibility.fScore_monotone_along_path
 #print axioms Formal.PlannerAdmissibility.consistent_closedSet_preserves_optimal
-#print axioms Formal.PlannerAdmissibility.skillGrind_h_admissible
-#print axioms Formal.PlannerAdmissibility.skillGrind_h_consistent
-#print axioms Formal.PlannerAdmissibility.skillGrind_closedSet_preserves_optimal
+#print axioms Formal.PlannerAdmissibility.RHP_closedSet_preserves_optimal
 #print axioms Formal.ArbiterSelect.select_pure_guard_wins
 #print axioms Formal.ArbiterSelect.select_pure_sticky_idempotent
 #print axioms Formal.ArbiterSelect.select_pure_no_sticky_preempt_lower_band
@@ -677,12 +675,6 @@ open Formal.PriorityBand
 #print axioms Formal.ActionApplicability.winnable_inWindow_imp_fightApplicable_nonvacuous
 #print axioms Formal.ActionApplicability.restApplicable_iff_subfull
 #print axioms Formal.ActionApplicability.equipApplicable_iff
-#print axioms Formal.ActionApplicability.levelSkillApplicable_iff
-#print axioms Formal.ActionApplicability.levelSkillApplicable_false_of_at_target
-#print axioms Formal.ActionApplicability.levelSkillApplicable_false_of_no_rung
-#print axioms Formal.ActionApplicability.levelSkillApply_sets_target
-#print axioms Formal.ActionApplicability.levelSkillApply_preserves_other
-#print axioms Formal.ActionApplicability.levelSkillApplicable_under_with_rung_witness
 #print axioms Formal.StepDispatch.stepDispatch_total
 #print axioms Formal.StepDispatch.stepDispatch_deterministic
 #print axioms Formal.StepDispatch.dispatch_obtain_equippable_goes_to_upgrade

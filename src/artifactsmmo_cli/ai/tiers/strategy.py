@@ -143,7 +143,7 @@ earned by fighting. Gold is RENEWABLE here, as it always was for this test
 however far the pocket falls short, which is exactly what near-term
 attainability (pocket gold only) must not say. No GE fill: goal emission fills
 an order only as the cheaper venue for an item an NPC also sells (D-E). No
-skill gate: an under-skill craft grinds through `LevelSkill`."""
+skill gate: an under-skill craft's gate is a sub-task the walk opens by a grind."""
 
 
 def _producible(code: str, state: WorldState, game_data: GameData) -> bool:

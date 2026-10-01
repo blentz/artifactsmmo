@@ -378,8 +378,7 @@ class TestRecycleAsAcquisition:
 
 def _forged_plate_gd() -> GameData:
     """forged_plate: craft-only, gearcrafting-gated at level 20, built from a
-    gatherable iron_ore leaf (mirrors test_forced_craft_grind._gd /
-    test_goals._fire_bow_gd — craft-only, skill-gated, unowned target). No
+    gatherable iron_ore leaf (craft-only, skill-gated, unowned target). No
     resource drop / monster drop / NPC vendor exists for forged_plate ITSELF,
     so `obtain_sources` names no non-CRAFT route for it and the grind is
     forced whenever the skill gate is unmet."""

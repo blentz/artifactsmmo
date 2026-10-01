@@ -44,7 +44,6 @@ from artifactsmmo_cli.ai.actions.ge_fill import GeFillBuyOrderAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
 from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
@@ -63,18 +62,16 @@ from artifactsmmo_cli.ai.constants import (
     GE_ORDER_REFRESH_INTERVAL_SECONDS,
     STUCK_DETECTOR_WINDOW,
 )
-from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.currency_turnin import TurnIn, fleet_total_pure, turn_in_ready_pure
 from artifactsmmo_cli.ai.cycle_snapshot import (
     CycleSnapshot,
     GoalAttempt,
     GoalRankEntry,
     ObjectiveUnplannable,
-    PlanTreeNode,
     RoleChange,
     RootScoreView,
 )
-from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog, search_detail
+from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings
@@ -86,16 +83,13 @@ from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
 from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
-from artifactsmmo_cli.ai.grind_expansion import grind_leg_nodes
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.xp_gain import xp_gained
-from artifactsmmo_cli.ai.level_skill_expand import next_grind_goal
 from artifactsmmo_cli.ai.loadout_profiles import (
     active_profile_gear,
     combat_key,
@@ -106,7 +100,7 @@ from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.plan_tree import build_plan_tree
-from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner, _state_key
+from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost  # noqa: F401  (test import target)
 from artifactsmmo_cli.ai.player_helpers import format_plan as _format_plan
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
@@ -396,26 +390,16 @@ class GamePlayer:
         # `_own_unmet_demand`.
         self._last_blocked_target: str | None = None
         # Per-cycle SelectionContext, computed ONCE per cycle at the
-        # `_selection_context` seam and threaded into `decide`/`next_grind_goal`/
+        # `_selection_context` seam and threaded into `decide`/`decompose`/
         # `build_plan_tree` so the tier descent stops at a node with any ready
         # `ai/obtain_sources` route instead of falling into its recipe
         # (one-obtain-model epic, Task 5; originally the recycle-as-acquisition
         # epic's bespoke `recoverable` map). `NO_PROFILE_CONTEXT` until the first
         # decide/plan cycle runs.
         self._last_ctx: SelectionContext = NO_PROFILE_CONTEXT
-        # The runtime skill-grind legs captured while executing the current
-        # cycle's LevelSkill step (empty on non-grind cycles). Surfaced to the
-        # TUI plan tree + log so the whole action chain below LevelSkill shows.
-        self._last_grind_expansion: tuple[PlanTreeNode, ...] = ()
-        # The leg a skill grind actually executed this cycle. The cycle's
-        # observers see the outer LevelSkill, so this is how a Fight leg's
-        # captured transcript reaches them (see `_fight_of`). Cleared alongside
-        # `_last_grind_expansion` on every non-recursive grind.
-        self._last_grind_leg: Action | None = None
         # Why the last executed action failed. `outcome` alone collapses
-        # distinct dead-ends onto one label — `error:other` covers all three
-        # LevelSkill grind guards — so the message rides the trace too.
-        # Cleared at the start of every `_execute`, like the grind expansion.
+        # distinct dead-ends onto one label, so the message rides the trace too.
+        # Cleared at the start of every `_execute`.
         self._last_error: str | None = None
         # Set only by `play --all` children, which share one per-IP budget.
         # A lone `play <character>` is unthrottled, exactly as before.
@@ -1530,176 +1514,6 @@ class GamePlayer:
         finally:
             self.tracer.close()
 
-    def _execute_level_skill(self, action: LevelSkill,
-                             client: AuthenticatedClient,
-                             _grinding: frozenset[str] = frozenset()
-                             ) -> tuple[WorldState, str]:
-        """Run ONE grind cycle for a LevelSkill plan step: pick the rung, plan the
-        skill_grind GatherMaterials goal, execute its first leg. The next cycle's
-        replan re-derives the remaining grind (one-leg-per-cycle idiom); when the
-        real skill reaches target, is_applicable turns False and the plan advances
-        to the gated craft.
-
-        The no-rung guard is for a state LevelSkill.is_applicable already
-        excludes, so it raises rather than swallow.
-
-        The empty-sub-plan guard is NOT "unreachable": the planner also returns
-        [] when it exhausts its wall-clock budget on a plannable goal. That made
-        a search blow-up indistinguishable from a logic error, and since the raise
-        degrades to an `error:other` cycle that changes no state, the next replan
-        re-picked the same LevelSkill — a zero-progress LIVELOCK (live Robby
-        2026-07-12: GatherMaterials(fire_staff) hit the 1M-node cap, every cycle,
-        forever). The blow-up is fixed at the source — `next_grind_goal` descends
-        to the rung's actionable_step, a FLAT gather that plans in ~30 nodes —
-        so the two arms below name which fault actually occurred.
-
-        That claim was once written here as settled, and it was not. The descent
-        only holds while the deficit it descends on is REAL, and the rung's own
-        holdings kept leafing it: live C3P0 2026-08-01 banked its own grind
-        rungs, `actionable_step` stopped at the rung, and the goal reverted to
-        the full from-scratch chain — 109 timeout cycles across 9.5h with zero
-        character progress, ending in a StuckExit. `next_grind_goal` now runs
-        the descent against a state with the rung's carried/banked/worn copies
-        removed (`level_skill_expand._grind_probe_state`), which is what makes
-        the deficit unconditionally real. Both arms below stay, and each says
-        which fault it is: a repeat is caught by the repeated-action-failure
-        StuckDetector rather than being silently swallowed here.
-
-        The StuckDetector is a WEAK backstop for this shape and must not be
-        relied on as the fix. It keys on `repr(action)`, so two gear roots
-        grinding two different skills split the failure count: on the C3P0 run
-        the max same-action failures in any 20-cycle window was exactly 10, the
-        threshold, while COMBINED LevelSkill failures in that window were 20.
-        Suppressing one root just handed the arbiter its symmetric twin.
-
-        Recursion is bounded by a cycle guard. A grind rung can need a cross-skill
-        under-level intermediate (real: lizard_skin_armor gearcrafting-25 needs
-        dead_wood_plank woodcutting-30), so sub_plan[0] may itself be a LevelSkill
-        for ANOTHER skill. We recurse into _execute_level_skill directly (not via
-        _execute) so the _grinding set of skills already in the current recursion
-        chain threads through; a cyclic skill-dependency is detected and raised
-        rather than looping. Recursion depth is thus <= the number of distinct
-        skills.
-        """
-        assert self.state is not None and self.game_data is not None
-        # Clear last cycle's captured legs on the top-level grind call only;
-        # recursive calls (non-empty _grinding) build on the same field. If a
-        # guard below raises before legs are captured, the TUI shows no chain
-        # for this errored grind cycle rather than a stale one.
-        if not _grinding:
-            self._last_grind_expansion = ()
-            self._last_grind_leg = None
-        if action.skill in _grinding:
-            raise RuntimeError(
-                f"cyclic skill-grind dependency for {action.skill}: "
-                f"{sorted(_grinding)}")
-        goal = next_grind_goal(action.skill, self.state, self.game_data,
-                               self._last_ctx)
-        if goal is None:
-            raise RuntimeError(
-                f"LevelSkill({action.skill}) has no grind rung at execution — "
-                "is_applicable should have gated this")
-        actions = self._build_actions()
-        # DECOMPOSITION FIRST (Phase 2 of docs/PLAN_decision_architecture_redesign.md):
-        # the same route-driven producer the arbiter asks, so a grind no longer
-        # runs a nested A* when the rung's closure decomposes. Measured live
-        # 2026-09-27 over 40 grind goals (5 characters x 8 skills): decomposition
-        # answered every one it served in <= 10 ms, while the nested search
-        # timed out at 15 s with NO plan on four of them (Robby's three
-        # hardwood_plank rungs, 130-173k nodes, which decomposition served with a
-        # withdraw). The search stays, instrumented, for what decomposition
-        # cannot serve yet (a huge-quantity cooking rung, a gate-blocked leaf).
-        declined: list[str] = []
-        # The same grind decomposition the arbiter's ReachSkill candidate asks
-        # (Phase 2d-a): the rung's legs, sub-task grinds expanded, and the
-        # fight-leg heal prep.
-        decomposed = decompose(ReachSkillGoal(action.skill, action.target_level), self.state,
-                               self.game_data, actions, self._last_ctx, declined)
-        for reason in declined:
-            self._events.note(Mechanism.DECOMPOSE_DECLINE, repr(goal), reason)
-        if decomposed is not None:
-            sub_plan = decomposed
-            self._events.note(Mechanism.FAST_PATH, repr(goal), f"grind plan_len={len(sub_plan)}")
-        else:
-            # No explicit budget: the grind sub-plan gets the same single budget
-            # (`planner._SEARCH_BUDGET_SECONDS`) every arbiter candidate gets.
-            sub_plan = self.planner.plan(self.state, goal, actions, self.game_data)
-            self._events.note(Mechanism.GRIND_SEARCH, repr(goal),
-                              search_detail(self.planner.last_stats, len(sub_plan)))
-        if not sub_plan:
-            # Two very different faults land here, and conflating them cost a
-            # 9.5h live livelock its diagnosis (C3P0 2026-08-01): the message
-            # said "no leg", which reads as a DEAD END, while all 109 failures
-            # were in fact budget TIMEOUTS on a plannable goal. Name the fault
-            # and carry the goal + search stats, so a repeat is readable from
-            # the trace alone instead of needing an offline bisect.
-            stats = self.planner.last_stats
-            detail = (f"goal={goal!r} nodes={stats.nodes_explored} "
-                      f"depth={stats.max_depth_reached}")
-            self._mark_grind_failure_doomed()
-            if stats.timed_out:
-                raise RuntimeError(
-                    f"LevelSkill({action.skill}) grind sub-plan EXHAUSTED the "
-                    f"{_SEARCH_BUDGET_SECONDS}s planning budget — {detail}. The "
-                    "goal is plannable but too expensive to search from here; "
-                    "this is a search blow-up, not a dead end.")
-            raise RuntimeError(
-                f"LevelSkill({action.skill}) grind produced no leg — {detail}. "
-                "The goal is a genuine dead end: the search space was "
-                "exhausted without reaching it.")
-        first = sub_plan[0]
-        if isinstance(first, LevelSkill):
-            result = self._execute_level_skill(first, client,
-                                               _grinding | {action.skill})
-            self._last_grind_expansion = grind_leg_nodes(
-                action.skill, sub_plan, self._last_grind_expansion)
-            return result
-        self._last_grind_expansion = grind_leg_nodes(action.skill, sub_plan)
-        # Stash the leg BEFORE executing it: a Fight leg sets its own
-        # `last_fight` before raising on a loss, so recording the leg first is
-        # what lets a grind-embedded defeat reach the trace too.
-        self._last_grind_leg = first
-        # `_execute_level_skill` reports (state, outcome) only — the LEG's
-        # executed action is discarded here on purpose: the outer LevelSkill
-        # is what gets recorded, never the leg (see `_execute`'s docstring).
-        leg_state, leg_outcome, _leg_executed = self._execute(first, client)
-        return leg_state, leg_outcome
-
-    def _mark_grind_failure_doomed(self) -> None:
-        """Mark the goal whose plan contains this failing LevelSkill step as
-        doomed, so the arbiter stops re-picking it every cycle.
-
-        A grind expansion that produces no leg degrades to an `error:other`
-        cycle that changes NO state, so the next replan re-derives the identical
-        decision and the bot repeats the identical failing action forever: live
-        Robby 2026-08-03 ran the same `LevelSkill(jewelrycrafting->15)` failure
-        for 8 of 16 consecutive cycles, and live C3P0 2026-08-01 for 9.5h.
-        Nothing dampened it, because the DOOMED MEMO only ever sees a planning
-        failure and this goal PLANS fine — it is the plan's LevelSkill STEP that
-        cannot be expanded. Marking here is the missing edge: the memo's key is
-        the plannability signature (character level + skill levels), exactly the
-        thing an errored, state-preserving cycle cannot change, so the entry
-        stands until the character actually levels — and self-clears the moment
-        it does, or when the escalating re-probe window (20 -> 160 cycles)
-        elapses. The StuckDetector's repeated-action-failure recovery stays as
-        the backstop it is; it is not one (it keys on `repr(action)`, so two
-        gear roots grinding two skills split the count below its threshold).
-
-        Both fault arms mark. A dead end is conclusive by construction, and a
-        cheap-budget TIMEOUT is just as conclusive here: unlike the arbiter's
-        two-pass planning, the grind expansion has no full-budget escalation to
-        stay available for — one shot per cycle is all it ever gets.
-
-        No plan cache means no goal to attribute the failure to (a `plan_once`
-        diagnostic run, which executes nothing); the raise below still reports
-        the fault.
-        """
-        assert self.state is not None
-        if self._plan_cache is not None:
-            self._arbiter._memo.mark(self._plan_cache.goal_repr, self.state,
-                                     self._cycle_counter)
-            self._events.note(Mechanism.GRIND_DOOM, self._plan_cache.goal_repr)
-
     def _claim_bank_stock(self, action: WithdrawItemAction) -> None:
         """Announce to siblings that this withdraw is taking `action.quantity`
         of `action.code` out of the shared bank. No-op without a coordination
@@ -1751,13 +1565,6 @@ class GamePlayer:
         73-unit `actual_cooldown_seconds` because the caller kept its own
         pre-batch reference; 1733 of 5383 (32.2%) craft rows with drops
         disagreed this way.
-
-        The LevelSkill dispatch below is the one exception, BY DESIGN: it
-        always hands back the LevelSkill `action` parameter itself, never the
-        grind leg `_execute_level_skill` actually executed. That is deliberate
-        and unrelated to the craft-quantity fix — see `_execute_level_skill`'s
-        docstring and `_fight_of` for why a grind leg must still be reported
-        under its outer LevelSkill.
         """
         assert self.state is not None
         if isinstance(action, CraftAction):
@@ -1778,20 +1585,6 @@ class GamePlayer:
                     action = replace(action, quantity=feasible)
         self._last_error = None
         try:
-            # LevelSkill is player-expanded (never LevelSkill.execute, which
-            # raises). Dispatched INSIDE the try so its grind dead-end guards
-            # (no rung / empty sub-plan — reachable by an ordinary planner
-            # timeout returning [] — / cyclic skill dep) DEGRADE to an
-            # `error:*` cycle via `except RuntimeError` below instead of
-            # propagating out of run() and crashing the session.
-            if isinstance(action, LevelSkill):
-                # Report the outer LevelSkill, not the grind leg it ran — see
-                # this method's docstring. `_execute_level_skill` still
-                # returns a plain (state, outcome) pair; its own internal
-                # recursive calls to `_execute` discard the leg's executed
-                # action for the same reason.
-                skill_state, skill_outcome = self._execute_level_skill(action, client)
-                return skill_state, skill_outcome, action
             # Publish what this withdraw is taking out of the ACCOUNT-SHARED
             # bank BEFORE the request, so a sibling deriving its shed licence
             # in the meantime nets these units out instead of racing us for
@@ -2549,18 +2342,12 @@ class GamePlayer:
         `_notify_observer`) so the trace and the TUI can never disagree about
         whether a cycle fought.
 
-        Two arms, because a fight reaches the server by two routes. A top-level
-        `FightAction` carries its own record. A SKILL GRIND executes its leg
-        through `_execute` (so the leg captures a record just the same) but hands
-        the observers the outer `LevelSkill` — which is how 59 live fights across
-        a 1263-cycle run recorded nothing at all (Robby 2026-07-29): every one
-        was a grind leg, and only the outer action was ever consulted.
+        A `FightAction` carries its own record. (A skill grind's fight used to
+        hide under the outer `LevelSkill` macro; since Phase 2d a grind's legs
+        are the cycle's own actions.)
         """
         if isinstance(action, FightAction):
             return action.last_fight
-        if isinstance(action, LevelSkill):
-            leg = self._last_grind_leg
-            return leg.last_fight if isinstance(leg, FightAction) else None
         return None
 
     def _turn_in_trace(self) -> dict[str, object] | None:
@@ -3020,11 +2807,7 @@ class GamePlayer:
                 (self.state.cooldown_expires - datetime.now(tz=timezone.utc)).total_seconds(),
             )
         action_kind, action_target = action_kind_of(action) if action is not None else ("other", None)
-        # Only a LevelSkill cycle has a captured grind chain; gating on the
-        # action type keeps a prior grind's legs from leaking onto an unrelated
-        # cycle (the field is only cleared inside _execute_level_skill).
-        grind_children = self._last_grind_expansion if isinstance(action, LevelSkill) else ()
-        # Same shape as the grind gate above: only a fight cycle has a captured
+        # Only a fight cycle has a captured
         # transcript, and gating on the action type keeps a prior fight's record
         # from leaking onto an unrelated cycle. Shared with the trace surface.
         fight_record = self._fight_of(action)
@@ -3086,13 +2869,11 @@ class GamePlayer:
                     f"{selected_goal_name}: {action_name}"
                     if selected_goal_name and action_name else (selected_goal_name or action_name),
                     self._last_ctx,
-                    grind_children,
                     self._role,
                     self._supply_target,
                 )
                 if self._last_decision is not None and self.game_data is not None else ()
             ),
-            grind_expansion=grind_children,
             fight=fight_record,
             gear_focus={
                 self._focus_key_str(k): v for k, v in self._gear_focus.items()

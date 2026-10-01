@@ -8,7 +8,6 @@ from unittest.mock import patch
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
-from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
@@ -57,9 +56,9 @@ def test_classify_gap_real_bundle_new_classes_regression_pin() -> None:
         shopping through a gate the account has not earned.
       - cooked_chicken at char 12 / cooking 1: raw_chicken's only dropper is the
         grey L1 chicken and a near next-tier food exists -> GREY_FARM_SUPPRESSED.
-    And the LevelSkill acceptance (epic P4): an under-skill grindable cell no
-    longer classifies as a gap at all — the planner plans a LevelSkill first leg
-    and `craft_cell_verdict` PASSes it (was SKILL_PREREQUISITE, now retired)."""
+    And an under-skill grindable cell no longer classifies as a gap at all:
+    the planner plans the grind's first leg and `craft_cell_verdict` PASSes it
+    (was SKILL_PREREQUISITE, now retired)."""
     gd = _gd()
     assert classify_gap("iron_axe", CraftCell(8, "weaponcrafting", 10),
                         gd) is GapClass.MATERIAL_UNREACHABLE
@@ -265,15 +264,6 @@ def test_craft_cell_verdict_passes_skill_grind_craft() -> None:
     plan = [CraftAction(code="copper_helmet")]
     verdict = craft_cell_verdict("iron_boots", plan, gd)
     assert verdict == CraftVerdict(True, "")
-
-
-def test_craft_cell_verdict_passes_a_level_skill_leg_for_a_closure_craft_skill() -> None:
-    """The A* fallback can still plan the LevelSkill macro (until Phase 2d-b
-    drops it from the pool): a grind of a closure craftable's skill advances
-    the cell, a grind of any other skill does not."""
-    gd = _gd()
-    assert craft_cell_verdict("iron_boots", [LevelSkill("gearcrafting", 10)], gd).passed
-    assert not craft_cell_verdict("iron_boots", [LevelSkill("fishing", 10)], gd).passed
 
 
 def test_craft_cell_verdict_passes_npc_buy_of_closure_material() -> None:

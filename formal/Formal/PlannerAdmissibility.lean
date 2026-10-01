@@ -328,103 +328,45 @@ theorem RHP_optimal_strictly_cheaper_than_rest :
     RHPoptimalPlanCost < RHPrestPlanCost := by
   simp [RHPoptimalPlanCost, RHPrestPlanCost]
 
-/-! ## CONCRETE INSTANCE (skill-grind landmark) — admissible AND consistent.
+/-! ## The closed-set contract on the RestoreHP instance (h ≡ 0).
 
-The Python side (BUG B fix) gives the planner a goal-provided heuristic h that is
-non-zero: for a skill-grind goal it estimates the remaining cost to a LANDMARK
-(the grind action that levels the skill).  Because the search now prunes with the
-`visited` set, that h must be not merely admissible but CONSISTENT.  This is the
-Lean witness that the heuristic's SHAPE is both: a 2-state landmark world where h
-equals the landmark edge cost at the un-ground state, drops by exactly that edge
-cost when the grind action is taken, and is 0 at the goal.
+Every production goal now uses the base heuristic h ≡ 0 (Phase 2d-b2 removed the
+last non-zero one, the skill-grind landmark, with the `LevelSkill` macro it
+priced). This discharges the whole closed-set contract on the RestoreHP world
+with the planner's real heuristic: the edges are its actions (Move 5, Use 2,
+Rest 9), and the alternate route `moved → eaten` folds consistency along. -/
 
-  * `needsGrind` : skill not yet at target — one grind action away.   NOT satisfied
-  * `done`       : skill at target.                                   SATISFIED
+/-- The instance's action edges. -/
+def RHPsucc : RHPState → RHPState → Prop
+  | start, moved => True
+  | moved, eaten => True
+  | start, rested => True
+  | _, _ => False
 
-  `succ needsGrind done`     : the landmark grind action.
-  `cost needsGrind done = C` : its cost (the landmark distance).
-  `h needsGrind = C`, `h done = 0` : the landmark heuristic (drops by exactly C).
-  `trueRemaining needsGrind = C`   : the genuine remaining cost (one grind). -/
+/-- The instance's action costs: Move 5, UseConsumable 2, Rest 9. -/
+def RHPcostOf : RHPState → RHPState → Nat
+  | start, moved => 5
+  | moved, eaten => 2
+  | start, rested => 9
+  | _, _ => 0
 
-/-- The landmark edge cost (a stand-in for the grind action's `action.cost`). -/
-def SGcost : Nat := 40
+/-- The Use edge `moved → eaten` as a one-edge path. -/
+def RHPusePath : PathCost RHPcostOf RHPsucc moved eaten (RHPcostOf moved eaten) :=
+  PathCost.cons (by simp [RHPsucc]) (PathCost.nil eaten)
 
-/-- The two states of the skill-grind instance. -/
-inductive SGState where
-  | needsGrind     -- skill below target — one landmark grind away    — NOT SATISFIED
-  | done           -- skill at target                                 — SATISFIED
-deriving Repr, DecidableEq
-
-open SGState
-
-/-- ReachSkillGoal.is_satisfied: the skill has reached its target level. -/
-def SGSat : SGState → Prop
-  | done       => True
-  | needsGrind => False
-
-instance : DecidablePred SGSat := by
-  intro s; cases s <;> simp [SGSat] <;> infer_instance
-
-/-- Edge-cost function: the landmark grind action `needsGrind → done` costs `SGcost`. -/
-def SGcostOf : SGState → SGState → Nat
-  | needsGrind, done => SGcost
-  | _,          _    => 0
-
-/-- The landmark successor relation: the single grind action. -/
-def SGsucc : SGState → SGState → Prop
-  | needsGrind, done => True
-  | _,          _    => False
-
-/-- True remaining least cost to a satisfied state: one grind (`SGcost`) from
-`needsGrind`, none from `done`. -/
-def SGtrueRemaining : SGState → Nat
-  | needsGrind => SGcost
-  | done       => 0
-
-/-- The goal-provided skill-grind heuristic: the landmark distance at `needsGrind`,
-0 at the goal — it drops by EXACTLY the edge cost when the grind is taken. -/
-def SGh : SGState → Nat
-  | needsGrind => SGcost
-  | done       => 0
-
-/-- GoalZero holds for the skill-grind instance. -/
-theorem skillGrind_goalZero : GoalZero SGtrueRemaining SGSat := by
-  intro s hs; cases s <;> simp_all [SGSat, SGtrueRemaining]
-
-/-- The skill-grind heuristic IS admissible (`h ≤ trueRemaining` at every state:
-`SGcost ≤ SGcost` and `0 ≤ 0`). -/
-theorem skillGrind_h_admissible : Admissible SGh SGtrueRemaining := by
-  intro s; cases s <;> simp [SGh, SGtrueRemaining]
-
-/-- The skill-grind heuristic IS consistent: across the landmark edge
-`needsGrind → done`, `h` drops by EXACTLY the edge cost
-(`SGcost ≤ SGcost + 0`), so closed-set pruning stays optimal. -/
-theorem skillGrind_h_consistent : Consistent SGh SGcostOf SGsucc := by
-  intro s s' hss; cases s <;> cases s' <;> simp_all [SGh, SGcostOf, SGsucc]
-
-/-- The landmark grind edge `needsGrind → done` as a one-edge `PathCost` of cost
-`SGcostOf needsGrind done` (= `SGcost` = 40): the concrete alternate route the
-closed-set contract folds consistency along. -/
-def SGgrindPath : PathCost SGcostOf SGsucc needsGrind done (SGcostOf needsGrind done) :=
-  PathCost.cons (by simp [SGsucc]) (PathCost.nil done)
-
-/-- The whole closed-set contract discharged on the skill-grind instance: with the
-admissible AND consistent landmark heuristic, the A*-with-`visited` search is optimal
-on both fronts — least-g among satisfied nodes, and (front 2) the first-pop route to
-`done` at cost `gA` is no costlier than the landmark grind route to it (`gW + 40`),
-so pruning the re-expansion drops nothing cheaper.  The consistency proof
-(`skillGrind_h_consistent`, tight at `40 ≤ 40 + 0`) feeds the load-bearing
-path-monotonicity step. -/
-theorem skillGrind_closedSet_preserves_optimal
-    (s₁ s₂ : SGState) (g₁ g₂ : Nat) (h₁ : SGSat s₁) (h₂ : SGSat s₂)
-    (hpopSat : fScore g₁ (SGh s₁) ≤ fScore g₂ (SGh s₂))
+/-- The whole closed-set contract on the RestoreHP instance with h ≡ 0:
+least-g among satisfied nodes, and the first-pop route to `eaten` is no costlier
+than reaching it through `moved` (`gW + 2`). -/
+theorem RHP_closedSet_preserves_optimal
+    (s₁ s₂ : RHPState) (g₁ g₂ : Nat) (h₁ : RHPSat s₁) (h₂ : RHPSat s₂)
+    (hpopSat : fScore g₁ (RHPh s₁) ≤ fScore g₂ (RHPh s₂))
     (gA gW : Nat)
-    (hfront : fScore gA (SGh done) ≤ fScore gW (SGh needsGrind)) :
-    g₁ ≤ g₂ ∧ gA ≤ gW + SGcostOf needsGrind done :=
+    (hfront : fScore gA (RHPh eaten) ≤ fScore gW (RHPh moved)) :
+    g₁ ≤ g₂ ∧ gA ≤ gW + RHPcostOf moved eaten :=
   consistent_closedSet_preserves_optimal
-    SGh SGtrueRemaining SGcostOf SGsucc SGSat
-    skillGrind_h_admissible skillGrind_goalZero skillGrind_h_consistent
+    RHPh RHPtrueRemaining RHPcostOf RHPsucc RHPSat
+    RHP_h_admissible RHP_goalZero (zero_h_consistent RHPcostOf RHPsucc)
     s₁ s₂ g₁ g₂ h₁ h₂ hpopSat
-    done needsGrind gA gW (SGcostOf needsGrind done) SGgrindPath hfront
+    eaten moved gA gW (RHPcostOf moved eaten) RHPusePath hfront
 
 end Formal.PlannerAdmissibility

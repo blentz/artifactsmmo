@@ -18,9 +18,9 @@ of `ObtainItem code` are:
 * else if `code` HAS a recipe (`crafting_recipe(code) is not None`): ONE
   `ObtainItem(mat, qty)` edge per `(mat, qty)` ingredient, in recipe
   (insertion) order — and NOTHING else. The crafting-skill gate is NO LONGER
-  emitted as a prerequisite node: under-skill gear is grinded planner-natively
-  by UpgradeEquipmentGoal via the LevelSkill action (epic P3), not by a
-  tree-level skill root;
+  emitted as a prerequisite node: an under-skill craft's gate is a sub-task
+  the decomposition walk opens by a grind (Phase 2d), not a tree-level skill
+  root;
 * else (buyable / monster-drop / gatherable / unknown): NO prerequisites (a
   leaf). The old "resource-drop → ReachSkillLevel" branch is GONE.
 

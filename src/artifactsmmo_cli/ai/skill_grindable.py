@@ -1,5 +1,6 @@
-"""Is there an open rung to grind a skill from here? One predicate for the
-`LevelSkill` macro and the one walk's skill-gate sub-task (Phase 2d)."""
+"""Is there an open rung to grind a skill from here? The one predicate the walk's
+skill-gate sub-task, the orphan-skill roots and the open-rung census ask
+(Phase 2d; it used to be the `LevelSkill` macro's applicability)."""
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
@@ -16,8 +17,7 @@ def skill_is_grindable(skill: str, target_level: int, state: WorldState,
     craftable in-skill rung (`has_grind_target`). The cheap arm runs first:
     `has_grind_target` walks recipes and recursive obtainability.
 
-    The "an open rung exists" predicate: `LevelSkill.is_applicable` and the
-    one walk's skill-gate sub-task both ask this one function."""
+    The "an open rung exists" predicate every grind question asks."""
     current = state.skills.get(skill, 1)
     if current >= target_level:
         return False

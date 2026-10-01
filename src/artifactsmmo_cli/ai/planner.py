@@ -22,7 +22,7 @@ The live loop now plans DURING the cooldown rather than after it
 this constant is what that window is floored at: a 40s craft cooldown funds a
 40s search the bot would have idled through anyway, while a 3s cooldown still
 gets the full 15s here. It remains the outright budget wherever no deadline is
-set — offline harnesses, audits, the LevelSkill sub-plan, and any live cycle
+set — offline harnesses, audits, and any live cycle
 with no cooldown left to spend.
 
 Was 300s behind a 10s "cheap" first pass. That two-pass scheme is deleted: its
@@ -105,14 +105,12 @@ def _state_key(state: WorldState) -> tuple[object, ...]:
     """Hashable key over the full WorldState for the visited set.
 
     Includes `state.skills`: an action whose ONLY effect is a skill-level
-    change (LevelSkill's optimistic apply) produces a next_state that is
-    otherwise identical to its parent, so without skills in the key that
-    child collides with the already-visited parent and is pruned — the
-    skill-gated craft it unlocks can then never be reached in-search
-    (GatherMaterials(under-skill widget) planned to length 0). Adding skills
-    only makes the dedup FINER, so it cannot break Dijkstra optimality
+    change (the retired LevelSkill macro's optimistic apply) produced a
+    next_state otherwise identical to its parent, so without skills in the
+    key that child collided with the already-visited parent and was pruned.
+    Adding skills only makes the dedup FINER, so it cannot break Dijkstra optimality
     (PlannerAdmissibility.lean); and since gathers/crafts never raise
-    state.skills in-search (skill grind is a separate LevelSkill action leg),
+    state.skills in-search (a grind is the walk's, not the search's),
     the skills component is constant across every node of a GatherMaterials
     search — the in-search partition is unchanged. This key is also compared
     cross-cycle for StuckSignal.STATE_FROZEN (player.py); there the addition is
@@ -346,10 +344,9 @@ class GOAPPlanner:
                     #
                     # APPLIED HERE, NOT INSIDE `Action.cost`, for two reasons
                     # that are both load-bearing:
-                    #   * `Goal.heuristic` is NOT `h ≡ 0` — `goals/progression`
-                    #     and `goals/gathering` return `LevelSkill(...).cost(...)`
-                    #     — and `PlannerAdmissibility.Consistent` is a TIGHT
-                    #     equality there (`skillGrind_h_consistent`). Raising
+                    #   * `Goal.heuristic` need not be `h ≡ 0`, and
+                    #     `PlannerAdmissibility.Consistent` can be a TIGHT
+                    #     equality for a goal's heuristic. Raising
                     #     only the EDGE keeps `h s ≤ cost s s' + h s'` slacker
                     #     on the safe side; raising only the HEURISTIC would
                     #     break consistency and make closed-set pruning discard

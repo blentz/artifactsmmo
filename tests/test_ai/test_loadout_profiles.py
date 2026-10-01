@@ -2,7 +2,7 @@
 
 Fixture layout:
   - "combat:chicken" profile  (activated by current combat_monster parameter)
-  - "gather:mining"  profile  (activated by recent LevelSkill(mining->…) cycle)
+  - "gather:mining"  profile  (activated by recent ReachSkill(mining->…) cycle)
   - "combat:wolf"    profile  (not current, not recent → excluded)
 """
 
@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import (
@@ -82,9 +83,9 @@ def profiles_fixture(tmp_path):
         {"weapon_slot": "wolf_only_gear"},
     )
     # Seed a recent cycle so "gather:mining" appears in the recent window.
-    # _recent_task_keys parses "LevelSkill(<skill>->...)" → "gather:<skill>".
+    # _recent_task_keys parses "ReachSkill(<skill>->...)" → "gather:<skill>".
     history.start_session()
-    _record_goal_cycle(history, "LevelSkill(mining->5)")
+    _record_goal_cycle(history, "ReachSkill(mining->5)")
     yield _make_state(), GameData(), history
     history.close()
 
@@ -117,11 +118,14 @@ def test_active_task_keys_current_gather(tmp_path):
     history.close()
 
 
-def test_active_task_keys_picks_up_recent_level_skill(tmp_path):
-    """A recent LevelSkill(<skill>-><n>) cycle contributes gather:<skill>."""
+def test_active_task_keys_picks_up_recent_skill_grind(tmp_path):
+    """A recent ReachSkill(<skill>-><n>) cycle contributes gather:<skill>: the
+    repr `ReachSkillGoal` writes as the selected goal. The parser used to
+    match `LevelSkill(`, a goal repr that never reached the store (0 of
+    ~320k recorded cycles), so the skill profile was never active."""
     history = LearningStore(db_path=str(tmp_path / "t.db"), character="X")
     history.start_session()
-    _record_goal_cycle(history, "LevelSkill(woodcutting->3)")
+    _record_goal_cycle(history, repr(ReachSkillGoal("woodcutting", 3)))
     keys = active_task_keys(history, combat_monster=None, gather_skills=frozenset())
     assert "gather:woodcutting" in keys
     history.close()

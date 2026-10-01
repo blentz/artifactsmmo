@@ -25,7 +25,7 @@ FILTER.
 DEFECT B — the grind ate the objective's materials. The committed objective was
 `hardwood_plank` = 4 `ash_wood` + 6 `birch_wood`; `birch_tree` needs woodcutting
 20 and the character had 15. So the arbiter gathered the reachable ash, failed on
-birch, fell back to `LevelSkill(woodcutting->20)` — whose rung `ash_plank`
+birch, fell back to the woodcutting grind — whose rung `ash_plank`
 CONSUMES 10 `ash_wood` — and the ash demand re-armed. `skill_grind_target` had
 carried a `reserved` guard for exactly this since 2026-06-11, but no production
 caller ever passed one; `ctx.step_profile` (the committed step's material demand,
@@ -42,10 +42,13 @@ from pathlib import Path
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
-from artifactsmmo_cli.ai.level_skill_expand import next_grind_goal
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
@@ -57,7 +60,6 @@ BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
 SCENARIO = "l22_grey_rung_grind"
 SKILL = "woodcutting"
-BUDGET = 10.0
 
 
 @pytest.fixture(scope="module")
@@ -134,7 +136,7 @@ _RESERVE_SKILL = "gearcrafting"
 
 def test_reservation_reaches_the_grind_through_the_context(
         game_data: GameData, state: WorldState) -> None:
-    """THE WIRING. `next_grind_goal` must READ `ctx.step_profile`. Before the fix
+    """THE WIRING. `grind_rung_goal` must READ `ctx.step_profile`. Before the fix
     the `reserved` parameter existed and no production caller ever passed one, so
     this is the test that would have caught a dead guard.
 
@@ -148,12 +150,12 @@ def test_reservation_reaches_the_grind_through_the_context(
     assert rung is not None
     mats = sorted(game_data.crafting_recipe(rung))
 
-    plain = next_grind_goal(_RESERVE_SKILL, state, game_data, NO_PROFILE_CONTEXT)
+    plain = grind_rung_goal(_RESERVE_SKILL, state, game_data, NO_PROFILE_CONTEXT)
     assert plain is not None
 
     ctx = dataclasses.replace(NO_PROFILE_CONTEXT,
                               step_profile={m: 1 for m in mats})
-    reserved = next_grind_goal(_RESERVE_SKILL, state, game_data, ctx)
+    reserved = grind_rung_goal(_RESERVE_SKILL, state, game_data, ctx)
     assert reserved is not None, "grind must still produce a goal under reservation"
     assert repr(reserved) != repr(plain), (
         "the grind ignored ctx.step_profile — the reserved guard is dead again")
@@ -164,18 +166,18 @@ def test_reservation_reaches_the_grind_through_the_context(
 
 def test_reservation_never_creates_a_dead_end(game_data: GameData,
                                               state: WorldState) -> None:
-    """LIVENESS. `LevelSkill.is_applicable` gates on the UNRESERVED target and has
-    no ctx to pass; if reservation could empty the candidate set, the applicable
-    action would raise "no grind rung at execution" — the selection-says-yes /
+    """LIVENESS. `skill_is_grindable` answers on the UNRESERVED target and has
+    no ctx to pass; if reservation could empty the candidate set, a skill the
+    root walk calls grindable would have no cycle — the selection-says-yes /
     emission-says-no split behind the wool livelock. Reserving EVERY material the
     skill's rungs consume must therefore STILL yield a goal."""
     every_material = {code: 1 for code in (
         "copper_bar", "feather", "iron_bar", "wool", "cowhide",
         "yellow_slimeball", "blue_slimeball", "green_slimeball", "red_slimeball")}
     ctx = dataclasses.replace(NO_PROFILE_CONTEXT, step_profile=every_material)
-    assert next_grind_goal(_RESERVE_SKILL, state, game_data, ctx) is not None
+    assert grind_rung_goal(_RESERVE_SKILL, state, game_data, ctx) is not None
     # ...and the woodcutting grind at the heart of this scenario likewise.
-    assert next_grind_goal(SKILL, state, game_data, ctx) is not None
+    assert grind_rung_goal(SKILL, state, game_data, ctx) is not None
 
 
 def test_gather_fallback_refuses_a_grey_resource(game_data: GameData,
@@ -192,15 +194,15 @@ def test_gather_fallback_refuses_a_grey_resource(game_data: GameData,
 
 def test_full_grind_cycle_plans_and_pays(player: GamePlayer, game_data: GameData,
                                          state: WorldState) -> None:
-    """END TO END through the production seam. The goal `_execute_level_skill`
-    builds must PLAN (a leg exists) and every gather it plans must be against
+    """END TO END through the production seam. The arbiter's decomposition of
+    `ReachSkillLevel(woodcutting, C+1)` must yield a cycle that ends in the
+    paying spruce_plank craft, and every gather it plans must be against
     xp-paying content — the property whose absence pinned Robby's woodcutting xp
     at 4229 for 104 consecutive successful cycles."""
-    goal = next_grind_goal(SKILL, state, game_data, player._last_ctx)
-    assert goal is not None
-    plan = player.planner.plan(state, goal, player._build_actions(), game_data,
-                               budget_seconds=BUDGET)
-    assert plan, "LevelSkill(woodcutting) grind produced no leg"
+    goal = ReachSkillGoal(SKILL, state.skills[SKILL] + 1)
+    plan = decompose(goal, state, game_data, player._build_actions(), player._last_ctx)
+    assert plan, "the woodcutting grind produced no cycle"
+    assert isinstance(plan[-1], CraftAction) and plan[-1].code == "spruce_plank"
     for action in plan:
         if isinstance(action, GatherAction):
             req = game_data.resource_skill_level(action.resource_code)
