@@ -74,6 +74,13 @@ clear, and the number the flip below turns into a fishing sub-grind."""
 PLAN_BUDGET_SECONDS = 2.0
 """Measured 0.003 s for both halves of the flip."""
 
+RESTORE_PLAN_BUDGET_SECONDS = 5.0
+"""The wounded cook's RestoreHP search. Measured 1.05 s standalone (22,233 nodes
+created, 1,297 explored, depth 6) since `UseConsumableAction.apply` heals
+`hp_restore` instead of to full (2026-10-01): cook-then-eat now needs several
+rounds and a closing Rest, so the search really combines them. 2.0 s ran out
+under xdist load."""
+
 
 def _state(game_data: GameData) -> WorldState:
     return scenario_state(SCENARIOS[CELL], game_data)
@@ -333,7 +340,7 @@ def _restore_plan(state: WorldState, game_data: GameData) -> list:
     player.seed_offline(state, game_data)
     return GOAPPlanner().plan(state, RestoreHPGoal(), list(player._build_actions()),
                               game_data, history=None,
-                              budget_seconds=PLAN_BUDGET_SECONDS)
+                              budget_seconds=RESTORE_PLAN_BUDGET_SECONDS)
 
 
 def test_restore_hp_may_cook(bundle_game_data: GameData) -> None:

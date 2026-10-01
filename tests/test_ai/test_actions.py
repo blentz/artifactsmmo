@@ -1034,11 +1034,18 @@ class TestUseConsumableAction:
         state = make_state(hp=73, max_hp=235, inventory={"small_health_potion": 10})
         assert action.is_applicable(state, make_game_data()) is False
 
-    def test_apply_sets_hp_to_max(self):
+    def test_apply_restores_the_items_hp(self):
+        """Eating restores `hp_restore` (80), not the whole deficit (100): the
+        server's heal, and `Formal.CycleInvariants`' `min maxHp (hp + gain)`."""
         action = UseConsumableAction(_item_stats=_consumable_stats())
         state = make_state(hp=50, max_hp=150, inventory={"cooked_chicken": 2})
         new_state = action.apply(state, make_game_data())
-        assert new_state.hp == 150
+        assert new_state.hp == 130
+
+    def test_apply_caps_the_heal_at_max_hp(self):
+        action = UseConsumableAction(_item_stats=_consumable_stats())
+        state = make_state(hp=100, max_hp=150, inventory={"cooked_chicken": 2})
+        assert action.apply(state, make_game_data()).hp == 150
 
     def test_apply_removes_one_food_from_inventory(self):
         action = UseConsumableAction(_item_stats=_consumable_stats())

@@ -161,6 +161,7 @@ EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equip_va
 GEAR_VALUE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value_core.py"
 GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 RECYCLE_YIELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recycle_yield.py"
+USE_CONSUMABLE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "consumable.py"
 LEARNING_STORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "store.py"
 LOCATION_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 PROGRESSION_RESERVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression_reserve_core.py"
@@ -3062,6 +3063,15 @@ RECYCLE_ACTION_LEARNED_MUTATIONS = [
     ("recycle: apply mints a zero share",
      "            if per_unit > 0:",
      "            if True:"),
+]
+# Killed by tests/test_ai/test_actions.py (TestUseConsumableAction).
+USE_CONSUMABLE_HEAL_MUTATIONS = [
+    ("consumable: eating heals to full again",
+     "            hp=min(state.max_hp, state.hp + restore),",
+     "            hp=state.max_hp,"),
+    ("consumable: the heal is not capped at max_hp",
+     "            hp=min(state.max_hp, state.hp + restore),",
+     "            hp=state.hp + restore,"),
 ]
 # Killed by tests/test_ai/test_bag_peak.py.
 BAG_PEAK_MUTATIONS = [
@@ -8641,6 +8651,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(RECYCLE_ACTION_SRC, RECYCLE_ACTION_LEARNED_MUTATIONS,
               "tests/test_ai/test_actions_tier2.py", survivors)
+    run_group(USE_CONSUMABLE_SRC, USE_CONSUMABLE_HEAL_MUTATIONS,
+              "tests/test_ai/test_actions.py", survivors)
     run_group(BAG_PEAK_SRC, BAG_PEAK_MUTATIONS,
               "tests/test_ai/test_bag_peak.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, BAG_OVERFLOW_DECLINE_MUTATIONS,

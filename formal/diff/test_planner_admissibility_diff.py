@@ -106,15 +106,15 @@ def _instance():
     gd = _make_game_data()
     gd._item_stats = {
         "cooked_chicken": ItemStats(
-            code="cooked_chicken", level=1, type_="consumable", hp_restore=30
+            code="cooked_chicken", level=1, type_="consumable", hp_restore=36
         )
     }
     # HP 364/400 (missing 36 = 9%) anchors the demo for the DYNAMIC Rest cost
     # (rest_cost_pure = max(3, ceil(missing%)) = 9.0 seconds here), keeping Rest
-    # the expensive single-step. cooked_chicken restores 30 ≤ 36 deficit, so
-    # EatAtTile FITS (cost 3.0, not the 200.0 overheal sentinel) and full-heals
-    # in-model. A big bar is what buys both properties at once: a 9% deficit that
-    # still exceeds one chicken.
+    # the expensive single-step. cooked_chicken restores exactly the 36 deficit,
+    # so EatAtTile FITS (cost 3.0, not the 200.0 overheal sentinel) and one eat
+    # closes it (`UseConsumableAction.apply` heals `min(max_hp, hp + restore)`,
+    # no longer to full).
     state = make_state(hp=364, max_hp=400, inventory={"cooked_chicken": 1}, x=0, y=0)
     goal = RestoreHPGoal()
     actions = [

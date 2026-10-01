@@ -38,9 +38,11 @@ def _best_consumable(inventory: dict[str, int], item_stats: dict[str, ItemStats]
 class UseConsumableAction(Action):
     """Use the best available consumable from inventory to restore HP.
 
-    In the planning model, eating any food fully heals the character — this
-    approximation keeps the planner chain simple while real execution partially
-    heals and subsequent loop iterations handle remaining deficit via Rest.
+    In the planning model, eating restores the chosen item's `hp_restore`, capped
+    at `max_hp` — what the server does, and what `Formal.CycleInvariants`
+    models (`min maxHp (hp + gain)`). It used to heal to full, so one 50-hp
+    gudgeon looked like it closed a 178-hp deficit and craft+eat beat Rest
+    where four rounds were really dearer.
     """
 
     tags: ClassVar[frozenset[str]] = frozenset({"recovery"})
@@ -72,14 +74,14 @@ class UseConsumableAction(Action):
         deficit = state.max_hp - state.hp
         best = select_consumable(state.inventory, self._item_stats, deficit)
         assert best is not None
-        item_code, _ = best
+        item_code, restore = best
         new_inventory = dict(state.inventory)
         new_inventory[item_code] -= 1
         if new_inventory[item_code] == 0:
             del new_inventory[item_code]
         return dataclasses.replace(
             state,
-            hp=state.max_hp,  # full-heal assumption: planning treats food as solving the problem
+            hp=min(state.max_hp, state.hp + restore),
             inventory=new_inventory,
             cooldown_expires=None,
         )
