@@ -58,6 +58,11 @@ class UpgradeEquipmentGoal(Goal):
         self._committed_target = committed_target
 
     @property
+    def committed_target(self) -> tuple[str, str] | None:
+        """The (item, slot) this goal committed to, or None (any upgrade)."""
+        return self._committed_target
+
+    @property
     def max_depth(self) -> int:
         """Deeper than the base 15 so a craft+equip plan whose lower bound sits
         just under the base bound is actually FOUND by the A*, not falsely

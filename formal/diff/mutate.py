@@ -3160,6 +3160,22 @@ GRIND_CYCLE_CENSUS_MUTATIONS = [
      "    earned = earned_skill(plan[-1], game_data)",
      "    earned = earned_skill(plan[0], game_data)"),
 ]
+# A committed upgrade decomposes (Phase 2d-b1). Killed by
+# tests/test_ai/test_craft_plan_gen.py.
+UPGRADE_DECOMPOSE_MUTATIONS = [
+    ("craft_plan_gen: an upgrade fetches a copy its equip cannot use",
+     "    if not equip.is_applicable(state if state.inventory.get(item, 0) >= 1 else held, game_data):",
+     "    if False:"),
+    ("craft_plan_gen: an upgrade names the equip before its legs land the item",
+     "    return [*legs, equip] if equip.is_applicable(landed, game_data) else legs\n\n\ndef _decompose_grind",
+     "    return [*legs, equip]\n\n\ndef _decompose_grind"),
+    ("craft_plan_gen: an upgrade the GE sells is made instead (the venue choice lost)",
+     "    if game_data.ge_best_sell_order(item) is not None:\n        # The book sells it",
+     "    if False:\n        # The book sells it"),
+    ("craft_plan_gen: an upgrade is never decomposed (A* only)",
+     "        return _decompose_upgrade(goal, state, game_data, actions, ctx, declined, subtasks)",
+     "        return None"),
+]
 # The walk adapter (`ObtainModel.walk_graph`). Killed by
 # tests/test_ai/test_craft_plan_gen.py.
 WALK_ADAPTER_MUTATIONS = [
@@ -8624,6 +8640,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/scenarios/test_fisher_cooking_rung.py", survivors)
     run_group(PLAYER_SRC, GRIND_DECOMPOSE_MUTATIONS,
               "tests/test_ai/test_decision_events.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, UPGRADE_DECOMPOSE_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, COMMITTED_PLAN_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(PLAN_CACHE_SRC, PLAN_CACHE_TARGET_MUTATIONS,

@@ -18,6 +18,7 @@ from unittest.mock import patch
 from artifactsmmo_cli.ai import craft_plan_gen
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
@@ -29,6 +30,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import DECOMPOSE_POLICY, decompose
 from artifactsmmo_cli.ai.decompose_core import Act
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.route import Route
@@ -1789,3 +1791,78 @@ class TestWalkPlanEdges:
         step = Act("gold", 0, 5, 1)
         assert craft_plan_gen._action_for(step, graph, [], [], make_state(), _gd_copper_ring(),
                                           True) is None
+
+
+class TestACommittedUpgradeDecomposes:
+    """Phase 2d-b: a committed UpgradeEquipment goal is the walk's plan for its
+    item, then the equip; its only A* route to a skill-gated item was the
+    LevelSkill macro, which is leaving the pool."""
+
+    def _goal(self, state, target=("copper_ring", "ring1_slot")):
+        return UpgradeEquipmentGoal(initial_equipment=state.equipment, committed_target=target)
+
+    def test_the_item_is_made_then_equipped(self):
+        gd = _gd_copper_ring()
+        state = make_state(inventory={}, bank_items={}, skills={"mining": 5, "jewelrycrafting": 5})
+        plan = decompose(self._goal(state), state, gd, _copper_ring_actions(), _ctx())
+        assert [repr(a) for a in plan or []] == [
+            "Gather(copper_rocks×10)", "Craft(copper_bar×1)", "Craft(copper_ring×1)",
+            "Equip(copper_ring->ring1_slot)"]
+
+    def test_an_item_in_the_bag_is_just_equipped(self):
+        gd = _gd_copper_ring()
+        state = make_state(inventory={"copper_ring": 1}, skills={"mining": 5, "jewelrycrafting": 5})
+        plan = decompose(self._goal(state), state, gd, _copper_ring_actions(), _ctx())
+        assert [repr(a) for a in plan or []] == ["Equip(copper_ring->ring1_slot)"]
+
+    def test_a_skill_gate_ends_the_plan_in_its_grind_without_the_equip(self):
+        gd = _gd_copper_ring()
+        gd._item_stats["copper_ring"] = ItemStats(code="copper_ring", level=1, type_="ring",
+                                                  crafting_skill="jewelrycrafting", crafting_level=3)
+        gd._item_stats["jewel_trinket"] = ItemStats(code="jewel_trinket", level=1, type_="resource",
+                                                    crafting_skill="jewelrycrafting", crafting_level=1)
+        gd._crafting_recipes["jewel_trinket"] = {"copper_ore": 1}
+        state = make_state(inventory={}, bank_items={}, skills={"mining": 5, "jewelrycrafting": 1})
+        actions = [*_copper_ring_actions(), CraftAction(code="jewel_trinket", workshop_location=(3, 1))]
+        plan = decompose(self._goal(state), state, gd, actions, _ctx())
+        assert plan is not None and not any(isinstance(a, EquipAction) for a in plan)
+        assert repr(plan[-1]) == "Craft(jewel_trinket×1)"
+
+    def test_declines_name_their_reason(self):
+        gd = _gd_copper_ring()
+        worn = make_state(equipment={**_ALL_SLOTS, "ring1_slot": "copper_ring"},
+                          skills={"mining": 5, "jewelrycrafting": 5})
+        for goal, state, reason in (
+                (UpgradeEquipmentGoal(), worn, "upgrade:uncommitted"),
+                (self._goal(worn), worn, "satisfied"),
+                (self._goal(worn, ("copper_ring", "no_such_slot")),
+                 make_state(inventory={"copper_ring": 1}), "upgrade:equip_inapplicable:"
+                                                          "Equip(copper_ring->no_such_slot)")):
+            declined: list[str] = []
+            assert decompose(goal, state, gd, _copper_ring_actions(), _ctx(), declined) is None
+            assert declined == [reason]
+        infeasible = make_state(inventory={}, bank_items={}, skills={"mining": 5, "jewelrycrafting": 5})
+        assert decompose(self._goal(infeasible), infeasible, gd, [], _ctx()) is None
+
+    def test_an_item_the_ge_sells_is_left_to_the_search(self, monkeypatch):
+        """Buying off the book against making it is a price question the walk
+        does not answer (no GE routes, D-E); the search keeps that choice."""
+        gd = _gd_copper_ring()
+        monkeypatch.setattr(gd, "ge_best_sell_order",
+                            lambda code: ("order", 5, 1) if code == "copper_ring" else None)
+        state = make_state(inventory={}, bank_items={}, skills={"mining": 5, "jewelrycrafting": 5})
+        declined: list[str] = []
+        assert decompose(self._goal(state), state, gd, _copper_ring_actions(), _ctx(), declined) is None
+        assert declined == ["upgrade:ge_venue:copper_ring"]
+
+    def test_an_equip_that_could_not_apply_declines_before_obtaining(self):
+        """A copy the equip could not use is not fetched: the withdraw would be
+        banked again by the deposit guard next cycle (live HAL 2026-09-30:
+        lich_race_medal, banked, for a slot it cannot take)."""
+        gd = _gd_copper_ring()
+        state = make_state(inventory={}, bank_items={"copper_ring": 1},
+                           skills={"mining": 5, "jewelrycrafting": 5})
+        declined: list[str] = []
+        goal = self._goal(state, ("copper_ring", "no_such_slot"))
+        assert decompose(goal, state, gd, _copper_ring_actions(), _ctx(), declined) is None
+        assert declined == ["upgrade:equip_inapplicable:Equip(copper_ring->no_such_slot)"]

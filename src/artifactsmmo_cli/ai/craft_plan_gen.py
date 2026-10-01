@@ -35,6 +35,7 @@ from datetime import UTC, datetime
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
@@ -46,6 +47,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
 from artifactsmmo_cli.ai.level_skill_expand import grind_rung_goal
@@ -87,7 +89,9 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
 
     A `ReachSkillGoal` is served by its grind (`_decompose_grind`, Phase 2d-a):
     the arbiter plans the grind's real legs instead of an opaque `LevelSkill`
-    macro that a second planner expanded at execution.
+    macro that a second planner expanded at execution. A committed
+    `UpgradeEquipmentGoal` is the walk's plan for its item, then the equip
+    (`_decompose_upgrade`, Phase 2d-b).
 
     `declined`, when given, receives a named reason for every decline of a goal
     this producer serves (not for a goal shape it does not serve at all).
@@ -98,9 +102,51 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     if isinstance(goal, ReachSkillGoal):
         return _decompose_grind(goal.skill, goal.target_level, state, game_data, actions, ctx,
                                 declined, frozenset())
+    if isinstance(goal, UpgradeEquipmentGoal):
+        return _decompose_upgrade(goal, state, game_data, actions, ctx, declined, subtasks)
     if not isinstance(goal, GatherMaterialsGoal):
         return None
     return _walk_plan(goal, state, game_data, actions, ctx, declined, subtasks, frozenset())
+
+
+def _decompose_upgrade(goal: UpgradeEquipmentGoal, state: WorldState, game_data: GameData,
+                       actions: list[Action], ctx: SelectionContext,
+                       declined: list[str] | None, subtasks: bool) -> list[Action] | None:
+    """A committed upgrade as an obtain plan (Phase 2d-b): the walk's committed
+    plan for one copy of the item (a banked copy is withdrawn; a skill gate
+    opens as a sub-grind), then the equip that lands it in the slot.
+
+    Its only A* route to a skill-gated item used to be the `LevelSkill` macro,
+    which is leaving the action pool. The equip joins only when the legs land
+    the item (a plan that ends in a sub-grind does not), and the next cycle
+    decomposes the rest, as the potion batch does."""
+    if goal.committed_target is None:
+        return _decline(declined, "upgrade:uncommitted")
+    if goal.is_satisfied(state):
+        return _decline(declined, "satisfied")
+    item, slot = goal.committed_target
+    equip = EquipAction(code=item, slot=slot)
+    held = replace(state, inventory={**state.inventory, item: state.inventory.get(item, 0) + 1})
+    if not equip.is_applicable(state if state.inventory.get(item, 0) >= 1 else held, game_data):
+        # Decline before obtaining a copy the equip could not use: a withdraw
+        # the next cycle cannot follow up is banked again by the deposit guard.
+        return _decline(declined, f"upgrade:equip_inapplicable:{equip!r}")
+    if state.inventory.get(item, 0) >= 1:
+        return [equip]
+    if game_data.ge_best_sell_order(item) is not None:
+        # The book sells it: buying off the GE against making it is a price
+        # question the walk does not answer (no GE routes, D-E); the search,
+        # which prices both, keeps that choice.
+        return _decline(declined, f"upgrade:ge_venue:{item}")
+    legs = _walk_plan(GatherMaterialsGoal(item, {item: 1}), state, game_data, actions, ctx,
+                      declined, subtasks, frozenset())
+    if legs is None:
+        return None
+    landed = state
+    for leg in legs:
+        if leg.is_applicable(landed, game_data):
+            landed = leg.apply(landed, game_data)
+    return [*legs, equip] if equip.is_applicable(landed, game_data) else legs
 
 
 def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data: GameData,
