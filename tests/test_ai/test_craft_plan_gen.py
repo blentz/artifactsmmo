@@ -1160,7 +1160,7 @@ class TestRecycleAsASource:
         and licenses the other, which is the licence the walk reads."""
         gd = _gd_recyclable()
         state = make_state(inventory={"copper_dagger": 2}, bank_items={},
-                           skills={"mining": 5, "weaponcrafting": 5})
+                           skills={"mining": 5, "weaponcrafting": 5}, inventory_max=100)
         goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2)))
@@ -1171,13 +1171,27 @@ class TestRecycleAsASource:
         assert [type(a).__name__ for a in result] == ["RecycleAction"], result
         assert result[0].code == "copper_dagger"
 
+    def test_a_plan_the_bag_cannot_hold_declines(self):
+        """Three bars are thirty ore, and a 20-unit bag cannot hold them: the
+        committed plan would stall at its gather, so decomposition declines
+        with the bag's numbers (Phase 2d, bag capacity)."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={"copper_dagger": 1}, bank_items={},
+                           skills={"mining": 5, "weaponcrafting": 5})
+        declined: list[str] = []
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
+        assert decompose(goal, state, gd, _bar_actions(), _ctx(), declined) is None
+        assert declined == ["bag_overflow:qty=31/20:slots=2/20"]
+        roomy = dataclasses.replace(state, inventory_max=100)
+        assert decompose(goal, roomy, gd, _bar_actions(), _ctx()) is not None
+
     def test_an_unlicensed_source_is_never_recycled(self):
         """The keep authority protects the last copper_dagger, so production's
         licence leaves NO RecycleAction in the pool. The generator must gather —
         it may only ever take a recycle the authority already handed it."""
         gd = _gd_recyclable()
         state = make_state(inventory={"copper_dagger": 1}, bank_items={},
-                           skills={"mining": 5, "weaponcrafting": 5})
+                           skills={"mining": 5, "weaponcrafting": 5}, inventory_max=100)
         goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
 
         result = decompose(goal, state, gd, _bar_actions(), _ctx())
@@ -1546,7 +1560,7 @@ class TestPhase2bDecompositionGaps:
         cannot serve and decomposition declines."""
         gd = _gd_recyclable()
         state = make_state(inventory={"copper_dagger": 2}, bank_items={},
-                           skills={"mining": 5, "weaponcrafting": 5})
+                           skills={"mining": 5, "weaponcrafting": 5}, inventory_max=100)
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2)))
         free = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
@@ -1563,7 +1577,7 @@ class TestPhase2bDecompositionGaps:
         nothing is being produced (not a grind)."""
         gd = _gd_recyclable()
         state = make_state(inventory={"copper_dagger": 2}, bank_items={},
-                           skills={"mining": 5, "weaponcrafting": 5})
+                           skills={"mining": 5, "weaponcrafting": 5}, inventory_max=100)
         model = ObtainModel(state, gd, _ctx(), datetime.now(UTC))
         free = model.walk_graph("copper_bar", DECOMPOSE_POLICY)
         assert SourceKind.RECYCLE in {r.kind for r in free.sources["copper_bar"]}

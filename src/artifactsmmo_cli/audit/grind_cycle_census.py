@@ -11,6 +11,8 @@ classifies the plan by its LAST leg:
   * EARNS_SUBSKILL: a craft or gather of ANOTHER skill — the plan met a skill
     gate and ends in that sub-grind's own earning leg;
   * DECLINED: decomposition declined (the A* fallback serves it; counted);
+  * BAG_OVERFLOW: decomposition declined because the committed plan would
+    overflow the bag (`bag_peak`): the cycle exists but not from this bag;
   * NO_EARNING_LEG: the plan ends in a leg that earns no skill — the cycle the
     proof assumes does not exist. Must be zero (`--check` gates on it).
 """
@@ -36,6 +38,7 @@ class GrindCycleGap(Enum):
     EARNS = "earns"
     EARNS_SUBSKILL = "earns_subskill"
     DECLINED = "declined"
+    BAG_OVERFLOW = "bag_overflow"
     NO_EARNING_LEG = "no_earning_leg"
 
 
@@ -60,8 +63,11 @@ def earned_skill(action: Action, game_data: GameData) -> str | None:
     return None
 
 
-def classify(skill: str, plan: list[Action] | None, game_data: GameData) -> GrindCycleGap:
+def classify(skill: str, plan: list[Action] | None, game_data: GameData,
+             declined: list[str] | None = None) -> GrindCycleGap:
     if plan is None:
+        if any(reason.startswith("bag_overflow") for reason in declined or []):
+            return GrindCycleGap.BAG_OVERFLOW
         return GrindCycleGap.DECLINED
     earned = earned_skill(plan[-1], game_data)
     if earned == skill:
@@ -85,10 +91,12 @@ def run_census(game_data: GameData) -> list[GrindCycleResult]:
                                 task_exchange_min_coins=0)
         for skill in SKILL_NAMES:
             level = state.skills[skill]
-            plan = decompose(ReachSkillGoal(skill, level + 1), state, game_data, actions, _CTX)
+            declined: list[str] = []
+            plan = decompose(ReachSkillGoal(skill, level + 1), state, game_data, actions, _CTX,
+                             declined)
             results.append(GrindCycleResult(name, skill, level,
                                             tuple(repr(a) for a in plan or []),
-                                            classify(skill, plan, game_data)))
+                                            classify(skill, plan, game_data, declined)))
     return results
 
 

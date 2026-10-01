@@ -19,7 +19,8 @@ pre-check, a WITHDRAW filter, a held-leaf exemption, bank-count fudges).
 `None` (the caller may search) for a goal shape it does not serve, and for a
 decline, which `declined` names: `infeasible:<item>:no_route:<leaves>`,
 `unmapped_step:<step>` (a route no concrete action serves yet),
-`first_leg_inapplicable:<action>`, `satisfied`, and for potions `no_batch`,
+`first_leg_inapplicable:<action>`, `bag_overflow:qty=<peak>/<max>:slots=<peak>/<max>`,
+`satisfied`, and for potions `no_batch`,
 `equip_inapplicable`, `off_ladder_leg`.
 
 SAFETY NET, NOT ADMIT-TIME FILTERING. A route says nothing about a fight's
@@ -41,6 +42,7 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.bag_peak import plan_bag_peak
 from artifactsmmo_cli.ai.decompose_core import Act, OpenGate, Step
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.game_data import GameData
@@ -101,7 +103,27 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     readiness for a `GatherMaterialsGoal`: a batch chosen under a narrower
     policy (the potion ladder's, the heal prep's) is decomposed under that
     same policy, so the walk serves exactly what selection judged feasible
-    (Phase 2d-F)."""
+    (Phase 2d-F).
+
+    A plan whose bag would overflow at some leg (`bag_peak.plan_bag_peak`,
+    total quantity or occupied slots) declines as `bag_overflow:...`: the walk
+    counts quantities, not the bag, and the plan is committed, so a leg that
+    cannot fit would stall it mid-cycle. The deposit guard or the search then
+    serves the cycle."""
+    plan = _dispatch(goal, state, game_data, actions, ctx, declined, subtasks, policy)
+    if plan is None:
+        return None
+    peak_qty, peak_slots = plan_bag_peak(plan, state, game_data)
+    if peak_qty > state.inventory_max or peak_slots > state.inventory_slots_max:
+        return _decline(declined, f"bag_overflow:qty={peak_qty}/{state.inventory_max}"
+                                  f":slots={peak_slots}/{state.inventory_slots_max}")
+    return plan
+
+
+def _dispatch(goal: Goal, state: WorldState, game_data: GameData, actions: list[Action],
+              ctx: SelectionContext, declined: list[str] | None, subtasks: bool,
+              policy: Policy) -> list[Action] | None:
+    """`decompose` by goal shape, before the bag check."""
     if isinstance(goal, CraftPotionsGoal):
         return _decompose_potions(goal, state, game_data, actions, ctx, declined)
     if isinstance(goal, ReachSkillGoal):

@@ -42,6 +42,9 @@ def test_every_class_is_reachable() -> None:
     assert classify("mining", [bar], gd) is GrindCycleGap.EARNS
     assert classify("gearcrafting", [bar], gd) is GrindCycleGap.EARNS_SUBSKILL
     assert classify("mining", None, gd) is GrindCycleGap.DECLINED
+    assert classify("mining", None, gd, ["infeasible:x:no_route:y"]) is GrindCycleGap.DECLINED
+    assert classify("mining", None, gd, ["bag_overflow:qty=31/20:slots=2/20"]) \
+        is GrindCycleGap.BAG_OVERFLOW
     assert classify("mining", [bar, FightAction(monster_code="chicken")], gd) is GrindCycleGap.NO_EARNING_LEG
 
 
@@ -53,4 +56,4 @@ def test_the_catalogue_grid_has_no_cycle_without_an_earning_leg() -> None:
     odd = GrindCycleResult("x", "mining", 1, ("Fight(chicken)",), GrindCycleGap.NO_EARNING_LEG)
     doc = render_matrix([*results, odd])
     assert "| x | mining | 1 | no_earning_leg | Fight(chicken) |" in doc
-    assert summary_line([odd]) == "1 cells; earns 0, earns_subskill 0, declined 0, no_earning_leg 1"
+    assert summary_line([odd]) == "1 cells; earns 0, earns_subskill 0, declined 0, bag_overflow 0, no_earning_leg 1"

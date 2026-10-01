@@ -179,6 +179,7 @@ GRIND_CYCLE_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "grind_cy
 PLAN_CACHE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "plan_cache.py"
 SHOULD_REPLAN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "should_replan.py"
 GRIND_HEAL_PREP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grind_heal_prep.py"
+BAG_PEAK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bag_peak.py"
 ACTION_REJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "action_rejection.py"
 MEANS_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means_worth.py"
 TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "taskmaster_choice.py"
@@ -3024,6 +3025,25 @@ GRIND_PREP_MUTATIONS = [
     ("craft_plan_gen: a prep decline is not noted",
      "                declined.extend(f\"heal_prep:{reason}\" for reason in prep_declined)",
      "                pass"),
+]
+# Killed by tests/test_ai/test_bag_peak.py.
+BAG_PEAK_MUTATIONS = [
+    ("bag_peak: the replay keeps the bag's cap",
+     "    current = dataclasses.replace(state, inventory_max=UNCAPPED, inventory_slots_max=UNCAPPED)",
+     "    current = state"),
+    ("bag_peak: a fight to a drop target holds one kill's drop",
+     "        if isinstance(leg, FightAction) and leg.drop_target is not None:",
+     "        if False:"),
+    ("bag_peak: only the plan's end counts",
+     "        peak_qty = max(peak_qty, current.inventory_used)",
+     "        peak_qty = current.inventory_used"),
+]
+# Killed by tests/test_ai/test_craft_plan_gen.py
+# (test_a_plan_the_bag_cannot_hold_declines).
+BAG_OVERFLOW_DECLINE_MUTATIONS = [
+    ("craft_plan_gen: a plan may overflow the bag",
+     "    if peak_qty > state.inventory_max or peak_slots > state.inventory_slots_max:",
+     "    if False:"),
 ]
 # Killed by tests/test_ai/test_decompose_potions.py (a drop-only ingredient
 # has no route under the ladder's policy; under the walk's default it is a fight).
@@ -8576,6 +8596,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_grind_heal_prep.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, POTION_DECOMPOSE_POLICY_MUTATIONS,
               "tests/test_ai/test_decompose_potions.py", survivors)
+    run_group(BAG_PEAK_SRC, BAG_PEAK_MUTATIONS,
+              "tests/test_ai/test_bag_peak.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, BAG_OVERFLOW_DECLINE_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(GRIND_HEAL_PREP_SRC, GRIND_HEAL_PREP_POLICY_MUTATIONS,
               "tests/test_ai/test_grind_heal_prep.py", survivors)
     run_group(LEVEL_SKILL_EXPAND_SRC, GRIND_RUNG_MUTATIONS,
