@@ -11,7 +11,7 @@
 | gather | copper_ore | 5 | gather | gather | gather | gather | True | True | True | PASS | `GatherMaterials(copper_ore, {copper_ore:5})` |
 | craft | copper_bar | 3 | craft | · | craft,gather | craft,gather | True | True | True | PASS | `GatherMaterials(copper_bar, {copper_bar:3})` |
 | withdraw | copper_bar | 3 | craft | · | craft | craft | True | True | True | PASS | `GatherMaterials(copper_bar, {copper_bar:3})` |
-| recycle | ash_plank | 4 | craft,recycle | recycle | recycle | recycle | True | True | True | PASS | `GatherMaterials(ash_plank, {ash_plank:4})` |
+| recycle | ash_plank | 2 | craft,recycle | recycle | recycle | recycle | True | True | True | PASS | `GatherMaterials(ash_plank, {ash_plank:2})` |
 | buy | cloth | 2 | buy | buy | buy | buy | True | True | True | PASS | `GatherMaterials(cloth, {cloth:2})` |
 | drop | feather | 2 | drop | drop | drop | drop | True | True | True | PASS | `GatherMaterials(feather, {feather:2})` |
 

@@ -1989,6 +1989,9 @@ class GamePlayer:
         if self.game_data is not None:
             self.game_data.active_event_codes = set(active_events)
             self.game_data.active_raid_codes = {r.code for r in state.active_raids}
+            # Recycle yields are learned, fleet-wide (`ai/recycle_yield`).
+            if self.history is not None:
+                self.game_data.recycle_totals = self.history.fleet_recycle_totals()
         return state
 
     def _sync_bank(self, client: AuthenticatedClient, state: WorldState,

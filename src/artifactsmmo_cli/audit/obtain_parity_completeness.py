@@ -169,11 +169,13 @@ This is the exact scenario the carveout exists for."""
 
 RECYCLE_SOURCE = "water_bow"
 RECYCLE_MATERIAL = "ash_plank"
-RECYCLE_NEEDED = 4
+RECYCLE_NEEDED = 2
 RECYCLE_BAG = {"water_bow": 3}
 """THE CELL THAT PINS THE CARVEOUT NARROW. Three `water_bow` in the bag, one kept
-(COMBAT_WEAPON / RECIPE_DEMAND), two destroyable; each unit recycle recovers
-`max(1, 5 // 2) = 2` `ash_plank`, so 4 are recoverable — exactly the demand.
+(COMBAT_WEAPON / RECIPE_DEMAND), two destroyable; each unit recycle is expected to
+return `2 * 5 // 7 = 1` `ash_plank` (the learned total 2, drawn from the 5 planks
+and 2 slimeballs of the recipe: `ai/recycle_yield`), so 2 are recoverable —
+exactly the demand.
 `obtain_sources(ash_plank)` = {RECYCLE, CRAFT} and BOTH producers recycle. Because
 RECYCLE is compared in full (only WITHDRAW is carved out), deleting the RECYCLE
 arm from `obtain_sources` turns this cell RED on POOL⊆MODEL and PLAN PARITY — the

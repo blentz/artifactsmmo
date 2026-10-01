@@ -1927,3 +1927,39 @@ class TestTheHottestReadIsIndexed:
         assert hero.sample_count("Fight(pig)") == sum(1 for i in range(30) if i % 3)
         hero.close()
         other.close()
+
+
+class TestFleetRecycleTotals:
+    """`fleet_recycle_totals`: units one recycled copy returns, per item,
+    measured over every character's successful recycles."""
+
+    def _recycle(self, store, repr_, drops, outcome="ok", character="testchar"):
+        store.record_cycle(Cycle(
+            ts="2026-10-01T00:00:00+00:00", session_id="x", cycle_index=0,
+            character=character, outcome=outcome, action_class="RecycleAction",
+            action_repr=repr_, drops_json=None if drops is None else json.dumps(drops)))
+
+    def test_the_total_per_unit_is_read_off_the_fleets_results(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        # Two characters, batch sizes 1 and 6, random splits: the total per unit
+        # is the same fact about the item.
+        self._recycle(store, "Recycle(iron_dagger×1)", {"iron_bar": 1, "feather": 1})
+        self._recycle(store, "Recycle(iron_dagger×6)", {"iron_bar": 9, "feather": 3}, character="Lor")
+        self._recycle(store, "Recycle(fire_ring×1)", {"iron_bar": 2, "flying_wing": 1})
+        # Ignored: a failed recycle, a row with no record, an uneven batch, and
+        # a repr that is not a recycle.
+        self._recycle(store, "Recycle(copper_boots×1)", {"copper_bar": 7}, outcome="error:HTTP_497")
+        self._recycle(store, "Recycle(copper_ring×1)", None)
+        self._recycle(store, "Recycle(copper_ring×2)", {"copper_bar": 3})
+        self._recycle(store, "RecycleAll()", {"copper_bar": 2})
+        assert store.fleet_recycle_totals() == {"iron_dagger": 2, "fire_ring": 3}
+        store.close()
+
+    def test_the_most_common_total_wins(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        for drops in ({"copper_bar": 2}, {"copper_bar": 2}, {"copper_bar": 5}):
+            self._recycle(store, "Recycle(copper_helmet×1)", drops)
+        assert store.fleet_recycle_totals() == {"copper_helmet": 2}
+        store.close()

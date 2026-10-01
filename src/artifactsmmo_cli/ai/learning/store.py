@@ -1,7 +1,9 @@
 """SQLModel-backed learning store for autoregressive GOAP planning."""
 
 import json
+import re
 import weakref
+from collections import Counter
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -82,6 +84,10 @@ def grind_action_prefix(skill: str) -> str:
     character gains xp in this skill, which is what they are; matching the exact
     string would silently drop half the observations."""
     return f"LevelSkill({skill}->"
+
+
+_RECYCLE_REPR = re.compile(r"Recycle\((\w+)×(\d+)\)")
+"""`RecycleAction.__repr__`: `Recycle(<code>×<quantity>)`."""
 
 
 def _parse_skill_xp_value(raw: str | None, skill: str) -> int:
@@ -847,6 +853,30 @@ class LearningStore:
         gear and level are baked into them.
         """
         return self._grind_rate(skill, window, character=None)
+
+    def fleet_recycle_totals(self) -> dict[str, int]:
+        """item_code -> units one recycled copy returns, MEASURED over every
+        character's successful recycles (the bag gains `drops_json` records).
+
+        The server returns a fixed total per unit, split at random across the
+        recipe's materials (`ai/recycle_yield`), so the total is a fact about
+        the item, not the character, and one recycle observes it. The most
+        common per-unit total wins; an item never recycled has no entry."""
+        with SqlSession(self._engine) as s:
+            rows = list(s.exec(
+                select(Cycle.action_repr, Cycle.drops_json)
+                .where(col(Cycle.action_class) == "RecycleAction")
+                .where(col(Cycle.outcome) == "ok")))
+        seen: dict[str, Counter[int]] = {}
+        for action_repr, drops_json in rows:
+            match = _RECYCLE_REPR.fullmatch(action_repr or "")
+            if match is None or not drops_json:
+                continue
+            code, quantity = match.group(1), int(match.group(2))
+            returned = sum(json.loads(drops_json).values())
+            if returned % quantity == 0:
+                seen.setdefault(code, Counter())[returned // quantity] += 1
+        return {code: totals.most_common(1)[0][0] for code, totals in seen.items()}
 
     def fleet_supply_request_cycles(self) -> float | None:
         """Median producer cycles ONE fleet supply request has historically cost,

@@ -4,7 +4,7 @@ Task 8).
 Every cell here drives the REAL `StrategyArbiter.select` seam over the committed
 bundle — the seam at which `license_destructive_actions` runs. A harness that
 planned through a lower seam would see the UNLICENSED factory pool (in which the
-last `copper_axe` still carries a `RecycleAction`) and the SAFETY cell would be
+last `copper_pickaxe` still carries a `RecycleAction`) and the SAFETY cell would be
 proving nothing.
 """
 
@@ -70,32 +70,32 @@ def test_liveness_cell_plans_a_recycle(bundle_game_data: GameData) -> None:
 
 
 def test_safety_cell_never_recycles_the_working_tool(bundle_game_data: GameData) -> None:
-    """ONE copper_axe owned, and it is the WORKING_KIT tool (best woodcutting).
+    """ONE copper_pickaxe owned, and it is the WORKING_KIT tool (best mining).
     Its recipe is 6 copper_bar and the goal needs 6 copper_bar — the melt is
     RIGHT THERE. It must be gathered around, never dismantled."""
     cell = _cells(bundle_game_data)[RecycleSourceKind.SAFETY]
     plan = _actions(cell, bundle_game_data)
     assert plan, "a protected source must be gathered AROUND, not stalled on"
-    assert not any(isinstance(a, RecycleAction) and a.code == "copper_axe"
+    assert not any(isinstance(a, RecycleAction) and a.code == "copper_pickaxe"
                    for a in plan)
     assert any(isinstance(a, GatherAction) for a in plan)
 
 
 def test_safety_cell_is_falsifiable(bundle_game_data: GameData) -> None:
     """THE FALSIFIABILITY WITNESS. The SAFETY cell would be worthless if the
-    planner never took this route anyway. Hold TWO copper_axes — the ONE fact the
+    planner never took this route anyway. Hold TWO copper_pickaxes — the ONE fact the
     keep authority reads (`destroyable` 0 -> 1) — and the very same census
     machinery, same source, same material, same seam, now plans
-    `Recycle(copper_axe)`. So the SAFETY green is the PROTECTION talking, not a
+    `Recycle(copper_pickaxe)`. So the SAFETY green is the PROTECTION talking, not a
     route the planner was blind to."""
     cell = RecycleSourceCell(
-        kind=RecycleSourceKind.LIVENESS, source="copper_axe",
-        material="copper_bar", needed=3, bag_copies=2, bank_copies=0)
+        kind=RecycleSourceKind.LIVENESS, source="copper_pickaxe",
+        material="copper_bar", needed=2, bag_copies=2, bank_copies=0)
     state = census_state(cell, bundle_game_data)
     _check_cell(cell, state, bundle_game_data, None)  # the cell IS licensed now
     _goal, plan, failed = plan_recycle_source(cell, state, bundle_game_data)
     assert failed is False
-    assert any(isinstance(a, RecycleAction) and a.code == "copper_axe"
+    assert any(isinstance(a, RecycleAction) and a.code == "copper_pickaxe"
                for a in plan), (
         "the SAFETY cell is VACUOUS: with the protection lifted the planner still "
         "does not recycle, so its green proves nothing about the protection")
@@ -131,8 +131,8 @@ def test_partial_protection_source_has_NO_bag_floor(
     """THE CELL'S LOAD-BEARING PREMISE, pinned. The source must be one whose
     `keep_in_bag` is 0 — otherwise `bag_floor` ALREADY bounds a second recycle and
     the cell would pass without the ownership bound, proving nothing. That is
-    exactly why the source is a spare `copper_helmet` and NOT the `copper_axe`:
-    the axe is WORKING_KIT (keep_in_bag 1). `IN_BAG_REASONS` carries no gear-keep
+    exactly why the source is a spare `copper_helmet` and NOT the `copper_pickaxe`:
+    the pickaxe is WORKING_KIT (keep_in_bag 1). `IN_BAG_REASONS` carries no gear-keep
     reason at all, which is the structural fact CRITICAL 1 turned on."""
     cell = _cells(bundle_game_data)[RecycleSourceKind.PARTIAL_PROTECTION]
     state = census_state(cell, bundle_game_data)
@@ -200,7 +200,7 @@ def test_a_partial_protection_cell_the_licence_already_serves_raises(
     reason to reach for an unlicensed copy and the cell proves nothing."""
     cell = RecycleSourceCell(
         kind=RecycleSourceKind.PARTIAL_PROTECTION, source="copper_helmet",
-        material="copper_bar", needed=3, bag_copies=2, bank_copies=0,
+        material="copper_bar", needed=2, bag_copies=2, bank_copies=0,
         equip_slot="helmet_slot")
     state = census_state(cell, bundle_game_data)
     with pytest.raises(ValueError, match="no incentive to over-destroy"):
@@ -368,9 +368,9 @@ def test_a_cell_that_already_holds_the_material_is_vacuous(
 
 def test_a_safety_cell_whose_source_is_licensed_raises(
         bundle_game_data: GameData) -> None:
-    """Two axes: the authority licenses one. That is a LIVENESS cell wearing the
+    """Two pickaxes: the authority licenses one. That is a LIVENESS cell wearing the
     SAFETY name — it must not ship."""
-    cell = RecycleSourceCell(kind=RecycleSourceKind.SAFETY, source="copper_axe",
+    cell = RecycleSourceCell(kind=RecycleSourceKind.SAFETY, source="copper_pickaxe",
                              material="copper_bar", needed=6, bag_copies=2,
                              bank_copies=0)
     state = census_state(cell, bundle_game_data)
@@ -380,16 +380,16 @@ def test_a_safety_cell_whose_source_is_licensed_raises(
 
 def test_a_safety_cell_with_another_recycle_route_raises(
         bundle_game_data: GameData) -> None:
-    """The axe is protected, but a spare water_bow (whose recipe also yields the
-    material? no — a spare copper_dagger, whose recipe IS copper_bar) offers the
-    planner a DIFFERENT licensed recycle for the same material. The cell would
-    then be safe for the wrong reason."""
-    cell = RecycleSourceCell(kind=RecycleSourceKind.SAFETY, source="copper_axe",
+    """The pickaxe is protected, but spare copper_helmets (whose recipe IS
+    copper_bar, and whose recycle total is learned) offer the planner a
+    DIFFERENT licensed recycle for the same material. The cell would then be
+    safe for the wrong reason."""
+    cell = RecycleSourceCell(kind=RecycleSourceKind.SAFETY, source="copper_pickaxe",
                              material="copper_bar", needed=6, bag_copies=1,
                              bank_copies=0)
     state = census_state(cell, bundle_game_data)
     state = dataclasses.replace(
-        state, inventory={**state.inventory, "copper_dagger": 3})
+        state, inventory={**state.inventory, "copper_helmet": 3})
     with pytest.raises(ValueError, match="is recoverable"):
         _check_cell(cell, state, bundle_game_data, None)
 
@@ -397,7 +397,7 @@ def test_a_safety_cell_with_another_recycle_route_raises(
 def test_a_partial_cell_that_is_fully_recoverable_raises(
         bundle_game_data: GameData) -> None:
     cell = RecycleSourceCell(kind=RecycleSourceKind.PARTIAL, source="water_bow",
-                             material="ash_plank", needed=4, bag_copies=3,
+                             material="ash_plank", needed=2, bag_copies=3,
                              bank_copies=0)
     state = census_state(cell, bundle_game_data)
     with pytest.raises(ValueError, match="is not a PARTIAL cover"):
@@ -410,7 +410,7 @@ def test_a_liveness_cell_the_recycle_cannot_serve_raises(
                              material="ash_plank", needed=9, bag_copies=3,
                              bank_copies=0)
     state = census_state(cell, bundle_game_data)
-    with pytest.raises(ValueError, match="recoverable 4 < needed 9"):
+    with pytest.raises(ValueError, match="recoverable 2 < needed 9"):
         _check_cell(cell, state, bundle_game_data, None)
 
 
@@ -475,9 +475,9 @@ def test_run_cell_records_the_authority_and_the_plan(
     result = run_cell(cell, bundle_game_data)
     assert result.passed is True
     assert result.gap is None
-    assert result.recoverable == 4
+    assert result.recoverable == 2
     assert result.destroyable == 2
-    assert result.goal == "GatherMaterials(ash_plank, {ash_plank:4})"
+    assert result.goal == "GatherMaterials(ash_plank, {ash_plank:2})"
     assert any("Recycle(water_bow" in leg for leg in result.plan)
 
 

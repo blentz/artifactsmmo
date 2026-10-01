@@ -64,6 +64,7 @@ from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
 from artifactsmmo_cli.ai.recipe_cost_memo import RecipeCostMemo
+from artifactsmmo_cli.ai.recycle_yield import recycle_unit_yield
 from artifactsmmo_cli.ai.requirement_graph_memo import RequirementGraphMemo
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
@@ -1191,6 +1192,25 @@ class GameData:
         return self.recipes_catalog.craft_yields.get(code, 1)
 
     @property
+    def recycle_totals(self) -> Mapping[str, int]:
+        """item_code -> units one recycled copy returns, learned per item."""
+        return self.recipes_catalog.recycle_totals
+
+    @recycle_totals.setter
+    def recycle_totals(self, value: Mapping[str, int]) -> None:
+        self.recipes_catalog.recycle_totals = dict(value)
+
+    def recycle_unit_yield(self, code: str) -> dict[str, int] | None:
+        """Expected whole units of each recipe material one recycled `code`
+        returns (`recycle_yield.recycle_unit_yield`), or None when `code` has
+        no recipe or its per-unit total has never been observed."""
+        recipe = self.crafting_recipe(code)
+        total = self.recipes_catalog.recycle_totals.get(code)
+        if recipe is None or total is None:
+            return None
+        return recycle_unit_yield(recipe, total)
+
+    @property
     def craft_yields(self) -> Mapping[str, int]:
         """item_code -> craft output quantity (prior map from CraftSchema.quantity).
 
@@ -1620,6 +1640,9 @@ class GameData:
         key already documents: absent means nothing is known to be complete."""
         data = cls()
         data._build_from_objs(cls._hydrate_bundle(raw), completed_achievements)
+        # Learned, not static: the fleet's observed per-unit recycle totals at
+        # capture time (`LearningStore.fleet_recycle_totals`).
+        data.recycle_totals = {code: int(total) for code, total in raw["recycle_totals"].items()}
         if with_ge_orders:
             orders = [GEOrderSchema.from_dict(d) for d in raw["ge_orders"]["orders"]]
             # The capture holds both halves of the book in one list, so the side

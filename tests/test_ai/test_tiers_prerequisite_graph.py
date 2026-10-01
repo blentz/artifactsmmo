@@ -40,6 +40,7 @@ def _gd() -> GameData:
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
     gd._monster_level = {"chicken": 1, "dragon": 40}
     gd._workshop_locations = {"weaponcrafting": (1, 1)}
+    gd.recycle_totals = {"copper_dagger": 3}  # a learned yield
     fill_monster_stat_defaults(gd)
     return gd
 

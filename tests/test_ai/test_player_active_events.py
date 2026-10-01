@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 
+from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.test_actions_execute import make_char_schema, make_get_character_result
@@ -157,6 +158,23 @@ class TestFetchWorldStateActiveEvents:
 
         assert isinstance(state, WorldState)
         assert state.active_events == {"gemstone_merchant": expiry}
+
+    def test_the_learned_recycle_totals_reach_game_data(self):
+        """Recycle yields are learned fleet-wide; each world fetch refreshes
+        them onto the planner's GameData (`ai/recycle_yield`)."""
+        history = MagicMock()
+        history.fleet_recycle_totals.return_value = {"copper_helmet": 2}
+        player = GamePlayer(character="hero", history=history)
+        player.state = None
+        player.game_data = GameData()
+        empty_page = MagicMock()
+        empty_page.data = []
+        with patch("artifactsmmo_cli.ai.player.get_character",
+                   return_value=make_get_character_result(make_char_schema())):
+            with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_page):
+                with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_page):
+                    player._fetch_world_state(MagicMock())
+        assert dict(player.game_data.recycle_totals) == {"copper_helmet": 2}
 
     def test_active_events_empty_when_no_events(self):
         """_fetch_world_state yields empty active_events when API returns nothing."""

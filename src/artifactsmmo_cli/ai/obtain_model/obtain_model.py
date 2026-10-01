@@ -244,9 +244,11 @@ class ObtainModel:
 
         A non-equippable has no RecycleAction in existence (`factory.py` builds
         them only for equippable codes), so it is no route at all rather than a
-        gated one. The yield is the repeated UNIT-recycle yield
-        `max(1, mat_qty // 2)`, not the batch form, which differs whenever
-        `mat_qty == 1`. `LICENSED` asks the keep authority (`destroyable`) for
+        gated one. The yield is the LEARNED expectation per unit recycled
+        (`GameData.recycle_unit_yield`: the item's observed per-unit total,
+        split at random across the recipe); an item never recycled, or one
+        whose expected share of `item` is under one unit, is no route.
+        `LICENSED` asks the keep authority (`destroyable`) for
         copies it may destroy, never raw stock, which would license melting
         protected copies.
 
@@ -264,8 +266,11 @@ class ObtainModel:
             stats = self._gd.item_stats(code)
             if stats is None or not stats.crafting_skill or not ITEM_TYPE_TO_SLOTS.get(stats.type_):
                 continue
+            unit_yield = self._gd.recycle_unit_yield(code)
+            yield_per = unit_yield.get(item, 0) if unit_yield is not None else 0
+            if yield_per == 0:
+                continue
             copies = destroyable(code, self._state, self._gd, self._ctx)
-            yield_per = max(1, recipe[item] // 2)
             gates = (
                 Gate(GateKind.CRAFT_SKILL, stats.crafting_skill,
                      self._skill(stats.crafting_skill) >= stats.crafting_level,

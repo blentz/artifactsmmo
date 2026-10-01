@@ -141,29 +141,46 @@ class TestRecycleAction:
         action = RecycleAction(code="copper_dagger", quantity=1, workshop_location=(5, 0))
         stats = ItemStats(code="copper_dagger", level=1, type_="weapon",
                           crafting_skill="weaponcrafting", crafting_level=1)
-        # Recipe yields 3 ore (net = +2). Full bag has 0 free slots → must refuse.
-        state = make_state(inventory={"copper_dagger": 1, "pad": 19})  # used=20, free=0
+        # No learned total: the bound is the whole recipe, 6 ore (net +5), and a
+        # full bag (used=20, free=0) must refuse.
+        state = make_state(inventory={"copper_dagger": 1, "pad": 19})
         gd = make_gd(item_stats={"copper_dagger": stats}, recipes={"copper_dagger": {"copper_ore": 6}})
         assert action.is_applicable(state, gd) is False
 
-    def test_apply_removes_item_and_returns_materials(self):
+    def test_a_learned_total_is_the_room_bound(self):
+        """The server returns exactly the learned total per unit, so a bag with
+        room for it may recycle where the whole-recipe bound would refuse."""
         action = RecycleAction(code="copper_dagger", quantity=1, workshop_location=(5, 0))
-        stats = ItemStats(code="copper_dagger", level=1, type_="weapon")
-        state = make_state(inventory={"copper_dagger": 1})
+        stats = ItemStats(code="copper_dagger", level=1, type_="weapon",
+                          crafting_skill="weaponcrafting", crafting_level=1)
+        state = make_state(inventory={"copper_dagger": 1, "pad": 17})  # used=18, free=2
         gd = make_gd(item_stats={"copper_dagger": stats}, recipes={"copper_dagger": {"copper_ore": 6}})
+        assert action.is_applicable(state, gd) is False
+        gd.recycle_totals = {"copper_dagger": 2}
+        assert action.is_applicable(state, gd) is True
+
+    def test_apply_removes_item_and_returns_the_learned_expectation(self):
+        """One recycled copper_dagger returns its learned total (2), drawn at
+        random from the recipe: the expected whole units per material are
+        2 * 6 // 8 = 1 ore and 2 * 2 // 8 = 0 feather (`ai/recycle_yield`)."""
+        action = RecycleAction(code="copper_dagger", quantity=3, workshop_location=(5, 0))
+        stats = ItemStats(code="copper_dagger", level=1, type_="weapon")
+        state = make_state(inventory={"copper_dagger": 3})
+        gd = make_gd(item_stats={"copper_dagger": stats},
+                     recipes={"copper_dagger": {"copper_ore": 6, "feather": 2}})
+        gd.recycle_totals = {"copper_dagger": 2}
         new_state = action.apply(state, gd)
         assert "copper_dagger" not in new_state.inventory
-        # 6 // 2 = 3 copper_ore returned
         assert new_state.inventory.get("copper_ore", 0) == 3
+        assert "feather" not in new_state.inventory
 
-    def test_apply_minimum_one_material_returned(self):
+    def test_apply_of_an_item_never_recycled_mints_nothing(self):
+        """No learned total, no yield the planner can count on."""
         action = RecycleAction(code="copper_dagger", quantity=1, workshop_location=(5, 0))
         stats = ItemStats(code="copper_dagger", level=1, type_="weapon")
         state = make_state(inventory={"copper_dagger": 1})
-        # Recipe with qty=1: max(1, 1//2) = 1
         gd = make_gd(item_stats={"copper_dagger": stats}, recipes={"copper_dagger": {"copper_ore": 1}})
-        new_state = action.apply(state, gd)
-        assert new_state.inventory.get("copper_ore", 0) == 1
+        assert action.apply(state, gd).inventory == {}
 
     def test_cost_includes_distance(self):
         action = RecycleAction(code="copper_dagger", quantity=1, workshop_location=(5, 0))

@@ -969,20 +969,21 @@ def test_the_closure_terminates_on_real_data(state, game_data) -> None:
 
 def test_the_closure_survives_a_genuine_cycle_in_real_game_data(
         state, game_data) -> None:
-    """The cycle is not hypothetical. Holding copper daggers, `copper_bar` has a
-    RECYCLE route out of `copper_dagger`, and `copper_dagger` CRAFTS from
-    `copper_bar` — a two-node loop straight out of the live recipe tables.
+    """The cycle is not hypothetical. Holding copper helmets, `copper_bar` has a
+    RECYCLE route out of `copper_helmet` (its recycle yield is learned: the
+    bundle captures the fleet's observed totals), and `copper_helmet` CRAFTS
+    from `copper_bar` — a two-node loop straight out of the live recipe tables.
 
     This is the case that showed the walk had two visited-set guards where one
     is correct, and that the redundant push-time filter was making the pop-time
     guard unreachable."""
-    holding = replace(state, inventory={"copper_dagger": 3})
+    holding = replace(state, inventory={"copper_helmet": 3})
     kinds = {s.kind for s in
              obtain_sources("copper_bar", holding, game_data, NO_PROFILE_CONTEXT)}
     assert SourceKind.RECYCLE in kinds, "fixture drift: the cycle is gone"
     options = acquisition_options("copper_bar", holding, game_data,
                                   NO_PROFILE_CONTEXT)
-    assert {"copper_bar", "copper_dagger", "copper_ore"} <= set(options)
+    assert {"copper_bar", "copper_helmet", "copper_ore"} <= set(options)
 
 
 def _live_sized(state, game_data):  # type: ignore[no-untyped-def]

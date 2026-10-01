@@ -75,7 +75,9 @@ def _gear_gd(**overrides) -> GameData:
         workshops={"gearcrafting": WORKSHOP_LOC},
     )
     defaults.update(overrides)
-    return _gd(**defaults)
+    gd = _gd(**defaults)
+    gd.recycle_totals = {"copper_helmet": 2}  # learned live, 14 recycles
+    return gd
 
 
 def test_recyclable_gear_routes_to_recycle():
@@ -110,10 +112,10 @@ def test_routed_recycle_is_stamped_with_the_owned_floor():
 
 
 def test_recycle_quantity_reduced_to_fit_minted_materials():
-    # Recycling mints ~half the materials into the bag (HTTP 497 otherwise);
+    # Recycling mints its learned total into the bag (HTTP 497 otherwise);
     # the probe descends until RecycleAction.is_applicable accepts.
     gd = _gear_gd()
-    # 6-bar recipe -> recycling qty recovers >= 3*qty bars; free = 2 slots.
+    # learned total 2 per unit -> recycling qty mints 2*qty bars; free = 2.
     state = make_state(inventory={"copper_helmet": 8, "filler": 90},
                        inventory_max=100, bank_items={},
                        skills={"gearcrafting": 5})

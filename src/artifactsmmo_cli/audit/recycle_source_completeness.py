@@ -22,7 +22,7 @@ needs, and asks whether the production plan takes it:
   * LIVENESS (`recoverable[m] >= needed`): the plan MUST contain `Recycle(S)`.
   * SAFETY   (`destroyable(S) == 0`):      the plan MUST NOT contain `Recycle(S)`
     — it must gather instead. THE CELL THAT MATTERS MOST: it is what stops this
-    epic from becoming a tool-melting bug (the last `copper_axe` is WORKING_KIT's,
+    epic from becoming a tool-melting bug (the last `copper_pickaxe` is WORKING_KIT's,
     and a recipe that wants `copper_bar` must never dismantle it for parts).
   * BANKED   (`S` in the BANK, bag empty):  `Withdraw(S)` THEN `Recycle(S)` — the
     MAIN path in production, since `DEPOSIT_FULL` banks exactly this surplus.
@@ -52,7 +52,7 @@ LICENCE (`ai/destructive_license.license_destructive_actions`) is applied INSIDE
 `select`, so a harness that planned through a lower seam (e.g. `arbiter._plans`,
 which the craft census uses) would hand the goal an UNLICENSED pool — every
 `RecycleAction` the factory ever emitted, including the one for the last
-`copper_axe` — and the SAFETY cell would be proving nothing at all.
+`copper_pickaxe` — and the SAFETY cell would be proving nothing at all.
 """
 
 from dataclasses import dataclass
@@ -119,28 +119,32 @@ recycle the planner chose to ACQUIRE with, so the bag is quiet."""
 LIVENESS_SOURCE = "water_bow"
 LIVENESS_MATERIAL = "ash_plank"
 LIVENESS_BAG_COPIES = 3
-LIVENESS_NEEDED = 4
+LIVENESS_NEEDED = 2
 """The live shape, from the epic's runtime proof on Robby: a weaponcrafting chain
 wanted `ash_plank` and the bot chopped 50 `ash_wood` at 1/cycle while holding bows
-and nets whose recipes ARE `ash_plank`. `water_bow`'s recipe is 5 `ash_plank`, so
-one unit recycle recovers `max(1, 5 // 2) = 2`. Three copies held, one kept
-(COMBAT_WEAPON / RECIPE_DEMAND keep the last weapon), leaves 2 destroyable = 4
-recoverable planks — exactly the 4 the goal needs, so the recycle route ALONE can
-serve it and a plan that gathers instead is the bug."""
+and nets whose recipes ARE `ash_plank`. `water_bow`'s recipe is 5 `ash_plank` + 2
+`blue_slimeball` and its LEARNED recycle total is 2 a unit, drawn at random from the
+recipe, so one unit is expected to return `2 * 5 // 7 = 1` plank
+(`ai/recycle_yield`). Three copies held, one kept (COMBAT_WEAPON / RECIPE_DEMAND
+keep the last weapon), leaves 2 destroyable = 2 recoverable planks — exactly the 2
+the goal needs, so the recycle route ALONE can serve it and a plan that gathers
+instead is the bug."""
 
-SAFETY_SOURCE = "copper_axe"
+SAFETY_SOURCE = "copper_pickaxe"
 SAFETY_MATERIAL = "copper_bar"
 SAFETY_BAG_COPIES = 1
 SAFETY_NEEDED = 6
-"""THE ONE THAT MATTERS. `copper_axe` is the character's best woodcutting tool
+"""THE ONE THAT MATTERS. `copper_pickaxe` is the character's best mining tool
 (WORKING_KIT) and its recipe is 6 `copper_bar` — so a goal that needs
-`copper_bar` has an obvious, cheap, WRONG answer: melt the axe. Exactly ONE copy
-is held, so `destroyable == 0` and the authority licenses nothing. The plan must
-gather `copper_ore` and smelt.
+`copper_bar` has an obvious, cheap, WRONG answer: melt the pickaxe. Exactly ONE
+copy is held, so `destroyable == 0` and the authority licenses nothing. The plan
+must gather `copper_ore` and smelt. (It was `copper_axe` until recycle yields
+became learned: the fleet has never recycled an axe, so it has no route to
+falsify against; the pickaxe's total, 2 a unit, is observed.)
 
-FALSIFIABILITY IS NOT ASSUMED. Hold TWO axes and the very same cell shape
+FALSIFIABILITY IS NOT ASSUMED. Hold TWO pickaxes and the very same cell shape
 (`kind=liveness`, same source, same material) turns `destroyable` into 1 and the
-plan MUST then contain `Recycle(copper_axe)` — the census's own machinery, one
+plan MUST then contain `Recycle(copper_pickaxe)` — the census's own machinery, one
 copy apart. That cell is driven in the test suite
 (`test_safety_cell_is_falsifiable`), so a SAFETY green can never be the vacuous
 green of a route the planner was never going to take anyway."""
@@ -148,7 +152,7 @@ green of a route the planner was never going to take anyway."""
 BANKED_SOURCE = "water_bow"
 BANKED_MATERIAL = "ash_plank"
 BANKED_BANK_COPIES = 3
-BANKED_NEEDED = 4
+BANKED_NEEDED = 2
 """Same arithmetic as LIVENESS, but every copy is in the BANK and the bag is
 empty. This is the MAIN path in production, not an exotic one: `DEPOSIT_FULL`
 banks the surplus a recycle would want to consume, so the fuel routinely lives in
@@ -159,10 +163,10 @@ the bank. It is also why Recycle — and only Recycle — is licensed off a BANK
 PARTIAL_SOURCE = "water_bow"
 PARTIAL_MATERIAL = "ash_plank"
 PARTIAL_BAG_COPIES = 3
-PARTIAL_NEEDED = 8
-"""THE NODE-EXPLOSION CELL. 4 planks are recoverable and 8 are needed, so the
-remaining 4 must come from the `ash_plank <- 10x ash_wood` subtree (recipe depth
-2, 40 gathers). That is exactly the partially-deep subtree the `recoverable > 0`
+PARTIAL_NEEDED = 4
+"""THE NODE-EXPLOSION CELL. 2 planks are recoverable and 4 are needed, so the
+remaining 2 must come from the `ash_plank <- 10x ash_wood` subtree (recipe depth
+2, 20 gathers). That is exactly the partially-deep subtree the `recoverable > 0`
 leaf rule lets the descent inherit — the shape that hit a 1M-node cap in livelock
 3166d390 — and the plan must resolve it WITHIN BUDGET or `classify_gap` calls it
 what it is: a bug."""
@@ -175,19 +179,19 @@ PARTIAL_PROTECTION_NEEDED = 6
 PARTIAL_PROTECTION_EQUIP_SLOT = "helmet_slot"
 """THE CELL THAT WOULD HAVE FAILED ON DAY ONE (whole-branch review, CRITICAL 1).
 
-THE SOURCE IS A HELMET, NOT THE AXE, AND THAT IS THE ENTIRE POINT. `copper_axe` is
+THE SOURCE IS A HELMET, NOT THE PICKAXE, AND THAT IS THE ENTIRE POINT. `copper_pickaxe` is
 WORKING_KIT, so `keep_in_bag` is 1 and `bag_floor` ALREADY bounds a second recycle
-of it — a partial-protection cell built on the axe would pass without the
+of it — a partial-protection cell built on the pickaxe would pass without the
 ownership bound and would be a LIE. `copper_helmet` is the real population this
 epic dismantles: a spare, unequipped, non-dominated equippable. `IN_BAG_REASONS`
 carries NO gear-keep reason, so its `keep_in_bag` is 0 (measured, not assumed —
 `test_partial_protection_source_has_NO_bag_floor` pins it) while `keep_owned` is 1
 (RECIPE_DEMAND). TWO copies held: `destroyable == 1`, `bag_floor == 0`.
 
-The temptation is exact. Six `copper_bar` are needed; one unit recycle recovers
-`max(1, 6 // 2) = 3`. The licensed recycle gives 3 and the SECOND (unlicensed) one
-would give the other 3 — cheaper than mining and smelting them, so every cost term
-says take it. Nothing stopped it: `licensed_recycle_quantity` admits the
+The temptation is exact. Six `copper_bar` are needed; one unit recycle returns its
+learned total, 2 bars (a one-material recipe gets all of it). The licensed recycle
+gives 2 and the SECOND (unlicensed) one would give 2 more — cheaper than mining and
+smelting them, so every cost term says take it. Nothing stopped it: `licensed_recycle_quantity` admits the
 quantity=1 `RecycleAction` ONCE and never counts APPLICATIONS. Both helmets died —
 reproduced against production code, and it survived to EXECUTION (the plan cache
 re-validates `is_applicable` per step and never re-derives the licence).
@@ -464,7 +468,7 @@ def plan_recycle_source(cell: RecycleSourceCell, state: WorldState,
     convenience: `license_destructive_actions` runs INSIDE `select` (right after
     the step profile is bound onto the ctx — the one point where the ctx the keep
     authority reads is complete). A harness that planned through a LOWER seam would
-    hand the goal the RAW factory pool, in which the last `copper_axe` still has a
+    hand the goal the RAW factory pool, in which the last `copper_pickaxe` still has a
     `RecycleAction`, and the SAFETY cell would be asserting a protection that the
     census itself had bypassed.
 

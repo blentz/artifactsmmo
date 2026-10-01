@@ -1126,7 +1126,8 @@ class TestDropLeafSuboptimalLoadoutRearm:
 
 def _gd_recyclable() -> GameData:
     """copper_bar ← 10 copper_ore, and a copper_dagger (weapon) whose recipe is
-    6 copper_bar — so ONE unit recycle recovers max(1, 6 // 2) = 3 bars."""
+    6 copper_bar — so ONE unit recycle recovers its learned total, 3 bars (a
+    one-material recipe gets the whole total)."""
     gd = _gd_copper_ring()
     gd._item_stats["copper_dagger"] = ItemStats(
         code="copper_dagger", level=1, type_="weapon",
@@ -1137,6 +1138,7 @@ def _gd_recyclable() -> GameData:
     gd._crafting_recipes["copper_dagger"] = {"copper_bar": 6}
     gd._crafting_recipes["iron_dagger"] = {"copper_bar": 6}
     gd._workshop_locations["weaponcrafting"] = (2, 2)
+    gd.recycle_totals = {"copper_dagger": 3, "iron_dagger": 3}
     return gd
 
 
@@ -1475,6 +1477,7 @@ def _gd_fire_staff() -> GameData:
     gd._workshop_locations = {"weaponcrafting": (2, 2)}
     gd._bank_location = (4, 0)
     gd._taskmaster_location = (1, 2)
+    gd.recycle_totals = {"fishing_net": 2}  # learned live, 22 recycles
     fill_monster_stat_defaults(gd)
     return gd
 

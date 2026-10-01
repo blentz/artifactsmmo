@@ -119,15 +119,16 @@ def test_generator_rearms_AFTER_a_recycle_leg() -> None:
     gd._crafting_recipes = {"copper_bar": {"copper_ore": 10},
                             "copper_helmet": {"copper_bar": 6}}
     gd._workshop_locations = {"mining": (5, 0), "gearcrafting": (6, 0)}
+    gd.recycle_totals = {"copper_helmet": 2}  # learned live, 14 recycles
     goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 4})
     state = make_state(x=2, y=0,
                        inventory={"copper_pickaxe": 1, "copper_helmet": 2},
                        equipment={"weapon_slot": "copper_dagger"},
-                       skills={"mining": 12, "gearcrafting": 5})
+                       skills={"mining": 12, "gearcrafting": 5}, inventory_max=100)
     actions = [*_actions(),
                RecycleAction(code="copper_helmet", quantity=1,
                              workshop_location=(6, 0))]
-    # One copper_helmet recycle recovers max(1, 6 // 2) = 3 bars. Two copies:
+    # One copper_helmet recycle recovers its learned 2 bars. Two copies:
     # the keep authority keeps one for the empty helmet slot and licenses the
     # other, the licence the walk reads.
 
@@ -135,7 +136,7 @@ def test_generator_rearms_AFTER_a_recycle_leg() -> None:
 
     assert plan is not None
     kinds = [type(a).__name__ for a in plan]
-    # The recycle recovers 3 of the 4 bars; the 4th is still gathered — and that
+    # The recycle recovers 2 of the 4 bars; the rest are still gathered — and that
     # gather is armed.
     assert kinds[0] == "RecycleAction", kinds
     assert "OptimizeLoadoutAction" in kinds, kinds

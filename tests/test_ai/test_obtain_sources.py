@@ -124,6 +124,8 @@ def _build_game_data(with_workshops: bool) -> GameData:
     }
     # event_beast: NO entry in _monster_locations -> its event is inactive.
     gd._monster_locations = {"boss": [(9, 9)], "slime": [(0, 2)]}
+    # Learned recycle totals (the live fleet's: fishing_net returns 2 a unit).
+    gd.recycle_totals = {"fishing_net": 2, "copper_axe": 2}
     fill_monster_stat_defaults(gd)
     return gd
 
@@ -220,18 +222,17 @@ def test_recycle_source_names_the_SOURCE_item_not_the_target(game_data, ctx):
     rec = [s for s in obtain_sources("ash_plank", state, game_data, ctx)
            if s.kind is SourceKind.RECYCLE]
     assert [s.code for s in rec] == ["fishing_net"]
-    assert rec[0].yield_per == max(1, 6 // 2)   # 3 — the UNIT-recycle yield, not batch
+    assert rec[0].yield_per == 2   # the learned total: a one-material recipe gets all of it
     # capacity == destroyable(fishing_net) * yield_per -- destroyable is 6, not
     # the raw 7 owned: the profile-less EQUIPPABLE_KEEP=1 "swap candidate"
     # floor protects one copy from destruction (see inventory_caps.py).
-    assert rec[0].capacity == 6 * 3
+    assert rec[0].capacity == 6 * 2
 
 
 def test_recycle_source_capacity_is_destroyable_times_yield(game_data):
     """CRITICAL 1: capacity is the max the source can ACTUALLY deliver right
     now -- licensed copies (destroyable) times per-copy yield, NOT the raw
-    deficit a caller might ask for. 2 fishing_net (yield 3 each) -> 6, the
-    exact reproduction from the bug report.
+    deficit a caller might ask for. 2 fishing_net (learned yield 2 each) -> 4.
 
     `gear_keep={"fishing_net": 0}` names the amulet slot in the active
     profile (so the blanket EQUIPPABLE_KEEP=1 "swap candidate" floor the
@@ -245,7 +246,7 @@ def test_recycle_source_capacity_is_destroyable_times_yield(game_data):
     state = make_state(inventory={"fishing_net": 2})
     rec = [s for s in obtain_sources("ash_plank", state, game_data, ctx)
            if s.kind is SourceKind.RECYCLE]
-    assert rec[0].capacity == 2 * 3
+    assert rec[0].capacity == 2 * 2
 
 
 def test_protected_item_is_not_a_recycle_source(game_data, ctx):
@@ -483,6 +484,7 @@ def test_priority_order_pins_the_full_six_source_tail():
     gd._resource_drops = {"gem_vein": "hexagem"}
     gd._resource_locations = {"gem_vein": [(9, 0)]}
     gd._workshop_locations = {"jewelrycrafting": (1, 1)}
+    gd.recycle_totals = {"gem_ring": 2}
     gd._npc_stock = {"bazaar": {"hexagem": 50}}
     gd._npc_locations = {"bazaar": (2, 2)}
     gd._monster_level = {"gem_mob": 1}

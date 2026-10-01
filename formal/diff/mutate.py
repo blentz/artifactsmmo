@@ -160,6 +160,8 @@ CYCLE_STEP_SRC = ROOT / "formal" / "sim" / "cycle_step.py"
 EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equip_value.py"
 GEAR_VALUE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value_core.py"
 GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
+RECYCLE_YIELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recycle_yield.py"
+LEARNING_STORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "store.py"
 LOCATION_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 PROGRESSION_RESERVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression_reserve_core.py"
 DECOMPOSE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decompose_core.py"
@@ -2898,9 +2900,9 @@ OBTAIN_MODEL_GATE_MUTATIONS = [
     ("obtain_model: withdraw ignores bank access",
      'Gate(GateKind.BANK_ACCESSIBLE, "bank", self._ctx.bank_accessible)',
      'Gate(GateKind.BANK_ACCESSIBLE, "bank", True)'),
-    ("obtain_model: recycle uses the batch yield",
-     "max(1, recipe[item] // 2)",
-     "max(1, recipe[item])"),
+    ("obtain_model: the recycle route ignores the learned yield",
+     "            yield_per = unit_yield.get(item, 0) if unit_yield is not None else 0",
+     "            yield_per = 3"),
     ("obtain_model: wrong primary gatherer",
      "primary=rank == 0))",
      "primary=rank == 1))"),
@@ -3025,6 +3027,41 @@ GRIND_PREP_MUTATIONS = [
     ("craft_plan_gen: a prep decline is not noted",
      "                declined.extend(f\"heal_prep:{reason}\" for reason in prep_declined)",
      "                pass"),
+]
+# The learned recycle yield (a fixed total per unit, drawn at random from the
+# recipe). Killed by tests/test_ai/test_recycle_yield.py.
+RECYCLE_YIELD_MUTATIONS = [
+    ("recycle_yield: a share is rounded up",
+     "    return {material: total * qty // weight for material, qty in recipe.items()}",
+     "    return {material: -(-total * qty // weight) for material, qty in recipe.items()}"),
+]
+GAME_DATA_RECYCLE_YIELD_MUTATIONS = [
+    ("game_data: an item never recycled has a yield",
+     "        if recipe is None or total is None:\n            return None\n"
+     "        return recycle_unit_yield(recipe, total)",
+     "        if recipe is None:\n            return None\n"
+     "        return recycle_unit_yield(recipe, total or 1)"),
+]
+# Killed by tests/test_ai/test_learning_store.py (TestFleetRecycleTotals).
+FLEET_RECYCLE_TOTALS_MUTATIONS = [
+    ("store: an uneven batch counts",
+     "            if returned % quantity == 0:",
+     "            if True:"),
+    ("store: the largest total wins, not the most common",
+     "        return {code: totals.most_common(1)[0][0] for code, totals in seen.items()}",
+     "        return {code: max(totals) for code, totals in seen.items()}"),
+    ("store: a failed recycle counts",
+     '                .where(col(Cycle.outcome) == "ok")))',
+     "                ))"),
+]
+# Killed by tests/test_ai/test_actions_tier2.py (TestRecycleAction).
+RECYCLE_ACTION_LEARNED_MUTATIONS = [
+    ("recycle: the room bound ignores the learned total",
+     "        per_unit = game_data.recycle_totals.get(self.code, sum(recipe.values()))",
+     "        per_unit = sum(recipe.values())"),
+    ("recycle: apply mints a zero share",
+     "            if per_unit > 0:",
+     "            if True:"),
 ]
 # Killed by tests/test_ai/test_bag_peak.py.
 BAG_PEAK_MUTATIONS = [
@@ -8596,6 +8633,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_grind_heal_prep.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, POTION_DECOMPOSE_POLICY_MUTATIONS,
               "tests/test_ai/test_decompose_potions.py", survivors)
+    run_group(RECYCLE_YIELD_SRC, RECYCLE_YIELD_MUTATIONS,
+              "tests/test_ai/test_recycle_yield.py", survivors)
+    run_group(GAME_DATA_PARSE_SRC, GAME_DATA_RECYCLE_YIELD_MUTATIONS,
+              "tests/test_ai/test_recycle_yield.py", survivors)
+    run_group(LEARNING_STORE_SRC, FLEET_RECYCLE_TOTALS_MUTATIONS,
+              "tests/test_ai/test_learning_store.py", survivors)
+    run_group(RECYCLE_ACTION_SRC, RECYCLE_ACTION_LEARNED_MUTATIONS,
+              "tests/test_ai/test_actions_tier2.py", survivors)
     run_group(BAG_PEAK_SRC, BAG_PEAK_MUTATIONS,
               "tests/test_ai/test_bag_peak.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, BAG_OVERFLOW_DECLINE_MUTATIONS,

@@ -156,7 +156,7 @@ argmax blindness: 0 of 9 walls sit on a RESOLVED root. A census that prices only
 | l20_dual_utility_one_stocked | ReachCharLevel(level=30) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility_one_stocked | ReachSkillLevel(skill='cooking', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l20_dual_utility_one_stocked | ReachSkillLevel(skill='weaponcrafting', level=16) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
-| l13_drop_recipe_grind | ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot') | argmax | PASS | 45 | 45 | 45 | - | - | - | - | - |
+| l13_drop_recipe_grind | ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot') | argmax | PASS | 47 | 47 | 47 | - | - | - | - | - |
 | l13_drop_recipe_grind | ReachCharLevel(level=20) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l13_drop_recipe_grind | ReachSkillLevel(skill='cooking', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |
 | l13_drop_recipe_grind | ReachSkillLevel(skill='jewelrycrafting', level=6) | alt | PASS | 1000000 | 1000000 | 1000000 | - | - | - | - | - |

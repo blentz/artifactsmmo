@@ -99,7 +99,11 @@ class RecycleAction(Action):
         # SURVIVES → 0 slots freed) while the recipe mints ash_plank as a NEW
         # stack. New stacks = recovered materials not already held, minus the
         # source's own slot when this recycle exhausts it.
-        recovered_qty = sum(max(1, (mat_qty * self.quantity) // 2) for mat_qty in recipe.values())
+        # The bound, not the expectation: the learned per-unit total when known,
+        # else the whole recipe (the server never returns more than it took),
+        # and any material may arrive (the split is random).
+        per_unit = game_data.recycle_totals.get(self.code, sum(recipe.values()))
+        recovered_qty = per_unit * self.quantity
         minted = sum(1 for mat_code in recipe if mat_code not in state.inventory)
         freed = 1 if state.inventory.get(self.code, 0) - self.quantity <= 0 else 0
         return has_room(minted - freed, recovered_qty - self.quantity,
@@ -111,11 +115,11 @@ class RecycleAction(Action):
         if new_inventory[self.code] <= 0:
             del new_inventory[self.code]
 
-        # Recycling returns approximately half the materials (rounded down per ingredient).
-        recipe = game_data.crafting_recipe(self.code) or {}
-        for mat_code, mat_qty in recipe.items():
-            recovered = max(1, (mat_qty * self.quantity) // 2)
-            new_inventory[mat_code] = new_inventory.get(mat_code, 0) + recovered
+        # The learned expectation per unit (`GameData.recycle_unit_yield`); an
+        # item never recycled mints nothing the planner can count on.
+        for mat_code, per_unit in (game_data.recycle_unit_yield(self.code) or {}).items():
+            if per_unit > 0:
+                new_inventory[mat_code] = new_inventory.get(mat_code, 0) + per_unit * self.quantity
 
         dest = self.workshop_location or (state.x, state.y)
         return dataclasses.replace(

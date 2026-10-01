@@ -9,6 +9,10 @@ class RecipeCatalog:
 
     crafting_recipes: dict[str, dict[str, int]] = field(default_factory=dict)
     craft_yields: dict[str, int] = field(default_factory=dict)
+    recycle_totals: dict[str, int] = field(default_factory=dict)
+    """item_code -> units one recycled copy returns, LEARNED from the server's
+    own results (`LearningStore.fleet_recycle_totals`; a bundle captures them).
+    An item never recycled has no entry: its yield is unknown."""
     resource_skill: dict[str, tuple[str, int]] = field(default_factory=dict)  # code -> (skill, level)
     resource_drops: dict[str, str] = field(default_factory=dict)  # resource_code -> primary drop item
     resource_drops_full: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)

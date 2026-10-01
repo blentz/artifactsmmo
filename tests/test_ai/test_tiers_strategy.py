@@ -48,6 +48,7 @@ def _gd() -> GameData:
     gd._resource_locations = {"copper_rocks": [(2, 0)]}  # the rocks spawn somewhere
     gd._monster_level = {"chicken": 1}
     gd._workshop_locations = {"weaponcrafting": (1, 1)}
+    gd.recycle_totals = {"copper_dagger": 3, "copper_ring": 2}  # learned yields
     fill_monster_stat_defaults(gd)
     return gd
 
@@ -97,6 +98,7 @@ def test_is_reachable_agrees_with_the_descent_ready_source():
     gd._crafting_recipes = {"trinket": {"part": 5}, "part": {"raw_unobtainium": 2},
                            "part_source": {"part": 4}}
     gd._workshop_locations = {"jewelrycrafting": (1, 1)}
+    gd.recycle_totals = {"part_source": 2}
     state = make_state()
     assert is_reachable(ObtainItem("trinket"), state, gd) is False
     state2 = make_state(inventory={"part_source": 2})

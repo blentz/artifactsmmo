@@ -289,6 +289,7 @@ class TestRecycleAsAcquisition:
                                   "weaponcrafting": (3, 1)}
         gd._bank_location = (4, 0)
         gd._taskmaster_location = (1, 2)
+        gd.recycle_totals = {"fishing_net": 2, "copper_axe": 2}  # learned live
         return gd
 
     def test_gather_goal_admits_a_licensed_recycle_source(self):
