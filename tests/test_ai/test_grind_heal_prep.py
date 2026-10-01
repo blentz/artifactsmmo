@@ -19,9 +19,9 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
-from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
+from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY, heal_prep_goal
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -168,7 +168,7 @@ class TestGrindFightLegPreps:
         assert declined == []
 
     def test_a_prep_decline_is_noted_and_the_fight_goes_ahead(self):
-        def declines(_goal, _state, _gd, _actions, _ctx, declined, subtasks):
+        def declines(_goal, _state, _gd, _actions, _ctx, declined, subtasks, policy):
             declined.append("unmapped_step:milk")
             return None
 
@@ -179,11 +179,19 @@ class TestGrindFightLegPreps:
     def test_a_stocked_fight_leg_fights(self):
         assert _grind({"cheese": HEAL_STOCK_FLOOR}, _FIGHT) == ([_FIGHT], [])
 
-    def test_the_fight_goes_ahead_when_the_prep_would_fight(self):
-        """The prep never fights for its ingredients: the fight it would add
-        costs the hp the stock is meant to save."""
-        other = FightAction(monster_code="cow", locations=frozenset({(6, 6)}))
-        assert _grind({"milk": 10}, _FIGHT, prep=lambda *_a, **_k: [other])[0] == [_FIGHT]
+    def test_the_prep_is_walked_under_its_own_policy(self):
+        """The prep never fights for its ingredients (the fight it would add
+        costs the hp the stock is meant to save): it is decomposed under
+        `HEAL_PREP_POLICY`, the policy that judged it feasible, which has no
+        drop route (Phase 2d-F)."""
+        seen: list[Policy] = []
+
+        def walk(*_a, policy, **_k):
+            seen.append(policy)
+            return None
+
+        assert _grind({"milk": 10}, _FIGHT, prep=walk)[0] == [_FIGHT]
+        assert seen == [HEAL_PREP_POLICY] and not HEAL_PREP_POLICY.drop_routes
 
     def test_a_fight_after_a_gather_is_prepped_too(self):
         """The plan is committed (Phase 2d-L1c), so a fight later in it runs

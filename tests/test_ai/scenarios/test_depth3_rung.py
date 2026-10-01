@@ -159,11 +159,9 @@ def test_the_descent_reaches_two_levels_below_the_root(
     crafts further down. No other scenario produces a step that far from its
     root."""
     node = _root_node()
-    prereqs = prerequisites(node, state, bundle_game_data,
-                            NO_PROFILE_CONTEXT, False)
+    prereqs = prerequisites(node, state, bundle_game_data, NO_PROFILE_CONTEXT)
     assert ObtainItem(code=TIER2, quantity=1) in prereqs
-    step = actionable_step(node, state, bundle_game_data, NO_PROFILE_CONTEXT,
-                           grind_descent=False)
+    step = actionable_step(node, state, bundle_game_data, NO_PROFILE_CONTEXT)
     assert step == ObtainItem(code=LEAF, quantity=4)
 
 
@@ -177,8 +175,7 @@ def test_owning_the_intermediate_collapses_the_depth_and_the_answer(
     the depth-3 leg, not by anything else about this character."""
     held = dataclasses.replace(
         state, inventory={**state.inventory, TIER2: 1})
-    step = actionable_step(_root_node(), held, bundle_game_data,
-                           NO_PROFILE_CONTEXT, grind_descent=False)
+    step = actionable_step(_root_node(), held, bundle_game_data, NO_PROFILE_CONTEXT)
     assert step == ObtainItem(code=TIER2, quantity=1)
 
     player = GamePlayer(character=CELL, history=None)

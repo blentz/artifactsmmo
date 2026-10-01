@@ -18,97 +18,16 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
-from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
-CRAFT_SUBSTITUTE_KINDS = frozenset({SourceKind.BUY, SourceKind.GE_FILL})
-"""Sources that hand over the finished item INSTEAD of crafting it, and that
-`grind_probe_state` cannot take away.
 
-Under a `grind_descent` these must not leaf (see `_source_leafs`). A skill grind
-earns its XP from the CRAFT — the item is the byproduct, not the goal — so a
-route that substitutes for the craft serves the grind's target and not the
-grind. RECYCLE is a craft-substitute too and has its own value-aware arm below.
-
-WHY THESE TWO AND NOT `GATHER`/`DROP`/`WITHDRAW`: `grind_probe_state` strips the
-rung from inventory, bank AND equipment, which neutralises the WITHDRAW and
-owned/worn leaf arms outright. It cannot neutralise these two — an NPC vendor is
-permanent and a stranger's standing GE order is not ours to remove — so they are
-exactly the substitutes that survive the probe. GATHER and DROP are not on the
-list because a rung is a crafted item and generally has neither; widening to
-them would be unmotivated (a `_leafs` arm above already leafs anything with no
-recipe at all).
-
-LIVE 2026-08-24, Robby: `obtain_sources` emits a GE_FILL for any item with a
-standing Grand Exchange sell order, and the snapshot carried one for 21 of the
-23 gearcrafting rungs at level <= 15. So the descent leafed AT the rung,
-`prerequisites` returned [], `actionable_step` handed the rung back unchanged
-and `next_grind_goal` fell through to the from-scratch `GatherMaterials(rung,
-held+1)` the descent exists to prevent — 63k nodes and a timeout offline,
-matching the live 42,277-node error:other signature. `ReachSkill(gearcrafting
-->16)` was selected 32 times over 3.5h and the skill never moved."""
-
-RECYCLE_LEAF_VALUE_FLOOR = 256_000_000
-"""pursuit_value below which a recyclable item is JUNK (obsolete gear) a skill
-grind may recover cheaply, vs CURRENT-TIER gear it must not churn. Only consulted
-under a `grind_descent` (see `prerequisites`): a RECYCLE source leafs a material
-iff the recycled item's pursuit_value is below this floor.
-
-THE ONE absolute pursuit_value threshold in the codebase, so it is re-derived
-whenever that ruler's scale moves. Calibrated exactly as before, against the
-same four live witnesses, at the current scale: obsolete fishing_net / copper_axe
-score 200_000_000 and must recover; current-tier wooden_staff (328_001_000) and
-fire_staff (656_001_000) must be skipped so the grind gathers fresh. The floor is
-the geometric mean of the two adjacent witnesses (√(200.0M × 328.0M) = 256.1M),
-the same midpoint rule the retired 10000 satisfied on the retired scale
-(√(8000 × 13000) = 10198). `tests/test_ai/test_pursuit_value.py` pins all four
-witnesses against the catalog bundle, so a scale change fails the suite instead
-of silently reclassifying every recyclable.
-
-RE-DERIVED AND UNCHANGED when `equipment/scoring.RULER_SCALE` moved onto the
-armor terms. This threshold reads `pursuit_value`, whose COMBAT term is
-`gear_components(stats, Rank)[0]`, and all four calibration witnesses are
-WEAPONS — whose combat term that change left bit-identical (the factor was
-already on the weapon side; what moved was the ARMOR side, up to meet it). So
-the geometric mean is the same number it was: √(200.0M × 328.0M) = 256.1M.
-
-What DID move is armor, by design: 55 armor items (level-35/40 shields, books
-and amulets among them) now sit above the floor where they used to sit below it,
-because they were being measured on a ruler that priced them at HALF a weapon's
-magnitude for the same real swing. Classifying a level-40 shield as junk
-relative to a level-6 staff was the asymmetry, not the floor.
-
-Tunable — a proxy for 'current-tier', not load-bearing for correctness; the
-null-cycle guard (GatherMaterialsGoal.exclude_recycle) protects the rung
-independently."""
-
-
-def _source_leafs(source: Source, game_data: GameData,
-                  grind_descent: bool) -> bool:
-    """Whether `source` makes its material a descent LEAF. CRAFT never leafs (the
-    descent walks the recipe). Every other kind leafs — EXCEPT under a
-    `grind_descent`, where THE CRAFT IS THE GOAL and a source that SUBSTITUTES
-    for it therefore must not end the descent:
-
-      * `CRAFT_SUBSTITUTE_KINDS` (BUY / GE_FILL) never leaf. Buying the rung
-        pays zero skill XP.
-      * a RECYCLE leafs only when the recycled item is JUNK (pursuit_value <
-        RECYCLE_LEAF_VALUE_FLOOR — cheap recovery). A CURRENT-TIER item does not
-        leaf: the grind descends to gather rather than churn it.
-
-    The one rule, two arms: RECYCLE is the value-aware substitute, BUY/GE_FILL
-    the unconditional ones. The predicate previously carved out only RECYCLE —
-    the special case, not the rule — which is the 2026-08-24 Robby stall
-    documented on `CRAFT_SUBSTITUTE_KINDS`."""
-    if source.kind is SourceKind.CRAFT:
-        return False
-    if grind_descent:
-        if source.kind is SourceKind.RECYCLE:
-            stats = game_data.item_stats(source.code)
-            return stats is not None and pursuit_value(stats) < RECYCLE_LEAF_VALUE_FLOOR
-        if source.kind in CRAFT_SUBSTITUTE_KINDS:
-            return False
-    return True
+def _source_leafs(source: Source) -> bool:
+    """Whether `source` makes its material a descent LEAF: every kind but
+    CRAFT does (the descent walks the recipe). The grind's exemptions
+    (`grind_descent`: a craft substitute or current-tier recycle did not leaf)
+    retired with the grind's own descent in Phase 2d: a grind's plan is the
+    walk's, which names the routes that earn (`produce`)."""
+    return source.kind is not SourceKind.CRAFT
 
 
 def combat_capable(state: WorldState, game_data: GameData) -> bool:
@@ -133,8 +52,7 @@ def best_attainable_weapon(game_data: GameData) -> str | None:
 
 
 def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
-                  ctx: SelectionContext = NO_PROFILE_CONTEXT,
-                  grind_descent: bool = False) -> list[MetaGoal]:
+                  ctx: SelectionContext = NO_PROFILE_CONTEXT) -> list[MetaGoal]:
     """Direct prerequisites of `node`, derived from game data.
 
     A craftable material with ANY READY non-craft source — a bank withdraw, a
@@ -167,17 +85,9 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
         #   * a READY non-craft source exists (withdraw / licensed recycle / live
         #     gather / located vendor / winnable drop) per the shared
         #     `obtain_sources` model.
-        # `grind_descent` (set by a SKILL GRIND) suspends the leaf for every
-        # source that SUBSTITUTES for the craft, because under a grind the CRAFT
-        # is the goal and the item only its byproduct: BUY and GE_FILL never
-        # leaf, and RECYCLE leafing becomes VALUE-AWARE — a grind gathers
-        # materials fresh rather than churning CURRENT-TIER gear (pursuit_value
-        # >= RECYCLE_LEAF_VALUE_FLOOR) but still recovers surplus JUNK cheaply.
-        # See `_source_leafs` / `CRAFT_SUBSTITUTE_KINDS`. The rung itself is
-        # forbidden separately by GatherMaterialsGoal.exclude_recycle (null cycle).
         # `requirement_edges` only ever queries `node.code` (one ply), so `_leafs`
         # is called with that item alone; the skill-gate is NOT emitted as a prereq
-        # (under-skill gear grinds planner-natively via LevelSkill, epic P3).
+        # (a skill gate is the decomposition walk's sub-task, Phase 2d).
         def _leafs(item: str) -> bool:
             if node.is_satisfied(state, game_data):
                 return True
@@ -189,8 +99,7 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
             if game_data.crafting_recipe(node.code) is None:
                 return True  # buyable / drop / gatherable / unknown → leaf
             sources = obtain_sources(node.code, state, game_data, ctx)
-            return any(_source_leafs(s, game_data, grind_descent)
-                       for s in sources)
+            return any(_source_leafs(s) for s in sources)
 
         graph = game_data.requirement_graph.graph()
         edges = requirement_edges(graph, node.code, _leafs)

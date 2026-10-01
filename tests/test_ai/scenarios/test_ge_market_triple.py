@@ -8,10 +8,10 @@ what let a standing sell order turn a skill grind's descent off at its root on
 
 Three cells, ONE character, two axes:
 
-| cell | `ge_market` | `gearcrafting` | the `_source_leafs` arm it reaches |
+| cell | `ge_market` | `gearcrafting` | what it pins |
 |---|---|---|---|
-| 4 `l12_ge_book_grind`    | busy  | 9 (one short) | `CRAFT_SUBSTITUTE_KINDS`: GE_FILL does NOT leaf |
-| 5 `l12_ge_book_adequate` | busy  | 10 (adequate) | the general arm: GE_FILL LEAFS |
+| 4 `l12_ge_book_grind`    | busy  | 9 (one short) | the grind's walk crafts the rung past the standing order |
+| 5 `l12_ge_book_adequate` | busy  | 10 (adequate) | outside a grind, GE_FILL LEAFS the descent |
 | 7 `l12_quiet_book_grind` | quiet | 9 (one short) | none — no GE_FILL exists (CONTROL) |
 
 **Cell 7 is why the other two mean anything.** Cells 4 and 5 assert that a
@@ -20,12 +20,14 @@ that is identical except for the market, neither could tell "the order book
 changed the answer" from "the answer was always that".
 
 The honest reading of the cell-4/cell-7 pair, stated here rather than left for
-someone to discover: they agree on the final step. That is not a failure, it is
-what "the fix is in" MEANS — the grind descends past the standing order to the
-material it must gather, exactly as it does when no order exists. The pair is
-non-vacuous because the same busy market reaches a DIFFERENT answer the moment
-the grind flag comes off (`test_the_busy_book_changes_the_answer_without_the_grind_flag`),
-which is precisely the pre-fix behaviour and precisely what cell 5 institutionalises.
+someone to discover: they agree on the rung's legs. That is not a failure, it is
+what "the fix is in" MEANS — the grind crafts the rung past the standing order,
+exactly as it does when no order exists. Since Phase 2d the grind is the walk's
+(`decompose(ReachSkillGoal)`, `produce = {rung}`: only the rung's craft serves),
+not a flag on the descent. The pair is non-vacuous because the same busy market
+leafs the plain descent AT the rung
+(`test_the_busy_book_leafs_the_plain_descent_at_the_rung`), which is the pre-fix
+behaviour and what cell 5 institutionalises.
 """
 
 import json
@@ -34,16 +36,16 @@ from pathlib import Path
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
-    CRAFT_SUBSTITUTE_KINDS,
-    prerequisites,
-)
+from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -140,52 +142,46 @@ def test_the_control_market_really_is_empty(quiet: GameData) -> None:
     assert _kinds(RUNG, state, quiet) == {SourceKind.CRAFT}
 
 
-# --- cell 4: the GE arm of the grind descent --------------------------------
+# --- cell 4: the grind crafts past the standing order ---------------------
 
-def test_cell4_reaches_the_craft_substitute_arm(busy: GameData) -> None:
-    """The branch the cell targets, named and shown: `_source_leafs`'
-    `CRAFT_SUBSTITUTE_KINDS` arm, entered with a GE_FILL source under a grind.
+def _grind(name: str, game_data: GameData) -> list[str]:
+    """The grind's committed plan, the arbiter's own call."""
+    player = GamePlayer(character=name, history=None)
+    player.seed_offline(_state(name, game_data), game_data)
+    plan = decompose(ReachSkillGoal(SKILL, 10), player.state, game_data,
+                     player._build_actions(), player._last_ctx)
+    assert plan, f"{name}: the grind produced no plan"
+    assert isinstance(plan[-1], CraftAction) and plan[-1].code == RUNG
+    return [repr(a) for a in plan]
 
-    The observable is `prerequisites`: under `grind_descent` the standing order
-    must NOT end the walk, so the rung still reports its recipe inputs. Under
-    the pre-fix rule it reported none and `actionable_step` handed the rung
-    straight back — the 2026-08-24 stall."""
-    assert SourceKind.GE_FILL in CRAFT_SUBSTITUTE_KINDS
+
+def test_cell4_grind_crafts_the_rung_past_the_standing_order(busy: GameData) -> None:
+    """The 2026-08-24 Robby stall: a standing sell order on the rung must not
+    stand in for the craft, because buying it pays zero skill XP. The order is
+    there, and the grind's plan still ends in the rung's craft with no GE leg."""
     state = _state(CELL4_BUSY_GRIND, busy)
     assert SourceKind.GE_FILL in _kinds(RUNG, state, busy)
-    node = ObtainItem(code=RUNG, quantity=1)
-    assert prerequisites(node, state, busy, NO_PROFILE_CONTEXT, True) != []
-    step = actionable_step(node, state, busy, NO_PROFILE_CONTEXT,
-                           grind_descent=True)
-    assert step == ObtainItem(code="ash_wood", quantity=10)
+    plan = _grind(CELL4_BUSY_GRIND, busy)
+    assert not [leg for leg in plan if "Ge" in leg], plan
 
 
-def test_the_busy_book_changes_the_answer_without_the_grind_flag(
+def test_the_busy_book_leafs_the_plain_descent_at_the_rung(
         busy: GameData, quiet: GameData) -> None:
     """What makes cells 4 and 7 non-vacuous despite agreeing.
 
-    In the BUSY book the descent's answer depends on the grind flag — the
-    standing order leafs the walk at the rung when the flag is off and does not
-    when it is on. In the QUIET book the flag makes no difference at all,
-    because there is no order to leaf on. So the order book IS load-bearing
-    here, and the grind arm is what neutralises it: exactly the pair of facts
-    that "cell 4 and cell 7 reach the same step" would otherwise hide."""
+    In the BUSY book the plain descent (no grind) leafs AT the rung, since the
+    standing order hands the finished item over; in the QUIET book it descends
+    to the material. The grind's walk reaches the same rung legs in both books,
+    so the order book IS load-bearing here and `produce` is what neutralises it."""
     node = ObtainItem(code=RUNG, quantity=1)
-
     busy_state = _state(CELL4_BUSY_GRIND, busy)
-    busy_grind = actionable_step(node, busy_state, busy, NO_PROFILE_CONTEXT,
-                                 grind_descent=True)
-    busy_plain = actionable_step(node, busy_state, busy, NO_PROFILE_CONTEXT,
-                                 grind_descent=False)
-    assert busy_grind != busy_plain
-    assert busy_plain == ObtainItem(code=RUNG, quantity=1)
-
     quiet_state = _state(CELL7_QUIET_GRIND, quiet)
-    quiet_grind = actionable_step(node, quiet_state, quiet, NO_PROFILE_CONTEXT,
-                                  grind_descent=True)
-    quiet_plain = actionable_step(node, quiet_state, quiet, NO_PROFILE_CONTEXT,
-                                  grind_descent=False)
-    assert quiet_grind == quiet_plain == busy_grind
+    assert actionable_step(node, busy_state, busy, NO_PROFILE_CONTEXT) == node
+    assert actionable_step(node, quiet_state, quiet, NO_PROFILE_CONTEXT) != node
+    rung_legs = ["Fight(chicken)", "Gather(ash_tree×20)", "Craft(ash_plank×2)",
+                 f"Craft({RUNG}×1)"]
+    assert _grind(CELL4_BUSY_GRIND, busy)[-4:] == rung_legs
+    assert _grind(CELL7_QUIET_GRIND, quiet)[-4:] == rung_legs
 
 
 # --- cell 5: the other arm — a GE_FILL outside a grind DOES leaf ------------
@@ -204,14 +200,11 @@ def test_cell5_leafs_the_descent_on_the_standing_order(
     assert SourceKind.GE_FILL in _kinds(LEG_TARGET, busy_state, busy)
     assert _kinds(LEG_TARGET, quiet_state, quiet) == {SourceKind.CRAFT}
 
-    assert prerequisites(node, busy_state, busy, NO_PROFILE_CONTEXT, False) == []
-    assert prerequisites(node, quiet_state, quiet, NO_PROFILE_CONTEXT, False) == [
+    assert prerequisites(node, busy_state, busy, NO_PROFILE_CONTEXT) == []
+    assert prerequisites(node, quiet_state, quiet, NO_PROFILE_CONTEXT) == [
         ObtainItem(code="iron_bar", quantity=5),
         ObtainItem(code="cowhide", quantity=3),
     ]
-    # ...and the grind flag restores the recipe even in the busy book, which is
-    # cell 4's rule seen from cell 5's row.
-    assert prerequisites(node, busy_state, busy, NO_PROFILE_CONTEXT, True) != []
 
 
 def test_cell5_changes_the_planned_first_action(busy: GameData,

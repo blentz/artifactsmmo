@@ -1518,10 +1518,10 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # cycles, and it carried 4/30 scenarios. `feather_coat` also carries a
     # standing GE sell order in the captured book, which is what puts the
     # `_source_leafs` GE arm on the descent at all.
-    # D11 = ONE SHORT (gearcrafting 9 against the rung's 10), so the descent is
-    # a GRIND descent and `_source_leafs` takes its `CRAFT_SUBSTITUTE_KINDS`
-    # arm: the standing GE order must NOT end the walk, because buying the rung
-    # pays zero skill XP. This is the Robby stall of 2026-08-24 as a scenario.
+    # D11 = ONE SHORT (gearcrafting 9 against the rung's 10): a grind, whose
+    # standing GE order must not stand in for the craft, because buying the
+    # rung pays zero skill XP (the Robby stall of 2026-08-24). Since Phase 2d
+    # the walk's `produce` enforces that: only the rung's craft serves.
     "l12_ge_book_grind": _ge_market_cell(
         "l12_ge_book_grind", gearcrafting=9, ge_market=True,
         description="GE triple, cell 4: busy order book, gearcrafting ONE "

@@ -26,15 +26,18 @@ from artifactsmmo_cli.ai.consumable_supply import (
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
+from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, Policy
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
-HEAL_PREP_POLICY: Policy = replace(LEGACY, drop_routes=False)
-"""What a heal stock may be made from: everything LEGACY serves except a fight.
-The stock exists to spare hp in the grind's fights; fighting another monster for
-its ingredients spends what it is meant to save (the potion ladder excludes
-drops for the same reason, `POTION_POLICY`)."""
+HEAL_PREP_POLICY: Policy = replace(DECOMPOSE_POLICY, drop_routes=False)
+"""What a heal stock may be made from: everything the walk serves except a
+fight. The stock exists to spare hp in the grind's fights; fighting another
+monster for its ingredients spends what it is meant to save (the potion ladder
+excludes drops for the same reason, `POTION_POLICY`). Selection (`feasible`)
+and decomposition both walk under it, so a stock judged suppliable is the stock
+the walk plans (Phase 2d-F: it was LEGACY, whose GE routes the walk does not
+serve, so a heal only a GE order could supply was chosen and then dropped)."""
 
 
 def heal_prep_goal(state: WorldState, game_data: GameData,

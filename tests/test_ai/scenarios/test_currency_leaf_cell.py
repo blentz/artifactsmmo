@@ -129,8 +129,7 @@ def test_the_step_is_the_currency_leaf_itself(unlocked: GameData) -> None:
     mapper the currency item directly" shape that stalled the satchel live on
     2026-07-06."""
     state = _state(unlocked)
-    step = actionable_step(_root(), state, unlocked, NO_PROFILE_CONTEXT,
-                           grind_descent=False)
+    step = actionable_step(_root(), state, unlocked, NO_PROFILE_CONTEXT)
     assert step == ObtainItem(code=LEAF, quantity=1)
 
 

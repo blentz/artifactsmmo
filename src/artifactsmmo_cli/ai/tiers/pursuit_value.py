@@ -46,10 +46,9 @@ one. ``combat_raw`` is deleted, not merely bypassed.
 SCALE. For an item with no efficiency stats — which is every weapon, every
 potion and most armor — ``pursuit_value == 1000 * equip_value`` exactly, so the
 verdicts this ruler reached before the combat term changed are preserved
-wherever it is compared against ``equip_value``-derived quantities. One absolute
-threshold consumes the magnitude (``prerequisite_graph.RECYCLE_LEAF_VALUE_FLOOR``)
-and it is re-derived from the same catalog witnesses; every other consumer
-compares pursuit values with each other. See
+wherever it is compared against ``equip_value``-derived quantities. No absolute
+threshold consumes the magnitude (the grind descent's recycle floor retired in
+Phase 2d); every consumer compares pursuit values with each other. See
 ``tests/test_ai/test_pursuit_value.py`` for the named per-consumer audit.
 """
 

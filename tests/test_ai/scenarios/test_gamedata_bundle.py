@@ -132,9 +132,9 @@ def test_a_craftable_rung_carries_a_standing_sell_order() -> None:
 def test_hydrated_book_puts_a_ge_fill_route_on_the_rung() -> None:
     """The route, not just the accessor: `obtain_sources` emits GE_FILL.
 
-    This is the production consumer that made the empty book expensive —
-    `GE_FILL` is in `_source_leafs`' CRAFT_SUBSTITUTE_KINDS, so a standing order
-    changes where a prerequisite descent stops. Asserted against the quiet
+    This is the production consumer that made the empty book expensive — a
+    standing order changes where a prerequisite descent stops (`_source_leafs`
+    leafs on every non-craft source). Asserted against the quiet
     market as its own control, so it cannot pass by the kind never being
     emitted."""
     state = scenario_state(SCENARIOS["l13_drop_recipe_grind"], _load())

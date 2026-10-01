@@ -27,7 +27,6 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value import gear_components
 from artifactsmmo_cli.ai.gear_value_core import Rank
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import RECYCLE_LEAF_VALUE_FLOOR
 from artifactsmmo_cli.ai.tiers.pursuit_value import (
     EFFICIENCY_BUDGET,
     PURSUIT_WEIGHTS,
@@ -186,33 +185,8 @@ def test_negative_efficiency_still_orders_below_zero_efficiency():
 
 # --- 4. every consumer of pursuit_value, named --------------------------------
 #
-# `grep -rn "pursuit_value" src/` finds four call sites. Three compare pursuit
-# values with each other (scale-free); ONE carries an absolute threshold.
-
-def test_consumer_1_recycle_leaf_floor_is_recalibrated_to_the_new_scale():
-    """`tiers/prerequisite_graph.RECYCLE_LEAF_VALUE_FLOOR` — THE only absolute
-    pursuit_value threshold in the codebase. Pinned against the same four live
-    witnesses its docstring has always named: obsolete tools must recycle,
-    current-tier staves must not.
-
-    RE-DERIVED and UNCHANGED at `RULER_SCALE`: all four witnesses are WEAPONS,
-    whose pursuit COMBAT term that change left bit-identical (the factor was
-    already on the weapon side; the ARMOR side moved up to meet it). The
-    witnesses' exact values are pinned so a scale move on the weapon side would
-    fail here rather than silently reclassify every recyclable."""
-    gd = _bundle()
-    for junk, expected in (("fishing_net", 200_000_000), ("copper_axe", 200_000_000)):
-        stats = gd.item_stats(junk)
-        assert stats is not None
-        assert pursuit_value(stats) == expected, junk
-        assert pursuit_value(stats) < RECYCLE_LEAF_VALUE_FLOOR, junk
-    for current, expected in (("wooden_staff", 328_001_000),
-                              ("fire_staff", 656_001_000)):
-        stats = gd.item_stats(current)
-        assert stats is not None
-        assert pursuit_value(stats) == expected, current
-        assert pursuit_value(stats) >= RECYCLE_LEAF_VALUE_FLOOR, current
-
+# Every consumer compares pursuit values with each other (scale-free); the one
+# absolute threshold (the grind descent's recycle floor) retired in Phase 2d.
 
 def test_consumer_2_near_term_gear_buckets_by_type_before_ranking():
     """`tiers/objective.CharacterObjective.near_term_gear` — argmax within one

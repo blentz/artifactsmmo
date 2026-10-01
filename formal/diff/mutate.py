@@ -1858,10 +1858,8 @@ RECOVERABLE_LEAF_MUTATIONS = [
     # test_a_material_with_a_ready_source_is_a_leaf (a RECYCLE-only source
     # must still short-circuit to []).
     ("prerequisite_graph: _source_leafs CRAFT branch inverted (craft leafs)",
-     "    if source.kind is SourceKind.CRAFT:\n"
-     "        return False",
-     "    if source.kind is SourceKind.CRAFT:\n"
-     "        return True"),
+     "    return source.kind is not SourceKind.CRAFT",
+     "    return source.kind is SourceKind.CRAFT"),
     # Force the ready-source leaf predicate to False: `_leafs` never truncates on
     # a ready non-craft route, so the descent ALWAYS falls into the recipe —
     # reverting to the pre-epic behavior (the live 2026-07-13 ash_plank/fishing_net
@@ -1870,30 +1868,8 @@ RECOVERABLE_LEAF_MUTATIONS = [
     # test_a_material_with_a_ready_source_is_a_leaf (a RECYCLE source must
     # short-circuit to []).
     ("prerequisite_graph: drop ready-source leaf branch (always descend)",
-     "            return any(_source_leafs(s, game_data, grind_descent)\n"
-     "                       for s in sources)",
+     "            return any(_source_leafs(s) for s in sources)",
      "            return False"),
-    # Grind value-aware recycle leafing: flip the JUNK-vs-current-tier floor
-    # comparison. Killed by test_grind_descent_descends_past_a_recycle_only_
-    # material (current-tier copper_dagger must NOT leaf -> descend) AND
-    # test_grind_descent_still_leafs_a_junk_recycle (junk rusty_scrap
-    # must leaf).
-    ("prerequisite_graph: grind recycle-leaf value floor comparison flipped",
-     "            return stats is not None and pursuit_value(stats) < RECYCLE_LEAF_VALUE_FLOOR",
-     "            return stats is not None and pursuit_value(stats) >= RECYCLE_LEAF_VALUE_FLOOR"),
-    # Restore the 2026-08-24 Robby stall: a craft-substitute (BUY / GE_FILL) once
-    # again LEAFS a grind's descent, so `prerequisites` returns [] at the rung,
-    # `actionable_step` hands the rung back and `next_grind_goal` emits the
-    # from-scratch chain that timed out every cycle. Killed by
-    # test_grind_descent_descends_past_a_standing_ge_sell_order and
-    # test_grind_descent_descends_past_a_permanent_npc_vendor (unit) and by
-    # test_next_grind_goal_descends_past_a_standing_GE_ORDER_on_the_rung
-    # (the caller path).
-    ("prerequisite_graph: craft-substitute leafs a grind descent (Robby stall)",
-     "        if source.kind in CRAFT_SUBSTITUTE_KINDS:\n"
-     "            return False",
-     "        if source.kind in CRAFT_SUBSTITUTE_KINDS:\n"
-     "            return True"),
 ]
 
 
@@ -3042,17 +3018,25 @@ GRIND_PREP_MUTATIONS = [
     ("craft_plan_gen: only a leading fight is prepped (a later one runs short)",
      "    if any(isinstance(a, FightAction) for a in legs):\n        prep = heal_prep_goal(",
      "    if isinstance(legs[0], FightAction):\n        prep = heal_prep_goal("),
-    ("craft_plan_gen: the heal prep may fight for its ingredients",
-     "            if prep_legs and not any(isinstance(a, FightAction) for a in prep_legs):",
-     "            if prep_legs:"),
+    ("craft_plan_gen: the heal prep is walked under its selection policy",
+     "                                  subtasks=False, policy=HEAL_PREP_POLICY)",
+     "                                  subtasks=False)"),
     ("craft_plan_gen: a prep decline is not noted",
      "                declined.extend(f\"heal_prep:{reason}\" for reason in prep_declined)",
      "                pass"),
 ]
+# Killed by tests/test_ai/test_decompose_potions.py (a drop-only ingredient
+# has no route under the ladder's policy; under the walk's default it is a fight).
+POTION_DECOMPOSE_POLICY_MUTATIONS = [
+    ("craft_plan_gen: the potion batch is walked under its selection policy",
+     "    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False,\n"
+     "                     policy=POTION_POLICY)",
+     "    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False)"),
+]
 GRIND_HEAL_PREP_POLICY_MUTATIONS = [
     ("grind_heal_prep: the heal prep counts drops as supply",
-     "HEAL_PREP_POLICY: Policy = replace(LEGACY, drop_routes=False)",
-     "HEAL_PREP_POLICY: Policy = LEGACY"),
+     "HEAL_PREP_POLICY: Policy = replace(DECOMPOSE_POLICY, drop_routes=False)",
+     "HEAL_PREP_POLICY: Policy = DECOMPOSE_POLICY"),
 ]
 # The committed plan (Phase 2d-L1c). Killed by tests/test_ai/test_craft_plan_gen.py.
 COMMITTED_PLAN_MUTATIONS = [
@@ -8590,6 +8574,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, GRIND_PREP_MUTATIONS,
               "tests/test_ai/test_grind_heal_prep.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, POTION_DECOMPOSE_POLICY_MUTATIONS,
+              "tests/test_ai/test_decompose_potions.py", survivors)
     run_group(GRIND_HEAL_PREP_SRC, GRIND_HEAL_PREP_POLICY_MUTATIONS,
               "tests/test_ai/test_grind_heal_prep.py", survivors)
     run_group(LEVEL_SKILL_EXPAND_SRC, GRIND_RUNG_MUTATIONS,

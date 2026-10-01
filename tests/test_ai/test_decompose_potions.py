@@ -193,7 +193,10 @@ def test_decline_reasons_are_named(monkeypatch):
     assert declined == [f"potion:equip_inapplicable:{equip!r}"]
 
 
-def test_an_off_ladder_leg_is_named(monkeypatch):
+def test_a_drop_only_ingredient_is_off_the_ladder(monkeypatch):
+    """The batch is walked under `POTION_POLICY` (no drops), the policy that
+    judged it suppliable, so an ingredient only a fight yields has no route
+    rather than a fight leg (Phase 2d-F)."""
     gd = _gd(with_boost=False, monster_level=18)
     gd._resource_drops = {}
     gd._monster_drops = {"biting_slime": [(_INGREDIENT, 1, 1, 1)]}
@@ -205,7 +208,7 @@ def test_an_off_ladder_leg_is_named(monkeypatch):
     actions.append(FightAction(monster_code="biting_slime", locations=frozenset({(1, 0)})))
     declined: list[str] = []
     assert decompose(goal, state, gd, actions, NO_PROFILE_CONTEXT, declined) is None
-    assert declined == ["potion:off_ladder_leg:Fight(biting_slime)"]
+    assert declined == [f"infeasible:{_HEAL}:no_route:{_INGREDIENT}"]
 
 
 def test_an_undecomposable_batch_reports_the_inner_reason(monkeypatch):

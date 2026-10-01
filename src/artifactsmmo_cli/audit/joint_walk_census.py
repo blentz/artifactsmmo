@@ -37,10 +37,10 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
 
-from artifactsmmo_cli.ai.craft_plan_gen import DECOMPOSE_POLICY
 from artifactsmmo_cli.ai.decompose_core import Route, can_obtain, runs
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
+from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
 from artifactsmmo_cli.ai.recipe_closure import recipe_closure
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.audit.craft_census import craftable_recipes

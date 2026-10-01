@@ -61,7 +61,7 @@ class _Graph:
 
 
 def _install(graph, mp):
-    def fake_prerequisites(node, state, game_data, recoverable=None, grind_descent=False):
+    def fake_prerequisites(node, state, game_data, recoverable=None):
         return [graph.node(p) for p in graph.prereqs[graph.id_of(node)]]
 
     def fake_producible(code, state, game_data):

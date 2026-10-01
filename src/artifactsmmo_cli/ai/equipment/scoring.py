@@ -40,11 +40,9 @@ rather than of the numbers happening to line up.
 UNIT: the two monster-relative terms are ``1/20000`` of one HP of damage swing
 per combat turn BEFORE this factor (see ``armor_score_pure`` for the
 derivation), so the ruler's unit is ``1/(RULER_SCALE * 20000)`` = ``1/40000`` of
-one HP of swing per turn. The ruler is an ORDERING, so the absolute unit matters
-only where an absolute threshold reads it; ``tiers/prerequisite_graph.
-RECYCLE_LEAF_VALUE_FLOOR`` is the only one, and it consumes
-``pursuit_value``'s COMBAT term, which this change leaves bit-identical on the
-weapon branch (its four calibration witnesses are all weapons)."""
+one HP of swing per turn. The ruler is an ORDERING, so the absolute unit would
+matter only where an absolute threshold read it, and none does since the grind
+descent's recycle floor retired (Phase 2d)."""
 
 
 def weapon_score_raw_pure(elements: list[str], attack: dict[str, int],

@@ -49,13 +49,14 @@ from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
-from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
+from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY, heal_prep_goal
 from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
-from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
+from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, Policy
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkGraph
 from artifactsmmo_cli.ai.obtain_sources import SourceKind
+from artifactsmmo_cli.ai.potion_supply import POTION_POLICY
 from artifactsmmo_cli.ai.region_edges import admit_region_edges
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
@@ -74,7 +75,8 @@ def _decline(declined: list[str] | None, reason: str) -> list[Action] | None:
 def decompose(goal: Goal, state: WorldState, game_data: GameData,
               actions: list[Action], ctx: SelectionContext,
               declined: list[str] | None = None, *,
-              subtasks: bool = True) -> list[Action] | None:
+              subtasks: bool = True,
+              policy: Policy = DECOMPOSE_POLICY) -> list[Action] | None:
     """The route-driven next-action producer: a plan for `goal` built by
     decomposing its recipe closure over the obtain model's routes, or None when
     decomposition cannot serve it (the caller may then search).
@@ -95,7 +97,11 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
     `declined`, when given, receives a named reason for every decline of a goal
     this producer serves (not for a goal shape it does not serve at all).
     `subtasks=False` forbids opening a skill gate as a sub-task (a potion batch
-    or a heal stock must not turn into a grind)."""
+    or a heal stock must not turn into a grind). `policy` is the walk's
+    readiness for a `GatherMaterialsGoal`: a batch chosen under a narrower
+    policy (the potion ladder's, the heal prep's) is decomposed under that
+    same policy, so the walk serves exactly what selection judged feasible
+    (Phase 2d-F)."""
     if isinstance(goal, CraftPotionsGoal):
         return _decompose_potions(goal, state, game_data, actions, ctx, declined)
     if isinstance(goal, ReachSkillGoal):
@@ -105,7 +111,7 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
         return _decompose_upgrade(goal, state, game_data, actions, ctx, declined, subtasks)
     if not isinstance(goal, GatherMaterialsGoal):
         return None
-    return _walk_plan(goal, state, game_data, actions, ctx, declined, subtasks, frozenset())
+    return _walk_plan(goal, state, game_data, actions, ctx, declined, subtasks, frozenset(), policy)
 
 
 def _decompose_upgrade(goal: UpgradeEquipmentGoal, state: WorldState, game_data: GameData,
@@ -177,34 +183,20 @@ def _decompose_grind(skill: str, target_level: int, state: WorldState, game_data
         prep = heal_prep_goal(state, game_data, ctx)
         if prep is not None:
             prep_declined: list[str] = []
-            prep_legs = decompose(prep, state, game_data, actions, ctx, prep_declined, subtasks=False)
+            prep_legs = decompose(prep, state, game_data, actions, ctx, prep_declined,
+                                  subtasks=False, policy=HEAL_PREP_POLICY)
             if declined is not None:
                 declined.extend(f"heal_prep:{reason}" for reason in prep_declined)
-            if prep_legs and not any(isinstance(a, FightAction) for a in prep_legs):
+            if prep_legs:
                 return [*prep_legs, *legs]
     return legs
-
-
-DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False)
-"""The walk's readiness: LEGACY (what the executor can serve now) with two
-switches.
-
-- Every resource that drops an item is offered (D-B), ranked by the proved
-  gather-source order. LEGACY's primary-only gather hid a workable spot behind a
-  skill-gated one: `small_pearls` drops at bass (fishing 30) and salmon
-  (fishing 40, the most frequent), and primary-only offered salmon alone, so
-  the walk opened a fishing grind instead of gathering at bass.
-- No GE fill (D-E). A fill spends gold, and whether a standing order is worth
-  its price against the time a fight or gather costs is a COST question the
-  model cannot answer yet (the cost view); fills stay the venue choice goal
-  emission makes beside an NPC buy (`choose_buy_venue`). The old descent never
-  used them either: its "ge_fill" step fell through the mapping into a fight."""
 
 
 def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData,
                actions: list[Action], ctx: SelectionContext,
                declined: list[str] | None, subtasks: bool,
-               grinding: frozenset[str]) -> list[Action] | None:
+               grinding: frozenset[str],
+               policy: Policy = DECOMPOSE_POLICY) -> list[Action] | None:
     """The goal's plan from THE ONE WALK (Phase 2c-2b of
     docs/PLAN_decision_architecture_redesign.md): the legs `ObtainModel.walk`
     extracts under `DECOMPOSE_POLICY`, each as a concrete action.
@@ -247,7 +239,7 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
     for item, needed in goal.needed.items():
         qty = _bag_target(item, needed, goal.exclude_recycle, state)
         answer = ObtainModel(state, game_data, ctx, datetime.now(UTC)).walk(
-            item, qty, DECOMPOSE_POLICY, goal.exclude_recycle, openable, frozenset(goal.needed))
+            item, qty, policy, goal.exclude_recycle, openable, frozenset(goal.needed))
         if not answer.feasible:
             graph = answer.graph
             dead = sorted(code for code, routes in graph.routes.items()
@@ -365,12 +357,10 @@ def _decompose_potions(goal: CraftPotionsGoal, state: WorldState, game_data: Gam
         if equip.is_applicable(state, game_data):
             return [equip]
         return _decline(declined, f"potion:equip_inapplicable:{equip!r}")
-    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False)
+    legs = decompose(obtain, state, game_data, actions, ctx, declined, subtasks=False,
+                     policy=POTION_POLICY)
     if legs is None:
         return None
-    if any(isinstance(a, FightAction) for a in legs):
-        errand = next(a for a in legs if isinstance(a, FightAction))
-        return _decline(declined, f"potion:off_ladder_leg:{errand!r}")
     # The legs can be a PREFIX of the batch (a later leg with no action): the
     # equip joins the plan only when they land the whole batch.
     landed = state

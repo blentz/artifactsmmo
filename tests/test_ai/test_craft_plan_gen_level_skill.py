@@ -8,11 +8,12 @@ cannot."""
 from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.actions.factory import build_actions
-from artifactsmmo_cli.ai.craft_plan_gen import DECOMPOSE_POLICY, decompose
+from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
+from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults

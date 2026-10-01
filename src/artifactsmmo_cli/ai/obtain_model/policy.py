@@ -9,7 +9,7 @@ then a change to a policy default that the disagreement census can see,
 rather than an edit to one of many models.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.route import Route
@@ -121,3 +121,19 @@ D-D (2026-09-27): a spawn counts when ROUTABLE, a tile in a reachable region
 of any layer, not only a live overworld tile: the action factory builds the
 fight or gather for it and the planner reaches it through a transition
 (`Transition(->underground)`, then `Gather(gold_rocks)`)."""
+
+
+DECOMPOSE_POLICY = replace(LEGACY, all_gather_routes=True, ge_routes=False)
+"""The walk's readiness: LEGACY (what the executor can serve now) with two
+switches.
+
+- Every resource that drops an item is offered (D-B), ranked by the proved
+  gather-source order. LEGACY's primary-only gather hid a workable spot behind a
+  skill-gated one: `small_pearls` drops at bass (fishing 30) and salmon
+  (fishing 40, the most frequent), and primary-only offered salmon alone, so
+  the walk opened a fishing grind instead of gathering at bass.
+- No GE fill (D-E). A fill spends gold, and whether a standing order is worth
+  its price against the time a fight or gather costs is a COST question the
+  model cannot answer yet (the cost view); fills stay the venue choice goal
+  emission makes beside an NPC buy (`choose_buy_venue`). The old descent never
+  used them either: its "ge_fill" step fell through the mapping into a fight."""

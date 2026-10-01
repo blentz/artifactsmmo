@@ -138,8 +138,7 @@ def test_the_descent_lands_on_the_fishing_gather(
     assert state.inventory == {}
     assert state.bank_items == {}
     step = actionable_step(ObtainItem(code=RUNG, quantity=1), state,
-                           bundle_game_data, NO_PROFILE_CONTEXT,
-                           grind_descent=True)
+                           bundle_game_data, NO_PROFILE_CONTEXT)
     assert step == ObtainItem(code=RAW, quantity=1)
     resource, _rate = bundle_game_data.resource_for_drop(RAW)
     assert bundle_game_data.resource_skill_level(resource) == (
