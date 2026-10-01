@@ -13,9 +13,9 @@ from unittest.mock import patch
 
 import pytest
 
+from artifactsmmo_cli.ai.decompose_core import Act
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes
-from artifactsmmo_cli.ai.obtain_model.feasibility import Feasibility
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
@@ -274,13 +274,13 @@ class TestFeasible:
     def test_a_held_item_is_feasible_up_to_the_count_held(
             self, world: tuple[WorldState, GameData]) -> None:
         model = self._model(world, {}, inventory={"ghost": 2}, equipment={}, gold=0)
-        assert model.feasible("ghost", 2, LEGACY).ok and not model.feasible("ghost", 3, LEGACY).ok
+        assert model.feasible("ghost", 2, LEGACY) and not model.feasible("ghost", 3, LEGACY)
 
     def test_pocket_gold_is_on_hand_and_worn_gear_is_not(
             self, world: tuple[WorldState, GameData]) -> None:
         model = self._model(world, {}, inventory={}, equipment={"weapon_slot": "ghost"}, gold=5)
-        assert not model.feasible("ghost", 1, LEGACY).ok
-        assert model.feasible(GOLD_CODE, 5, LEGACY).ok and not model.feasible(GOLD_CODE, 6, LEGACY).ok
+        assert not model.feasible("ghost", 1, LEGACY)
+        assert model.feasible(GOLD_CODE, 5, LEGACY) and not model.feasible(GOLD_CODE, 6, LEGACY)
 
     def test_a_chain_of_unbounded_routes_is_feasible_in_any_amount(
             self, world: tuple[WorldState, GameData]) -> None:
@@ -288,57 +288,86 @@ class TestFeasible:
                  "bar": (self._craft("bar", ore=10),),
                  "ring": (self._craft("ring", bar=6),)}
         model = self._model(world, table, inventory={}, equipment={}, gold=0)
-        assert model.feasible("ring", 50, LEGACY) == Feasibility(ok=True)
+        assert model.feasible("ring", 50, LEGACY)
 
     def test_banked_stock_bounds_the_amount(self, world: tuple[WorldState, GameData]) -> None:
         """Six banked bars make one ring (six per craft) and not two."""
         table = {"ring": (self._craft("ring", bar=6),),
                  "bar": (Route("bar", SourceKind.WITHDRAW, "bar", 1, 6, ()),)}
         model = self._model(world, table, inventory={}, equipment={}, gold=0)
-        assert model.feasible("ring", 1, LEGACY).ok
-        assert model.feasible("ring", 2, LEGACY) == Feasibility(ok=False, missing_inputs=("bar",))
+        assert model.feasible("ring", 1, LEGACY)
+        assert not model.feasible("ring", 2, LEGACY)
 
     def test_a_gold_price_is_an_input(self, world: tuple[WorldState, GameData]) -> None:
         """A vendor is a route only as far as the pocket pays for it."""
         table = {"ore": (Route("ore", SourceKind.BUY, "smith", 1, 10**9, (),
                                inputs={GOLD_CODE: 30}),)}
         model = self._model(world, table, inventory={}, equipment={}, gold=60)
-        assert model.feasible("ore", 2, LEGACY).ok
-        assert model.feasible("ore", 3, LEGACY) == Feasibility(ok=False, missing_inputs=(GOLD_CODE,))
+        assert model.feasible("ore", 2, LEGACY)
+        assert not model.feasible("ore", 3, LEGACY)
 
     def test_a_route_delivers_no_more_than_its_capacity(
             self, world: tuple[WorldState, GameData]) -> None:
         table = {"ore": (Route("ore", SourceKind.GE_FILL, "order", 1, 4, (),
                                inputs={GOLD_CODE: 1}),)}
         model = self._model(world, table, inventory={}, equipment={}, gold=100)
-        assert model.feasible("ore", 4, LEGACY).ok and not model.feasible("ore", 5, LEGACY).ok
+        assert model.feasible("ore", 4, LEGACY) and not model.feasible("ore", 5, LEGACY)
 
-    def test_an_unmet_gate_is_named(self, world: tuple[WorldState, GameData]) -> None:
-        """When the gather skill is enforced and unmet, it is the reason
-        reported; a policy ignoring it finds the gather."""
+    def test_an_unmet_enforced_gate_closes_the_route(self, world: tuple[WorldState, GameData]) -> None:
+        """When the gather skill is enforced and unmet, the gather is no
+        route; a policy ignoring it finds the gather."""
         table = {"ore": (Route("ore", SourceKind.GATHER, "rocks", 1, 10**9, (self.GATHER_GATE,)),)}
         model = self._model(world, table, inventory={}, equipment={}, gold=0)
-        assert model.feasible("ore", 1, replace(LEGACY, gather_skill_gate=False)).ok
-        assert model.feasible("ore", 1, OPEN) == Feasibility(ok=False, blocking_gates=(self.GATHER_GATE,))
+        assert model.feasible("ore", 1, replace(LEGACY, gather_skill_gate=False))
+        assert not model.feasible("ore", 1, OPEN)
 
-    def test_an_unobtainable_input_is_named(self, world: tuple[WorldState, GameData]) -> None:
+    def test_an_unobtainable_input_closes_the_route(self, world: tuple[WorldState, GameData]) -> None:
         table = {"ring": (self._craft("ring", bar=6, ghost=1),),
                  "bar": (Route("bar", SourceKind.WITHDRAW, "bar", 1, 6, ()),)}
         model = self._model(world, table, inventory={}, equipment={}, gold=0)
-        assert model.feasible("ring", 1, LEGACY) == Feasibility(ok=False, missing_inputs=("ghost",))
+        assert not model.feasible("ring", 1, LEGACY)
 
     def test_a_cycle_is_not_its_own_way_in(self, world: tuple[WorldState, GameData]) -> None:
         table = {"loop_a": (self._craft("loop_a", loop_b=1),),
                  "loop_b": (self._craft("loop_b", loop_a=1),)}
         model = self._model(world, table, inventory={}, equipment={}, gold=0)
-        assert not model.feasible("loop_a", 1, LEGACY).ok
+        assert not model.feasible("loop_a", 1, LEGACY)
         assert self._model(world, table, inventory={"loop_b": 1}, equipment={},
-                           gold=0).feasible("loop_a", 1, LEGACY).ok
+                           gold=0).feasible("loop_a", 1, LEGACY)
 
-    def test_an_item_with_no_route_and_no_holding_has_no_reason_to_give(
+    def test_two_inputs_that_share_stock_share_it(
             self, world: tuple[WorldState, GameData]) -> None:
-        model = self._model(world, {}, inventory={}, equipment={}, gold=0)
-        assert model.feasible("ghost", 1, LEGACY) == Feasibility(ok=False)
+        """Phase 2d-F: the walk is joint. A ring needs 6 bars directly and an
+        ingot that needs 6 more; 6 banked bars serve one of the two, not both
+        (the independent walk let each input see all 6)."""
+        table = {"ring": (self._craft("ring", bar=6, ore=1),),
+                 "ore": (self._craft("ore", bar=6),),
+                 "bar": (Route("bar", SourceKind.WITHDRAW, "bar", 1, 6, ()),)}
+        model = self._model(world, table, inventory={}, equipment={}, gold=0)
+        assert model.feasible("ore", 1, LEGACY), "vacuous: the ingot alone is not feasible"
+        assert not model.feasible("ring", 1, LEGACY)
+        assert self._model(world, table, inventory={"bar": 6}, equipment={},
+                           gold=0).feasible("ring", 1, LEGACY)
+
+    def test_stock_and_production_mix(self, world: tuple[WorldState, GameData]) -> None:
+        """Phase 2d-F: 4 banked bars and a craft capped at 2 make 6 together,
+        though neither route alone delivers 6."""
+        table = {"bar": (Route("bar", SourceKind.WITHDRAW, "bar", 1, 4, ()),
+                         Route("bar", SourceKind.CRAFT, "bar", 1, 2, ())),
+                 "ring": (self._craft("ring", bar=6),)}
+        model = self._model(world, table, inventory={}, equipment={}, gold=0)
+        assert model.feasible("ring", 1, LEGACY)
+        assert not model.feasible("ring", 2, LEGACY)
+
+    def test_produce_refuses_a_held_or_banked_copy(
+            self, world: tuple[WorldState, GameData]) -> None:
+        """An item in `produce` counts only through its craft or gather route:
+        a banked copy is not withdrawn for it (the grind's rung, a potion
+        batch)."""
+        table = {"ring": (Route("ring", SourceKind.WITHDRAW, "ring", 1, 5, ()),)}
+        model = self._model(world, table, inventory={}, equipment={}, gold=0)
+        assert model.feasible("ring", 1, LEGACY)
+        assert not model.feasible("ring", 1, LEGACY, produce=frozenset({"ring"}))
 
 
 def test_feasible_runs_over_the_real_catalogue(world: tuple[WorldState, GameData]) -> None:
@@ -348,9 +377,9 @@ def test_feasible_runs_over_the_real_catalogue(world: tuple[WorldState, GameData
     state, gd = world
     model = ObtainModel(state, gd, _ctx(), NOW)
     verdicts = {item: model.feasible(item, 1, LEGACY) for item in census_items(gd)}
-    assert any(v.ok for v in verdicts.values()) and any(not v.ok for v in verdicts.values())
-    assert all(model.on_hand(item, LEGACY) or model.ready(item, LEGACY)
-               for item, v in verdicts.items() if v.ok)
+    assert any(verdicts.values()) and not all(verdicts.values())
+    assert all(model.in_bag(item) or model.ready(item, LEGACY)
+               for item, ok in verdicts.items() if ok)
 
 
 def test_drop_routes_evaluate_winnability_only_for_a_monster_that_spawns(
@@ -369,25 +398,32 @@ def test_drop_routes_evaluate_winnability_only_for_a_monster_that_spawns(
     assert gates[GateKind.SPAWN_KNOWN] and gates[GateKind.WINNABLE] and not gates[GateKind.SPAWN_LIVE]
 
 
-class TestOnHand:
-    """What `on_hand` counts: the bag, reachable bank copies and licensed
-    recycles, never a purchase or a worn copy."""
+class TestHoldings:
+    """What the walk holds: the bag (`in_bag`), with reachable bank copies
+    arriving as WITHDRAW routes; never a worn copy."""
 
-    def test_the_bag_and_the_bank_are_on_hand(self, world: tuple[WorldState, GameData]) -> None:
+    def test_the_bag_and_the_bank_are_held(self, world: tuple[WorldState, GameData]) -> None:
         state, gd = world
         model = ObtainModel(replace(state, inventory={"hard_leather": 2},
                                     bank_items={"hard_leather": 3}), gd, _ctx(), NOW)
-        assert model.on_hand("hard_leather", OPEN) == 5
-        assert model.feasible("hard_leather", 5, OPEN).ok
-        assert not model.feasible("hard_leather", 6, OPEN).ok
+        assert model.in_bag("hard_leather") == 2
+        assert model.feasible("hard_leather", 5, OPEN)
+        # The sixth is bartered (3 cowhide at the tailor) on top of the five
+        # held: stock and production mix (Phase 2d-F). The independent walk
+        # asked the barter for all six (18 cowhide) and said no.
+        assert model.walk("hard_leather", 6, OPEN).plan == (
+            Act("hard_leather", 0, 3, 3), Act("cowhide", 0, 3, 3), Act("hard_leather", 1, 1, 1))
+        assert model.feasible("hard_leather", 6, OPEN)
 
-    def test_a_locked_bank_is_not_on_hand(self, world: tuple[WorldState, GameData]) -> None:
+    def test_a_locked_bank_is_not_held(self, world: tuple[WorldState, GameData]) -> None:
         state, gd = world
         model = ObtainModel(replace(state, bank_items={"hard_leather": 3}), gd,
                             _ctx(bank_accessible=False), NOW)
-        assert model.on_hand("hard_leather", OPEN) == state.inventory.get("hard_leather", 0)
+        held = state.inventory.get("hard_leather", 0)
+        assert not any(r.kind is SourceKind.WITHDRAW for r in model.ready("hard_leather", OPEN))
+        assert model.in_bag("hard_leather") == held
 
-    def test_worn_gear_and_a_ge_order_are_not_on_hand(
+    def test_worn_gear_is_not_held_and_a_ge_order_is_a_purchase(
             self, world: tuple[WorldState, GameData]) -> None:
         """A worn copy would have to be unequipped, and a GE fill is a purchase."""
         state, gd = world
@@ -395,7 +431,7 @@ class TestOnHand:
         model = ObtainModel(replace(state, inventory={}, bank_items={}), gd, _ctx(), NOW)
         assert any(r.kind is SourceKind.GE_FILL for r in model.ready(worn, OPEN)), \
             "vacuous: no GE order for the worn item"
-        assert model.on_hand(worn, OPEN) == 0
+        assert model.in_bag(worn) == 0
 
     def test_a_ge_order_costs_its_price_in_gold(self, world: tuple[WorldState, GameData]) -> None:
         state, gd = world
@@ -414,8 +450,8 @@ def test_the_task_board_is_a_route_to_what_it_pays(
     [route] = [r for r in model.routes(TASKS_COIN_CODE) if r.kind is SourceKind.TASK_REWARD]
     assert route.capacity == UNBOUNDED_CAPACITY and not route.inputs
     assert not [r for r in model.routes("copper_ore") if r.kind is SourceKind.TASK_REWARD]
-    assert model.feasible(TASKS_COIN_CODE, 50, OPEN).ok
-    assert not model.feasible(TASKS_COIN_CODE, 50, LEGACY).ok
+    assert model.feasible(TASKS_COIN_CODE, 50, OPEN)
+    assert not model.feasible(TASKS_COIN_CODE, 50, LEGACY)
 
 
 
@@ -455,8 +491,8 @@ def test_every_monster_that_pays_gold_is_a_gold_route(world: tuple[WorldState, G
     # A geared character can earn any amount of gold by fighting; the world
     # fixture is a zero-stat state (no fight winnable), so it cannot.
     geared = scenario_state(replace(SCENARIOS["l20_band_entry"], derive_combat_stats=True), gd)
-    assert ObtainModel(replace(geared, gold=0), gd, _ctx(), NOW).feasible(GOLD_CODE, 10**6, OPEN).ok
-    assert not ObtainModel(replace(state, gold=0), gd, _ctx(), NOW).feasible(GOLD_CODE, 1, OPEN).ok
+    assert ObtainModel(replace(geared, gold=0), gd, _ctx(), NOW).feasible(GOLD_CODE, 10**6, OPEN)
+    assert not ObtainModel(replace(state, gold=0), gd, _ctx(), NOW).feasible(GOLD_CODE, 1, OPEN)
 
 
 class TestGatedBy:

@@ -78,7 +78,7 @@ class TestHealPrepGoal:
         fill_monster_stat_defaults(gd)
         state = replace(_state(gd, {}), hp=165, max_hp=165, attack={"air": 5}, dmg=18)
         assert ObtainModel(state, gd, NO_PROFILE_CONTEXT, datetime.now(UTC)).feasible(
-            "cheese", HEAL_STOCK_FLOOR, LEGACY).ok
+            "cheese", HEAL_STOCK_FLOOR, LEGACY)
         assert heal_prep_goal(state, gd, NO_PROFILE_CONTEXT) is None
 
     def test_the_strongest_heal_that_can_be_supplied_wins(self):

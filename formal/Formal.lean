@@ -208,7 +208,6 @@ import Formal.PlanModel
 import Formal.MinGatherStepsBound
 import Formal.LeafAttainable
 import Formal.ObtainModelReady
-import Formal.ObtainModelSupply
 import Formal.Decompose
 import Formal.DecomposeWitness
 import Formal.CommittedLoop

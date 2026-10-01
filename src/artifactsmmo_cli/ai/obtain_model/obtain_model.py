@@ -37,19 +37,14 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, rank_gather_sources
 from artifactsmmo_cli.ai.inventory_keep import destroyable
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_routes, gold_drop_routes
-from artifactsmmo_cli.ai.obtain_model.feasibility import Feasibility
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
-from artifactsmmo_cli.ai.obtain_model.supply_core import Supply, can_supply
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
-
-_OWNED = (SourceKind.WITHDRAW, SourceKind.RECYCLE)
-"""Route kinds that deliver copies the character already owns."""
 
 _MINTS = (SourceKind.CRAFT, SourceKind.GATHER, SourceKind.BUY, SourceKind.DROP,
           SourceKind.TASK_REWARD, SourceKind.GOLD_DROP)
@@ -108,39 +103,24 @@ class ObtainModel:
                            if policy.enforces(gate, route) and not gate.satisfied})
             and unmet == {kind})
 
-    def feasible(self, item: str, qty: int, policy: Policy) -> Feasibility:
+    def feasible(self, item: str, qty: int, policy: Policy,
+                 produce: frozenset[str] = frozenset(),
+                 keep: frozenset[str] = frozenset()) -> bool:
         """Can `qty` units of `item` be obtained from here under `policy`?
 
-        `supply_core.can_supply` over the input closure of `item`'s ready
-        routes: yes when `qty` are `on_hand`, or when some ready route that
-        produces (not an owned-copy route: those are counted as on hand) can
-        deliver `qty` and every input can be had in the amount its applications
-        consume. A gold price is an input like any other, so an unaffordable
-        vendor is no route. When the answer is no, `blocking_gates` names the
-        unmet enforced gates on `item`'s own routes and `missing_inputs` the
-        inputs of its ready routes that cannot be had in the amount needed."""
-        on_hand: dict[str, int] = {}
-        supplies: dict[str, list[Supply]] = {}
-        pending = [item]
-        while pending:
-            code = pending.pop()
-            if code in supplies:
-                continue
-            on_hand[code] = self.on_hand(code, policy)
-            supplies[code] = [Supply(route.yield_per, route.capacity, tuple(route.inputs.items()))
-                              for route in self.ready(code, policy) if route.kind not in _OWNED]
-            pending.extend(x for supply in supplies[code] for x, _k in supply.inputs)
-        if can_supply(item, qty, on_hand, supplies):
-            return Feasibility(ok=True)
-        gates = tuple(gate for route in self.routes(item)
-                      if policy.admits(route) and not policy.ready(route)
-                      for gate in route.gates
-                      if policy.enforces(gate, route) and not gate.satisfied)
-        missing = tuple(dict.fromkeys(
-            x for supply in supplies[item] if supply.capacity >= qty
-            for x, per_application in supply.inputs
-            if not can_supply(x, -(-qty // supply.yield_per) * per_application, on_hand, supplies)))
-        return Feasibility(ok=False, blocking_gates=gates, missing_inputs=missing)
+        The one walk's answer (`decompose_core.can_obtain` over `walk_graph`,
+        `Decompose.feasible`): the bag, banked copies withdrawn, and the ready
+        routes of the closure filled jointly, so two inputs that draw on the
+        same stock share it and stock and production mix. The same call
+        decomposition makes, so "can I" and "what next" cannot disagree (Phase
+        2d-F). `produce` and `keep` are `walk_graph`'s: an item that must be
+        MADE, and items no recycle or sale may destroy."""
+        graph = self.walk_graph(item, policy, produce, keep=keep)
+        return can_obtain(item, qty, graph.on_hand, graph.routes)
+
+    def in_bag(self, item: str) -> int:
+        """Units of `item` in the bag, the walk's on hand (gold: the pocket)."""
+        return self._state.gold if item == GOLD_CODE else self._state.inventory.get(item, 0)
 
     def walk_graph(self, item: str, policy: Policy,
                    produce: frozenset[str] = frozenset(),
@@ -244,18 +224,6 @@ class ObtainModel:
         return WalkAnswer(can_obtain(item, qty, graph.on_hand, graph.routes),
                           next_step(item, qty, graph.on_hand, graph.routes), graph,
                           tuple(plan_legs(item, qty, graph.on_hand, graph.routes)))
-
-    def on_hand(self, item: str, policy: Policy) -> int:
-        """Units of `item` available from what the character already owns: the
-        bag, plus the capacity of every ready WITHDRAW (banked copies) and
-        RECYCLE (licensed copies) route. Not a GE fill, which is a purchase, and
-        not worn copies: using one would mean unequipping it. Gold is the pocket
-        (`state.gold`; gold is never an inventory item). Bank gold is not counted
-        yet (D-H)."""
-        if item == GOLD_CODE:
-            return self._state.gold
-        return self._state.inventory.get(item, 0) + sum(
-            route.capacity for route in self.ready(item, policy) if route.kind in _OWNED)
 
     def _skill(self, skill: str) -> int:
         return self._state.skills.get(skill, DEFAULT_SKILL_LEVEL)

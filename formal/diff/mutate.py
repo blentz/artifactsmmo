@@ -340,7 +340,6 @@ LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / 
 OBTAIN_MODEL_READY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "ready_core.py"
 OBTAIN_MODEL_POLICY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "policy.py"
 ACQUISITION_COST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "acquisition_cost.py"
-OBTAIN_MODEL_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "supply_core.py"
 OBTAIN_MODEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "obtain_model.py"
 OBTAIN_MODEL_DROP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "drop_routes.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
@@ -2912,35 +2911,6 @@ OBTAIN_MODEL_READY_MUTATIONS = [
      "            sold.add(route.via)",
      "            pass"),
 ]
-# Killed by formal/diff/test_obtain_model_supply_diff.py (binds
-# supply_core.can_supply to the proved Formal.ObtainModelSupply.canSupply).
-OBTAIN_MODEL_SUPPLY_MUTATIONS = [
-    ("supply_core: stock never suffices",
-     "    if on_hand.get(item, 0) >= qty:",
-     "    if on_hand.get(item, 0) > qty:"),
-    ("supply_core: capacity is not a limit",
-     "        if supply.capacity < qty:",
-     "        if supply.capacity < 0:"),
-    ("supply_core: one application per ask, whatever the yield",
-     "        runs = -(-qty // supply.yield_per)",
-     "        runs = qty"),
-    ("supply_core: a cycle is its own way in",
-     "        return False, frozenset({item}), frozenset({item})",
-     "        return True, frozenset({item}), frozenset({item})"),
-    ("supply_core: some input suffices",
-     "            if not found:\n                ok = False\n                break",
-     "            if found:\n                break"),
-    ("supply_core: reuse an answer whatever its cuts",
-     "    if cached is not None and cached[2] <= path and not ((cached[1] - cached[2]) & path):",
-     "    if cached is not None:"),
-]
-# The memo's work bound, killed by tests/test_ai/test_supply_core.py (a
-# disabled memo gives the same answers, so no differential can see it).
-OBTAIN_MODEL_SUPPLY_MEMO_MUTATIONS = [
-    ("supply_core: never reuse an answer",
-     "    if cached is not None and cached[2] <= path and not ((cached[1] - cached[2]) & path):",
-     "    if False:"),
-]
 # Killed by tests/test_ai/test_obtain_sources.py, which exercises the model
 # through `obtain_sources` (a LEGACY-policy view of it since Phase 1 step 3).
 # These were first killed by the legacy-equality census that step retired.
@@ -2987,16 +2957,12 @@ OBTAIN_MODEL_GATHER_SPAWN_MUTATIONS = [
 # ObtainModel.renewable / on_hand, killed by tests/test_ai/test_obtain_model.py
 # (TestQuantity).
 OBTAIN_MODEL_QUANTITY_MUTATIONS = [
-    ("obtain_model: a GE order is on hand",
-     "            route.capacity for route in self.ready(item, policy) if route.kind in _OWNED)",
-     "            route.capacity for route in self.ready(item, policy)\n"
-     "            if route.capacity < UNBOUNDED_CAPACITY)"),
-    ("obtain_model: the bag is not on hand",
-     "        return self._state.inventory.get(item, 0) + sum(",
-     "        return 0 + sum("),
-    ("obtain_model: gold is not on hand",
-     "        if item == GOLD_CODE:\n            return self._state.gold\n",
-     "        if item == GOLD_CODE:\n            return 0\n"),
+    ("obtain_model: the bag is not held",
+     "        return self._state.gold if item == GOLD_CODE else self._state.inventory.get(item, 0)",
+     "        return self._state.gold if item == GOLD_CODE else 0"),
+    ("obtain_model: feasible ignores produce",
+     "        graph = self.walk_graph(item, policy, produce, keep=keep)",
+     "        graph = self.walk_graph(item, policy, frozenset(), keep=keep)"),
     ("obtain_model: a GE order is free",
      "                      inputs={GOLD_CODE: price})]",
      "                      inputs={})]"),
@@ -3185,8 +3151,11 @@ POTION_BATCH_MUTATIONS = [
      "    for candidate in range(runs, 0, -1):",
      "    for candidate in range(runs, runs - 1, -1):"),
     ("potion_supply: an item with no recipe has every run",
-     "    if not recipe:\n        return 0  # nothing to craft it from: no batch at all",
-     "    if False:\n        return 0  # nothing to craft it from: no batch at all"),
+     "    if not game_data.crafting_recipes.get(code):\n        return 0",
+     "    if False:\n        return 0"),
+    ("potion_supply: a run ignores the craft yield",
+     "        if model.feasible(code, held + candidate * craft_yield, POTION_POLICY,",
+     "        if model.feasible(code, held + candidate, POTION_POLICY,"),
 ]
 RESOURCE_SPAWN_KNOWN_MUTATIONS = [
     ("game_data: a resource spawn ignores layered tiles",
@@ -3212,15 +3181,12 @@ GRIND_OBTAINABLE_MUTATIONS = [
     ("skill_grind_target: the grind counts vendor and GE routes",
      "                      vendor_routes=False, ge_routes=False, task_rewards=False,",
      "                      vendor_routes=True, ge_routes=True, task_rewards=False,"),
-    ("skill_grind_target: a rung input needs one unit, not the recipe's amount",
-     "               and all(model.feasible(item, qty, GRIND_POLICY).ok",
-     "               and all(model.feasible(item, 1, GRIND_POLICY).ok"),
     ("skill_grind_target: a held rung is obtainable",
-     "    if not crafts:\n",
-     "    if True:\n"),
-    ("skill_grind_target: the rung's own craft route need not be ready",
-     "    return any(GRIND_POLICY.ready(route)\n",
-     "    return any(True\n"),
+     "    return model.feasible(code, model.in_bag(code) + 1, GRIND_POLICY, produce=rung, keep=rung)",
+     "    return model.feasible(code, 1, GRIND_POLICY, produce=rung, keep=rung)"),
+    ("skill_grind_target: a banked rung serves the grind",
+     "    return model.feasible(code, model.in_bag(code) + 1, GRIND_POLICY, produce=rung, keep=rung)",
+     "    return model.feasible(code, model.in_bag(code) + 1, GRIND_POLICY, keep=rung)"),
 ]
 # objective.NEAR_TERM_POLICY, killed by tests/test_ai/test_tiers_objective.py.
 NEAR_TERM_POLICY_MUTATIONS = [
@@ -4417,9 +4383,9 @@ BOOST_SELECTION_MUTATIONS = [
 ]
 
 RECIPE_PRODUCIBLE_MUTATIONS = [
-    ("potion_supply: one supplied ingredient is enough for a run (all -> any)",
-     "        if all(model.feasible(mat, per * candidate, POTION_POLICY).ok for mat, per in recipe.items()):",
-     "        if any(model.feasible(mat, per * candidate, POTION_POLICY).ok for mat, per in recipe.items()):"),
+    ("potion_supply: a banked potion counts toward the batch",
+     "                          produce=potion, keep=potion):",
+     "                          keep=potion):"),
 ]
 
 
@@ -5009,7 +4975,7 @@ _ALL_SRCS = [
     # C1 — acquisition-leaf attainability (task-earnable + currency-buy disjuncts).
     LEAF_ATTAINABLE_CORE_SRC,
     # Decision-architecture Phase 1 — unified obtain model route selection.
-    OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_SUPPLY_SRC, OBTAIN_MODEL_SRC,
+    OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_SRC,
     ACQUISITION_COST_SRC,
     OBTAIN_MODEL_DROP_SRC,
     # C2 — complete_task coin-minting pure core.
@@ -8590,10 +8556,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_obtain_model_ready_diff.py", survivors)
     run_group(OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_POLICY_MUTATIONS,
               "formal/diff/test_obtain_model_ready_diff.py", survivors)
-    run_group(OBTAIN_MODEL_SUPPLY_SRC, OBTAIN_MODEL_SUPPLY_MUTATIONS,
-              "formal/diff/test_obtain_model_supply_diff.py", survivors)
-    run_group(OBTAIN_MODEL_SUPPLY_SRC, OBTAIN_MODEL_SUPPLY_MEMO_MUTATIONS,
-              "tests/test_ai/test_supply_core.py", survivors)
     run_group(OBTAIN_MODEL_SRC, OBTAIN_MODEL_GATE_MUTATIONS,
               "tests/test_ai/test_obtain_sources.py", survivors)
     run_group(OBTAIN_MODEL_DROP_SRC, OBTAIN_MODEL_DROP_MUTATIONS,

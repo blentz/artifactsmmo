@@ -23,7 +23,6 @@ import Formal.LoadoutProfiles
 import Formal.DoomedMemo
 import Formal.LeafAttainable
 import Formal.ObtainModelReady
-import Formal.ObtainModelSupply
 import Formal.Decompose
 import Formal.DecomposeWitness
 import Formal.CommittedLoop
@@ -1222,13 +1221,6 @@ open Formal.PriorityBand
 #check @Formal.ObtainModelReady.admits_drop                    -- drop-routes switch
 #check @Formal.ObtainModelReady.admits_other                   -- other kinds always offered
 #check @Formal.ObtainModelReady.enforces_xp_positive           -- grey switch
-
--- ObtainModelSupply required roles (quantity feasibility of the obtain model;
--- src/artifactsmmo_cli/ai/obtain_model/supply_core.py):
-#check @Formal.ObtainModelSupply.can_sound          -- validity: a yes has a finite supply tree
-#check @Formal.ObtainModelSupply.can_mono_onHand    -- monotone in holdings
-#check @Formal.ObtainModelSupply.can_anti_qty       -- fewer units are never harder
-#check @Formal.ObtainModelSupply.can_fuel_stable    -- termination: n + 1 fuel is the unbounded answer
 
 -- Decompose required roles (THE ONE WALK: feasibility + next step;
 -- src/artifactsmmo_cli/ai/decompose_core.py):

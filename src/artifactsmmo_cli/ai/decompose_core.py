@@ -7,6 +7,8 @@ next" (`next_craft_core` over a separate recipe map and a lossy source
 projection). They disagreed, and every disagreement read "the model says yes,
 decomposition declines, the search times out". Here the next step is the first
 leaf of the supply tree the feasibility walk finds, so they cannot disagree.
+Since Phase 2d-F `ObtainModel.feasible` asks this walk too (`supply_core` is
+retired), so every "can I get N of X" in production is this one answer.
 Kernel-checked properties of the Lean mirror: a feasible unmet goal always has a
 step (complete); a step is only emitted when feasible (sound); an action is
 emitted only for a ready route that can deliver the deficit, with every input

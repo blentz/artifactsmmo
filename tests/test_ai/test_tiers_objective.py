@@ -914,7 +914,7 @@ def test_is_attainable_now_counts_no_ge_order():
     gd.world.grand_exchange_tile = (2, 2)
     state = make_state(level=20, gold=1000)
     model = ObtainModel(state, gd, NO_PROFILE_CONTEXT, datetime.now(UTC))
-    assert model.feasible("lifesteal_rune", 1, LEGACY).ok, "vacuous: the GE order is no route"
+    assert model.feasible("lifesteal_rune", 1, LEGACY), "vacuous: the GE order is no route"
     assert is_attainable_now("lifesteal_rune", state, gd) is False
 
 
@@ -944,6 +944,6 @@ def test_is_attainable_now_pays_from_the_pocket_not_from_future_fights():
     gd.monsters.max_gold = {"chicken": 3}
     state = make_state(level=20, gold=100, attack={"fire": 50})
     model = ObtainModel(state, gd, NO_PROFILE_CONTEXT, datetime.now(UTC))
-    assert model.feasible("gold", 20000, replace(LEGACY, fight_gold=True)).ok, \
+    assert model.feasible("gold", 20000, replace(LEGACY, fight_gold=True)), \
         "vacuous: the chicken is no gold route"
     assert is_attainable_now("lifesteal_rune", state, gd) is False

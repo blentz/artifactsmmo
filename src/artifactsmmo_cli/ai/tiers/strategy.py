@@ -167,7 +167,7 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
     if game_data.crafting_recipe(code) is not None:
         return True
     model = ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
-    return model.feasible(code, 1, STEP_POLICY).ok
+    return model.feasible(code, 1, STEP_POLICY)
 
 
 def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,

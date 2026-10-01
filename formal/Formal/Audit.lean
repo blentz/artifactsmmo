@@ -962,10 +962,6 @@ open Formal.PriorityBand
 #print axioms Formal.ObtainModelReady.admits_drop
 #print axioms Formal.ObtainModelReady.admits_other
 #print axioms Formal.ObtainModelReady.enforces_xp_positive
-#print axioms Formal.ObtainModelSupply.can_sound
-#print axioms Formal.ObtainModelSupply.can_mono_onHand
-#print axioms Formal.ObtainModelSupply.can_anti_qty
-#print axioms Formal.ObtainModelSupply.can_fuel_stable
 #print axioms Formal.Decompose.step_complete
 #print axioms Formal.Decompose.step_sound
 #print axioms Formal.Decompose.step_none_iff

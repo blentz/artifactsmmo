@@ -113,10 +113,12 @@ def grind_model(state: WorldState, game_data: GameData) -> ObtainModel:
 
 def is_obtainable(code: str, model: ObtainModel) -> bool:
     """Can the grind make `code`? A rung is crafted for its xp, so a craftable
-    item counts only through its CRAFT route: that route must be ready, and
-    every input must be feasible in the quantity the recipe needs (a copy of
-    the rung already held does not serve the grind). Any other item is asked
-    for one unit (`ObtainModel.feasible`).
+    item counts only as one MORE copy MADE: the one walk asked for the bag plus
+    one, with `code` in `produce` (only its craft or gather route serves, so a
+    banked copy is not withdrawn) and in `keep` (no recycle of it). The walk
+    fills the whole closure jointly, so two inputs that share stock share it
+    (Phase 2d-F; this used to conjoin per-input answers, each seeing all the
+    stock). Any other item is asked for one unit (`ObtainModel.feasible`).
 
     QUANTITY, NOT EXISTENCE. Unit feasibility would admit a rung whose material
     is one banked copy of something nothing makes: live 2026-09-27, the bank's
@@ -128,13 +130,10 @@ def is_obtainable(code: str, model: ObtainModel) -> bool:
     `obtain_model/drop_routes.py`), so selection cannot call a rung buildable
     while emission refuses the only fight that builds it: the wool/iron_ring
     livelock (see `drop_obtainability`'s docstring)."""
-    crafts = [route for route in model.routes(code) if route.kind is SourceKind.CRAFT]
-    if not crafts:
-        return model.feasible(code, 1, GRIND_POLICY).ok
-    return any(GRIND_POLICY.ready(route)
-               and all(model.feasible(item, qty, GRIND_POLICY).ok
-                       for item, qty in route.inputs.items())
-               for route in crafts)
+    if not any(route.kind is SourceKind.CRAFT for route in model.routes(code)):
+        return model.feasible(code, 1, GRIND_POLICY)
+    rung = frozenset({code})
+    return model.feasible(code, model.in_bag(code) + 1, GRIND_POLICY, produce=rung, keep=rung)
 
 
 _CacheKey = tuple[str, int, tuple[tuple[str, str | None], ...],

@@ -144,17 +144,22 @@ only other source was a drop, so the guard fired and the goal found no plan
 
 
 def feasible_runs(code: str, runs: int, state: WorldState, game_data: GameData) -> int:
-    """The largest run count <= `runs` whose ingredients can ALL be had in full
-    (`ObtainModel.feasible` under `POTION_POLICY`), or 0 (always 0 for an item
-    with no recipe). Fewer runs are never
-    harder (the proved `can_anti_qty`), so the answer is the first that holds
-    counting down."""
-    recipe = game_data.crafting_recipes.get(code, {})
-    if not recipe:
-        return 0  # nothing to craft it from: no batch at all
+    """The largest run count <= `runs` the one walk can supply under
+    `POTION_POLICY`, or 0: the bag plus `candidate * yield` copies of `code`,
+    with `code` MADE (`produce`: its craft route, whose own skill gate counts)
+    and never recycled (`keep`). The walk fills the recipe jointly, so two
+    ingredients that share stock share it (Phase 2d-F). Counting down returns
+    the largest such count. A run is a craft, so an item with no recipe has
+    none (`produce` alone would admit its gather)."""
+    if not game_data.crafting_recipes.get(code):
+        return 0
     model = ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
+    potion = frozenset({code})
+    held = model.in_bag(code)
+    craft_yield = game_data.craft_yield(code)
     for candidate in range(runs, 0, -1):
-        if all(model.feasible(mat, per * candidate, POTION_POLICY).ok for mat, per in recipe.items()):
+        if model.feasible(code, held + candidate * craft_yield, POTION_POLICY,
+                          produce=potion, keep=potion):
             return candidate
     return 0
 

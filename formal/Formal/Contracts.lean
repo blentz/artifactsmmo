@@ -16,7 +16,6 @@ import Formal.DoomedMemo
 import Formal.CurrencyAffordFastFail
 import Formal.LeafAttainable
 import Formal.ObtainModelReady
-import Formal.ObtainModelSupply
 import Formal.Decompose
 import Formal.DecomposeWitness
 import Formal.CommittedLoop
@@ -3067,26 +3066,6 @@ open Formal.ObtainModelReady in
 example : ∀ (p : Policy) (r : Route), r.kind ≠ .gather → r.kind ≠ .buy → r.kind ≠ .geFill →
     r.kind ≠ .taskReward → r.kind ≠ .goldDrop → r.kind ≠ .drop → admits p r = true :=
   @Formal.ObtainModelReady.admits_other
-
--- ─── ObtainModelSupply (quantity feasibility) anti-weakening pins ───
-open Formal.ObtainModelSupply in
-example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q : Nat),
-    can g fuel path i q = true → Supplied g i q :=
-  @Formal.ObtainModelSupply.can_sound
-open Formal.ObtainModelSupply in
-example : ∀ (g : Graph) (h : Nat → Nat), (∀ i, g.onHand i ≤ h i) →
-    ∀ (fuel : Nat) (path : List Nat) (i q : Nat), can g fuel path i q = true →
-      can { g with onHand := h } fuel path i q = true :=
-  @Formal.ObtainModelSupply.can_mono_onHand
-open Formal.ObtainModelSupply in
-example : ∀ (g : Graph) (fuel : Nat) (path : List Nat) (i q q' : Nat), q' ≤ q →
-    can g fuel path i q = true → can g fuel path i q' = true :=
-  @Formal.ObtainModelSupply.can_anti_qty
-open Formal.ObtainModelSupply in
-example : ∀ (g : Graph), Closed g → ∀ (fuel : Nat) (path : List Nat) (i q : Nat), path.Nodup →
-    (∀ x ∈ path, x < g.n) → i < g.n → g.n + 1 ≤ fuel + path.length →
-      can g (fuel + 1) path i q = can g fuel path i q :=
-  @Formal.ObtainModelSupply.can_fuel_stable
 
 -- ─── Decompose (THE ONE WALK: joint feasibility + next step, greedy fill) anti-weakening pins ───
 open Formal.Decompose in

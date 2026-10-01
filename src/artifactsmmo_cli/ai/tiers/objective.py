@@ -259,7 +259,7 @@ def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool
     A craftable item is no longer asked only through its recipe: a permanent
     vendor for it counts too."""
     model = ObtainModel(state, game_data, NO_PROFILE_CONTEXT, datetime.now(UTC))
-    return model.feasible(code, 1, NEAR_TERM_POLICY).ok
+    return model.feasible(code, 1, NEAR_TERM_POLICY)
 
 
 def is_suppliable(code: str, state: WorldState, game_data: GameData) -> bool:

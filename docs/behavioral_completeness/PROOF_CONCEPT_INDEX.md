@@ -73,7 +73,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | Objective | crafting, items, characters | reachability, dominance |
 | ObjectiveStepFight | liveness | safety, liveness, validity |
 | ObtainModelReady | core, planner | validity, sufficiency, safety |
-| ObtainModelSupply | core, planner | validity, monotonicity, termination |
 | OptimalBuyMix | potion-supply-economics | validity, safety |
 | OwnedCount | items | safety, monotonicity |
 | Phase10GoalLattices | core, planner | boundedness, dominance, reachability |

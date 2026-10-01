@@ -111,3 +111,19 @@ def test_held_stock_bounds_the_runs_and_a_drop_does_not_count():
 def test_an_item_with_no_recipe_has_no_run():
     gd = _gd_brew(sunflower=1)
     assert feasible_runs("sunflower", 3, make_state(level=10), gd) == 0
+
+
+def test_a_run_makes_the_recipe_yield():
+    """`brew` yields 2 a run: two more runs need two slimeballs, and one is
+    banked, so one run can be supplied."""
+    gd = _gd_brew(sunflower=1, slimeball=1)
+    gd._craft_yields = {"brew": 2}
+    state = make_state(level=10, attack={"fire": 50}, bank_items={"slimeball": 1})
+    assert feasible_runs("brew", 2, state, gd) == 1
+
+
+def test_a_banked_potion_is_no_run():
+    """A run is a craft: five banked brews do not supply one when the recipe
+    cannot be had."""
+    gd = _gd_brew(rare_crystal=1)
+    assert feasible_runs("brew", 3, make_state(level=10, bank_items={"brew": 5}), gd) == 0

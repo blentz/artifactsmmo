@@ -2350,11 +2350,14 @@ def runLeafAttainable (args : Array Json) : Json :=
     (intArg args 0 != 0) (intArg args 1 != 0) (intArg args 2 != 0) (intArg args 3 != 0)
   Json.mkObj [("attainable", Json.bool a)]
 
--- ObtainModelSupply: quantity feasibility of the obtain model.
--- args = [n, onHand: [Nat x n], supplies: [[[yield, cap, [[input, amount], ...]], ...] x n],
---         queries: [[item, qty], ...]] -> can: [bool per query]
-namespace ObtainModelSupplyOracle
-open Formal.ObtainModelSupply
+-- Decompose: THE ONE WALK (feasibility + next step, greedy fill).
+-- args = [n, onHand: [Nat x n],
+--         routes: [[[tag, yield, cap, [[input, per], ...], [gate, ...]], ...] x n],
+--         queries: [[item, qty], ...]]
+-- -> [{"can": bool, "step": null | {"act": [item, route, amount, runs]} | {"open": [item, route, gate]},
+--      "plan": [step, ...]}]
+namespace DecomposeOracle
+open Formal.Decompose
 
 def natList (j : Json) : Option (List Nat) := do
   let a ← (j.getArr?).toOption
@@ -2366,43 +2369,6 @@ def parsePair (j : Json) : Option (Nat × Nat) := do
   | [a, b] => pure (a, b)
   | _ => none
 
-def parseSupply (j : Json) : Option Supply := do
-  let a ← (j.getArr?).toOption
-  if a.size < 3 then none
-  let y ← (a[0]!.getInt?).toOption
-  let c ← (a[1]!.getInt?).toOption
-  let ins ← (a[2]!.getArr?).toOption
-  let inputs ← ins.toList.mapM parsePair
-  pure ⟨y.toNat, c.toNat, inputs⟩
-
-def run (args : Array Json) : Json :=
-  let n := (intArg args 0).toNat
-  let parsed : Option (List Nat × List (List Supply) × List (Nat × Nat)) := do
-    let onHand ← natList args[1]!
-    let ss ← (args[2]!.getArr?).toOption
-    let supplies ← ss.toList.mapM (fun perItem => do
-      let a ← (perItem.getArr?).toOption
-      a.toList.mapM parseSupply)
-    let qs ← (args[3]!.getArr?).toOption
-    let queries ← qs.toList.mapM parsePair
-    pure (onHand, supplies, queries)
-  match parsed with
-  | none => Json.mkObj [("error", Json.str "bad graph")]
-  | some (onHand, supplies, queries) =>
-    let g : Graph := ⟨n, fun i => onHand.getD i 0, fun i => supplies.getD i []⟩
-    Json.mkObj [("can", Json.arr (queries.map (fun (i, q) => Json.bool (canSupply g i q))).toArray)]
-
-end ObtainModelSupplyOracle
-
--- Decompose: THE ONE WALK (feasibility + next step, greedy fill).
--- args = [n, onHand: [Nat x n],
---         routes: [[[tag, yield, cap, [[input, per], ...], [gate, ...]], ...] x n],
---         queries: [[item, qty], ...]]
--- -> [{"can": bool, "step": null | {"act": [item, route, amount, runs]} | {"open": [item, route, gate]},
---      "plan": [step, ...]}]
-namespace DecomposeOracle
-open Formal.Decompose
-
 def parseRoute (j : Json) : Option Route := do
   let a ← (j.getArr?).toOption
   if a.size < 5 then none
@@ -2410,8 +2376,8 @@ def parseRoute (j : Json) : Option Route := do
   let y ← (a[1]!.getInt?).toOption
   let c ← (a[2]!.getInt?).toOption
   let ins ← (a[3]!.getArr?).toOption
-  let inputs ← ins.toList.mapM ObtainModelSupplyOracle.parsePair
-  let gates ← ObtainModelSupplyOracle.natList a[4]!
+  let inputs ← ins.toList.mapM parsePair
+  let gates ← natList a[4]!
   pure ⟨tag.toNat, y.toNat, c.toNat, inputs, gates⟩
 
 def stepJson : Option Step → Json
@@ -2422,13 +2388,13 @@ def stepJson : Option Step → Json
 def run (args : Array Json) : Json :=
   let n := (intArg args 0).toNat
   let parsed : Option (List Nat × List (List Route) × List (Nat × Nat)) := do
-    let onHand ← ObtainModelSupplyOracle.natList args[1]!
+    let onHand ← natList args[1]!
     let rs ← (args[2]!.getArr?).toOption
     let routes ← rs.toList.mapM (fun perItem => do
       let a ← (perItem.getArr?).toOption
       a.toList.mapM parseRoute)
     let qs ← (args[3]!.getArr?).toOption
-    let queries ← qs.toList.mapM ObtainModelSupplyOracle.parsePair
+    let queries ← qs.toList.mapM parsePair
     pure (onHand, routes, queries)
   match parsed with
   | none => Json.mkObj [("error", Json.str "bad graph")]
@@ -3109,8 +3075,6 @@ def runOne (item : Json) : Json :=
     runLeafAttainable args
   else if kind == "obtain_model_ready" then
     ObtainModelReadyOracle.run args
-  else if kind == "obtain_model_supply" then
-    ObtainModelSupplyOracle.run args
   else if kind == "decompose" then
     DecomposeOracle.run args
   else if kind == "complete_task_income" then

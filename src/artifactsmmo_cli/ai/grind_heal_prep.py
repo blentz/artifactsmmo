@@ -60,6 +60,6 @@ def heal_prep_goal(state: WorldState, game_data: GameData,
     model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
     for code in heals:
         want = state.inventory.get(code, 0) + deficit
-        if model.feasible(code, want, HEAL_PREP_POLICY).ok:
+        if model.feasible(code, want, HEAL_PREP_POLICY):
             return GatherMaterialsGoal(target_item=code, needed={code: want})
     return None

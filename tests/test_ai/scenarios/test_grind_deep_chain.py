@@ -334,7 +334,7 @@ def test_a_SECONDARY_drop_is_recognised_as_gatherable(game_data: GameData,
         # no GatherAction to serve it, so its drops are rightly not obtainable.
         # A rung's inputs are asked through `feasible` (a craftable one such as
         # `maple_sap` counts through its gather even below its craft level).
-        assert model.feasible(code, 1, GRIND_POLICY).ok == (code in spawned), (
+        assert model.feasible(code, 1, GRIND_POLICY) == (code in spawned), (
             f"{code}: obtainable must be exactly 'a resource that drops it spawns' "
             "— a False for a spawned one means the primary-only map is back")
 
